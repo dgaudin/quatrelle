@@ -5,6 +5,10 @@
 
 use super::*;
 
+mod marks;
+pub(crate) use marks::LocalMarks;
+pub use marks::MarkWork;
+
 impl Session {
     /// Apply a change: to the in-memory list at once, then to the cache and server (through a
     /// job), or straight to the cache for local accounts.
@@ -143,23 +147,18 @@ impl Session {
         }
         touched.sort();
         touched.dedup();
-        // A flag or category: the lists in memory have it already (`apply_op_memory`), so they're
-        // saved as they are (a big folder's changed page only), not read from disk, changed and
-        // read again. One not in memory is changed on disk.
+        // A flag or category: the lists in memory have it already (`apply_op_memory`), so their
+        // counts are known; the mark and the counts are written in one transaction, away from
+        // the window's thread where it has one (`changing/marks.rs`). One not in memory is
+        // changed on disk, here.
         if matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. })
             && touched.iter().all(|f| self.cache.contains_key(&(account.to_string(), f.clone())))
         {
-            let changed: HashSet<u32> = op.keys().iter().map(|k| k.uid).collect();
-            for f in &touched {
-                if let Some(st) = self.cache.get(&(account.to_string(), f.clone()))
-                    && let Err(e) = store.save_folder_changed(account, f, st, &changed)
-                {
-                    self.notice(e.to_string(), true);
-                }
-            }
-            self.recount_local(account, Some(&touched));
+            self.queue_local_mark(account, op, &touched);
             return Ok(());
         }
+        // Anything else after the marks made before it.
+        self.finish_local_marks();
         if let Op::Move { keys, to } = op {
             // Not filed in the destination: the messages stay where they were (taken from the
             // sources after all, they were lost), and the lists in memory are read again.

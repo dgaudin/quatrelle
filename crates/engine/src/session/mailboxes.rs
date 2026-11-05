@@ -105,6 +105,10 @@ impl Session {
     pub(super) fn load_cached(&mut self, account: &str, folder: &str) -> Result<(), quatrelle_store::StoreError> {
         let k = (account.to_string(), folder.to_string());
         if !self.cache.contains_key(&k) {
+            // A local account's marks still being written elsewhere are in it first.
+            if self.account(account).is_none_or(AccountState::is_local) {
+                self.finish_local_marks();
+            }
             let st = match &self.store {
                 Some(s) => s.load_folder(account, folder)?.shared(),
                 None => FolderState::default(),

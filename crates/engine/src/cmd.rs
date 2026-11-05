@@ -60,6 +60,13 @@ pub(crate) fn leaves_body_waiting(id: &str) -> bool {
     ) || id.starts_with("list.extend")
 }
 
+/// Commands that don't finish the local accounts' marks still being written on another thread
+/// (`session/changing/marks.rs`): moving about the list (which marks what it opens) and marking.
+/// Every other command reads and writes the lists after them.
+pub(crate) fn leaves_marks_waiting(id: &str) -> bool {
+    leaves_body_waiting(id) || matches!(id, "mail.markRead" | "mail.markUnread" | "mail.toggleRead" | "mail.flag")
+}
+
 /// The message being read has voting buttons.
 fn has_voting(s: &Session) -> Option<&'static str> {
     match &s.reading {

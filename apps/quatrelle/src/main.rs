@@ -205,8 +205,10 @@ impl eframe::App for App {
         if let Some(server) = &self.instance {
             server.close();
         }
-        // The address book's latest changes (it's written a minute at most after each).
+        // The address book's latest changes (it's written a minute at most after each), and the
+        // local accounts' marks still waiting on their thread.
         self.app.session.save_contacts();
+        self.app.session.finish_local_marks();
         // A test build downloaded and checked: installed now that Quatrelle closes (unless it was
         // kept for later); a download still going stops, to carry on next time.
         if let Some(u) = &self.updater {
@@ -636,6 +638,8 @@ fn run(
             // From here the open message's body is read and parsed on a thread of its own (the
             // commands above answered at once, as they do in the CLI).
             app.defer_bodies();
+            // And a local account's marks are written on a thread of their own.
+            app.defer_local_marks();
             let gpu = cc.wgpu_render_state.as_ref().map(|rs| rs.device.clone());
             if let Some(server) = &instance {
                 server.connect(&cc.egui_ctx);

@@ -224,26 +224,44 @@ fn an_older_body_finishing_last_is_let_go() {
 
 /// The arc's target: holding Down over 200 big messages on threads of their own, every step
 /// (the command and its frame) takes under 16 ms, marked read as they're shown (the fork marks
-/// them, and since R10 that's cheap on a server account). On the sample's local account the mark
-/// is written by the window: told, not held to the target. A timing test: run in release (`cargo
+/// them, and since R10 that's cheap on a server account; since R19 a local account's, in a data
+/// file or not, are written on the writing lane). A timing test: run in release (`cargo
 /// test --release -p quatrelle-ui-egui holding_down_frames -- --ignored --nocapture`).
 #[test]
 #[ignore = "a bench: run it with --release, --ignored and --nocapture"]
 fn holding_down_frames_stay_under_16_ms() {
-    let local = hold_down(false);
-    let server = hold_down(true);
-    assert!(server < std::time::Duration::from_millis(16), "worst step {server:?} (local account: {local:?})");
+    let local = hold_down(false, false);
+    let packed = hold_down(false, true);
+    let server = hold_down(true, false);
+    let target = std::time::Duration::from_millis(16);
+    assert!(server < target && local < target && packed < target, "worst step {server:?} (local account: {local:?}, in a data file: {packed:?})");
 }
 
 /// Down held over 200 messages of about 1 MB, each marked read as it's shown: the slowest step.
-fn hold_down(server: bool) -> std::time::Duration {
-    let (mut a, dir) = app(if server { "body-frames-server" } else { "body-frames" });
+/// `packed`: the cache in data files, as the app keeps it (each write a sealed commit).
+fn hold_down(server: bool, packed: bool) -> std::time::Duration {
+    let name = match (server, packed) {
+        (true, _) => "body-frames-server",
+        (false, false) => "body-frames",
+        (false, true) => "body-frames-packed",
+    };
+    let (mut a, dir) = if packed {
+        let dir = std::env::temp_dir().join(format!("quatrelle-ui-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+        sample::seed_if_empty(&store, NOW).unwrap();
+        let s = Session::open(Some(store), Clock::new(NOW, 0));
+        (MailApp::new(s, Box::new(crate::NullBackend), Box::new(crate::NullServices(NOW))), dir)
+    } else {
+        app(name)
+    };
     if server {
         on_a_server(&mut a);
     }
     let ctx = egui::Context::default();
     a.services = Box::new(Threads);
     a.defer_bodies();
+    a.defer_local_marks();
     frame(&ctx, &mut a, vec![]);
     let big = "A long line of text that goes on. ".repeat(30_000);
     for i in 0..200u32 {
@@ -264,9 +282,20 @@ fn hold_down(server: bool) -> std::time::Duration {
         std::thread::sleep(std::time::Duration::from_millis(30));
     }
     let unread = a.session.list.iter().filter(|m| m.key.uid >= 9700 && !m.flags.seen).count();
+    let here = a.session.local_marks_written_here();
+    // What the writing lane has left is written now; then the cache has every mark.
+    a.session.finish_local_marks();
+    let kept = a.session.store.as_ref().unwrap().load_folder("sample", "INBOX").unwrap();
+    let unread_kept = kept.messages.iter().filter(|m| m.key.uid >= 9700 && !m.flags.seen).count();
+    // (A server account's go to the edit writer, which this test hasn't.)
+    assert!(server || unread_kept == unread, "the cache has the marks ({unread_kept} unread there)");
     println!(
-        "{}: worst step {:.1} ms, mean {:.1} ms, {unread} of 200 left unread",
-        if server { "server account" } else { "local account" },
+        "{}: worst step {:.1} ms, mean {:.1} ms, {unread} of 200 left unread, {here} marks written on the window's thread",
+        match (server, packed) {
+            (true, _) => "server account",
+            (false, false) => "local account",
+            (false, true) => "local account in a data file",
+        },
         worst.as_secs_f64() * 1e3,
         total.as_secs_f64() * 1e3 / 199.0
     );

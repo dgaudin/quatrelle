@@ -43,6 +43,7 @@ mod writing;
 // The list's, the settings', the message being written's and organizing mail's own parts,
 // named here as before.
 pub use accounts::{AccountState, UpdateCheck, VacationState, newer_release};
+pub use changing::MarkWork;
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, flag_rank, person, size_group};
 pub use mailboxes::{
@@ -430,6 +431,8 @@ pub struct Session {
     shown: u64,
     /// The open message's body, when it's got ready on another thread.
     pub(crate) body: opening::BodyLane,
+    /// Local accounts' marks waiting to be written, when that's done on another thread.
+    pub(crate) marks: changing::LocalMarks,
     /// The message in the reading pane to mark read, and when (`ReadInPane::Shown` with a wait).
     read_due: Option<(MessageKey, i64)>,
     /// The message to mark read once another is chosen (`ReadInPane::Left`).
@@ -455,6 +458,7 @@ const ACCOUNT_COLORS: u8 = 8;
 impl Session {
     /// A session over a cache. Remote accounts get a `Start` job (password from the keychain).
     pub fn open(store: Option<Store>, clock: Clock) -> Session {
+        let marks = changing::LocalMarks::new(store.clone());
         let mut s = Session {
             store,
             accounts: Vec::new(),
@@ -567,6 +571,7 @@ impl Session {
             summary_index: None,
             shown: 0,
             body: Default::default(),
+            marks,
             read_due: None,
             read_on_leave: None,
             body_words: HashMap::new(),
@@ -663,6 +668,11 @@ impl Session {
         if !crate::cmd::leaves_body_waiting(id) && std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.finish_pending_body())).is_err() {
             log::error!("the open message couldn't be shown");
             PANICS_CAUGHT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        // So are the marks of local accounts still being written on another thread, before
+        // anything else reads or writes the lists.
+        if !crate::cmd::leaves_marks_waiting(id) {
+            self.finish_local_marks();
         }
         if let Some(why) = (spec.enabled)(self) {
             return Err(CmdError::Disabled(why.to_string()));
