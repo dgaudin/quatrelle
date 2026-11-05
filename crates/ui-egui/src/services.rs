@@ -123,6 +123,8 @@ pub enum Lane {
     Pictures,
     /// Getting a message ready to read.
     Reading,
+    /// Writing a local account's marks to its cache, in order.
+    Writing,
 }
 
 /// Work handed to a lane.

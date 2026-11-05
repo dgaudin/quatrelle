@@ -28,6 +28,7 @@ mod app;
 mod dialogs;
 pub mod i18n;
 mod look;
+mod marks;
 mod panes;
 mod reading;
 mod rich_edit;
@@ -662,6 +663,7 @@ impl MailApp {
     }
 
     fn flush_jobs(&mut self) {
+        self.send_mark_work();
         for j in self.session.take_jobs() {
             self.backend.submit(j);
         }

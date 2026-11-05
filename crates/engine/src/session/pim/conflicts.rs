@@ -206,6 +206,8 @@ impl Session {
         }
         a.folders.push(folder);
         let folders = a.folders.clone();
+        // Written after the marks of its messages made before (which write its counts).
+        self.finish_local_marks();
         if let Some(store) = &self.store
             && let Err(e) = store.save_folders(SYNC_ISSUES, &folders)
         {

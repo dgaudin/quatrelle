@@ -192,6 +192,7 @@ impl Session {
                 if let Some(e) = error {
                     // The folder list came with the end and is held here: saved again, or the
                     // next start would find none and the mail out of reach.
+                    self.finish_local_marks();
                     let kept = match (&self.store, self.account(account)) {
                         (Some(store), Some(a)) if !a.folders.is_empty() => {
                             store.save_folders(account, &a.folders).inspect_err(|e| log::warn!("{account}: folders not saved: {e}")).is_ok()

@@ -589,6 +589,8 @@ impl Session {
     /// mail gone), or listed a message that had no source.
     pub(super) fn file_locally(&mut self, account: &str, folder: &str, raw: &[u8], seen: bool) -> Result<MessageKey, CmdError> {
         let store = self.store.clone().ok_or_else(|| CmdError::Failed("there is nowhere to keep it".into()))?;
+        // The folder read after the marks made before.
+        self.finish_local_marks();
         let failed = |e: quatrelle_store::StoreError| CmdError::Failed(format!("The message couldn't be kept in {folder}: {e}"));
         let mut st = store.load_folder(account, folder).map_err(failed)?;
         if st.validity == 0 {

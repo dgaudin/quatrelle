@@ -229,6 +229,8 @@ impl Session {
     /// Count a local account's folders again (`only` these, or all of them). One whose list
     /// can't be read keeps its counts (not 0).
     pub(crate) fn recount_local(&mut self, account: &str, only: Option<&[String]>) {
+        // Its counts are written after the marks made before (which write them too).
+        self.finish_local_marks();
         let paths: Vec<String> = match only {
             Some(list) => list.to_vec(),
             None => self.account(account).map(|a| a.folders.iter().map(|f| f.path.clone()).collect()).unwrap_or_default(),
