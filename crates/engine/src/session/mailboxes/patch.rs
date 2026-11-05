@@ -6,7 +6,7 @@
 //! (each message copied out of the folder, filtered, arranged, its conversations worked out, its
 //! rows laid out): on a folder of ten thousand messages, every Down that opened one did.
 
-use quatrelle_model::PINNED;
+use quatrelle_model::{FOLLOW_UP_COMPLETE, PINNED};
 
 use super::*;
 
@@ -37,7 +37,13 @@ impl Session {
                 *flag == Flag::Seen,
             ),
             Op::SetKeyword { keyword, .. } if keyword.to_ascii_lowercase().contains("junk") => return false,
-            Op::SetKeyword { keys, keyword, .. } => (keys, filter == ListFilter::Categorized, false, keyword.eq_ignore_ascii_case(PINNED), false),
+            Op::SetKeyword { keys, keyword, .. } => (
+                keys,
+                filter == ListFilter::Categorized,
+                keyword.eq_ignore_ascii_case(FOLLOW_UP_COMPLETE) && self.prefs.arrange == Arrange::Flag,
+                keyword.eq_ignore_ascii_case(PINNED),
+                false,
+            ),
             _ => return false,
         };
         if self.search.is_some() || self.view == View::Outbox || !self.nav_fresh() {

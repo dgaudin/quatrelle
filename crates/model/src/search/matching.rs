@@ -69,6 +69,7 @@ fn clause_matches(term: &Term, doc: &Doc<'_>) -> bool {
         Term::Unread(b) => m.flags.seen != *b,
         Term::Flagged(b) => m.flags.flagged == *b,
         Term::Keyword(k) => m.flags.has(k) || m.flags.has(&crate::keyword_for(k)),
+        Term::Complete => m.flags.follow_up_complete(),
         Term::Important => m.importance > 0,
         Term::Awaiting => doc.awaiting,
         Term::Categorized(ks) if ks.is_empty() => m.flags.keywords.iter().any(|k| !k.starts_with('$')),

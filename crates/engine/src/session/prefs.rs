@@ -134,8 +134,13 @@ pub struct Prefs {
     pub pane_order: Vec<String>,
     /// When flagged messages are due (Follow Up › Today, Tomorrow…): Message-ID → local day.
     /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "checked_days")]
     pub follow_up: BTreeMap<String, i64>,
+    /// When follow-ups were marked complete (Follow Up › Mark Complete): Message-ID → local day.
+    /// The mark itself is the message's [`FOLLOW_UP_COMPLETE`](quatrelle_model::FOLLOW_UP_COMPLETE)
+    /// keyword; Exchange keeps the day too, and its own wins (`Session::follow_up_done`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_days")]
+    pub follow_up_done: BTreeMap<String, i64>,
     /// Words the writer added to the dictionary (the spelling check keeps them).
     #[serde(default)]
     pub spelling: Vec<String>,
@@ -276,6 +281,7 @@ impl Default for Prefs {
             work_offline: false,
             ignored: BTreeSet::new(),
             follow_up: BTreeMap::new(),
+            follow_up_done: BTreeMap::new(),
             reminders: BTreeMap::new(),
             search_folders: Vec::new(),
             animations: true,
@@ -445,6 +451,23 @@ pub enum ReadInPane {
     Shown,
     /// When another message is chosen (or the folder left).
     Left,
+}
+
+/// The longest follow-up id kept (a Message-ID's line is at most 998 characters, RFC 5322).
+const MAX_FOLLOW_UP_ID: usize = 998;
+
+/// Follow-up days read from disk: only what are days (a key empty or too long, a day before
+/// 1601 or after 9999, past [`MAX_FOLLOW_UP`](super::mailboxes::MAX_FOLLOW_UP) are left out), as
+/// a damaged or hostile file may have them.
+fn checked_days<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<String, i64>, D::Error> {
+    use quatrelle_model::dates::days_from_civil;
+    let read = <BTreeMap<String, i64> as serde::Deserialize>::deserialize(d)?;
+    let days = days_from_civil(1601, 1, 1)..=days_from_civil(9999, 12, 31);
+    Ok(read
+        .into_iter()
+        .filter(|(id, day)| !id.trim().is_empty() && id.len() <= MAX_FOLLOW_UP_ID && days.contains(day))
+        .take(super::mailboxes::MAX_FOLLOW_UP)
+        .collect())
 }
 
 /// A setting that was on before it existed.

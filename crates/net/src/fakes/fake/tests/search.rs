@@ -31,6 +31,15 @@ fn a_query_becomes_imap_search_keys() {
         imap_criteria("from:ana,jun lee"),
         Some(vec![a("TEXT"), st("lee")]).map(|v| [vec![a("OR"), a("FROM"), st("ana"), a("FROM"), st("jun")], v].concat())
     );
+    // A follow-up marked complete: the keyword on mail not flagged again; negated, left to the
+    // list (NOT of both would need an OR).
+    assert_eq!(imap_criteria("is:complete"), Some(vec![a("KEYWORD"), a("$FollowUpComplete"), a("UNFLAGGED")]));
+    assert_eq!(imap_criteria("-is:complete"), None);
+    assert_eq!(
+        quatrelle_jmap::search_filter("is:complete"),
+        Some(serde_json::json!({"operator": "AND", "conditions": [{"hasKeyword": "$FollowUpComplete"}, {"notKeyword": "$flagged"}]}))
+    );
+    assert_eq!(quatrelle_jmap::search_filter("-is:complete"), None);
 }
 
 /// Gap #7: the query as Exchange's KQL/AQS words with the read, flag and attachment

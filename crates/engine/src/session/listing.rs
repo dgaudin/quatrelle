@@ -141,7 +141,7 @@ pub(super) fn person(a: Option<&quatrelle_model::EmailAddress>) -> String {
 }
 
 /// The fixed headings an arranged list shows (for translations).
-pub const ARRANGE_HEADINGS: [&str; 13] = [
+pub const ARRANGE_HEADINGS: [&str; 14] = [
     "Under 10 KB",
     "10 to 25 KB",
     "25 to 100 KB",
@@ -150,12 +150,18 @@ pub const ARRANGE_HEADINGS: [&str; 13] = [
     "1 to 5 MB",
     "Over 5 MB",
     "Flagged",
+    "Completed",
     "Not flagged",
     "With attachments",
     "Without attachments",
     "(no subject)",
     "(nobody)",
 ];
+
+/// Where a list arranged by the flag puts a message: flagged first, then those marked complete.
+pub(super) fn flag_rank(m: &Summary) -> u8 {
+    if m.flags.flagged { 2 } else { u8::from(m.flags.follow_up_complete()) }
+}
 
 /// The size range a message is shown under.
 pub(super) fn size_group(size: u32) -> &'static str {
@@ -199,7 +205,7 @@ pub fn arrange_list<M: std::borrow::Borrow<Summary>>(list: &mut [M], arrange: Ar
             let (a, b) = (a.borrow(), b.borrow());
             match arrange {
                 Arrange::Size => b.size.cmp(&a.size),
-                Arrange::Flag => b.flags.flagged.cmp(&a.flags.flagged),
+                Arrange::Flag => flag_rank(b).cmp(&flag_rank(a)),
                 Arrange::Attachments => b.has_attachments.cmp(&a.has_attachments),
                 Arrange::Date | Arrange::From | Arrange::To | Arrange::Subject => b.date.cmp(&a.date),
             }

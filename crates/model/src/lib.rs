@@ -276,10 +276,19 @@ pub struct Flags {
     /// Other keywords (RFC 3501 §2.3.2): categories (`$label1`, `work`…), `$Pinned`, `$Junk`…
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
+    /// When the server says its follow-up was marked complete (Unix seconds; 0: not said):
+    /// Exchange keeps the time (`PidTagFlagCompleteTime`, Graph's `completedDateTime`); IMAP and
+    /// JMAP have nowhere for it, and the day is kept in the preferences. Setting or taking off
+    /// [`FOLLOW_UP_COMPLETE`] here forgets it until the server says again.
+    #[serde(default, skip_serializing_if = "is_zero_time")]
+    pub completed: i64,
 }
 
 /// The keyword that pins a message to the top of its folder.
 pub const PINNED: &str = "$Pinned";
+/// The keyword that marks a message's follow-up complete (Follow Up › Mark Complete): no longer
+/// flagged, but done, as Outlook shows it with a tick.
+pub const FOLLOW_UP_COMPLETE: &str = "$FollowUpComplete";
 
 /// Whether `k` can be sent as an IMAP keyword: an atom (no spaces, brackets, wildcards, quotes or
 /// controls), not a system flag, at most 64 characters.
@@ -340,6 +349,9 @@ impl Flags {
 
     /// Add or remove a keyword.
     pub fn set_keyword(&mut self, keyword: &str, on: bool) {
+        if keyword.eq_ignore_ascii_case(FOLLOW_UP_COMPLETE) {
+            self.completed = 0;
+        }
         self.keywords.retain(|k| !k.eq_ignore_ascii_case(keyword));
         if on {
             self.keywords.push(keyword.to_string());
@@ -358,6 +370,12 @@ impl Flags {
 
     pub fn pinned(&self) -> bool {
         self.has(PINNED)
+    }
+
+    /// Its follow-up marked complete, and not flagged again since (a flag set again, here or by
+    /// another program, is what counts).
+    pub fn follow_up_complete(&self) -> bool {
+        !self.flagged && self.has(FOLLOW_UP_COMPLETE)
     }
 
     /// The flags as an IMAP flag list (without parentheses).
@@ -516,6 +534,10 @@ impl Smime {
 
 fn is_zero(n: &i8) -> bool {
     *n == 0
+}
+
+fn is_zero_time(t: &i64) -> bool {
+    *t == 0
 }
 
 impl Summary {
@@ -705,6 +727,14 @@ mod tests {
         assert!(f.pinned() && f.has("$pinned"));
         f.set_keyword("$PINNED", false);
         assert!(!f.pinned());
+        f.set_keyword(FOLLOW_UP_COMPLETE, true);
+        assert!(f.follow_up_complete());
+        f.flagged = true;
+        assert!(!f.follow_up_complete(), "flagged again");
+        // The server's time goes with a change made here.
+        f.completed = 1_791_979_200;
+        f.set_keyword("$followupcomplete", false);
+        assert_eq!(f.completed, 0);
     }
 
     #[test]

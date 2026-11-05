@@ -57,7 +57,8 @@ impl Clock {
         self.utc(day.saturating_mul(86_400))
     }
 
-    fn local_day(&self, t: i64) -> i64 {
+    /// The local day (days since the epoch) the instant `t` falls on.
+    pub fn local_day(&self, t: i64) -> i64 {
         self.local(t).div_euclid(86_400)
     }
 }
@@ -290,7 +291,8 @@ pub fn day_string(day: i64) -> String {
 /// A local day as the reading pane shows it: `Fri 2026-10-16`.
 pub fn day_label(day: i64) -> String {
     let (y, m, d) = civil_from_days(day);
-    let weekday = WEEKDAYS.get((day + 3).rem_euclid(7) as usize).copied().unwrap_or("");
+    // 1970-01-01 was a Thursday; any day, however far off (it may come from disk).
+    let weekday = WEEKDAYS.get((day.rem_euclid(7) + 3).rem_euclid(7) as usize).copied().unwrap_or("");
     format!("{weekday} {y:04}-{m:02}-{d:02}")
 }
 
@@ -322,6 +324,8 @@ mod tests {
         assert_eq!(day_string(FollowUp::ThisWeek.due(&sat)), "2026-10-17");
         assert_eq!(day_string(FollowUp::NextWeek.due(&sat)), "2026-10-23");
         assert_eq!(day_label(FollowUp::ThisWeek.due(&clock)), "Fri 2026-10-16");
+        // A day from a damaged file, far off either way: a label all the same.
+        assert!(!day_label(i64::MAX).is_empty() && !day_label(i64::MIN).is_empty());
         assert_eq!(FollowUp::from_code("nextweek"), Some(FollowUp::NextWeek));
     }
 

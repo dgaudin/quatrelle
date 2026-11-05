@@ -6,7 +6,8 @@
 //! The syntax follows the familiar mail-client form: bare words match anywhere (as word
 //! prefixes, so `proj` finds "project"), `"quoted phrases"` match as written, and keywords narrow
 //! the field: `from:`, `to:` (also `cc:`), `subject:`, `body:`, `has:attachment` /
-//! `hasattachments:yes`, `is:unread` / `is:read`, `is:flagged`, `is:awaiting` (sent and not
+//! `hasattachments:yes`, `is:unread` / `is:read`, `is:flagged`, `is:complete` (a follow-up
+//! marked complete), `is:awaiting` (sent and not
 //! answered yet), `larger:` / `smaller:` (a size: `100KB`, `2MB`, bytes alone). A leading `-`
 //! negates a term. `from:` and `to:` take a list,
 //! `from:ana,jun`, matching any of them (terms otherwise must all match).
@@ -67,6 +68,9 @@ pub enum Term {
     /// Carries a keyword (`keyword:x`; `category:` names are mapped to keywords by the caller,
     /// and match the keyword spelled as the name too). `is:pinned` is the `$Pinned` keyword.
     Keyword(String),
+    /// Its follow-up marked complete and not flagged again since (`is:complete`:
+    /// [`Flags::follow_up_complete`](crate::Flags::follow_up_complete)).
+    Complete,
     /// Marked high importance by its sender (`is:important`).
     Important,
     /// Carries one of these keywords (`is:categorized`: the caller fills in its categories'
