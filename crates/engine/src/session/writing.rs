@@ -202,7 +202,8 @@ impl Session {
     pub fn reply_compose(&mut self, mode: ReplyMode) -> CmdResult {
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && self.identity(&r.key.account).is_some();
-        let mut parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
+        // The reply's own copy (the quote's pictures are put in it), the one shown left as it is.
+        let mut parsed = Arc::unwrap_or_clone(r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?);
         if r.text_first && !answerable_from_text(&parsed, mode) {
             self.whole_here()?;
         }
