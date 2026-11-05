@@ -63,3 +63,39 @@ fn a_failed_last_save_keeps_what_came_in() {
     o.add_folder(None, "Inbox");
     assert_eq!(o.finish().last_save, None);
 }
+
+/// The reader failing on one folder of a data file costs that folder's rest, not the folders
+/// read after it: each folder is read behind its own `catch_unwind`.
+#[test]
+fn a_panic_in_one_folder_keeps_the_others() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-pst-panic-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(dir.join("cache")).unwrap();
+    let names = ["Archive", "Projects", "Receipts"];
+    let mut folders = Vec::new();
+    for (i, name) in names.iter().enumerate() {
+        let d = mime::Draft { subject: format!("In {name}"), body: "Hello.".into(), ..Default::default() };
+        let raw = mime::build(&d, &EmailAddress::new("Riley", "riley@example.com"), 1_704_067_200, &format!("m{i}@example.com")).unwrap();
+        let key = MessageKey { account: "a1".into(), folder: (*name).into(), validity: 1, uid: 1 };
+        store.write_body(&key, &raw).unwrap();
+        let summary = mime::summary_from_full(&raw, key, Flags::default(), 10, 0);
+        store.save_folder("a1", name, &FolderState { validity: 1, uid_next: 2, messages: vec![summary], ..Default::default() }).unwrap();
+        folders.push(Folder { account: "a1".into(), path: (*name).into(), delimiter: Some('/'), selectable: true, ..Default::default() });
+    }
+    store.save_folders("a1", &folders).unwrap();
+    let file = dir.join("Three.pst");
+    crate::pst_export::export(&store, "a1", "Three", &file, &mut |_| {}).unwrap();
+    for (i, bad) in names.iter().enumerate() {
+        fail_on(Some(bad));
+        let account = format!("b{i}");
+        let done = import(&file, &store, &account, &mut |_| {});
+        fail_on(None);
+        let done = done.unwrap();
+        let came: Vec<&str> = done.folders.iter().filter(|f| f.total > 0).map(|f| f.path.as_str()).collect();
+        let others: Vec<&str> = names.iter().copied().filter(|n| n != bad).collect();
+        assert_eq!(came, others, "{bad} failing: {done:?}");
+        assert_eq!(done.messages, 2, "{bad} failing");
+        assert!(done.folders.iter().any(|f| f.path == *bad), "{bad} is there, empty");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
