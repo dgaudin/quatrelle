@@ -2092,6 +2092,104 @@ pur : `packed/tests.rs` (821 lignes) découpé par sujet en `packed/tests/` (`na
   - le doublement à la croissance de redb concerne toutes les écritures, pas seulement le bouton ;
     il explique sans doute une part de la taille des fichiers des propriétaires.
 
+### État de la récupération : v0.32, vingt-deuxième partie : la recherche ignore les accents et coupe les mots aux apostrophes ; ce que coûte l'index (2026-11-05)
+
+Le lot R14 de `merge-tools/survey-v0.32.md`, sur `main`, selon la décision du propriétaire du 04/11
+(n° 3 et 4) : **accents ignorés et mots coupés aux apostrophes**, dans le courrier et le calendrier ;
+**la requête envoyée au serveur reste telle que tapée** ; l'index sur disque (P3) attend ces mesures.
+Pour chaque partie, sa sonde d'abord, lancée contre le code d'alors, sur des boîtes fabriquées. D'abord
+un déplacement pur : `model/src/search.rs` (764 lignes) découpé par sujet en `search/parse.rs`,
+`matching.rs`, `index.rs` (`df1b68d2`), comme l'origine l'a fait dans `41464ec1`.
+
+| Sonde | avant | après |
+|---|---|---|
+| `equipe` dans « Réunion Équipe », `resume` dans « Le Résumé », `équipe` dans « Notes equipe » (`accents_are_read_away_both_ways`) | rien trouvé | trouvés, index et vérification |
+| `PRÓJECTOR` dans la boîte d'exemple (`search_folds_accents`, la partie pliage du test moteur de `41464ec1`) | 0 | 1 |
+| `equipe` dans « l'équipe » et « l’équipe », `l'equipe` dans « l’équipe », `hui` dans « aujourd'hui », `word` dans « site.word », `list` dans « shot_list_v2 » (`joined_words_are_found_by_their_parts`) | rien trouvé | trouvés ; « 10,000 » pas coupé, une lettre n'est pas une partie |
+| un événement « Réunion d'équipe », salle « Hélène », cherché par `equipe`, `helene`, `"reunion d'equipe"` | introuvable | trouvé |
+| `helene` dans les personnes (« Hélène Dupré »), `dupre` dans le carnet, `MÁRTÍN` dans les tâches (« Devis Martin ») | rien | trouvés |
+| `"thank you for the update"` dans 50 000 messages, dont des HTML mis en texte (`a_phrase_is_found_across_a_line_break`) | 16 643 sur 16 667 | 16 667 |
+
+- **La table de pliage** (`6b8c1bde`, repris de `82a959b4`) : `cargo xtask fold` l'écrit dans
+  `model/src/search/fold_table.rs` avec `icu_normalizer` (NFKD, accents retirés, ß, æ, ø, œ, ł, đ, ð,
+  þ, ı, ё, ς à la main), le modèle portable n'emporte aucun normaliseur ; `fold --check` entre dans
+  `cargo xtask ci`, après `authors`. Adapté : la table s'écrit avec l'en-tête d'auteurs du fork. La
+  table faite ici est celle de l'origine, à l'en-tête près.
+- **Le pliage des deux côtés** (`9838da6c`, adapté de `41464ec1`, sa partie pliage seulement) :
+  `search/fold.rs` (`fold_word`, `tokens`, du code de l'origine), appliqué où l'index prend les mots,
+  où la requête interroge l'index, et où un message est vérifié (mots, mots exclus, phrases pliées
+  lettre à lettre, adresses). `Term::Words` garde les mots tapés : EWS, IMAP, Graph et JMAP reçoivent
+  la requête telle quelle (`a_server_is_asked_for_the_words_as_typed`, déjà juste, gardé en
+  garde-fou). `FOLDER_VERSION` passe à 2 : les `search.idx` anciens sont relus. **Pas pris** : les
+  dates (`received:`, `sent:`, `date:`, `after:`, `before:`, `search/dates.rs`), `attachment:`, la
+  logique à trois réponses ; le pliage s'en sépare proprement et se pose sur la logique à deux
+  réponses du fork. Pris aussi : le test de pliage de l'origine, son proptest d'idempotence, les
+  entrées du dictionnaire de fuzz ; deux proptests écrits ici (une requête quelconque vérifiée sans
+  panique ; un mot tapé avec ou sans accents trouve le texte qui l'a).
+- **Les parties des mots joints** (`1191f0e8`, adapté de `282b08c6`) : `index_tokens`, `parts`,
+  `joins` de l'origine ; chaque partie de deux lettres ou plus est indexée et vérifiée. Propre au
+  fork : l'apostrophe typographique (’, ‘) se lit comme la droite, dans les mots et les phrases.
+  `FOLDER_VERSION` passe à 3. Deux tests du moteur comptent « shot list » deux fois, comme chez
+  l'origine (« shot_list_v2 »). `store/src/search/writer.rs` est sans objet ici.
+- **Le calendrier** (`c3589feb`, propre au fork : l'origine ne plie pas `ical/find.rs`) : chaque
+  champ plié lettre à lettre, ce qui règle aussi le sigma final que la présélection devait excuser ;
+  les mots et leurs parties comme le courrier. La référence du test d'équivalence (3 000 cas) lit de
+  même, apostrophes, ß et Ł parmi ses lettres. Deux assertions qui figeaient l'ancien comportement
+  changent : « ecrire » trouve « écrire », et une marque seule ne compte plus.
+- **Plier aussi vite que mettre en minuscules** (`c0e3fc01`) : la recherche du calendrier dans
+  25 000 rendez-vous dont toutes les notes ont le mot cherché prenait 0,94 s en debug (0,53 s avant
+  le pliage), au bord de la seconde du test, que les machines de GitHub dépassent déjà. Les suites
+  ASCII sont copiées d'un bloc, un mot sans partie ne fait pas de liste, et `quatrelle-model` se
+  construit en `opt-level = 1` en debug (le `to_lowercase` de la bibliothèque standard qu'il
+  remplace l'était toujours) : 0,20 s.
+- **Tâches et personnes** (`d550a604`) : la recherche des tâches (objet, notes), celle des personnes
+  des carnets (nom, organisation, adresses) et la liste du carnet d'adresses (adresses de
+  l'utilisateur comprises) plient les deux côtés, toujours en sous-chaîne.
+- **Défaut du fork trouvé par la mesure** (`c13a6ff5`) : la mise en texte du HTML coupe ses lignes
+  (« Thank you for the\nupdate »), et une phrase n'y était pas trouvée, avant le pliage aussi. Une
+  phrase se cherche maintenant dans le texte plié, chaque suite de blancs réduite à une espace.
+- **Les mesures** (`96c489b8`, adapté de `db1bc510` ; `107ac7b4`, adapté de `19a5f797`) :
+  `sample::big` (50 000 messages en 40 dossiers, la Boîte de réception 12 000, tous téléchargés, avec
+  les réponses connues), écrit par lots ; `Shape` gagne `words` et `vocabulary` (par défaut ceux de
+  l'origine : 40 mots tirés de 2 048). Le banc ignoré `bench::search::fifty_thousand` joue la
+  fenêtre (6 ms par appel, 4 096 messages au plus) sur un fichier de données ; le test
+  `ui-egui/src/tests/list/search_big.rs` met la boîte dans la fenêtre (verrou entre ses deux tests,
+  durées vérifiées en `--release` seulement, 10 000 messages en debug). En `--release`, sur ce poste :
+
+| 50 000 messages | textes courts (40 mots, 32 Mo de sources) | textes longs (600 mots sur 60 000, 228 Mo) |
+|---|---|---|
+| Première recherche, l'index bâti | 1,96 s de calcul en 348 appels (≈ 5,8 s d'images à 60 Hz) ; fenêtre : 294 images, p99 7,4 ms | 22,1 s en 4 762 appels (≈ 79 s à l'écran), pire appel 143 ms (la fin d'un dossier) |
+| Entrées de l'index | 55 par message | 610 par message |
+| Mémoire prise | +62 Mo (≈ 1,2 Ko par message) | +269 Mo (≈ 5,4 Ko par message, dont 15 Mo de texte gardé) |
+| Recherche suivante (un mot, `zurich` pour Zürich) | ≤ 2,4 ms, un appel | ≤ 1,9 ms |
+| Une phrase (16 667 corps relus) / `is:read` (35 000) | 0,12 s / 0,24 s | 1,13 s en 179 appels / 0,19 s |
+| `search.idx` sur disque | 4,1 Mo | 53,7 Mo (≈ 1,1 Ko par message) |
+| Après relancement, rien de changé | 0,11 s, 24 appels | 1,58 s, 41 appels, pire 89 ms (un dossier gardé lu d'un coup) |
+| Après relancement, un message arrivé dans la Boîte de réception | 0,59 s, 119 appels | 6,9 s, 1 241 appels (≈ 21 s), toute la Boîte relue |
+
+- **Pour P3, ramené à 550 000 éléments** (fois 11, profil des textes longs, le plus proche du
+  propriétaire : la dev.3 a mis 6 à 7 minutes de calcul, ce profil en donne environ 4) : la première
+  construction ≈ 4 min de calcul, ≈ 15 min avant que la recherche soit complète à l'écran (la
+  fenêtre reste utilisable) ; **≈ 3 Go de mémoire** pour l'index (1,3 Go pour les seules listes de
+  messages) ; ≈ 600 Mo de `search.idx`. Un relancement sans changement ≈ 17 s de calcul, mais **un
+  dossier modifié depuis est relu en entier** : un dossier de 50 000 messages qui a reçu un message ≈
+  30 s de calcul et plus d'une minute à l'écran ; et l'appel qui lit d'un coup un dossier gardé, ou
+  qui finit d'en bâtir un (écriture de son `search.idx`, jonction), ≈ 0,4 à 0,6 s pour 50 000
+  messages : un petit gel par dossier. Chez le propriétaire, la Boîte de réception, les Éléments
+  envoyés et chaque dossier qui reçoit du courrier sont donc relus à chaque lancement.
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-model` (proptests compris),
+  `quatrelle-engine` et `quatrelle-ui-egui` ; la cible de fuzz `search` compile (dictionnaire de
+  l'origine et entrées des parties ; graines `folding` et `joined`) ; `cargo xtask ci` (wasm compris).
+- **Où la recherche ne plie pas encore** : les suggestions de destinataires (`Contact::matches` et
+  son nom en minuscules gardé, `mailboxes/people/suggest.rs`, `writing/names.rs` : classement,
+  annuaire, salles, un ensemble à reprendre d'un bloc) ; les règles de courrier
+  (`organize.rs`, `Condition::matches`, volontairement : elles suivent les règles du serveur) ; une
+  phrase du calendrier coupée par un saut de ligne ; les recherches faites par les serveurs.
+- **Reste, remarqué** : le vocabulaire fabriqué (des mots de six lettres) donne moins de mots
+  différents que le vrai courrier, la mémoire des mots eux-mêmes est donc sous-estimée ; le pire
+  appel dépasse la part de 6 ms à la fin de chaque dossier (déjà noté par R6), et `is:read` montre
+  ses 35 000 trouvés en un appel de 32 à 63 ms.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
