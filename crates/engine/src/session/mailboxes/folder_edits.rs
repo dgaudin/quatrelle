@@ -242,7 +242,11 @@ impl Session {
             let st = self.folder_state(account, &p);
             counts.push((p, st.unread(), u32::try_from(st.messages.len()).unwrap_or(u32::MAX)));
         }
-        let mut changed = false;
+        // Compared with the disk too: a flag changed here was counted in memory already
+        // (`apply_op_memory`), so the counts kept on disk were never written again after a mark.
+        let on_disk = self.store.as_ref().and_then(|s| s.load_folders(account).ok()).unwrap_or_default();
+        let mut changed =
+            counts.iter().any(|(p, unread, total)| on_disk.iter().find(|f| &f.path == p).is_some_and(|f| f.unread != *unread || f.total != *total));
         if let Some(a) = self.account_mut(account) {
             for (p, unread, total) in counts {
                 if let Some(f) = a.folders.iter_mut().find(|f| f.path == p)

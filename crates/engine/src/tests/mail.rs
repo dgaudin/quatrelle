@@ -6,6 +6,7 @@
 use super::*;
 
 mod echo;
+mod marks;
 mod nav;
 mod selecting;
 mod shown;
