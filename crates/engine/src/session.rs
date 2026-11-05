@@ -229,7 +229,8 @@ pub const STILL_COMING: &str = "its attachments are still downloading: a moment"
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reading {
     pub key: MessageKey,
-    pub parsed: Option<Parsed>,
+    /// Shared, so the pane and windows copy it each frame for nothing (a reply takes its own).
+    pub parsed: Option<Arc<Parsed>>,
     pub error: Option<String>,
     /// The other messages of its conversation in this list, oldest first.
     pub thread: Vec<MessageKey>,

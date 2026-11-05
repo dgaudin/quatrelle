@@ -192,8 +192,8 @@ impl Session {
 
     /// A message as it's read: one without a `Date` gets the time the server took it in, as the
     /// list shows it (replies and forwards quoted it as sent on 1 January 1970).
-    fn parse_for_reading(&self, key: &MessageKey, raw: &[u8]) -> Option<mime::Parsed> {
-        mime::parse(raw).map(|p| self.dated(key, p))
+    fn parse_for_reading(&self, key: &MessageKey, raw: &[u8]) -> Option<Arc<mime::Parsed>> {
+        mime::parse(raw).map(|p| Arc::new(self.dated(key, p)))
     }
 
     fn dated(&self, key: &MessageKey, mut p: mime::Parsed) -> mime::Parsed {
@@ -213,7 +213,7 @@ impl Session {
             return;
         }
         // Read as it was built: a name alone stays, where the address isn't known yet.
-        let Some(parsed) = mime::parse_text_first(raw).map(|p| self.dated(key, p)) else { return };
+        let Some(parsed) = mime::parse_text_first(raw).map(|p| Arc::new(self.dated(key, p))) else { return };
         let warning = self.message_warning(key, &parsed);
         for r in self.reading.iter_mut().chain(&mut self.windows).filter(|r| waits(r)) {
             r.parsed = Some(parsed.clone());
@@ -228,16 +228,18 @@ impl Session {
         // Signed or encrypted: what's inside is what's shown, the protection said beside it.
         let shown = self.reading.as_ref().is_some_and(|r| &r.key == key)
             || self.windows.iter().any(|w| &w.key == key && (w.parsed.is_none() || w.text_first));
-        let (raw, security) = if shown { self.unwrap(key, raw) } else { (raw.to_vec(), None) };
-        let raw = raw.as_slice();
+        let (raw, security) = if shown { self.unwrap(key, raw) } else { (std::borrow::Cow::Borrowed(raw), None) };
+        let raw = &*raw;
         // Gathered before the windows are set aside: a gathering says again what every one shows.
         if shown {
             self.keep_senders();
         }
         let mut windows = std::mem::take(&mut self.windows);
+        // Parsed once, however many places show it.
+        let mut parsed = None;
         for w in windows.iter_mut().filter(|w| &w.key == key && (w.parsed.is_none() || w.text_first)) {
             w.text_first = false;
-            w.parsed = self.parse_for_reading(key, raw);
+            w.parsed = parsed.get_or_insert_with(|| self.parse_for_reading(key, raw)).clone();
             w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
             w.warning = w.parsed.as_ref().and_then(|p| self.message_warning(key, p));
             w.security = security.clone();
@@ -245,7 +247,7 @@ impl Session {
         self.windows = windows;
         // Only the open message is laid out (bodies downloaded ahead aren't, each costing time).
         if self.reading.as_ref().is_some_and(|r| &r.key == key)
-            && let parsed = self.parse_for_reading(key, raw)
+            && let parsed = parsed.unwrap_or_else(|| self.parse_for_reading(key, raw))
             && let Some(r) = self.reading.as_mut()
         {
             r.error = if parsed.is_none() { Some("this message could not be read".into()) } else { None };
@@ -253,7 +255,7 @@ impl Session {
             r.security = security;
             r.text_first = false;
         }
-        // Taken out while it's checked (not copied: it can be big), and put back.
+        // Taken out while it's checked (`self` is borrowed by the check), and put back.
         let parsed = self.reading.as_mut().filter(|r| &r.key == key).and_then(|r| r.parsed.take());
         if let Some(parsed) = parsed {
             let warning = self.message_warning(key, &parsed);
