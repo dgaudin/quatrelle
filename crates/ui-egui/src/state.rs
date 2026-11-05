@@ -170,6 +170,8 @@ pub struct UiState {
     pub(crate) videos: reading::Videos,
     /// The open message's body on its way back from the reading lane.
     pub(crate) bodies: reading::Bodies,
+    /// Long message texts laid out by what's in view: their parts' heights, and their selection.
+    pub(crate) long_text: HashMap<egui::Id, reading::LongText>,
     /// The File page, while it's open.
     pub backstage: Option<backstage::Backstage>,
     /// The month the calendar's small month shows (`year * 12 + month - 1`; `None`: the day on

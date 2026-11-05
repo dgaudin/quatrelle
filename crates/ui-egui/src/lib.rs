@@ -400,6 +400,7 @@ impl MailApp {
                 video_frames: HashMap::new(),
                 videos: reading::Videos::default(),
                 bodies: reading::Bodies::default(),
+                long_text: HashMap::new(),
                 backstage: None,
                 mini_month: None,
                 cal_scrolled: [false; 2],
