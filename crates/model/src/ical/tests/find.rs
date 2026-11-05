@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::dates::days_from_civil;
+use crate::search::fold_word;
 
 fn board() -> CalEvent {
     CalEvent {
@@ -143,13 +144,14 @@ fn a_bare_word_looks_through_each_field() {
     for q in ["οδος", "ΟΔΟΣ", "οδο", "α"] {
         assert!(EventQuery::parse(q).matches(&road), "{q}");
     }
-    // An address or a room's number inside a word, an accented word, a word in a long note.
+    // An address or a room's number inside a word, an accented word (typed with its accents or
+    // without), a word in a long note.
     let mut notes = board();
     notes.description = format!("{}Réunion du comité, salle B.12, écrire à info@post.example", "x ".repeat(5_000));
-    for q in ["réunion", "RÉUN", "comité", "b.12", "post.example", "info@post", "notes:salle"] {
+    for q in ["réunion", "RÉUN", "comité", "b.12", "post.example", "info@post", "notes:salle", "ecrire", "comite"] {
         assert!(EventQuery::parse(q).matches(&notes), "{q}");
     }
-    for q in ["eunion", "notes:board", "ecrire"] {
+    for q in ["eunion", "notes:board"] {
         assert!(!EventQuery::parse(q).matches(&notes), "{q}");
     }
     // Over several lines: each word on its line, a word cut by a line break isn't one.
@@ -167,11 +169,12 @@ fn a_bare_word_looks_through_each_field() {
         let parsed = EventQuery::parse(q);
         assert_eq!(parsed.matches(&mark), matched_before(&parsed, &mark), "{q:?}");
     }
-    assert!(!EventQuery::parse("\u{345}a").matches(&mark));
+    // The mark alone folds to nothing (accents are read away): what's left is `a`.
+    assert!(EventQuery::parse("\u{345}a").matches(&mark));
 }
 
 /// The search as it read events before it looked through them field by field: every field joined,
-/// lowercased and cut into words whole.
+/// folded and cut into words whole (with their parts), as the mail search reads a text.
 fn matched_before(q: &EventQuery, e: &CalEvent) -> bool {
     fn people(list: &[&Attendee]) -> String {
         list.iter().map(|a| format!("{} {} ", a.name, a.email)).collect()
@@ -200,13 +203,14 @@ fn matched_before(q: &EventQuery, e: &CalEvent) -> bool {
             EventTerm::Recurring => e.rrule.is_some() || e.recurrence_id.is_some(),
             EventTerm::Text(f, list) => {
                 let text = text(*f, e);
-                let lower = text.to_lowercase();
-                let have: Vec<String> = crate::search::words(&text).collect();
+                let folded = fold_word(&text);
+                let have: Vec<String> = crate::search::words_and_parts(&text).map(std::borrow::Cow::into_owned).collect();
                 list.iter().any(|n| match n {
-                    Needle::Phrase(p) => lower.contains(p.as_str()),
-                    Needle::Words(ws) => {
-                        ws.iter().all(|w| have.iter().any(|h| h.starts_with(w.as_str())) || (w.contains(['@', '.']) && lower.contains(w.as_str())))
-                    }
+                    Needle::Phrase(p) => folded.contains(fold_word(p).as_ref()),
+                    Needle::Words(ws) => ws
+                        .iter()
+                        .map(|w| fold_word(w))
+                        .all(|w| have.iter().any(|h| h.starts_with(w.as_ref())) || (w.contains(['@', '.']) && folded.contains(w.as_ref()))),
                 })
             }
         };
@@ -223,7 +227,7 @@ mod same_as_before {
     /// written apart (accents, one that is a letter's part, a joiner, a soft hyphen), line breaks, an address's and a room's punctuation, the fields' separator.
     const CHARS: &[char] = &[
         'a', 'b', 'A', 'B', 'Σ', 'σ', 'ς', 'İ', 'i', 'K', '\u{212a}', 'k', 'é', 'e', '\u{301}', '\u{345}', '\u{200d}', '\u{ad}', ' ', '\n', '\r',
-        '@', '.', '-', ':', '^', '\u{1f}',
+        '@', '.', '-', ':', '^', '\u{1f}', '\'', '\u{2019}', '_', 'ß', 'Ł',
     ];
     const PIECES: &[&str] = &[
         "a",
@@ -241,6 +245,10 @@ mod same_as_before {
         "@",
         "a@b",
         "b.a",
+        "ab'ba",
+        "ab\u{2019}ba",
+        "ss",
+        "l",
         ".",
         "\"a b\"",
         "\"b \u{1f} a\"",
@@ -303,5 +311,37 @@ mod same_as_before {
             let parsed = EventQuery::parse(&q);
             prop_assert_eq!(parsed.matches(&e), matched_before(&parsed, &e), "{:?} in {:?}", q, e);
         }
+    }
+}
+
+/// Cases met in real use (04/11), in the calendar too: accents are read away both ways round, and the
+/// parts of words joined by an apostrophe, straight or typographic, are words.
+#[test]
+fn accents_and_apostrophes_in_the_calendar() {
+    let e = CalEvent {
+        summary: "Réunion d'équipe".into(),
+        location: "Salle Hélène".into(),
+        description: "Résumé de l\u{2019}ordre du jour".into(),
+        ..Default::default()
+    };
+    for q in [
+        "equipe",
+        "ÉQUIPE",
+        "reunion",
+        "subject:equipe",
+        "helene",
+        "where:helene",
+        "resume",
+        "ordre",
+        "l'ordre",
+        "\"reunion d'equipe\"",
+        "\"l'ordre du\"",
+    ] {
+        assert!(EventQuery::parse(q).matches(&e), "{q}");
+    }
+    assert!(!EventQuery::parse("-equipe").matches(&e));
+    let plain = CalEvent { summary: "Reunion equipe".into(), ..Default::default() };
+    for q in ["équipe", "réunion", "\"réunion équipe\""] {
+        assert!(EventQuery::parse(q).matches(&plain), "{q}");
     }
 }

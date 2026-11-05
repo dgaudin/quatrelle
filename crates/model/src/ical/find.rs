@@ -9,14 +9,16 @@
 //! `attendee:` (`to:`, `cc:`, `with:`), `category:`. A field takes a list, `organizer:ana,jun`
 //! being either. `is:private` (`is:confidential`) and `is:recurring` pick those; `after:` and `before:` a date
 //! (`YYYY-MM-DD`), its occurrences starting on or after it, or before it. A leading `-` turns any
-//! of them round. The caller places the dates in its zone and finds the occurrences.
+//! of them round. The caller places the dates in its zone and finds the occurrences. Words are
+//! read [folded](crate::search::fold_word) on both sides, with the parts of words joined by an
+//! apostrophe or a dot, as the mail search reads them: `equipe` finds "Réunion d’Équipe".
 
 use std::borrow::Cow;
 
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::*;
-use crate::search::words;
+use crate::search::{fold_word, words, words_and_parts};
 
 /// Where in an event a term looks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -248,33 +250,33 @@ fn field_text(f: EventField, e: &CalEvent) -> Cow<'_, str> {
     }
 }
 
-/// A field's text, and the same lowercased.
+/// A field's text, and the same folded.
 struct Text<'a> {
     raw: Cow<'a, str>,
-    lower: String,
+    folded: String,
 }
 
 impl<'a> Text<'a> {
     fn new(raw: Cow<'a, str>) -> Text<'a> {
-        let lower = raw.to_lowercase();
-        Text { raw, lower }
+        let folded = fold_word(&raw).into_owned();
+        Text { raw, folded }
     }
 
-    /// One of its words starts with `w` (or, an address or a room's `2.14`, it's inside one).
+    /// One of its words, or of their parts, starts with `w`, folded (or, an address or a room's
+    /// `2.14`, it's inside one).
     fn has_word(&self, w: &str) -> bool {
-        // A word can only start with `w` where the lowercased text holds it, so most fields,
-        // and most lines of the others, are never cut into words. (A sigma aside: a word ending
-        // in one is lowercased on its own, `ς`, where the whole text may have `σ`.)
-        let sigma = w.contains(['σ', 'ς']);
-        if !sigma && !self.lower.contains(w) {
+        // The text is folded a letter at a time, so each of its words folded, and each part of
+        // one, is in it: a word can only start with `w` where the folded text holds it, so most
+        // fields, and most lines of the others, are never cut into words.
+        if !self.folded.contains(w) {
             return false;
         }
-        if w.contains(['@', '.']) && self.lower.contains(w) {
+        if w.contains(['@', '.']) {
             return true;
         }
-        // A line break always ends a word (Unicode's word bounds, WB3a and WB3b), and lowercases
-        // to itself: each line is cut into words, and lowercased, on its own as within the text.
-        self.raw.split('\n').zip(self.lower.split('\n')).any(|(raw, lower)| (sigma || lower.contains(w)) && words(raw).any(|h| h.starts_with(w)))
+        // A line break always ends a word (Unicode's word bounds, WB3a and WB3b), and folds to
+        // itself: each line is cut into words, and folded, on its own as within the text.
+        self.raw.split('\n').zip(self.folded.split('\n')).any(|(raw, folded)| folded.contains(w) && words_and_parts(raw).any(|h| h.starts_with(w)))
     }
 }
 
@@ -313,9 +315,15 @@ fn term_matches(t: &EventTerm, e: &CalEvent) -> bool {
             };
             let mut seen: [Option<Text>; ANY_FIELDS.len()] = Default::default();
             list.iter().any(|n| match n {
-                Needle::Phrase(p) => in_any(&mut seen, fields, e, |t| t.lower.contains(p.as_str())),
+                Needle::Phrase(p) => {
+                    let p = fold_word(p);
+                    in_any(&mut seen, fields, e, |t| t.folded.contains(p.as_ref()))
+                }
                 // Each word in one of the fields (not all in the same one).
-                Needle::Words(ws) => ws.iter().all(|w| in_any(&mut seen, fields, e, |t| t.has_word(w))),
+                Needle::Words(ws) => ws.iter().all(|w| {
+                    let w = fold_word(w);
+                    in_any(&mut seen, fields, e, |t| t.has_word(&w))
+                }),
             })
         }
     }
