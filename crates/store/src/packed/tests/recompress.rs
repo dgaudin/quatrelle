@@ -22,20 +22,35 @@ type Kept = Vec<(String, Vec<u8>)>;
 /// A data store at `t` whose account `a1` has a data file as a build before R3 left it: no
 /// `META`, and `kept` as it was kept (raw or compressed, whole or in pieces), compacted.
 fn old_store(t: &std::path::Path, kept: &Kept) -> Store {
+    old_store_from(t, kept.iter().cloned())
+}
+
+/// [`old_store`], its files made as they're written (64 MB a transaction at most).
+fn old_store_from(t: &std::path::Path, mut kept: impl Iterator<Item = (String, Vec<u8>)>) -> Store {
     let (app, files) = (t.join("app"), t.join("Files"));
     std::fs::create_dir_all(&app).unwrap();
     std::fs::create_dir_all(&files).unwrap();
     std::fs::write(app.join("datafiles.json"), br#"{"a1": "old.quatrelle"}"#).unwrap();
     {
         let mut db = redb::Database::create(files.join("old.quatrelle")).unwrap();
-        let tx = db.begin_write().unwrap();
-        {
-            let mut tables = Tables { files: tx.open_table(super::super::FILES).unwrap(), pieces: tx.open_table(super::super::PIECES).unwrap() };
-            for (k, v) in kept {
-                tables.put_kept(k, v).unwrap();
+        let mut more = true;
+        while more {
+            let tx = db.begin_write().unwrap();
+            {
+                let mut tables = Tables { files: tx.open_table(super::super::FILES).unwrap(), pieces: tx.open_table(super::super::PIECES).unwrap() };
+                let mut n = 0usize;
+                more = false;
+                for (k, v) in kept.by_ref() {
+                    tables.put_kept(&k, &v).unwrap();
+                    n += v.len();
+                    if n >= 64 << 20 {
+                        more = true;
+                        break;
+                    }
+                }
             }
+            tx.commit().unwrap();
         }
-        tx.commit().unwrap();
         // Compacted as it was left: what Compact Now gives back is then only what it saves.
         while db.compact().unwrap() {}
     }
@@ -79,34 +94,62 @@ fn text(n: usize, seed: u64) -> Vec<u8> {
     format!("Subject: note {seed}\r\n\r\n").bytes().chain(b"the figures for the quarter are in ".iter().copied().cycle().take(n)).collect()
 }
 
-/// Messages with a base64 attachment each, kept raw as before R3, `total` bytes in all.
-fn raw_attachments(total: usize) -> Kept {
-    let mut kept = Kept::new();
+/// Messages with a base64 attachment each, kept raw as before R3, `total` bytes in all, made as
+/// they're asked for.
+fn raw_attachments(total: usize) -> impl Iterator<Item = (String, Vec<u8>)> {
     let (mut n, mut i) = (0usize, 0u64);
-    while n < total {
+    std::iter::from_fn(move || {
+        if n >= total {
+            return None;
+        }
         let size = [40_000usize, 300_000, 1_200_000, 5_000][i as usize % 4];
         let mut mail = format!("Subject: report {i}\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\n\r\n").into_bytes();
         mail.extend(base64(&noise(size, i + 1)));
         n += mail.len();
-        kept.push((format!("INBOX/1/{i}.eml"), mail));
         i += 1;
-    }
-    kept
+        Some((format!("INBOX/1/{}.eml", i - 1), mail))
+    })
+}
+
+/// Every file of `a1` as it reads back, by its length and a hash (`None`: it doesn't read).
+fn digests(s: &Store) -> BTreeMap<String, Option<(usize, u64)>> {
+    use std::hash::{Hash, Hasher};
+    let p = packs(s);
+    p.keys("a1", "")
+        .unwrap()
+        .into_iter()
+        .map(|(k, _)| {
+            let d = p.get("a1", &k).ok().flatten().map(|v| {
+                let mut h = std::hash::DefaultHasher::new();
+                v.hash(&mut h);
+                (v.len(), h.finish())
+            });
+            (k, d)
+        })
+        .collect()
 }
 
 /// The probe: Compact Now on a data file from before R3 (its attachments' base64 kept raw) gives
 /// back what compressing them saves, about a quarter, and every file reads back the same.
 fn compact_now_gives_back_raw_attachments(total: usize) {
     let t = temp(&format!("raw-{total}"));
-    let s = old_store(&t, &raw_attachments(total));
-    let before_files = read_back(&s);
+    let s = old_store_from(&t, raw_attachments(total));
+    let before_files = digests(&s);
     let file = s.data_file("a1").unwrap();
     let size = std::fs::metadata(&file).unwrap().len();
     let began = std::time::Instant::now();
-    let (mut recompressing, mut compacting, mut peak) = (None, None, size);
+    // The file's size, and what it takes on the disk (a file grown by redb is sparse until written).
+    let on_disk = |f: &std::path::Path| {
+        #[cfg(unix)]
+        return std::os::unix::fs::MetadataExt::blocks(&std::fs::metadata(f).unwrap()) * 512;
+        #[cfg(not(unix))]
+        return std::fs::metadata(f).unwrap().len();
+    };
+    let (mut recompressing, mut compacting, mut peak, mut peak_disk) = (None, None, size, on_disk(&file));
     let done = s
         .compact_now("a1", true, &AtomicBool::new(false), &mut |step| {
             peak = peak.max(std::fs::metadata(&file).map_or(0, |m| m.len()));
+            peak_disk = peak_disk.max(on_disk(&file));
             match step {
                 CompactStep::Recompressing(_) => recompressing = Some(began.elapsed()),
                 CompactStep::Compacting => compacting = Some(began.elapsed()),
@@ -120,7 +163,7 @@ fn compact_now_gives_back_raw_attachments(total: usize) {
     let phase1 = compacting.unwrap_or(took);
     eprintln!(
         "{} MB of raw attachments: data file {before} → {after} bytes ({:.3} of it) in {took:.2?}: compressed again {} files, \
-         {} → {} bytes as kept, in {phase1:.2?} ({:.0} MB/s), the file at most {peak} bytes meanwhile; compacted in {:.2?}",
+         {} → {} bytes as kept, in {phase1:.2?} ({:.0} MB/s), the file at most {peak} bytes meanwhile ({peak_disk} on the disk); compacted in {:.2?}",
         total >> 20,
         after as f64 / before as f64,
         r.files,
@@ -132,7 +175,7 @@ fn compact_now_gives_back_raw_attachments(total: usize) {
     assert!(recompressing.is_some() && compacting.is_some(), "both steps heard");
     assert_eq!(before, size);
     assert!(after * 100 <= before * 82, "Compact Now gave back {} of {before} bytes", before - after);
-    assert_eq!(read_back(&s), before_files, "everything reads back the same");
+    assert_eq!(digests(&s), before_files, "everything reads back the same");
     assert_eq!(meta(&s).deflate, super::super::DEFLATE_NOW, "the next one goes straight to compacting");
     drop(s);
     let _ = std::fs::remove_dir_all(&t);
@@ -156,6 +199,69 @@ fn compact_now_on_200_mb_of_raw_attachments() {
 #[ignore = "a measurement: run alone with --release --ignored --nocapture"]
 fn compact_now_on_1_gb_of_raw_attachments() {
     compact_now_gives_back_raw_attachments(1 << 30);
+}
+
+/// The window beside Compact Now on 200 MB of raw attachments: a write from it (a message marked
+/// read, on a local account) while attachments are made smaller waits at most for one batch's
+/// commit; a read from it while the file is compacted is refused at once. A measurement of each
+/// write and read, run with `--release --ignored --nocapture`.
+#[test]
+#[ignore = "a measurement: run alone with --release --ignored --nocapture"]
+fn the_window_beside_compact_now() {
+    let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+    let at = |v: &[f64], q: f64| v.get(((v.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
+    let t = temp("window-beside");
+    let s = old_store_from(&t, raw_attachments(200 << 20));
+    let key = MessageKey { account: "a1".into(), folder: "Drafts".into(), validity: 1, uid: 1 };
+    s.write_body(&key, b"Subject: x\r\n\r\nx").unwrap();
+    let phase = std::sync::Arc::new(AtomicU32::new(0));
+    let running = {
+        let (s, phase) = (s.clone(), phase.clone());
+        std::thread::spawn(move || {
+            s.compact_now("a1", true, &AtomicBool::new(false), &mut |step| {
+                phase.store(if step == CompactStep::Compacting { 2 } else { 1 }, Ordering::SeqCst);
+            })
+            .unwrap()
+            .unwrap()
+        })
+    };
+    crate::no_waiting();
+    let (mut writes, mut reads, mut refused) = (Vec::new(), Vec::new(), 0u32);
+    while !running.is_finished() {
+        match phase.load(Ordering::SeqCst) {
+            1 => {
+                let t0 = std::time::Instant::now();
+                s.write_body(&key, format!("Subject: x\r\n\r\nread {}", writes.len()).as_bytes()).unwrap();
+                writes.push(ms(t0.elapsed()));
+            }
+            2 => {
+                let t0 = std::time::Instant::now();
+                refused += u32::from(s.read_body(&key).is_none());
+                reads.push(ms(t0.elapsed()));
+            }
+            _ => {}
+        }
+        std::thread::sleep(std::time::Duration::from_millis(3));
+    }
+    let done = running.join().unwrap();
+    writes.sort_by(f64::total_cmp);
+    reads.sort_by(f64::total_cmp);
+    eprintln!(
+        "{} → {} bytes; {} writes from the window while attachments were made smaller: p50 {:.1} ms, p99 {:.1} ms, at most {:.1} ms; \
+         {} reads from it while compacted ({refused} refused): at most {:.3} ms",
+        done.before,
+        done.after,
+        writes.len(),
+        at(&writes, 0.5),
+        at(&writes, 0.99),
+        writes.last().copied().unwrap_or(0.0),
+        reads.len(),
+        reads.last().copied().unwrap_or(0.0),
+    );
+    assert!(at(&writes, 0.99) < 500.0);
+    assert!(reads.last().copied().unwrap_or(0.0) < 50.0);
+    drop(s);
+    let _ = std::fs::remove_dir_all(&t);
 }
 
 /// A data file from before: base64 attachments kept raw (whole and in pieces, one of them bigger
