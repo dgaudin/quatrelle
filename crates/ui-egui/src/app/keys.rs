@@ -62,29 +62,28 @@ impl MailApp {
                 .collect()
         });
         let reg = self.session.registry();
+        // A key held down repeats faster than a frame is drawn: the presses of Down or Up (J,
+        // K, with Shift too) queued in a row go as one step of so many messages, so only the
+        // message landed on is read, and a frame costs one step whatever the repeat rate.
+        let mut runs: Vec<(Key, egui::Modifiers, String, i64)> = Vec::new();
         for (key, m) in pressed {
-            let name = match key {
-                Key::ArrowDown => "Down".to_string(),
-                Key::ArrowUp => "Up".to_string(),
-                Key::Enter => "Enter".to_string(),
-                k => k.name().to_string(),
-            };
+            let combo = combo_of(key, m);
+            let step = |c: &str| reg.by_shortcut(c).map(|spec| spec.id).filter(|id| steps(id));
+            if let Some(last) = runs.last_mut()
+                && let Some(id) = step(&combo)
+                && step(&last.2) == Some(id)
+            {
+                last.3 = last.3.saturating_add(1);
+                continue;
+            }
+            runs.push((key, m, combo, 1));
+        }
+        for (key, m, combo, n) in runs {
             let plain = !(m.command || m.ctrl || m.alt);
             // Single keys type text when a text box has focus.
             if typing && plain && !matches!(key, Key::F9 | Key::Escape) {
                 continue;
             }
-            let mut combo = String::new();
-            if m.command || m.ctrl {
-                combo.push_str("Mod+");
-            }
-            if m.alt {
-                combo.push_str("Alt+");
-            }
-            if m.shift {
-                combo.push_str("Shift+");
-            }
-            combo.push_str(&name);
             // Writing a message: its own keys (formatting, Ctrl+R aligns right…), not the main
             // window's; Ctrl+Shift+B opens the address book from any of its boxes.
             if typing && let Some(c) = self.session.compose.as_ref().filter(|c| compose_inline(c, ctx)) {
@@ -156,7 +155,13 @@ impl MailApp {
                 // Page Up and Page Down go as many rows as the list shows (with Shift too: the
                 // plain ones are `list.pageUp`, a small p, which `ends_with("PageUp")` missed).
                 let page = matches!(id, "list.pageUp" | "list.pageDown" | "list.extendPageUp" | "list.extendPageDown");
-                let params = if page { json!({"rows": self.ui.list_page}) } else { json!({}) };
+                let params = if page {
+                    json!({"rows": self.ui.list_page})
+                } else if steps(id) {
+                    json!({"by": n})
+                } else {
+                    json!({})
+                };
                 self.run(id, params);
                 if moves_focus(id) {
                     self.ui.scroll_to_focus = true;
@@ -210,6 +215,32 @@ impl MailApp {
 /// previous. New mail, Send / Receive, Undo, Search, the modules and the address book act anywhere.
 fn acts_on_mail(id: &str) -> bool {
     (id.starts_with("mail.") && !matches!(id, "mail.new" | "mail.sync")) || id.starts_with("quickStep.") || id.starts_with("list.")
+}
+
+/// A shortcut as the registry names it: `Mod+Shift+Down`.
+fn combo_of(key: Key, m: egui::Modifiers) -> String {
+    let mut combo = String::new();
+    if m.command || m.ctrl {
+        combo.push_str("Mod+");
+    }
+    if m.alt {
+        combo.push_str("Alt+");
+    }
+    if m.shift {
+        combo.push_str("Shift+");
+    }
+    combo.push_str(match key {
+        Key::ArrowDown => "Down",
+        Key::ArrowUp => "Up",
+        Key::Enter => "Enter",
+        k => k.name(),
+    });
+    combo
+}
+
+/// The commands that go a message at a time (`{"by": n}`: so many at once).
+fn steps(id: &str) -> bool {
+    matches!(id, "list.next" | "list.prev" | "list.extendNext" | "list.extendPrev")
 }
 
 /// Whether a command moves the list's focus (which is then scrolled into view).
