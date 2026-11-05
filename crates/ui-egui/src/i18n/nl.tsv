@@ -1544,6 +1544,7 @@ month	May	mei
 	Next Week	Volgende week
 	No Date	Geen datum
 	Compacting the data file…	Gegevensbestand comprimeren…
+	Quatrelle closes once it's done.	Quatrelle wordt gesloten zodra dit klaar is.
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	De vrijgekomen ruimte erin gaat terug naar de schijf. Het duurt ongeveer een minuut voor 40 GB; Quatrelle gaat verder zodra het klaar is.
 	Compacted from {before} to {after}	Gecomprimeerd van {before} naar {after}
 	{saved} of it from attachments made smaller	waarvan {saved} door verkleinde bijlagen

@@ -1547,6 +1547,7 @@ month	May	maggio
 	Next Week	Settimana prossima
 	No Date	Nessuna data
 	Compacting the data file…	Compattazione del file di dati…
+	Quatrelle closes once it's done.	Quatrelle si chiuderà appena avrà finito.
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	Lo spazio liberato al suo interno torna al disco. Ci vuole circa un minuto per 40 GB; Quatrelle riprende appena finito.
 	Compacted from {before} to {after}	Compattato da {before} a {after}
 	{saved} of it from attachments made smaller	di cui {saved} dalla riduzione degli allegati

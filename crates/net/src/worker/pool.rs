@@ -173,7 +173,13 @@ impl Pool {
                     sink.emit(Event::CompactProgress { account: account.clone(), in_place, done, total });
                 }
             };
-            let done = store.compact_now(&account, room, &std::sync::atomic::AtomicBool::new(false), &mut progress);
+            // Whatever happens, it ends told: the window's veil and Compact Now's button wait for it.
+            let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                store.compact_now(&account, room, &std::sync::atomic::AtomicBool::new(false), &mut progress)
+            }));
+            let done = done.unwrap_or_else(|_| {
+                Err(quatrelle_store::StoreError::Io { path: account.clone(), source: std::io::Error::other("compacting stopped unexpectedly") })
+            });
             let no_room = !room;
             let done = match done {
                 Ok(Some(c)) => {

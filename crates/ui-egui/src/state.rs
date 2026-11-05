@@ -14,6 +14,9 @@ pub struct UiState {
     /// the window is to close on the next frame.
     pub closing_anyway: bool,
     pub close_now: bool,
+    /// The window was closed while Compact Now had a data file to itself: it closes once that's
+    /// done (stopped then, the file would be gone through whole at the next start).
+    pub(crate) close_after_compact: bool,
     /// The close asked for quits (File › Exit, the icon's Exit, a script): it goes ahead rather
     /// than leaving Quatrelle in the notification area.
     pub quitting: bool,

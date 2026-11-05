@@ -145,3 +145,38 @@ fn without_a_notification_area_closing_quits() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+/// Closed while Compact Now has a data file to itself: the window stays, its veil saying it
+/// closes once that's done, and closes then (stopped part way, redb's compaction has the whole
+/// file gone through at the next start: 72 s for the owner's). Closed while attachments are made
+/// smaller first (stopped there, the next one goes on), it closes at once.
+#[test]
+fn closing_while_a_data_file_is_compacted_waits_for_it() {
+    let (mut a, dir) = app("compact-close");
+    hosting(&mut a, false);
+    let ctx = egui::Context::default();
+    start(&ctx, &mut a);
+    a.session.compacting = Some("a1".into());
+    a.session.compact_phase = quatrelle_engine::CompactPhase::InPlace;
+    let told = pass(&ctx, &mut a, true);
+    assert!(told.contains(&ViewportCommand::CancelClose) && !told.contains(&ViewportCommand::Close), "{told:?}");
+    assert!(a.ui.close_after_compact, "closes once it's done");
+    assert!(!pass(&ctx, &mut a, false).contains(&ViewportCommand::Close), "not yet");
+    a.session.apply(quatrelle_engine::model::Event::Compacted {
+        account: "a1".into(),
+        before: 9,
+        after: 3,
+        recompressed: 0,
+        no_room: false,
+        error: None,
+    });
+    let told = pass(&ctx, &mut a, false);
+    assert!(told.contains(&ViewportCommand::Close), "done: it closes {told:?}");
+    assert!(!a.ui.close_after_compact);
+
+    a.session.compacting = Some("a1".into());
+    a.session.compact_phase = quatrelle_engine::CompactPhase::Recompressing { done: 3, total: 9 };
+    let told = pass(&ctx, &mut a, true);
+    assert!(!told.contains(&ViewportCommand::CancelClose) && !a.ui.close_after_compact, "at once: {told:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

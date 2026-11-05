@@ -1547,6 +1547,7 @@ month	May	5月
 	Next Week	下週
 	No Date	無日期
 	Compacting the data file…	正在壓縮資料檔…
+	Quatrelle closes once it's done.	完成後 Quatrelle 將關閉。
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	檔案中騰出的空間將歸還給磁碟。40 GB 大約需要一分鐘；完成後 Quatrelle 會繼續。
 	Compacted from {before} to {after}	已從 {before} 壓縮為 {after}
 	{saved} of it from attachments made smaller	其中 {saved} 來自縮小附件
