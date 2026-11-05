@@ -7,8 +7,11 @@ use super::*;
 
 mod answer;
 mod indexing;
+mod pace;
 use answer::Answer;
 pub(crate) use indexing::SearchIndex;
+pub(crate) use pace::Pace;
+pub use pace::SearchClock;
 
 /// Sent at least this long ago with nothing back, a message is waiting for a reply
 /// (`is:awaiting`); sent longer ago than [`AWAITING_WITHIN_DAYS`], it no longer is.
@@ -172,7 +175,7 @@ impl Session {
         if folder.is_some() || !same {
             self.search_folder = folder;
         }
-        self.search_budget = budget;
+        self.search_pace.begin(budget);
         if q.is_empty() {
             self.search_pending = false;
             // The index stays (the next search is quick), not the answer: what it would have
@@ -194,7 +197,7 @@ impl Session {
         // A slice more of the index; carrying the same search on, the list shows the answer
         // again only when the slice says so (a big mailbox's list sorted at every frame made
         // each slice dearer than the last).
-        let show = self.search_step(q, scope, budget);
+        let show = self.search_step(q, scope);
         if show || !same {
             self.refresh_list();
         }

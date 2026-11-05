@@ -211,6 +211,10 @@ impl SearchIndex {
     }
 }
 
+/// Most messages taken from a folder's list at once (a call that runs out of time early doesn't
+/// copy a big folder's list for nothing).
+const SLICE_MAX: usize = 512;
+
 /// A folder's messages take their place in the mailbox's index after the ones before them.
 fn join_folder(ix: &mut SearchIndex, k: (String, String), folder: FolderIndex) {
     let offset = u32::try_from(ix.keys.len()).unwrap_or(u32::MAX);
@@ -257,20 +261,20 @@ impl Session {
         });
     }
 
-    /// Index at most `budget` more messages (`usize::MAX`: whatever is left), reading a folder in
-    /// slices so a big one isn't copied whole. Whether the scan is done: a big mailbox's first
-    /// search is spread over several calls, one slice each, and the window keeps drawing between
-    /// them. Between folders, what came into the folders read already is added first (usually a
-    /// few messages).
-    pub(crate) fn index_step(&mut self, budget: usize) -> bool {
+    /// Index what the call's allowance lets ([`Pace`]: messages at most, and the window's share
+    /// of a frame), reading a folder in slices so a big one isn't copied whole. Whether the scan
+    /// is done: a big mailbox's first search is spread over several calls, and the window keeps
+    /// drawing between them. Between folders, what came into the folders read already is added
+    /// first (usually a few messages).
+    pub(crate) fn index_step(&mut self) -> bool {
         let Some(mut ix) = self.index.take() else { return true };
-        let mut added = 0usize;
-        while added < budget {
+        while self.search_pace.index_more() {
             if ix.building.is_none()
                 && ix.pos == 0
                 && let Some(k) = ix.stale.first().cloned()
             {
-                added += self.top_up(&mut ix, &k, budget - added);
+                let cost = self.top_up(&mut ix, &k);
+                self.search_pace.spend(cost);
                 continue;
             }
             let Some((a, f)) = ix.scan.get(ix.folder).cloned() else { break };
@@ -282,19 +286,26 @@ impl Session {
                     ix.folder += 1;
                     // A folder kept on disk is read in one go: a big one takes the whole
                     // slice, so a first search after a restart doesn't load them all at once.
-                    added += ix.keys.len().saturating_sub(before).max(1);
+                    self.search_pace.spend(ix.keys.len().saturating_sub(before).max(1));
                     continue;
                 }
                 ix.building = Some(FolderIndex::new(self.folder_stamp(&a, &f)));
             }
-            // A slice of the folder at once (not the folder looked up again for each message).
-            let slice: Vec<Arc<Summary>> = self.folder_state(&a, &f).messages.iter().skip(ix.pos).take(budget - added).cloned().collect();
+            // A slice of the folder at once (not the folder looked up again for each message);
+            // a message is begun only while the call's time allows one more.
+            let take = self.search_pace.left().min(SLICE_MAX);
+            let slice: Vec<Arc<Summary>> = self.folder_state(&a, &f).messages.iter().skip(ix.pos).take(take).cloned().collect();
             let Some(mut b) = ix.building.take() else { break };
+            let mut n = 0;
             for m in &slice {
+                if n > 0 && !self.search_pace.index_more() {
+                    break;
+                }
                 self.index_message(&mut b, m);
+                n += 1;
             }
-            ix.pos += slice.len();
-            added += slice.len();
+            ix.pos += n;
+            self.search_pace.spend(n);
             if ix.pos < self.folder_state(&a, &f).messages.len() {
                 ix.building = Some(b);
                 continue;
@@ -309,7 +320,7 @@ impl Session {
             join_folder(&mut ix, k, b);
             ix.folder += 1;
             ix.pos = 0;
-            added += 1;
+            self.search_pace.spend(1);
         }
         ix.done = ix.folder >= ix.scan.len();
         let done = !ix.pending();
@@ -329,10 +340,10 @@ impl Session {
         b.keys.push(m.key.clone());
     }
 
-    /// What came into a folder read already: its messages the index hasn't got, at most
-    /// `budget`, join the index (the folder isn't read again). What it cost (at least one); the
-    /// folder is up to date once nothing is left.
-    pub(crate) fn top_up(&mut self, ix: &mut SearchIndex, k: &(String, String), budget: usize) -> usize {
+    /// What came into a folder read already: its messages the index hasn't got join the index
+    /// (the folder isn't read again), as many as the call's allowance lets. What it cost (at
+    /// least one); the folder is up to date once nothing is left.
+    pub(crate) fn top_up(&mut self, ix: &mut SearchIndex, k: &(String, String)) -> usize {
         if ix.gone.contains(k) {
             ix.stale.retain(|s| s != k);
             return 1;
@@ -346,7 +357,7 @@ impl Session {
             .filter_map(|d| ix.keys.get(d as usize))
             .map(|key| (key.validity, key.uid))
             .collect();
-        let budget = budget.max(1);
+        let budget = self.search_pace.left().max(1);
         let came: Vec<Arc<Summary>> = self
             .folder_state(&k.0, &k.1)
             .messages
@@ -355,12 +366,15 @@ impl Session {
             .take(budget.saturating_add(1))
             .cloned()
             .collect();
-        let all = came.len() <= budget;
         let mut b = FolderIndex::new(0);
         for m in came.iter().take(budget) {
+            if !b.keys.is_empty() && !self.search_pace.index_more() {
+                break;
+            }
             self.index_message(&mut b, m);
         }
         let n = b.keys.len();
+        let all = n == came.len();
         if n > 0 {
             join_folder(ix, k.clone(), b);
         }
