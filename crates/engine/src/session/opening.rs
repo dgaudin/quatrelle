@@ -124,9 +124,7 @@ impl Session {
         }
         // The one kept under the filter while it was read goes, now that another is: marked read
         // as it was left, it stayed under Unread (from upstream aaed8d6).
-        if let Some(prev) = kept_before
-            && self.list.iter().any(|m| m.key == prev && !self.filter_keeps(self.filter, m))
-        {
+        if kept_before.as_ref().and_then(|k| self.summary(k)).is_some_and(|m| !self.filter_keeps(self.filter, m)) {
             self.refresh_list();
         }
     }
@@ -213,7 +211,7 @@ impl Session {
 
     fn dated(&self, key: &MessageKey, mut p: mime::Parsed) -> mime::Parsed {
         if p.date == 0
-            && let Some(m) = self.list.iter().find(|m| &m.key == key)
+            && let Some(m) = self.summary(key)
         {
             p.date = m.date;
         }

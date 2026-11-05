@@ -14,6 +14,8 @@ pub(crate) use directory::{Directory, bare_name, directory_key};
 pub use directory::{DirectoryAnswer, directory_people, fill_name};
 mod folder_edits;
 mod mailbox_settings;
+mod nav;
+pub(crate) use nav::ListNav;
 pub(super) mod people;
 pub use mailbox_settings::{FolderSizes, Sizes};
 pub(crate) use people::People;
@@ -327,7 +329,19 @@ impl Session {
             list.retain(|m| self.is_focused(m) != other);
         }
         arrange_list(&mut list, self.prefs.arrange, self.prefs.reverse_sort);
-        self.threads = if self.prefs.conversations && self.prefs.arrange == Arrange::Date { threads(&list) } else { Vec::new() };
+        // Conversations are worked out once here when the list shows them (arranged by date);
+        // arranged otherwise, the reading pane still shows the open message's, worked out once
+        // with the first message opened (`thread_at`) rather than with every rebuild.
+        let conversations = self.prefs.conversations;
+        let shown = conversations && self.prefs.arrange == Arrange::Date;
+        let all = if shown {
+            self.nav.threaded();
+            threads(&list)
+        } else {
+            Vec::new()
+        };
+        self.nav.build(&list, &all, conversations, !shown);
+        self.threads = all;
         let alive: BTreeSet<&MessageKey> = list.iter().map(|m| &m.key).collect();
         self.selection.retain(|k| alive.contains(k));
         if self.focus.as_ref().is_some_and(|k| !alive.contains(k)) {
@@ -431,20 +445,6 @@ impl Session {
         }
     }
 
-    pub fn summary(&self, key: &MessageKey) -> Option<&Summary> {
-        self.list.iter().find(|m| &m.key == key).map(Arc::as_ref)
-    }
-
-    /// The selected messages (in list order).
-    pub fn selected(&self) -> Vec<Arc<Summary>> {
-        if self.selection.len() < 8 {
-            return self.list.iter().filter(|m| self.selection.contains(&m.key)).cloned().collect();
-        }
-        let chosen: HashSet<&MessageKey> = self.selection.iter().collect();
-        self.list.iter().filter(|m| chosen.contains(&m.key)).cloned().collect()
-    }
-
-    /// The conversation a message belongs to in the current list.
     /// The open message's conversation again (conversations turned on or off).
     pub(crate) fn rethread_reading(&mut self) {
         let Some(key) = self.reading.as_ref().map(|r| r.key.clone()) else { return };
@@ -452,26 +452,5 @@ impl Session {
         if let Some(r) = self.reading.as_mut() {
             r.thread = thread;
         }
-    }
-
-    /// The conversation a message is in, shown above it in the reading pane: only while the list
-    /// is grouped by conversation (as Outlook's reading pane shows one message otherwise).
-    pub(super) fn thread_of(&self, key: &MessageKey) -> Vec<MessageKey> {
-        if !self.prefs.conversations {
-            return Vec::new();
-        }
-        let Some(i) = self.list.iter().position(|m| &m.key == key) else { return Vec::new() };
-        let ts;
-        let threads = if self.threads.is_empty() {
-            ts = threads(&self.list);
-            &ts
-        } else {
-            &self.threads
-        };
-        threads
-            .iter()
-            .find(|t| t.messages.contains(&i))
-            .map(|t| t.messages.iter().filter_map(|&j| self.list.get(j).map(|m| m.key.clone())).collect())
-            .unwrap_or_default()
     }
 }

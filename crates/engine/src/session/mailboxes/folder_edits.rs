@@ -281,7 +281,7 @@ impl Session {
     /// the list down there.
     pub(crate) fn successor_of(&self, read: &MessageKey, gone: &[MessageKey]) -> Option<MessageKey> {
         let gone: HashSet<&MessageKey> = gone.iter().collect();
-        let at = self.list.iter().position(|m| &m.key == read)?;
+        let at = self.index_of(read)?;
         self.list
             .iter()
             .skip(at.saturating_add(1))
@@ -376,7 +376,7 @@ impl Session {
         self.selection.clear();
         self.focus = None;
         if let Some(k) = next
-            && self.list.iter().any(|m| m.key == k)
+            && self.index_of(&k).is_some()
         {
             // Show the next message, but don't mark it read just because something was deleted.
             self.show_message(&k, false);
