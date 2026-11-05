@@ -17,6 +17,7 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `search` | the search box: the query language, a query checked against a message and its text, folding, the index, the Advanced form, JMAP filters, modified UTF-7; lookalike senders, known names on other addresses, External |
 | `signature` | a sender's name, address and message text (split at the first two line breaks): the author's own part, the signature's addresses and sites, the name asked of the directory, the signature checked against the sender |
 | `pgp` | OpenPGP keys, encrypted and signed messages, detached and cleartext signatures, inline PGP, Autocrypt headers; a secret key that opens, extended |
+| `pgp_mime` | a message source read for OpenPGP: PGP/MIME signed or encrypted, inline PGP, its `Autocrypt:` headers and attached keys, taken apart and put back; PGP/MIME never told unprotected from its header alone; written signed, then encrypted |
 | `pst` | an Outlook data file: a good exported file with the input as byte patches, or a whole file |
 | `pst_item` | a `.pst` mail item rebuilt as a message from hostile property values: the headers made from them (Thread-Index, Thread-Topic, Sensitivity) stay on clean lines of their own; recipients' one-off entry ids; categories as keywords; an original header's `multipart/report` type |
 | `pst_props` | text in a data file's properties: an HTML body or an 8-bit string in its code page (a declared charset, byte-order marks), and the bytes in every code page Quatrelle reads |

@@ -17,6 +17,7 @@ bin = [
     { name = "jmap", bench = false, test = false, doc = false, path = "fuzz_targets/jmap.rs" }, # JMAP replies, push events and URLs
     { name = "mime_parse", bench = false, test = false, doc = false, path = "fuzz_targets/mime_parse.rs" }, # raw message sources
     { name = "pgp", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp.rs" }, # OpenPGP keys, messages, signatures, Autocrypt
+    { name = "pgp_mime", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp_mime.rs" }, # PGP/MIME, inline PGP, a message's keys; written for sending
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst/import.rs" }, # Outlook data file import
     { name = "pst_item", bench = false, test = false, doc = false, path = "fuzz_targets/pst/item.rs" }, # a .pst item rebuilt from its properties
     { name = "pst_props", bench = false, test = false, doc = false, path = "fuzz_targets/pst/props.rs" }, # text in a data file's properties, by code page
