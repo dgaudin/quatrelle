@@ -78,20 +78,7 @@ fn notes_come_in_as_notes() {
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
     let mut progress = |_| {};
-    let mut out = Out {
-        store: &store,
-        account: "d1",
-        folders: Vec::new(),
-        states: HashMap::new(),
-        imported: 0,
-        skipped: 0,
-        charset_unsupported: 0,
-        body_not_converted: 0,
-        progress: &mut progress,
-        pim: Pim::default(),
-        pending: Vec::new(),
-        pending_bytes: 0,
-    };
+    let mut out = Out::new(&store, "d1", &mut progress);
     let note = |body: &str, color: Option<u8>| Item {
         class: "IPM.StickyNote".into(),
         subject: body.lines().next().unwrap_or_default().into(),
@@ -255,20 +242,7 @@ fn an_unsupported_charset_is_in_the_report() {
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
     let mut progress = |_| {};
-    let mut out = Out {
-        store: &store,
-        account: "d1",
-        folders: Vec::new(),
-        states: HashMap::new(),
-        imported: 0,
-        skipped: 0,
-        charset_unsupported: 0,
-        body_not_converted: 0,
-        progress: &mut progress,
-        pim: Pim::default(),
-        pending: Vec::new(),
-        pending_bytes: 0,
-    };
+    let mut out = Out::new(&store, "d1", &mut progress);
     let inbox = out.add_folder(None, "Inbox");
     let mail = |lost: bool| Item {
         class: "IPM.Note".into(),
@@ -802,20 +776,7 @@ fn tasks_come_in_as_tasks() {
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
     let mut progress = |_| {};
-    let mut out = Out {
-        store: &store,
-        account: "d1",
-        folders: Vec::new(),
-        states: HashMap::new(),
-        imported: 0,
-        skipped: 0,
-        charset_unsupported: 0,
-        body_not_converted: 0,
-        progress: &mut progress,
-        pim: Pim::default(),
-        pending: Vec::new(),
-        pending_bytes: 0,
-    };
+    let mut out = Out::new(&store, "d1", &mut progress);
     // 27 October 2026 at local midnight in Paris (22:00 UTC the day before, summer time).
     let due = quatrelle_model::dates::days_from_civil(2026, 10, 27) * 86_400 - 7200;
     let task = |subject: &str, due: Option<i64>, done: bool| Item {

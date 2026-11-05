@@ -40,7 +40,25 @@ pub(super) struct Out<'a> {
     pub(super) pending_bytes: usize,
 }
 
-impl Out<'_> {
+impl<'a> Out<'a> {
+    /// Nothing written yet, into `account`'s cache.
+    pub(super) fn new(store: &'a Store, account: &'a str, progress: &'a mut dyn FnMut(usize)) -> Out<'a> {
+        Out {
+            store,
+            account,
+            folders: Vec::new(),
+            states: HashMap::new(),
+            imported: 0,
+            skipped: 0,
+            charset_unsupported: 0,
+            body_not_converted: 0,
+            progress,
+            pim: Pim::default(),
+            pending: Vec::new(),
+            pending_bytes: 0,
+        }
+    }
+
     /// A folder for `name` under `parent`, with a role when it's a usual top-level one.
     pub(super) fn add_folder(&mut self, parent: Option<&str>, name: &str) -> String {
         let name = name.trim().replace('/', "∕");
