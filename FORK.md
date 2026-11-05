@@ -2482,6 +2482,118 @@ de la taille du banc, pas de la reprise.
 - **Jamais essayé sur un vrai Exchange** : le `FindItem` avec la restriction `0x1090 = 1`, sa
   pagination, son routage vers les dossiers publics et la boîte partagée.
 
+### Hors relevé : R18, répondu et transféré comme Outlook (2026-11-05)
+
+Un lot propre au fork, demandé par le propriétaire le 05/11 : la flèche d'un message auquel il a
+répondu (vers la gauche) ou qu'il a transféré (vers la droite), et la ligne du volet « Vous avez
+répondu à ce message le … ». La liste dessinait déjà la flèche d'après `\Answered` et `$Forwarded`,
+qu'IMAP et JMAP lisent et écrivent, et le moteur posait la marque sur l'original après l'envoi.
+Mais EWS ne lisait ni n'écrivait l'état : Outlook le garde dans `PidTagLastVerbExecuted` (`0x1081` :
+102 répondu à l'expéditeur, 103 à tous, 104 transféré) et `PidTagLastVerbExecutionTime` (`0x1082`),
+et le fork envoie son propre message (`CreateItem` avec la source), si bien qu'Exchange ne marque
+rien de lui-même. Graph de même (`sendMail` avec la source). Pour chaque partie, la sonde d'abord,
+lancée contre le code d'alors, sur les seuls faux serveurs du dépôt.
+
+| Sonde | avant | après |
+|---|---|---|
+| EWS, faux serveur : répondu, répondu à tous, transféré dans Outlook (`0x1081`, `0x1082`), répondre puis transférer ici, puis répondre dans Outlook (`a_reply_or_a_forward_goes_both_ways_with_its_time`) | arrivés **sans flèche ni heure** (`(false, false, 0)`) ; écrit ici : **rien** (aucun `UpdateItem`) | flèche et heure d'Outlook ; écrit 102 (ou 104), l'heure et l'icône 261 (262) ; la synchro suivante garde la flèche, la dernière action l'emporte ; la réponse faite dans Outlook arrive |
+| EWS : flèche posée ici, puis un changement dans Outlook, puis le dossier relu en entier (`an_arrow_kept_here_survives_the_syncs_that_say_nothing_of_it`) | **passait déjà** (`take_marks` gardait la marque) | garde-fou : une synchro qui ne dit rien de la dernière action ne l'ôte pas |
+| EWS : valeurs hostiles (vote 261, 105, « abc », nombre géant, heure illisible, d'avant 1970, l'« aucune » de MAPI en 4501, heure sans verbe, étiquette en décimal) (`a_reply_read_from_exchange_is_read_with_care`) | non lu | lu avec soin, rien gardé de faux |
+| Moteur, compte Exchange : répondre, transférer, répondre à tous depuis la Boîte d'envoi (`on_exchange_the_last_reply_or_forward_shows`) | après le transfert, **les deux flèches** | la dernière seule, tout de suite ; l'autre ôtée d'abord (changement sans effet sur le serveur) |
+| Moteur, compte IMAP : répondre puis transférer (`over_imap_a_reply_and_a_forward_both_stay`) | **passait déjà** | garde-fou : les deux marques restent, faits distincts |
+| Graph, faux serveur : répondu dans Outlook, cache « d'avant », transférer ici, répondre à tous dans Outlook (`a_reply_or_a_forward_goes_both_ways_over_graph`) | arrivé **sans flèche** | flèche et heure, à la première synchro comme à la suivante d'un cache d'avant ; écrit 104, l'heure et 262 |
+| EWS, passe unique : cache « d'avant » (flèches ôtées, état sans la passe), Boîte de réception (1 répondu, 1 voté) et un dossier (3 : répondu, à tous, transféré), passe coupée puis reprise (`replies_made_before_this_version_get_their_arrow_once`) | **aucune flèche** après la synchro | une requête pour la Boîte de réception, deux pages pour l'autre dossier (page de 2 en test) ; le vote n'est pas demandé ; reprise sans refaire la Boîte de réception ; passe finie : plus rien demandé |
+| EWS : boîte partagée et dossier public suivi (garde-fou de R17 étendu) | — | une requête de plus chacun, là où ils vivent |
+| État du compte : lecteur parallèle, fin de passe, `replies` abîmé (`the_completed_follow_ups_pass_is_kept_per_account`, étendu) | — | dossiers rendus par `absorb`, passe finie, une marque abîmée refait la passe sans toucher à l'autre |
+| Interface sans tête : liste et volet pour un message répondu (heure d'Exchange), transféré, répondu sans heure (IMAP), et un sans rien (`tests/list/replied.rs`) | — (ligne absente du volet) | « Replied »/« Forwarded » lus à l'écran, les trois lignes du volet, aucune pour le dernier ; clair et sombre regardés |
+
+- **Modèle et moteur** (`6c6ebf46`) : `Flags::acted` (secondes Unix ; 0 : non dit), l'heure de la
+  dernière action dite par le serveur, oubliée dès qu'une des deux marques change ici (comme
+  `Flags::completed` de R16). `Session::mark_original` pose la marque sur l'original après la
+  remise (directe ou depuis la Boîte d'envoi) ; sur un compte Exchange (EWS ou Graph) il ôte
+  d'abord l'autre flèche, car Exchange ne garde que la dernière action et Outlook ne montre qu'elle.
+- **EWS** (`6c6ebf46`) : `FLAG_FIELDS` demande `0x1081` et `0x1082` (donc la synchro complète,
+  `SyncFolderItems`, `GetItem`, la recherche et les passes) ; 102 et 103 sont lus répondu, 104
+  transféré, un autre verbe (vote) ni l'un ni l'autre ; l'heure est gardée si elle est lisible,
+  après 1970 et avant 4501. `take_marks` prend la dernière action **dès que le serveur en dit une** ;
+  sinon la flèche gardée ici reste (réponse faite par une version qui ne disait rien à Exchange).
+  Écrit, comme Outlook le fait sur l'original ([MS-OXOMSG] `PidTagLastVerbExecuted`,
+  `PidTagLastVerbExecutionTime`, `PidTagIconIndex`) : le verbe, l'heure d'envoi du changement et
+  l'icône 0x105 (261) ou 0x106 (262). **Répondre à tous est écrit 102** : le changement du moteur
+  (`Op::SetFlag`) ne dit pas le mode, et Outlook montre l'un et l'autre de même. Ôter une flèche
+  n'écrit rien. Le faux EWS garde le verbe, l'heure et l'icône (éléments, états de synchro,
+  restriction par plage) ; la cible de fuzz `text_first` lit déjà les marques de chaque message.
+- **Graph** (`bcb9c34e`) : sûr, donc fait. Graph n'a pas de champ pour cela, mais donne et prend
+  les propriétés d'Outlook (`singleValueExtendedProperties`). Chaque liste d'un dossier, les
+  messages retrouvés hors fenêtre et les détails d'un message développent `Integer 0x1081` et
+  `SystemTime 0x1082` (un seul `$expand` avec le filtre des boutons de vote, joints par `or`) ;
+  écrit par `PATCH` : le verbe, l'heure et `Integer 0x1080`. La liste d'un dossier relit à chaque
+  synchro les marques de toute la fenêtre gardée : pas de passe pour Graph.
+- **Interface** (`44d65396`) : au volet, au-dessus du message, avec la flèche, « Vous avez répondu
+  à ce message le jeu. 2026-11-05 10:12. » ou « Vous avez transféré ce message le … » (jour et heure,
+  comme Outlook) ; sans heure connue (IMAP, JMAP, Exchange pas encore relu) « Vous avez répondu à ce
+  message. ». Les deux marques gardées (IMAP) : la réponse, comme la liste. La ligne de la liste dit
+  « Répondu » ou « Transféré » au lecteur d'écran. **La flèche de la liste passe de `t.faint` à
+  `t.dim`** (la teinte du trombone et de la coche de R16) : en sombre, sur la ligne choisie, elle se
+  voyait à peine (rendus regardés, gardés hors du dépôt dans `~/.tq/r18-shots/`). Six textes dans
+  les 13 catalogues ; le peintre d'images du test de R16 est partagé dans `tests/list/`.
+- **Passe unique** (`d9c1b1db`) : sur le modèle de R17, au premier passage de chaque dossier de
+  courrier suivi, un `FindItem` `IdOnly` avec `FLAG_FIELDS` et la restriction `0x1081 ≥ 102` et
+  `≤ 104`, paginé par 1 000, limité à la fenêtre et à l'âge gardé (`Client::replied`) ; les
+  messages que le cache connaît prennent la flèche et l'heure (`take_marks`), rien d'autre n'est
+  lu. Marque dans `jmap.json`, champ `replies` à côté de `ticks` (même type, `Ticks`, dont les
+  règles passent sur lui : `wanted`, `read`, `finish`, `absorb`) ; les deux passes partent d'un
+  seul appel, `catch_up_once`, et `sync_all` clôt chacune quand tous les dossiers suivis l'ont eue.
+  Un refus du serveur (`NetError::No`) compte comme fait ; hors ligne, le dossier est repris.
+- **Ce que verra le propriétaire** :
+  - **dans Quatrelle** : la flèche à gauche ou à droite dans la liste, de la teinte du trombone ;
+    au volet « Vous avez répondu à ce message le … » ou « Vous avez transféré ce message le … » ;
+    sur Exchange, la dernière action l'emporte (répondu puis transféré : la flèche de transfert),
+    tout de suite après l'envoi ; Gmail et Yahoo (IMAP) gardent les deux marques et montrent la
+    réponse, sans heure ;
+  - **dans Outlook** (même compte Exchange sur site) : un message répondu ou transféré depuis
+    Quatrelle montre, après sa synchro, la flèche et le bandeau « Vous avez répondu … », à l'heure
+    où Quatrelle a envoyé le changement ; ce qu'il a fait dans Outlook, avant comme après cette
+    version, arrive ici avec sa flèche et son heure ;
+  - **au premier démarrage** : la passe, mêlée à la première synchro complète.
+- **Coût de la passe sur sa boîte** (550 000 éléments, 110 dossiers et quelques dossiers suivis de
+  la boîte partagée et des dossiers publics, mettons 10 à 20 % répondus ou transférés, soit 55 000 à
+  110 000 messages) : **une requête par dossier suivi** (110 à 130, comme R17), **plus une page par
+  millier de messages trouvés au-delà du premier** (55 à 110 pages), soit **de l'ordre de 170 à
+  240 requêtes `FindItem`, une seule fois**. Chaque message rendu pèse de l'ordre de 0,6 à 0,8 Ko de
+  XML (identifiant, clé de changement, lu, drapeau, verbe, heures, catégories) : 35 à 90 Mo reçus en
+  tout. Côté Exchange, la restriction porte sur une propriété non indexée : le serveur parcourt
+  chaque dossier (quelques secondes pour un dossier de 50 000 éléments, peut-être plus la première
+  fois) ; à 1 à 3 s par page, **quelques minutes de synchro en plus**, une fois. Ici, chaque dossier
+  touché voit ses pages de liste réécrites pour les messages changés (`save_folder_changed`), une
+  fois ; la mémoire tient la liste des identifiants trouvés d'un dossier (≈ 15 Mo pour 50 000). La
+  fenêtre et l'âge gardés (le « courrier à garder hors connexion ») bornent tout cela. Coupée
+  (fermeture, perte du réseau), la passe reprend au dossier suivant.
+- **Jamais essayé sur un vrai Exchange** : la restriction par plage sur `0x1081` (`IsGreaterThanOrEqualTo`
+  et `IsLessThanOrEqualTo` sous un `And`), sa durée sur un gros dossier et son routage vers la boîte
+  partagée et les dossiers publics ; l'écriture de `0x1081`, `0x1082` et `0x1080` par `UpdateItem`
+  (élément écrit `<t:Message>`, comme le drapeau : une invitation pourrait le refuser) et qu'Outlook
+  montre alors flèche et bandeau ; la forme exacte de l'heure rendue ; sur Graph, le `$expand` à trois
+  propriétés jointes par `or`, son coût sur une liste de toute la fenêtre à chaque synchro, et le
+  `PATCH` des trois propriétés.
+- **Vérifié** : chaque sonde avant (échec, ou déjà juste pour les deux garde-fous) et après ; les
+  suites de `quatrelle-model`, `quatrelle-engine`, `quatrelle-jmap`, `quatrelle-net` et
+  `quatrelle-ui-egui` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - la vue en colonnes (volet de lecture fermé) n'a pas de colonne d'icône : pas de flèche là ;
+  - répondre à tous est écrit 102, non 103 (il faudrait que `Op::SetFlag` porte le mode) ;
+  - les messages auxquels il a répondu **depuis Quatrelle** avant cette version, sur Exchange,
+    gardent leur flèche ici mais Exchange n'en sait rien : Outlook ne la montre pas ; aucune passe
+    ne les lui écrit ;
+  - IMAP n'a pas d'ordre entre `\Answered` et `$Forwarded` : la réponse est montrée ; un message
+    voté puis répondu dans Outlook montre la réponse, un message répondu puis voté garde sa flèche
+    ici (Outlook dessine alors l'icône de `0x1080`, que le fork ne lit pas) ;
+  - les phrases françaises sont celles d'Outlook, comme demandé : l'en-tête des catalogues dit
+    qu'aucun texte n'est repris d'un autre client, et `CLAUDE.md` limite les mots d'Outlook aux
+    noms de fonctions. Ce sont les tournures les plus simples en français, mais c'est au
+    propriétaire de trancher ;
+  - l'import `.pst` ne lit pas `0x1081` (à faire avec P2, comme l'état 1 du drapeau).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
