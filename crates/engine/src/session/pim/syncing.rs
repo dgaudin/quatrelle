@@ -52,6 +52,8 @@ impl Session {
             p.dav_untrusted.clone_from(&sync.untrusted);
         }
         p.deleted.retain(|t| !sync.deleted.contains(&t.href));
+        // Reminder answers the server took (one given again meanwhile still waits).
+        p.reminder_answers.retain(|a| !sync.answered.contains(a));
         // Dropped, the server no longer having them: a copy of each is kept (below).
         let mut gone = conflicts::drop_gone_events(p, &sync.gone_events, now);
         gone.extend(conflicts::drop_gone_tasks(p, &sync.gone_tasks, now));

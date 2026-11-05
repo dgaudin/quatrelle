@@ -288,6 +288,33 @@ pub struct Pim {
     /// Calendars left unticked: listed, not read (what this computer has of them stays).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_read: Vec<String>,
+    /// Reminders dismissed or snoozed here, for an Exchange server to learn (issue #40): Outlook
+    /// shows them again otherwise. Kept, so one answered offline goes at the next sync. A
+    /// single appointment's dismissal isn't among them: its reminder is turned off on the item.
+    /// A CalDAV server learns a dismissal from the event itself (its alarm's `ACKNOWLEDGED`,
+    /// RFC 9074).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reminder_answers: Vec<ReminderAnswer>,
+}
+
+/// The most reminder answers kept waiting for the server.
+pub const MAX_REMINDER_ANSWERS: usize = 500;
+
+/// A reminder answered here, waiting for the server ([`Pim::reminder_answers`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReminderAnswer {
+    pub calendar: String,
+    /// The event's item on the server (a series' when it recurs).
+    pub href: String,
+    pub uid: String,
+    /// The occurrence's start (Unix seconds).
+    pub occurrence: i64,
+    /// One occurrence of a series.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub series: bool,
+    /// Snoozed until then; `None`: dismissed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snooze_until: Option<i64>,
 }
 
 /// What a CalDAV / CardDAV sync found, for the engine to merge into its [`Pim`].
@@ -352,6 +379,11 @@ pub struct DavSync {
     /// it go when it's refused again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refused_answers: Vec<(String, String)>,
+    /// Reminder answers the server took, or that can't apply there (the event is gone, or the
+    /// server is older than Exchange 2013): no longer waiting. Whole, so an answer given again
+    /// meanwhile (snoozed, then dismissed) still waits.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answered: Vec<ReminderAnswer>,
     /// What couldn't be stored or deleted (tried again next time).
     pub errors: Vec<String>,
     /// Only some calendars and address books were looked at ([`Pim::own_only`]): those not

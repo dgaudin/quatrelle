@@ -23,6 +23,7 @@ mod listening;
 mod mailbox;
 mod opening;
 mod pushing;
+mod reminders;
 mod scheduling;
 mod tasks;
 mod text_first;

@@ -232,6 +232,8 @@ pub struct Data {
     /// What each subscription last told of: what changed since is told when it's next asked,
     /// as a subscription keeps its notifications between two answers.
     told: std::collections::HashMap<String, streaming::Seen>,
+    /// Its reminders (issue #40), and whether it's older than Exchange 2013.
+    pub reminders: reminders::Reminders,
     next: u32,
 }
 
@@ -359,6 +361,7 @@ impl Default for Data {
             hosts: Vec::new(),
             redirect_addr: Vec::new(),
             told: std::collections::HashMap::new(),
+            reminders: Default::default(),
             next: 0,
         };
         d.folders.push(Fo {
@@ -728,6 +731,7 @@ fn xml(e: &El) -> String {
 mod directory;
 mod fields;
 mod meetings;
+mod reminders;
 mod route;
 mod server;
 mod streaming;
