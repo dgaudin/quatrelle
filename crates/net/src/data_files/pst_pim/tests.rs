@@ -398,3 +398,25 @@ fn a_request_carries_its_changed_occurrences() {
     let (_, ics) = invitation(&x, "IPM.Schedule.Meeting.Resp.Pos", "Review", "", &guests[0], &[organizer], 1, "u".into()).unwrap();
     assert_eq!(ical::parse(&ics, 0).events.len(), 1);
 }
+
+/// A file's line keeps its bytes, a clean name and a usable type, and reads back from the
+/// calendar and the card it goes in.
+#[test]
+fn files_as_lines() {
+    let line = event_file("Agenda \"draft\"\r\n.pdf", "Application/PDF; name=x", b"%PDF-1.7");
+    assert_eq!(line, "ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"Agenda draft.pdf\":JVBERi0xLjc=");
+    assert!(event_file("notes.txt", "not a type", b"").starts_with("ATTACH;FMTTYPE=text/plain;"));
+    assert!(event_file("", "", b"x").contains("X-FILENAME=\"attachment\""));
+    let long = event_file(&"n".repeat(400), "text/plain", b"");
+    assert!(long.contains(&format!("\"{}\"", "n".repeat(255))) && !long.contains(&"n".repeat(256)));
+    let docx = quatrelle_mime::mime_from_name("a.docx");
+    let card_line = card_file("a.docx", "", b"PK");
+    assert_eq!(card_line, format!("X-QUATRELLE-ATTACH;X-FILENAME=\"a.docx\":data:{docx};base64,UEs="));
+    // Read back: the event keeps its file among its own lines, and so does the card.
+    let ics = format!("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:u\r\nDTSTART:20261020T090000Z\r\n{line}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+    let e = &quatrelle_model::ical::parse(&ics, 0).events[0];
+    assert!(e.extra.iter().any(|l| l.ends_with("JVBERi0xLjc=")), "{:?}", e.extra);
+    let card = Card { uid: "c".into(), name: "C".into(), extra: vec![card_line.clone()], ..Default::default() };
+    let back = quatrelle_model::vcard::parse(&quatrelle_model::vcard::write(&card));
+    assert_eq!(back[0].extra, [card_line]);
+}

@@ -273,13 +273,13 @@ fn rtf_into(it: &mut Item, compressed: &[u8], in_sync: bool) {
     }
 }
 
-/// A contact's picture: Outlook keeps it as a hidden attachment (MS-OXOCNTC 2.2.2.1.1), which
-/// isn't shown as an attachment of the message.
+/// A contact's picture: the attachment Outlook flags as one (PidTagAttachmentContactPhoto), or,
+/// without the flag, a hidden picture (MS-OXOCNTC 2.2.2.1.1); it isn't shown as an attachment of
+/// the message.
 pub(super) fn picture_of(a: &dyn Attachment) -> Option<(String, Vec<u8>)> {
     let props = a.properties();
     let p = |id: u16| props.get(id).map(|v| val(v, 0));
-    let hidden = matches!(p(0x7FFE), Some(Val::Bool(true)));
-    if !hidden {
+    if !is_picture(&p) && !matches!(p(0x7FFE), Some(Val::Bool(true))) {
         return None;
     }
     let mime = p(0x370E).and_then(Val::into_text).unwrap_or_default();
@@ -314,7 +314,7 @@ pub(super) fn attachment(a: &dyn Attachment, code_page: u32, class: &str) -> Opt
     let props = a.properties();
     let p = |id: u16| props.get(id).map(|v| val(v, code_page));
     let s = |id: u16| p(id).and_then(Val::into_text).unwrap_or_default();
-    if hidden(&p, class) {
+    if hidden(&p, class) || (is_picture(&p) && is(class, "ipm.contact")) {
         return Some(Got::Nothing);
     }
     Some(match a.data() {
@@ -397,6 +397,16 @@ fn hidden<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, class: &str) -> bool {
 /// The class of an appointment's changed occurrence, an attached message of it (MS-OXOCAL
 /// 2.2.10.1.1), lower case.
 pub(super) const EXCEPTION: &str = "ipm.ole.class.{00061055-0000-0000-c000-000000000046}";
+
+/// Whether an attachment is flagged as a contact's picture (PidTagAttachmentContactPhoto).
+fn is_picture<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>) -> bool {
+    matches!(p(0x7FFF), Some(Val::Bool(true)))
+}
+
+/// Whether `class` is `prefix` or one of its kind, whatever the case.
+fn is(class: &str, prefix: &str) -> bool {
+    class.get(..prefix.len()).is_some_and(|c| c.eq_ignore_ascii_case(prefix))
+}
 
 /// By reference, by reference only, or by web reference (PidTagAttachMethod 2, 4, 7): a path
 /// or an address, not the file.

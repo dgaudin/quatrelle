@@ -8,6 +8,7 @@ use outlook_pst::{UnicodePstAttachment, UnicodePstFile as Writer, UnicodePstMess
 
 use super::*;
 
+mod files;
 mod kinds;
 mod occurrences;
 
