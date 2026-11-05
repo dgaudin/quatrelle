@@ -1507,6 +1507,143 @@ les tests vont dans `tests/mail/`, `tests/list/` et `tests/reading/`.
     une ancre restée dans la liste sert encore au Maj suivant ;
   - `ui-egui/src/lib.rs` est à 983 lignes : à découper avant d'y ajouter.
 
+### État de la récupération : v0.32, dix-septième partie : la flèche Bas et les marques de lu à l'échelle d'une grosse boîte (2026-11-05)
+
+Le lot R10 de `merge-tools/survey-v0.32.md` (constat n° 6, les gels à chaque Bas), sur `main`.
+Pour chaque point, sa sonde d'abord, lancée contre le code d'alors ; quand le test de
+l'origine ne pouvait pas compiler avant la correction (il appelle ce qu'elle ajoute), la sonde
+est une mesure, ou la correction coupée le temps d'un essai. Aucune copie des données du
+propriétaire : un banc ignoré, `engine/src/bench.rs::down_twenty` (`f8a71a39`), fabrique une
+Boîte de réception de 50 000 messages sur un compte serveur, leurs sources gardées, et mesure
+en `--release` ce que coûtent à la fenêtre un Bas et l'écho de sa marque, et à l'écrivain
+(son propre fil) l'enregistrement de la marque, en ligne et hors ligne. `session.rs` (846
+lignes) a d'abord perdu les types des comptes, pur déplacement (`77dd79fe`).
+
+| Banc, 50 000 messages | avant le lot | après |
+|---|---|---|
+| un Bas, par date | 17,9 ms | 2,9 ms |
+| un Bas, conversations par expéditeur | 114,5 ms | 2,7 ms |
+| l'écho de sa marque (`FolderChanged`) | 99 à 188 ms | 1,6 ms |
+| un corps téléchargé en route | 196 à 201 ms (dossier relu) | 0,01 ms (`Filled`) |
+| l'écrivain, une marque | 192 ms | 18 ms |
+| hors ligne, 10 premières → 10 dernières marques sur 100 | 198 → 321 ms | 17,5 → 16,4 ms |
+
+- **Bas et Haut avancent de *n* d'un coup** (`41a34544`, de `e5c03883`) : `list.next` et les
+  autres prennent `{"by": n}`, seul le message d'arrivée est ouvert et marqué lu ; ceux passés
+  gardent leurs drapeaux. Sondes : `several_steps_read_only_the_message_landed_on`,
+  `several_steps_from_nothing_focused` (un pas de 3 n'avançait que d'une ligne). Un compteur
+  `messages_shown` sert aux tests.
+- **Pg suiv. sans focus revient en haut** (`27d1af5d`, de `53691768`) : le pas de *n* avait
+  aussi déplacé Pg suiv. (`Toward::Steps` à part de `Toward::By`). Sonde : Pg suiv. sans focus
+  ouvrait la 3ᵉ ligne. La correction des touches de page seules du fork (`77611b0d`) reste.
+- **Les appuis groupés en un pas** (`091e1981`, de `0317ccbd`) : les Bas reçus dans une même
+  image font une seule commande. Sondes (tests de fenêtre) : 4 appuis lisaient 4 messages, 20
+  en lisaient 20 ; maintenant 1.
+- **Un index clé → position** (`e67bc133`, adapté de `de32c465`) : `summary`, `index_of`,
+  `selected_iter`, `first_selected`, la conversation du message lu sont des recherches et non
+  des parcours (`session/mailboxes/nav.rs`) ; un classement par nom met chaque nom en
+  minuscules une fois. Sur la liste du fork (des `Arc` partagés avec le cache), `selected()`
+  rend les résumés partagés. `proptest` devient une dépendance de test du moteur. Sonde : le
+  banc, 114,5 → 45,9 ms par Bas avec conversations par expéditeur (par date 17,9 → 22,9 ms :
+  l'index était refait à chaque reconstruction, jusqu'au point suivant).
+- **La sélection n'est plus recopiée à chaque image** (`3edcac92`, de `116a89df`) : ruban, menus,
+  Supprimer lisent la sélection sur place. Sonde : 20 000 sélectionnés, sept images dessinées
+  faisaient sortir 620 000 résumés de la liste ; maintenant aucun.
+- **Les lignes gardées entre deux pas** (`ccb7373e`, adapté de `4df14244`) : les lignes (titres,
+  conversations, épinglés) sont faites avec la liste (`session/mailboxes/rows.rs`, où va le
+  `rows()` du fork) et refaites par `tick()` au changement de jour ; un pas cherche la suivante
+  par l'index ; la fenêtre ne recalcule leurs hauteurs que si `nav_structure()` change (avec
+  les hauteurs propres au tableau du fork). Sonde (essai provisoire, 20 000 messages lus) : 500
+  Bas prenaient 1,1 à 2,1 s selon le classement ; 0,7 à 17 ms ensuite.
+- **La marque de lu appliquée en place** (`3ba68ad8`, adapté de `e69ddc54`) : un drapeau ou une
+  catégorie change la liste telle qu'elle est quand le résultat est le même
+  (`session/mailboxes/patch.rs`), un proptest (`patched_list_equals_refresh`) le tient égal à
+  `refresh_list` ; recherche, Boîte d'envoi, supprimés, courrier indésirable et ce que le
+  filtre fait entrer reconstruisent. Chez nous l'entrée prend l'`Arc` du cache, et le message
+  gardé sous le filtre est `filter_keep`. Sonde (le patch coupé le temps d'un essai) : 100
+  messages ouverts reconstruisaient 100 fois les lignes. Banc : 22,9 → 3,3 ms par Bas.
+- **L'écho d'une marque ne relit plus le dossier** (`6e4de44e` adapté de `f3753775`, `59fe1f1c`
+  de `4cb2576f`) : la session compte, par dossier, les changements envoyés au serveur
+  (`session/mailboxes/echo.rs`) et prend un `FolderChanged` qui en attend un pour son écho ;
+  un de plus que d'envoyés, un avis du compte ou une minute d'attente relisent le dossier. Les
+  tests sont sur un compte Exchange, comme celui du propriétaire. Sondes : 50 ouverts, marqués
+  et leur écho reçu sur 10 941 messages reconstruisaient 50 fois la liste (1,93 s, l'écho
+  coupé) ; `every_waiting_change_gets_into_a_folder_read_before_them` perdait le premier
+  changement ; `a_later_waiting_change_says_how_it_ends` passait déjà (garde-fou). Banc :
+  l'écho 113 → 1,6 ms. **Vu en route** (`a3602ca7`) : huit tests du fork (invitations,
+  vérification de l'expéditeur) passent un compte en Exchange, ouvrent un message puis livrent
+  du courrier par un `FolderChanged` ; sans travailleur, ce changement était pris pour l'écho
+  attendu et le courrier n'était jamais lu. Leurs aides prennent les échos comme arrivés ;
+  dans l'application, l'écho arrive juste après la marque et relit alors le dossier.
+- **Un corps téléchargé remplit sa ligne** (`5f3a23f9`, adapté de `4eb0d977`) : IMAP, JMAP,
+  Graph et EWS passent par `keep_source` (`quatrelle-jmap`) et disent `Event::Filled` au lieu
+  de `FolderChanged` ; la session met le résumé dans le dossier et dans sa ligne, et ne
+  reconstruit que si ce qui a changé décide de ce que la liste montre (conversation, filtre ou
+  classement par pièces jointes, taille, importance, Prioritaire). Chez nous un seul chemin de
+  téléchargement, les index de recherche prévenus, une réponse remplie dans Brouillons notée ;
+  l'application web aussi. Sonde : le banc, 196 à 201 ms par corps téléchargé (dossier relu).
+- **Une marque n'écrit que la marque** (`b85338d3`, `7ab836b6` adapté à `Store::apply_op`) :
+  dans un dossier en pages, une marque (sur le fil de l'écrivain) lisait toutes les pages, les
+  remettait toutes en JSON pour comparer, écrivait la page de 4 096 du message et l'en-tête,
+  et rejouait sur une copie de toute la liste chaque modification en attente. Les marques vont
+  dans un petit `state-marks.json` à côté des pages (512 au plus, repliées au prochain
+  enregistrement complet, vidées par une liste réécrite d'un bloc) ; l'en-tête garde le
+  premier numéro de chaque page, si bien qu'une marque ne lit que la page de son message (un
+  en-tête d'avant lit tout une fois, le prochain enregistrement le numérote) ; la liste qu'on
+  vient de lire a déjà les modifications en attente, elles ne sont plus rejouées. Le fichier
+  des marques est lu et écrit sous le verrou du cache, comme une synchro qui le replie.
+  `folder_version` ne hache que l'en-tête : une marque le laisse tel quel, et le code le dit
+  (ce qu'on en tire, ce qui reste à télécharger, ne dépend pas des drapeaux). Les marques d'un
+  compte local enregistrées par la fenêtre (`save_folder_changed`) font de même. Sonde
+  (`one_mark_in_a_big_folder_writes_under_64_kib_and_survives_a_reopen`, 10 941 messages) :
+  une marque écrivait 1 482 912 octets ; maintenant la marque seule. Banc : l'écrivain
+  192 → 100 ms avec le fichier des marques, 18 ms en ne lisant qu'une page.
+- **Le compte d'un dossier local après une marque** (`6cd3746b`, propre au fork) : trouvé par le
+  test moteur de `7ab836b6` porté ici. `recount_local` comparait les comptes à la liste en
+  mémoire, déjà décomptée par `apply_op_memory` : `folders.json` gardait l'ancien nombre de
+  non-lus (10 941 pour 10 940), qu'un fichier de données rouvert montrait. Il compare aussi
+  avec le disque.
+- **Lister un dossier sans parcourir son courrier** (`92aea071` de `cfce0215`, `3bac3ea1` de
+  `5953beb5`) : le cache paqueté lit les seules clés et saute chaque sous-dossier d'un pas ; le
+  cache en mémoire part de l'endroit où le dossier commence. Sans le banc de l'origine sur une
+  copie de vraies données. Sondes (essais provisoires) : les fichiers d'un dossier de 20 000
+  sources listés en 2,5 ms → 0,06 ms ; en mémoire, un dossier de 10 messages à côté de 50 000
+  en 4,7 ms → 4 à 20 µs. Les tests de `5953beb5` passaient déjà (garde-fous de ce qui est
+  listé).
+- **Pas pris** : `d3980fdb`, `ef46a988`, `3957819c`, `05d3944d` (les marques des comptes
+  locaux et des fichiers de données écrites hors du fil de la fenêtre, machinerie de
+  l'origine), ni le `save_marks` de `7ab836b6` (marque et comptes d'un compte local dans une
+  seule écriture) : chez nous un compte local écrit encore la marque puis `folders.json`, deux
+  écritures sur le fil de la fenêtre.
+- **Le coût au carré de `pending_edits`** : il tombe pour l'écrivain (une marque ne rejoue plus
+  rien : 100 marques hors ligne, 17,5 → 16,4 ms, sans croissance). Il reste pour les
+  enregistrements d'une synchro (chaque modification en attente refaite sur une copie de toute
+  la liste, une passe par modification : O(attente × messages) par enregistrement, une fois
+  par synchro de dossier au retour en ligne) et pour `ops.json`, relu et réécrit en entier à
+  chaque modification ajoutée ou retirée. Correction proposée, non faite : refaire les
+  modifications en une seule passe sur la liste (une table numéro → effets, dans l'ordre) ;
+  garder le journal par modification (une clé par modification dans le fichier de données)
+  plutôt qu'un fichier réécrit.
+- **Ce qui change pour le propriétaire** : tenir Bas dans un dossier de 50 000 messages ne
+  gèle plus la fenêtre (environ 3 ms par pas au lieu de 18 à 115, puis 100 à 200 ms à l'écho
+  de chaque marque et à chaque message téléchargé en route) ; les appuis répétés plus vite que
+  l'image ne lisent que le message d'arrivée, ceux passés restent non lus, comme Outlook ;
+  l'écrivain suit (18 ms par marque au lieu de 192), y compris hors ligne. Le premier
+  enregistrement complet d'un gros dossier (sa prochaine synchro) ajoute les premiers numéros
+  de pages à son en-tête ; une version plus ancienne de Quatrelle l'ignore.
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-store`,
+  `quatrelle-engine`, `quatrelle-net` et `quatrelle-ui-egui` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - un `FolderChanged` de synchro arrivé entre une marque et son écho est pris pour l'écho : le
+    courrier nouveau apparaît à l'arrivée de l'écho (quelques millisecondes). Si cette
+    modification échoue ensuite (avis), l'écho ne vient pas et le courrier attend le
+    changement suivant du dossier ;
+  - l'écho coûte encore 1,6 ms (un passage sur les 50 000 résumés du dossier pour voir s'ils
+    ont déjà le changement) ;
+  - une sélection de 20 000 (Ctrl+A) cherche encore chaque ligne visible dans la sélection
+    (`selection.contains`, `panes/list.rs`, `list/table.rs`) ;
+  - un `FolderChanged` d'une synchro relit toujours tout le dossier (200 ms sur 50 000).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
