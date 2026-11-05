@@ -2190,6 +2190,96 @@ un déplacement pur : `model/src/search.rs` (764 lignes) découpé par sujet en 
   appel dépasse la part de 6 ms à la fin de chaque dossier (déjà noté par R6), et `is:read` montre
   ses 35 000 trouvés en un appel de 32 à 63 ms.
 
+### État de la récupération : v0.32, vingt-troisième partie : un rappel fermé ou reporté ici l'est aussi sur le serveur (2026-11-05)
+
+Le lot R15 de `merge-tools/survey-v0.32.md` (issue #40 de l'origine, `0a6fc712`), sur `main`. Le
+calendrier et ses rappels restent ceux du fork : la fonction de l'origine comble le manque noté au
+relevé (`session/pim/reminders.rs` : fermer une occurrence de série et reporter restaient sur ce
+poste, et Outlook les remontrait). Ce que le fork faisait déjà est gardé : fermer le rappel d'un
+rendez-vous simple le coupe sur l'élément (`ReminderIsSet` sur EWS, `isReminderOn` sur Graph,
+l'alarme retirée sur CalDAV), comme Outlook ; c'est aussi le repli de l'origine pour Exchange 2010,
+donc ce repli n'est pas repris dans la couche réseau. Pour chaque protocole, dans l'ordre EWS (celui
+du propriétaire), Graph, CalDAV : la sonde d'abord, lancée contre le code d'alors, sur les seuls faux
+serveurs du dépôt.
+
+| Sonde | avant | après |
+|---|---|---|
+| EWS, moteur : une occurrence de série fermée, un rendez-vous simple reporté (`a_dismissed_occurrence_and_a_snooze_go_to_exchange`) | aucune synchro demandée, rien gardé | synchro demandée ; chaque réponse gardée avec le calendrier (après un redémarrage aussi) jusqu'à la synchro qui la prend |
+| EWS, faux serveur 2013 : un report simple, une occurrence fermée, un élément disparu (`reminders_answered_here_are_answered_on_exchange`) | aucun `GetReminders`, rien dit répondu | `Snooze` sur l'élément, `Dismiss` sur l'occurrence du jour (pas celle de la veille), le disparu laissé |
+| EWS, faux serveur 2010 (`an_exchange_older_than_2013_is_not_asked`) | rien dit répondu | rien demandé au serveur, rien n'attend |
+| EWS, serveur injoignable puis revenu (`an_answer_given_offline_waits_for_the_next_sync`) | rien envoyé | la réponse attend et l'erreur le dit ; la synchro suivante la donne |
+| EWS, réponse `GetReminders` hostile : vide, coupée, 5 000 rappels, dates impossibles (`a_hostile_reminders_list_is_survived`) | rien demandé | aucune panique, réponse laissée |
+| Graph, faux serveur (`reminders_answered_here_are_answered_on_graph`) | rien envoyé | `snoozeReminder` sur l'événement, `dismissReminder` sur l'occurrence trouvée parmi les instances, le disparu laissé |
+| CalDAV, une occurrence de série fermée (`a_dismissal_on_caldav_acknowledges_the_alarm`) | événement inchangé | alarme `ACKNOWLEDGED`, événement envoyé, `SEQUENCE` inchangée ; l'occurrence du lendemain sonne ; un report reste ici |
+| CalDAV, événement marqué ailleurs après son alarme (`an_alarm_acknowledged_elsewhere_isnt_due`) | dû ici | pas dû (marqué avant cette alarme : dû) |
+| CalDAV, rendez-vous simple fermé (`a_single_dismissal_on_caldav_raises_no_sequence`) | `SEQUENCE` 2 → 3 | 2 |
+
+- **EWS** (`20068408`, adapté de `0a6fc712`) : `Pim::reminder_answers` (500 au plus, gardées avec le
+  calendrier ; plus de 30 jours après l'occurrence, elles s'en vont) et `DavSync::answered`, faites
+  de réponses entières : une réponse redonnée pendant la synchro (reportée, puis fermée) attend
+  encore, là où l'origine les reconnaissait par UID et occurrence. La synchro EWS, après la lecture
+  du calendrier, demande `GetReminders` sous `RequestServerVersion` `Exchange2013` (de quatre
+  semaines et un jour avant l'occurrence à un jour après), choisit le rappel par l'`ItemId` de
+  l'élément, ou celui de sa série (`RecurringMasterItemId`), l'UID en secours, au début le plus
+  proche à un jour près, puis `PerformReminderAction` (`Dismiss`, ou `Snooze` et `NewReminderTime`).
+  Un rappel que le serveur ne liste plus, ou une opération refusée, est laissé (et consigné) ; le
+  serveur injoignable ou occupé, cette réponse et les suivantes attendent la synchro d'après. **La
+  version du serveur** : le fork ne la connaissait pas ; le client note le `MajorVersion` du
+  `ServerVersionInfo` de chaque réponse, et sous 15 (Exchange 2010) rien n'est demandé. La réponse
+  `GetReminders` est lue comme hostile (500 rappels, identifiants de 4 096 caractères au plus, dates
+  vérifiées) et la cible de fuzz `text_first` la lit aussi (`reminders_listed`, `server_major`).
+  Propre au fork : une fermeture de rendez-vous simple efface le report qui attendait pour lui. Le
+  faux EWS répond aux deux opérations dans l'élément de réponse lui-même, comme Exchange, les
+  refuse en 2010 (`ErrorInvalidServerVersion`), dit sa version (15 ou 14) dans chaque réponse et
+  peut couper la connexion. Les 188 tests EWS d'avant passent avec cet en-tête.
+- **Graph** (`4845b06a`, adapté de `0a6fc712`) : `dismissReminder` ou `snoozeReminder` sur
+  l'événement, ou sur l'occurrence d'une série trouvée parmi ses `instances` autour de son début
+  (50 au plus, à un jour près) ; un événement disparu (404) est laissé ; hors d'atteinte, on attend.
+  Le moteur est le même que pour EWS (`an_answer_on_graph_waits_too`, garde-fou).
+- **CalDAV** (`4b65b945`, adapté de `0a6fc712`) : selon la RFC 9074, l'occurrence fermée marque
+  l'alarme de l'événement (l'exception de l'occurrence s'il en a une, sinon la série)
+  `ACKNOWLEDGED` à l'heure de la fermeture, sans monter la `SEQUENCE`, et l'événement part au
+  serveur ; un événement marqué ainsi par un autre programme après son alarme n'est pas dû ici,
+  sauf reporté ici. Adapté : le fork lit une alarme lisible dans `CalEvent::reminder` et la
+  réécrit, l'`ACKNOWLEDGED` serait donc perdu ; il est gardé à côté (`CalEvent::acknowledged`),
+  relu et réécrit avec l'alarme (dont l'écriture passe dans `ical/alarms.rs`, `ical.rs` restant
+  sous 800 lignes) ; une alarme gardée telle quelle reçoit le sien comme chez l'origine, une alarme
+  de report (`RELTYPE=SNOOZE`) s'en va. Propres au fork : une invitation ne dit pas que
+  l'organisateur a fermé son rappel ; un rappel remis sonne de nouveau. **Défaut du fork trouvé par
+  la sonde** : fermer le rappel d'un rendez-vous simple passait par `update_event`, qui monte la
+  `SEQUENCE` de ce que l'utilisateur organise ; un serveur CalDAV qui planifie pouvait y voir un
+  changement de la réunion. Le rappel est maintenant coupé sans y toucher. Pris aussi : le test du
+  modèle de l'origine (le reste de l'événement gardé, un événement abîmé survit), une propriété
+  écrite ici (un rappel fermé à toute heure, écrit puis relu), et l'essai de l'origine contre un
+  vrai serveur, porté en test ignoré `real_caldav_dismissed_reminder` (`QUATRELLE_REAL_CALDAV`,
+  un Radicale local) : jamais lancé ici.
+- **Pas pris** : le repli `ReminderIsSet` de la couche réseau de l'origine (le moteur du fork le
+  fait déjà, pour tout serveur) ; le CHANGELOG (le fork n'en a pas).
+- **Ce que verra le propriétaire** (Exchange sur site, 2013 ou plus récent) : une occurrence de
+  réunion périodique fermée dans Quatrelle est fermée sur le serveur à la synchro, demandée tout de
+  suite : Outlook, Outlook sur le web et le téléphone ne la remontrent plus (les rappels suivants
+  de la série viennent). Un rappel reporté l'est sur le serveur à la même heure : tous les appareils
+  le remontrent alors, ensemble. Une fermeture faite hors ligne attend la synchro suivante, même
+  après un redémarrage. Le rendez-vous simple, comme avant : son rappel est coupé sur l'élément,
+  partout. **Avec un Exchange 2010** : le rendez-vous simple aussi (ReminderIsSet) ; mais une
+  occurrence de série fermée et un report restent sur ce poste, Outlook les remontrera.
+- **Jamais essayé sur un vrai Exchange** : `GetReminders` et `PerformReminderAction` eux-mêmes
+  (la forme des demandes, la fenêtre `BeginTime`/`EndTime`, que l'`ItemId` d'une occurrence et le
+  `RecurringMasterItemId` y soient ceux que le fork garde, la présence de l'`UID`) ; la demande sous
+  `Exchange2013` envoyée à un 2016 ou 2019 ; le vrai refus d'un 2010 (le fork s'en passe, la version
+  suffit) ; `dismissReminder` et `snoozeReminder` de Graph ; le test Radicale.
+- **Vérifié** : chaque sonde avant (échec) et après ; les suites de `quatrelle-model` (proptests
+  compris), `quatrelle-engine` et les tests EWS et Graph de `quatrelle-net` ; `cargo xtask ci`
+  (wasm compris), après une correction de clippy dans les tests (`6a0fd5d3`).
+- **Reste, remarqué** : un rappel fermé dans Outlook pour une occurrence de série n'est pas lu ici
+  (le fork calcule les rappels depuis les minutes ; il ne lit pas l'heure du prochain rappel du
+  serveur) ; une exception déplacée de plus d'un jour n'est pas retrouvée parmi les rappels du
+  serveur (sa réponse est laissée) ; l'alarme d'un rendez-vous est lue jusqu'à deux semaines
+  (`duration_minutes`) quand le fork en permet quatre (`REMINDER_MAX_MINUTES`) : au-delà elle reste
+  entière parmi les lignes gardées, toujours lue, la propriété l'a trouvé ; dans les tests du
+  moteur, une session rouverte ne retrouve pas les rappels répondus sur ce poste (les préférences
+  sont enregistrées par la fenêtre, non vérifié ici).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
