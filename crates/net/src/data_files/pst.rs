@@ -42,7 +42,7 @@ mod rebuild;
 mod tests;
 
 use chunked::Shared;
-use item::{Files, Item, attachment, item, message_code_page, picture_of, unread_attachment};
+use item::{Files, Item, attachment, item, message_class, message_code_page, picture_of, unread_attachment};
 use open::Recycle;
 use out::Out;
 #[doc(hidden)]
@@ -240,6 +240,8 @@ macro_rules! reader {
                 };
                 let m = <$message>::read(store, entry, None)?;
                 let cp = message_code_page(&*m);
+                // Which hidden files are left out depends on what the item is.
+                let class = message_class(&*m, cp);
                 let mut files = Files::default();
                 let mut photo = None;
                 if let Some(table) = m.attachment_table() {
@@ -250,9 +252,9 @@ macro_rules! reader {
                             Ok(a) => {
                                 // A contact's picture is one of its attachments, hidden.
                                 photo = photo.or_else(|| picture_of(&*a));
-                                attachment(&*a, 0, cp, &named)
+                                attachment(&*a, 0, cp, &class, &named)
                             }
-                            Err(e) => unread_attachment(&e, &**table, row, cp),
+                            Err(e) => unread_attachment(&e, &**table, row, cp, &class),
                         });
                     }
                 }

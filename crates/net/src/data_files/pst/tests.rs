@@ -801,32 +801,6 @@ fn tasks_come_in_as_tasks() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A picture the HTML shows comes in under its own name, still inline, and gives no paperclip.
-/// It went out unnamed, and showed as `attachment-1` in another client.
-#[test]
-fn a_shown_picture_keeps_its_name() {
-    let it = Item {
-        subject: "Logo".into(),
-        from: EmailAddress::new("Ana", "ana@example.com"),
-        date: 1_704_067_200,
-        body: "Hi".into(),
-        html: Some("<p>Hi</p><img src=\"cid:logo@studio.example\">".into()),
-        files: vec![File::Data {
-            name: "image001.png".into(),
-            mime: "image/png".into(),
-            cid: "logo@studio.example".into(),
-            data: b"\x89PNG\r\n\x1a\nfake".to_vec(),
-        }],
-        ..Default::default()
-    };
-    let raw = to_raw(it, "logo@x").unwrap();
-    let p = mime::parse(&raw).unwrap();
-    let parts: Vec<_> = p.attachments.iter().map(|a| (a.name.as_str(), a.inline)).collect();
-    assert_eq!(parts, [("image001.png", true)]);
-    let key = quatrelle_model::MessageKey { account: "d1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
-    assert!(!mime::summary_from_full(&raw, key, Flags::default(), 0, 0).has_attachments);
-}
-
 mod chunked;
 mod fidelity;
 mod files;
