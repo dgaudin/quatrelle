@@ -1099,6 +1099,70 @@ compactage en place : rien de la machinerie de commits non durables de l'origine
   import se lisent encore « vide si illisible » (copies du serveur, relues à l'affichage) ; la
   suite du relevé, R3.
 
+### État de la récupération : v0.32, douzième partie : compression du cache et import qui ne perd pas son travail (2026-11-05)
+
+Les lots R3 et R4 de `merge-tools/survey-v0.32.md` (constat n° 1), sur `main`. Pour chaque
+commit, son test porté seul d'abord et lancé contre le code d'alors ; quand l'origine n'en avait
+pas, ou que le sien ne montrait pas le défaut (la mémoire), une sonde écrite ici.
+
+- **R3, compression et mémoire du cache** :
+  - `3ecd128a` (`8f1e2198`, repris tel quel, `DEFLATED_OLD` gardé) : `pack()` compresse avec
+    miniz_oxide (niveau 1) appelé directement. Sonde : le test d'intégration de l'origine, porté
+    en `apps/quatrelle/tests/data_file_compression.rs`, échouait : dans le graphe de
+    l'application, `hayro-syntax` fait prendre zlib-rs à flate2, dont le niveau rapide gardait le
+    base64 d'une pièce jointe à **0,996** de sa taille, donc stocké brut (le test du crate seul
+    passait). Après : **0,760** (une source de base64 tient dans 0,733 de la place prise par du
+    bruit). Le format ne change pas : anciens fichiers et anciennes versions se relisent.
+  - `9c0e3e5e`, `239a8625`, `104fc902` (tampon écrit en place, puis sa taille) : **non pris**.
+    Leurs tests passaient déjà (`21db2772`, gardés comme garde-fous) : notre `pack()` garde
+    exactement ce que dit la règle du dixième, dans un tampon de cette taille, et rien ici ne
+    garde une source compressée en attente dans un lot d'import (le `652ac8f6` de l'origine, que
+    ces commits corrigent, n'est pas pris). Reste, non mesuré par leurs tests : `compress_to_vec`
+    double son tampon (pic passager d'environ 1,76 fois la source pendant la compression).
+  - `1a8bed0c` (`e685c242`, adapté) : un fichier compressé en pièces est décompressé au fil de
+    leur lecture, sans recoller les pièces d'abord ; l'ancien préfixe est lu aussi. Le test de
+    l'origine (pièces manquantes détectées) passait avant et après. Sonde écrite ici,
+    `store/tests/reading_memory.rs` (Linux, pic de mémoire résidente) : une source de 64,5 Mo
+    montait à **1,75** fois sa taille au-dessus de l'état d'avant ; **1,00** après. Le test des
+    préfixes hérités couvre maintenant une valeur compressée en pièces.
+- **R4, un import qui ne perd pas son travail** :
+  - `4f130900`, seulement `RESERVE_MAX` (`65d4aba4`) : 64 Mio au plus réservés avant de lire un
+    fichier, au lieu de 1 Gio sur la foi de sa note. Sonde (même fichier) : une note annonçant
+    1 Gio sans aucune pièce faisait monter la mémoire virtuelle de 1 006 649 344 octets ; 16 Ko
+    après. La cible de fuzz `data_file` n'est pas prise (elle suppose le stockage de l'origine).
+  - `e44b556b` (`6dcbcc80`, repris tel quel, dans `worker/pool.rs`) : un fil d'import qui ne
+    démarre pas termine l'import en échec au lieu d'un simple avis (compte laissé en
+    « Syncing »). Pas de sonde possible (pas d'`unsafe` ni de `setrlimit` pour empêcher un fil).
+  - `0a59342b` (`fdcdac9b`, adapté) : si l'enregistrement final (liste des dossiers, ou contacts,
+    calendrier, notes et tâches) échoue, `finish` rend les comptes avec l'erreur
+    (`Imported::last_save`, qui dit lequel) ; le moteur garde le compte quand du courrier ou un
+    élément est entré (lu dans le cache : l'événement du fork n'a pas de rapport), réenregistre
+    la liste des dossiers et le dit ; si cela échoue encore, il dit de réimporter. Deux avis
+    nouveaux dans les treize catalogues. Sondes (`pst/tests/losses.rs`,
+    `engine/src/tests/accounts/data_files.rs`) : `finish` rendait
+    `Err("memory/d1/folders.json: failed on purpose")` sans comptes ; un compte de 30 messages et
+    un de contacts seuls étaient supprimés. Non pris : `ImportReport`, la progression en éléments
+    lus, les dossiers écartés (journal, RSS) : lot P2.
+  - `cda89c0f`, seulement le `catch_unwind` par dossier (`1e7f03c9`, adapté) : `visit` lit chaque
+    dossier (`visit_one`) et sa liste de sous-dossiers derrière leur propre `catch_unwind` ; ce
+    qui est entré du dossier fautif reste, ses sous-dossiers sont lus. Sonde (point de panne de
+    test `pst::tests::fault`) : une panique dans le premier de trois dossiers arrêtait l'import,
+    les deux autres perdus. Pour rester sous 800 lignes, le test ignoré `real_files` passe dans
+    `pst/tests/real_files.rs`. Ni le pipeline ni la découpe de `pst.rs` de l'origine.
+  - `e70504df` (`e21d6e32`, repris tel quel) : l'export remplace l'ancien `.pst` par un seul
+    renommage ; s'il échoue, l'erreur dit que le courrier est dans le `.pst.part`. Sonde : le
+    test de l'origine (une cible qu'on ne peut remplacer) échouait, l'erreur n'étant que « Is a
+    directory ». La perte elle-même (suppression réussie, renommage raté) ne se provoque pas ici.
+  - `2071a661` (`fd3bbfd1`, adapté) : aucun `vendor/` suivi par git ; le filtre disparaît de
+    `xtask sizes` et aussi de `xtask authors` (propre au fork). La partie `keys` est sans objet :
+    ses commentaires ne parlent pas de code tiers copié dans le dépôt.
+- **Vérifié** : chaque sonde avant et après, les suites de `quatrelle-store`, `quatrelle-engine`,
+  `quatrelle-net` et les tests i18n, `cargo xtask ci`.
+- **Ce que R3 ne rend pas** : la place déjà prise par les pièces jointes gardées brutes dans les
+  fichiers de données existants ne revient qu'avec la recompression (lot R12) ; seules les
+  écritures nouvelles sont compressées.
+- **Reste à faire** : la suite du relevé, R5.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
