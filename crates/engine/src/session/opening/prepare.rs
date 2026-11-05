@@ -245,6 +245,8 @@ impl Session {
         let Some(work) = self.body.waiting.clone() else { return };
         self.body.work = None;
         if self.reading.as_ref().is_some_and(|r| r.key == work.key) {
+            // Read and parsed on this thread after all: counted as such.
+            self.body.parsed_here = self.body.parsed_here.wrapping_add(1);
             self.finish_body(work.run());
         } else {
             // The pane moved on from it (another folder): nothing to read.
