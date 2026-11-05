@@ -5478,6 +5478,7 @@ name = "quatrelle-pgp"
 version = "1.2.0"
 dependencies = [
  "pgp",
+ "proptest",
  "rand_core 0.6.4",
  "serde",
  "thiserror 2.0.21",
