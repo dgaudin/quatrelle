@@ -114,8 +114,10 @@ pub(super) fn has_real_attachments(m: &Message<'_>) -> bool {
     // A winmail.dat counts by what it gives in its place, as `attached` lists it: its files, or
     // itself when it stays one; one holding only the body gives none (no paperclip over an
     // empty list), and neither do the pictures Outlook marks as the body's (hidden, by
-    // Content-ID), as a MIME part shown inline doesn't. No body is read to count them.
+    // Content-ID), as a MIME part shown inline doesn't. No body is read to count them; the HTML
+    // is read only for a named picture (see `shown_picture`).
     let mut budget = Budget::new();
+    let html = std::cell::OnceCell::new();
     for p in m.attachments() {
         if smime(p) {
             continue;
@@ -126,11 +128,36 @@ pub(super) fn has_real_attachments(m: &Message<'_>) -> bool {
                 Some(t) if !budget.cut && t.attachments.iter().all(|f| f.hidden && f.content_id.is_some()) => {}
                 _ => return true,
             }
-        } else if p.attachment_name().is_some() || !p.is_inline_part() {
+        } else if (p.attachment_name().is_some() || !p.is_inline_part()) && !shown_picture(m, p, &html) {
             return true;
         }
     }
     false
+}
+
+/// Most of a message's HTML looked through for the pictures it shows.
+const SHOWN_HTML_MAX: usize = 4 << 20;
+
+/// A named picture sent inline with a Content-ID that the message's HTML shows (`cid:`): the
+/// text's, not a file, as Outlook names its pictures (`image001.png`) and Quatrelle its own. A
+/// file sent inline (Apple Mail's PDFs) stays one. `html`: the HTML, lower case, read once.
+fn shown_picture(m: &Message<'_>, p: &mail_parser::MessagePart<'_>, html: &std::cell::OnceCell<String>) -> bool {
+    let Some(cid) = p.content_id().map(|c| c.trim().trim_matches(['<', '>']).to_ascii_lowercase()).filter(|c| !c.is_empty()) else {
+        return false;
+    };
+    if !p.is_inline_part() || !part_mime(p).starts_with("image/") {
+        return false;
+    }
+    let html = html.get_or_init(|| {
+        let mut out = String::new();
+        for t in m.html_bodies().filter_map(|b| b.text_contents()) {
+            let room = SHOWN_HTML_MAX.saturating_sub(out.len());
+            let end = (0..=room.min(t.len())).rev().find(|i| t.is_char_boundary(*i)).unwrap_or(0);
+            out.push_str(t.get(..end).unwrap_or_default());
+        }
+        out.to_ascii_lowercase()
+    });
+    html.contains(&format!("cid:{cid}"))
 }
 
 pub(super) trait InlinePart {
