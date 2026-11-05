@@ -10,7 +10,7 @@ use std::sync::Arc;
 use quatrelle_mime::{self as mime, OutAttachment, Parsed, ReplyMode};
 use quatrelle_model::contacts::{Contact, ContactBook};
 use quatrelle_model::dates::{Clock, DateGroup};
-use quatrelle_model::job::{Secret, TEXT_FIRST_OVER, Vacation};
+use quatrelle_model::job::{IMAP_TEXT_FIRST_OVER, Secret, TEXT_FIRST_OVER, Vacation};
 use quatrelle_model::search::{Doc, Index, Query, summary_text};
 use quatrelle_model::thread::{Thread, threads};
 use quatrelle_model::{

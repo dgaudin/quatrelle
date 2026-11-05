@@ -500,6 +500,11 @@ impl Job {
 /// ([`Job::FetchTextFirst`]).
 pub const TEXT_FIRST_OVER: u32 = 1 << 20;
 
+/// An IMAP message of more bytes than this is shown by its text first: its structure
+/// (`BODYSTRUCTURE`) tells its text from its files, a round trip that's quick next to a file of a
+/// few hundred kilobytes.
+pub const IMAP_TEXT_FIRST_OVER: u32 = 256 << 10;
+
 /// The folder Exchange's public folders are listed under. They are the organisation's, often
 /// huge (years of automatic reports): as in Outlook, only the ones made Favorites are kept in
 /// sync in the background; another is read from the server when it is opened.

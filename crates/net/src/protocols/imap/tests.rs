@@ -12,7 +12,7 @@ pub(crate) struct Script {
 }
 
 impl Script {
-    fn new(s: &[u8]) -> Self {
+    pub(crate) fn new(s: &[u8]) -> Self {
         Script { input: io::Cursor::new(s.to_vec()), written: Vec::new() }
     }
 }

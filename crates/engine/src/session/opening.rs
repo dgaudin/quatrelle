@@ -181,11 +181,16 @@ impl Session {
 
     /// Whether a message is worth showing as its text before the whole of it: one with files, on
     /// Exchange from [`TEXT_FIRST_OVER`] on, on Microsoft Graph whatever it weighs (it gives no
-    /// size).
+    /// size); on IMAP, one from [`IMAP_TEXT_FIRST_OVER`] on and not signed or encrypted, its
+    /// structure saying whether it has files (a header alone doesn't).
     fn text_first_wanted(&self, key: &MessageKey) -> bool {
         let Some(config) = self.account(&key.account).map(|a| &a.config) else { return false };
+        let imap = !config.is_api() && config.pop.is_none() && !config.imap.host.trim().is_empty();
         key.folder != OUTBOX
-            && self.summary(key).is_some_and(|m| m.has_attachments && (config.graph.is_some() || (config.ews.is_some() && m.size >= TEXT_FIRST_OVER)))
+            && self.summary(key).is_some_and(|m| {
+                (m.has_attachments && (config.graph.is_some() || (config.ews.is_some() && m.size >= TEXT_FIRST_OVER)))
+                    || (imap && m.size >= IMAP_TEXT_FIRST_OVER && m.smime == quatrelle_model::Smime::None)
+            })
     }
 
     /// Whether a message is one of the older mail read on the server, not kept.

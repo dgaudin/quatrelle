@@ -19,7 +19,7 @@ mod tnef;
 pub use index_text::{IndexDoc, MAX_INDEX_CHARS, index_doc};
 #[doc(hidden)]
 pub use index_text::{IndexStats, index_doc_stats};
-pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, text_first};
+pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, part_name, text_first};
 
 /// A part's size: its bytes, or, with none yet (a message's text that came first), the size its
 /// `Content-Disposition` gives (RFC 2183's `size`).

@@ -50,6 +50,25 @@ fn plain_type(m: &str) -> String {
     if ok { m.to_ascii_lowercase() } else { "application/octet-stream".into() }
 }
 
+/// A file's name from a part's parameters as an IMAP server lists them (`BODYSTRUCTURE`): the
+/// disposition's `filename`, else the type's `name`, in RFC 2231's or RFC 2047's form decoded.
+/// What a hostile server gives is written into a header of one line, at most 32 parameters.
+pub fn part_name(disposition: &[(String, String)], type_params: &[(String, String)]) -> Option<String> {
+    let line = |params: &[(String, String)]| {
+        params
+            .iter()
+            .take(32)
+            .filter(|(k, v)| !k.is_empty() && k.bytes().all(|b| b.is_ascii_graphic() && b != b'=' && b != b';') && !v.contains(['\r', '\n']))
+            .map(|(k, v)| format!("; {k}=\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\"")))
+            .collect::<String>()
+    };
+    let raw = format!("Content-Type: application/octet-stream{}\r\nContent-Disposition: attachment{}\r\n\r\n", line(type_params), line(disposition));
+    let m = MessageParser::default().parse(raw.as_bytes())?;
+    let p = m.parts.first()?;
+    let name = p.content_disposition().and_then(|d| d.attribute("filename")).or_else(|| p.content_type().and_then(|t| t.attribute("name")))?;
+    Some(one_line(name.trim())).filter(|n| !n.trim().is_empty())
+}
+
 /// [`parse`] for a message built by [`text_first`], and only one: a sender or a recipient with a
 /// name alone stays (an empty `email`: not known yet), as `text_first` writes it. Ordinary mail
 /// goes through [`parse`], which keeps addresses only.
@@ -175,6 +194,19 @@ mod tests {
             assert_eq!(plain_type(odd), "application/octet-stream", "{odd}");
         }
         assert_eq!(plain_type("Image/PNG"), "image/png");
+    }
+
+    /// RFC 2231's continued, encoded `filename*0*=` and RFC 2047's encoded word both come out
+    /// as the name; a `filename` wins over the type's `name`; a broken line adds nothing.
+    #[test]
+    fn a_file_name_as_a_server_lists_it() {
+        let p = |k: &str, v: &str| (k.to_string(), v.to_string());
+        assert_eq!(part_name(&[p("filename*0*", "utf-8''r%C3%A9"), p("filename*1*", "sum%C3%A9.pdf")], &[]).as_deref(), Some("résumé.pdf"));
+        assert_eq!(part_name(&[], &[p("name", "=?utf-8?q?r=C3=A9sum=C3=A9=2Epdf?=")]).as_deref(), Some("résumé.pdf"));
+        assert_eq!(part_name(&[p("filename", "a.pdf")], &[p("name", "b.pdf")]).as_deref(), Some("a.pdf"));
+        assert_eq!(part_name(&[p("filename", "a\r\nX: y")], &[]), None);
+        assert_eq!(part_name(&[p("filename", "  ")], &[]), None);
+        assert_eq!(part_name(&[p("bad key", "a"), p("filename", "q\"uo\\te.txt")], &[]).as_deref(), Some("q\"uo\\te.txt"));
     }
 
     #[test]

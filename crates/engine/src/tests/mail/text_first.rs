@@ -446,9 +446,30 @@ fn which_messages_come_text_first() {
     let _ = not_here(&s, &key);
     s.open_message(&key); // Read now: nothing later rebuilds the list under the shapes below.
 
-    // IMAP.
+    // A local account (the sample): nothing to ask a server for.
     shape(&mut s, &key, BIG, true);
     assert_eq!(asked_for(&mut s, &key), "whole");
+
+    // IMAP: from 256 KB on, files or not (the header doesn't say; the structure will), signed
+    // and encrypted mail whole.
+    exchange(&mut s, |c| c.imap.host = "imap.studio.example".into());
+    assert_eq!(asked_for(&mut s, &key), "text first");
+    shape(&mut s, &key, quatrelle_model::job::IMAP_TEXT_FIRST_OVER, false);
+    assert_eq!(asked_for(&mut s, &key), "text first", "from the size on");
+    shape(&mut s, &key, quatrelle_model::job::IMAP_TEXT_FIRST_OVER - 1, true);
+    assert_eq!(asked_for(&mut s, &key), "whole");
+    shape(&mut s, &key, BIG, true);
+    for smime in [quatrelle_model::Smime::Signed, quatrelle_model::Smime::Encrypted] {
+        Arc::make_mut(s.list.iter_mut().find(|m| m.key == key).unwrap()).smime = smime;
+        assert_eq!(asked_for(&mut s, &key), "whole", "{smime:?}");
+    }
+    Arc::make_mut(s.list.iter_mut().find(|m| m.key == key).unwrap()).smime = quatrelle_model::Smime::None;
+    exchange(&mut s, |c| c.pop = Some(c.imap.clone()));
+    assert_eq!(asked_for(&mut s, &key), "whole", "POP");
+    exchange(&mut s, |c| {
+        c.pop = None;
+        c.imap.host = String::new();
+    });
 
     exchange(&mut s, |c| c.ews = Some(EWS.into()));
     assert_eq!(asked_for(&mut s, &key), "text first");

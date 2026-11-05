@@ -1,0 +1,12 @@
+* 1 FETCH (UID 1 BODYSTRUCTURE (("TEXT" "PLAIN" ("CHARSET" "iso-8859-1") NIL NIL "QUOTED-PRINTABLE" 22 1 NIL NIL NIL NIL)("VIDEO" "QUICKTIME" ("NAME*" "utf-8''r%C3%A9el.mov") NIL NIL "BASE64" 4000000 NIL ("ATTACHMENT" ("FILENAME*0*" "utf-8''r%C3%A9" "FILENAME*1" "el.mov")) NIL NIL) "MIXED" ("BOUNDARY" "b") NIL NIL NIL))
+M1 OK done
+* 1 FETCH (UID 1 BODY[HEADER] {91}
+From: Sam <sam@studio.example>
+To: me@studio.example
+Subject: Reel
+Message-ID: <r@x>
+
+ BODY[1] {19}
+Caf=E9 at n=F6on.
+)
+M2 OK done
