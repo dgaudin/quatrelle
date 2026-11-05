@@ -174,8 +174,13 @@ attachment names for the chosen scope; candidates are verified against the full 
 may over-approximate but never misses. The index is rebuilt lazily after changes.
 
 The index is built a slice at a time (`Session::index_step`, `search.run` with an `index` budget):
-the window indexes a few hundred messages per frame and draws between slices, so a big mailbox's
-first search never freezes it. The address book built from the mail (`model::contacts`, for the
+the window gives a search 6 ms of each frame by its own clock (`Session::set_search_clock`, from
+`web-time`: the engine reads none) and draws between slices, so a big mailbox's first search never
+freezes it; a message is begun only while one as long as the frame's longest so far still fits.
+A message's words come from `mime::index_doc`, a walk over its MIME structure that decodes its
+text parts and never its files. A query the summaries answer alone (flags, sizes, categories,
+sender, recipients, subject) goes to a second index of the summaries only, which reads no
+message. The folders on view are read first. The address book built from the mail (`model::contacts`, for the
 recipient boxes' suggestions, Select Names and the Focused Inbox) goes the same way
 (`Session::contacts_step`): the window asks for what is known so far (`suggest_contacts_now`,
 `address_book_now`) and takes a slice per frame while there's mail left to read; commands and

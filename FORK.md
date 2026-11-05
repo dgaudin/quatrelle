@@ -1241,6 +1241,92 @@ d'abord et lancé contre le code d'alors.
 - **Reste à faire** : la suite du relevé, R6 (où la règle complète du trombone est à signaler au
   propriétaire).
 
+### État de la récupération : v0.32, quatorzième partie : une recherche qui ne fige jamais la fenêtre (2026-11-05)
+
+Le lot R6 de `merge-tools/survey-v0.32.md` (constat n° 6), sur `main`. La recherche garde son
+index en mémoire (l'index sur disque de l'origine, `591adccf` et suite, attend les mesures de
+R14). Pour chaque point, sa sonde d'abord, lancée contre le code d'alors.
+
+- **Le texte d'un message sans décoder ses pièces jointes** (`6dee1a15`, adapté de `0a86ddb4`, des
+  parties `mime` de `eb1fe5c6` et `248bcbd6`) : `search_text` analysait tout le message qu'il
+  indexait, chaque pièce jointe décodée, sur le fil de la fenêtre, à chaque tranche et à chaque
+  corps téléchargé. `index_doc` (`mime/src/attachments/index_text.rs`) parcourt la structure MIME
+  lui-même (frontières trouvées par `memchr`), ne donne à mail-parser que les en-têtes et les
+  parties texte, et borne la profondeur (8), les parties (1 000) et le texte (un million de
+  caractères, au lieu de 50 000) ; `search_text` devient `index_doc(raw).joined()`. Un parcours
+  coupé le dit (`parts_cut`) : son compte de fichiers n'est pas « aucun ». La recherche lit
+  maintenant toutes les parties texte et les messages joints (objet et texte), et ne nomme que
+  les vrais fichiers. Cible de fuzz `index_text`, avec le dictionnaire et la graine de l'origine.
+  Sondes : un message avec une pièce de 30 Mo coûtait **62 ms** (décodée entière) ; **2,3 ms**
+  après. 2 000 fichiers joints donnaient 2 000 noms (moins de 1 000 après, coupé et dit). Les
+  tests de l'origine (`mime/src/tests/index_text.rs`, `search_reads_what_a_winmail_dat_holds`)
+  ne compilaient pas avant ; le test de l'origine pour `draft_carries_files` n'est pas pris
+  (`fefd506a`, lot P2).
+- **Le trombone, une règle avec la recherche** (même commit), qui reprend la règle étroite du
+  lot R5 (`8d07a07a`). Une partie est un fichier sauf la partie S/MIME, et sauf une partie en
+  ligne ou sans disposition que le HTML montre à sa place, quel que soit son nom. **Ce qui
+  change dans la liste** :
+  - une image que le HTML montre par son adresse (`Content-Location`, RFC 2557, exacte ou par
+    son dernier segment) n'a plus de trombone ; sonde : elle en avait un ;
+  - la référence doit être entière, en majuscules ou non : `cid:image10` ne montre pas
+    `image1`, qui est donc un fichier ; sonde : pas de trombone avant ;
+  - **une image en ligne sans nom que le HTML ne montre pas a désormais un trombone** ; sonde :
+    elle n'en avait pas ;
+  - une partie en ligne qui n'est pas une image (un PDF à `Content-ID`) et que le HTML montre
+    par `cid:` n'est plus un fichier ; un PDF en ligne sans `Content-ID` (Apple Mail) en reste
+    un ;
+  - le `winmail.dat` garde la règle du fork (deuxième partie) : ses fichiers sauf les images
+    qu'Outlook cache avec un `Content-ID`, aucun pour celui qui ne tient que le corps, lui-même
+    quand le budget en a laissé, sans lire le corps ; la recherche compte de même
+    (`tnef_files`). La règle de l'origine (images montrées par le corps du `winmail.dat`) n'est
+    pas prise : elle lit le corps pour le trombone.
+  - les références du HTML sont lues en une passe, chacune sur 4 Ko au plus. La liste des pièces
+    du volet de lecture ne change pas.
+- **Un budget en temps** (`c27cd47d`, idées de `5c201bf8`, `ea060907`, `5a5da66b`, sans leur
+  moteur) : la fenêtre donnait 500 messages par image, un compte et non un temps. Elle donne à la
+  session son horloge (`Session::set_search_clock`, `web-time` ; le moteur n'en lit aucune) et
+  6 ms par image : l'index ne commence un message, et la réponse n'en regarde un, que si le plus
+  long vu dans l'appel tient encore (trois quarts pour l'index, le reste pour la réponse, qui
+  regarde au moins un message par appel). Le compte reste un plafond (4 096 par image) ; une
+  recherche demandée entière (ligne de commande, `--cmd`, dossiers de recherche) reste entière.
+  Sonde (`tests/searching/paced.rs`) : 3 000 messages, un sur deux téléchargé avec un corps de
+  16 Ko, par tranches de 500 : **482 ms** par appel ; après (1 200 messages dans la même
+  proportion, le test gardé), l'appel le plus lent qui indexe prend **6,3 ms** sur 239 appels,
+  et les 12 attendus sont trouvés.
+- **Les requêtes sans mot du texte** (`71a01caa`, adapté de `c0742486` et `df653c4c`) :
+  `is:unread`, un drapeau, une taille, une catégorie, « en attente de réponse », ou des mots de
+  l'expéditeur, des destinataires ou de l'objet bâtissaient l'index des mots, chaque message
+  téléchargé relu. Elles vont à un second index, des résumés seuls (`summary_index`) : aucun
+  message lu, rien gardé sur disque, mêmes tranches et même réponse ; l'index des mots reste
+  pour la recherche de mots suivante. `Store::reads()` compte les sources lues (`load_body`
+  aussi). La partie « index par dossier » de `c0742486` était déjà chez nous. Sonde :
+  `summary_searches_read_no_message` (le test de l'origine) échouait, **12 sources lues**.
+- **Le dossier affiché d'abord** (`5b7bfd45`, idée de `402ceff4`, qui ordonne chez l'origine les
+  candidats de son index sur disque) : les dossiers affichés passent en tête du parcours, les
+  autres dans l'ordre du compte. Sonde : `the_folder_on_view_is_read_first`, le dernier de douze
+  dossiers affiché, les premières trouvailles étaient toutes dans INBOX.
+- **Le téléchargement d'avance d'Exchange** (`23a0f543`, propre au fork) : `worker/ahead.rs`
+  signale maintenant le dossier une fois son courrier téléchargé, comme IMAP, JMAP et Graph (une
+  fois par dossier, pas à chaque pas : la fenêtre relit alors la liste du dossier). Sonde :
+  `downloading_ahead_tells_of_the_folder` (faux serveur EWS, mode Exchange mis en cache, 60
+  messages) : rien signalé en 20 s après la synchro complète ; 1,6 s après. **Surprise** : ce
+  signal seul n'apportait aucun mot, pour aucun protocole (ni celui de `69706264`) : un dossier
+  signalé ne recevait que ses messages nouveaux, pas les sources venues pour des messages déjà
+  indexés (un téléchargement d'avance n'envoie pas d'`Event::Body`). Un dossier signalé liste
+  maintenant une fois ses sources en cache s'il a des messages indexés sans la leur, et leurs
+  mots sont lus au pas de la recherche (`SearchIndex::came`). Sonde :
+  `sources_downloaded_ahead_are_searched_once_told`, le mot d'une source arrivée ainsi n'était
+  pas trouvé dans la même session.
+- **Vérifié** : chaque sonde avant et après, les suites de `quatrelle-mime`, `quatrelle-store`,
+  `quatrelle-engine`, `quatrelle-net` et `quatrelle-ui-egui`, `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - l'appel qui finit un dossier écrit son index sur disque et le joint à celui du compte, d'un
+    seul tenant : 45 ms pour un dossier de 1 200 messages dont 600 corps (compilation de test),
+    davantage pour un gros dossier, une fois par dossier et par session ;
+  - un dossier dont l'index est relu depuis le disque lit d'un coup les corps arrivés depuis ;
+  - un dossier signalé pendant une recherche liste ses sources en cache (une fois par signal) ;
+  - les mesures de R14 sur une boîte de 50 000 messages, avant de choisir l'index sur disque.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
