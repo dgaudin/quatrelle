@@ -157,6 +157,71 @@ fn the_pane_shows_the_subject_while_the_lane_reads() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Services with a thread for each piece of work, the reading lane's kept to be joined.
+struct Joined(std::sync::Arc<std::sync::Mutex<Vec<std::thread::JoinHandle<()>>>>);
+
+impl crate::Services for Joined {
+    fn clock(&self) -> (i64, i32) {
+        (NOW, 0)
+    }
+    fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
+        Ok(())
+    }
+    fn background(&mut self, lane: crate::Lane, work: crate::Work) -> Result<(), crate::Work> {
+        let h = std::thread::spawn(work.run);
+        if matches!(lane, crate::Lane::Reading) {
+            self.0.lock().unwrap().push(h);
+        }
+        Ok(())
+    }
+    fn has_background(&self) -> bool {
+        true
+    }
+}
+
+/// Two threads of the reading lane at once (the desktop's lane starts another when one is caught
+/// on cancelled work; here each piece has its own), the older one finishing last: the newer body
+/// stays (from upstream eb56351). It was overwritten, and the pane waited for a body that never
+/// came, blank.
+#[test]
+fn an_older_body_finishing_last_is_let_go() {
+    let (mut a, dir) = app("body-order");
+    let ctx = egui::Context::default();
+    let handles = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(Joined(handles.clone()));
+    a.defer_bodies();
+    frame(&ctx, &mut a, vec![]);
+    // Long formatted mail: slow to parse (a quarter of a second in release).
+    let html = (0..12_000).map(|i| format!("<p>Line {i} of a <b>long</b> newsletter, <i>formatted</i>.</p>")).collect::<String>();
+    let k = with_files_and_html(&mut a, 9650, Vec::new(), Some(html), Vec::new());
+    a.run("list.open", json!({"key": k.to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    // Its thread has taken the work and reads the big one.
+    for _ in 0..5000 {
+        if !a.ui.bodies.waiting_to_run() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    a.run("list.next", json!({}));
+    let next = a.session.reading.as_ref().unwrap().key.clone();
+    assert_ne!(next, k);
+    frame(&ctx, &mut a, vec![]);
+    let mut hs: Vec<_> = std::mem::take(&mut *handles.lock().unwrap());
+    assert_eq!(hs.len(), 2, "two threads at work");
+    let newer = hs.pop().unwrap();
+    let older = hs.pop().unwrap();
+    newer.join().unwrap();
+    let overlapped = !older.is_finished();
+    older.join().unwrap();
+    assert!(overlapped, "the older one still at work when the newer one was done");
+    frame(&ctx, &mut a, vec![]);
+    let r = a.session.reading.as_ref().unwrap();
+    assert_eq!(r.key, next);
+    assert!(r.parsed.is_some() && !a.session.body_waiting(&next), "the newer body is shown");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The arc's target: holding Down over 200 big messages on threads of their own, every step
 /// (the command and its frame) takes under 16 ms, marked read as they're shown (the fork marks
 /// them, and since R10 that's cheap on a server account). On the sample's local account the mark
