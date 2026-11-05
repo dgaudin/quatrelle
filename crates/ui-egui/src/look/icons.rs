@@ -121,6 +121,8 @@ pub enum Icon {
     Tasks,
     /// A tick in a circle (Mark Complete).
     Complete,
+    /// A tick on its own: a follow-up marked complete, where its flag was.
+    Done,
     /// A smiling face (Insert › Emoji).
     Emoji,
     /// The kinds of a contacts field's entries (a person is `Person`): a distribution list, a
@@ -240,6 +242,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Video => f!("video"),
         Icon::Tasks => f!("task_list_ltr"),
         Icon::Complete => f!("checkmark_circle"),
+        Icon::Done => f!("checkmark"),
         Icon::Emoji => f!("emoji"),
         Icon::DistributionList => f!("people_list"),
         Icon::ContactGroup => f!("people_team"),

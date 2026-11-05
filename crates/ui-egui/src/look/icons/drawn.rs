@@ -298,6 +298,10 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.circle(8.0, 8.0, 6.5);
             pen.line(&[(5.0, 8.2), (7.2, 10.4), (11.2, 6.0)]);
         }
+        Icon::Done => {
+            // A tick, its short stroke down to the left of its foot.
+            pen.line(&[(2.5, 8.6), (6.2, 12.3), (13.5, 3.7)]);
+        }
         Icon::Video => {
             // The camera's body, then its lens.
             pen.closed(&[(1.5, 4.5), (10.5, 4.5), (10.5, 11.5), (1.5, 11.5)]);

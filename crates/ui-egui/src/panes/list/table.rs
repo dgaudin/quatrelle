@@ -328,10 +328,14 @@ pub(super) fn table_row(
                 }
             }
             Col::Flag => {
-                // Flag or unflag from the row, as Outlook's flag column.
+                // Flag or unflag from the row, as Outlook's flag column; one marked complete
+                // shows a tick there, and a click flags it again.
                 let fr = Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(20.0, 20.0));
                 let fresp = ui.interact(fr, id.with("flag"), Sense::click()).on_hover_text(tl!(if m.flags.flagged { "Unflag" } else { "Flag" }));
-                if m.flags.flagged || fresp.hovered() || hovered {
+                let complete = m.flags.follow_up_complete();
+                if complete && !fresp.hovered() {
+                    icons::paint(&p, icons::centered(fr, 13.0), Icon::Done, t.dim);
+                } else if m.flags.flagged || fresp.hovered() || hovered {
                     let color = if m.flags.flagged { t.flag } else { t.faint };
                     icons::paint(&p, icons::centered(fr, 13.0), Icon::Flag, color);
                 }
