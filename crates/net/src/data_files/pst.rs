@@ -356,11 +356,13 @@ type ReadItem<'a> = dyn Fn(&EntryId) -> io::Result<Item> + 'a;
 
 fn walk(store: &dyn PstStore, read: &ReadItem<'_>, out: &mut Out<'_>) -> io::Result<()> {
     let top = store.open_folder(&store.properties().ipm_sub_tree_entry_id()?)?;
-    visit(store, &*top, None, 0, read, out);
+    visit(store, &*top, (None, false), 0, read, out);
     Ok(())
 }
 
-fn visit(store: &dyn PstStore, folder: &dyn PstFolder, parent: Option<&str>, depth: usize, read: &ReadItem<'_>, out: &mut Out<'_>) {
+/// Read the folders under `folder`: they go under `parent` (`.0`), and are thrown away (`.1`) when
+/// it's Deleted Items or under it.
+fn visit(store: &dyn PstStore, folder: &dyn PstFolder, (parent, trash): (Option<&str>, bool), depth: usize, read: &ReadItem<'_>, out: &mut Out<'_>) {
     if depth >= MAX_DEPTH {
         return;
     }
@@ -379,6 +381,7 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, parent: Option<&str>, dep
     };
     for node in nodes {
         let mut at = Visited::default();
+        at.trash = trash || special_folder(store, 0x35E3) == Some(node);
         let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| visit_one(store, node, parent, read, out, &mut at)));
         if done.is_err() {
             // What came in of it stays, in its folder's list; the folders under it are read.
@@ -390,7 +393,7 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, parent: Option<&str>, dep
         }
         if let Some(sub) = at.sub {
             let under = if at.mail { at.path.as_deref() } else { parent };
-            visit(store, &*sub, under, depth + 1, read, out);
+            visit(store, &*sub, (under, at.trash), depth + 1, read, out);
         }
     }
 }
@@ -404,6 +407,9 @@ struct Visited {
     mail: bool,
     /// The folder made for it, once made.
     path: Option<String>,
+    /// Deleted Items, or a folder under it: a contact, calendar item, task or note in it was
+    /// thrown away, and stays out of the address book, calendar, tasks and notes.
+    trash: bool,
 }
 
 /// One folder of the file read in: its mail, or its contacts and calendar items.
@@ -448,6 +454,8 @@ fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadI
             tests::fault(&name);
             let item = store.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| read(&e));
             match item {
+                // Thrown away: only counted.
+                Ok(i) if at.trash && out::is_pim(&i.class) => out.skipped += 1,
                 Ok(i) => out.add_message(&path, i),
                 Err(e) => {
                     log::info!("a message could not be read: {e}");
@@ -459,7 +467,7 @@ fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadI
     out.save_folder(&path);
 }
 
-/// The node of one of the store's special folders (`0x35E2`: the Outbox), from its entry id
+/// The node of one of the store's special folders (`0x35E2`: the Outbox, `0x35E3`: Deleted Items), from its entry id
 /// (flags, the store's 16-byte key, then the node id).
 fn special_folder(store: &dyn PstStore, prop: u16) -> Option<u32> {
     let (_, v) = store.properties().iter().find(|(id, _)| **id == prop)?;
