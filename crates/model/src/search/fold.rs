@@ -36,7 +36,20 @@ pub fn fold_word(w: &str) -> Cow<'_, str> {
         return if w.bytes().any(|b| b.is_ascii_uppercase()) { Cow::Owned(w.to_ascii_lowercase()) } else { Cow::Borrowed(w) };
     }
     let mut out = String::with_capacity(w.len());
-    for c in w.chars() {
+    let mut rest = w;
+    while !rest.is_empty() {
+        // A run of ASCII is copied in one go, lower-cased where it lands (most of a text, even
+        // one with accents: folding a letter at a time made a calendar search four times slower).
+        let ascii = rest.bytes().position(|b| !b.is_ascii()).unwrap_or(rest.len());
+        let Some((run, tail)) = rest.split_at_checked(ascii) else { break };
+        let start = out.len();
+        out.push_str(run);
+        if let Some(added) = out.get_mut(start..) {
+            added.make_ascii_lowercase();
+        }
+        let mut chars = tail.chars();
+        let Some(c) = chars.next() else { break };
+        rest = chars.as_str();
         // "l’équipe" is "l'équipe", as typed on a keyboard.
         let c = if matches!(c, '\u{2018}' | '\u{2019}') { '\'' } else { c };
         for l in c.to_lowercase().filter(|l| !is_mark(*l)) {
@@ -96,7 +109,8 @@ pub(crate) fn words_and_parts(text: &str) -> impl Iterator<Item = Cow<'_, str>> 
 /// Words, each followed by its [`parts`].
 fn with_parts<'a>(words: impl Iterator<Item = Cow<'a, str>>) -> impl Iterator<Item = Cow<'a, str>> {
     words.flat_map(|w| {
-        let parts: Vec<Cow<'a, str>> = parts(&w).map(|p| Cow::Owned(p.to_string())).collect();
+        // Most words join nothing: no list made for them.
+        let parts: Vec<Cow<'a, str>> = if w.contains(joins) { parts(&w).map(|p| Cow::Owned(p.to_string())).collect() } else { Vec::new() };
         std::iter::once(w).chain(parts)
     })
 }

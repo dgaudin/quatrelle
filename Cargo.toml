@@ -65,6 +65,12 @@ type_complexity = "allow"
 [profile.dev.package."*"]
 opt-level = 2
 
+# The model's text reading (search's folding, a letter at a time, on every event and message it
+# checks) runs as std's lower-casing did, which std's own optimised build gave even to debug
+# builds: a calendar search over 25,000 appointments took 0.94 s folded, 0.53 s before.
+[profile.dev.package.quatrelle-model]
+opt-level = 1
+
 # mail-parser 0.11 has a `debug_assert!` that hostile mail reaches (a message in a message ended
 # by the outer boundary; crates/mime/src/tests.rs): off, debug builds read it as release ones do.
 [profile.dev.package.mail-parser]
