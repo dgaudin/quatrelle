@@ -1424,6 +1424,89 @@ de son XML, `ews_pim/events.rs`, et n'ont ni RDATE ni règle horaire : rien n'y 
     dans `bbc8f852` (lot de l'import .pst) ;
   - `apps/quatrelle/src/main.rs` passe 817 lignes (811 avant) : à découper avant d'y ajouter.
 
+### État de la récupération : v0.32, seizième partie : la liste au clavier et la source d'un message (2026-11-05)
+
+Le lot R9 de `merge-tools/survey-v0.32.md` (l'ancien lot 4 de la v0.31, issues #26 et #27), sur
+`main`. Le menu à icônes de la liste et le volet de lecture du 04/11 restent tels quels : ce
+lot y ajoute, sans rien déplacer. Pour chaque point, sa sonde d'abord, lancée contre le code
+d'alors. Les dossiers `engine/src/tests/` et `ui-egui/src/tests/` étant pleins (16 fichiers),
+les tests vont dans `tests/mail/`, `tests/list/` et `tests/reading/`.
+
+- **Maj avec les flèches, Début, Fin et les touches de page** (`e1879b18`, de `c18d2dce`) : la
+  sélection a une ancre (là où elle commence) et un bout qui bouge. Maj+↓/↑ sélectionnent de
+  l'ancre au bout (revenir vers l'ancre en ôte), Maj+Début/Fin jusqu'au premier ou au dernier,
+  Maj+Pg préc./suiv. une page (les lignes que la liste montre) ; Début, Fin et les touches de
+  page seules vont au message et le lisent. Maj+clic passe par la même commande
+  (`list.selectRange`, Ctrl+Maj+clic ajoute la plage), dans l'ordre des lignes montrées. Un seul
+  message sélectionné est lu ; plusieurs, le volet dit combien (« 3 messages sélectionnés ») et
+  Répondre attend un seul message, comme Outlook. Sondes (`tests/list/selecting.rs`) : Maj+↓
+  deux fois laissait un seul message sélectionné ; Maj+clic depuis un message épinglé (montré
+  en tête) prenait quatre messages venus d'ailleurs dans la liste, et un second Maj+clic n'en
+  ôtait jamais.
+- **Les touches de page seules allaient toujours de 10 lignes** (`77611b0d`, propre au fork,
+  défaut encore chez l'origine) : `id.ends_with("PageDown")` ne voyait pas `list.pageDown` (p
+  minuscule), seulement les formes avec Maj. Trouvé par le test de l'origine lui-même
+  (`shift_arrows_select_from_the_keyboard`) : une page de cinq lignes menait à la septième,
+  la dernière.
+- **Un clic droit sur l'un de plusieurs messages sélectionnés les garde tous**
+  (`e7557962`, de `72fc66e0`) : le clic droit ouvrait le message, qui restait seul
+  sélectionné ; Supprimer, Déplacer ou Marquer comme lu du menu n'agissaient que sur lui. Sonde :
+  `shift_click_and_a_right_click_on_the_selection`, un seul des trois restait sélectionné.
+- **Ctrl+A comme Maj** (`650e5419`, de `cb7514bb`) : tout sélectionné, le message lu restait dans
+  le volet et Répondre lui répondait. Sonde : `select_all_is_several_selected`, le volet le
+  montrait encore.
+- **Les touches de la liste seulement dans Courrier** (`168cd816`) : DÉJÀ chez nous
+  (`acts_on_mail`, `87113c8c`) ; sa sonde passait telle quelle. Son test reste (`7f0d8ba5`) : il
+  couvre Début, Fin et les touches de page dans le Calendrier, les Contacts et les Notes.
+- **Pas de Répondre ni d'Impression rapide pour plusieurs messages** (`c6a2c2b8`, adapté de
+  `1197321e`) : Répondre, Répondre à tous et Transférer échouaient, Impression rapide demandait
+  où enregistrer un PDF puis disait qu'aucun message n'était ouvert. Les quatre sont grisés, avec
+  leur icône, sur le menu à icônes du fork ; Supprimer, Déplacer et le reste agissent sur tous.
+  Sonde : `the_menu_of_several_has_no_reply`, Impression rapide restait active.
+- **Afficher la source du message** (`67688b8b`, adapté de `07ba74e7`) : le fork avait les
+  en-têtes seuls (`message.headers`, Fichier › Infos et ⋯ › En-têtes du message, inchangés), pas
+  la source entière. Sonde : `message.source` inconnue. La source, telle qu'elle est arrivée,
+  s'ouvre dans une fenêtre à elle depuis ⋯ › **Afficher** › **Afficher la source du message**
+  (là où Outlook la met), et le même sous-menu Afficher au bas du clic droit de la liste (l'œil
+  est l'icône de Cci). Pas de bouton au ruban : l'onglet Affichage d'Outlook n'en a pas.
+  « View » d'un menu se dit « Afficher » en français (contexte `menu`), pas « Affichage »
+  comme l'onglet. La fenêtre a la barre des fenêtres de message du fork (couleur `chrome`, trait
+  dessous) : « Message entier | En-tête seul » en choix `segmented`, « Tout copier » avec son
+  icône, la taille ; dessous les lignes en chasse fixe, sélectionnables, seules celles en vue
+  mises en page (une source de 30 Mo s'ouvre aussitôt ; les premiers 2 Mo seulement sont
+  montrés, la fenêtre le dit, l'enregistrement .eml garde tout). Ce qui pourrait cacher ou
+  retourner du texte est montré par son nom (`<U+202E>`), les caractères de contrôle par leur
+  image (␀). Un message pas encore là est demandé comme le volet le ferait (`fetch_job` : le
+  courrier plus ancien lu sur le serveur, un gros message Exchange son texte d'abord), et la
+  fenêtre attend le message entier : chez nous le texte d'abord arrive par son propre événement
+  et n'est jamais gardé comme le message, il n'y a donc rien à démêler. `quatrelle-cli source
+  KEY [--headers]` l'imprime. Tests en plus de ceux de l'origine :
+  `the_source_from_more_actions_view_in_the_forks_window` (le chemin ⋯ › Afficher, la barre
+  d'un seul tenant au-dessus des lignes, En-tête seul ôte le corps) et
+  `the_source_from_the_lists_menu` ; la tournée sans écran (`tests.rs::tour`) dessine la fenêtre
+  entière et en-tête seul, en clair, en sombre et en pseudo-langue.
+- **La marque de lettre arabe et les séparateurs de ligne nommés** (`19dea193`, de `fec44fc1`) :
+  U+061C retourne le texte comme les autres marques, U+2028 et U+2029 coupaient une ligne où la
+  source n'en a pas. Sonde : `hostile_sources`, les trois passaient tels quels.
+- **Les lignes jusqu'au pied de la fenêtre** (`0e3ffce5`, adapté de `39587ef5`, sans sa barre de
+  droite à gauche) : les lignes en vue étaient comptées avec l'espacement sous chacune, que les
+  lignes n'ont pas ; le bas de la fenêtre restait vide. Sonde : `a_source_fills_its_window`,
+  36 lignes dessinées dans une fenêtre qui en tient 41.
+- **Ce qui change pour le propriétaire** : Maj+↓/↑, Maj+Début/Fin, Maj+Pg préc./suiv.
+  sélectionnent au clavier ; Début, Fin et Pg préc./suiv. seuls parcourent la liste ; avec
+  plusieurs messages sélectionnés (Maj, Ctrl, Ctrl+A) le volet de lecture se vide et dit combien
+  il y en a ; un clic droit dans la sélection agit sur toute la sélection, Répondre et Impression
+  rapide y sont grisés ; la source d'un message : ⋯ › Afficher › Afficher la source du message,
+  ou clic droit › Afficher.
+- **Vérifié** : chaque sonde avant et après, les suites de `quatrelle-engine` et de
+  `quatrelle-ui-egui`, `quatrelle-cli` compilé, `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - l'origine a toujours le défaut des touches de page seules (`app/keys.rs`) ;
+  - l'ancre n'est remise à zéro qu'à l'ouverture d'un dossier et quand son message quitte la
+    liste, comme chez l'origine ; ailleurs (recherche, Boîte d'envoi) le bout l'est seul, et
+    une ancre restée dans la liste sert encore au Maj suivant ;
+  - `ui-egui/src/lib.rs` est à 983 lignes : à découper avant d'y ajouter.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
