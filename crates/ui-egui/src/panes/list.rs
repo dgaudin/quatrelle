@@ -693,10 +693,20 @@ fn row_input(
         };
         item(ui, acts, Icon::PopOut, tl!("Open in new window"), Action::Run("message.popOut", json!({"key": key.to_id()})));
         ui.separator();
-        item(ui, acts, Icon::Reply, tl!("Reply"), Action::Run("mail.reply", json!({})));
-        item(ui, acts, Icon::ReplyAll, tl!("Reply all"), Action::Run("mail.replyAll", json!({})));
-        item(ui, acts, Icon::Forward, tl!("Forward"), Action::Run("mail.forward", json!({})));
-        item(ui, acts, Icon::Print, tl!("Quick print"), Action::Print);
+        // One of several selected: answering and printing are for one message (they failed, or
+        // asked where to save a PDF and then said nothing is open); greyed, as Outlook's.
+        let several = s.selection.contains(&key) && s.selection.len() > 1;
+        for (icon, label, act) in [
+            (Icon::Reply, tl!("Reply"), Action::Run("mail.reply", json!({}))),
+            (Icon::ReplyAll, tl!("Reply all"), Action::Run("mail.replyAll", json!({}))),
+            (Icon::Forward, tl!("Forward"), Action::Run("mail.forward", json!({}))),
+            (Icon::Print, tl!("Quick print"), Action::Print),
+        ] {
+            if ui.add_enabled(!several, egui::Button::new((widgets::menu_icon(Some(icon)), label))).clicked() {
+                acts.push(act);
+                ui.close();
+            }
+        }
         item(ui, acts, Icon::File, tl!("Save as…"), Action::SaveSelected);
         ui.separator();
         item(
