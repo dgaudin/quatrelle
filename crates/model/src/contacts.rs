@@ -233,16 +233,13 @@ fn read_contacts<'de, D: serde::Deserializer<'de>>(d: D) -> Result<HashMap<Strin
 }
 
 impl ContactBook {
-    /// Everyone known whose name or address contains `query` (everyone for an empty one), by
-    /// name: the address book's list.
+    /// Everyone known whose name or address contains `query` (everyone for an empty one; accents
+    /// read away as the mail search reads them), by name: the address book's list.
     pub fn list(&self, query: &str, limit: usize) -> Vec<Contact> {
-        let q = query.trim().to_lowercase();
-        let mut v: Vec<Contact> = self
-            .by_email
-            .values()
-            .filter(|c| q.is_empty() || c.address.name.to_lowercase().contains(&q) || c.address.email.to_lowercase().contains(&q))
-            .cloned()
-            .collect();
+        use crate::search::fold_word;
+        let q = fold_word(query.trim());
+        let has = |text: &str| fold_word(text).contains(q.as_ref());
+        let mut v: Vec<Contact> = self.by_email.values().filter(|c| q.is_empty() || has(&c.address.name) || has(&c.address.email)).cloned().collect();
         let key = |c: &Contact| if c.address.name.trim().is_empty() { c.address.email.to_lowercase() } else { c.address.name.to_lowercase() };
         v.sort_by_key(key);
         v.truncate(limit);
@@ -447,5 +444,16 @@ mod tests {
         let z = EmailAddress::new("Zoe Park", "zoe@x.example");
         assert_eq!(complete("Ann <a@x>, zo", &z), "Ann <a@x>, Zoe Park <zoe@x.example>, ");
         assert_eq!(complete("zo", &z), "Zoe Park <zoe@x.example>, ");
+    }
+
+    /// The address book's list reads accents away, both ways round.
+    #[test]
+    fn the_address_book_list_is_found_without_accents() {
+        let mut b = ContactBook::new();
+        b.add_saved(&EmailAddress::new("Hélène Dupré", "helene@studio.example"));
+        b.add_saved(&EmailAddress::new("Jose Nuñez", "jose@studio.example"));
+        assert_eq!(b.list("dupre", 10).len(), 1);
+        assert_eq!(b.list("NUNEZ", 10).len(), 1);
+        assert_eq!(b.list("josé", 10).len(), 1);
     }
 }

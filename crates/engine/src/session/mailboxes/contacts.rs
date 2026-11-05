@@ -171,11 +171,12 @@ impl Session {
         let mut v: Vec<EmailAddress> =
             self.contacts.book.as_ref().map(|b| b.list(query, MAX).into_iter().map(|c| c.address).collect()).unwrap_or_default();
         // The user's own addresses too (the mail read leaves them out).
-        let lower = query.trim().to_lowercase();
+        let q = quatrelle_model::search::fold_word(query.trim());
+        let has = |text: &str| quatrelle_model::search::fold_word(text).contains(q.as_ref());
         let mine: Vec<EmailAddress> = self
             .own_addresses()
             .into_iter()
-            .filter(|a| a.name.to_lowercase().contains(&lower) || a.email.to_lowercase().contains(&lower))
+            .filter(|a| has(&a.name) || has(&a.email))
             .filter(|a| !v.iter().any(|x| x.email.eq_ignore_ascii_case(&a.email)))
             .collect();
         if !mine.is_empty() {
