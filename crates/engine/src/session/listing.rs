@@ -281,9 +281,14 @@ impl Session {
             self.previews.clear();
         }
         let (mut done, mut bytes) = (0usize, 0usize);
+        let compacting = self.compacting_in_place().map(str::to_string);
         for key in keys {
             if done >= PREVIEW_STEP || bytes >= PREVIEW_STEP_BYTES {
                 return true;
+            }
+            // Its data file had to itself by Compact Now: worked out once it's done.
+            if compacting.as_deref() == Some(key.account.as_str()) {
+                continue;
             }
             let Some(raw) = store.read_body(key) else {
                 self.previews.insert(key.clone(), Preview::Missing(self.clock.now));

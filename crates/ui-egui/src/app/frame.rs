@@ -598,7 +598,9 @@ impl MailApp {
         // A big mailbox's search index goes on a slice at a time: keep going while there's more,
         // one slice per frame, with the window drawing between them (as Outlook's search does).
         // Carried on as itself: in its own scope, a Search Folder's staying one.
-        if self.session.search_pending {
+        // Not while Compact Now has a data file to itself: the search waits, and the window with
+        // it rather than drawing as fast as it can (the veil over it asks for its frames).
+        if self.session.search_pending && self.session.compacting_in_place().is_none() {
             self.run("search.more", json!({"index": SEARCH_INDEX_BUDGET}));
             ctx.request_repaint();
         }
@@ -606,7 +608,7 @@ impl MailApp {
         // The rows drawn without a preview: a few worked out, drawn in the next frame (which
         // asks for the rest).
         let previews = std::mem::take(&mut self.ui.want_previews);
-        if !previews.is_empty() {
+        if !previews.is_empty() && self.session.compacting_in_place().is_none() {
             self.session.fill_previews(&previews);
             ctx.request_repaint();
         }

@@ -736,9 +736,17 @@ impl Backend for WebBackend {
                 },
             ),
             // The browser keeps no data files: nothing to compact.
-            Job::CompactDataFile { account } => {
-                emit(sh, Event::Compacted { account, before: 0, after: 0, error: Some("the browser keeps no data file".into()) })
-            }
+            Job::CompactDataFile { account } => emit(
+                sh,
+                Event::Compacted {
+                    account,
+                    before: 0,
+                    after: 0,
+                    recompressed: 0,
+                    no_room: false,
+                    error: Some("the browser keeps no data file".into()),
+                },
+            ),
             // What the browser keeps of each folder; a JMAP server doesn't tell each one's size.
             Job::LocalFolderSizes { account } => {
                 let (folders, error) = match store(sh).folder_sizes(&account) {

@@ -45,11 +45,11 @@ mod writing;
 pub use accounts::{AccountState, UpdateCheck, VacationState, newer_release};
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, person, size_group};
-use mailboxes::{Contacts, bare_name, directory_key};
 pub use mailboxes::{
-    DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, Sizes, Source,
-    Suggestion, directory_people, fill_name,
+    CompactPhase, Compacted, DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL,
+    Sizes, Source, Suggestion, directory_people, fill_name,
 };
+use mailboxes::{Contacts, bare_name, directory_key};
 pub use opening::SenderMarks;
 #[cfg(test)]
 pub(crate) use opening::source_lines;
@@ -377,10 +377,11 @@ pub struct Session {
     pub discovered: HashMap<String, Option<(Option<AccountConfig>, String)>>,
     /// Accounts waiting for a data file to come in before they connect (their start).
     held: HashMap<String, Job>,
-    /// The account whose data file is being compacted (Compact Now), and the last one
-    /// compacted here with its size before and after.
+    /// The account whose data file is being compacted (Compact Now), how far it has come, and
+    /// the last one compacted here with its size before and after.
     pub compacting: Option<String>,
-    pub compacted: Option<(String, u64, u64)>,
+    pub compact_phase: CompactPhase,
+    pub compacted: Option<Compacted>,
     /// Folder Size: each of an account's folders' sizes here and on its server.
     pub sizes: Option<FolderSizes>,
     /// What the language model was last asked about the message being read.
@@ -538,6 +539,7 @@ impl Session {
             discovered: HashMap::new(),
             held: HashMap::new(),
             compacting: None,
+            compact_phase: CompactPhase::Starting,
             compacted: None,
             sizes: None,
             assistant: None,

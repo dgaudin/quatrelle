@@ -462,13 +462,19 @@ pub(crate) fn backstage_tour(a: &mut MailApp, ctx: &egui::Context) {
         a.act(crate::Action::Backstage(page));
         frame(ctx, a, vec![]);
     }
-    // Compact Now: the window while it goes on, and the page with its sizes after.
+    // Compact Now: the page while attachments are made smaller, the window while it's compacted
+    // in place, and the page with its sizes after.
     if let Some(id) = a.session.accounts.first().map(|x| x.config.id.clone()) {
         a.act(crate::Action::Backstage(crate::backstage::Page::Info));
         a.session.compacting = Some(id.clone());
+        a.session.compact_phase = quatrelle_engine::CompactPhase::Recompressing { done: 1_200, total: 4_000 };
+        frame(ctx, a, vec![]);
+        a.session.compact_phase = quatrelle_engine::CompactPhase::InPlace;
         frame(ctx, a, vec![]);
         a.session.compacting = None;
-        a.session.compacted = Some((id, 40_000_000_000, 12_000_000_000));
+        a.session.compact_phase = quatrelle_engine::CompactPhase::Starting;
+        a.session.compacted =
+            Some(quatrelle_engine::Compacted { account: id, before: 40_000_000_000, after: 12_000_000_000, recompressed: 9_000_000_000 });
         frame(ctx, a, vec![]);
         a.session.compacted = None;
     }

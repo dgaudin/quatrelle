@@ -1547,6 +1547,9 @@ month	May	5月
 	Compacting the data file…	データ ファイルを圧縮しています…
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	ファイル内で空いた領域をディスクに戻します。40 GB でおよそ 1 分かかります。終わり次第 Quatrelle は続行します。
 	Compacted from {before} to {after}	{before} から {after} に圧縮しました
+	{saved} of it from attachments made smaller	うち {saved} は添付ファイルの縮小によるもの
+	Making attachments kept here smaller: {percent}% (you can keep working meanwhile)	ここに保存された添付ファイルを縮小しています: {percent}% (その間も作業を続けられます)
+	There wasn't room on the drive to make attachments smaller first: the data file was only compacted.	先に添付ファイルを縮小するための空き容量がドライブにありませんでした。データ ファイルの圧縮のみ行いました。
 	Compact Now	今すぐ圧縮
 	Give the space freed inside the data file back to the disk	データ ファイル内で空いた領域をディスクに戻す
 	The data file was compacted.	データ ファイルを圧縮しました。

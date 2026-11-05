@@ -183,7 +183,10 @@ impl Session {
             Event::Rooms { account, lists, rooms, error } => self.rooms_answered(&account, lists, rooms, error),
             Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
             Event::Imported { account, messages, skipped, done, error } => self.imported(&account, messages, skipped, done, error),
-            Event::Compacted { account, before, after, error } => self.compacted(&account, before, after, error),
+            Event::CompactProgress { account, in_place, done, total } => self.compact_progress(&account, in_place, done, total),
+            Event::Compacted { account, before, after, recompressed, no_room, error } => {
+                self.compacted(&account, Compacted { account: String::new(), before, after, recompressed }, no_room, error)
+            }
             Event::FolderSizes { account, server, folders, quota, error } => self.sizes_answered(&account, server, folders, quota, error),
             Event::LlmAnswered { id, text, error } => self.llm_answered(id, text, error),
             Event::LlmModels { url, models, error } => self.llm_models_answered(url, models, error),

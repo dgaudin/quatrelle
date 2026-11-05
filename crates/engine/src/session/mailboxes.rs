@@ -21,7 +21,7 @@ pub(crate) use nav::ListNav;
 mod patch;
 pub(super) mod people;
 mod rows;
-pub use mailbox_settings::{FolderSizes, Sizes};
+pub use mailbox_settings::{CompactPhase, Compacted, FolderSizes, Sizes};
 pub(crate) use people::People;
 pub use people::{Expansion, FIELD_NAMES, FieldId, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, Source, Suggestion};
 mod envelope;

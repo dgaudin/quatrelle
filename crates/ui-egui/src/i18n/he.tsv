@@ -1546,6 +1546,9 @@ month	May	מאי
 	Compacting the data file…	דוחס את קובץ הנתונים…
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	המקום שהתפנה בתוכו חוזר לדיסק. זה לוקח כדקה ל-40 GB; Quatrelle ימשיך ברגע שזה יסתיים.
 	Compacted from {before} to {after}	נדחס מ-{before} ל-{after}
+	{saved} of it from attachments made smaller	מתוכם {saved} מהקטנת קבצים מצורפים
+	Making attachments kept here smaller: {percent}% (you can keep working meanwhile)	מקטין קבצים מצורפים השמורים כאן: {percent}% (אפשר להמשיך לעבוד בינתיים)
+	There wasn't room on the drive to make attachments smaller first: the data file was only compacted.	לא היה מספיק מקום בכונן כדי להקטין קודם את הקבצים המצורפים: קובץ הנתונים רק נדחס.
 	Compact Now	דחוס עכשיו
 	Give the space freed inside the data file back to the disk	החזר לדיסק את המקום שהתפנה בקובץ הנתונים
 	The data file was compacted.	קובץ הנתונים נדחס.

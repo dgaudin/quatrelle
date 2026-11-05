@@ -1550,6 +1550,9 @@ month	May	mai
 	Compacting the data file…	Compactage du fichier de données…
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	La place libérée à l’intérieur est rendue au disque. Comptez environ une minute pour 40 Go ; Quatrelle reprend dès que c’est fini.
 	Compacted from {before} to {after}	Compacté : {before} → {after}
+	{saved} of it from attachments made smaller	dont {saved} par la réduction des pièces jointes
+	Making attachments kept here smaller: {percent}% (you can keep working meanwhile)	Réduction des pièces jointes gardées ici : {percent} % (vous pouvez continuer à travailler)
+	There wasn't room on the drive to make attachments smaller first: the data file was only compacted.	Pas assez de place sur le disque pour réduire d’abord les pièces jointes : le fichier de données a seulement été compacté.
 	Compact Now	Compacter maintenant
 	Give the space freed inside the data file back to the disk	Rendre au disque la place libérée dans le fichier de données
 	The data file was compacted.	Le fichier de données a été compacté.

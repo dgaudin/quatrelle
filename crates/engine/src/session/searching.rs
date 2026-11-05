@@ -173,6 +173,11 @@ impl Session {
             self.search_pending = false;
             return self.list.len();
         };
+        // Compact Now has a data file to itself: its reads would be refused, and messages taken
+        // for unread. The search waits, and goes on once it's done.
+        if self.compacting_in_place().is_some() {
+            return self.list.len();
+        }
         self.search_now(&query, scope, if budget == 0 { usize::MAX } else { budget }, None)
     }
 

@@ -331,7 +331,9 @@ pub enum Job {
     CheckUpdates,
     /// Read an Outlook data file (`.pst`) into an account with no server.
     ImportPst { account: String, path: String },
-    /// Compact the account's data file (Outlook's Compact Now); answered by [`Event::Compacted`].
+    /// Compact the account's data file (Outlook's Compact Now): attachments an earlier version kept
+    /// uncompressed made smaller first, then compacted in place; told as it goes by
+    /// [`Event::CompactProgress`], answered by [`Event::Compacted`].
     CompactDataFile { account: String },
     /// How much space each of the account's folders takes on this computer (Outlook's Folder
     /// Size, Local Data): the bytes its data file keeps for each. Answered by
