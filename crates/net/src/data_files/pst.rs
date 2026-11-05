@@ -219,7 +219,11 @@ fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadI
         return;
     }
     if !mail {
-        if class.starts_with("IPF.Contact") || class.starts_with("IPF.Appointment") || class.starts_with("IPF.Task") || class.starts_with("IPF.StickyNote") {
+        if class.starts_with("IPF.Contact")
+            || class.starts_with("IPF.Appointment")
+            || class.starts_with("IPF.Task")
+            || class.starts_with("IPF.StickyNote")
+        {
             at.sub = Some(sub.clone());
             read_items(store, &*sub, read, out);
         }

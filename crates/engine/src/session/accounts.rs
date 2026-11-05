@@ -155,11 +155,12 @@ impl Session {
             a.status = SyncStatus::Offline;
         }
         // The file's contacts, calendar, notes and tasks, written next to its mail.
-        let pim = self.store.clone().and_then(|store| store.load_account_doc::<quatrelle_model::pim::Pim>(account, quatrelle_model::pim::PIM_DOC).ok());
+        let pim =
+            self.store.clone().and_then(|store| store.load_account_doc::<quatrelle_model::pim::Pim>(account, quatrelle_model::pim::PIM_DOC).ok());
         // An error after mail or anything else came in is the last save failing: what came in
         // stays (the import used to end there, and the account went with all it had written).
-        let came_in = messages > 0
-            || pim.as_ref().is_some_and(|p| !(p.cards.is_empty() && p.events.is_empty() && p.notes.is_empty() && p.tasks.is_empty()));
+        let came_in =
+            messages > 0 || pim.as_ref().is_some_and(|p| !(p.cards.is_empty() && p.events.is_empty() && p.notes.is_empty() && p.tasks.is_empty()));
         // An account that was waiting for its data file connects now.
         if let Some(start) = self.held.remove(account) {
             self.jobs.push(start);

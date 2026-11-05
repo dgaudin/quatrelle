@@ -15,14 +15,7 @@ fn imports_the_file_in_quatrelle_pst() {
     let r = super::import(std::path::Path::new(&path), &store, "r1", &mut |_| {});
     match r {
         Ok(done) => {
-            eprintln!(
-                "messages {} contacts {} events {} skipped {} in {:?}",
-                done.messages,
-                done.contacts,
-                done.events,
-                done.skipped,
-                t.elapsed()
-            );
+            eprintln!("messages {} contacts {} events {} skipped {} in {:?}", done.messages, done.contacts, done.events, done.skipped, t.elapsed());
             let (mut parsed, mut html, mut files, mut dated) = (0, 0, 0, 0);
             for f in &done.folders {
                 eprintln!("  {:30} {:?} total {} unread {}", f.path, f.role, f.total, f.unread);
