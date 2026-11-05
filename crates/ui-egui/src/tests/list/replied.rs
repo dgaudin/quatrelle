@@ -54,7 +54,7 @@ fn a_message_replied_to_or_forwarded_shows_its_arrow_and_when() {
         let row = shown.iter().find(|l| l.starts_with(&spoken)).cloned().unwrap_or_default();
         assert!(row.contains(word), "{row}");
         assert!(!row.contains(if word == "Replied" { "Forwarded" } else { "Replied" }), "{row}");
-        assert!(shown.iter().any(|l| *l == line), "{line:?} in {shown:?}");
+        assert!(shown.contains(&line), "{line:?} in {shown:?}");
     }
     // A message neither: no such line.
     let plain = a.session.list.iter().find(|m| !m.flags.answered && !m.flags.forwarded).map(|m| m.key.to_id()).unwrap();
