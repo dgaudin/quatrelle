@@ -148,7 +148,7 @@ fn a_reply_read_from_exchange_is_read_with_care() {
     assert_eq!(marks(&format!("{}{}", last("103"), time("2026-10-30T09:12:00Z"))), (true, false, when));
     assert_eq!(marks(&format!("{}{}", last("104"), time("2026-10-30T09:12:00Z"))), (false, true, when));
     // Exchange's own spelling of the tag.
-    assert_eq!(marks(&format!("{}{}", prop("0x1081", "Integer", " 104 "), prop("4226", "SystemTime", "2026-10-30T09:12:00Z"))).1, true);
+    assert_eq!(marks(&format!("{}{}", prop("0x1081", "Integer", " 104 "), prop("4226", "SystemTime", "2026-10-30T09:12:00Z"))), (false, true, when));
     assert_eq!(marks(&format!("{}{}", last("102"), time("not a time"))), (true, false, 0));
     assert_eq!(marks(&format!("{}{}", last("102"), time("1601-01-01T00:00:00Z"))), (true, false, 0), "before 1970");
     assert_eq!(marks(&format!("{}{}", last("104"), time("4501-01-01T00:00:00Z"))), (false, true, 0), "MAPI's none");
