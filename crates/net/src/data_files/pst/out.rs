@@ -30,6 +30,7 @@ pub(super) struct Out<'a> {
     pub(super) states: HashMap<String, Open>,
     pub(super) imported: usize,
     pub(super) skipped: usize,
+    pub(super) charset_unsupported: usize,
     pub(super) progress: &'a mut dyn FnMut(usize),
     /// Contacts and calendar items read so far.
     pub(super) pim: Pim,
@@ -131,6 +132,9 @@ impl Out<'_> {
                 return;
             }
         };
+        if it.charset_unsupported {
+            self.charset_unsupported += 1;
+        }
         let key = MessageKey { account: self.account.to_string(), folder: path.to_string(), validity: 1, uid };
         st.uid_next = uid.saturating_add(1);
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
@@ -225,6 +229,19 @@ impl Out<'_> {
         if let Some(e) = &last_save {
             log::warn!("import: {e}");
         }
-        Imported { folders: self.folders, messages: self.imported, contacts, events, notes, tasks, skipped: self.skipped, last_save }
+        if self.charset_unsupported > 0 {
+            log::info!("{} messages are in a code page Quatrelle can't read (ISO-2022-KR): only their ASCII was kept", self.charset_unsupported);
+        }
+        Imported {
+            folders: self.folders,
+            messages: self.imported,
+            contacts,
+            events,
+            notes,
+            tasks,
+            skipped: self.skipped,
+            last_save,
+            charset_unsupported: self.charset_unsupported,
+        }
     }
 }

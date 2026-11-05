@@ -14,6 +14,7 @@ fn out<'a>(store: &'a Store, account: &'a str, progress: &'a mut dyn FnMut(usize
         states: HashMap::new(),
         imported: 0,
         skipped: 0,
+        charset_unsupported: 0,
         progress,
         pim: Pim::default(),
         pending: Vec::new(),
