@@ -154,7 +154,7 @@ impl Session {
         // The search index adds what came in, if it read the folder already, and its answer looks
         // again at what it found there. (Dropping the index, as this once did, made the search of
         // a busy mailbox start over at each change a sync told of: it never ended.)
-        if let Some(ix) = self.index.as_mut() {
+        for ix in self.index.iter_mut().chain(self.summary_index.iter_mut()) {
             ix.changed(account, folder, true, None);
         }
         // The address book reads the folder's new mail (a slice at a time, by the window).

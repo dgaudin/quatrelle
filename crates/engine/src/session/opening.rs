@@ -31,6 +31,7 @@ impl Session {
         self.stop_server_search();
         self.search_pending = false;
         self.index = None;
+        self.summary_index = None;
         self.selection.clear();
         self.focus = None;
         self.reading = None;

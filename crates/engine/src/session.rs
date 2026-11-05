@@ -503,6 +503,8 @@ pub struct Session {
     /// The local day the calendar shows (`None`: today).
     pub cal_day: Option<i64>,
     index: Option<SearchIndex>,
+    /// The index of the summaries alone (no word of a message read), for the queries they answer.
+    summary_index: Option<SearchIndex>,
     /// The message in the reading pane to mark read, and when (`ReadInPane::Shown` with a wait).
     read_due: Option<(MessageKey, i64)>,
     /// The message to mark read once another is chosen (`ReadInPane::Left`).
@@ -632,6 +634,7 @@ impl Session {
             cal_mode: pim::CalMode::Week,
             cal_day: None,
             index: None,
+            summary_index: None,
             read_due: None,
             read_on_leave: None,
             body_words: HashMap::new(),

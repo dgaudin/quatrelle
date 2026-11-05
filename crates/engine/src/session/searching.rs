@@ -181,7 +181,7 @@ impl Session {
             // The index stays (the next search is quick), not the answer: what it would have
             // to look at again piles up while no search is shown, and a later one starts its
             // answer from the index.
-            if let Some(ix) = self.index.as_mut() {
+            for ix in self.index.iter_mut().chain(self.summary_index.iter_mut()) {
                 ix.answer = None;
             }
         }
