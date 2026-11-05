@@ -1856,6 +1856,98 @@ deux images avant d'ouvrir le message, et passe aussi sur un compte serveur.
   - `reading.rs` est à 799 lignes : à découper avant d'y ajouter quoi que ce soit ;
   - le commit `43db93d5` laissait un avertissement de clippy, corrigé dans `77387e6e`.
 
+### État de la récupération : v0.32, vingtième partie : un message ouvert pendant une synchro arrive tout de suite, et le texte d'abord pour IMAP (2026-11-05)
+
+Le lot R13 de `merge-tools/survey-v0.32.md` (issue #24 de l'origine, `46ca26a5`), sur `main`, en
+deux parties ; pour chacune, sa sonde d'abord, lancée contre le code d'alors. Aucun vrai compte :
+les faux serveurs IMAP (`fakes/fake.rs`) et EWS (`fakes/fake_ews`). D'abord deux déplacements purs :
+le code d'ouverture quitte `worker/sync.rs` (884 → 784 lignes) pour `worker/opening.rs`, comme chez
+l'origine, et les lecteurs de dossiers `worker.rs` (869 → 786) pour `worker/connect.rs`
+(`515cd78a`) ; les commandes de dossiers du client IMAP quittent `protocols/imap.rs` (870 → 751)
+pour `protocols/imap/folders.rs` (`6515f78c`).
+
+| Sonde | avant | après |
+|---|---|---|
+| IMAP, ouvert pendant les 8 s de la synchro de l'Archive (test de l'origine) | 8,1 s | 0,42 s |
+| EWS, ouvert pendant les 8 s de la lecture d'un dossier : un petit message, le texte d'un gros | 7,8 s, 7,85 s | 0,58 s, 0,48 s |
+| EWS, ouvert pendant les 8 s de la lecture des calendriers et des contacts | 8,0 s | 0,50 s |
+| EWS, dossier public et boîte partagée pendant une synchro | — | 0,78 s, 0,52 s, chacun par sa route |
+| IMAP, message avec un fichier de 20 Mo (27 962 771 octets), ligne de 10 Mo/s : le texte affiché | après 3,19 s et tous ses octets | après 0,42 s et 967 octets ; le message entier à 3,6 s |
+
+Les 400 ms de grâce (ci-dessous) sont comprises dans les chiffres d'après.
+
+- **Ouvert pendant une synchro, sur une copie de la connexion principale** (`d1c17246`, adapté de
+  `46ca26a5`). L'origine envoie le message sur la seconde connexion du compte ; le fork l'avait
+  refusé le 02/11 (pas de numérotation sur Exchange, pas les routes des dossiers publics et des
+  boîtes partagées, et elle sert à l'envoi et aux salles). La règle est gardée : la connexion
+  principale dit quand elle travaille (`Worker::at_work` : lecture d'un dossier, liste des
+  dossiers, calendriers et contacts, calendriers cochés) et prend alors une copie d'elle-même, le
+  `sibling()` du client EWS avec l'id de chaque dossier sur le serveur, ou, en IMAP, le compte et
+  ce avec quoi il se connecte. Un message ouvert pendant ce temps va toujours dans la file de la
+  connexion principale, et aussi à `Opened` (`worker/opening.rs`) : si la connexion principale ne
+  l'a pas commencé 400 ms plus tard, un fil à lui l'apporte sur la copie, le dernier ouvert
+  d'abord ; le premier qui le commence l'a (`Opened::claim`). Sur Exchange la copie trouve l'id du
+  message par son Message-ID dans son dossier (un `FindItem`, `ews::find_by_message_id`) : la
+  numérotation (550 000 ids) reste à la connexion principale et n'est jamais relue pour cela. Un
+  gros message vient en texte d'abord (`Event::TextFirst`), puis entier sur le fil des messages
+  entiers (`Rest`, du lot 2) ; un petit vient entier ; seule la source est écrite, jamais la liste
+  du dossier. Gardé du lot 2 : une copie refusée à la connexion ne coûte qu'un refus pour toute la
+  session (`Rest::refuse`, partagé maintenant par les copies), la connexion principale apportant
+  les messages après son travail ; le refus du texte seul par le serveur est partagé aussi ;
+  S/MIME, invitations et « Tout télécharger » restent entiers ; l'expéditeur lu par `0x5D01`.
+  Graph et JMAP attendent la connexion principale comme avant (leur copie aurait besoin de la
+  numérotation, et Graph n'a pas ici de recherche par Message-ID). Le faux IMAP apprend le
+  `stall_on` de l'origine, le faux EWS des calendriers retenus une fois (`slow_pim`). Tests du
+  fork en plus : un refus de copie pendant une synchro (un seul refus, les deux messages viennent
+  par la connexion principale, aucune copie essayée ensuite), un dossier public et une boîte
+  partagée pendant une synchro.
+- **Le texte d'abord pour IMAP par `BODYSTRUCTURE`** (`e90c4de6`, adapté de `46ca26a5`). Le moteur
+  demande le texte d'abord d'un message IMAP de 256 Ko ou plus, ni signé ni chiffré
+  (`IMAP_TEXT_FIRST_OVER`), fichiers ou non : l'en-tête seul ne le dit pas, la structure le dira.
+  Le client lit la structure (`protocols/imap/text_first.rs`) : une seule partie, signé ou chiffré,
+  sans fichier, ou au-delà des plafonds (500 parties, 16 niveaux, 32 parties texte, 8 Mo de texte ;
+  l'imbrication est déjà bornée à 64 avant l'analyse, R1) : entier. Sinon l'en-tête et les parties
+  texte seules, l'en-tête de chacune fait depuis la structure (jetons de 64 caractères au plus,
+  sans retour à la ligne) ; les fichiers nommés (RFC 2231 et RFC 2047 décodés, `mime::part_name`)
+  et pesés. Le message entier vient sur une connexion de plus, connectée comme la principale
+  (`Whole::Imap` sur le fil de `Rest`, gardée d'un message au suivant), pas sur la seconde
+  connexion du compte, qui envoie. Le faux IMAP apprend `BODYSTRUCTURE` et les sections de parties
+  (`fakes/fake/structure.rs` de l'origine, son découpeur passé à une lecture par ligne : il mettait
+  1,4 s à couper 28 Mo en compilation de débogage) et un débit (`rate`). Fuzz : la cible `imap`
+  demande aussi un texte d'abord, comme chez l'origine, et `text_first` lit les réponses d'un
+  serveur IMAP (premier octet, graine `seeds/text_first/imap`, mots du dictionnaire `imap`).
+  `cargo fuzz` n'étant pas installé, les cibles sont seulement compilées (`cargo check` dans
+  `fuzz/`). Les tests contre de vrais serveurs (`fakes/real_servers.rs`, GreenMail) ne sont ni
+  portés ni lancés.
+- **Ce qui change pour le propriétaire** :
+  - Exchange : un message ouvert pendant que la connexion principale lit un gros dossier (la
+    première synchro, Envoyer/Recevoir, un dossier public ouvert) ou les calendriers et les
+    contacts s'affiche en moins d'une seconde au lieu d'attendre la fin de ce travail (des
+    minutes à la première synchro) ; un gros, son texte d'abord. Le message entier finit toujours
+    dans le cache (mode Exchange mis en cache). Coût : un `FindItem` par message ouvert ainsi, et
+    une connexion de plus, qui se connecte en NTLM.
+  - Gmail et Yahoo : un message de 256 Ko ou plus (une pièce jointe) montre son texte et la liste
+    de ses fichiers tout de suite, le reste suit ; ouvert pendant une synchro, il ne l'attend plus
+    non plus. Une connexion de plus le temps d'un téléchargement (deux pendant une synchro).
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-net`, `quatrelle-mime`,
+  `quatrelle-model` et `quatrelle-engine` ; les cibles de fuzz compilent ; `cargo xtask ci` (wasm
+  compris).
+- **Reste, remarqué** :
+  - rien n'a été essayé sur le vrai Exchange : le coût du `FindItem` par Message-ID dans un dossier
+    de 100 000 éléments n'est pas connu (la première fois, Exchange peut bâtir une vue de
+    restriction) ; un message sans Message-ID attend la connexion principale ;
+  - un message apporté par la copie ou par `Rest` ne remplit pas son résumé (`Event::Filled`) :
+    en IMAP, l'aperçu de la liste reste vide pour lui, comme au lot 2 sur Graph ;
+  - Graph et JMAP ne sont pas couverts (voir plus haut) ;
+  - un compte IMAP en OAuth dont le jeton a expiré ne prend pas de copie (il attend) ;
+  - le texte d'abord IMAP ne porte pas `In-Reply-To` (le constructeur du fork ne l'écrit pas) : le
+    fil se fait au message entier ;
+  - surpris en route : la première forme (la copie gardant le message pendant les 400 ms) rendait
+    le message trop tard, la connexion principale étant déjà repartie, et un test du lot 2 a
+    déraillé ; d'où la double file et `claim`. Un test Teams (`check_caps_listings_at_ten_pages`)
+    a échoué une fois sous charge et passe seul ;
+  - `worker/changes.rs` (827 lignes) n'a pas été touché ; `worker/` a maintenant 15 fichiers.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
