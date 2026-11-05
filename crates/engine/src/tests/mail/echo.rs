@@ -123,6 +123,46 @@ fn an_echo_puts_the_change_in_a_folder_read_before_it() {
     assert_ne!(s.revision, revision);
 }
 
+/// Two changes waiting and the folder read from disk again before the pool made either: each
+/// echo puts its own change in (only the last one did, and the first was lost from memory).
+#[test]
+fn every_waiting_change_gets_into_a_folder_read_before_them() {
+    let (mut s, id) = server_inbox(300);
+    let rows = s.row_keys();
+    let (a, b) = (rows[3].clone(), rows[5].clone());
+    s.apply_op(&id, Op::SetFlag { keys: vec![a.clone()], flag: Flag::Flagged, on: true });
+    s.apply_op(&id, Op::SetFlag { keys: vec![b.clone()], flag: Flag::Flagged, on: true });
+    s.cache.remove(&(id.clone(), "INBOX".to_string()));
+    s.refresh_list();
+    let built = s.nav_structure();
+    assert_eq!(made_on_disk(&mut s).len(), 2);
+    inbox_changed(&mut s, &id);
+    assert!(s.summary(&a).unwrap().flags.flagged, "the first, as its echo comes");
+    inbox_changed(&mut s, &id);
+    assert!(s.summary(&a).unwrap().flags.flagged && s.summary(&b).unwrap().flags.flagged);
+    assert_eq!(s.nav_structure(), built, "patched, not built again");
+    assert_eq!(s.echoes.waiting(&id), 0);
+}
+
+/// A message flagged, the folder read again, then unflagged: the first echo doesn't flag it
+/// again, as the change after it says how it ends.
+#[test]
+fn a_later_waiting_change_says_how_it_ends() {
+    let (mut s, id) = server_inbox(30);
+    let k = s.row_keys()[2].clone();
+    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true });
+    s.cache.remove(&(id.clone(), "INBOX".to_string()));
+    s.refresh_list();
+    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: false });
+    made_on_disk(&mut s);
+    inbox_changed(&mut s, &id);
+    assert!(!s.summary(&k).unwrap().flags.flagged, "not flagged again on the way");
+    inbox_changed(&mut s, &id);
+    assert!(!s.summary(&k).unwrap().flags.flagged);
+    let store = s.store.clone().unwrap();
+    assert!(!store.load_folder(&id, "INBOX").unwrap().messages.iter().any(|m| m.key == k && m.flags.flagged), "as disk has it");
+}
+
 /// A change the cache on disk couldn't take comes with a notice: the account's echoes are let go
 /// of, and what it says changed is read from disk (the read mark there isn't). So is an echo
 /// waited for too long (a front end that never says).
