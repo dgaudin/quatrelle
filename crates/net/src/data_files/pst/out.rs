@@ -39,8 +39,9 @@ pub(super) struct Out<'a> {
     /// How the data file was read.
     pub(super) reading: Reading,
     pub(super) progress: &'a mut dyn FnMut(usize),
-    /// Contacts and calendar items read so far.
+    /// Contacts and calendar items read so far, and the bytes of the files they keep.
     pub(super) pim: Pim,
+    pub(super) pim_files: usize,
     /// Sources read but not yet written, and their size.
     pub(super) pending: Vec<(MessageKey, Vec<u8>)>,
     pub(super) pending_bytes: usize,
@@ -62,6 +63,7 @@ impl<'a> Out<'a> {
             reading: Reading::default(),
             progress,
             pim: Pim::default(),
+            pim_files: 0,
             pending: Vec::new(),
             pending_bytes: 0,
         }

@@ -21,8 +21,10 @@ use quatrelle_model::vcard::{Card, Photo, PostalAddress, Typed, base64_encode};
 
 use crate::pst::Val;
 
+mod files;
 mod groups;
 mod meetings;
+pub(crate) use files::{card_file, event_file};
 mod recur;
 pub(crate) use groups::group_of;
 pub(crate) use meetings::invitation;

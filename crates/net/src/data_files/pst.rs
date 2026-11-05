@@ -149,6 +149,8 @@ pub enum FileLeftOut {
     TooDeep,
     /// An attached message's files past what one item may read.
     FilesPastLimit,
+    /// A file of an item that has nowhere to keep one (a task, a note, a journal entry).
+    NoPlace,
 }
 
 /// Import the data file at `path` into `account`'s cache (an account with no server). Calls
