@@ -531,3 +531,51 @@ fn compact_now_tells_its_steps_and_what_it_gave_back() {
     drop(p);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A message marked read a moment before an export is read in the data file. The mark goes into
+/// the cache on the edit writer's thread, and the export read the cache on its own without
+/// waiting for it: the writer is held here until the export has had time to start, as a busy
+/// disk would hold it, and the export waits for it now.
+#[test]
+fn an_export_has_the_marks_made_just_before_it() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-export-marks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let store = Store::open(dir.join("cache")).unwrap();
+    let account = pool::HELD_ACCOUNT;
+    let key = MessageKey { account: account.into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let raw = b"From: Ana <ana@example.com>\r\nTo: riley@example.com\r\nSubject: Marked\r\nMessage-ID: <marked@example.com>\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\n\r\nHello.\r\n";
+    store.write_body(&key, raw).unwrap();
+    let summary = quatrelle_mime::summary_from_full(raw, key.clone(), quatrelle_model::Flags::default(), 10, 0);
+    store
+        .save_folder(account, "INBOX", &quatrelle_store::FolderState { validity: 1, uid_next: 2, messages: vec![summary], ..Default::default() })
+        .unwrap();
+    let inbox = Folder { account: account.into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    store.save_folders(account, &[inbox]).unwrap();
+    let mut pool = Pool::new(store, Arc::new(MemoryCredentials::default()));
+    let file = dir.join("Out.pst");
+    let exported = |pool: &Pool, within: Duration| {
+        let began = Instant::now();
+        while began.elapsed() < within {
+            if let Some(e) = pool.poll().into_iter().find(|e| matches!(e, Event::Exported { done: true, .. })) {
+                return Some(e);
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        None
+    };
+    let held = pool::HOLD_EDITS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    pool.submit(Job::Apply { account: account.into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true } });
+    pool.submit(Job::ExportPst { account: account.into(), path: file.to_string_lossy().into(), name: "Riley".into(), marks: Default::default() });
+    let early = exported(&pool, Duration::from_secs(3));
+    drop(held);
+    let done = early.or_else(|| exported(&pool, Duration::from_secs(60)));
+    assert!(matches!(done, Some(Event::Exported { messages: 1, error: None, .. })), "{done:?}");
+    let back = Store::open(dir.join("back")).unwrap();
+    crate::pst::import(&file, &back, "b1", &mut |_| {}).unwrap();
+    let inbox = back.load_folders("b1").unwrap().into_iter().find(|f| f.role == FolderRole::Inbox).unwrap();
+    let read = back.load_folder("b1", &inbox.path).unwrap().messages.iter().find(|m| m.subject == "Marked").map(|m| m.flags.seen);
+    assert_eq!(read, Some(true), "the mark made just before the export is in the file");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(&dir);
+}

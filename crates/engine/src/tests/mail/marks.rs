@@ -111,3 +111,28 @@ fn a_local_mark_writes_the_list_and_the_counts_alone() {
     assert_eq!(s.local_marks_written_here(), 1);
     assert!(store.load_folder("sample", "INBOX").unwrap().find(k.uid).unwrap().flags.seen);
 }
+
+/// A local account's mark still waiting for its thread when the account is exported: it's
+/// written before the export is handed over (the export reads the cache on a thread of its own,
+/// and missed it), whether the command or the session's own call asks.
+#[test]
+fn an_export_finds_the_local_marks_waiting_written() {
+    let store = Store::memory();
+    sample::seed_if_empty(&store, NOW).unwrap();
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.defer_local_marks(true);
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let unread: Vec<MessageKey> = s.list.iter().filter(|m| !m.flags.seen).map(|m| m.key.clone()).collect();
+    let seen = |k: &MessageKey| store.load_folder("sample", "INBOX").unwrap().find(k.uid).unwrap().flags.seen;
+    for (k, by_command) in unread.iter().take(2).zip([false, true]) {
+        s.run("list.open", &json!({"key": k.to_id()})).unwrap();
+        assert!(!seen(k), "waiting for its thread");
+        if by_command {
+            s.run("account.exportPst", &json!({"account": "sample", "path": "/nowhere/Out.pst"})).unwrap();
+        } else {
+            s.export_pst("sample", "/nowhere/Out.pst").unwrap();
+        }
+        assert!(seen(k), "written before the export is handed over (by command: {by_command})");
+        assert!(s.take_jobs().iter().any(|j| matches!(j, quatrelle_model::Job::ExportPst { .. })));
+    }
+}

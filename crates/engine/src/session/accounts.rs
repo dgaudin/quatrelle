@@ -111,6 +111,9 @@ impl Session {
             done: self.prefs.follow_up_done.clone(),
             categories: self.prefs.categories.clone(),
         };
+        // A local account's marks still waiting for their thread are in the cache first: the
+        // export reads it on a thread of its own (the pool waits there for its own writer).
+        self.finish_local_marks();
         self.jobs.push(Job::ExportPst { account: account.to_string(), path: path.to_string(), name, marks });
         Ok(serde_json::json!({ "account": account, "exporting": true }))
     }

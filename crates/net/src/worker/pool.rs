@@ -7,6 +7,58 @@ use quatrelle_store::CompactStep;
 
 use super::*;
 
+/// What the edit writer's thread is handed, in order.
+pub(super) enum Edit {
+    /// A change: the account, the change, the account's thread to tell after, and how many times
+    /// the account had been removed when it was made ([`Store::while_kept`]).
+    Apply(String, Op, Option<Sender<Job>>, u64),
+    /// Answered once every change handed over before it is in the cache ([`edits_written`]).
+    Flush(Sender<()>),
+}
+
+/// How long an export waits for the changes made before it to be in the cache.
+const FLUSH_WAIT: Duration = Duration::from_secs(10);
+
+/// The account whose changes wait for the test holding [`HOLD_EDITS`].
+#[cfg(test)]
+pub(super) const HELD_ACCOUNT: &str = "held-edits";
+
+/// Held by a test: the edit writer waits before making a change to [`HELD_ACCOUNT`].
+#[cfg(test)]
+pub(super) static HOLD_EDITS: Mutex<()> = Mutex::new(());
+
+/// The thread writing edits, in the order they were made, until the pool shuts down.
+fn edit_writer(store: Store, sink: Sink, rx: Receiver<Edit>) {
+    for edit in rx {
+        match edit {
+            Edit::Apply(account, op, worker, seen) => {
+                #[cfg(test)]
+                let _held = (account == HELD_ACCOUNT).then(|| HOLD_EDITS.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
+                write_edit(&store, &sink, account, op, worker, seen);
+            }
+            Edit::Flush(done) => {
+                let _ = done.send(());
+            }
+        }
+    }
+}
+
+/// Wait (a while at most) until every change handed to the edit writer through `edits` before
+/// now is in the cache: before what reads the cache as a whole (an export), a mark made a moment
+/// before it is there. `edits` goes once that's answered, so the pool's shutdown, which waits
+/// for the writer to end, never waits on it.
+fn edits_written(edits: Option<Sender<Edit>>) {
+    let Some(tx) = edits else { return };
+    let (done, wait) = mpsc::channel();
+    if tx.send(Edit::Flush(done)).is_err() {
+        return;
+    }
+    drop(tx);
+    if let Err(RecvTimeoutError::Timeout) = wait.recv_timeout(FLUSH_WAIT) {
+        log::warn!("changes to mail: still being saved after {} s; exported without them", FLUSH_WAIT.as_secs());
+    }
+}
+
 impl Pool {
     pub fn new(store: Store, creds: Arc<dyn Credentials>) -> Pool {
         let (tx, rx) = mpsc::channel();
@@ -135,7 +187,11 @@ impl Pool {
     fn export_pst(&mut self, account: String, path: String, name: String, marks: quatrelle_model::organize::ExportMarks) {
         let sink = self.sink.clone();
         let store = self.store.clone();
+        let edits = self.edits.clone();
         let spawned = std::thread::Builder::new().name("mail-export".into()).spawn(move || {
+            // With the changes made just before it, waited for here rather than on the window's
+            // thread (they're written on the edit writer's).
+            edits_written(edits);
             let mut progress =
                 |messages| sink.emit(Event::Exported { account: account.clone(), messages, skipped: 0, already: 0, done: false, error: None });
             let event = match crate::pst_export::export(&store, &account, &name, std::path::Path::new(&path), &marks, &mut progress) {
@@ -518,10 +574,10 @@ impl Pool {
                 // the pool hears of it: a change queued before that isn't made after.
                 let seen = self.store.removals(&account);
                 let unsent = match &self.edits {
-                    Some(tx) => tx.send((account, op, worker, seen)).err().map(|mpsc::SendError(e)| e),
-                    None => Some((account, op, worker, seen)),
+                    Some(tx) => tx.send(Edit::Apply(account, op, worker, seen)).err().map(|mpsc::SendError(e)| e),
+                    None => Some(Edit::Apply(account, op, worker, seen)),
                 };
-                if let Some((account, op, worker, seen)) = unsent {
+                if let Some(Edit::Apply(account, op, worker, seen)) = unsent {
                     write_edit(&self.store, &self.sink, account, op, worker, seen);
                 }
             }
