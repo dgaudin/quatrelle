@@ -43,6 +43,10 @@ pub(crate) fn placement(size: Option<(u32, u32)>) -> (Option<u32>, bool) {
 fn set_size(own: Option<Vec2>, width: Option<u16>) -> Option<Vec2> {
     match (own, width) {
         (Some(o), Some(w)) => Some(vec2(f32::from(w), f32::from(w) * o.y / o.x.max(1.0))),
+        // Its own size unknown (a picture on the web, never loaded here: a signature's 16-pixel
+        // icon quoted under a reply) but its width set: a square that wide, not a placeholder's
+        // hundred pixels.
+        (None, Some(w)) if w > 0 => Some(vec2(f32::from(w), f32::from(w))),
         (own, _) => own,
     }
 }
@@ -50,7 +54,7 @@ fn set_size(own: Option<Vec2>, width: Option<u16>) -> Option<Vec2> {
 /// Each picture's size as the text sets it (by `cid:`): its own (`own`), or the width it was
 /// given.
 pub(super) fn sizes_as_set(own: HashMap<String, Vec2>, c: &Compose) -> HashMap<String, Vec2> {
-    if c.inline.is_empty() {
+    if !c.body.contains(PICTURE) {
         return own;
     }
     let mut out = own.clone();
@@ -183,7 +187,10 @@ mod tests {
         let own = Some(vec2(1200.0, 600.0));
         assert_eq!(set_size(own, Some(300)), Some(vec2(300.0, 150.0)));
         assert_eq!(set_size(own, None), own);
-        assert_eq!(set_size(None, Some(300)), None);
+        // Its own size not known (a picture on the web, never loaded): a square that wide.
+        assert_eq!(set_size(None, Some(16)), Some(vec2(16.0, 16.0)));
+        assert_eq!(set_size(None, Some(0)), None);
+        assert_eq!(set_size(None, None), None);
         assert_eq!(placement(Some((2880, 1800))), (Some(FIT_WIDTH), true));
         assert_eq!(placement(Some((400, 300))), (None, true));
         assert_eq!(placement(Some((32, 32))), (None, false));
