@@ -18,6 +18,34 @@ pub(crate) const WEBEX_SET: &str = webex_set!();
 pub(crate) const WEBEX_ID: &str =
     concat!("<t:ExtendedFieldURI PropertySetId=\"", webex_set!(), "\" PropertyName=\"WebexId\" PropertyType=\"String\"/>");
 
+/// What the organizer meant the meeting to show as for a guest who accepts
+/// ([MS-OXOCAL] `PidLidIntendedBusyStatus`, valued as `PidLidBusyStatus`: 0 free, 1 tentative,
+/// 2 busy, 3 out of the office, 4 working elsewhere), on the guest's copy as on the invitation. EWS names it only on a
+/// meeting request (`IntendedFreeBusyStatus`), so it's asked for as the property it is.
+pub(crate) const INTENDED_BUSY: &str =
+    "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Appointment\" PropertyId=\"33316\" PropertyType=\"Integer\"/>";
+
+/// The Show As an item's `PidLidIntendedBusyStatus` says, when it has one that reads.
+fn intended_busy(it: &El) -> Option<ShowAs> {
+    let value = it
+        .children("ExtendedProperty")
+        .find(|p| {
+            p.child("ExtendedFieldURI").is_some_and(|u| {
+                u.attr("DistinguishedPropertySetId").is_some_and(|s| s.trim().eq_ignore_ascii_case("Appointment"))
+                    && u.attr("PropertyId").is_some_and(|id| matches!(id.trim(), "33316" | "0x8224" | "0x00008224"))
+            })
+        })
+        .and_then(|p| p.text_of("Value"))?;
+    match value.trim() {
+        "0" => Some(ShowAs::Free),
+        "1" => Some(ShowAs::Tentative),
+        "2" => Some(ShowAs::Busy),
+        "3" => Some(ShowAs::OutOfOffice),
+        "4" => Some(ShowAs::WorkingElsewhere),
+        _ => None,
+    }
+}
+
 /// An EWS `Recurrence` element as Graph's pattern and range.
 pub fn recurrence_json(r: &El) -> Option<Value> {
     let p = r.kids.iter().find(|k| k.name.ends_with("Recurrence") && !k.name.contains("End") && !k.name.contains("Numbered"))?;
@@ -325,6 +353,9 @@ fn appointment(it: &El) -> Option<CalEvent> {
             _ => "",
         }
         .to_string(),
+        // What the organizer meant it to show as once accepted, as an invitation says it: the
+        // engine shows it so as soon as the meeting is accepted (else Busy, until read again).
+        extra: intended_busy(it).map(|s| format!("X-MICROSOFT-CDO-INTENDEDSTATUS:{}", s.cdo())).into_iter().collect(),
         ..Default::default()
     })
 }
