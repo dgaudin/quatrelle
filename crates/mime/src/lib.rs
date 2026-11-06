@@ -68,8 +68,6 @@ pub fn decode_in(charset: &str, bytes: &[u8]) -> Option<String> {
 
 /// Longest preview kept in a summary, in characters.
 pub const PREVIEW_CHARS: usize = 200;
-/// The most of an HTML body read for its preview, in characters.
-const PREVIEW_HTML: usize = 64 * 1024;
 /// HTML larger than this is cut before conversion (the rest is rarely more than markup).
 pub(crate) const HTML_MAX: usize = 4 << 20;
 
@@ -149,9 +147,9 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
     // Mail in HTML only: its text as the reading pane's plain text makes it (mail-parser's own
     // runs one table cell into the next: "BANNERFirst block", issue #41), from its start.
     let html_only = m.text_bodies().next().is_some_and(|p| p.is_text_html());
-    let text = match m.body_html(0).filter(|_| html_only) {
-        Some(h) => html::html_to_words(h.get(..h.char_indices().nth(PREVIEW_HTML).map_or(h.len(), |(i, _)| i)).unwrap_or(&h)),
-        None => m.body_text(0).map(|t| t.into_owned()).unwrap_or_default(),
+    let preview = match m.body_html(0).filter(|_| html_only) {
+        Some(h) => html::html_preview(&h),
+        None => preview(&m.body_text(0).unwrap_or_default()),
     };
     Summary {
         key,
@@ -168,7 +166,7 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         size,
         flags,
         has_attachments,
-        preview: preview(&text),
+        preview,
         modseq: 0,
         bulk: is_bulk(m),
         smime: m.root_part().content_type().map_or(quatrelle_model::Smime::None, |c| {
@@ -428,6 +426,12 @@ pub fn summary_from_full(raw: &[u8], key: MessageKey, flags: Flags, size: u32, f
         s.preview = preview(&p.text);
     }
     s
+}
+
+/// A message's preview from its source, the one [`summary_from_full`] gives it: for a list row
+/// that came without one. Much less than [`parse`] (which lays the message out).
+pub fn preview_from_source(raw: &[u8]) -> String {
+    summary_from_full(raw, MessageKey::default(), Flags::default(), 0, 0).preview
 }
 
 /// The HTML body as written, for a message that has one: its own, or the one Outlook wrapped in

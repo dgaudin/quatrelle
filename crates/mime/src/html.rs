@@ -595,14 +595,40 @@ pub fn html_images(html: &str) -> Vec<String> {
     out
 }
 
-/// An HTML body's words for a preview: as [`html_to_text`] reads it, without its marks for bold
-/// and the like.
+/// An HTML body's words for a preview, in reading order: each table cell after the one before
+/// (raw mode: cells side by side came out interleaved line by line, "[[Picture ## Title 0]]"),
+/// with no marks at all (no `[…]` around links and pictures, no `#` before titles, no `**`).
+/// It is made for each message downloaded: raw mode lays out no columns.
 pub(crate) fn html_to_words(html: &str) -> String {
-    let result = std::panic::catch_unwind(|| html2text::config::plain_no_decorate().no_table_borders().string_from_read(html.as_bytes(), 400));
+    let result = std::panic::catch_unwind(|| {
+        html2text::config::with_decorator(html2text::render::TrivialDecorator::new()).raw_mode(true).string_from_read(html.as_bytes(), 400)
+    });
     match result {
         Ok(Ok(s)) => tidy_text(&s),
         _ => String::new(),
     }
+}
+
+/// How much of an HTML body is read for its preview, in characters, from its `<body>`: a first
+/// look, then more only when that holds too few words (the first look is what most need, and
+/// reading costs in proportion to what is read, for each message downloaded).
+const PREVIEW_READS: [usize; 2] = [16 * 1024, 64 * 1024];
+
+/// An HTML body's preview ([`crate::preview`] of [`html_to_words`]): read from its `<body>`
+/// (what comes before is styles and the like), a little first, more when that is too short.
+pub(crate) fn html_preview(html: &str) -> String {
+    // Where `<body` starts, in any case (an ASCII `<` starts a character).
+    let from = html.as_bytes().windows(5).position(|w| w.eq_ignore_ascii_case(b"<body")).unwrap_or(0);
+    let body = html.get(from..).unwrap_or(html);
+    let mut out = String::new();
+    for n in PREVIEW_READS {
+        let cut = body.char_indices().nth(n).map(|(i, _)| i);
+        out = crate::preview(&html_to_words(body.get(..cut.unwrap_or(body.len())).unwrap_or(body)));
+        if cut.is_none() || out.chars().count() >= crate::PREVIEW_CHARS {
+            break;
+        }
+    }
+    out
 }
 
 /// HTML → readable text. Never panics; returns an empty string when conversion fails.
