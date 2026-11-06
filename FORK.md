@@ -972,6 +972,11 @@ changement de crate.
   version. Épinglé par révision dans `[patch.crates-io]` de `Cargo.toml` et de `fuzz/Cargo.toml`,
   admis dans `allow-git` de `deny.toml` ; le dépôt de ZIDAN44 n'est nommé nulle part. Un seul
   crate lit et écrit : `outlook-pst` 1.2.0 de crates.io et le renommage `pst_rw` disparaissent.
+- **Copié dans `vendor/` (06/11, lot V)** : la publication partagée de storytold refuse toute
+  dépendance git hors de `github.com/storytold/` ; le crate est donc copié tel quel, à la même
+  révision, dans `vendor/outlook-pst-rw/` (`vendor/README.md` : origine, raison, mise à jour), pris
+  par chemin dans les deux `[patch.crates-io]`, hors de l'espace de travail et des contrôles de
+  `cargo xtask` ; `deny.toml` n'admet plus `dgaudin/outlook-pst-rs`.
 - **Sondes**, contre `outlook-pst` 1.2.0 (le rédacteur `outlook-pst-rw` 1.2.14 de crates.io
   fabrique les fichiers, abîmés ensuite octet par octet ; deux méthodes absentes de la 1.2.0,
   `set_max_value_size` et `embedded_message`, remplacées le temps de la sonde par des méthodes
