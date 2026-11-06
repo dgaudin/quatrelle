@@ -18,7 +18,9 @@
 //!
 //! A data file that's already there is added to, as Outlook's export does: its mail stays, the
 //! account's goes into folders of the same names, and messages already in it (by `Message-ID`)
-//! aren't written twice. The file is written as a copy that replaces it at the end, so a failed
+//! aren't written twice. That is a file in the Unicode format Outlook 2003 and later make or in
+//! Outlook 97–2002's ANSI one ([`format`]: its strings 8-bit, in Windows-1252 or, for a message
+//! whose text it can't hold, UTF-8), encoded as Outlook encodes them or not. The file is written as a copy that replaces it at the end, so a failed
 //! export leaves it as it was.
 
 use std::collections::HashSet;
@@ -26,7 +28,6 @@ use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
-use outlook_pst::messaging::message::{Message as _, UnicodeMessage};
 use outlook_pst::messaging::store::{Store as PstStore, UnicodeStore};
 use outlook_pst::ndb::node_id::NodeId;
 use outlook_pst::{
@@ -63,6 +64,7 @@ pub struct Exported {
 }
 
 mod files;
+mod format;
 mod item;
 mod kinds;
 mod place;
@@ -70,11 +72,13 @@ mod place;
 mod tests;
 mod writing;
 
+use format::Format;
 use item::{Owned, owned};
 use writing::write;
 
 /// The `Message-ID`s in an existing data file's folders (a file the writer can add to: the Unicode
-/// format, not Outlook's offline copy of a server account). The file is read as the import reads
+/// format or Outlook 97–2002's ANSI one, encoded or not, not Outlook's offline copy of a server
+/// account). The file is read as the import reads
 /// one, within its limit for a value, and a panic in the reader is an error.
 fn ids_in(path: &Path) -> Result<HashSet<String>, String> {
     let mut head = [0u8; 12];
@@ -82,19 +86,17 @@ fn ids_in(path: &Path) -> Result<HashSet<String>, String> {
     if !head.starts_with(b"!BDN") || head.get(8..10) != Some(b"SM") {
         return Err("it isn't an Outlook data file: choose another name to make a new one".into());
     }
+    let format = Format::of_head(&head);
     let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> io::Result<HashSet<String>> {
-        let pst = outlook_pst::UnicodePstFile::open(path)?;
-        pst.set_max_value_size(crate::pst::MAX_VALUE);
-        let store = UnicodeStore::read(Rc::new(pst))?;
+        let any = format.store(path)?;
         let mut ids = HashSet::new();
-        let any: Rc<dyn PstStore> = store.clone();
         let top = any.open_folder(&any.properties().ipm_sub_tree_entry_id()?)?;
         let mut stack = vec![(top, 0usize)];
         while let Some((folder, depth)) = stack.pop() {
             if let Some(contents) = folder.contents_table() {
                 for row in contents.rows_matrix() {
                     let Ok(entry) = any.properties().make_entry_id(NodeId::from(u32::from(row.id()))) else { continue };
-                    let Ok(m) = UnicodeMessage::read(store.clone(), &entry, Some(&[0x1035])) else { continue };
+                    let Ok(m) = any.open_message(&entry, Some(&[0x1035])) else { continue };
                     if let Some(id) = m.properties().get(0x1035).and_then(crate::pst::text_of) {
                         ids.insert(quatrelle_model::thread::norm_id(&id));
                     }
@@ -146,7 +148,9 @@ pub fn export(
     }
     let mut created = existing;
     // The special folders a file added to records, else the names a new one gets.
-    let targets = place::Targets::of(existing.then_some(temp.as_path()));
+    // A file added to keeps its format; a new one is Unicode.
+    let format = if existing { Format::of(&temp) } else { Format::Unicode };
+    let targets = place::Targets::of(existing.then_some(temp.as_path()), format);
     let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
         for f in folders.iter().filter(|f| f.selectable) {
             let Ok(st) = store.load_folder(account, &f.path) else { continue };
@@ -167,7 +171,7 @@ pub fn export(
                 }
                 if batch.len() >= BATCH || bytes >= BATCH_BYTES || spill.bytes() >= SPILL_BYTES {
                     let n = batch.len();
-                    write(&temp, &folder, &std::mem::take(&mut batch), &mut created)?;
+                    write(&temp, format, &folder, &std::mem::take(&mut batch), &mut created)?;
                     spill.clear();
                     bytes = 0;
                     done.messages += n;
@@ -175,13 +179,13 @@ pub fn export(
                 }
             }
             if !batch.is_empty() {
-                write(&temp, &folder, &batch, &mut created)?;
+                write(&temp, format, &folder, &batch, &mut created)?;
                 spill.clear();
                 done.messages += batch.len();
                 progress(done.messages);
             }
         }
-        place::record_special(&temp, &folders, &targets, created);
+        place::record_special(&temp, format, &folders, &targets, created);
         Ok(())
     }));
     let result = match written {

@@ -101,9 +101,9 @@ fn attachments<'a>(m: &'a Owned, h: &'a Held<'a>) -> Vec<UnicodePstAttachment<'a
     out
 }
 
-/// Write `batch` into `folder` of the file at `path`, made with the first message unless it's
-/// `created`.
-pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
+/// Write `batch` into `folder` of the file at `path` (in `format`), made with the first message
+/// unless it's `created`.
+pub(super) fn write(path: &Path, format: Format, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
     let held: Vec<Held<'_>> = batch.iter().map(|m| held(m, true)).collect();
     let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch.iter().zip(&held).map(|(m, h)| attachments(m, h)).collect();
     let categories: Vec<Vec<&str>> = batch.iter().map(|m| m.state.categories.iter().map(String::as_str).collect()).collect();
@@ -125,16 +125,17 @@ pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut
         *created = true;
     }
     if !rest.is_empty() {
-        append(path, folder, rest)?;
+        append(path, format, folder, rest)?;
     }
     Ok(())
 }
 
-/// Add `batch` to the file at `path`. A file whose name-to-ID map can't take names (damaged, or
-/// made by a program that keeps it some other way) gets the batch without its named properties:
-/// the mail goes in, without its follow-up text, due days and categories, and the log says why.
-pub(super) fn append(path: &Path, folder: &[&str], batch: &[UnicodePstBatchMessage<'_>]) -> Result<(), String> {
-    let Err(e) = UnicodePstFile::append_many_in_folder_with_attachments(path, folder, batch) else { return Ok(()) };
+/// Add `batch` to the file at `path` (in `format`). A file whose name-to-ID map can't take names
+/// (damaged, or made by a program that keeps it some other way) gets the batch without its named
+/// properties: the mail goes in, without its follow-up text, due days and categories, and the log
+/// says why.
+pub(super) fn append(path: &Path, format: Format, folder: &[&str], batch: &[UnicodePstBatchMessage<'_>]) -> Result<(), String> {
+    let Err(e) = format.append(path, folder, batch) else { return Ok(()) };
     let named = |p: &UnicodePstProperty<'_>| matches!(p.key, UnicodePstPropertyKey::Named(..));
     // The writer says so before it writes any of the batch's messages (their folder may be made
     // by then, and stays).
@@ -149,5 +150,5 @@ pub(super) fn append(path: &Path, folder: &[&str], batch: &[UnicodePstBatchMessa
         .zip(&tagged)
         .map(|(m, p)| UnicodePstBatchMessage { message: UnicodePstMessage { properties: p, ..m.message }, attachments: m.attachments })
         .collect();
-    UnicodePstFile::append_many_in_folder_with_attachments(path, folder, &batch).map(drop).map_err(|e| e.to_string())
+    format.append(path, folder, &batch).map_err(|e| e.to_string())
 }
