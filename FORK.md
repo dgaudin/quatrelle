@@ -2971,6 +2971,48 @@ quatre lots dans l'ordre ; cette partie se complète à chacun.
   plus `MAX`, mais la copie d'un tampon qui double peut tenir un instant 32 + 64 Mio ; la sauvegarde
   n'a été lue que par GnuPG 2.4.5, pas par un GnuPG 2.2.
 
+**Lot 2 : PGP/MIME dans `mime`** (2026-11-06).
+
+| Commit | Ce qu'il fait | Essais (échoué avant → passé) |
+|---|---|---|
+| `b518e3a6` (`896db24a`, repris tel quel, à son auteur) | `smime/pgp.rs` : `multipart/signed` avec `application/pgp-signature` et `multipart/encrypted` avec `application/pgp-encrypted` (RFC 3156), un bloc PGP dans un message qui n'est qu'un texte, chacun comme message entier seulement ; l'écriture signée puis chiffrée (§ 6.1), les champs d'en-tête dedans (RFC 9788), `Autocrypt:` laissé dehors ; les en-têtes `Autocrypt:` et les parties `application/pgp-keys` lus ; `is_protected` et `is_smime_part` comptent OpenPGP ; la liste marque PGP/MIME | les 5 de l'origine et les 11 de S/MIME passent |
+| `690634ea` (propre au fork) | `Smime::Signed` et `Smime::Encrypted` gardent leur nom, leur doc dit qu'ils couvrent OpenPGP | `pgp_mime_mail_is_marked_as_smime_is` (par l'en-tête et par la source entière ; un autre protocole et un bloc dans un texte ne sont pas marqués) ; sonde : sans la branche `pgp-encrypted` du modèle, échoue |
+| `c018d873` (`896db24a`, adapté) | cible de fuzz `pgp_mime` : ses graines (celles du lot 1 mises dans un message signé, chiffré, en ligne, porteur d'une clé), son dictionnaire | `cargo check --bins` dans `fuzz/` ; chaque graine atteint sa branche (essai temporaire, retiré) |
+| `555effa6` (propre au fork) | les graines sans extension, comme celles de `mime_parse` | `cargo xtask assets` les prenait en `.eml` pour des ressources sans ligne dans `ATTRIBUTION.md` |
+
+- **Où vont les choses** : `crates/mime/src/` a déjà 16 fichiers Rust ; le module est
+  `smime/pgp.rs` (257 lignes), ses essais `smime/pgp/tests.rs`, réexporté `quatrelle_mime::pgp`
+  comme chez l'origine. `smime.rs` passe de 584 à 588 lignes : rien à découper. Le marqueur de la
+  liste est dans `model/src/lib.rs` (le fork n'a pas `summary.rs`), 799 lignes.
+- **Adapté** : l'origine appelle `protection`, `autocrypt` et `key_parts` depuis sa cible `pgp` et
+  n'a pas de cible `pgp_mime` ; ici ils ont la leur, nourrie de messages plutôt que de paquets, qui
+  défait aussi chaque message comme le volet de lecture, l'écrit signé puis chiffré, et tient que
+  PGP/MIME n'est jamais dit non protégé par le coup d'œil sur l'en-tête (ce qui l'empêcherait d'être
+  lu au lot 3). La cible `pgp` reste sans ces appels.
+- **Ce qui change dès ce lot** (avant que le lot 3 lise OpenPGP) :
+  - la liste montre le cadenas ou le sceau des messages PGP/MIME arrivés après ce lot (le marqueur
+    se calcule à la synchronisation) ;
+  - `signature.asc`, `encrypted.asc` et les parties `application/pgp-signature` ou
+    `pgp-encrypted` ne sont plus des pièces jointes (ni trombone ni « A des fichiers ») : jusqu'au
+    lot 3, un message chiffré OpenPGP s'ouvre donc sans rien à montrer ;
+  - `is_protected` dit oui pour un message PGP/MIME, un bloc PGP dans un texte, un en-tête
+    `Autocrypt:` ou une clé jointe (multipart de 2 Mio au plus) : le volet le prépare alors sur le
+    fil de la fenêtre (le chemin « rare » des messages protégés), sans rien en ôter tant que le
+    lot 3 ne lit pas OpenPGP.
+- **Pour le lot 3** : l'interface est celle du plan (tâche 2.1) : `pgp::{Protection, may_carry,
+  protection, text_entity, autocrypt, key_parts, is_pgp_part, signed_message, encrypted_message,
+  protect}`. `Session::unwrap` (`engine/src/session/security.rs`) ne connaît encore que
+  `smime::protection` : c'est là que `pgp::protection` doit entrer, après le même
+  `is_protected`. Les messages Autocrypt (Thunderbird, Delta Chat…) passent tous par ce chemin
+  sur le fil de la fenêtre : y apprendre une clé ne doit pas coûter une seconde analyse du message
+  là. `may_carry` ne regarde pas dans un texte en base64 alors que `protection` le décode : un bloc
+  PGP dans un texte en base64 est `Inline` pour `protection` mais jamais signalé par
+  `is_protected` (la doc de `may_carry` dit le contraire) ; à trancher au lot 3.
+- **Vérifié** : les suites de `quatrelle-mime` ; `cargo check --bins` dans `fuzz/` ;
+  `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** : `cargo fmt --check` dans `fuzz/` signale `fuzz_targets/pst/item.rs`,
+  d'avant ce lot (le `cargo fmt --all` du dépôt ne passe pas dans `fuzz/`), non touché.
+
 ### Hors relevé : R20, rechercher dans le message (2026-11-06)
 
 Demandé par le propriétaire le 5 novembre, sa conception validée par lui ; propre au fork. Une
