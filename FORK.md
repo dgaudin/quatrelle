@@ -4706,6 +4706,97 @@ Outlook/Quatrelle », « Document PDF », « Fiche de contact », « Tous les fi
   - `apps/quatrelle/src/` reste à 16 fichiers Rust : la prochaine pièce de l'application devra
     ouvrir un sous-dossier.
 
+### État de la récupération : v0.33, septième partie : mail-parser 1.0 et Rust 1.98 (S7) (2026-11-06)
+
+Le lot S7 de `merge-tools/survey-v0.33.md`, sur `main`, après S5 : les morceaux de `07f249d6`
+que le propriétaire a pris le 06/11 (mail-parser 1.0, mail-builder 2, Rust 1.98 au minimum).
+**Pas pris**, décision du 06/11 : keyring 4 (risque sur le trousseau), `.github/dependabot.yml`,
+`CHANGELOG.md`, et les autres montées de ce commit, qu'aucun des deux n'impose (liste plus bas).
+Chaque sonde a été lancée d'abord contre mail-parser 0.11 et mail-builder 1.
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `eabca9ac` | Rust 1.98 au minimum (`rust-version`) ; les quatre `chunks_exact` de taille fixe que clippy 1.98 signale, dans des tests (octets des graines .pst, valeur UTF-16, triangles d'une image), lus en tableaux par `as_chunks`, sans `allow` | clippy 1.98 `-D warnings` : **4 erreurs** → aucune |
+| `d6f94bf0` | adapté de `07f249d6` : mail-parser 1.0 lu par ses vues, dans tout `quatrelle-mime` (seul crate qui l'utilise) | voir ci-dessous |
+| `3a816be8` | adapté de `07f249d6` : mail-builder 2 | `a_long_file_name_goes_out_in_rfc_2231_pieces` : **le nom ASCII long plié dans une chaîne entre guillemets** (relu avec une espace) → `filename*0="…"`, lignes de 78 caractères au plus, relu tel quel ; le nom long accentué passait déjà (`filename*0*=`, mail-builder 1) |
+
+**Les sondes de mail-parser 1.0** (`tests/parts_listed.rs`, quatre tests de l'origine et deux
+du fork, plus `a_named_text_part_is_a_file` changé comme l'origine) :
+
+- `a_file_with_a_stray_byte_in_its_base64_is_the_file` : **le texte base64 lui-même** en guise
+  de fichier → l'image (`\x89PNG…`), par `attachment_data` et `attachment_data_moved` ;
+- `a_body_with_damaged_base64_is_still_the_body` : **le texte encodé affiché** → « Meet at noon. »
+  (le commentaire de l'origine disait « un fichier de son texte encodé » : ici c'était le corps) ;
+- `a_boundary_in_the_middle_of_a_line_leaves_the_text_whole` (propre au fork) : **« Type »** →
+  « Type --b1 to begin, then the rest. », et la recherche a la suite ;
+- `a_text_file_sent_inline_as_apple_mail_does_is_listed` (propre au fork) : **aucune pièce
+  jointe** → `notes.txt` listé, ses octets, la trombone, et la recherche compte un fichier ;
+- `text_with_no_header_is_no_message` : **un message vide** → pas de message ;
+- `a_picture_the_html_shows_stays_listed_and_inline` : passait déjà ; c'est la garde du changement
+  (RFC 8621 sort de la liste des pièces jointes l'image que le corps montre).
+
+**Ce qui a changé dans le code.** `attachments/parts.rs` (de l'origine) : `files_of` liste ce que
+0.11 listait (les pièces jointes RFC 8621, plus les images, sons et vidéos que le corps montre et
+les parties d'aucune liste), `contents` donne les octets comme `contents()` de 0.11 (texte dans son
+jeu de caractères ; une partie texte au base64 illisible reste son source), `sent_bytes` les octets
+d'un fichier texte tels qu'envoyés, `header_raw` un champ tel qu'écrit (le dernier). Propre au fork :
+`attached` décode chaque partie une fois (budget TNEF du fork gardé) ; la trombone ne décode plus
+que les `winmail.dat` (0.11 décodait tout à l'analyse) ; `attachments_moved` passe les octets
+décodés sans copie ; l'OpenPGP du fork (`smime/pgp.rs`) cherche un bloc PGP dans un texte en base64
+avec le décodeur des parties (`Encoding::Base64`), comme `protection` le lit ; le base64 des images
+`data:` passe par encodify (déjà tiré par mail-parser, ajouté en dépendance directe). La marche de
+la recherche (`index_text.rs`) prend pour fichier une partie texte nommée seulement par le
+`filename` de sa disposition, comme 1.0 et le volet de lecture, et décode un message joint comme le
+volet de lecture (`base64 (commentaire)` est du base64). Le réglage
+`[profile.dev.package.mail-parser] debug-assertions = false` est retiré, et son pendant du fuzz :
+`nested_messages_ended_by_the_outer_boundary_never_panic` passe en debug, assertions actives.
+
+**mail-builder 2** (`3a816be8`). Rien à changer dans le code (l'API utilisée est la même). Les
+octets écrits changent de 6 : plus de ligne vide avant la première frontière des trois multiparts
+(`build_writes_the_same_bytes_as_before`, empreinte reprise, la même que celle de l'origine ; le
+source attendu de `nothing_changes_for_an_account_without_a_key`, sans cette ligne). Les
+valeurs de paramètres de plus de 78 caractères partent en morceaux RFC 2231 ; les caractères de
+contrôle d'un nom affiché partent en mots encodés.
+
+**Rust 1.98.** Fixé par `rust-version` dans `Cargo.toml` (le seul endroit qui disait 1.95 ; la
+ligne de la v0.17 plus haut dans ce fichier est de l'histoire, `clippy.err` à la racine un vieux
+journal suivi par git). Sur ce poste : `rustup override set 1.98` dans le dossier du dépôt seulement,
+le défaut de rustup reste 1.95 pour les autres projets. Les compilations de GitHub prennent
+`stable` (`dtolnay/rust-toolchain`, 1.99 aujourd'hui), la publication partagée aussi, sauf FreeBSD
+aarch64, qui prend `lang/rust` de la branche « quarterly » de FreeBSD : 1.98.1 sur FreeBSD 15 le
+06/11 (freshports), donc assez. Le manifeste Flatpak pour Flathub prend l'extension `rust-stable`
+du SDK 25.08 ; le `.flatpak` de la publication reprend l'archive Linux. Le rpm de développement :
+`packaging/linux/package.sh` lance `cargo build` dans le dossier du dépôt, où l'override de rustup
+s'applique ; `rpmbuild` ne compile rien (il emballe l'arbre préparé).
+
+- **Ce que verra le propriétaire**, à l'ouverture d'un message (le volet de lecture relit le
+  source, y compris d'un message déjà en cache) : un fichier dont le base64 a un octet de travers
+  s'ouvre ; un corps au base64 abîmé se lit ; un `--frontière` au milieu d'une ligne ne coupe plus
+  le texte ; un fichier texte envoyé « en ligne » par Apple Mail est dans la barre des pièces
+  jointes ; un source sans aucun en-tête n'est plus un message vide (le volet affiche alors
+  l'erreur du moteur « this message could not be read »). Moins visibles, de mail-parser 1.0 : pas
+  d'espace ajoutée entre un texte et un mot encodé voisin (un objet ou un nom peut s'afficher un
+  peu autrement), un nom de champ mal formé (`Fr om`) n'est plus lu comme le champ, une
+  alternative HTML nommée après un texte devient une pièce jointe (RFC 8621).
+- **À l'envoi** : rien de visible ; un nom de fichier ASCII de plus de 78 caractères arrive entier
+  chez le destinataire (il pouvait y gagner une espace).
+- **Ce qui ne change pas tout de suite** : la liste (aperçu, trombone) et l'index de recherche
+  sont faits à la synchronisation et gardés ; ils suivent les nouvelles règles pour les messages
+  qui arrivent, pas pour ceux déjà en cache (aucun numéro de version relevé : tout réindexer
+  coûterait cher sur 550 000 messages).
+- **Vérifié** : chaque sonde avant et après ; `cargo deny check` (encodify, hashify 0.3 : MIT ou
+  Apache-2.0) ; `cargo xtask ci` (wasm compris) ; `cargo xtask git-sources` vide ;
+  `fuzz/Cargo.lock` à jour.
+- **Pas de fuzz** : 5 Go de mémoire libre (moins des 6 Go demandés, la mémoire d'échange pleine)
+  et `cargo-fuzz` absent du poste ; seulement `cargo +nightly check --locked` des cibles de `fuzz/`.
+  À lancer quand le poste est libre : `mime_parse`, `index_text`, `text_first`, `tnef`,
+  `pgp_mime`, 60 s chacune.
+- **Reste de `07f249d6`**, pour un lot à part : keyring 4 (refusé), skrifa 0.49 et read-fonts
+  0.46, hayro 0.9 (et sa famille), sspi 0.23.1 avec picky-krb 0.13 (`KerberosConfig::new` devient
+  `new_with_kdc_url`), cfb 0.16, x11rb 0.14, windows-registry 0.100, der 0.8 (tests), sha1 et sha2
+  0.11 (`keys`, `model`), accesskit 0.25.2 et accesskit_consumer 0.39.2, icu 2.4, log, open,
+  picky, yoke, zerovec, tinystr ; les règles Dependabot (rsa 0.10, cms 0.3, zbus 6 retenus).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
