@@ -78,7 +78,7 @@ fn a_big_message_comes_as_its_text_first() {
     // A message of one part comes whole at once.
     let uid = st.lock().unwrap().add("INBOX", "Small", &[]);
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
-    until(&pool, "the new one", |e| matches!(e, Event::FolderChanged { .. }));
+    until(&pool, "the new one", |e| matches!(e, Event::FolderChanged { .. } | Event::FolderSynced { .. }));
     let key = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.key.uid == uid).unwrap().key.clone();
     pool.submit(Job::FetchTextFirst { key: key.clone() });
     let seen = until(&pool, "the small one", |e| matches!(e, Event::Body { key: k, .. } if *k == key));

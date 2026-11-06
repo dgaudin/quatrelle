@@ -160,7 +160,11 @@ fn an_on_premises_exchange_account_works_through_ews() {
     eventually("moved on the server", || {
         data.lock().unwrap().items.iter().any(|i| i.folder == projects && String::from_utf8_lossy(&i.raw).contains("Sound mix"))
     });
-    until(&pool, "the move shows in Projects", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Projects"));
+    until(
+        &pool,
+        "the move shows in Projects",
+        |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Projects"),
+    );
     eventually("in Projects here, flagged", || {
         store.load_folder("a1", "Projects").unwrap().messages.iter().any(|m| m.subject == "Sound mix" && m.flags.flagged)
     });
@@ -230,7 +234,7 @@ fn an_on_premises_exchange_account_works_through_ews() {
 
     // A draft replaces its earlier copy.
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft one", "d1"), folder: "Drafts".into(), replaces: None });
-    until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Drafts"));
+    until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Drafts"));
     let draft = store.load_folder("a1", "Drafts").unwrap().messages.iter().find(|m| m.subject == "Draft one").unwrap().key.clone();
     assert!(store.load_folder("a1", "Drafts").unwrap().messages.iter().any(|m| m.flags.draft));
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft two", "d2"), folder: "Drafts".into(), replaces: Some(draft) });

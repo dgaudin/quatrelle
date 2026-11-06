@@ -20,7 +20,7 @@ use quatrelle_model::job::Secret;
 use quatrelle_model::{
     AccountConfig, Event, FOLLOWED_PUBLIC_DOC, Flag, Folder, FolderRole, Job, MessageKey, Op, SyncStatus, is_public_folder, sort_folders,
 };
-use quatrelle_store::{OutboxItem, Store};
+use quatrelle_store::{NoteGuard, Noted, OutboxItem, Store};
 
 use crate::imap::{Client, uid_set};
 use crate::jmap;

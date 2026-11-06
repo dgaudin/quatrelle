@@ -412,7 +412,7 @@ fn show_more_and_search(caps: &'static str) {
     // "needle-2" is the words "needle" and "2", each found anywhere as IMAP's TEXT finds them
     // (so "needle-12" too).
     assert_eq!(found, Some(vec![2, 12, 20, 21, 22, 23, 24, 25]), "{seen:?}");
-    assert!(seen.iter().any(|e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX")));
+    assert!(seen.iter().any(|e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX")));
     assert!(store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key.uid == 2));
 
     pool.submit(Job::MoreMail { account: "a1".into(), folder: "INBOX".into(), more: 5 });

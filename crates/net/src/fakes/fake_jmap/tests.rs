@@ -208,7 +208,11 @@ fn a_jmap_account_syncs_changes_and_sends() {
     eventually("the server has the flag", || data.lock().unwrap().email(&second).unwrap().keywords.contains("$seen"));
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key.clone()], to: "Projects".into() } });
     eventually("moved on the server", || data.lock().unwrap().email(&second).unwrap().mailboxes == [projects.clone()].into());
-    until(&pool, "the move shows in Projects", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Projects"));
+    until(
+        &pool,
+        "the move shows in Projects",
+        |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Projects"),
+    );
     assert!(
         store.load_folder("a1", "Projects").unwrap().messages.iter().any(|m| m.subject == "Sound mix" && m.key.uid == key.uid),
         "same message, same number"
@@ -229,7 +233,7 @@ fn a_jmap_account_syncs_changes_and_sends() {
     eventually("listening for changes", || !data.lock().unwrap().listeners.is_empty());
     data.lock().unwrap().deliver(&inbox, &mail("Festival poster", "m4"), &[], "2024-05-07T08:00:00Z");
     until(&pool, "new mail, pushed", |e| {
-        matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX")
+        matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX")
             && store.load_folder("a1", "INBOX").unwrap().messages.first().is_some_and(|m| m.subject == "Festival poster")
     });
 
@@ -274,7 +278,7 @@ fn a_jmap_account_syncs_changes_and_sends() {
     };
     pool.submit(send(7, "zoe@studio.example"));
     until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
-    until(&pool, "the copy in Sent", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Sent"));
+    until(&pool, "the copy in Sent", |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Sent"));
     {
         let d = data.lock().unwrap();
         let (email, from, rcpt) = d.submissions.last().unwrap().clone();
@@ -290,7 +294,7 @@ fn a_jmap_account_syncs_changes_and_sends() {
 
     // A draft replaces its earlier copy.
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft one", "d1"), folder: "Sent".into(), replaces: None });
-    until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Sent"));
+    until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Sent"));
     let draft = store.load_folder("a1", "Sent").unwrap().messages.iter().find(|m| m.subject == "Draft one").unwrap().key.clone();
     assert!(store.load_folder("a1", "Sent").unwrap().find(draft.uid).unwrap().flags.draft);
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft two", "d2"), folder: "Sent".into(), replaces: Some(draft) });

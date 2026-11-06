@@ -385,7 +385,9 @@ fn sending_waits_for_nothing() {
     server.data.lock().unwrap().deliver(&inbox, &mail("New", "n1"), false, "2026-10-30T08:00:00Z");
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
     let read = |store: &Store| store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == "New"));
-    seen.extend(until(&pool, "the folder read", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX") && read(&store)));
+    seen.extend(until(&pool, "the folder read", |e| {
+        matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX") && read(&store)
+    }));
     assert!(!seen.iter().any(|e| is_body(e, &key)), "{seen:?}");
     until(&pool, "the whole message", |e| is_body(e, &key));
     drop(pool);
@@ -690,7 +692,7 @@ fn the_folder_list_stays_as_it_was() {
     open(&mut pool, &key);
     let seen = until(&pool, "the whole message", |e| is_body(e, &key));
     assert_eq!(store.folder_version("a1", "INBOX"), version);
-    assert!(!seen.iter().any(|e| matches!(e, Event::FolderChanged { .. })), "{seen:?}");
+    assert!(!seen.iter().any(|e| matches!(e, Event::FolderChanged { .. } | Event::FolderSynced { .. })), "{seen:?}");
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
