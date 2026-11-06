@@ -389,3 +389,29 @@ fn files_dropped_on_the_main_window_start_a_message() {
     assert_eq!(attached(&a), ["brief.pdf", "notes.txt"]);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Every window of Quatrelle's own carries its app id, as the main one does: a Wayland dock
+/// shows Quatrelle's icon on it and window rules can match it. Each is built from `os_window`,
+/// which no window of the UI's own goes around.
+#[test]
+fn windows_of_their_own_carry_the_app_id() {
+    assert_eq!(crate::os_window().app_id.as_deref(), Some(crate::APP_ID));
+    fn walk(dir: &std::path::Path, found: &mut Vec<String>) {
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, found);
+            } else if p.extension().is_some_and(|x| x == "rs") && !p.ends_with("os_windows.rs") && !p.starts_with(dir.join("tests")) {
+                let text = std::fs::read_to_string(&p).unwrap();
+                for (n, line) in text.lines().enumerate() {
+                    if line.contains(concat!("ViewportBuilder::", "default()")) {
+                        found.push(format!("{}:{}", p.display(), n + 1));
+                    }
+                }
+            }
+        }
+    }
+    let mut found = Vec::new();
+    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut found);
+    assert!(found.is_empty(), "windows built without Quatrelle's app id: {found:?}");
+}

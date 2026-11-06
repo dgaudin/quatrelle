@@ -59,8 +59,9 @@ pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, sc
 pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;
-use os_windows::first_frame;
+pub use os_windows::APP_ID;
 pub use os_windows::trace_window;
+use os_windows::{first_frame, os_window};
 pub use services::{
     Backend, BrowserProfile, FileAsk, Lane, NullBackend, NullServices, PrintOutcome, ReminderAction, Services, TrayAction, TrayIcon, UpdateState,
     Work,
