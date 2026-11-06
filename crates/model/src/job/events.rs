@@ -387,6 +387,39 @@ pub enum Event {
     },
 }
 
+/// What saves of a folder's list changed in it ([`Event::FolderSynced`]): the messages come or
+/// changed, as the list on disk has them now, and the numbers gone; with what the list holds
+/// after, to check the folder in memory against (it reads the folder again when they differ).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListChange {
+    /// The numbering the list is under.
+    pub validity: u32,
+    /// Messages come or changed, whole.
+    pub upserts: Vec<crate::Summary>,
+    /// Numbers gone from the list.
+    pub removed: Vec<u32>,
+    /// How many messages the list holds after.
+    pub count: usize,
+    /// [`ListChange::print`] of the numbers the list holds after.
+    pub print: u64,
+}
+
+impl ListChange {
+    /// A print of a set of message numbers that doesn't depend on their order: two lists with
+    /// the same numbers have the same print (a list that lost a message and gained another
+    /// has another one, but for one chance in 2⁶⁴).
+    pub fn print(uids: impl IntoIterator<Item = u32>) -> u64 {
+        uids.into_iter().fold(0u64, |sum, uid| {
+            // SplitMix64's finalizer: each number spread over all 64 bits.
+            let mut z = u64::from(uid).wrapping_add(0x9e37_79b9_7f4a_7c15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            sum.wrapping_add(z ^ (z >> 31))
+        })
+    }
+}
+
 /// A certificate with its private key held where Quatrelle can't read it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

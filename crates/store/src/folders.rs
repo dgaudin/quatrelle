@@ -13,6 +13,10 @@ use crate::*;
 mod marks;
 pub(crate) use marks::MARKS;
 pub use marks::MARKS_MAX;
+mod noted;
+pub(crate) use noted::Notings;
+
+pub use noted::{NOTED_MAX, NoteGuard, Noted};
 
 impl Store {
     pub fn load_folder(&self, account: &str, folder: &str) -> Result<FolderState> {
@@ -148,8 +152,15 @@ impl Store {
         };
         let mut writes: Vec<(PathBuf, Vec<u8>)> = Vec::new();
         let marks_path = dir.join(MARKS);
+        // What was saved, for what changed to be noted ([`Store::note_list`]): the list, and
+        // for a list in pages the flags changed alone and what was written.
+        let listed: Vec<&Summary>;
+        let mut noted_same: Option<std::collections::HashSet<u32>> = None;
+        let paged: bool;
         if messages.len() <= PAGE_MESSAGES {
-            file.messages = messages.into_iter().cloned().collect();
+            file.messages = messages.iter().map(|m| Summary::clone(m)).collect();
+            listed = messages;
+            paged = false;
         } else {
             let n = messages.len();
             // The same messages as last time, some flags changed: the other pages stand.
@@ -170,7 +181,9 @@ impl Store {
                     let bytes = serde_json::to_vec(&list).map_err(json_err(&marks_path))?;
                     let mut writes = vec![(marks_path, bytes)];
                     writes.append(extra);
+                    let saved = self.note_list((account, folder, &dir), &old, &messages, state.validity, Some(changed), None);
                     self.write_files(&writes)?;
+                    self.note_saved(account, folder, saved);
                     return Ok(writes.len());
                 }
                 // Too many: their pages are written again (as the list has them now), and the
@@ -198,6 +211,9 @@ impl Store {
                 }
                 file.pages.push(hash);
             }
+            noted_same = same.cloned();
+            listed = by_number;
+            paged = true;
         }
         // The pages have every flag now: the marks beside them emptied, with them.
         if self.has_marks(&marks_path) {
@@ -205,8 +221,12 @@ impl Store {
         }
         writes.push((head.clone(), serde_json::to_vec(&file).map_err(json_err(&head))?));
         writes.append(extra);
+        // What it changes, worked out while the pages before are there.
+        let pages = paged.then_some((file.firsts.as_slice(), file.pages.as_slice()));
+        let saved = self.note_list((account, folder, &dir), &old, &listed, state.validity, noted_same.as_ref(), pages);
         // The list and its pages together (one transaction in a data file).
         self.write_files(&writes)?;
+        self.note_saved(account, folder, saved);
         // Pages the list no longer has.
         for i in file.pages.len()..old.pages.len() {
             let _ = self.files.remove_file(&dir.join(format!("state-{i}.json")));
@@ -270,6 +290,7 @@ impl Store {
 
     /// Forget a folder's cache (UIDVALIDITY changed, or the folder was deleted on the server).
     pub fn clear_folder(&self, account: &str, folder: &str) -> Result<()> {
+        self.note_unknown(account, folder);
         let dir = self.folder_dir(account, folder);
         match self.files.remove_dir_all(&dir) {
             Err(e) if e.kind() != io::ErrorKind::NotFound => Err(io_err(&dir)(e)),

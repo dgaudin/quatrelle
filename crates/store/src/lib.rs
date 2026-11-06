@@ -360,6 +360,8 @@ pub struct Store {
     removals: Arc<RwLock<HashMap<String, u64>>>,
     /// How many message sources were read ([`Store::reads`]).
     reads: Arc<std::sync::atomic::AtomicU64>,
+    /// The folders whose lists' changes are noted ([`Store::note_changes`]).
+    noting: Arc<Mutex<folders::Notings>>,
 }
 
 impl Store {
@@ -367,7 +369,14 @@ impl Store {
     pub fn open(root: impl Into<PathBuf>) -> Result<Store> {
         let root = root.into();
         private_dir(&root)?;
-        Ok(Store { files: Routed::new(&root, Files::Disk), root, changes: Arc::default(), removals: Arc::default(), reads: Arc::default() })
+        Ok(Store {
+            files: Routed::new(&root, Files::Disk),
+            root,
+            changes: Arc::default(),
+            removals: Arc::default(),
+            reads: Arc::default(),
+            noting: Arc::default(),
+        })
     }
 
     /// A cache whose accounts are each one data file in `files` (as Outlook keeps a `.pst` per
@@ -384,6 +393,7 @@ impl Store {
             changes: Arc::default(),
             removals: Arc::default(),
             reads: Arc::default(),
+            noting: Arc::default(),
         })
     }
 
@@ -396,6 +406,7 @@ impl Store {
             changes: Arc::default(),
             removals: Arc::default(),
             reads: Arc::default(),
+            noting: Arc::default(),
         }
     }
 
@@ -411,6 +422,7 @@ impl Store {
             changes: Arc::default(),
             removals: Arc::default(),
             reads: Arc::default(),
+            noting: Arc::default(),
         }
     }
 
@@ -660,6 +672,7 @@ pub use accounts::{CompactStep, Compacted, Recompressed, Recompressing};
 use atomic::private_dir;
 pub use atomic::write_atomic;
 use files::{Files, Routed};
+pub use folders::{NOTED_MAX, NoteGuard, Noted};
 
 mod accounts;
 mod atomic;
