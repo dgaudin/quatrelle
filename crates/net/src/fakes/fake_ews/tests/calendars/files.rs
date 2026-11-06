@@ -137,3 +137,31 @@ fn a_file_removed_on_the_server_goes_at_the_next_sync() {
     let pim = kept_after(&pim, &next);
     assert_eq!(names(&pim), ["Deck.pptx", "Minutes.eml"]);
 }
+
+/// Opened in the app: the account's worker fetches the file from the server and gives its bytes,
+/// or says why it can't.
+#[test]
+fn the_worker_fetches_a_file_left_on_the_server() {
+    let (server, _c) = server(None);
+    let store = crate::fake::tests_store("ews-appointment-files");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    pool.submit(Job::FetchEventFile { account: "a1".into(), reference: "AT-2".into(), ask: 7 });
+    let seen = until(&pool, "the deck", |e| matches!(e, Event::EventFile { ask: 7, .. }));
+    let Some(Event::EventFile { data, error, .. }) = seen.last() else { panic!("{seen:?}") };
+    assert_eq!((data.len(), error), (deck().len(), &None));
+    assert!(data == &deck());
+    pool.submit(Job::FetchEventFile { account: "a1".into(), reference: "AT-404".into(), ask: 8 });
+    let seen = until(&pool, "the answer", |e| matches!(e, Event::EventFile { ask: 8, .. }));
+    let Some(Event::EventFile { data, error, .. }) = seen.last() else { panic!("{seen:?}") };
+    assert!(data.is_empty() && error.as_deref().is_some_and(|e| e.contains("not on the server")), "{error:?}");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
