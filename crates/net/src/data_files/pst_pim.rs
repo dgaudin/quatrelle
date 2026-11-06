@@ -54,6 +54,8 @@ const MAX_PATTERN: usize = 1 << 20;
 const MAX_CATEGORIES: usize = 64;
 /// A reminder further ahead than a year (in minutes) isn't one; nor a journal entry longer.
 const MAX_MINUTES: i64 = 366 * 24 * 60;
+/// The last moment a reminder may come at (9999-12-31 23:59:59 UTC): past it, a time is damage.
+const LAST_TIME: i64 = 253_402_300_799;
 /// Minutes from 1601-01-01 to 1970-01-01.
 const EPOCH_MINUTES: i64 = 11_644_473_600 / 60;
 
@@ -171,6 +173,10 @@ pub(crate) struct Extra {
     pub busy: Option<i64>,
     pub sensitivity: u8,
     pub reminder: Option<i64>,
+    /// When a task's reminder comes, while it reminds at all: the time it was put off to
+    /// (PidLidReminderSignalTime), else the one it was set for (PidLidReminderTime). A task has no
+    /// start for a reminder to count from.
+    pub reminder_at: Option<i64>,
     /// A contact group's members that carry their address: (name, address).
     pub members: Vec<(String, String)>,
     /// A journal entry's start and end.
@@ -282,6 +288,8 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
             Some(Val::Int(m)) if (0..=MAX_MINUTES).contains(&m) => Some(m),
             _ => Some(15),
         };
+        x.reminder_at =
+            [0x8560, 0x8502].into_iter().find_map(|lid| n(PSETID_COMMON, lid).and_then(|v| v.time())).filter(|t| (0..=LAST_TIME).contains(t));
     }
     x.replaces = n(PSETID_APPOINTMENT, 0x8228).and_then(|v| v.time());
     x.members = groups::members(n(PSETID_ADDRESS, 0x8054), n(PSETID_ADDRESS, 0x8055));
@@ -427,16 +435,21 @@ pub(crate) fn event_of(x: &Extra, subject: &str, body: &str, from: &EmailAddress
             Some(4) => ShowAs::WorkingElsewhere,
             _ => ShowAs::Busy,
         },
-        // Sensitivity, as Exchange's comes in: personal, private, confidential.
         private: x.sensitivity != 0,
-        private_kind: match x.sensitivity {
-            1 => PrivateKind::Personal,
-            3 => PrivateKind::Confidential,
-            _ => PrivateKind::Private,
-        },
+        private_kind: private_kind(x.sensitivity),
         reminder: x.reminder.map(|m| m.clamp(0, quatrelle_model::ical::REMINDER_MAX_MINUTES)),
         ..Default::default()
     })
+}
+
+/// Which private an item is, from its sensitivity, as Exchange's comes in: 1 personal, 2 private,
+/// 3 confidential.
+pub(crate) fn private_kind(sensitivity: u8) -> PrivateKind {
+    match sensitivity {
+        1 => PrivateKind::Personal,
+        3 => PrivateKind::Confidential,
+        _ => PrivateKind::Private,
+    }
 }
 
 #[cfg(test)]
