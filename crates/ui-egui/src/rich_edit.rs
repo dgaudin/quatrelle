@@ -27,19 +27,24 @@ use crate::{Action, Dialog};
 mod emoji;
 mod layout;
 mod links;
+mod menu;
 mod pictures;
 mod ribbon;
 mod signature;
+mod spelling;
 mod toolbar;
 use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
+use menu::*;
 #[cfg(test)]
 pub(crate) use pictures::FIT_WIDTH;
 pub(crate) use pictures::{own_size, own_size_of, placement};
 use ribbon::*;
 pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon, rewrite_choices, rewrite_on, scheme_name};
 pub(crate) use signature::draw as draw_signature;
+use spelling::*;
+pub(crate) use spelling::{check_for, misspelt_in};
 pub use toolbar::Counts;
 use toolbar::*;
 #[cfg(test)]
@@ -628,52 +633,6 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     text_menu(&out.response, ed, c, acts, at_pointer);
 }
 
-/// What the spelling of `c` is checked by: its language (the interface's unless one was chosen
-/// for it), leaving out its signature and the original under a reply or forward, and the words
-/// let be in it (Ignore all).
-pub(crate) fn check_for(c: &Compose) -> crate::spellcheck::Check {
-    let langs = effective_language(c).into_iter().collect();
-    let mut skip = Vec::new();
-    if !c.signature.is_empty()
-        && let Some(b) = c.body.rfind(&c.signature)
-    {
-        skip.push(b..b + c.signature.len());
-    }
-    // The original under a reply or forward: from its rule to the end.
-    let mut at = 0usize;
-    for (n, line) in c.body.split('\n').enumerate() {
-        if c.styles.para(n).rule {
-            skip.push(at..c.body.len());
-            break;
-        }
-        at += line.len() + 1;
-    }
-    crate::spellcheck::Check { langs, skip, ignored: crate::spellcheck::ignored(c.id) }
-}
-
-/// The misspelt words of the message (its subject too, when `subject`), as its check says.
-pub(crate) fn misspelt_in(c: &Compose, subject: bool) -> Vec<(Range<usize>, String)> {
-    let check = check_for(c);
-    if subject {
-        let check = crate::spellcheck::Check { skip: Vec::new(), ..check };
-        return crate::spellcheck::misspelt_with(&c.subject, &check);
-    }
-    crate::spellcheck::misspelt_with(&c.body, &check)
-}
-
-/// The word at `at` (a character index into the text), when it isn't spelt right, with its range
-/// in characters: what the right-click menu offers to mend. A click between two words, past the
-/// end, or on a word the dictionaries know gives nothing.
-fn misspelt_at(c: &Compose, at: usize) -> Option<(Range<usize>, String)> {
-    let text = &c.body;
-    let at = at.min(text.chars().count());
-    let byte = text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
-    misspelt_in(c, false).into_iter().find(|(r, _)| r.start <= byte && byte < r.end).map(|(r, word)| {
-        let start = text.get(..r.start).unwrap_or("").chars().count();
-        (start..start + word.chars().count(), word)
-    })
-}
-
 /// The rectangles a selection covers, one per row (galley coordinates).
 fn selection_rects(g: &Galley, sel: Range<usize>) -> Vec<Rect> {
     let mut out: Vec<Rect> = Vec::new();
@@ -690,117 +649,6 @@ fn selection_rects(g: &Galley, sel: Range<usize>) -> Vec<Rect> {
         }
     }
     out
-}
-
-/// The right-click menu on the text, as Outlook's: what could take a misspelt word; Cut, Copy,
-/// Paste and Select all; the link (insert, edit, open, remove); and clearing the formatting.
-fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>, at_pointer: Option<usize>) {
-    let n = c.body.chars().count();
-    let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
-    let link = c.styles.style(sel.start).link.filter(|_| n > 0);
-    let opening = !ed.menu_open;
-    let shown = resp.context_menu(|ui| {
-        ui.set_min_width(190.0);
-        // The word the menu was opened on, when it isn't spelt right, in characters: Outlook
-        // puts what could take its place at the top of this menu, so a red-underlined word is
-        // two clicks from mended instead of a trip through the spelling dialog. Worked out as
-        // the menu opens (the suggestions take a while), kept while it's shown.
-        if opening {
-            ed.menu_word = misspelt_at(c, at_pointer.unwrap_or(ed.sel.start));
-            // Ten, as Outlook lists a good handful: the closest words come first, but a likely
-            // one isn't always first ("vai" → "vais"), and five cut it off.
-            ed.suggestions = ed.menu_word.as_ref().map(|(_, w)| crate::spellcheck::suggest_in(w, &check_for(c).langs, 10)).unwrap_or_default();
-        }
-        if let Some((range, word)) = ed.menu_word.clone() {
-            let mut picked: Option<String> = None;
-            for sug in &ed.suggestions {
-                if ui.add_enabled(!c.sending, egui::Button::new(RichText::new(sug).strong())).clicked() {
-                    picked = Some(sug.clone());
-                }
-            }
-            if ed.suggestions.is_empty() {
-                ui.label(RichText::new(tl!("No suggestions.")).weak());
-            }
-            if let Some(sug) = picked {
-                let style = typing_style(&c.body, &c.styles, range.start);
-                replace(ed, c, range.clone(), &sug, style);
-                let end = range.start + sug.chars().count();
-                ed.refocus = Some(end..end);
-                ui.close();
-            }
-            ui.separator();
-            // Let be in this message, or the writer's own dictionary (this word in it, or back
-            // out).
-            if ui.button(tl!("Ignore all")).on_hover_text(tl!("Let this word be, here and elsewhere in this message")).clicked() {
-                crate::spellcheck::ignore_all(c.id, &word);
-                ed.refocus = Some(sel.clone());
-                ui.close();
-            }
-            if crate::spellcheck::added(&word) {
-                if ui.button(tf!("Remove “{word}” from the dictionary", word = word)).clicked() {
-                    acts.push(Action::Run("spelling.remove", serde_json::json!({"word": word.clone()})));
-                    crate::spellcheck::remove_word(&word);
-                    ui.close();
-                }
-            } else if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
-                acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
-                crate::spellcheck::add_word(&word);
-                ui.close();
-            }
-            ui.separator();
-        }
-        let item = |ui: &mut Ui, label: &str, keys: &str, enabled: bool| -> bool {
-            let b = egui::Button::new(tl!(label)).shortcut_text(keys);
-            let clicked = ui.add_enabled(enabled, b).clicked();
-            if clicked {
-                ui.close();
-            }
-            clicked
-        };
-        let some = !sel.is_empty();
-        if item(ui, "Cut", "Ctrl+X", some && !c.sending) {
-            cut(ui, ed, c, &sel);
-        }
-        if item(ui, "Copy", "Ctrl+C", some) {
-            copy_selection(ui, c, &sel);
-            ed.refocus = Some(sel.clone());
-        }
-        if item(ui, "Paste", "Ctrl+V", !c.sending) {
-            ed.paste = true;
-            ed.refocus = Some(sel.clone());
-        }
-        ui.separator();
-        if item(ui, "Select all", "Ctrl+A", n > 0) {
-            ed.refocus = Some(0..n);
-        }
-        if !c.plain {
-            ui.separator();
-            if item(ui, if link.is_some() { "Edit link…" } else { "Link…" }, "Ctrl+K", !c.sending) {
-                ed.link = Some(LinkForm::open(c, sel.clone()));
-            }
-            if let Some(url) = &link {
-                if item(ui, "Open link", "", true) {
-                    acts.push(Action::OpenUrl(url.clone()));
-                }
-                if item(ui, "Remove link", "", !c.sending) {
-                    apply(ed, c, Op::Unlink);
-                    ed.refocus = Some(sel.clone());
-                }
-            }
-            ui.separator();
-            if item(ui, "Clear formatting", "Ctrl+Space", some && !c.sending) {
-                apply(ed, c, Op::Clear);
-                ed.refocus = Some(sel.clone());
-            }
-        }
-    });
-    // Closed without a choice (Escape, a click elsewhere in the window): the text gets the
-    // keyboard back, with what was selected.
-    let open = shown.is_some();
-    if ed.menu_open && !open && ed.refocus.is_none() && ed.link.is_none() && !resp.ctx.input(|i| i.pointer.any_pressed() && !resp.hovered()) {
-        ed.refocus = Some(sel.clone());
-    }
-    ed.menu_open = open;
 }
 
 /// Each picture's own size in points (one pixel a point, as Outlook shows a picture), read from
