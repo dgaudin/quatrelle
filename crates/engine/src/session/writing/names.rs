@@ -165,12 +165,17 @@ fn prefer(mut people: Vec<Addressee>, kinds: &[AddresseeKind]) -> Vec<Addressee>
 }
 
 impl Session {
-    /// The people here a name fits: by name, or the start of an address, among the contacts,
-    /// the people written to or heard from, and the user's own addresses.
+    /// The people here a name fits: by name, or the start of an address (case and accents
+    /// aside), among the contacts, the people written to or heard from, and the user's own
+    /// addresses.
     fn local_names(&mut self, token: &str) -> Vec<EmailAddress> {
         self.people.lookups = self.people.lookups.saturating_add(1);
-        let lower = token.to_lowercase();
-        let fits = |a: &EmailAddress| a.name.to_lowercase().contains(&lower) || a.email.to_lowercase().starts_with(&lower);
+        // Case and accents aside, as search reads them: `helene` is « Hélène Dupré ».
+        let typed = quatrelle_model::search::fold_word(token);
+        let fits = |a: &EmailAddress| {
+            quatrelle_model::search::fold_word(&a.name).contains(typed.as_ref())
+                || quatrelle_model::search::fold_word(&a.email).starts_with(typed.as_ref())
+        };
         let mut out: Vec<EmailAddress> = self.suggest_contacts(token, 10).into_iter().map(|c| c.address).filter(|a| fits(a)).collect();
         for a in self.own_addresses() {
             if fits(&a) && !out.iter().any(|x| x.email.eq_ignore_ascii_case(&a.email)) {

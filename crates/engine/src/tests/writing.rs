@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod accents;
 mod attendees;
 mod charsets;
 mod drafts;

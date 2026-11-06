@@ -76,10 +76,11 @@ pub(crate) struct People {
     pub(crate) lookups: u64,
 }
 
-/// An entry of the directory index, with its name in lower case (matched on every key typed).
+/// An entry of the directory index, with its name folded as search folds it (lower case, accents
+/// gone: matched on every key typed).
 pub(crate) struct Indexed {
     pub(crate) who: Addressee,
-    pub(crate) name_lower: String,
+    pub(crate) name_folded: String,
 }
 
 /// An entry's place in the index: its address in lower case, or a contact group's reference.
@@ -177,7 +178,7 @@ impl Session {
         let p = &mut self.people;
         for a in people {
             let Some(key) = index_key(a) else { continue };
-            let entry = Indexed { who: a.clone(), name_lower: a.name.to_lowercase() };
+            let entry = Indexed { who: a.clone(), name_folded: quatrelle_model::search::fold_word(&a.name).into_owned() };
             if p.index.insert(key.clone(), entry).is_none() {
                 p.index_order.push_back(key);
             }

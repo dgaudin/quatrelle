@@ -8,8 +8,13 @@
 //! only when a field's text (or what the book answers) changed: the window asks every frame, and
 //! a frame where nothing was typed gets the field's last answer back, scanning nothing. A pass per
 //! frame over a big mailbox is what froze the search on 2026-10-30.
+//!
+//! What's typed and what it's matched against are both folded as search folds them
+//! ([`fold_word`]: lower case, accents gone, as R14 made the search read them): `helene` offers
+//! « Hélène Dupré », and a text written with its accents is ranked as it was.
 
 use quatrelle_model::addr::Accepts;
+use quatrelle_model::search::fold_word;
 use quatrelle_model::{Addressee, AddresseeKind};
 use serde::Serialize;
 
@@ -157,8 +162,8 @@ struct Hit {
     address: String,
 }
 
-/// Whether a name (in lower case) or an address (in lower case) starts with `q`: the address,
-/// the name, or any word of the name.
+/// Whether a name or an address (both [folded](fold_word)) starts with `q`: the address, the
+/// name, or any word of the name.
 fn starts_with(name: &str, address: &str, q: &str) -> bool {
     address.starts_with(q) || name.starts_with(q) || words(name).any(|w| w.starts_with(q))
 }
@@ -167,7 +172,7 @@ fn words(name: &str) -> impl Iterator<Item = &str> {
     name.split(|c: char| c.is_whitespace() || matches!(c, '-' | '.' | ',')).filter(|w| !w.is_empty())
 }
 
-/// How well a name and an address (in lower case) fit `q`: 0 one of them exactly, 1 the start of
+/// How well a name and an address (both [folded](fold_word)) fit `q`: 0 one of them exactly, 1 the start of
 /// the first or the last name or of the address, 2 anything else that matched.
 fn fit(name: &str, address: &str, q: &str) -> u8 {
     let name = name.trim();
@@ -191,7 +196,7 @@ impl Session {
 
     /// [`Session::people_suggest`] for the kinds a field takes, as a command gives them.
     pub(crate) fn people_suggest_kinds(&mut self, field: FieldId, account: Option<&str>, kinds: &[AddresseeKind], text: &str) -> Vec<Suggestion> {
-        let q: String = text.trim().chars().take(MAX_TEXT).collect::<String>().to_lowercase();
+        let q: String = fold_word(&text.trim().chars().take(MAX_TEXT).collect::<String>()).into_owned();
         if q.is_empty() {
             return Vec::new();
         }
@@ -223,7 +228,7 @@ impl Session {
     }
 
     /// One pass: the book's people, the directory's answers, the rooms and the shared mailboxes
-    /// that `q` (lower case) matches, of the kinds taken, each address once, ordered, cut. Every
+    /// that `q` ([folded](fold_word)) matches, of the kinds taken, each address once, ordered, cut. Every
     /// match is ranked (how well it fits, then how much it's used) before anything is cut, and
     /// only what is kept is cloned.
     fn suggestion_pass(&mut self, account: Option<&str>, kinds: &[AddresseeKind], q: &str) -> Vec<Suggestion> {
@@ -234,7 +239,7 @@ impl Session {
             .map(|b| {
                 b.matches(q)
                     .map(|c| Candidate {
-                        fit: fit(c.name_lower(), &c.address.email, q),
+                        fit: fit(c.name_folded(), &fold_word(&c.address.email), q),
                         score: c.score(now),
                         key: &c.address.email,
                         from: From::Book(c),
@@ -249,8 +254,9 @@ impl Session {
             .filter_map(|(key, e)| {
                 // A contact group's key is its reference, not an address.
                 let address = if e.who.address.is_empty() { "" } else { key.as_str() };
-                starts_with(&e.name_lower, address, q).then(|| Candidate {
-                    fit: fit(&e.name_lower, address, q),
+                let address = fold_word(address);
+                starts_with(&e.name_folded, &address, q).then(|| Candidate {
+                    fit: fit(&e.name_folded, &address, q),
                     score: 0.0,
                     key,
                     from: From::Index(&e.who),
@@ -263,9 +269,10 @@ impl Session {
             rooms_scanned = rooms_scanned.saturating_add(set.len());
             if Accepts::taken_by(kinds, AddresseeKind::Room) {
                 for (address, name) in set {
-                    let lower = name.to_lowercase();
-                    if starts_with(&lower, address, q) {
-                        rooms.push(Candidate { fit: fit(&lower, address, q), score: 0.0, key: address, from: From::Room(name) });
+                    let (folded, address_folded) = (fold_word(name), fold_word(address));
+                    if starts_with(&folded, &address_folded, q) {
+                        let how_well = fit(&folded, &address_folded, q);
+                        rooms.push(Candidate { fit: how_well, score: 0.0, key: address, from: From::Room(name) });
                     }
                 }
             }
@@ -278,10 +285,11 @@ impl Session {
         if Accepts::taken_by(kinds, AddresseeKind::SharedMailbox) {
             for m in self.accounts.iter().flat_map(|a| &a.config.shared_mailboxes) {
                 let address = m.trim().to_ascii_lowercase();
-                if starts_with("", &address, q) && seen.insert(address.clone()) {
-                    // Ranked on the address in lower case, as typed text is: configured in any
-                    // case, the mailbox typed exactly is an exact match.
-                    let how_well = fit("", &address, q);
+                let folded = fold_word(&address);
+                if starts_with("", &folded, q) && seen.insert(address.clone()) {
+                    // Ranked on the address folded, as typed text is: configured in any case, the
+                    // mailbox typed exactly is an exact match.
+                    let how_well = fit("", &folded, q);
                     let who = Addressee::new("", address, AddresseeKind::SharedMailbox);
                     hits.push(hit(who, Source::Recent, how_well, 0.0, kinds));
                 }
