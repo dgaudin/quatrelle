@@ -36,7 +36,7 @@ serde_json = { workspace = true }
 quick-xml = "0.42"
 # Outlook data files (.pst), read for importing and written for exporting (MIT; Microsoft's reader
 # with a writer added, whose library keeps the reader's name, `outlook_pst`). Built from the
-# fixed copy pinned in the workspace's [patch.crates-io].
+# fixed copy in vendor/ that the workspace's [patch.crates-io] takes.
 outlook-pst-rw = "1.2.14"
 # NTLM sign-in for on-premises Exchange (EWS): MD4, MD5 and HMAC (RustCrypto, MIT / Apache-2.0).
 md4 = "0.11"

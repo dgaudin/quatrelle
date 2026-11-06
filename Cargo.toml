@@ -1,8 +1,10 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-# `fuzz` is its own workspace (nightly, libFuzzer).
-exclude = ["fuzz"]
+# `fuzz` is its own workspace (nightly, libFuzzer). `vendor` holds third-party crates copied in
+# as they are (vendor/README.md): built as dependencies, never as members, so `cargo xtask ci`
+# (fmt, clippy, tests) leaves them alone.
+exclude = ["fuzz", "vendor"]
 
 [workspace.package]
 version = "1.2.0"
@@ -98,8 +100,8 @@ winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457
 # outlook-pst-rw 1.2.14, the .pst reader and writer in one crate (library `outlook_pst`), with
 # the fixes Quatrelle needs (capped reads of a damaged file, trees that can't point back at
 # themselves, attached messages, zero-byte files): the owner's copy (dgaudin/outlook-pst-rs) of
-# MailCraft's branch craft/rw-1.2.14, at the revision MailCraft pins, whose PATCHES.md lists the
-# fixes. To move to a newer release, follow that file (a craft/rw-<version> branch from the
-# release's tag, its commits cherry-picked onto it), then pin the new revision here and in
-# fuzz/Cargo.toml (`cargo xtask ci` checks both alike). Dropped once a release has the fixes.
-outlook-pst-rw = { git = "https://github.com/dgaudin/outlook-pst-rs.git", rev = "60cefd986b159d5f934d8291e4317dc96e0cd35b" }
+# MailCraft's branch craft/rw-1.2.14, whose PATCHES.md lists the fixes, copied into vendor/ at
+# the revision MailCraft pins, because storytold's shared release refuses git dependencies from
+# anywhere else (vendor/README.md: where it comes from and how to update it). fuzz/Cargo.toml
+# takes the same copy (`cargo xtask ci` checks both alike). Dropped once a release has the fixes.
+outlook-pst-rw = { path = "vendor/outlook-pst-rw" }

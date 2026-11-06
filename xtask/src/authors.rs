@@ -8,7 +8,6 @@
 //! sizes` doesn't count these lines ([`header_len`]).
 
 use std::path::Path;
-use std::process::Command;
 
 /// The licence line, first in every Rust file.
 pub const SPDX: &str = "// SPDX-License-Identifier: MIT OR Apache-2.0";
@@ -47,19 +46,14 @@ pub fn problem(text: &str) -> Option<String> {
     }
 }
 
-/// The tracked or new Rust files (not ignored) that fail the rule, with what is wrong.
+/// The tracked or new Rust files (not ignored, not vendored) that fail the rule, with what is wrong.
 fn offenders(root: &Path) -> Result<Vec<(String, String)>, String> {
-    let out = Command::new("git")
-        .current_dir(root)
-        .args(["ls-files", "--cached", "--others", "--exclude-standard", "*.rs"])
-        .output()
-        .map_err(|e| format!("git ls-files: {e}"))?;
     let mut bad = Vec::new();
-    for f in String::from_utf8_lossy(&out.stdout).lines() {
+    for f in &crate::own_files(root, &["*.rs"])? {
         // Listed but deleted from the working tree: not there to check.
         let Ok(bytes) = std::fs::read(root.join(f)) else { continue };
         if let Some(why) = problem(&String::from_utf8_lossy(&bytes)) {
-            bad.push((f.to_string(), why));
+            bad.push((f.clone(), why));
         }
     }
     Ok(bad)

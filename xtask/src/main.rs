@@ -53,10 +53,31 @@ const LAYERS: &[(&str, u8)] = &[
     ("quatrelle-ui-egui", 6),
 ];
 
-/// Third-party crates built from a fixed copy rather than as crates.io publishes them, pinned by
-/// revision in `[patch.crates-io]`. Each copy's `PATCHES.md` lists its fixes, and its own tests
-/// prove them.
+/// Third-party crates built from a fixed copy rather than as crates.io publishes them, taken in
+/// `[patch.crates-io]` from a fork pinned by revision or from their copy in [`VENDOR`]. Each
+/// copy's `PATCHES.md` lists its fixes, and its own tests prove them.
 const FORKED: &[&str] = &["outlook-pst-rw"];
+
+/// Third-party code copied into the repository as it is (`vendor/README.md`): built as a
+/// dependency, never a workspace member, and outside the repository's own rules (sizes, authors,
+/// attribution, fmt, clippy).
+pub const VENDOR: &str = "vendor";
+
+/// The repository's own files matching `pathspec` (tracked or new, not ignored), [`VENDOR`] left out.
+pub fn own_files(root: &Path, pathspec: &[&str]) -> Result<Vec<String>, String> {
+    let exclude = format!(":(exclude){VENDOR}/");
+    let out = Command::new("git")
+        .current_dir(root)
+        .args(["ls-files", "--cached", "--others", "--exclude-standard", "--"])
+        .args(pathspec)
+        .arg(&exclude)
+        .output()
+        .map_err(|e| format!("git ls-files: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("git ls-files failed:\n{}", String::from_utf8_lossy(&out.stderr)));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect())
+}
 
 /// Crates that never build for the web (sockets, threads, TLS).
 const NATIVE_ONLY: &[&str] = &["quatrelle-keys", "quatrelle-net"];
@@ -130,6 +151,18 @@ fn violations(crates: &[(String, Vec<(String, bool)>)]) -> Vec<String> {
 
 fn cmd_layers() -> Result<(), String> {
     let meta = metadata()?;
+    // A vendored crate as a member would be held to the repository's fmt, clippy and tests.
+    let vendor = root().join(VENDOR);
+    let members_in_vendor: Vec<&str> = meta["packages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|p| p["manifest_path"].as_str().is_some_and(|m| Path::new(m).starts_with(&vendor)))
+        .filter_map(|p| p["name"].as_str())
+        .collect();
+    if !members_in_vendor.is_empty() {
+        return Err(format!("{VENDOR}/ crates are workspace members (exclude them in Cargo.toml): {}", members_in_vendor.join(", ")));
+    }
     let crates: Vec<(String, Vec<(String, bool)>)> = meta["packages"]
         .as_array()
         .into_iter()
@@ -162,20 +195,16 @@ const ASSET_EXT: &[&str] =
     &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "icns", "svg", "pdf", "ttf", "otf", "woff", "woff2", "mp3", "wav", "mp4", "eml"];
 
 fn cmd_assets() -> Result<(), String> {
-    let out = Command::new("git")
-        .current_dir(root())
-        .args(["ls-files", "--cached", "--others", "--exclude-standard"])
-        .output()
-        .map_err(|e| format!("git ls-files: {e}"))?;
+    let files = own_files(&root(), &[])?;
     let md = std::fs::read_to_string(root().join("ATTRIBUTION.md")).map_err(|e| format!("ATTRIBUTION.md: {e}"))?;
-    let missing: Vec<String> = String::from_utf8_lossy(&out.stdout)
-        .lines()
+    let missing: Vec<String> = files
+        .iter()
         .filter(|f| {
             let ext = Path::new(f).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
             ASSET_EXT.contains(&ext.as_str()) || f.starts_with("assets/")
         })
         .filter(|f| !md.contains(&format!("`{f}`")))
-        .map(str::to_string)
+        .cloned()
         .collect();
     if missing.is_empty() {
         println!("assets: every asset file is attributed");
@@ -204,7 +233,7 @@ fn patched(root: &Path) -> Result<(), String> {
     let (main, fuzz) = (read("Cargo.toml")?, read("fuzz/Cargo.toml")?);
     let wrong: Vec<String> = FORKED
         .iter()
-        .filter_map(|name| match (pin(&main, name), pin(&fuzz, name)) {
+        .filter_map(|name| match (pin(&main, "", name), pin(&fuzz, "fuzz", name)) {
             (Some(a), Some(b)) if a == b => None,
             (a, b) => Some(format!("{name}: {a:?} in Cargo.toml, {b:?} in fuzz/Cargo.toml")),
         })
@@ -217,13 +246,32 @@ fn patched(root: &Path) -> Result<(), String> {
     }
 }
 
-/// The fork and revision a manifest's `[patch.crates-io]` takes `name` from, as `<git>@<rev>`.
-fn pin(manifest: &str, name: &str) -> Option<String> {
+/// Where the `[patch.crates-io]` of the manifest in folder `dir` (from the repository root)
+/// takes `name` from: `<git>@<rev>` for a fork, `path:<folder>` (from the root) for a copy.
+fn pin(manifest: &str, dir: &str, name: &str) -> Option<String> {
     // The section itself, at the start of a line (a comment may name it too).
     let patch = manifest.split("\n[patch.crates-io]").nth(1).map(|p| p.split("\n[").next().unwrap_or(p))?;
     let line = patch.lines().find(|l| l.trim_start().starts_with(&format!("{name} ")))?;
     let field = |key: &str| line.split(&format!("{key} = \"")).nth(1).and_then(|v| v.split('"').next());
+    if let Some(path) = field("path") {
+        return from_root(dir, path).map(|p| format!("path:{p}"));
+    }
     Some(format!("{}@{}", field("git")?, field("rev")?))
+}
+
+/// `path`, relative to the folder `dir`, as a path from the repository root (`None` above it).
+fn from_root(dir: &str, path: &str) -> Option<String> {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in dir.split('/').chain(path.split('/')) {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            p => parts.push(p),
+        }
+    }
+    Some(parts.join("/"))
 }
 
 fn cmd_ci() -> Result<(), String> {
@@ -292,11 +340,29 @@ mod tests {
     #[test]
     fn forked_crates_are_pinned_alike() {
         let ok = "# [patch.crates-io] below\n[patch.crates-io]\negui = { git = \"x\" }\noutlook-pst-rw = { git = \"https://f.git\", rev = \"1a\" }\n";
-        assert_eq!(pin(ok, "outlook-pst-rw").as_deref(), Some("https://f.git@1a"));
-        assert_eq!(pin(&ok.replace("1a", "2b"), "outlook-pst-rw").as_deref(), Some("https://f.git@2b"), "another revision");
-        assert_eq!(pin(&ok.replace(", rev = \"1a\"", ""), "outlook-pst-rw"), None, "a branch's head isn't a pin");
+        assert_eq!(pin(ok, "", "outlook-pst-rw").as_deref(), Some("https://f.git@1a"));
+        assert_eq!(pin(&ok.replace("1a", "2b"), "", "outlook-pst-rw").as_deref(), Some("https://f.git@2b"), "another revision");
+        assert_eq!(pin(&ok.replace(", rev = \"1a\"", ""), "", "outlook-pst-rw"), None, "a branch's head isn't a pin");
         let elsewhere = "[dependencies]\noutlook-pst-rw = { git = \"https://f.git\", rev = \"1a\" }\n[patch.crates-io]\negui = \"1\"\n";
-        assert_eq!(pin(elsewhere, "outlook-pst-rw"), None, "only [patch.crates-io] counts");
+        assert_eq!(pin(elsewhere, "", "outlook-pst-rw"), None, "only [patch.crates-io] counts");
         assert!(patched(&root()).is_ok(), "{:?}", patched(&root()));
+    }
+
+    #[test]
+    fn vendored_copies_are_found_from_the_root() {
+        let main = "[workspace]\n[patch.crates-io]\noutlook-pst-rw = { path = \"vendor/outlook-pst-rw\" }\n";
+        let fuzz = "[workspace]\n[patch.crates-io]\noutlook-pst-rw = { path = \"../vendor/outlook-pst-rw\" }\n";
+        assert_eq!(pin(main, "", "outlook-pst-rw").as_deref(), Some("path:vendor/outlook-pst-rw"));
+        assert_eq!(pin(fuzz, "fuzz", "outlook-pst-rw"), pin(main, "", "outlook-pst-rw"), "the same folder from fuzz/");
+        assert_ne!(pin(main, "fuzz", "outlook-pst-rw"), pin(main, "", "outlook-pst-rw"), "fuzz/vendor is another folder");
+        assert_eq!(pin(&fuzz.replace("../", "../../"), "fuzz", "outlook-pst-rw"), None, "above the repository");
+        assert_eq!(from_root("fuzz", "./../vendor//x").as_deref(), Some("vendor/x"));
+    }
+
+    #[test]
+    fn own_files_leave_vendor_out() {
+        let rs = own_files(&root(), &["*.rs"]).unwrap_or_default();
+        assert!(rs.iter().any(|f| f == "xtask/src/main.rs"), "the repository's own files are listed");
+        assert!(!rs.iter().any(|f| f.starts_with("vendor/")), "vendored files aren't");
     }
 }

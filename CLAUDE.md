@@ -113,6 +113,8 @@ Small files are what keep this codebase readable by people and agents. `cargo xt
 
 ## Quality gates
 Before every commit: `cargo xtask ci`. Commit after every arc of work that builds.
+`vendor/` holds third-party crates copied in unchanged (`vendor/README.md`): not workspace members, and
+`cargo xtask` (sizes, authors, assets, layers, fmt, clippy) skips them; update them only by recopying.
 
 ## Packaging and releases
 - `packaging/` holds the installer scripts (Linux AppImage/deb/rpm/Flatpak, macOS dmg, Windows
