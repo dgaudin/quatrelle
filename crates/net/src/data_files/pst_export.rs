@@ -9,7 +9,8 @@
 //! Email ([`place`]). Each message whose body is here goes in with its addresses (Bcc too), text
 //! and HTML bodies, attachments and header block, and with what the cache keeps of it: read or
 //! not, a draft, flagged (and when it's due), answered or forwarded, its categories, importance
-//! and sensitivity ([`item`]). Messages only known by their headers (never opened, on an account
+//! and sensitivity ([`item`]); an attached message as the message it is, and files of any size,
+//! a big one read from the cache as it's written ([`files`]). Messages only known by their headers (never opened, on an account
 //! that keeps headers only) are counted as skipped. The writer makes mail items only, so the
 //! account's calendar and contacts go beside the file in the standard formats every calendar and
 //! address book reads (`… Calendar.ics`, `… Contacts.vcf`).
@@ -39,10 +40,9 @@ use quatrelle_store::Store;
 /// Messages written per commit to the file, at most: the writer rewrites the folder's table of
 /// contents with each, so a big folder written a hundred at a time took longer with every batch.
 const BATCH: usize = 2000;
-/// …and their bytes (attachments and all), at most.
+/// …and the bytes they hold (their text and files; not the big files left in the cache until
+/// they are written, [`files::HELD_UP_TO`]), at most.
 const BATCH_BYTES: usize = 48 << 20;
-/// Attachments larger than this are left out.
-const MAX_ATTACHMENT: usize = 100 * 1024 * 1024;
 /// How deep folders in a data file already there are looked through.
 const MAX_DEPTH: usize = 64;
 
@@ -59,6 +59,7 @@ pub struct Exported {
     pub contacts: usize,
 }
 
+mod files;
 mod item;
 mod place;
 #[cfg(test)]
@@ -153,25 +154,23 @@ pub fn export(
                 let state = item::state(s, f.role, marks);
                 match store.read_body(&key).and_then(|raw| owned(&raw, s.received, state)) {
                     Some(m) if !m.message_id.is_empty() && had.contains(&quatrelle_model::thread::norm_id(&m.message_id)) => done.already += 1,
-                    Some(m) => {
-                        let held = [m.body.len(), m.html.as_ref().map_or(0, String::len), m.headers.len()]
-                            .into_iter()
-                            .chain(m.files.iter().map(|f| f.3.len()));
-                        bytes = held.fold(bytes, usize::saturating_add);
+                    Some(mut m) => {
+                        bytes = bytes.saturating_add(m.held());
+                        m.key = key;
                         batch.push(m);
                     }
                     None => done.skipped += 1,
                 }
                 if batch.len() >= BATCH || bytes >= BATCH_BYTES {
                     let n = batch.len();
-                    write(&temp, &folder, &std::mem::take(&mut batch), &mut created)?;
+                    write(store, &temp, &folder, &std::mem::take(&mut batch), &mut created)?;
                     bytes = 0;
                     done.messages += n;
                     progress(done.messages);
                 }
             }
             if !batch.is_empty() {
-                write(&temp, &folder, &batch, &mut created)?;
+                write(store, &temp, &folder, &batch, &mut created)?;
                 done.messages += batch.len();
                 progress(done.messages);
             }

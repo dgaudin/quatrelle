@@ -44,9 +44,9 @@ pub use smime::pgp;
 mod trackers;
 pub use attachments::{
     AttachmentInfo, AttachmentKind, HtmlRefs, IndexDoc, MAX_INDEX_CHARS, MAX_WANTED, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile,
-    attachment_data, attachment_out, attachment_text, attachments_data, byte_code_page, craft_app_for, decode_code_page, decompress_rtf,
-    draft_carries_files, index_doc, is_protected_file, kind_of, known_code_page, parse_text_first, part_name, quoted_pictures, read_tnef, rtf_body,
-    rtf_wraps_html, text_first, text_preview_kind, unsupported_code_page, utf16_code_page,
+    attachment_data, attachment_data_moved, attachment_out, attachment_text, attachments_data, attachments_moved, byte_code_page, craft_app_for,
+    decode_code_page, decompress_rtf, draft_carries_files, index_doc, is_protected_file, kind_of, known_code_page, parse_text_first, part_name,
+    quoted_pictures, read_tnef, rtf_body, rtf_wraps_html, text_first, text_preview_kind, unsupported_code_page, utf16_code_page,
 };
 #[doc(hidden)]
 pub use attachments::{IndexStats, index_doc_stats};

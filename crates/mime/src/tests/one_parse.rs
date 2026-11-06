@@ -49,6 +49,26 @@ fn several_attachments_come_from_one_parse_within_their_caps() {
     assert_eq!(attachments_data(&raw, &many, usize::MAX, usize::MAX).len(), 5);
 }
 
+/// Files moved out of one parse ([`attachments_moved`]): each once, the same bytes as read alone,
+/// a text file's and a binary one's alike; an index asked twice once, one it doesn't have none.
+#[test]
+fn files_moved_out_of_one_parse_are_the_files() {
+    let mut files: Vec<(String, Vec<u8>)> = (0..4u8).map(|i| (format!("f{i}.bin"), vec![i; 3000 + usize::from(i)])).collect();
+    files.push(("note.txt".into(), b"caf\xe9 in Latin-1".to_vec()));
+    let raw = with_files(&files);
+    let mut all = Vec::new();
+    attachments_moved(&raw, &[4, 0, 3, 1, 2, 0, 9], &mut |index, data| all.push((index, data)));
+    all.sort();
+    let each: Vec<_> = (0..5).map(|i| (i, attachment_data(&raw, i).unwrap())).collect();
+    assert_eq!(all, each);
+    assert_eq!(attachment_data_moved(&raw, 2), attachment_data(&raw, 2));
+    assert_eq!(attachment_data_moved(&raw, 9), None);
+    let mut none = 0;
+    attachments_moved(b"", &[0], &mut |_, _| none += 1);
+    attachments_moved(&raw, &[], &mut |_, _| none += 1);
+    assert_eq!(none, 0);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
 
