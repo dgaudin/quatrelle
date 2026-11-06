@@ -8588,6 +8588,7 @@ dependencies = [
  "icu_normalizer",
  "png 0.18.1",
  "serde_json",
+ "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]
