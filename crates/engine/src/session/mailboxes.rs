@@ -133,8 +133,8 @@ impl Session {
                 Some(s) => s.load_folder(account, folder)?.shared(),
                 None => FolderState::default(),
             };
-            let (lists, messages) = self.lists_read;
-            self.lists_read = (lists.wrapping_add(1), messages.wrapping_add(st.messages.len() as u64));
+            let (lists, messages, pages) = self.lists_read;
+            self.lists_read = (lists.wrapping_add(1), messages.wrapping_add(st.messages.len() as u64), pages);
             self.cache.insert(k.clone(), st);
             self.cache_order.retain(|o| *o != k);
             if scan {
@@ -158,7 +158,32 @@ impl Session {
         self.lists_read.0
     }
 
-    /// How many messages the lists [`Session::lists_read`] counts held: what was read again.
+    /// How many pages of folders' lists were read alone (a search's candidates looked at in the
+    /// page they're in, their folder not in memory).
+    pub fn pages_read(&self) -> u64 {
+        self.lists_read.2
+    }
+
+    /// A page of `n` messages read alone.
+    pub(super) fn note_page_read(&mut self, n: usize) {
+        let (lists, messages, pages) = self.lists_read;
+        self.lists_read = (lists, messages.wrapping_add(n as u64), pages.wrapping_add(1));
+    }
+
+    /// A message as its folder's list has it: in memory, or read from the page of the list it's
+    /// in (not the whole list read for it, nor kept), its folder not in memory.
+    pub(super) fn summary_where(&mut self, key: &MessageKey) -> Option<Arc<Summary>> {
+        let local = self.account(&key.account).is_none_or(AccountState::is_local);
+        if local || self.cache.contains_key(&(key.account.clone(), key.folder.clone())) {
+            return self.folder_state(&key.account, &key.folder).messages.iter().find(|m| m.key.uid == key.uid).cloned();
+        }
+        let page = self.store.as_ref()?.load_page_of(&key.account, &key.folder, key.uid).ok()?;
+        self.note_page_read(page.len());
+        page.into_iter().find(|m| m.key.uid == key.uid).map(Arc::new)
+    }
+
+    /// How many messages the lists [`Session::lists_read`] counts held, and the pages
+    /// [`Session::pages_read`] counts: what was read again.
     pub fn messages_read(&self) -> u64 {
         self.lists_read.1
     }
@@ -325,7 +350,7 @@ impl Session {
             let awaiting = super::searching::awaiting_wanted(&q).map(|on| (on, self.awaiting_now()));
             let hits = hits.into_iter().filter(|k| awaiting.as_ref().is_none_or(|(on, set)| set.contains(k) == *on));
             for key in hits.filter(|k| !have.contains(k)) {
-                if let Some(m) = self.folder_state(&key.account, &key.folder).messages.iter().find(|m| m.key.uid == key.uid).cloned() {
+                if let Some(m) = self.summary_where(&key) {
                     found.push(m);
                 }
             }

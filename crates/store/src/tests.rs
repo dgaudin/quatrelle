@@ -685,3 +685,25 @@ fn a_memory_folder_lists_only_its_own_files() {
     assert!(!s.files.exists(&dir.join("8")) && !s.files.exists(&s.folder_dir("a1", "Other")));
     assert_eq!(s.files.main.walk(&dir).len(), 3);
 }
+
+/// A message's page of a big list read alone, with the marks kept beside the pages; a small list
+/// is its own page.
+#[test]
+fn the_page_a_message_is_in_is_read_alone() {
+    let s = Store::memory();
+    let messages: Vec<Summary> = (1..=10_000).rev().map(|u| msg(u, false)).collect();
+    s.save_folder("a1", "INBOX", &FolderState { validity: 3, messages, ..Default::default() }).unwrap();
+    let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 5_000 };
+    s.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: quatrelle_model::Flag::Seen, on: true }).unwrap();
+    let page = s.load_page_of("a1", "INBOX", 5_000).unwrap();
+    assert_eq!(page.len(), PAGE_MESSAGES);
+    assert!(page.iter().all(|m| (4_097..=8_192).contains(&m.key.uid)), "the second page");
+    assert!(page.iter().any(|m| m.key == key && m.flags.seen), "marked as the list is");
+    assert_eq!(s.load_page_of("a1", "INBOX", 0).unwrap().first().map(|m| m.key.uid), Some(1), "below them all: the first");
+    assert_eq!(s.load_page_of("a1", "INBOX", 9_999).unwrap().len(), 10_000 - 2 * PAGE_MESSAGES);
+    s.save_folder("a1", "Small", &FolderState { validity: 3, messages: (1..=5).map(|u| msg(u, false)).collect(), ..Default::default() }).unwrap();
+    let small = s.load_page_of("a1", "Small", 3).unwrap();
+    assert_eq!(small.len(), 5);
+    assert!(small.iter().all(|m| m.key.folder == "Small"), "keys rebuilt");
+    assert!(s.load_page_of("a1", "Nowhere", 1).unwrap_or_default().is_empty());
+}

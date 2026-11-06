@@ -66,6 +66,42 @@ impl Store {
         self.files.read(&self.folder_dir(account, folder).join("state.json")).map(|b| page_hash(&b)).unwrap_or(0)
     }
 
+    /// The messages of a folder's list kept in the same page as message `uid` (marked as the
+    /// list is, keys rebuilt as [`Store::load_folder`] makes them): a search that finds a few
+    /// messages in a big folder looks at them there, not in a list of tens of thousands read
+    /// whole. A small list is its own page; a list with no first numbers in its head (written
+    /// before them) is read whole. Not in any order.
+    pub fn load_page_of(&self, account: &str, folder: &str, uid: u32) -> Result<Vec<Summary>> {
+        let dir = self.folder_dir(account, folder);
+        let file: StateFile = self.read_json(&dir.join("state.json"))?;
+        if !file.pages.is_empty() && file.firsts.len() != file.pages.len() {
+            return self.load_folder(account, folder).map(|st| st.messages);
+        }
+        let mut messages = if file.pages.is_empty() {
+            file.messages
+        } else {
+            // The last page whose first number isn't past it (the first, for one below them all).
+            let i = file.firsts.partition_point(|&f| f <= uid).saturating_sub(1);
+            let mut page: Vec<Summary> = self.read_json(&dir.join(format!("state-{i}.json")))?;
+            let marks: Vec<(u32, Flags)> = self.read_json(&dir.join(MARKS))?;
+            if !marks.is_empty() {
+                let marks: HashMap<u32, Flags> = marks.into_iter().collect();
+                for m in &mut page {
+                    if let Some(f) = marks.get(&m.key.uid) {
+                        m.flags.clone_from(f);
+                    }
+                }
+            }
+            page
+        };
+        for m in &mut messages {
+            m.key.account = account.to_string();
+            m.key.folder = folder.to_string();
+            m.key.validity = file.validity;
+        }
+        Ok(messages)
+    }
+
     /// Whether a folder's list is kept here, numbered under `validity`: read from its head alone
     /// (a big folder's pages aren't loaded to know).
     pub fn folder_kept(&self, account: &str, folder: &str, validity: u32) -> bool {

@@ -9,6 +9,7 @@
 //! found is looked up again where something changed: a folder told of changes, a body that came
 //! in, a folder that came back.
 
+use std::collections::VecDeque;
 use std::ops::Range;
 
 use super::*;
@@ -38,6 +39,11 @@ pub(crate) struct Answer {
     /// looked at a call (a new query over a big index, or a big folder that changed, doesn't
     /// load every folder in one frame). A set: queued twice, a message is looked at once.
     pub(super) todo: BTreeSet<u32>,
+    /// Taken from `todo` to be looked at first: the others found in the page of a folder's list
+    /// just read (its folder not in memory), looked at while it's here.
+    pub(super) next: VecDeque<u32>,
+    /// The pages of folders' lists last read for it, kept from one call to the next.
+    pages: Pages,
     /// How many were found when the list last showed them.
     pub(super) shown: usize,
     /// Something found went or changed since the list last showed them.
@@ -109,8 +115,37 @@ struct Looking<'a> {
     awaiting: &'a HashSet<MessageKey>,
 }
 
-/// Each folder's messages by number, made once a call when a message isn't where it was.
-type Lists = HashMap<(String, String), HashMap<u32, usize>>;
+/// What a call looks messages up in: each folder in memory's messages by number (made once a
+/// call when a message isn't where it was), and the pages of lists read for folders that aren't.
+#[derive(Default)]
+struct Lists {
+    places: HashMap<(String, String), HashMap<u32, usize>>,
+    pages: Pages,
+    /// The page just read, if one was: its folder and the numbers in it.
+    fresh: Option<((String, String), HashSet<u32>)>,
+}
+
+/// The latest pages of folders' lists read alone, each by its messages' numbers: the candidates
+/// in a page are looked at while it's here (the index's order is the list's, newest first, not
+/// the pages', by number), the last one or two kept from a call to the next.
+#[derive(Default)]
+pub(super) struct Pages(VecDeque<((String, String), HashMap<u32, Arc<Summary>>)>);
+
+/// Pages kept at most (4096 messages each).
+const PAGES_KEPT: usize = 2;
+
+impl Pages {
+    fn get(&self, k: &(String, String), uid: u32) -> Option<&Arc<Summary>> {
+        self.0.iter().rev().filter(|(f, _)| f == k).find_map(|(_, p)| p.get(&uid))
+    }
+
+    fn keep(&mut self, k: (String, String), page: HashMap<u32, Arc<Summary>>) {
+        while self.0.len() >= PAGES_KEPT {
+            self.0.pop_front();
+        }
+        self.0.push_back((k, page));
+    }
+}
 
 impl Session {
     /// The query as the index reads it: `category:Work` means the Work category's keyword
@@ -261,7 +296,13 @@ impl Session {
             _ => Answer { query: query.clone(), awaiting: awaiting.clone(), changed: true, ..Default::default() },
         };
         let total = ix.total();
-        if answer.recheck.is_empty() && answer.dirty.is_empty() && answer.again.is_empty() && answer.todo.is_empty() && answer.checked >= total {
+        if answer.recheck.is_empty()
+            && answer.dirty.is_empty()
+            && answer.again.is_empty()
+            && answer.todo.is_empty()
+            && answer.next.is_empty()
+            && answer.checked >= total
+        {
             ix.answer = Some(answer);
             self.index = Some(ix);
             return;
@@ -297,10 +338,10 @@ impl Session {
         // one a call: what's found shows while the index is read).
         let room = self.search_pace.units.max(1).saturating_mul(LOOKS_PER_MESSAGE_INDEXED);
         let mut looked = 0;
-        let mut lists = Lists::new();
+        let mut lists = Lists { pages: std::mem::take(&mut answer.pages), ..Lists::default() };
         while looked < room
             && (looked == 0 || self.search_pace.look_more())
-            && let Some(d) = answer.todo.pop_first()
+            && let Some(d) = answer.next.pop_front().or_else(|| answer.todo.pop_first())
         {
             // Found already or gone from the search: nothing to look at (and nothing counted).
             let Some((key, has_body)) = ix.doc(d) else { continue };
@@ -309,12 +350,24 @@ impl Session {
             }
             looked += 1;
             let key = key.clone();
-            let Some((m, pos)) = self.look_up(&mut lists, &key, ix.hint(d, &key)) else { continue };
+            let got = self.look_up(&mut lists, &key, ix.hint(d, &key));
+            // A page read: the others the index found in it are looked at next, while it's here.
+            if let Some((k, uids)) = lists.fresh.take() {
+                for r in ix.docs_of(&k) {
+                    let here: Vec<u32> = answer.todo.range(r).copied().filter(|&o| ix.doc(o).is_some_and(|(m, _)| uids.contains(&m.uid))).collect();
+                    for o in here {
+                        answer.todo.remove(&o);
+                        answer.next.push_back(o);
+                    }
+                }
+            }
+            let Some((m, pos)) = got else { continue };
             if self.answers(&looking, &m, has_body) {
                 answer.have.insert(&key);
                 answer.found.push(Found { summary: m, pos, doc: d });
             }
         }
+        answer.pages = lists.pages;
         ix.answer = Some(answer);
         self.index = Some(ix);
     }
@@ -325,7 +378,7 @@ impl Session {
         if folders.is_empty() {
             return;
         }
-        let mut lists = Lists::new();
+        let mut lists = Lists { pages: std::mem::take(&mut answer.pages), ..Lists::default() };
         let mut kept = Vec::with_capacity(answer.found.len());
         for mut f in std::mem::take(&mut answer.found) {
             let key = f.summary.key.clone();
@@ -355,6 +408,7 @@ impl Session {
             }
         }
         answer.found = kept;
+        answer.pages = lists.pages;
     }
 
     /// Whether a message the index found for the query's words answers it, its body read again
@@ -365,17 +419,43 @@ impl Session {
     }
 
     /// A message as its folder's list has it now, and where: looked at where it was first, else
-    /// found by number (the folder's numbers made once a call).
+    /// found by number (the folder's numbers made once a call). A folder whose list isn't in
+    /// memory isn't read whole for it: the page of the list the message is in is read (kept for
+    /// the rest of the call, the next candidates are mostly in it), as a mark reads only its
+    /// message's page. A search of everything in a mailbox bigger than the lists kept in memory
+    /// read most folders' lists again at every search, each pushing out another.
     fn look_up(&mut self, lists: &mut Lists, key: &MessageKey, hint: usize) -> Option<(Arc<Summary>, usize)> {
+        let k = (key.account.clone(), key.folder.clone());
+        // (A local account's marks being written elsewhere are in its list read whole.)
+        let local = self.account(&key.account).is_none_or(AccountState::is_local);
+        if !local
+            && !self.cache.contains_key(&k)
+            && let Some(store) = self.store.clone()
+        {
+            if let Some(m) = lists.pages.get(&k, key.uid) {
+                return Some((m.clone(), hint)).filter(|(m, _)| m.key == *key);
+            }
+            match store.load_page_of(&key.account, &key.folder, key.uid) {
+                Ok(page) => {
+                    self.note_page_read(page.len());
+                    let page: HashMap<u32, Arc<Summary>> = page.into_iter().map(|m| (m.key.uid, Arc::new(m))).collect();
+                    let got = page.get(&key.uid).filter(|m| m.key == *key).map(|m| (m.clone(), hint));
+                    lists.fresh = Some((k.clone(), page.keys().copied().collect()));
+                    lists.pages.keep(k, page);
+                    return got;
+                }
+                Err(e) => {
+                    log::warn!("a page of a folder's list couldn't be read: {e}");
+                    return None;
+                }
+            }
+        }
         let st = self.scan_state(&key.account, &key.folder);
         if let Some(m) = st.messages.get(hint).filter(|m| m.key == *key) {
             return Some((m.clone(), hint));
         }
-        let at = lists
-            .entry((key.account.clone(), key.folder.clone()))
-            .or_insert_with(|| st.messages.iter().enumerate().map(|(i, m)| (m.key.uid, i)).collect())
-            .get(&key.uid)
-            .copied()?;
+        let at =
+            lists.places.entry(k).or_insert_with(|| st.messages.iter().enumerate().map(|(i, m)| (m.key.uid, i)).collect()).get(&key.uid).copied()?;
         st.messages.get(at).filter(|m| m.key == *key).map(|m| (m.clone(), at))
     }
 
@@ -385,7 +465,7 @@ impl Session {
     pub(crate) fn search_queue_len(&self) -> usize {
         let Some(a) = self.index.as_ref().and_then(|ix| ix.answer.as_ref()) else { return 0 };
         let ix = self.index.as_ref().map_or(0, |ix| a.dirty.iter().flat_map(|k| ix.docs_of(k)).map(|r| r.len()).sum::<usize>());
-        ix + a.again.len() + a.todo.len()
+        ix + a.again.len() + a.todo.len() + a.next.len()
     }
 
     /// `f` run with the index a query is answered from as `self.index`: the words' (`words`), or
