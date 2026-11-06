@@ -1949,3 +1949,24 @@ folder	Conflicts	충돌
 	the system keychain isn't available: {error}	시스템 키체인을 사용할 수 없습니다: {error}
 	the people's OpenPGP keys could not be saved: {error}	상대방의 OpenPGP 키를 저장하지 못했습니다: {error}
 	OpenPGP keys kept for {who}	{who}의 OpenPGP 키를 보관했습니다
+	its key ran out on {date}	키가 {date}에 만료되었습니다
+	its key isn't valid until {date}	키는 {date}부터 유효합니다
+	its key is for {addresses}, not for the sender	키가 {addresses}용이며 보낸 사람용이 아닙니다
+	its owner withdrew the key on {date}	소유자가 {date}에 키를 철회했습니다
+	Before: {key}	이전: {key}
+	Now: {key}	현재: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	이 사람의 OpenPGP 키가 바뀌었습니다: 이 메시지는 이전 메일과 다른 키와 함께 왔습니다.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	새 키를 만들었다는 말을 듣지 못했다면 다른 방법으로 본인에게 확인하세요: 누군가 그 사람의 이름으로 쓰고 있을 수 있습니다.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	나에게 암호화된 메일을 읽으려면 파일 › 정보 › 보안에서 OpenPGP 키를 만들거나 가져오세요.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	다른 사람의 키나 Quatrelle에 없는 내 키로 암호화되었습니다: 파일 › 정보 › 보안에서 그 키를 가져오세요.
+	Encrypted to the key {keys}	암호화 대상 키: {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	이 메시지는 Quatrelle에 없는 키로 암호화되어 있습니다.
+	OpenPGP key {fingerprint}	OpenPGP 키 {fingerprint}
+	Their key came with their own mail.	이 사람의 키는 본인의 메일과 함께 왔습니다.
+	You imported their key.	이 사람의 키를 직접 가져왔습니다.
+	It's one of your own keys.	내 키 중 하나입니다.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	{signer}의 서명: 서명이 유효합니다 (OpenPGP 키 {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Quatrelle에 없는 OpenPGP 키 {key}로 서명되어 서명을 확인할 수 없습니다.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	이 사람의 키는 본인의 메일과 함께 오며, 파일 › 정보 › 보안에서 파일로 가져올 수도 있습니다.
+	Import OpenPGP key	OpenPGP 키 가져오기
+	Keep this key for its owner's address	이 키를 소유자의 주소용으로 보관합니다

@@ -370,11 +370,13 @@ pub enum Event {
         changed: Option<PgpChange>,
         error: Option<String>,
     },
-    /// What [`PgpWork::Decrypt`] found inside (a MIME entity), and what a signature in it says.
+    /// What [`PgpWork::Decrypt`] found inside (a MIME entity), what a signature in it says, and
+    /// the public keys attached inside (binary, a few at most), to be learnt as those outside are.
     PgpDecrypted {
         key: MessageKey,
         content: Option<Private>,
         signature: Option<PgpSignature>,
+        keys: Vec<Vec<u8>>,
         error: Option<String>,
     },
     /// [`PgpWork::Backup`] wrote key `fingerprint`'s backup, or why it couldn't.

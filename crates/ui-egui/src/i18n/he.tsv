@@ -1946,3 +1946,24 @@ folder	Conflicts	התנגשויות
 	the system keychain isn't available: {error}	מחזיק המפתחות של המערכת אינו זמין: {error}
 	the people's OpenPGP keys could not be saved: {error}	לא ניתן היה לשמור את מפתחות ה-OpenPGP של אנשי הקשר שלך: {error}
 	OpenPGP keys kept for {who}	מפתחות OpenPGP נשמרו עבור {who}
+	its key ran out on {date}	תוקף המפתח שלו פג ב־{date}
+	its key isn't valid until {date}	המפתח שלו תקף רק מ־{date}
+	its key is for {addresses}, not for the sender	המפתח שלו שייך ל־{addresses}, לא לשולח
+	its owner withdrew the key on {date}	הבעלים שלו ביטל את המפתח ב־{date}
+	Before: {key}	לפני: {key}
+	Now: {key}	עכשיו: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	מפתח ה־OpenPGP של האדם הזה השתנה: ההודעה הזו הגיעה עם מפתח אחר מזה של ההודעות הקודמות שלו.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	אם לא סיפרו לכם שיצרו מפתח חדש, בדקו איתם בדרך אחרת: ייתכן שמישהו כותב בשמם.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	כדי לקרוא דואר שהוצפן בשבילכם, צרו או ייבאו את מפתח ה־OpenPGP שלכם בקובץ › מידע › אבטחה.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	היא הוצפנה למפתח של מישהו אחר, או לאחד המפתחות שלכם שאין ל־Quatrelle: ייבאו אותו בקובץ › מידע › אבטחה.
+	Encrypted to the key {keys}	הוצפנה למפתח {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	ההודעה הזו מוצפנת למפתח שאין ל־Quatrelle.
+	OpenPGP key {fingerprint}	מפתח OpenPGP {fingerprint}
+	Their key came with their own mail.	המפתח שלו הגיע עם הדואר שלו עצמו.
+	You imported their key.	ייבאתם את המפתח שלו.
+	It's one of your own keys.	זה אחד המפתחות שלכם.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	נחתמה על ידי {signer}: החתימה תקפה (מפתח OpenPGP {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	נחתמה במפתח OpenPGP {key} שאין ל־Quatrelle, ולכן אי אפשר לבדוק את החתימה.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	המפתח שלו מגיע עם הדואר שלו, או שאפשר לייבא אותו מקובץ בקובץ › מידע › אבטחה.
+	Import OpenPGP key	ייבוא מפתח OpenPGP
+	Keep this key for its owner's address	שמירת המפתח הזה לכתובת של בעליו

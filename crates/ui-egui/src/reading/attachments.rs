@@ -142,6 +142,10 @@ pub(super) fn attachment_card(
     // The Craft app for the file, when it's installed.
     let craft = mime::craft_app_for(&a.mime, &a.name).and_then(|(cmd, name)| st.craft_apps.iter().any(|(c, _)| *c == cmd).then_some((cmd, name)));
     let text_preview = mime::text_preview_kind(&a.mime, &a.name).is_some();
+    // Someone's OpenPGP key, attached to the message in the pane (adapted from upstream f32b54b).
+    let lower = a.name.to_ascii_lowercase();
+    let pgp_key = (a.mime.eq_ignore_ascii_case("application/pgp-keys") || (lower.ends_with(".asc") && lower.contains("key")))
+        && s.reading.as_ref().is_some_and(|r| &r.key == key);
     // Several selected, this one among them: its menu can save them together.
     let several: Option<Vec<usize>> =
         st.attachment_selected.as_ref().filter(|(k, v)| k == key && v.len() > 1 && v.contains(&a.index)).map(|(_, v)| v.clone());
@@ -167,6 +171,11 @@ pub(super) fn attachment_card(
             && ui.button(tf!("Open in {app}", app = name)).clicked()
         {
             acts.push(Action::OpenInCraft(a.index, cmd));
+            ui.close();
+        }
+        // Kept, to check their signatures (and, later, encrypt to them).
+        if pgp_key && ui.button(tl!("Import OpenPGP key")).on_hover_text(tl!("Keep this key for its owner's address")).clicked() {
+            acts.push(Action::Run("pgp.importAttached", json!({"index": a.index})));
             ui.close();
         }
         ui.separator();

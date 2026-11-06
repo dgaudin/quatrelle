@@ -1951,3 +1951,24 @@ menu	View	Anzeigen
 	the system keychain isn't available: {error}	der Schlüsselbund des Systems ist nicht verfügbar: {error}
 	the people's OpenPGP keys could not be saved: {error}	Die OpenPGP-Schlüssel Ihrer Kontakte konnten nicht gespeichert werden: {error}
 	OpenPGP keys kept for {who}	OpenPGP-Schlüssel behalten für {who}
+	its key ran out on {date}	sein Schlüssel ist am {date} abgelaufen
+	its key isn't valid until {date}	sein Schlüssel ist erst ab {date} gültig
+	its key is for {addresses}, not for the sender	sein Schlüssel gilt für {addresses}, nicht für den Absender
+	its owner withdrew the key on {date}	sein Besitzer hat den Schlüssel am {date} zurückgezogen
+	Before: {key}	Vorher: {key}
+	Now: {key}	Jetzt: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	Der OpenPGP-Schlüssel dieser Person hat sich geändert: Diese Nachricht kam mit einem anderen Schlüssel als ihre früheren.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	Wenn die Person Ihnen nicht gesagt hat, dass sie einen neuen Schlüssel hat, fragen Sie auf anderem Weg nach: Vielleicht schreibt jemand in ihrem Namen.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	Um an Sie verschlüsselte Mail zu lesen, erstellen oder importieren Sie Ihren OpenPGP-Schlüssel unter Datei › Informationen › Sicherheit.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	Sie wurde für den Schlüssel einer anderen Person verschlüsselt oder für einen Ihrer Schlüssel, den Quatrelle nicht hat: Importieren Sie ihn unter Datei › Informationen › Sicherheit.
+	Encrypted to the key {keys}	Verschlüsselt für den Schlüssel {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	Diese Nachricht ist für einen Schlüssel verschlüsselt, den Quatrelle nicht hat.
+	OpenPGP key {fingerprint}	OpenPGP-Schlüssel {fingerprint}
+	Their key came with their own mail.	Der Schlüssel kam mit der eigenen Mail dieser Person.
+	You imported their key.	Sie haben diesen Schlüssel importiert.
+	It's one of your own keys.	Es ist einer Ihrer eigenen Schlüssel.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	Signiert von {signer}: Die Signatur ist gültig (OpenPGP-Schlüssel {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Signiert mit dem OpenPGP-Schlüssel {key}, den Quatrelle nicht hat, daher kann die Signatur nicht geprüft werden.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Der Schlüssel kommt mit der Mail dieser Person oder kann aus einer Datei importiert werden, unter Datei › Informationen › Sicherheit.
+	Import OpenPGP key	OpenPGP-Schlüssel importieren
+	Keep this key for its owner's address	Diesen Schlüssel für die Adresse seines Besitzers behalten

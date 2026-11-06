@@ -12,6 +12,7 @@ mod find;
 mod header_actions;
 mod linked_pictures;
 mod long_text;
+mod pgp;
 mod previews;
 mod rules;
 mod senders;

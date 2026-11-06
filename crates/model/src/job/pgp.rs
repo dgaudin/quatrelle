@@ -13,6 +13,10 @@ use crate::MessageKey;
 /// not unlocked, none at all): the start of the error, what the system said after it.
 pub const NO_KEYCHAIN: &str = "the system keychain isn't available";
 
+/// What an error says when a message was encrypted to none of the account's keys: the start of
+/// the error, the key IDs it went to after it.
+pub const NOT_FOR_YOU: &str = "it was encrypted to a key Quatrelle doesn't have";
+
 /// What [`Job::Pgp`](super::Job::Pgp) does.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "work", rename_all = "camelCase")]

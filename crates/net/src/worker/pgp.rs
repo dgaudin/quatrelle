@@ -10,7 +10,7 @@
 //! key leaves nothing behind, and says so ([`NO_KEYCHAIN`]).
 
 use quatrelle_model::Private;
-use quatrelle_model::job::{NO_KEYCHAIN, PgpChange, PgpSignature, PgpWork};
+use quatrelle_model::job::{NO_KEYCHAIN, NOT_FOR_YOU, PgpChange, PgpSignature, PgpWork};
 use quatrelle_pgp as pgp;
 
 use super::*;
@@ -150,8 +150,19 @@ pub(crate) fn forget_all(creds: &dyn Credentials, account: &AccountConfig) {
     creds.delete_secret(account, LIST);
 }
 
+/// The most keys attached inside a decrypted message handed back, and the largest such message
+/// looked through for them (as the engine looks through one that isn't encrypted).
+const INSIDE_MAX: usize = 4;
+const INSIDE_LOOKED_MAX: usize = 2 << 20;
+
+/// What `data` decrypted with the account's keys gives: the MIME entity inside (a text made one,
+/// for inline PGP), what a signature in it says, and the public keys attached inside it.
+type Opened = (Vec<u8>, Option<PgpSignature>, Vec<Vec<u8>>);
+
 /// `data` decrypted with the account's keys: the MIME entity inside (a text made one, for inline
-/// PGP), and what a signature in it says. Kept in memory only.
+/// PGP), what a signature in it says, and the keys attached inside it (found here, off the
+/// window's thread, for the engine to learn as those of a message that isn't encrypted). Kept in
+/// memory only.
 pub(crate) fn decrypt(
     creds: &dyn Credentials,
     account: &AccountConfig,
@@ -159,7 +170,7 @@ pub(crate) fn decrypt(
     inline: bool,
     charset: &str,
     verify_with: &[Vec<u8>],
-) -> std::result::Result<(Vec<u8>, Option<PgpSignature>), String> {
+) -> std::result::Result<Opened, String> {
     let mine = secrets(creds, account);
     // The engine asks only for an account with a key: none given back is the keychain's doing.
     if mine.is_empty() {
@@ -171,9 +182,9 @@ pub(crate) fn decrypt(
         pgp::Error::Decrypt => {
             let to = pgp::recipients(data);
             if to.is_empty() {
-                e.to_string()
+                format!("{NOT_FOR_YOU}: import that key too (File › Info › Security)")
             } else {
-                format!("it was encrypted to a key Quatrelle doesn't have ({}): import that key too (File › Info › Security)", to.join(", "))
+                format!("{NOT_FOR_YOU} ({}): import that key too (File › Info › Security)", to.join(", "))
             }
         }
         other => other.to_string(),
@@ -184,7 +195,17 @@ pub(crate) fn decrypt(
         pgp::Check::Unknown(key_id) => PgpSignature::Unknown { key_id },
     });
     let entity = if inline { quatrelle_mime::pgp::text_entity(&d.data, charset) } else { d.data };
-    Ok((entity, signature))
+    let keys = attached_keys(&entity);
+    Ok((entity, signature, keys))
+}
+
+/// The public keys attached to `entity` (`application/pgp-keys` parts), a few at most.
+fn attached_keys(entity: &[u8]) -> Vec<Vec<u8>> {
+    let names = entity.len() <= INSIDE_LOOKED_MAX && entity.windows(20).any(|w| w.eq_ignore_ascii_case(b"application/pgp-keys"));
+    if !names {
+        return Vec::new();
+    }
+    quatrelle_mime::pgp::key_parts(entity).iter().flat_map(|part| pgp::public_keys(part).unwrap_or_default()).take(INSIDE_MAX).collect()
 }
 
 /// What the account has now, or why it couldn't be done.
@@ -225,8 +246,8 @@ fn work(creds: &dyn Credentials, account: &AccountConfig, work: PgpWork) -> Even
             keys_now(creds, account, Ok(None))
         }
         PgpWork::Decrypt { key, data, inline, charset, verify_with } => match decrypt(creds, account, &data, inline, &charset, &verify_with) {
-            Ok((entity, signature)) => Event::PgpDecrypted { key, content: Some(Private(entity)), signature, error: None },
-            Err(e) => Event::PgpDecrypted { key, content: None, signature: None, error: Some(e) },
+            Ok((entity, signature, keys)) => Event::PgpDecrypted { key, content: Some(Private(entity)), signature, keys, error: None },
+            Err(e) => Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error: Some(e) },
         },
     }
 }

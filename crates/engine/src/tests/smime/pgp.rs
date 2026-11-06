@@ -11,6 +11,8 @@ use crate::session::{AccountPgp, Learnt, PEOPLE_DOC, PGP_DOC};
 use quatrelle_model::job::{PgpChange, PgpWork};
 use quatrelle_pgp as pgp;
 
+mod reading;
+
 const THREE_YEARS: i64 = 94_608_000;
 const DAY: i64 = 86_400;
 

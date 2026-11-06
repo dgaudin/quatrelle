@@ -195,7 +195,7 @@ pub(super) fn header(
         sender_warning(&t, ui, w);
     }
     if let Some(sec) = &r.security {
-        security::security_bar(s, &t, ui, sec);
+        security::security_bar(s, &t, ui, r, sec);
     }
     placed
 }

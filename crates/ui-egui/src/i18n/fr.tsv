@@ -1951,3 +1951,24 @@ menu	View	Afficher
 	the system keychain isn't available: {error}	le trousseau du système n’est pas disponible : {error}
 	the people's OpenPGP keys could not be saved: {error}	Les clés OpenPGP de vos correspondants n’ont pas pu être enregistrées : {error}
 	OpenPGP keys kept for {who}	Clés OpenPGP conservées pour {who}
+	its key ran out on {date}	sa clé a expiré le {date}
+	its key isn't valid until {date}	sa clé n’est valable qu’à partir du {date}
+	its key is for {addresses}, not for the sender	sa clé est pour {addresses}, pas pour l’expéditeur
+	its owner withdrew the key on {date}	son propriétaire a retiré la clé le {date}
+	Before: {key}	Avant : {key}
+	Now: {key}	Maintenant : {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	La clé OpenPGP de cette personne a changé : ce message est arrivé avec une autre clé que ses messages précédents.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	Si elle ne vous a pas dit avoir fait une nouvelle clé, vérifiez auprès d’elle par un autre moyen : quelqu’un écrit peut-être en son nom.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	Pour lire le courrier chiffré pour vous, créez ou importez votre clé OpenPGP dans Fichier › Informations › Sécurité.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	Il a été chiffré pour la clé de quelqu’un d’autre, ou pour une des vôtres que Quatrelle n’a pas : importez-la dans Fichier › Informations › Sécurité.
+	Encrypted to the key {keys}	Chiffré pour la clé {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	Ce message est chiffré pour une clé que Quatrelle n’a pas.
+	OpenPGP key {fingerprint}	Clé OpenPGP {fingerprint}
+	Their key came with their own mail.	Sa clé est arrivée avec son propre courrier.
+	You imported their key.	Vous avez importé sa clé.
+	It's one of your own keys.	C’est une de vos propres clés.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	Signé par {signer} : la signature est valable (clé OpenPGP {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Signé avec la clé OpenPGP {key}, que Quatrelle n’a pas : la signature ne peut pas être vérifiée.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Sa clé arrive avec son courrier, ou peut être importée d’un fichier dans Fichier › Informations › Sécurité.
+	Import OpenPGP key	Importer la clé OpenPGP
+	Keep this key for its owner's address	Garder cette clé pour l’adresse de son propriétaire

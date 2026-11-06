@@ -244,9 +244,32 @@ fn mail_for_someone_else_says_so() {
     assert!(e.contains("encrypted to a key Quatrelle doesn't have ("), "{e}");
     // GnuPG's own signed and encrypted mail to Ana, read as inline PGP: a text, Bo's signature good.
     let bo = pgp::public_keys(&testdata("bo.asc")).unwrap();
-    let (entity, signature) = decrypt(&creds, &a, &testdata("to-ana-signed.asc"), true, "iso-8859-1", &bo).unwrap();
+    let (entity, signature, keys) = decrypt(&creds, &a, &testdata("to-ana-signed.asc"), true, "iso-8859-1", &bo).unwrap();
     assert!(entity.starts_with(b"Content-Type: text/plain; charset=utf-8\r\n"));
     assert!(matches!(signature, Some(PgpSignature::Good { key: 0, .. })));
+    assert!(keys.is_empty());
+}
+
+/// Keys attached inside an encrypted message come back with what it held (found on the pool's
+/// thread, not the window's), a few at most; what isn't a key is left out.
+#[test]
+fn keys_attached_inside_come_back_with_the_message() {
+    let creds = MemoryCredentials::default();
+    let a = account("ana");
+    let ana = ana();
+    take(&creds, &a, &ana).unwrap();
+    let bo = pgp::public_keys(&testdata("bo.asc")).unwrap().remove(0);
+    let armored = pgp::armored_public(&bo).unwrap().replace('\n', "\r\n");
+    let mut entity = String::from("Content-Type: multipart/mixed; boundary=\"in\"\r\n\r\n--in\r\nContent-Type: text/plain\r\n\r\nKeys.\r\n");
+    for _ in 0..6 {
+        entity.push_str(&format!("--in\r\nContent-Type: application/pgp-keys; name=\"bo.asc\"\r\n\r\n{armored}\r\n"));
+    }
+    entity.push_str("--in\r\nContent-Type: application/pgp-keys; name=\"junk.asc\"\r\n\r\nnot a key\r\n--in--\r\n");
+    let sealed = pgp::encrypt(entity.as_bytes(), &[&ana.public], None, NOW, &mut rand_core::OsRng).unwrap();
+    let (opened, _, keys) = decrypt(&creds, &a, sealed.as_bytes(), false, "", &[]).unwrap();
+    assert_eq!(opened, entity.as_bytes());
+    assert_eq!(keys.len(), 4, "a few at most");
+    assert!(keys.iter().all(|k| *k == bo));
 }
 
 #[test]

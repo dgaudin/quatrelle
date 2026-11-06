@@ -1947,3 +1947,24 @@ menu	View	Weergeven
 	the system keychain isn't available: {error}	de sleutelhanger van het systeem is niet beschikbaar: {error}
 	the people's OpenPGP keys could not be saved: {error}	De OpenPGP-sleutels van je contacten konden niet worden opgeslagen: {error}
 	OpenPGP keys kept for {who}	OpenPGP-sleutels bewaard voor {who}
+	its key ran out on {date}	de sleutel is verlopen op {date}
+	its key isn't valid until {date}	de sleutel is pas geldig vanaf {date}
+	its key is for {addresses}, not for the sender	de sleutel is voor {addresses}, niet voor de afzender
+	its owner withdrew the key on {date}	de eigenaar heeft de sleutel ingetrokken op {date}
+	Before: {key}	Eerder: {key}
+	Now: {key}	Nu: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	De OpenPGP-sleutel van deze persoon is veranderd: dit bericht kwam met een andere sleutel dan de eerdere berichten.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	Als deze persoon u niet heeft verteld een nieuwe sleutel te hebben, vraag het dan op een andere manier na: misschien schrijft iemand uit diens naam.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	Om e-mail te lezen die voor u is versleuteld, maakt of importeert u uw OpenPGP-sleutel in Bestand › Info › Beveiliging.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	Het is versleuteld voor de sleutel van iemand anders, of voor een sleutel van u die Quatrelle niet heeft: importeer die in Bestand › Info › Beveiliging.
+	Encrypted to the key {keys}	Versleuteld voor de sleutel {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	Dit bericht is versleuteld voor een sleutel die Quatrelle niet heeft.
+	OpenPGP key {fingerprint}	OpenPGP-sleutel {fingerprint}
+	Their key came with their own mail.	De sleutel kwam met de eigen e-mail van deze persoon.
+	You imported their key.	U hebt deze sleutel geïmporteerd.
+	It's one of your own keys.	Het is een van uw eigen sleutels.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	Ondertekend door {signer}: de handtekening klopt (OpenPGP-sleutel {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Ondertekend met de OpenPGP-sleutel {key}, die Quatrelle niet heeft, dus de handtekening kan niet worden gecontroleerd.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	De sleutel komt met de e-mail van deze persoon, of kan uit een bestand worden geïmporteerd in Bestand › Info › Beveiliging.
+	Import OpenPGP key	OpenPGP-sleutel importeren
+	Keep this key for its owner's address	Deze sleutel bewaren voor het adres van de eigenaar

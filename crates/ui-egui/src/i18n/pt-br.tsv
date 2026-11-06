@@ -1950,3 +1950,24 @@ folder	Conflicts	Conflitos
 	the system keychain isn't available: {error}	o chaveiro do sistema não está disponível: {error}
 	the people's OpenPGP keys could not be saved: {error}	Não foi possível salvar as chaves OpenPGP dos seus contatos: {error}
 	OpenPGP keys kept for {who}	Chaves OpenPGP guardadas para {who}
+	its key ran out on {date}	a chave expirou em {date}
+	its key isn't valid until {date}	a chave só é válida a partir de {date}
+	its key is for {addresses}, not for the sender	a chave é de {addresses}, não do remetente
+	its owner withdrew the key on {date}	o dono retirou a chave em {date}
+	Before: {key}	Antes: {key}
+	Now: {key}	Agora: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	A chave OpenPGP desta pessoa mudou: esta mensagem veio com uma chave diferente da das mensagens anteriores.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	Se essa pessoa não disse que fez uma chave nova, confirme com ela por outro meio: alguém pode estar escrevendo em nome dela.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	Para ler e-mails criptografados para você, crie ou importe sua chave OpenPGP em Arquivo › Informações › Segurança.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	Foi criptografada para a chave de outra pessoa, ou para uma chave sua que o Quatrelle não tem: importe-a em Arquivo › Informações › Segurança.
+	Encrypted to the key {keys}	Criptografada para a chave {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	Esta mensagem está criptografada para uma chave que o Quatrelle não tem.
+	OpenPGP key {fingerprint}	Chave OpenPGP {fingerprint}
+	Their key came with their own mail.	A chave veio com os próprios e-mails dessa pessoa.
+	You imported their key.	Você importou a chave dessa pessoa.
+	It's one of your own keys.	É uma das suas próprias chaves.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	Assinada por {signer}: a assinatura é válida (chave OpenPGP {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Assinada com a chave OpenPGP {key}, que o Quatrelle não tem, então a assinatura não pode ser verificada.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	A chave vem com os e-mails dessa pessoa, ou pode ser importada de um arquivo em Arquivo › Informações › Segurança.
+	Import OpenPGP key	Importar chave OpenPGP
+	Keep this key for its owner's address	Guardar esta chave para o endereço do dono

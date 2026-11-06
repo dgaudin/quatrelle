@@ -82,6 +82,8 @@ pub struct Security {
     pub headers: bool,
     /// OpenPGP: the key it brought for its sender replaced the one learnt before (said once).
     pub key_changed: bool,
+    /// It was protected with OpenPGP, not S/MIME.
+    pub pgp: bool,
 }
 
 impl Security {
@@ -102,6 +104,8 @@ pub enum Lock {
         authenticated: bool,
     },
     Failed(String),
+    /// OpenPGP: encrypted to none of the account's keys (the key IDs it went to, those it names).
+    NoKey(Vec<String>),
 }
 
 /// A signed message.
@@ -110,6 +114,11 @@ pub struct SignedBy {
     pub seal: Seal,
     /// The signer's certificate, when the signature could be read.
     pub cert: Option<smime::CertInfo>,
+    /// Or, signed with OpenPGP, the key that made it.
+    pub key: Option<quatrelle_pgp::KeyInfo>,
+    /// How that key came: from the signer's mail, or imported by the user (`None`: the
+    /// account's own).
+    pub learnt: Option<Learnt>,
     pub at: Option<i64>,
     /// Made with SHA-1.
     pub weak: bool,
@@ -125,6 +134,8 @@ pub enum Seal {
     Untrusted(Vec<smime::Problem>),
     /// It doesn't hold (the message changed after it was signed), or can't be read: why.
     Broken(String),
+    /// OpenPGP: made with a key Quatrelle doesn't have (its key ID), so it can't be checked.
+    UnknownKey(String),
 }
 
 /// A message waiting for [`Event::Protected`] before it goes.
@@ -291,7 +302,18 @@ impl Session {
         let mut any = false;
         for _ in 0..4 {
             match mime::smime::protection(&cur) {
-                mime::smime::Protection::None => break,
+                // Not S/MIME: OpenPGP, perhaps.
+                mime::smime::Protection::None => match self.unwrap_pgp(key, &cur, &mut sec) {
+                    pgp::Step::Not => break,
+                    pgp::Step::Next(next) => {
+                        any = true;
+                        cur = next;
+                    }
+                    pgp::Step::Stop => {
+                        any = true;
+                        break;
+                    }
+                },
                 mime::smime::Protection::Signed { content, signature } => {
                     any = true;
                     if sec.signed.is_none() {
@@ -346,7 +368,10 @@ impl Session {
         let mut cur = self.store.as_ref()?.read_body(key)?;
         for _ in 0..4 {
             cur = match mime::smime::protection(&cur) {
-                mime::smime::Protection::None => break,
+                mime::smime::Protection::None => match self.readable_pgp(key, &cur) {
+                    Some(next) => next,
+                    None => break,
+                },
                 mime::smime::Protection::Signed { content, .. } => mime::smime::with_entity(&cur, &content),
                 mime::smime::Protection::Opaque(cms) => match smime::carried(&cms) {
                     Ok(c) => mime::smime::with_entity(&cur, &c),
@@ -388,6 +413,8 @@ impl Session {
                 SignedBy {
                     seal: if problems.is_empty() { Seal::Trusted } else { Seal::Untrusted(problems) },
                     cert: smime::cert::info(&signed.signer).ok(),
+                    key: None,
+                    learnt: None,
                     at: signed.signed_at,
                     weak: signed.weak,
                     revocation,
@@ -399,6 +426,8 @@ impl Session {
                     other => other.to_string(),
                 }),
                 cert: None,
+                key: None,
+                learnt: None,
                 at: None,
                 weak: false,
                 revocation: None,
