@@ -103,6 +103,8 @@ struct App {
     settings: Option<desktop::state_writer::StateWriter>,
     /// The window's GPU device, until its errors are only logged (`graphics::log_errors`).
     gpu: Option<eframe::wgpu::Device>,
+    /// The window's GPU device, watched for its loss (`graphics::LostWatch`).
+    lost: Option<graphics::LostWatch>,
     frames: u32,
     /// Answering later launches on the same data folder (`single_instance.rs`).
     instance: Option<single_instance::Server>,
@@ -154,6 +156,11 @@ impl eframe::App for App {
     // this window comes forward instead of a second one, and opens what that launch handed over.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.pacing.frame(ctx);
+        // The GPU device is gone (a driver reset after a sleep): what's being written is kept as
+        // drafts and Quatrelle closes, as nothing can be drawn any more.
+        if self.lost.as_ref().is_some_and(graphics::LostWatch::lost) {
+            self.app.graphics_lost(ctx);
+        }
         if let Some(handed) = self.instance.as_ref().and_then(single_instance::Server::take) {
             single_instance::show(ctx, self.native_wayland);
             for h in &handed {
@@ -172,6 +179,10 @@ impl eframe::App for App {
         MailApp::quit_instead_of_close(ctx, apple_events::quit);
     }
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // Nothing is drawn with a lost device (egui-wgpu would panic making its buffers).
+        if self.app.ui.graphics_lost {
+            return;
+        }
         self.frames = self.frames.saturating_add(1);
         if self.frames >= graphics::STARTUP_FRAMES
             && let Some(device) = self.gpu.take()
@@ -650,6 +661,7 @@ fn run(
             Ok(Box::new(App {
                 app,
                 settings: state_path.map(desktop::state_writer::StateWriter::new),
+                lost: gpu.as_ref().map(graphics::LostWatch::new),
                 gpu,
                 frames: 0,
                 instance,

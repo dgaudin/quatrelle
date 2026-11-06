@@ -6,6 +6,7 @@
 use super::*;
 
 mod file_dialogs;
+mod lost_gpu;
 mod people_field;
 mod pgp;
 mod rewrite;

@@ -13,6 +13,9 @@ pub struct UiState {
     /// Closing was confirmed though it loses online-only accounts' unsent mail (issue #4); and
     /// the window is to close on the next frame.
     pub closing_anyway: bool,
+    /// The window's GPU device is gone: nothing is drawn any more, and Quatrelle closes
+    /// ([`MailApp::graphics_lost`]).
+    pub graphics_lost: bool,
     pub close_now: bool,
     /// The window was closed while Compact Now had a data file to itself: it closes once that's
     /// done (stopped then, the file would be gone through whole at the next start).
