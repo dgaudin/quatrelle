@@ -266,6 +266,7 @@ impl Session {
                         dirty: calendar != LOCAL,
                         notify: false,
                         respond: None,
+                        changed_too: false,
                     });
                     remote |= calendar != LOCAL;
                 }
@@ -304,6 +305,8 @@ impl Session {
         let p = self.pim_mut(account);
         let mut found = false;
         for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid) && !e.href.is_empty() && e.event.recurrence_id.is_none()) {
+            // A change made here before, not sent yet: it goes once the answer is given.
+            e.changed_too |= e.dirty && e.respond.is_none();
             set_answer(&mut e.event, &mine, &me, stat);
             e.event.my_answer = stat.to_string();
             e.respond = Some(stat.to_string());
@@ -325,20 +328,26 @@ impl Session {
     /// the server refused again went before: [`Session::drop_refused_answers`].) Then copies of
     /// invitations made here before the server answered them (accepted from the invitation,
     /// never sent: they showed beside the server's meeting, twice) become the user's answer on
-    /// the server's meeting. Whether there's something new to send.
+    /// the server's meeting. Whether there's something new to send (a change made around an
+    /// answer given, or an answer to give).
     pub(super) fn settle_answers(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) -> bool {
         if !self.server_answers(account) {
             return false;
         }
         let (mine, me) = (self.my_addresses(), self.account(account).map(|a| a.config.email.clone()).unwrap_or_default());
         let p = self.pim_mut(account);
+        // A change made here around the answer (Show As, Private…): the server gave the answer
+        // alone, so the change goes now, as any change does.
+        let mut changed_too = false;
         for (uid, stat) in &sync.responded {
             p.events.retain(|e| !(same_meeting(&e.event.uid, uid) && (e.href.is_empty() || stat == "DECLINED")));
             for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid)) {
                 set_answer(&mut e.event, &mine, &me, stat);
                 e.event.my_answer = stat.clone();
                 e.respond = None;
-                e.dirty = false;
+                e.dirty = e.changed_too;
+                changed_too |= e.changed_too;
+                e.changed_too = false;
             }
         }
         // Copies of invitations: an appointment never sent, someone else's meeting, answered by
@@ -363,7 +372,7 @@ impl Session {
                 e.dirty = true;
             }
         }
-        !copies.is_empty()
+        changed_too || !copies.is_empty()
     }
 
     /// Answers the server refused at two syncs running (one refused for good was otherwise
@@ -396,9 +405,11 @@ impl Session {
             let p = self.pim_mut(account);
             let summary = p.events.iter().find(|e| same_meeting(&e.event.uid, uid)).map(|e| e.event.summary.clone()).unwrap_or_default();
             p.events.retain(|e| !(e.href.is_empty() && same_meeting(&e.event.uid, uid)));
+            // What was changed besides still goes, as any change does.
             for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid)) {
                 e.respond = None;
-                e.dirty = false;
+                e.dirty = e.changed_too;
+                e.changed_too = false;
             }
             let summary = if summary.trim().is_empty() { uid.as_str() } else { summary.as_str() };
             self.notice_with(
@@ -713,6 +724,7 @@ fn put_occurrence(p: &mut Pim, calendar: &str, e: CalEvent) -> bool {
         dirty: remote,
         notify: false,
         respond: None,
+        changed_too: false,
     });
     remote
 }

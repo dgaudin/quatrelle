@@ -249,6 +249,7 @@ fn dav_results_merge_without_losing_local_changes() {
         dirty: false,
         notify: false,
         respond: None,
+        changed_too: false,
     };
     let first = DavSync {
         caldav_home: Some("https://dav.example.org/cal/".into()),
@@ -338,6 +339,7 @@ fn dav_results_merge_without_losing_local_changes() {
         dirty: false,
         notify: false,
         respond: None,
+        changed_too: false,
     };
     let read = StoredEvent { event: CalEvent { uid: "ical-EV1".into(), ..local.event.clone() }, ..pushed.clone() };
     let merged = DavSync {

@@ -516,6 +516,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 dirty: false,
                 notify: false,
                 respond: None,
+                changed_too: false,
             }),
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
         }
@@ -563,6 +564,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                     dirty: false,
                     notify: false,
                     respond: None,
+                    changed_too: false,
                 });
             }
         }
@@ -586,6 +588,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                             dirty: false,
                             notify: false,
                             respond: None,
+                            changed_too: false,
                         });
                     }
                 }

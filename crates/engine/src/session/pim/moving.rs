@@ -175,7 +175,7 @@ impl Session {
         match existing.and_then(|i| p.events.get_mut(i)) {
             Some(stored) => {
                 stored.event = e;
-                stored.dirty |= remote;
+                stored.changed_here(remote);
             }
             None => p.events.push(StoredEvent {
                 calendar: master.calendar.clone(),
@@ -185,6 +185,7 @@ impl Session {
                 dirty: remote,
                 notify: false,
                 respond: None,
+                changed_too: false,
             }),
         }
         self.after_pim_change(&account, remote);

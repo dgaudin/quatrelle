@@ -156,9 +156,10 @@ impl Session {
         for d in gone {
             self.keep_conflict(account, d);
         }
-        // Invitations the server answered, and copies of invitations to answer instead.
+        // Invitations the server answered (and what was changed around their answer, to send), and
+        // copies of invitations to answer instead.
         if self.settle_answers(account, sync) {
-            log::info!("{account}: invitations' answers to send");
+            log::info!("{account}: invitations' answers, or changes made around them, to send");
             self.ask_pim_sync(account);
         }
         // Saved only when something changed (when the server was last asked isn't a change, unless
@@ -189,7 +190,7 @@ fn events_digest(events: &[StoredEvent]) -> u64 {
     for e in events {
         let mut h = std::hash::DefaultHasher::new();
         (&e.calendar, &e.href, &e.etag, &e.event.uid, e.event.recurrence_id, e.event.sequence).hash(&mut h);
-        (e.dirty, e.notify, &e.respond).hash(&mut h);
+        (e.dirty, e.notify, &e.respond, e.changed_too).hash(&mut h);
         sum = sum.wrapping_add(h.finish());
     }
     sum

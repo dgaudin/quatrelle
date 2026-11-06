@@ -214,6 +214,7 @@ pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &P
                             dirty: false,
                             notify: false,
                             respond: None,
+                            changed_too: false,
                         });
                     }
                 }

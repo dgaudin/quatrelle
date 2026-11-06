@@ -72,6 +72,7 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
                     dirty: false,
                     notify: false,
                     respond: None,
+                    changed_too: false,
                 });
             }
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
