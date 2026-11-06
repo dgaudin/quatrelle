@@ -3508,6 +3508,91 @@ aucun vrai compte.
   - les droits d'écriture d'un calendrier de collègue ne se revoient, sans élément changé, que par
     les droits du dossier (un `GetFolder` à chaque synchro, comme avant).
 
+### Hors relevé : R23, fichiers des rendez-vous et des contacts, tâches importées, suggestions sans accents (2026-11-06)
+
+Trois restes notés par P2b (vingt-sixième partie) et R14 (vingt-deuxième partie), indépendants,
+chacun avec sa sonde lancée d'abord contre le code d'alors. Le calendrier, les contacts et les
+tâches du fork restent les siens : on comble leurs manques dans leur style, rien n'est pris de
+l'origine qui remplacerait leur modèle. Aucune donnée du propriétaire : `.pst` fabriqués par
+l'écrivain du crate, carnets et rendez-vous fabriqués dans les tests.
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `3d5f6df3` | les fichiers gardés avec un rendez-vous ou un contact, montrés en puces et ouverts |
+| `1df00761` | les tâches importées gardent catégories, importance, privé et rappel |
+| `bfee83fd` | les suggestions de destinataires et Check Names lisent sans les accents |
+
+- **Partie 1, les fichiers** : `model/src/pim/files.rs` relit les lignes que l'import écrit
+  (`ATTACH` en base64 sur l'événement, `X-QUATRELLE-ATTACH` en `data:` sur la carte) : nom, type et
+  taille tirés de l'en-tête de la ligne seul, les octets décodés seulement quand on les demande ; le
+  son d'une alarme (`ATTACH` dans un `VALARM`), un `ATTACH` qui pointe ailleurs (une adresse web, une
+  pièce gérée d'un serveur CalDAV) et les lignes abîmées ne sont pas des fichiers ; 64 au plus par
+  élément. Le moteur les liste (`Session::event_files`, `card_files`) et les écrit
+  (`event.saveFile`, `contact.saveFile`), comme `attachment.save` : jamais un programme pour
+  l'ouvrir, la marque « venu d'Internet » sous Windows. Une occurrence modifiée d'une série qui porte
+  ses propres fichiers montre les siens, sinon ceux de la série. L'interface les montre en puces
+  comme les pièces jointes du courrier (icône du genre, nom, taille ; ▾ et clic droit : Ouvrir,
+  Enregistrer sous… ; double-clic : Ouvrir), sous « 2 pièces jointes », dans la fenêtre d'un
+  rendez-vous (et sa forme en dialogue), entre l'en-tête et les notes, et sur la fiche d'un contact,
+  avant ses notes ; la carte du calendrier (une infobulle, qu'on ne clique pas) les nomme sur une
+  ligne au trombone. Ouvrir écrit le fichier dans le dossier d'où le fork ouvre les pièces jointes
+  (`scratch_dir("open")`) puis le confie au système ; rien ne s'ouvre sans un clic ; le navigateur
+  le télécharge. Pas de vignette (les octets peuvent peser 1 Mo par fichier) : l'icône du genre.
+- **Exchange et CalDAV** : un rendez-vous CalDAV dont le `.ics` porte un `ATTACH` en base64 passe par
+  le même chemin (la ligne est gardée dans `extra` comme celle d'un import). Le fork ne garde pas les
+  pièces jointes des rendez-vous Exchange (EWS, Graph) : elles ne sont ni lues ni montrées, et ce lot
+  ne va pas les chercher sur le serveur ; de même un `ATTACH` CalDAV par adresse.
+- **Partie 2, les tâches** : la tâche prend l'importance de l'élément (`PidTagImportance` : haute,
+  normale, basse), ses catégories (`Keywords`), privé et sa sorte (`PidTagSensitivity` : personnel,
+  privé, confidentiel, comme un rendez-vous), et son rappel, quand il est posé
+  (`PidLidReminderSet`) : l'heure où il a été reporté (`PidLidReminderSignalTime`), sinon celle où il
+  a été mis (`PidLidReminderTime`) ; une heure au-delà de l'an 9999 n'en est pas une, un rappel posé
+  sans heure non plus (une tâche n'a pas de début d'où compter). Une tâche faite ne rappelle plus,
+  comme avant. Lu comme `712d7336` de l'origine le lit (`reminder_at`), dans le modèle du fork.
+- **Partie 3, les suggestions** : le nom gardé avec chaque contact du carnet est son pliage
+  (`name_folded`, refait à la lecture du disque, jamais écrit) ; ce qui est tapé est plié
+  (`fold_word`), et de même les adresses du carnet, les noms et adresses de l'index de l'annuaire
+  (`Indexed::name_folded`), les noms et adresses des salles et les boîtes partagées, pour la
+  correspondance comme pour la place (`fit`). Check Names (`local_names`) plie les deux côtés. Le
+  classement lui-même ne change pas : un texte sans accent, ou tapé avec, se range comme avant.
+- **Sondes** :
+
+  | Sonde | avant | après |
+  |---|---|---|
+  | rendu sans tête de la fenêtre d'un rendez-vous importé avec deux fichiers, et de la fiche d'un contact avec deux (`ui-egui/src/tests/pim/item_files.rs`) | rien ; la carte : quand et le calendrier seuls | « 2 pièces jointes », une puce chacun (nom, taille), Ouvrir et Enregistrer sous… au clic droit ; la carte les nomme |
+  | tâche catégorisée, importante, privée, avec rappel (`net/.../pst/tests/pim/tasks.rs`) | catégories vides, importance normale, ni privé ni rappel | `["Print", "Studio"]`, haute, privée, rappel à l'heure reportée ; une confidentielle sans rappel, une faite sans rappel |
+  | « helene », « dupre », « eric », « etoile » ; Check Names de « helene » (`engine/src/tests/writing/accents.rs`) | aucune suggestion ; « helene » non résolu | la même liste que « Hélène », dans le même ordre (Hélène Martin, plus écrite, puis Hélène Dupré), du carnet, de l'annuaire et des listes de salles ; « Hélène Dupré <…> » |
+
+- **Les rendus**, regardés en clair et en sombre (hors du dépôt) : dans la fenêtre « Budget review –
+  Appointment », les deux puces (« Agenda draft.pdf », 2 KB ; « Room plan.txt », 20 B) sous
+  « 2 attachments », alignées sur les champs, juste au-dessus des notes ; sur la fiche d'Hélène Dupré,
+  « CV Hélène.docx » (5 KB) et « Signed offer.pdf » (8 B) sous son adresse, avant « Dans le carnet
+  d'adresses de… ». Les puces reprennent le bord, le fond d'icône et les couleurs de celles du
+  courrier ; rien ne déborde ni ne se chevauche, dans les deux thèmes.
+- **Ce que le propriétaire verra** : après un import `.pst` (à refaire pour les tâches), les fichiers
+  d'un rendez-vous dans sa fenêtre et ceux d'un contact sur sa fiche, à ouvrir ou enregistrer comme
+  une pièce jointe ; leurs noms sur la carte du calendrier ; des tâches importées avec leurs
+  catégories, leur priorité, privées comme dans Outlook et leur rappel qui sonne ; et, en écrivant un
+  message ou une invitation, « helene » qui propose Hélène, « etoile » la salle Étoile, Ctrl+K qui
+  résout un nom tapé sans accents.
+- **Vérifié** : chaque sonde avant (échec) et après ; les tests du modèle (lecture des lignes, lignes
+  hostiles, plafond), du moteur (`event.saveFile`, `contact.saveFile`, occurrence modifiée, refus d'un
+  programme, `every_command_survives_junk_params`), de l'import relu par la lecture des fichiers, et du
+  champ de contacts (117 tests, dont l'ordre des suggestions d'avant) ; les cibles de fuzz `ical` et
+  `vcard` listent et décodent les fichiers ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - les pièces jointes des rendez-vous Exchange et les `ATTACH` CalDAV par adresse ne se voient pas
+    (à aller chercher sur le serveur, dans un autre lot) ;
+  - ni vignette ni aperçu pour ces fichiers (le courrier en a) ; on ne peut ni en ajouter ni en
+    retirer d'un rendez-vous ou d'un contact ;
+  - les tâches importées ne reprennent toujours ni leur début, ni leur état (en cours, en attente,
+    différée), ni leur avancement, ni le jour où elles ont été faites, ni leur périodicité, que
+    `712d7336` lit (le modèle du fork tient les quatre premiers) ;
+  - les règles de courrier (`Condition::matches`) gardent les accents, volontairement (elles suivent
+    celles du serveur) ;
+  - la taille d'un petit fichier s'affiche arrondie au Ko (« 2 KB » pour 2 400 octets), comme pour le
+    courrier.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
