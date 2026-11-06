@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Contacts, contact groups, calendar items, meeting requests and journal entries in an Outlook
-//! data file (MS-OXOCNTC, MS-OXOCAL, MS-OXOJRNL).
+//! Contacts, contact groups, calendar items, meeting requests, tasks and journal entries in an
+//! Outlook data file (MS-OXOCNTC, MS-OXOCAL, MS-OXOTASK, MS-OXOJRNL).
 //!
 //! Most of what makes a contact or an appointment lives in *named* properties: their ids differ
 //! from file to file and are found through the file's name-to-id map (MS-PST 2.4.7). The
@@ -26,6 +26,7 @@ mod groups;
 mod meetings;
 mod recur;
 mod sharing;
+mod tasks;
 pub(crate) use files::{card_file, event_file};
 pub(crate) use groups::group_of;
 pub(crate) use meetings::invitation;
@@ -33,6 +34,7 @@ use meetings::{known_zone, uid_of, zone_key_name};
 use recur::recurrence_in;
 pub(crate) use recur::{Own, changed_events};
 pub(crate) use sharing::{put_before, sharing_lines};
+pub(crate) use tasks::task_of;
 
 type GuidKey = (u32, u16, u16, [u8; 8]);
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
@@ -150,9 +152,18 @@ pub(crate) struct Extra {
     pub addresses: Vec<PostalAddress>,
     pub birthday: Option<i64>,
     pub start: Option<i64>,
-    /// A task's due date, and whether it's done.
+    /// A task's due date, and whether it's done (PidLidTaskDueDate, PidLidTaskComplete); its
+    /// status (PidLidTaskStatus: 0 not started, 1 in progress, 2 complete, 3 waiting on someone
+    /// else, 4 deferred), how far along it is in percent (PidLidPercentComplete, a fraction of 1),
+    /// its start (PidLidTaskStartDate), the day it was done (PidLidTaskDateCompleted), and how it
+    /// repeats (PidLidTaskRecurrence, a recurrence pattern).
     pub due: Option<i64>,
     pub done: bool,
+    pub task_status: Option<i64>,
+    pub percent: Option<u8>,
+    pub task_start: Option<i64>,
+    pub completed: Option<i64>,
+    pub task_recurrence: Vec<u8>,
     pub end: Option<i64>,
     pub location: String,
     pub all_day: bool,
@@ -245,6 +256,20 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
     x.location = ns(PSETID_APPOINTMENT, 0x8208);
     x.due = n(PSETID_TASK, 0x8105).and_then(|v| v.time());
     x.done = matches!(n(PSETID_TASK, 0x811C), Some(Val::Bool(true)));
+    x.task_status = match n(PSETID_TASK, 0x8101) {
+        Some(Val::Int(s @ 0..=4)) => Some(s),
+        _ => None,
+    };
+    // A fraction (0.4 is 40%); one out of range, or not a number, is none.
+    x.percent = n(PSETID_TASK, 0x8102)
+        .and_then(|v| v.float())
+        .filter(|f| f.is_finite() && (0.0..=1.0).contains(f))
+        .and_then(|f| u8::try_from((f * 100.0).round() as i64).ok());
+    x.task_start = n(PSETID_TASK, 0x8104).and_then(|v| v.time()).filter(|t| (0..=LAST_TIME).contains(t));
+    x.completed = n(PSETID_TASK, 0x810F).and_then(|v| v.time()).filter(|t| (0..=LAST_TIME).contains(t));
+    if let Some(Val::Bin(b)) = n(PSETID_TASK, 0x8116) {
+        x.task_recurrence = b.get(..MAX_PATTERN).unwrap_or(b).to_vec();
+    }
     x.all_day = matches!(n(PSETID_APPOINTMENT, 0x8215), Some(Val::Bool(true)));
     if let Some(Val::Bin(b)) = n(PSETID_APPOINTMENT, 0x8216) {
         x.recurrence = b.get(..MAX_PATTERN).unwrap_or(b).to_vec();
