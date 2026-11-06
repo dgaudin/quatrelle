@@ -40,13 +40,17 @@ ignore = [
     # gtk 0.18 brings in glib 0.18 for the `drag` crate (dragging mail out to other Linux apps).
     # The flagged `VariantStrIter` is never called here, and no `drag` release has moved on yet.
     { id = "RUSTSEC-2024-0429", reason = "glib via drag's gtk 0.18; VariantStrIter unused" },
-    # S/MIME (quatrelle-smime): timing side channels in RSA (Marvin) and in the big-integer code
-    # under P-256/P-384. Both need an attacker who can time the private key at work, many times
-    # over; Quatrelle uses it only on this computer, when the user signs or opens their own mail,
-    # never as a service and never answering automatically, and every decryption failure is one
-    # error. Fixed only in release candidates (rsa 0.10, crypto-bigint 0.7) so far.
-    { id = "RUSTSEC-2023-0071", reason = "rsa: local signing and decrypting only, no oracle (quatrelle-smime)" },
-    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint under p256/p384: local use only (quatrelle-smime)" },
+    # Timing side channels in RSA (Marvin) and in the big-integer code under P-256/P-384, in the
+    # crypto that S/MIME (quatrelle-smime: cms, p256/p384) and OpenPGP (quatrelle-pgp: rPGP's pgp,
+    # cx448) use. Both need an attacker who can time the private key at work, many times over;
+    # Quatrelle uses it only on this computer, when the user signs or opens their own mail, never
+    # as a service and never answering automatically, and every decryption failure is one error.
+    # Fixed upstream only in the next RustCrypto family: rsa 0.10 (RustCrypto/RSA#626, closed
+    # 2026-11-01, in its release candidates) and crypto-bigint 0.7.6 (p256 0.14). pgp 0.21, cms 0.2
+    # and x509-ocsp 0.2 still need the stable family, so this waits for rsa 0.10.0 and cms 0.3.0;
+    # rPGP ignores the crypto-bigint notice for the same reason.
+    { id = "RUSTSEC-2023-0071", reason = "rsa under cms and pgp: local signing and decrypting only, no oracle" },
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 under p256/p384, pgp and cx448: local use only" },
 ]
 
 # Licences (see CLAUDE.md, clean room): only the permissive ones below pass. Copyleft licences
