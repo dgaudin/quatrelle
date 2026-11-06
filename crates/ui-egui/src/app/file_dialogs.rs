@@ -8,7 +8,9 @@ use std::path::PathBuf;
 
 use crate::*;
 
-/// The file dialog open, and what asked for it.
+mod printing;
+
+/// The file dialog open, and what asked for it; the print window too.
 #[derive(Default)]
 pub(crate) struct FileDialogs {
     /// What runs again once the open dialog is answered, in the place that asked (the message
@@ -16,6 +18,9 @@ pub(crate) struct FileDialogs {
     asked: Option<Action>,
     /// The answer, while that runs again.
     answer: Option<Vec<PathBuf>>,
+    /// While the system's print window is open: what runs if it fails (the PDF opened in the
+    /// viewer, for the message it was asked for).
+    printing: Option<Action>,
 }
 
 /// How often, at most, the window looks for the answer while a dialog is open.
@@ -48,12 +53,16 @@ impl MailApp {
                 Some(c) => Action::ForCompose(c.id, Box::new(a)),
                 None => a,
             },
-            Action::SaveAttachment(_) | Action::SaveAttachments(_) | Action::SaveAll | Action::SaveMessage | Action::ExportPdf | Action::Print => {
-                match &self.session.reading {
-                    Some(r) => Action::InWindow(r.key.clone(), Box::new(a)),
-                    None => a,
-                }
-            }
+            Action::SaveAttachment(_)
+            | Action::SaveAttachments(_)
+            | Action::SaveAll
+            | Action::SaveMessage
+            | Action::ExportPdf
+            | Action::Print
+            | Action::PrintAsPdf => match &self.session.reading {
+                Some(r) => Action::InWindow(r.key.clone(), Box::new(a)),
+                None => a,
+            },
             a => a,
         }
     }

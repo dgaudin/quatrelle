@@ -2034,3 +2034,6 @@ folder	Conflicts	衝突
 	It can't be encrypted for {names}: no certificate	無法為 {names} 加密：沒有憑證
 	Downloading {name}…	正在下載 {name}…
 	{name} could not be downloaded: {error}	無法下載 {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	系統的列印視窗無法使用: 已以 PDF 開啟, 請從檢視器列印
+	Sent to the printer	已傳送到印表機
+	Downloaded as a PDF: print it from the viewer	已下載為 PDF: 請從檢視器列印

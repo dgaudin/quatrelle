@@ -103,6 +103,17 @@ impl MailApp {
                 self.ui.focus_search = true;
                 continue;
             }
+            // Ctrl+P prints the message read in Mail, not while one is written here. Taken, so a
+            // message's window drawn inside this one (the browser) doesn't print its own too.
+            if combo == "Mod+P"
+                && self.session.module == Module::Mail
+                && self.session.reading.is_some()
+                && !self.session.all_composes().any(|c| compose_inline(c, ctx))
+            {
+                ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P));
+                self.act(Action::Print);
+                continue;
+            }
             if combo == "Escape" {
                 // The find bar shown under the message closes first (not from the search box).
                 if self.ui.find.pane.shown(ctx) && !self.ui.search_focused {

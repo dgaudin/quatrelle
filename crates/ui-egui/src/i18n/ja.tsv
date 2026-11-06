@@ -2030,3 +2030,6 @@ folder	Conflicts	競合
 	It can't be encrypted for {names}: no certificate	{names} 宛てには暗号化できません: 証明書がありません
 	Downloading {name}…	{name} をダウンロードしています…
 	{name} could not be downloaded: {error}	{name} をダウンロードできませんでした: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	システムの印刷ウィンドウを使用できません: PDF で開きました。ビューアーから印刷してください
+	Sent to the printer	プリンターに送信しました
+	Downloaded as a PDF: print it from the viewer	PDF としてダウンロードしました: ビューアーから印刷してください

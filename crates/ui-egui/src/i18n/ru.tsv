@@ -2033,3 +2033,6 @@ menu	View	Просмотр
 	It can't be encrypted for {names}: no certificate	Для {names} зашифровать нельзя: нет сертификата
 	Downloading {name}…	Загрузка {name}…
 	{name} could not be downloaded: {error}	Не удалось загрузить {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	Окно печати системы недоступно: открыто как PDF, печатайте из программы просмотра
+	Sent to the printer	Отправлено на принтер
+	Downloaded as a PDF: print it from the viewer	Загружено как PDF: печатайте из программы просмотра

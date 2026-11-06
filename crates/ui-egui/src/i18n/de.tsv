@@ -2034,3 +2034,6 @@ menu	View	Anzeigen
 	It can't be encrypted for {names}: no certificate	Für {names} nicht verschlüsselbar: kein Zertifikat
 	Downloading {name}…	{name} wird heruntergeladen…
 	{name} could not be downloaded: {error}	{name} konnte nicht heruntergeladen werden: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	Das Druckfenster des Systems ist nicht verfügbar: als PDF geöffnet, drucken Sie es aus dem Viewer
+	Sent to the printer	An den Drucker gesendet
+	Downloaded as a PDF: print it from the viewer	Als PDF heruntergeladen: Drucken Sie es aus dem Viewer

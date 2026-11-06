@@ -136,7 +136,13 @@ impl MailApp {
         // asking where: there'd be nothing to save there.
         if matches!(
             a,
-            Action::SaveAttachment(_) | Action::SaveAttachments(_) | Action::SaveAll | Action::SaveMessage | Action::ExportPdf | Action::Print
+            Action::SaveAttachment(_)
+                | Action::SaveAttachments(_)
+                | Action::SaveAll
+                | Action::SaveMessage
+                | Action::ExportPdf
+                | Action::Print
+                | Action::PrintAsPdf
         ) && let Some(why) = self.session.reading.as_ref().filter(|r| r.text_first).map(crate::reading::still_coming)
         {
             self.session.notice(why, true);
@@ -419,11 +425,15 @@ impl MailApp {
                     self.session.notice(tf!("{app} couldn't open it: {error}", app = app.display(), error = e), true);
                 }
             }
-            Action::Print | Action::ExportPdf if self.services.downloads() => {
+            Action::Print | Action::PrintAsPdf | Action::ExportPdf if self.services.downloads() => {
                 let name = format!("{}.pdf", self.message_file_name());
                 match self.session.message_pdf() {
                     Ok(b) => self.services.download(&name, &b),
-                    Err(e) => self.session.notice(e.to_string(), true),
+                    Err(e) => return self.session.notice(e.to_string(), true),
+                }
+                // No print window in the browser: printed from its PDF viewer.
+                if !matches!(a, Action::ExportPdf) {
+                    self.session.notice(tl!("Downloaded as a PDF: print it from the viewer"), false);
                 }
             }
             Action::SaveMessage if self.services.downloads() => {
@@ -456,17 +466,9 @@ impl MailApp {
             }
             Action::InsertPicture if self.services.pick_later("picture") => {}
             Action::AttachFiles if self.services.pick_later("attach") => {}
-            Action::Print => {
-                // The message as a PDF, saved where asked, then opened to print from the viewer.
-                let Some(path) = self.file_answer_one(FileAsk::Save(format!("{}.pdf", self.message_file_name())), Action::Print) else { return };
-                match self.session.run("message.exportPdf", &json!({"path": path.to_string_lossy()})) {
-                    Ok(_) => match self.services.open_path(&path) {
-                        Ok(()) => self.session.notice(tl!("Opened as a PDF: print it from the viewer"), false),
-                        Err(e) => self.session.notice(tf!("The PDF couldn't be opened: {error}", error = e), true),
-                    },
-                    Err(e) => self.session.notice(e.to_string(), true),
-                }
-            }
+            // The system's print window, else the PDF opened in the viewer (`file_dialogs/printing.rs`).
+            Action::Print => self.print(),
+            Action::PrintAsPdf => self.print_as_pdf(),
             Action::ExportPdf | Action::SaveMessage => {
                 let pdf = matches!(a, Action::ExportPdf);
                 let (ext, id) = if pdf { ("pdf", "message.exportPdf") } else { ("eml", "message.saveAs") };

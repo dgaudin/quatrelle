@@ -2034,3 +2034,6 @@ menu	View	Afficher
 	It can't be encrypted for {names}: no certificate	Il ne peut pas être chiffré pour {names} : pas de certificat
 	Downloading {name}…	Téléchargement : {name}…
 	{name} could not be downloaded: {error}	Impossible de télécharger {name} : {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	La fenêtre d'impression du système n'est pas disponible : ouvert en PDF, imprimez-le depuis la visionneuse
+	Sent to the printer	Envoyé à l'imprimante
+	Downloaded as a PDF: print it from the viewer	Téléchargé en PDF : imprimez-le depuis la visionneuse

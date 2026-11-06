@@ -58,7 +58,8 @@ pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;
 pub use services::{
-    Backend, BrowserProfile, FileAsk, Lane, NullBackend, NullServices, ReminderAction, Services, TrayAction, TrayIcon, UpdateState, Work,
+    Backend, BrowserProfile, FileAsk, Lane, NullBackend, NullServices, PrintOutcome, ReminderAction, Services, TrayAction, TrayIcon, UpdateState,
+    Work,
 };
 pub use state::UiState;
 use theme::Tokens;
@@ -193,8 +194,10 @@ pub enum Action {
     Search(String),
     SetDark(Option<bool>),
     SetSystemAccent(bool),
-    /// Print the open message (as a PDF opened in the system's viewer).
+    /// Print the open message: the system's print window, else a PDF opened in the viewer.
     Print,
+    /// The open message as a PDF opened in the viewer, to print there (no print window here).
+    PrintAsPdf,
     /// Save the open message as a PDF, or as its `.eml` source.
     ExportPdf,
     SaveMessage,

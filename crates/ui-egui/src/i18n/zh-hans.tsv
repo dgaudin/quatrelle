@@ -2031,3 +2031,6 @@ menu	View	查看
 	It can't be encrypted for {names}: no certificate	无法为 {names} 加密：没有证书
 	Downloading {name}…	正在下载 {name}…
 	{name} could not be downloaded: {error}	无法下载 {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	系统的打印窗口不可用: 已以 PDF 打开, 请从查看器打印
+	Sent to the printer	已发送到打印机
+	Downloaded as a PDF: print it from the viewer	已下载为 PDF: 请从查看器打印

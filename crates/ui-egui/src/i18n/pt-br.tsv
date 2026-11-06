@@ -2033,3 +2033,6 @@ folder	Conflicts	Conflitos
 	It can't be encrypted for {names}: no certificate	Não dá para criptografar para {names}: nenhum certificado
 	Downloading {name}…	Baixando {name}…
 	{name} could not be downloaded: {error}	Não foi possível baixar {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	A janela de impressão do sistema não está disponível: aberto como PDF, imprima pelo visualizador
+	Sent to the printer	Enviado para a impressora
+	Downloaded as a PDF: print it from the viewer	Baixado como PDF: imprima pelo visualizador

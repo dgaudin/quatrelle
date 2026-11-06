@@ -312,6 +312,10 @@ impl MailApp {
                 // Escape closes the find bar first, while it's shown.
                 let bar = st.find.shown_in_window(ui.ctx(), &key);
                 let closing = ui.input(|i| i.viewport().close_requested() || (i.key_pressed(Key::Escape) && !bar));
+                // Ctrl+P prints this window's message.
+                if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P)) {
+                    mine.push(Action::Print);
+                }
                 egui::Panel::top(egui::Id::unique(("message-window-bar", key.to_id())))
                     .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.border)))
                     .show(ui, |ui| window_toolbar(ui, session, &t, &key, &mut mine));

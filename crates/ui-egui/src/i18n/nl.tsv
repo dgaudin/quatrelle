@@ -2030,3 +2030,6 @@ menu	View	Weergeven
 	It can't be encrypted for {names}: no certificate	Kan niet worden versleuteld voor {names}: geen certificaat
 	Downloading {name}…	{name} downloaden…
 	{name} could not be downloaded: {error}	{name} kon niet worden gedownload: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	Het afdrukvenster van het systeem is niet beschikbaar: als pdf geopend, druk het af vanuit de viewer
+	Sent to the printer	Naar de printer verzonden
+	Downloaded as a PDF: print it from the viewer	Als pdf gedownload: druk het af vanuit de viewer
