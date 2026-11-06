@@ -6,7 +6,7 @@
 //! the public parts here; the one in use first, older ones kept to decrypt). Nothing is active
 //! until the account has one ([`Session::pgp_active`]): no Autocrypt header, no signing, no
 //! encryption. A key made here asks for its backup until one is saved, and says a month ahead
-//! that it runs out. Correspondents' keys are [`people`]'s.
+//! that it runs out. Correspondents' keys are [`people`]'s; reading OpenPGP mail is [`reading`]'s.
 
 use quatrelle_model::job::{PgpChange, PgpWork};
 use quatrelle_pgp as openpgp;
@@ -14,8 +14,10 @@ use quatrelle_pgp as openpgp;
 use super::*;
 
 mod people;
+mod reading;
 pub use people::{Learn, Learnt, PEOPLE_DOC, PEOPLE_MAX, PeopleKeys, PersonKey};
 pub(crate) use people::{OfferedKey, offered};
+pub(crate) use reading::Step;
 
 /// An account's own OpenPGP keys and settings (the account document `pgp.json`).
 pub const PGP_DOC: &str = "pgp.json";
@@ -72,6 +74,10 @@ pub struct PgpCard {
 pub(crate) struct PgpState {
     accounts: HashMap<String, AccountPgp>,
     people: HashMap<String, PeopleKeys>,
+    /// Messages being decrypted: the keys their signature is checked with, and their sender.
+    asked: HashMap<MessageKey, (Vec<Vec<u8>>, String)>,
+    /// What signatures inside decrypted messages say (in memory, as what they held is).
+    signed: HashMap<MessageKey, SignedBy>,
 }
 
 /// `p` as it's kept, its keys read again from their public parts (one that can't be read is let
@@ -344,6 +350,7 @@ impl Session {
         for k in failed {
             self.show_again(&k);
         }
+        self.show_again_without_key(account);
     }
 
     fn heard_pgp_backup(&mut self, account: &str, fingerprint: &str, error: Option<String>) {
@@ -362,7 +369,7 @@ impl Session {
         match e {
             Event::PgpKeys { account, keys, changed, error } => self.heard_pgp_keys(&account, keys, changed, error),
             Event::PgpBackedUp { account, fingerprint, error } => self.heard_pgp_backup(&account, &fingerprint, error),
-            // Reading OpenPGP mail (lot 3, its second half) answers these.
+            Event::PgpDecrypted { key, content, signature, keys, error } => self.heard_pgp_decrypted(key, content, signature, keys, error),
             _ => {}
         }
     }

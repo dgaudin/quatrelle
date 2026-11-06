@@ -1947,3 +1947,24 @@ folder	Conflicts	競合
 	the system keychain isn't available: {error}	システムのキーチェーンを利用できません: {error}
 	the people's OpenPGP keys could not be saved: {error}	相手の OpenPGP キーを保存できませんでした: {error}
 	OpenPGP keys kept for {who}	{who} の OpenPGP キーを保持しました
+	its key ran out on {date}	キーは {date} に期限切れになりました
+	its key isn't valid until {date}	キーは {date} まで有効になりません
+	its key is for {addresses}, not for the sender	キーは {addresses} 用で、差出人用ではありません
+	its owner withdrew the key on {date}	所有者が {date} にキーを取り消しました
+	Before: {key}	以前: {key}
+	Now: {key}	現在: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	この人の OpenPGP キーが変わりました: このメッセージには以前のメールとは別のキーが付いていました。
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	新しいキーを作ったと聞いていなければ、別の方法で本人に確認してください: 誰かがその人の名前で書いているのかもしれません。
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	あなた宛てに暗号化されたメールを読むには、ファイル › 情報 › セキュリティ で OpenPGP キーを作成するかインポートしてください。
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	ほかの人のキー、または Quatrelle にないあなたのキーに向けて暗号化されています: ファイル › 情報 › セキュリティ でそのキーをインポートしてください。
+	Encrypted to the key {keys}	暗号化先のキー: {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	このメッセージは Quatrelle にないキーに向けて暗号化されています。
+	OpenPGP key {fingerprint}	OpenPGP キー {fingerprint}
+	Their key came with their own mail.	この人のキーは本人のメールに付いてきました。
+	You imported their key.	この人のキーはあなたがインポートしました。
+	It's one of your own keys.	あなた自身のキーの 1 つです。
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	{signer} による署名: 署名は有効です (OpenPGP キー {key})。
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Quatrelle にない OpenPGP キー {key} で署名されているため、署名を確認できません。
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	この人のキーは本人のメールに付いてくるか、ファイル › 情報 › セキュリティ でファイルからインポートできます。
+	Import OpenPGP key	OpenPGP キーをインポート
+	Keep this key for its owner's address	このキーを所有者のアドレス用に保持します

@@ -565,7 +565,7 @@ mod events;
 pub use events::{Event, HeldKey, Revocation};
 
 mod pgp;
-pub use pgp::{NO_KEYCHAIN, PgpChange, PgpSignature, PgpWork};
+pub use pgp::{NO_KEYCHAIN, NOT_FOR_YOU, PgpChange, PgpSignature, PgpWork};
 
 mod webex;
 pub use webex::{WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting};

@@ -26,7 +26,7 @@ pub const PEOPLE_MAX: usize = 10_000;
 const KEY_MAX: usize = 1 << 20;
 
 /// The most keys taken from one message.
-const OFFERED_MAX: usize = 8;
+pub(super) const OFFERED_MAX: usize = 8;
 
 /// The largest message whose attached keys are looked for (as `mime::pgp::may_carry` does).
 const KEYS_LOOKED_MAX: usize = 2 << 20;
@@ -280,7 +280,7 @@ impl Session {
         self.pgp.people.insert(account.to_string(), p.checked());
     }
 
-    fn save_people(&mut self, account: &str) {
+    pub(super) fn save_people(&mut self, account: &str) {
         let (Some(store), Some(p)) = (&self.store, self.pgp.people.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, PEOPLE_DOC, p) {
             self.notice_with("the people's OpenPGP keys could not be saved: {error}", &[("error", &e.to_string())], true);

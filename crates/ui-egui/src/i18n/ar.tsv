@@ -1946,3 +1946,24 @@ folder	Conflicts	التعارضات
 	the system keychain isn't available: {error}	سلسلة مفاتيح النظام غير متاحة: {error}
 	the people's OpenPGP keys could not be saved: {error}	تعذّر حفظ مفاتيح OpenPGP الخاصة بمراسليك: {error}
 	OpenPGP keys kept for {who}	احتُفظ بمفاتيح OpenPGP لـ {who}
+	its key ran out on {date}	انتهت صلاحية مفتاحه في {date}
+	its key isn't valid until {date}	مفتاحه غير صالح قبل {date}
+	its key is for {addresses}, not for the sender	مفتاحه لـ {addresses}، لا للمرسل
+	its owner withdrew the key on {date}	سحب مالكه المفتاح في {date}
+	Before: {key}	قبل: {key}
+	Now: {key}	الآن: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	تغيّر مفتاح OpenPGP لهذا الشخص: جاءت هذه الرسالة بمفتاح غير الذي جاءت به رسائله السابقة.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	إن لم يخبرك أنه أنشأ مفتاحًا جديدًا، فتحقّق منه بطريقة أخرى: ربما يكتب أحد باسمه.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	لقراءة البريد المشفّر لك، أنشئ مفتاح OpenPGP أو استورده من ملف › معلومات › الأمان.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	شُفّرت لمفتاح شخص آخر، أو لمفتاح من مفاتيحك ليس لدى Quatrelle: استورده من ملف › معلومات › الأمان.
+	Encrypted to the key {keys}	مشفّرة للمفتاح {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	هذه الرسالة مشفّرة لمفتاح ليس لدى Quatrelle.
+	OpenPGP key {fingerprint}	مفتاح OpenPGP {fingerprint}
+	Their key came with their own mail.	جاء مفتاحه مع بريده هو.
+	You imported their key.	أنت استوردت مفتاحه.
+	It's one of your own keys.	إنه أحد مفاتيحك.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	موقّعة من {signer}: التوقيع صحيح (مفتاح OpenPGP {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	موقّعة بمفتاح OpenPGP {key} وليس لدى Quatrelle، لذا لا يمكن التحقق من التوقيع.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	يأتي مفتاحه مع بريده، أو يمكن استيراده من ملف في ملف › معلومات › الأمان.
+	Import OpenPGP key	استيراد مفتاح OpenPGP
+	Keep this key for its owner's address	الاحتفاظ بهذا المفتاح لعنوان مالكه

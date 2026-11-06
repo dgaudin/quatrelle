@@ -1948,3 +1948,24 @@ menu	View	查看
 	the system keychain isn't available: {error}	系统钥匙串不可用: {error}
 	the people's OpenPGP keys could not be saved: {error}	无法保存联系人的 OpenPGP 密钥: {error}
 	OpenPGP keys kept for {who}	已保留 {who} 的 OpenPGP 密钥
+	its key ran out on {date}	其密钥已于 {date} 过期
+	its key isn't valid until {date}	其密钥要到 {date} 才生效
+	its key is for {addresses}, not for the sender	其密钥属于 {addresses}，而不是发件人
+	its owner withdrew the key on {date}	其所有者已于 {date} 撤销该密钥
+	Before: {key}	之前：{key}
+	Now: {key}	现在：{key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	此人的 OpenPGP 密钥变了：这封邮件带来的密钥与其以前的邮件不同。
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	如果对方没有告诉你换了新密钥，请用其他方式向其确认：可能有人在冒用其名义写信。
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	要阅读加密给你的邮件，请在“文件 › 信息 › 安全”中创建或导入你的 OpenPGP 密钥。
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	它被加密给了别人的密钥，或你的某个 Quatrelle 没有的密钥：请在“文件 › 信息 › 安全”中导入该密钥。
+	Encrypted to the key {keys}	加密给密钥 {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	这封邮件被加密给了一个 Quatrelle 没有的密钥。
+	OpenPGP key {fingerprint}	OpenPGP 密钥 {fingerprint}
+	Their key came with their own mail.	其密钥随其本人的邮件而来。
+	You imported their key.	其密钥是你导入的。
+	It's one of your own keys.	这是你自己的密钥之一。
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	由 {signer} 签名：签名有效（OpenPGP 密钥 {key}）。
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	使用 Quatrelle 没有的 OpenPGP 密钥 {key} 签名，因此无法验证签名。
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	其密钥会随其邮件而来，也可以在“文件 › 信息 › 安全”中从文件导入。
+	Import OpenPGP key	导入 OpenPGP 密钥
+	Keep this key for its owner's address	为其所有者的地址保留此密钥

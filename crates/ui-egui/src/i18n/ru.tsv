@@ -1950,3 +1950,24 @@ menu	View	Просмотр
 	the system keychain isn't available: {error}	системная связка ключей недоступна: {error}
 	the people's OpenPGP keys could not be saved: {error}	Не удалось сохранить ключи OpenPGP ваших собеседников: {error}
 	OpenPGP keys kept for {who}	Ключи OpenPGP сохранены для {who}
+	its key ran out on {date}	срок действия его ключа истёк {date}
+	its key isn't valid until {date}	его ключ действителен только с {date}
+	its key is for {addresses}, not for the sender	его ключ выдан для {addresses}, а не для отправителя
+	its owner withdrew the key on {date}	владелец отозвал ключ {date}
+	Before: {key}	Было: {key}
+	Now: {key}	Стало: {key}
+	This person's OpenPGP key changed: this message came with a different key from their earlier mail.	Ключ OpenPGP этого человека изменился: это письмо пришло с другим ключом, чем его прежние письма.
+	If they didn't tell you they made a new key, check with them some other way: someone may be writing in their name.	Если он не говорил вам, что сделал новый ключ, уточните у него другим способом: возможно, кто-то пишет от его имени.
+	To read mail encrypted to you, make or import your OpenPGP key in File › Info › Security.	Чтобы читать письма, зашифрованные для вас, создайте или импортируйте свой ключ OpenPGP в разделе Файл › Сведения › Безопасность.
+	It was encrypted to someone else's key, or to one of yours Quatrelle wasn't given: import that one in File › Info › Security.	Оно зашифровано для чужого ключа или для вашего ключа, которого нет в Quatrelle: импортируйте его в разделе Файл › Сведения › Безопасность.
+	Encrypted to the key {keys}	Зашифровано для ключа {keys}
+	This message is encrypted to a key Quatrelle doesn't have.	Это письмо зашифровано для ключа, которого нет в Quatrelle.
+	OpenPGP key {fingerprint}	Ключ OpenPGP {fingerprint}
+	Their key came with their own mail.	Его ключ пришёл с его собственным письмом.
+	You imported their key.	Вы импортировали его ключ.
+	It's one of your own keys.	Это один из ваших собственных ключей.
+	Signed by {signer}: the signature holds (OpenPGP key {key}).	Подписано: {signer}. Подпись верна (ключ OpenPGP {key}).
+	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Подписано ключом OpenPGP {key}, которого нет в Quatrelle, поэтому подпись нельзя проверить.
+	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Его ключ приходит с его письмами или может быть импортирован из файла в разделе Файл › Сведения › Безопасность.
+	Import OpenPGP key	Импортировать ключ OpenPGP
+	Keep this key for its owner's address	Сохранить этот ключ для адреса его владельца
