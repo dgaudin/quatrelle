@@ -199,12 +199,21 @@ impl Sink {
 
 impl Worker {
     /// The account's calendars and address books as the window last kept them, reading what it
-    /// last asked for ([`quatrelle_model::pim::PIM_READING_DOC`]), with the appointments made on
-    /// the server since that it hasn't taken in yet ([`Stored`]).
+    /// last asked for ([`quatrelle_model::pim::PIM_READING_DOC`]), with other people's
+    /// appointments it set aside while the calendar isn't shown (a calendar read by its changes
+    /// goes on from what's kept of it; one kept in both isn't doubled) and the appointments made
+    /// on the server since that it hasn't taken in yet ([`Stored`]).
     pub(super) fn load_pim(&self) -> quatrelle_model::pim::Pim {
-        use quatrelle_model::pim::{PIM_DOC, PIM_READING_DOC, PimReading};
+        use quatrelle_model::pim::{PARKED_DOC, PIM_DOC, PIM_READING_DOC, PimReading};
         let mut pim: Pim = self.store.load_account_doc(&self.acc.id, PIM_DOC).unwrap_or_default();
         pim.read_as(self.store.load_account_doc::<Option<PimReading>>(&self.acc.id, PIM_READING_DOC).unwrap_or_default());
+        // A calendar is kept in one or the other: one the calendar's document has isn't taken from
+        // the set-aside one (a copy left there).
+        let aside: Vec<StoredEvent> = self.store.load_account_doc(&self.acc.id, PARKED_DOC).unwrap_or_default();
+        if !aside.is_empty() {
+            let here: std::collections::HashSet<String> = pim.events.iter().map(|e| e.calendar.clone()).collect();
+            pim.events.extend(aside.into_iter().filter(|e| !here.contains(&e.calendar)));
+        }
         self.sink.carry_stored(&self.acc.id, &mut pim);
         pim
     }

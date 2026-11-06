@@ -20,6 +20,10 @@ pub const LOCAL: &str = "local";
 /// Where an account's calendars and address books are kept in its cache.
 pub const PIM_DOC: &str = "pim.json";
 
+/// Where other people's appointments are set aside while the calendar isn't shown (a list of
+/// [`StoredEvent`]s): the engine keeps them there, and a sync goes on from them.
+pub const PARKED_DOC: &str = "pim-parked.json";
+
 /// Where what an account's next calendar sync reads is kept ([`PimReading`]).
 pub const PIM_READING_DOC: &str = "pim-reading.json";
 
@@ -318,6 +322,13 @@ pub struct Pim {
     /// changed then waits any more.
     #[serde(default)]
     pub version: u32,
+    /// Where the server's Notes and Tasks folders were last read up to (Exchange's sync state),
+    /// saved with the notes and tasks read then: the next sync reads only what changed since, as
+    /// Outlook's Cached Exchange Mode does. Empty: read whole.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes_state: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tasks_state: String,
 }
 
 /// What [`Pim::version`] is now: 1, Exchange Online's Show As and Private read and written.
@@ -387,6 +398,12 @@ pub struct DavSync {
     pub tasks: Option<Vec<StoredTask>>,
     #[serde(default)]
     pub pushed_tasks: Vec<StoredTask>,
+    /// The state the server's notes and tasks (`notes`, `tasks`) were read up to, kept with them
+    /// ([`Pim::notes_state`]); empty: none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes_state: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tasks_state: String,
     /// Deletions done (by href).
     pub deleted: Vec<String>,
     /// Appointments changed here whose item the server no longer has (deleted there meanwhile),

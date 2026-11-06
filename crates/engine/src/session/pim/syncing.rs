@@ -81,6 +81,8 @@ impl Session {
         // The server's notes, by their item there; those changed here (and those never sent)
         // stay.
         if let Some(server) = &sync.notes {
+            // The state they were read up to, kept with them.
+            p.notes_state.clone_from(&sync.notes_state);
             p.notes.retain(|n| n.dirty || n.href.is_empty());
             for x in server {
                 // Deleted here, the server not told yet (offline): it stays deleted.

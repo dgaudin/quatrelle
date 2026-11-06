@@ -335,6 +335,10 @@ pub struct Session {
     /// Other people's calendars read again while theirs were set aside, by account: what was
     /// read wins over what was set aside.
     read_aside: HashMap<String, HashSet<String>>,
+    /// Accounts whose appointments brought back are still in their set-aside document, the
+    /// calendar not saved with them since: the worker reads them there, and the document is
+    /// emptied once the calendar is saved (`pim/parking.rs`).
+    aside_on_disk: HashSet<String>,
     /// Previews worked out from sources for list rows that came without one
     /// ([`Session::fill_previews`]).
     previews: HashMap<MessageKey, Preview>,
@@ -529,6 +533,7 @@ impl Session {
             parked: HashSet::new(),
             away_from_calendar: None,
             read_aside: HashMap::new(),
+            aside_on_disk: HashSet::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             lists_read: 0,
