@@ -210,9 +210,12 @@ fn an_on_premises_exchange_account_works_through_ews() {
     }
     pool.submit(Job::Apply { account: "a1".into(), op: Op::EmptyFolder { path: "Deleted Items".into() } });
     eventually("emptied", || !data.lock().unwrap().items.iter().any(|i| i.folder == trash));
+    // As Outlook's Cached Exchange Mode does (`SoftDelete`): Recover Deleted Items brings it back.
+    assert_eq!(data.lock().unwrap().recoverable.iter().filter(|i| i.folder == trash).count(), 3, "emptied into Recoverable Items");
     let gone = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Storyboard").unwrap().key.clone();
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone] } });
     eventually("deleted for good", || !data.lock().unwrap().items.iter().any(|i| i.id == first));
+    assert!(data.lock().unwrap().recoverable.iter().any(|i| i.id == first), "recoverable, as Shift+Delete in Outlook");
 
     // Send: the Bcc goes in the MIME for Exchange; Sent Items has the copy.
     let raw = b"From: riley@contoso.example\r\nTo: zoe@contoso.example\r\nSubject: e2e\r\nMessage-ID: <e2e@x>\r\n\r\nhi\r\n".to_vec();

@@ -126,6 +126,9 @@ pub struct Data {
     pub refused: Vec<String>,
     /// Items `DeleteItem` refuses (`ErrorAccessDenied`), by id: they stay.
     pub undeletable: Vec<String>,
+    /// Mail deleted with `SoftDelete` (`deleting.rs`): in Recoverable Items, where Recover Deleted
+    /// Items finds it. `HardDelete` leaves nothing the user can reach.
+    pub recoverable: Vec<It>,
     /// People who stopped sharing their calendar with the account: every request naming their
     /// mailbox, or one of their items, is refused (`ErrorAccessDenied`).
     pub withdrawn: Vec<String>,
@@ -333,6 +336,7 @@ impl Default for Data {
             unreadable: Vec::new(),
             refused: Vec::new(),
             undeletable: Vec::new(),
+            recoverable: Vec::new(),
             withdrawn: Vec::new(),
             public_changes_refused: false,
             item_shapes: Vec::new(),
@@ -756,6 +760,7 @@ fn xml(e: &El) -> String {
 }
 
 mod attachments;
+mod deleting;
 mod directory;
 mod fields;
 mod meetings;
