@@ -320,16 +320,14 @@ pub fn mail_colors_on(fg: Option<[u8; 3]>, bg: Option<[u8; 3]>, page: [u8; 3], t
         }
         None => None,
     };
+    let black_or_white = |b: [u8; 3]| if contrast([0, 0, 0], b) >= contrast([255, 255, 255], b) { Color32::BLACK } else { Color32::WHITE };
     let text = match (fg, bg) {
         (Some(c), _) => Color32::from_rgb(c[0], c[1], c[2]),
         // A highlight without its own text colour: black or white, whichever reads.
-        (None, Some(b)) => {
-            if contrast([0, 0, 0], b) >= contrast([255, 255, 255], b) {
-                Color32::BLACK
-            } else {
-                Color32::WHITE
-            }
-        }
+        (None, Some(b)) => black_or_white(b),
+        // On a cell of its own colour the theme's text doesn't read on (a light blue row in
+        // dark mode, a dark heading row in light mode): the same.
+        (None, None) if contrast([default.r(), default.g(), default.b()], under) < 3.0 => black_or_white(under),
         (None, None) => default,
     };
     (text, bg.map(|b| Color32::from_rgb(b[0], b[1], b[2])))
@@ -420,6 +418,21 @@ pub fn regular(size: f32) -> egui::FontId {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Text that sets no colour, in a cell of its own colour that the theme's text doesn't read
+    /// on (a newsletter's light blue row in dark mode, a dark heading row in light mode): black
+    /// or white, whichever reads, as a highlight's; on the page, the theme's own.
+    #[test]
+    fn plain_text_reads_on_a_coloured_cell() {
+        for t in [Tokens::light(), Tokens::dark()] {
+            for cell in [[0xb8, 0xdc, 0xff], [0x1f, 0x5f, 0x8b], [0xf0, 0xb8, 0x00]] {
+                let (fg, _) = mail_colors_on(None, None, cell, &t, t.text);
+                let c = [fg.r(), fg.g(), fg.b()];
+                assert!(contrast(c, cell) >= 3.0, "{c:?} on {cell:?}, dark {}", t.dark);
+            }
+            assert_eq!(mail_colors_on(None, None, rgb(t.surface), &t, t.text).0, t.text);
+        }
+    }
 
     /// Upstream issue #41: a pale tint on a pale page is still a box (a newsletter's light yellow
     /// blocks on light grey, as Outlook shows them); the page's own colour, or one a shade off
