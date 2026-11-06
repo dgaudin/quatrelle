@@ -4297,6 +4297,98 @@ l'adresse et que zbus ne décode pas.
     fenêtre, et l'export n'attend plus rien) ;
   - `ui-egui/src/lib.rs` passe à 806 lignes (803 comptées) : à découper avant d'y ajouter.
 
+### État de la récupération : v0.33, troisième partie : le bureau GNOME (S2) (2026-11-06)
+
+Le lot S2 de `merge-tools/survey-v0.33.md`, sur `main`, après S1, plus un reste de P4a (la
+fenêtre du système qui demandait « Remplacer ? » alors que l'export complète le .pst). Chaque
+point a sa sonde, lancée d'abord contre le code d'alors (ou contre la correction coupée le temps
+d'un essai, quand le test appelle ce qu'elle ajoute).
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `84fb9314` | découpe de `ui-egui/src/lib.rs` (806 lignes) : `first_frame` et `trace_window` dans `os_windows.rs`, code inchangé | — (pur déplacement ; `lib.rs` à 766 lignes) |
+| `90fee8a7` | adapté de `7f0ba88d` : chaque fenêtre à part porte l'identifiant d'application (`os_windows::APP_ID`, `os_window()`) | `windows_of_their_own_carry_the_app_id` : **5 fenêtres sans identifiant** (`app/windows.rs:75`, `:188`, `:294`, `app/source.rs:21`, `panes/reminders.rs:136`) → aucune |
+| `b4b06c09` | reprise de `61aa3687` (auteur Zinadin Zidan) : `StartupNotify=false` dans le `.desktop` | — (ne se voit qu'en vrai) |
+| `405c1469` | reprise de `8a9f0eb4` (auteur Zinadin Zidan) : Échap quitte d'abord le champ, puis la page Fichier | `esc_leaves_a_file_page_field_before_the_page` : **la page fermée** au premier Échap → le champ quitté, la page au second |
+| `3e8f82fb` | adapté de `4471fbbf` : la liste des langues dans l'ordre de leur nom | `the_language_list_reads_in_order` : English, Español, Français, Deutsch… → English, Deutsch, Español, Français, Italiano, Nederlands, Português, puis les autres écritures |
+| `9484b48c` | reprise de `d38183be` (auteur Zinadin Zidan) : un chemin non mis entre guillemets, coupé aux espaces, est recollé | `unquoted_paths_with_spaces_are_joined_again` : `["D:\\Mail\\Order", "42.eml"]` → un seul chemin |
+| `14dd880a` | propre au fork (reste de P4a) : « Ajouter à un fichier » ouvre le .pst par la fenêtre Ouvrir, qui ne demande pas de remplacer | `adding_to_a_data_file_opens_it_rather_than_asking_to_replace_it` (voir plus bas) |
+
+**L'identifiant d'application** (`7f0ba88d`). Le fork a cinq fenêtres à part, deux de plus que
+l'origine : rédaction, message ouvert, rendez-vous ou réunion, source d'un message, rappels. Toutes
+sont faites par `os_window()`, qui pose `ai.storyteller.quatrelle` ; la fenêtre principale et les
+notifications de Windows lisent la même constante. `APP_ID` et `os_window` vont dans le nouveau
+`os_windows.rs` (15 fichiers Rust dans `ui-egui/src/`), pas dans `lib.rs`. La sonde de l'origine
+parcourt les sources : chez nous elle écarte `os_windows.rs` (et non `lib.rs`) et nomme chaque ligne
+fautive, pas seulement le fichier (`app/windows.rs` en a trois). Sans la ligne de `CHANGELOG.md`, que
+le fork n'a pas (le correctif de l'origine ne s'appliquait pas d'un bloc à cause d'elle).
+
+**Le démarrage sous GNOME** (`61aa3687`). Ni winit 0.30 ni eframe ne lisent `XDG_ACTIVATION_TOKEN`
+au démarrage (eframe sait demander un jeton pour lever une fenêtre, `request_activation_token`,
+mais n'achève pas la notification de lancement) : avec `StartupNotify=true`, GNOME attendait sa fin
+jusqu'au délai. Le Flatpak et le paquet FreeBSD prennent le même fichier.
+
+**Échap sur la page Fichier** (`8a9f0eb4`). Même changement que l'origine, posé à la main (le
+`keys.rs` du fork diffère) : `UiState::backstage_typing` dans `state.rs`, mis à jour à la fin du
+dessin de la page Fichier, remis à faux quand la page n'est pas ouverte.
+
+**La liste des langues** (`4471fbbf`). `fold_all` n'existe pas ici : la clé de tri prend
+`fold_word` de la recherche (`model/src/search/fold.rs`), qui ôte les accents de même. 14 langues,
+sans le turc.
+
+**Les chemins coupés** (`d38183be`). Pris tel quel, hormis un commentaire de test que le correctif
+avait séparé de son test (`paths_are_absolute`), remis à sa place. Sous GNOME, le `.desktop` passe
+des liens (`%U`) : l'effet vise surtout Windows.
+
+**« Remplacer ? » pour un fichier complété** (propre au fork, le reste de P4a). Depuis P4a,
+exporter vers un .pst déjà là y ajoute le courrier sans rien perdre, mais la seule entrée était
+« Enregistrer comme fichier de données Outlook… », c'est-à-dire la fenêtre Enregistrer du système,
+qui demande toujours de remplacer un fichier choisi. Ni `rfd` ni le portail n'offrent de la faire
+taire : `SaveFile` du portail n'a pas d'option pour cela, le chemin GTK3 de rfd force
+`do_overwrite_confirmation`, zenity passe `--confirm-overwrite`, et les panneaux de macOS et de
+Windows font de même. **Choix : deux entrées**, dans l'allure du fork :
+- Ouvrir et exporter : à côté de la tuile « Exporter » (inchangée, Enregistrer sous), une tuile
+  « Ajouter à un fichier » (icône Fluent `add`), avec les boutons des comptes comme sa voisine ;
+- Informations du compte : « Ajouter à un fichier de données Outlook… » à côté de « Enregistrer
+  comme fichier de données Outlook… », avec une bulle qui dit ce qui reste ;
+- ces deux entrées demandent `FileAsk::AddToDataFile`, c'est-à-dire la fenêtre **Ouvrir** du
+  système (fichiers .pst), qui ne parle pas de remplacer. Son titre, « Ajouter à un fichier de
+  données Outlook », est dans la langue de l'interface (`i18n::t`, le même texte que la tuile) ;
+  les autres titres des fenêtres de fichiers sont toujours en anglais, comme avant ;
+- quelle que soit l'entrée, un fichier déjà là est annoncé comme complété : « Ajout à {file}… (ce
+  qu'il contient déjà reste) » au lieu de « Exportation vers {file}… ». Cela vaut aussi pour un
+  fichier existant choisi dans Enregistrer sous, juste après la question du système : l'avis la
+  corrige aussitôt.
+
+Écarté : un menu sur chaque compte (deux choix cachés), et une question de Quatrelle après la
+fenêtre Enregistrer (une question de plus, après celle du système qui dit le contraire). L'export
+quitte `app/actions.rs` pour `app/file_dialogs/data_files.rs` (`MailApp::export_data_file`). Cinq
+textes, dans les 13 catalogues. La sonde dessine sans écran la page Ouvrir et exporter, clique la
+tuile « Ajouter à un fichier » : **Ouvrir** est demandé (`FileAsk::AddToDataFile`), l'avis dit
+« Adding to Old.pst… » ; puis la tuile « Exporter » : **Enregistrer sous** (`FileAsk::Save`, un nom
+en `.pst`), l'avis dit « Exporting to New.pst… » pour un fichier neuf, « Adding to Old.pst… » pour un
+fichier déjà là.
+
+- **Ce que verra le propriétaire** : les fenêtres de rédaction, de message, de rendez-vous, de
+  source et des rappels ont l'icône de Quatrelle dans le dock de GNOME et se rangent avec la
+  fenêtre principale ; plus de curseur occupé (ou d'attente) après le lancement depuis le menu ;
+  Échap dans un champ des Options n'efface plus la page ; la liste des langues dans l'ordre
+  alphabétique de leurs noms ; sur Ouvrir et exporter, une tuile « Ajouter à un fichier » (et un
+  bouton dans Informations) qui ouvre un .pst sans demander de le remplacer.
+- **Vérifié** : chaque sonde avant et après ; toute la suite de l'interface (510 tests) ;
+  `cargo xtask ci` (wasm compris).
+- **Vérifiable seulement en vrai** :
+  - l'icône des fenêtres à part dans le dock de GNOME Wayland (et leur regroupement) ;
+  - l'effet de `StartupNotify=false` : le curseur ou la roue d'attente après un lancement depuis
+    le menu ou le dock, une fois le paquet installé (le `.desktop` du système compte, pas celui
+    du dépôt) ;
+  - la fenêtre Ouvrir du portail GNOME pour « Ajouter à un fichier » : son titre, le filtre .pst,
+    et qu'elle ne pose aucune question.
+- **Reste, remarqué** :
+  - les titres des autres fenêtres de fichiers du bureau (« Save as », « Attach files », « Open
+    data file »…) et les noms de leurs filtres sont en anglais en dur dans `desktop.rs` ;
+  - `app/` a toujours 16 fichiers Rust ; `ui-egui/src/` en a 15.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
