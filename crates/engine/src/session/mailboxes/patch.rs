@@ -167,7 +167,7 @@ impl Session {
 
     /// Count the unread mail of the row the message at `i` in the list is on again (its own, or
     /// its conversation's); false when it has none to count.
-    fn patch_unread(&mut self, i: usize) -> bool {
+    pub(super) fn patch_unread(&mut self, i: usize) -> bool {
         let Some(key) = self.list.get(i).map(|m| m.key.clone()) else { return false };
         let unread = |j: &usize| self.list.get(*j).is_some_and(|m| !m.flags.seen);
         let count = if self.prefs.conversations && !self.threads.is_empty() {

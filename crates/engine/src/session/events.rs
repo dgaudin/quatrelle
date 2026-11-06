@@ -126,31 +126,8 @@ impl Session {
             }
             // The echo of a flag or category changed here: the folder in memory has it already.
             Event::FolderChanged { account, folder } if self.own_echo(&account, &folder) => {}
-            Event::FolderChanged { account, folder } => {
-                if self.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder) {
-                    self.showing_more = None;
-                }
-                self.reload_folder(&account, &folder);
-                self.note_new_mail(&account, &folder);
-                // A reply saved in Drafts (or gone from there): the list's marks follow.
-                if self.folder(&account, &folder).is_some_and(|f| f.role == FolderRole::Drafts) {
-                    self.note_drafts();
-                }
-                let visible = self.search.is_some() || self.view_folders().iter().any(|(a, f)| *a == account && *f == folder);
-                if visible {
-                    self.refresh_list();
-                }
-                if let Some(r) = &self.reading
-                    && r.key.account == account
-                    && r.key.folder == folder
-                {
-                    let key = r.key.clone();
-                    let thread = self.thread_of(&key);
-                    if let Some(r) = self.reading.as_mut() {
-                        r.thread = thread;
-                    }
-                }
-            }
+            Event::FolderChanged { account, folder } => self.folder_changed(&account, &folder),
+            Event::FolderSynced { account, folder, change } => self.folder_synced(&account, &folder, *change),
             Event::ServerSearched { account, query, keys, error, done } => {
                 if let Some(ss) = self.server_search.as_mut().filter(|ss| ss.query == query) {
                     // What's found so far shows at once; the account is done at its last answer.

@@ -3,8 +3,10 @@
 //! What a sync costs the window on a big folder on screen: the folder made up (50,000 messages
 //! in the Inbox of a server account, `MC_PER` for another size), shown, and a sync that brings
 //! three messages and takes one away, five times. Printed: what the account's thread spends
-//! saving the list, and what the window spends taking the change (its time, the messages it read
-//! from the disk again), by date and in conversations.
+//! saving the list (noting what changed in it, or not), and what the window spends taking the change (its
+//! time, the messages it read from the disk again), by date and in conversations; told as it is
+//! (`FolderSynced`), and told only that the folder changed (`FolderChanged`, as every sync was
+//! before, and a first sync still is).
 //!
 //! ```text
 //! cargo test -p quatrelle-engine --release --lib bench::sync::three_in_one_out -- --ignored --nocapture
@@ -19,10 +21,12 @@ use super::*;
 const NOW: i64 = 1_800_000_000;
 
 /// A sync of `folder`, as an account's thread makes it: three messages come (numbered after the
-/// others, the newest), one goes (from the middle); the list saved. What the window is told, and
-/// how long the save took.
-fn sync(store: &Store, account: &str, folder: &str, round: u32) -> (Event, Duration) {
+/// others, the newest), one goes (from the middle); the list saved, its changes noted. What the
+/// window is told (`told`: what changed, or only that it did), and how long the save took.
+fn sync(store: &Store, account: &str, folder: &str, round: u32, told: bool) -> (Event, Duration) {
     let t = Instant::now();
+    // Noted only when it's told (saved as before otherwise, to weigh what noting costs).
+    let noting = told.then(|| store.note_changes(account, folder));
     let mut st = store.load_folder(account, folder).unwrap();
     let top = st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0);
     let middle = st.messages.len() / 2;
@@ -41,7 +45,11 @@ fn sync(store: &Store, account: &str, folder: &str, round: u32) -> (Event, Durat
     }
     st.uid_next = top + 4;
     store.save_folder(account, folder, &st).unwrap();
-    (Event::FolderChanged { account: account.into(), folder: folder.into() }, t.elapsed())
+    let event = match noting.map_or(quatrelle_store::Noted::Unknown, quatrelle_store::NoteGuard::take) {
+        quatrelle_store::Noted::Changed(change) if told => Event::FolderSynced { account: account.into(), folder: folder.into(), change },
+        _ => Event::FolderChanged { account: account.into(), folder: folder.into() },
+    };
+    (event, t.elapsed())
 }
 
 /// The marks the window sent kept, as the pool keeps them, and their echo told (or the next
@@ -74,7 +82,7 @@ fn three_in_one_out() {
     println!("list: {} messages", s.list.len());
     let ms = |d: Duration| d.as_secs_f64() * 1000.0;
     let mut round = 0;
-    for (conversations, by) in [(false, "date"), (true, "date")] {
+    for (conversations, by, told) in [(false, "date", true), (true, "date", true), (false, "date", false), (true, "date", false)] {
         let _ = s.run("view.conversations", &json!({"on": conversations}));
         let _ = s.run("view.arrange", &json!({"by": by}));
         let Some(first) = s.list.get(10).map(|m| m.key.to_id()) else { continue };
@@ -83,7 +91,7 @@ fn three_in_one_out() {
         let (mut saved, mut window, mut read) = (Duration::ZERO, Duration::ZERO, 0);
         for _ in 0..5 {
             round += 1;
-            let (event, save) = sync(&store, &account, "INBOX", round);
+            let (event, save) = sync(&store, &account, "INBOX", round, told);
             saved += save;
             let before = s.messages_read();
             let t = Instant::now();
@@ -94,8 +102,9 @@ fn three_in_one_out() {
         let want = store.load_folder(&account, "INBOX").unwrap().messages.len();
         assert_eq!(s.list.len(), want, "the list shows the folder");
         println!(
-            "a sync, 3 in and 1 out (conversations {conversations}, by {by}): the window {:.1} ms, {} messages read again; \
+            "a sync, 3 in and 1 out (conversations {conversations}, by {by}), {}: the window {:.1} ms, {} messages read again; \
              the account's thread saving the list {:.1} ms",
+            if told { "told what changed" } else { "told it changed" },
             ms(window) / 5.0,
             read / 5,
             ms(saved) / 5.0

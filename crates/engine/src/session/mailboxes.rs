@@ -28,6 +28,7 @@ pub(crate) use people::People;
 pub use people::{Expansion, FIELD_NAMES, FieldId, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, Source, Suggestion};
 mod envelope;
 mod shared_mailboxes;
+mod synced;
 mod trust;
 pub(crate) use envelope::Envelope;
 
@@ -396,16 +397,19 @@ impl Session {
         };
         self.nav.build(&list, &all, conversations, !shown);
         self.threads = all;
-        let alive: BTreeSet<&MessageKey> = list.iter().map(|m| &m.key).collect();
-        self.selection.retain(|k| alive.contains(k));
-        if self.focus.as_ref().is_some_and(|k| !alive.contains(k)) {
+        // What's still in the list, by the index just built (a set of every key made for it was
+        // a tenth of what a sync's change to a big folder cost).
+        let nav = &self.nav;
+        let alive = |k: &MessageKey| nav.holds(&list, k);
+        self.selection.retain(|k| alive(k));
+        if self.focus.as_ref().is_some_and(|k| !alive(k)) {
             self.focus = None;
         }
-        if self.anchor.as_ref().is_some_and(|k| !alive.contains(k)) {
+        if self.anchor.as_ref().is_some_and(|k| !alive(k)) {
             self.anchor = None;
         }
         if let Some(r) = &self.reading
-            && !alive.contains(&r.key)
+            && !alive(&r.key)
             && self.search.is_none()
         {
             self.reading = None;
