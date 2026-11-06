@@ -2028,3 +2028,5 @@ menu	View	Weergeven
 	Every recipient can receive it encrypted ({scheme})	Alle ontvangers kunnen het versleuteld ontvangen ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	Kan niet worden versleuteld voor {names}: geen bruikbare OpenPGP-sleutel
 	It can't be encrypted for {names}: no certificate	Kan niet worden versleuteld voor {names}: geen certificaat
+	Downloading {name}…	{name} downloaden…
+	{name} could not be downloaded: {error}	{name} kon niet worden gedownload: {error}

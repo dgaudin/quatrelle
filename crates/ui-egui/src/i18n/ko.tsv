@@ -2030,3 +2030,5 @@ folder	Conflicts	충돌
 	Every recipient can receive it encrypted ({scheme})	모든 받는 사람이 암호화된 채로 받을 수 있습니다({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	{names}에게는 암호화할 수 없습니다: 쓸 수 있는 OpenPGP 키 없음
 	It can't be encrypted for {names}: no certificate	{names}에게는 암호화할 수 없습니다: 인증서 없음
+	Downloading {name}…	{name} 다운로드 중…
+	{name} could not be downloaded: {error}	{name}을(를) 다운로드할 수 없습니다: {error}

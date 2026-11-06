@@ -116,3 +116,36 @@ fn an_imported_contacts_files_show_on_their_page() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An Exchange appointment's files (R25): one kept with it, one left on the server until it's
+/// opened, and the attached minutes; all three chips alike, each with its size.
+#[test]
+fn an_exchange_appointments_files_show_whether_here_or_on_the_server() {
+    use quatrelle_engine::model::pim::StoredEvent;
+    use quatrelle_engine::model::pim::files::server_file_line;
+    let (mut a, dir) = app("item-files-exchange");
+    let ctx = egui::Context::default();
+    let mut tex = Textures::default();
+    frame(&ctx, &mut a, vec![]);
+    let start = (NOW / 86_400 + 1) * 86_400 + 13 * 3600;
+    let account = a.session.accounts[0].config.id.clone();
+    let deck = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    let extra = vec![
+        format!("ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"Agenda.pdf\":{}", base64_encode(&[b'%'; 3000])),
+        server_file_line("Deck Q4.pptx", deck, 1_500_000, "AAMkAD-2=").unwrap(),
+        format!(
+            "ATTACH;FMTTYPE=message/rfc822;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"Minutes.eml\":{}",
+            base64_encode(b"Subject: Minutes\r\n\r\nWe agreed.\r\n")
+        ),
+    ];
+    let event = CalEvent { uid: "ews-files-1".into(), summary: "Budget review".into(), start, end: start + 3600, extra, ..Default::default() };
+    a.session.pim_mut(&account).events.push(StoredEvent { calendar: "ews:calendar".into(), href: "R1".into(), event, ..Default::default() });
+    a.ui.dialog = Dialog::open_event(&a.session, "ews-files-1", start);
+    let t = drawn(&ctx, &mut a, &mut tex, "exchange-files");
+    assert_eq!(a.ui.event_windows.len(), 1);
+    for want in ["3 attachments", "Agenda.pdf", "3 KB", "Deck Q4.pptx", "Minutes.eml"] {
+        assert!(has(&t, want), "{want} in {t:?}");
+    }
+    assert!(t.iter().any(|s| s.contains("MB")), "the deck's size: {t:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

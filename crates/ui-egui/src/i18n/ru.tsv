@@ -2031,3 +2031,5 @@ menu	View	Просмотр
 	Every recipient can receive it encrypted ({scheme})	Все получатели могут получить его зашифрованным ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	Для {names} зашифровать нельзя: нет пригодного ключа OpenPGP
 	It can't be encrypted for {names}: no certificate	Для {names} зашифровать нельзя: нет сертификата
+	Downloading {name}…	Загрузка {name}…
+	{name} could not be downloaded: {error}	Не удалось загрузить {name}: {error}

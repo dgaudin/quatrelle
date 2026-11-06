@@ -26,6 +26,7 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::trust_domain(&account, &site));
             }
         }
+        self.open_files_come();
         let news = self.session.take_new_mail();
         if !news.is_empty() {
             // Issue #4: the system keeps its notifications (Windows, in its history): one for an

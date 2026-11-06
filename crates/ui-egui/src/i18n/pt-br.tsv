@@ -2031,3 +2031,5 @@ folder	Conflicts	Conflitos
 	Every recipient can receive it encrypted ({scheme})	Todos os destinatários podem receber criptografada ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	Não dá para criptografar para {names}: nenhuma chave OpenPGP utilizável
 	It can't be encrypted for {names}: no certificate	Não dá para criptografar para {names}: nenhum certificado
+	Downloading {name}…	Baixando {name}…
+	{name} could not be downloaded: {error}	Não foi possível baixar {name}: {error}

@@ -2027,3 +2027,5 @@ folder	Conflicts	התנגשויות
 	Every recipient can receive it encrypted ({scheme})	כל הנמענים יכולים לקבל אותה מוצפנת ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	אי אפשר להצפין עבור {names}: אין מפתח OpenPGP שמיש
 	It can't be encrypted for {names}: no certificate	אי אפשר להצפין עבור {names}: אין תעודה
+	Downloading {name}…	מוריד את {name}…
+	{name} could not be downloaded: {error}	לא ניתן היה להוריד את {name}: {error}

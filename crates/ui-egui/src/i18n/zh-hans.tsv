@@ -2029,3 +2029,5 @@ menu	View	查看
 	Every recipient can receive it encrypted ({scheme})	所有收件人都能接收加密邮件（{scheme}）
 	It can't be encrypted for {names}: no usable OpenPGP key	无法为 {names} 加密：没有可用的 OpenPGP 密钥
 	It can't be encrypted for {names}: no certificate	无法为 {names} 加密：没有证书
+	Downloading {name}…	正在下载 {name}…
+	{name} could not be downloaded: {error}	无法下载 {name}: {error}

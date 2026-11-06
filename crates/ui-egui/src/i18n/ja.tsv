@@ -2028,3 +2028,5 @@ folder	Conflicts	競合
 	Every recipient can receive it encrypted ({scheme})	全受信者が暗号化されたまま受け取れます ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	{names} 宛てには暗号化できません: 使える OpenPGP キーがありません
 	It can't be encrypted for {names}: no certificate	{names} 宛てには暗号化できません: 証明書がありません
+	Downloading {name}…	{name} をダウンロードしています…
+	{name} could not be downloaded: {error}	{name} をダウンロードできませんでした: {error}
