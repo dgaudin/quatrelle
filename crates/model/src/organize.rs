@@ -46,13 +46,15 @@ pub fn outlook_color(preset: i32) -> Option<u8> {
 }
 
 /// What only this computer keeps of an account's mail, which an export to an Outlook data file
-/// writes beside each message: when flagged messages are due (local days, by
-/// [`Summary::follow_up_id`]), and the categories' names (a message keeps a category by its
-/// keyword).
+/// writes beside each message: when flagged messages are due and completed ones were done
+/// (local days, by [`Summary::follow_up_id`]), and the categories' names (a message keeps a
+/// category by its keyword).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportMarks {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub due: std::collections::BTreeMap<String, i64>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub done: std::collections::BTreeMap<String, i64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<Category>,
 }

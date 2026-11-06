@@ -104,9 +104,13 @@ impl Session {
         }
         let a = self.account(account).ok_or_else(|| CmdError::Params(format!("no account `{account}`")))?;
         let name = if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() };
-        // When flagged messages are due, and what each category is called, kept only here, go
-        // into the file too.
-        let marks = quatrelle_model::organize::ExportMarks { due: self.prefs.follow_up.clone(), categories: self.prefs.categories.clone() };
+        // When flagged messages are due and completed ones were done, and what each category is
+        // called, kept only here, go into the file too.
+        let marks = quatrelle_model::organize::ExportMarks {
+            due: self.prefs.follow_up.clone(),
+            done: self.prefs.follow_up_done.clone(),
+            categories: self.prefs.categories.clone(),
+        };
         self.jobs.push(Job::ExportPst { account: account.to_string(), path: path.to_string(), name, marks });
         Ok(serde_json::json!({ "account": account, "exporting": true }))
     }

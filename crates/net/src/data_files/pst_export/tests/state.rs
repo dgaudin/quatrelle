@@ -106,6 +106,7 @@ fn what_the_cache_keeps_of_a_message_goes_through_a_data_file() {
     let marks = ExportMarks {
         due: std::collections::BTreeMap::from([("m1@example.com".to_string(), 20_000)]),
         categories: quatrelle_model::organize::default_categories(),
+        ..Default::default()
     };
     let done = export(&store, "a1", "Riley's mail", &file, &marks, &mut |_| {}).unwrap();
     assert_eq!(done.messages, 4);
