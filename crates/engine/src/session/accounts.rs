@@ -122,19 +122,19 @@ impl Session {
         let name = self.account(account).map(|a| a.config.email.clone()).unwrap_or_default();
         let (messages, skipped, already) = (messages.to_string(), skipped.to_string(), already.to_string());
         let args = [("name", name.as_str()), ("messages", messages.as_str()), ("skipped", skipped.as_str()), ("already", already.as_str())];
-        let text = match (done, &error, left) {
-            (false, _, _) => "{name}: {messages} messages exported so far…",
-            (true, Some(_), _) => "{name} could not be exported: {error}",
-            (true, None, (0, 0)) => "{name}: {messages} messages exported",
-            (true, None, (_, 0)) => "{name}: {messages} messages exported ({skipped} not on this computer were left out)",
-            (true, None, (0, _)) => "{name}: {messages} messages exported ({already} the data file already had)",
-            (true, None, _) => {
-                "{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)"
+        match (done, error, left) {
+            (false, _, _) => self.notice_with("{name}: {messages} messages exported so far…", &args, false),
+            (true, Some(e), _) => self.notice_with("{name} could not be exported: {error}", &[("name", &name), ("error", &e)], true),
+            (true, None, (0, 0)) => self.notice_with("{name}: {messages} messages exported", &args, false),
+            (true, None, (_, 0)) => {
+                self.notice_with("{name}: {messages} messages exported ({skipped} not on this computer were left out)", &args, false)
             }
-        };
-        match error.filter(|_| done) {
-            Some(e) => self.notice_with(text, &[("name", &name), ("error", &e)], true),
-            None => self.notice_with(text, &args, false),
+            (true, None, (0, _)) => self.notice_with("{name}: {messages} messages exported ({already} the data file already had)", &args, false),
+            (true, None, _) => self.notice_with(
+                "{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)",
+                &args,
+                false,
+            ),
         }
     }
 
