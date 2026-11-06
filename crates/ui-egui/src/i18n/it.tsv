@@ -2057,3 +2057,4 @@ folder	Conflicts	Conflitti
 	All files	Tutti i file
 	{ext} file	File {ext}
 	This message is no longer in the list: open its folder to delete it.	Questo messaggio non è più nell'elenco: apri la sua cartella per eliminarlo.
+	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Maiusc+Canc elimina la posta definitivamente, come Canc in Posta eliminata

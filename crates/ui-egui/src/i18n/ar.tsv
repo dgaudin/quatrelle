@@ -2054,3 +2054,4 @@ folder	Conflicts	التعارضات
 	All files	كل الملفات
 	{ext} file	ملف {ext}
 	This message is no longer in the list: open its folder to delete it.	لم تعد هذه الرسالة في القائمة: افتح مجلدها لحذفها.
+	Shift+Delete deletes mail for good, as Delete does in Deleted Items	يحذف Shift+Del البريد نهائيًا، كما يفعل Del في العناصر المحذوفة

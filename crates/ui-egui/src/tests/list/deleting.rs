@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: Shift+Delete deletes the mail selected for good, past Deleted Items. Asked first
-//! while the option says so: Escape keeps. In the Outbox, it does what Delete does.
+//! while the option says so: Enter deletes, Escape keeps. In the Outbox, it does what Delete does;
+//! in a message's page of its own, it deletes that message, not the list's selection.
 
 use super::*;
 
@@ -43,6 +44,20 @@ fn asking(a: &MailApp, n: usize) -> bool {
 }
 
 #[test]
+fn shift_delete_asks_then_enter_deletes_for_good() {
+    let (mut a, dir, ctx) = opened("shift-delete-enter");
+    press(&ctx, &mut a, Key::Delete, Modifiers::SHIFT);
+    assert!(asking(&a, 1), "asked first");
+    assert!(kept(&a, "INBOX"), "nothing deleted before the answer");
+    press(&ctx, &mut a, Key::Enter, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none(), "answered");
+    assert!(!kept(&a, "INBOX"), "gone from the Inbox");
+    assert!(!kept(&a, "Trash"), "and not in Deleted Items: deleted for good");
+    assert!(a.session.undo.is_empty(), "no Undo offered for it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn escape_keeps_the_message() {
     let (mut a, dir, ctx) = opened("shift-delete-escape");
     press(&ctx, &mut a, Key::Delete, Modifiers::SHIFT);
@@ -51,6 +66,24 @@ fn escape_keeps_the_message() {
     assert!(a.ui.dialog.is_none(), "Escape is Cancel");
     assert!(kept(&a, "INBOX") && a.session.list.iter().any(|m| m.subject == SUBJECT), "still there");
     assert!(!kept(&a, "Trash"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The question Delete asks in Deleted Items answers the same keys.
+#[test]
+fn delete_in_deleted_items_answers_enter_and_escape_too() {
+    let (mut a, dir, ctx) = opened("trash-enter");
+    press(&ctx, &mut a, Key::Delete, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && kept(&a, "Trash"), "moved to Deleted Items, unasked");
+    a.run("folder.open", json!({"account": "sample", "folder": "Trash"}));
+    a.run("list.select", json!({"key": key_of(&a, SUBJECT).to_id()}));
+    press(&ctx, &mut a, Key::Delete, Modifiers::NONE);
+    assert!(asking(&a, 1));
+    press(&ctx, &mut a, Key::Escape, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && kept(&a, "Trash"));
+    press(&ctx, &mut a, Key::Delete, Modifiers::NONE);
+    press(&ctx, &mut a, Key::Enter, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && !kept(&a, "Trash"), "deleted for good");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -81,5 +114,39 @@ fn in_the_outbox_shift_delete_is_delete() {
     press(&ctx, &mut a, Key::Delete, Modifiers::SHIFT);
     assert!(a.ui.dialog.is_none(), "nothing to ask: it only isn't sent");
     assert!(store.outbox("sample").is_empty() && a.session.list.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A message's page of its own (the browser): Shift+Delete deletes that message, asked first,
+/// not the one selected in the list; one no longer in the list isn't deleted (nor the list's).
+#[test]
+fn in_a_messages_own_page_shift_delete_deletes_its_message() {
+    let (a, dir) = app("shift-delete-page");
+    let opened = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut tab = MailApp::new(a.session, Box::new(NullBackend), Box::new(PageServices(opened.clone())));
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut tab, vec![]);
+    let other = "Character turnarounds";
+    tab.run("list.select", json!({"key": key_of(&tab, other).to_id()}));
+    tab.show_message_page(&key_of(&tab, SUBJECT).to_id());
+    frame(&ctx, &mut tab, vec![]);
+    press(&ctx, &mut tab, Key::Delete, Modifiers::SHIFT);
+    assert!(asking(&tab, 1), "asked first");
+    press(&ctx, &mut tab, Key::Enter, Modifiers::NONE);
+    assert!(!kept(&tab, "INBOX") && !kept(&tab, "Trash"), "the page's message, for good");
+    assert!(kept_as(&tab, "INBOX", other), "not the one selected in the list");
+
+    // Another folder shown since: the page's message isn't in the list, the list's isn't taken.
+    tab.show_message_page(&key_of(&tab, other).to_id());
+    tab.run("folder.open", json!({"account": "sample", "folder": "Archive"}));
+    tab.run("list.selectAll", json!({}));
+    let archived = tab.session.selection.len();
+    assert!(archived > 0, "something selected in the list");
+    frame(&ctx, &mut tab, vec![]);
+    let said = tab.session.notices.len();
+    press(&ctx, &mut tab, Key::Delete, Modifiers::SHIFT);
+    assert!(tab.ui.dialog.is_none() && kept_as(&tab, "INBOX", other), "refused");
+    assert_eq!(tab.session.store.as_ref().unwrap().load_folder("sample", "Archive").unwrap().messages.len(), archived, "Archive untouched");
+    assert!(tab.session.notices.len() > said, "said why");
     let _ = std::fs::remove_dir_all(dir);
 }

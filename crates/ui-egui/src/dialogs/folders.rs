@@ -17,7 +17,10 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             };
             ui.label(RichText::new(what).color(t.dim));
             let (ok, cancel) = buttons(ui, t, "Delete", true);
-            if ok {
+            // Enter is Delete (Escape, Cancel: `keys.rs`); with Cancel reached by Tab, Enter
+            // presses Cancel.
+            let enter = !cancel && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if ok || enter {
                 acts.push(Action::Run("mail.delete", json!({"permanent": true})));
                 return false;
             }
