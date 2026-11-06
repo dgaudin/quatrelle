@@ -3414,6 +3414,100 @@ aucun vrai compte.
     lecture coûte quelques requêtes ; laissé tel quel ;
   - un rendez-vous sorti de la fenêtre des six mois reste dans le cache tant qu'il ne change pas.
 
+### Hors relevé : R22, le reste du calendrier et des dossiers partagés par changement (2026-11-06)
+
+Suite de R21 : ce qu'elle laissait relu en entier à chaque synchro complète (un quart d'heure), lu
+de la même façon par ses changements. Le calendrier, les contacts, les notes et les tâches du fork
+restent les siens (modèle et règles inchangés). Les sondes d'abord, sur le faux serveur EWS ;
+aucun vrai compte.
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `92f04569` | les rendez-vous mis de côté restent dans `pim-parked.json` jusqu'à ce que `pim.json` les reprenne, et le worker les lit ; l'état des notes et des tâches gardé avec elles (`Pim::notes_state`, `Pim::tasks_state`) |
+| `ffa31339` | les calendriers des collègues cochés, les dossiers publics suivis, les notes et les tâches lus par leurs changements (et `746bf297`, une durée de vie que clippy refusait) |
+
+- **Ce qui est suivi** : chaque calendrier d'un collègue coché (dans sa boîte, nommée dans la
+  requête comme pour la lecture complète), chaque calendrier et carnet d'adresses public (routé vers
+  la boîte de dossiers publics qui le tient, dès qu'elle est connue de la session), les notes et les
+  tâches du compte. Même mécanique que R21 (`ews_pim/changes.rs`, maintenant découpé :
+  `changes/own.rs` l'agenda et les contacts du compte, `changes/others.rs` les collègues et les
+  dossiers publics, `changes/lists.rs` les notes et les tâches) : `SyncFolderItems` depuis l'état
+  gardé (le `ctag` de l'entrée, ou `notes_state` / `tasks_state`), enregistré par le moteur avec ce
+  qui est lu ; l'état pris avant une lecture complète ; une lecture complète une seule fois sans
+  état, sur un état refusé ou au-delà de 40 pages. Un calendrier ou un carnet décoché garde son
+  état avec ce qui est gardé de lui.
+- **Ce qui est rendu** : pour un calendrier qui n'est pas celui du compte, les rendez-vous inchangés
+  sont rendus tels quels (et non nommés par `kept`) : ils peuvent être mis de côté loin du
+  calendrier, et le moteur prend alors ce que la synchro donne à la place de ce qui est de côté ;
+  pour le moteur, c'est une lecture complète. Les notes et les tâches aussi sont rendues en entier
+  (gardées inchangées et lues), sauf celles changées ici et pas encore envoyées, qui restent au
+  moteur. Les contacts publics, jamais mis de côté, passent par `kept`.
+- **La mise de côté** (`session/pim/parking.rs`) : le worker lisait `pim.json` seul ; loin du
+  calendrier, les rendez-vous des collègues n'y sont pas (dans `pim-parked.json`), et une lecture
+  par changements les aurait perdus. Le worker lit maintenant les deux (un calendrier présent dans
+  `pim.json` n'est pas repris de l'autre). Au retour au calendrier, `pim-parked.json` n'est plus
+  vidé tout de suite si tout a été ramené : `pim.json` ne les reprend qu'à sa prochaine
+  sauvegarde, qui le vide ; sinon il est vidé comme avant. Garde-fou : un état gardé alors que rien
+  de ce qu'il représente n'est ici (cache perdu) fait relire le dossier en entier.
+- **Rien en double ni perdu** : les suppressions refusées par le serveur reviennent là où elles
+  étaient (`again_in` : le calendrier du collègue pour un de ses rendez-vous ; R21 les relisait
+  toutes dans l'agenda du compte, contacts compris, et un rendez-vous d'un collègue y revenait en
+  double) ; une note changée ici (refaite sur le serveur) revient une fois sous son nouvel élément,
+  l'ancien parti ; « le serveur l'emporte » et Problèmes de synchronisation › Conflits passent par
+  les mêmes chemins qu'avant (`gone_events`, `gone_tasks`).
+- **Les droits** : un collègue qui retire le partage est dit comme avant (« …'s calendar: … » pour
+  un calendrier ouvert à la main, la boîte partagée notée sans calendrier pour la session sinon) ;
+  l'état et ce qui est gardé restent, chaque synchro ne coûte que quelques requêtes refusées (aucune
+  lecture complète), et le partage revenu, il est suivi depuis où il s'était arrêté. Un dossier
+  public devenu inaccessible : dit comme avant, son entrée part comme avant. Les droits d'écriture
+  d'un calendrier lu par changements sans élément lu restent ceux d'avant.
+- **Ce qui peut ne pas s'y prêter** : la référence Microsoft de `SyncFolderItems` dit l'opération
+  non prise en charge pour les dossiers publics (alors que son guide des dossiers publics la
+  conseille dans une boîte de dossiers publics). Un refus d'un état pris de rien, hors état ou droits
+  (`ErrorInvalidOperation`, une erreur SOAP…), fait lire le dossier en entier, comme avant, et il
+  n'est plus demandé de la session (`Client::changes_refused`) ; de même pour un dossier trop grand
+  pour être suivi (plus de 40 pages). Un calendrier partagé seulement en disponibilité (ou en
+  détails limités) ne se lit déjà ni par `FindItem` ni par `GetItem` : rien ne change pour lui. Les
+  dossiers publics de tâches ou de notes ne sont pas suivis par le fork : rien à faire.
+- **Sondes** (`fake_ews/tests/calendar_speed/followed.rs` : un calendrier de collègue de 200
+  rendez-vous, un dossier public de 300 contacts, 50 tâches, 50 notes, 15 ms par élément servi,
+  Exchange 2013 ou plus avec la boîte de dossiers publics routée) ; un élément changé dans chacun,
+  puis la synchro complète suivante :
+
+  | changé | avant | après |
+  |---|---|---|
+  | un rendez-vous du collègue | 900 éléments, 38 requêtes, 5,50 s | 1 élément, 16 requêtes, 0,68 s |
+  | un contact public | 900 éléments, 38 requêtes, 5,50 s | 1 élément, 16 requêtes, 0,69 s |
+  | une tâche | 900 éléments, 38 requêtes, 5,50 s | 1 élément, 16 requêtes, 0,68 s |
+  | une note | 900 éléments, 38 requêtes, 5,50 s | 1 élément, 16 requêtes, 0,69 s |
+
+  « 900 » : 600 éléments servis, plus les 300 contacts publics demandés d'abord sans route (refusés
+  puis redemandés routés ; le faux compte chaque élément demandé). Après, la lecture complète d'un
+  dossier public passe aussi par sa route connue : la première synchro sert 600 éléments au lieu de
+  900. Après chaque changement, ce qui est gardé est comparé à une lecture complète, élément par
+  élément ; égal. Les autres sondes : un partage retiré puis rendu, un dossier public qui refuse
+  `SyncFolderItems` (lu en entier, plus redemandé), des suppressions et créations sur le serveur,
+  des suppressions refusées, une note et une tâche changées ici.
+- **Ce que le propriétaire verra** : la synchro complète d'un quart d'heure qui ne relit plus les
+  calendriers des collègues cochés, les dossiers publics, les notes et les tâches (la première après
+  la mise à jour les lit encore une fois en entier, pour prendre leur état) ; dans le journal,
+  « …'s calendar read by its changes in … s », « … read by its changes », « the notes / the tasks
+  read by their changes ». Rien ne change à l'écran.
+- **Vérifié** : les suites de `quatrelle-model`, `quatrelle-engine` et `quatrelle-net` ;
+  `cargo xtask ci` (wasm compris) ; chaque commit vérifié seul (`cargo check --workspace --all-targets`).
+- **Jamais essayé sur un vrai Exchange** : `SyncFolderItems` sur le calendrier d'une autre boîte
+  (par `DistinguishedFolderId` et `Mailbox`), sur un dossier public routé vers sa boîte, sur les
+  dossiers Notes et Tâches ; le code de refus réel d'un dossier public, et d'un partage retiré ;
+  si l'état d'un dossier public pris sans route est refusé ensuite avec la route (le cas est prévu :
+  lecture complète une fois).
+- **Reste, remarqué** :
+  - `PIM_EVERY` toujours à une minute ; la synchro complète pourrait maintenant être plus
+    fréquente que le quart d'heure ;
+  - un calendrier de collègue de plus de 20 000 éléments (toutes années) n'est pas suivi : lu en
+    entier comme avant ;
+  - les droits d'écriture d'un calendrier de collègue ne se revoient, sans élément changé, que par
+    les droits du dossier (un `GetFolder` à chaque synchro, comme avant).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
