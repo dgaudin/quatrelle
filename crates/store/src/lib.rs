@@ -670,7 +670,7 @@ pub fn no_waiting() {
 
 pub use accounts::{CompactStep, Compacted, Recompressed, Recompressing};
 use atomic::private_dir;
-pub use atomic::write_atomic;
+pub use atomic::{check_writable, write_atomic};
 use files::{Files, Routed};
 pub use folders::{NOTED_MAX, NoteGuard, Noted};
 

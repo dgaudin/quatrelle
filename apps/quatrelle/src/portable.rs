@@ -71,13 +71,12 @@ fn bundle_parent(exe_dir: &Path) -> Option<&Path> {
     (contents.file_name()? == "Contents" && bundle.extension()? == "app").then_some(bundle.parent()?)
 }
 
-/// Make `dir` and prove a file can be written in it (a folder can exist yet be read-only).
-fn writable(dir: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    let probe = dir.join(".write-test");
-    std::fs::write(&probe, b"")?;
-    let _ = std::fs::remove_file(&probe);
-    Ok(())
+/// Make `dir` and prove a file can be written in it (a folder can exist yet be read-only). The
+/// probe is made new under a name nobody can tell in advance, so whatever is already there (a
+/// link someone left pointing elsewhere) is never written through nor removed.
+fn writable(dir: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    quatrelle_engine::store::check_writable(dir).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -138,5 +137,32 @@ mod tests {
         assert_eq!(p.dir, None);
         assert!(p.unwritable.is_some_and(|w| w.contains("portable mode is off") && w.contains("can't be written")));
         let _ = std::fs::remove_dir_all(&exe);
+    }
+
+    /// What's already in the data folder is never written through or removed: at the name the
+    /// check used to write (`.write-test`), a link to a file elsewhere (a file, off Unix) stays as
+    /// it was, so does the file it points at, and the probe made is gone again.
+    #[test]
+    fn the_write_probe_never_goes_through_what_is_at_its_name() {
+        let root = temp("probe-taken");
+        let data = root.join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let other = root.join("elsewhere.txt");
+        std::fs::write(&other, b"keep me").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&other, data.join(".write-test")).unwrap();
+        #[cfg(not(unix))]
+        std::fs::write(data.join(".write-test"), b"someone's").unwrap();
+        let listing = || {
+            let mut names: Vec<_> = std::fs::read_dir(&data).unwrap().map(|e| e.unwrap().file_name()).collect();
+            names.sort();
+            names
+        };
+        let before = listing();
+        writable(&data).unwrap();
+        let (kept, after) = (std::fs::read(&other).unwrap(), listing());
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(kept, b"keep me", "the linked file is untouched");
+        assert_eq!(after, before, "what was there stays, and the probe made is removed");
     }
 }

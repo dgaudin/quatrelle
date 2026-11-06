@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! How the cache puts files on disk: a file is replaced in one step, so a reader sees the old
 //! contents or the new ones and never half of either, and what Quatrelle writes stays its owner's.
 
@@ -77,6 +78,17 @@ fn patiently(mut attempt: impl FnMut() -> std::io::Result<()>, mut wait: impl Fn
             done => return done,
         }
     }
+}
+
+/// Proves a file can be made in `dir` (a folder can be there yet not writable): one is made new
+/// under a name nobody can tell in advance, as [`write_atomic`]'s scratch files are, and removed
+/// again. Whatever the folder already holds, a file or a link planted to point elsewhere, is never
+/// opened, written through or removed (portable mode's and the updater's check).
+pub fn check_writable(dir: &Path) -> Result<()> {
+    let (probe, file) = new_scratch(|| scratch_beside(&dir.join("write-test")))?;
+    drop(file);
+    let _ = fs::remove_file(&probe);
+    Ok(())
 }
 
 /// How many names a scratch file is tried under before the write gives up. A name already taken
@@ -228,6 +240,32 @@ mod tests {
             assert!(name.starts_with(".state.json.") && name.ends_with(".part") && s.parent() == Some(Path::new("d")), "{name}");
             assert!(!name.contains(&format!(".{}.", std::process::id())), "{name}");
         }
+    }
+
+    /// The write check makes and removes its own file only: what the folder holds stays as it
+    /// was, and a folder that can't be written (or isn't there) fails.
+    #[test]
+    fn the_write_check_leaves_the_folder_as_it_was() {
+        let root = std::env::temp_dir().join(format!("quatrelle-writable-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join(".write-test"), b"someone else's").unwrap();
+        check_writable(&root).unwrap();
+        let names: Vec<_> = fs::read_dir(&root).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, vec![std::ffi::OsString::from(".write-test")]);
+        assert_eq!(fs::read(root.join(".write-test")).unwrap(), b"someone else's");
+        assert!(check_writable(&root.join("missing")).is_err());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o500)).unwrap();
+            // Root writes anywhere: the refusal is only checked for other users.
+            let probe_ok = fs::File::options().write(true).create_new(true).open(root.join("x")).is_ok();
+            let refused = check_writable(&root);
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+            assert!(probe_ok || refused.is_err(), "a read-only folder isn't writable");
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 
     /// A rename another program holds up a few times goes through; one refused for another
