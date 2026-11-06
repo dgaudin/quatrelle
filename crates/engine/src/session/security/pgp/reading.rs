@@ -106,10 +106,10 @@ impl Session {
         }
     }
 
-    /// `owner`'s key (`fingerprint`) checked a signature: how it came, and its use written down
+    /// `owner`'s key (`fingerprint`) checked a signature (or was encrypted to): how it came, and its use written down
     /// (a day at most), the least used going first. `None`: not a correspondent's (the account's
     /// own).
-    fn key_used(&mut self, account: &str, owner: &str, fingerprint: &str) -> Option<Learnt> {
+    pub(super) fn key_used(&mut self, account: &str, owner: &str, fingerprint: &str) -> Option<Learnt> {
         let now = self.clock.now;
         let people = self.pgp.people.get_mut(account)?;
         let k = people.get(owner).filter(|k| k.info.fingerprint == fingerprint)?;

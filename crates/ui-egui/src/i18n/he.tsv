@@ -2012,3 +2012,11 @@ folder	Conflicts	התנגשויות
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	המפתח שלכם עבור {who} יוסר מהמחשב הזה, והחלק הסודי שלו גם ממחזיק המפתחות של המערכת.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	לא יהיה אפשר עוד לקרוא כאן דואר שהוצפן אליו, עד שהגיבוי שלו ייובא שוב.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	לא נשמר לו גיבוי: לא יהיה אפשר עוד לקרוא דואר שהוצפן אליו, לא כאן ולא בשום מקום.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	רק הנמענים יכולים לקרוא אותה: Quatrelle צריך מפתח OpenPGP של כל אחד מהם (הוא מגיע עם הדואר שלו)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	חתומה במפתח ה־OpenPGP שלכם: הנמענים יידעו שהיא מכם ושלא שונתה
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	רק הנמענים יכולים לקרוא אותה: Quatrelle צריך תעודה או מפתח OpenPGP של כל אחד מהם
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	חתומה בתעודה או במפתח ה־OpenPGP שלכם: הנמענים יידעו שהיא מכם ושלא שונתה
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	חתימה והצפנה ב־S/MIME או ב־OpenPGP: «אוטומטי» בוחר את מה שכל הנמענים יכולים לקבל, או את מה שבו הגיעה ההודעה שעליה עונים
+	Automatic takes {scheme} for this message	«אוטומטי» בוחר ב־{scheme} להודעה זו
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	אי אפשר לשלוח אותה מוצפנת: אין מפתח OpenPGP שמיש עבור {names}. המפתח שלהם מגיע עם הדואר שלהם, או שאפשר לייבא אותו בקובץ › מידע › אבטחה; או כבו את «הצפנה» כדי לשלוח בלי הצפנה.

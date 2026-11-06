@@ -2013,3 +2013,11 @@ menu	View	Weergeven
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Uw sleutel voor {who} verdwijnt van deze computer, het geheime deel ook uit de sleutelbos van het systeem.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	E-mail die ervoor is versleuteld kan hier niet meer worden gelezen, tot de back-up opnieuw is geïmporteerd.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Er is geen back-up van opgeslagen: e-mail die ervoor is versleuteld kan niet meer worden gelezen, hier noch elders.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	Alleen de ontvangers kunnen het lezen: Quatrelle heeft van ieder een OpenPGP-sleutel nodig (die komt mee met hun e-mail)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	Ondertekend met uw OpenPGP-sleutel: de ontvangers zien dat het van u is en ongewijzigd
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	Alleen de ontvangers kunnen het lezen: Quatrelle heeft van ieder een certificaat of een OpenPGP-sleutel nodig
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	Ondertekend met uw certificaat of uw OpenPGP-sleutel: de ontvangers zien dat het van u is en ongewijzigd
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Ondertekenen en versleutelen met S/MIME of OpenPGP: Automatisch neemt wat alle ontvangers kunnen ontvangen, of dat van het bericht waarop u antwoordt
+	Automatic takes {scheme} for this message	Automatisch neemt {scheme} voor dit bericht
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Het kan niet versleuteld worden verzonden: er is geen bruikbare OpenPGP-sleutel voor {names}. Hun sleutel komt mee met hun e-mail, of kan worden geïmporteerd in Bestand › Info › Beveiliging; of zet Versleutelen uit om het onversleuteld te verzenden.

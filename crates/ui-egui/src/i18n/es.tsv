@@ -2017,3 +2017,11 @@ menu	View	Ver
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Tu clave para {who} se va de este equipo, y su parte secreta también del llavero del sistema.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	El correo cifrado para ella ya no se podrá leer aquí, hasta que se vuelva a importar su copia de seguridad.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	No se guardó ninguna copia de seguridad: el correo cifrado para ella ya no se podrá leer, ni aquí ni en ningún sitio.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	Solo los destinatarios pueden leerlo: Quatrelle necesita una clave OpenPGP de cada uno (llega con su correo)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	Firmado con tu clave OpenPGP: los destinatarios sabrán que es tuyo y que no ha cambiado
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	Solo los destinatarios pueden leerlo: Quatrelle necesita un certificado o una clave OpenPGP de cada uno
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	Firmado con tu certificado o tu clave OpenPGP: los destinatarios sabrán que es tuyo y que no ha cambiado
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Firmar y cifrar con S/MIME u OpenPGP: Automático elige el que todos los destinatarios pueden recibir, o el del mensaje al que respondes
+	Automatic takes {scheme} for this message	Automático usa {scheme} para este mensaje
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	No se puede enviar cifrado: no hay ninguna clave OpenPGP utilizable para {names}. Su clave llega con su correo, o se puede importar en Archivo › Información › Seguridad; o desactiva Cifrar para enviarlo sin cifrar.

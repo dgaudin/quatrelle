@@ -201,7 +201,14 @@ impl Session {
 
     pub fn reply_compose(&mut self, mode: ReplyMode) -> CmdResult {
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && self.identity(&r.key.account).is_some();
+        // Answered the way it came (S/MIME or OpenPGP): encrypted too when it was and the account
+        // can.
+        let came_as = r.security.as_ref().filter(|s| s.lock.is_some() || s.signed.is_some()).map(|s| if s.pgp { Scheme::Pgp } else { Scheme::Smime });
+        let can = match came_as {
+            Some(Scheme::Pgp) => self.pgp_active(&r.key.account),
+            _ => self.identity(&r.key.account).is_some(),
+        };
+        let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && can;
         // The reply's own copy (the quote's pictures are put in it), the one shown left as it is.
         let mut parsed = Arc::unwrap_or_clone(r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?);
         if r.text_first && !answerable_from_text(&parsed, mode) {
@@ -255,6 +262,7 @@ impl Session {
             // An answer to encrypted mail quotes it: encrypted too, and signed, when it can be.
             sign: encrypted,
             encrypt: encrypted,
+            came_as,
             window: self.prefs.reply_window,
             ..Default::default()
         });
@@ -407,7 +415,7 @@ impl Session {
                 return Ok(serde_json::json!({ "check": found }));
             }
         }
-        // Signed or encrypted (S/MIME): its parts must reach the reader byte for byte.
+        // Signed or encrypted (S/MIME or OpenPGP): its parts must reach the reader byte for byte.
         if c.sign || c.encrypt {
             d.seven_bit = true;
         }
@@ -535,10 +543,13 @@ impl Session {
 
     /// The job filing `c`'s draft `raw` in `folder` on the server in place of `replaces`
     /// (`keep`: kept on this computer first, as Quatrelle closes): encrypted to the account's
-    /// own certificate first when the message is to be encrypted.
+    /// own certificate (or OpenPGP key) first when the message is to be encrypted.
     fn draft_job(&self, c: &Compose, raw: Vec<u8>, folder: String, keep: bool, replaces: Option<MessageKey>) -> Job {
         let config = self.account(&c.account).map(|a| a.config.clone());
         match config {
+            Some(account) if self.seals_with_pgp(c) => {
+                Job::Pgp { account, work: quatrelle_model::job::PgpWork::SealDraft { raw: quatrelle_model::Private(raw), folder, replaces, keep } }
+            }
             Some(account) if c.encrypt && self.identity(&c.account).is_some() => {
                 Job::SealDraft { account, raw: quatrelle_model::Private(raw), folder, replaces, keep }
             }

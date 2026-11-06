@@ -2017,3 +2017,11 @@ menu	View	Afficher
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Votre clé pour {who} quitte cet ordinateur, et sa partie secrète le trousseau du système.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	Le courrier chiffré pour elle ne pourra plus être lu ici, tant que sa sauvegarde n’aura pas été importée de nouveau.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Aucune sauvegarde n’en a été enregistrée : le courrier chiffré pour elle ne pourra plus être lu, ici ni ailleurs.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	Seuls les destinataires peuvent le lire : Quatrelle doit avoir une clé OpenPGP pour chacun (elle arrive avec son courrier)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	Signé avec votre clé OpenPGP : les destinataires savent qu'il vient de vous et n'a pas changé
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	Seuls les destinataires peuvent le lire : Quatrelle doit avoir un certificat ou une clé OpenPGP pour chacun
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	Signé avec votre certificat ou votre clé OpenPGP : les destinataires savent qu'il vient de vous et n'a pas changé
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Signer et chiffrer avec S/MIME ou OpenPGP : Automatique prend celui que tous les destinataires peuvent recevoir, ou celui du message auquel vous répondez
+	Automatic takes {scheme} for this message	Automatique prend {scheme} pour ce message
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Il ne peut pas partir chiffré : il n'y a pas de clé OpenPGP utilisable pour {names}. Leur clé arrive avec leur courrier, ou s'importe dans Fichier › Informations › Sécurité ; ou désactivez Chiffrer pour l'envoyer sans chiffrement.

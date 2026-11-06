@@ -2015,3 +2015,11 @@ folder	Conflicts	Conflitti
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	La tua chiave per {who} lascia questo computer, e la sua parte segreta anche il portachiavi del sistema.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	La posta crittografata per essa non potrà più essere letta qui, finché il suo backup non verrà importato di nuovo.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Non ne è stato salvato alcun backup: la posta crittografata per essa non potrà più essere letta, né qui né altrove.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	Solo i destinatari possono leggerlo: Quatrelle deve avere una chiave OpenPGP di ciascuno (arriva con la sua posta)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	Firmato con la tua chiave OpenPGP: i destinatari sapranno che è tuo e non è stato modificato
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	Solo i destinatari possono leggerlo: Quatrelle deve avere un certificato o una chiave OpenPGP di ciascuno
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	Firmato con il tuo certificato o la tua chiave OpenPGP: i destinatari sapranno che è tuo e non è stato modificato
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Firma e crittografa con S/MIME o OpenPGP: Automatico sceglie quello che tutti i destinatari possono ricevere, o quello del messaggio a cui rispondi
+	Automatic takes {scheme} for this message	Automatico usa {scheme} per questo messaggio
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Non si può inviare crittografato: non c'è una chiave OpenPGP utilizzabile per {names}. La loro chiave arriva con la loro posta, o si può importare in File › Informazioni › Sicurezza; oppure disattiva Crittografa per inviarlo non crittografato.

@@ -351,3 +351,73 @@ fn removing_an_account_takes_its_keys_from_the_keychain() {
     assert!(list(creds.as_ref(), &a).is_empty());
     assert!(creds.get_secret(&a, &entry(&ana().info.fingerprint)).is_none(), "no orphan secret");
 }
+
+/// What `sent` (PGP/MIME, signed then encrypted) holds, decrypted with `secret`: the signed part,
+/// and what its signature says checked with `signer`.
+pub(crate) fn open_sent(sent: &[u8], secret: &[u8], signer: &[u8]) -> (Vec<u8>, pgp::Check) {
+    let quatrelle_mime::pgp::Protection::Encrypted(data) = quatrelle_mime::pgp::protection(sent) else { panic!("not encrypted") };
+    let inside = pgp::decrypt(&data, &[secret], &[]).unwrap().data;
+    let quatrelle_mime::pgp::Protection::Signed { content, signature } = quatrelle_mime::pgp::protection(&inside) else {
+        panic!("not signed inside")
+    };
+    let check = pgp::verify(&content, &signature, &[signer]).unwrap();
+    (content, check)
+}
+
+/// Sending (adapted from upstream f32b54b): the message signed with the key in the keychain,
+/// then encrypted to each key given; each recipient's secret opens it, a good signature inside,
+/// and the subject outside is `[...]`. A draft to seal is encrypted to the key in use and saved;
+/// without a key, it's saved as it is, and said.
+#[test]
+fn mail_is_signed_then_encrypted_with_the_key_in_the_keychain() {
+    let store = crate::fake::tests_store("pgp-protect");
+    let creds = Arc::new(MemoryCredentials::default());
+    let mut p = Pool::new(store.clone(), creds.clone());
+    let a = account("ana");
+    // Made now: the pool signs at the system's time.
+    let ana = pgp::generate("Ana", "ana@posteo.example", now() - 60, &mut rand_core::OsRng).unwrap();
+    take(creds.as_ref(), &a, &ana).unwrap();
+    let bo = pgp::generate("Bo", "bo@studio.example", now() - 60, &mut rand_core::OsRng).unwrap();
+    let raw = b"From: ana@posteo.example\r\nTo: bo@studio.example\r\nSubject: Plan\r\nMessage-ID: <p@x>\r\nMIME-Version: 1.0\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\r\nThe plan for Tuesday\r\n";
+    let encrypt_to = vec![bo.public.clone(), ana.public.clone()];
+    p.submit(Job::Pgp {
+        account: a.clone(),
+        work: PgpWork::Protect { id: 4, raw: Private(raw.to_vec()), sign: true, encrypt_to, hide_subject: true },
+    });
+    let Event::Protected { id, raw: done, error, .. } = answer(&p, |e| matches!(e, Event::Protected { .. })) else { panic!("another answer") };
+    let sent = done.unwrap_or_else(|| panic!("not protected: {error:?}")).0;
+    assert_eq!(id, 4);
+    let text = String::from_utf8_lossy(&sent);
+    assert!(text.contains("multipart/encrypted") && text.contains("Subject: [...]") && !text.contains("The plan for Tuesday"), "{text}");
+    for secret in [&bo.secret, &ana.secret] {
+        let (content, check) = open_sent(&sent, secret, &ana.public);
+        assert!(String::from_utf8_lossy(&content).contains("The plan for Tuesday"));
+        assert!(matches!(check, pgp::Check::Good { key: 0, .. }), "{check:?}");
+    }
+    // Signed only: not encrypted, the text as it was.
+    p.submit(Job::Pgp {
+        account: a.clone(),
+        work: PgpWork::Protect { id: 5, raw: Private(raw.to_vec()), sign: true, encrypt_to: Vec::new(), hide_subject: true },
+    });
+    let Event::Protected { raw: Some(Private(signed)), .. } = answer(&p, |e| matches!(e, Event::Protected { id: 5, .. })) else {
+        panic!("not signed")
+    };
+    assert!(matches!(quatrelle_mime::pgp::protection(&signed), quatrelle_mime::pgp::Protection::Signed { .. }));
+    assert!(String::from_utf8_lossy(&signed).contains("Subject: Plan"));
+    // Without a key, nothing goes: said in the keychain's words.
+    let none = account("none");
+    p.submit(Job::Pgp {
+        account: none.clone(),
+        work: PgpWork::Protect { id: 6, raw: Private(raw.to_vec()), sign: true, encrypt_to: Vec::new(), hide_subject: true },
+    });
+    let Event::Protected { raw: none_sent, error, .. } = answer(&p, |e| matches!(e, Event::Protected { id: 6, .. })) else { panic!("no answer") };
+    assert!(none_sent.is_none() && error.unwrap().starts_with(NO_KEYCHAIN));
+    // A draft: encrypted to the key in use only, before it's saved.
+    let sealed = seal(creds.as_ref(), &a, raw).unwrap();
+    assert!(String::from_utf8_lossy(&sealed).contains("multipart/encrypted"));
+    let quatrelle_mime::pgp::Protection::Encrypted(data) = quatrelle_mime::pgp::protection(&sealed) else { panic!("not sealed") };
+    assert!(pgp::decrypt(&data, &[&bo.secret], &[]).is_err(), "for no one else");
+    assert!(String::from_utf8_lossy(&pgp::decrypt(&data, &[&ana.secret], &[]).unwrap().data).contains("The plan for Tuesday"));
+    assert!(seal(creds.as_ref(), &none, raw).is_err());
+}

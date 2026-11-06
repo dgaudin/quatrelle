@@ -2014,3 +2014,11 @@ menu	View	查看
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	你用于 {who} 的密钥将从这台电脑上移除，其私密部分也会从系统钥匙串中移除。
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	在重新导入其备份之前，加密给它的邮件将无法在这里阅读。
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	它没有保存过备份：加密给它的邮件将无法再阅读，无论在这里还是别处。
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	只有收件人能阅读：Quatrelle 需要有每位收件人的 OpenPGP 密钥（随对方的邮件而来）
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	用你的 OpenPGP 密钥签名：收件人能确认是你发的且未被改动
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	只有收件人能阅读：Quatrelle 需要有每位收件人的证书或 OpenPGP 密钥
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	用你的证书或 OpenPGP 密钥签名：收件人能确认是你发的且未被改动
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	用 S/MIME 或 OpenPGP 签名和加密：“自动”选择所有收件人都能接收的方式，或所回复邮件使用的方式
+	Automatic takes {scheme} for this message	“自动”为这封邮件选择 {scheme}
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	无法加密发送：{names} 没有可用的 OpenPGP 密钥。对方的密钥随其邮件而来，也可以在“文件 › 信息 › 安全”中导入；或关闭“加密”以不加密发送。

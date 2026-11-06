@@ -208,6 +208,34 @@ fn attached_keys(entity: &[u8]) -> Vec<Vec<u8>> {
     quatrelle_mime::pgp::key_parts(entity).iter().flat_map(|part| pgp::public_keys(part).unwrap_or_default()).take(INSIDE_MAX).collect()
 }
 
+/// `raw` signed with `secret` (`sign`) and/or encrypted to `encrypt_to` (empty: not encrypted),
+/// as PGP/MIME, as it will be sent (adapted from upstream f32b54b).
+pub(crate) fn protect(raw: &[u8], secret: &[u8], sign: bool, encrypt_to: &[Vec<u8>], hide_subject: bool) -> std::result::Result<Vec<u8>, String> {
+    use rand_core::RngCore as _;
+    let boundary = format!("=_mcp{:016x}", rand_core::OsRng.next_u64());
+    let at = now();
+    let keys: Vec<&[u8]> = encrypt_to.iter().map(Vec::as_slice).collect();
+    let mut sign_with = |entity: &[u8]| pgp::sign(entity, secret, at, &mut rand_core::OsRng).map(String::into_bytes).map_err(|e| e.to_string());
+    let mut encrypt_with =
+        |entity: &[u8]| pgp::encrypt(entity, &keys, None, at, &mut rand_core::OsRng).map(String::into_bytes).map_err(|e| e.to_string());
+    let signer: Option<quatrelle_mime::smime::Crypto<'_>> = if sign { Some(&mut sign_with) } else { None };
+    let encrypter: Option<quatrelle_mime::smime::Crypto<'_>> = if keys.is_empty() { None } else { Some(&mut encrypt_with) };
+    quatrelle_mime::pgp::protect(raw, signer, encrypter, hide_subject, &boundary)
+}
+
+/// The secret part of the key in use.
+fn in_use(creds: &dyn Credentials, account: &AccountConfig) -> std::result::Result<Vec<u8>, String> {
+    let none = || no_keychain("it gave no OpenPGP key for this account".into());
+    list(creds, account).first().ok_or_else(none).and_then(|fp| secret(creds, account, fp))
+}
+
+/// A draft encrypted to the key in use, as what's sent would be.
+fn seal(creds: &dyn Credentials, account: &AccountConfig, raw: &[u8]) -> std::result::Result<Vec<u8>, String> {
+    let s = in_use(creds, account)?;
+    let me = pgp::read_secret_key(&s, "").map_err(|e| e.to_string())?;
+    protect(raw, &s, false, &[me.public], false)
+}
+
 /// What the account has now, or why it couldn't be done.
 fn keys_now(creds: &dyn Credentials, account: &AccountConfig, done: std::result::Result<Option<PgpChange>, String>) -> Event {
     let keys = publics(creds, account);
@@ -217,9 +245,9 @@ fn keys_now(creds: &dyn Credentials, account: &AccountConfig, done: std::result:
     }
 }
 
-/// One job's work, on its own thread.
-fn work(creds: &dyn Credentials, account: &AccountConfig, work: PgpWork) -> Event {
-    match work {
+/// One job's work, on its own thread (a draft to seal is the pool's own, at once: `None`).
+fn work(creds: &dyn Credentials, account: &AccountConfig, work: PgpWork) -> Option<Event> {
+    Some(match work {
         PgpWork::Import { file, passphrase } => {
             let done = pgp::read_secret_key(&file.0, &passphrase.0)
                 .map_err(|e| e.to_string())
@@ -249,14 +277,42 @@ fn work(creds: &dyn Credentials, account: &AccountConfig, work: PgpWork) -> Even
             Ok((entity, signature, keys)) => Event::PgpDecrypted { key, content: Some(Private(entity)), signature, keys, error: None },
             Err(e) => Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error: Some(e) },
         },
-    }
+        PgpWork::Protect { id, raw, sign, encrypt_to, hide_subject } => {
+            match in_use(creds, account).and_then(|s| protect(&raw.0, &s, sign, &encrypt_to, hide_subject)) {
+                Ok(r) => Event::Protected { account: account.id.clone(), id, raw: Some(Private(r)), error: None },
+                Err(e) => Event::Protected { account: account.id.clone(), id, raw: None, error: Some(e) },
+            }
+        }
+        PgpWork::SealDraft { .. } => return None,
+    })
 }
 
 impl Pool {
     pub(super) fn pgp(&mut self, account: AccountConfig, job: PgpWork) {
+        // A draft is sealed at once (it may be the last thing before Quatrelle closes), then
+        // saved; without the key it's saved as it is, and the user is told.
+        if let PgpWork::SealDraft { raw, folder, replaces, keep } = job {
+            let raw = match seal(self.creds.as_ref(), &account, &raw.0) {
+                Ok(sealed) => sealed,
+                Err(e) => {
+                    self.sink.emit(Event::Notice {
+                        account: account.id.clone(),
+                        message: format!("the draft couldn't be encrypted, so it's saved as it is: {e}"),
+                    });
+                    raw.0
+                }
+            };
+            let account = account.id;
+            self.submit(if keep { Job::KeepDraft { account, raw, folder, replaces } } else { Job::SaveDraft { account, raw, folder, replaces } });
+            return;
+        }
         let creds = self.creds.clone();
         let sink = self.sink.clone();
-        let spawned = std::thread::Builder::new().name("mail-pgp".into()).spawn(move || sink.emit(work(creds.as_ref(), &account, job)));
+        let spawned = std::thread::Builder::new().name("mail-pgp".into()).spawn(move || {
+            if let Some(e) = work(creds.as_ref(), &account, job) {
+                sink.emit(e);
+            }
+        });
         if let Err(e) = spawned {
             log::warn!("OpenPGP: {e}");
         }

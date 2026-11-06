@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
-//! Commands: S/MIME (File › Info › Security, and the message being written).
+// Copyright (c) 2026 Didier Gaudin
+//! Commands: S/MIME (File › Info › Security), and how the message being written is signed and
+//! encrypted, with S/MIME or OpenPGP.
 
 use super::*;
+use crate::Scheme;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
@@ -61,10 +64,20 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"sign"?: bool, "encrypt"?: bool, "keepSubject"?: bool (encrypted mail shows its subject on the way, not "[...]"), "account"?: string}"#),
         CommandSpec::new("compose.security", "Sign and Encrypt", "Message › Options", |s, v| {
             let c = s.compose.as_ref().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+            let (smime, pgp) = (s.identity(&c.account).is_some(), s.pgp_active(&c.account));
             let wants = p::bool(v, "sign") == Some(true) || p::bool(v, "encrypt") == Some(true);
-            if wants && s.identity(&c.account).is_none() {
-                return Err(CmdError::Disabled("import a certificate for the account first (File › Info › Security)".into()));
+            if wants && !smime && !pgp {
+                return Err(CmdError::Disabled("import a certificate or make an OpenPGP key for the account first (File › Info › Security)".into()));
             }
+            let scheme = match p::str(v, "scheme") {
+                None => None,
+                Some("auto") => Some(Scheme::Auto),
+                Some("smime") if smime => Some(Scheme::Smime),
+                Some("pgp") if pgp => Some(Scheme::Pgp),
+                Some("smime") => return Err(CmdError::Disabled("this account has no certificate".into())),
+                Some("pgp") => return Err(CmdError::Disabled("this account has no OpenPGP key".into())),
+                Some(other) => return Err(CmdError::Params(format!("`scheme`: auto, smime or pgp (not `{other}`)"))),
+            };
             let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
             if let Some(on) = p::bool(v, "sign") {
                 c.sign = on;
@@ -72,8 +85,25 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             if let Some(on) = p::bool(v, "encrypt") {
                 c.encrypt = on;
             }
-            Ok(json!({ "sign": c.sign, "encrypt": c.encrypt }))
+            if let Some(sc) = scheme {
+                c.scheme = sc;
+            }
+            let (sign, encrypt, chosen) = (c.sign, c.encrypt, c.scheme);
+            let uses = s.compose.as_ref().and_then(|c| s.scheme_for(c));
+            Ok(json!({ "sign": sign, "encrypt": encrypt, "scheme": chosen, "uses": uses }))
         })
-        .params(r#"{"sign"?: bool, "encrypt"?: bool}"#),
+        .params(r#"{"sign"?: bool, "encrypt"?: bool, "scheme"?: "auto" | "smime" | "pgp" (with both a certificate and an OpenPGP key: which one; auto, the one every recipient can receive, or a reply's)}"#),
+        CommandSpec::new("compose.encryption", "Can it be encrypted?", "Message › Options", |s, _| {
+            if s.compose.is_none() {
+                return Err(CmdError::Disabled("no message is being written".into()));
+            }
+            let reach = s.encryption_reach();
+            let encrypt = s.compose.as_ref().is_some_and(|c| c.encrypt);
+            Ok(match reach {
+                None => json!({ "can": false, "setUp": false, "missing": [], "encrypt": encrypt }),
+                Some(r) => json!({ "can": r.everyone(), "setUp": true, "scheme": r.scheme, "missing": r.missing, "recipients": r.recipients, "encrypt": encrypt }),
+            })
+        })
+        .params("{}"),
     ]
 }

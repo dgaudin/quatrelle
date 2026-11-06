@@ -45,6 +45,16 @@ pub enum PgpWork {
     /// text in `charset`, not a MIME entity). Answered by
     /// [`Event::PgpDecrypted`](super::Event::PgpDecrypted).
     Decrypt { key: MessageKey, data: Vec<u8>, inline: bool, charset: String, verify_with: Vec<Vec<u8>> },
+    /// Sign with the key in use (`sign`) and/or encrypt to `encrypt_to` (public keys; empty: not
+    /// encrypted) message `id`, about to be sent, as PGP/MIME: signed, then encrypted, its header
+    /// fields inside too, the Subject outside `[...]` with `hide_subject`. Answered by
+    /// [`Event::Protected`](super::Event::Protected).
+    Protect { id: u64, raw: Private, sign: bool, encrypt_to: Vec<Vec<u8>>, hide_subject: bool },
+    /// A draft of a message to be encrypted with OpenPGP, encrypted to the account's own key
+    /// first (the copy in Drafts is no more readable than what will be sent), then saved as
+    /// [`Job::SaveDraft`](super::Job::SaveDraft) (or kept as
+    /// [`Job::KeepDraft`](super::Job::KeepDraft), `keep`).
+    SealDraft { raw: Private, folder: String, replaces: Option<MessageKey>, keep: bool },
 }
 
 /// What a signature inside an OpenPGP message says (checked with the keys the job gave).
