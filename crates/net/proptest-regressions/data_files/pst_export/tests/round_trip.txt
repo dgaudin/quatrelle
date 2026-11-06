@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3fc184e0c9d87b79ae0f2e6a87733de492ada81b5861bc095a4379cee48874ed # shrinks to mails = [Mail { subject: "a", body: ".e,\n..5g Zy,u.IpLÜS1 .\nY\n Q.6qhX .ÔTRèiaÂðK1,,8O2T2", seen: false, flagged: false, complete: true, pinned: false, acted: 0, categories: ["m_d5___"] }], ansi = false
