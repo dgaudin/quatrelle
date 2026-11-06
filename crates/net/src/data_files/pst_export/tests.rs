@@ -2,6 +2,8 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 use super::*;
+
+mod seeds;
 use quatrelle_model::{EmailAddress, Flags};
 use quatrelle_store::FolderState;
 use std::path::Path;

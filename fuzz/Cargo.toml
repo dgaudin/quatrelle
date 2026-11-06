@@ -19,6 +19,7 @@ bin = [
     { name = "pgp", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp.rs" }, # OpenPGP keys, messages, signatures, Autocrypt
     { name = "pgp_mime", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp_mime.rs" }, # PGP/MIME, inline PGP, a message's keys; written for sending
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst/import.rs" }, # Outlook data file import
+    { name = "pst_append", bench = false, test = false, doc = false, path = "fuzz_targets/pst/append.rs" }, # mail added to a damaged data file, and taken out again
     { name = "pst_item", bench = false, test = false, doc = false, path = "fuzz_targets/pst/item.rs" }, # a .pst item rebuilt from its properties
     { name = "pst_props", bench = false, test = false, doc = false, path = "fuzz_targets/pst/props.rs" }, # text in a data file's properties, by code page
     { name = "pst_recurrence", bench = false, test = false, doc = false, path = "fuzz_targets/pst/recurrence.rs" }, # a .pst appointment's recurrence and its changed occurrences
@@ -40,6 +41,7 @@ quatrelle-net.path = "../crates/net" # IMAP, WebDAV, .pst
 quatrelle-pgp.path = "../crates/pgp" # OpenPGP
 rand_core = "0.6" # the numbers a key's new signatures take
 quatrelle-store.path = "../crates/store" # the in-memory cache syncs write to; data files
+outlook-pst-rw = "1.2.14" # the .pst reader and writer, from the fixed copy below (`pst_append`)
 serde_json = "1" # Graph's answers
 
 # `cargo fuzz ... -O` builds with this profile. Quatrelle's own code keeps its debug assertions and
