@@ -17,8 +17,9 @@ use super::*;
 /// it a moment later doesn't read them again).
 pub(super) const PARK_AFTER: i64 = 5 * 60;
 
-/// The appointments set aside, an account's.
-pub const PARKED_DOC: &str = "pim-parked.json";
+/// The appointments set aside, an account's (the worker reads them too: a calendar read by its
+/// changes goes on from what's kept of it).
+pub use quatrelle_model::pim::PARKED_DOC;
 
 /// Whether an appointment is set aside away from the calendar: another person's, not waiting to
 /// go to the server.
@@ -56,15 +57,21 @@ impl Session {
         if self.pim_unread.contains(account) {
             return;
         }
+        // Brought back and not saved since: what's in memory is all there is (the document holds
+        // a copy of it).
+        let copy_on_disk = self.aside_on_disk.remove(account);
         let Some(p) = self.pim.get_mut(account) else { return };
         if !p.events.iter().any(parks) {
+            if copy_on_disk && let Err(e) = store.save_account_doc(account, PARKED_DOC, &Vec::<StoredEvent>::new()) {
+                log::warn!("{account}: the appointments set aside stay on disk: {e}");
+            }
             self.parked.insert(account.to_string());
             return;
         }
         let (aside, kept): (Vec<StoredEvent>, Vec<StoredEvent>) = std::mem::take(&mut p.events).into_iter().partition(parks);
         p.events = kept;
         let here: HashSet<String> = aside.iter().map(|e| e.calendar.clone()).collect();
-        let mut doc: Vec<StoredEvent> = store.load_account_doc(account, PARKED_DOC).unwrap_or_default();
+        let mut doc: Vec<StoredEvent> = if copy_on_disk { Vec::new() } else { store.load_account_doc(account, PARKED_DOC).unwrap_or_default() };
         doc.retain(|e| !here.contains(&e.calendar));
         doc.extend(aside);
         if let Err(e) = store.save_account_doc(account, PARKED_DOC, &doc) {
@@ -102,9 +109,11 @@ impl Session {
     }
 
     /// Other people's appointments back in memory (a calendar read since keeps what was read; one
-    /// kept in memory isn't doubled; one of a calendar no longer listed stays out), then nothing
-    /// left aside. The calendar's document takes them at its next save: lost meanwhile, they're
-    /// only a copy of the server's, read again when the calendar is shown.
+    /// kept in memory isn't doubled; one of a calendar no longer listed stays out). The calendar's
+    /// document takes them at its next save; until then, every one of them brought back, they stay
+    /// in their document too, where the worker reads them (a calendar read by its changes goes on
+    /// from what's kept of it), and it's emptied with that save. Some left out, it's emptied at
+    /// once: lost meanwhile, they're only a copy of the server's, read whole again.
     fn unpark(&mut self, store: &Store, account: &str) {
         self.parked.remove(account);
         let read = self.read_aside.remove(account).unwrap_or_default();
@@ -118,13 +127,17 @@ impl Session {
             p.events.iter().map(|e| (e.calendar.clone(), e.event.uid.clone(), e.event.recurrence_id)).collect();
         let listed: HashSet<String> = p.calendars.iter().map(|c| c.id.clone()).collect();
         let n = doc.len();
+        let before = p.events.len();
         p.events.extend(doc.into_iter().filter(|e| {
             listed.contains(&e.calendar)
                 && !read.contains(&e.calendar)
                 && !kept.contains(&(e.calendar.clone(), e.event.uid.clone(), e.event.recurrence_id))
         }));
+        let all = p.events.len() - before == n;
         self.pim_revision = self.pim_revision.wrapping_add(1);
-        if let Err(e) = store.save_account_doc(account, PARKED_DOC, &Vec::<StoredEvent>::new()) {
+        if all {
+            self.aside_on_disk.insert(account.to_string());
+        } else if let Err(e) = store.save_account_doc(account, PARKED_DOC, &Vec::<StoredEvent>::new()) {
             log::warn!("{account}: the appointments set aside stay on disk too: {e}");
         }
         log::info!("{account}: {n} of other people's appointments read back for the calendar");

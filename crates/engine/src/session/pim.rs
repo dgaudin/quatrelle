@@ -157,6 +157,13 @@ impl Session {
         let (Some(store), Some(p)) = (&self.store, self.pim.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, PIM_DOC, p) {
             self.notice_with("calendar and contacts could not be saved: {error}", &[("error", &e.to_string())], true);
+            return;
+        }
+        // Saved with the appointments brought back from where they were set aside: no longer there.
+        if self.aside_on_disk.remove(account)
+            && let Err(e) = store.save_account_doc(account, quatrelle_model::pim::PARKED_DOC, &Vec::<StoredEvent>::new())
+        {
+            log::warn!("{account}: the appointments set aside stay on disk too: {e}");
         }
     }
 

@@ -190,7 +190,7 @@ fn apply(t: &mut Task, c: TaskChange, today: i64) {
 
 /// Merge the tasks a sync found: those stored on the server get their item there and are no
 /// longer to send; the server's list replaces the rest, those changed here (and those never
-/// sent) staying.
+/// sent) staying, and the state it was read up to is kept with it.
 pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) {
     for x in &sync.pushed_tasks {
         for t in p.tasks.iter_mut().filter(|t| t.task.uid == x.task.uid) {
@@ -200,6 +200,7 @@ pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) {
         }
     }
     if let Some(server) = &sync.tasks {
+        p.tasks_state.clone_from(&sync.tasks_state);
         p.tasks.retain(|t| t.dirty || t.href.is_empty());
         for x in server {
             // Deleted here, the server not told yet (offline): it stays deleted.

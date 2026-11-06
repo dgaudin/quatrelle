@@ -545,15 +545,17 @@ fn other_peoples_calendars_are_set_aside_away_from_the_calendar() {
     assert_eq!(theirs(&s), 0, "set aside at the start");
     assert_eq!(aside(&store), 7);
     let own = on_disk(&store);
-    // The calendar shown: back, and nothing left aside.
+    // The calendar shown: back, and their document keeps them, where the worker reads them, until
+    // the calendar's takes them, at its next save (R22: a calendar read by its changes goes on
+    // from what's kept of it).
     s.run("view.calendar", &json!({})).unwrap();
     s.take_jobs();
     assert_eq!(theirs(&s), 7);
-    assert_eq!(aside(&store), 0, "nothing left aside");
-    // The calendar's document takes them at its next save.
+    assert_eq!(aside(&store), 7, "kept there until the calendar is saved");
     s.run("calendar.goto", &json!({"date": "2026-10-14"})).ok();
     s.save_pim(account);
     assert_eq!(on_disk(&store), own + 7);
+    assert_eq!(aside(&store), 0, "nothing left aside once saved");
     let today = s.agenda(NOW - 86_400, NOW + 86_400);
     assert!(today.iter().any(|i| i.summary == "Dailies"), "shown in the calendar");
     // Left a moment: still there; five minutes: set aside, but for one changed here.
@@ -587,6 +589,30 @@ fn other_peoples_calendars_are_set_aside_away_from_the_calendar() {
     let zoes: Vec<String> = s.pim[account].events.iter().filter(|e| e.calendar == zoe).map(|e| e.event.summary.clone()).collect();
     assert_eq!(zoes, ["Read since"]);
     assert_eq!(theirs(&s), 1 + 1 + 4, "the rooms' come back, the one kept not doubled");
+    done(s);
+}
+
+/// Brought back and left again before the calendar was saved with them: set aside as memory has
+/// them, each once, and brought back again whole.
+#[test]
+fn set_aside_again_before_a_save_keeps_each_once() {
+    use quatrelle_model::pim::StoredEvent;
+    let mut s = sample_session("parking-again");
+    let account = sample::SAMPLE_ACCOUNT;
+    let theirs = |s: &Session| s.pim.get(account).map_or(0, |p| p.events.iter().filter(|e| e.calendar.starts_with("shared:")).count());
+    let store = s.store.clone().unwrap();
+    let aside = |store: &Store| store.load_account_doc::<Vec<StoredEvent>>(account, "pim-parked.json").unwrap_or_default().len();
+    s.run("view.calendar", &json!({})).unwrap();
+    s.take_jobs();
+    assert_eq!((theirs(&s), aside(&store)), (7, 7));
+    s.run("view.mail", &json!({})).unwrap();
+    s.take_jobs();
+    s.set_clock(NOW + 301, 0);
+    s.take_jobs();
+    assert_eq!((theirs(&s), aside(&store)), (0, 7), "each once");
+    s.run("view.calendar", &json!({})).unwrap();
+    s.take_jobs();
+    assert_eq!(theirs(&s), 7);
     done(s);
 }
 
