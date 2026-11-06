@@ -65,20 +65,28 @@ const FORKED: &[&str] = &["outlook-pst-rw"];
 /// attribution, fmt, clippy).
 pub const VENDOR: &str = "vendor";
 
-/// The repository's own files matching `pathspec` (tracked or new, not ignored), [`VENDOR`] left out.
+/// The repository's own files matching `pathspec` (tracked or new, not ignored), [`VENDOR`] left
+/// out: the one listing the assets, sizes and authors checks read. Listed NUL-separated, so a
+/// name with non-ASCII letters isn't quoted (and left out of every check); a listing that fails
+/// is an error, never an empty list that passes (as WordCraft's xtask).
 pub fn own_files(root: &Path, pathspec: &[&str]) -> Result<Vec<String>, String> {
     let exclude = format!(":(exclude){VENDOR}/");
     let out = Command::new("git")
         .current_dir(root)
-        .args(["ls-files", "--cached", "--others", "--exclude-standard", "--"])
+        .args(["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--"])
         .args(pathspec)
         .arg(&exclude)
         .output()
         .map_err(|e| format!("git ls-files: {e}"))?;
     if !out.status.success() {
-        return Err(format!("git ls-files failed:\n{}", String::from_utf8_lossy(&out.stderr)));
+        return Err(format!("git ls-files failed ({}): {}", out.status, String::from_utf8_lossy(&out.stderr).trim()));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect())
+    Ok(nul_separated(&out.stdout))
+}
+
+/// The paths in `git ls-files -z` output.
+fn nul_separated(stdout: &[u8]) -> Vec<String> {
+    stdout.split(|b| *b == 0).filter(|p| !p.is_empty()).map(|p| String::from_utf8_lossy(p).into_owned()).collect()
 }
 
 /// Crates that never build for the web (sockets, threads, TLS).
@@ -197,8 +205,12 @@ const ASSET_EXT: &[&str] =
     &["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "icns", "svg", "pdf", "ttf", "otf", "woff", "woff2", "mp3", "wav", "mp4", "eml"];
 
 fn cmd_assets() -> Result<(), String> {
-    let files = own_files(&root(), &[])?;
-    let md = std::fs::read_to_string(root().join("ATTRIBUTION.md")).map_err(|e| format!("ATTRIBUTION.md: {e}"))?;
+    assets(&root())
+}
+
+fn assets(root: &Path) -> Result<(), String> {
+    let files = own_files(root, &[])?;
+    let md = std::fs::read_to_string(root.join("ATTRIBUTION.md")).map_err(|e| format!("ATTRIBUTION.md: {e}"))?;
     let missing: Vec<String> = files
         .iter()
         .filter(|f| {
@@ -366,5 +378,31 @@ mod tests {
         let rs = own_files(&root(), &["*.rs"]).unwrap_or_default();
         assert!(rs.iter().any(|f| f == "xtask/src/main.rs"), "the repository's own files are listed");
         assert!(!rs.iter().any(|f| f.starts_with("vendor/")), "vendored files aren't");
+    }
+
+    /// Names are read whole, non-ASCII ones too (git quotes them otherwise, and the quoted name
+    /// matched no file); a listing that fails fails the check instead of passing with nothing
+    /// checked. The temporary folder may sit inside another checkout (a home folder kept in
+    /// git): a `.git` file naming a missing folder makes git fail there all the same.
+    #[test]
+    fn file_listings_are_whole_and_never_silently_empty() {
+        assert_eq!(nul_separated(b"assets/\xc3\xa9 b.png\0docs/x.svg\0"), vec!["assets/é b.png".to_string(), "docs/x.svg".into()]);
+        assert!(nul_separated(b"").is_empty());
+        let dir = std::env::temp_dir().join(format!("quatrelle-xtask-listing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("assets")).unwrap();
+        std::fs::write(dir.join("assets/é b.png"), b"").unwrap();
+        std::fs::write(dir.join("ATTRIBUTION.md"), "").unwrap();
+        std::fs::write(dir.join(".git"), "gitdir: no-such-folder\n").unwrap();
+        let (broken, checked) = (own_files(&dir, &[]), assets(&dir));
+        std::fs::remove_file(dir.join(".git")).unwrap();
+        let init = Command::new("git").current_dir(&dir).args(["init", "-q"]).status();
+        let listed = own_files(&dir, &[]);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(broken.is_err_and(|e| e.starts_with("git ls-files failed")));
+        assert!(checked.is_err(), "no listing, no pass");
+        assert!(init.is_ok_and(|s| s.success()));
+        let listed = listed.unwrap();
+        assert!(listed.iter().any(|f| f == "assets/é b.png"), "{listed:?}");
     }
 }
