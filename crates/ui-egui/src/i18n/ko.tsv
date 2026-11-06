@@ -164,6 +164,7 @@
 	Not an email address: {address}	이메일 주소가 아닙니다: {address}
 	Not junk	정크 아님
 	Not sent: {error}	보내지 못함: {error}
+	Not sent yet: this is a draft.	아직 보내지 않음: 임시 보관 메시지입니다.
 	Nothing matches this filter.	이 필터에 맞는 항목이 없습니다.
 	Nov	11월
 	Numbered list	번호 매기기 목록

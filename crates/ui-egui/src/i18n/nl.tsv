@@ -164,6 +164,7 @@
 	Not an email address: {address}	Geen e-mailadres: {address}
 	Not junk	Geen ongewenste e-mail
 	Not sent: {error}	Niet verzonden: {error}
+	Not sent yet: this is a draft.	Nog niet verzonden: dit is een concept.
 	Nothing matches this filter.	Niets voldoet aan dit filter.
 	Nov	nov
 	Numbered list	Genummerde lijst

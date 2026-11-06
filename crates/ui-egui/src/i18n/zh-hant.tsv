@@ -164,6 +164,7 @@
 	Not an email address: {address}	不是電子郵件地址: {address}
 	Not junk	不是垃圾郵件
 	Not sent: {error}	未傳送: {error}
+	Not sent yet: this is a draft.	尚未傳送：這是草稿。
 	Nothing matches this filter.	沒有符合此篩選條件的項目。
 	Nov	11月
 	Numbered list	編號清單

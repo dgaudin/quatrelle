@@ -666,7 +666,7 @@ fn row_input(
     }
     if resp.double_clicked() {
         // Drafts carry on being written; other mail opens in a window of its own.
-        if s.view_role() == Some(FolderRole::Drafts) {
+        if s.view_role() == Some(FolderRole::Drafts) || m.flags.draft {
             acts.push(Action::Run("draft.edit", json!({"key": m.key.to_id()})));
         } else {
             acts.push(Action::Run("message.popOut", json!({"key": m.key.to_id()})));

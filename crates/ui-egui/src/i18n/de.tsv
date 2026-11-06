@@ -164,6 +164,7 @@
 	Not an email address: {address}	Keine E-Mail-Adresse: {address}
 	Not junk	Kein Junk
 	Not sent: {error}	Nicht gesendet: {error}
+	Not sent yet: this is a draft.	Noch nicht gesendet: Dies ist ein Entwurf.
 	Nothing matches this filter.	Nichts entspricht diesem Filter.
 	Nov	Nov
 	Numbered list	Nummerierte Liste
