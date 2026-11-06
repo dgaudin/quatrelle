@@ -165,3 +165,46 @@ fn the_worker_fetches_a_file_left_on_the_server() {
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A calendar followed by its changes before its files were read (R21, R22): read whole once, its
+/// appointments' files with it, then by its changes again.
+#[test]
+fn a_calendar_kept_before_comes_with_its_files_once() {
+    let (server, c) = server(None);
+    let first = crate::ews_pim::sync_changes(&c, &Pim::default(), NOW).unwrap();
+    let mut pim = kept_after(&Pim::default(), &first);
+    // As the version before kept it: the server's state, the appointment without its files.
+    for k in &mut pim.calendars {
+        k.ctag = k.ctag.strip_prefix("f1:").unwrap_or(&k.ctag).to_string();
+    }
+    for e in &mut pim.events {
+        e.event.extra.retain(|l| !l.starts_with("ATTACH") && !l.starts_with("X-QUATRELLE-SERVER-ATTACH"));
+    }
+    assert!(names(&pim).is_empty());
+    let next = crate::ews_pim::sync_changes(&c, &pim, NOW + 60).unwrap();
+    assert!(next.kept.is_empty(), "read whole");
+    let pim = kept_after(&pim, &next);
+    assert_eq!(names(&pim), ["Agenda.pdf", "Deck.pptx", "Minutes.eml"]);
+    let given = server.data.lock().unwrap().pim_given;
+    let again = crate::ews_pim::sync_changes(&c, &pim, NOW + 120).unwrap();
+    assert!(again.events.is_empty() && server.data.lock().unwrap().pim_given == given, "then by its changes");
+}
+
+/// A public calendar's appointment lists its files, none fetched until opened.
+#[test]
+fn a_public_calendars_appointment_lists_its_files() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
+    let events = d.folder("Company events", Some(&root), None, "IPF.Appointment");
+    d.pim.push(("P1".into(), events, review(&["agenda", "deck"])));
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let sync = crate::ews_pim::sync(&c, &Pim::default(), NOW).unwrap();
+    let e = &sync.events.iter().find(|e| e.calendar.starts_with("public:")).expect("the public appointment").event;
+    let files: Vec<(String, bool)> = event_files(e).into_iter().map(|f| (f.name, f.on_server)).collect();
+    assert_eq!(files, [("Agenda.pdf".to_string(), true), ("Deck.pptx".to_string(), true)]);
+    assert!(server.data.lock().unwrap().attachments_given.is_empty());
+}

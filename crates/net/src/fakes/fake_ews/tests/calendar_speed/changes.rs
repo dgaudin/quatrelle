@@ -258,7 +258,7 @@ fn a_refused_state_reads_the_calendar_whole_once() {
     let (server, c, mut pim) = read_once();
     let state = pim.calendars.iter().find(|k| k.id == crate::ews_pim::CALENDAR).map(|k| k.ctag.clone()).unwrap();
     assert!(!state.is_empty(), "a state kept with the calendar");
-    for junk in ["p1!!not-one", ""] {
+    for junk in ["f1:p1!!not-one", ""] {
         pim.calendars.iter_mut().filter(|k| k.id == crate::ews_pim::CALENDAR).for_each(|k| k.ctag = junk.into());
         let (next, given, _, _) = cost(&server, || told(&c, &pim, NOW + 60));
         assert_eq!(given, SINGLES + SERIES + MOVED, "read whole ({junk:?})");
