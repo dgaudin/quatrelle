@@ -2027,3 +2027,5 @@ folder	Conflicts	التعارضات
 	Every recipient can receive it encrypted ({scheme})	يستطيع كل المستلمين استقبالها مشفّرة ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	لا يمكن تشفيرها لـ {names}: لا يوجد مفتاح OpenPGP صالح
 	It can't be encrypted for {names}: no certificate	لا يمكن تشفيرها لـ {names}: لا توجد شهادة
+	Downloading {name}…	جارٍ تنزيل {name}…
+	{name} could not be downloaded: {error}	تعذّر تنزيل {name}: {error}

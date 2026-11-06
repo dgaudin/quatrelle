@@ -2032,3 +2032,5 @@ menu	View	Afficher
 	Every recipient can receive it encrypted ({scheme})	Tous les destinataires peuvent le recevoir chiffré ({scheme})
 	It can't be encrypted for {names}: no usable OpenPGP key	Il ne peut pas être chiffré pour {names} : pas de clé OpenPGP utilisable
 	It can't be encrypted for {names}: no certificate	Il ne peut pas être chiffré pour {names} : pas de certificat
+	Downloading {name}…	Téléchargement : {name}…
+	{name} could not be downloaded: {error}	Impossible de télécharger {name} : {error}

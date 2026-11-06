@@ -4,7 +4,8 @@
 //! `ATTACH`), as chips like a message's attachments: in the appointment's window and on the
 //! contact's page. Each opens with a double-click or Open, and saves with Save As; nothing opens
 //! without the user's asking, never a program, and a file opened is written in the folder the
-//! app opens attachments from first, as a message's are.
+//! app opens attachments from first, as a message's are. An Exchange appointment's file left on
+//! the server (R25) looks the same: opened, it's downloaded first, then opened once it's come.
 
 use egui::Rect;
 use quatrelle_engine::model::pim::files::KeptFile;
@@ -182,12 +183,26 @@ impl MailApp {
         let path = dir.join(&name);
         let (id, params) = item.command(&path, true);
         match self.session.run(id, &params) {
-            Ok(_) => {
-                if let Err(e) = self.services.open_path(&path) {
-                    self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true);
-                }
-            }
+            // One on the server (an Exchange appointment's, R25) is opened once it's come.
+            Ok(v) if v.get("fetching").is_some() => {}
+            Ok(_) => self.open_written(&path, &name),
             Err(e) => self.session.notice(e.to_string(), true),
+        }
+    }
+
+    /// Hand a file just written to the system to open.
+    fn open_written(&mut self, path: &std::path::Path, name: &str) {
+        if let Err(e) = self.services.open_path(path) {
+            self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true);
+        }
+    }
+
+    /// The appointments' files that came from the server to be opened (R25): handed on.
+    pub(crate) fn open_files_come(&mut self) {
+        for path in self.session.take_files_to_open() {
+            let path = std::path::PathBuf::from(path);
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            self.open_written(&path, &name);
         }
     }
 }

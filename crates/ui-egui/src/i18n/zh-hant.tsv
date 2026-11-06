@@ -2032,3 +2032,5 @@ folder	Conflicts	衝突
 	Every recipient can receive it encrypted ({scheme})	所有收件人都能接收加密郵件（{scheme}）
 	It can't be encrypted for {names}: no usable OpenPGP key	無法為 {names} 加密：沒有可用的 OpenPGP 金鑰
 	It can't be encrypted for {names}: no certificate	無法為 {names} 加密：沒有憑證
+	Downloading {name}…	正在下載 {name}…
+	{name} could not be downloaded: {error}	無法下載 {name}: {error}
