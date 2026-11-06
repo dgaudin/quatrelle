@@ -22,6 +22,7 @@ use crate::model::dates::Clock;
 use crate::store::Store;
 
 mod search;
+mod sync;
 
 fn step<T>(what: &str, f: impl FnOnce() -> T) -> T {
     std::thread::sleep(Duration::from_secs(3));
