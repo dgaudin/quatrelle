@@ -21,10 +21,11 @@ fn last_sent(s: &Session) -> Vec<u8> {
 }
 
 /// The source the sample account sent before OpenPGP could send anything (recorded before lot 4;
-/// `{VERSION}`: Quatrelle's, in `X-Mailer`).
+/// `{VERSION}`: Quatrelle's, in `X-Mailer`), without the empty line mail-builder 1 wrote before
+/// the first boundary (mail-builder 2 writes none).
 const BEFORE: &str = "From: \"Riley Moreno\" <riley@studio.example>\r\nSubject: Plan\r\nDate: Wed, 14 Oct 2026 12:00:00 +0000\r\n\
 Message-ID: <6acf6ec0.c4810462bc19dca4@studio.example>\r\nTo: \"Bo\" <bo@studio.example>\r\nX-Mailer: Quatrelle {VERSION}\r\n\
-MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"=_mcc6512b6a89c44875_1\"\r\n\r\n\r\n--=_mcc6512b6a89c44875_1\r\n\
+MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"=_mcc6512b6a89c44875_1\"\r\n\r\n--=_mcc6512b6a89c44875_1\r\n\
 Content-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\n\r\nSee you at nine.\r\n--=_mcc6512b6a89c44875_1\r\n\
 Content-Type: text/plain\r\nContent-Disposition: attachment; filename=\"plan.txt\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n\
 nine=0A\r\n--=_mcc6512b6a89c44875_1--\r\n";
