@@ -4389,6 +4389,125 @@ fichier déjà là.
     data file »…) et les noms de leurs filtres sont en anglais en dur dans `desktop.rs` ;
   - `app/` a toujours 16 fichiers Rust ; `ui-egui/src/` en a 15.
 
+### État de la récupération : v0.33, quatrième partie : les lettres d'information (S3) (2026-11-06)
+
+Le lot S3 de `merge-tools/survey-v0.33.md` (issue #41 de l'origine), sur `main`, après S2. Il
+prolonge la huitième partie (la mise en page HTML en colonnes, `b06767f4`, `d153a457`). Chaque
+point a sa sonde, lancée d'abord contre le code d'alors. L'apparence reste celle du fork : on
+corrige ses défauts, on ne prend pas celle de l'origine.
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `b1200eff` | reprise de `634748f7` (auteur Zinadin Zidan), sans CHANGELOG : le texte d'un HTML sans cadres de tableau, l'aperçu d'un HTML seul tiré de ce texte | `tables_read_as_text_without_rules` : **texte encadré de `─`**, aperçu « BANNERFirst block » → sans cadres, « BANNER First block » |
+| `1b10dbe6` | adapté de `634748f7` : l'aperçu dans l'ordre de lecture, sans marques, lu à partir de `<body>` par petites fenêtres ; l'aperçu de la liste sans analyse complète | `a_newsletter_preview_reads_its_cells_in_order` (mime) et `rows_downloaded_ahead_get_their_preview_from_the_source` (moteur) : **« [[Logo]][1] ## Banner \*\*First\*\* block [1]: https://… »** → « Logo Banner First block » |
+| `8e133282` | adapté de `5e3288d2` : les blocs empilés jointifs, `cellspacing`, la teinte pâle, le `bgcolor` sous un dégradé, la marge interne des boîtes CSS, le `<br>` entre deux blocs ; plus le test manuel GreenMail de `634748f7` | `stacked_blocks_keep_their_own_room` (ne compilait pas : pas de `Table::spacing`), `a_line_break_alone_is_room_only_between_two_boxes`, `a_pale_tint_is_a_box` (**`None`** → la teinte), `a_newsletters_stacked_blocks_touch_and_keep_their_tint` : **0 bloc jaune dessiné** → 3, jointifs, et les deux rangées bleues jointives |
+| `daebd00f` | propre au fork : un texte sans couleur sur une cellule colorée où celle du thème ne se lit pas est noir ou blanc | `plain_text_reads_on_a_coloured_cell` : **presque noir sur bleu foncé** (clair), gris clair sur bleu clair (sombre) → lisible |
+
+**Le texte et l'aperçu** (`634748f7`). `html_to_text` (vue en texte brut, partie texte des réponses,
+recherche) passe par html2text sans bordures de tableau. L'aperçu d'un message en HTML seul ne vient
+plus de la conversion de mail-parser, qui collait les cellules. Le test manuel de l'origine contre
+GreenMail (`net/src/fakes/real_layout.rs`) lit les champs de `5e3288d2` : il arrive avec `8e133282`,
+adapté (`QUATRELLE_REAL_LAYOUT`, la marge interne dans la cellule) ; il n'a jamais tourné ici.
+
+**L'aperçu adapté, et ce qu'il coûte.** `fill_from_source` appelle `summary_from_full` pour
+**chaque message téléchargé** (Exchange, Graph, IMAP en avance). Mesures en `--release` sur des
+lettres d'information fabriquées (blocs de tableaux, images, liens, styles), 40 messages × 5 tours,
+banc hors dépôt (`~/.tq/s3-hold/s3bench.rs`) :
+
+| HTML seul de | avant (mail-parser) | `634748f7` tel quel | adapté (`1b10dbe6`) |
+|---|---|---|---|
+| 4 Ko | 18 µs | 236 µs | 153 µs |
+| 15 Ko | 52 µs | 765 µs | 455 µs |
+| 41 Ko | 140 µs | 1 893 µs | 469 µs |
+
+Ramené à 550 000 messages tous en HTML seul de 41 Ko : 77 s avant, 17 min 21 s avec la reprise
+telle quelle, **4 min 18 s adapté**, sur le fil du téléchargement, à côté du réseau (dizaines de
+ms par message pour Exchange). Un message `multipart/alternative` (texte + HTML) ne change pas
+(7 à 47 µs : l'aperçu vient de sa partie texte). L'aperçu tel quel de l'origine entremêlait aussi
+deux cellules côte à côte ligne à ligne (« [[Picture ## Title 0 0]] ») et gardait les `[…]` et
+`##` de html2text. Adapté :
+- le mode brut de html2text (`raw_mode`, une cellule après l'autre, aucune mise en colonnes) avec
+  `TrivialDecorator` (aucune marque) : « Picture 0 Title 0 Lead word0… » ;
+- lu à partir de `<body>` (cherché sans copie, sur tout le HTML : 80 Ko de styles en tête n'y
+  font rien), d'abord 16 Ko, puis 64 Ko seulement si les 16 premiers n'ont pas 200 caractères de
+  mots (`html::html_preview`).
+
+**L'aperçu de la liste** (propre au fork). Pour les lignes arrivées sans aperçu (le courrier
+d'Exchange téléchargé en avance, celui du propriétaire), `Session::fill_previews`, sur le fil de la
+fenêtre, faisait une analyse complète (`mime::parse`, mise en page comprise) pour en prendre le
+texte : **2,3 à 21,6 ms par ligne**, et un aperçu plein de `─ │` (avant `b1200eff`) puis de
+`[[…]][1]`, `##`, `**` et des notes de liens. Il prend maintenant l'aperçu du résumé
+(`mime::preview_from_source`, ce que `summary_from_full` donnerait) : 0,15 à 0,48 ms par ligne.
+
+**Les blocs empilés** (`5e3288d2`). Vu avant dans le volet de lecture : les blocs jaune pâle
+disparaissaient sur le gris de la page (contraste 1,055 sous le seuil de 1,06), le bandeau perdait
+sa couleur (le `background` en dégradé cachait le `bgcolor`), les rangées étaient à 4 px l'une de
+l'autre et chaque tableau laissait 4 px sous lui. Repris :
+- `Table::spacing` (`cellspacing`, `border-spacing`, 2 quand rien n'est dit, 0 avec
+  `border-collapse`) pour un tableau HTML ; `None` pour une boîte CSS. Dessiné entre les rangées,
+  entre les cellules côte à côte et autour d'elles ;
+- un tableau suivi d'un autre le touche ; un texte avant ou après garde l'écart d'avant ;
+- une teinte dont un canal est à 12 ou plus de celui de la page est gardée (règle de l'origine) ;
+- le `bgcolor` sous un dégradé, sinon la première couleur du dégradé ;
+- un `<br>` seul entre deux blocs devient la ligne vide d'un navigateur.
+
+Adapté aux types et au rendu du fork :
+- le fork avait déjà la marge interne des cellules (`Cell::padding`, `cellpadding` compris) :
+  pas de `Table::padding` comme chez l'origine ;
+- les boîtes CSS (colonne de largeur fixe, boîte à image de fond, boîte à éléments placés)
+  prennent leur propre `padding` ;
+- un `<br>` qui finit une cellule, ou qui en fait une cellule d'espacement, ne compte pas : chez
+  l'origine, une cellule `<td><br></td>` cessait d'être vide et ajoutait une ligne ;
+- restent ceux du fork : l'interligne du texte dans une cellule (4 px, 0 dans une grille), la
+  grille de cellules bordées sur une seule ligne (le cas `bordered` : pas d'espacement), les
+  colonnes au pixel près d'un tableau de chiffres (pas d'espacement), et les 6 px du lecteur pour
+  une cellule qui ne dit rien.
+
+**Le texte sur une cellule colorée** (propre au fork, vu sur les rendus). Un texte sans couleur
+prenait celle du thème quelle que soit la cellule : illisible sur la rangée bleu foncé d'un
+rapport en clair, sur la rangée bleu clair d'une lettre d'information en sombre. Quand la couleur
+du thème ne se lit pas (contraste sous 3), il est noir ou blanc, comme pour un surlignage.
+
+**Les rendus** (`QUATRELLE_FRAME_PNG`, `~/.tq/s3-shots/`, avant et après, clair et sombre) d'une
+lettre d'information fabriquée : bandeau à dégradé, deux blocs jaune pâle, un `<br>`, deux rangées
+colorées, un tableau de mise en page sans bordure, un tableau de chiffres à bordures.
+- Clair avant : page grise sans blocs, bandeau sans couleur, rangées séparées.
+- Clair après : les trois blocs jaunes jointifs, le bandeau doré, une ligne vide puis les deux
+  rangées jointives ; le tableau à bordures identique ; le tableau sans bordure à 2 px de ses bords.
+- Sombre : le gris et le jaune pâle restent écartés (règle des boîtes claires peu saturées en
+  sombre), le bandeau doré est gardé ; après `daebd00f`, son texte et celui de la rangée bleu
+  clair sont noirs.
+- Liserés pointillés blancs en haut de quelques aplats : déjà là avant, dans les deux thèmes ;
+  ils viennent du peintre logiciel des tests, pas du rendu de la fenêtre.
+
+**Pour S6** (la réponse qui garde l'original mis en page, `4a966444`) :
+- `Table` a un champ de plus, `spacing: Option<u8>` (`Some` pour un tableau HTML, `None` pour une
+  boîte CSS ; `serde(default)`, absent quand `None`) : toute construction littérale doit le
+  nommer ou finir par `..Default::default()` ;
+- chez l'origine, `Table::padding` (le `cellpadding`) et `Cell::padding: Option<[u16; 4]>` ; ici
+  seulement `Cell::padding: Option<[u8; 4]>` (`Padding`, borné à `MAX_PADDING` = 64), qui contient
+  déjà le `cellpadding` ; `None` veut dire « celle du lecteur » (6 px), pas 0 ;
+- un `Block::Text` fait de lignes vides peut séparer deux tableaux (le `<br>`) ;
+- la partie texte d'une réponse à un courrier HTML n'a plus de cadres `─ │` (`html_to_text`) ;
+- `html_to_words` n'est pas celui de l'origine (mode brut, sans marques) ; `mime::preview_from_source`
+  et `html::html_preview` sont propres au fork.
+
+- **Ce que verra le propriétaire** : dans la liste, l'aperçu des lettres d'information se lit (plus
+  de `─`, de `[[…]]` ni de `**`) ; dans le volet de lecture, les blocs empilés se touchent, gardent
+  leur teinte pâle et leur marge, un bandeau en dégradé a sa couleur ; un texte reste lisible sur
+  une cellule colorée ; la liste remplit ses aperçus Exchange sans à-coups.
+- **Vérifié** : chaque sonde avant et après ; mime (178), moteur (557), jmap, toute l'interface
+  (513) ; `cargo xtask ci` (wasm compris).
+- **Vérifiable seulement en vrai** : les vraies lettres d'information du propriétaire, à côté
+  d'Outlook ; le test GreenMail de l'origine.
+- **Reste, remarqué** :
+  - la cible de fuzz `html` n'a pas été relancée sur le nouveau code (html2text et le modèle, déjà
+    couverts ; aucun nouvel analyseur) ;
+  - une lettre d'information sans aucun mot (que des images) retombe, comme avant, sur l'analyse
+    complète de `summary_from_full` (2 à 22 ms) à chaque téléchargement ;
+  - en sombre, les boîtes claires peu saturées (jaune pâle, bleu très clair) sont écartées, comme
+    avant : leur texte se lit, mais les blocs ne se voient plus.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
