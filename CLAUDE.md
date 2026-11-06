@@ -121,6 +121,9 @@ Before every commit: `cargo xtask ci`. Commit after every arc of work that build
   MSI, FreeBSD); `.github/workflows/` calls them through `storytold/craft-common-actions`
   (`release.yml` on the `release` branch). Keep app ids (`ai.storyteller.quatrelle`), binary
   names and the WiX `UpgradeCode` stable.
+- That shared release refuses git dependencies from outside `github.com/storytold/` and any
+  cargo config that swaps a source: `cargo xtask git-sources` (part of `cargo xtask ci`) checks
+  the same in `Cargo.lock` and `fuzz/Cargo.lock`.
 - The version lives only in `[workspace.package]` (`cargo xtask version [set X.Y.Z]`).
 - After touching workflows, run `npx actions-up` to keep pinned actions current; the
   `craft-common-actions@main` references stay on `main` on purpose.
