@@ -3013,6 +3013,60 @@ quatre lots dans l'ordre ; cette partie se complète à chacun.
 - **Reste, remarqué** : `cargo fmt --check` dans `fuzz/` signale `fuzz_targets/pst/item.rs`,
   d'avant ce lot (le `cargo fmt --all` du dépôt ne passe pas dans `fuzz/`), non touché.
 
+**Lot 3a : les clés, dans le pool et dans le moteur** (2026-11-06 ; tâches 3.1 à 3.3 du plan, la
+lecture et la carte viendront au lot 3b).
+
+| Commit | Ce qu'il fait | Essais (échoué avant → passé) |
+|---|---|---|
+| `c05a882b` (`f32b54b0`, adapté) | le pool (`net/src/worker/pgp.rs`, après `worker/smime.rs`) : `Job::Pgp { account, work }` et `PgpWork` (importer, utiliser, oublier, déchiffrer, comme l'origine ; faire, prolonger, sauvegarder, propres au fork), `Event::PgpKeys`, `PgpDecrypted`, `PgpBackedUp` ; chaque partie secrète dans une entrée du trousseau du compte (`pgp.<empreinte>`), listée dans `pgp` ; la sauvegarde écrite par `write_atomic` (au seul propriétaire) ; un compte retiré emporte ses clés du trousseau ; `FileAsk::PgpKey` pour le dialogue du bureau | 7 essais dans `worker/pgp/tests.rs` : 5 échouaient (le pool ne répondait pas, rien n'était oublié avec le compte) → passent ; `a_missing_keychain_makes_nothing` (point 3 de la revue) |
+| `243c2889` (`f32b54b0`, adapté) | le moteur : `AccountPgp` / `OwnKey` dans `pgp.json`, `Session::pgp_active`, `pgp_card` (`PgpCard`), les commandes de l'origine (`pgp.import`, `pgp.keys`, `pgp.forget`, `pgp.use`, `pgp.options`) et du fork (`pgp.create`, `pgp.extend`, `pgp.backup`, `pgp.exportPublic`, sur `armored_public`, ajouté au crate) ; un compte retiré demande l'oubli de chaque clé et ôte `pgp.json` de son fichier de données, qui reste (`Store::remove_account_doc`) ; 7 annonces et l'erreur du trousseau dans les 13 catalogues | `nothing_is_active_without_a_key`, `a_key_made_is_active_and_asks_for_its_backup`, `a_key_running_out_says_so_a_month_before`, `removing_an_account_forgets_its_secrets` (point 5) : `pgp_active` et `pgp_card` introuvables → passent ; sonde : sans l'effacement du document, le 4ᵉ échoue ; `a_public_key_is_written_as_a_key_file` : `armored_public` introuvable → passe ; `every_command_survives_junk_params` vert |
+| `57394bcf` (propre au fork) | les essais des deux commits précédents comme clippy les veut (`panic!` plutôt que `unreachable!`, `slice::from_ref`) | le clippy de `cargo xtask ci` les refusait |
+| `6436e13f` (`f32b54b0`, adapté) | les clés des correspondants (`session/security/pgp/people.rs`) : `PeopleKeys` dans `pgp-people.json`, `PersonKey`, `Learnt`, `Learn`, `PEOPLE_MAX` = 10 000 ; apprises de l'en-tête `Autocrypt:` de l'adresse d'expédition et des clés jointes à son nom, un message plus récent remplaçant la clé d'un plus ancien, jamais une clé importée à la main ; `Security::key_changed`, dit une fois ; les commandes `pgp.importPublic`, `pgp.importAttached`, `pgp.known`, `pgp.forgetPublic` ; 2 annonces de plus | 5 essais unitaires (`people/tests.rs`) et 5 du moteur (`tests/smime/pgp.rs`) : `person_key`, `pgp_people`, `key_changed`, `offered` introuvables → passent ; sonde du point 1 (message au From usurpé portant une autre clé) : sans la ligne du changement, échoue |
+
+- **Où les clés des correspondants sont apprises** : là où le message est déjà lu pour être
+  montré, jamais une seconde fois sur le fil de la fenêtre. Dans la fenêtre, le corps d'un message
+  protégé (Autocrypt, clé jointe, PGP) est préparé sur la file de lecture (`BodyWork::prepare`) :
+  c'est là que `offered` lit l'en-tête `Autocrypt:` (l'en-tête seul) et, si le message nomme
+  `application/pgp-keys`, ses parties de clé, et lit chaque clé (rPGP) ; le fil de la fenêtre ne
+  fait plus que comparer à l'expéditeur et à la date **de la liste** (`Summary`, rien n'est relu)
+  et ranger (`learn_offered`, dans `finish_body`, juste avant `unwrap`). Sans file de lecture (CLI,
+  essais), `offered` est lu au moment de montrer. La fenêtre à part d'un message et un message
+  remontré après déchiffrement n'apprennent rien (le volet l'a fait).
+- **Adapté** (au nom du propriétaire) :
+  - le plan nommait `Job::PgpMake`… et `Event::PgpKey { info }` : le fork garde la forme de
+    l'origine (`Job::Pgp { work }`), et les événements ne portent que les clés publiques, car
+    `model` (couche 0) ne peut pas dépendre de `quatrelle-pgp` pour `KeyInfo` ; le moteur les lit ;
+  - l'entrée du trousseau est `Quatrelle` / `<compte>|pgp.<empreinte>`, comme celle de S/MIME
+    (`<compte>|smime`), pas `quatrelle-pgp:<compte>:<empreinte>` ;
+  - `learn_from_mail` reçoit aussi le `KeyInfo`, lu hors du fil de la fenêtre ;
+  - `PgpWork::Protect` et le brouillon scellé de l'origine attendent le lot 4 ; le navigateur
+    laisse les jobs OpenPGP sans réponse jusque-là ;
+  - `model/src/lib.rs` (799 lignes) n'est pas touché : les types OpenPGP sont sous
+    `quatrelle_model::job` (`job/pgp.rs`).
+- **Trousseau verrouillé ou absent** (point 3) : faire ou importer une clé répond « the system
+  keychain isn't available: <ce qu'a dit le système> » (`NO_KEYCHAIN`), traduit dans les 13
+  catalogues, rien de gardé, pas même l'entrée de la clé si sa liste n'a pu s'écrire ; déchiffrer
+  sans clé rendue par le trousseau dit la même chose, jamais « mauvaise clé ». Une réponse sans
+  clés n'efface jamais celles que connaît le moteur.
+- **Vérifié** : les suites de `quatrelle-pgp`, `quatrelle-net` (essais OpenPGP), `quatrelle-engine`,
+  `quatrelle-store`, `quatrelle-ui-egui` (catalogues) ; `cargo xtask ci` (wasm compris).
+- **Pour le lot 3b** : `Session::pgp_card(account) -> PgpCard { keys: Vec<OwnKey>, needs_backup,
+  expires_soon: Option<i64>, autocrypt, people: Vec<PersonKey> }`, `Session::pgp_active`,
+  `pgp_key`, `pgp_people`, `person_key` ; `OwnKey { public, info, backed_up, in_use }` ;
+  `PersonKey { email, public, info, learnt: Learnt::{FromMail, ByHand}, last_used, from_date,
+  previous, change_shown }` ; `Security::key_changed` n'est pas encore dessiné (la barre ne montre
+  rien pour lui seul) ; `Event::PgpDecrypted` arrive à `apply_pgp`, qui l'ignore ; le pool attend
+  `PgpWork::Decrypt { key, data, inline, charset, verify_with }` et ne doit être appelé que pour un
+  compte qui a une clé (sinon il répond par l'erreur du trousseau) ; `PeopleKeys::used` est à
+  appeler quand une clé vérifie une signature.
+- **Reste, remarqué** : les clés des correspondants se chargent au démarrage pour chaque compte
+  et s'écrivent en entier à chaque changement (à 10 000 clés, une vingtaine de Mo de JSON) ;
+  `Store::import_data_file` recopie les documents d'un compte, d'où l'effacement de ceux
+  d'OpenPGP au retrait — `smime.json` reste, lui, dans le fichier de données gardé (sa clé est
+  partie du trousseau) ; une clé jointe à l'intérieur d'un message chiffré n'est pas apprise ;
+  une commande qui n'attend pas (`finish_pending_body`) lit les clés sur le fil de la fenêtre,
+  comme elle y lit déjà le message.
+
 ### Hors relevé : R20, rechercher dans le message (2026-11-06)
 
 Demandé par le propriétaire le 5 novembre, sa conception validée par lui ; propre au fork. Une
