@@ -60,7 +60,7 @@ fn message<'a>(m: &'a Owned, recipients: &'a [UnicodePstRecipient<'a>], properti
         html_body: m.html.as_deref(),
         message_id: &m.message_id,
         delivery_time: m.received,
-        message_class: "IPM.Note",
+        message_class: m.class(),
         properties,
     }
 }

@@ -9,8 +9,9 @@
 //! Email ([`place`]). Each message whose body is here goes in with its addresses (Bcc too), text
 //! and HTML bodies, attachments and header block, and with what the cache keeps of it: read or
 //! not, a draft, flagged (and when it's due), answered or forwarded, its categories, importance
-//! and sensitivity ([`item`]); an attached message as the message it is, and files of any size,
-//! a big one read from the cache as it's written ([`files`]). Messages only known by their headers (never opened, on an account
+//! and sensitivity ([`item`]); signed and encrypted mail and reports as Outlook keeps them
+//! ([`kinds`]); an attached message as the message it is, and files of any size, a big one read
+//! from the cache as it's written ([`files`]). Messages only known by their headers (never opened, on an account
 //! that keeps headers only) are counted as skipped. The writer makes mail items only, so the
 //! account's calendar and contacts go beside the file in the standard formats every calendar and
 //! address book reads (`… Calendar.ics`, `… Contacts.vcf`).
@@ -61,6 +62,7 @@ pub struct Exported {
 
 mod files;
 mod item;
+mod kinds;
 mod place;
 #[cfg(test)]
 mod tests;
@@ -202,6 +204,13 @@ pub fn export(
             Err(e)
         }
     }
+}
+
+/// The class an export gives the message in `raw` (signed, encrypted, a report or a note), its
+/// files and attached messages read as it reads them. For the fuzz target.
+#[doc(hidden)]
+pub fn message_class(raw: &[u8]) -> Option<&'static str> {
+    owned(raw, 0, item::State::default()).map(|m| m.class())
 }
 
 /// The account's calendar and contacts beside the data file: (events, people) written.
