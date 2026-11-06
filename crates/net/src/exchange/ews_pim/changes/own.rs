@@ -10,7 +10,7 @@ use super::*;
 pub(in crate::exchange::ews_pim) fn read_own_calendar(c: &Client, pim: &Pim, now: i64, again: &[String], out: &mut DavSync) -> Result<String> {
     let since = now - CALENDAR_BACK;
     let folder = distinguished("calendar");
-    let kept = pim.calendars.iter().find(|k| k.id == CALENDAR).map(|k| k.ctag.as_str()).unwrap_or("");
+    let kept = calendar_state(pim.calendars.iter().find(|k| k.id == CALENDAR).map(|k| k.ctag.as_str()).unwrap_or(""));
     if let Some(read) = read_changes(c, &folder, "the calendar", kept, again, Shape::Appointment)? {
         let (began, changed, deleted, given) = (read.began, read.changed, read.deleted, read.found.len());
         let state = read.state.clone();
@@ -19,13 +19,13 @@ pub(in crate::exchange::ews_pim) fn read_own_calendar(c: &Client, pim: &Pim, now
             "the calendar read by its changes in {:.1} s: {changed} made or changed ({given} given), {deleted} deleted, {kept} kept as they were",
             began.elapsed().as_secs_f32(),
         );
-        return Ok(state);
+        return Ok(keep_calendar_state(state));
     }
     // Its state first: what changes while it's read comes next time.
     let state = state_now(c, &folder, "the calendar")?.unwrap_or_default();
     read_calendar(c, items(c, "calendar", Some(since))?, CALENDAR, c.email(), since, out);
     out.synced_calendars.push(CALENDAR.into());
-    Ok(state)
+    Ok(keep_calendar_state(state))
 }
 
 /// The account's contacts into `out`, under `name`: by their changes when a state is kept, else

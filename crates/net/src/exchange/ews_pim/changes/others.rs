@@ -40,6 +40,7 @@ pub(in crate::exchange::ews_pim) fn shared_calendar(
     let since = now - CALENDAR_BACK;
     let label = format!("{owner}'s calendar");
     let here = pim.events.iter().any(|e| e.calendar == id && !e.href.is_empty());
+    let kept = calendar_state(kept);
     if let Some(read) = read_changes(c, folder, &label, if here { kept } else { "" }, again, Shape::Appointment)? {
         let (began, changed, deleted, state) = (read.began, read.changed, read.deleted, read.state.clone());
         let (may_change, nothing_read) = (read.found.iter().any(item_may_change), read.found.is_empty());
@@ -48,9 +49,9 @@ pub(in crate::exchange::ews_pim) fn shared_calendar(
             "{label} read by its changes in {:.1} s: {changed} made or changed, {deleted} deleted, {kept} kept as they were",
             began.elapsed().as_secs_f32()
         );
-        return Ok(Followed { state, may_change, nothing_read });
+        return Ok(Followed { state: keep_calendar_state(state), may_change, nothing_read });
     }
-    let state = state_now(c, folder, &label)?.unwrap_or_default();
+    let state = keep_calendar_state(state_now(c, folder, &label)?.unwrap_or_default());
     let list = items_in(c, folder, "", Some(since))?;
     let may_change = list.iter().any(item_may_change);
     read_calendar(c, list, id, owner, since, out);
@@ -84,7 +85,7 @@ fn routed<T>(c: &Client, p: &Public, f: impl FnOnce() -> Result<T>) -> Result<T>
 /// keep.
 pub(in crate::exchange::ews_pim) fn public_calendar(c: &Client, pim: &Pim, p: &Public, key: &str, since: i64, out: &mut DavSync) -> Result<String> {
     let folder = format!("<t:FolderId Id=\"{}\"/>", esc(p.id));
-    let kept = pim.calendars.iter().find(|k| k.id == key).map(|k| k.ctag.as_str()).unwrap_or("");
+    let kept = calendar_state(pim.calendars.iter().find(|k| k.id == key).map(|k| k.ctag.as_str()).unwrap_or(""));
     let here = pim.events.iter().any(|e| e.calendar == key && !e.href.is_empty());
     let read = routed(c, p, || read_changes(c, &folder, p.name, if here { kept } else { "" }, &[], Shape::Appointment))?;
     let (found, state) = match read {
@@ -106,9 +107,15 @@ pub(in crate::exchange::ews_pim) fn public_calendar(c: &Client, pim: &Pim, p: &P
             (routed(c, p, || public_items(c, p.id, p.replica, p.total, Some(since)))?, state)
         }
     };
+    // Their files listed, fetched when opened (R25).
+    let mut files = Vec::new();
     for it in found {
         if let Some(event) = event_of(&it) {
             let href = it.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or("").to_string();
+            let listed = super::super::files::listed(&it);
+            if !listed.is_empty() {
+                files.push((out.events.len(), listed));
+            }
             out.events.push(StoredEvent {
                 calendar: key.into(),
                 href,
@@ -121,8 +128,9 @@ pub(in crate::exchange::ews_pim) fn public_calendar(c: &Client, pim: &Pim, p: &P
             });
         }
     }
+    super::super::files::fill(c, out, files, false);
     out.synced_calendars.push(key.into());
-    Ok(state)
+    Ok(keep_calendar_state(state))
 }
 
 /// A public address book, kept here as `key`, into `out`: by its changes from its entry's state

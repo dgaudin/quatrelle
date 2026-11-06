@@ -49,6 +49,22 @@ const PASSING: [&str; 6] = [
     "ErrorMailboxMoveInProgress",
 ];
 
+/// What a calendar's state kept here begins with since its appointments' files come with them
+/// (R25): a calendar followed before has its appointments without their files, so its state is
+/// none, and it's read whole once, its files with it.
+const WITH_FILES: &str = "f1:";
+
+/// A calendar's state as kept (its entry's `ctag`) to go on from: none for one kept before its
+/// appointments' files were read.
+pub(super) fn calendar_state(ctag: &str) -> &str {
+    ctag.strip_prefix(WITH_FILES).unwrap_or("")
+}
+
+/// A calendar's state to keep (none stays none).
+pub(super) fn keep_calendar_state(state: String) -> String {
+    if state.is_empty() { state } else { format!("{WITH_FILES}{state}") }
+}
+
 /// The element naming one of the account's own special folders (`calendar`, `tasks`…).
 pub(super) fn distinguished(id: &str) -> String {
     format!("<t:DistinguishedFolderId Id=\"{id}\"/>")
