@@ -36,7 +36,9 @@ fn props(mut data: &[u8]) -> (Vec<(u16, Val<'_>)>, Vec<Vec<(u16, Val<'_>)>>) {
                 recipients.push(Vec::new());
                 continue;
             }
-            6 => Val::Text(Cow::Owned(String::from_utf16_lossy(&value.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect::<Vec<_>>()))),
+            6 => {
+                Val::Text(Cow::Owned(String::from_utf16_lossy(&value.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect::<Vec<_>>())))
+            }
             // A list of texts, NUL between them (property 0x8000 is the categories).
             7 => Val::Texts(value.split(|b| *b == 0).map(|t| String::from_utf8_lossy(t).into_owned()).collect()),
             _ => Val::Other,
