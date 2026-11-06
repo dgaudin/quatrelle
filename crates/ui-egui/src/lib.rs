@@ -30,6 +30,7 @@ mod dialogs;
 pub mod i18n;
 mod look;
 mod marks;
+mod os_windows;
 mod panes;
 mod reading;
 mod rich_edit;
@@ -58,6 +59,8 @@ pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, sc
 pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;
+use os_windows::first_frame;
+pub use os_windows::trace_window;
 pub use services::{
     Backend, BrowserProfile, FileAsk, Lane, NullBackend, NullServices, PrintOutcome, ReminderAction, Services, TrayAction, TrayIcon, UpdateState,
     Work,
@@ -65,8 +68,6 @@ pub use services::{
 pub use state::UiState;
 use theme::Tokens;
 
-/// Whether the message being written shows in the reading pane: when it isn't popped out, or
-/// where windows of its own can't open (the browser).
 /// How the app reads HTML from the clipboard, set once at start (the clipboard is the
 /// platform's; a build without one has none).
 static CLIPBOARD_HTML: std::sync::OnceLock<fn() -> Option<String>> = std::sync::OnceLock::new();
@@ -103,6 +104,8 @@ pub(crate) fn write_clipboard_html(html: &str, text: &str) -> bool {
     }
 }
 
+/// Whether the message being written shows in the reading pane: when it isn't popped out, or
+/// where windows of its own can't open (the browser).
 pub(crate) fn compose_inline(c: &quatrelle_engine::Compose, ctx: &egui::Context) -> bool {
     !c.window || ctx.embed_viewports()
 }
@@ -740,50 +743,6 @@ pub(crate) fn view_title(s: &Session) -> String {
     match &s.search {
         Some((q, _)) => tf!("Results for “{query}”", query = q),
         None => i18n::tc("folder", &s.view_title()).to_string(),
-    }
-}
-
-/// Whether this is the first frame of a window: its place is asked for once, at its opening, and
-/// left to the window manager from then on. A place handed in at every frame made a window the
-/// window manager had just placed jump between the two places, frame after frame (GNOME put a
-/// compose window at one spot, the app asked for another, and the window flashed between them).
-fn first_frame(ctx: &egui::Context, viewport: egui::ViewportId) -> bool {
-    let id = egui::Id::unique(("first-frame", viewport));
-    let seen = ctx.data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
-    if !seen {
-        ctx.data_mut(|d| d.insert_temp(id, true));
-    }
-    !seen
-}
-
-/// `QUATRELLE_TRACE_WINDOWS=1`: what a window of the app says about itself — its outer and inner
-/// rectangles, its monitor, its scale — logged each time it changes, with the window's id, so a
-/// window that the window manager and the app seem to fight over (one that jumps between two
-/// places, flashes, or comes in two) can be followed in `quatrelle.log` frame by frame.
-pub fn trace_window(ui: &Ui, what: &str) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var_os("QUATRELLE_TRACE_WINDOWS").is_some_and(|v| !v.is_empty())) {
-        return;
-    }
-    let ctx = ui.ctx();
-    let id = ctx.viewport_id();
-    let v = ui.input(|i| i.viewport().clone());
-    let rect = |r: Option<egui::Rect>| r.map(|r| format!("{:.0},{:.0} {:.0}x{:.0}", r.min.x, r.min.y, r.width(), r.height()));
-    let say = format!(
-        "outer {} inner {} monitor {:?} scale {:.2} maximized {:?} minimized {:?} focused {:?}",
-        rect(v.outer_rect).unwrap_or_else(|| "-".into()),
-        rect(v.inner_rect).unwrap_or_else(|| "-".into()),
-        v.monitor_size.map(|m| format!("{:.0}x{:.0}", m.x, m.y)),
-        v.native_pixels_per_point.unwrap_or(1.0),
-        v.maximized,
-        v.minimized,
-        v.focused,
-    );
-    let key = egui::Id::unique(("trace-window", id));
-    let last: Option<String> = ctx.data(|d| d.get_temp(key));
-    if last.as_deref() != Some(say.as_str()) {
-        log::info!("window {what} {id:?}: {say}");
-        ctx.data_mut(|d| d.insert_temp(key, say));
     }
 }
 
