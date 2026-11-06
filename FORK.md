@@ -3980,6 +3980,134 @@ un texte latin, grec, cyrillique, hébreu, arabe, CJK et emoji.
 `desktop::printing`, clippy, `cargo xtask ci` (wasm compris). Au premier commit, `ui-egui` compilé et
 testé avant que le second n'existe (il n'ajoute au trait que des méthodes par défaut).
 
+### État de la récupération : v0.32, vingt-huitième partie : l'export fidèle du courrier vers un .pst, et l'ajout à un .pst existant (2026-11-06)
+
+La première moitié du lot P4 de `merge-tools/survey-v0.32.md` (P4a, le courrier), sur `main`,
+plus le reste de R18 pour l'export. L'export du fork restait le premier de l'origine : un fichier
+neuf à chaque fois (un fichier déjà là était remplacé), chaque message lu, sans drapeau, en
+`IPM.Note`, ses messages joints en `.eml`, ses fichiers de plus de 100 Mo laissés. Le calendrier et
+les contacts restent écrits à côté (`… Calendar.ics`, `… Contacts.vcf`) : les écrire dans le
+fichier est P4b. Pour chaque commit, son test porté seul d'abord (ou une sonde écrite ici), lancé
+contre le code d'alors, sur des fichiers fabriqués par l'écrivain du crate (`outlook-pst-rw`,
+abîmés octet par octet, encodés comme Outlook, ANSI), relus par le lecteur du fork : aucune donnée
+du propriétaire.
+
+**L'épingle** : `rev = 60cefd98` (P1) est celle que pose `0ba7fa97`, la dernière de l'origine pour
+ces commits ; elle a toutes les corrections d'écriture attendues (`PATCHES.md`, correctifs 9 à
+27 : ajout aux fichiers encodés, carte d'allocation vérifiée, lecture plafonnée, classes et
+propriétés, noms, dossiers spéciaux, messages joints, sources, ANSI, suppression). Rien n'a changé
+dans `Cargo.toml`. **D'abord la découpe** (`a5f5e8b1`, pur déplacement) : `pst_export.rs` (359
+lignes) donne le message à `pst_export/item.rs`, les dossiers à `place.rs`, l'écriture à
+`writing.rs`, ses tests à `tests.rs`, comme l'origine les a rangés. **Puis le socle**, que le
+relevé ne nommait pas : `957e6650` (« exporter vers un .pst déjà là y ajoute »), absent du fork, sur
+lequel `c385032c` et tout le lot reposent.
+
+| Commit de l'origine | Sonde | avant | après |
+|---|---|---|---|
+| `957e6650` (`93883da3`, adapté) | sonde (`a_data_file_already_there_is_added_to`) | le fichier remplacé : **son courrier perdu** (`Theirs` disparu) | ajouté ; rien deux fois (par Message-ID) ; un fichier qui n'est pas un .pst laissé tel quel ; l'avis compte ce que le fichier avait |
+| `c385032c` (`4b0df476`, adapté) | son test (fichier encodé par permutation comme Outlook) | **passait déjà** (l'épingle) | gardé comme garde-fou |
+| `cf63deda` | — | sans objet : l'épingle et `ATTRIBUTION.md` l'avaient | — |
+| `b29b0f0f` + `5173d74a` (`ec38039c`, adaptés) | — | aucune cible pour l'écriture | cible `pst_append` dans sa forme finale ; graines faites ici par l'écrivain |
+| `c808a127` (`f85bd3f0`, adapté) | sonde (`tests/state.rs`) | **tout relu lu**, sans drapeau, flèche, catégorie, brouillon, en-têtes, Cci, `In-Reply-To`, `References`, importance ; reçu = envoyé | lu, brouillon, drapeau et échéance, répondu ou transféré, catégories, importance, sensibilité, en-têtes, Cci, fil, heure d'envoi |
+| `db99f100` (`903b9d3f`, adapté) | sonde (`tests/special.rs`) | **aucun dossier spécial** ; `Sent` et `Bin` en dossiers ordinaires à côté de ceux du fichier | Éléments envoyés, supprimés, Brouillons, Courrier indésirable du fichier (ceux qu'il a déjà, quel que soit leur nom) |
+| `40dae7bc` (`fa952254`, adapté) | son test | une panique du lecteur, hors de la garde de l'export : **fil arrêté, export jamais fini** | la recherche coûte seulement son nom par défaut |
+| `defa4434` (`2f24c226`, adapté) | ses tests | en-tête LF + corps CRLF : **le corps lu comme en-tête** ; sans `Date:` : envoyé en **1970** | fin à la première ligne vide ; pas d'heure d'envoi |
+| `13f1ddd8` (`40f80a41`, adapté) | son test | table des noms abîmée : **tout l'export échoue** | le lot réécrit sans propriétés nommées, le journal le dit |
+| `c2b76edc` (`e49a0982`, adapté) | ses tests (`tests/kinds.rs`, `tests/big.rs`) | message joint en **`.eml`** ; deux fichiers de 120 Mo **laissés** | messages joints sur trois niveaux, relus ; les deux fichiers octet pour octet, +299 Mo de pic |
+| `1a1f42ba` (`491f51f2`, adapté) | ses tests sans la réunion | signé, chiffré, non-remise, accusé de lecture : **`IPM.Note`** | classes d'Outlook ; la signature se vérifie et le chiffré se déchiffre après l'aller-retour |
+| `03bd7cc7` (`f4c2896e`, adapté) | sondes puis ses tests | source sortie du cache avant l'écriture : **export en échec** ; Content-ID de 1 216 caractères coupé à 255, **l'image perdue** ; nom long : **passait déjà** | gros fichiers mis de côté près du fichier ; Content-ID à 1 000 avec sa référence ; imbrication bornée à 256 Mo (test de l'origine seul : son API n'existait pas avant) ; +296 Mo de pic |
+| `7e9adc80` (`11e09426`, adapté) | son test sans le PIM (`tests/ansi.rs`) | fichier ANSI : **refusé** | ajouté ; « Grüße » en Windows-1252, « Ελληνικά » en UTF-8 (65001) |
+| `97eb1d68` (`32eeedcb`, adapté) | son test | « Письма » et « Отчёты » **dans un seul dossier `??????`** | « ?????? » et « ?????? (2) », les mêmes à chaque export |
+| `0ba7fa97` | — | sans objet hors épingle ; sa part de fuzz est dans `pst_append` | — |
+| `6a3be3f4`, `8e9a1299` | — | **sans objet** : ils remplacent la copie d'un rendez-vous, contact, note ou tâche déjà exporté ; ici aucun élément PIM n'entre dans le fichier | pour P4b |
+| `bf980891` (`d9c9b789`, adapté) | sonde (`tests/follow_up.rs`) | suivi terminé : **aucune marque** | `0x1090` = 1, propriétés de tâche, `0x1091` et l'échéance ; relu terminé avec son heure |
+| `d930395f` (`599d8227`, adapté) | ses tests (`tests/pinned.rs`) | épinglé : **revient non épinglé** (Unicode et ANSI) | `X-Quatrelle-Pinned` écrit ; lu, comme `X-MailCraft-Pinned` |
+| R18, propre au fork (`f9646c85`) | sonde | répondu, transféré : **sans heure** | `0x1082` avec le verbe et l'icône |
+
+- **Tous adaptés** (au nom du propriétaire) : l'export de l'origine avait déjà, à chaque commit, la
+  partie réunion et PIM (`calendar::Owner`, `meeting`, `pim`), que P4a ne prend pas ; aucun commit
+  ne s'applique donc tel quel. Repris à l'identique de l'origine : `kinds.rs`, l'essentiel de
+  `files.rs`, `format.rs` (sans `delete` ni `create_folder`, qu'emploie seul le PIM) et la cible
+  `pst_append`.
+- **Propre au fork** : ce que seul cet ordinateur garde va avec le travail d'export
+  (`ExportMarks` : jours d'échéance `prefs.follow_up`, jours de fin `prefs.follow_up_done`, et les
+  catégories). Une catégorie est écrite sous le nom donné par l'utilisateur (trouvée par son
+  mot-clé, ou par celui de son nom comme Exchange la garde : « To do » pour `$label4`), un autre
+  mot-clé tel quel, aucun mot-clé posé par un programme (tout `$` sauf ceux de l'utilisateur, les
+  marques de courrier indésirable) ; l'import la relit `to_do`, que « To do » reconnaît.
+  L'heure exacte de fin dite par Exchange (`Flags::completed`, R16) l'emporte sur le jour gardé
+  ici ; l'heure de la dernière action (`Flags::acted`, R18) va dans `0x1082`, sauf quand les deux
+  marques sont là (IMAP), écrites comme la réponse. Le nom de l'épingle est celui de Quatrelle ;
+  celui de MailCraft est lu aussi. `Summary::follow_up_id` passe dans le modèle (`organize.rs`,
+  `lib.rs` étant à 799 lignes) ; `mime::Parsed` lit Cci ; `mime::attachments_moved` (de `03bd7cc7`)
+  est écrit ici, le fork ne l'avait pas. Deux avis nouveaux (« … déjà présents dans le fichier de
+  données ») dans les 13 catalogues.
+- **La cible `pst_append`** est prise d'un coup dans sa forme finale (avec les parts de
+  `40dae7bc`, `c808a127`, `c2b76edc`, `7e9adc80`, `0ba7fa97`) : elle n'appelle que l'écrivain, déjà
+  à sa révision finale. Ses trois graines (`good-file`, `encoded` permuté, `ansi`) sont **fabriquées
+  ici** par l'écrivain (test ignoré `make_the_pst_append_seeds`), non copiées, et relues comme la
+  cible les lit par `pst_export/tests/seeds.rs` (pas de `cargo-fuzz` ici). `mime_parse` lit aussi
+  chaque entrée comme l'export (`pst_export::message_class`).
+- **Un aller-retour garde le courrier** : proptest `tests/round_trip.rs` (12 cas, fichier Unicode
+  ou ANSI) : sujets latins, accentués, grecs, texte, adresses, lu, drapeau, terminé, épinglé,
+  répondu ou transféré, catégories, tous relus pareils.
+- **Découpes** : `pst_export/` a 8 fichiers (le plus gros `item.rs`, 451 lignes), `tests/` 10 ;
+  le test moteur des fichiers de données passe dans `engine/src/tests/accounts/data_files.rs`
+  (`ff63dc55`, `accounts.rs` dépassait 1 000 lignes).
+- **Accroc** : de `f85bd3f0` à `491f51f2`, la cible de fuzz `pst` appelait encore `export` sans
+  marques et `fuzz/` ne compilait pas (le dépôt principal, si) ; corrigé par `9b103c75`, sans
+  réécrire l'histoire. De même, l'avis de `93883da3` passait son gabarit à `notice_with` par une
+  variable : le relevé des textes de l'interface prenait « name » pour un texte et le test des
+  catalogues échouait (espagnol) ; corrigé par `c14e8d86`, chaque cas avec son
+  gabarit littéral.
+- **Ce que verra le propriétaire** en exportant (Fichier › Ouvrir et exporter › Exporter) :
+  - **un `.pst` déjà là n'est plus écrasé** : son courrier reste, celui du compte s'ajoute dans des
+    dossiers de même nom, rien deux fois (par Message-ID) ; l'avis dit « … (N déjà présents dans
+    le fichier de données) ». La boîte « remplacer ? » du système de fichiers s'affiche toujours
+    pour un fichier existant, mais le fichier est **complété**, non remplacé ;
+  - fichiers acceptés : Unicode (Outlook 2003 et après) et ANSI (Outlook 97-2002), encodés ou
+    non ; un fichier ouvert par Outlook est refusé avec un message (Windows) ;
+  - dans Outlook, le fichier ouvert montre : lu/non lu, drapeaux avec échéance, coches terminées
+    avec leur date, flèches répondu/transféré, catégories sous leurs noms, importance, Cci des
+    envoyés, brouillons non envoyés, les Éléments envoyés, supprimés, Brouillons et Courrier
+    indésirable dans les dossiers spéciaux du fichier, messages joints comme messages, gros
+    fichiers sans limite (jusqu'à 2 Go), courrier signé ou chiffré lisible et vérifiable, rapports
+    de non-remise et accusés comme tels ;
+  - relu dans Quatrelle (Fichier › Ouvrir un fichier de données) : tout cela revient, plus
+    l'épinglage et l'heure de « Répondu le … » ;
+  - pendant l'export, un dossier `… .pst.part-files` apparaît à côté du fichier, et disparaît.
+- **Pour P4b** (calendrier, contacts, notes, tâches dans le fichier ; `d3b8dc9f`, `fe4fe116`,
+  `95cc48d6`, `5d8a71c0`, `ba8082c6`, puis `6a3be3f4`, `8e9a1299`) :
+  - `item::owned_in` n'a pas de paramètre `owner` ni de champ `meeting` : à ajouter (et
+    `Owned::class` : `kind`, puis la réunion, puis `IPM.Note`) ; `writing::write` concatène déjà
+    `item::properties` par message, y ajouter `pim::properties` ;
+  - `format.rs` n'a pas `delete` ni `create_folder` : les reprendre de l'origine avec `pim.rs` ;
+    `place::MAX_SUFFIX` (100) est celui que `pim.rs` de l'origine définit ;
+  - `Exported` n'a ni `occurrences`, ni `tasks`, `notes`, `pim_already`, `pim_replaced` ;
+    l'événement `Exported` n'a que `already` en plus ; `pim_beside` (les `.ics` et `.vcf` à côté)
+    est à retirer quand le PIM entre dans le fichier ;
+  - `ExportMarks` (modèle, `organize.rs`) est ce que le moteur passe ; `pst_pim::Named` connaît
+    maintenant `pinned()` (deux noms) à côté de `keywords()` ; la marque des éléments exportés
+    (`EXPORTED_ITEM` de l'origine) n'y est pas ;
+  - le test `kinds.rs` de l'origine a une moitié réunion (`meeting_mail_and_reports_keep_their_classes`)
+    laissée ici, et `ansi.rs` une moitié PIM ;
+  - `pst_export/tests/` a 10 fichiers : prévoir des sous-dossiers au-delà de 16.
+- **Vérifié** : chaque sonde avant (échec, ou déjà juste pour les deux notées) et après ; les
+  suites `.pst` de `quatrelle-net` (import et export, 145), `quatrelle-engine`, `quatrelle-mime` ;
+  `cargo check --bins` dans `fuzz/` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - jamais ouvert dans un vrai Outlook : que les coches, drapeaux, catégories et dossiers spéciaux
+    s'y montrent comme prévu ;
+  - le doublon se juge par Message-ID seul (comme Outlook « ne pas exporter les doublons ») : un
+    message déjà exporté puis marqué autrement n'est pas mis à jour dans le fichier ; un message
+    sans Message-ID est réécrit à chaque export ;
+  - `ids_in` lit le Message-ID de chaque message du fichier existant avant d'écrire : sur un gros
+    fichier, une lecture complète (jamais mesurée à l'échelle des 550 000 éléments) ;
+  - une marque posée une seconde avant l'export peut ne pas y être : l'écrivain des modifications
+    (R10) écrit sur son propre fil, et l'export ne l'attend pas (l'origine le vide d'abord) ;
+  - un message PGP/MIME (P5) part en `IPM.Note`, ses parties en fichiers : Outlook n'a pas de forme
+    pour lui ; son aller-retour n'a pas été essayé (sa signature ne devrait plus se vérifier).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
