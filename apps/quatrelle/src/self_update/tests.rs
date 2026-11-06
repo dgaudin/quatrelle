@@ -115,6 +115,27 @@ fn nothing_is_installed_while_quatrelle_still_runs() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The updater's check that it can write in the app's folder never goes through a link planted
+/// at the name it used to write (`.quatrelle-update-probe-<process>`): the file the link points
+/// at keeps its contents, and the link stays.
+#[cfg(unix)]
+#[test]
+fn the_updaters_write_check_never_goes_through_a_link() {
+    let dir = scratch("probe-link");
+    let app = dir.join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    let other = dir.join("elsewhere.txt");
+    std::fs::write(&other, b"keep me").unwrap();
+    let planted = app.join(format!(".quatrelle-update-probe-{}", std::process::id()));
+    std::os::unix::fs::symlink(&other, &planted).unwrap();
+    let ok = writable(&app);
+    let (kept, link) = (std::fs::read(&other).unwrap(), std::fs::symlink_metadata(&planted).map(|m| m.is_symlink()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(ok);
+    assert_eq!(kept, b"keep me");
+    assert!(link.is_ok_and(|l| l), "the link stays");
+}
+
 /// The Mac step run by a shell, `hdiutil` and `ditto` stood in for: a disk image refused twice
 /// (the system still busy with it) is attached the third time and the app replaced; one refused
 /// every time leaves the app as it was.
