@@ -60,8 +60,8 @@ pub fn draft_copy(raw: Vec<u8>, bcc: &[EmailAddress], source: Option<(ReplyMode,
 /// [`draft_copy`] wrote them).
 pub fn sending_options(raw: &[u8]) -> (i8, bool, Option<(ReplyMode, String)>) {
     let Some(m) = MessageParser::default().parse(raw) else { return (0, false, None) };
-    let receipt = m.header_raw("Disposition-Notification-To").is_some_and(|v| !v.trim().is_empty());
-    (importance(&m), receipt, m.header_raw(SOURCE_HEADER).and_then(source_of))
+    let receipt = header_raw(m.root(), "Disposition-Notification-To").is_some_and(|v| !v.trim().is_empty());
+    (importance(&m), receipt, header_raw(m.root(), SOURCE_HEADER).and_then(source_of))
 }
 
 /// A [`SOURCE_HEADER`] read back: its mode and the message's key.
