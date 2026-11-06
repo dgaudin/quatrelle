@@ -12,6 +12,7 @@ mod files;
 mod kinds;
 mod meetings;
 mod occurrences;
+mod tasks;
 
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
 pub(super) const APPOINTMENT: GuidValue = GuidValue::new(0x0006_2002, 0, 0, OLE);
