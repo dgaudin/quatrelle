@@ -54,3 +54,6 @@ windows-registry = "0.6"
 [dev-dependencies]
 # OpenPGP's tests make a key as the network layer does (tests/accounts/pgp.rs).
 rand_core = { version = "0.6", features = ["getrandom"] }
+# The a11y guard's test: the consumer the system adapters run, fed with our updates. The version
+# egui already brings in, so nothing is built twice.
+accesskit_consumer = "=0.39.1"
