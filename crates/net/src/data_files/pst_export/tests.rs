@@ -4,6 +4,7 @@
 use super::*;
 
 mod seeds;
+mod special;
 mod state;
 use quatrelle_model::{EmailAddress, Flags};
 use quatrelle_store::FolderState;
