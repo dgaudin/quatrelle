@@ -2142,6 +2142,7 @@ name = "quatrelle-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "outlook-pst-rw",
  "quatrelle-jmap",
  "quatrelle-mime",
  "quatrelle-model",
