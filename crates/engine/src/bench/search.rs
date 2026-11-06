@@ -218,14 +218,14 @@ fn s_folders(store: &Store) -> Vec<String> {
 /// in all and the most in a call, and the messages they held in all.
 fn search_lists(s: &mut Session, q: &str) -> (usize, Duration, Duration, u64, u64, u64) {
     let call = |s: &mut Session, first: bool| {
-        let (read, messages) = (s.lists_read(), s.messages_read());
+        let (read, messages) = (s.lists_read() + s.pages_read(), s.messages_read());
         let t = Instant::now();
         if first {
             s.run_search_budgeted(q, SearchScope::All, SLICE);
         } else {
             s.search_more(SLICE);
         }
-        (t.elapsed(), s.lists_read() - read, s.messages_read() - messages)
+        (t.elapsed(), s.lists_read() + s.pages_read() - read, s.messages_read() - messages)
     };
     let mut calls = vec![call(s, true)];
     while s.search_pending && calls.len() < 1_000_000 {
@@ -237,8 +237,9 @@ fn search_lists(s: &mut Session, q: &str) -> (usize, Duration, Duration, u64, u6
 }
 
 /// A search of everything in a mailbox bigger than the session's cache of folders' lists
-/// (`MC_MESSAGES`, 60,000 by default, in 40 folders): how many lists each call reads again from
-/// the disk, and what it costs, for the first search (the index built) and the ones after.
+/// (`MC_MESSAGES`, 60,000 by default, in `MC_FOLDERS`, 40 by default), on a server account: how
+/// many lists (or pages of them) each call reads again from the disk, and what it costs, for the
+/// first search (the index built) and the ones after.
 ///
 /// ```text
 /// cargo test -p quatrelle-engine --release --lib bench::search::lists_read_by_a_search_of_everything -- --ignored --nocapture
@@ -250,11 +251,21 @@ fn lists_read_by_a_search_of_everything() {
     let dir = std::env::temp_dir().join(format!("mc-search-lists-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
-    let shape = big::Shape { messages, inbox: messages / 50 * 12, ..big::Shape::default() };
+    let folders = std::env::var("MC_FOLDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(40usize);
+    let shape = big::Shape { messages, inbox: messages / 50 * 12, folders, ..big::Shape::default() };
     let truth = big::generate(&store, NOW, shape).unwrap();
+    // A server account, as the owner's (a local one's marks may be on their way to its lists,
+    // which are read whole).
+    let mut accounts = store.load_accounts().unwrap();
+    for a in &mut accounts {
+        a.imap.host = "imap.big.example".into();
+        a.smtp.host = "smtp.big.example".into();
+    }
+    store.save_accounts(&accounts).unwrap();
     drop(store);
     let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
     let mut s = window(&store);
+    s.take_jobs();
     let before = rss_mb();
     println!("{} messages in {} folders; opened: process {before:.0} MB", truth.messages, shape.folders);
     let accented = big::ACCENTED.to_lowercase().replace('ü', "u");

@@ -72,7 +72,10 @@ impl SearchIndex {
         !self.done
             || !self.stale.is_empty()
             || !self.came.is_empty()
-            || self.answer.as_ref().is_some_and(|a| a.checked < self.total() || !a.dirty.is_empty() || !a.again.is_empty() || !a.todo.is_empty())
+            || self
+                .answer
+                .as_ref()
+                .is_some_and(|a| a.checked < self.total() || !a.dirty.is_empty() || !a.again.is_empty() || !a.todo.is_empty() || !a.next.is_empty())
     }
 
     /// The candidates for a query numbered within `docs`: the index's, then the folder being

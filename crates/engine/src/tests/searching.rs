@@ -9,6 +9,7 @@ mod busy;
 mod by_change;
 mod folding;
 mod paced;
+mod pages;
 mod summaries;
 
 #[test]
