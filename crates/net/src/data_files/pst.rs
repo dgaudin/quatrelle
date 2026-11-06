@@ -29,7 +29,7 @@ use outlook_pst::messaging::store::{AnsiStore, EntryId, Store as PstStore, Unico
 use outlook_pst::ndb::node_id::NodeId;
 use outlook_pst::{AnsiPstFile, UnicodePstFile};
 use quatrelle_mime::{self as mime, Draft, InlinePicture, OutAttachment};
-use quatrelle_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, StoredEvent, StoredNote, StoredTask, Task};
+use quatrelle_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, StoredEvent, StoredNote, StoredTask};
 use quatrelle_model::{EmailAddress, Flags, Folder, FolderRole, MessageKey, utf7};
 use quatrelle_store::{FolderState, Store};
 

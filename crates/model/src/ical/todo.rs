@@ -54,6 +54,10 @@ pub fn write_task(t: &Task, now: i64) -> String {
     if t.private {
         lines.push("CLASS:PRIVATE".into());
     }
+    // How it repeats, as kept from an Outlook data file (the fork's tasks don't repeat).
+    if let Some(rule) = t.rrule.as_deref().map(|r| r.replace(['\r', '\n'], "")).filter(|r| !r.trim().is_empty()) {
+        lines.push(format!("RRULE:{rule}"));
+    }
     lines.push("END:VTODO".into());
     lines.push("END:VCALENDAR".into());
     let mut out = String::new();
@@ -75,6 +79,7 @@ mod tests {
             notes: "Relancer\nvendredi".into(),
             due: Some(crate::dates::days_from_civil(2026, 10, 27)),
             importance: 1,
+            rrule: Some("FREQ=WEEKLY;BYDAY=MO\r\n".into()),
             ..Default::default()
         };
         let ics = write_task(&t, 1_792_000_000);
@@ -86,6 +91,7 @@ mod tests {
             "DESCRIPTION:Relancer\\nvendredi",
             "DUE;VALUE=DATE:20261027",
             "PRIORITY:1",
+            "RRULE:FREQ=WEEKLY;BYDAY=MO",
         ] {
             assert!(ics.lines().any(|l| l == line), "{line} in {ics}");
         }

@@ -85,6 +85,11 @@ pub struct Task {
     /// Which kind of private it is, while it's private.
     #[serde(skip_serializing_if = "crate::ical::PrivateKind::is_plain")]
     pub private_kind: crate::ical::PrivateKind,
+    /// How it repeats (an RFC 5545 rule), as an Outlook data file had it (R25). The fork's tasks
+    /// don't repeat: it's kept with the task, neither shown nor followed (marking it complete
+    /// makes no next one).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rrule: Option<String>,
     /// When it was last changed (Unix seconds).
     pub modified: i64,
 }

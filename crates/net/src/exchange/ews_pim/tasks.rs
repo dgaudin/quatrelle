@@ -69,6 +69,8 @@ pub fn task_of(it: &El) -> Option<StoredTask> {
         categories,
         private: private_kind(it).is_some(),
         private_kind: private_kind(it).unwrap_or_default(),
+        // How an Exchange task repeats isn't read: the fork's tasks don't repeat.
+        rrule: None,
         modified: it.text_of("LastModifiedTime").and_then(quatrelle_jmap::utc_date).unwrap_or(0),
     };
     Some(StoredTask { href, etag: id.attr("ChangeKey").unwrap_or("").to_string(), task, dirty: false })

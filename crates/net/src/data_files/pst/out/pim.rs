@@ -60,24 +60,7 @@ impl Out<'_> {
             self.pim.notes.push(StoredNote { note, ..Default::default() });
             self.no_place(&files);
         } else if class.starts_with("ipm.task") {
-            // A task, done or not; its due day stored as local midnight, the nearest UTC midnight.
-            // Its priority is the item's importance; its categories, sensitivity and reminder its
-            // own, as the fork's task keeps them (a task done reminds no more).
-            let due = x.due.map(|t| (t + 43_200).div_euclid(86_400));
-            let mut task = Task {
-                uid,
-                subject: it.subject.clone(),
-                notes: it.body.trim().to_string(),
-                due,
-                importance: it.importance,
-                reminder: x.reminder_at,
-                categories: x.categories.clone(),
-                private: x.sensitivity != 0,
-                private_kind: crate::pst_pim::private_kind(x.sensitivity),
-                modified: x.modified.unwrap_or(it.date),
-                ..Default::default()
-            };
-            task.set_complete(x.done, due.unwrap_or(it.date.div_euclid(86_400)));
+            let task = crate::pst_pim::task_of(x, &it.subject, &it.body, it.importance, it.date, uid);
             self.pim.tasks.push(StoredTask { task, ..Default::default() });
             self.no_place(&files);
         } else if class.starts_with("ipm.contact") {
