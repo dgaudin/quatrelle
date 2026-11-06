@@ -508,6 +508,15 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
                 error: Some("pictures come from Exchange, which the browser doesn't reach".into()),
             },
         ),
+        // An appointment's file left on Exchange, which the browser doesn't reach (R25).
+        Job::FetchEventFile { ask, .. } => emit(
+            sh,
+            Event::EventFile {
+                ask,
+                data: Vec::new(),
+                error: Some("appointments' files come from Exchange, which the browser doesn't reach".into()),
+            },
+        ),
         // Voting buttons come with Exchange accounts, which the browser doesn't reach.
         Job::Vote { key, choice } => {
             let error = Some("voting buttons can only be answered on Exchange and Microsoft 365 accounts".to_string());
