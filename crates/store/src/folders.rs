@@ -194,7 +194,7 @@ impl Store {
         let mut noted_same: Option<std::collections::HashSet<u32>> = None;
         let paged: bool;
         if messages.len() <= PAGE_MESSAGES {
-            file.messages = messages.iter().map(|m| Summary::clone(m)).collect();
+            file.messages = messages.iter().copied().cloned().collect();
             listed = messages;
             paged = false;
         } else {
