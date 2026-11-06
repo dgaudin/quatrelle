@@ -164,6 +164,7 @@
 	Not an email address: {address}	Это не адрес электронной почты: {address}
 	Not junk	Не спам
 	Not sent: {error}	Не отправлено: {error}
+	Not sent yet: this is a draft.	Ещё не отправлено: это черновик.
 	Nothing matches this filter.	Ничего не подходит под этот фильтр.
 	Nov	ноя
 	Numbered list	Нумерованный список

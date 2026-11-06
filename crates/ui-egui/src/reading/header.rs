@@ -325,6 +325,24 @@ pub(super) fn actions(
                 acts.push(Action::Run("mail.delete", json!({})));
             }
         });
+    } else if s.folder(&r.key.account, &r.key.folder).is_some_and(|f| f.role == quatrelle_engine::model::FolderRole::Drafts)
+        || s.summary(&r.key).is_some_and(|m| m.flags.draft)
+    {
+        // A draft: carried on with, as it was saved.
+        egui::Frame::new().fill(t.accent_soft).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(tl!("Not sent yet: this is a draft.")).color(t.text));
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            if widgets::pill_button(ui, Icon::Drafts, "Edit", &t).clicked() {
+                acts.push(Action::Run("draft.edit", json!({"key": r.key.to_id()})));
+            }
+            if widgets::pill_button(ui, Icon::Delete, "Delete", &t).clicked() {
+                acts.push(Action::Run("mail.delete", json!({})));
+            }
+        });
     } else if !in_window && !placed {
         // On one line: their icons alone when it has no room for their words.
         let compact = ui.available_width() < action_width(ui, s, false);

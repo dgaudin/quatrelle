@@ -164,6 +164,7 @@
 	Not an email address: {address}	Adresse e-mail non valide : {address}
 	Not junk	Courrier légitime
 	Not sent: {error}	Non envoyé : {error}
+	Not sent yet: this is a draft.	Pas encore envoyé : c’est un brouillon.
 	Nothing matches this filter.	Rien ne correspond à ce filtre.
 	Nov	nov.
 	Numbered list	Liste numérotée

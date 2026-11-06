@@ -164,6 +164,7 @@
 	Not an email address: {address}	メール アドレスではありません: {address}
 	Not junk	迷惑メールではない
 	Not sent: {error}	送信されませんでした: {error}
+	Not sent yet: this is a draft.	まだ送信されていません。これは下書きです。
 	Nothing matches this filter.	このフィルターに一致するものはありません。
 	Nov	11月
 	Numbered list	番号付きリスト
