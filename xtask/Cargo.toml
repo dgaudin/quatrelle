@@ -17,3 +17,6 @@ png = "0.18"
 # Unicode decompositions for `cargo xtask fold` (search's fold table); xtask only, so the
 # model and the browser build carry no normalizer.
 icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
+# Cargo.lock and cargo config files read as TOML for `cargo xtask git-sources`, as storytold's
+# shared release reads them (already in the lock file through the build tools).
+toml = "1"
