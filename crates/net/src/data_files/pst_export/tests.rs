@@ -2,7 +2,9 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 use super::*;
+use outlook_pst::messaging::message::{Message as _, UnicodeMessage};
 
+mod ansi;
 mod big;
 mod damaged;
 mod kinds;

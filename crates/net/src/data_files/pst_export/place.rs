@@ -50,9 +50,9 @@ impl Targets {
     /// The file at `path`'s (none when there's no file yet). The file is one being added to, so
     /// anything wrong in it, a panic in the writer's reader too, costs only its record: that
     /// folder gets the name a new file gives it.
-    pub(super) fn of(path: Option<&Path>) -> Targets {
+    pub(super) fn of(path: Option<&Path>, format: Format) -> Targets {
         Targets::found(|s| match path {
-            Some(p) => UnicodePstFile::special_folder(p, s),
+            Some(p) => format.special_folder(p, s),
             None => Ok(None),
         })
     }
@@ -94,7 +94,7 @@ pub(super) fn place(f: &Folder, folders: &[Folder], targets: &Targets) -> Vec<St
 /// the file records one already (a file added to keeps its own); made when they have no mail.
 /// The mail is in by then: a file that can't take the record keeps it as written, and the log
 /// says why.
-pub(super) fn record_special(path: &Path, folders: &[Folder], targets: &Targets, created: bool) {
+pub(super) fn record_special(path: &Path, format: Format, folders: &[Folder], targets: &Targets, created: bool) {
     if !created {
         return;
     }
@@ -102,7 +102,7 @@ pub(super) fn record_special(path: &Path, folders: &[Folder], targets: &Targets,
         if !folders.iter().any(|f| f.selectable && f.role == role) {
             continue;
         }
-        match UnicodePstFile::special_folder(path, special) {
+        match format.special_folder(path, special) {
             Ok(Some(_)) => continue,
             Ok(None) => {}
             Err(e) => {
@@ -112,7 +112,7 @@ pub(super) fn record_special(path: &Path, folders: &[Folder], targets: &Targets,
         }
         let names = targets.get(special);
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
-        if let Err(e) = UnicodePstFile::set_special_folder(path, special, &names) {
+        if let Err(e) = format.set_special_folder(path, special, &names) {
             log::info!("the data file's {special:?} can't be recorded: {e}");
         }
     }
@@ -139,7 +139,7 @@ mod tests {
             folder("Trashy", FolderRole::Other),
             folder("Projects", FolderRole::Other),
         ];
-        let targets = Targets::of(None);
+        let targets = Targets::of(None, Format::Unicode);
         let at = |i: usize| place(&folders[i], &folders, &targets);
         assert_eq!(at(0), ["Sent Items"]);
         assert_eq!(at(1), ["Sent Items", "2024"]);
