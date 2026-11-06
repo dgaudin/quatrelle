@@ -294,13 +294,30 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             std::thread::sleep(h);
             shared.lock().unwrap().items_in_flight -= 1;
         }
+        // Appointments and contacts given, each costing its time.
+        if op.name == "GetItem" {
+            let cost = {
+                let mut d = shared.lock().unwrap();
+                let asked = op.child("ItemIds").map(|l| l.kids.iter().filter_map(|k| k.attr("Id")).collect::<Vec<_>>()).unwrap_or_default();
+                let n = asked.iter().filter(|id| d.pim.iter().any(|(i, _, _)| i == *id)).count();
+                d.pim_given += n;
+                d.pim_item_cost.map(|c| c * u32::try_from(n).unwrap_or(0))
+            };
+            if let Some(c) = cost {
+                std::thread::sleep(c);
+            }
+        }
         // A mailbox without a picture, as Exchange 2016 tells of it: HTTP 404, nothing else.
         if op.name == "GetUserPhoto" && op.text_of("Email").is_some_and(|e| e.ends_with("@http404.example")) {
             respond(&mut s, 404, &[], b"");
             continue;
         }
         let mut d = shared.lock().unwrap();
-        d.calls.push(op.name.clone());
+        // A calendar's or a contacts folder's changes, told apart from a mail folder's.
+        let sync_of = op.child("SyncFolderId").and_then(|f| f.kids.first());
+        let pim_changes = op.name == "SyncFolderItems"
+            && (d.pim_folder(sync_of) || sync_of.and_then(|f| f.attr("Id")).is_some_and(|id| matches!(id, "calendar" | "contacts")));
+        d.calls.push(if pim_changes { "SyncFolderItems pim".into() } else { op.name.clone() });
         // Reminders (Exchange 2013 and later), under the version the request asked for.
         if super::reminders::is_reminders(&op.name) {
             let version = doc.find("RequestServerVersion").and_then(|v| v.attr("Version")).unwrap_or_default().to_string();

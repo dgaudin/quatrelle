@@ -408,7 +408,14 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   before never asks. The one exception is a site the user removed: see below.
 - **Calendars and contacts** (`crates/net/src/exchange/ews_pim.rs`) are the mailbox's Calendar and
   Contacts folders, synced like CalDAV / CardDAV: changes here first (appointments updated field
-  by field, contacts made again, never any meeting mail), then both folders read in full.
+  by field, contacts made again, never any meeting mail), then both folders read by what changed
+  in them, as Cached Exchange Mode reads its folders (`ews_pim/changes.rs`): `SyncFolderItems`
+  from the state the last sync ended at, kept as the folder's `ctag` and saved with what it read,
+  the items made or changed asked for (a series with its occurrences changed on their own), those
+  deleted gone, the rest named unchanged (`DavSync::kept`). Read whole once when no state is kept
+  or the server refuses it (the state as of then taken first). A change the server tells of
+  (`worker/listening.rs`) runs `sync_changes`: those two folders alone, a few requests on the
+  connection new mail comes on, where the whole sync read the owner's 239 appointments again.
   Recurrences go through Graph's pattern-and-range shape, so one RRULE mapping serves both.
   Away from the calendar, only the account's own calendar is read; other people's appointments
   are set aside five minutes after it's left (at once at the start), as Outlook reads a shared

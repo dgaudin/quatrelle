@@ -10,8 +10,9 @@
 //! appointments updated field by field (an occurrence changed on its own through the
 //! occurrence's own item), changed contacts made again, deletions done; the server mails the
 //! guests of a meeting only when the change asks it to ([`StoredEvent::notify`]). Then both
-//! folders are read again, a series' changed occurrences with it. Notes and tasks go with them
-//! (the Notes and Tasks folders).
+//! folders are read by what changed in them since the last sync (`changes`), a series' changed
+//! occurrences with it, and the other calendars read again. Notes and tasks go with them (the
+//! Notes and Tasks folders).
 
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
@@ -568,6 +569,7 @@ fn public_items(c: &Client, id: &str, replica: Option<&str>, total: u32, since: 
 }
 
 mod categories;
+mod changes;
 mod contacts;
 pub(crate) mod events;
 mod push;
@@ -584,7 +586,8 @@ pub use events::{event_of, exception_of, own_organizer};
 #[cfg(test)]
 pub(crate) use push::item_gone_code;
 use push::{answer_pending, push_events};
-pub use sync::{sync, sync_calendars, sync_tasks};
+use sync::read_calendar;
+pub use sync::{sync, sync_calendars, sync_changes, sync_tasks};
 use tasks::read_tasks;
 
 #[cfg(test)]

@@ -124,6 +124,8 @@ pub struct Data {
     /// Appointments `GetItem` refuses (`ErrorAccessDenied`), by id: a colleague's occurrences
     /// Exchange wouldn't give, though their series came.
     pub refused: Vec<String>,
+    /// Items `DeleteItem` refuses (`ErrorAccessDenied`), by id: they stay.
+    pub undeletable: Vec<String>,
     /// How each `GetItem` asked for its items: `AllProperties`, `IdOnly`, `fields` (an
     /// appointment's fields named, `IdOnly` with them), or `MimeContent` (their whole sources).
     pub item_shapes: Vec<String>,
@@ -193,6 +195,10 @@ pub struct Data {
     pub slow_items: Option<std::time::Duration>,
     pub items_in_flight: usize,
     pub most_items_in_flight: usize,
+    /// A `GetItem` giving appointments or contacts takes this long for each one (the server
+    /// working each out: 12 ms for a colleague's, 29/10), and how many it gave in all.
+    pub pim_item_cost: Option<std::time::Duration>,
+    pub pim_given: usize,
     /// Folders Exchange keeps hidden (PidTagAttributeHidden), by id.
     pub hidden: Vec<String>,
     /// How each appointment created or changed asked the guests to be told
@@ -318,6 +324,7 @@ impl Default for Data {
             flagged_hidden: Vec::new(),
             unreadable: Vec::new(),
             refused: Vec::new(),
+            undeletable: Vec::new(),
             item_shapes: Vec::new(),
             refuse_fields: false,
             refuse_fields_each: false,
@@ -348,6 +355,8 @@ impl Default for Data {
             slow_items: None,
             items_in_flight: 0,
             most_items_in_flight: 0,
+            pim_item_cost: None,
+            pim_given: 0,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
             refused_guests: Vec::new(),

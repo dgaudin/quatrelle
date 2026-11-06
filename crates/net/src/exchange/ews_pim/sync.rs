@@ -1,13 +1,40 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! EWS calendars and contacts: the sync — what changed here sent first, then every folder read again.
+//! EWS calendars and contacts: the sync — what changed here sent first, then the account's own
+//! calendar and contacts read by their changes ([`changes`](super::changes)), the other calendars
+//! read again.
 
+use super::changes::{read_contacts, read_own_calendar};
 use super::*;
 
 /// Send what changed here, then read the calendar and contacts again.
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     sync_as(c, pim, now, false)
+}
+
+/// What the server told of in the account's own calendar or contacts: what changed here sent,
+/// then those two read by their changes, the other calendars, the public folders, the notes and
+/// the tasks left as they are (`partial`). A few requests, where the whole sync read every
+/// appointment again (06/11).
+pub fn sync_changes(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
+    let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, partial: true, ..Default::default() };
+    let again = delete_gone(c, pim.deleted.iter().filter(|t| !t.href.starts_with("task:") && !t.href.starts_with("note:")), &mut out);
+    push_events(c, pim, &mut out);
+    push_cards(c, pim, &mut out);
+    let state = read_own_calendar(c, pim, now, &again, &mut out)?;
+    answer_pending(c, pim, &mut out);
+    reminders::answer_all(c, pim, &mut out);
+    // Named as it was: the server isn't asked again.
+    let own = pim.calendars.iter().find(|k| k.id == CALENDAR).cloned();
+    let name =
+        own.as_ref().map(|k| k.name.clone()).filter(|n| !n.is_empty()).or_else(|| folder_name(c, "calendar")).unwrap_or_else(|| "Calendar".into());
+    out.calendars = Some(vec![CalendarInfo { id: CALENDAR.into(), name, ctag: state, ..own.unwrap_or_default() }]);
+    let book = pim.books.iter().find(|b| b.id == CONTACTS).map(|b| b.name.clone()).filter(|n| !n.is_empty());
+    let book = book.or_else(|| folder_name(c, "contacts")).unwrap_or_else(|| "Contacts".into());
+    read_contacts(c, pim, book, &again, &mut out)?;
+    quatrelle_model::pim::separate_shared_uids(&mut out.events);
+    Ok(out)
 }
 
 /// The sync, or (`calendars_only`, the calendar just opened) the calendars alone: the address
@@ -16,45 +43,27 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
 fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
     let others = |t: &&quatrelle_model::pim::Tombstone| ["contact:", "note:", "task:"].iter().any(|p| t.href.starts_with(p));
-    delete_gone(c, pim.deleted.iter().filter(|t| !calendars_only || !others(t)), &mut out);
+    let again = delete_gone(c, pim.deleted.iter().filter(|t| !calendars_only || !others(t)), &mut out);
     push_events(c, pim, &mut out);
-    for k in pim.cards.iter().filter(|k| k.dirty && !calendars_only) {
-        // Made again: a contact's addresses and numbers are simplest replaced whole.
-        if let Some(old) = k.href.strip_prefix("contact:")
-            && let Err(e) = delete(c, old, false)
-            && !matches!(e, NetError::No(_))
-        {
-            out.errors.push(format!("{}: {e}", k.card.display()));
-            continue;
-        }
-        let r = c.call_one(&format!(
-            "<m:CreateItem><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"contacts\"/></m:SavedItemFolderId><m:Items>{}</m:Items></m:CreateItem>",
-            contact_xml(&k.card)
-        ));
-        match r {
-            Ok(m) => {
-                let (id, etag) = new_id(&m);
-                out.pushed_cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{id}"), etag, card: k.card.clone(), dirty: false });
-            }
-            Err(x) => out.errors.push(format!("{}: {x}", k.card.display())),
-        }
+    if !calendars_only {
+        push_cards(c, pim, &mut out);
     }
-    // Then both folders, read again.
-    read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, c.email(), now - CALENDAR_BACK, &mut out);
+    // Then the account's own calendar, by its changes.
+    let state = read_own_calendar(c, pim, now, &again, &mut out)?;
     answer_pending(c, pim, &mut out);
     // Reminders dismissed or snoozed here (issue #40), once the server said its version.
     reminders::answer_all(c, pim, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
-    let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: String::new(), group: String::new() }];
-    out.synced_calendars.push(CALENDAR.into());
+    let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: state, group: String::new() }];
     // Other people's calendars: those opened here by their address, and those Outlook keeps in
     // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
     // is read where the permissions they gave allow, and changed where they let this account.
     // Contacts first: People shows them, and a first sync's whole address book mustn't wait
     // behind a dozen colleagues' calendars.
     if !calendars_only {
-        read_contacts(c, &mut out)?;
+        let name = folder_name(c, "contacts").unwrap_or_else(|| "Contacts".into());
+        read_contacts(c, pim, name, &again, &mut out)?;
     }
     if pim.own_only {
         // The calendar isn't shown: this account's own is enough (the others are read once it is).
@@ -299,13 +308,15 @@ fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i6
 /// they stay as they are.
 pub fn sync_tasks(c: &Client, pim: &Pim, now: i64) -> DavSync {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
-    delete_gone(c, pim.deleted.iter().filter(|t| t.href.starts_with("task:")), &mut out);
+    let _ = delete_gone(c, pim.deleted.iter().filter(|t| t.href.starts_with("task:")), &mut out);
     read_tasks(c, pim, &mut out);
     out
 }
 
-/// What was deleted here, deleted on the server.
-fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::pim::Tombstone>, out: &mut DavSync) {
+/// What was deleted here, deleted on the server; those it refused, to read again (their item
+/// there), as they stay on the server and so come back here.
+fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::pim::Tombstone>, out: &mut DavSync) -> Vec<String> {
+    let mut refused = Vec::new();
     for t in gone {
         let task = t.href.starts_with("task:");
         match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task) {
@@ -316,9 +327,36 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::p
             Err(NetError::No(why)) => {
                 out.deleted.push(t.href.clone());
                 out.errors.push(format!("not deleted on the server: {why}"));
+                refused.push(t.href.clone());
             }
             // Not now (offline, the server busy): tried again next time, still deleted here.
             Err(e) => out.errors.push(e.to_string()),
+        }
+    }
+    refused
+}
+
+/// The contacts changed here, made again on the server (a contact's addresses and numbers are
+/// simplest replaced whole).
+fn push_cards(c: &Client, pim: &Pim, out: &mut DavSync) {
+    for k in pim.cards.iter().filter(|k| k.dirty) {
+        if let Some(old) = k.href.strip_prefix("contact:")
+            && let Err(e) = delete(c, old, false)
+            && !matches!(e, NetError::No(_))
+        {
+            out.errors.push(format!("{}: {e}", k.card.display()));
+            continue;
+        }
+        let r = c.call_one(&format!(
+            "<m:CreateItem><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"contacts\"/></m:SavedItemFolderId><m:Items>{}</m:Items></m:CreateItem>",
+            contact_xml(&k.card)
+        ));
+        match r {
+            Ok(m) => {
+                let (id, etag) = new_id(&m);
+                out.pushed_cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{id}"), etag, card: k.card.clone(), dirty: false });
+            }
+            Err(x) => out.errors.push(format!("{}: {x}", k.card.display())),
         }
     }
 }
@@ -330,7 +368,7 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::p
 /// doesn't give is made from what its series says of it (its own times).
 /// `owner`: the calendar's mailbox (the organizer of the meetings it organizes); `since`: what
 /// the calendar is read from (the occurrences changed before then aren't).
-fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: i64, out: &mut DavSync) {
+pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: i64, out: &mut DavSync) {
     let id_of = |it: &El| {
         it.child("ItemId").map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string())).unwrap_or_default()
     };
@@ -397,20 +435,6 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: 
         if from_series > 0 { format!("; {from_series} not given, shown from their series") } else { String::new() },
         t.server.as_secs_f32()
     );
-}
-
-/// This account's contacts, read again: its address book in `out`.
-fn read_contacts(c: &Client, out: &mut DavSync) -> Result<()> {
-    for it in items(c, "contacts", None)? {
-        if let Some(card) = card_of(&it) {
-            let etag = it.child("ItemId").and_then(|i| i.attr("ChangeKey")).unwrap_or("").to_string();
-            out.cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{}", card.uid), etag, card, dirty: false });
-        }
-    }
-    let own = folder_name(c, "contacts").unwrap_or_else(|| "Contacts".into());
-    out.books = Some(vec![BookInfo { id: CONTACTS.into(), name: own, read_only: false, ctag: String::new() }]);
-    out.synced_books.push(CONTACTS.into());
-    Ok(())
 }
 
 /// Notes: what changed here goes up, then the folder is read again.

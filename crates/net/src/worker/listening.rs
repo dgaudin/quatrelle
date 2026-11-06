@@ -205,7 +205,7 @@ impl Worker {
             return false;
         }
         if self.listen.pim_due.is_some_and(|at| Instant::now() >= at) {
-            self.sync_dav();
+            self.sync_pim_changes();
         }
         if self.listen.tasks_due.is_some_and(|at| Instant::now() >= at) {
             self.sync_tasks();
@@ -335,6 +335,13 @@ impl Worker {
         self.listen.pim_due = None;
         self.listen.pim_last = Some(Instant::now());
         self.listen.tasks_due = None;
+    }
+
+    /// The calendar and the contacts were read by their changes: what was told of in them before
+    /// is read (not the tasks).
+    pub(super) fn pim_changes_synced(&mut self) {
+        self.listen.pim_due = None;
+        self.listen.pim_last = Some(Instant::now());
     }
 
     /// The Tasks folder was read alone: what was told of in it before is read.

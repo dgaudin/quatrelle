@@ -80,14 +80,17 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
 }
 
 /// Answers to invitations whose meeting wasn't in the calendar here yet: found in the calendar
-/// just read (by the invitation's UID, or Exchange's `UID#start` for a single one), and
+/// just read, or kept as it was (by the invitation's UID, or Exchange's `UID#start` for a single one), and
 /// answered there. Not found yet: tried again at the next sync.
 pub(super) fn answer_pending(c: &Client, pim: &Pim, out: &mut DavSync) {
     for e in pim.events.iter().filter(|e| e.dirty && e.href.is_empty() && e.event.recurrence_id.is_none()) {
         let Some(answer) = &e.respond else { continue };
+        // Just read, or (the calendar read by its changes) kept here as it was.
+        let kept = pim.events.iter().filter(|x| !x.href.is_empty() && out.kept.contains(&x.href));
         let found = out
             .events
             .iter()
+            .chain(kept)
             .find(|x| x.calendar == CALENDAR && x.event.recurrence_id.is_none() && quatrelle_model::pim::same_meeting(&x.event.uid, &e.event.uid))
             .map(|x| x.href.clone());
         if let Some(href) = found {

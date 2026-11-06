@@ -252,6 +252,21 @@ impl Worker {
         self.dav_done(done);
     }
 
+    /// What the server told of in the account's own calendar or contacts (on-premises Exchange):
+    /// those two read by their changes alone, a few requests on the connection new mail comes on,
+    /// not the whole sync (the owner's 239 appointments, 3 to 6 s, at each change, 06/11). The
+    /// tasks told of meanwhile wait for their own read.
+    pub(super) fn sync_pim_changes(&mut self) {
+        let _at_work = self.at_work();
+        self.pim_changes_synced();
+        let Some(Conn::Ews(c)) = &self.conn else { return self.sync_dav() };
+        let pim = self.load_pim();
+        match crate::ews_pim::sync_changes(c, &pim, now()) {
+            Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
+            Err(e) => log::info!("{}: the calendar's and contacts' changes: {e}", self.acc.id),
+        }
+    }
+
     /// The calendars' and contacts' pass after a full sync, unless the worker was told to stop
     /// meanwhile: it would run under the settings it started with, a site just removed among them.
     pub(super) fn pim_pass(&mut self, rx: &Receiver<Job>) {
