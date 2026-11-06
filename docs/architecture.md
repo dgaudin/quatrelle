@@ -25,6 +25,8 @@
 | L1 | `quatrelle-mime` | model | `mail-parser`, `mail-builder`, `html2text` (formatted text), `html5ever` (the tokenizer, for table layouts) |
 | L1 | `quatrelle-store` | model | Plain files + JSON; atomic writes; no database engine |
 | L1 | `quatrelle-print` | — | Messages laid out as PDF pages with an embedded TrueType font (`ttf-parser`, `miniz_oxide`) |
+| L1 | `quatrelle-smime` | — | S/MIME (RFC 8551) on RustCrypto; wasm-safe |
+| L1 | `quatrelle-pgp` | — | OpenPGP on rPGP: keys read and checked by their self-signatures, made (v4, Ed25519 and Curve25519, three years), extended and backed up as GnuPG reads them; signing, verifying, encrypting (AES-256, SEIPDv1), decrypting with what it decompresses to bounded; Autocrypt headers; PGP blocks in a text. Never reads the clock (it's given the time); rPGP runs behind a guard that turns a panic into an error; wasm-safe |
 | L2 | `quatrelle-jmap` | model, mime, store | The JMAP transport, written once as async code over a two-method `Http` trait: the desktop runs it over `net`'s client (answers are ready at once, so a no-op `block_on` drives it), the browser over `fetch`. Portable, wasm-safe |
 | L3 | `quatrelle-net` | model, mime, store, jmap | Native only. IMAP (`imap-proto`), POP3, SMTP (`lettre`), JMAP push, Microsoft Graph, Exchange Web Services with NTLM, CalDAV/CardDAV (`quick-xml`), ManageSieve, a small HTTP/1.1 client, DNS for autoconfiguration, OAuth, Outlook data files (`outlook-pst-rw` to read and write, a fixed copy pinned in `[patch.crates-io]`); TLS through `rustls` |
 | L4 | `quatrelle-engine` | model, mime, store | Sans-I/O, wasm-safe |
@@ -94,7 +96,10 @@ changes are written back, so mail stays between visits (settings stay in local s
 passwords). The `WebBackend` runs each account's jobs in order on the browser's event loop with
 `quatrelle-jmap` over `fetch`, holds the push stream open (read through `fetch`, parsed by
 `quatrelle_jmap::sse`), polls as the fallback, and answers what a browser can't do (IMAP,
-OAuth sign-in, data files) with an explanation. `Services` tells the UI files are downloads and
+OAuth sign-in, data files) with an explanation; OpenPGP work with the account's own keys
+(`backend/pgp.rs`, `PgpWork::unavailable`) is answered at once with why (a draft to seal is
+saved as it is, said), so nothing waits and nothing to be encrypted goes unencrypted; reading
+signed OpenPGP mail and people's keys are the engine's and work there too. `Services` tells the UI files are downloads and
 that the file picker answers on a later frame. `Session::jmap_only` keeps the account form to
 JMAP.
 
@@ -143,6 +148,22 @@ written (`Compose`), preferences and status-bar notices.
   message downloaded comes back as its summary filled from its source (`Event::Filled`, made by
   `quatrelle_jmap::keep_source` for every protocol), which the folder in memory and the list's
   entry take (`patch.rs`), built again only where what changed decides what the list shows.
+- OpenPGP sits beside S/MIME (`session/security/pgp.rs` and its `people.rs`, `reading.rs`,
+  `writing.rs`; commands in `cmd/pgp.rs` and `cmd/security.rs`; the pool's half in
+  `net/src/worker/pgp.rs`). An account's secret keys live only in the system keychain, the
+  engine holds their public parts (`pgp.json`) and its correspondents' keys (`pgp-people.json`,
+  learnt from the From address's Autocrypt header and attached keys, or imported; at most
+  10,000, the least used from mail let go first). **Nothing is active until the account has a
+  key** (`Session::pgp_active`): no Autocrypt header, no signing, no encryption, no scheme
+  choice. Reading is always on: `Session::unwrap` takes PGP/MIME and PGP blocks apart as it
+  takes S/MIME, signatures checked here, decryption asked of the pool and kept in memory only.
+  Sending: `protect_job` hands a message to `pgp_protect_job` when `Session::scheme_for` says
+  OpenPGP (with a certificate and a key: the one chosen, else Automatic, the scheme of the
+  message answered, else the one every recipient can receive); it's encrypted to every
+  recipient and to the sender, or refused naming whoever has no key that can be encrypted to
+  now (`NO_KEY_TO_ENCRYPT`). `Session::encryption_reach` (`compose.encryption`) says who can't
+  receive it encrypted, worked out again only when the recipients, the scheme or the keys
+  known change; with File › Options › Safety's option it turns encryption on and off to match.
 - Local-only accounts (the sample mailbox) apply changes to the cache directly, including moves
   (new UIDs in the destination) and, for the sample mailbox alone, sending (filed in Sent).
 - Mail is sent only from an account that can send it (`session/writing/sending.rs`):
