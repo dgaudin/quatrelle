@@ -2036,3 +2036,8 @@ menu	View	查看
 	The system's print window isn't available: opened as a PDF, print it from the viewer	系统的打印窗口不可用: 已以 PDF 打开, 请从查看器打印
 	Sent to the printer	已发送到打印机
 	Downloaded as a PDF: print it from the viewer	已下载为 PDF: 请从查看器打印
+	Add to an Outlook data file…	添加到 Outlook 数据文件…
+	Add to an Outlook data file	添加到 Outlook 数据文件
+	Add to file	添加到文件
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	将帐户的邮件连同文件夹添加到已有的 Outlook 数据文件 (.pst)。文件原有的内容保留，已有的邮件不会重复写入。
+	Adding to {file}… (what it already has stays)	正在添加到 {file}…（原有内容保留）

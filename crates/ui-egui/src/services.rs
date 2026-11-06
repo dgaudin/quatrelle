@@ -115,6 +115,10 @@ pub enum FileAsk {
     Rules,
     /// An Outlook (or Quatrelle) data file to open.
     DataFile,
+    /// An Outlook data file already there to add an account's mail to: the system's Open
+    /// window, which doesn't ask whether to replace it as Save as does (the export adds to a
+    /// file already there, and replaces nothing in it).
+    AddToDataFile,
 }
 
 /// How printing through the system's print window went ([`Services::print`]).

@@ -283,8 +283,10 @@ pub enum Action {
     PickAccountDataFile,
     /// An action from a message's own window, on that message (its attachments, Save As, Print).
     InWindow(MessageKey, Box<Action>),
-    /// Choose where to write an account's mail as an Outlook data file.
+    /// Choose where to write an account's mail as an Outlook data file (a new one, by Save as).
     ExportDataFile(String),
+    /// Choose an Outlook data file already there to add an account's mail to (by Open).
+    AddToDataFile(String),
     /// Show a folder in the system's file manager.
     OpenFolder(PathBuf),
     /// Choose a folder to move Quatrelle's data into (at the next start).

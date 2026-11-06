@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use crate::*;
 
+mod data_files;
 mod printing;
 
 /// The file dialog open, and what asked for it; the print window too.

@@ -73,9 +73,33 @@ pub(super) fn open(s: &Session, t: &Tokens, ui: &mut Ui, b: &mut Backstage, acts
         },
     );
     if r.clicked()
-        && let Some(id) = current
+        && let Some(id) = current.clone()
     {
         acts.push(Action::ExportDataFile(id));
+    }
+    // A .pst already there, added to: picked the Open way, as Save as would ask to replace it
+    // though nothing in it is replaced.
+    let r = tile(
+        ui,
+        t,
+        Icon::Plus,
+        "Add to file",
+        "Add to an Outlook data file",
+        "Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.",
+        |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for a in &s.accounts {
+                    if ui.button(RichText::new(&a.config.email).small()).clicked() {
+                        acts.push(Action::AddToDataFile(a.config.id.clone()));
+                    }
+                }
+            });
+        },
+    );
+    if r.clicked()
+        && let Some(id) = current
+    {
+        acts.push(Action::AddToDataFile(id));
     }
     // Rules to a file and back, as Outlook's Import and Export Rules (the shared version's card,
     // drawn as the fork's tile).

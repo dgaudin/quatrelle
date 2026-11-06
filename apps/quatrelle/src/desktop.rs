@@ -197,6 +197,12 @@ impl Services for Desktop {
                     .add_filter("Quatrelle data files", &["quatrelle"]);
                 (one(d.pick_file()), None)
             }
+            // Opened, not saved: Save as would ask to replace the file, though the export only
+            // adds to it. Its title in the interface's language, as the File page's entry.
+            FileAsk::AddToDataFile => (
+                one(self.dialog(quatrelle_ui_egui::i18n::t("Add to an Outlook data file")).add_filter("Outlook data files", &["pst"]).pick_file()),
+                Some(false),
+            ),
         };
         self.files.start(answer, remember);
         true

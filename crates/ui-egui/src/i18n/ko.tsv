@@ -2037,3 +2037,8 @@ folder	Conflicts	충돌
 	The system's print window isn't available: opened as a PDF, print it from the viewer	시스템 인쇄 창을 사용할 수 없습니다: PDF로 열었습니다. 뷰어에서 인쇄하세요
 	Sent to the printer	프린터로 보냈습니다
 	Downloaded as a PDF: print it from the viewer	PDF로 다운로드했습니다: 뷰어에서 인쇄하세요
+	Add to an Outlook data file…	Outlook 데이터 파일에 추가…
+	Add to an Outlook data file	Outlook 데이터 파일에 추가
+	Add to file	파일에 추가
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	계정의 메일을 폴더와 함께 이미 있는 Outlook 데이터 파일(.pst)에 추가합니다. 파일에 있던 내용은 그대로 남고, 이미 있는 메시지는 두 번 쓰지 않습니다.
+	Adding to {file}… (what it already has stays)	{file}에 추가하는 중… (이미 있는 내용은 그대로 남습니다)

@@ -2035,3 +2035,8 @@ menu	View	Weergeven
 	The system's print window isn't available: opened as a PDF, print it from the viewer	Het afdrukvenster van het systeem is niet beschikbaar: als pdf geopend, druk het af vanuit de viewer
 	Sent to the printer	Naar de printer verzonden
 	Downloaded as a PDF: print it from the viewer	Als pdf gedownload: druk het af vanuit de viewer
+	Add to an Outlook data file…	Toevoegen aan een Outlook-gegevensbestand…
+	Add to an Outlook data file	Toevoegen aan een Outlook-gegevensbestand
+	Add to file	Aan bestand toevoegen
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Voegt de mail van een account, met de mappen, toe aan een bestaand Outlook-gegevensbestand (.pst). Wat het bestand bevat blijft, en een bericht dat het al heeft wordt niet twee keer geschreven.
+	Adding to {file}… (what it already has stays)	Toevoegen aan {file}… (wat het al bevat, blijft)

@@ -2039,3 +2039,8 @@ menu	View	Ver
 	The system's print window isn't available: opened as a PDF, print it from the viewer	La ventana de impresión del sistema no está disponible: abierto como PDF, imprímelo desde el visor
 	Sent to the printer	Enviado a la impresora
 	Downloaded as a PDF: print it from the viewer	Descargado como PDF: imprímelo desde el visor
+	Add to an Outlook data file…	Añadir a un archivo de datos de Outlook…
+	Add to an Outlook data file	Añadir a un archivo de datos de Outlook
+	Add to file	Añadir a archivo
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Añade el correo de una cuenta, con sus carpetas, a un archivo de datos de Outlook (.pst) que ya existe. Lo que el archivo tiene se queda, y un mensaje que ya tiene no se escribe dos veces.
+	Adding to {file}… (what it already has stays)	Añadiendo a {file}… (lo que ya tiene se queda)
