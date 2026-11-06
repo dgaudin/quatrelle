@@ -427,3 +427,67 @@ fn a_centred_title_in_a_column_stays_centred_and_big() {
     // Text that flows (no column) keeps flowing: no layout for a centred paragraph alone.
     assert!(html_layout(r#"<p style="text-align:center">Just centred</p>"#).is_empty());
 }
+
+/// Upstream issue #41, the tester's newsletter: blocks of one width stacked one on another (each
+/// its own table, or a table's rows) keep their own room, as in Outlook: the tables'
+/// `cellspacing` (HTML's 2 when not said, none with `border-collapse`), `cellpadding` and each
+/// cell's padding; a line break between two of them is the empty line a browser leaves; a
+/// gradient Outlook doesn't draw shows its `bgcolor`; a box of CSS keeps its own padding.
+#[test]
+fn stacked_blocks_keep_their_own_room() {
+    let html = r##"<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" bgcolor="#fff8cc"><tr><td style="padding:24px">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(90deg,#ffcc00,#c08000)" bgcolor="#f0b800">
+            <tr><td style="padding:20px 10px">BANNER</td></tr></table></td></tr></table>
+        <table width="600" cellpadding="0" cellspacing="0" bgcolor="#fff8cc"><tr><td style="padding:24px 20px 12pt">First block</td></tr></table>
+        <br>
+        <table width="600" cellpadding="4" cellspacing="0"><tr><td bgcolor="#cce8ff">Row one</td></tr><tr><td bgcolor="#b8dcff">Row two</td></tr></table>
+        <table width="600"><tr><td>HTML's own room</td></tr></table>
+        <table width="600" cellspacing="8" style="border-collapse:collapse"><tr><td>Collapsed</td></tr></table>
+        <table width="600" style="border-spacing:6px"><tr><td>Spaced by CSS</td></tr></table>
+        </td></tr></table>"##;
+    let b = html_layout(&inline_css(html));
+    let Block::Table(outer) = &b[0] else { panic!("{b:?}") };
+    assert_eq!(outer.spacing, Some(0));
+    let parts = &outer.rows[0][0].blocks;
+    let tables: Vec<&Table> = parts.iter().filter_map(|p| if let Block::Table(t) = p { Some(t) } else { None }).collect();
+    let room: Vec<Option<u8>> = tables.iter().map(|t| t.spacing).collect();
+    assert_eq!(room, [Some(0), Some(0), Some(0), Some(2), Some(0), Some(6)]);
+    assert_eq!(tables[0].rows[0][0].padding, Some([24, 24, 24, 24]));
+    assert_eq!(tables[1].rows[0][0].padding, Some([24, 20, 16, 20]), "a missing side is the second's; points as pixels");
+    assert_eq!(tables[2].rows[1][0].padding, Some([4; 4]), "its table's cellpadding");
+    assert_eq!(tables[3].rows[0][0].padding, None, "the reader's own");
+    let Block::Table(banner) = &tables[0].rows[0][0].blocks[0] else { panic!() };
+    assert_eq!(banner.background, Some([0xf0, 0xb8, 0x00]), "the bgcolor under a gradient");
+    assert_eq!(banner.rows[0][0].padding, Some([20, 10, 20, 10]));
+    // The line break between the second block and the rows: one empty line; nothing between
+    // the first two.
+    let at = parts.iter().position(|p| matches!(p, Block::Table(t) if t.rows.len() == 2)).unwrap();
+    assert!(matches!(&parts[at - 1], Block::Text(lines) if lines.len() == 1 && lines[0].is_empty()), "{:?}", parts[at - 1]);
+    assert!(matches!(&parts[1], Block::Table(_)), "nothing between the first two: {:?}", parts[1]);
+    // A gradient with no bgcolor: its first colour; one written after a colour: that colour.
+    let b = html_layout(r#"<table width="600" style="background-image:linear-gradient(#123456, #fff)"><tr><td>x</td></tr></table>"#);
+    let Block::Table(t) = &b[0] else { panic!() };
+    assert_eq!(t.background, Some([0x12, 0x34, 0x56]));
+    let b = html_layout(r#"<table width="600" style="background:#abcdef url(x.png) no-repeat"><tr><td>x</td></tr></table>"#);
+    let Block::Table(t) = &b[0] else { panic!() };
+    assert_eq!(t.background, Some([0xab, 0xcd, 0xef]));
+    // A column of CSS (no table) keeps its padding and has no spacing.
+    let b = html_layout(r#"<div style="max-width:600px;margin:0 auto;padding:18px 12px;background:#fff8cc">A column</div>"#);
+    let Block::Table(t) = &b[0] else { panic!("{b:?}") };
+    assert_eq!((t.spacing, t.rows[0][0].padding), (None, Some([18, 12, 18, 12])));
+}
+
+/// A line break alone is room only between two boxes: a spacer cell of one stays a spacer (left
+/// out), and one after a cell's last box adds nothing.
+#[test]
+fn a_line_break_alone_is_room_only_between_two_boxes() {
+    let html = r#"<table width="600"><tr><td>Text</td><td><br></td></tr><tr><td><br></td><td><br></td></tr>
+        <tr><td><table width="100"><tr><td>Box</td></tr></table><br></td><td>x</td></tr></table>"#;
+    let b = html_layout(html);
+    let Block::Table(t) = &b[0] else { panic!("{b:?}") };
+    assert_eq!(t.rows.len(), 2, "the row of line breaks is a spacer: {:?}", t.rows);
+    assert_eq!(t.rows[0].len(), 2, "a cell of a line break holds its column's place");
+    assert!(t.rows[0][1].blocks.is_empty(), "{:?}", t.rows[0][1]);
+    assert_eq!(t.rows[1][0].blocks.len(), 1, "nothing after the box: {:?}", t.rows[1][0].blocks);
+}

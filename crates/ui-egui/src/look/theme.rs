@@ -290,9 +290,12 @@ pub fn surface_rgb(t: &Tokens) -> [u8; 3] {
 
 /// A box's colour (a highlight, a table cell's background) on `page`, when it's kept: one too
 /// close to the page to see goes (a report's light grey stripes, #f0f0f0 on white, stay), and grey
-/// or white ones go in dark mode (the page is dark).
+/// or white ones go in dark mode (the page is dark). A pale tint that can be told from the page
+/// stays though its contrast with it is slight (a newsletter's light yellow blocks on its light
+/// grey, 1.055, upstream issue #41): one of its channels 12 or more off the page's.
 pub fn box_color(bg: Option<[u8; 3]>, page: [u8; 3], t: &Tokens) -> Option<[u8; 3]> {
-    bg.filter(|b| contrast(*b, page) > 1.06 && !(t.dark && luminance(*b) > 0.35 && saturation(*b) < 0.25))
+    let apart = |b: [u8; 3]| b.iter().zip(page).map(|(x, y)| x.abs_diff(y)).max().unwrap_or(0) >= 12;
+    bg.filter(|b| (contrast(*b, page) > 1.06 || apart(*b)) && !(t.dark && luminance(*b) > 0.35 && saturation(*b) < 0.25))
 }
 
 /// The colour a message's border (a table's grid, a signature's rule) is drawn in on `page`:
@@ -417,6 +420,20 @@ pub fn regular(size: f32) -> egui::FontId {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Upstream issue #41: a pale tint on a pale page is still a box (a newsletter's light yellow
+    /// blocks on light grey, as Outlook shows them); the page's own colour, or one a shade off
+    /// it, isn't.
+    #[test]
+    fn a_pale_tint_is_a_box() {
+        let t = Tokens::light();
+        let grey = [0xf2, 0xf2, 0xf2];
+        assert_eq!(box_color(Some([0xff, 0xf8, 0xcc]), grey, &t), Some([0xff, 0xf8, 0xcc]));
+        assert_eq!(box_color(Some([0xcc, 0xe8, 0xff]), grey, &t), Some([0xcc, 0xe8, 0xff]));
+        assert_eq!(box_color(Some(grey), grey, &t), None);
+        assert_eq!(box_color(Some([0xf4, 0xf4, 0xf4]), grey, &t), None);
+        assert_eq!(box_color(Some([0xff, 0xff, 0xff]), [0xff, 0xff, 0xff], &t), None);
+    }
 
     #[test]
     fn a_system_accent_stays_readable() {

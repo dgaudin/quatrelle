@@ -103,21 +103,29 @@ impl Body<'_> {
         let tbg = theme::box_color(table.background, page, &st.tokens);
         let page = tbg.unwrap_or(page);
         let behind = table.background_image.as_deref().and_then(|src| self.background(st, ui.ctx(), src));
-        // Rows meet when its cells draw borders (a receipt's grid); otherwise a
-        // little air between them.
+        // Rows meet when its cells draw borders (a receipt's grid: one line between two cells);
+        // otherwise they're as far apart as the message sets (`cellspacing`, HTML's 2 when not
+        // said: none for a newsletter's blocks of `cellspacing="0"`, which touch as in Outlook,
+        // upstream issue #41), and so are its cells side by side and its edges from them. A
+        // table of figures keeps its columns' widths to the pixel (as before: none).
         let bordered = table.rows.iter().flatten().any(|c| !c.borders.is_none());
+        let spacing = if bordered || figures { 0.0 } else { (f32::from(table.spacing.unwrap_or(0)) * self.zoom).round() };
+        // The air between lines of text in its cells, as before: a little, none in a grid.
+        let room = Room { spacing, lines: if bordered { 0.0 } else { 4.0 } };
         ui.horizontal_top(|ui| {
             ui.add_space(indent);
             ui.allocate_ui_with_layout(vec2(tw, 0.0), egui::Layout::top_down(Align::Min), |ui| {
                 ui.set_width(tw);
                 let fill = tbg.map_or(Color32::TRANSPARENT, |c| Color32::from_rgb(c[0], c[1], c[2]));
                 let (frame, round) = framed_box(fill, &table.borders, table.radius, page, &st.tokens);
-                let framed = frame.show(ui, |ui| {
+                let edge = i8::try_from(spacing as i32).unwrap_or(i8::MAX);
+                let framed = frame.inner_margin(Margin::same(edge)).show(ui, |ui| {
                     // Its place in the drawing: above the fill, under the content.
                     let slot = ui.painter().add(egui::Shape::Noop);
-                    ui.spacing_mut().item_spacing = vec2(0.0, if bordered { 0.0 } else { 4.0 });
+                    ui.spacing_mut().item_spacing = vec2(spacing, spacing);
+                    let inner = (tw - 2.0 * f32::from(edge)).max(1.0);
                     for row in &table.rows {
-                        self.row(st, ui, row, columns, figures, tw, page, depth);
+                        self.row(st, ui, row, columns, figures, inner, page, room, depth);
                     }
                     slot
                 });
@@ -150,9 +158,15 @@ impl Body<'_> {
         figures: bool,
         width: f32,
         page: [u8; 3],
+        room: Room,
         depth: usize,
     ) {
         use mime::layout::{VAlign, Width};
+        // The room between its cells side by side comes out of the row's width (none for one
+        // under the other).
+        let between = room.spacing * row.len().saturating_sub(1) as f32;
+        let full = width;
+        let width = (width - between).max(1.0);
         let px = |w: Width| match w {
             Width::Px(px) => px as f32 * self.zoom,
             Width::Percent(pc) => width * f32::from(pc) / 100.0,
@@ -223,6 +237,7 @@ impl Body<'_> {
                 let (frame, round) = framed_box(fill, &c.borders, c.radius, page, &st.tokens);
                 let framed = frame.inner_margin(pad).show(ui, |ui| {
                     let slot = ui.painter().add(egui::Shape::Noop);
+                    ui.spacing_mut().item_spacing = vec2(0.0, room.lines);
                     let inner = (w - pad.sum().x).max(1.0);
                     ui.set_width(inner);
                     // The cell starts here even when its content is pushed down, and is at
@@ -265,11 +280,11 @@ impl Body<'_> {
         };
         if stack {
             for (i, c) in row.iter().enumerate().filter(|(_, c)| !c.blocks.is_empty()) {
-                cell(self, st, ui, c, width, pads.get(i).copied().unwrap_or_default(), first.saturating_add(i), None);
+                cell(self, st, ui, c, full, pads.get(i).copied().unwrap_or_default(), first.saturating_add(i), None);
             }
         } else {
             ui.horizontal_top(|ui| {
-                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.spacing_mut().item_spacing.x = room.spacing;
                 for (i, (c, w)) in row.iter().zip(&widths).enumerate() {
                     let h = heights.get(i).copied().flatten();
                     cell(self, st, ui, c, *w, pads.get(i).copied().unwrap_or_default(), first.saturating_add(i), h);
@@ -281,6 +296,14 @@ impl Body<'_> {
 
 /// The reader's own padding in a table cell, when the message sets none.
 const PAD: i8 = 6;
+
+/// A table's room: between its rows, its cells side by side and its edges (`cellspacing`), and
+/// between the lines of text in its cells.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Room {
+    spacing: f32,
+    lines: f32,
+}
 
 /// A table without a width that is one box of text (a newsletter's button, a note in a frame,
 /// a signature's name beside its rule): as wide as its text, padding added, as a browser

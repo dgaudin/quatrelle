@@ -123,3 +123,71 @@ fn a_tables_columns_line_up_from_row_to_row() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A newsletter laid out as most are (issue #41 upstream): blocks of one width stacked on a pale
+/// grey page, each `cellspacing="0" cellpadding="0"` with its own padding, a pale yellow tint,
+/// a banner whose gradient isn't drawn (its `bgcolor` is), two coloured rows, a layout table
+/// without borders, a bordered table of figures. The blocks touch, as in Outlook, and the pale
+/// yellow shows (its contrast with the grey is 1.055). Painted light and dark into
+/// `QUATRELLE_FRAME_PNG` when set.
+#[test]
+fn a_newsletters_stacked_blocks_touch_and_keep_their_tint() {
+    use super::super::list::follow_up::{Textures, frame_with_size};
+    let block = |text: &str, pad: &str| {
+        format!(
+            "<table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#fff8cc\"><tr><td style=\"padding:{pad}\">{text}</td></tr></table>"
+        )
+    };
+    let banner = "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#f0b800\" \
+                  style=\"background:linear-gradient(90deg,#ffcc00,#c08000)\"><tr><td style=\"padding:20px 10px\"><b>STUDIO NEWS</b></td></tr></table>";
+    let html = format!(
+        "<html><body style=\"margin:0\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#f2f2f2\"><tr><td align=\"center\">\
+         {}{}{}<br>\
+         <table width=\"600\" cellpadding=\"4\" cellspacing=\"0\"><tr><td bgcolor=\"#cce8ff\">Row one</td></tr><tr><td bgcolor=\"#b8dcff\">Row two</td></tr></table>\
+         <table width=\"600\"><tr><td width=\"200\"><b>Layout column</b></td><td>Beside it, a column of text without borders, as a newsletter puts a picture and its words.</td></tr></table>\
+         <table width=\"600\" border=\"1\" cellpadding=\"6\"><tr><td>Week</td><td>Sent</td><td>Read</td></tr><tr><td>44</td><td>1200</td><td>640</td></tr></table>\
+         </td></tr></table></body></html>",
+        block(banner, "24px"),
+        block("First block, line one.", "24px 20px"),
+        block("Centred block", "24px 20px; text-align:center"),
+    );
+    let (mut a, dir) = app_with_html("newsletter", "Studio News", &html);
+    let ctx = egui::Context::default();
+    let mut tex = Textures::default();
+    let pictures = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
+    let size = (1600, 1000);
+    frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size);
+    let k = a.session.list.iter().find(|m| m.subject == "Studio News").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let fills = |shapes: &[egui::Shape], c: [u8; 3]| -> Vec<egui::Rect> {
+        let c = egui::Color32::from_rgb(c[0], c[1], c[2]);
+        shapes.iter().filter_map(|s| if let egui::Shape::Rect(r) = s { (r.fill == c).then_some(r.rect) } else { None }).collect()
+    };
+    for (dark, theme) in [(true, "dark"), (false, "light")] {
+        a.ui.dark = Some(dark);
+        let mut shown = Vec::new();
+        for _ in 0..12 {
+            shown = frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size).1;
+        }
+        let png = pictures.as_ref().map(|d| d.join(format!("newsletter-{theme}.png")));
+        if png.is_some() {
+            frame_with_size(&ctx, &mut a, &mut tex, vec![], png, size);
+        }
+        if dark {
+            continue;
+        }
+        let mut yellow = fills(&shown, [0xff, 0xf8, 0xcc]);
+        yellow.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        assert_eq!(yellow.len(), 3, "the three pale yellow blocks: {yellow:?}");
+        for pair in yellow.windows(2) {
+            assert!((pair[1].top() - pair[0].bottom()).abs() < 0.5, "stacked blocks touch: {pair:?}");
+        }
+        let (one, two) = (fills(&shown, [0xcc, 0xe8, 0xff]), fills(&shown, [0xb8, 0xdc, 0xff]));
+        assert!(
+            one.first().zip(two.first()).is_some_and(|(a, b)| (b.top() - a.bottom()).abs() < 0.5),
+            "rows of no cellspacing touch: {one:?} {two:?}"
+        );
+        assert_eq!(fills(&shown, [0xf0, 0xb8, 0x00]).len(), 1, "the banner's bgcolor under its gradient");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

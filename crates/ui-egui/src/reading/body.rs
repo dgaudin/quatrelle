@@ -533,10 +533,21 @@ impl Body<'_> {
             A::Center => Align::Center,
             A::Right => Align::Max,
         };
-        for b in blocks {
+        for (i, b) in blocks.iter().enumerate() {
             match b {
                 Block::Text(lines) => self.lines(st, ui, lines, width, page, main_align(align)),
-                Block::Table(table) if depth < 16 => self.table(st, ui, table, width, page, align, depth),
+                Block::Table(table) if depth < 16 => {
+                    // A box with another right under it touches it, as a browser stacks them (a
+                    // newsletter's blocks of one width, upstream issue #41): what parts them is
+                    // their own room (padding, spacing), not the pane's.
+                    let stacked = matches!(blocks.get(i + 1), Some(Block::Table(_)));
+                    let gap = ui.spacing().item_spacing.y;
+                    if stacked {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                    }
+                    self.table(st, ui, table, width, page, align, depth);
+                    ui.spacing_mut().item_spacing.y = gap;
+                }
                 Block::Table(_) => {}
             }
         }

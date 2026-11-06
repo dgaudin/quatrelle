@@ -325,6 +325,17 @@ impl Node {
         Some(capped(px, MAX_PADDING))
     }
 
+    /// A table's room between and around its cells, in pixels: `border-spacing`, else
+    /// `cellspacing`, else HTML's 2; none when its borders collapse.
+    pub(super) fn cell_spacing(&self) -> u8 {
+        if self.style("border-collapse").is_some_and(|c| c.trim() == "collapse") {
+            return 0;
+        }
+        let css = self.style("border-spacing").and_then(|v| v.split_whitespace().next().and_then(length_px));
+        let attr = self.attr("cellspacing").and_then(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().ok()).filter(|n| n.is_finite());
+        css.or(attr).map_or(2, |px| capped(px, MAX_PADDING))
+    }
+
     /// Where its content sits in its row: its `vertical-align` or `valign`, else its row's, else
     /// the middle (HTML's default for a table cell).
     pub(super) fn valign(&self, row: Option<&Node>) -> VAlign {

@@ -177,7 +177,8 @@ fn without_spacers(rows: Vec<Vec<Cell>>) -> Vec<Vec<Cell>> {
 fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     let mut out = Vec::new();
     let mut pending = String::new();
-    let flush = |pending: &mut String, out: &mut Vec<Block>, ctx: &Ctx| {
+    // `between`: a box comes next (line breaks alone before it are room between two boxes).
+    let flush = |pending: &mut String, out: &mut Vec<Block>, ctx: &Ctx, between: bool| {
         if pending.chars().any(|c| !c.is_whitespace()) || pending.contains("<img") {
             let rich = match &ctx.color {
                 Some(c) => crate::html_to_rich(&format!("{}<div style=\"color:{c}\">{}</div>", ctx.css, pending)),
@@ -185,6 +186,11 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             };
             if !rich.is_empty() {
                 out.push(Block::Text(rich));
+            } else if between && !out.is_empty() && pending.contains("<br") {
+                // Line breaks alone between two boxes: the empty lines a browser leaves there
+                // (not those that end a cell, or make a spacer of one).
+                let n = pending.matches("<br").count().clamp(1, 4);
+                out.push(Block::Text(vec![Vec::new(); n]));
             }
         }
         pending.clear();
@@ -193,7 +199,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
         match k {
             Kid::El(n) if n.hidden() => {}
             Kid::El(n) if n.tag == "table" && depth < MAX_DEPTH => {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 // Its `border="1"`: a border around it, and one around each cell; its
                 // `cellpadding`: its cells' padding. Their own styles win over both.
                 let (table_border, cell_border) = n.border_attr();
@@ -246,11 +252,12 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     background_image: n.background_image(),
                     borders: n.borders(table_border),
                     radius: n.radius(),
+                    spacing: Some(n.cell_spacing()),
                 }));
             }
             // A box with others placed over it: its content, and theirs on top.
             Kid::El(n) if depth < MAX_DEPTH && n.has_overlays() => {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 let (placed, base): (Vec<&Kid>, Vec<&Kid>) = n.kids.iter().partition(|k| matches!(k, Kid::El(c) if c.placed()));
                 let base: Vec<Kid> = base.into_iter().map(copy).collect();
                 let overlays: Vec<Overlay> = colored(ctx, n, |ctx| {
@@ -278,13 +285,14 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     align: n.align(),
                     span: 1,
                     overlays,
+                    padding: n.padding(None),
                     ..Default::default()
                 };
                 out.push(Block::Table(Table { rows: vec![vec![cell]], width: n.width(), align: n.table_align(), ..Default::default() }));
             }
             // A box with a picture behind it (a banner): one cell that carries it.
             Kid::El(n) if depth < MAX_DEPTH && !matches!(n.tag.as_str(), "img" | "td" | "th" | "tr") && n.background_image().is_some() => {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 ctx.cells += 1;
                 // Its content is the box itself without the picture, so columns in it stay columns.
                 let cell = Cell {
@@ -293,13 +301,14 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     background_image: n.background_image(),
                     align: n.align(),
                     span: 1,
+                    padding: n.padding(None),
                     ..Default::default()
                 };
                 out.push(Block::Table(Table { rows: vec![vec![cell]], width: n.width(), align: n.table_align(), ..Default::default() }));
             }
             // Boxes side by side with CSS: a table of one row per line of boxes.
             Kid::El(n) if depth < MAX_DEPTH && n.columns().is_some() => {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 let rows: Vec<Vec<Cell>> = colored(ctx, n, |ctx| {
                     n.columns()
                         .unwrap_or_default()
@@ -351,6 +360,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         background_image: n.background_image(),
                         borders: n.borders(None),
                         radius: n.radius(),
+                        spacing: None,
                     }));
                 }
             }
@@ -364,7 +374,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     && (n.has_picture(0) || (depth > 0 && n.has_text(0)))
                     && (!n.has_block_inside(0) || n.holds_a_title()) =>
             {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 ctx.cells += 1;
                 let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
                 if !inner.is_empty() {
@@ -378,13 +388,20 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             // A column of a set width (`max-width: 600px; margin: 0 auto`): a one-cell table that
             // wide, so it isn't stretched across the window (upstream issue #10).
             Kid::El(n) if depth < MAX_DEPTH && n.fixed_width() && (n.has_text(0) || n.has_picture(0)) => {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 ctx.cells += 1;
                 let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
                 if !inner.is_empty() {
                     let align = if n.tag == "center" { Align::Center } else { n.table_align() };
                     out.push(Block::Table(Table {
-                        rows: vec![vec![Cell { blocks: inner, align: n.align(), background: n.background(), span: 1, ..Default::default() }]],
+                        rows: vec![vec![Cell {
+                            blocks: inner,
+                            align: n.align(),
+                            background: n.background(),
+                            span: 1,
+                            padding: n.padding(None),
+                            ..Default::default()
+                        }]],
                         width: n.width(),
                         align,
                         ..Default::default()
@@ -393,7 +410,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             }
             // A wrapper around tables (`<div>`, `<center>`): its parts in turn.
             Kid::El(n) if depth < MAX_DEPTH && n.has_table(0) => {
-                flush(&mut pending, &mut out, ctx);
+                flush(&mut pending, &mut out, ctx, true);
                 let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth));
                 if n.tag == "center" || n.align() == Align::Center {
                     // Centred: as a one-cell table that sits in the middle.
@@ -411,6 +428,6 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             k => write(k, &mut pending),
         }
     }
-    flush(&mut pending, &mut out, ctx);
+    flush(&mut pending, &mut out, ctx, false);
     out
 }

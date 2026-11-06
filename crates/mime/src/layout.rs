@@ -90,6 +90,11 @@ pub struct Table {
     /// How round its corners are, in pixels (`border-radius`).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub radius: u8,
+    /// The room between its cells and around them, in pixels, for a table of HTML (`cellspacing`
+    /// or `border-spacing`; HTML's 2 when not said, none with `border-collapse: collapse`);
+    /// `None` for a box laid out with CSS, which has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<u8>,
 }
 
 fn is_zero(v: &u8) -> bool {
@@ -353,9 +358,25 @@ impl Node {
             || matches!(self.tag.as_str(), "head" | "script" | "style" | "title" | "template" | "noscript")
     }
 
+    /// Its colour, the first that reads: `background-color`, a colour in `background`, the
+    /// `bgcolor` attribute (what Outlook shows under a gradient it doesn't draw, upstream issue
+    /// #41), and last a gradient's first colour.
     fn background(&self) -> Option<[u8; 3]> {
-        let v = self.style("background-color").or_else(|| self.style("background")).or_else(|| self.attr("bgcolor").map(str::to_ascii_lowercase))?;
-        color(v.split_whitespace().next()?)
+        let own = self.style("background-color").and_then(|v| color(v.split_whitespace().next()?));
+        let shorthand = || {
+            let v = self.style("background")?;
+            if v.contains("gradient(") {
+                return None;
+            }
+            v.split_whitespace().find_map(color)
+        };
+        let attr = || self.attr("bgcolor").map(str::to_ascii_lowercase).and_then(|v| color(&v));
+        let gradient = || {
+            let v = self.style("background").or_else(|| self.style("background-image"))?;
+            let inner = v.get(v.find("gradient(")? + "gradient(".len()..)?;
+            inner.split(',').find_map(|stop| color(stop.split_whitespace().next()?))
+        };
+        own.or_else(shorthand).or_else(attr).or_else(gradient)
     }
 
     fn align(&self) -> Align {
