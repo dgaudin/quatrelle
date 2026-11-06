@@ -2924,7 +2924,7 @@ novembre), conçu avec lui le 5 novembre : approche A, l'OpenPGP de l'origine (s
 place qu'a S/MIME dans le fork, plus la création de clé que l'origine n'a pas. **Rien n'est actif
 tant qu'un compte n'a pas de clé** : rien ne change dans ce qui part. Spécification
 `docs/superpowers/specs/2026-11-05-openpgp-design.md`, plan `docs/superpowers/plans/2026-11-05-openpgp.md`,
-quatre lots dans l'ordre ; cette partie se complète à chacun.
+quatre lots dans l'ordre, tous faits le 6 novembre (le lot 3 en deux, 3a et 3b).
 
 **Lot 1 : le crate `quatrelle-pgp`** (L1, portable, vérifié pour le navigateur), sur rPGP 0.21.
 
@@ -3132,6 +3132,102 @@ lecture et la carte viendront au lot 3b).
   une signature ne regarde que la clé principale (une sous-clé de signature n'est pas trouvée) ;
   l'essai de la barre nomme l'expéditrice « Ana L. », pour que l'avis « vous connaissez Ana Lima
   sous une autre adresse » de l'échantillon ne se mêle pas aux rendus.
+
+**Lot 4 : l'envoi** (2026-11-06 ; tâches 4.1 à 4.3 du plan). Avec lui, la partie est complète :
+OpenPGP lit ce qui arrive, fait et garde la clé du compte, apprend celles des correspondants, signe
+et chiffre ce qui part ; **rien de tout cela n'est actif tant qu'un compte n'a pas de clé**.
+
+| Commit | Ce qu'il fait | Essais (échoué avant → passé) |
+|---|---|---|
+| `3e803907` (`f32b54b0`, adapté) | le pool signe avec la clé du trousseau puis chiffre en PGP/MIME (`PgpWork::Protect`, réponse `Event::Protected` comme S/MIME) et scelle un brouillon à chiffrer pour la clé du compte avant de le classer (`PgpWork::SealDraft`) ; le moteur (`session/security/pgp/writing.rs`) chiffre pour chaque destinataire et pour l'expéditeur, refuse en nommant qui n'a pas de clé utilisable (`CmdError::Disabled`, `NO_KEY_TO_ENCRYPT`), note l'usage des clés (`PeopleKeys::used`, une fois par jour au plus) ; `Scheme`, `Session::scheme_for`, `Compose::{scheme, came_as}` ; `compose.security {"scheme"}`, `compose.encryption` ; le groupe Chiffrer du ruban pour une clé comme pour un certificat, le choix de méthode quand le compte a les deux ; l'envoi chiffré sans clé arrêté dans la fenêtre, en nommant ; 8 chaînes dans les 13 catalogues | `nothing_changes_for_an_account_without_a_key` : la source relevée sur le code d'avant le lot (pièce jointe comprise), comparée octet pour octet ; `sending_signs_then_encrypts_to_everyone_and_the_sender`, `a_recipient_without_a_usable_key_is_named` (point 4 de la revue), `auto_answers_in_the_scheme_it_was_written_in` : écrits avec le code, sonde (le refus, `came_as` et la copie de l'expéditeur retirés) → les trois échouent, chacun sur son point ; `mail_is_signed_then_encrypted_with_the_key_in_the_keychain` (pool) ; `the_message_window_offers_the_scheme_only_with_both`, `sending_encrypted_without_a_key_names_who_lacks_one` (interface) |
+| `cd819d22` (`f32b54b0`, adapté ; son message ne le dit pas, oubli) | l'en-tête `Autocrypt: addr=…; keydata=…` (sans `prefer-encrypt`, la clé réduite à l'adresse), seulement avec une clé valable, l'interrupteur allumé et l'adresse d'expédition du compte ; `compose.attachPublicKey` (« Joindre ma clé publique », une partie `application/pgp-keys` nommée `<adresse>.asc`, une fois ; `Disabled` sans clé) ; l'option « Chiffrer de lui-même quand tous peuvent le recevoir » (Fichier › Options › Sécurité, `view.encryptWhenPossible`, coupée) ; la ligne sous l'objet ; 7 chaînes | `attaching_my_public_key_adds_it_once`, `the_public_key_goes_with_mail_once_a_key_exists`, `encryption_turns_itself_on_only_when_chosen` : écrits avant le code, échouaient (commande inconnue, aucun en-tête) → passent ; `nothing_changes…` étendu (l'option allumée) : échouait (commande inconnue) → passe, la source toujours la même ; `the_line_says_who_cant_receive_it_encrypted` (interface) |
+| `b54908e4` (`f32b54b0`, adapté) | le navigateur répond à tout job OpenPGP « pas encore disponible ici » (`NOT_IN_BROWSER`, par `PgpWork::unavailable` dans le modèle, essayé hors du navigateur), un brouillon à sceller enregistré tel quel en le disant ; `real_pgp` de l'origine (GreenMail et GnuPG), porté, ignoré, **jamais lancé** ; le tour par les faux serveurs | `the_browser_answers_every_openpgp_job` (écrit avec le code) ; `openpgp_mail_goes_and_comes_back_over_imap` et `…_over_ews` : passés du premier coup |
+| `8bbc6fd8` (`7e743c43`, adapté) | `docs/architecture.md` (les crates S/MIME et OpenPGP, OpenPGP dans la session et le navigateur), `docs/gaps.md` (n° 9 : ce qui n'est pas fait), le README | — |
+
+- **Le choix de méthode**, seulement quand le compte a un certificat **et** une clé : un bouton
+  du groupe Chiffrer (onglet Options du ruban, icône Fluent `settings` déjà là) qui porte le nom
+  du choix (« Automatique », « S/MIME », « OpenPGP ») et ouvre un menu à trois choix ; sous
+  Automatique, le menu dit ce qu'il prend pour ce message. **Automatique** : la méthode du
+  message auquel on répond (signé ou chiffré), sinon celle que tous les destinataires peuvent
+  recevoir, S/MIME à égalité (ce qui ne change rien aux comptes S/MIME d'aujourd'hui).
+- **Chiffrer**, c'est chiffrer pour chaque destinataire (To, Cc, Cci) et pour l'expéditeur (la
+  copie d'Envoyés se relit). Une clé absente, expirée ou révoquée ne compte pas
+  (`KeyInfo::encryptable`). L'envoi est alors refusé en nommant ces destinataires, et rien ne
+  part tant que l'utilisateur ne coupe pas Chiffrer. Une réponse à un message chiffré part chiffrée
+  et signée, dans la méthode du message.
+- **La ligne sous l'objet** (comptes qui ont une clé seulement : un compte S/MIME seul ne voit rien
+  de nouveau) : « Tous les destinataires peuvent le recevoir chiffré (OpenPGP) », en vert quand
+  Chiffrer est allumé ; sinon « Il ne peut pas être chiffré pour … : pas de clé OpenPGP
+  utilisable », en gris, ou en rouge quand Chiffrer est allumé (il ne partira pas). Calculée à
+  nouveau seulement quand changent les destinataires, la méthode, le nombre de clés connues ou
+  l'heure (`encryption_reach`, un condensé comme chez l'origine).
+- **Adapté** (au nom du propriétaire) :
+  - `scheme_for` rend `None` quand le compte n'a ni certificat ni clé ; ce qui ne peut pas être
+    chiffré se lit dans `Reach` (`compose.encryption` : `can`, `missing`, `scheme`, `recipients`,
+    `encrypt`, `setUp`) ;
+  - la fenêtre ne montre jamais un `CmdError::Disabled` (`ui-egui/src/lib.rs` le note au journal) :
+    elle regarde donc elle-même, avant `compose.send`, si un envoi chiffré par OpenPGP va vers
+    quelqu'un sans clé, et le dit dans l'alerte de la fenêtre, traduite ; le moteur refuse aussi
+    (CLI, `--cmd`). S/MIME garde son chemin (le carnet d'Exchange peut trouver le certificat) ;
+  - l'option qui chiffre d'elle-même est une préférence (`Prefs::encrypt_when_possible`), comme le
+    plan le dit, non une option par compte comme chez l'origine (`security.defaults autoEncrypt`) ;
+    choisie, elle vaut aussi pour un compte S/MIME ;
+  - l'en-tête Autocrypt ne part que si l'adresse d'expédition est celle du compte (pas d'une boîte
+    partagée ou d'une autre adresse) ; jamais `prefer-encrypt` ;
+  - le brouillon d'un message à chiffrer est scellé avec OpenPGP pour un compte serveur ; celui
+    du compte local reste classé tel quel, comme avec S/MIME ;
+  - faire une clé n'allume pas Signer pour les nouveaux messages (importer un certificat S/MIME
+    le fait).
+- **Exchange : l'essai à faire avant d'activer OpenPGP sur le compte Exchange** (spécification,
+  « Exchange: to be checked »). Quatrelle envoie par EWS le message entier (`CreateItem` avec
+  `MimeContent`), qu'Exchange met à sa façon ; rien ne dit qu'il garde une signature OpenPGP octet
+  pour octet. Le faux serveur EWS la garde (essai ci-dessus), un vrai Exchange n'a jamais été
+  essayé. Le jour où le propriétaire veut OpenPGP sur son compte Exchange :
+  1. créer la clé sur le compte Exchange (Fichier › Informations › Sécurité) ; dès lors chaque
+     message de ce compte porte l'en-tête Autocrypt (« Envoyer ma clé publique avec mes
+     messages » peut être coupé le temps de l'essai) ;
+  2. depuis le compte Exchange, envoyer un message **signé** (Options › Signer) à son adresse
+     Gmail, et le lire dans Quatrelle par le compte Gmail : la barre doit dire « la signature est
+     valable » ;
+  3. dans l'autre sens, un message signé avec OpenPGP depuis Gmail (une clé sur le compte Gmail
+     dans Quatrelle, ou un autre logiciel), lu dans Quatrelle **par Exchange** : la signature doit
+     être valable aussi ;
+  4. puis la même chose **chiffrée** (la clé de l'autre côté apprise par le message de l'étape 2
+     ou 3), pour voir que le message s'ouvre des deux côtés.
+  Si l'un des deux sens échoue (signature dite fausse, partie manquante), Exchange demande une
+  autre façon d'envoyer : c'est un travail à part, pas celui-ci. Supprimer la clé (« Oublier »)
+  rend le compte tel qu'avant.
+- **Ce que le propriétaire verra le jour où il crée sa clé** : l'annonce et la carte qui demande
+  une sauvegarde (lot 3b) ; ensuite, sans qu'il le voie, l'en-tête Autocrypt sur chaque message de
+  ce compte ; dans la fenêtre d'un message, onglet Options, les boutons Chiffrer et Signer (s'il
+  n'avait pas de certificat), « Joindre ma clé publique », et le choix « Automatique » s'il a aussi
+  un certificat S/MIME ; sous l'objet, la ligne qui dit qui peut le recevoir chiffré. Rien n'est
+  signé ni chiffré de lui-même, sauf la réponse à un message chiffré.
+- **Regardé** (rendus dans `~/.tq/pgp-shots/`, hors du dépôt, clair et sombre) : le groupe
+  Chiffrer absent sans clé ni certificat ; Chiffrer et Signer seuls avec une clé ; « Automatique »
+  avec les deux, « OpenPGP » allumé une fois choisi ; « Joindre ma clé publique » sur deux lignes
+  à côté de Signer ; l'alerte qui refuse l'envoi en nommant eve@studio.example ; la ligne sous
+  l'objet en gris, en rouge Chiffrer allumé, en vert quand Bo seul reste. Vu et corrigé en route :
+  la ligne était coupée à droite (phrase raccourcie : « … : pas de clé OpenPGP utilisable ») ; les
+  infobulles du groupe passées par une variable échappaient au relevé des catalogues (écrites en
+  littéraux).
+- **Jamais essayé** : un vrai Exchange (ci-dessus) ; un vrai serveur SMTP ou IMAP avec ce qu'envoie
+  le moteur ; GnuPG ou Thunderbird lisant un message PGP/MIME fait par l'envoi de Quatrelle (au
+  lot 1, GnuPG 2.4.5 a lu les messages du crate seul) ; `real_pgp` (GreenMail et GnuPG) ; le
+  navigateur lancé (seulement compilé pour `wasm32`) ; un vrai certificat S/MIME avec une clé sur
+  le même compte.
+- **Vérifié** : les suites de `quatrelle-model`, `quatrelle-net` (pool OpenPGP, faux serveurs),
+  `quatrelle-engine`, `quatrelle-ui-egui` ; `cargo xtask ci` (wasm compris) ; `cargo deny check`.
+- **Reste, remarqué** :
+  - le pool signe à l'heure du système, le moteur à celle de la session : sans effet en vrai, mais
+    l'essai du pool fait ses clés à l'heure présente (celles de GnuPG sont datées de 2027) ;
+  - une clé remplacée par une autre sans que le nombre de clés change n'est vue par la ligne
+    qu'à l'heure suivante (le condensé de l'origine) ;
+  - l'en-tête Autocrypt part aussi sur un message signé avec S/MIME (dehors, comme chez
+    l'origine) quand le compte a les deux ;
+  - `apps/quatrelle-web/src/backend.rs` a 870 lignes (une de plus) : à découper avant d'y
+    ajouter encore ; `ui-egui/src/lib.rs` (795), `app/actions.rs` (786) et `dialogs.rs` (787) n'ont
+    pas été touchés.
 
 ### Hors relevé : R20, rechercher dans le message (2026-11-06)
 
