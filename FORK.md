@@ -3593,6 +3593,160 @@ l'écrivain du crate, carnets et rendez-vous fabriqués dans les tests.
   - la taille d'un petit fichier s'affiche arrondie au Ko (« 2 KB » pour 2 400 octets), comme pour le
     courrier.
 
+### Hors relevé : R24, la synchro, la recherche et le démarrage à grande échelle (2026-11-06)
+
+Trois lenteurs qui restaient à l'échelle du propriétaire (Exchange, ~550 000 éléments, des dossiers
+de 50 000 messages), notées par R10, R17 et R19, chacune avec sa sonde lancée d'abord contre le code
+d'alors. Aucune donnée du propriétaire : boîtes fabriquées (`sample::seed_big_mailbox`,
+`sample::big`) et bancs ignorés en `--release`, sur ce poste (chargé par un autre travail : les
+chiffres d'une même passe se comparent mieux que d'une passe à l'autre). D'abord deux commits
+sans effet : le banc de la synchro avec un compteur des messages relus (`3a0ad9c1`), et la
+recherche sur le serveur du travailleur déplacée dans `worker/sync/searching.rs` (`71e5bad8`,
+`worker/sync.rs` était à 798 lignes et `worker/` à 16 fichiers).
+
+| Sonde (`--release`) | avant | après |
+|---|---|---|
+| un dossier de 50 000 messages affiché, une synchro qui en apporte 3 et en retire 1 (`bench::sync::three_in_one_out`), le fil de la fenêtre, par date | 111,7 ms, 50 006 messages relus | 21,6 à 25,5 ms, 0 relu |
+| le même, en conversations | 169,0 ms, 50 016 relus | 62 à 75 ms, 0 relu |
+| le même, le fil du compte qui enregistre la liste | 152 à 160 ms | inchangé à la mesure près (223 contre 215 à 230 ms dans une même passe chargée) |
+| 150 000 messages en 40 dossiers (~3 700 chacun), compte serveur, une recherche après la première (`bench::search::lists_read_by_a_search_of_everything`) | 36 listes, 105 231 messages, 0,50 à 0,57 s, pire appel 19 à 56 ms | 35 pages (chaque dossier tient dans la sienne), 102 305 messages, 0,45 à 0,48 s, pire 15 à 41 ms |
+| le même, `is:read` | 72 listes, 1,33 s, pire 97 ms | 71 pages, 1,27 s, pire 93 ms |
+| 150 000 messages en 8 dossiers (~16 000 chacun) | 7 listes, 114 000 messages, 0,57 à 0,59 s, pire 87 à 96 ms | 24 pages, 97 715 messages, 0,43 à 0,44 s, pire 20 à 21 ms |
+| le même, `is:read` | **plus de 10 minutes** (arrêté) | 1,15 s, pire 103 ms |
+| mémoire du processus après ces recherches | 255 à 324 Mo (40 dossiers), 289 Mo (8) | 266 à 342 Mo, 282 à 351 Mo |
+| 50 000 messages longs indexés, ouverture de la session (`bench::search::a_restart_with_the_index_kept`) | 122 à 129 ms (compte local : 40 listes recomptées) ; 32 à 37 ms en compte serveur, une liste | inchangé |
+| la première recherche ensuite, le fil de la fenêtre | 41 appels, 1,48 à 1,65 s, pire 68 à 91 ms, 39 listes relues (compte serveur) | 67 à 71 appels, 1,23 à 1,27 s, pire 45 à 56 ms, 0 liste ; finie en 1,60 à 1,70 s à l'horloge (la voie au travail entre les images) |
+
+**Première partie : une synchro ne fait plus relire tout le dossier** (`40eee394` le cache, `d8aed69e` la session, `e38287fc` le travailleur ; `39388ab9` les conversations). R10 l'avait
+laissé : chaque synchro qui apportait du courrier disait `FolderChanged`, et la fenêtre lâchait le
+dossier, le relisait en entier sur le disque et refaisait la liste.
+
+- **Ce qu'une synchro change est noté là où la liste est enregistrée** (`store/src/folders/noted.rs`) :
+  le travailleur tient une garde (`Store::note_changes`) le temps de la synchro d'un dossier (le
+  lecteur parallèle aussi) ; chaque `save_list` compare la liste qu'il écrit à celle du disque
+  d'avant, quelle que soit la façon de synchroniser (IMAP, JMAP, Graph, EWS, POP, et leurs
+  enregistrements en route). Une petite liste est dans son en-tête ; d'une liste en pages, une page
+  n'est relue que si les messages que la nouvelle liste range entre son premier numéro et celui de
+  la suivante n'ont pas le même nombre ou la même empreinte (le texte de la page, déjà calculé
+  quand les bornes coïncident) ; les marques posées à côté des pages comptent. Calculé avant
+  l'écriture (les pages d'avant sont encore là), noté une fois l'écriture faite. Les changements
+  `save_folder_changed` (drapeaux seuls) sont ces messages-là sans comparaison. Un dossier vidé,
+  renuméroté, ou plus de 4 096 messages changés : « inconnu ».
+- **`Event::FolderSynced`** porte les messages venus ou changés (entiers), les numéros partis, et ce
+  que la liste tient après (nombre, empreinte des numéros, `ListChange::print`). `FolderChanged`
+  reste pour la première synchro d'un dossier, l'inconnu, ce qui ne passe pas par une synchro
+  (déplacements, recherche sur le serveur, téléchargement d'avance…) et l'application web.
+- **La session** (`session/mailboxes/synced.rs`) met le changement dans le dossier en mémoire, refait
+  par-dessus les drapeaux encore en attente de leur écho (la synchro a pu lire le message avant
+  eux), puis vérifie nombre et empreinte : différents (un enregistrement non dit entre-temps),
+  elle relit le dossier comme avant. L'index de recherche ne regarde à nouveau que ces messages,
+  le carnet d'adresses et le courrier nouveau (annonces, règles) suivent comme avant. **La liste**
+  est corrigée en place : un message qui ne change ni de place, ni de ligne, ni de filtre (lu,
+  répondu, transféré, aperçu) prend son entrée et sa ligne recompte ses non-lus ; sinon les
+  messages partis ou changés sortent et ceux venus ou changés entrent à leur place par une fusion
+  (un comparateur `arranged`, le même ordre qu'`arrange_list`), puis ses conversations, son index et
+  ses lignes sont refaits en mémoire, sans disque. Recherche, Boîte d'envoi, liste changée à la main
+  et anciens messages lus sur le serveur (Exchange en ligne) reconstruisent.
+- **Un `FolderChanged` de synchro n'est plus pris pour l'écho d'une marque** (le reste de R10) :
+  `FolderSynced` ne consomme jamais d'écho.
+- **Vu en route** : refaire les conversations d'une liste de 50 000 coûtait 61 ms, surtout parce que
+  le tri des groupes recalculait le sujet de base (allocations, minuscules) à chaque comparaison ;
+  calculé une fois par groupe, sans copie en minuscules à chaque préfixe (`model/src/thread.rs`) :
+  37 ms, même ordre. Et `take_list` faisait un ensemble de toutes les clés pour savoir ce qui reste
+  de la sélection (7 à 8 ms) : il prend l'index clé → position qu'il vient de bâtir.
+- **Le proptest de R10** (`patched_list_equals_refresh`) gagne des synchros (messages partis,
+  changés de neuf façons — lu, répondu, drapeau, épingle, date, expéditeur, objet, aperçu,
+  supprimé — et venus) : la liste corrigée est celle reconstruite, le dossier en mémoire celui du
+  disque, rien relu. Deux mutations essayées (tout prendre « en place », oublier les venus) le font
+  échouer. Un proptest du cache tient « liste d'avant + changement noté = liste d'après » (petites
+  listes et listes en pages, venus au-dessus et au-dessous, marques à côté des pages).
+
+**Deuxième partie : la recherche dans toute la boîte ne lit que les pages de ce qu'elle trouve**
+(`9c7f2d4c` les sondes, `45ac80a5`), la piste de R19.
+
+- **`Store::load_page_of`** lit la page de la liste où est un message (le dernier premier numéro de
+  l'en-tête qui ne le dépasse pas, comme une marque de R10), avec les marques posées à côté et les
+  clés refaites ; une petite liste est sa propre page ; un en-tête d'avant les premiers numéros est
+  lu en entier.
+- **La réponse** (`session/searching/answer.rs`, `look_up`) regarde un candidat de l'index dans son
+  dossier en mémoire quand il y est (comme avant) ; sinon dans la page où il est. L'index va dans
+  l'ordre de la liste (les plus récents d'abord), pas dans celui des pages (par numéro) : les
+  autres candidats de la page qu'on vient de lire sont regardés à la suite, tant qu'elle est là,
+  et les deux dernières pages lues sont gardées d'un appel à l'autre (sans cela, premier essai :
+  2 046 pages lues pour une recherche, 37 s). Rien n'entre dans le cache des listes : il n'y a
+  plus de listes qui se chassent. Les
+  trouvailles du serveur (Exchange) ajoutées à la liste prennent le même chemin
+  (`summary_where`) ; un compte local lit encore la liste entière (ses marques peuvent être en
+  cours d'écriture ailleurs).
+- `Session::pages_read` compte les pages lues ; test `a_search_of_everything_reads_the_pages_of_its_finds`
+  (trois dossiers de 9 000 messages, place pour un) : la seconde recherche ne lit aucune liste
+  entière, quelques pages, et le cache reste tel qu'il était ; coupé, il échoue.
+
+**Troisième partie : les index gardés repris sur une voie de fond** (`a6536082`). La sonde a
+d'abord montré que **l'ouverture de la session ne lit aucun `search.idx`** (32 à 37 ms en compte
+serveur ; les 122 à 129 ms d'un compte local viennent du recompte de ses dossiers) : ce que R17
+appelait le démarrage, c'est la première recherche après lui, qui reprenait chaque dossier sur le
+fil de la fenêtre, un appel par dossier (le fichier lu et analysé, la liste du dossier relue pour
+voir ce qui a changé, les corps venus depuis lus).
+
+- **`indexing/kept.rs`** sépare ce travail de la session : `listed` (l'empreinte et les sommes d'une
+  liste) et `take_back` (le fichier repris contre la liste, les corps venus ajoutés, le fichier
+  réécrit s'il a changé) ne demandent que le cache ; `Session::kept_folder` les appelle comme avant.
+- **`indexing/ahead.rs`** : là où la fenêtre a une voie (`defer_index_reading`, l'application de
+  bureau), la recherche qui arrive à un dossier demande sa reprise et celle des trois suivants ;
+  un `IndexWork` les reprend l'un après l'autre sur la nouvelle voie `Lane::Searching` (fil
+  `mail-searching`), d'après le seul cache ; la recherche attend (rien de plus dans cet appel, la
+  fenêtre rappelle à l'image suivante), puis joint ce qui est prêt. Un dossier dont la liste a
+  changé depuis que la voie l'a lu (`folder_version`) est repris sur place, contre sa liste
+  d'alors ; une voie qui ne répond pas en 20 s est abandonnée, le reste repris sur place. Sans
+  voie (navigateur, ligne de commande, tests), tout est fait sur place, comme avant. L'index par
+  ajout de R17 (`Kept::Partly`) est le même des deux côtés.
+- **Une jonction dans un index vide** (le premier dossier) prend l'index du dossier tel quel
+  (`Index::absorb`).
+- Tests : `kept_indexes_are_taken_back_on_the_lane` (mêmes trouvailles qu'en direct, moins de
+  listes lues sur le fil de la fenêtre), `a_folder_changed_since_the_lane_read_it_is_taken_back_here`,
+  `a_lane_that_never_works_is_waited_for_a_while`.
+
+- **Ce que le propriétaire verra** :
+  - une synchro qui apporte du courrier dans un gros dossier affiché ne fige plus la fenêtre un
+    dixième de seconde : la liste prend les nouveaux messages en place (une vingtaine de
+    millisecondes par date, une soixantaine en conversations au lieu de 110 à 170), sans relire le
+    dossier ; les marques qu'il vient de poser ne clignotent plus quand une synchro croise leur
+    écho ; le courrier nouveau qui arrivait pendant l'écho d'une marque n'attend plus cet écho ;
+  - une recherche dans toute la boîte ne lit plus une liste de 50 000 messages d'un tenant (le pire
+    appel tombe d'une centaine à une vingtaine de millisecondes) et ne fait plus se chasser les
+    listes du cache ; `is:read` sur de gros dossiers ne tourne plus sans fin ; les petits dossiers
+    sont lus comme avant (une page chacun) ;
+  - la première recherche après le démarrage ne lit plus aucune liste sur le fil de la fenêtre,
+    et ses appels les plus longs sont deux fois plus courts ; le démarrage lui-même ne lisait déjà
+    pas les index.
+- **Vérifié** : chaque sonde avant et après ; les proptests du cache et de la liste (et deux
+  mutations qui les font échouer) ; les suites de `quatrelle-model`, `quatrelle-store`,
+  `quatrelle-engine`, `quatrelle-net` (les faux IMAP, JMAP, Graph et EWS) et `quatrelle-ui-egui` ;
+  `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - refaire les conversations d'une liste de 50 000 (37 ms) reste l'essentiel de ce que coûte une
+    synchro en conversations : il n'y a pas de calcul des conversations par ajout ;
+  - la recherche dans une boîte de petits dossiers (quelques milliers de messages chacun) les lit
+    encore tous à chaque recherche quand ses candidats y sont répandus : une page, c'est tout le
+    dossier ; seuls des candidats rares ou groupés lisent moins. Garder les résumés trouvés d'une
+    recherche à l'autre (une mémoire bornée) ou lire une page sans en faire tous les résumés
+    serait la suite ;
+  - la jonction des index repris dans celui de la boîte (~1,2 s pour 50 000 messages longs, en
+    une soixantaine d'appels) reste sur le fil de la fenêtre : elle se fait par mot dans une table triée, et
+    l'index de la boîte ne peut pas être sur la voie pendant qu'il répond ; seule la première
+    jonction, dans un index vide, est gratuite ;
+  - dans le banc (glibc), la mémoire du processus après la recherche avec la voie monte de 240 Mo
+    (un fil de voie persistant comme dans l'application, même chiffre) : l'index d'un dossier fait
+    sur la voie, recopié par la fenêtre en le joignant, est libéré dans l'arène de la voie, que
+    glibc garde ; l'application tourne sous jemalloc, qui rend la mémoire libérée en fond, et la
+    voie ne tient que trois dossiers d'avance et une liste à la fois. Non mesuré sous jemalloc ;
+  - l'application web garde `FolderChanged` pour ses synchros ; une synchro qui change plus de
+    4 096 messages d'un dossier, ou un dossier renuméroté, le relit aussi, comme avant ;
+  - un `FolderSynced` marque encore le dossier comme à compléter dans l'index de recherche
+    (`top_up`), qui relit alors sa liste entière à la recherche suivante, alors que les messages
+    venus sont dans le changement.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
