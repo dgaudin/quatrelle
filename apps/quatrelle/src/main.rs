@@ -639,8 +639,10 @@ fn run(
             // From here the open message's body is read and parsed on a thread of its own (the
             // commands above answered at once, as they do in the CLI).
             app.defer_bodies();
-            // And a local account's marks are written on a thread of their own.
+            // And a local account's marks are written on a thread of their own, and the folders'
+            // kept search indexes taken back on another.
             app.defer_local_marks();
+            app.defer_index_reading();
             let gpu = cc.wgpu_render_state.as_ref().map(|rs| rs.device.clone());
             if let Some(server) = &instance {
                 server.connect(&cc.egui_ctx);

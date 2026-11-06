@@ -83,6 +83,11 @@ impl Index {
     /// keeps its numbers once joined to the mailbox's. The words are moved rather than copied (a
     /// big folder's would take twice its memory while it joins).
     pub fn absorb(&mut self, other: Index, offset: u32) {
+        // Into nothing (the first folder a search joins): taken as it is.
+        if offset == 0 && self.postings.is_empty() && self.docs.is_empty() {
+            *self = other;
+            return;
+        }
         for (w, mut docs) in other.postings {
             match self.postings.entry(w) {
                 std::collections::btree_map::Entry::Vacant(e) => {

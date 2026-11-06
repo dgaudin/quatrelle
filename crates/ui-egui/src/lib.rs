@@ -672,6 +672,7 @@ impl MailApp {
 
     fn flush_jobs(&mut self) {
         self.send_mark_work();
+        self.send_index_work();
         for j in self.session.take_jobs() {
             self.backend.submit(j);
         }
