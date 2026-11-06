@@ -4198,6 +4198,105 @@ sur l'arbre ; un `fuzz/.cargo/config` avec `replace-with` échoue en le nommant.
   - d'anciens `.part` laissés par un arrêt brutal gardent l'ancien nom : rien ne les efface, comme
     avant.
 
+### État de la récupération : v0.33, deuxième partie : ne rien perdre, ne pas planter (S1) (2026-11-06)
+
+Le lot S1 de `merge-tools/survey-v0.33.md`, sur `main`, après S4, plus un reste de P4a (l'export
+qui n'attendait pas les marques). Chaque point a sa sonde, lancée d'abord contre le code d'alors
+(ou contre la correction coupée le temps d'un essai, quand le test appelle ce qu'elle ajoute).
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `2e55d6ac` | adapté de `b356e61e` : un pilote graphique perdu garde ce qui est en cours d'écriture, puis Quatrelle se ferme | `a_lost_gpu_keeps_whats_written_and_closes` (compte EWS en ligne, deux messages) : la façon de l'origine donnait **2 `SaveDraft`, 0 `KeepDraft`** → 2 `KeepDraft`, chacun une fois ; `a_lost_device_is_seen` : passe sur l'appareil réel du poste |
+| `6319b02a` | reprise de `2acc8dfe` (auteur Zinadin Zidan) : chaque panique au journal, avec son fil et son lieu | `a_panic_is_logged_by_where_it_happened` ; avant, aucun `set_hook` (le test ne pouvait pas compiler) |
+| `562f9b7e` | reprise de `bd48088e` (auteur Zinadin Zidan) : garde-fou du focus AccessKit, `ui-egui/src/a11y.rs` | `a_focus_the_update_does_not_carry_falls_back_to_the_root` : le consommateur panique, puis prend la mise à jour gardée ; `every_update_keeps_its_focus_among_its_nodes` : **passait déjà**, même garde-fou coupé |
+| `db92783d` | adapté de `26a5e202` : le portail des réglages abandonne après 2 s | `a_portal_that_never_answers_is_given_up` : **aucune réponse en 15 s** → retour en 2 s |
+| `92af4ac7` | propre au fork (reste de P4a) : l'export attend les marques en cours d'écriture | `an_export_has_the_marks_made_just_before_it` : marque **relue non lue** dans le .pst → lue ; `an_export_finds_the_local_marks_waiting_written` : marque locale **absente du cache** → écrite |
+
+**Le pilote perdu** (`b356e61e`). `graphics::LostWatch` (repris de l'origine) écoute le rappel
+`set_device_lost_callback` de wgpu et interroge l'appareil sans attendre à chaque passe de
+`logic` : une perte pendant la veille est vue avant qu'une image soit dessinée avec lui (wgpu
+panique quand on l'interroge sur un appareil perdu, ce qui compte aussi comme perdu). Ensuite `ui`
+ne dessine plus rien et `MailApp::graphics_lost` (une seule fois) passe par **le chemin de
+fermeture du fork** : `compose.keepAll`, c'est-à-dire `Session::keep_drafts` →
+`file_draft(c, keep = true)`. Pour un compte serveur, cela fait un `Job::KeepDraft` que le pool
+écrit sur le disque dès qu'il le reçoit (`drafts-pending.json`), et que la prochaine connexion
+range dans Brouillons ; pour un compte local, le brouillon est rangé tout de suite. Les tâches
+sont remises au pool aussitôt (`flush_jobs`), puis la fenêtre se ferme sans rien demander
+(`closing_anyway`, `close_now`). La façon de l'origine (`compose.saveDraft` message par message)
+aurait donné des `SaveDraft`, confiés au fil du compte que la fermeture arrête : sur l'Exchange
+du propriétaire, le brouillon partait avec lui. La sonde le montre (la version de l'origine
+essayée d'abord : 2 `SaveDraft`, 0 `KeepDraft`). Le drapeau `graphics_lost` va dans `state.rs`
+(c'est là qu'est `UiState` chez nous) ; le test dans `tests/writing/lost_gpu.rs`.
+
+**Les paniques au journal** (`2acc8dfe`). Pris tel quel : un crochet écrit
+« internal error: a panic on thread … at fichier:ligne », jamais le message de la panique (il
+peut citer le texte d'un courrier), puis appelle le crochet d'origine. Le fil du journal
+s'appelle « log » chez nous aussi : il ne journalise pas sa propre panique. Le seul conflit :
+la ligne voisine `give_back_freed_memory()` du fork, gardée.
+
+**Le garde-fou AccessKit** (`bd48088e`). Même egui (`6d518fc`), même `accesskit_consumer` 0.39.1
+(dépendance de test seulement, épinglée sur celle qu'egui apporte, rien n'est compilé deux
+fois). `a11y.rs` va dans `ui-egui/src/` (14 fichiers Rust après lui). Sans la ligne de
+`CHANGELOG.md`, que le fork n'a pas. Comme chez l'origine, aucune image de la fenêtre principale
+ne perd aujourd'hui son focus (essai : le greffon coupé, la sonde passe) : le garde-fou sert pour
+celle qui le perdrait.
+
+**Le portail des réglages** (`26a5e202`). Le fork lit le portail toutes les 3 s, au lieu de
+suivre ses signaux comme l'origine : la moitié « s'abonner avant de lire » de l'origine n'a ici
+rien à corriger. Reste le délai : la première lecture se fait sur le fil de la fenêtre, au
+démarrage (`appearance::Watch::start`), sur un bus ouvert sans délai maximal. Maintenant chaque
+appel abandonne après 2 s (`method_timeout`, comme `printing.rs`), et un portail qui n'a pas
+répondu n'est pas réinterrogé pendant la même lecture (avant : jusqu'à quatre appels,
+`ReadOne` puis `Read` pour deux réglages). Le démarrage attend donc 2 s au plus. La sonde monte un
+vrai bus de session privé (`dbus-daemon`, avec sa propre configuration, sans aucun service
+activable ; test sauté sans lui) où une connexion prend le nom `org.freedesktop.portal.Desktop`
+sans rien servir : zbus ne lance son serveur d'objets que si une interface est servie, donc
+l'appel n'est jamais répondu, comme avec un portail figé. Son socket va dans `XDG_RUNTIME_DIR`
+(ou `/tmp`) : le chemin du dossier personnel contient `@`, que dbus-daemon échappe dans
+l'adresse et que zbus ne décode pas.
+
+**L'export et les marques** (propre au fork, le « Reste » de P4a). Deux voies :
+- **les comptes serveur** (l'Exchange du propriétaire) : une marque va au cache sur le fil de
+  l'écrivain des modifications du pool (R10), et l'export lisait le cache sur son propre fil sans
+  l'attendre. Maintenant les modifications de l'écrivain sont un `enum` (`Apply`, `Flush`),
+  déplacé avec l'écrivain dans `worker/pool.rs` (le dossier `worker/` a déjà 16 fichiers) ; le
+  fil de l'export envoie un `Flush` et attend la réponse, 10 s au plus, puis lâche l'émetteur,
+  si bien que l'arrêt du pool, qui attend la fin de l'écrivain, ne l'attend jamais. L'origine
+  vide son écrivain sur le fil de la fenêtre ; ici la fenêtre n'attend pas. Sonde : l'écrivain
+  retenu par un verrou de test, pour un compte de test seulement, le temps que l'export démarre ;
+  le fichier relu par l'import du fork ;
+- **les comptes locaux** (R19, la voie `Lane::Writing`) : la commande `account.exportPst` les
+  vidait déjà (`Session::run` finit les marques locales avant toute commande qui ne les laisse
+  pas attendre) ; `Session::export_pst` les vide maintenant lui-même, pour tout autre appelant.
+  Sonde : par la commande, passait déjà ; par l'appel direct, échec avant, succès après.
+
+- **Ce que verra le propriétaire** après une veille qui casse le pilote : la fenêtre de
+  Quatrelle se ferme d'elle-même, sans question ni plantage ; `quatrelle.log` dit « graphics: the
+  GPU device was lost … » puis « … message(s) being written kept as drafts ». En relançant
+  Quatrelle, les messages en cours d'écriture sont dans Brouillons : tout de suite pour un compte
+  local, à la première connexion pour l'Exchange (comme une fermeture par « Enregistrer »). Une
+  panique sur un autre fil (synchro, IDLE, écrivains) laisse maintenant sa ligne au journal.
+  Un portail des réglages muet retarde le démarrage de 2 s au lieu de le figer (le thème suit
+  alors celui de Quatrelle). Une marque posée juste avant un export est dans le fichier.
+- **Vérifié** : chaque sonde avant et après ; les tests de marques du moteur, ceux du pool ;
+  `cargo xtask ci` (wasm compris).
+- **Vérifiable seulement en vrai** :
+  - une vraie réinitialisation du pilote après une veille, sous GNOME Wayland : que wgpu le dise
+    par son rappel ou par la panique de `poll` (la sonde détruit l'appareil, ce qui imite une
+    réinitialisation), qu'eframe ferme ensuite la fenêtre proprement, `on_exit` compris ;
+  - que les brouillons gardés arrivent bien dans les Brouillons de l'Exchange à la connexion
+    suivante (le même chemin que la fermeture par « Enregistrer », déjà utilisé) ;
+  - un vrai portail figé (la sonde imite son silence sur un bus privé).
+- **Reste, remarqué** :
+  - un message en cours d'écriture sur un compte sans dossier Brouillons n'est pas gardé
+    (`draft_bytes` refuse ; la fermeture normale fait de même, en silence) ;
+  - un brouillon chiffré (S/MIME ou OpenPGP) passe d'abord par un fil de chiffrement avant son
+    `KeepDraft` : une fermeture immédiate peut le couper, comme à la fermeture normale ;
+  - l'écrivain des modifications du fork n'a pas la garde `catch_unwind` de celui de l'origine :
+    une modification qui panique arrête le fil (les suivantes s'écrivent alors sur celui de la
+    fenêtre, et l'export n'attend plus rien) ;
+  - `ui-egui/src/lib.rs` passe à 806 lignes (803 comptées) : à découper avant d'y ajouter.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
