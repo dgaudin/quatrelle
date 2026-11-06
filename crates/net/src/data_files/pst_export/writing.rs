@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Handing a batch of messages to the writer.
+//! Handing a batch of messages to the writer, each with its recipients, properties and files.
 
 use super::*;
 
+/// Write `batch` into `folder` of the file at `path`, made with the first message unless it's
+/// `created`.
 pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
     let recipients: Vec<Vec<UnicodePstRecipient<'_>>> = batch
         .iter()
@@ -27,11 +29,14 @@ pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut
                 .collect()
         })
         .collect();
+    let categories: Vec<Vec<&str>> = batch.iter().map(|m| m.state.categories.iter().map(String::as_str).collect()).collect();
+    let properties: Vec<Vec<UnicodePstProperty<'_>>> = batch.iter().zip(&categories).map(|(m, c)| item::properties(m, c)).collect();
     let messages: Vec<UnicodePstBatchMessage<'_>> = batch
         .iter()
         .zip(&recipients)
         .zip(&files)
-        .map(|((m, r), f)| UnicodePstBatchMessage {
+        .zip(&properties)
+        .map(|(((m, r), f), p)| UnicodePstBatchMessage {
             message: UnicodePstMessage {
                 subject: &m.subject,
                 sender_name: &m.from.0,
@@ -40,9 +45,9 @@ pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut
                 body: &m.body,
                 html_body: m.html.as_deref(),
                 message_id: &m.message_id,
-                delivery_time: m.time,
+                delivery_time: m.received,
                 message_class: "IPM.Note",
-                properties: &[],
+                properties: p,
             },
             attachments: f,
         })

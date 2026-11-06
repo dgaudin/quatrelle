@@ -5,7 +5,9 @@
 //!
 //! The file is written with the MIT-licensed `outlook-pst-rw` crate (MS-PST, Unicode format):
 //! each folder kept on this computer becomes a folder of the same name, and each message whose
-//! body is here goes in with its addresses, text and HTML bodies and attachments. Messages only
+//! body is here goes in with its addresses (Bcc too), text and HTML bodies, attachments and header
+//! block, and with what the cache keeps of it: read or not, a draft, flagged (and when it's due),
+//! answered or forwarded, its categories, importance and sensitivity ([`item`]). Messages only
 //! known by their headers (never opened, on an account that keeps headers only) are counted as
 //! skipped. The writer makes mail items only, so the account's calendar and contacts go beside
 //! the file in the standard formats every calendar and address book reads (`… Calendar.ics`,
@@ -24,8 +26,11 @@ use std::rc::Rc;
 use outlook_pst::messaging::message::{Message as _, UnicodeMessage};
 use outlook_pst::messaging::store::{Store as PstStore, UnicodeStore};
 use outlook_pst::ndb::node_id::NodeId;
-use outlook_pst::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
+use outlook_pst::{
+    UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstProperty, UnicodePstRecipient, UnicodePstRecipientType,
+};
 use quatrelle_mime as mime;
+use quatrelle_model::organize::ExportMarks;
 use quatrelle_model::{FolderRole, MessageKey, utf7};
 use quatrelle_store::Store;
 
@@ -112,8 +117,16 @@ fn ids_in(path: &Path) -> Result<HashSet<String>, String> {
 }
 
 /// Write `account`'s mail to a data file at `path`, named `name` when it's new; a file already
-/// there is added to. Calls `progress` with the number of messages written so far.
-pub fn export(store: &Store, account: &str, name: &str, path: &Path, progress: &mut dyn FnMut(usize)) -> Result<Exported, String> {
+/// there is added to. `marks`: what only this computer keeps of the mail (when flagged messages
+/// are due, the categories' names). Calls `progress` with the number of messages written so far.
+pub fn export(
+    store: &Store,
+    account: &str,
+    name: &str,
+    path: &Path,
+    marks: &ExportMarks,
+    progress: &mut dyn FnMut(usize),
+) -> Result<Exported, String> {
     let folders = store.load_folders(account).map_err(|e| e.to_string())?;
     let mut done = Exported::default();
     let temp = path.with_extension("pst.part");
@@ -134,10 +147,14 @@ pub fn export(store: &Store, account: &str, name: &str, path: &Path, progress: &
             let mut bytes = 0usize;
             for s in &st.messages {
                 let key = MessageKey { account: account.to_string(), folder: f.path.clone(), validity: s.key.validity, uid: s.key.uid };
-                match store.read_body(&key).and_then(|raw| owned(&raw)) {
+                let state = item::state(s, f.role, marks);
+                match store.read_body(&key).and_then(|raw| owned(&raw, s.received, state)) {
                     Some(m) if !m.message_id.is_empty() && had.contains(&quatrelle_model::thread::norm_id(&m.message_id)) => done.already += 1,
                     Some(m) => {
-                        bytes += m.body.len() + m.html.as_ref().map_or(0, String::len) + m.files.iter().map(|f| f.3.len()).sum::<usize>();
+                        let held = [m.body.len(), m.html.as_ref().map_or(0, String::len), m.headers.len()]
+                            .into_iter()
+                            .chain(m.files.iter().map(|f| f.3.len()));
+                        bytes = held.fold(bytes, usize::saturating_add);
                         batch.push(m);
                     }
                     None => done.skipped += 1,

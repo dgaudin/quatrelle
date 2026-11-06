@@ -73,7 +73,7 @@ fn a_panic_in_one_folder_keeps_the_others() {
     }
     store.save_folders("a1", &folders).unwrap();
     let file = dir.join("Three.pst");
-    crate::pst_export::export(&store, "a1", "Three", &file, &mut |_| {}).unwrap();
+    crate::pst_export::export(&store, "a1", "Three", &file, &Default::default(), &mut |_| {}).unwrap();
     for (i, bad) in names.iter().enumerate() {
         fail_on(Some(bad));
         let account = format!("b{i}");
