@@ -1945,3 +1945,5 @@ folder	Conflicts	競合
 	The OpenPGP key's backup couldn't be saved: {error}	OpenPGP キーのバックアップを保存できませんでした: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	OpenPGP キーのバックアップを保存しました: パスフレーズとともに安全な場所に保管してください
 	the system keychain isn't available: {error}	システムのキーチェーンを利用できません: {error}
+	the people's OpenPGP keys could not be saved: {error}	相手の OpenPGP キーを保存できませんでした: {error}
+	OpenPGP keys kept for {who}	{who} の OpenPGP キーを保持しました

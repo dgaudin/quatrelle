@@ -1947,3 +1947,5 @@ folder	Conflicts	충돌
 	The OpenPGP key's backup couldn't be saved: {error}	OpenPGP 키의 백업을 저장하지 못했습니다: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	OpenPGP 키의 백업을 저장했습니다: 암호 문구와 함께 안전한 곳에 보관하세요
 	the system keychain isn't available: {error}	시스템 키체인을 사용할 수 없습니다: {error}
+	the people's OpenPGP keys could not be saved: {error}	상대방의 OpenPGP 키를 저장하지 못했습니다: {error}
+	OpenPGP keys kept for {who}	{who}의 OpenPGP 키를 보관했습니다

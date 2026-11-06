@@ -21,7 +21,8 @@ mod pgp;
 mod revocation;
 pub use cards::CardSearch;
 pub(crate) use pgp::PgpState;
-pub use pgp::{AccountPgp, OwnKey, PGP_DOC, PgpCard};
+pub use pgp::{AccountPgp, Learn, Learnt, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey, PgpCard};
+pub(crate) use pgp::{OfferedKey, offered};
 pub use revocation::RevocationCheck;
 pub(crate) use revocation::Revocations;
 
@@ -79,6 +80,8 @@ pub struct Security {
     pub signed: Option<SignedBy>,
     /// Its subject and addresses came from inside, where they were protected (RFC 9788).
     pub headers: bool,
+    /// OpenPGP: the key it brought for its sender replaced the one learnt before (said once).
+    pub key_changed: bool,
 }
 
 impl Security {
@@ -333,7 +336,9 @@ impl Session {
                 }
             }
         }
-        (std::borrow::Cow::Owned(cur), any.then_some(sec))
+        // A key it brought replaced the sender's: said on it, once.
+        sec.key_changed = self.key_change_shown(key);
+        (std::borrow::Cow::Owned(cur), (any || sec.key_changed).then_some(sec))
     }
 
     /// A message as it reads: what [`Session::unwrap`] shows, without checking anything again.

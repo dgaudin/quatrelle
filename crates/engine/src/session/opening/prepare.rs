@@ -58,6 +58,9 @@ pub struct PreparedBody {
     protected: bool,
     /// The work failed (its parse panicked).
     broken: bool,
+    /// The OpenPGP keys it brings (a protected message's), read here rather than on the
+    /// window's thread.
+    pub(crate) offered: Vec<security::OfferedKey>,
 }
 
 impl BodyWork {
@@ -73,7 +76,7 @@ impl BodyWork {
             Ok(p) => p,
             Err(_) => {
                 log::warn!("a message couldn't be read (the parser failed)");
-                PreparedBody { key, generation, raw: None, parsed: None, protected: false, broken: true }
+                PreparedBody { key, generation, raw: None, parsed: None, protected: false, broken: true, offered: Vec::new() }
             }
         }
     }
@@ -86,7 +89,15 @@ impl BodyWork {
             (None, None, _) => None,
         };
         let Some(raw) = raw else {
-            return PreparedBody { key: self.key, generation: self.generation, raw: None, parsed: None, protected: false, broken: false };
+            return PreparedBody {
+                key: self.key,
+                generation: self.generation,
+                raw: None,
+                parsed: None,
+                protected: false,
+                broken: false,
+                offered: Vec::new(),
+            };
         };
         #[cfg(test)]
         if self.breaks {
@@ -94,7 +105,9 @@ impl BodyWork {
         }
         let protected = mime::smime::is_protected(&raw);
         let parsed = if protected { None } else { mime::parse(&raw) };
-        PreparedBody { key: self.key, generation: self.generation, raw: Some(raw), parsed, protected, broken: false }
+        // The keys it brings (Autocrypt, attached): only protected mail can (`may_carry`).
+        let offered = if protected { security::offered(&raw) } else { Vec::new() };
+        PreparedBody { key: self.key, generation: self.generation, raw: Some(raw), parsed, protected, broken: false, offered }
     }
 }
 
@@ -231,8 +244,9 @@ impl Session {
             return;
         };
         if p.protected {
-            // Its protection is taken off here, with the session's keys (rare).
-            self.show_body(&key, &raw);
+            // Its protection is taken off here, with the session's keys (rare); the keys it
+            // brings were read with it.
+            self.show_body_with(&key, &raw, Some(p.offered));
             return;
         }
         let parsed = p.parsed.map(|parsed| Arc::new(self.dated(&key, parsed)));

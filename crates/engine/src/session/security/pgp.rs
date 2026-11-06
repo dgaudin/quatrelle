@@ -6,12 +6,16 @@
 //! the public parts here; the one in use first, older ones kept to decrypt). Nothing is active
 //! until the account has one ([`Session::pgp_active`]): no Autocrypt header, no signing, no
 //! encryption. A key made here asks for its backup until one is saved, and says a month ahead
-//! that it runs out.
+//! that it runs out. Correspondents' keys are [`people`]'s.
 
 use quatrelle_model::job::{PgpChange, PgpWork};
 use quatrelle_pgp as openpgp;
 
 use super::*;
+
+mod people;
+pub use people::{Learn, Learnt, PEOPLE_DOC, PEOPLE_MAX, PeopleKeys, PersonKey};
+pub(crate) use people::{OfferedKey, offered};
 
 /// An account's own OpenPGP keys and settings (the account document `pgp.json`).
 pub const PGP_DOC: &str = "pgp.json";
@@ -59,12 +63,15 @@ pub struct PgpCard {
     pub expires_soon: Option<i64>,
     /// The public key goes with the account's mail.
     pub autocrypt: bool,
+    /// Correspondents' keys, by address.
+    pub people: Vec<PersonKey>,
 }
 
 /// The session's OpenPGP state.
 #[derive(Debug, Default)]
 pub(crate) struct PgpState {
     accounts: HashMap<String, AccountPgp>,
+    people: HashMap<String, PeopleKeys>,
 }
 
 /// `p` as it's kept, its keys read again from their public parts (one that can't be read is let
@@ -94,6 +101,10 @@ impl Session {
         for a in &self.accounts {
             let p: AccountPgp = store.load_account_doc(&a.config.id, PGP_DOC).unwrap_or_default();
             self.pgp.accounts.insert(a.config.id.clone(), read_keys(p));
+        }
+        let ids: Vec<String> = self.accounts.iter().map(|a| a.config.id.clone()).collect();
+        for id in ids {
+            self.load_people(&id);
         }
     }
 
@@ -126,7 +137,13 @@ impl Session {
         let now = self.clock.now;
         let expires_soon =
             p.keys.iter().find(|k| k.in_use).and_then(|k| k.info.expires).filter(|end| end.saturating_sub(now) <= openpgp::EXPIRY_WARNING_SECS);
-        PgpCard { needs_backup: p.keys.iter().any(|k| !k.backed_up), expires_soon, autocrypt: p.autocrypt, keys: p.keys }
+        PgpCard {
+            needs_backup: p.keys.iter().any(|k| !k.backed_up),
+            expires_soon,
+            autocrypt: p.autocrypt,
+            keys: p.keys,
+            people: self.pgp_people(account),
+        }
     }
 
     fn pgp_config(&self, account: &str) -> Result<AccountConfig, CmdError> {
@@ -251,7 +268,7 @@ impl Session {
     }
 
     /// An account going: each of its keys' secret parts asked to go from the keychain, and its
-    /// OpenPGP documents from its data file, which stays.
+    /// OpenPGP documents (its keys', its correspondents') from its data file, which stays.
     pub(in crate::session) fn forget_pgp_account(&mut self, account: &str) {
         let config = self.account(account).map(|a| a.config.clone());
         if let (Some(config), Some(p)) = (config, self.pgp.accounts.remove(account)) {
@@ -259,10 +276,13 @@ impl Session {
                 self.jobs.push(Job::Pgp { account: config.clone(), work: PgpWork::Forget { fingerprint: k.info.fingerprint } });
             }
         }
-        if let Some(store) = &self.store
-            && let Err(e) = store.remove_account_doc(account, PGP_DOC)
-        {
-            log::warn!("{account}: {PGP_DOC}: {e}");
+        self.pgp.people.remove(account);
+        for doc in [PGP_DOC, PEOPLE_DOC] {
+            if let Some(store) = &self.store
+                && let Err(e) = store.remove_account_doc(account, doc)
+            {
+                log::warn!("{account}: {doc}: {e}");
+            }
         }
     }
 

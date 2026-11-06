@@ -1945,3 +1945,5 @@ menu	View	Weergeven
 	The OpenPGP key's backup couldn't be saved: {error}	De reservekopie van de OpenPGP-sleutel kon niet worden opgeslagen: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	De reservekopie van de OpenPGP-sleutel is opgeslagen: bewaar die, met de wachtzin, op een veilige plek
 	the system keychain isn't available: {error}	de sleutelhanger van het systeem is niet beschikbaar: {error}
+	the people's OpenPGP keys could not be saved: {error}	De OpenPGP-sleutels van je contacten konden niet worden opgeslagen: {error}
+	OpenPGP keys kept for {who}	OpenPGP-sleutels bewaard voor {who}

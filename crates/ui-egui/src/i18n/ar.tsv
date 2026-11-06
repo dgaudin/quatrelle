@@ -1944,3 +1944,5 @@ folder	Conflicts	التعارضات
 	The OpenPGP key's backup couldn't be saved: {error}	تعذّر حفظ النسخة الاحتياطية لمفتاح OpenPGP: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	حُفظت النسخة الاحتياطية لمفتاح OpenPGP: احتفظ بها وبعبارة مرورها في مكان آمن
 	the system keychain isn't available: {error}	سلسلة مفاتيح النظام غير متاحة: {error}
+	the people's OpenPGP keys could not be saved: {error}	تعذّر حفظ مفاتيح OpenPGP الخاصة بمراسليك: {error}
+	OpenPGP keys kept for {who}	احتُفظ بمفاتيح OpenPGP لـ {who}

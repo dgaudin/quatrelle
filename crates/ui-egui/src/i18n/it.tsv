@@ -1947,3 +1947,5 @@ folder	Conflicts	Conflitti
 	The OpenPGP key's backup couldn't be saved: {error}	Non è stato possibile salvare il backup della chiave OpenPGP: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	Il backup della chiave OpenPGP è salvato: conservalo, con la sua passphrase, in un luogo sicuro
 	the system keychain isn't available: {error}	il portachiavi di sistema non è disponibile: {error}
+	the people's OpenPGP keys could not be saved: {error}	Non è stato possibile salvare le chiavi OpenPGP dei tuoi contatti: {error}
+	OpenPGP keys kept for {who}	Chiavi OpenPGP conservate per {who}
