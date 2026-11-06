@@ -365,7 +365,31 @@ fn push_cards(c: &Client, pim: &Pim, out: &mut DavSync) {
 /// doesn't give is made from what its series says of it (its own times).
 /// `owner`: the calendar's mailbox (the organizer of the meetings it organizes); `since`: what
 /// the calendar is read from (the occurrences changed before then aren't).
+/// Each appointment comes with its files ([`super::files`]): kept for the account's own calendar,
+/// listed for the others.
 pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: i64, out: &mut DavSync) {
+    let mut files = Vec::new();
+    read_appointments(c, list, calendar, owner, since, out, &mut files);
+    super::files::fill(c, out, files, calendar == CALENDAR);
+}
+
+/// [`read_calendar`] without the files: those of each event read noted in `files`, by its place
+/// in `out.events`.
+fn read_appointments(
+    c: &Client,
+    list: Vec<El>,
+    calendar: &str,
+    owner: &str,
+    since: i64,
+    out: &mut DavSync,
+    files: &mut Vec<(usize, Vec<super::files::Listed>)>,
+) {
+    let mut note = |out: &DavSync, it: &El| {
+        let listed = super::files::listed(it);
+        if !listed.is_empty() {
+            files.push((out.events.len(), listed));
+        }
+    };
     let id_of = |it: &El| {
         it.child("ItemId").map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string())).unwrap_or_default()
     };
@@ -393,6 +417,7 @@ pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &s
                 changed.push(href);
             }
             let (href, etag) = id_of(it);
+            note(out, it);
             out.events.push(stored(href, etag, event));
         }
     }
@@ -414,6 +439,7 @@ pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &s
             own_organizer(&mut event, it, owner);
             given.extend(event.recurrence_id.map(|r| (event.uid.clone(), r)));
             let (href, etag) = id_of(it);
+            note(out, it);
             out.events.push(stored(href, etag, event));
         }
     }

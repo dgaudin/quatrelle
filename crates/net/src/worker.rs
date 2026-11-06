@@ -771,6 +771,7 @@ fn jumps_queue(j: &Job) -> bool {
             | Job::FetchTextFirst { .. }
             | Job::ReadOnline { .. }
             | Job::FetchPhoto { .. }
+            | Job::FetchEventFile { .. }
             | Job::GetServerRules { .. }
             | Job::GetVacation { .. }
             | Job::SetVacation { .. }

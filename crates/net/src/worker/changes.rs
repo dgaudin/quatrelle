@@ -210,6 +210,7 @@ impl Worker {
                 }
             }
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
+            Job::FetchEventFile { reference, ask, .. } => self.fetch_event_file(&reference, ask),
             Job::GetRooms { .. } => self.rooms(),
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
             Job::ServerFolderSizes { .. } => self.folder_sizes(),

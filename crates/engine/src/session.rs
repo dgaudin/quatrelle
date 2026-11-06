@@ -325,16 +325,16 @@ pub struct Session {
     pub(crate) cache: HashMap<(String, String), FolderState<Arc<Summary>>>,
     /// The cached folders, the least recently used first.
     pub(crate) cache_order: Vec<(String, String)>,
-    /// Flag and category changes sent for a server account's mail, their echo still to come
-    /// (`mailboxes/echo.rs`).
+    /// Flag and category changes sent for a server account's mail, their echo still to come (`mailboxes/echo.rs`).
     pub(crate) echoes: mailboxes::Echoes,
     /// Accounts whose other people's appointments are set aside (`pim/parking.rs`), and since
     /// when the calendar isn't shown.
     parked: HashSet<String>,
     away_from_calendar: Option<i64>,
-    /// Other people's calendars read again while theirs were set aside, by account: what was
-    /// read wins over what was set aside.
+    /// Other people's calendars read again while theirs were set aside, by account: what was read wins over what was set aside.
     read_aside: HashMap<String, HashSet<String>>,
+    /// Appointments' files on their way from the server, and those written to be opened (R25).
+    pub(crate) files_coming: pim::FilesComing,
     /// Accounts whose appointments brought back are still in their set-aside document, the
     /// calendar not saved with them since: the worker reads them there, and the document is
     /// emptied once the calendar is saved (`pim/parking.rs`).
@@ -534,6 +534,7 @@ impl Session {
             parked: HashSet::new(),
             away_from_calendar: None,
             read_aside: HashMap::new(),
+            files_coming: Default::default(),
             aside_on_disk: HashSet::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,

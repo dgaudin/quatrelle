@@ -319,6 +319,10 @@ pub enum Job {
     /// `contact`, as the address book keeps it), or else the one the directory (Exchange,
     /// Microsoft 365) keeps for their address.
     FetchPhoto { account: String, email: String, contact: Option<String> },
+    /// Fetch one of an appointment's files left on the account's server (an Exchange attachment's
+    /// id, a Graph attachment's path: `reference`), as it's opened; answered by
+    /// [`Event::EventFile`] with the same `ask`.
+    FetchEventFile { account: String, reference: String, ask: u64 },
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
     /// made here first).
     SyncDav { account: String },
@@ -457,6 +461,7 @@ impl Job {
             | Job::DeleteServerRule { account, .. }
             | Job::ReplaceOutlookRules { account }
             | Job::FetchPhoto { account, .. }
+            | Job::FetchEventFile { account, .. }
             | Job::Search { account, .. }
             | Job::SyncDav { account }
             | Job::SyncCalendars { account, .. }

@@ -165,6 +165,13 @@ pub enum Event {
         data: Vec<u8>,
         error: Option<String>,
     },
+    /// One of an appointment's files fetched from the server ([`crate::Job::FetchEventFile`]): its
+    /// bytes, or why it couldn't be.
+    EventFile {
+        ask: u64,
+        data: Vec<u8>,
+        error: Option<String>,
+    },
     /// A CalDAV / CardDAV sync's result, to merge.
     DavSynced {
         account: String,

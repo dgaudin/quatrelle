@@ -40,6 +40,15 @@ impl Client {
         self.request(Request::post(&format!("{}{path}", self.base), "application/json", bytes, MAX_JSON))
     }
 
+    /// An attachment's bytes (`path`: the attachment, under its item): its `$value`, a file's
+    /// content or an attached item's source.
+    pub(crate) fn attachment_value(&self, path: &str) -> Result<Vec<u8>> {
+        let r = Request::get(&format!("{}{path}/$value", self.base), MAX_MIME).header("Authorization", &self.auth).header("Prefer", PREFER);
+        let resp = send_through_limits(&r)?;
+        check(&resp)?;
+        Ok(resp.body)
+    }
+
     pub(crate) fn send_raw(&self, method: &str, path: &str, content_type: &str, body: Vec<u8>) -> Result<Value> {
         let mut r = Request::post(&format!("{}{path}", self.base), content_type, body, MAX_JSON);
         r.method = method.into();

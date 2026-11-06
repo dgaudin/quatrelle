@@ -97,8 +97,9 @@ enum Shape<'a> {
 /// [`events::exception_of`], [`events::modified_occurrences`] and [`item_may_change`]), asked by
 /// name. `AllProperties` gives much besides, some of it worked out for each appointment as it's
 /// asked (how many meetings it conflicts with, and is next to), and a colleague's 870
-/// appointments cost the server 10 s that way, 12 ms each (29/10).
-const APPOINTMENT_FIELDS: [&str; 28] = [
+/// appointments cost the server 10 s that way, 12 ms each (29/10). Its files are listed
+/// (`item:Attachments`, without their bytes: [`files`]).
+const APPOINTMENT_FIELDS: [&str; 29] = [
     "item:Subject",
     "item:Body",
     "item:Categories",
@@ -106,6 +107,7 @@ const APPOINTMENT_FIELDS: [&str; 28] = [
     "item:ReminderIsSet",
     "item:ReminderMinutesBeforeStart",
     "item:EffectiveRights",
+    "item:Attachments",
     "calendar:UID",
     "calendar:Start",
     "calendar:End",
@@ -574,6 +576,7 @@ mod categories;
 mod changes;
 mod contacts;
 pub(crate) mod events;
+mod files;
 mod push;
 mod reminders;
 pub mod scheduling;
@@ -585,6 +588,8 @@ use contacts::{NOTE_COLOR, contact_xml, note_xml};
 pub use contacts::{card_of, note_of};
 use events::{event_fields, listed_exception, modified_occurrences, occurrence_item_id};
 pub use events::{event_of, exception_of, own_organizer};
+pub use files::attachment;
+pub(crate) use files::{MAX_EVENT_FILES, MAX_FILE};
 #[cfg(test)]
 pub(crate) use push::item_gone_code;
 use push::{answer_pending, push_events};

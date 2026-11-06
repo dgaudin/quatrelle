@@ -5,6 +5,8 @@
 
 use super::*;
 
+mod files;
+
 /// Three plain appointments carrying one UID: the sync hands the engine three distinct
 /// identities, not one.
 #[test]

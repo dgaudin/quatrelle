@@ -104,6 +104,7 @@ fn can_connect(s: &Session) -> Option<&'static str> {
 
 mod accounts;
 mod compose;
+pub(crate) use compose::mark_from_internet;
 mod files;
 mod home;
 mod kept_files;
