@@ -591,11 +591,14 @@ impl Session {
             voting: String::new(),
             seven_bit: false,
         };
-        let folder = self
-            .account(&c.account)
-            .and_then(|a| a.folder(FolderRole::Drafts))
-            .map(|f| f.path.clone())
-            .ok_or_else(|| CmdError::Failed("this account has no Drafts folder".into()))?;
+        // A server account without one gets Drafts made where it's filed, as Outlook makes it
+        // (refused, the message was lost as Quatrelle closed).
+        let account = self.account(&c.account);
+        let folder = match account.and_then(|a| a.folder(FolderRole::Drafts)) {
+            Some(f) => f.path.clone(),
+            None if account.is_some_and(|a| !a.is_local()) => "Drafts".to_string(),
+            None => return Err(CmdError::Failed("this account has no Drafts folder".into())),
+        };
         let earlier = Some(c.saved_id.as_str()).filter(|m| !m.is_empty());
         let (raw, _, mid) = self.compose_bytes_as(c, &d, earlier)?;
         Ok((raw, folder, mid))

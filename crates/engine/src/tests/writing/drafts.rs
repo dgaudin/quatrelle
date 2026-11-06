@@ -127,3 +127,25 @@ fn a_server_accounts_draft_is_found_by_its_message_id() {
     assert!(matches!(s.take_jobs().as_slice(), [Job::Apply { op: Op::Expunge { keys }, .. }] if *keys == vec![second]), "discarded: its copy goes");
     let _ = std::fs::remove_dir_all(s.store.as_ref().unwrap().root());
 }
+
+/// A server account that lists no Drafts (GreenMail, a new account on many hosts) refused every
+/// draft ("this account has no Drafts folder"), so a message being written was lost as Quatrelle
+/// closed. Its draft goes to `Drafts`, which the connection makes there.
+#[test]
+fn a_draft_on_a_server_without_drafts_is_kept() {
+    let store = temp("no-drafts");
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let inbox =
+        quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
+    s.take_jobs();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "Plans", "body": "To finish"})).unwrap();
+    s.run("compose.saveDraft", &json!({})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::SaveDraft { folder, .. }] if folder == "Drafts"));
+    // As Quatrelle closes: kept on this computer, for Drafts at the next connection.
+    assert_eq!(s.keep_drafts(), 1);
+    assert!(matches!(s.take_jobs().as_slice(), [Job::KeepDraft { folder, .. }] if folder == "Drafts"));
+    let _ = std::fs::remove_dir_all(s.store.as_ref().unwrap().root());
+}
