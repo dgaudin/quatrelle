@@ -124,7 +124,7 @@ fn a_key_made_goes_to_the_keychain_and_its_public_part_to_the_engine() {
     let a = account("riley");
     let work = PgpWork::Make { name: "Riley Moreno".into(), email: "riley@studio.example".into(), now: NOW };
     p.submit(Job::Pgp { account: a.clone(), work });
-    let Event::PgpKeys { account: id, keys, changed, error } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { unreachable!() };
+    let Event::PgpKeys { account: id, keys, changed, error } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { panic!("another answer") };
     assert_eq!((id.as_str(), error), ("riley", None));
     assert_eq!(keys.len(), 1);
     let info = pgp::info(&keys[0]).unwrap();
@@ -158,7 +158,7 @@ fn a_missing_keychain_makes_nothing() {
     let mut p = Pool::new(store, Arc::new(NoKeychain));
     let a = account("riley");
     p.submit(Job::Pgp { account: a.clone(), work: PgpWork::Make { name: "Riley".into(), email: "riley@studio.example".into(), now: NOW } });
-    let Event::PgpKeys { keys, changed, error, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { unreachable!() };
+    let Event::PgpKeys { keys, changed, error, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { panic!("another answer") };
     let e = error.expect("an error");
     assert!(e.starts_with(NO_KEYCHAIN), "{e}");
     assert!(e.contains("the collection is locked"), "and what the system said: {e}");
@@ -166,7 +166,7 @@ fn a_missing_keychain_makes_nothing() {
     // Importing says the same, never that the key or passphrase is wrong.
     let file = Private(testdata("ana-secret.asc"));
     p.submit(Job::Pgp { account: a.clone(), work: PgpWork::Import { file, passphrase: Secret("secret".into()) } });
-    let Event::PgpKeys { error, keys, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { unreachable!() };
+    let Event::PgpKeys { error, keys, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { panic!("another answer") };
     assert!(error.unwrap().starts_with(NO_KEYCHAIN) && keys.is_empty());
     // Decrypting with the keychain locked: the keychain, not a wrong key.
     let sealed = pgp::encrypt(b"x", &[&ana().public], None, NOW, &mut rand_core::OsRng).unwrap();
@@ -194,11 +194,11 @@ fn encrypted_mail_is_decrypted_in_memory_only() {
         account: a.clone(),
         work: PgpWork::Import { file: Private(testdata("ana-secret.asc")), passphrase: Secret("secret".into()) },
     });
-    let Event::PgpKeys { keys, changed, error, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { unreachable!() };
+    let Event::PgpKeys { keys, changed, error, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { panic!("another answer") };
     let ana = ana();
     assert_eq!(error, None);
     assert_eq!(changed, Some(PgpChange::Imported { fingerprint: ana.info.fingerprint.clone() }));
-    assert_eq!(keys, [ana.public.clone()]);
+    assert_eq!(keys, std::slice::from_ref(&ana.public));
     let kept = creds.get_secret(&a, &entry(&ana.info.fingerprint)).unwrap();
     assert!(!kept.contains("secret") && unhex(&kept).is_some());
     let entity = b"Content-Type: text/plain; charset=utf-8\r\n\r\nThe plan for Tuesday\r\n";
@@ -211,7 +211,9 @@ fn encrypted_mail_is_decrypted_in_memory_only() {
         verify_with: vec![ana.public.clone()],
     };
     p.submit(Job::Pgp { account: a.clone(), work });
-    let Event::PgpDecrypted { content, signature, error, .. } = answer(&p, |e| matches!(e, Event::PgpDecrypted { .. })) else { unreachable!() };
+    let Event::PgpDecrypted { content, signature, error, .. } = answer(&p, |e| matches!(e, Event::PgpDecrypted { .. })) else {
+        panic!("another answer")
+    };
     assert_eq!(error, None);
     assert_eq!(content.unwrap().0, entity);
     assert!(matches!(signature, Some(PgpSignature::Good { key: 0, .. })), "{signature:?}");
@@ -275,11 +277,11 @@ fn a_key_is_extended_and_backed_up() {
     let mut p = Pool::new(store.clone(), creds.clone());
     let a = account("riley");
     p.submit(Job::Pgp { account: a.clone(), work: PgpWork::Make { name: "Riley".into(), email: "riley@studio.example".into(), now: NOW } });
-    let Event::PgpKeys { keys, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { unreachable!() };
+    let Event::PgpKeys { keys, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { panic!("another answer") };
     let fp = pgp::info(&keys[0]).unwrap().fingerprint;
     let later = NOW + 1000 * 86_400;
     p.submit(Job::Pgp { account: a.clone(), work: PgpWork::Extend { fingerprint: fp.to_lowercase(), now: later } });
-    let Event::PgpKeys { keys, changed, error, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { unreachable!() };
+    let Event::PgpKeys { keys, changed, error, .. } = answer(&p, |e| matches!(e, Event::PgpKeys { .. })) else { panic!("another answer") };
     assert_eq!((error, changed), (None, Some(PgpChange::Extended { fingerprint: fp.clone() })));
     let info = pgp::info(&keys[0]).unwrap();
     assert_eq!((info.fingerprint.as_str(), info.expires), (fp.as_str(), Some(later + 94_608_000)));
@@ -298,18 +300,18 @@ fn a_key_is_extended_and_backed_up() {
     // No passphrase, no key, nowhere to write: said, nothing written.
     std::fs::remove_file(&path).unwrap();
     p.submit(Job::Pgp { account: a.clone(), work: backup("") });
-    let Event::PgpBackedUp { error, .. } = answer(&p, |e| matches!(e, Event::PgpBackedUp { .. })) else { unreachable!() };
+    let Event::PgpBackedUp { error, .. } = answer(&p, |e| matches!(e, Event::PgpBackedUp { .. })) else { panic!("another answer") };
     assert!(error.is_some() && !path.exists());
     p.submit(Job::Pgp {
         account: a.clone(),
         work: PgpWork::Backup { fingerprint: "AB".repeat(20), passphrase: Secret("pw".into()), path: path.display().to_string() },
     });
-    let Event::PgpBackedUp { error, .. } = answer(&p, |e| matches!(e, Event::PgpBackedUp { .. })) else { unreachable!() };
+    let Event::PgpBackedUp { error, .. } = answer(&p, |e| matches!(e, Event::PgpBackedUp { .. })) else { panic!("another answer") };
     assert!(error.is_some() && !path.exists());
     // A folder where the file would go.
     let nowhere = store.root().display().to_string();
     p.submit(Job::Pgp { account: a, work: PgpWork::Backup { fingerprint: fp, passphrase: Secret("pw".into()), path: nowhere } });
-    let Event::PgpBackedUp { error, .. } = answer(&p, |e| matches!(e, Event::PgpBackedUp { .. })) else { unreachable!() };
+    let Event::PgpBackedUp { error, .. } = answer(&p, |e| matches!(e, Event::PgpBackedUp { .. })) else { panic!("another answer") };
     assert!(error.is_some());
 }
 
