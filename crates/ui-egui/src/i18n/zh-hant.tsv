@@ -2045,3 +2045,16 @@ folder	Conflicts	衝突
 	Add to file	新增至檔案
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	將帳戶的郵件連同資料夾新增至現有的 Outlook 資料檔 (.pst)。檔案原有的內容會保留，已有的郵件不會重複寫入。
 	Adding to {file}… (what it already has stays)	正在新增至 {file}…（原有內容會保留）
+	Save as	另存新檔
+	Attach files	附加檔案
+	Insert pictures	插入圖片
+	Save attachments to	將附件儲存到
+	Certificate with its key	憑證及其金鑰
+	OpenPGP key	OpenPGP 金鑰
+	Quatrelle rules	Quatrelle 規則
+	Outlook data files	Outlook 資料檔
+	Quatrelle data files	Quatrelle 資料檔
+	PDF document	PDF 文件
+	Contact card	連絡人名片
+	All files	所有檔案
+	{ext} file	{ext} 檔案

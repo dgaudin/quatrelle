@@ -2045,3 +2045,16 @@ menu	View	Anzeigen
 	Add to file	Zu Datei hinzufügen
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Fügt die E-Mails eines Kontos samt Ordnern einer vorhandenen Outlook-Datendatei (.pst) hinzu. Was die Datei enthält, bleibt erhalten, und eine Nachricht, die sie schon hat, wird nicht doppelt geschrieben.
 	Adding to {file}… (what it already has stays)	Wird zu {file} hinzugefügt… (was sie schon enthält, bleibt)
+	Save as	Speichern unter
+	Attach files	Dateien anhängen
+	Insert pictures	Bilder einfügen
+	Save attachments to	Anlagen speichern in
+	Certificate with its key	Zertifikat mit Schlüssel
+	OpenPGP key	OpenPGP-Schlüssel
+	Quatrelle rules	Quatrelle-Regeln
+	Outlook data files	Outlook-Datendateien
+	Quatrelle data files	Quatrelle-Datendateien
+	PDF document	PDF-Dokument
+	Contact card	Kontaktkarte
+	All files	Alle Dateien
+	{ext} file	{ext}-Datei

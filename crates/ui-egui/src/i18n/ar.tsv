@@ -2040,3 +2040,16 @@ folder	Conflicts	التعارضات
 	Add to file	إضافة إلى ملف
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	يضيف بريد حساب، بمجلداته، إلى ملف بيانات Outlook (.pst) موجود. يبقى ما في الملف، ولا تُكتب رسالة موجودة فيه مرتين.
 	Adding to {file}… (what it already has stays)	جارٍ الإضافة إلى {file}… (يبقى ما فيه)
+	Save as	حفظ باسم
+	Attach files	إرفاق ملفات
+	Insert pictures	إدراج صور
+	Save attachments to	حفظ المرفقات في
+	Certificate with its key	شهادة مع مفتاحها
+	OpenPGP key	مفتاح OpenPGP
+	Quatrelle rules	قواعد Quatrelle
+	Outlook data files	ملفات بيانات Outlook
+	Quatrelle data files	ملفات بيانات Quatrelle
+	PDF document	مستند PDF
+	Contact card	بطاقة جهة اتصال
+	All files	كل الملفات
+	{ext} file	ملف {ext}

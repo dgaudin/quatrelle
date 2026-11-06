@@ -2041,3 +2041,16 @@ folder	Conflicts	競合
 	Add to file	ファイルに追加
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	アカウントのメールをフォルダーごと、既存の Outlook データ ファイル (.pst) に追加します。ファイルの内容はそのまま残り、すでにあるメッセージは二重に書き込まれません。
 	Adding to {file}… (what it already has stays)	{file} に追加しています… (既存の内容はそのまま残ります)
+	Save as	名前を付けて保存
+	Attach files	ファイルを添付
+	Insert pictures	画像を挿入
+	Save attachments to	添付ファイルの保存先
+	Certificate with its key	証明書とそのキー
+	OpenPGP key	OpenPGP キー
+	Quatrelle rules	Quatrelle のルール
+	Outlook data files	Outlook データ ファイル
+	Quatrelle data files	Quatrelle データ ファイル
+	PDF document	PDF ドキュメント
+	Contact card	連絡先カード
+	All files	すべてのファイル
+	{ext} file	{ext} ファイル

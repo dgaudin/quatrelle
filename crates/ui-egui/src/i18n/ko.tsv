@@ -2043,3 +2043,16 @@ folder	Conflicts	충돌
 	Add to file	파일에 추가
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	계정의 메일을 폴더와 함께 이미 있는 Outlook 데이터 파일(.pst)에 추가합니다. 파일에 있던 내용은 그대로 남고, 이미 있는 메시지는 두 번 쓰지 않습니다.
 	Adding to {file}… (what it already has stays)	{file}에 추가하는 중… (이미 있는 내용은 그대로 남습니다)
+	Save as	다른 이름으로 저장
+	Attach files	파일 첨부
+	Insert pictures	그림 삽입
+	Save attachments to	첨부 파일 저장 위치
+	Certificate with its key	인증서 및 키
+	OpenPGP key	OpenPGP 키
+	Quatrelle rules	Quatrelle 규칙
+	Outlook data files	Outlook 데이터 파일
+	Quatrelle data files	Quatrelle 데이터 파일
+	PDF document	PDF 문서
+	Contact card	연락처 카드
+	All files	모든 파일
+	{ext} file	{ext} 파일

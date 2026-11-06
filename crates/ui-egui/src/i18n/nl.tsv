@@ -2041,3 +2041,16 @@ menu	View	Weergeven
 	Add to file	Aan bestand toevoegen
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Voegt de mail van een account, met de mappen, toe aan een bestaand Outlook-gegevensbestand (.pst). Wat het bestand bevat blijft, en een bericht dat het al heeft wordt niet twee keer geschreven.
 	Adding to {file}… (what it already has stays)	Toevoegen aan {file}… (wat het al bevat, blijft)
+	Save as	Opslaan als
+	Attach files	Bestanden bijvoegen
+	Insert pictures	Afbeeldingen invoegen
+	Save attachments to	Bijlagen opslaan in
+	Certificate with its key	Certificaat met sleutel
+	OpenPGP key	OpenPGP-sleutel
+	Quatrelle rules	Quatrelle-regels
+	Outlook data files	Outlook-gegevensbestanden
+	Quatrelle data files	Quatrelle-gegevensbestanden
+	PDF document	PDF-document
+	Contact card	Contactkaart
+	All files	Alle bestanden
+	{ext} file	{ext}-bestand
