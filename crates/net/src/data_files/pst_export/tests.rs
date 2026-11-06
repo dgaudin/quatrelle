@@ -3,6 +3,7 @@
 // Copyright (c) 2026 Didier Gaudin
 use super::*;
 
+mod damaged;
 mod seeds;
 mod special;
 mod state;

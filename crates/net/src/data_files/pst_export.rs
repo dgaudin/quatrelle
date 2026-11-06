@@ -28,7 +28,8 @@ use outlook_pst::messaging::message::{Message as _, UnicodeMessage};
 use outlook_pst::messaging::store::{Store as PstStore, UnicodeStore};
 use outlook_pst::ndb::node_id::NodeId;
 use outlook_pst::{
-    UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstProperty, UnicodePstRecipient, UnicodePstRecipientType,
+    UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstProperty, UnicodePstPropertyKey, UnicodePstRecipient,
+    UnicodePstRecipientType,
 };
 use quatrelle_mime as mime;
 use quatrelle_model::organize::ExportMarks;
