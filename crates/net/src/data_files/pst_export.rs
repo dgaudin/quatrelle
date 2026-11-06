@@ -151,10 +151,12 @@ pub fn export(
     // A file added to keeps its format; a new one is Unicode.
     let format = if existing { Format::of(&temp) } else { Format::Unicode };
     let targets = place::Targets::of(existing.then_some(temp.as_path()), format);
+    // Where each folder goes; in an ANSI file, folders whose names it would write alike apart.
+    let placed: Vec<Vec<String>> = folders.iter().map(|f| place::place(f, &folders, &targets)).collect();
+    let placed = if format == Format::Ansi { place::apart(&placed, &targets) } else { placed };
     let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
-        for f in folders.iter().filter(|f| f.selectable) {
+        for (f, folder) in folders.iter().zip(&placed).filter(|(f, _)| f.selectable) {
             let Ok(st) = store.load_folder(account, &f.path) else { continue };
-            let folder = place::place(f, &folders, &targets);
             let folder: Vec<&str> = folder.iter().map(String::as_str).collect();
             let mut batch = Vec::new();
             let mut bytes = 0usize;
