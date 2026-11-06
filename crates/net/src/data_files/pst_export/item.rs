@@ -5,6 +5,7 @@
 //! what the cache keeps of it (read, flagged, answered, categories, when it's due) as the
 //! properties Outlook keeps them in.
 
+use super::files::File;
 use super::*;
 use outlook_pst::ltp::prop_context::GuidValue;
 use outlook_pst::messaging::named_prop::PS_PUBLIC_STRINGS;
@@ -49,7 +50,10 @@ pub(super) struct Owned {
     /// When it was received (delivery), and its `Date:` (submitted): 100 ns since 1601.
     pub(super) received: i64,
     pub(super) date: i64,
-    pub(super) files: Vec<(String, String, Option<String>, Vec<u8>)>,
+    /// Its files and attached messages ([`super::files`]).
+    pub(super) files: Vec<File>,
+    /// Where its source is in the cache: its files left there are read from it when written.
+    pub(super) key: MessageKey,
     /// Its header block, as it came (`PidTagTransportMessageHeaders`).
     pub(super) headers: String,
     pub(super) in_reply_to: String,
@@ -59,6 +63,19 @@ pub(super) struct Owned {
     pub(super) importance: i32,
     pub(super) sensitivity: Option<i32>,
     pub(super) state: State,
+}
+
+impl Owned {
+    /// The bytes it holds until it is written: its text, its files' (not those left in the
+    /// cache) and its attached messages'.
+    pub(super) fn held(&self) -> usize {
+        let files = self.files.iter().map(|f| match f {
+            File::Data { data, .. } => data.len(),
+            File::Stored { .. } => 0,
+            File::Message { message, .. } => message.held(),
+        });
+        [self.body.len(), self.html.as_ref().map_or(0, String::len), self.headers.len()].into_iter().chain(files).fold(0, usize::saturating_add)
+    }
 }
 
 /// What the cache keeps of a message beyond its source.
@@ -121,17 +138,18 @@ pub(super) fn state(s: &quatrelle_model::Summary, role: FolderRole, marks: &Expo
 
 /// The message in `raw`, with `state`; `received` is when it was received (Unix seconds).
 pub(super) fn owned(raw: &[u8], received: i64, state: State) -> Option<Owned> {
+    owned_in(raw, received, state, &[])
+}
+
+/// [`owned`] for a message attached `path.len()` deep (`path`: the index of each attached
+/// message down to it among its holder's attachments, empty for the message itself).
+pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize]) -> Option<Owned> {
     let p = mime::parse(raw)?;
     let mut recipients = Vec::new();
     for (list, kind) in [(&p.to, UnicodePstRecipientType::To), (&p.cc, UnicodePstRecipientType::Cc), (&p.bcc, UnicodePstRecipientType::Bcc)] {
         recipients.extend(list.iter().filter(|a| !a.email.is_empty()).map(|a| (a.name.clone(), a.email.clone(), kind)));
     }
-    let files = p
-        .attachments
-        .iter()
-        .filter(|a| a.size <= MAX_ATTACHMENT)
-        .filter_map(|a| Some((a.name.clone(), a.mime.clone(), a.content_id.clone(), mime::attachment_data(raw, a.index)?)))
-        .collect();
+    let files = super::files::of(raw, &p, path);
     let headers = header_block(raw);
     let field = |name: &str| header_value(&headers, name).unwrap_or_default();
     let importance = match field("Importance").to_ascii_lowercase().as_str() {
@@ -161,6 +179,7 @@ pub(super) fn owned(raw: &[u8], received: i64, state: State) -> Option<Owned> {
         // No `Date:`: no submit time, not 1970.
         date: if p.date > 0 { filetime(p.date) } else { 0 },
         files,
+        key: MessageKey::default(),
         headers: if headers.len() <= MAX_HEADERS { headers } else { String::new() },
         in_reply_to: bracket(&p.in_reply_to),
         references: p.references.iter().map(|id| bracket(id)).collect::<Vec<_>>().join(" "),

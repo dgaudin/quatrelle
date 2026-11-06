@@ -1,56 +1,119 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Handing a batch of messages to the writer, each with its recipients, properties and files.
+//! Handing a batch of messages to the writer: each with its recipients, properties and files,
+//! its attached messages with theirs in turn, and its files left in the cache read from there as
+//! the writer comes to them ([`super::files`]).
 
+use outlook_pst::{UnicodePstAttachmentContent, UnicodePstEmbeddedMessage};
+
+use super::files::{File, StoredFile};
 use super::*;
 
-/// Write `batch` into `folder` of the file at `path`, made with the first message unless it's
-/// `created`.
-pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
-    let recipients: Vec<Vec<UnicodePstRecipient<'_>>> = batch
-        .iter()
-        .map(|m| {
-            m.recipients.iter().map(|(name, email, kind)| UnicodePstRecipient { name, email, recipient_type: *kind, ..Default::default() }).collect()
-        })
-        .collect();
-    let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch
-        .iter()
-        .map(|m| {
-            m.files
-                .iter()
-                .map(|(filename, mime_type, cid, data)| UnicodePstAttachment {
-                    filename,
-                    mime_type,
+/// What a message's attachments borrow while its batch is written: the recipients and
+/// properties of each message attached to it and the sources of its files left in the cache, in
+/// the order its files list them.
+struct Held<'a> {
+    recipients: Vec<UnicodePstRecipient<'a>>,
+    properties: Vec<UnicodePstProperty<'a>>,
+    sources: Vec<StoredFile<'a>>,
+    inner: Vec<Held<'a>>,
+}
+
+/// What `m`'s attachments borrow; its files left in the cache are in the source of the message
+/// at `key`. `top`: it is the message written, whose properties are the batch's own.
+fn held<'a>(store: &'a Store, key: &'a MessageKey, m: &'a Owned, top: bool) -> Held<'a> {
+    Held {
+        recipients: recipients(m),
+        // An attached message has no state in the cache: no categories.
+        properties: if top { Vec::new() } else { item::properties(m, &[]) },
+        sources: m
+            .files
+            .iter()
+            .filter_map(|f| match f {
+                File::Stored { size, path, .. } => Some(StoredFile { store, key, path, size: *size }),
+                _ => None,
+            })
+            .collect(),
+        inner: m
+            .files
+            .iter()
+            .filter_map(|f| match f {
+                File::Message { message, .. } => Some(held(store, key, message, false)),
+                _ => None,
+            })
+            .collect(),
+    }
+}
+
+fn recipients(m: &Owned) -> Vec<UnicodePstRecipient<'_>> {
+    m.recipients.iter().map(|(name, email, kind)| UnicodePstRecipient { name, email, recipient_type: *kind, ..Default::default() }).collect()
+}
+
+fn message<'a>(m: &'a Owned, recipients: &'a [UnicodePstRecipient<'a>], properties: &'a [UnicodePstProperty<'a>]) -> UnicodePstMessage<'a> {
+    UnicodePstMessage {
+        subject: &m.subject,
+        sender_name: &m.from.0,
+        sender_email: &m.from.1,
+        recipients,
+        body: &m.body,
+        html_body: m.html.as_deref(),
+        message_id: &m.message_id,
+        delivery_time: m.received,
+        message_class: "IPM.Note",
+        properties,
+    }
+}
+
+/// `m`'s attachments, as the writer takes them.
+fn attachments<'a>(m: &'a Owned, h: &'a Held<'a>) -> Vec<UnicodePstAttachment<'a>> {
+    let mut sources = h.sources.iter();
+    let mut inner = h.inner.iter();
+    let mut out = Vec::new();
+    for f in &m.files {
+        out.push(match f {
+            File::Data { name, mime, cid, data } => {
+                UnicodePstAttachment { filename: name, mime_type: mime, content_id: cid.as_deref(), data, ..Default::default() }
+            }
+            File::Stored { name, mime, cid, .. } => {
+                let Some(source) = sources.next() else { continue };
+                UnicodePstAttachment {
+                    filename: name,
+                    mime_type: mime,
                     content_id: cid.as_deref(),
-                    data,
+                    content: UnicodePstAttachmentContent::Source(source),
                     ..Default::default()
-                })
-                .collect()
-        })
-        .collect();
+                }
+            }
+            File::Message { name, message: attached } => {
+                let Some(h) = inner.next() else { continue };
+                let embedded =
+                    UnicodePstEmbeddedMessage { message: message(attached, &h.recipients, &h.properties), attachments: attachments(attached, h) };
+                UnicodePstAttachment {
+                    filename: name,
+                    mime_type: "message/rfc822",
+                    content: UnicodePstAttachmentContent::Message(Box::new(embedded)),
+                    ..Default::default()
+                }
+            }
+        });
+    }
+    out
+}
+
+/// Write `batch` into `folder` of the file at `path`, made with the first message unless it's
+/// `created`; its files left in the cache are read from `store`.
+pub(super) fn write(store: &Store, path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
+    let held: Vec<Held<'_>> = batch.iter().map(|m| held(store, &m.key, m, true)).collect();
+    let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch.iter().zip(&held).map(|(m, h)| attachments(m, h)).collect();
     let categories: Vec<Vec<&str>> = batch.iter().map(|m| m.state.categories.iter().map(String::as_str).collect()).collect();
     let properties: Vec<Vec<UnicodePstProperty<'_>>> = batch.iter().zip(&categories).map(|(m, c)| item::properties(m, c)).collect();
     let messages: Vec<UnicodePstBatchMessage<'_>> = batch
         .iter()
-        .zip(&recipients)
+        .zip(&held)
         .zip(&files)
         .zip(&properties)
-        .map(|(((m, r), f), p)| UnicodePstBatchMessage {
-            message: UnicodePstMessage {
-                subject: &m.subject,
-                sender_name: &m.from.0,
-                sender_email: &m.from.1,
-                recipients: r,
-                body: &m.body,
-                html_body: m.html.as_deref(),
-                message_id: &m.message_id,
-                delivery_time: m.received,
-                message_class: "IPM.Note",
-                properties: p,
-            },
-            attachments: f,
-        })
+        .map(|(((m, h), f), p)| UnicodePstBatchMessage { message: message(m, &h.recipients, p), attachments: f })
         .collect();
     let (first, rest) = match (*created, messages.split_first()) {
         (_, None) => return Ok(()),
