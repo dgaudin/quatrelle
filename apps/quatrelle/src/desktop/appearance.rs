@@ -105,29 +105,64 @@ mod portal {
 
     const NS: &str = "org.freedesktop.appearance";
 
+    /// How long a call to the portal is waited for. The first read is on the window's thread
+    /// as Quatrelle starts: a portal that took the call and never answered held the start for
+    /// good (as `printing.rs` gives its own calls a limit).
+    const CALL_LIMIT: std::time::Duration = std::time::Duration::from_secs(2);
+
     /// The session bus, opened once (`None` without one: no desktop settings to follow).
     static BUS: std::sync::OnceLock<Option<zbus::blocking::Connection>> = std::sync::OnceLock::new();
 
     pub fn read() -> SystemStyle {
-        let Some(bus) = BUS.get_or_init(|| zbus::blocking::Connection::session().ok()) else { return SystemStyle::default() };
-        SystemStyle { dark: scheme(&setting(bus, "color-scheme")), accent: accent(&setting(bus, "accent-color")) }
+        let Some(bus) = BUS.get_or_init(|| connect(zbus::blocking::connection::Builder::session())) else { return SystemStyle::default() };
+        read_from(bus)
+    }
+
+    /// The bus `builder` opens, each call on it given up after [`CALL_LIMIT`].
+    pub(super) fn connect(builder: zbus::Result<zbus::blocking::connection::Builder<'_>>) -> Option<zbus::blocking::Connection> {
+        builder.map(|b| b.method_timeout(CALL_LIMIT)).and_then(|b| b.build()).ok()
+    }
+
+    /// The style `bus`'s portal says. One that doesn't answer in time isn't asked the rest:
+    /// a read costs [`CALL_LIMIT`] once at most.
+    pub(super) fn read_from(bus: &zbus::blocking::Connection) -> SystemStyle {
+        let dark = match setting(bus, "color-scheme") {
+            Ok(v) => scheme(&v),
+            Err(e) => {
+                log::debug!("colour scheme: the desktop's portal didn't answer: {e}");
+                return SystemStyle::default();
+            }
+        };
+        SystemStyle { dark, accent: setting(bus, "accent-color").ok().and_then(|v| accent(&v)) }
     }
 
     /// One setting: `ReadOne` (portal version 2), else the older `Read`, which wraps the value
-    /// in one more variant.
-    fn setting(bus: &zbus::blocking::Connection, key: &str) -> Option<OwnedValue> {
-        let call = |method: &str| {
-            bus.call_method(
+    /// in one more variant. An error only when the portal didn't answer in time.
+    fn setting(bus: &zbus::blocking::Connection, key: &str) -> zbus::Result<Option<OwnedValue>> {
+        let call = |method: &str| -> zbus::Result<Option<OwnedValue>> {
+            let reply = bus.call_method(
                 Some("org.freedesktop.portal.Desktop"),
                 "/org/freedesktop/portal/desktop",
                 Some("org.freedesktop.portal.Settings"),
                 method,
                 &(NS, key),
-            )
-            .ok()
-            .and_then(|m| m.body().deserialize::<OwnedValue>().ok())
+            );
+            match reply {
+                Ok(m) => Ok(m.body().deserialize::<OwnedValue>().ok()),
+                Err(e) if timed_out(&e) => Err(e),
+                Err(_) => Ok(None),
+            }
         };
-        call("ReadOne").or_else(|| call("Read")).map(unwrap)
+        let value = match call("ReadOne")? {
+            Some(v) => Some(v),
+            None => call("Read")?,
+        };
+        Ok(value.map(unwrap))
+    }
+
+    /// Whether a call was given up for want of an answer.
+    fn timed_out(e: &zbus::Error) -> bool {
+        matches!(e, zbus::Error::InputOutput(io) if io.kind() == std::io::ErrorKind::TimedOut)
     }
 
     /// The value inside any variants around it (at most a few: the reply is the desktop's).
@@ -185,6 +220,73 @@ mod portal {
             // `Read`'s extra variant comes off.
             let wrapped = owned(Value::Value(Box::new(Value::Value(Box::new(Value::U32(1))))));
             assert_eq!(scheme(&wrapped.map(unwrap)), Some(true));
+        }
+
+        /// The bus started for a test, ended with it (a panic too: it would outlive the test).
+        struct Daemon(std::process::Child);
+
+        impl Drop for Daemon {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        /// A desktop portal that takes the call and never answers (its name owned on the bus,
+        /// nothing served behind it): a read gives up after the limit with nothing said, where
+        /// it held Quatrelle's start for good. On a session bus of its own (`dbus-daemon`; skipped
+        /// without one), so the desktop's own portal is never asked.
+        #[test]
+        fn a_portal_that_never_answers_is_given_up() {
+            use std::io::BufRead;
+            let dir = std::env::temp_dir().join(format!("quatrelle-mute-portal-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            // The socket where its path needs no escaping in a bus address (zbus doesn't undo it).
+            let plain = |p: &std::path::Path| p.to_str().is_some_and(|s| s.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_/.".contains(&b)));
+            let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).filter(|p| plain(p) && p.is_dir());
+            let socket = runtime.unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join(format!("quatrelle-mute-portal-{}", std::process::id()));
+            let _ = std::fs::remove_file(&socket);
+            let config = format!(
+                "<!DOCTYPE busconfig PUBLIC \"-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN\" \
+                 \"http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd\">\n\
+                 <busconfig><type>session</type><listen>unix:path={}</listen><auth>EXTERNAL</auth>\
+                 <policy context=\"default\"><allow send_destination=\"*\" eavesdrop=\"true\"/><allow eavesdrop=\"true\"/>\
+                 <allow own=\"*\"/></policy></busconfig>\n",
+                socket.display()
+            );
+            std::fs::write(dir.join("bus.conf"), config).unwrap();
+            let started = std::process::Command::new("dbus-daemon")
+                .arg(format!("--config-file={}", dir.join("bus.conf").display()))
+                .args(["--nofork", "--print-address=1"])
+                .stdout(std::process::Stdio::piped())
+                .spawn();
+            let Ok(mut daemon) = started.map(Daemon) else {
+                eprintln!("no dbus-daemon here: skipped");
+                return;
+            };
+            let mut address = String::new();
+            let read = daemon.0.stdout.take().map(|out| std::io::BufReader::new(out).read_line(&mut address));
+            assert!(matches!(read, Some(Ok(n)) if n > 0), "dbus-daemon gave no address");
+            let address = address.trim().to_string();
+            // The mute portal: the name taken, no object server, so a call is never answered.
+            let mute = zbus::blocking::connection::Builder::address(address.as_str()).and_then(|b| b.build()).unwrap();
+            mute.request_name("org.freedesktop.portal.Desktop").unwrap();
+            let bus = connect(zbus::blocking::connection::Builder::address(address.as_str())).expect("the bus");
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let began = std::time::Instant::now();
+                let style = read_from(&bus);
+                let _ = tx.send((style, began.elapsed()));
+            });
+            let got = rx.recv_timeout(std::time::Duration::from_secs(15));
+            drop(daemon);
+            drop(mute);
+            let _ = std::fs::remove_dir_all(&dir);
+            let _ = std::fs::remove_file(&socket);
+            let (style, took) = got.expect("the read never came back: Quatrelle's start would wait on it for good");
+            assert_eq!(style, SystemStyle::default());
+            assert!(took < std::time::Duration::from_secs(5), "one call waited for, not every one: {took:?}");
         }
     }
 }
