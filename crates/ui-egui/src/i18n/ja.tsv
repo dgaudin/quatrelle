@@ -2013,3 +2013,11 @@ folder	Conflicts	競合
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	{who} のキーがこのコンピューターから削除され、秘密の部分もシステムのキーチェーンから削除されます。
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	バックアップをもう一度インポートするまで、このキー宛てに暗号化されたメールはここでは読めなくなります。
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	バックアップは保存されていません: このキー宛てに暗号化されたメールは、ここでもほかの場所でも読めなくなります。
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	受信者だけが読めます。Quatrelle に各受信者の OpenPGP キーが必要です (相手のメールと一緒に届きます)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	あなたの OpenPGP キーで署名します。受信者はあなたからのもので変更されていないとわかります
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	受信者だけが読めます。Quatrelle に各受信者の証明書か OpenPGP キーが必要です
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	あなたの証明書か OpenPGP キーで署名します。受信者はあなたからのもので変更されていないとわかります
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	S/MIME か OpenPGP で署名・暗号化します。「自動」は全受信者が受け取れる方式、または返信元のメッセージの方式を選びます
+	Automatic takes {scheme} for this message	このメッセージでは「自動」は {scheme} を使います
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	暗号化して送れません: {names} の使える OpenPGP キーがありません。キーは相手のメールと一緒に届くか、ファイル › 情報 › セキュリティ でインポートできます。暗号化せずに送るには「暗号化」をオフにしてください。

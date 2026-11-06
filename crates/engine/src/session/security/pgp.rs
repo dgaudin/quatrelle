@@ -6,7 +6,8 @@
 //! the public parts here; the one in use first, older ones kept to decrypt). Nothing is active
 //! until the account has one ([`Session::pgp_active`]): no Autocrypt header, no signing, no
 //! encryption. A key made here asks for its backup until one is saved, and says a month ahead
-//! that it runs out. Correspondents' keys are [`people`]'s; reading OpenPGP mail is [`reading`]'s.
+//! that it runs out. Correspondents' keys are [`people`]'s; reading OpenPGP mail is [`reading`]'s,
+//! sending it [`writing`]'s.
 
 use quatrelle_model::job::{PgpChange, PgpWork};
 use quatrelle_pgp as openpgp;
@@ -15,9 +16,11 @@ use super::*;
 
 mod people;
 mod reading;
+mod writing;
 pub use people::{Learn, Learnt, PEOPLE_DOC, PEOPLE_MAX, PeopleKeys, PersonKey};
 pub(crate) use people::{OfferedKey, offered};
 pub(crate) use reading::Step;
+pub use writing::{NO_KEY_TO_ENCRYPT, Reach, Scheme};
 
 /// An account's own OpenPGP keys and settings (the account document `pgp.json`).
 pub const PGP_DOC: &str = "pgp.json";
@@ -78,6 +81,9 @@ pub(crate) struct PgpState {
     asked: HashMap<MessageKey, (Vec<Vec<u8>>, String)>,
     /// What signatures inside decrypted messages say (in memory, as what they held is).
     signed: HashMap<MessageKey, SignedBy>,
+    /// Whether the message being written can go encrypted to everyone, and what that was
+    /// worked out from (a digest).
+    reach: Option<(u64, Reach)>,
 }
 
 /// `p` as it's kept, its keys read again from their public parts (one that can't be read is let

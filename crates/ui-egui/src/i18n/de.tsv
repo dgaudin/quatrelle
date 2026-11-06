@@ -2017,3 +2017,11 @@ menu	View	Anzeigen
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Ihr Schlüssel für {who} wird von diesem Computer entfernt, sein geheimer Teil auch aus dem Schlüsselbund des Systems.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	An ihn verschlüsselte Mail kann hier nicht mehr gelesen werden, bis seine Sicherung wieder importiert wird.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Es wurde keine Sicherung gespeichert: An ihn verschlüsselte Mail kann nicht mehr gelesen werden, weder hier noch anderswo.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	Nur die Empfänger können sie lesen: Für jeden braucht Quatrelle einen OpenPGP-Schlüssel (er kommt mit seiner Mail)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	Mit Ihrem OpenPGP-Schlüssel signiert: Die Empfänger sehen, dass sie von Ihnen und unverändert ist
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	Nur die Empfänger können sie lesen: Für jeden braucht Quatrelle ein Zertifikat oder einen OpenPGP-Schlüssel
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	Mit Ihrem Zertifikat oder Ihrem OpenPGP-Schlüssel signiert: Die Empfänger sehen, dass sie von Ihnen und unverändert ist
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Mit S/MIME oder OpenPGP signieren und verschlüsseln: Automatisch nimmt das, was alle Empfänger empfangen können, oder das der beantworteten Nachricht
+	Automatic takes {scheme} for this message	Automatisch nimmt {scheme} für diese Nachricht
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Sie kann nicht verschlüsselt gesendet werden: Für {names} gibt es keinen verwendbaren OpenPGP-Schlüssel. Der Schlüssel kommt mit ihrer Mail oder lässt sich unter Datei › Informationen › Sicherheit importieren; oder schalten Sie Verschlüsseln aus, um sie unverschlüsselt zu senden.

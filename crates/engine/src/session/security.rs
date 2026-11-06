@@ -21,7 +21,7 @@ mod pgp;
 mod revocation;
 pub use cards::CardSearch;
 pub(crate) use pgp::PgpState;
-pub use pgp::{AccountPgp, Learn, Learnt, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey, PgpCard};
+pub use pgp::{AccountPgp, Learn, Learnt, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey, PgpCard, Reach, Scheme};
 pub(crate) use pgp::{OfferedKey, offered};
 pub use revocation::RevocationCheck;
 pub(crate) use revocation::Revocations;
@@ -472,6 +472,9 @@ impl Session {
     pub(super) fn protect_job(&mut self, c: &Compose, raw: &[u8], recipients: &[String], from: &str) -> Result<Option<Job>, CmdError> {
         if !c.sign && !c.encrypt {
             return Ok(None);
+        }
+        if self.scheme_for(c) == Some(Scheme::Pgp) {
+            return self.pgp_protect_job(c, raw, recipients, from).map(Some);
         }
         let s = self.smime_settings(&c.account);
         let config = self.account(&c.account).map(|a| a.config.clone()).ok_or_else(|| CmdError::Failed("the sending account is gone".into()))?;

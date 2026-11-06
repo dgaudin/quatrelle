@@ -257,8 +257,15 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     // Delay Delivery holds mail in the Outbox, which only a server account's sends from.
     let can_delay = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| !a.is_local());
     let can_vote = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| a.config.ews.is_some());
-    // S/MIME's Encrypt and Sign, for an account with a certificate.
+    // Encrypt and Sign, for an account with a certificate or an OpenPGP key; with both, which
+    // of the two (and what Automatic takes, worked out as the recipients change).
     let has_cert = s.compose.as_ref().is_some_and(|c| s.identity(&c.account).is_some());
+    let has_pgp = s.compose.as_ref().is_some_and(|c| s.pgp_active(&c.account));
+    let reach = if has_cert || has_pgp { s.encryption_reach() } else { None };
+    // Encrypted with OpenPGP, to someone without a key it can be encrypted to: not sent, and
+    // said whom for (the engine refuses it too). S/MIME says its own (Exchange's address book
+    // may have the certificate).
+    let no_key_for = reach.as_ref().filter(|r| r.scheme == quatrelle_engine::Scheme::Pgp && !r.missing.is_empty()).map(|r| r.missing.join(", "));
     let assistant = !s.prefs.llm_url.trim().is_empty();
     let written = s.has_written_text();
     let recent_emoji = s.prefs.recent_emoji.clone();
@@ -317,7 +324,14 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     let fresh = st.compose_shown.insert(c.id);
     let focus_to = fresh && c.to.trim().is_empty();
     let focus_body = fresh && !focus_to;
-    let send = |c: &quatrelle_engine::Compose, acts: &mut Vec<Action>| {
+    let send = |c: &quatrelle_engine::Compose, alert: &mut Option<String>, acts: &mut Vec<Action>| {
+        if let Some(names) = no_key_for.as_ref().filter(|_| c.encrypt && blocked.is_none()) {
+            *alert = Some(tf!(
+                "It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.",
+                names = names
+            ));
+            return;
+        }
         // From an account that can't send: Send says why (not first ask about the subject).
         if c.subject.trim().is_empty() && blocked.is_none() {
             acts.push(Action::Dialog(crate::Dialog::EmptySubject));
@@ -337,7 +351,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             )
         });
         if alt_s || send_key {
-            send(c, acts);
+            send(c, &mut st.compose_alert, acts);
         }
         if save_key {
             acts.push(Action::Run("compose.saveDraft", json!({})));
@@ -364,6 +378,8 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             can_delay,
             can_vote,
             has_cert,
+            has_pgp,
+            scheme_now: reach.as_ref().map(|r| r.scheme),
             in_window,
             can_pop: !ui.ctx().embed_viewports(),
             assistant,
@@ -425,7 +441,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             let height = rows * ROW_H + (rows - 1.0) * 6.0;
             ui.horizontal_top(|ui| {
                 if send_button(ui, &t, height, c.sending, blocked_text.as_deref()).clicked() {
-                    send(c, acts);
+                    send(c, &mut st.compose_alert, acts);
                 }
                 ui.add_space(10.0);
                 ui.vertical(|ui| {

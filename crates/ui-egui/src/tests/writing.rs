@@ -7,6 +7,7 @@ use super::*;
 
 mod file_dialogs;
 mod people_field;
+mod pgp;
 mod rewrite;
 mod sending;
 mod typing;

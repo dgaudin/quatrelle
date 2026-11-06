@@ -5,6 +5,7 @@
 //! and Review, each a row of named groups of big buttons (the main window's widgets), with
 //! Save small at the right of the tabs (and in a window Pop in and Discard).
 
+use quatrelle_engine::Scheme;
 use serde_json::json;
 
 use super::*;
@@ -39,8 +40,13 @@ pub(crate) struct RibbonInput<'a> {
     /// Delay Delivery (a server account), Voting Buttons (Exchange).
     pub can_delay: bool,
     pub can_vote: bool,
-    /// The sending account has an S/MIME certificate: Encrypt and Sign are offered.
+    /// The sending account has an S/MIME certificate, an OpenPGP key: Encrypt and Sign are
+    /// offered (with both, the choice between them).
     pub has_cert: bool,
+    pub has_pgp: bool,
+    /// What the message would be signed and encrypted with now ([`Scheme::Smime`] or
+    /// [`Scheme::Pgp`]).
+    pub scheme_now: Option<Scheme>,
     /// Written in a window of its own; and windows can open at all (not the browser).
     pub in_window: bool,
     pub can_pop: bool,
@@ -433,26 +439,38 @@ fn tags(ui: &mut Ui, t: Tokens, c: &mut Compose) {
     }
 }
 
-/// Options: Bcc, encrypting and signing (S/MIME), a read receipt, voting buttons, delay delivery,
-/// where replies go, the format.
+/// Options: Bcc, encrypting and signing (S/MIME or OpenPGP), a read receipt, voting buttons,
+/// delay delivery, where replies go, the format.
 fn options(ui: &mut Ui, t: Tokens, c: &mut Compose, input: &RibbonInput<'_>, groups: &mut Groups) {
     if widgets::big_toggle(ui, Icon::Bcc, "Bcc", &t, c.show_cc).on_hover_text(tl!("Hidden from the other recipients")).clicked() {
         c.show_cc = !c.show_cc;
     }
     groups.end(ui, &t, "Show Fields");
-    // Outlook's Encrypt group, for an account with a certificate.
-    if input.has_cert {
-        if widgets::big_toggle(ui, Icon::Lock, "Encrypt", &t, c.encrypt)
-            .on_hover_text(tl!("Only the recipients can read it: each needs to have sent you a signed message"))
-            .clicked()
-        {
+    // Outlook's Encrypt group, for an account with a certificate or an OpenPGP key; with both,
+    // which of the two.
+    if input.has_cert || input.has_pgp {
+        let (encrypt_about, sign_about) = match (input.has_cert, input.has_pgp) {
+            (true, false) => (
+                tl!("Only the recipients can read it: each needs to have sent you a signed message"),
+                tl!("Signed with your certificate: the recipients can tell it's from you and unchanged"),
+            ),
+            (false, _) => (
+                tl!("Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)"),
+                tl!("Signed with your OpenPGP key: the recipients can tell it's from you and unchanged"),
+            ),
+            (true, true) => (
+                tl!("Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has"),
+                tl!("Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged"),
+            ),
+        };
+        if widgets::big_toggle(ui, Icon::Lock, "Encrypt", &t, c.encrypt).on_hover_text(encrypt_about).clicked() {
             c.encrypt = !c.encrypt;
         }
-        if widgets::big_toggle(ui, Icon::Seal, "Sign", &t, c.sign)
-            .on_hover_text(tl!("Signed with your certificate: the recipients can tell it's from you and unchanged"))
-            .clicked()
-        {
+        if widgets::big_toggle(ui, Icon::Seal, "Sign", &t, c.sign).on_hover_text(sign_about).clicked() {
             c.sign = !c.sign;
+        }
+        if input.has_cert && input.has_pgp {
+            scheme_choice(ui, t, c, input.scheme_now);
         }
         groups.end(ui, &t, "Encrypt");
     }
@@ -589,4 +607,35 @@ pub(crate) fn language_name(code: &str) -> String {
         other => return other.to_uppercase(),
     }
     .to_string()
+}
+
+/// A protection's name, as the message window offers it.
+pub(crate) fn scheme_name(s: Scheme) -> &'static str {
+    match s {
+        Scheme::Auto => tl!("Automatic"),
+        Scheme::Smime => tl!("S/MIME"),
+        Scheme::Pgp => tl!("OpenPGP"),
+    }
+}
+
+/// With both a certificate and an OpenPGP key: which one signs and encrypts the message
+/// (Automatic, as it starts: the one every recipient can receive, or a reply's), and, under
+/// Automatic, the one it would take now.
+fn scheme_choice(ui: &mut Ui, t: Tokens, c: &mut Compose, now: Option<Scheme>) {
+    let r = widgets::big_toggle(ui, Icon::Gear, scheme_name(c.scheme), &t, !c.scheme.is_auto()).on_hover_text(tl!(
+        "Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered"
+    ));
+    egui::Popup::menu(&r).show(|ui| {
+        ui.set_min_width(220.0);
+        for s in [Scheme::Auto, Scheme::Smime, Scheme::Pgp] {
+            if ui.radio(c.scheme == s, scheme_name(s)).clicked() {
+                c.scheme = s;
+                ui.close();
+            }
+        }
+        if let Some(now) = now.filter(|_| c.scheme.is_auto()) {
+            ui.separator();
+            ui.label(RichText::new(tf!("Automatic takes {scheme} for this message", scheme = scheme_name(now))).color(t.dim).small());
+        }
+    });
 }

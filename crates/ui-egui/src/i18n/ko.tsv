@@ -2015,3 +2015,11 @@ folder	Conflicts	충돌
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	{who}의 키가 이 컴퓨터에서 삭제되고, 비밀 부분도 시스템 키체인에서 삭제됩니다.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	백업을 다시 가져올 때까지 이 키로 암호화된 메일은 여기서 읽을 수 없습니다.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	백업이 저장되지 않았습니다: 이 키로 암호화된 메일은 여기서도 어디서도 더 이상 읽을 수 없습니다.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	받는 사람만 읽을 수 있습니다. Quatrelle에 받는 사람마다 OpenPGP 키가 있어야 합니다(상대의 메일과 함께 옵니다)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	내 OpenPGP 키로 서명합니다. 받는 사람이 나에게서 왔고 바뀌지 않았음을 알 수 있습니다
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	받는 사람만 읽을 수 있습니다. Quatrelle에 받는 사람마다 인증서나 OpenPGP 키가 있어야 합니다
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	내 인증서나 OpenPGP 키로 서명합니다. 받는 사람이 나에게서 왔고 바뀌지 않았음을 알 수 있습니다
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	S/MIME 또는 OpenPGP로 서명하고 암호화합니다. 자동은 모든 받는 사람이 받을 수 있는 방식, 또는 답장하는 메시지의 방식을 고릅니다
+	Automatic takes {scheme} for this message	이 메시지에는 자동이 {scheme}을(를) 씁니다
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	암호화해서 보낼 수 없습니다. {names}의 쓸 수 있는 OpenPGP 키가 없습니다. 키는 상대의 메일과 함께 오거나 파일 › 정보 › 보안에서 가져올 수 있습니다. 암호화하지 않고 보내려면 암호화를 끄세요.

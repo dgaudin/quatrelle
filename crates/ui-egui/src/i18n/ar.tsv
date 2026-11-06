@@ -2012,3 +2012,11 @@ folder	Conflicts	التعارضات
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	يُزال مفتاحك لـ {who} من هذا الحاسوب، ويُزال جزؤه السري من سلسلة مفاتيح النظام أيضًا.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	لن يعود ممكنًا قراءة البريد المشفّر له هنا حتى تُستورد نسخته الاحتياطية من جديد.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	لم تُحفظ منه نسخة احتياطية: لن يعود ممكنًا قراءة البريد المشفّر له، لا هنا ولا في أي مكان.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	لا يقرؤها إلا المستلمون: يحتاج كل منهم إلى مفتاح OpenPGP لدى Quatrelle (يصل مع بريده)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	موقّعة بمفتاح OpenPGP الخاص بك: يعرف المستلمون أنها منك ولم تتغير
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	لا يقرؤها إلا المستلمون: يحتاج كل منهم إلى شهادة أو مفتاح OpenPGP لدى Quatrelle
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	موقّعة بشهادتك أو بمفتاح OpenPGP الخاص بك: يعرف المستلمون أنها منك ولم تتغير
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	التوقيع والتشفير بـ S/MIME أو OpenPGP: يختار «تلقائي» ما يستطيع كل المستلمين استقباله، أو ما وصلت به الرسالة التي تردّ عليها
+	Automatic takes {scheme} for this message	يختار «تلقائي» ‏{scheme} لهذه الرسالة
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	لا يمكن إرسالها مشفّرة: لا يوجد مفتاح OpenPGP صالح لـ {names}. يصل مفتاحهم مع بريدهم، أو يمكن استيراده من ملف › معلومات › الأمان؛ أو أوقف «تشفير» لإرسالها دون تشفير.

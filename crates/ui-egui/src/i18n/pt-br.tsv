@@ -2016,3 +2016,11 @@ folder	Conflicts	Conflitos
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Sua chave para {who} sai deste computador, e a parte secreta também do chaveiro do sistema.
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	Os e-mails criptografados para ela não poderão mais ser lidos aqui, até o backup ser importado de novo.
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Nenhum backup dela foi salvo: os e-mails criptografados para ela não poderão mais ser lidos, nem aqui nem em outro lugar.
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	Só os destinatários podem ler: o Quatrelle precisa de uma chave OpenPGP de cada um (ela chega com o e-mail deles)
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	Assinada com sua chave OpenPGP: os destinatários sabem que é sua e que não mudou
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	Só os destinatários podem ler: o Quatrelle precisa de um certificado ou de uma chave OpenPGP de cada um
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	Assinada com seu certificado ou sua chave OpenPGP: os destinatários sabem que é sua e que não mudou
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Assinar e criptografar com S/MIME ou OpenPGP: Automático escolhe o que todos os destinatários podem receber, ou o da mensagem respondida
+	Automatic takes {scheme} for this message	Automático usa {scheme} nesta mensagem
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Não dá para enviar criptografada: não há chave OpenPGP utilizável para {names}. A chave chega com o e-mail deles, ou pode ser importada em Arquivo › Informações › Segurança; ou desative Criptografar para enviar sem criptografia.

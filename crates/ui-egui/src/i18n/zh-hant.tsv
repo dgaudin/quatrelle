@@ -2017,3 +2017,11 @@ folder	Conflicts	衝突
 	Your key for {who} goes from this computer, its secret part from the system's keychain too.	你用於 {who} 的金鑰將從這台電腦上移除，其私密部分也會從系統鑰匙圈中移除。
 	Mail encrypted to it can't be read here any more, until its backup is imported again.	在重新匯入其備份之前，加密給它的郵件將無法在這裡閱讀。
 	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	它沒有儲存過備份：加密給它的郵件將無法再閱讀，無論在這裡還是別處。
+	Only the recipients can read it: each needs an OpenPGP key Quatrelle has (it comes with their mail)	只有收件人能閱讀：Quatrelle 需要有每位收件人的 OpenPGP 金鑰（隨對方的郵件而來）
+	Signed with your OpenPGP key: the recipients can tell it's from you and unchanged	用你的 OpenPGP 金鑰簽署：收件人能確認是你寄的且未被改動
+	Only the recipients can read it: each needs a certificate or an OpenPGP key Quatrelle has	只有收件人能閱讀：Quatrelle 需要有每位收件人的憑證或 OpenPGP 金鑰
+	Signed with your certificate or your OpenPGP key: the recipients can tell it's from you and unchanged	用你的憑證或 OpenPGP 金鑰簽署：收件人能確認是你寄的且未被改動
+	S/MIME	S/MIME
+	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	用 S/MIME 或 OpenPGP 簽署和加密：「自動」選擇所有收件人都能接收的方式，或所回覆郵件使用的方式
+	Automatic takes {scheme} for this message	「自動」為這封郵件選擇 {scheme}
+	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	無法加密寄出：{names} 沒有可用的 OpenPGP 金鑰。對方的金鑰隨其郵件而來，也可以在「檔案 › 資訊 › 安全性」中匯入；或關閉「加密」以不加密寄出。
