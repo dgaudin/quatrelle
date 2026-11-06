@@ -14,6 +14,7 @@ use crate::worker::apply_remote;
 mod hostile;
 mod idle;
 mod opening;
+mod pgp;
 mod pool;
 mod search;
 mod sent;

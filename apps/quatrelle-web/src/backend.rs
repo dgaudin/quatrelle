@@ -17,6 +17,7 @@ use quatrelle_ui_egui::Backend;
 
 use crate::fetch::{Fetch, events, sleep};
 
+mod pgp;
 mod smime;
 
 /// How often the Inbox is checked for new mail, and every how many checks everything is.
@@ -551,6 +552,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::Protect { .. }
         | Job::Decrypt { .. }
         | Job::SealDraft { .. }) => smime::job(sh, id, j),
+        // OpenPGP with the account's own keys isn't in the browser yet: answered so.
+        Job::Pgp { work, .. } => pgp::job(sh, id, work),
         Job::CheckRevocation { chain } => emit(
             sh,
             Event::Revocation {
@@ -590,8 +593,6 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::WebexUpdate { .. }
         | Job::WebexDelete { .. }
         | Job::ExportPst { .. }
-        // OpenPGP isn't in the browser yet: answered so in lot 4 of the plan.
-        | Job::Pgp { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
         // Older mail read online is Exchange's; the browser's accounts keep more instead.
