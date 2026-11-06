@@ -3747,6 +3747,154 @@ voir ce qui a changé, les corps venus depuis lus).
     (`top_up`), qui relit alors sa liste entière à la recherche suivante, alors que les messages
     venus sont dans le changement.
 
+### Hors relevé : R25, les pièces jointes des rendez-vous Exchange et les tâches importées (2026-11-06)
+
+Deux restes notés par R23, indépendants, chacun avec sa sonde lancée d'abord contre le code d'alors
+(sauf celle de Graph, écrite avec le code). Le calendrier et les tâches du fork restent les leurs :
+on comble leurs manques dans leur style, rien n'est pris de l'origine qui remplacerait leur modèle.
+Aucun vrai compte : faux serveurs EWS et Graph, `.pst` fabriqués par l'écrivain du crate.
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `6dbdd9a7` | les fichiers d'un rendez-vous Exchange (EWS, Graph) gardés avec lui ou listés, et ceux restés sur le serveur téléchargés quand on les ouvre (modèle, réseau, moteur, faux serveurs) |
+| `bfc94ea9` | l'interface : un fichier venu du serveur ouvert une fois arrivé ; deux textes dans les 13 catalogues ; le rendu sans tête |
+| `8b1726a2` | test : le fichier demandé par le travailleur du compte |
+| `0273da4f` | l'application web répond au nouveau job (le navigateur n'atteint pas Exchange) : `cargo xtask ci` (wasm) l'avait trouvé |
+| `945f24f4` | les calendriers suivis avant R25 relus en entier une fois, avec leurs fichiers ; les calendriers publics listent les leurs |
+| `36d5e75c` | les tâches d'un `.pst` gardent leur début, leur état, leur avancement et leur jour d'achèvement ; leur périodicité gardée sans être montrée |
+
+**Partie 1 : les pièces jointes des rendez-vous Exchange.** Jusqu'ici un rendez-vous venu d'Exchange
+arrivait sans ses fichiers : R23 montrait en puces ceux qu'un import garde, aucun ne venait du
+serveur.
+
+- **EWS** (`ews_pim/files.rs`) : chaque rendez-vous lu demande la liste de ses fichiers
+  (`item:Attachments`, parmi les champs d'un rendez-vous : noms, types, tailles et ids, jamais les
+  octets). Sont des fichiers du rendez-vous : ses fichiers (`FileAttachment`) et ses éléments joints
+  (`ItemAttachment`, un message, un rendez-vous) ; pas les images du texte (un `ContentId` et
+  `IsInline`), ni un lien vers un fichier ailleurs (`ReferenceAttachment`) ; 64 au plus.
+- **Le plafond** : comme le mode Exchange mis en cache, les fichiers de l'agenda du compte sont
+  gardés avec le rendez-vous, en lignes `ATTACH` comme celles d'un import, **jusqu'à 1 Mio par
+  fichier et 2 Mio par rendez-vous** (dans l'ordre, ceux qui tiennent). Pourquoi : Outlook garde tout
+  dans son `.ost`, une base qu'il lit par morceaux ; ici le calendrier d'un compte est un seul
+  document (`pim.json`), tenu en mémoire et réécrit en entier à chaque changement, si bien que chaque
+  octet gardé se paie à chaque enregistrement. Un ordre du jour, un compte rendu, un plan, une photo
+  passent ; une présentation ou une vidéo vient quand on l'ouvre. 2 Mio par rendez-vous, c'est
+  2,7 Mo en base64 au plus ; l'import (R23, P2b) tenait 1 Mio par fichier et 8 Mo en tout. Les
+  octets sont demandés quelques-uns à la fois (`GetAttachment`, 20 ids et 8 Mo au plus par
+  requête) ; un élément joint vient par sa source (`IncludeMimeContent`), gardé en `.eml`. Un
+  fichier que le serveur refuse, ou qu'il donne plus gros qu'il ne l'a dit, est listé.
+- **Au-delà du plafond**, et pour les calendriers des collègues et les dossiers publics : une ligne
+  `X-QUATRELLE-SERVER-ATTACH` (nom, type, taille et id de la pièce sur le serveur,
+  `model/src/pim/files.rs`, `KeptFile::on_server`). La puce est la même (nom, taille, Ouvrir,
+  Enregistrer sous…). **Ouvrir** demande le fichier au serveur (`Job::FetchEventFile`, une fois
+  quel que soit le nombre de clics, « Downloading Deck.pptx… » dans la barre d'état), le travailleur
+  du compte le prend (`GetAttachment` ; Graph : `$value`), le moteur l'écrit dans le dossier d'où le
+  fork ouvre les pièces jointes, avec la marque « venu d'Internet » sous Windows, et l'interface le
+  confie au système (`Session::take_files_to_open`) ; **Enregistrer sous** l'écrit où on l'a dit.
+  Un fichier téléchargé reste en mémoire le temps de la session (64 Mo au plus) : rouvert, il n'est
+  pas redemandé. Jamais un programme à ouvrir, comme avant. Un rendez-vous importé ou d'un calendrier
+  abonné par son lien ne nomme aucun serveur du compte : refusé.
+- **Les collègues et les dossiers publics** (en lecture seule) montrent leurs fichiers dès que leurs
+  rendez-vous se lisent (un partage en disponibilité seule ne se lit pas, comme avant), listés
+  seulement (un calendrier public lit ses rendez-vous par son propre chemin, sans `read_calendar` :
+  ses fichiers y sont listés aussi) : leurs calendriers sont lus en entier puis mis de côté loin du calendrier
+  (`pim-parked.json`), parfois une cinquantaine ; les garder tous aurait multiplié les requêtes et
+  le document. Ouverts, ils viennent avec les droits qui lisent l'élément.
+- **La lecture par changements** (R21, R22) garde les fichiers justes sans rien de plus : un
+  rendez-vous changé sur le serveur (ajout ou retrait d'une pièce compris) est relu en entier, ses
+  fichiers avec lui ; un rendez-vous inchangé reste tel qu'il est gardé, sans `GetAttachment`. Une
+  occurrence modifiée lue comme élément porte ses propres fichiers (la fenêtre les montre, sinon
+  ceux de la série, comme R23).
+- **Les calendriers suivis avant R25** : leurs rendez-vous gardés n'ont pas leurs fichiers, et la
+  lecture par changements ne les relirait qu'à leur prochain changement. L'état gardé d'un calendrier
+  porte maintenant une marque (`f1:`) ; un état sans elle n'en est pas un : l'agenda du compte, ceux
+  des collègues cochés et les calendriers publics sont relus en entier **une fois**, leurs fichiers
+  avec eux, puis par leurs changements comme avant. Les contacts, les notes et les tâches n'y sont
+  pas.
+- **Graph** (`graph_pim/files.rs`) : la même chose, simplement. Un événement qui dit en avoir
+  (`hasAttachments`) liste les siens (`…/events/{id}/attachments`, sans `contentBytes`) ; les
+  calendriers du compte (sous `/me/calendars`, modifiables) les gardent dans les mêmes bornes
+  (`$value` chacun), les autres les listent ; l'id gardé est le chemin de la pièce, que le
+  travailleur ne suit que s'il a la forme d'une pièce d'un événement. Graph relit tout le calendrier à
+  chaque synchro : un événement dont la clé de changement (`changeKey`) n'a pas bougé garde les
+  fichiers qu'il a ici, sans rien redemander ; un événement changé est relu.
+- **Sondes** (`fake_ews/tests/calendars/files.rs`, `fake_graph/tests/events.rs`,
+  `engine/src/tests/calendar/kept_files.rs`) ; le faux EWS liste maintenant les pièces d'un élément
+  sans leurs octets et les donne par `GetAttachment`, le faux Graph liste et donne celles d'un
+  événement :
+
+  | Sonde | avant | après |
+  |---|---|---|
+  | rendez-vous EWS avec trois pièces : « Agenda.pdf » (3 000 o), « Deck.pptx » (1,5 Mo), un message joint « Minutes » | **aucune** (`[]`) | « Agenda.pdf » gardé (3 000 o, les mêmes octets), « Deck.pptx » listé (1 500 000 o, sur le serveur), « Minutes.eml » gardé (sa source) ; `GetAttachment` pour les deux petits ensemble, le gros seulement à l'ouverture, ses octets justes ; une synchro sans changement ne redemande rien |
+  | l'agenda retiré sur le serveur, synchro par changements suivante | **aucune** | « Deck.pptx », « Minutes.eml » |
+  | le même rendez-vous dans le calendrier d'une collègue | — | les trois listés, aucun téléchargé ; le message téléchargé à l'ouverture |
+  | le travailleur, `Job::FetchEventFile` | — | les 1,5 Mo ; une pièce partie : « not on the server any more » |
+  | le moteur : Ouvrir deux fois, puis l'arrivée | — | un seul job ; le fichier écrit et confié à l'interface ; Enregistrer sous ensuite écrit tout de suite, sans job ; un refus du serveur dit, rien d'écrit ; un programme jamais ouvert ; un rendez-vous importé refusé |
+  | Graph, les mêmes trois plus une image du texte et un lien (écrite avec le code) | — | les trois, ni image ni lien ; inchangé : aucune requête de pièces ; l'agenda retiré et la clé changée : parti |
+  | un calendrier suivi avant R25 (état sans marque, rendez-vous sans fichiers) | — | relu en entier une fois, les trois fichiers ; puis par ses changements, rien de relu |
+  | un calendrier public, rendez-vous à deux pièces (trouvé par la relecture de ce texte) | **aucune** (pas par `read_calendar`) | les deux listées, aucune téléchargée |
+
+- **Le rendu** (sans tête, `ui-egui/src/tests/pim/item_files.rs`, regardé en clair et en sombre hors
+  du dépôt) : dans la fenêtre « Budget review – Appointment », sous « 3 attachments », trois puces
+  alignées sur les champs, juste au-dessus des notes : « Agenda.pdf » 3 KB, « Deck Q4.pptx » 1.4 MB
+  (restée sur le serveur), « Minutes.eml » 32 B ; les mêmes bords, fonds d'icône et couleurs que
+  celles du courrier ; rien ne déborde, dans les deux thèmes. Une pièce restée sur le serveur ne se
+  distingue pas à l'écran, comme dans Outlook.
+- **Ce que le propriétaire verra** : à la première synchro après la mise à jour, une lecture complète
+  de son agenda (3 à 6 s, comme avant R21), puis à la synchro complète suivante de ses calendriers de
+  collègues cochés et de ses dossiers publics, une fois ; les fichiers de ses rendez-vous dans leur fenêtre, à ouvrir ou enregistrer comme une
+  pièce jointe, leurs noms sur la carte du calendrier ; une présentation qui s'ouvre après quelques
+  secondes de téléchargement ; ceux des rendez-vous de ses collègues aussi. Dans le journal :
+  « appointments' files: N kept with them, M left on the server until opened ».
+- **Jamais essayé sur un vrai Exchange** : `item:Attachments` parmi les champs d'un rendez-vous
+  demandés par nom ; `GetAttachment` en groupe et avec `IncludeMimeContent` pour un élément joint
+  (Exchange 2010 SP1 et après, d'après le schéma) ; sur l'élément d'une collègue sans en-tête de
+  boîte ; sur un dossier public (non routé vers sa boîte de dossiers publics : peut échouer sur
+  Exchange 2013 et après, le refus est alors dit) ; que l'ajout ou le retrait d'une pièce change bien
+  l'élément pour `SyncFolderItems` (l'élément est modifié : c'est ce que dit [MS-OXCMSG]) ; côté
+  Graph, `$value` d'une pièce d'événement et la clé de changement qui bouge avec ses pièces.
+- **Reste, remarqué** :
+  - aucun plafond par calendrier : 239 rendez-vous à 2 Mio chacun au pire, c'est 0,6 Go ; en pratique
+    quelques-uns ont des fichiers, mais le document grossit d'autant ;
+  - un rendez-vous changé ici, renvoyé au serveur, revient changé à la synchro suivante et ses
+    petits fichiers sont redemandés une fois ;
+  - ni ajouter ni retirer un fichier d'un rendez-vous depuis le fork ; pas d'aperçu ;
+  - un `ATTACH` CalDAV par adresse ne se voit toujours pas.
+
+**Partie 2 : le reste des tâches importées d'un `.pst`.** R23 avait repris catégories, importance,
+privé et rappel ; restaient le début, l'état, l'avancement, le jour d'achèvement et la périodicité,
+que `712d7336` de l'origine lit.
+
+- **Les quatre premiers**, que la tâche du fork tient (`start`, `status`, `percent`, `completed`),
+  lus comme l'origine les lit ([MS-OXOTASK]) : `PidLidTaskStartDate` (0x8104), `PidLidTaskStatus`
+  (0x8101 : pas commencée, en cours, terminée, en attente de quelqu'un, différée),
+  `PidLidPercentComplete` (0x8102, un flottant sur 64 bits, une fraction de 1 : l'import lit
+  maintenant les flottants, `Val::Float`), `PidLidTaskDateCompleted` (0x810F) ; les jours pris au
+  minuit local qu'Outlook écrit. L'état et l'avancement tenus ensemble comme Outlook les tient
+  (`Task::settle` : pas commencée, c'est 0 % ; terminée, 100 %) ; un début après l'échéance ramené à
+  elle ; une tâche faite l'est à son jour, sinon, comme avant, à son échéance. La tâche est faite dans
+  `pst_pim/tasks.rs`, hors de `out/pim.rs`.
+- **La périodicité** : **le modèle du fork ne la tient pas** (ses tâches ne se répètent pas). Elle est
+  lue (`PidLidTaskRecurrence`, 0x8116, le motif qu'un rendez-vous périodique a en tête, par le lecteur
+  des rendez-vous) en règle RFC 5545 et gardée avec la tâche (`Task::rrule`), écrite dans sa copie en
+  `VTODO` (Problèmes de synchronisation › Conflits) ; ni montrée, ni suivie : marquer la tâche faite
+  n'en fait pas une suivante. Une tâche Exchange ne la lit pas (`rrule` vide).
+- **Sonde** (`pst/tests/pim/tasks.rs`, `.pst` fabriqué) :
+
+  | Sonde | avant | après |
+  |---|---|---|
+  | « Print the posters » commencée une semaine avant l'échéance, en cours, 40 % ; « Hear from the venue » en attente, 25 % ; « Send the invoice » faite trois jours avant l'échéance | **aucun début** (`None`), pas commencée, 0 %, faite le jour de l'échéance | début et échéance, en cours, 40 % ; en attente, 25 % ; faite, 100 %, le jour où elle l'a été |
+  | « Water the plants » chaque lundi, dix fois | — | `FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;COUNT=10` gardé, rien d'autre ne change |
+
+- **Ce que le propriétaire verra** : après un nouvel import du `.pst`, ses tâches avec leur début,
+  leur état (en cours, en attente, différée), leur pourcentage et le jour où elles ont été faites,
+  comme dans Outlook ; une tâche périodique arrive comme une tâche simple (sa règle gardée en
+  silence).
+- **Vérifié** : chaque sonde avant (échec) et après ; les suites de `quatrelle-model`,
+  `quatrelle-engine`, `quatrelle-net` (faux EWS et Graph, import `.pst`) et `quatrelle-ui-egui` ;
+  `every_command_survives_junk_params` ; chaque commit compilé seul
+  (`cargo check --workspace --all-targets`) ; `cargo xtask ci` (wasm compris).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
