@@ -7,6 +7,9 @@ use crate::*;
 
 impl MailApp {
     pub(crate) fn shortcuts(&mut self, ctx: &egui::Context) {
+        if self.ui.backstage.is_none() {
+            self.ui.backstage_typing = false;
+        }
         if self.ui.dialog.is_some() {
             if ctx.input(|i| i.key_pressed(Key::Escape)) {
                 // Escape on the question about another domain is a no: the safe answer.
@@ -19,7 +22,8 @@ impl MailApp {
             return;
         }
         if self.ui.backstage.is_some() {
-            if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            // Esc in one of its fields leaves the field; from outside one, the page.
+            if ctx.input(|i| i.key_pressed(Key::Escape)) && !std::mem::take(&mut self.ui.backstage_typing) {
                 self.ui.backstage = None;
             }
             return;

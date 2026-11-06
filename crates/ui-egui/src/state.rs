@@ -112,6 +112,9 @@ pub struct UiState {
     pub toast: Option<(String, bool, f64)>,
     pub(super) seen_notices: usize,
     pub(super) scroll_to_focus: bool,
+    /// A text field on the File page had the keyboard at the end of the last frame: Esc leaves it
+    /// rather than the page (egui takes the focus away on Esc before the shortcuts see it).
+    pub(super) backstage_typing: bool,
     /// How many message rows the list shows at once: a page, for Page Up and Page Down.
     pub(super) list_page: u64,
     /// A message source's window to bring to the front (asked for again while open).

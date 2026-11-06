@@ -385,6 +385,7 @@ impl MailApp {
                 toast: None,
                 seen_notices: seen,
                 scroll_to_focus: false,
+                backstage_typing: false,
                 list_page: 10,
                 raise_source: None,
                 source_headers: Default::default(),
