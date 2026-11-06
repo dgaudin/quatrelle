@@ -12,6 +12,7 @@ mod compose;
 mod drafts;
 mod items;
 mod names;
+mod reopen;
 mod senders;
 mod sending;
 mod signature_web;
@@ -601,6 +602,10 @@ impl Session {
         };
         let earlier = Some(c.saved_id.as_str()).filter(|m| !m.is_empty());
         let (raw, _, mid) = self.compose_bytes_as(c, &d, earlier)?;
+        // Its copy keeps its Bcc and the message it answers, as Outlook's drafts do (opened
+        // again, it had neither).
+        let source = c.source.as_ref().zip(c.mode).map(|(k, m)| (m, k.to_id()));
+        let raw = mime::draft_copy(raw, &d.bcc, source.as_ref().map(|(m, k)| (*m, k.as_str())));
         Ok((raw, folder, mid))
     }
 

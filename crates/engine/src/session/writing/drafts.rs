@@ -84,7 +84,7 @@ impl Session {
 
     /// The message going by `Message-ID` `mid` in the account: among its folders read so far,
     /// else in its Inbox.
-    fn find_message(&mut self, account: &str, mid: &str) -> Option<MessageKey> {
+    pub(super) fn find_message(&mut self, account: &str, mid: &str) -> Option<MessageKey> {
         let wanted = norm_id(mid);
         if wanted.is_empty() {
             return None;
@@ -158,44 +158,19 @@ impl Session {
         if self.take_up(key) {
             return Ok(serde_json::json!({ "compose": self.compose.as_ref().map(|c| c.id) }));
         }
+        // Being written already (in a window of its own): that one.
+        let open = self.all_composes().find(|c| c.draft.as_ref() == Some(key)).map(|c| c.id);
+        if let Some(id) = open {
+            self.activate_compose(id);
+            return Ok(serde_json::json!({ "compose": id }));
+        }
         let raw = self.readable_raw(key).ok_or_else(|| CmdError::Disabled("the draft is still downloading".into()))?;
-        let p = mime::parse(&raw).ok_or_else(|| CmdError::Failed("the draft can't be read".into()))?;
-        // Every part comes along, the pictures in the text too (as attachments): nothing is lost,
-        // a text file's charset neither.
-        let attachments = p
-            .attachments
-            .iter()
-            .filter_map(|a| mime::attachment_out(&raw, a.index).map(|out| OutAttachment { name: a.name.clone(), ..out }))
-            .collect();
-        let (body, styles) =
-            if p.had_html && !p.rich.is_empty() { mime::rich::from_rich(&p.rich) } else { (p.text.clone(), mime::rich::Styles::plain(&p.text)) };
-        let id = self.fresh_id();
-        let window = self.prefs.new_mail_window;
-        // A reply's message gets its Replied mark once it's sent, as when it was started here.
-        let source = self.find_message(&key.account, &p.in_reply_to);
-        let mode = source.as_ref().map(|_| ReplyMode::Reply);
-        // From another address than the account's own: still from it.
-        let own = self.account(&key.account).map(|a| a.config.email.clone()).unwrap_or_default();
-        let from = if p.from.email.is_empty() || p.from.email.eq_ignore_ascii_case(&own) { String::new() } else { p.from.to_string() };
-        self.bring_back(Compose {
-            id,
-            account: key.account.clone(),
-            from,
-            to: addr::format_field(&p.to),
-            cc: addr::format_field(&p.cc),
-            subject: p.subject.clone(),
-            body,
-            styles,
-            in_reply_to: p.in_reply_to.clone(),
-            references: p.references.clone(),
-            attachments,
-            draft: Some(key.clone()),
-            saved_id: p.message_id.clone(),
-            window,
-            source,
-            mode,
-            ..Default::default()
-        });
+        // As it was saved ([`Session::compose_from_saved`]).
+        let mut c = self.compose_from_saved(&key.account.clone(), key, &raw)?;
+        c.draft = Some(key.clone());
+        c.window = self.prefs.new_mail_window;
+        let id = c.id;
+        self.bring_back(c);
         Ok(serde_json::json!({ "compose": id }))
     }
 }
