@@ -3067,6 +3067,72 @@ lecture et la carte viendront au lot 3b).
   une commande qui n'attend pas (`finish_pending_body`) lit les clés sur le fil de la fenêtre,
   comme elle y lit déjà le message.
 
+**Lot 3b : la lecture et la carte** (2026-11-06 ; tâches 3.4 et 3.5 du plan).
+
+| Commit | Ce qu'il fait | Essais (échoué avant → passé) |
+|---|---|---|
+| `d9efac5c` (propre au fork) | `may_carry` décode un texte en base64 (2 Mio au plus) pour y chercher un bloc PGP, comme `protection` le lit | `inline_pgp_in_a_base64_text_is_found` : échouait (le bloc n'était jamais signalé) → passe |
+| `a949a687` (`f32b54b0`, adapté) | la lecture (`session/security/pgp/reading.rs`) : `Session::unwrap` ôte OpenPGP comme S/MIME (PGP/MIME signé et chiffré, bloc dans un texte) ; signature vérifiée avec la clé du correspondant (et celles du compte pour son propre courrier), une signature faite par la clé d'un autre correspondant vérifiée avec elle et dite « pour une autre adresse » ; `SignedBy::{key, learnt}`, `Seal::UnknownKey`, `Lock::NoKey`, `Security::pgp` ; déchiffrement demandé au pool pour un compte qui a une clé seulement, gardé en mémoire avec ce que dit la signature intérieure ; `NOT_FOR_YOU` du pool ; `Event::PgpDecrypted { keys }` : les clés jointes à l'intérieur, trouvées par le pool ; la barre (clé inconnue, bonne, fausse, autre adresse, provenance de la clé, changement de clé une fois, chiffré, clé absente) ; « Importer la clé OpenPGP » sur une clé jointe | 5 essais du moteur (`tests/smime/pgp/reading.rs`) : ne compilaient pas (`NOT_FOR_YOU`, `Lock::NoKey`, `SignedBy::key`… introuvables) → passent ; `keys_attached_inside_come_back_with_the_message` (pool) ; `the_security_bar_says_what_openpgp_found` (interface, rendus regardés) |
+| `2e474518` (`f32b54b0`, adapté) | la carte OpenPGP sous celle de S/MIME (`panes/backstage/pgp.rs`) et ses dialogues (`dialogs/pgp.rs`) : phrase secrète d'un fichier de clé, phrase de sauvegarde tapée deux fois, question avant d'oublier une clé ; `Action::Pgp(PgpAsk)` | `the_openpgp_card_offers_a_key_then_its_backup` : sonde sans la carte, échoue → passe ; `a_backup_asks_its_passphrase_twice` |
+
+- **Les états de la barre**, dans les mots de Quatrelle : « Signé avec la clé OpenPGP …, que
+  Quatrelle n'a pas » ; « Signé par … : la signature est valable (clé OpenPGP …) », avec en
+  dessous « Sa clé est arrivée avec son propre courrier » / « Vous avez importé sa clé » / « C'est
+  une de vos propres clés » ; « Signé par …, mais sa clé est pour …, pas pour l'expéditeur » ; la
+  signature qui ne tient pas ; « La clé OpenPGP de cette personne a changé » (une fois, les
+  empreintes avant et maintenant sous le pointeur) ; « Chiffré » ; « Ce message est chiffré pour une
+  clé que Quatrelle n'a pas » (avec, sans clé du compte, comment en faire ou en importer une ; rien
+  du message n'est montré que la barre) ; l'objet protégé (RFC 9788) montré une fois déchiffré, la
+  liste gardant « ... ».
+- **Le texte déchiffré** n'est écrit nulle part : l'essai cherche un mot du texte clair dans tous les
+  fichiers du cache et par `search.run` (absent), et trouve le message par son objet.
+- **La carte** : sans clé, « Créer une clé OpenPGP » et « Importer une clé… » ; avec une clé, son
+  adresse, l'empreinte espacée et la date de fin, « Enregistrer une sauvegarde… », « Exporter la clé
+  publique… », « Oublier » (demandé d'abord, en disant si une sauvegarde existe), la ligne « Aucune
+  sauvegarde de cette clé n'est enregistrée » jusqu'à la sauvegarde, « Prolonger » dans les 30 jours
+  de la fin, « Envoyer ma clé publique avec mes messages » ; les anciennes clés ; les clés des
+  correspondants (les 20 plus récemment utilisées, empreinte, provenance, « Oublier »), « Importer
+  la clé de quelqu'un… ». Dans le navigateur, la carte dit que les clés OpenPGP sont pour
+  l'application de bureau.
+- **Questions ouvertes du lot 3a, tranchées** :
+  - une clé jointe **à l'intérieur** d'un message chiffré est apprise, une fois le message
+    déchiffré, pour l'expéditeur seulement, comme une clé jointe dehors (Thunderbird joint la clé
+    dans la partie chiffrée quand on le lui demande). Elle est trouvée par le pool, sur son fil, dans
+    ce qu'il vient de déchiffrer (4 clés au plus, message de 2 Mio au plus), et rendue dans
+    `PgpDecrypted { keys }` : le fil de la fenêtre ne relit pas le message, il lit seulement chaque
+    clé (rPGP) pour la ranger ;
+  - `may_carry` décode maintenant un texte en base64 de 2 Mio au plus. Sûr (le décodeur de
+    mail-parser, déjà utilisé ailleurs) et peu coûteux : `is_protected` ne tourne qu'au moment de
+    montrer un message, sur la file de lecture quand elle existe (le fil de la fenêtre ne le
+    rappelle que pour un message protégé).
+- **Adapté** (au nom du propriétaire) : le plan nommait un `PgpState { check: Signed(..) | Encrypted
+  | NoKey }` ; le fork étend plutôt `Security` comme l'origine (`pgp`, `SignedBy::{key, learnt}`,
+  `Seal::UnknownKey`) et ajoute `Lock::NoKey(identifiants des clés)` ; l'autre adresse est
+  `smime::Problem::OtherAddress`, comme pour S/MIME. L'usage d'une clé qui vérifie une signature
+  (`PeopleKeys::used`) n'est écrit qu'une fois par jour au plus (le fichier des clés s'écrit en
+  entier). Un compte qui reçoit sa première clé remontre le message ouvert qui attendait une clé.
+- **Regardé** (rendus dans `~/.tq/pgp-shots/`, hors du dépôt, clair et sombre) : la barre dans ses
+  sept états, la carte sans clé, avec une clé faite, avec une clé de correspondant, sauvegardée, à
+  20 jours de la fin, et le dialogue de sauvegarde (« Enregistrer » grisé tant que les deux phrases
+  diffèrent). Vu et corrigé en route : un message chiffré pour une clé absente montrait ses parties
+  brutes (`encrypted.asc`, la partie de version) en pièces jointes sous la barre ; la phrase du
+  changement de clé, maladroite, reformulée.
+- **Pour le lot 4** : la réponse à un message chiffré (`session/writing.rs`, vers la ligne 204) ne
+  regarde encore que `identity()` (S/MIME) : le schéma d'une réponse se lit dans
+  `Reading::security.pgp` ; `PeopleKeys::used` est à appeler aussi quand on chiffre pour quelqu'un ;
+  l'interrupteur « Envoyer ma clé publique avec mes messages » règle déjà `pgp.options`
+  (`autocrypt`) ; `ui-egui/src/lib.rs` (795 lignes), `app/actions.rs` (786) et `dialogs.rs` (787)
+  sont près de la limite : les découper avant d'y ajouter ; le navigateur ne répond toujours pas
+  aux jobs OpenPGP.
+- **Vérifié** : les suites de `quatrelle-mime`, `quatrelle-net` (essais OpenPGP), `quatrelle-engine`
+  (S/MIME et OpenPGP), `quatrelle-ui-egui` (entière) ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** : une signature dans un message à la fois signé et chiffré par OpenPGP (et non
+  en PGP/MIME signé à l'intérieur) n'est vérifiée qu'avec la clé de l'expéditeur : faite par une
+  autre clé connue, elle reste « clé inconnue » ; la recherche d'une clé par l'identifiant que nomme
+  une signature ne regarde que la clé principale (une sous-clé de signature n'est pas trouvée) ;
+  l'essai de la barre nomme l'expéditrice « Ana L. », pour que l'avis « vous connaissez Ana Lima
+  sous une autre adresse » de l'échantillon ne se mêle pas aux rendus.
+
 ### Hors relevé : R20, rechercher dans le message (2026-11-06)
 
 Demandé par le propriétaire le 5 novembre, sa conception validée par lui ; propre au fork. Une
