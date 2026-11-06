@@ -2221,6 +2221,7 @@ dependencies = [
  "quatrelle-keys",
  "quatrelle-mime",
  "quatrelle-model",
+ "quatrelle-pgp",
  "quatrelle-smime",
  "quatrelle-store",
  "quick-xml",
