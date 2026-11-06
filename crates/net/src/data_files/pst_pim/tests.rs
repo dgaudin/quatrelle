@@ -96,7 +96,7 @@ fn recurrence_patterns_become_rules() {
 #[test]
 fn a_mistyped_named_time_hides_the_fallback() {
     let ids = HashMap::from([((PSETID_APPOINTMENT, 0x820D), 0x8001), ((PSETID_APPOINTMENT, 0x820E), 0x8002)]);
-    let named = Named { ids, keywords: None };
+    let named = Named { ids, keywords: None, pinned: Vec::new() };
     let props = HashMap::from([(0x8001, Val::Other), (0x8002, Val::Time(133_485_408_000_000_000)), (0x0060, Val::Time(133_485_408_000_000_000))]);
     let x = extract(&|id| props.get(&id).cloned(), &named);
     assert_eq!((x.start, x.end), (None, Some(1_704_067_200)));
@@ -150,7 +150,7 @@ fn a_contact_group_s_members() {
     let wrapped_ana = wrap(0x00, &ana);
     let contact = wrap(0xC3, &[1, 2, 3, 4]);
     let ids = HashMap::from([((PSETID_ADDRESS, 0x8054), 0x8001), ((PSETID_ADDRESS, 0x8055), 0x8002)]);
-    let named = Named { ids, keywords: None };
+    let named = Named { ids, keywords: None, pinned: Vec::new() };
     let props = HashMap::from([
         (0x8001, Val::Bins(vec![&ana[..], &[0xFF; 3][..]])),
         (0x8002, Val::Bins(vec![&wrapped_ana[..], &wrapped_ben[..], &contact[..], &[][..]])),
@@ -444,7 +444,7 @@ fn files_as_lines() {
 fn a_huge_pattern_is_read_to_its_cap() {
     let (mut b, start) = series(0x3009);
     b.resize(MAX_PATTERN * 2, 0xAB);
-    let named = Named { ids: HashMap::from([((PSETID_APPOINTMENT, 0x8216), 0x8001)]), keywords: None };
+    let named = Named { ids: HashMap::from([((PSETID_APPOINTMENT, 0x8216), 0x8001)]), keywords: None, pinned: Vec::new() };
     let props = HashMap::from([(0x8001, Val::Bin(&b))]);
     let x = Extra { start: Some(start), end: Some(start + 3600), ..extract(&|id| props.get(&id).cloned(), &named) };
     assert_eq!(x.recurrence.len(), MAX_PATTERN);
@@ -465,7 +465,7 @@ fn a_sharing_invitation_says_what_it_shares() {
         ((SHARING, 0x8A08), 0x8004),
         ((SHARING, 0x8A04), 0x8005),
     ]);
-    let named = Named { ids, keywords: None };
+    let named = Named { ids, keywords: None, pinned: Vec::new() };
     let props = HashMap::from([
         (0x8001, Val::Text("Studio\r\nbookings".into())),
         (0x8002, Val::Text("IPF.Appointment".into())),

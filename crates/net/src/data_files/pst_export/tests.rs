@@ -9,6 +9,7 @@ mod big;
 mod damaged;
 mod follow_up;
 mod kinds;
+mod pinned;
 mod seeds;
 mod special;
 mod state;

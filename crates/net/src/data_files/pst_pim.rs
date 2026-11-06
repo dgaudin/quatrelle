@@ -65,12 +65,21 @@ fn key(g: &GuidValue) -> GuidKey {
     (g.data1(), g.data2(), g.data3(), *g.data4())
 }
 
-/// The data file's named properties: (property set, number) → property id; and the one named
-/// by a string that the import reads, the categories (`Keywords` in PS_PUBLIC_STRINGS).
+/// The property (in PS_PUBLIC_STRINGS, a PtypBoolean) an export gives a pinned message: MS-OXPROPS
+/// has no pin (Outlook's files keep none), so it is Quatrelle's own, which Outlook ignores and
+/// the import reads back as `$Pinned` (`pst_export::item`)…
+pub(crate) const PINNED: &str = "X-Quatrelle-Pinned";
+/// …as it reads MailCraft's, which a file MailCraft exported keeps.
+const PINNED_UPSTREAM: &str = "X-MailCraft-Pinned";
+
+/// The data file's named properties: (property set, number) → property id; and those named by a
+/// string that the import reads, the categories (`Keywords` in PS_PUBLIC_STRINGS) and a
+/// message's pin ([`PINNED`]).
 #[derive(Default)]
 pub(crate) struct Named {
     ids: HashMap<(GuidKey, u32), u16>,
     keywords: Option<u16>,
+    pinned: Vec<u16>,
 }
 
 impl Named {
@@ -97,11 +106,14 @@ impl Named {
                 NamedPropertyId::Number(lid) => {
                     named.ids.insert((set, lid), e.prop_id());
                 }
-                NamedPropertyId::StringOffset(at) => {
-                    if set == key(&PS_PUBLIC_STRINGS) && name_at(strings, at).is_some_and(|n| n.eq_ignore_ascii_case("Keywords")) {
-                        named.keywords = Some(e.prop_id());
+                NamedPropertyId::StringOffset(at) if set == key(&PS_PUBLIC_STRINGS) => match name_at(strings, at) {
+                    Some(n) if n.eq_ignore_ascii_case("Keywords") => named.keywords = Some(e.prop_id()),
+                    Some(n) if (n.eq_ignore_ascii_case(PINNED) || n.eq_ignore_ascii_case(PINNED_UPSTREAM)) && named.pinned.len() < 2 => {
+                        named.pinned.push(e.prop_id());
                     }
-                }
+                    _ => {}
+                },
+                NamedPropertyId::StringOffset(_) => {}
             }
         }
         named
@@ -115,6 +127,11 @@ impl Named {
     /// The property holding an item's categories.
     pub(crate) fn keywords(&self) -> Option<u16> {
         self.keywords
+    }
+
+    /// The properties holding a message's pin ([`PINNED`], and MailCraft's).
+    pub(crate) fn pinned(&self) -> &[u16] {
+        &self.pinned
     }
 
     fn id(&self, set: GuidKey, lid: u32) -> Option<u16> {
