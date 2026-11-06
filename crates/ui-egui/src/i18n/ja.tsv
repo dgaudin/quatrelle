@@ -1796,6 +1796,8 @@ month	May	5月
 	{name}: the data file could not be opened: {error}	{name}: データ ファイルを開けませんでした: {error}
 	{name}: {messages} messages exported	{name}: {messages} 件のメッセージをエクスポートしました
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} 件のメッセージをエクスポートしました (このコンピューターにない {skipped} 件は除外しました)
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} 件のメッセージをエクスポートしました (データ ファイルに既にあった {already} 件を除く)
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} 件のメッセージをエクスポートしました (このコンピューターにない {skipped} 件は除外しました。データ ファイルに既にあった {already} 件を除く)
 	{name}: {messages} messages exported so far…	{name}: これまでに {messages} 件のメッセージをエクスポートしました…
 	{name}: {messages} messages imported	{name}: {messages} 件のメッセージをインポートしました
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} 件のメッセージをインポートしました ({skipped} 件は読み込めませんでした)

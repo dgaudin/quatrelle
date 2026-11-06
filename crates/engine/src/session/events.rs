@@ -174,7 +174,9 @@ impl Session {
             Event::WebexCreated { ask, meeting, error } => self.webex_created(ask, meeting, error),
             Event::WebexUpdated { id, meeting, error } => self.webex_updated(&id, meeting, error),
             Event::WebexDeleted { error, .. } => self.webex_deleted(error),
-            Event::Exported { account, messages, skipped, done, error } => self.exported(&account, messages, skipped, done, error),
+            Event::Exported { account, messages, skipped, already, done, error } => {
+                self.exported(&account, messages, (skipped, already), done, error)
+            }
             Event::Categories { account, categories } => self.take_master_categories(&account, categories),
             Event::Quota { account, used, limit } => {
                 if let Some(a) = self.account_mut(&account) {

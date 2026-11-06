@@ -108,19 +108,26 @@ impl Session {
         Ok(serde_json::json!({ "account": account, "exporting": true }))
     }
 
-    pub(super) fn exported(&mut self, account: &str, messages: usize, skipped: usize, done: bool, error: Option<String>) {
+    /// How an export is going; `left`: messages not on this computer, and ones the data file
+    /// already had.
+    pub(super) fn exported(&mut self, account: &str, messages: usize, left: (usize, usize), done: bool, error: Option<String>) {
+        let (skipped, already) = left;
         let name = self.account(account).map(|a| a.config.email.clone()).unwrap_or_default();
-        match (done, error) {
-            (false, _) => {
-                self.notice_with("{name}: {messages} messages exported so far…", &[("name", &name), ("messages", &messages.to_string())], false)
+        let (messages, skipped, already) = (messages.to_string(), skipped.to_string(), already.to_string());
+        let args = [("name", name.as_str()), ("messages", messages.as_str()), ("skipped", skipped.as_str()), ("already", already.as_str())];
+        let text = match (done, &error, left) {
+            (false, _, _) => "{name}: {messages} messages exported so far…",
+            (true, Some(_), _) => "{name} could not be exported: {error}",
+            (true, None, (0, 0)) => "{name}: {messages} messages exported",
+            (true, None, (_, 0)) => "{name}: {messages} messages exported ({skipped} not on this computer were left out)",
+            (true, None, (0, _)) => "{name}: {messages} messages exported ({already} the data file already had)",
+            (true, None, _) => {
+                "{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)"
             }
-            (true, Some(e)) => self.notice_with("{name} could not be exported: {error}", &[("name", &name), ("error", &e)], true),
-            (true, None) if skipped > 0 => self.notice_with(
-                "{name}: {messages} messages exported ({skipped} not on this computer were left out)",
-                &[("name", &name), ("messages", &messages.to_string()), ("skipped", &skipped.to_string())],
-                false,
-            ),
-            (true, None) => self.notice_with("{name}: {messages} messages exported", &[("name", &name), ("messages", &messages.to_string())], false),
+        };
+        match error.filter(|_| done) {
+            Some(e) => self.notice_with(text, &[("name", &name), ("error", &e)], true),
+            None => self.notice_with(text, &args, false),
         }
     }
 

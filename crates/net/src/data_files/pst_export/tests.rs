@@ -4,6 +4,7 @@
 use super::*;
 use quatrelle_model::{EmailAddress, Flags};
 use quatrelle_store::FolderState;
+use std::path::Path;
 
 #[test]
 fn an_account_round_trips_through_a_data_file() {
@@ -70,10 +71,9 @@ fn an_account_round_trips_through_a_data_file() {
     });
     store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
     let file = dir.join("Out.pst");
-    std::fs::write(&file, b"an older file").unwrap();
     let mut ticks = 0;
     let done = export(&store, "a1", "Riley's mail", &file, &mut |_| ticks += 1).unwrap();
-    assert_eq!(done, Exported { messages: 3, skipped: 1, events: 1, contacts: 1 });
+    assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, contacts: 1 });
     let ics = std::fs::read_to_string(dir.join("Out Calendar.ics")).unwrap();
     assert!(ics.contains("SUMMARY:Screening") && ics.contains("BEGIN:VCALENDAR"), "{ics}");
     let vcf = std::fs::read_to_string(dir.join("Out Contacts.vcf")).unwrap();
@@ -109,5 +109,80 @@ fn an_account_round_trips_through_a_data_file() {
     let empty = dir.join("Empty.pst");
     assert!(export(&store, "nobody", "x", &empty, &mut |_| {}).is_err());
     assert!(!empty.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The subjects of `file`'s mail as the import reads them back, in order.
+pub(super) fn subjects_back(file: &Path, dir: &Path, label: &str) -> Vec<String> {
+    let back = Store::open(dir.join(label)).unwrap();
+    crate::pst::import(file, &back, "b", &mut |_| {}).unwrap();
+    let mut out: Vec<String> = Vec::new();
+    for f in back.load_folders("b").unwrap() {
+        out.extend(back.load_folder("b", &f.path).unwrap().messages.iter().map(|m| m.subject.clone()));
+    }
+    out.sort();
+    out
+}
+
+/// An account with `messages` (uid, subject) in its Inbox, each with Message-ID `m<uid>@example.com`.
+pub(super) fn inbox_account(dir: &Path, messages: &[(u32, &str)]) -> Store {
+    let store = Store::open(dir.join("cache")).unwrap();
+    let mk = |uid: u32, subject: &str| {
+        let d = mime::Draft { subject: subject.into(), body: "Hello there.".into(), ..Default::default() };
+        let raw = mime::build(&d, &EmailAddress::new("Riley", "riley@example.com"), 1_704_067_200, &format!("m{uid}@example.com")).unwrap();
+        let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        store.write_body(&key, &raw).unwrap();
+        mime::summary_from_full(&raw, key, Flags::default(), 10, 0)
+    };
+    let inbox = FolderState { validity: 1, uid_next: 100, messages: messages.iter().map(|(uid, s)| mk(*uid, s)).collect(), ..Default::default() };
+    store.save_folder("a1", "INBOX", &inbox).unwrap();
+    let folder =
+        quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    store.save_folders("a1", &[folder]).unwrap();
+    store
+}
+
+/// A data file another program made, with mail of its own and one of the account's messages
+/// (by Message-ID).
+pub(super) fn theirs(file: &Path) {
+    let theirs = |subject, message_id| UnicodePstMessage {
+        subject,
+        sender_name: "Ana",
+        sender_email: "ana@example.com",
+        recipients: &[],
+        body: "Kept as it was.",
+        html_body: None,
+        message_id,
+        delivery_time: 133_485_408_000_000_000,
+        message_class: "IPM.Note",
+        properties: &[],
+    };
+    drop(UnicodePstFile::create_in_folder(file, &["Inbox"], &theirs("Theirs", "<theirs@example.com>")).unwrap());
+    drop(UnicodePstFile::append_in_folder(file, &["Inbox"], &theirs("Both", "<m1@example.com>")).unwrap());
+}
+
+/// Exporting into a data file already there adds to it, as Outlook's export does: what it had
+/// stays, a message it already has (by Message-ID) isn't written twice, and a second export adds
+/// nothing. Something there that isn't a data file is left alone, and said so.
+#[test]
+fn a_data_file_already_there_is_added_to() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-pst-export-added-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let store = inbox_account(&dir, &[(1, "Both"), (2, "Ours")]);
+    let file = dir.join("Outlook.pst");
+    theirs(&file);
+    let done = export(&store, "a1", "Riley's mail", &file, &mut |_| {}).unwrap();
+    assert_eq!((done.messages, done.already), (1, 1));
+    assert_eq!(subjects_back(&file, &dir, "back1"), ["Both", "Ours", "Theirs"]);
+    let again = export(&store, "a1", "Riley's mail", &file, &mut |_| {}).unwrap();
+    assert_eq!((again.messages, again.already), (0, 2));
+    assert_eq!(subjects_back(&file, &dir, "back2"), ["Both", "Ours", "Theirs"]);
+    assert!(!dir.join("Outlook.pst.part").exists());
+
+    let other = dir.join("Notes.pst");
+    std::fs::write(&other, b"an older file").unwrap();
+    assert!(export(&store, "a1", "Riley's mail", &other, &mut |_| {}).is_err_and(|e| e.contains("isn't an Outlook data file")));
+    assert_eq!(std::fs::read(&other).unwrap(), b"an older file");
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -371,11 +371,16 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     assert!(
         matches!(s.take_jobs().as_slice(), [Job::ExportPst { account, path, name }] if *account == id && path == "C:/out/Archive.pst" && name == "Archive 2024")
     );
-    s.apply(Event::Exported { account: id.clone(), messages: 100, skipped: 0, done: false, error: None });
+    s.apply(Event::Exported { account: id.clone(), messages: 100, skipped: 0, already: 0, done: false, error: None });
     assert!(s.notices.last().is_some_and(|n| n.text.contains("100 messages exported so far")));
-    s.apply(Event::Exported { account: id.clone(), messages: 120, skipped: 3, done: true, error: None });
+    s.apply(Event::Exported { account: id.clone(), messages: 120, skipped: 3, already: 0, done: true, error: None });
     assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("120 messages exported (3 not on this computer")));
-    s.apply(Event::Exported { account: id.clone(), messages: 0, skipped: 0, done: true, error: Some("disk full".into()) });
+    // Added to a data file that had some already: said so.
+    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 0, already: 9, done: true, error: None });
+    assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("5 messages exported (9 the data file already had)")));
+    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 2, already: 9, done: true, error: None });
+    assert!(s.notices.last().is_some_and(|n| n.text.contains("(2 not on this computer were left out; 9 the data file already had)")));
+    s.apply(Event::Exported { account: id.clone(), messages: 0, skipped: 0, already: 0, done: true, error: Some("disk full".into()) });
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("disk full")));
     done(s);
 }

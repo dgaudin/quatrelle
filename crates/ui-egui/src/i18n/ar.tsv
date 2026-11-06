@@ -1795,6 +1795,8 @@ month	May	مايو
 	{name}: the data file could not be opened: {error}	{name}: تعذّر فتح ملف البيانات: {error}
 	{name}: {messages} messages exported	{name}: عدد الرسائل المصدّرة: {messages}
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: عدد الرسائل المصدّرة: {messages} (أُغفل ما ليس على هذا الكمبيوتر: {skipped})
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: عدد الرسائل المصدّرة: {messages} (كان في ملف البيانات من قبل: {already})
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: عدد الرسائل المصدّرة: {messages} (أُغفل ما ليس على هذا الكمبيوتر: {skipped}؛ كان في ملف البيانات من قبل: {already})
 	{name}: {messages} messages exported so far…	{name}: عدد الرسائل المصدّرة حتى الآن: {messages}…
 	{name}: {messages} messages imported	{name}: عدد الرسائل المستوردة: {messages}
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: عدد الرسائل المستوردة: {messages} (تعذّرت قراءة: {skipped})

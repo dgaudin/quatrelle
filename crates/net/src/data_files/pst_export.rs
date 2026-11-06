@@ -10,9 +10,20 @@
 //! skipped. The writer makes mail items only, so the account's calendar and contacts go beside
 //! the file in the standard formats every calendar and address book reads (`… Calendar.ics`,
 //! `… Contacts.vcf`).
+//!
+//! A data file that's already there is added to, as Outlook's export does: its mail stays, the
+//! account's goes into folders of the same names, and messages already in it (by `Message-ID`)
+//! aren't written twice. The file is written as a copy that replaces it at the end, so a failed
+//! export leaves it as it was.
 
+use std::collections::HashSet;
+use std::io;
 use std::path::Path;
+use std::rc::Rc;
 
+use outlook_pst::messaging::message::{Message as _, UnicodeMessage};
+use outlook_pst::messaging::store::{Store as PstStore, UnicodeStore};
+use outlook_pst::ndb::node_id::NodeId;
 use outlook_pst::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
 use quatrelle_mime as mime;
 use quatrelle_model::{FolderRole, MessageKey, utf7};
@@ -25,6 +36,8 @@ const BATCH: usize = 2000;
 const BATCH_BYTES: usize = 48 << 20;
 /// Attachments larger than this are left out.
 const MAX_ATTACHMENT: usize = 100 * 1024 * 1024;
+/// How deep folders in a data file already there are looked through.
+const MAX_DEPTH: usize = 64;
 
 /// What an export did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -32,6 +45,8 @@ pub struct Exported {
     pub messages: usize,
     /// Messages whose body isn't on this computer, or that couldn't be read.
     pub skipped: usize,
+    /// Messages a data file already there had (by `Message-ID`), not written again.
+    pub already: usize,
     /// Events and people written beside the data file.
     pub events: usize,
     pub contacts: usize,
@@ -47,14 +62,69 @@ use item::{Owned, owned};
 use place::names;
 use writing::write;
 
-/// Write `account`'s mail to a new data file at `path` (replacing a file already there), named
-/// `name` when opened. Calls `progress` with the number of messages written so far.
+/// The `Message-ID`s in an existing data file's folders (a file the writer can add to: the Unicode
+/// format, not Outlook's offline copy of a server account). The file is read as the import reads
+/// one, within its limit for a value, and a panic in the reader is an error.
+fn ids_in(path: &Path) -> Result<HashSet<String>, String> {
+    let mut head = [0u8; 12];
+    std::fs::File::open(path).and_then(|mut f| io::Read::read_exact(&mut f, &mut head)).map_err(|e| e.to_string())?;
+    if !head.starts_with(b"!BDN") || head.get(8..10) != Some(b"SM") {
+        return Err("it isn't an Outlook data file: choose another name to make a new one".into());
+    }
+    let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> io::Result<HashSet<String>> {
+        let pst = outlook_pst::UnicodePstFile::open(path)?;
+        pst.set_max_value_size(crate::pst::MAX_VALUE);
+        let store = UnicodeStore::read(Rc::new(pst))?;
+        let mut ids = HashSet::new();
+        let any: Rc<dyn PstStore> = store.clone();
+        let top = any.open_folder(&any.properties().ipm_sub_tree_entry_id()?)?;
+        let mut stack = vec![(top, 0usize)];
+        while let Some((folder, depth)) = stack.pop() {
+            if let Some(contents) = folder.contents_table() {
+                for row in contents.rows_matrix() {
+                    let Ok(entry) = any.properties().make_entry_id(NodeId::from(u32::from(row.id()))) else { continue };
+                    let Ok(m) = UnicodeMessage::read(store.clone(), &entry, Some(&[0x1035])) else { continue };
+                    if let Some(id) = m.properties().get(0x1035).and_then(crate::pst::text_of) {
+                        ids.insert(quatrelle_model::thread::norm_id(&id));
+                    }
+                }
+            }
+            if depth < MAX_DEPTH
+                && let Some(table) = folder.hierarchy_table()
+            {
+                for row in table.rows_matrix() {
+                    if let Ok(sub) = any.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| any.open_folder(&e)) {
+                        stack.push((sub, depth + 1));
+                    }
+                }
+            }
+        }
+        Ok(ids)
+    }));
+    match read {
+        Ok(Ok(ids)) => Ok(ids),
+        // ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION.
+        Ok(Err(e)) if matches!(e.raw_os_error(), Some(32 | 33)) => {
+            Err("Outlook (or another program) has this data file open: close Outlook, including from the notification area, and try again".into())
+        }
+        Ok(Err(_)) | Err(_) => Err("this data file can't be read, so mail can't be added to it: choose another name to make a new one".into()),
+    }
+}
+
+/// Write `account`'s mail to a data file at `path`, named `name` when it's new; a file already
+/// there is added to. Calls `progress` with the number of messages written so far.
 pub fn export(store: &Store, account: &str, name: &str, path: &Path, progress: &mut dyn FnMut(usize)) -> Result<Exported, String> {
     let folders = store.load_folders(account).map_err(|e| e.to_string())?;
     let mut done = Exported::default();
-    let mut created = false;
     let temp = path.with_extension("pst.part");
     let _ = std::fs::remove_file(&temp);
+    // Added to: a copy of it, with the messages it has already left out.
+    let existing = path.is_file();
+    let had = if existing { ids_in(path)? } else { HashSet::new() };
+    if existing {
+        std::fs::copy(path, &temp).map_err(|e| e.to_string())?;
+    }
+    let mut created = existing;
     let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
         for f in folders.iter().filter(|f| f.selectable) {
             let Ok(st) = store.load_folder(account, &f.path) else { continue };
@@ -65,6 +135,7 @@ pub fn export(store: &Store, account: &str, name: &str, path: &Path, progress: &
             for s in &st.messages {
                 let key = MessageKey { account: account.to_string(), folder: f.path.clone(), validity: s.key.validity, uid: s.key.uid };
                 match store.read_body(&key).and_then(|raw| owned(&raw)) {
+                    Some(m) if !m.message_id.is_empty() && had.contains(&quatrelle_model::thread::norm_id(&m.message_id)) => done.already += 1,
                     Some(m) => {
                         bytes += m.body.len() + m.html.as_ref().map_or(0, String::len) + m.files.iter().map(|f| f.3.len()).sum::<usize>();
                         batch.push(m);
@@ -89,6 +160,8 @@ pub fn export(store: &Store, account: &str, name: &str, path: &Path, progress: &
     }));
     let result = match written {
         Ok(Ok(())) if !created => Err("there is no mail on this computer to export".to_string()),
+        // A file added to keeps its own name.
+        Ok(Ok(())) if existing => Ok(()),
         Ok(Ok(())) => UnicodePstFile::set_store_display_name(&temp, name).map(drop).map_err(|e| e.to_string()),
         Ok(Err(e)) => Err(e),
         Err(_) => Err("the data file could not be written".into()),
