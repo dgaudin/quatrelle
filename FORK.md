@@ -4641,6 +4641,71 @@ frappe et le ruban dans un bloc à la souris, dans la vraie fenêtre.
   - dans les blocs, l'interligne est celui de l'éditeur, un peu plus serré que le volet de lecture ;
     les boîtes posées sur une image sont mesurées en texte, pas en champ.
 
+### État de la récupération : v0.33, sixième partie : les mises à jour plus sûres (S5) (2026-11-06)
+
+Le lot S5 de `merge-tools/survey-v0.33.md`, sur `main`, après S6, plus un reste de S2 (les titres
+des fenêtres de fichiers en anglais). `0ed33889` (mises à jour des versions publiées par dnf,
+pkexec…) n'est pas pris, décision du 06/11. Chaque sonde a été lancée d'abord contre le code
+d'alors, les tests déjà écrits (pour `b2075c71`, les scripts sortis en fonctions sans la
+correction).
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `09f076f7` | reprise de `e6629000` (auteur Zinadin Zidan) : un installateur listé deux fois dans `SHA256SUMS.txt` avec deux sommes n'en a aucune, donc n'est pas installé ; la même somme répétée compte une fois | `installers_come_with_what_to_check_them_against` : **la première ligne gagnait** (`Some(aaaa…)`) → `None`, dans les deux ordres |
+| `f5f35706` | reprise de `b2075c71` (auteur Zinadin Zidan) : l'aide d'installation (PowerShell, `sh`) n'installe ni ne relance rien si Quatrelle tourne encore après les 120 s d'attente ; elle l'écrit dans son journal, la mise à jour attend la fois suivante | `nothing_is_installed_while_quatrelle_still_runs` : **installé** avec le processus du test encore vivant → rien d'installé, « still running » au journal ; installé pour un processus fini |
+| `12f9491f` | adapté de `ee42892e` : l'essai d'écriture du mode portable et de l'outil de mise à jour passe par `store::check_writable` (nouveau), fait comme les fichiers temporaires du cache | `the_write_probe_never_goes_through_what_is_at_its_name` et `the_updaters_write_check_never_goes_through_a_link` : **le fichier visé par un lien vidé** → intact, le lien laissé |
+| `a038b031` | propre au fork (reste de S2) : titres et filtres des fenêtres de fichiers du bureau dans la langue de l'interface | `a_file_dialogs_title_is_in_the_interfaces_language` : **« Save as »** en français → « Enregistrer sous », « Document PDF », « Tous les fichiers », « Fichier XYZ » |
+
+**L'essai d'écriture** (`ee42892e`). Avant, `portable.rs` écrivait `.write-test` et
+`self_update.rs` `.quatrelle-update-probe-<processus>` par `fs::write`, qui suit un lien : un lien
+laissé à ce nom vidait le fichier qu'il désigne, puis était effacé. L'origine passe à
+`create_new` sous le premier libre de 64 noms faits du numéro du processus. **Choix : l'idée de
+S4 plutôt que des noms prévisibles.** `store::check_writable(dir)` (dans `store/src/atomic.rs`, à
+côté de `write_atomic`) prend `new_scratch` et `scratch_beside` : `create_new`, nom de 16 chiffres
+hexadécimaux tirés du hasard du système (`.write-test.<hex>.part`), 16 essais, et n'efface que le
+fichier qu'il a fait. Ainsi, personne ne peut placer d'avance un lien sous le prochain nom, ni
+occuper les 64 noms pour faire passer le dossier pour non inscriptible (le mode portable coupé,
+la mise à jour refusée). Les deux appelants n'ont plus qu'une ligne ; le test du cache
+`the_write_check_leaves_the_folder_as_it_was` vérifie qu'un fichier déjà là reste, et qu'un
+dossier absent ou en lecture seule est refusé (ce dernier sauté pour root).
+
+**Rien d'installé tant que Quatrelle tourne** (`b2075c71`). Pris tel quel, sans la ligne de
+`CHANGELOG.md` que le fork n'a pas : `windows_script` et `unix_script` construisent les scripts
+(délai en paramètre, une seconde dans le test), qui vérifient après l'attente que le processus est
+fini avant l'étape d'installation. Le script macOS passe par `unix_script` ; l'AppImage, remplacée
+tout de suite par Quatrelle elle-même (le fichier monté reste lisible), n'a plus que la relance,
+qui attend de même que l'ancienne ait quitté. La sonde lance le vrai `sh` (PowerShell sous
+Windows).
+
+**Les fenêtres de fichiers** (reste de S2). L'application n'avait que `quatrelle_ui_egui::i18n::t`
+pour « Ajouter à un fichier de données Outlook ». Elle a maintenant ses propres `tl!` et `tf!`
+(en tête de `main.rs` : `apps/quatrelle/src/` a déjà 16 fichiers Rust), qui lisent les catalogues
+de l'interface dans la langue du fil de la fenêtre, celui où les fenêtres de fichiers sont faites.
+Le test des catalogues (`every_interface_string_is_translated`) lit désormais aussi les `tl!(` et
+`tf!(` de `apps/quatrelle/src/` : un texte non traduit de l'application le fait échouer. Treize
+textes nouveaux dans les 13 catalogues, dans les mots qu'ils emploient déjà (« Enregistrer sous »,
+« Joindre des fichiers », « Insérer des images », « Enregistrer les pièces jointes dans »,
+« Certificat avec sa clé », « Clé OpenPGP », « Règles Quatrelle », « Fichiers de données
+Outlook/Quatrelle », « Document PDF », « Fiche de contact », « Tous les fichiers », « Fichier
+{ext} ») ; les autres (« Importer un certificat », « Ouvrir un fichier de données », « Images »,
+« Calendrier »…) existaient.
+
+- **Ce que verra le propriétaire** : les fenêtres Enregistrer sous, Joindre des fichiers, Insérer
+  des images, Enregistrer les pièces jointes dans, Importer un certificat / une clé OpenPGP / des
+  règles et Ouvrir un fichier de données ont leur titre et leurs filtres en français. Le reste ne se
+  voit pas : l'outil de mise à jour ne sert qu'aux versions de test (plus publiées sur GitHub depuis
+  la 1.2), et l'essai d'écriture ne change rien tant que personne n'a placé de lien dans le dossier.
+- **Vérifié** : chaque sonde avant et après ; tests de `updates`, de `atomic`, de l'application
+  (90) et des catalogues ; `cargo xtask ci` (wasm compris).
+- **Vérifiable seulement en vrai** : le titre en français dans la fenêtre du portail GNOME (le
+  portail l'affiche tel que rfd le donne) ; l'aide d'installation sous Windows (PowerShell) et
+  macOS, jamais lancée ici.
+- **Reste, remarqué** :
+  - la sonde de `b2075c71` prend le numéro d'un processus fini pour « Quatrelle a quitté » : s'il
+    était réattribué dans la seconde, le test échouerait (très improbable) ;
+  - `apps/quatrelle/src/` reste à 16 fichiers Rust : la prochaine pièce de l'application devra
+    ouvrir un sous-dossier.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
