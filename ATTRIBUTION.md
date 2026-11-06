@@ -7,7 +7,11 @@ The interface icons are Microsoft's Fluent UI System Icons
 ([microsoft/fluentui-system-icons](https://github.com/microsoft/fluentui-system-icons), from the
 `@fluentui/svg-icons` 1.1.292 package), MIT licence, copyright (c) 2020 Microsoft Corporation; the
 licence is `assets/icons/fluent/LICENSE.txt`. Otherwise Quatrelle ships no third-party assets: the sample picture is generated in code, and the UI uses an
-installed system font when one is found. Builds made with `CRAFT_FONTS_DIR` (the releases) embed
+installed system font when one is found. The app does carry egui's built-in fonts, which come in
+with the `epaint_default_fonts` crate (egui's fallbacks for text, symbols and emoji, under their
+own licences, in the crate beside each font): Ubuntu Light (Ubuntu Font Licence 1.0), Hack (MIT
+and the Bitstream Vera licence), Noto Emoji (SIL Open Font License 1.1), and John Slegers'
+emoji-icon-font with egui's subset of it, egui-icons (MIT). Builds made with `CRAFT_FONTS_DIR` (the releases) embed
 the fonts listed in [storytold/craft-fonts](https://github.com/storytold/craft-fonts)' `ATTRIBUTION.md`
 (SIL Open Font License 1.1); none are in this repository, and each one's licence is shown on the
 About page. On Linux, the title bar drawn under GNOME's Wayland session (winit's
