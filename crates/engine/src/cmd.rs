@@ -106,6 +106,7 @@ mod accounts;
 mod compose;
 mod files;
 mod home;
+mod kept_files;
 mod navigation;
 mod people;
 mod pgp;
@@ -130,6 +131,7 @@ pub fn registry() -> Registry {
     all.extend(pim::commands());
     all.extend(scheduling::commands());
     all.extend(files::commands());
+    all.extend(kept_files::commands());
     all.extend(security::commands());
     all.extend(pgp::commands());
     all.extend(tasks::commands());

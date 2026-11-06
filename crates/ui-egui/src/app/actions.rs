@@ -405,6 +405,8 @@ impl MailApp {
             Action::SetLanguage(l) => self.ui.language = l,
             Action::OpenUrl(url) => self.open_link(&url),
             Action::OpenMeeting(url) => self.open_meeting(&url),
+            Action::OpenItemFile(f) => self.item_file(f, true),
+            Action::SaveItemFile(f) => self.item_file(f, false),
             Action::MakeMeetingProfile => self.make_meeting_profile(),
             Action::OpenShare(link) => self.open_share(&link),
             Action::SignInAgain(id) => self.sign_in_again(&id),

@@ -141,6 +141,7 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleF
         ui.add_enabled_ui(!f.read_only, |ui| times(ui, t, f, s));
     } else {
         header(ui, t, f, s, people, acts);
+        super::files::event_strip(ui, t, f, acts);
         body(ui, t, f, acts);
     }
     // A name several people fit in one of its lines: which one, over the window.

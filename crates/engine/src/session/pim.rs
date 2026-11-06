@@ -16,6 +16,7 @@ pub use quatrelle_model::pim::PIM_DOC;
 
 mod conflicts;
 mod deleting;
+mod files;
 mod find;
 mod moving;
 mod notes;

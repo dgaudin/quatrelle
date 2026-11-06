@@ -11,6 +11,7 @@ mod conflicts;
 mod find;
 mod gone;
 mod guests;
+mod kept_files;
 mod reminders;
 mod showing;
 mod web;

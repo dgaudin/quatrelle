@@ -570,6 +570,13 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             if !c.anniversary.is_empty() {
                 field(ui, &t, Icon::Calendar, &c.anniversary, tl!("Anniversary"));
             }
+            // The files kept with them (a `.pst` import's), as a message's attachments.
+            let files = s.card_files(&c.uid);
+            if !files.is_empty() {
+                ui.add_space(10.0);
+                let of = crate::pim_dialogs::FilesOf::Contact { uid: c.uid.clone() };
+                crate::pim_dialogs::files::strip(ui, &t, &of, &files, acts);
+            }
             if !c.note.is_empty() {
                 ui.add_space(10.0);
                 ui.label(RichText::new(tl!("Notes")).font(theme::bold(13.0)).color(t.dim));

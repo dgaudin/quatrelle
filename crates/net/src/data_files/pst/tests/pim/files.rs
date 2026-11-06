@@ -48,6 +48,14 @@ fn pictures_and_files_come_in_on_cards_and_events() {
     assert_eq!(file_lines(&card.extra), ["X-QUATRELLE-ATTACH;X-FILENAME=\"cv.pdf\""]);
     assert_eq!(file_lines(&pim.events[0].event.extra), ["ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"agenda.pdf\""]);
     assert_eq!(b.done.files_left_out.get(&FileLeftOut::NoPlace), Some(&1), "{:?}", b.done);
+    // What the contact's page and the appointment's window show of them, and open (R23).
+    use quatrelle_model::pim::files::{card_file_data, card_files, event_file_data, event_files};
+    let shown = |f: Vec<quatrelle_model::pim::files::KeptFile>| f.into_iter().map(|f| (f.name, f.mime, f.size)).collect::<Vec<_>>();
+    assert_eq!(shown(card_files(card)), [("cv.pdf".to_string(), "application/pdf".to_string(), 4)]);
+    assert_eq!(card_file_data(card, 0).as_deref(), Some(&b"%PDF"[..]));
+    let event = &pim.events[0].event;
+    assert_eq!(shown(event_files(event)), [("agenda.pdf".to_string(), "application/pdf".to_string(), 8)]);
+    assert_eq!(event_file_data(event, 0).as_deref(), Some(&b"%PDF-1.7"[..]));
 }
 
 /// A file as the import holds it.
