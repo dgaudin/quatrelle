@@ -474,6 +474,8 @@ pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<u
         .iter()
         .flatten()
         .filter_map(|s| s.image.clone())
+        // And those its layout shows (a reply quotes it by its layout when it has one).
+        .chain(layout_pictures(&p.layout))
         .map(|src| {
             let at = picture_attachment(p, &src);
             (src, at)
@@ -518,16 +520,32 @@ pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<u
             }
         }
     }
-    for span in p.rich.iter_mut().flatten() {
-        let Some(src) = span.image.clone() else { continue };
+    // In the text and in its layout.
+    let mut quote = |span: &mut Span| {
+        let Some(src) = span.image.clone() else { return };
         if let Some((_, cid)) = given.iter().find(|(s, _)| *s == src) {
             span.image = Some(format!("cid:{cid}"));
         } else if trackers.contains(&src) {
             span.image = None;
             span.text.clear();
         }
-    }
+    };
+    p.rich.iter_mut().flatten().for_each(&mut quote);
+    crate::layout::each_span(&mut p.layout, &mut quote);
     (out, used)
+}
+
+/// The pictures in a layout's text, in order.
+fn layout_pictures(blocks: &[crate::layout::Block]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (lines, _) in crate::layout::text_blocks(blocks) {
+        for src in lines.iter().flatten().filter_map(|s| s.image.as_ref()) {
+            if !out.contains(src) && out.len() < QUOTED_PICTURES * 4 {
+                out.push(src.clone());
+            }
+        }
+    }
+    out
 }
 
 /// A picture written into HTML as `data:image/…;base64,…`: its type and bytes.

@@ -25,6 +25,7 @@ use crate::RichText;
 mod blocks;
 mod clean;
 mod edges;
+mod flat;
 mod lengths;
 mod styling;
 pub(crate) use blocks::background_pictures;
@@ -33,6 +34,8 @@ pub use clean::clean_html;
 pub(crate) use edges::length_px;
 use edges::*;
 pub use edges::{Border, Edges, MAX_BORDER, MAX_PADDING, MAX_RADIUS, Padding, VAlign};
+pub(crate) use flat::each_span;
+pub use flat::{cell_text, flatten, text_blocks};
 pub use styling::inline_css;
 pub(crate) use styling::{font_attr_px, font_px};
 

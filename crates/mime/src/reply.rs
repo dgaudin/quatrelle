@@ -98,10 +98,24 @@ fn quoted_original(p: &Parsed, clock: &Clock, words: &QuoteWords) -> (String, ri
         st.restyle(&line, 1..1 + label.chars().count(), |_| bold.clone());
         rich::append(&mut text, &mut styles, &line, &st);
     }
-    let (orig, ost) = if p.had_html && !p.rich.is_empty() { rich::from_rich(&p.rich) } else { (p.text.clone(), rich::Styles::plain(&p.text)) };
+    let (orig, ost) = quoted_body(p);
     rich::append(&mut text, &mut styles, "\n\n", &rich::Styles::plain("\n\n"));
     rich::append(&mut text, &mut styles, &orig, &ost);
     (text, styles)
+}
+
+/// A message's body as text and styles to edit, with its own formatting. Mail laid out in tables
+/// goes as its blocks of text one after another, each lined up as it was: its formatted text
+/// (`rich`) draws the tables in lines of `│` and `─`, which came out as such, padded with spaces
+/// and wrapped wrongly, under a reply.
+pub fn quoted_body(p: &Parsed) -> (String, rich::Styles) {
+    if !p.layout.is_empty() {
+        layout::flatten(&p.layout)
+    } else if p.had_html && !p.rich.is_empty() {
+        rich::from_rich(&p.rich)
+    } else {
+        (p.text.clone(), rich::Styles::plain(&p.text))
+    }
 }
 
 /// A reply or forward of `p`, as plain text. `me` are the user's own addresses, left out of
