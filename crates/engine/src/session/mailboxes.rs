@@ -128,11 +128,12 @@ impl Session {
             if self.account(account).is_none_or(AccountState::is_local) {
                 self.finish_local_marks();
             }
-            self.lists_read = self.lists_read.wrapping_add(1);
             let st = match &self.store {
                 Some(s) => s.load_folder(account, folder)?.shared(),
                 None => FolderState::default(),
             };
+            let (lists, messages) = self.lists_read;
+            self.lists_read = (lists.wrapping_add(1), messages.wrapping_add(st.messages.len() as u64));
             self.cache.insert(k.clone(), st);
             self.cache_order.retain(|o| *o != k);
             if scan {
@@ -153,7 +154,12 @@ impl Session {
     /// How many folders' lists were read from the cache on disk (not found in memory), for the
     /// tests and benches of what a look through the mailbox costs.
     pub fn lists_read(&self) -> u64 {
-        self.lists_read
+        self.lists_read.0
+    }
+
+    /// How many messages the lists [`Session::lists_read`] counts held: what was read again.
+    pub fn messages_read(&self) -> u64 {
+        self.lists_read.1
     }
 
     /// The folders whose lists are in memory, the least recently used first (what a look

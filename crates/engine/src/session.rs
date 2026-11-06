@@ -347,8 +347,8 @@ pub struct Session {
     pending_marks: BTreeMap<u64, (MessageKey, Flag)>,
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
-    /// Folders' lists read from the cache on disk ([`Session::lists_read`]).
-    lists_read: u64,
+    /// Folders' lists read from the cache on disk, and their messages ([`Session::lists_read`]).
+    lists_read: (u64, u64),
     /// The address book (recipient suggestions, Select Names, the Focused Inbox): kept on disk,
     /// and only the mail new in a folder read into it (see `session/mailboxes/contacts.rs`).
     contacts: Contacts,
@@ -536,7 +536,7 @@ impl Session {
             aside_on_disk: HashSet::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
-            lists_read: 0,
+            lists_read: (0, 0),
             contacts: Contacts::default(),
             people: mailboxes::People::default(),
             senders: None,
