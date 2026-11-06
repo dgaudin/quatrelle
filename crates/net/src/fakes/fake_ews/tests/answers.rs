@@ -131,3 +131,36 @@ fn an_answer_refused_while_the_server_is_busy_is_tried_again() {
         assert!(out.errors[0].starts_with("Review: "), "{:?}", out.errors);
     }
 }
+
+/// What the organizer meant the meeting to show as once accepted (`PidLidIntendedBusyStatus`,
+/// on the guest's copy as on the invitation) is read with it: accepting shows it at once, as
+/// Outlook does, not Busy until the next read.
+#[test]
+fn the_status_the_organizer_meant_is_read() {
+    use quatrelle_model::ical::{ShowAs, intended_show_as};
+    for (value, meant) in [("0", Some(ShowAs::Free)), ("3", Some(ShowAs::OutOfOffice)), ("-1", None), ("junk", None)] {
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        let meeting = parse(&format!(
+            "<t:CalendarItem><t:Subject>All hands</t:Subject><t:Start>2026-10-27T09:00:00Z</t:Start><t:End>2026-10-27T10:00:00Z</t:End>\
+             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>mtg-2</t:UID><t:CalendarItemType>Single</t:CalendarItemType>\
+             <t:LegacyFreeBusyStatus>Tentative</t:LegacyFreeBusyStatus>\
+             <t:Organizer><t:Mailbox><t:Name>Ana</t:Name><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:Mailbox></t:Organizer>\
+             <t:MyResponseType>NoResponseReceived</t:MyResponseType>\
+             <t:ExtendedProperty><t:ExtendedFieldURI DistinguishedPropertySetId=\"Appointment\" PropertyId=\"33316\" PropertyType=\"Integer\"/>\
+             <t:Value>{value}</t:Value></t:ExtendedProperty></t:CalendarItem>"
+        ));
+        d.pim.push(("E2".into(), cal, meeting.kids[0].clone()));
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let out = crate::ews_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+        let e = out.events.iter().find(|e| same_meeting(&e.event.uid, "mtg-2")).expect("the meeting");
+        assert_eq!(e.event.show_as, ShowAs::Tentative, "shown as the server has it until answered");
+        assert_eq!(intended_show_as(&e.event), meant, "meant: {value}");
+        let mut answered = e.event.clone();
+        quatrelle_model::ical::show_as_answered(&mut answered, "ACCEPTED");
+        assert_eq!(answered.show_as, meant.unwrap_or(ShowAs::Busy), "accepted: {value}");
+    }
+}
