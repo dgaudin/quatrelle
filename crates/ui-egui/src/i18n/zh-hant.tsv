@@ -1941,3 +1941,11 @@ folder	Conflicts	衝突
 	No match	無相符項目
 	Previous result	上一個結果
 	Next result	下一個結果
+	the OpenPGP settings could not be saved: {error}	無法儲存 OpenPGP 設定: {error}
+	The OpenPGP key couldn't be kept: {error}	無法保留 OpenPGP 金鑰: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	你的 {who} OpenPGP 金鑰已建立: 請儲存一份備份
+	Your OpenPGP key for {who} is ready	你的 {who} OpenPGP 金鑰已就緒
+	Your OpenPGP key now runs until {until}	你的 OpenPGP 金鑰現在有效至 {until}
+	The OpenPGP key's backup couldn't be saved: {error}	無法儲存 OpenPGP 金鑰的備份: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	OpenPGP 金鑰的備份已儲存: 請將它和它的密碼片語保存在安全的地方
+	the system keychain isn't available: {error}	系統鑰匙圈無法使用: {error}

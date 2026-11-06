@@ -1941,3 +1941,11 @@ menu	View	Ver
 	No match	Sin resultados
 	Previous result	Resultado anterior
 	Next result	Resultado siguiente
+	the OpenPGP settings could not be saved: {error}	No se pudo guardar la configuración de OpenPGP: {error}
+	The OpenPGP key couldn't be kept: {error}	No se pudo conservar la clave OpenPGP: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	Tu clave OpenPGP para {who} está creada: guarda una copia de seguridad
+	Your OpenPGP key for {who} is ready	Tu clave OpenPGP para {who} está lista
+	Your OpenPGP key now runs until {until}	Tu clave OpenPGP ahora es válida hasta el {until}
+	The OpenPGP key's backup couldn't be saved: {error}	No se pudo guardar la copia de seguridad de la clave OpenPGP: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	La copia de seguridad de la clave OpenPGP está guardada: consérvala, con su frase de contraseña, en un lugar seguro
+	the system keychain isn't available: {error}	el llavero del sistema no está disponible: {error}

@@ -1936,3 +1936,11 @@ folder	Conflicts	التعارضات
 	No match	لا توجد نتائج
 	Previous result	النتيجة السابقة
 	Next result	النتيجة التالية
+	the OpenPGP settings could not be saved: {error}	تعذّر حفظ إعدادات OpenPGP: {error}
+	The OpenPGP key couldn't be kept: {error}	تعذّر الاحتفاظ بمفتاح OpenPGP: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	أُنشئ مفتاح OpenPGP الخاص بك لـ {who}: احفظ نسخة احتياطية منه
+	Your OpenPGP key for {who} is ready	مفتاح OpenPGP الخاص بك لـ {who} جاهز
+	Your OpenPGP key now runs until {until}	أصبح مفتاح OpenPGP الخاص بك صالحًا حتى {until}
+	The OpenPGP key's backup couldn't be saved: {error}	تعذّر حفظ النسخة الاحتياطية لمفتاح OpenPGP: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	حُفظت النسخة الاحتياطية لمفتاح OpenPGP: احتفظ بها وبعبارة مرورها في مكان آمن
+	the system keychain isn't available: {error}	سلسلة مفاتيح النظام غير متاحة: {error}

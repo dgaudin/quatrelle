@@ -1940,3 +1940,11 @@ menu	View	Просмотр
 	No match	Совпадений нет
 	Previous result	Предыдущее совпадение
 	Next result	Следующее совпадение
+	the OpenPGP settings could not be saved: {error}	Не удалось сохранить настройки OpenPGP: {error}
+	The OpenPGP key couldn't be kept: {error}	Не удалось сохранить ключ OpenPGP: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	Ваш ключ OpenPGP для {who} создан: сохраните его резервную копию
+	Your OpenPGP key for {who} is ready	Ваш ключ OpenPGP для {who} готов
+	Your OpenPGP key now runs until {until}	Ваш ключ OpenPGP теперь действует до {until}
+	The OpenPGP key's backup couldn't be saved: {error}	Не удалось сохранить резервную копию ключа OpenPGP: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	Резервная копия ключа OpenPGP сохранена: храните её и её парольную фразу в надёжном месте
+	the system keychain isn't available: {error}	системная связка ключей недоступна: {error}

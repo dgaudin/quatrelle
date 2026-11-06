@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Keys: secret key files unlocked, public keys read, and what a key is and can do, from its
 //! self-signatures (each checked: a subkey or user ID someone else bound to a key isn't its).
 
@@ -209,6 +210,12 @@ pub(crate) fn parse_public(data: &[u8]) -> Result<SignedPublicKey, Error> {
 pub fn info(data: &[u8]) -> Result<KeyInfo, Error> {
     let key = parse_public(data)?;
     guard(Error::Malformed("a key can't be read"), || Ok(analyse(&key).info))
+}
+
+/// The public key `data` (binary) armored, as a key file is written (`.asc`).
+pub fn armored_public(data: &[u8]) -> Result<String, Error> {
+    let key = parse_public(data)?;
+    guard(Error::Malformed("a key can't be read"), || key.to_armored_string(Default::default()).map_err(|_| Error::Malformed("a key can't be read")))
 }
 
 /// Whether two public keys (binary) are the same key (their primary keys' fingerprints).

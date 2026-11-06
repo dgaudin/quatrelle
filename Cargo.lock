@@ -5375,6 +5375,7 @@ dependencies = [
  "proptest",
  "quatrelle-mime",
  "quatrelle-model",
+ "quatrelle-pgp",
  "quatrelle-print",
  "quatrelle-smime",
  "quatrelle-store",

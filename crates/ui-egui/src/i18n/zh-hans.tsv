@@ -1938,3 +1938,11 @@ menu	View	查看
 	No match	无匹配项
 	Previous result	上一个结果
 	Next result	下一个结果
+	the OpenPGP settings could not be saved: {error}	无法保存 OpenPGP 设置: {error}
+	The OpenPGP key couldn't be kept: {error}	无法保留 OpenPGP 密钥: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	你的 {who} OpenPGP 密钥已创建: 请保存一份备份
+	Your OpenPGP key for {who} is ready	你的 {who} OpenPGP 密钥已就绪
+	Your OpenPGP key now runs until {until}	你的 OpenPGP 密钥现在有效期至 {until}
+	The OpenPGP key's backup couldn't be saved: {error}	无法保存 OpenPGP 密钥的备份: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	OpenPGP 密钥的备份已保存: 请将它和它的密码短语保存在安全的地方
+	the system keychain isn't available: {error}	系统钥匙串不可用: {error}

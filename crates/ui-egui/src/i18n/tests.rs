@@ -149,6 +149,8 @@ fn notice_wordings() -> BTreeSet<String> {
     out.extend(KNOWN_ERRORS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
     out.insert(quatrelle_engine::STILL_COMING.to_string());
+    // The keychain's refusal, as the network layer puts it before what the system said.
+    out.insert(format!("{}: {{error}}", quatrelle_engine::model::job::NO_KEYCHAIN));
     out
 }
 
@@ -684,6 +686,12 @@ fn a_notice_is_said_in_the_interfaces_language() {
     s.notice_with("It will be sent {when}", &[("when", "Wed 29 Oct 14:30")], false);
     let said = s.notices.last().map(notice).unwrap_or_default();
     assert!(!said.contains("Wed") && !said.contains("It will"), "{said}");
+    // OpenPGP's keychain locked (GNOME's keyring): Quatrelle's words translated, the system's
+    // as they came.
+    let locked = format!("{}: the collection is locked", quatrelle_engine::model::job::NO_KEYCHAIN);
+    s.notice_with("The OpenPGP key couldn't be kept: {error}", &[("error", &locked)], true);
+    let said = s.notices.last().map(notice).unwrap_or_default();
+    assert_eq!(said, "La clé OpenPGP n’a pas pu être conservée : le trousseau du système n’est pas disponible : the collection is locked");
     s.notice_with("{name}: {messages} messages imported", &[("name", "Didier"), ("messages", "12")], false);
     assert!(s.notices.last().map(notice).is_some_and(|n| n.contains("Didier") && n.contains("12") && !n.contains("imported")));
     set_current(Lang::EN);

@@ -1937,3 +1937,11 @@ folder	Conflicts	競合
 	No match	見つかりません
 	Previous result	前の結果
 	Next result	次の結果
+	the OpenPGP settings could not be saved: {error}	OpenPGP 設定を保存できませんでした: {error}
+	The OpenPGP key couldn't be kept: {error}	OpenPGP キーを保持できませんでした: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	{who} の OpenPGP キーを作成しました: バックアップを保存してください
+	Your OpenPGP key for {who} is ready	{who} の OpenPGP キーの準備ができました
+	Your OpenPGP key now runs until {until}	OpenPGP キーの有効期限は {until} になりました
+	The OpenPGP key's backup couldn't be saved: {error}	OpenPGP キーのバックアップを保存できませんでした: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	OpenPGP キーのバックアップを保存しました: パスフレーズとともに安全な場所に保管してください
+	the system keychain isn't available: {error}	システムのキーチェーンを利用できません: {error}
