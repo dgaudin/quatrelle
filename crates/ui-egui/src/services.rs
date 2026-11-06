@@ -117,6 +117,18 @@ pub enum FileAsk {
     DataFile,
 }
 
+/// How printing through the system's print window went ([`Services::print`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PrintOutcome {
+    /// Handed to the printer.
+    Sent,
+    /// Cancelled in the print window: nothing more is said.
+    Cancelled,
+    /// The print window couldn't be had, or failed (why, for the log): the window falls back on
+    /// the PDF opened in the viewer.
+    Failed(String),
+}
+
 /// Where slow work runs without holding up the window ([`Services::background`]): each lane
 /// does its work in order, one at a time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -165,6 +177,18 @@ pub trait Services {
     }
     /// Open a file with the system's default app.
     fn open_path(&mut self, path: &std::path::Path) -> Result<(), String>;
+    /// Print `pdf`, a PDF document called `title`, through the system's print window (printer,
+    /// pages, copies) without waiting: nothing is saved first, and how it went comes later,
+    /// through [`Services::take_printed`]. False when there's no print window to ask here: the
+    /// window falls back on the PDF opened in the viewer. The default has none.
+    fn print(&mut self, _title: &str, _pdf: Vec<u8>) -> bool {
+        false
+    }
+    /// How the printing asked for went, once it's known (asked every frame meanwhile); `None`
+    /// while the print window is open, or when nothing is being printed.
+    fn take_printed(&mut self) -> Option<PrintOutcome> {
+        None
+    }
     /// Where a build that updates itself is with the next version. The default: nowhere.
     fn update_state(&mut self) -> UpdateState {
         UpdateState::None

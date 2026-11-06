@@ -2032,3 +2032,6 @@ folder	Conflicts	Conflitti
 	It can't be encrypted for {names}: no certificate	Non si può crittografare per {names}: nessun certificato
 	Downloading {name}…	Download di {name}…
 	{name} could not be downloaded: {error}	Impossibile scaricare {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	La finestra di stampa del sistema non è disponibile: aperto come PDF, stampalo dal visualizzatore
+	Sent to the printer	Inviato alla stampante
+	Downloaded as a PDF: print it from the viewer	Scaricato come PDF: stampalo dal visualizzatore

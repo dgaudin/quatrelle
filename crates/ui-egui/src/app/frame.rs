@@ -31,6 +31,8 @@ impl MailApp {
         self.send_when_resolved(ctx);
         // A file dialog answered: what asked (Attach, Save As…) completes.
         self.file_dialog_answers(ctx);
+        // The print window answered: printed, cancelled, or the PDF opened in the viewer instead.
+        self.print_answers(ctx);
         self.announce(ctx);
         // Reminders answered from their notification: as from the window's buttons; clicked:
         // the window comes forward, the Reminders window with it. (Before the due list is

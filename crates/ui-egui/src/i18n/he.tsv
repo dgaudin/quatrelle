@@ -2029,3 +2029,6 @@ folder	Conflicts	התנגשויות
 	It can't be encrypted for {names}: no certificate	אי אפשר להצפין עבור {names}: אין תעודה
 	Downloading {name}…	מוריד את {name}…
 	{name} could not be downloaded: {error}	לא ניתן היה להוריד את {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	חלון ההדפסה של המערכת אינו זמין: נפתח כ-PDF, הדפס אותו מהמציג
+	Sent to the printer	נשלח למדפסת
+	Downloaded as a PDF: print it from the viewer	הורד כ-PDF: הדפס אותו מהמציג

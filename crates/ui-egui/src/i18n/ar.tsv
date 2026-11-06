@@ -2029,3 +2029,6 @@ folder	Conflicts	التعارضات
 	It can't be encrypted for {names}: no certificate	لا يمكن تشفيرها لـ {names}: لا توجد شهادة
 	Downloading {name}…	جارٍ تنزيل {name}…
 	{name} could not be downloaded: {error}	تعذّر تنزيل {name}: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	نافذة الطباعة في النظام غير متاحة: فُتح كملف PDF، اطبعه من العارض
+	Sent to the printer	أُرسل إلى الطابعة
+	Downloaded as a PDF: print it from the viewer	نُزّل كملف PDF: اطبعه من العارض

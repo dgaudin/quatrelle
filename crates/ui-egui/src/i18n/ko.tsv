@@ -2032,3 +2032,6 @@ folder	Conflicts	충돌
 	It can't be encrypted for {names}: no certificate	{names}에게는 암호화할 수 없습니다: 인증서 없음
 	Downloading {name}…	{name} 다운로드 중…
 	{name} could not be downloaded: {error}	{name}을(를) 다운로드할 수 없습니다: {error}
+	The system's print window isn't available: opened as a PDF, print it from the viewer	시스템 인쇄 창을 사용할 수 없습니다: PDF로 열었습니다. 뷰어에서 인쇄하세요
+	Sent to the printer	프린터로 보냈습니다
+	Downloaded as a PDF: print it from the viewer	PDF로 다운로드했습니다: 뷰어에서 인쇄하세요

@@ -14,6 +14,7 @@ mod linked_pictures;
 mod long_text;
 mod pgp;
 mod previews;
+mod printing;
 mod rules;
 mod senders;
 mod source;
