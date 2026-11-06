@@ -727,3 +727,14 @@ fn a_translation_read_from_the_source_is_the_catalogs() {
         }
     }
 }
+
+/// The Language list: English first, the languages in Latin letters by their own names with
+/// accents set aside, then the other scripts; every language once.
+#[test]
+fn the_language_list_reads_in_order() {
+    let names: Vec<&str> = Lang::for_picker().iter().map(|l| l.name()).collect();
+    assert_eq!(names.len(), LANGUAGES.len());
+    let latin = ["English", "Deutsch", "Español", "Français", "Italiano", "Nederlands", "Português (Brasil)"];
+    assert_eq!(names.get(..latin.len()), Some(&latin[..]), "{names:?}");
+    assert!(names.iter().skip(latin.len()).all(|n| !n.is_ascii()), "{names:?}");
+}
