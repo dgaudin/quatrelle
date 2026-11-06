@@ -562,7 +562,7 @@ impl SyncStatus {
 }
 
 mod events;
-pub use events::{Event, HeldKey, Revocation};
+pub use events::{Event, HeldKey, ListChange, Revocation};
 
 mod pgp;
 pub use pgp::{NO_KEYCHAIN, NOT_FOR_YOU, NOT_IN_BROWSER, PgpChange, PgpSignature, PgpWork, Unavailable};

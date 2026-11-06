@@ -6,6 +6,7 @@ use quatrelle_model::{Flag, Flags};
 use super::*;
 
 mod journal;
+mod noted;
 
 /// A big folder's list is kept in pages by number: read back newest first as it was; a flag
 /// change writes one page, new mail the last one; shrunk, the pages go; and a list kept whole
