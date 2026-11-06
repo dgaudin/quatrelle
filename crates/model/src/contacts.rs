@@ -14,6 +14,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
+use crate::search::fold_word;
 use crate::{EmailAddress, Summary};
 
 /// One person.
@@ -29,30 +30,33 @@ pub struct Contact {
     /// Saved in an address book (laid over the mail counted; not kept with the book).
     #[serde(skip)]
     pub saved: bool,
-    /// The name in lower case, kept with it so a suggestion pass doesn't lower every name of
-    /// the book on every key typed (made again when the book is read from disk).
+    /// The name folded as search folds it ([`fold_word`]: lower case, accents gone), kept with it
+    /// so a suggestion pass doesn't fold every name of the book on every key typed (made again
+    /// when the book is read from disk).
     #[serde(skip)]
-    name_lower: String,
+    name_folded: String,
 }
 
 /// What being saved in Contacts counts for: as many messages written to them.
 const SAVED_WEIGHT: f64 = 32.0;
 
 impl Contact {
-    /// The name in lower case.
-    pub fn name_lower(&self) -> &str {
-        &self.name_lower
+    /// The name [folded](fold_word): lower case, its accents gone.
+    pub fn name_folded(&self) -> &str {
+        &self.name_folded
     }
 
     fn set_name(&mut self, name: &str) {
         self.address.name = name.to_string();
-        self.name_lower = name.to_lowercase();
+        self.name_folded = fold_word(name).into_owned();
     }
 
-    /// Whether `q` (trimmed, in lower case, not empty) starts the address, the name, any word of
-    /// the name or any part of the address.
+    /// Whether `q` (trimmed, [folded](fold_word) as search folds what's typed, not empty) starts
+    /// the address, the name, any word of the name or any part of the address: `helene` and
+    /// `Hélène` both start « Hélène Dupré ».
     pub fn matches(&self, q: &str) -> bool {
-        let (name, email) = (self.name_lower.as_str(), self.address.email.as_str());
+        let email = fold_word(&self.address.email);
+        let (name, email) = (self.name_folded.as_str(), email.as_ref());
         email.starts_with(q)
             || name.starts_with(q)
             || name.split(|ch: char| ch.is_whitespace() || ch == '-' || ch == '.').any(|w| w.starts_with(q))
@@ -202,8 +206,8 @@ impl ContactBook {
         self.by_email.values().filter(|c| c.sent > 0).map(|c| crate::lookalike::domain_of(&c.address.email)).filter(|d| !d.is_empty())
     }
 
-    /// The contacts `q` (trimmed, in lower case) matches ([`Contact::matches`]), in no order;
-    /// nothing for an empty one.
+    /// The contacts `q` (trimmed, [folded](fold_word)) matches ([`Contact::matches`]), in no
+    /// order; nothing for an empty one.
     pub fn matches<'a>(&'a self, q: &'a str) -> impl Iterator<Item = &'a Contact> + 'a {
         self.by_email.values().filter(move |c| !q.is_empty() && c.matches(q))
     }
@@ -214,20 +218,20 @@ impl ContactBook {
     }
 
     /// Up to `limit` contacts matching `query` (the start of the address, of the name, or of any
-    /// word of the name; case-insensitive), best first.
+    /// word of the name; case and accents aside), best first.
     pub fn suggest(&self, query: &str, limit: usize, now: i64) -> Vec<Contact> {
-        let q = query.trim().to_lowercase();
+        let q = fold_word(query.trim());
         let mut hits: Vec<(&Contact, f64)> = self.matches(&q).map(|c| (c, c.score(now))).collect();
         hits.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.address.email.cmp(&b.0.address.email)));
         hits.into_iter().take(limit).map(|(c, _)| c.clone()).collect()
     }
 }
 
-/// The book as read from disk, each name's lower case made again.
+/// The book as read from disk, each name's fold made again.
 fn read_contacts<'de, D: serde::Deserializer<'de>>(d: D) -> Result<HashMap<String, Contact>, D::Error> {
     let mut by_email = HashMap::<String, Contact>::deserialize(d)?;
     for c in by_email.values_mut() {
-        c.name_lower = c.address.name.to_lowercase();
+        c.name_folded = fold_word(&c.address.name).into_owned();
     }
     Ok(by_email)
 }
@@ -236,7 +240,6 @@ impl ContactBook {
     /// Everyone known whose name or address contains `query` (everyone for an empty one; accents
     /// read away as the mail search reads them), by name: the address book's list.
     pub fn list(&self, query: &str, limit: usize) -> Vec<Contact> {
-        use crate::search::fold_word;
         let q = fold_word(query.trim());
         let has = |text: &str| fold_word(text).contains(q.as_ref());
         let mut v: Vec<Contact> = self.by_email.values().filter(|c| q.is_empty() || has(&c.address.name) || has(&c.address.email)).cloned().collect();
@@ -375,12 +378,14 @@ mod tests {
     #[test]
     fn a_book_read_from_disk_still_matches_by_name() {
         let mut b = ContactBook::new();
-        b.add_sent(&[EmailAddress::new("Prosper Martin", "pm@x.example")], 1, &[]);
+        b.add_sent(&[EmailAddress::new("Prosper Martin", "pm@x.example"), EmailAddress::new("Hélène Dupré", "hd@x.example")], 1, &[]);
         let json = serde_json::to_string(&b).unwrap();
-        assert!(!json.contains("name_lower"), "the lower case isn't kept on disk");
+        assert!(!json.contains("name_folded"), "the fold isn't kept on disk");
         let back: ContactBook = serde_json::from_str(&json).unwrap();
         assert_eq!(back.matches("mart").count(), 1);
         assert_eq!(back.suggest("Pros", 8, 1).len(), 1);
+        assert_eq!(back.matches("dupre").count(), 1, "its fold made again");
+        assert_eq!(back.suggest("HÉLÈNE", 8, 1).len(), 1);
     }
 
     #[test]
