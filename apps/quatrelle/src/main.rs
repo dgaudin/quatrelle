@@ -23,6 +23,21 @@
 #[global_allocator]
 static ALLOCATOR: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+/// Interface text the app draws itself (the file dialogs' titles and filters) in the window's
+/// language, from the UI crate's catalogs, whose test reads this app's sources as well as its own.
+macro_rules! tl {
+    ($s:expr) => {
+        quatrelle_ui_egui::i18n::t($s)
+    };
+}
+
+/// A translated template with its `{name}` values filled in (the UI crate's `tf!`).
+macro_rules! tf {
+    ($s:expr $(, $k:ident = $v:expr)* $(,)?) => {
+        quatrelle_ui_egui::i18n::tfmt($s, &[$((stringify!($k), &$v.to_string())),*])
+    };
+}
+
 use std::path::PathBuf;
 use std::sync::Arc;
 

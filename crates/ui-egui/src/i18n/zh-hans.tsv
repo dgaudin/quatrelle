@@ -2042,3 +2042,16 @@ menu	View	查看
 	Add to file	添加到文件
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	将帐户的邮件连同文件夹添加到已有的 Outlook 数据文件 (.pst)。文件原有的内容保留，已有的邮件不会重复写入。
 	Adding to {file}… (what it already has stays)	正在添加到 {file}…（原有内容保留）
+	Save as	另存为
+	Attach files	附加文件
+	Insert pictures	插入图片
+	Save attachments to	将附件保存到
+	Certificate with its key	证书及其密钥
+	OpenPGP key	OpenPGP 密钥
+	Quatrelle rules	Quatrelle 规则
+	Outlook data files	Outlook 数据文件
+	Quatrelle data files	Quatrelle 数据文件
+	PDF document	PDF 文档
+	Contact card	联系人名片
+	All files	所有文件
+	{ext} file	{ext} 文件

@@ -82,22 +82,22 @@ impl Desktop {
 
     /// Where to save a file, the name `suggested` filled in.
     fn save_dialog(&self, suggested: &str) -> rfd::AsyncFileDialog {
-        let mut d = self.dialog("Save as").set_file_name(suggested);
+        let mut d = self.dialog(tl!("Save as")).set_file_name(suggested);
         // Save as type: the suggested name's kind first, so the system keeps its extension.
         if let Some((_, ext)) = suggested.rsplit_once('.').filter(|(_, e)| !e.is_empty() && e.len() <= 8) {
             let kind = match ext.to_ascii_lowercase().as_str() {
-                "pst" => "Outlook data file".to_string(),
-                "eml" => "Email message".to_string(),
-                "pdf" => "PDF document".to_string(),
-                "ics" => "Calendar".to_string(),
-                "vcf" => "Contact card".to_string(),
-                "txt" => "Text".to_string(),
-                "json" => "Quatrelle rules".to_string(),
-                "asc" => "OpenPGP key".to_string(),
-                "html" | "htm" => "Web page".to_string(),
-                e => format!("{} file", e.to_ascii_uppercase()),
+                "pst" => tl!("Outlook data file").to_string(),
+                "eml" => tl!("Email message").to_string(),
+                "pdf" => tl!("PDF document").to_string(),
+                "ics" => tl!("Calendar").to_string(),
+                "vcf" => tl!("Contact card").to_string(),
+                "txt" => tl!("Text").to_string(),
+                "json" => tl!("Quatrelle rules").to_string(),
+                "asc" => tl!("OpenPGP key").to_string(),
+                "html" | "htm" => tl!("Web page").to_string(),
+                e => tf!("{ext} file", ext = e.to_ascii_uppercase()),
             };
-            d = d.add_filter(kind, &[ext]).add_filter("All files", &["*"]);
+            d = d.add_filter(kind, &[ext]).add_filter(tl!("All files"), &["*"]);
         }
         d
     }
@@ -157,33 +157,36 @@ impl Services for Desktop {
         if self.files.is_open() {
             return false;
         }
-        // The dialog is made here, on the window's thread: macOS begins its panel at once.
+        // The dialog is made here, on the window's thread: macOS begins its panel at once. Its
+        // title and filters are in the interface's language (`tl!`, the window's thread's).
         let (answer, remember) = match ask {
-            FileAsk::Attach => (many(self.dialog("Attach files").pick_files()), Some(false)),
-            FileAsk::Pictures => {
-                (many(self.dialog("Insert pictures").add_filter("Pictures", &["png", "jpg", "jpeg", "gif", "webp", "bmp"]).pick_files()), Some(false))
-            }
+            FileAsk::Attach => (many(self.dialog(tl!("Attach files")).pick_files()), Some(false)),
+            FileAsk::Pictures => (
+                many(self.dialog(tl!("Insert pictures")).add_filter(tl!("Pictures"), &["png", "jpg", "jpeg", "gif", "webp", "bmp"]).pick_files()),
+                Some(false),
+            ),
             FileAsk::Save(suggested) => (one(self.save_dialog(&suggested).save_file()), Some(false)),
-            FileAsk::Folder => (one(self.dialog("Save attachments to").pick_folder()), Some(true)),
+            FileAsk::Folder => (one(self.dialog(tl!("Save attachments to")).pick_folder()), Some(true)),
             FileAsk::Certificate => (
                 one(self
-                    .dialog("Import certificate")
-                    .add_filter("Certificate with its key", &["p12", "pfx"])
-                    .add_filter("All files", &["*"])
+                    .dialog(tl!("Import certificate"))
+                    .add_filter(tl!("Certificate with its key"), &["p12", "pfx"])
+                    .add_filter(tl!("All files"), &["*"])
                     .pick_file()),
                 Some(false),
             ),
             FileAsk::PgpKey => (
                 one(self
-                    .dialog("Import OpenPGP key")
-                    .add_filter("OpenPGP key", &["asc", "gpg", "key", "pgp"])
-                    .add_filter("All files", &["*"])
+                    .dialog(tl!("Import OpenPGP key"))
+                    .add_filter(tl!("OpenPGP key"), &["asc", "gpg", "key", "pgp"])
+                    .add_filter(tl!("All files"), &["*"])
                     .pick_file()),
                 Some(false),
             ),
-            FileAsk::Rules => {
-                (one(self.dialog("Import rules").add_filter("Quatrelle rules", &["json"]).add_filter("All files", &["*"]).pick_file()), Some(false))
-            }
+            FileAsk::Rules => (
+                one(self.dialog(tl!("Import rules")).add_filter(tl!("Quatrelle rules"), &["json"]).add_filter(tl!("All files"), &["*"]).pick_file()),
+                Some(false),
+            ),
             FileAsk::DataFile => {
                 let mut d = self.files.base.clone();
                 // Where the data files are (a removed account's stays there), as Outlook opens its own.
@@ -191,18 +194,17 @@ impl Services for Desktop {
                     d = d.set_directory(dir);
                 }
                 let d = d
-                    .set_title("Open data file")
-                    .add_filter("Data files", &["pst", "quatrelle"])
-                    .add_filter("Outlook data files", &["pst"])
-                    .add_filter("Quatrelle data files", &["quatrelle"]);
+                    .set_title(tl!("Open data file"))
+                    .add_filter(tl!("Data files"), &["pst", "quatrelle"])
+                    .add_filter(tl!("Outlook data files"), &["pst"])
+                    .add_filter(tl!("Quatrelle data files"), &["quatrelle"]);
                 (one(d.pick_file()), None)
             }
             // Opened, not saved: Save as would ask to replace the file, though the export only
-            // adds to it. Its title in the interface's language, as the File page's entry.
-            FileAsk::AddToDataFile => (
-                one(self.dialog(quatrelle_ui_egui::i18n::t("Add to an Outlook data file")).add_filter("Outlook data files", &["pst"]).pick_file()),
-                Some(false),
-            ),
+            // adds to it.
+            FileAsk::AddToDataFile => {
+                (one(self.dialog(tl!("Add to an Outlook data file")).add_filter(tl!("Outlook data files"), &["pst"]).pick_file()), Some(false))
+            }
         };
         self.files.start(answer, remember);
         true
@@ -739,5 +741,23 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
         assert!(d.last_dir.as_ref().is_some_and(|p| !p.is_dir()), "gone: the dialog opens where the system says");
         let _ = d.dialog("Attach files");
+    }
+
+    /// A file dialog is titled, and its kinds named, in the interface's language: Save as in
+    /// French when the interface is in French, a kind of its own and one made of the extension
+    /// included; in English again once the interface is.
+    #[test]
+    fn a_file_dialogs_title_is_in_the_interfaces_language() {
+        use quatrelle_ui_egui::i18n::{Lang, set_current};
+        let d = Desktop::default();
+        set_current(Lang::from_code("fr").unwrap());
+        let (pdf, other) = (format!("{:?}", d.save_dialog("Rapport.pdf")), format!("{:?}", d.save_dialog("notes.xyz")));
+        set_current(Lang::EN);
+        let english = format!("{:?}", d.save_dialog("Report.pdf"));
+        for said in ["\"Enregistrer sous\"", "\"Document PDF\"", "\"Tous les fichiers\""] {
+            assert!(pdf.contains(said), "{said}: {pdf}");
+        }
+        assert!(other.contains("\"Fichier XYZ\""), "{other}");
+        assert!(english.contains("\"Save as\"") && english.contains("\"PDF document\"") && english.contains("\"All files\""), "{english}");
     }
 }

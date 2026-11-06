@@ -2043,3 +2043,16 @@ folder	Conflicts	Conflitti
 	Add to file	Aggiungi a file
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Aggiunge la posta di un account, con le sue cartelle, a un file di dati di Outlook (.pst) già esistente. Ciò che il file contiene resta, e un messaggio che ha già non viene scritto due volte.
 	Adding to {file}… (what it already has stays)	Aggiunta a {file}… (ciò che contiene già resta)
+	Save as	Salva con nome
+	Attach files	Allega file
+	Insert pictures	Inserisci immagini
+	Save attachments to	Salva allegati in
+	Certificate with its key	Certificato con la sua chiave
+	OpenPGP key	Chiave OpenPGP
+	Quatrelle rules	Regole di Quatrelle
+	Outlook data files	File di dati di Outlook
+	Quatrelle data files	File di dati di Quatrelle
+	PDF document	Documento PDF
+	Contact card	Scheda contatto
+	All files	Tutti i file
+	{ext} file	File {ext}

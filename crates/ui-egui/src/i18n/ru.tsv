@@ -2044,3 +2044,16 @@ menu	View	Просмотр
 	Add to file	Добавить в файл
 	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Добавляет почту учётной записи вместе с папками в уже существующий файл данных Outlook (.pst). Содержимое файла сохраняется, а сообщения, которые в нём уже есть, не записываются повторно.
 	Adding to {file}… (what it already has stays)	Добавление в {file}… (то, что в нём уже есть, сохраняется)
+	Save as	Сохранить как
+	Attach files	Вложить файлы
+	Insert pictures	Вставить изображения
+	Save attachments to	Сохранить вложения в
+	Certificate with its key	Сертификат с ключом
+	OpenPGP key	Ключ OpenPGP
+	Quatrelle rules	Правила Quatrelle
+	Outlook data files	Файлы данных Outlook
+	Quatrelle data files	Файлы данных Quatrelle
+	PDF document	Документ PDF
+	Contact card	Карточка контакта
+	All files	Все файлы
+	{ext} file	Файл {ext}

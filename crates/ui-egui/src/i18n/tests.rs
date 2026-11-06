@@ -193,6 +193,11 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         ("(Group::", &[0]),
     ];
     let mut out = literals_after(&sources, &prefixes);
+    // The text the desktop app draws itself (its file dialogs' titles and filters), by its own
+    // `tl!` and `tf!` over these catalogs.
+    let app = rust_sources(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/quatrelle/src"));
+    assert!(app.len() > 10, "the app's sources weren't found");
+    out.extend(literals_after(&app, &[("tl!(", &[0]), ("tf!(", &[0])]));
     out.extend(notice_wordings());
     use quatrelle_engine::model::dates::DateGroup;
     use quatrelle_engine::model::organize::SnoozeUntil;
