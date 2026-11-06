@@ -54,6 +54,8 @@ pub(super) struct Owned {
     pub(super) files: Vec<File>,
     /// Where its source is in the cache: its files left there are read from it when written.
     pub(super) key: MessageKey,
+    /// Its class when what it is says so: signed or encrypted mail, a report ([`super::kinds`]).
+    pub(super) kind: Option<&'static str>,
     /// Its header block, as it came (`PidTagTransportMessageHeaders`).
     pub(super) headers: String,
     pub(super) in_reply_to: String,
@@ -66,6 +68,11 @@ pub(super) struct Owned {
 }
 
 impl Owned {
+    /// Its class (PidTagMessageClass): what it is, else `IPM.Note`.
+    pub(super) fn class(&self) -> &'static str {
+        self.kind.unwrap_or("IPM.Note")
+    }
+
     /// The bytes it holds until it is written: its text, its files' (not those left in the
     /// cache) and its attached messages'.
     pub(super) fn held(&self) -> usize {
@@ -149,8 +156,15 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize]) 
     for (list, kind) in [(&p.to, UnicodePstRecipientType::To), (&p.cc, UnicodePstRecipientType::Cc), (&p.bcc, UnicodePstRecipientType::Bcc)] {
         recipients.extend(list.iter().filter(|a| !a.email.is_empty()).map(|a| (a.name.clone(), a.email.clone(), kind)));
     }
-    let files = super::files::of(raw, &p, path);
     let headers = header_block(raw);
+    // Signed or encrypted mail is its one smime.p7m; other mail its files and attached messages.
+    let (body, html, files, kind) = match super::kinds::protected(raw, &p) {
+        Some(s) => (s.body, s.html, vec![s.file], Some(s.class)),
+        None => {
+            let kind = super::kinds::report(&headers, raw, &p);
+            (p.text.clone(), mime::html_body(raw), super::files::of(raw, &p, path), kind)
+        }
+    };
     let field = |name: &str| header_value(&headers, name).unwrap_or_default();
     let importance = match field("Importance").to_ascii_lowercase().as_str() {
         "high" => 2,
@@ -172,14 +186,15 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize]) 
         subject: p.subject,
         from: (p.from.name, p.from.email),
         recipients,
-        body: p.text,
-        html: mime::html_body(raw),
+        body,
+        html,
         message_id: bracket(&p.message_id),
         received: filetime(if received > 0 { received } else { p.date }),
         // No `Date:`: no submit time, not 1970.
         date: if p.date > 0 { filetime(p.date) } else { 0 },
         files,
         key: MessageKey::default(),
+        kind,
         headers: if headers.len() <= MAX_HEADERS { headers } else { String::new() },
         in_reply_to: bracket(&p.in_reply_to),
         references: p.references.iter().map(|id| bracket(id)).collect::<Vec<_>>().join(" "),

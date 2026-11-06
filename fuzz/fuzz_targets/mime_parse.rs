@@ -2,7 +2,7 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A message source as it comes from a server or a file: parsed for reading, for the message
 //! list and for search, and its attachments taken out; told signed or encrypted from its header
-//! alone, never wrongly told it isn't.
+//! alone, never wrongly told it isn't; and as an export to a data file takes it.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -28,4 +28,6 @@ fuzz_target!(|raw: &[u8]| {
         let _ = mime::attachments_data(raw, &[0, 1, 5, usize::MAX], 1 << 20, 4 << 20);
         let _ = mime::with_date(raw, 0);
     }
+    // As an export to a data file reads it: S/MIME, a report's status, attached messages.
+    let _ = quatrelle_net::pst_export::message_class(raw);
 });
