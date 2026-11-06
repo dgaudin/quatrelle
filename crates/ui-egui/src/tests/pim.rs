@@ -9,6 +9,7 @@ mod calendar_clicks;
 mod calendar_delete;
 mod calendar_look;
 mod calendar_menu;
+mod item_files;
 mod new_item_keys;
 
 /// People's list and A–Z index were a few pixels wider than the pane, so the pane (shared by

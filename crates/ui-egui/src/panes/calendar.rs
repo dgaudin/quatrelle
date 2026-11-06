@@ -349,8 +349,8 @@ fn item_color(item: &AgendaItem, t: &Tokens) -> egui::Color32 {
     item.category.map_or_else(|| color(item.color, t), |i| theme::category_color(i, t.dark))
 }
 
-/// What the card says, one line each: when the appointment is, where, and the calendar it's in
-/// (nothing for what it doesn't have). As Outlook's card, which also shows the reminder (Quatrelle
+/// What the card says, one line each: when the appointment is, where, the calendar it's in, and
+/// its files (nothing for what it doesn't have). As Outlook's card, which also shows the reminder (Quatrelle
 /// doesn't read `VALARM` yet).
 pub(crate) fn card_rows(s: &Session, item: &AgendaItem) -> Vec<(Icon, String)> {
     let mut out = vec![(Icon::Clock, when(s, item))];
@@ -361,6 +361,12 @@ pub(crate) fn card_rows(s: &Session, item: &AgendaItem) -> Vec<(Icon, String)> {
     out.push((Icon::Calendar, calendar_name(s, item)));
     if let Some(m) = item.reminder {
         out.push((Icon::Reminder, reminder_text(m)));
+    }
+    // The files kept with it, by name (the card can't be clicked: its window opens them).
+    let files = s.event_files(&item.uid, Some(item.occurrence));
+    if !files.is_empty() {
+        let names: Vec<&str> = files.iter().map(|f| if f.name.trim().is_empty() { "attachment" } else { f.name.as_str() }).collect();
+        out.push((Icon::Attach, crate::widgets::shorten(&names.join(", "), 120)));
     }
     out
 }

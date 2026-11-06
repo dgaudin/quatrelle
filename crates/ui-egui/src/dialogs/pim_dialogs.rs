@@ -4,7 +4,7 @@
 //! The event and contact forms: what they share (their rows, fields and headings), the event
 //! form in `event` (with its Room Finder in `rooms`, its Scheduling Assistant in `scheduling`,
 //! its address book in `attendees`, its Webex meeting in `webex` and its Webex rooms in
-//! `webex_rooms`), the contact form in `contact`.
+//! `webex_rooms`), the contact form in `contact`; the files kept with either in `files`.
 
 use egui::{Margin, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
@@ -18,6 +18,7 @@ use crate::{Action, widgets};
 mod attendees;
 mod contact;
 mod event;
+pub(crate) mod files;
 mod meeting;
 pub(crate) mod pickers;
 pub(crate) mod recurrence;
@@ -29,6 +30,7 @@ pub(crate) mod webex_rooms;
 pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};
 pub use event::{EventForm, event};
+pub use files::{FilesOf, ItemFile};
 pub use meeting::meeting;
 pub(crate) use meeting::{prepare, show_as_label};
 pub use rooms::RoomFinderUi;

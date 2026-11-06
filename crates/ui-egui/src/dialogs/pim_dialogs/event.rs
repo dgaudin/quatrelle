@@ -105,6 +105,8 @@ pub struct EventForm {
     /// The conference the window opened with. Saved unchanged, it isn't sent and the engine keeps
     /// it as it is, even one it would refuse now (the user couldn't see it to fix it).
     pub(crate) conference_opened: Option<Conference>,
+    /// The files kept with it (a `.pst` import's, a calendar's inline ones), shown as chips.
+    pub files: Vec<quatrelle_engine::model::pim::files::KeptFile>,
 }
 
 impl EventForm {
@@ -199,6 +201,7 @@ impl EventForm {
             conference: e.conference.clone(),
             conference_shown: e.conference.as_ref().is_some_and(|c| link_shown(&c.url, &e.location, &e.description)),
             conference_opened: e.conference.clone(),
+            files: s.event_files(uid, Some(occurrence)),
             ..Default::default()
         })
     }
@@ -569,6 +572,7 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut
             });
         }
     });
+    super::files::event_strip(ui, t, f, acts);
     if f.reading_notes {
         ui.add_space(4.0);
         notes(ui, t, &f.description, acts);

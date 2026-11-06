@@ -567,7 +567,7 @@ pub(super) fn save_attachment(s: &mut Session, v: &Value) -> CmdResult {
 /// Windows' mark that a file came from the internet (its `Zone.Identifier` stream, zone 3), as
 /// browsers and mail programs add: SmartScreen checks a program before it runs, and Office opens
 /// the file in Protected View. Best effort; nothing elsewhere.
-fn mark_from_internet(path: &std::path::Path) {
+pub(super) fn mark_from_internet(path: &std::path::Path) {
     if cfg!(windows) {
         let mut stream = path.as_os_str().to_owned();
         stream.push(":Zone.Identifier");
