@@ -2035,3 +2035,8 @@ folder	Conflicts	競合
 	The system's print window isn't available: opened as a PDF, print it from the viewer	システムの印刷ウィンドウを使用できません: PDF で開きました。ビューアーから印刷してください
 	Sent to the printer	プリンターに送信しました
 	Downloaded as a PDF: print it from the viewer	PDF としてダウンロードしました: ビューアーから印刷してください
+	Add to an Outlook data file…	Outlook データ ファイルに追加…
+	Add to an Outlook data file	Outlook データ ファイルに追加
+	Add to file	ファイルに追加
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	アカウントのメールをフォルダーごと、既存の Outlook データ ファイル (.pst) に追加します。ファイルの内容はそのまま残り、すでにあるメッセージは二重に書き込まれません。
+	Adding to {file}… (what it already has stays)	{file} に追加しています… (既存の内容はそのまま残ります)

@@ -278,24 +278,8 @@ impl MailApp {
                     }
                 }
             }
-            Action::ExportDataFile(account) => {
-                // Named after the account's address, as Outlook names a data file.
-                let name = self
-                    .session
-                    .account(&account)
-                    .map(|a| if a.config.email.trim().is_empty() { a.config.name.clone() } else { a.config.email.clone() })
-                    .unwrap_or_default();
-                let name = quatrelle_engine::mime::sanitize_filename(if name.trim().is_empty() { "Mail" } else { name.trim() });
-                if let Some(path) = self.file_answer_one(FileAsk::Save(format!("{name}.pst")), Action::ExportDataFile(account.clone())) {
-                    match self.session.run("account.exportPst", &json!({"account": account, "path": path.to_string_lossy()})) {
-                        Ok(_) => {
-                            self.ui.backstage = None;
-                            self.session.notice(tf!("Exporting to {file}…", file = path.file_name().unwrap_or_default().to_string_lossy()), false);
-                        }
-                        Err(e) => self.session.notice(e.to_string(), true),
-                    }
-                }
-            }
+            Action::ExportDataFile(account) => self.export_data_file(account, false),
+            Action::AddToDataFile(account) => self.export_data_file(account, true),
             Action::ExportRules => {
                 if let Some(path) = self.file_answer_one(FileAsk::Save("Quatrelle rules.json".into()), Action::ExportRules) {
                     match self.session.run("rules.export", &json!({"path": path.to_string_lossy()})) {

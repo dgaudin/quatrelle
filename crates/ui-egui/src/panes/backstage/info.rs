@@ -214,6 +214,11 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
                 if ui.button(tl!("Save as an Outlook data file…")).clicked() {
                     acts.push(Action::ExportDataFile(id.clone()));
                 }
+                // A .pst already there, opened rather than saved over: Save as would ask to
+                // replace it, though the export only adds to it.
+                if ui.button(tl!("Add to an Outlook data file…")).on_hover_text(tl!("Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.")).clicked() {
+                    acts.push(Action::AddToDataFile(id.clone()));
+                }
                 if ui.button(tl!("Open folder")).clicked() {
                     // The folder the data file is in (or the account's own folder).
                     let dir = if file.is_dir() { file.clone() } else { file.parent().map_or_else(|| file.clone(), Path::to_path_buf) };

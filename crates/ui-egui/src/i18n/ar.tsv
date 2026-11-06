@@ -2034,3 +2034,8 @@ folder	Conflicts	التعارضات
 	The system's print window isn't available: opened as a PDF, print it from the viewer	نافذة الطباعة في النظام غير متاحة: فُتح كملف PDF، اطبعه من العارض
 	Sent to the printer	أُرسل إلى الطابعة
 	Downloaded as a PDF: print it from the viewer	نُزّل كملف PDF: اطبعه من العارض
+	Add to an Outlook data file…	إضافة إلى ملف بيانات Outlook…
+	Add to an Outlook data file	إضافة إلى ملف بيانات Outlook
+	Add to file	إضافة إلى ملف
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	يضيف بريد حساب، بمجلداته، إلى ملف بيانات Outlook (.pst) موجود. يبقى ما في الملف، ولا تُكتب رسالة موجودة فيه مرتين.
+	Adding to {file}… (what it already has stays)	جارٍ الإضافة إلى {file}… (يبقى ما فيه)

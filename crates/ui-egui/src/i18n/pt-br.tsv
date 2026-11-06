@@ -2038,3 +2038,8 @@ folder	Conflicts	Conflitos
 	The system's print window isn't available: opened as a PDF, print it from the viewer	A janela de impressão do sistema não está disponível: aberto como PDF, imprima pelo visualizador
 	Sent to the printer	Enviado para a impressora
 	Downloaded as a PDF: print it from the viewer	Baixado como PDF: imprima pelo visualizador
+	Add to an Outlook data file…	Adicionar a um arquivo de dados do Outlook…
+	Add to an Outlook data file	Adicionar a um arquivo de dados do Outlook
+	Add to file	Adicionar a arquivo
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Adiciona os emails de uma conta, com suas pastas, a um arquivo de dados do Outlook (.pst) que já existe. O que o arquivo tem permanece, e uma mensagem que ele já tem não é gravada duas vezes.
+	Adding to {file}… (what it already has stays)	Adicionando a {file}… (o que ele já tem permanece)

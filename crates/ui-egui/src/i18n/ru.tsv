@@ -2038,3 +2038,8 @@ menu	View	Просмотр
 	The system's print window isn't available: opened as a PDF, print it from the viewer	Окно печати системы недоступно: открыто как PDF, печатайте из программы просмотра
 	Sent to the printer	Отправлено на принтер
 	Downloaded as a PDF: print it from the viewer	Загружено как PDF: печатайте из программы просмотра
+	Add to an Outlook data file…	Добавить в файл данных Outlook…
+	Add to an Outlook data file	Добавить в файл данных Outlook
+	Add to file	Добавить в файл
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	Добавляет почту учётной записи вместе с папками в уже существующий файл данных Outlook (.pst). Содержимое файла сохраняется, а сообщения, которые в нём уже есть, не записываются повторно.
+	Adding to {file}… (what it already has stays)	Добавление в {file}… (то, что в нём уже есть, сохраняется)

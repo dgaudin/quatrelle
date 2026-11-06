@@ -2039,3 +2039,8 @@ folder	Conflicts	衝突
 	The system's print window isn't available: opened as a PDF, print it from the viewer	系統的列印視窗無法使用: 已以 PDF 開啟, 請從檢視器列印
 	Sent to the printer	已傳送到印表機
 	Downloaded as a PDF: print it from the viewer	已下載為 PDF: 請從檢視器列印
+	Add to an Outlook data file…	新增至 Outlook 資料檔…
+	Add to an Outlook data file	新增至 Outlook 資料檔
+	Add to file	新增至檔案
+	Add an account's mail, with its folders, to an Outlook data file (.pst) already there. What the file has stays, and a message it already has isn't written twice.	將帳戶的郵件連同資料夾新增至現有的 Outlook 資料檔 (.pst)。檔案原有的內容會保留，已有的郵件不會重複寫入。
+	Adding to {file}… (what it already has stays)	正在新增至 {file}…（原有內容會保留）
