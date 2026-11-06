@@ -104,6 +104,9 @@ pub(super) struct State {
     pub(super) done: Option<i64>,
     /// Its categories, by name.
     pub(super) categories: Vec<String>,
+    /// Pinned to the top of its folder (`$Pinned`): Outlook's files have no pin, so it goes in
+    /// as Quatrelle's own property (`pst_pim::PINNED`).
+    pub(super) pinned: bool,
 }
 
 /// Unix seconds as 100 ns since 1601 (0 before then).
@@ -154,6 +157,7 @@ pub(super) fn state(s: &quatrelle_model::Summary, role: FolderRole, marks: &Expo
         due,
         done,
         categories: categories(f, &marks.categories),
+        pinned: f.pinned(),
     }
 }
 
@@ -251,7 +255,8 @@ pub(super) fn header_value(head: &str, name: &str) -> Option<String> {
 
 /// What the message is beyond the writer's own list: its read, draft and follow-up state, its
 /// categories (`categories`, the names in `m.state`), how important and private it is, its
-/// header block, what it answers, when it was sent and that its addresses are SMTP ones.
+/// header block, what it answers, when it was sent and that its addresses are SMTP ones; and
+/// whether it is pinned, which only Quatrelle reads.
 pub(super) fn properties<'a>(m: &'a Owned, categories: &'a [&'a str]) -> Vec<UnicodePstProperty<'a>> {
     let int = |id, n| UnicodePstProperty::tagged(id, UnicodePstValue::Integer32(n));
     let text = |id, s: &'a str| UnicodePstProperty::tagged(id, UnicodePstValue::Unicode(s));
@@ -310,6 +315,11 @@ pub(super) fn properties<'a>(m: &'a Owned, categories: &'a [&'a str]) -> Vec<Uni
     }
     if !categories.is_empty() {
         out.push(UnicodePstProperty::named(PS_PUBLIC_STRINGS, UnicodePstName::String("Keywords"), UnicodePstValue::MultipleUnicode(categories)));
+    }
+    if st.pinned {
+        // MS-OXPROPS has no pin: a PtypBoolean of Quatrelle's, named in PS_PUBLIC_STRINGS, which
+        // Outlook keeps and ignores.
+        out.push(UnicodePstProperty::named(PS_PUBLIC_STRINGS, UnicodePstName::String(crate::pst_pim::PINNED), UnicodePstValue::Boolean(true)));
     }
     out
 }

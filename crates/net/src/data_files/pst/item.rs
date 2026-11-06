@@ -225,6 +225,10 @@ pub(super) fn item_of<'a>(
             }
         }
     }
+    // Pinned before it went into the file (`pst_pim::PINNED`): Outlook keeps no pin.
+    if named.pinned().iter().any(|id| matches!(p(*id), Some(Val::Bool(true)))) {
+        it.flags.set_keyword(quatrelle_model::PINNED, true);
+    }
     // A follow-up marked complete, as Exchange's comes in: beside the categories, not counted
     // among them.
     if complete && !it.flags.keywords.iter().any(|k| k.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE)) {
