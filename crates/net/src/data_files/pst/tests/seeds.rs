@@ -52,9 +52,9 @@ fn the_pst_seeds_import_without_a_panic() {
             data
         } else {
             let mut file = good.clone();
-            for p in data.chunks_exact(5) {
-                let at = u32::from_le_bytes([p[0], p[1], p[2], p[3]]) as usize % file.len();
-                file[at] = p[4];
+            for &[a, b, c, d, byte] in data.as_chunks::<5>().0 {
+                let at = u32::from_le_bytes([a, b, c, d]) as usize % file.len();
+                file[at] = byte;
             }
             file
         };
@@ -87,7 +87,7 @@ fn props(mut data: &[u8]) -> (Vec<(u16, Val<'_>)>, Vec<Vec<(u16, Val<'_>)>>) {
                 continue;
             }
             6 => {
-                Val::Text(Cow::Owned(String::from_utf16_lossy(&value.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect::<Vec<_>>())))
+                Val::Text(Cow::Owned(String::from_utf16_lossy(&value.as_chunks::<2>().0.iter().map(|&c| u16::from_le_bytes(c)).collect::<Vec<_>>())))
             }
             7 => Val::Texts(value.split(|b| *b == 0).map(|t| String::from_utf8_lossy(t).into_owned()).collect()),
             _ => Val::Other,

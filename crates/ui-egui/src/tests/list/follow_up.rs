@@ -55,7 +55,7 @@ fn paint(prims: &[ClippedPrimitive], tex: &Textures, w: usize, h: usize) -> Vec<
     for p in prims {
         let Primitive::Mesh(mesh) = &p.primitive else { continue };
         let clip = p.clip_rect;
-        for tri in mesh.indices.chunks_exact(3) {
+        for tri in mesh.indices.as_chunks::<3>().0 {
             let v: Vec<&egui::epaint::Vertex> = tri.iter().filter_map(|&i| mesh.vertices.get(i as usize)).collect();
             let [a, b, c] = [v[0], v[1], v[2]];
             let area = (b.pos.x - a.pos.x) * (c.pos.y - a.pos.y) - (c.pos.x - a.pos.x) * (b.pos.y - a.pos.y);
