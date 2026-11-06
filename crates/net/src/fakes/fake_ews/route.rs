@@ -655,7 +655,7 @@ impl Data {
                         out.push(err("ErrorInvalidRequest"));
                         continue;
                     }
-                    self.items.retain(|i| i.id != id);
+                    self.take_items(op, |i| i.id == id);
                     self.pim.retain(|(i, _, _)| *i != id);
                     out.push(ok(String::new()));
                 }
@@ -693,7 +693,7 @@ impl Data {
             }
             "EmptyFolder" => {
                 for id in ids(op.child("FolderIds")) {
-                    self.items.retain(|i| i.folder != id);
+                    self.take_items(op, |i| i.folder == id);
                     out.push(ok(String::new()));
                 }
             }
