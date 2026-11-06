@@ -647,7 +647,7 @@ impl Data {
             }
             "DeleteItem" => {
                 for id in ids(op.child("ItemIds")) {
-                    if !self.may_change(&id) {
+                    if !self.may_change(&id) || self.undeletable.contains(&id) {
                         out.push(err("ErrorAccessDenied"));
                         continue;
                     }

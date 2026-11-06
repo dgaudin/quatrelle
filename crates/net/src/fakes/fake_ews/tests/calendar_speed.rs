@@ -253,3 +253,5 @@ fn refusing_the_fields(each: bool) {
     let again = server.data.lock().unwrap().item_shapes.clone();
     assert!(again.iter().all(|s| s == "AllProperties"), "not asked by their fields again: {again:?}");
 }
+
+mod changes;

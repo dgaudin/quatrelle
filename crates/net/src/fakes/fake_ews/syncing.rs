@@ -46,6 +46,9 @@ impl Data {
             return vec![err("ErrorFolderNotFound")];
         };
         let given = op.child("SyncState").map(|s| s.text.trim().to_string()).unwrap_or_default();
+        if self.pim_folder(op.child("SyncFolderId").and_then(|f| f.kids.first())) {
+            return vec![self.sync_pim_items(&folder, &given, op)];
+        }
         let Some(mut was) = sync_snapshot(&given) else {
             return vec![err("ErrorInvalidSyncStateData")];
         };
@@ -103,6 +106,83 @@ impl Data {
             sync_state(&was)
         ))]
     }
+}
+
+impl Data {
+    /// `SyncFolderItems` in a calendar or a contacts folder: its items as Exchange lists them (a
+    /// series, not its occurrences that became items of their own), each changed when anything of
+    /// it changed (an occurrence of a series moved changes the series, as Exchange keeps the
+    /// occurrence inside it). The state is each item's id and a digest of it.
+    fn sync_pim_items(&self, folder: &str, given: &str, op: &El) -> String {
+        use std::hash::{Hash, Hasher};
+        let Some(mut was) = pim_snapshot(given) else {
+            return "<m:R ResponseClass=\"Error\"><m:MessageText>The synchronization state data is corrupt or otherwise invalid.</m:MessageText>\
+                    <m:ResponseCode>ErrorInvalidSyncStateData</m:ResponseCode></m:R>"
+                .into();
+        };
+        let max: usize =
+            op.child("MaxChangesReturned").and_then(|m| m.text.trim().parse().ok()).unwrap_or(512).min(self.sync_page.unwrap_or(usize::MAX));
+        let own = |id: &str, e: &El| !id.contains(":occ") && !matches!(e.text_of("CalendarItemType"), Some("Occurrence" | "Exception"));
+        let now: Vec<(String, String, u64)> = self
+            .pim
+            .iter()
+            .filter(|(id, f, e)| *f == folder && own(id, e))
+            .map(|(id, _, e)| {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                super::xml(e).hash(&mut h);
+                let prefix = format!("{id}:occ");
+                for (_, _, o) in self.pim.iter().filter(|(i, _, _)| i.starts_with(&prefix)) {
+                    super::xml(o).hash(&mut h);
+                }
+                (id.clone(), e.name.clone(), h.finish())
+            })
+            .collect();
+        // Each change, the item's id, and its digest (`None`: deleted).
+        let mut changes: Vec<(String, String, Option<u64>)> = Vec::new();
+        for (id, kind, digest) in &now {
+            let item = format!("<t:{kind}><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:{kind}>");
+            match was.iter().find(|(w, _)| w == id) {
+                None => changes.push((format!("<t:Create>{item}</t:Create>"), id.clone(), Some(*digest))),
+                Some((_, d)) if d != digest => changes.push((format!("<t:Update>{item}</t:Update>"), id.clone(), Some(*digest))),
+                Some(_) => {}
+            }
+        }
+        for (w, _) in &was {
+            if !now.iter().any(|(id, _, _)| id == w) {
+                changes.push((format!("<t:Delete><t:ItemId Id=\"{w}\" ChangeKey=\"ck\"/></t:Delete>"), w.clone(), None));
+            }
+        }
+        let last = changes.len() <= max;
+        let mut xml = String::new();
+        for (x, id, digest) in changes.into_iter().take(max) {
+            xml.push_str(&x);
+            was.retain(|(w, _)| *w != id);
+            if let Some(d) = digest {
+                was.push((id, d));
+            }
+        }
+        let lines: String = was.iter().map(|(id, d)| format!("{id}\t{d:x}\n")).collect();
+        format!(
+            "<m:R ResponseClass=\"Success\"><m:ResponseCode>NoError</m:ResponseCode><m:SyncState>p1{}</m:SyncState>\
+             <m:IncludesLastItemInRange>{last}</m:IncludesLastItemInRange><m:Changes>{xml}</m:Changes></m:R>",
+            crate::imap::base64(lines.as_bytes())
+        )
+    }
+}
+
+/// The items a calendar's or a contacts folder's sync state stands for, with their digests
+/// (empty: none); `None` for one this server didn't make.
+fn pim_snapshot(state: &str) -> Option<Vec<(String, u64)>> {
+    if state.is_empty() {
+        return Some(Vec::new());
+    }
+    let text = String::from_utf8(unb64(state.strip_prefix("p1")?)?).ok()?;
+    text.lines()
+        .map(|l| {
+            let (id, d) = l.split_once('\t')?;
+            Some((id.to_string(), u64::from_str_radix(d, 16).ok()?))
+        })
+        .collect()
 }
 
 /// The separator of a message's categories in a sync state.
