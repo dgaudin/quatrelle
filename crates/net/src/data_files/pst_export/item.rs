@@ -5,7 +5,7 @@
 //! what the cache keeps of it (read, flagged, answered, categories, when it's due) as the
 //! properties Outlook keeps them in.
 
-use super::files::File;
+use super::files::{File, Spill};
 use super::*;
 use outlook_pst::ltp::prop_context::GuidValue;
 use outlook_pst::messaging::named_prop::PS_PUBLIC_STRINGS;
@@ -52,8 +52,6 @@ pub(super) struct Owned {
     pub(super) date: i64,
     /// Its files and attached messages ([`super::files`]).
     pub(super) files: Vec<File>,
-    /// Where its source is in the cache: its files left there are read from it when written.
-    pub(super) key: MessageKey,
     /// Its class when what it is says so: signed or encrypted mail, a report ([`super::kinds`]).
     pub(super) kind: Option<&'static str>,
     /// Its header block, as it came (`PidTagTransportMessageHeaders`).
@@ -73,8 +71,8 @@ impl Owned {
         self.kind.unwrap_or("IPM.Note")
     }
 
-    /// The bytes it holds until it is written: its text, its files' (not those left in the
-    /// cache) and its attached messages'.
+    /// The bytes it holds until it is written: its text, its files' (not the big ones waiting in
+    /// files of their own) and its attached messages'.
     pub(super) fn held(&self) -> usize {
         let files = self.files.iter().map(|f| match f {
             File::Data { data, .. } => data.len(),
@@ -143,14 +141,16 @@ pub(super) fn state(s: &quatrelle_model::Summary, role: FolderRole, marks: &Expo
     }
 }
 
-/// The message in `raw`, with `state`; `received` is when it was received (Unix seconds).
-pub(super) fn owned(raw: &[u8], received: i64, state: State) -> Option<Owned> {
-    owned_in(raw, received, state, &[])
+/// The message in `raw`, with `state`; `received` is when it was received (Unix seconds);
+/// `spill`: where its big files wait for their batch (none: they are held with it).
+pub(super) fn owned(raw: &[u8], received: i64, state: State, spill: Option<&Spill>) -> Option<Owned> {
+    owned_in(raw, received, state, &[], spill, super::files::MAX_ATTACHED)
 }
 
 /// [`owned`] for a message attached `path.len()` deep (`path`: the index of each attached
-/// message down to it among its holder's attachments, empty for the message itself).
-pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize]) -> Option<Owned> {
+/// message down to it among its holder's attachments, empty for the message itself; `left`: what
+/// the attached messages below it may hold, [`super::files::of`]).
+pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize], spill: Option<&Spill>, left: usize) -> Option<Owned> {
     let p = mime::parse(raw)?;
     let mut recipients = Vec::new();
     for (list, kind) in [(&p.to, UnicodePstRecipientType::To), (&p.cc, UnicodePstRecipientType::Cc), (&p.bcc, UnicodePstRecipientType::Bcc)] {
@@ -162,7 +162,10 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize]) 
         Some(s) => (s.body, s.html, vec![s.file], Some(s.class)),
         None => {
             let kind = super::kinds::report(&headers, raw, &p);
-            (p.text.clone(), mime::html_body(raw), super::files::of(raw, &p, path), kind)
+            let mut files = super::files::of(raw, &p, path, spill, left);
+            let mut html = mime::html_body(raw);
+            super::files::fit_cids(&mut files, &mut html);
+            (p.text.clone(), html, files, kind)
         }
     };
     let field = |name: &str| header_value(&headers, name).unwrap_or_default();
@@ -193,7 +196,6 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize]) 
         // No `Date:`: no submit time, not 1970.
         date: if p.date > 0 { filetime(p.date) } else { 0 },
         files,
-        key: MessageKey::default(),
         kind,
         headers: if headers.len() <= MAX_HEADERS { headers } else { String::new() },
         in_reply_to: bracket(&p.in_reply_to),
@@ -298,7 +300,7 @@ mod tests {
         // lines aren't header fields.
         let raw = b"Subject: x\nFrom: a@b\n\nImportance: high\r\nSensitivity: Private\r\n\r\nmore";
         assert_eq!(header_block(raw), "Subject: x\nFrom: a@b\r\n");
-        let m = owned(raw, 0, State::default()).unwrap();
+        let m = owned(raw, 0, State::default(), None).unwrap();
         assert_eq!((m.importance, m.sensitivity), (1, None));
     }
 
@@ -306,10 +308,10 @@ mod tests {
     #[test]
     fn no_date_no_submit_time() {
         let submit = |m: &Owned| properties(m, &[]).iter().any(|p| matches!(p.key, outlook_pst::UnicodePstPropertyKey::Tag(0x0039)));
-        let m = owned(b"Subject: x\r\nFrom: a@b\r\n\r\nbody", 0, State::default()).unwrap();
+        let m = owned(b"Subject: x\r\nFrom: a@b\r\n\r\nbody", 0, State::default(), None).unwrap();
         assert_eq!(m.date, 0);
         assert!(!submit(&m));
-        let m = owned(b"Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nSubject: x\r\n\r\nbody", 0, State::default()).unwrap();
+        let m = owned(b"Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nSubject: x\r\n\r\nbody", 0, State::default(), None).unwrap();
         assert_eq!(m.date, (1_704_067_200 + EPOCH_1601) * 10_000_000);
         assert!(submit(&m));
     }

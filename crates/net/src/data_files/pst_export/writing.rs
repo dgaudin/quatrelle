@@ -2,8 +2,8 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Handing a batch of messages to the writer: each with its recipients, properties and files,
-//! its attached messages with theirs in turn, and its files left in the cache read from there as
-//! the writer comes to them ([`super::files`]).
+//! its attached messages with theirs in turn, and its big files read from the files they wait in
+//! as the writer comes to them ([`super::files`]).
 
 use outlook_pst::{UnicodePstAttachmentContent, UnicodePstEmbeddedMessage};
 
@@ -11,8 +11,8 @@ use super::files::{File, StoredFile};
 use super::*;
 
 /// What a message's attachments borrow while its batch is written: the recipients and
-/// properties of each message attached to it and the sources of its files left in the cache, in
-/// the order its files list them.
+/// properties of each message attached to it and the sources of its big files, in the order its
+/// files list them.
 struct Held<'a> {
     recipients: Vec<UnicodePstRecipient<'a>>,
     properties: Vec<UnicodePstProperty<'a>>,
@@ -20,9 +20,9 @@ struct Held<'a> {
     inner: Vec<Held<'a>>,
 }
 
-/// What `m`'s attachments borrow; its files left in the cache are in the source of the message
-/// at `key`. `top`: it is the message written, whose properties are the batch's own.
-fn held<'a>(store: &'a Store, key: &'a MessageKey, m: &'a Owned, top: bool) -> Held<'a> {
+/// What `m`'s attachments borrow. `top`: it is the message written, whose properties are the
+/// batch's own.
+fn held(m: &Owned, top: bool) -> Held<'_> {
     Held {
         recipients: recipients(m),
         // An attached message has no state in the cache: no categories.
@@ -31,7 +31,7 @@ fn held<'a>(store: &'a Store, key: &'a MessageKey, m: &'a Owned, top: bool) -> H
             .files
             .iter()
             .filter_map(|f| match f {
-                File::Stored { size, path, .. } => Some(StoredFile { store, key, path, size: *size }),
+                File::Stored { size, file, .. } => Some(StoredFile { file, size: *size }),
                 _ => None,
             })
             .collect(),
@@ -39,7 +39,7 @@ fn held<'a>(store: &'a Store, key: &'a MessageKey, m: &'a Owned, top: bool) -> H
             .files
             .iter()
             .filter_map(|f| match f {
-                File::Message { message, .. } => Some(held(store, key, message, false)),
+                File::Message { message, .. } => Some(held(message, false)),
                 _ => None,
             })
             .collect(),
@@ -102,9 +102,9 @@ fn attachments<'a>(m: &'a Owned, h: &'a Held<'a>) -> Vec<UnicodePstAttachment<'a
 }
 
 /// Write `batch` into `folder` of the file at `path`, made with the first message unless it's
-/// `created`; its files left in the cache are read from `store`.
-pub(super) fn write(store: &Store, path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
-    let held: Vec<Held<'_>> = batch.iter().map(|m| held(store, &m.key, m, true)).collect();
+/// `created`.
+pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
+    let held: Vec<Held<'_>> = batch.iter().map(|m| held(m, true)).collect();
     let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch.iter().zip(&held).map(|(m, h)| attachments(m, h)).collect();
     let categories: Vec<Vec<&str>> = batch.iter().map(|m| m.state.categories.iter().map(String::as_str).collect()).collect();
     let properties: Vec<Vec<UnicodePstProperty<'_>>> = batch.iter().zip(&categories).map(|(m, c)| item::properties(m, c)).collect();
