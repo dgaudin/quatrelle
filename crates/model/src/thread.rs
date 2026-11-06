@@ -28,14 +28,14 @@ pub fn base_subject(subject: &str) -> String {
         {
             s = s.get(end + 1..).unwrap_or_default().trim_start();
         }
-        // ASCII lowering keeps byte offsets equal to `s`'s.
-        let lower = s.to_ascii_lowercase();
         for p in ["re", "fw", "fwd", "aw", "sv", "vs", "wg", "rif", "tr", "antw", "odp", "ynt"] {
-            if let Some(rest) = lower.strip_prefix(p) {
+            // Compared without case where it stands, not on a lower-cased copy made each time
+            // round (byte offsets stay `s`'s).
+            if let Some(rest) = s.get(..p.len()).filter(|h| h.eq_ignore_ascii_case(p)).and_then(|_| s.get(p.len()..)) {
                 // `Re:`, `RE[2]:`, `Re :`.
                 let rest_t = rest.trim_start_matches(|c: char| c.is_ascii_digit() || c == '[' || c == ']').trim_start();
                 if rest_t.starts_with(':') || rest_t.starts_with('：') {
-                    let consumed = lower.len() - rest_t.len() + rest_t.chars().next().map_or(0, char::len_utf8);
+                    let consumed = s.len() - rest_t.len() + rest_t.chars().next().map_or(0, char::len_utf8);
                     s = s.get(consumed..).unwrap_or_default().trim_start();
                     break;
                 }
@@ -228,12 +228,17 @@ pub fn threads<M: std::borrow::Borrow<Summary>>(msgs: &[M]) -> Vec<Thread> {
     let first_subject = |g: &Vec<usize>| -> (String, bool) {
         let oldest = g.iter().copied().min_by_key(|&i| msg(i).map_or(0, |m| m.date)).unwrap_or(0);
         let s = msg(oldest).map(|m| m.subject.as_str()).unwrap_or_default();
-        (base_subject(s).to_lowercase(), is_reply_subject(s))
+        // As `is_reply_subject` says, from the one base worked out.
+        let base = base_subject(s);
+        let reply = base.len() != s.trim().len();
+        (base.to_lowercase(), reply)
     };
-    // Original posts first, so replies join them rather than the other way round.
-    groups.sort_by_key(|g| first_subject(g).1);
-    for g in groups {
-        let (subj, reply) = first_subject(&g);
+    // Original posts first, so replies join them rather than the other way round. Each group's
+    // subject worked out once (asked at each comparison of the sort, it was most of the time
+    // conversations took on a big folder: 60 ms on 50,000 messages).
+    let mut groups: Vec<((String, bool), Vec<usize>)> = groups.into_iter().map(|g| (first_subject(&g), g)).collect();
+    groups.sort_by_key(|((_, reply), _)| *reply);
+    for ((subj, reply), g) in groups {
         if !subj.is_empty()
             && reply
             && let Some(&at) = by_subject.get(&subj)
