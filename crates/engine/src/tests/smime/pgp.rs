@@ -93,7 +93,7 @@ fn a_key_made_is_active_and_asks_for_its_backup() {
     // Its public part written as a key file.
     let file = s.store.as_ref().unwrap().root().join("riley.asc");
     s.run("pgp.exportPublic", &json!({"path": file.display().to_string()})).unwrap();
-    assert_eq!(pgp::public_keys(&std::fs::read(&file).unwrap()).unwrap(), [key.public.clone()]);
+    assert_eq!(pgp::public_keys(&std::fs::read(&file).unwrap()).unwrap(), std::slice::from_ref(&key.public));
     // Sent with mail, or not.
     s.run("pgp.options", &json!({"autocrypt": false})).unwrap();
     assert!(!s.pgp_card("sample").autocrypt);
