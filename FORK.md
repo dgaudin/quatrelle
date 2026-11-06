@@ -4113,6 +4113,91 @@ lequel `c385032c` et tout le lot reposent.
   - un message PGP/MIME (P5) part en `IPM.Note`, ses parties en fichiers : Outlook n'a pas de forme
     pour lui ; son aller-retour n'a pas été essayé (sa signature ne devrait plus se vérifier).
 
+### État de la récupération : v0.33, première partie : l'outillage (S4) (2026-11-06)
+
+Le lot S4 de `merge-tools/survey-v0.33.md` (outillage et poste de compilation), sur `main`, après
+le lot V, plus un ajout propre au fork : le contrôle de la publication partagée dans
+`cargo xtask ci`.
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `5e19008f` | reprise de `cee5bef1` (auteur Zinadin Zidan) : profil de développement en `line-tables-only`, sans débogage pour les dépendances ; les réglages par crate du fork gardés |
+| `9267fc6c` | reprise de `fc4d90b5` : `xtask` sous les lints de l'espace de travail et la règle sans panique |
+| `79bce5e1` | adapté de `34cf3efa` : `own_files` (du lot V) lit la liste de git séparée par NUL (`-z`) ; `assets` prend sa racine |
+| `2ce00692` | reprise de `8d7a0c24` : pas de zéro en tête dans un numéro de préversion |
+| `25b39fca` | reprise de `b63a8536` : le paquet FreeBSD construit et nommé pour son architecture (`CARGO_BUILD_TARGET`), binaires vérifiés |
+| `629099db` | adapté de `ed4469e5` : `ATTRIBUTION.md` nomme les polices intégrées d'egui |
+| `14344032` | adapté de `95ce647a` : les raisons des deux avis de sécurité de `deny.toml`, rPGP compris |
+| `a7202daf` | reprise de `c1ab9a56`, faite par `npx actions-up` : `taiki-e/install-action` 2.90.1 |
+| `72700fad` | adapté de l'idée de `902aa7cc` : le fichier temporaire du cache créé neuf, sous un nom imprévisible |
+| `8700ba71` | propre au fork : `cargo xtask git-sources`, appelé par `cargo xtask ci` |
+| `15fde862` | `CLAUDE.md` : une ligne sur ce contrôle |
+
+**Le profil de développement** (`cee5bef1`). Mesuré ici, chaque fois dans un dossier `target` neuf,
+`cargo test --workspace --no-run` à 2 tâches : `target/debug` **16 Go avant, 6,0 Go après** ;
+21 min 11 s avant, 16 min 04 s après ; pic de mémoire de la compilation 5,1 Go avant, 1,5 Go
+après. Une panique de test donne toujours `fichier:ligne:colonne` dans chaque cadre de la trace
+(essayé sur un test jetable). `[profile.dev.package."*"]` garde `opt-level = 2`,
+`quatrelle-model` son `opt-level = 1`, `mail-parser` ses `debug-assertions = false`. Le
+`target/debug` du poste, lui, pesait 135 Go (dont 133 Go de `deps`, surtout d'anciens artefacts) :
+non touché ; tout ce lot a été compilé dans `~/.tq/s4/target-after`, effacé ensuite. La prochaine
+compilation dans `target/` reconstruira tout une fois (le profil change l'empreinte de chaque crate).
+
+**`xtask` sans panique** (`fc4d90b5`). Rien à corriger : aucun `unwrap`, `expect` ni `panic!` hors
+des tests (les 14 du relevé sont tous dans des tests, que `clippy.toml` permet).
+
+**Les listings git** (`34cf3efa`). Le lot V avait déjà réuni les listings de `assets`, `sizes` et
+`authors` (propre au fork) dans `own_files`, qui écarte `vendor/` et échoue quand git échoue. Restait
+`-z` : git met entre guillemets un nom non ASCII (`"assets/\303\251 b.png"`), qui ne désignait aucun
+fichier et sortait des trois contrôles. Sonde `file_listings_are_whole_and_never_silently_empty`
+(de l'origine, adaptée) : échec avant (le nom revenait entre guillemets), succès après. Le dossier
+personnel du poste étant lui-même un dépôt git, l'échec de git y est provoqué par un fichier `.git`
+qui désigne un dossier absent. Aucun fichier du dépôt n'a un tel nom aujourd'hui.
+
+**La préversion** (`8d7a0c24`). Sonde `prerelease_numbers_have_no_leading_zero` : échec avant
+(`1.0.0-01` accepté), succès après.
+
+**FreeBSD** (`b63a8536`). Sans sa ligne de `CHANGELOG.md` (le fork n'en a pas). La publication
+partagée construit aarch64 dans sa machine x86_64 avec `CARGO_BUILD_TARGET` (#39) : c'est l'élément
+« Paquet FreeBSD aarch64 absent des versions stables » du carnet, à revoir à la prochaine version
+stable. Vérifié ici : `bash -n`, et les octets ELF comparés par le script lus sur un binaire x86_64
+local (`shellcheck` n'est pas installé).
+
+**Les textes** (`ed4469e5`, `95ce647a`). Les cinq polices d'`epaint_default_fonts` lues dans le
+crate à la révision épinglée, les mêmes que l'origine. Les avis RUSTSEC-2023-0071 (`rsa`, par `cms`
+et `pgp`) et RUSTSEC-2026-0387 (`crypto-bigint` 0.5, par `p256`/`p384`, `pgp` et `cx448`) disent d'où
+ils viennent (`cargo tree -i`) et ce qu'ils attendent (rsa 0.10.0, cms 0.3.0), sans la partie
+Kerberos de l'origine (ni `sspi` ni `picky` ici). `cargo deny check` : tout passe.
+
+**Le fichier temporaire du cache** (idée de `902aa7cc`, sans `craft-libs`). `write_atomic` écrivait
+dans `.<nom>.<processus>.<compte>.part`, ouvert par `create` + `truncate` : quiconque pouvait écrire
+dans le dossier pouvait y planter un lien, et l'écriture passait par lui dans le fichier visé, puis
+le lien était renommé sur la cible. Maintenant le nom porte 16 chiffres hexadécimaux d'un hachage
+que std amorce par l'aléa du système (`RandomState`, aucune dépendance de plus), et le fichier est
+ouvert en `create_new` : rien de ce qui est déjà là n'est ouvert ; un nom pris est suivi d'un autre,
+16 essais en tout, puis une erreur. Tests écrits d'abord : `a_planted_link_is_never_written_through`
+(des liens aux 256 noms suivants de l'ancien schéma) échouait (le fichier visé réécrit), passe ;
+`a_taken_scratch_name_is_passed_over`.
+
+**`cargo xtask git-sources`** (propre au fork). La tâche `git-sources` de la publication partagée
+(`craft-common-actions`, `release.yml`, lignes 134 à 175) refuse, avant toute compilation, une
+dépendance git hors de `github.com/storytold/`, un verrou en retard sur les manifestes et un
+`.cargo/config` qui remplace, corrige ou détourne une source. Le lot V la rejouait par un script
+Python ; c'est maintenant une étape de `xtask`, en Rust, sur `Cargo.lock` et `fuzz/Cargo.lock`, les
+fichiers lus en TOML comme le fait la publication (crate `toml`, déjà dans le verrou), lancée par
+`cargo xtask ci` après `fold --check`. Tests : un verrou fabriqué avec des sources git d'ailleurs
+(dont un hôte qui imite storytold) échoue ; six écritures TOML d'une config qui détourne une source
+échouent, une config d'alias passe ; les deux verrous du dépôt passent. Essayé pour de vrai : passe
+sur l'arbre ; un `fuzz/.cargo/config` avec `replace-with` échoue en le nommant.
+
+- **Vérifié** : chaque sonde avant (échec) et après ; les tests de `xtask` (29) et de
+  `quatrelle-store` ; `cargo deny check` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - le `target/debug` du poste (135 Go) n'a pas été vidé : c'est au propriétaire de le faire ;
+  - le paquet FreeBSD aarch64 n'est vérifiable qu'à la prochaine publication stable ;
+  - d'anciens `.part` laissés par un arrêt brutal gardent l'ancien nom : rien ne les efface, comme
+    avant.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
