@@ -130,3 +130,45 @@ fn an_appointment_deleted_on_the_server_is_reported_gone() {
     assert!(sync.errors.is_empty(), "said by the engine, once: {:?}", sync.errors);
     assert!(sync.pushed_events.is_empty());
 }
+
+/// An appointment changed by a version that didn't read Show As and Private from Exchange Online
+/// (before 1.1), and not yet sent: it holds Busy and public whatever the server has, which the
+/// update must not write over the server's (a private appointment made public, a free one busy).
+/// What the user chose since goes as before.
+#[test]
+fn an_appointment_changed_before_show_as_was_read_keeps_the_servers() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.events.push(
+        json!({"id": "E1", "calendar": "CAL1", "iCalUId": "e1", "subject": "Dentist", "start": {"dateTime": "2026-10-20T09:00:00", "timeZone": "UTC"},
+        "end": {"dateTime": "2026-10-20T09:30:00", "timeZone": "UTC"}, "sensitivity": "private", "showAs": "free"}),
+    );
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    // As the older version kept it: renamed here, its Show As and Private the defaults.
+    let old = StoredEvent {
+        calendar: "CAL1".into(),
+        href: "E1".into(),
+        etag: "ck".into(),
+        event: CalEvent { uid: "e1".into(), summary: "Dentist, Tuesday".into(), start: 1_792_486_800, end: 1_792_488_600, ..Default::default() },
+        dirty: true,
+        ..Default::default()
+    };
+    let pim = Pim { events: vec![old.clone()], ..Default::default() };
+    let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    let server_has = || {
+        let d = server.data.lock().unwrap();
+        let e = d.events.iter().find(|e| e["id"] == "E1").unwrap().clone();
+        (e["subject"].clone(), e["sensitivity"].clone(), e["showAs"].clone())
+    };
+    assert_eq!(server_has(), (json!("Dentist, Tuesday"), json!("private"), json!("free")), "the change went, the server's Show As and Private kept");
+    // One chosen since (out of the office) goes; kept by this version, public and busy go too.
+    let chosen = StoredEvent { event: CalEvent { show_as: ShowAs::OutOfOffice, ..old.event.clone() }, ..old.clone() };
+    crate::graph_pim::sync(&c, &Pim { events: vec![chosen], ..Default::default() }, 1_792_000_100).unwrap();
+    assert_eq!(server_has(), (json!("Dentist, Tuesday"), json!("private"), json!("oof")));
+    let now = Pim { events: vec![old], version: quatrelle_model::pim::PIM_VERSION, ..Default::default() };
+    crate::graph_pim::sync(&c, &now, 1_792_000_200).unwrap();
+    assert_eq!(server_has(), (json!("Dentist, Tuesday"), json!("normal"), json!("busy")), "public and busy, as chosen");
+}

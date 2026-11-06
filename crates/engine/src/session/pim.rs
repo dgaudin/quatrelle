@@ -163,7 +163,7 @@ impl Session {
     /// An account's calendars and address books (made on first use).
     pub fn pim_mut(&mut self, account: &str) -> &mut Pim {
         self.pim.entry(account.to_string()).or_insert_with(|| {
-            let mut p = Pim::default();
+            let mut p = Pim { version: quatrelle_model::pim::PIM_VERSION, ..Default::default() };
             p.ensure_defaults();
             p
         })

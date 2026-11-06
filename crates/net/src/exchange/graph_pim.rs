@@ -485,8 +485,22 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             Err(e) => out.errors.push(e.to_string()),
         }
     }
+    // Changes kept by a version that didn't read Show As and Private (`Pim::version`): theirs are
+    // the defaults, not what the server has, and aren't sent unless one was chosen since.
+    let from_before = pim.version < quatrelle_model::pim::PIM_VERSION;
     for e in pim.events.iter().filter(|e| e.dirty) {
-        let body = event_json(&e.event);
+        let mut body = event_json(&e.event);
+        if from_before
+            && !e.href.is_empty()
+            && let Some(fields) = body.as_object_mut()
+        {
+            if !e.event.private {
+                fields.remove("sensitivity");
+            }
+            if e.event.show_as == quatrelle_model::ical::ShowAs::Busy {
+                fields.remove("showAs");
+            }
+        }
         let shared = quatrelle_model::pim::shared_calendar_owner(&e.calendar).is_some();
         let r = if e.href.is_empty() && shared {
             // Into someone else's calendar (they let this account edit it).

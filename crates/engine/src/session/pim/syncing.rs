@@ -149,6 +149,11 @@ impl Session {
             p.books = list;
         }
         p.ensure_defaults();
+        // Kept by a version from before (see `Pim::version`): now as this one keeps them, once
+        // nothing changed then waits to go.
+        if p.version < quatrelle_model::pim::PIM_VERSION && !p.events.iter().any(|e| e.dirty && !e.href.is_empty()) {
+            p.version = quatrelle_model::pim::PIM_VERSION;
+        }
         self.drop_lone_occurrences(account);
         for e in sync.errors.iter().take(3) {
             self.notice_with("calendars and contacts: {error}", &[("error", e)], true);

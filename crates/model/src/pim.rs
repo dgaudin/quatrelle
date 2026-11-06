@@ -311,7 +311,17 @@ pub struct Pim {
     /// RFC 9074).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reminder_answers: Vec<ReminderAnswer>,
+    /// How what's kept here was kept: [`PIM_VERSION`], or 0 for calendars kept by a version that
+    /// didn't read Exchange Online's Show As and Private (before 1.1). An appointment changed by
+    /// one and not yet sent holds Busy and public whatever the server has: Microsoft Graph's
+    /// update then leaves the server's as they are, unless one was chosen. Raised once nothing
+    /// changed then waits any more.
+    #[serde(default)]
+    pub version: u32,
 }
+
+/// What [`Pim::version`] is now: 1, Exchange Online's Show As and Private read and written.
+pub const PIM_VERSION: u32 = 1;
 
 /// The most reminder answers kept waiting for the server.
 pub const MAX_REMINDER_ANSWERS: usize = 500;
