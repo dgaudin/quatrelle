@@ -11,7 +11,6 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::process::Command;
 
 use crate::authors;
 
@@ -25,19 +24,14 @@ const BUDGET: &str = "xtask/sizes.txt";
 /// Line counts by file, Rust files by folder (`dir/`).
 type Sizes = (BTreeMap<String, usize>, BTreeMap<String, usize>);
 
-/// The workspace's Rust files (tracked or new, not ignored) and their line counts.
+/// The repository's own Rust files (tracked or new, not ignored, not vendored) and their line counts.
 fn measure(root: &Path) -> Result<Sizes, String> {
-    let out = Command::new("git")
-        .current_dir(root)
-        .args(["ls-files", "--cached", "--others", "--exclude-standard", "*.rs"])
-        .output()
-        .map_err(|e| format!("git ls-files: {e}"))?;
     let mut files = BTreeMap::new();
     let mut dirs: BTreeMap<String, usize> = BTreeMap::new();
-    for f in String::from_utf8_lossy(&out.stdout).lines() {
+    for f in &crate::own_files(root, &["*.rs"])? {
         // Listed but deleted from the working tree: not there to count.
         let Ok(text) = std::fs::read_to_string(root.join(f)) else { continue };
-        files.insert(f.to_string(), counted_lines(&text));
+        files.insert(f.clone(), counted_lines(&text));
         let dir = f.rsplit_once('/').map_or(".", |(d, _)| d);
         *dirs.entry(format!("{dir}/")).or_default() += 1;
     }

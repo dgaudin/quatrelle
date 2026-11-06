@@ -18,14 +18,17 @@ are rendered by `cargo xtask icons` from Quatrelle's own drawing in `xtask/src/i
 owner's own picture `assets/icon.png` when it is there (every size is sampled down from it).
 
 Third-party code built from a fixed copy rather than taken from crates.io as it is published:
-Dong Shin's [outlook-pst-rw](https://github.com/dongs0104/outlook-pst-rs) 1.2.14 (MIT, its
-`LICENSE`), a fork of Microsoft's [outlook-pst](https://github.com/microsoft/outlook-pst-rs) reader
-with a writer added, from [dgaudin/outlook-pst-rs](https://github.com/dgaudin/outlook-pst-rs), the
-owner's copy of MailCraft's `craft/rw-1.2.14` branch, with the fixes listed in its `PATCHES.md`.
-It adds no asset files.
+Dong Shin's [outlook-pst-rw](https://github.com/dongs0104/outlook-pst-rs) 1.2.14 (MIT, copyright
+(c) Microsoft Corporation, its `LICENSE`), a fork of Microsoft's
+[outlook-pst](https://github.com/microsoft/outlook-pst-rs) reader with a writer added, from
+[dgaudin/outlook-pst-rs](https://github.com/dgaudin/outlook-pst-rs), the owner's copy of
+MailCraft's `craft/rw-1.2.14` branch, with the fixes listed in its `PATCHES.md`. It is copied
+unchanged into `vendor/outlook-pst-rw/` (`vendor/README.md` says from which commit and why);
+`cargo xtask assets` doesn't look inside `vendor/`, so its one asset file has its row below.
 
 | Path | Author | Source | Licence |
 |---|---|---|---|
+| `vendor/outlook-pst-rw/examples/Empty.pst` | Microsoft Corporation | outlook-pst-rw's empty Unicode `.pst`, built in as the template for a new data file | MIT (`vendor/outlook-pst-rw/LICENSE`) |
 | `assets/icon.png` | Quatrelle's owner | The picture the app icon is rendered from, when present | Quatrelle's own |
 | `docs/images/reading.png` | Quatrelle contributors | Screenshot of Quatrelle's own sample mailbox | MIT OR Apache-2.0 |
 | `docs/images/search-dark.png` | Quatrelle contributors | Screenshot of Quatrelle's own sample mailbox | MIT OR Apache-2.0 |

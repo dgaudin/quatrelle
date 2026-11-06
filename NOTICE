@@ -9,3 +9,8 @@ Quatrelle is dual-licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-
 Each source file names its licence and its authors on its first lines: the ArtCraft Team and the
 MailCraft contributors where the code is MailCraft's, Didier Gaudin where the fork added code, both
 on files that hold both.
+
+Third-party code copied into vendor/ keeps its own licence and authors, unchanged, and is not
+part of the above: vendor/outlook-pst-rw is outlook-pst-rw 1.2.14 (Microsoft's Outlook data file
+reader, with Dong Shin's writer and fixes made for MailCraft and Quatrelle), MIT, Copyright (c)
+Microsoft Corporation (vendor/outlook-pst-rw/LICENSE). vendor/README.md says where it comes from.

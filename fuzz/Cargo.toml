@@ -52,7 +52,7 @@ debug-assertions = true
 overflow-checks = true
 package.mail-parser.debug-assertions = false
 
-# The .pst reader and writer with the fixes Quatrelle needs, the same revision as the main
-# workspace's [patch.crates-io] (`cargo xtask ci` checks it).
+# The .pst reader and writer with the fixes Quatrelle needs, the copy in vendor/ that the main
+# workspace's [patch.crates-io] takes too (`cargo xtask ci` checks it).
 [patch.crates-io]
-outlook-pst-rw = { git = "https://github.com/dgaudin/outlook-pst-rs.git", rev = "60cefd986b159d5f934d8291e4317dc96e0cd35b" }
+outlook-pst-rw = { path = "../vendor/outlook-pst-rw" }
