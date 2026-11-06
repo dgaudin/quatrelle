@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod pgp;
 mod trust;
 
 #[test]

@@ -1967,3 +1967,48 @@ folder	Conflicts	התנגשויות
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	המפתח שלו מגיע עם הדואר שלו, או שאפשר לייבא אותו מקובץ בקובץ › מידע › אבטחה.
 	Import OpenPGP key	ייבוא מפתח OpenPGP
 	Keep this key for its owner's address	שמירת המפתח הזה לכתובת של בעליו
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	חתמו והצפינו עם OpenPGP, כמו שעושים אנשים ותוכנות דואר רבים: עם מפתח משלכם, והמפתחות של האנשים שאתם כותבים להם.
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	מפתחות OpenPGP פועלים באפליקציה למחשב
+	No OpenPGP key	אין מפתח OpenPGP
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	שום דבר לא נחתם ולא מוצפן עם OpenPGP עד שיש לחשבון מפתח; דואר שנחתם או הוצפן כך נקרא בכל זאת.
+	Create an OpenPGP key	יצירת מפתח OpenPGP
+	Import a key…	ייבוא מפתח…
+	A secret key file (.asc or .gpg), with its passphrase	קובץ מפתח סודי (.asc או .gpg), עם משפט הסיסמה שלו
+	Older key {key}: kept to decrypt mail sent to it	מפתח קודם {key}: נשמר כדי לפענח דואר שנשלח אליו
+	Forget	שכחה
+	Mail encrypted to it can't be read any more	לא יהיה אפשר עוד לקרוא דואר שהוצפן אליו
+	Sign and decrypt with this key again; the one in use is kept to decrypt	לחתום ולפענח שוב עם המפתח הזה; המפתח שבשימוש נשמר לפענוח
+	Send my public key with my messages	שליחת המפתח הציבורי שלי עם ההודעות שלי
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	תוכנות הדואר שלהם יוכלו אז לבדוק את החתימה שלכם ולהצפין אליכם את התשובות (Autocrypt).
+	Export public key…	ייצוא המפתח הציבורי…
+	A file to give those who'll write to you	קובץ לתת למי שיכתבו לכם
+	Save a backup…	שמירת גיבוי…
+	The secret key in a file, locked with a passphrase	המפתח הסודי בקובץ, נעול במשפט סיסמה
+	No backup of this key is saved	לא נשמר גיבוי של המפתח הזה
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	אם המחשב הזה יאבד או מחזיק המפתחות שלו יתרוקן, לא יהיה אפשר עוד לקרוא דואר שהוצפן למפתח הזה. שמרו גיבוי, והחזיקו אותו עם משפט הסיסמה במקום בטוח.
+	This key ran out on {date}	תוקף המפתח הזה פג ב־{date}
+	This key runs out on {date}	תוקף המפתח הזה יפוג ב־{date}
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	הארכה חותמת עליו שוב לשלוש שנים מהיום; אחר כך שלחו שוב את המפתח הציבורי שלכם למי שיש לו אותו.
+	Extend	הארכה
+	Keys of the people you write to: {n}	המפתחות של האנשים שאתם כותבים להם: {n}
+	They come with their mail, or from a key file they gave you.	הם מגיעים עם הדואר שלהם, או מקובץ מפתח שהם נתנו לכם.
+	Import someone's key…	ייבוא מפתח של מישהו…
+	from their mail	מהדואר שלו
+	imported by you	יובא על ידיכם
+	Their signatures can't be checked any more, until their key comes again	לא יהיה אפשר עוד לבדוק את החתימות שלו, עד שהמפתח שלו יגיע שוב
+	Withdrawn on {date}	בוטל ב־{date}
+	It ran out on {date}	פג ב־{date}
+	Valid until {date}	בתוקף עד {date}
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	המפתח הציבורי שלכם ל־OpenPGP נשמר ב־{file}: תנו אותו למי שיכתבו לכם
+	Import an OpenPGP key	ייבוא מפתח OpenPGP
+	The passphrase {file} is locked with (none, if it has none):	משפט הסיסמה שנועל את {file} (ריק, אם אין לו):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	החלק הסודי שלו נשמר במחזיק המפתחות של המערכת, לא בקבצים של Quatrelle; משפט הסיסמה לא נשמר.
+	Save a backup of your OpenPGP key	שמירת גיבוי של מפתח ה־OpenPGP שלכם
+	A passphrase to lock {file} with, twice:	משפט סיסמה לנעילת {file}, פעמיים:
+	The two passphrases aren't the same.	שני משפטי הסיסמה אינם זהים.
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	בלי משפט הסיסמה הזה אף אחד לא יוכל לפתוח את הגיבוי, גם לא אתם: שמרו את שניהם במקום בטוח. גם GnuPG ותוכנות OpenPGP אחרות קוראות אותו.
+	Forget this OpenPGP key?	לשכוח את מפתח ה־OpenPGP הזה?
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	המפתח שלכם עבור {who} יוסר מהמחשב הזה, והחלק הסודי שלו גם ממחזיק המפתחות של המערכת.
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	לא יהיה אפשר עוד לקרוא כאן דואר שהוצפן אליו, עד שהגיבוי שלו ייובא שוב.
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	לא נשמר לו גיבוי: לא יהיה אפשר עוד לקרוא דואר שהוצפן אליו, לא כאן ולא בשום מקום.

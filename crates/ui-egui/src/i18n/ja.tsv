@@ -1968,3 +1968,48 @@ folder	Conflicts	競合
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	この人のキーは本人のメールに付いてくるか、ファイル › 情報 › セキュリティ でファイルからインポートできます。
 	Import OpenPGP key	OpenPGP キーをインポート
 	Keep this key for its owner's address	このキーを所有者のアドレス用に保持します
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	多くの人やメールソフトと同じように、OpenPGP で署名と暗号化を行います: 自分のキーと、メールを送る相手のキーを使います。
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	OpenPGP キーはデスクトップアプリで使えます
+	No OpenPGP key	OpenPGP キーがありません
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	アカウントにキーができるまで、OpenPGP では何も署名・暗号化されません。OpenPGP で署名・暗号化されたメールは読めます。
+	Create an OpenPGP key	OpenPGP キーを作成
+	Import a key…	キーをインポート…
+	A secret key file (.asc or .gpg), with its passphrase	秘密鍵ファイル (.asc または .gpg) とそのパスフレーズ
+	Older key {key}: kept to decrypt mail sent to it	以前のキー {key}: このキー宛てのメールを復号するために保持しています
+	Forget	削除
+	Mail encrypted to it can't be read any more	このキー宛てに暗号化されたメールは読めなくなります
+	Sign and decrypt with this key again; the one in use is kept to decrypt	このキーでもう一度署名と復号を行います。使用中のキーは復号用に保持されます
+	Send my public key with my messages	自分の公開鍵をメッセージに添える
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	相手のメールソフトがあなたの署名を確認し、返信を暗号化できるようになります (Autocrypt)。
+	Export public key…	公開鍵をエクスポート…
+	A file to give those who'll write to you	あなたにメールを送る人に渡すファイル
+	Save a backup…	バックアップを保存…
+	The secret key in a file, locked with a passphrase	パスフレーズで保護したファイルに入れた秘密鍵
+	No backup of this key is saved	このキーのバックアップは保存されていません
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	このコンピューターをなくしたりキーチェーンが空になったりすると、このキー宛てに暗号化されたメールは読めなくなります。バックアップを保存し、パスフレーズと一緒に安全な場所に保管してください。
+	This key ran out on {date}	このキーは {date} に期限切れになりました
+	This key runs out on {date}	このキーは {date} に期限切れになります
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	延長すると、今日から 3 年間有効になるよう署名し直します。その後、公開鍵を持っている人にもう一度送ってください。
+	Extend	延長
+	Keys of the people you write to: {n}	メールを送る相手のキー: {n}
+	They come with their mail, or from a key file they gave you.	相手のメールに付いてくるか、相手からもらったキーファイルから取り込みます。
+	Import someone's key…	ほかの人のキーをインポート…
+	from their mail	相手のメールから
+	imported by you	あなたがインポート
+	Their signatures can't be checked any more, until their key comes again	相手のキーがまた届くまで、相手の署名を確認できなくなります
+	Withdrawn on {date}	{date} に取り消し
+	It ran out on {date}	{date} に期限切れ
+	Valid until {date}	{date} まで有効
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	OpenPGP 公開鍵を {file} に保存しました: あなたにメールを送る人に渡してください
+	Import an OpenPGP key	OpenPGP キーをインポート
+	The passphrase {file} is locked with (none, if it has none):	{file} を保護しているパスフレーズ (ない場合は空欄):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	秘密の部分は Quatrelle のファイルではなくシステムのキーチェーンに保存されます。パスフレーズは保存されません。
+	Save a backup of your OpenPGP key	OpenPGP キーのバックアップを保存
+	A passphrase to lock {file} with, twice:	{file} を保護するパスフレーズ (2 回):
+	The two passphrases aren't the same.	2 つのパスフレーズが一致しません。
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	このパスフレーズがないと、あなたを含め誰もバックアップを開けません: 両方を安全な場所に保管してください。GnuPG やほかの OpenPGP ソフトでも読めます。
+	Forget this OpenPGP key?	この OpenPGP キーを削除しますか?
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	{who} のキーがこのコンピューターから削除され、秘密の部分もシステムのキーチェーンから削除されます。
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	バックアップをもう一度インポートするまで、このキー宛てに暗号化されたメールはここでは読めなくなります。
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	バックアップは保存されていません: このキー宛てに暗号化されたメールは、ここでもほかの場所でも読めなくなります。

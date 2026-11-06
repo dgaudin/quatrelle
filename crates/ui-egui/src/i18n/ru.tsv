@@ -1971,3 +1971,48 @@ menu	View	Просмотр
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Его ключ приходит с его письмами или может быть импортирован из файла в разделе Файл › Сведения › Безопасность.
 	Import OpenPGP key	Импортировать ключ OpenPGP
 	Keep this key for its owner's address	Сохранить этот ключ для адреса его владельца
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	Подписывайте и шифруйте с OpenPGP, как многие люди и почтовые программы: собственным ключом и ключами тех, кому вы пишете.
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	Ключи OpenPGP работают в настольном приложении
+	No OpenPGP key	Нет ключа OpenPGP
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	Пока у учётной записи нет ключа, ничего не подписывается и не шифруется с OpenPGP; письма, подписанные или зашифрованные так, всё равно читаются.
+	Create an OpenPGP key	Создать ключ OpenPGP
+	Import a key…	Импортировать ключ…
+	A secret key file (.asc or .gpg), with its passphrase	Файл секретного ключа (.asc или .gpg) с его парольной фразой
+	Older key {key}: kept to decrypt mail sent to it	Прежний ключ {key}: сохранён, чтобы расшифровывать письма, отправленные для него
+	Forget	Забыть
+	Mail encrypted to it can't be read any more	Письма, зашифрованные для него, больше нельзя будет прочитать
+	Sign and decrypt with this key again; the one in use is kept to decrypt	Снова подписывать и расшифровывать этим ключом; текущий сохраняется для расшифровки
+	Send my public key with my messages	Отправлять мой открытый ключ с моими письмами
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	Тогда их почтовые программы смогут проверить вашу подпись и зашифровать ответы вам (Autocrypt).
+	Export public key…	Экспортировать открытый ключ…
+	A file to give those who'll write to you	Файл для тех, кто будет вам писать
+	Save a backup…	Сохранить резервную копию…
+	The secret key in a file, locked with a passphrase	Секретный ключ в файле, защищённом парольной фразой
+	No backup of this key is saved	Резервная копия этого ключа не сохранена
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	Если этот компьютер пропадёт или его хранилище ключей очистится, письма, зашифрованные для этого ключа, больше нельзя будет прочитать. Сохраните резервную копию и храните её вместе с парольной фразой в надёжном месте.
+	This key ran out on {date}	Срок действия этого ключа истёк {date}
+	This key runs out on {date}	Срок действия этого ключа истекает {date}
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	Продление заново подписывает его на три года с сегодняшнего дня; затем снова отправьте открытый ключ тем, у кого он есть.
+	Extend	Продлить
+	Keys of the people you write to: {n}	Ключи тех, кому вы пишете: {n}
+	They come with their mail, or from a key file they gave you.	Они приходят с их письмами или из файла ключа, который вам дали.
+	Import someone's key…	Импортировать чужой ключ…
+	from their mail	из их писем
+	imported by you	импортирован вами
+	Their signatures can't be checked any more, until their key comes again	Их подписи больше нельзя будет проверить, пока их ключ не придёт снова
+	Withdrawn on {date}	Отозван {date}
+	It ran out on {date}	Истёк {date}
+	Valid until {date}	Действует до {date}
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	Ваш открытый ключ OpenPGP сохранён в {file}: передайте его тем, кто будет вам писать
+	Import an OpenPGP key	Импортировать ключ OpenPGP
+	The passphrase {file} is locked with (none, if it has none):	Парольная фраза, которой защищён {file} (пусто, если её нет):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	Его секретная часть хранится в хранилище ключей системы, а не в файлах Quatrelle; парольная фраза не сохраняется.
+	Save a backup of your OpenPGP key	Сохранить резервную копию ключа OpenPGP
+	A passphrase to lock {file} with, twice:	Парольная фраза для защиты {file}, дважды:
+	The two passphrases aren't the same.	Парольные фразы не совпадают.
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	Без этой парольной фразы резервную копию не откроет никто, даже вы: храните их в надёжном месте. GnuPG и другие программы OpenPGP тоже её читают.
+	Forget this OpenPGP key?	Забыть этот ключ OpenPGP?
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Ваш ключ для {who} удаляется с этого компьютера, а его секретная часть — из хранилища ключей системы.
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	Письма, зашифрованные для него, здесь больше нельзя будет прочитать, пока его резервная копия не будет импортирована снова.
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Его резервная копия не сохранялась: письма, зашифрованные для него, больше нельзя будет прочитать ни здесь, ни где-либо ещё.

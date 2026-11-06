@@ -5559,6 +5559,7 @@ dependencies = [
  "log",
  "quatrelle-engine",
  "quatrelle-spell",
+ "rand_core 0.6.4",
  "resvg",
  "serde",
  "serde_json",

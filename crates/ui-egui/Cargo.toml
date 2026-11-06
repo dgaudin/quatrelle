@@ -50,3 +50,7 @@ hayro = { version = "0.8", default-features = false }
 # The system's code pages for Alt codes (`app/alt_code.rs`), from the registry; the version the
 # app and ipconfig use, so it's built once.
 windows-registry = "0.6"
+
+[dev-dependencies]
+# OpenPGP's tests make a key as the network layer does (tests/accounts/pgp.rs).
+rand_core = { version = "0.6", features = ["getrandom"] }

@@ -214,6 +214,8 @@ pub enum Action {
     UnlockCertificate(String),
     /// Choose a certificate on a smart card (or in the system's keychain) for an account.
     UseSmartCard(String),
+    /// The OpenPGP card's: a key file to pick or a place to save one, then its dialog or command.
+    Pgp(backstage::PgpAsk),
     /// Sign an account in again: the browser for OAuth accounts, else the password dialog.
     SignInAgain(String),
     /// Insert a picture at the cursor of the message being written (from a file).

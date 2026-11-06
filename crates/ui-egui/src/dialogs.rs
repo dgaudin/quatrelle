@@ -25,6 +25,7 @@ mod names;
 mod organize;
 mod other;
 pub(crate) mod people_field;
+mod pgp;
 pub(crate) mod pim_dialogs;
 mod writing;
 
@@ -145,6 +146,29 @@ pub enum Dialog {
         path: String,
         data: Option<Vec<u8>>,
         password: String,
+    },
+    /// OpenPGP: the passphrase of a secret key file being imported, from `path`.
+    PgpKey {
+        account: String,
+        path: String,
+        passphrase: quatrelle_engine::model::Secret,
+    },
+    /// OpenPGP: the passphrase (typed twice) a backup of key `fingerprint` is saved behind, at
+    /// `path`.
+    PgpBackup {
+        account: String,
+        fingerprint: String,
+        path: String,
+        passphrase: quatrelle_engine::model::Secret,
+        again: quatrelle_engine::model::Secret,
+    },
+    /// OpenPGP: before forgetting one of the account's keys (`who` it's for; whether a backup
+    /// of it was saved).
+    PgpForget {
+        account: String,
+        fingerprint: String,
+        who: String,
+        backed_up: bool,
     },
     /// A certificate on a smart card (its PKCS #11 module and PIN), or in the system's keychain.
     SmartCard {
@@ -300,6 +324,7 @@ impl Dialog {
                     | Dialog::ConfirmEmpty { .. }
                     | Dialog::DeleteFolder { .. }
                     | Dialog::RemoveAccount { .. }
+                    | Dialog::PgpForget { .. }
                     | Dialog::MailboxClosed { .. }
                     | Dialog::TrustDomain { .. }
                     | Dialog::EmptySubject
@@ -701,6 +726,7 @@ fn body(
         | Dialog::SmartCard { .. }
         | Dialog::Event(..)
         | Dialog::Contact(..) => other::draw(ui, d, s, pics, t, acts),
+        Dialog::PgpKey { .. } | Dialog::PgpBackup { .. } | Dialog::PgpForget { .. } => pgp::draw(ui, d, t, acts),
         Dialog::OpenSharedCalendar(f) => calendars::draw(ui, f, s, people, t, acts),
         Dialog::MoveEvent(f) => moving::draw(ui, f, t, acts),
     }

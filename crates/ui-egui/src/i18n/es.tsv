@@ -1972,3 +1972,48 @@ menu	View	Ver
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Su clave llega con su correo, o se puede importar de un archivo en Archivo › Información › Seguridad.
 	Import OpenPGP key	Importar clave OpenPGP
 	Keep this key for its owner's address	Guardar esta clave para la dirección de su propietario
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	Firma y cifra con OpenPGP, como hacen muchas personas y programas de correo: con una clave propia y las claves de las personas a las que escribes.
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	Las claves OpenPGP funcionan en la aplicación de escritorio
+	No OpenPGP key	Sin clave OpenPGP
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	No se firma ni se cifra nada con OpenPGP hasta que la cuenta tenga una clave; el correo firmado o cifrado así se lee igualmente.
+	Create an OpenPGP key	Crear una clave OpenPGP
+	Import a key…	Importar una clave…
+	A secret key file (.asc or .gpg), with its passphrase	Un archivo de clave secreta (.asc o .gpg), con su frase de contraseña
+	Older key {key}: kept to decrypt mail sent to it	Clave anterior {key}: se conserva para descifrar el correo enviado a ella
+	Forget	Olvidar
+	Mail encrypted to it can't be read any more	El correo cifrado para ella ya no se podrá leer
+	Sign and decrypt with this key again; the one in use is kept to decrypt	Firmar y descifrar de nuevo con esta clave; la que está en uso se conserva para descifrar
+	Send my public key with my messages	Enviar mi clave pública con mis mensajes
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	Así sus programas de correo pueden comprobar tu firma y cifrar sus respuestas (Autocrypt).
+	Export public key…	Exportar clave pública…
+	A file to give those who'll write to you	Un archivo para dar a quienes te escriban
+	Save a backup…	Guardar una copia de seguridad…
+	The secret key in a file, locked with a passphrase	La clave secreta en un archivo, protegido con una frase de contraseña
+	No backup of this key is saved	No hay ninguna copia de seguridad de esta clave
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	Si pierdes este equipo o se vacía su llavero, el correo cifrado para esta clave ya no se podrá leer. Guarda una copia de seguridad y consérvala con su frase de contraseña en un lugar seguro.
+	This key ran out on {date}	Esta clave caducó el {date}
+	This key runs out on {date}	Esta clave caduca el {date}
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	Ampliarla la firma de nuevo por tres años desde hoy; después envía otra vez tu clave pública a quienes la tienen.
+	Extend	Ampliar
+	Keys of the people you write to: {n}	Claves de las personas a las que escribes: {n}
+	They come with their mail, or from a key file they gave you.	Llegan con su correo, o de un archivo de clave que te dieron.
+	Import someone's key…	Importar la clave de alguien…
+	from their mail	de su correo
+	imported by you	importada por ti
+	Their signatures can't be checked any more, until their key comes again	Sus firmas ya no se podrán comprobar, hasta que su clave vuelva a llegar
+	Withdrawn on {date}	Retirada el {date}
+	It ran out on {date}	Caducó el {date}
+	Valid until {date}	Válida hasta el {date}
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	Tu clave pública OpenPGP se guardó en {file}: dásela a quienes te escriban
+	Import an OpenPGP key	Importar una clave OpenPGP
+	The passphrase {file} is locked with (none, if it has none):	La frase de contraseña que protege {file} (vacía, si no tiene):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	Su parte secreta se guarda en el llavero del sistema, no en los archivos de Quatrelle; la frase de contraseña no se guarda.
+	Save a backup of your OpenPGP key	Guardar una copia de seguridad de tu clave OpenPGP
+	A passphrase to lock {file} with, twice:	Una frase de contraseña para proteger {file}, dos veces:
+	The two passphrases aren't the same.	Las dos frases de contraseña no son iguales.
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	Sin esta frase de contraseña nadie puede abrir la copia, ni tú: guarda ambas en un lugar seguro. GnuPG y otros programas OpenPGP también la leen.
+	Forget this OpenPGP key?	¿Olvidar esta clave OpenPGP?
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Tu clave para {who} se va de este equipo, y su parte secreta también del llavero del sistema.
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	El correo cifrado para ella ya no se podrá leer aquí, hasta que se vuelva a importar su copia de seguridad.
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	No se guardó ninguna copia de seguridad: el correo cifrado para ella ya no se podrá leer, ni aquí ni en ningún sitio.

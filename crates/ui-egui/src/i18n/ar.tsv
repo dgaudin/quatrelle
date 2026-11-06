@@ -1967,3 +1967,48 @@ folder	Conflicts	التعارضات
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	يأتي مفتاحه مع بريده، أو يمكن استيراده من ملف في ملف › معلومات › الأمان.
 	Import OpenPGP key	استيراد مفتاح OpenPGP
 	Keep this key for its owner's address	الاحتفاظ بهذا المفتاح لعنوان مالكه
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	وقّع وشفّر باستخدام OpenPGP كما يفعل كثير من الناس وبرامج البريد: بمفتاح خاص بك، ومفاتيح من تراسلهم.
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	تعمل مفاتيح OpenPGP في تطبيق سطح المكتب
+	No OpenPGP key	لا يوجد مفتاح OpenPGP
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	لا يُوقَّع شيء ولا يُشفَّر باستخدام OpenPGP حتى يصبح للحساب مفتاح؛ ويُقرأ البريد الموقّع أو المشفّر به رغم ذلك.
+	Create an OpenPGP key	إنشاء مفتاح OpenPGP
+	Import a key…	استيراد مفتاح…
+	A secret key file (.asc or .gpg), with its passphrase	ملف مفتاح سري (.asc أو .gpg) مع عبارة مروره
+	Older key {key}: kept to decrypt mail sent to it	مفتاح سابق {key}: محفوظ لفك تشفير البريد المرسل إليه
+	Forget	نسيان
+	Mail encrypted to it can't be read any more	لن يعود ممكنًا قراءة البريد المشفّر له
+	Sign and decrypt with this key again; the one in use is kept to decrypt	التوقيع وفك التشفير بهذا المفتاح من جديد؛ ويُحفظ المفتاح المستخدم لفك التشفير
+	Send my public key with my messages	إرسال مفتاحي العام مع رسائلي
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	تستطيع برامج بريدهم عندئذ التحقق من توقيعك وتشفير ردودهم إليك (Autocrypt).
+	Export public key…	تصدير المفتاح العام…
+	A file to give those who'll write to you	ملف تعطيه لمن سيراسلك
+	Save a backup…	حفظ نسخة احتياطية…
+	The secret key in a file, locked with a passphrase	المفتاح السري في ملف محمي بعبارة مرور
+	No backup of this key is saved	لم تُحفظ نسخة احتياطية من هذا المفتاح
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	إذا ضاع هذا الحاسوب أو أُفرغت سلسلة مفاتيحه، فلن يعود ممكنًا قراءة البريد المشفّر لهذا المفتاح. احفظ نسخة احتياطية واحتفظ بها مع عبارة مرورها في مكان آمن.
+	This key ran out on {date}	انتهت صلاحية هذا المفتاح في {date}
+	This key runs out on {date}	تنتهي صلاحية هذا المفتاح في {date}
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	تمديده يعيد توقيعه ليبقى صالحًا ثلاث سنوات من اليوم؛ ثم أرسل مفتاحك العام من جديد إلى من لديهم.
+	Extend	تمديد
+	Keys of the people you write to: {n}	مفاتيح من تراسلهم: {n}
+	They come with their mail, or from a key file they gave you.	تأتي مع بريدهم، أو من ملف مفتاح أعطوك إياه.
+	Import someone's key…	استيراد مفتاح شخص…
+	from their mail	من بريده
+	imported by you	استوردتَه أنت
+	Their signatures can't be checked any more, until their key comes again	لن يعود ممكنًا التحقق من تواقيعه حتى يصل مفتاحه من جديد
+	Withdrawn on {date}	سُحب في {date}
+	It ran out on {date}	انتهت صلاحيته في {date}
+	Valid until {date}	صالح حتى {date}
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	حُفظ مفتاح OpenPGP العام الخاص بك في {file}: أعطه لمن سيراسلك
+	Import an OpenPGP key	استيراد مفتاح OpenPGP
+	The passphrase {file} is locked with (none, if it has none):	عبارة المرور التي تحمي {file} (فارغة إن لم تكن له عبارة):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	يُحفظ جزؤه السري في سلسلة مفاتيح النظام، لا في ملفات Quatrelle؛ ولا تُحفظ عبارة المرور.
+	Save a backup of your OpenPGP key	حفظ نسخة احتياطية من مفتاح OpenPGP
+	A passphrase to lock {file} with, twice:	عبارة مرور لحماية {file}، مرتين:
+	The two passphrases aren't the same.	عبارتا المرور غير متطابقتين.
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	دون عبارة المرور هذه لا يستطيع أحد فتح النسخة الاحتياطية، ولا أنت: احتفظ بهما في مكان آمن. ويقرؤها GnuPG وبرامج OpenPGP الأخرى أيضًا.
+	Forget this OpenPGP key?	هل تريد نسيان مفتاح OpenPGP هذا؟
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	يُزال مفتاحك لـ {who} من هذا الحاسوب، ويُزال جزؤه السري من سلسلة مفاتيح النظام أيضًا.
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	لن يعود ممكنًا قراءة البريد المشفّر له هنا حتى تُستورد نسخته الاحتياطية من جديد.
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	لم تُحفظ منه نسخة احتياطية: لن يعود ممكنًا قراءة البريد المشفّر له، لا هنا ولا في أي مكان.
