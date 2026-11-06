@@ -2025,3 +2025,10 @@ menu	View	Ver
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Firmar y cifrar con S/MIME u OpenPGP: Automático elige el que todos los destinatarios pueden recibir, o el del mensaje al que respondes
 	Automatic takes {scheme} for this message	Automático usa {scheme} para este mensaje
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	No se puede enviar cifrado: no hay ninguna clave OpenPGP utilizable para {names}. Su clave llega con su correo, o se puede importar en Archivo › Información › Seguridad; o desactiva Cifrar para enviarlo sin cifrar.
+	Encrypt by itself when everyone can receive it	Cifrar solo cuando todos puedan recibirlo cifrado
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Un mensaje nuevo se cifra mientras Quatrelle tenga un certificado o una clave OpenPGP de cada destinatario, hasta que elijas Cifrar tú mismo
+	Attach my public key	Adjuntar mi clave pública
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	Tu clave pública OpenPGP va con el mensaje como archivo, para que los destinatarios la importen
+	Every recipient can receive it encrypted ({scheme})	Todos los destinatarios pueden recibirlo cifrado ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	No se puede cifrar para {names}: no hay clave OpenPGP utilizable
+	It can't be encrypted for {names}: no certificate	No se puede cifrar para {names}: no hay certificado

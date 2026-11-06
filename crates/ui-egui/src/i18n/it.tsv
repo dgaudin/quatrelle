@@ -2023,3 +2023,10 @@ folder	Conflicts	Conflitti
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Firma e crittografa con S/MIME o OpenPGP: Automatico sceglie quello che tutti i destinatari possono ricevere, o quello del messaggio a cui rispondi
 	Automatic takes {scheme} for this message	Automatico usa {scheme} per questo messaggio
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Non si può inviare crittografato: non c'è una chiave OpenPGP utilizzabile per {names}. La loro chiave arriva con la loro posta, o si può importare in File › Informazioni › Sicurezza; oppure disattiva Crittografa per inviarlo non crittografato.
+	Encrypt by itself when everyone can receive it	Crittografa da solo quando tutti possono riceverlo
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Un nuovo messaggio viene crittografato finché Quatrelle ha un certificato o una chiave OpenPGP di ogni destinatario, finché non scegli tu Crittografa
+	Attach my public key	Allega la mia chiave pubblica
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	La tua chiave pubblica OpenPGP va con il messaggio come file, perché i destinatari la importino
+	Every recipient can receive it encrypted ({scheme})	Tutti i destinatari possono riceverlo crittografato ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	Non si può crittografare per {names}: nessuna chiave OpenPGP utilizzabile
+	It can't be encrypted for {names}: no certificate	Non si può crittografare per {names}: nessun certificato

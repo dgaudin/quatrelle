@@ -91,6 +91,10 @@ pub struct Compose {
     /// A reply: the protection the message it answers came with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub came_as: Option<Scheme>,
+    /// Encryption follows the recipients (on while every one can receive it), until it's chosen
+    /// (File › Options › Safety).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub encrypt_auto: bool,
     /// The language its spelling is checked in (`fr`, `en`…, as the dictionaries are named;
     /// empty: the interface's, when there's a dictionary for it; `all`: every dictionary), as
     /// Outlook's Review › Language.

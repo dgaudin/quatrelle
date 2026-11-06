@@ -475,6 +475,13 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 ui.add_space(76.0);
                 ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, Some(&subject_check)));
             });
+            // With an OpenPGP key: whether everyone in it can receive it encrypted, and who can't.
+            if let Some(r) = reach.as_ref().filter(|r| has_pgp && r.recipients > 0) {
+                ui.horizontal(|ui| {
+                    ui.add_space(76.0 + LABEL_W);
+                    encryption_line(ui, &t, r, c.encrypt);
+                });
+            }
             if !c.attachments.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(76.0 + LABEL_W);
@@ -590,4 +597,27 @@ fn attach_dropped(ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
     for f in dropped.iter().take(100).filter(|f| f.path().is_absolute()) {
         acts.push(Action::Run("compose.attach", json!({"path": f.path().to_string_lossy()})));
     }
+}
+
+/// Whether everyone in the message being written can receive it encrypted, and if not who can't:
+/// in the colour of what it means now (red while Encrypt is on: it won't go).
+fn encryption_line(ui: &mut Ui, t: &Tokens, r: &quatrelle_engine::Reach, encrypting: bool) {
+    let scheme = crate::rich_edit::scheme_name(r.scheme);
+    let (color, text) = if r.everyone() {
+        (if encrypting { t.ok } else { t.dim }, tf!("Every recipient can receive it encrypted ({scheme})", scheme = scheme))
+    } else {
+        let names = r.missing.join(", ");
+        let text = if r.scheme == quatrelle_engine::Scheme::Pgp {
+            tf!("It can't be encrypted for {names}: no usable OpenPGP key", names = names)
+        } else {
+            tf!("It can't be encrypted for {names}: no certificate", names = names)
+        };
+        (if encrypting { t.danger } else { t.dim }, text)
+    };
+    let shown = ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+        icons::paint(ui.painter(), rect, Icon::Lock, color);
+        ui.add(egui::Label::new(RichText::new(text.clone()).color(color).small()).truncate());
+    });
+    shown.response.on_hover_text(text);
 }

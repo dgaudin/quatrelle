@@ -84,6 +84,8 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             }
             if let Some(on) = p::bool(v, "encrypt") {
                 c.encrypt = on;
+                // Chosen: it no longer follows the recipients.
+                c.encrypt_auto = false;
             }
             if let Some(sc) = scheme {
                 c.scheme = sc;
@@ -105,5 +107,6 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             })
         })
         .params("{}"),
+        CommandSpec::new("compose.attachPublicKey", "Attach my public key", "Message › Options", |s, _| s.attach_public_key()).params("{}"),
     ]
 }

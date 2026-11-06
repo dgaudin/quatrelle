@@ -270,6 +270,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({ "on": s.prefs.keep_photo_location }))
         })
         .params(r#"{"on"?: bool (none: switch; off, the place is taken out of attached photos as they're sent)}"#),
+        CommandSpec::new("view.encryptWhenPossible", "Encrypt by itself when everyone can receive it", "File › Options › Safety", |s, v| {
+            s.prefs.encrypt_when_possible = p::bool(v, "on").unwrap_or(!s.prefs.encrypt_when_possible);
+            Ok(json!({ "on": s.prefs.encrypt_when_possible }))
+        })
+        .params(r#"{"on"?: bool (none: switch; on, a new message is encrypted while every recipient can receive it, until Encrypt is chosen)}"#),
         CommandSpec::new("view.cleanLinks", "Open links without their tracking", "File › Options › Safety", |s, v| {
             s.prefs.clean_links = p::bool(v, "on").unwrap_or(!s.prefs.clean_links);
             Ok(json!({ "on": s.prefs.clean_links }))

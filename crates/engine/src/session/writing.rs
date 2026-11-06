@@ -389,6 +389,10 @@ impl Session {
     /// Send the message being written. Unless `checked`, it's held when [`Session::send_checks`]
     /// finds anything, and the answer says what (`{"check": [...]}`).
     pub fn send_compose(&mut self, allow_empty_subject: bool, checked: bool) -> CmdResult {
+        // Encryption following the recipients: as they are now.
+        if self.compose.as_ref().is_some_and(|c| c.encrypt_auto) {
+            self.encryption_reach();
+        }
         let c = self.compose.clone().ok_or_else(|| CmdError::Disabled("nothing to send".into()))?;
         if c.sending {
             return Err(CmdError::Disabled("already sending".into()));
@@ -420,6 +424,8 @@ impl Session {
             d.seven_bit = true;
         }
         let (raw, from) = self.compose_bytes(&c, &d)?;
+        // The account's OpenPGP key goes along, for answers to be encrypted (Autocrypt).
+        let raw = self.with_autocrypt(&c, raw);
         // Written to: suggested first from now on, as Outlook's AutoComplete list does.
         let written: Vec<EmailAddress> = d.to.iter().chain(&d.cc).chain(&d.bcc).cloned().collect();
         self.contacts_sent(&written);

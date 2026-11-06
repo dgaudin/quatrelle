@@ -2021,3 +2021,10 @@ menu	View	Weergeven
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Ondertekenen en versleutelen met S/MIME of OpenPGP: Automatisch neemt wat alle ontvangers kunnen ontvangen, of dat van het bericht waarop u antwoordt
 	Automatic takes {scheme} for this message	Automatisch neemt {scheme} voor dit bericht
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Het kan niet versleuteld worden verzonden: er is geen bruikbare OpenPGP-sleutel voor {names}. Hun sleutel komt mee met hun e-mail, of kan worden geïmporteerd in Bestand › Info › Beveiliging; of zet Versleutelen uit om het onversleuteld te verzenden.
+	Encrypt by itself when everyone can receive it	Vanzelf versleutelen als iedereen het kan ontvangen
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Een nieuw bericht wordt versleuteld zolang Quatrelle van elke ontvanger een certificaat of OpenPGP-sleutel heeft, tot u zelf Versleutelen kiest
+	Attach my public key	Mijn openbare sleutel bijvoegen
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	Uw openbare OpenPGP-sleutel gaat als bestand met het bericht mee, zodat de ontvangers hem kunnen importeren
+	Every recipient can receive it encrypted ({scheme})	Alle ontvangers kunnen het versleuteld ontvangen ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	Kan niet worden versleuteld voor {names}: geen bruikbare OpenPGP-sleutel
+	It can't be encrypted for {names}: no certificate	Kan niet worden versleuteld voor {names}: geen certificaat

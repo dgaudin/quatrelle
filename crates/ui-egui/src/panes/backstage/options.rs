@@ -374,6 +374,17 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         setting(
             ui,
             false,
+            tl!("Encrypt by itself when everyone can receive it"),
+            Some(tl!(
+                "A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself"
+            )),
+            &mut |ui| {
+                switch(ui, s.prefs.encrypt_when_possible, tl!("Encrypt by itself when everyone can receive it"), "view.encryptWhenPossible", acts);
+            },
+        );
+        setting(
+            ui,
+            false,
             tl!("Open links without their tracking"),
             Some(tl!("A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked")),
             &mut |ui| {

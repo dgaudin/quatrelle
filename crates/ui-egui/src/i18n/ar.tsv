@@ -2020,3 +2020,10 @@ folder	Conflicts	التعارضات
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	التوقيع والتشفير بـ S/MIME أو OpenPGP: يختار «تلقائي» ما يستطيع كل المستلمين استقباله، أو ما وصلت به الرسالة التي تردّ عليها
 	Automatic takes {scheme} for this message	يختار «تلقائي» ‏{scheme} لهذه الرسالة
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	لا يمكن إرسالها مشفّرة: لا يوجد مفتاح OpenPGP صالح لـ {names}. يصل مفتاحهم مع بريدهم، أو يمكن استيراده من ملف › معلومات › الأمان؛ أو أوقف «تشفير» لإرسالها دون تشفير.
+	Encrypt by itself when everyone can receive it	التشفير تلقائيًا حين يستطيع الجميع استقباله
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	تُشفَّر الرسالة الجديدة ما دام لكل مستلم شهادة أو مفتاح OpenPGP يستطيع Quatrelle التشفير له، إلى أن تختار «تشفير» بنفسك
+	Attach my public key	إرفاق مفتاحي العام
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	يُرسَل مفتاح OpenPGP العام الخاص بك مع الرسالة ملفًا، ليستورده المستلمون
+	Every recipient can receive it encrypted ({scheme})	يستطيع كل المستلمين استقبالها مشفّرة ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	لا يمكن تشفيرها لـ {names}: لا يوجد مفتاح OpenPGP صالح
+	It can't be encrypted for {names}: no certificate	لا يمكن تشفيرها لـ {names}: لا توجد شهادة

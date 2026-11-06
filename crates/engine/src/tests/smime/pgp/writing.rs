@@ -32,8 +32,9 @@ nine=0A\r\n--=_mcc6512b6a89c44875_1--\r\n";
 #[test]
 fn nothing_changes_for_an_account_without_a_key() {
     let mut s = sample_session("pgp-no-key-send");
-    // Bo's key is known: still nothing, the account has none.
+    // Bo's key is known, and encryption may turn itself on: still nothing, the account has none.
     s.run("pgp.importPublic", &json!({"data": bo_key().public})).unwrap();
+    s.run("view.encryptWhenPossible", &json!({"on": true})).unwrap();
     s.run("mail.new", &json!({})).unwrap();
     s.run("compose.update", &json!({"to": "Bo <bo@studio.example>", "subject": "Plan", "body": "See you at nine."})).unwrap();
     s.run("compose.attach", &json!({"name": "plan.txt", "data": b"nine\n".to_vec()})).unwrap();
@@ -238,5 +239,104 @@ fn auto_answers_in_the_scheme_it_was_written_in() {
     let mut fresh = c.clone();
     fresh.came_as = None;
     assert_eq!(s.scheme_for(&fresh), Some(Scheme::Smime), "by recipients alone, a tie: S/MIME");
+    done(s);
+}
+
+/// The `Autocrypt:` headers of `raw`, read: the address each is for, and its key's fingerprint.
+fn autocrypt_of(raw: &[u8]) -> Vec<(String, String)> {
+    quatrelle_mime::pgp::autocrypt(raw)
+        .iter()
+        .filter_map(|v| pgp::autocrypt::parse(v))
+        .map(|a| (a.addr.clone(), pgp::info(&a.keydata).map(|i| i.fingerprint).unwrap_or_default()))
+        .collect()
+}
+
+#[test]
+fn attaching_my_public_key_adds_it_once() {
+    // Without a key: nothing to attach.
+    let mut s = sample_session("pgp-attach-none");
+    s.run("mail.new", &json!({})).unwrap();
+    assert!(matches!(s.run("compose.attachPublicKey", &json!({})), Err(CmdError::Disabled(_))));
+    assert!(s.compose.as_ref().unwrap().attachments.is_empty());
+    done(s);
+    let (mut s, riley) = with_key("pgp-attach");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "Bo <bo@studio.example>", "subject": "My key", "body": "Here it is."})).unwrap();
+    s.run("compose.attachPublicKey", &json!({})).unwrap();
+    let again = s.run("compose.attachPublicKey", &json!({})).unwrap();
+    assert_eq!(again["already"], json!(true));
+    let c = s.compose.clone().unwrap();
+    let keys: Vec<_> = c.attachments.iter().filter(|a| a.mime == "application/pgp-keys").collect();
+    assert_eq!(keys.len(), 1, "once");
+    assert_eq!(keys[0].name, "riley@studio.example.asc");
+    assert!(String::from_utf8_lossy(&keys[0].data).starts_with("-----BEGIN PGP PUBLIC KEY BLOCK-----"));
+    let attached = pgp::public_keys(&keys[0].data).unwrap();
+    assert_eq!(pgp::info(&attached[0]).unwrap().fingerprint, riley.info.fingerprint, "the account's key");
+    // Sent, it reads as a key attached to Riley's mail.
+    s.run("compose.send", &json!({})).unwrap();
+    let parts = quatrelle_mime::pgp::key_parts(&last_sent(&s));
+    assert_eq!(parts.len(), 1);
+    done(s);
+}
+
+#[test]
+fn the_public_key_goes_with_mail_once_a_key_exists() {
+    let (mut s, riley) = with_key("pgp-autocrypt");
+    let send = |s: &mut Session, subject: &str| {
+        s.run("mail.new", &json!({})).unwrap();
+        s.run("compose.update", &json!({"to": "Bo <bo@studio.example>", "subject": subject, "body": "Hi."})).unwrap();
+        s.run("compose.send", &json!({})).unwrap();
+        last_sent(s)
+    };
+    // On once the key is made: one header, the account's key, no prefer-encrypt.
+    let raw = send(&mut s, "With");
+    assert_eq!(autocrypt_of(&raw), [("riley@studio.example".to_string(), riley.info.fingerprint.clone())]);
+    let text = String::from_utf8_lossy(&raw);
+    assert_eq!(text.matches("Autocrypt:").count(), 1);
+    assert!(!text.contains("prefer-encrypt"), "{text}");
+    // Turned off: none.
+    s.run("pgp.options", &json!({"autocrypt": false})).unwrap();
+    assert!(autocrypt_of(&send(&mut s, "Without")).is_empty());
+    // On again, but the key ran out: none either (no one could encrypt to it).
+    s.run("pgp.options", &json!({"autocrypt": true})).unwrap();
+    s.clock.now = riley.info.expires.unwrap() + DAY;
+    assert!(autocrypt_of(&send(&mut s, "Late")).is_empty());
+    done(s);
+}
+
+#[test]
+fn encryption_turns_itself_on_only_when_chosen() {
+    let (mut s, riley) = with_key("pgp-encrypt-auto");
+    let bo = bo_key();
+    s.run("pgp.importPublic", &json!({"data": bo.public})).unwrap();
+    let reach = |s: &mut Session| s.run("compose.encryption", &json!({})).unwrap();
+    // The option off, as it starts: encryption stays off, though everyone could receive it.
+    assert_eq!(s.run("view.encryptWhenPossible", &json!({})).unwrap()["on"], json!(true), "switched on from off");
+    s.run("view.encryptWhenPossible", &json!({"on": false})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "Bo <bo@studio.example>", "subject": "Plan"})).unwrap();
+    let r = reach(&mut s);
+    assert_eq!((r["can"].clone(), r["encrypt"].clone()), (json!(true), json!(false)), "{r}");
+    s.run("compose.discard", &json!({})).unwrap();
+    // On: it turns on while everyone can, off when someone can't, on again.
+    s.run("view.encryptWhenPossible", &json!({"on": true})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "Bo <bo@studio.example>", "subject": "Plan"})).unwrap();
+    assert_eq!(reach(&mut s)["encrypt"], json!(true));
+    s.run("compose.update", &json!({"to": "Bo <bo@studio.example>; eve@studio.example"})).unwrap();
+    let r = reach(&mut s);
+    assert_eq!((r["encrypt"].clone(), r["missing"].clone()), (json!(false), json!(["eve@studio.example"])), "{r}");
+    s.run("compose.update", &json!({"to": "Bo <bo@studio.example>"})).unwrap();
+    assert_eq!(reach(&mut s)["encrypt"], json!(true));
+    // Chosen by hand: it holds, whoever it goes to.
+    s.run("compose.security", &json!({"encrypt": false})).unwrap();
+    assert_eq!(reach(&mut s)["encrypt"], json!(false));
+    s.run("compose.discard", &json!({})).unwrap();
+    // Sent without asking first: as the recipients are then.
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "Bo <bo@studio.example>", "subject": "Plan", "body": "Hi."})).unwrap();
+    s.run("compose.send", &json!({})).unwrap();
+    let (to, _) = answer_protect(&mut s, &riley.secret);
+    assert_eq!(to.len(), 2, "Bo, and Riley for the Sent copy");
     done(s);
 }

@@ -120,3 +120,48 @@ fn sending_encrypted_without_a_key_names_who_lacks_one() {
     assert!(has(&t, "eve@studio.example"), "{t:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// With a key, the message window says under the subject whether everyone in it can receive it
+/// encrypted, naming who can't (in red while Encrypt is on: it won't go); and offers the key as
+/// an attachment. The option that has encryption follow the recipients is in File › Options.
+#[test]
+fn the_line_says_who_cant_receive_it_encrypted() {
+    let (mut a, dir) = app("pgp-compose-line");
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    let mut tex = Textures::default();
+    let bo = pgp::generate("Bo", "bo@studio.example", NOW, &mut rand_core::OsRng).unwrap();
+    a.session.run("pgp.importPublic", &json!({"data": bo.public})).unwrap();
+    // Without a key of the account's: no line.
+    write_to_bo_and_eve(&ctx, &mut a, &mut tex);
+    let t = drawn(&ctx, &mut a, &mut tex, "line-without-key");
+    assert!(!has(&t, "It can't be encrypted") && !has(&t, "Attach my public key"), "{t:?}");
+    a.run("compose.discard", json!({}));
+    make_key(&mut a);
+    write_to_bo_and_eve(&ctx, &mut a, &mut tex);
+    let t = drawn(&ctx, &mut a, &mut tex, "line-off");
+    assert!(has(&t, "It can't be encrypted for eve@studio.example: no usable OpenPGP key"), "{t:?}");
+    assert!(has(&t, "Attach my public key"), "{t:?}");
+    a.run("compose.security", json!({"encrypt": true}));
+    let t = drawn(&ctx, &mut a, &mut tex, "line-on");
+    assert!(has(&t, "It can't be encrypted for eve@studio.example"), "{t:?}");
+    a.run("compose.update", json!({"to": "Bo <bo@studio.example>"}));
+    let t = drawn(&ctx, &mut a, &mut tex, "line-everyone");
+    assert!(has(&t, "Every recipient can receive it encrypted (OpenPGP)") && !has(&t, "It can't be encrypted"), "{t:?}");
+    // The option, off as it starts.
+    a.act(crate::Action::Backstage(crate::backstage::Page::Options));
+    let mut texts = Vec::new();
+    for _ in 0..6 {
+        texts = super::super::list::follow_up::frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (1280, 4000))
+            .1
+            .iter()
+            .filter_map(|s| match s {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+    }
+    assert!(has(&texts, "Encrypt by itself when everyone can receive it"), "{texts:?}");
+    assert!(!a.session.prefs.encrypt_when_possible);
+    let _ = std::fs::remove_dir_all(dir);
+}
