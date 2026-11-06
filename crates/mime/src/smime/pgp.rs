@@ -10,7 +10,9 @@
 //! part inside some other multipart is an attachment, and inline PGP only in a message that is
 //! one text.
 
-use mail_parser::{MessageParser, MimeHeaders};
+use mail_parser::MessageParser;
+
+use crate::attachments::contents;
 
 use super::{RAW_MAX, crlf, entity_of, fields, find, first_part, protect_headers, safe_to_sign, split, with_entity};
 
@@ -70,7 +72,7 @@ pub fn may_carry(raw: &[u8]) -> bool {
         return true;
     }
     let Some(m) = MessageParser::default().parse_headers(raw) else { return false };
-    let Some(root) = m.parts.first() else { return false };
+    let root = m.root_part();
     let (kind, sub) = match root.content_type() {
         Some(ct) => (ct.ctype().to_ascii_lowercase(), ct.subtype().unwrap_or_default().to_ascii_lowercase()),
         None => ("text".to_string(), "plain".to_string()),
@@ -81,7 +83,7 @@ pub fn may_carry(raw: &[u8]) -> bool {
         ("multipart", "encrypted") => protocol == "application/pgp-encrypted",
         ("multipart", _) => raw.len() <= KEYS_LOOKED_MAX && find_ignoring_case(body, b"application/pgp-keys"),
         // Quoted-printable leaves an armor line as it is; a text in base64 is decoded to look.
-        ("text", "plain") => find(body, b"-----BEGIN PGP ", 0).is_some() || base64_block(root, body),
+        ("text", "plain") => find(body, b"-----BEGIN PGP ", 0).is_some() || base64_block(&root, body),
         _ => false,
     }
 }
@@ -92,7 +94,7 @@ pub fn may_carry(raw: &[u8]) -> bool {
 fn base64_block(part: &mail_parser::MessagePart<'_>, body: &[u8]) -> bool {
     part.content_transfer_encoding().is_some_and(|e| e.trim().eq_ignore_ascii_case("base64"))
         && body.len() <= KEYS_LOOKED_MAX
-        && mail_parser::decoders::base64::base64_decode(body).is_some_and(|text| has_block(&text))
+        && has_block(&mail_parser::Encoding::Base64.decode(body))
 }
 
 /// Whether `needle` (lower-case) is in `hay`, in any case.
@@ -114,7 +116,7 @@ pub fn protection(raw: &[u8]) -> Protection {
     if kind == "multipart" && sub == "signed" && protocol == "application/pgp-signature" {
         let Some(boundary) = m.content_type().and_then(|c| c.attribute("boundary")) else { return Protection::None };
         let Some(content) = first_part(raw, boundary) else { return Protection::None };
-        let signature = m.parts.iter().skip(1).find(|p| content_type_of(p) == "application/pgp-signature").map(|p| p.contents().to_vec());
+        let signature = m.root().parts().skip(1).find(|p| content_type_of(p) == "application/pgp-signature").map(|p| contents(p).into_owned());
         return match signature {
             Some(signature) if !signature.is_empty() => Protection::Signed { content, signature },
             _ => Protection::None,
@@ -122,18 +124,17 @@ pub fn protection(raw: &[u8]) -> Protection {
     }
     if kind == "multipart" && sub == "encrypted" && protocol == "application/pgp-encrypted" {
         // The version part first, then the message (RFC 3156 §4).
-        let body = m.parts.iter().skip(1).find(|p| content_type_of(p) == "application/octet-stream").map(|p| p.contents().to_vec());
+        let body = m.root().parts().skip(1).find(|p| content_type_of(p) == "application/octet-stream").map(|p| contents(p).into_owned());
         return match body {
             Some(b) if !b.is_empty() => Protection::Encrypted(b),
             _ => Protection::None,
         };
     }
     if kind == "text" && sub == "plain" {
-        let Some(part) = m.parts.first() else { return Protection::None };
-        let body = part.contents();
-        if has_block(body) {
+        let body = contents(m.root_part());
+        if has_block(&body) {
             let charset = m.content_type().and_then(|c| c.attribute("charset")).unwrap_or("utf-8").trim().to_ascii_lowercase();
-            return Protection::Inline { body: body.to_vec(), charset };
+            return Protection::Inline { body: body.into_owned(), charset };
         }
     }
     Protection::None
@@ -173,13 +174,13 @@ pub fn key_parts(raw: &[u8]) -> Vec<Vec<u8>> {
         return Vec::new();
     }
     let Some(m) = MessageParser::default().parse(raw) else { return Vec::new() };
-    m.parts
-        .iter()
+    m.root()
+        .parts()
         .filter(|p| content_type_of(p) == "application/pgp-keys")
-        .map(|p| p.contents())
+        .map(contents)
         .filter(|c| !c.is_empty() && c.len() <= 1 << 20)
         .take(8)
-        .map(<[u8]>::to_vec)
+        .map(std::borrow::Cow::into_owned)
         .collect()
 }
 

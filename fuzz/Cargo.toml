@@ -44,13 +44,11 @@ quatrelle-store.path = "../crates/store" # the in-memory cache syncs write to; d
 outlook-pst-rw = "1.2.14" # the .pst reader and writer, from the fixed copy below (`pst_append`)
 serde_json = "1" # Graph's answers
 
-# `cargo fuzz ... -O` builds with this profile. Quatrelle's own code keeps its debug assertions and
-# overflow checks; mail-parser runs without debug assertions, as the main workspace sets it.
+# `cargo fuzz ... -O` builds with this profile, debug assertions and overflow checks on.
 [profile.release]
 debug = 1
 debug-assertions = true
 overflow-checks = true
-package.mail-parser.debug-assertions = false
 
 # The .pst reader and writer with the fixes Quatrelle needs, the copy in vendor/ that the main
 # workspace's [patch.crates-io] takes too (`cargo xtask ci` checks it).

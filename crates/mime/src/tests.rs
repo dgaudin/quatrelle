@@ -42,6 +42,7 @@ pub(crate) mod index_text;
 mod inline_names;
 mod kept_cid;
 mod one_parse;
+mod parts_listed;
 mod reply_layout;
 mod report;
 mod report_status;
@@ -224,8 +225,8 @@ fn garbage_never_panics() {
 }
 
 /// A message inside a message inside a multipart, ended by the outer boundary (found by
-/// `fuzz/`): mail-parser trips its own `debug_assert!`, a panic in every debug build until the
-/// workspace's profiles turned its debug assertions off (Cargo.toml).
+/// `fuzz/`): mail-parser 0.11 tripped its own `debug_assert!`, a panic in every debug build
+/// while its debug assertions were on. 1.0 keeps the content as a part, with them on.
 #[test]
 fn nested_messages_ended_by_the_outer_boundary_never_panic() {
     let raw = b"Content-Type:multipart;boundary=b1\n\n--b1Content-Type:message/rfc822\n\nContent-Type:message/rfc822\n\n\n--b1--";
