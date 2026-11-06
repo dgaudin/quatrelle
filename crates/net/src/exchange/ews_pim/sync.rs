@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! EWS calendars and contacts: the sync — what changed here sent first, then the account's own
-//! calendar and contacts read by their changes ([`changes`](super::changes)), the other calendars
-//! read again.
+//! EWS calendars and contacts: the sync — what changed here sent first, then every calendar,
+//! address book, the notes and the tasks read by their changes ([`changes`](super::changes)).
 
-use super::changes::{read_contacts, read_own_calendar};
+use quatrelle_model::pim::Tombstone;
+
+use super::changes::{Public, notes_read, public_calendar, public_contacts, read_contacts, read_own_calendar, shared_calendar};
 use super::*;
 
 /// Send what changed here, then read the calendar and contacts again.
@@ -19,10 +20,10 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
 /// appointment again (06/11).
 pub fn sync_changes(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, partial: true, ..Default::default() };
-    let again = delete_gone(c, pim.deleted.iter().filter(|t| !t.href.starts_with("task:") && !t.href.starts_with("note:")), &mut out);
+    let refused = delete_gone(c, pim.deleted.iter().filter(|t| !t.href.starts_with("task:") && !t.href.starts_with("note:")), &mut out);
     push_events(c, pim, &mut out);
     push_cards(c, pim, &mut out);
-    let state = read_own_calendar(c, pim, now, &again, &mut out)?;
+    let state = read_own_calendar(c, pim, now, &again_in(&refused, CALENDAR), &mut out)?;
     answer_pending(c, pim, &mut out);
     reminders::answer_all(c, pim, &mut out);
     // Named as it was: the server isn't asked again.
@@ -32,7 +33,7 @@ pub fn sync_changes(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     out.calendars = Some(vec![CalendarInfo { id: CALENDAR.into(), name, ctag: state, ..own.unwrap_or_default() }]);
     let book = pim.books.iter().find(|b| b.id == CONTACTS).map(|b| b.name.clone()).filter(|n| !n.is_empty());
     let book = book.or_else(|| folder_name(c, "contacts")).unwrap_or_else(|| "Contacts".into());
-    read_contacts(c, pim, book, &again, &mut out)?;
+    read_contacts(c, pim, book, &hrefs(&refused), &mut out)?;
     quatrelle_model::pim::separate_shared_uids(&mut out.events);
     Ok(out)
 }
@@ -43,13 +44,13 @@ pub fn sync_changes(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
 fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
     let others = |t: &&quatrelle_model::pim::Tombstone| ["contact:", "note:", "task:"].iter().any(|p| t.href.starts_with(p));
-    let again = delete_gone(c, pim.deleted.iter().filter(|t| !calendars_only || !others(t)), &mut out);
+    let refused = delete_gone(c, pim.deleted.iter().filter(|t| !calendars_only || !others(t)), &mut out);
     push_events(c, pim, &mut out);
     if !calendars_only {
         push_cards(c, pim, &mut out);
     }
     // Then the account's own calendar, by its changes.
-    let state = read_own_calendar(c, pim, now, &again, &mut out)?;
+    let state = read_own_calendar(c, pim, now, &again_in(&refused, CALENDAR), &mut out)?;
     answer_pending(c, pim, &mut out);
     // Reminders dismissed or snoozed here (issue #40), once the server said its version.
     reminders::answer_all(c, pim, &mut out);
@@ -63,13 +64,13 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
     // behind a dozen colleagues' calendars.
     if !calendars_only {
         let name = folder_name(c, "contacts").unwrap_or_else(|| "Contacts".into());
-        read_contacts(c, pim, name, &again, &mut out)?;
+        read_contacts(c, pim, name, &hrefs(&refused), &mut out)?;
     }
     if pim.own_only {
         // The calendar isn't shown: this account's own is enough (the others are read once it is).
         out.calendars = Some(calendars);
         out.partial = true;
-        finish(c, pim, &mut out, calendars_only);
+        finish(c, pim, &refused, &mut out, calendars_only);
         return Ok(out);
     }
     // Opened here by their address, then the calendars of the shared mailboxes the account opens
@@ -109,13 +110,16 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
         log::info!("{} other people's calendars, {ticked} ticked{}", others.len(), if known { " and read" } else { " (listed, none read yet)" });
     }
     for (n, (email, name, group, asked)) in others.iter().enumerate() {
+        let id = quatrelle_model::pim::shared_calendar_id(email);
+        // Its state and rights as kept, to go on from.
+        let before = pim.calendars.iter().find(|k| k.id == id);
         let entry = CalendarInfo {
-            id: quatrelle_model::pim::shared_calendar_id(email),
             name: name.clone(),
             color: u8::try_from((n + 1) % 8).unwrap_or(0),
-            read_only: true,
-            ctag: String::new(),
+            read_only: before.is_none_or(|k| k.read_only),
+            ctag: before.map(|k| k.ctag.clone()).unwrap_or_default(),
             group: group.clone(),
+            id,
         };
         if !*asked && !known {
             calendars.push(entry);
@@ -132,7 +136,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
             calendars.push(CalendarInfo { read_only, ..entry });
             continue;
         }
-        if let Some(info) = read_other(c, email, *asked, entry, now, &mut out) {
+        if let Some(info) = read_other(c, pim, email, *asked, entry, now, &refused, &mut out) {
             calendars.push(info);
         }
     }
@@ -152,70 +156,32 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                     continue;
                 }
                 let key = format!("public:{id}");
-                // An unticked public calendar: listed, not read.
+                let color = u8::try_from((n + 3) % 8).unwrap_or(0);
+                // An unticked public calendar: listed, not read (its state kept with what's kept of it).
                 if !class.starts_with("IPF.Contact") && pim.not_read.contains(&key) {
+                    let ctag = pim.calendars.iter().find(|k| k.id == key).map(|k| k.ctag.clone()).unwrap_or_default();
                     if let Some(cals) = out.calendars.as_mut() {
-                        cals.push(CalendarInfo {
-                            id: key,
-                            name,
-                            color: u8::try_from((n + 3) % 8).unwrap_or(0),
-                            read_only: true,
-                            ctag: String::new(),
-                            group: String::new(),
-                        });
+                        cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new() });
                     }
                     continue;
                 }
-                // A public calendar from six months back, as the others; contacts whole.
-                let since = class.starts_with("IPF.Appointment").then_some(now - CALENDAR_BACK);
-                let found = match public_items(c, &id, f.replica.as_deref(), f.total, since) {
-                    Ok(found) => found,
-                    Err(e) => {
-                        out.errors.push(format!("{name}: {e}"));
-                        continue;
-                    }
-                };
+                // A public calendar from six months back, as the others; contacts whole. Each by
+                // its changes once read.
+                let p = Public { id: &id, replica: f.replica.as_deref(), total: f.total, name: &name };
                 if class.starts_with("IPF.Contact") {
-                    for it in found {
-                        if let Some(card) = card_of(&it) {
-                            out.cards.push(StoredCard {
-                                book: key.clone(),
-                                href: format!("public:{}", card.uid),
-                                etag: String::new(),
-                                card,
-                                dirty: false,
-                            });
+                    match public_contacts(c, pim, &p, &key, &mut out) {
+                        Ok(ctag) => books.push(BookInfo { id: key, name, read_only: true, ctag }),
+                        Err(e) => out.errors.push(format!("{name}: {e}")),
+                    }
+                    continue;
+                }
+                match public_calendar(c, pim, &p, &key, now - CALENDAR_BACK, &mut out) {
+                    Ok(ctag) => {
+                        if let Some(cals) = out.calendars.as_mut() {
+                            cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new() });
                         }
                     }
-                    books.push(BookInfo { id: key.clone(), name, read_only: true, ctag: String::new() });
-                    out.synced_books.push(key);
-                } else {
-                    for it in found {
-                        if let Some(event) = event_of(&it) {
-                            let href = it.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or("").to_string();
-                            out.events.push(StoredEvent {
-                                calendar: key.clone(),
-                                href,
-                                etag: String::new(),
-                                event,
-                                dirty: false,
-                                notify: false,
-                                respond: None,
-                                changed_too: false,
-                            });
-                        }
-                    }
-                    if let Some(cals) = out.calendars.as_mut() {
-                        cals.push(CalendarInfo {
-                            id: key.clone(),
-                            name,
-                            color: u8::try_from((n + 3) % 8).unwrap_or(0),
-                            read_only: true,
-                            ctag: String::new(),
-                            group: String::new(),
-                        });
-                    }
-                    out.synced_calendars.push(key);
+                    Err(e) => out.errors.push(format!("{name}: {e}")),
                 }
             }
         }
@@ -226,18 +192,36 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
     if !calendars_only {
         out.books = Some(books);
     }
-    finish(c, pim, &mut out, calendars_only);
+    finish(c, pim, &refused, &mut out, calendars_only);
     Ok(out)
 }
 
-/// The notes and tasks read with the rest; the calendars alone, their appointments told apart.
-fn finish(c: &Client, pim: &Pim, out: &mut DavSync, calendars_only: bool) {
+/// The notes and tasks read with the rest (`refused`: deletions refused, to read again); the
+/// calendars alone, their appointments told apart.
+fn finish(c: &Client, pim: &Pim, refused: &[Tombstone], out: &mut DavSync, calendars_only: bool) {
     if calendars_only {
         quatrelle_model::pim::separate_shared_uids(&mut out.events);
     } else {
-        read_notes(c, pim, out);
-        read_tasks(c, pim, out);
+        read_notes(c, pim, &hrefs(refused), out);
+        read_tasks(c, pim, &hrefs(refused), out);
     }
+}
+
+/// The deletions the server refused in calendar `id` (the account's own: those of no other
+/// calendar), to read again: they come back.
+fn again_in(refused: &[Tombstone], id: &str) -> Vec<String> {
+    refused
+        .iter()
+        .filter(|t| !["contact:", "note:", "task:"].iter().any(|p| t.href.starts_with(p)))
+        .filter(|t| if id == CALENDAR { t.calendar.is_empty() || t.calendar == CALENDAR } else { t.calendar == id })
+        .map(|t| t.href.clone())
+        .collect()
+}
+
+/// What the deletions the server refused named (contacts, notes and tasks are told by their
+/// prefix).
+fn hrefs(refused: &[Tombstone]) -> Vec<String> {
+    refused.iter().map(|t| t.href.clone()).collect()
 }
 
 /// Other people's calendars alone (just ticked), not everything again: their appointments and
@@ -260,7 +244,7 @@ pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> Result
             ..Default::default()
         });
         let asked = pim.shared.iter().any(|e| e.eq_ignore_ascii_case(email));
-        if let Some(info) = read_other(c, email, asked, entry, now, &mut out) {
+        if let Some(info) = read_other(c, pim, email, asked, entry, now, &[], &mut out) {
             calendars.push(info);
         }
     }
@@ -269,11 +253,23 @@ pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> Result
     Ok(out)
 }
 
-/// `email`'s calendar read into `out` (from six months back), and its entry in the list as
-/// `entry` has it, editable or not as the server says. `None`: a shared mailbox whose calendar
-/// isn't shared with this account (said in the log, then not asked again this session); one
-/// opened by hand (`asked`) says why it's missing, and stays listed.
-fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i64, out: &mut DavSync) -> Option<CalendarInfo> {
+/// `email`'s calendar read into `out` (from six months back), by its changes from the state its
+/// entry keeps once read, and its entry in the list as `entry` has it, editable or not as the
+/// server says. `refused`: deletions the server refused, those of this calendar read again.
+/// `None`: a shared mailbox whose calendar isn't shared with this account (said in the log, then
+/// not asked again this session); one opened by hand (`asked`) says why it's missing, and stays
+/// listed with what's kept of it.
+#[allow(clippy::too_many_arguments)]
+fn read_other(
+    c: &Client,
+    pim: &Pim,
+    email: &str,
+    asked: bool,
+    entry: CalendarInfo,
+    now: i64,
+    refused: &[Tombstone],
+    out: &mut DavSync,
+) -> Option<CalendarInfo> {
     if !asked && c.has_no_calendar(email) {
         return None;
     }
@@ -282,14 +278,14 @@ fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i6
     // another mailbox's folder) when its events do, as Outlook finds by trying.
     let folder_rights = may_edit(c, &parent);
     let mut can_edit = matches!(&folder_rights, Ok(true));
-    match items_in(c, &parent, "", Some(now - CALENDAR_BACK)) {
-        Ok(list) => {
-            can_edit |= list.iter().any(item_may_change);
+    match shared_calendar(c, pim, &parent, &entry.id, email, &entry.ctag, now, &again_in(refused, &entry.id), out) {
+        Ok(read) => {
+            // Read by its changes, none of them read: as it was.
+            can_edit |= read.may_change || (read.nothing_read && !entry.read_only);
             if !can_edit && let Err(e) = &folder_rights {
                 log::info!("{email}'s calendar rights: {e}");
             }
-            read_calendar(c, list, &entry.id, email, now - CALENDAR_BACK, out);
-            out.synced_calendars.push(entry.id.clone());
+            return Some(CalendarInfo { read_only: !can_edit, ctag: read.state, ..entry });
         }
         Err(e) if asked => out.errors.push(format!("{email}'s calendar: {e}")),
         Err(e) => {
@@ -309,14 +305,14 @@ fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i6
 /// they stay as they are.
 pub fn sync_tasks(c: &Client, pim: &Pim, now: i64) -> DavSync {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
-    let _ = delete_gone(c, pim.deleted.iter().filter(|t| t.href.starts_with("task:")), &mut out);
-    read_tasks(c, pim, &mut out);
+    let refused = delete_gone(c, pim.deleted.iter().filter(|t| t.href.starts_with("task:")), &mut out);
+    read_tasks(c, pim, &hrefs(&refused), &mut out);
     out
 }
 
 /// What was deleted here, deleted on the server; those it refused, to read again (their item
 /// there), as they stay on the server and so come back here.
-fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::pim::Tombstone>, out: &mut DavSync) -> Vec<String> {
+fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a Tombstone>, out: &mut DavSync) -> Vec<Tombstone> {
     let mut refused = Vec::new();
     for t in gone {
         let task = t.href.starts_with("task:");
@@ -328,7 +324,7 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::p
             Err(NetError::No(why)) => {
                 out.deleted.push(t.href.clone());
                 out.errors.push(format!("not deleted on the server: {why}"));
-                refused.push(t.href.clone());
+                refused.push(t.clone());
             }
             // Not now (offline, the server busy): tried again next time, still deleted here.
             Err(e) => out.errors.push(e.to_string()),
@@ -439,8 +435,9 @@ pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &s
     );
 }
 
-/// Notes: what changed here goes up, then the folder is read again.
-fn read_notes(c: &Client, pim: &Pim, out: &mut DavSync) {
+/// Notes: what changed here goes up, then the folder is read by its changes (`again`: deletions
+/// refused, to read again).
+fn read_notes(c: &Client, pim: &Pim, again: &[String], out: &mut DavSync) {
     // Notes (Outlook's sticky notes): what changed here goes up (made again, as contacts are),
     // then the folder is read again. A mailbox without one keeps notes on this computer.
     for n in pim.notes.iter().filter(|n| n.dirty) {
@@ -463,8 +460,11 @@ fn read_notes(c: &Client, pim: &Pim, out: &mut DavSync) {
             Err(x) => out.errors.push(format!("{}: {x}", n.note.title())),
         }
     }
-    match items(c, "notes", None) {
-        Ok(list) => out.notes = Some(list.iter().filter_map(note_of).collect()),
+    match notes_read(c, pim, again) {
+        Ok((list, state)) => {
+            out.notes = Some(list);
+            out.notes_state = state;
+        }
         Err(e) => log::info!("no Notes folder: {e}"),
     }
     // A scheduling tool can send several plain appointments under one series' UID: the engine

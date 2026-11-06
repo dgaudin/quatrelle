@@ -416,12 +416,20 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   or the server refuses it (the state as of then taken first). A change the server tells of
   (`worker/listening.rs`) runs `sync_changes`: those two folders alone, a few requests on the
   connection new mail comes on, where the whole sync read a real calendar's few hundred appointments again.
+  The full sync reads the rest the same way (R22, `ews_pim/changes/others.rs`, `lists.rs`): the
+  colleagues' calendars ticked (in their mailbox), the public calendars and address books (routed
+  to the public folder mailbox holding them once it's known), the notes and the tasks
+  (`Pim::notes_state`, `Pim::tasks_state`); a calendar's unchanged appointments are given whole,
+  since they may be set aside. A folder whose state is kept but none of what it stands for is
+  here is read whole; one whose changes the server won't give at all (some servers' public
+  folders), or too big to follow, is read whole as before and not asked about again that session.
   Recurrences go through Graph's pattern-and-range shape, so one RRULE mapping serves both.
   Away from the calendar, only the account's own calendar is read; other people's appointments
   are set aside five minutes after it's left (at once at the start), as Outlook reads a shared
   calendar from its offline file only to show it (`session/pim/parking.rs`): out of memory and
   of `pim.json`, into `pim-parked.json`, read back when the calendar is shown (a calendar read
-  again meanwhile keeps what was read). One changed here and not yet sent stays. On a large
+  again meanwhile keeps what was read); every one brought back, `pim-parked.json` keeps them until
+  `pim.json` is saved with them, and the worker reads both. One changed here and not yet sent stays. On a large
   mailbox, 25,390 of 25,761 appointments: the session holds 49 MB rather than 105 away from
   the calendar, and a save of the calendar and contacts writes 1.6 MB rather than 35.
 - **Rooms and free/busy** (`ews_pim/scheduling.rs`), on the account's second connection so a

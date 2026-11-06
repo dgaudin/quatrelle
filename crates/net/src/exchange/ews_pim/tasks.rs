@@ -151,9 +151,9 @@ fn update_task(c: &Client, id: &str, t: &Task) -> Result<(String, String)> {
     })
 }
 
-/// Tasks: what changed here goes up, then the folder is read again. A mailbox without one
-/// keeps tasks on this computer.
-pub(super) fn read_tasks(c: &Client, pim: &Pim, out: &mut DavSync) {
+/// Tasks: what changed here goes up, then the folder is read by its changes (`again`: deletions
+/// refused, to read again). A mailbox without one keeps tasks on this computer.
+pub(super) fn read_tasks(c: &Client, pim: &Pim, again: &[String], out: &mut DavSync) {
     for s in pim.tasks.iter().filter(|s| s.dirty) {
         let r = match s.href.strip_prefix("task:") {
             Some(id) => update_task(c, id, &s.task),
@@ -170,8 +170,11 @@ pub(super) fn read_tasks(c: &Client, pim: &Pim, out: &mut DavSync) {
             Err(x) => out.errors.push(format!("{}: {x}", s.task.subject)),
         }
     }
-    match items(c, "tasks", None) {
-        Ok(list) => out.tasks = Some(list.iter().filter_map(task_of).collect()),
+    match super::changes::tasks_read(c, pim, again) {
+        Ok((list, state)) => {
+            out.tasks = Some(list);
+            out.tasks_state = state;
+        }
         Err(e) => log::info!("no Tasks folder: {e}"),
     }
 }

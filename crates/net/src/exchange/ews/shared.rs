@@ -28,6 +28,25 @@ impl Client {
         }
     }
 
+    /// Whether the server won't give the changes of this folder (named by its element) this
+    /// session.
+    pub(crate) fn changes_refused(&self, folder: &str) -> bool {
+        self.changes_refused.borrow().iter().any(|f| f == folder)
+    }
+
+    /// The server won't give this folder's changes: it's read whole this session, not asked again.
+    pub(crate) fn note_changes_refused(&self, folder: &str) {
+        let mut list = self.changes_refused.borrow_mut();
+        if list.len() < MAX_WITHOUT_CALENDAR && !list.iter().any(|f| f == folder) {
+            list.push(folder.to_string());
+        }
+    }
+
+    /// The public folder mailbox with this GUID, when it was found this session (nothing asked).
+    pub(crate) fn known_public_folder_mailbox(&self, guid: &str) -> Option<String> {
+        self.pf_mailboxes.borrow().get(guid).cloned()
+    }
+
     /// The account's Autodiscover answer, asked once.
     pub(super) fn discovery(&self) -> Option<String> {
         if let Some(known) = self.discovered.borrow().clone() {
