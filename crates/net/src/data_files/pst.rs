@@ -61,7 +61,7 @@ const MAX_ATTACHMENT: usize = 100 * 1024 * 1024;
 /// A value (a body, an attachment's bytes, a table's rows, a store's, folder's or the name map's
 /// properties) the file says is larger than this is an error before any of it is read: a damaged
 /// size can't make the import run out of memory.
-const MAX_VALUE: u64 = 256 * 1024 * 1024;
+pub(crate) const MAX_VALUE: u64 = 256 * 1024 * 1024;
 /// Original headers longer than this are not kept.
 const MAX_HEADERS: usize = 256 * 1024;
 /// Embedded messages inside embedded messages… stop here.

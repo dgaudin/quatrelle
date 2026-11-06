@@ -1798,6 +1798,8 @@ month	May	Май
 	{name}: the data file could not be opened: {error}	{name}: не удалось открыть файл данных: {error}
 	{name}: {messages} messages exported	{name}: экспортировано писем: {messages}
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: экспортировано писем: {messages} (пропущено отсутствующих на этом компьютере: {skipped})
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: экспортировано писем: {messages} (уже были в файле данных: {already})
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: экспортировано писем: {messages} (пропущено отсутствующих на этом компьютере: {skipped}; уже были в файле данных: {already})
 	{name}: {messages} messages exported so far…	{name}: пока экспортировано писем: {messages}…
 	{name}: {messages} messages imported	{name}: импортировано писем: {messages}
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: импортировано писем: {messages} (не удалось прочитать: {skipped})

@@ -1795,6 +1795,8 @@ month	May	מאי
 	{name}: the data file could not be opened: {error}	{name}: לא ניתן היה לפתוח את קובץ הנתונים: {error}
 	{name}: {messages} messages exported	{name}: {messages} הודעות יוצאו
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} הודעות יוצאו ({skipped} שאינן במחשב הזה הושמטו)
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} הודעות יוצאו ({already} כבר היו בקובץ הנתונים)
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} הודעות יוצאו ({skipped} שאינן במחשב הזה הושמטו; {already} כבר היו בקובץ הנתונים)
 	{name}: {messages} messages exported so far…	{name}: {messages} הודעות יוצאו עד כה…
 	{name}: {messages} messages imported	{name}: {messages} הודעות יובאו
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} הודעות יובאו ({skipped} לא היו קריאות)

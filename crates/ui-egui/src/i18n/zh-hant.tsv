@@ -1798,6 +1798,8 @@ month	May	5月
 	{name}: the data file could not be opened: {error}	{name}: 無法開啟資料檔: {error}
 	{name}: {messages} messages exported	{name}: 已匯出 {messages} 封郵件
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: 已匯出 {messages} 封郵件（{skipped} 封不在這台電腦上，已略過）
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: 已匯出 {messages} 封郵件（{already} 封已在資料檔中）
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: 已匯出 {messages} 封郵件（{skipped} 封不在這台電腦上，已略過；{already} 封已在資料檔中）
 	{name}: {messages} messages exported so far…	{name}: 目前已匯出 {messages} 封郵件…
 	{name}: {messages} messages imported	{name}: 已匯入 {messages} 封郵件
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 已匯入 {messages} 封郵件（{skipped} 封無法讀取）

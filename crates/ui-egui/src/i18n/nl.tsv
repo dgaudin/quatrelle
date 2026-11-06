@@ -1795,6 +1795,8 @@ month	May	mei
 	{name}: the data file could not be opened: {error}	{name}: het gegevensbestand kon niet worden geopend: {error}
 	{name}: {messages} messages exported	{name}: {messages} berichten geëxporteerd
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} berichten geëxporteerd ({skipped} die niet op deze computer staan, zijn overgeslagen)
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} berichten geëxporteerd ({already} stonden al in het gegevensbestand)
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} berichten geëxporteerd ({skipped} die niet op deze computer staan, zijn overgeslagen; {already} stonden al in het gegevensbestand)
 	{name}: {messages} messages exported so far…	{name}: tot nu toe {messages} berichten geëxporteerd…
 	{name}: {messages} messages imported	{name}: {messages} berichten geïmporteerd
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} berichten geïmporteerd ({skipped} konden niet worden gelezen)

@@ -1798,6 +1798,8 @@ month	May	5월
 	{name}: the data file could not be opened: {error}	{name}: 데이터 파일을 열지 못했습니다: {error}
 	{name}: {messages} messages exported	{name}: 메시지 {messages}개를 내보냈습니다
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: 메시지 {messages}개를 내보냈습니다(이 컴퓨터에 없는 {skipped}개는 제외)
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: 메시지 {messages}개를 내보냈습니다(데이터 파일에 이미 있던 {already}개 제외)
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: 메시지 {messages}개를 내보냈습니다(이 컴퓨터에 없는 {skipped}개는 제외, 데이터 파일에 이미 있던 {already}개 제외)
 	{name}: {messages} messages exported so far…	{name}: 지금까지 메시지 {messages}개를 내보냈습니다…
 	{name}: {messages} messages imported	{name}: 메시지 {messages}개를 가져왔습니다
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 메시지 {messages}개를 가져왔습니다({skipped}개는 읽을 수 없음)

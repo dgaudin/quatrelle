@@ -1799,6 +1799,8 @@ month	May	mayo
 	{name}: the data file could not be opened: {error}	{name}: no se pudo abrir el archivo de datos: {error}
 	{name}: {messages} messages exported	{name}: {messages} mensajes exportados
 	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} mensajes exportados (se omitieron {skipped} que no están en este equipo)
+	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} mensajes exportados ({already} ya estaban en el archivo de datos)
+	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} mensajes exportados (se omitieron {skipped} que no están en este equipo; {already} ya estaban en el archivo de datos)
 	{name}: {messages} messages exported so far…	{name}: {messages} mensajes exportados hasta ahora…
 	{name}: {messages} messages imported	{name}: {messages} mensajes importados
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} mensajes importados ({skipped} no se pudieron leer)
