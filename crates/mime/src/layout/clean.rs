@@ -136,7 +136,7 @@ impl Quoting<'_> {
         while let Some(i) = rest.to_ascii_lowercase().find("url(") {
             out.push_str(rest.get(..i).unwrap_or(""));
             let after = rest.get(i + 4..).unwrap_or("");
-            let Some(end) = after.find(')') else { return None };
+            let end = after.find(')')?;
             let target = after.get(..end).unwrap_or("").trim().trim_matches(['"', '\'']);
             match self.picture(target).filter(|p| !p.contains(['"', '\'', '(', ')'])) {
                 Some(p) => out.push_str(&format!("url('{p}')")),
