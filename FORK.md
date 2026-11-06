@@ -4508,6 +4508,139 @@ colorées, un tableau de mise en page sans bordure, un tableau de chiffres à bo
   - en sombre, les boîtes claires peu saturées (jaune pâle, bleu très clair) sont écartées, comme
     avant : leur texte se lit, mais les blocs ne se voient plus.
 
+### État de la récupération : v0.33, cinquième partie : la réponse avec l'original tel que reçu (S6) (2026-11-06)
+
+Le lot S6 de `merge-tools/survey-v0.33.md` : `4a966444` de l'origine (et la partie réponse de
+`94b9d88d`, la touche qui va au début d'un texte sur tous les systèmes), décidé par le
+propriétaire le 06/11, sur `main` après S3. Une adaptation faite à la main : la fenêtre de
+rédaction et l'éditeur sont ceux du fork (section 7), on y apporte la fonction, pas l'allure de
+l'origine. Chaque point a sa sonde, lancée d'abord contre le code d'alors quand c'était possible.
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `c46f3e69` | découpe : les règles du serveur dans `worker/changes/rules.rs` (`changes.rs` passait 800 lignes) | — |
+| `334e5fb2` | un compte serveur sans dossier Brouillons le fait créer, comme Éléments envoyés, et le brouillon y va | `a_draft_on_a_server_without_drafts_makes_the_folder` (faux IMAP) : **le brouillon n'arrive jamais** → dossier fait, connu comme Brouillons ; `a_draft_on_a_server_without_drafts_is_kept` (moteur) : **« this account has no Drafts folder »** → `SaveDraft`/`KeepDraft` vers `Drafts` |
+| `43c9955c` | un brouillon rouvert (ou un message repris de la Boîte d'envoi) tel qu'il a été enregistré | `a_draft_opens_again_as_it_was_saved`, `a_draft_keeps_its_html_signature` : Cci, importance, accusé de lecture, gras, la ligne au-dessus de l'original, l'image en place, le message répondu ou transféré |
+| `23c65d11` | une réponse à un courrier en tableaux cite ses blocs de texte, plus des traits `│ ─` | `a_reply_quotes_a_table_layout_cleanly` (mime) : **traits de tableau** → blocs à la suite, images, lien, couleur, alignements gardés |
+| `6bafe7a6`, `0a7d06a6` | découpes : le menu clic droit et l'orthographe de l'éditeur (`rich_edit.rs` passait 800 lignes), les images insérées (`app/actions.rs`, 775 lignes, `app/` plein) | — |
+| `03c7ae71` | l'original tel que reçu sous la réponse, modifiable sur place ; envoyé tel quel ou sa mise en page réécrite | `a_reply_keeps_the_original_as_it_came`, `the_original_is_changed_where_it_stands`, `the_original_comes_back_with_a_draft_and_from_the_outbox` (moteur), `a_quoted_message_keeps_its_look_and_pictures`, `a_layout_written_out_reads_back_the_same` (mime), `a_reply_shows_the_original_as_it_came_and_changes_it_in_place`, `a_draft_opens_again_from_drafts`, `replies_to_layouts_draw_light_and_dark_and_read_back_so` (interface) |
+| `c63ca6b5` | propre au fork, vu sur les rendus : une image du web jamais chargée, de largeur fixée, prend cette largeur dans l'éditeur | rendu : **cases vides de 100 px** pour les icônes de 16 px d'une signature → 16 px |
+| `fff4ca73` | un brouillon lu dans le volet de lecture dit qu'il n'est pas envoyé, avec Modifier et Supprimer ; le double-clic sur un message marqué brouillon le rouvre | — (13 catalogues) |
+
+**Les brouillons** (`334e5fb2`, `43c9955c`). Un compte IMAP qui ne liste pas de Brouillons
+(GreenMail, beaucoup de comptes neufs) refusait tout brouillon : le message en cours était perdu,
+même à la fermeture (`keep_drafts`), et après une veille qui casse le pilote (S1). Le moteur le
+dépose maintenant dans `Drafts`, et la connexion fait le dossier comme elle fait Éléments envoyés
+(`Worker::role_folder`, tiré de `sent_folder` : le dossier d'un autre client de ce nom d'abord,
+sinon `Drafts` ou `INBOX.Drafts`). Un brouillon rouvert revenait avec ses images en pièces jointes
+(et cassées dans le texte), sans Cci, sans importance ni accusé de lecture, la signature en HTML
+devenue du texte, une ligne vide à la place de la ligne au-dessus de l'original, et un transfert
+qui ne savait plus ce qu'il transférait ; un message repris de la Boîte d'envoi revenait en texte
+brut. Repris de l'origine, adapté :
+- `compose_from_saved` (`writing/reopen.rs`), commun au brouillon et à la Boîte d'envoi ; les
+  images que le HTML montre restent dans le texte, le reste en fichiers ;
+- la copie d'un brouillon garde son Cci et le message qu'elle répond ou transfère : ajoutés à la
+  copie après coup (`mime::draft_copy`), pas de champ de plus dans `mime::Draft` (une vingtaine de
+  constructions littérales) ; l'en-tête `X-Quatrelle-Source` écrit la clé en hexadécimal (un nom
+  de dossier pourrait tout contenir : une clé avec un retour à la ligne ne peut pas ajouter
+  d'en-tête, sonde) ; jamais dans ce qui part ;
+- la signature écrite en HTML (`mime::rich::SIGNATURE` du fork) est marquée
+  (`quatrelle-signature`) et revient telle quelle ;
+- `from_rich` relit une ligne horizontale comme une ligne (elle devenait une ligne vide), et la
+  ligne vide que la relecture ajoute après elle est retirée (sinon chaque enregistrement en
+  ajoutait une).
+
+**La citation mise à plat** (`23c65d11`). Sous une réponse, un courrier en tableaux était cité par
+son texte mis en forme, qui dessine les tableaux en `│ ├── ─`. Il est cité par ses blocs de texte
+dans l'ordre de lecture (`layout::flatten`, `text_blocks`), chacun aligné comme il l'était, avec ses
+images, liens et couleurs. C'est aussi le texte de secours : un courrier sans HTML, ou un compte en
+texte brut.
+
+**L'original tel que reçu, modifiable sur place** (`03c7ae71`, plus `4d9b5575` : deux remarques de clippy). Comme Outlook, l'original d'un courrier
+écrit en HTML ne va plus dans le texte de l'éditeur (qui n'a pas de tableaux) :
+- le texte finit par « De / Envoyé / À / Objet » (`reply_head_doc`, dans la langue de l'interface
+  comme avant), et l'original est dessiné dessous par le dessin même du volet de lecture
+  (`reading/compose/quote.rs`) : colonnes, couleurs, bandes à image de fond, boîtes posées sur une
+  image ;
+- chaque bloc de texte (une cellule, une boîte) est un champ de l'éditeur du fork
+  (`Editor::in_quote` : haut comme son texte, sans invite, sans orthographe), sur la couleur de sa
+  cellule ; la frappe, Annuler, les raccourcis (Ctrl+B…) et le ruban agissent sur le bloc qui a le
+  curseur ; une image insérée ou collée y va (`compose.insertPicture` `quoteCell`) ;
+- tant que rien n'y est changé, il part tel quel : son HTML passé par le nettoyeur à arbre du fork
+  (`layout::quote_html`, plus sûr que celui de l'origine, par chaînes) : feuille de style écrite
+  dans les balises, sans tête, scripts, formulaires, cadres ni `on…`, profondeur de lecture 48
+  (12 pour une signature : une lettre d'information perdait ses tableaux imbriqués), ses images
+  sous les `cid:` de la réponse (celles derrière les boîtes aussi), les images espions retirées, une
+  image du web laissée à son adresse comme Outlook la laisse ;
+- changé, il part comme sa mise en page réécrite autour du nouveau texte (`layout::to_html`,
+  adapté aux champs du fork : `Table::spacing` en `cellspacing`, `Cell::padding` ou les 6 px du
+  lecteur, bordures, coins, `valign`) ;
+- en texte brut (le format du message, ou un compte qui l'exige), il part comme son texte, et la
+  fenêtre le montre ainsi ; la partie texte d'un message HTML le porte aussi ;
+- marqué (`quatrelle-quote`), il revient tel quel, avec ce qui y a été changé, d'un brouillon
+  rouvert et d'un message repris de la Boîte d'envoi.
+
+Gardé du fork : R18 (la marque répondu ou transféré, `source`/`mode` inchangés) ; le transfert en
+pièce jointe ne cite rien ; S/MIME et OpenPGP signent ou chiffrent le message entier, original
+compris ; une image du web de l'original n'est chargée dans la fenêtre que si celles du message lu
+le sont déjà (`Session::pictures_allowed_for`), et pas du tout dans le texte d'un bloc (l'éditeur
+n'en charge jamais) ; une image incorporée (`cid:`) suit. Pour Exchange, rien à changer : l'envoi
+passe par `CreateItem` (`SendAndSaveCopy`) avec le MIME entier en base64, partie HTML comprise, et
+l'enregistrement d'un brouillon aussi (le Cci de la copie y devient le Cci du brouillon).
+
+Adapté au fork en route :
+- le message est sorti de la session le temps que la fenêtre de rédaction se dessine (le dessin du
+  volet de lecture veut la session), et remis sur tous les chemins ;
+- les cellules de la citation sont numérotées à part (à partir de 10 000) dans `CellHeights` : le
+  même message lu dans le volet de lecture n'a pas les hauteurs d'un champ ;
+- l'empreinte d'un message (`Compose::fingerprint`) compte ce qui a été changé dans l'original : une
+  réponse où seul l'original a été modifié n'est plus jetée quand on lit un autre message ;
+- découpes faites avant d'ajouter : `worker/changes.rs`, `rich_edit.rs`, `app/actions.rs` ; dossier
+  `reading/compose/` (`reading/` est plein).
+
+**Les rendus** (`QUATRELLE_FRAME_PNG`, `~/.tq/s6-shots/`, 1 280 × 1 300, clair et sombre) : une réponse à la lettre d'information de l'exemple et une
+réponse à une signature en tableaux (`app_with_html`), puis le message envoyé relu dans le volet de
+lecture (`s6-reply-*`, `s6-sent-*`).
+- Lettre d'information, clair et sombre : sous « De / Envoyé / À / Objet », la bande à image de
+  fond et son titre en blanc, les deux colonnes, la puce, l'étiquette « NEW » posée sur l'affiche,
+  la date limite en rouge et son surlignage jaune (noir dessus en sombre), le lien centré ; tout se
+  lit dans les deux thèmes.
+- Signature en tableaux : à la largeur du volet (≈ 580 px pour un tableau de 640), les colonnes
+  s'empilent, comme le volet de lecture les empile au même endroit ; la bande bleue « THE MILL » en
+  blanc, l'avertissement en rouge, le lien. Avant `c63ca6b5`, les deux icônes de 16 px (sur le web,
+  jamais chargées) étaient deux cases vides de 100 px ; après, 16 px.
+- La ligne au-dessus de « De : » est là (absente de mon premier rendu : `compose.update` avec
+  `body` remet le texte à plat, artefact du test, corrigé dans le test).
+- Le message envoyé, relu : l'original garde ses colonnes, couleurs, puces, l'étiquette et le
+  surlignage, dans les deux thèmes ; pour la signature, `[tel]` `[web]` et la barre « images du web
+  masquées », comme pour tout message.
+- Le gras du texte (« winter group show ») ne se distingue pas dans ces rendus, en lecture comme en
+  rédaction : la police grasse du peintre des tests, déjà ainsi avant.
+
+- **Ce que verra le propriétaire** : en répondant à un courrier mis en page (lettre d'information, signature
+d'entreprise en tableaux), l'original reste dessous tel qu'il est arrivé, avec ses colonnes et
+couleurs, et on peut taper dedans à l'endroit voulu (gras, ruban, image collée compris) ; le
+destinataire le reçoit mis en page, lisible dans Outlook. Un compte sans dossier Brouillons en a
+un dès le premier brouillon. Un brouillon rouvert (double-clic, ou Modifier sur la nouvelle bande
+« Pas encore envoyé : c’est un brouillon. ») revient comme il a été enregistré : Cci, importance,
+images en place, signature HTML, original et ses modifications.
+- **Vérifié** : chaque sonde ; les « avant » lancés contre le code d'alors pour
+le dossier Brouillons (faux IMAP et moteur) et la citation à plat (mime) ; mime (184), moteur (563),
+interface (518) ; `cargo clippy -D warnings` ; `cargo xtask ci` (wasm compris).
+- **Vérifiable seulement en vrai** : Outlook qui reçoit la réponse (rendu de la citation, notamment
+`position:absolute` d'une boîte posée sur une image, qu'Outlook ignore) ; un vrai serveur sans
+Brouillons (GreenMail) ; Exchange chez le propriétaire (brouillon avec Cci par `CreateItem`) ; la
+frappe et le ruban dans un bloc à la souris, dans la vraie fenêtre.
+- **Reste, remarqué** : 
+  - la sonde `a_draft_opens_again_as_it_was_saved` n'a pas été lancée contre l'ancien code (trop
+    de fichiers mêlés) : son échec d'avant (Cci perdu, image en pièce jointe) est établi par
+    lecture ;
+  - la cible de fuzz `html` couvre les nouvelles transformations, mais n'a pas été lancée ;
+  - un original très long (des milliers de lignes en HTML) est un seul champ de l'éditeur, refait à
+    chaque image comme l'était le texte cité d'avant : pas plus lent, pas plus rapide ;
+  - dans les blocs, l'interligne est celui de l'éditeur, un peu plus serré que le volet de lecture ;
+    les boîtes posées sur une image sont mesurées en texte, pas en champ.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
