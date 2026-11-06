@@ -143,7 +143,8 @@ impl Compose {
         } else {
             let mut html = mime::rich::to_html(&self.body, &styles);
             if signed {
-                html = html.replace(mime::rich::SIGNATURE, &format!("<div>{}</div>", self.signature_html));
+                // Marked, so a draft opened again has it back as it was written.
+                html = html.replace(mime::rich::SIGNATURE, &format!("<div class=\"{}\">{}</div>", mime::SIGNATURE_CLASS, self.signature_html));
             }
             (text, Some(html), pictures)
         }

@@ -522,6 +522,13 @@ pub fn from_rich(lines: &RichText) -> (String, Styles) {
             styles.chars.push(0);
         }
         styles.paras.push(Para::default());
+        // A line across it (an `<hr>`, the line over a quoted message) stays one.
+        if line.iter().any(|sp| sp.rule) {
+            if let Some(p) = styles.paras.last_mut() {
+                p.rule = true;
+            }
+            continue;
+        }
         for sp in line {
             let mut st = span_style(sp);
             // A picture in the message stays one (a reply or forward sends it on); one on the

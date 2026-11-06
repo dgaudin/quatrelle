@@ -57,7 +57,7 @@ pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
 pub use html::*;
 pub use photos::without_location;
-pub use reply::{QuoteWords, ReplyMode, reply, reply_doc};
+pub use reply::{QUOTE_CLASS, QuoteWords, ReplyMode, SIGNATURE_CLASS, SOURCE_HEADER, draft_copy, reply, reply_doc, sending_options, split_marked};
 pub use trackers::{Trackers, clean_link, trackers, tracks_click};
 
 /// `bytes` read in the character set `charset` names (`iso-8859-1`, `shift_jis`), when it's one
