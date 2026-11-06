@@ -103,6 +103,30 @@ impl MailApp {
         true
     }
 
+    /// The window's GPU device is gone (a driver reset, after the computer slept): no frame can be
+    /// drawn any more, so nobody could answer a question. Every message being written is kept as a
+    /// draft the way a close keeps it (`compose.keepAll`: on this computer at once, and in Drafts
+    /// on the server at the next connection; a draft saved to the server now would go with a
+    /// thread the close stops), and Quatrelle closes without asking. Once only, however often
+    /// it's said.
+    pub fn graphics_lost(&mut self, ctx: &egui::Context) {
+        if self.ui.graphics_lost {
+            return;
+        }
+        self.ui.graphics_lost = true;
+        log::error!("graphics: the window can't be drawn any more; keeping what's being written as drafts and closing");
+        match self.session.run("compose.keepAll", &json!({})) {
+            Ok(v) => log::info!("graphics: {} message(s) being written kept as drafts", v["kept"]),
+            Err(e) => log::error!("graphics: the messages being written couldn't be kept as drafts: {e}"),
+        }
+        // Handed over now: a draft kept is written to the disk as the job is taken.
+        self.flush_jobs();
+        self.ui.dialog = None;
+        self.ui.closing_anyway = true;
+        self.ui.close_now = true;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
     /// Closing with messages being written, online-only accounts' unsent mail or changes held in
     /// memory, or an update waiting: ask first. Decided in [`MailApp::logic`], which eframe runs
     /// with the window minimized too, and closes the window after unless it cancels (craft-libs'

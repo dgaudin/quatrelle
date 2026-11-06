@@ -334,6 +334,7 @@ impl MailApp {
             ui: UiState {
                 tokens: Tokens::light(),
                 closing_anyway: false,
+                graphics_lost: false,
                 close_now: false,
                 close_after_compact: false,
                 quitting: false,
