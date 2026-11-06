@@ -45,6 +45,25 @@ pub fn outlook_color(preset: i32) -> Option<u8> {
     usize::try_from(preset).ok().and_then(|i| COLORS.get(i)).copied()
 }
 
+/// What only this computer keeps of an account's mail, which an export to an Outlook data file
+/// writes beside each message: when flagged messages are due (local days, by
+/// [`Summary::follow_up_id`]), and the categories' names (a message keeps a category by its
+/// keyword).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportMarks {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub due: std::collections::BTreeMap<String, i64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<Category>,
+}
+
+impl Summary {
+    /// What a follow-up date is kept under: the Message-ID, or (without one) the message's place.
+    pub fn follow_up_id(&self) -> String {
+        if self.message_id.trim().is_empty() { self.key.to_id() } else { self.message_id.trim().to_string() }
+    }
+}
+
 /// The categories a new profile starts with. Their keywords are the ones Thunderbird uses for its
 /// five default tags, so tags made there show here and back.
 pub fn default_categories() -> Vec<Category> {

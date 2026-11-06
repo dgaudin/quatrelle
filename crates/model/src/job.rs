@@ -346,8 +346,15 @@ pub enum Job {
     /// The same on the server (Server Data), with the mailbox's limits where the server tells
     /// them. Exchange only; answered by [`Event::FolderSizes`].
     ServerFolderSizes { account: String },
-    /// Write the account's mail to an Outlook data file, which opens as `name`.
-    ExportPst { account: String, path: String, name: String },
+    /// Write the account's mail to an Outlook data file, which opens as `name`; `marks`: what only
+    /// this computer keeps of it (when flagged messages are due, the categories' names).
+    ExportPst {
+        account: String,
+        path: String,
+        name: String,
+        #[serde(default)]
+        marks: crate::organize::ExportMarks,
+    },
     /// Answer a message's voting buttons with `choice`: a reply to its sender that names it, as
     /// the sender's mail client counts votes.
     Vote { key: MessageKey, choice: String },

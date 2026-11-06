@@ -132,13 +132,13 @@ impl Pool {
     }
 
     /// Export to a data file on a thread of its own.
-    fn export_pst(&mut self, account: String, path: String, name: String) {
+    fn export_pst(&mut self, account: String, path: String, name: String, marks: quatrelle_model::organize::ExportMarks) {
         let sink = self.sink.clone();
         let store = self.store.clone();
         let spawned = std::thread::Builder::new().name("mail-export".into()).spawn(move || {
             let mut progress =
                 |messages| sink.emit(Event::Exported { account: account.clone(), messages, skipped: 0, already: 0, done: false, error: None });
-            let event = match crate::pst_export::export(&store, &account, &name, std::path::Path::new(&path), &mut progress) {
+            let event = match crate::pst_export::export(&store, &account, &name, std::path::Path::new(&path), &marks, &mut progress) {
                 Ok(done) => {
                     Event::Exported { account, messages: done.messages, skipped: done.skipped, already: done.already, done: true, error: None }
                 }
@@ -366,7 +366,7 @@ impl Pool {
                 let account = account.id;
                 self.submit(if keep { Job::KeepDraft { account, raw, folder, replaces } } else { Job::SaveDraft { account, raw, folder, replaces } });
             }
-            Job::ExportPst { account, path, name } => self.export_pst(account, path, name),
+            Job::ExportPst { account, path, name, marks } => self.export_pst(account, path, name, marks),
             Job::SetSync { days, messages, full } => {
                 let window = if messages == 0 { usize::MAX } else { messages as usize };
                 let opts = SyncOptions { window, since_days: days, full, ..self.opts };

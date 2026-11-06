@@ -4,9 +4,13 @@
 use super::*;
 
 mod seeds;
+mod state;
 use quatrelle_model::{EmailAddress, Flags};
 use quatrelle_store::FolderState;
 use std::path::Path;
+
+/// No follow-up days, no category names.
+pub(super) const NONE: &ExportMarks = &ExportMarks { due: std::collections::BTreeMap::new(), categories: Vec::new() };
 
 #[test]
 fn an_account_round_trips_through_a_data_file() {
@@ -74,7 +78,7 @@ fn an_account_round_trips_through_a_data_file() {
     store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
     let file = dir.join("Out.pst");
     let mut ticks = 0;
-    let done = export(&store, "a1", "Riley's mail", &file, &mut |_| ticks += 1).unwrap();
+    let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| ticks += 1).unwrap();
     assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, contacts: 1 });
     let ics = std::fs::read_to_string(dir.join("Out Calendar.ics")).unwrap();
     assert!(ics.contains("SUMMARY:Screening") && ics.contains("BEGIN:VCALENDAR"), "{ics}");
@@ -102,14 +106,14 @@ fn an_account_round_trips_through_a_data_file() {
     // A file that can't be replaced: the error says where the mail is, and it is there.
     let busy = dir.join("Busy.pst");
     std::fs::create_dir_all(busy.join("inside")).unwrap();
-    let e = export(&store, "a1", "Riley's mail", &busy, &mut |_| {}).unwrap_err();
+    let e = export(&store, "a1", "Riley's mail", &busy, NONE, &mut |_| {}).unwrap_err();
     assert!(e.contains("Busy.pst.part"), "{e}");
     let back = Store::open(dir.join("back3")).unwrap();
     assert_eq!(crate::pst::import(&dir.join("Busy.pst.part"), &back, "b3", &mut |_| {}).unwrap().messages, 3);
 
     // Nothing to write: an error, and the old file stays.
     let empty = dir.join("Empty.pst");
-    assert!(export(&store, "nobody", "x", &empty, &mut |_| {}).is_err());
+    assert!(export(&store, "nobody", "x", &empty, NONE, &mut |_| {}).is_err());
     assert!(!empty.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -174,17 +178,17 @@ fn a_data_file_already_there_is_added_to() {
     let store = inbox_account(&dir, &[(1, "Both"), (2, "Ours")]);
     let file = dir.join("Outlook.pst");
     theirs(&file);
-    let done = export(&store, "a1", "Riley's mail", &file, &mut |_| {}).unwrap();
+    let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| {}).unwrap();
     assert_eq!((done.messages, done.already), (1, 1));
     assert_eq!(subjects_back(&file, &dir, "back1"), ["Both", "Ours", "Theirs"]);
-    let again = export(&store, "a1", "Riley's mail", &file, &mut |_| {}).unwrap();
+    let again = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| {}).unwrap();
     assert_eq!((again.messages, again.already), (0, 2));
     assert_eq!(subjects_back(&file, &dir, "back2"), ["Both", "Ours", "Theirs"]);
     assert!(!dir.join("Outlook.pst.part").exists());
 
     let other = dir.join("Notes.pst");
     std::fs::write(&other, b"an older file").unwrap();
-    assert!(export(&store, "a1", "Riley's mail", &other, &mut |_| {}).is_err_and(|e| e.contains("isn't an Outlook data file")));
+    assert!(export(&store, "a1", "Riley's mail", &other, NONE, &mut |_| {}).is_err_and(|e| e.contains("isn't an Outlook data file")));
     assert_eq!(std::fs::read(&other).unwrap(), b"an older file");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -255,7 +259,7 @@ fn an_export_adds_to_an_encoded_data_file() {
     permute_encode(&file);
     let store = inbox_account(&dir, &[(1, "Both"), (2, "Ours")]);
 
-    let done = export(&store, "a1", "Riley's mail", &file, &mut |_| {}).unwrap();
+    let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| {}).unwrap();
     assert_eq!((done.messages, done.already), (1, 1));
     assert_eq!(std::fs::read(&file).unwrap()[0x201], 1, "still permute-encoded");
     let back = Store::open(dir.join("back")).unwrap();
