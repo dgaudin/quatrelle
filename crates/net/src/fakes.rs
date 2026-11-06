@@ -19,6 +19,8 @@ pub(crate) mod fake_jmap;
 #[cfg(test)]
 pub(crate) mod fake_webex;
 #[cfg(test)]
+mod real_layout;
+#[cfg(test)]
 mod real_pgp;
 #[cfg(test)]
 mod real_servers;
