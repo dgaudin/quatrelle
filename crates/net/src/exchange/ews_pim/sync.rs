@@ -201,6 +201,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                                 dirty: false,
                                 notify: false,
                                 respond: None,
+                                changed_too: false,
                             });
                         }
                     }
@@ -380,6 +381,7 @@ pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &s
         dirty: false,
         notify: false,
         respond: None,
+        changed_too: false,
     };
     let mut changed: Vec<String> = Vec::new();
     // Each of those as its series says of it, for one the server doesn't give.

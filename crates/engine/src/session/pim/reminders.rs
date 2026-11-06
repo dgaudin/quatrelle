@@ -189,7 +189,7 @@ impl Session {
         };
         let Some(stored) = p.events.get_mut(at) else { return false };
         ical::set_reminder(&mut stored.event, None);
-        stored.dirty |= remote;
+        stored.changed_here(remote);
         self.after_pim_change(&account, remote);
         true
     }
@@ -262,7 +262,7 @@ impl Session {
             let Some(i) = own.or(series).filter(|&i| p.events.get(i).is_some_and(writable)) else { return };
             let Some(e) = p.events.get_mut(i) else { return };
             ical::acknowledge(&mut e.event, now);
-            e.dirty = true;
+            e.changed_here(true);
         } else {
             return;
         }

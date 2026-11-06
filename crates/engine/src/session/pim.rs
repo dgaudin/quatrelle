@@ -494,6 +494,7 @@ impl Session {
             dirty: id != LOCAL,
             notify: false,
             respond: None,
+            changed_too: false,
         });
         self.after_pim_change(&account, id != LOCAL);
         Ok(serde_json::json!({"uid": uid, "account": account}))
@@ -522,7 +523,7 @@ impl Session {
         }
         stored.event = e;
         let remote = stored.calendar != LOCAL;
-        stored.dirty |= remote;
+        stored.changed_here(remote);
         self.after_pim_change(&account, remote);
         Ok(serde_json::json!({"uid": real}))
     }

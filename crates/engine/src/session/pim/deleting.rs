@@ -37,7 +37,7 @@ impl Session {
                         m.event.sequence = m.event.sequence.saturating_add(1);
                     }
                     remote = m.calendar != LOCAL;
-                    m.dirty |= remote;
+                    m.changed_here(remote);
                 }
             }
             _ => {

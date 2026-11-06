@@ -89,6 +89,22 @@ pub struct StoredEvent {
     /// Cleared once given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub respond: Option<String>,
+    /// Changed here besides the answer waiting in [`StoredEvent::respond`] (its Show As, Private,
+    /// a category, its reminder…): the server gives the answer alone, so the change goes after
+    /// it, as any change does. Cleared once the answer is given.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub changed_too: bool,
+}
+
+impl StoredEvent {
+    /// Changed here: to go to the server when it lives on one (`remote`), and, with an answer
+    /// waiting, once the answer is given ([`StoredEvent::changed_too`]).
+    pub fn changed_here(&mut self, remote: bool) {
+        self.dirty |= remote;
+        if self.respond.is_some() {
+            self.changed_too = true;
+        }
+    }
 }
 
 /// An address book.
