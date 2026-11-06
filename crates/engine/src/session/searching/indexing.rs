@@ -7,6 +7,8 @@ use std::ops::Range;
 
 use super::*;
 
+mod ahead;
+pub use ahead::IndexWork;
 mod kept;
 use kept::Kept;
 
@@ -53,6 +55,8 @@ pub(crate) struct SearchIndex {
     pub(super) ranges: HashMap<(String, String), Vec<Range<u32>>>,
     /// The search's answer, carried on as the index grows (see `answer.rs`).
     pub(super) answer: Option<Answer>,
+    /// The folders' kept indexes taken back on the window's search lane (`ahead.rs`).
+    pub(super) ahead: Option<Arc<std::sync::Mutex<ahead::Ahead>>>,
 }
 
 impl SearchIndex {
@@ -282,6 +286,7 @@ impl Session {
             gone: HashSet::new(),
             ranges: HashMap::new(),
             answer: None,
+            ahead: None,
         });
     }
 
@@ -322,7 +327,10 @@ impl Session {
             if ix.building.is_none() && ix.pos == 0 {
                 // A folder read by an earlier run is taken as it is; one that changed since,
                 // less what went or changed, what came in read as the folder is.
-                match if ix.words { self.kept_folder(&a, &f) } else { Kept::No } {
+                let kept = if ix.words { self.kept_or_wait(&mut ix, &a, &f) } else { Some(Kept::No) };
+                // Being taken back on the lane: the search waits for it (the next call).
+                let Some(kept) = kept else { break };
+                match kept {
                     Kept::Whole(b) => {
                         // A folder kept on disk is read in one go: a big one takes the whole
                         // slice, so a first search after a restart doesn't load them all at once.

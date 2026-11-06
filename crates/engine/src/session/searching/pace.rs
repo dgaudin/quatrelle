@@ -31,6 +31,9 @@ pub(crate) struct Pace {
     began: Duration,
     last: Duration,
     longest: Duration,
+    /// Whether the window takes the folders' kept indexes back on its search lane
+    /// ([`Session::defer_index_reading`]).
+    pub(super) lane: bool,
 }
 
 /// The most messages a call adds to the index when the window asked for no count (a scope picked
@@ -45,7 +48,16 @@ const SHARES: u32 = 4;
 
 impl Default for Pace {
     fn default() -> Pace {
-        Pace { clock: None, timed: false, units: usize::MAX, left: usize::MAX, began: Duration::ZERO, last: Duration::ZERO, longest: Duration::ZERO }
+        Pace {
+            clock: None,
+            timed: false,
+            units: usize::MAX,
+            left: usize::MAX,
+            began: Duration::ZERO,
+            last: Duration::ZERO,
+            longest: Duration::ZERO,
+            lane: false,
+        }
     }
 }
 

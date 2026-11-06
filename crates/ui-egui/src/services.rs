@@ -127,6 +127,8 @@ pub enum Lane {
     Reading,
     /// Writing a local account's marks to its cache, in order.
     Writing,
+    /// Taking the folders' kept search indexes back, ahead of the search that joins them.
+    Searching,
 }
 
 /// Work handed to a lane.

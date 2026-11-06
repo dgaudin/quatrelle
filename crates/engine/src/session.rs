@@ -60,8 +60,8 @@ pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
     WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
-pub use searching::SearchClock;
 use searching::SearchIndex;
+pub use searching::{IndexWork, SearchClock};
 pub use security::{
     AccountPgp, CardSearch, KnownCert, Learn, Learnt, Lock, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey,
     PgpCard, Reach, RevocationCheck, SMIME_DOC, Scheme, Seal, Security, SignedBy, SmimeSettings,

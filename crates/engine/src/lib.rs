@@ -31,8 +31,8 @@ pub use quatrelle_smime as smime;
 pub use quatrelle_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountPgp, AccountState, Arrange, AssistKind, Assistant, BodyWork, CardSearch, CompactPhase, Compacted, Compose,
-    DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, Filing, FolderRef, FolderSizes, INDEX_MAX, ItemChoice, ItemKind, KnownCert, Learn, Learnt,
-    ListFilter, ListLayout, Lock, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, MEETINGS_PROFILE, MarkWork, MoveTarget, NAMES_NOT_FOUND,
+    DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, Filing, FolderRef, FolderSizes, INDEX_MAX, IndexWork, ItemChoice, ItemKind, KnownCert, Learn,
+    Learnt, ListFilter, ListLayout, Lock, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, MEETINGS_PROFILE, MarkWork, MoveTarget, NAMES_NOT_FOUND,
     NO_KEY_TO_ENCRYPT, NameChoice, NotesOrder, Outcome, OwnKey, PANICS_CAUGHT, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PaneSection, PeopleKeys, PersonKey,
     PgpCard, Picture, PictureLoading, Prefs, PreparedBody, READING_ZOOM, RECENT_EMOJI, Reach, ReadInPane, Reading, ReadingPane, Resolved,
     RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, SOURCE_SHOWN, STILL_COMING, Scheme, Seal, SearchClock, SearchScope, Security, SendBlock,

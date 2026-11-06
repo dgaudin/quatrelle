@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod ahead;
 mod busy;
 mod by_change;
 mod folding;

@@ -9,6 +9,7 @@ mod answer;
 mod indexing;
 mod pace;
 use answer::Answer;
+pub use indexing::IndexWork;
 pub(crate) use indexing::SearchIndex;
 pub(crate) use pace::Pace;
 pub use pace::SearchClock;

@@ -142,6 +142,7 @@ fn spawn(lane: Lane, shared: &Arc<Shared>, id: u64) -> std::io::Result<()> {
         Lane::Pictures => "mail-pictures",
         Lane::Reading => "mail-reading",
         Lane::Writing => "mail-writing",
+        Lane::Searching => "mail-searching",
     };
     let shared = shared.clone();
     std::thread::Builder::new().name(name.into()).spawn(move || work_lane(&shared, id)).map(drop)

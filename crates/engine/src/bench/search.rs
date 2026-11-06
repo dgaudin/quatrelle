@@ -55,15 +55,44 @@ fn search(s: &mut Session, q: &str) -> (usize, Duration, Duration, usize, u64) {
     let t = Instant::now();
     s.run_search_budgeted(q, SearchScope::All, SLICE);
     times.push(t.elapsed());
+    lane(s, t.elapsed());
     while s.search_pending && times.len() < 1_000_000 {
         let t = Instant::now();
         s.search_more(SLICE);
         times.push(t.elapsed());
+        lane(s, t.elapsed());
     }
     let total = times.iter().sum();
     let worst = times.iter().max().copied().unwrap_or_default();
     let read = s.store.as_ref().map_or(0, |st| st.reads()).saturating_sub(reads);
     (times.len(), total, worst, s.list.len(), read)
+}
+
+thread_local! {
+    /// The search lane: one thread, as the window's.
+    static LANE: std::cell::OnceCell<std::sync::mpsc::Sender<crate::IndexWork>> = const { std::cell::OnceCell::new() };
+}
+
+/// What the window does between two calls, when it takes the kept indexes back on its search
+/// lane: the work sent to a thread, and the rest of the frame drawn (the lane works meanwhile).
+fn lane(s: &mut Session, call: Duration) {
+    if let Some(work) = s.take_index_work() {
+        LANE.with(|l| {
+            let tx = l.get_or_init(|| {
+                let (tx, rx) = std::sync::mpsc::channel::<crate::IndexWork>();
+                std::thread::spawn(move || {
+                    while let Ok(w) = rx.recv() {
+                        w.run();
+                    }
+                });
+                tx
+            });
+            let _ = tx.send(work);
+        });
+    }
+    if s.index_reading_deferred() {
+        std::thread::sleep(Duration::from_secs_f64(FRAME_MS / 1000.0).saturating_sub(call));
+    }
 }
 
 fn report(what: &str, (calls, total, worst, found, read): (usize, Duration, Duration, usize, u64)) {
@@ -208,6 +237,17 @@ fn arrive(store: &Store, n: u32, subject: &str) -> usize {
     1
 }
 
+/// The made-up mailbox's account made a server's (a local account's lists are
+/// counted again at each start, and read whole by a search).
+fn server_account(store: &Store) {
+    let mut accounts = store.load_accounts().unwrap();
+    for a in &mut accounts {
+        a.imap.host = "imap.big.example".into();
+        a.smtp.host = "smtp.big.example".into();
+    }
+    store.save_accounts(&accounts).unwrap();
+}
+
 /// The made-up mailbox's folders.
 fn s_folders(store: &Store) -> Vec<String> {
     store.load_folders(big::ACCOUNT).unwrap_or_default().into_iter().map(|f| f.path).collect()
@@ -256,12 +296,7 @@ fn lists_read_by_a_search_of_everything() {
     let truth = big::generate(&store, NOW, shape).unwrap();
     // A server account (a local one's marks may be on their way to its lists,
     // which are read whole).
-    let mut accounts = store.load_accounts().unwrap();
-    for a in &mut accounts {
-        a.imap.host = "imap.big.example".into();
-        a.smtp.host = "smtp.big.example".into();
-    }
-    store.save_accounts(&accounts).unwrap();
+    server_account(&store);
     drop(store);
     let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
     let mut s = window(&store);
@@ -311,25 +346,33 @@ fn a_restart_with_the_index_kept() {
         ..big::Shape::default()
     };
     let truth = big::generate(&store, NOW, shape).unwrap();
+    server_account(&store);
     let mut s = window(&store);
+    s.take_jobs();
     report("the index built and kept", search(&mut s, big::RARE));
     drop(s);
     drop(store);
-    for run in 1..=2 {
+    // On the window's thread, then on its search lane.
+    for (run, deferred) in [(1, false), (2, false), (3, true), (4, true)] {
         let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
         let before = rss_mb();
         let t = Instant::now();
         let mut s = window(&store);
         let opened = t.elapsed();
+        s.take_jobs();
         println!(
-            "restart {run}: the session opened in {:.1} ms; process {:.0} MB (grew {:.0} MB)",
+            "restart {run}: the session opened in {:.1} ms, {} lists read; process {:.0} MB (grew {:.0} MB)",
             opened.as_secs_f64() * 1000.0,
+            s.lists_read(),
             rss_mb(),
             rss_mb() - before
         );
+        s.defer_index_reading(deferred);
         let lists = s.lists_read();
+        let t = Instant::now();
         let r = search(&mut s, big::RARE);
-        report("  the first search", r);
+        report(if deferred { "  the first search, the kept indexes taken back on the lane" } else { "  the first search" }, r);
+        println!("  done in {:.2} s on the clock", t.elapsed().as_secs_f64());
         assert_eq!(r.3, truth.rare);
         println!("  {} lists read from the disk; process {:.0} MB", s.lists_read() - lists, rss_mb());
         drop(s);
