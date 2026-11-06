@@ -212,3 +212,24 @@ fn a_colleagues_writable_calendars_meeting_has_no_answer() {
     let shown = around(&s).into_iter().find(|i| i.calendar == cal).expect("the colleague's calendar is shown");
     assert_eq!(shown.answer, None, "{shown:?}");
 }
+
+/// Calendars kept by a version that didn't read Exchange Online's Show As and Private stay so
+/// while an appointment changed then waits to go (Graph's update leaves the server's as they are),
+/// and are kept as this version keeps them once it's gone; a new profile's are at once.
+#[test]
+fn calendars_from_before_show_as_was_read_are_raised_once_sent() {
+    use quatrelle_model::pim::{PIM_VERSION, Pim};
+    let mut s = Session::open(Some(temp("showing-version")), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert_eq!(s.pim_mut("new").version, PIM_VERSION, "a new profile's");
+    let cal = "graph:CAL1";
+    let changed =
+        StoredEvent { calendar: cal.into(), href: "E1".into(), event: meeting("e1", None, "", Vec::new()), dirty: true, ..Default::default() };
+    let calendars = Some(vec![CalendarInfo { id: cal.into(), name: "Calendar".into(), ..Default::default() }]);
+    s.pim.insert("a1".into(), Pim { calendars: calendars.clone().unwrap_or_default(), events: vec![changed.clone()], ..Default::default() });
+    let read = DavSync { calendars: calendars.clone(), synced_calendars: vec![cal.into()], ..Default::default() };
+    s.apply_dav("a1", &read);
+    assert_eq!(s.pim["a1"].version, 0, "the change from before still waits");
+    let pushed = StoredEvent { dirty: false, etag: "ck2".into(), ..changed };
+    s.apply_dav("a1", &DavSync { pushed_events: vec![pushed], ..read });
+    assert_eq!(s.pim["a1"].version, PIM_VERSION, "gone: kept as this version keeps it");
+}
