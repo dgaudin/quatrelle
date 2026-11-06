@@ -23,12 +23,10 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     if let Some(folder) = path.parent() {
         fs::create_dir_all(folder).map_err(io_err(folder))?;
     }
-    let scratch = scratch_beside(path);
+    let (scratch, mut file) = new_scratch(|| scratch_beside(path))?;
     // Flushed before the rename, so a power cut can't leave the new name on an empty file.
-    let filled = owner_only_file(&scratch).and_then(|mut f| {
-        f.write_all(bytes)?;
-        f.sync_all()
-    });
+    let filled = file.write_all(bytes).and_then(|()| file.sync_all());
+    drop(file);
     // A failure while filling is reported against the scratch file, one while renaming against
     // the target; either way the scratch file goes.
     let outcome = match filled {
@@ -81,21 +79,44 @@ fn patiently(mut attempt: impl FnMut() -> std::io::Result<()>, mut wait: impl Fn
     }
 }
 
-/// `.<name>.<process>.<serial>.part`, in the same folder as `path` so the rename stays on one
-/// file system.
-fn scratch_beside(path: &Path) -> PathBuf {
-    let serial = SCRATCH_SERIAL.fetch_add(1, Ordering::Relaxed);
-    let name = path.file_name().unwrap_or_default().to_string_lossy();
-    path.with_file_name(format!(".{name}.{}.{serial}.part", std::process::id()))
+/// How many names a scratch file is tried under before the write gives up. A name already taken
+/// is passed over, never opened: it may be a link someone planted to have the write go elsewhere.
+const SCRATCH_TRIES: u32 = 16;
+
+/// A scratch file made new under the first free name `name` gives (the idea of craft-libs'
+/// craft-atomic): a file or link already there is never written through, never emptied, and a
+/// name that's taken is followed by another, up to [`SCRATCH_TRIES`] in all.
+fn new_scratch(mut name: impl FnMut() -> PathBuf) -> Result<(PathBuf, fs::File)> {
+    let mut tries = 1;
+    loop {
+        let at = name();
+        match owner_only_new_file(&at) {
+            Ok(file) => return Ok((at, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && tries < SCRATCH_TRIES => tries += 1,
+            Err(e) => return Err(io_err(&at)(e)),
+        }
+    }
 }
 
-/// Creates (or empties) a file that, on Unix, only its owner may read or write: the cache holds
-/// mail, and the computer may be shared.
-fn owner_only_file(at: &Path) -> std::io::Result<fs::File> {
+/// `.<name>.<16 hex digits>.part`, in the same folder as `path` so the rename stays on one file
+/// system. The digits come from a hasher std seeds from the system's randomness, over this
+/// process's count of writes: another program can't tell the next name in advance, as it could
+/// one made of the process number and a count.
+fn scratch_beside(path: &Path) -> PathBuf {
+    use std::hash::BuildHasher as _;
+    let serial = SCRATCH_SERIAL.fetch_add(1, Ordering::Relaxed);
+    let unguessable = std::collections::hash_map::RandomState::new().hash_one(serial);
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    path.with_file_name(format!(".{name}.{unguessable:016x}.part"))
+}
+
+/// Creates a new file that, on Unix, only its owner may read or write (the cache holds mail, and
+/// the computer may be shared). Fails if anything, a link included, is already at `at`.
+fn owner_only_new_file(at: &Path) -> std::io::Result<fs::File> {
     let mut how = fs::File::options();
     #[cfg(unix)]
     how.mode(OWNER_READ_WRITE);
-    how.write(true).truncate(true).create(true);
+    how.write(true).create_new(true);
     how.open(at)
 }
 
@@ -149,6 +170,64 @@ mod tests {
             assert_eq!(bits(&root), 0o700, "a folder others could enter is closed");
         }
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// Links planted beside the file at the names the next scratch files would take, were those
+    /// names made of the process and a count, are never written through nor renamed into place:
+    /// the file they point at keeps its contents, and the target is a file of its own.
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_link_is_never_written_through() {
+        let root = std::env::temp_dir().join(format!("quatrelle-planted-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let victim = root.join("victim");
+        fs::write(&victim, b"keep").unwrap();
+        let next = SCRATCH_SERIAL.load(Ordering::Relaxed);
+        for serial in next..next + 256 {
+            let name = format!(".state.json.{}.{serial}.part", std::process::id());
+            std::os::unix::fs::symlink(&victim, root.join(name)).unwrap();
+        }
+        let target = root.join("state.json");
+        write_atomic(&target, b"new").unwrap();
+        let (kept, written, is_link) = (fs::read(&victim).unwrap(), fs::read(&target).unwrap(), fs::symlink_metadata(&target).unwrap().is_symlink());
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(kept, b"keep", "the linked file is untouched");
+        assert!(!is_link, "the target is a file, not the planted link");
+        assert_eq!(written, b"new");
+    }
+
+    /// A taken name is passed over and what's there left as it was; names taken without end give
+    /// up after a few tries with an error, never by opening one. Two scratch names never match,
+    /// nor say which process made them.
+    #[test]
+    fn a_taken_scratch_name_is_passed_over() {
+        let root = std::env::temp_dir().join(format!("quatrelle-scratch-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let taken = root.join("taken");
+        fs::write(&taken, b"someone else's").unwrap();
+        let mut names = vec![root.join("free"), taken.clone(), taken.clone()];
+        let (at, file) = new_scratch(|| names.pop().unwrap()).unwrap();
+        drop(file);
+        assert_eq!(at, root.join("free"));
+        let mut tries = 0;
+        let endless = new_scratch(|| {
+            tries += 1;
+            taken.clone()
+        });
+        let kept = fs::read(&taken).unwrap();
+        let _ = fs::remove_dir_all(&root);
+        assert!(endless.is_err());
+        assert_eq!(tries, SCRATCH_TRIES);
+        assert_eq!(kept, b"someone else's");
+        let (a, b) = (scratch_beside(Path::new("d/state.json")), scratch_beside(Path::new("d/state.json")));
+        assert_ne!(a, b);
+        for s in [&a, &b] {
+            let name = s.file_name().unwrap().to_string_lossy().into_owned();
+            assert!(name.starts_with(".state.json.") && name.ends_with(".part") && s.parent() == Some(Path::new("d")), "{name}");
+            assert!(!name.contains(&format!(".{}.", std::process::id())), "{name}");
+        }
     }
 
     /// A rename another program holds up a few times goes through; one refused for another
