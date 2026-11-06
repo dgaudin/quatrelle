@@ -6,6 +6,8 @@
 //! Pure Rust (std, serde_json, png, icu_normalizer). External tools (`cargo`, `git`) run through
 //! `std::process::Command`.
 
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+
 mod authors;
 mod fold;
 mod ico;
