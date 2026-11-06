@@ -1,0 +1,262 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.2.14] - 2026-10-15
+
+### Changed
+
+- write each run of contiguous new blocks in one system call instead of the encoders' field-sized writes (about 270,000 writes for 17,000 messages with attachments); block padding is now zero-filled
+- write only the allocation map pages a commit changed instead of every AMap/PMap/FMap/FPMap page; on a slow disk the flush of thousands of scattered map pages per append dominated large exports (17,000 messages on a Windows VM: 172 s to 61 s)
+- commit only the B-tree pages whose entries changed, and update block reference counts from the nodes and blocks a commit touched instead of re-reading every internal block
+- mark the allocation map from the commit's own block and page lists instead of re-reading both B-trees
+- flush to disk three times per commit instead of seven; new data only goes to space the committed allocation map marks free, so the committed state stays intact until the header switches roots
+
+## [1.2.13] - 2026-10-14
+
+### Added
+
+- `UnicodePstFile::set_store_display_name` sets the message store PR_DISPLAY_NAME, which Outlook shows as the top-level name of an opened PST; new files otherwise keep the template name "Empty"
+
+## [1.2.12] - 2026-10-14
+
+### Fixed
+
+- store large contents-table cells (such as the display-to list of a mass mail) in NID_TYPE_LTP subnodes; internal-type cell subnodes made Outlook fail to load the folder's contents table, so the folder showed no items
+- count every subnode type when numbering new contents-table subnodes so appended cell subnodes never reuse a NID
+- keep every heap allocation, row-index and property-tree node within the MS-PST 3580-byte limit and move larger values to subnodes; heap cells above it made SCANPST stop with Fatal Error 80040813
+- fill the deprecated header fields rgbFM and rgbFP with 0xFF as MS-PST requires and Outlook writes
+
+## [1.2.11] - 2026-10-13
+
+### Fixed
+
+- split heap page padding into allocations of at most 3580 bytes; a larger padding allocation made SCANPST stop with Fatal Error 80040813 after several large appends
+
+### Changed
+
+- append new contents-table rows incrementally, keeping unchanged heap pages and full row blocks instead of rebuilding the whole table per call
+- patch the parent hierarchy content count in place instead of leaking a row index into its heap per call
+- reuse space the allocation map marks free before growing the file; repeated appends no longer grow the PST with discarded B-trees and table blocks
+
+## [1.2.10] - 2026-10-12
+
+### Fixed
+
+- cache each heap page's parsed page map so table rebuilds no longer re-parse it for every heap-backed cell; appending to a folder with thousands of messages is ~2-3x faster
+
+## [1.2.9] - 2026-08-13
+
+### Fixed
+
+- place the first FPMap two pages after its AMap and reserve the matching page count
+
+## [1.2.8] - 2026-08-13
+
+### Fixed
+
+- externalize property values that exceed the actual aligned HN page capacity
+
+## [1.2.7] - 2026-08-13
+
+### Fixed
+
+- externalize oversized folder contents values such as `PR_DISPLAY_TO`
+- align HN page maps and encode each multi-level XBLOCK with its local subtree size
+
+## [1.2.6] - 2026-08-13
+
+### Added
+
+- bulk append APIs that stream message blocks and rebuild PST indexes once per batch
+- message position, Message-ID, and current PST size in bulk-write errors
+
+### Fixed
+
+- reserve periodic FPMap pages so Unicode PST creation remains valid beyond 2 GiB
+- build multi-level BBT/NBT/subnode trees without invalid `cEntMax` page headers
+- keep only reachable blocks and recompute BBT reference counts after each commit
+- preserve Outlook folder table allocations and update search records when adding folders/messages
+- write Outlook-compatible recipient, attachment, contents-table, and message-size metadata
+
+## [1.2.5] - 2026-08-11
+
+### Added
+
+- create and append messages in case-insensitive nested folder paths, creating missing folders
+- write hierarchy, contents, and associated-contents nodes for newly created folders
+
+## [1.2.4] - 2026-08-10
+
+### Added
+
+- write attachment Content-ID and HTML-reference properties for inline `cid:` images
+
+## [1.2.3] - 2026-08-10
+
+### Added
+
+- write TO, CC, and BCC recipient rows for every message recipient
+- write optional UTF-8 HTML as `PR_HTML` while retaining `PR_BODY`
+- write zero-byte by-value attachments
+
+### Changed
+
+- replace the single recipient name and email fields with a recipient slice
+
+## [1.2.2] - 2026-08-09
+
+### Added
+
+- append plain-text messages to existing unencrypted Unicode PSTs
+- write large message bodies and by-value file attachments using data trees
+- mark messages with attachments in message flags and properties
+- write multi-level BBT, NBT, and subnode trees
+- allocate and rebuild multiple AMap regions and their periodic metadata pages
+
+### Changed
+
+- preserve existing receive-folder properties, contents-table schemas, rows, and subnodes
+- commit appended BBT/NBT roots copy-on-write and update the receive-folder content count
+
+## [1.2.1] - 2026-08-09
+
+### Added
+
+- create a new Unicode PST containing Inbox and one plain-text message
+- generate a compatibility fixture for Outlook and SCANPST validation
+
+## [1.2.0](https://github.com/microsoft/outlook-pst-rs/compare/outlook-pst-v1.1.0...outlook-pst-v1.2.0) - 2026-03-17
+
+### Added
+
+- unify open_store logic and dyn traits
+
+### Fixed
+
+- #29
+- HeapId::new parameter validation bug
+- new clippy warnings
+
+### Other
+
+- Merge pull request #44 from alemigo/main
+
+## [1.1.0](https://github.com/microsoft/outlook-pst-rs/compare/outlook-pst-v1.0.0...outlook-pst-v1.1.0) - 2025-07-01
+
+### Fixed
+- allow 0-size MV Properties
+
+## [1.0.0](https://github.com/microsoft/outlook-pst-rs/compare/outlook-pst-v0.1.2...outlook-pst-v1.0.0) - 2025-04-11
+
+### Added
+- output some more information from read_header example
+- hide start_write/finish_write in PstFileLockGuard type
+- implement FMAP pages
+- mark blocks in AMAP rebuild
+- implement BBT portion of AMAP rebuild
+- implement NBT portion of AMAP rebuild
+- start collecting types in PstFile trait
+
+### Fixed
+- simplify trait bounds with Into<u64> on BlockId and ByteIndex
+- some sub-tables may be missing on some folders
+- ignore the lowest bit of BIDs in block BTree lookups
+- refactor max_free_slots into generalized find_free_bits
+- different padding in AnsiMapPage types
+- count bits within bytes
+
+## [0.1.2](https://github.com/microsoft/outlook-pst-rs/compare/outlook-pst-v0.1.1...outlook-pst-v0.1.2) - 2025-03-12
+
+### Fixed
+- distinguish between missing and too many  recipient table errors
+- truncate string values at null terminators
+- port row matrix fix to AnsiTableContext
+
+### Other
+- use compressed-rtf in browse examples
+
+## [0.1.1](https://github.com/microsoft/outlook-pst-rs/compare/v0.1.0...v0.1.1) - 2025-03-10
+
+### Fixed
+- misc. fixes for examples running against ANSI files
+
+## [0.1.0](https://github.com/microsoft/outlook-pst-rs/releases/tag/v0.1.0) - 2025-03-08
+
+### Added
+
+- split browse_pst into ANSI and Unicode versions
+- add a body preview pane to browse_pst
+- initial interative browse_pst sample
+- allow filtereing property IDs when loading messages
+- implement search update (basic) queue types
+- implement search update types in messaging layer
+- implement named property types in messaging layer
+- implement attachment types in messaging layer
+- load recipient and attachment tables on messages
+- implement message types in messaging layer
+- implement folder types in messaging layer
+- required store props and entry ID conversion
+- implement store types in messaging layer
+- implement read/write table context types
+- implement read/write property context types
+- lookup by key in node/block BTree pages
+- implement read/write tree-on-heap structures
+- implement read/write heap-on-node structures
+- finish implementing read/write blocks
+- implement read/write Data Tree blocks
+- implement read/write data blocks
+- read/write BTree page dynamically with level
+- generic BTree page read/write support
+- implement read/write BTree intermediate pages
+- implement read/write Density List page
+- implement read/write page trailers and map pages
+- implement read/write NDB header support
+- start work on the NDB layer
+
+### Fixed
+
+- cleanup commented out code
+- simplify taking ownership of data blocks
+- bounds check heap block index for 1..8 range
+- ignore per-block padding in row matrix
+- handle empty HeapId values in property context
+- cleanup error message
+- *(doc)* attachment module comment
+- cleanup and deduplication in store module
+- *(doc)* message module comment
+- empty table sets row matrix HNID to 0
+- empty tree-on-heap sets root HID to 0
+- tweak the output of read_root_folder
+- test the table context
+- read property context sub-nodes from sub-node tree
+- misc clippy fixes
+- test the property context and tree-on-heap
+- add accessors instead of making members public
+- make HeapNodePageAlloc members public
+- test the data-tree block traversal
+- test the sub-node tree traversal
+- handle loosely packed BTree entries
+- data validation in heap and tree modules
+- hide read/write support traits in pub(crate) module
+- move ENTRY_SIZE into private DataTreeBlockExt trait
+- misc. cleanup and check for internal BIDs in data blocks
+- test BTrees against additional sample PSTs
+- test Node and Block BTrees
+- cleanup dwPadding in AnsiBTreePage
+- test Density List and add CRC verification/update to page read/write
+- test and fix NDB header parsing with an empty Unicode PST
+- grammar in README
+
+### Other
+
+- scaffold the LTP layer module
+- expose ndb sub-module hierarchy
+- refactor ndb module into sub-modules
+- cargo fmt
+- cargo fmt
