@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Didier Gaudin
 //! What the window asks of the desktop (`Services`): the clock and the system's style and fonts,
 //! files and web addresses opened with the system's apps, the clipboard, files dragged out of
-//! the window, notifications, video frames, and threads for slow work.
+//! the window, notifications, video frames, printing, and threads for slow work.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -22,6 +22,7 @@ pub(crate) mod browsers;
 pub(crate) mod file_dialogs;
 pub(crate) mod keychain;
 mod lanes;
+mod printing;
 pub(crate) mod profiles;
 pub(crate) mod start;
 pub(crate) mod state_writer;
@@ -65,6 +66,8 @@ pub(crate) struct Desktop {
     pub(crate) tray: tray::Tray,
     /// The threads slow work runs on (decoding pictures).
     pub(crate) lanes: lanes::Lanes,
+    /// The system's print window, while it's open (`desktop/printing.rs`).
+    pub(crate) printing: printing::Printing,
 }
 
 impl Desktop {
@@ -207,6 +210,13 @@ impl Services for Desktop {
     }
     fn open_path(&mut self, path: &Path) -> Result<(), String> {
         shell_open(path.as_os_str())
+    }
+    /// The print portal's window on Linux and the BSDs (`desktop/printing.rs`).
+    fn print(&mut self, title: &str, pdf: Vec<u8>) -> bool {
+        self.printing.start(title, pdf)
+    }
+    fn take_printed(&mut self) -> Option<quatrelle_ui_egui::PrintOutcome> {
+        self.printing.take()
     }
     fn update_state(&mut self) -> quatrelle_ui_egui::UpdateState {
         self.updater.as_ref().map(self_update::Updater::state).unwrap_or_default()
