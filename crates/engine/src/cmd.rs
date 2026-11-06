@@ -108,6 +108,7 @@ mod files;
 mod home;
 mod navigation;
 mod people;
+mod pgp;
 mod pim;
 mod scheduling;
 mod security;
@@ -130,6 +131,7 @@ pub fn registry() -> Registry {
     all.extend(scheduling::commands());
     all.extend(files::commands());
     all.extend(security::commands());
+    all.extend(pgp::commands());
     all.extend(tasks::commands());
     all.extend(accounts::commands());
     all.extend(webex::commands());

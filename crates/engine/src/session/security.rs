@@ -17,8 +17,11 @@ use quatrelle_smime as smime;
 use super::*;
 
 mod cards;
+mod pgp;
 mod revocation;
 pub use cards::CardSearch;
+pub(crate) use pgp::PgpState;
+pub use pgp::{AccountPgp, OwnKey, PGP_DOC, PgpCard};
 pub use revocation::RevocationCheck;
 pub(crate) use revocation::Revocations;
 
@@ -141,6 +144,7 @@ impl Session {
             let s: SmimeSettings = store.load_account_doc(&a.config.id, SMIME_DOC).unwrap_or_default();
             self.smime.insert(a.config.id.clone(), s);
         }
+        self.load_pgp();
     }
 
     fn save_smime(&mut self, account: &str) {
@@ -618,6 +622,7 @@ impl Session {
             }
             Event::Revocation { cert, status } => self.heard_revocation(cert, status),
             Event::HeldKeys { keys, error } => self.heard_held_keys(keys, error),
+            e @ (Event::PgpKeys { .. } | Event::PgpDecrypted { .. } | Event::PgpBackedUp { .. }) => self.apply_pgp(e),
             _ => {}
         }
     }

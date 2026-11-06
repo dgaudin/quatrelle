@@ -295,6 +295,8 @@ impl Session {
         let Some(email) = self.account(id).map(|a| a.config.email.clone()) else {
             return Err(CmdError::Params(format!("no account `{id}`")));
         };
+        // Its OpenPGP keys' secret parts go from the keychain, asked while its settings are here.
+        self.forget_pgp_account(id);
         self.accounts.retain(|a| a.config.id != id);
         self.cache.retain(|(a, _), _| a != id);
         self.forget_echoes(id);

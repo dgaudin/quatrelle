@@ -62,7 +62,9 @@ pub use prefs::{
 };
 pub use searching::SearchClock;
 use searching::SearchIndex;
-pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
+pub use security::{
+    AccountPgp, CardSearch, KnownCert, Lock, OwnKey, PGP_DOC, PgpCard, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings,
+};
 use writing::NameCheck;
 pub use writing::{
     AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, Rewrite, SendBlock,
@@ -360,6 +362,8 @@ pub struct Session {
     protecting: HashMap<u64, security::Protecting>,
     revocation: security::Revocations,
     cards: security::CardSearch,
+    /// OpenPGP: each account's own keys.
+    pgp: security::PgpState,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
@@ -538,6 +542,7 @@ impl Session {
             protecting: HashMap::new(),
             revocation: Default::default(),
             cards: Default::default(),
+            pgp: Default::default(),
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             envelope: Default::default(),

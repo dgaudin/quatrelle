@@ -1939,3 +1939,11 @@ folder	Conflicts	Conflitti
 	No match	Nessun risultato
 	Previous result	Risultato precedente
 	Next result	Risultato successivo
+	the OpenPGP settings could not be saved: {error}	Non è stato possibile salvare le impostazioni OpenPGP: {error}
+	The OpenPGP key couldn't be kept: {error}	Non è stato possibile conservare la chiave OpenPGP: {error}
+	Your OpenPGP key for {who} is made: save a backup of it	La tua chiave OpenPGP per {who} è stata creata: salvane un backup
+	Your OpenPGP key for {who} is ready	La tua chiave OpenPGP per {who} è pronta
+	Your OpenPGP key now runs until {until}	La tua chiave OpenPGP ora è valida fino al {until}
+	The OpenPGP key's backup couldn't be saved: {error}	Non è stato possibile salvare il backup della chiave OpenPGP: {error}
+	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	Il backup della chiave OpenPGP è salvato: conservalo, con la sua passphrase, in un luogo sicuro
+	the system keychain isn't available: {error}	il portachiavi di sistema non è disponibile: {error}

@@ -196,3 +196,16 @@ fn a_backup_reads_back_with_its_passphrase_only() {
         }
     }
 }
+
+/// The public key written as a key file (`pgp.exportPublic`): armored, the same key read back,
+/// nothing of the secret in it; what isn't a key is an error.
+#[test]
+fn a_public_key_is_written_as_a_key_file() {
+    let k = riley();
+    let file = armored_public(&k.public).unwrap();
+    assert!(file.starts_with("-----BEGIN PGP PUBLIC KEY BLOCK-----"), "{file}");
+    assert_eq!(public_keys(file.as_bytes()).unwrap(), [k.public.clone()]);
+    assert!(read_secret_key(file.as_bytes(), "").is_err(), "no secret key in it");
+    assert!(armored_public(b"not a key").is_err());
+    assert!(armored_public(&k.secret).is_err(), "a secret key isn't written as a public one");
+}

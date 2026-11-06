@@ -557,6 +557,16 @@ impl Store {
         self.write_json(&self.account_dir(account).join(safe_doc(name)), value)
     }
 
+    /// An account's document gone (from its data file too, which may outlive the account); none
+    /// there is no error.
+    pub fn remove_account_doc(&self, account: &str, name: &str) -> Result<()> {
+        let path = self.account_dir(account).join(safe_doc(name));
+        match self.files.remove_file(&path) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(io_err(&path)(e)),
+            _ => Ok(()),
+        }
+    }
+
     pub fn load_accounts(&self) -> Result<Vec<AccountConfig>> {
         self.read_json(&self.root.join("accounts.json"))
     }
