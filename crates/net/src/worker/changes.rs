@@ -243,6 +243,7 @@ impl Worker {
             | Job::CheckRevocation { .. }
             | Job::FindHeldKeys { .. }
             | Job::UseHeldKey { .. }
+            | Job::Pgp { .. }
             | Job::CheckUpdates
             | Job::StopSearch => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}

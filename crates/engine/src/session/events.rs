@@ -14,7 +14,10 @@ impl Session {
             | Event::Decrypted { .. }
             | Event::Revocation { .. }
             | Event::HeldKeys { .. }
-            | Event::DirectoryCertificates { .. }) => self.apply_smime(e),
+            | Event::DirectoryCertificates { .. }
+            | Event::PgpKeys { .. }
+            | Event::PgpDecrypted { .. }
+            | Event::PgpBackedUp { .. }) => self.apply_smime(e),
             Event::DirectoryPeople { account, query, people, more, error } => self.apply_directory(account, query, people, more, error),
             Event::ListExpanded { account, address, item_id, members, more, total, error } => {
                 self.list_expanded(&account, address, item_id, members, more, total, error)

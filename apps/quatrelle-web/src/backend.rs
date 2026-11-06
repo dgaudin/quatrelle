@@ -590,6 +590,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::WebexUpdate { .. }
         | Job::WebexDelete { .. }
         | Job::ExportPst { .. }
+        // OpenPGP isn't in the browser yet: answered so in lot 4 of the plan.
+        | Job::Pgp { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
         // Older mail read online is Exchange's; the browser's accounts keep more instead.

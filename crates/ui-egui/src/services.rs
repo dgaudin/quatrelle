@@ -109,6 +109,8 @@ pub enum FileAsk {
     Folder,
     /// A certificate file (`.p12`, `.pfx`) to import.
     Certificate,
+    /// An OpenPGP key file (`.asc`, `.gpg`, `.key`, `.pgp`) to import.
+    PgpKey,
     /// A rules file to import.
     Rules,
     /// An Outlook (or Quatrelle) data file to open.
