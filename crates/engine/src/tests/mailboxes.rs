@@ -317,11 +317,18 @@ fn rows_downloaded_ahead_get_their_preview_from_the_source() {
     for uid in 1..=11u32 {
         let preview = if uid == 11 { "From its listing".to_string() } else { String::new() };
         st.messages.push(Summary { key: key(uid), subject: format!("Report {uid}"), date: NOW - i64::from(uid), preview, ..Default::default() });
-        if uid <= 8 {
+        if uid <= 7 {
             let raw = format!("From: a@x.example\r\nSubject: Report {uid}\r\n\r\nThe figures for week {uid}.\r\n\r\n-- \r\nA signature\r\n");
             store.write_body(&key(uid), raw.as_bytes()).unwrap();
         }
     }
+    // A newsletter in HTML only, laid out in tables (issue #41): its words in reading order,
+    // without rules or marks.
+    let letter = "From: news@studio.example\r\nSubject: Letter\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+        <html><head><style>td{color:#333}</style></head><body><table width=\"600\"><tr><td><a href=\"https://news.example/\">\
+        <img src=\"https://news.example/logo.png\" alt=\"Logo\"></a></td><td><h2>Banner</h2></td></tr></table>\
+        <table><tr><td><p><b>First</b> block</p></td></tr></table></body></html>\r\n";
+    store.write_body(&key(8), letter.as_bytes()).unwrap();
     store.save_folder("a1", "INBOX", &st).unwrap();
     let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.run("folder.open", &json!({"account": "a1", "folder": "INBOX"})).unwrap();
@@ -333,6 +340,7 @@ fn rows_downloaded_ahead_get_their_preview_from_the_source() {
     assert!(wanted(&s).is_empty(), "the two without a source wait");
     let preview = |s: &Session, uid| s.list.iter().find(|m| m.key == key(uid)).map(|m| s.preview_of(m).to_string()).unwrap_or_default();
     assert_eq!(preview(&s, 3), "The figures for week 3.", "the signature isn't part of it");
+    assert_eq!(preview(&s, 8), "Logo Banner First block");
     assert_eq!(preview(&s, 9), "");
     assert_eq!(preview(&s, 11), "From its listing");
     // Its source downloaded meanwhile: a minute later the row is looked at again.

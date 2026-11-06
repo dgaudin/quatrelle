@@ -328,8 +328,8 @@ impl Session {
             };
             done += 1;
             bytes = bytes.saturating_add(raw.len());
-            let text = mime::parse(&raw).map(|p| mime::preview(&p.text)).unwrap_or_default();
-            self.previews.insert(key.clone(), Preview::Text(text));
+            // As its summary would have it, had it come whole: not a full parse (laid out).
+            self.previews.insert(key.clone(), Preview::Text(mime::preview_from_source(&raw)));
         }
         false
     }

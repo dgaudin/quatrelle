@@ -106,3 +106,24 @@ fn tables_read_as_text_without_rules() {
     let s = summary_from_header(raw, key, Flags::default(), 0, 0);
     assert_eq!(s.preview, "BANNER First block");
 }
+
+/// Issue #41, the preview of an HTML-only newsletter as it's made for each message downloaded:
+/// cells side by side read one after the other, without marks; long styles before `<body>` and
+/// a start of markup without words still give its words.
+#[test]
+fn a_newsletter_preview_reads_its_cells_in_order() {
+    let mail = |html: &str| format!("From: news@studio.example\r\nSubject: x\r\nContent-Type: text/html; charset=utf-8\r\n\r\n{html}\r\n");
+    let side_by_side = "<table><tr><td><a href=\"https://news.example/a\"><img src=\"https://news.example/a.png\" alt=\"Picture one\"></a></td>\
+        <td><h2>Title one</h2><p><b>Lead</b> words</p></td></tr></table>";
+    assert_eq!(preview_from_source(mail(side_by_side).as_bytes()), "Picture one Title one Lead words");
+    // 80 KB of styles in its head, then a start of 20 KB of markup with no words in it.
+    let styles = format!("<html><head><style>{}</style></head>", ".c{color:#123456}\n".repeat(80 * 1024 / 18));
+    let empty = "<table><tr><td style=\"padding:0\"></td></tr></table>".repeat(20 * 1024 / 50);
+    let raw = mail(&format!("{styles}<BODY>{empty}<p>Été : les nouvelles.</p></BODY></html>"));
+    assert_eq!(preview_from_source(raw.as_bytes()), "Été : les nouvelles.");
+    let html = format!("{styles}<BODY>{empty}<p>Été : les nouvelles.</p></BODY></html>");
+    assert_eq!(html::html_preview(&html), "Été : les nouvelles.", "found without a full parse");
+    // A long one stops at the preview's length.
+    let long = mail(&format!("<body>{}</body>", "<p>Mot é</p>".repeat(30_000)));
+    assert_eq!(preview_from_source(long.as_bytes()).chars().count(), PREVIEW_CHARS + 1, "and its …");
+}
