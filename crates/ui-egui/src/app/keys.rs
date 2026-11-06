@@ -61,6 +61,7 @@ impl MailApp {
                         });
                         Some((digit.unwrap_or(*key), *modifiers))
                     }
+                    egui::Event::Cut if cut_is_shift_delete(i.modifiers) => Some((Key::Delete, egui::Modifiers::SHIFT)),
                     _ => None,
                 })
                 .collect()
@@ -164,9 +165,20 @@ impl MailApp {
                 if id == "search.run" {
                     continue;
                 }
-                if id == "mail.delete" && self.needs_delete_confirm() {
-                    self.ui.dialog = Some(Dialog::ConfirmDelete { count: self.session.selection.len() });
-                    continue;
+                if matches!(id, "mail.delete" | "mail.deleteForGood") {
+                    let for_good = id == "mail.deleteForGood";
+                    // A message's page of its own (the browser): its message, not the list's
+                    // selection.
+                    if let Some(k) = self.ui.page_message.clone() {
+                        for a in delete_from_window(&self.session, &k, for_good) {
+                            self.act(a);
+                        }
+                        continue;
+                    }
+                    if asks_first(&self.session, self.session.selected_iter().map(|m| &m.key), for_good) {
+                        self.ui.dialog = Some(Dialog::ConfirmDelete { count: self.session.selection.len() });
+                        continue;
+                    }
                 }
                 if id == "mail.move" {
                     self.ui.dialog = Some(Dialog::move_to());
@@ -219,15 +231,40 @@ impl MailApp {
 
     /// Deleting from Deleted Items is permanent: ask first.
     pub fn needs_delete_confirm(&self) -> bool {
-        self.session.prefs.confirm_permanent_delete
-            && !self.session.selection.is_empty()
-            && self.session.selected_iter().all(|m| {
-                self.session
-                    .account(&m.key.account)
-                    .and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash))
-                    .is_some_and(|t| t.path == m.key.folder)
-            })
+        asks_first(&self.session, self.session.selected_iter().map(|m| &m.key), false)
     }
+}
+
+/// Whether deleting these messages asks first, as the option says (on unless turned off): Delete
+/// for good (Shift+Delete) does, and Delete when all of them are in Deleted Items, where it's for
+/// good too. Not in the Outbox: deleting there only keeps a message from being sent.
+fn asks_first<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, for_good: bool) -> bool {
+    let in_trash =
+        |k: &MessageKey| s.account(&k.account).and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash)).is_some_and(|t| t.path == k.folder);
+    let mut any = false;
+    let mut all_in_trash = true;
+    let mut all_outbox = true;
+    for k in keys {
+        any = true;
+        all_in_trash &= in_trash(k);
+        all_outbox &= s.outbox_entry(k).is_some();
+    }
+    s.prefs.confirm_permanent_delete && any && if for_good { !all_outbox } else { all_in_trash }
+}
+
+/// Delete (or, `for_good`, Shift+Delete) on the message of a window of its own, or of the
+/// browser's page for one: that message, asked first as in the list; the window closes. One no
+/// longer in the list (another folder opened since) isn't deleted: the list's selection would be,
+/// in its place.
+pub(crate) fn delete_from_window(s: &Session, key: &MessageKey, for_good: bool) -> Vec<Action> {
+    if s.summary(key).is_none() {
+        return vec![Action::Refuse(tl!("This message is no longer in the list: open its folder to delete it.").to_string())];
+    }
+    let close = Action::Run("message.closeWindow", json!({"key": key.to_id()}));
+    if asks_first(s, std::iter::once(key), for_good) {
+        return vec![Action::Open(key.clone()), Action::Dialog(Dialog::ConfirmDelete { count: 1 }), Action::FocusMain, close];
+    }
+    vec![Action::Open(key.clone()), Action::Run(if for_good { "mail.deleteForGood" } else { "mail.delete" }, json!({})), close]
 }
 
 /// A command whose shortcut acts on the messages selected in Mail, or moves through its list:
@@ -235,6 +272,12 @@ impl MailApp {
 /// previous. New mail, Send / Receive, Undo, Search, the modules and the address book act anywhere.
 fn acts_on_mail(id: &str) -> bool {
     (id.starts_with("mail.") && !matches!(id, "mail.new" | "mail.sync")) || id.starts_with("quickStep.") || id.starts_with("list.")
+}
+
+/// Shift+Delete on Windows, which egui hands over as Cut (a clipboard shortcut there), not as
+/// the key: a Cut with Shift down and neither Ctrl nor Alt (Ctrl+X is a Cut too).
+pub(crate) fn cut_is_shift_delete(m: egui::Modifiers) -> bool {
+    cfg!(target_os = "windows") && m.shift && !(m.command || m.ctrl || m.alt)
 }
 
 /// A shortcut as the registry names it: `Mod+Shift+Down`.

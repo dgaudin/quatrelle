@@ -6,6 +6,7 @@
 use super::*;
 
 mod deferred;
+mod deleting;
 mod echo;
 mod follow_up;
 mod marks;

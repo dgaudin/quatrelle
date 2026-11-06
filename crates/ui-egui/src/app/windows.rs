@@ -314,6 +314,17 @@ impl MailApp {
                 if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P)) {
                     mine.push(Action::Print);
                 }
+                // Delete, and Shift+Delete for good, delete this window's message. Only in a
+                // window of its own: drawn inside the main one, its keys are the main window's.
+                if ui.ctx().viewport_id() != egui::ViewportId::ROOT && !ui.ctx().text_edit_focused() {
+                    let (delete, for_good) = ui.input_mut(|i| {
+                        let cut = super::keys::cut_is_shift_delete(i.modifiers) && i.events.iter().any(|e| matches!(e, egui::Event::Cut));
+                        (i.consume_key(egui::Modifiers::NONE, Key::Delete), i.consume_key(egui::Modifiers::SHIFT, Key::Delete) || cut)
+                    });
+                    if delete || for_good {
+                        mine.extend(super::keys::delete_from_window(session, &key, for_good));
+                    }
+                }
                 egui::Panel::top(egui::Id::unique(("message-window-bar", key.to_id())))
                     .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.border)))
                     .show(ui, |ui| window_toolbar(ui, session, &t, &key, &mut mine));
@@ -507,12 +518,14 @@ pub(crate) fn window_toolbar(ui: &mut Ui, s: &Session, t: &Tokens, key: &Message
             }
         }
         widgets::group_sep(ui, t);
-        for (id, icon, label) in [("mail.delete", Icon::Delete, "Delete"), ("mail.archive", Icon::Archive, "Archive")] {
-            if widgets::tool_button(ui, icon, label, t, true).clicked() {
-                acts.push(Action::Open(key.clone()));
-                acts.push(Action::Run(id, json!({})));
-                acts.push(close());
-            }
+        // Delete as the Delete key does: asked first in Deleted Items, where it's for good.
+        if widgets::tool_button(ui, Icon::Delete, "Delete", t, true).clicked() {
+            acts.extend(super::keys::delete_from_window(s, key, false));
+        }
+        if widgets::tool_button(ui, Icon::Archive, "Archive", t, true).clicked() {
+            acts.push(Action::Open(key.clone()));
+            acts.push(Action::Run("mail.archive", json!({})));
+            acts.push(close());
         }
         if widgets::tool_button(ui, Icon::Move, "Move to", t, true).clicked() {
             acts.push(Action::Open(key.clone()));
