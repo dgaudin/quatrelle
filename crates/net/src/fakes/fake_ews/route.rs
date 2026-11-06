@@ -15,6 +15,17 @@ impl Data {
             el.map(|e| e.kids.iter().filter_map(|k| k.attr("Id").map(str::to_string)).collect()).unwrap_or_default()
         };
         let mut out = Vec::new();
+        // A calendar no longer shared: whatever names its mailbox or its items is refused.
+        if !self.withdrawn.is_empty() {
+            let named = op.find("EmailAddress").map(|e| e.text.trim().to_ascii_lowercase()).is_some_and(|a| self.withdrawn.contains(&a));
+            let theirs = ids(op.child("ItemIds")).iter().any(|id| {
+                self.pim.iter().any(|(i, f, _)| i == id && f.strip_prefix("mailbox:").is_some_and(|w| self.withdrawn.iter().any(|x| x == w)))
+            });
+            if named || theirs {
+                out.push(err("ErrorAccessDenied"));
+                return (format!("{}Response", op.name), out);
+            }
+        }
         match op.name.as_str() {
             "GetAttachment" => {
                 // A contact's picture: the bytes of any attachment this mailbox's items carry.

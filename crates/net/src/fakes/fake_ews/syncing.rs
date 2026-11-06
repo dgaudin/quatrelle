@@ -45,6 +45,14 @@ impl Data {
         let Some(folder) = op.child("SyncFolderId").and_then(|f| f.kids.first()).and_then(|f| self.folder_id(f)) else {
             return vec![err("ErrorFolderNotFound")];
         };
+        // A public folder asked for without being routed to the mailbox holding it, or (some
+        // servers) at all.
+        if self.unrouted(&folder) {
+            return vec![err("ErrorFolderNotFound")];
+        }
+        if self.public_changes_refused && self.public_ids().contains(&folder) {
+            return vec![err("ErrorInvalidOperation")];
+        }
         let given = op.child("SyncState").map(|s| s.text.trim().to_string()).unwrap_or_default();
         if self.pim_folder(op.child("SyncFolderId").and_then(|f| f.kids.first())) {
             return vec![self.sync_pim_items(&folder, &given, op)];

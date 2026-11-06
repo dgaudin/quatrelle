@@ -153,6 +153,10 @@ pub struct Client {
     /// again at each calendar read (three of the owner's, 2.6 s of the 9 the calendar took to
     /// open, 29/10).
     no_calendar: RefCell<Vec<String>>,
+    /// The folders whose changes the server won't give this session (`SyncFolderItems` refused
+    /// from nothing: public folders, on some servers), by the element naming them: read whole, as
+    /// before, without asking again.
+    changes_refused: RefCell<Vec<String>>,
     /// The server refused an appointment's fields asked by name: all their properties are asked
     /// this session, as before (see `ews_pim`'s `get_items`).
     fields_refused: Cell<bool>,
@@ -397,6 +401,7 @@ impl Client {
             replace_outlook_rules: Cell::new(false),
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
+            changes_refused: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
             clock: Cell::new(None),
             server_major: Cell::new(None),
@@ -429,6 +434,7 @@ impl Client {
             replace_outlook_rules: Cell::new(false),
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
+            changes_refused: self.changes_refused.clone(),
             fields_refused: self.fields_refused.clone(),
             clock: self.clock.clone(),
             server_major: self.server_major.clone(),

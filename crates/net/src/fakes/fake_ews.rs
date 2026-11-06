@@ -126,6 +126,12 @@ pub struct Data {
     pub refused: Vec<String>,
     /// Items `DeleteItem` refuses (`ErrorAccessDenied`), by id: they stay.
     pub undeletable: Vec<String>,
+    /// People who stopped sharing their calendar with the account: every request naming their
+    /// mailbox, or one of their items, is refused (`ErrorAccessDenied`).
+    pub withdrawn: Vec<String>,
+    /// `SyncFolderItems` is refused in public folders (`ErrorInvalidOperation`), as Microsoft's
+    /// reference of the operation says it isn't supported there.
+    pub public_changes_refused: bool,
     /// How each `GetItem` asked for its items: `AllProperties`, `IdOnly`, `fields` (an
     /// appointment's fields named, `IdOnly` with them), or `MimeContent` (their whole sources).
     pub item_shapes: Vec<String>,
@@ -325,6 +331,8 @@ impl Default for Data {
             unreadable: Vec::new(),
             refused: Vec::new(),
             undeletable: Vec::new(),
+            withdrawn: Vec::new(),
+            public_changes_refused: false,
             item_shapes: Vec::new(),
             refuse_fields: false,
             refuse_fields_each: false,
