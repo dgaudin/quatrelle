@@ -369,9 +369,11 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     assert!(s.run("account.exportPst", &json!({"path": "out.pst", "account": "nope"})).is_err());
     // When flagged messages are due and the categories' names, kept only here, go along.
     s.prefs.follow_up.insert("due@example.com".into(), 20_000);
+    s.prefs.follow_up_done.insert("done@example.com".into(), 19_000);
     s.run("account.exportPst", &json!({"path": "C:/out/Archive.pst", "account": id})).unwrap();
     assert!(matches!(s.take_jobs().as_slice(), [Job::ExportPst { account, path, name, marks }]
         if *account == id && path == "C:/out/Archive.pst" && name == "Archive 2024" && marks.due.get("due@example.com") == Some(&20_000)
+            && marks.done.get("done@example.com") == Some(&19_000)
             && marks.categories.iter().any(|c| c.keyword == "$label4" && c.name == "To do")));
     s.apply(Event::Exported { account: id.clone(), messages: 100, skipped: 0, already: 0, done: false, error: None });
     assert!(s.notices.last().is_some_and(|n| n.text.contains("100 messages exported so far")));

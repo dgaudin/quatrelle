@@ -7,6 +7,7 @@ use outlook_pst::messaging::message::{Message as _, UnicodeMessage};
 mod ansi;
 mod big;
 mod damaged;
+mod follow_up;
 mod kinds;
 mod seeds;
 mod special;
@@ -16,7 +17,8 @@ use quatrelle_store::FolderState;
 use std::path::Path;
 
 /// No follow-up days, no category names.
-pub(super) const NONE: &ExportMarks = &ExportMarks { due: std::collections::BTreeMap::new(), categories: Vec::new() };
+pub(super) const NONE: &ExportMarks =
+    &ExportMarks { due: std::collections::BTreeMap::new(), done: std::collections::BTreeMap::new(), categories: Vec::new() };
 
 #[test]
 fn an_account_round_trips_through_a_data_file() {
