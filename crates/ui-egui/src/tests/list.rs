@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod deleting;
 pub(in crate::tests) mod follow_up;
 mod replied;
 mod search_big;

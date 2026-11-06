@@ -14,6 +14,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(has_account),
         // Home › Delete
         CommandSpec::new("mail.delete", "Delete", "Home › Delete", delete).key("Delete").params(r#"{"permanent"?: bool}"#).when(has_selection),
+        // Shift+Delete: past Deleted Items (in the Outbox, as Delete: the message isn't sent).
+        CommandSpec::new("mail.deleteForGood", "Delete for good", "Home › Delete", |s, _| delete(s, &json!({"permanent": true})))
+            .key("Shift+Delete")
+            .when(has_selection),
         CommandSpec::new("mail.archive", "Archive", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Archive)))
             .key("Backspace")
             .when(has_selection),

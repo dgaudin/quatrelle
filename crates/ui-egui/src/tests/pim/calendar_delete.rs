@@ -73,7 +73,7 @@ fn unread(a: &MailApp) -> bool {
 
 /// In Calendar, People, Tasks and Notes, the keys that act on the message selected in Mail do
 /// nothing: Backspace archives nothing, Insert flags nothing, Ctrl+U marks nothing unread, Ctrl+R
-/// writes no reply, Ctrl+Shift+1 runs no Quick Step.
+/// writes no reply, Ctrl+Shift+1 runs no Quick Step, Shift+Delete deletes nothing for good.
 #[test]
 fn mail_keys_leave_the_message_alone_in_other_modules() {
     for module in ["calendar", "people", "tasks", "notes"] {
@@ -84,6 +84,9 @@ fn mail_keys_leave_the_message_alone_in_other_modules() {
         press_key(&ctx, &mut a, Key::U, Modifiers::COMMAND);
         press_key(&ctx, &mut a, Key::Num1, Modifiers::COMMAND | Modifiers::SHIFT);
         press_key(&ctx, &mut a, Key::R, Modifiers::COMMAND);
+        // Shift+Delete (Delete for good) neither asks about the message nor deletes it.
+        press_key(&ctx, &mut a, Key::Delete, Modifiers::SHIFT);
+        assert!(!matches!(a.ui.dialog, Some(Dialog::ConfirmDelete { .. })), "{module}: nothing asked about the mail");
         assert_eq!(inbox(&a), mail, "{module}: nothing archived");
         assert_eq!(flagged(&a), flag, "{module}: the flag unchanged");
         assert_eq!(unread(&a), was_unread, "{module}: still as read as it was");
