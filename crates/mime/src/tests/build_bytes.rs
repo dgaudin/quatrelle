@@ -9,7 +9,9 @@ use super::*;
 /// an attached message with 8-bit text), two pictures its HTML shows, as written and as a
 /// signed message must be (7-bit). The digests were taken before `build` stopped copying its
 /// parts, and again when the pictures went out under their names (upstream's, the same here);
-/// the `X-Mailer` line, which carries the version, is left out.
+/// the `X-Mailer` line, which carries the version, is left out. Taken again for mail-builder
+/// 2.0.1, which writes no empty line before a multipart's first boundary (6 bytes: three
+/// multiparts).
 #[test]
 fn build_writes_the_same_bytes_as_before() {
     // Its length and FNV-1a, the X-Mailer line left out of both.
@@ -55,6 +57,34 @@ fn build_writes_the_same_bytes_as_before() {
     let from = EmailAddress::new("Zoe Park", "zoe@studio.example");
     let raw = build(&d, &from, 1_791_963_000, "g1@studio.example").unwrap();
     let signed = build(&Draft { seven_bit: true, ..d.clone() }, &from, 1_791_963_000, "g1@studio.example").unwrap();
-    assert_eq!(digest(&raw), (10_095, 7_850_003_861_301_803_885));
-    assert_eq!(digest(&signed), (10_107, 17_852_924_195_389_485_945));
+    assert_eq!(digest(&raw), (10_089, 18_148_128_963_542_891_464));
+    assert_eq!(digest(&signed), (10_101, 6_730_857_331_687_958_276));
+}
+
+/// A long file name, accented or not, goes out in RFC 2231's pieces (`filename*0*=`, or
+/// `filename*0=` when it is ASCII), each header line within 78 characters, and reads back as it
+/// was named: a quoted name folded across lines came back with a space in it.
+#[test]
+fn a_long_file_name_goes_out_in_rfc_2231_pieces() {
+    let names = [
+        "Compte rendu de la réunion du comité de direction élargi, séance de novembre — version définitive.pdf",
+        "Minutes of the extended steering committee meeting held in November, final reviewed version.pdf",
+    ];
+    for (name, piece) in names.into_iter().zip(["filename*0*=", "filename*0=\""]) {
+        let d = Draft {
+            to: vec![EmailAddress::new("Ann", "ann@studio.example")],
+            subject: "Minutes".into(),
+            body: "Attached.".into(),
+            attachments: vec![OutAttachment { name: name.into(), mime: "application/pdf".into(), data: b"%PDF-1.7".to_vec(), ..Default::default() }],
+            ..Default::default()
+        };
+        let raw = build(&d, &EmailAddress::new("Zoe", "zoe@studio.example"), 1_791_963_000, "n1@studio.example").unwrap();
+        let text = String::from_utf8_lossy(&raw);
+        let part = text.split("Content-Type: application/pdf").nth(1).unwrap_or_default();
+        let head = part.split("\r\n\r\n").next().unwrap_or_default();
+        assert!(head.contains(piece), "{head}");
+        assert!(head.split("\r\n").all(|l| l.len() <= 78), "{head}");
+        let p = parse(&raw).unwrap();
+        assert_eq!(p.attachments.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), [name]);
+    }
 }
