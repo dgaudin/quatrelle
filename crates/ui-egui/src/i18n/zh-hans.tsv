@@ -1946,3 +1946,5 @@ menu	View	查看
 	The OpenPGP key's backup couldn't be saved: {error}	无法保存 OpenPGP 密钥的备份: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	OpenPGP 密钥的备份已保存: 请将它和它的密码短语保存在安全的地方
 	the system keychain isn't available: {error}	系统钥匙串不可用: {error}
+	the people's OpenPGP keys could not be saved: {error}	无法保存联系人的 OpenPGP 密钥: {error}
+	OpenPGP keys kept for {who}	已保留 {who} 的 OpenPGP 密钥

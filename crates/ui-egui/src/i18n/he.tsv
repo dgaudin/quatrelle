@@ -1944,3 +1944,5 @@ folder	Conflicts	התנגשויות
 	The OpenPGP key's backup couldn't be saved: {error}	לא ניתן היה לשמור את הגיבוי של מפתח ה-OpenPGP: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	הגיבוי של מפתח ה-OpenPGP נשמר: שמור אותו ואת משפט הסיסמה שלו במקום בטוח
 	the system keychain isn't available: {error}	מחזיק המפתחות של המערכת אינו זמין: {error}
+	the people's OpenPGP keys could not be saved: {error}	לא ניתן היה לשמור את מפתחות ה-OpenPGP של אנשי הקשר שלך: {error}
+	OpenPGP keys kept for {who}	מפתחות OpenPGP נשמרו עבור {who}

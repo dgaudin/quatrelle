@@ -1948,3 +1948,5 @@ menu	View	Просмотр
 	The OpenPGP key's backup couldn't be saved: {error}	Не удалось сохранить резервную копию ключа OpenPGP: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	Резервная копия ключа OpenPGP сохранена: храните её и её парольную фразу в надёжном месте
 	the system keychain isn't available: {error}	системная связка ключей недоступна: {error}
+	the people's OpenPGP keys could not be saved: {error}	Не удалось сохранить ключи OpenPGP ваших собеседников: {error}
+	OpenPGP keys kept for {who}	Ключи OpenPGP сохранены для {who}

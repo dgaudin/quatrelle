@@ -1949,3 +1949,5 @@ menu	View	Ver
 	The OpenPGP key's backup couldn't be saved: {error}	No se pudo guardar la copia de seguridad de la clave OpenPGP: {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	La copia de seguridad de la clave OpenPGP está guardada: consérvala, con su frase de contraseña, en un lugar seguro
 	the system keychain isn't available: {error}	el llavero del sistema no está disponible: {error}
+	the people's OpenPGP keys could not be saved: {error}	No se pudieron guardar las claves OpenPGP de tus contactos: {error}
+	OpenPGP keys kept for {who}	Claves OpenPGP conservadas para {who}

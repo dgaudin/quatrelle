@@ -1949,3 +1949,5 @@ menu	View	Afficher
 	The OpenPGP key's backup couldn't be saved: {error}	La sauvegarde de la clé OpenPGP n’a pas pu être enregistrée : {error}
 	The OpenPGP key's backup is saved: keep it, and its passphrase, somewhere safe	La sauvegarde de la clé OpenPGP est enregistrée : gardez-la, avec sa phrase secrète, en lieu sûr
 	the system keychain isn't available: {error}	le trousseau du système n’est pas disponible : {error}
+	the people's OpenPGP keys could not be saved: {error}	Les clés OpenPGP de vos correspondants n’ont pas pu être enregistrées : {error}
+	OpenPGP keys kept for {who}	Clés OpenPGP conservées pour {who}

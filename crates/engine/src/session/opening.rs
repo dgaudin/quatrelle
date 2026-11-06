@@ -256,9 +256,26 @@ impl Session {
     }
 
     pub(super) fn show_body(&mut self, key: &MessageKey, raw: &[u8]) {
+        self.show_body_with(key, raw, None);
+    }
+
+    /// [`Session::show_body`], with the OpenPGP keys the message brings found already (on the
+    /// reading lane, [`BodyWork`]). `None`: found here, where bodies aren't got ready elsewhere
+    /// (the CLI, the tests); where they are, a message's own window learns nothing (the reading
+    /// pane does), so the window's thread never reads a message twice for its keys.
+    pub(super) fn show_body_with(&mut self, key: &MessageKey, raw: &[u8], offered: Option<Vec<security::OfferedKey>>) {
         // Signed or encrypted: what's inside is what's shown, the protection said beside it.
         let shown = self.reading.as_ref().is_some_and(|r| &r.key == key)
             || self.windows.iter().any(|w| &w.key == key && (w.parsed.is_none() || w.text_first));
+        if shown {
+            let offered = match offered {
+                Some(o) => o,
+                None if !self.body.defer && mime::smime::is_protected(raw) => security::offered(raw),
+                None => Vec::new(),
+            };
+            // Learnt first: the message may then say its sender's key changed.
+            self.learn_offered(key, offered);
+        }
         let (raw, security) = if shown { self.unwrap(key, raw) } else { (std::borrow::Cow::Borrowed(raw), None) };
         self.show_ready(key, &raw, None, security);
     }
