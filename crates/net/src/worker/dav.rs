@@ -315,6 +315,37 @@ impl Worker {
             self.sink.emit(Event::TrustAsked { account: self.id(), site });
         }
     }
+
+    /// One of an appointment's files left on the server, fetched as it's opened (R25): from
+    /// Exchange by its attachment id, from Microsoft 365 by its attachment's path.
+    pub(super) fn fetch_event_file(&mut self, reference: &str, ask: u64) {
+        let r = (|| -> Result<Vec<u8>> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => crate::ews_pim::attachment(c, reference),
+                Some(Conn::Graph(c)) => crate::graph_pim::attachment(c, reference),
+                _ => Err(NetError::No("this server keeps no appointments' files".into())),
+            }
+        })();
+        let (data, error) = match r {
+            Ok(data) => (data, None),
+            Err(e) => {
+                let said = e.to_string();
+                // The connection lost or the sign-in refused is the account's, as for a picture.
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.failed(e);
+                }
+                (Vec::new(), Some(said))
+            }
+        };
+        match &error {
+            Some(e) => log::info!("{}: an appointment's file not fetched ({e})", self.acc.id),
+            None => log::info!("{}: an appointment's file fetched, {} bytes", self.acc.id, data.len()),
+        }
+        self.sink.emit(Event::EventFile { ask, data, error });
+    }
 }
 
 /// Whether an account's calendars are looked for over CalDAV and CardDAV: OAuth tokens are for

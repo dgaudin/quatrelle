@@ -249,6 +249,7 @@ impl Session {
                 };
                 self.person_photos.insert(email.to_ascii_lowercase(), photo);
             }
+            Event::EventFile { ask, data, error } => self.event_file_came(ask, data, error),
             Event::Found { account, query, items, error } => self.found_by_server(&account, &query, items, error),
             Event::Older { account, folder, items, more, error } => self.older_from_server(&account, &folder, items, more, error),
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),

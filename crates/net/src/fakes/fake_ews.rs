@@ -252,6 +252,8 @@ pub struct Data {
     told: std::collections::HashMap<String, streaming::Seen>,
     /// Its reminders (issue #40), and whether it's older than Exchange 2013.
     pub reminders: reminders::Reminders,
+    /// The attachments `GetAttachment` was asked for, by id, in order.
+    pub attachments_given: Vec<String>,
     next: u32,
 }
 
@@ -385,6 +387,7 @@ impl Default for Data {
             redirect_addr: Vec::new(),
             told: std::collections::HashMap::new(),
             reminders: Default::default(),
+            attachments_given: Vec::new(),
             next: 0,
         };
         d.folders.push(Fo {
@@ -752,6 +755,7 @@ fn xml(e: &El) -> String {
     format!("<t:{0}{attrs}>{1}{inner}</t:{0}>", e.name, esc(&e.text))
 }
 
+mod attachments;
 mod directory;
 mod fields;
 mod meetings;

@@ -352,6 +352,8 @@ impl Data {
                 let list: Vec<Value> = self.events.iter().filter(|e| e["calendar"] == *cal).cloned().collect();
                 ok(json!({ "value": with_extended(list, query) }))
             }
+            ("GET", ["me", "calendars", _, "events", id, "attachments"]) => event_attachments(&self.events, id, None),
+            ("GET", ["me", "calendars", _, "events", id, "attachments", aid, "$value"]) => event_attachments(&self.events, id, Some(aid)),
             ("GET", ["me", "calendars", cal, "events"]) => {
                 let list: Vec<Value> = self.events.iter().filter(|e| e["calendar"] == *cal).cloned().collect();
                 ok(json!({ "value": with_extended(list, query) }))
@@ -382,6 +384,8 @@ impl Data {
                 let cal = format!("user:{who}");
                 match (method, parts.get(2..).unwrap_or_default()) {
                     ("GET", ["calendar"]) => ok(json!({"id": cal, "canEdit": edit})),
+                    ("GET", ["calendar", "events", id, "attachments"]) => event_attachments(&self.events, id, None),
+                    ("GET", ["calendar", "events", id, "attachments", aid, "$value"]) => event_attachments(&self.events, id, Some(aid)),
                     ("GET", ["calendar", "events"]) => {
                         ok(json!({"value": with_extended(self.events.iter().filter(|e| e["calendar"] == cal.as_str()).cloned().collect(), query)}))
                     }
@@ -560,14 +564,44 @@ impl Data {
     }
 }
 
-/// Events as Graph lists them: their extended properties only when asked for (`$expand`).
+/// Events as Graph lists them: their extended properties only when asked for (`$expand`), their
+/// attachments never (`…/attachments` lists them).
 fn with_extended(mut events: Vec<Value>, query: &str) -> Vec<Value> {
-    if !query.contains("$expand=singleValueExtendedProperties") {
-        for e in &mut events {
-            if let Some(o) = e.as_object_mut() {
+    for e in &mut events {
+        if let Some(o) = e.as_object_mut() {
+            o.remove("attachments");
+            if !query.contains("$expand=singleValueExtendedProperties") {
                 o.remove("singleValueExtendedProperties");
             }
         }
     }
     events
+}
+
+/// An event's attachments (`aid`: one's bytes, its `$value`), as Graph gives them: listed without
+/// their bytes. An event keeps them as they were put in it (`attachments`, each with its
+/// `contentBytes`).
+pub(super) fn event_attachments(events: &[Value], id: &str, aid: Option<&str>) -> (u16, Vec<u8>, &'static str) {
+    let not_found = || (404, json!({"error": {"code": "ErrorItemNotFound", "message": "Not found."}}).to_string().into_bytes(), "application/json");
+    let Some(list) = events.iter().find(|e| e["id"] == id).map(|e| e["attachments"].as_array().cloned().unwrap_or_default()) else {
+        return not_found();
+    };
+    match aid {
+        None => {
+            let listed: Vec<Value> = list
+                .into_iter()
+                .map(|mut a| {
+                    if let Some(o) = a.as_object_mut() {
+                        o.remove("contentBytes");
+                    }
+                    a
+                })
+                .collect();
+            (200, json!({ "value": listed }).to_string().into_bytes(), "application/json")
+        }
+        Some(aid) => match list.iter().find(|a| a["id"] == aid).and_then(|a| a["contentBytes"].as_str()) {
+            Some(b64) => (200, unbase64(b64.as_bytes()), "application/octet-stream"),
+            None => not_found(),
+        },
+    }
 }

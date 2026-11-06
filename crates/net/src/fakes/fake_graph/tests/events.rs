@@ -172,3 +172,56 @@ fn an_appointment_changed_before_show_as_was_read_keeps_the_servers() {
     crate::graph_pim::sync(&c, &now, 1_792_000_200).unwrap();
     assert_eq!(server_has(), (json!("Dentist, Tuesday"), json!("normal"), json!("busy")), "public and busy, as chosen");
 }
+
+/// An event's files (R25): a small one and the attached minutes kept with it, a big one listed and
+/// fetched when it's opened; read again only when the event changed, and one taken off there goes.
+#[test]
+fn an_events_files_come_with_it() {
+    use quatrelle_model::pim::files::{event_file_data, event_file_reference, event_files};
+    let agenda: Vec<u8> = b"%PDF-1.7 agenda ".iter().copied().cycle().take(3000).collect();
+    let deck: Vec<u8> = (0..1_500_000u32).map(|i| (i % 251) as u8).collect();
+    let minutes = "From: Zoe Park <zoe@contoso.example>\r\nSubject: Minutes\r\n\r\nWe agreed.\r\n";
+    let file = |id: &str, name: &str, kind: &str, data: &[u8]| json!({"@odata.type": "#microsoft.graph.fileAttachment", "id": id, "name": name, "contentType": kind, "size": data.len(), "isInline": false, "contentBytes": crate::imap::base64(data)});
+    let all = json!([
+        file("GA1", "Agenda.pdf", "application/pdf", &agenda),
+        file("GA2", "Deck.pptx", "application/vnd.ms-powerpoint", &deck),
+        {"@odata.type": "#microsoft.graph.itemAttachment", "id": "GA3", "name": "Minutes", "size": 900, "isInline": false, "contentBytes": crate::imap::base64(minutes.as_bytes())},
+        {"@odata.type": "#microsoft.graph.fileAttachment", "id": "GA4", "name": "logo.png", "contentType": "image/png", "size": 10, "isInline": true},
+        {"@odata.type": "#microsoft.graph.referenceAttachment", "id": "GA5", "name": "On the share"},
+    ]);
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.events.push(json!({"id": "E1", "calendar": "CAL1", "iCalUId": "e1", "subject": "Budget review", "changeKey": "ck1", "hasAttachments": true,
+        "start": {"dateTime": "2026-10-20T13:00:00", "timeZone": "UTC"}, "end": {"dateTime": "2026-10-20T14:00:00", "timeZone": "UTC"}, "attachments": all}));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let asked = || server.data.lock().unwrap().calls.iter().filter(|c| c.contains("/attachments")).count();
+    let sync = crate::graph_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+    let e = stored(&sync, "Budget review");
+    let files = event_files(&e.event);
+    let shown: Vec<(&str, bool)> = files.iter().map(|f| (f.name.as_str(), f.on_server)).collect();
+    assert_eq!(shown, [("Agenda.pdf", false), ("Deck.pptx", true), ("Minutes.eml", false)], "no picture of the text, no link");
+    assert_eq!(event_file_data(&e.event, 0), Some(agenda));
+    assert_eq!(event_file_data(&e.event, 2).as_deref(), Some(minutes.as_bytes()));
+    assert_eq!(files[1].size, deck.len());
+    assert_eq!(crate::graph_pim::attachment(&c, &event_file_reference(&e.event, 1).unwrap()).unwrap(), deck, "fetched when opened");
+    assert!(crate::graph_pim::attachment(&c, "/me/messages/M1/attachments/A1").is_err(), "only an event's");
+    // Unchanged: kept as it was, nothing asked.
+    let pim = Pim { events: vec![e], ..Default::default() };
+    let before = asked();
+    let again = crate::graph_pim::sync(&c, &pim, 1_792_000_060).unwrap();
+    assert_eq!(asked(), before);
+    assert_eq!(event_files(&stored(&again, "Budget review").event).len(), 3);
+    // The agenda taken off on the server: gone from here.
+    {
+        let mut d = server.data.lock().unwrap();
+        let ev = d.events.iter_mut().find(|e| e["id"] == "E1").unwrap();
+        ev["attachments"].as_array_mut().unwrap().remove(0);
+        ev["changeKey"] = json!("ck2");
+    }
+    let pim = Pim { events: vec![stored(&again, "Budget review")], ..Default::default() };
+    let next = crate::graph_pim::sync(&c, &pim, 1_792_000_120).unwrap();
+    let names: Vec<String> = event_files(&stored(&next, "Budget review").event).into_iter().map(|f| f.name).collect();
+    assert_eq!(names, ["Deck.pptx", "Minutes.eml"]);
+}

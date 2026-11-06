@@ -21,7 +21,7 @@ use crate::{NetError, Result};
 const MAX_ITEMS: usize = 5000;
 /// The address book Graph's contacts go into.
 pub const CONTACTS: &str = "graph:contacts";
-const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart,sensitivity,showAs";
+const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart,sensitivity,showAs,hasAttachments";
 /// Asks each event for Quatrelle's own property too, the Webex id (percent-encoded, as
 /// `graph.rs` writes its own).
 fn events_query() -> String {
@@ -395,8 +395,11 @@ pub fn card_json(c: &Card) -> Value {
     })
 }
 
+mod files;
 mod reminders;
 pub mod scheduling;
+
+pub use files::attachment;
 
 /// Where a calendar's events live: `/me`, or `/users/<address>` for someone else's.
 fn owner_path(calendar: &str) -> String {
@@ -568,6 +571,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             }
             Err(e) => return Err(e),
         };
+        let before = out.events.len();
         for v in &list {
             if let Some(event) = event_of(v) {
                 out.events.push(StoredEvent {
@@ -582,6 +586,11 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 });
             }
         }
+        // Their files: kept for the account's own calendars, listed for the others.
+        let own = at.starts_with("/me/calendars/") && calendars.iter().any(|x| x.id == *id && !x.read_only);
+        if let Some(read) = out.events.get_mut(before..) {
+            files::fill(c, pim, at, &list, read, own);
+        }
         out.synced_calendars.push(id.clone());
     }
     // Other people's calendars opened here, by their address: editable where their owner let this
@@ -592,6 +601,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         let can_edit = c.get(&format!("/users/{}/calendar?$select=canEdit", seg(email))).ok().and_then(|v| v.get("canEdit").and_then(Value::as_bool));
         match c.all(&format!("/users/{}/calendar/events?$top=100&{}", seg(email), events_query()), MAX_ITEMS) {
             Ok(list) => {
+                let before = out.events.len();
                 for v in &list {
                     if let Some(event) = event_of(v) {
                         out.events.push(StoredEvent {
@@ -605,6 +615,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                             changed_too: false,
                         });
                     }
+                }
+                if let Some(read) = out.events.get_mut(before..) {
+                    files::fill(c, pim, &format!("/users/{}/calendar/events", seg(email)), &list, read, false);
                 }
                 out.synced_calendars.push(id.clone());
             }

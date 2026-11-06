@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Engine tests: the files kept with an appointment or a contact (R23), listed and saved by
 //! `event.saveFile` and `contact.saveFile`: a series' changed occurrence shows its own, a program
-//! is never handed on to be opened, and a file that isn't there is an error, never a panic.
+//! is never handed on to be opened, and a file that isn't there is an error, never a panic. An
+//! Exchange appointment's file left on the server (R25) is asked of it, then written and opened.
 
 use quatrelle_model::ical::CalEvent;
 use quatrelle_model::vcard::{Card, base64_encode};
@@ -80,6 +81,92 @@ fn an_appointments_and_a_contacts_files_are_saved_where_asked() {
     s.run("contact.saveFile", &json!({"uid": "kept-card", "index": 0, "path": out.to_string_lossy()})).unwrap();
     assert_eq!(std::fs::read(&out).unwrap(), b"%PDF-cv");
     assert!(s.run("contact.saveFile", &json!({"uid": "kept-card", "index": 1, "path": out.to_string_lossy()})).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+    done(s);
+}
+
+/// An Exchange appointment's file left on the server: Open asks the server for it, and once it
+/// comes it's written and handed to the interface to open; Save As writes it where asked; asked
+/// again, it's here. An imported appointment's line names no server: an error.
+#[test]
+fn a_file_on_the_server_is_fetched_when_opened() {
+    use quatrelle_model::pim::files::server_file_line;
+    use quatrelle_model::pim::{LOCAL, StoredEvent};
+    let mut s = sample_session("server-files");
+    let dir = std::env::temp_dir().join(format!("quatrelle-server-files-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let account = s.accounts[0].config.id.clone();
+    let start = s.clock.now + 86_400;
+    let deck = server_file_line("Deck.pptx", "application/vnd.ms-powerpoint", 1_500_000, "AT-2").unwrap();
+    let tool = server_file_line("tool.exe", "", 10, "AT-9").unwrap();
+    let event = |uid: &str, calendar: &str, href: &str| StoredEvent {
+        calendar: calendar.into(),
+        href: href.into(),
+        event: CalEvent {
+            uid: uid.into(),
+            summary: "Budget review".into(),
+            start,
+            end: start + 3600,
+            extra: vec![deck.clone(), tool.clone()],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    s.pim_mut(&account).events.push(event("ews-1", "ews:calendar", "R1"));
+    s.pim_mut(&account).events.push(event("pst-1", LOCAL, ""));
+    let files = s.event_files("ews-1", None);
+    assert_eq!(
+        files.iter().map(|f| (f.name.as_str(), f.size, f.on_server)).collect::<Vec<_>>(),
+        [("Deck.pptx", 1_500_000, true), ("tool.exe", 10, true)]
+    );
+    s.take_jobs();
+    // Opened: asked of the server, once however often it's clicked.
+    let open = dir.join("Deck.pptx");
+    let p = json!({"uid": "ews-1", "index": 0, "path": open.to_string_lossy(), "open": true});
+    assert_eq!(s.run("event.saveFile", &p).unwrap()["fetching"], "Deck.pptx");
+    s.run("event.saveFile", &p).unwrap();
+    let jobs = s.take_jobs();
+    let asks: Vec<u64> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::FetchEventFile { account: a, reference, ask } if *a == account && reference == "AT-2" => Some(*ask),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asks.len(), 1, "{jobs:?}");
+    assert!(!open.exists() && s.take_files_to_open().is_empty(), "nothing yet");
+    assert!(s.event_file("ews-1", None, 0).is_err(), "not here yet");
+    s.apply(quatrelle_model::Event::EventFile { ask: asks[0], data: b"PK deck".to_vec(), error: None });
+    assert_eq!(std::fs::read(&open).unwrap(), b"PK deck");
+    assert_eq!(s.take_files_to_open(), [open.to_string_lossy().into_owned()]);
+    // Here now: saved at once, nothing asked.
+    let saved = dir.join("copy.pptx");
+    let r = s.run("event.saveFile", &json!({"uid": "ews-1", "index": 0, "path": saved.to_string_lossy()})).unwrap();
+    assert!(r.get("fetching").is_none() && std::fs::read(&saved).unwrap() == b"PK deck");
+    assert!(s.take_jobs().is_empty());
+    // Refused by the server: said, nothing written.
+    let other = dir.join("tool.exe");
+    assert!(
+        matches!(
+            s.run("event.saveFile", &json!({"uid": "ews-1", "index": 1, "path": dir.join("t.txt").to_string_lossy(), "open": true})),
+            Err(CmdError::Disabled(_))
+        ),
+        "a program is never opened"
+    );
+    s.run("event.saveFile", &json!({"uid": "ews-1", "index": 1, "path": other.to_string_lossy()})).unwrap();
+    let ask = match s.take_jobs().as_slice() {
+        [quatrelle_model::Job::FetchEventFile { ask, .. }] => *ask,
+        other => panic!("{other:?}"),
+    };
+    s.apply(quatrelle_model::Event::EventFile { ask, data: Vec::new(), error: Some("not on the server any more".into()) });
+    assert!(!other.exists());
+    assert!(s.notices.iter().any(|n| n.text == "tool.exe could not be downloaded: not on the server any more"), "{:?}", s.notices);
+    // An answer nobody waits for is let go.
+    s.apply(quatrelle_model::Event::EventFile { ask: 999, data: b"x".to_vec(), error: None });
+    // An imported appointment's line names no server.
+    assert!(s.run("event.saveFile", &json!({"uid": "pst-1", "index": 0, "path": open.to_string_lossy()})).is_err());
+    assert!(s.take_jobs().is_empty());
     let _ = std::fs::remove_dir_all(&dir);
     done(s);
 }
