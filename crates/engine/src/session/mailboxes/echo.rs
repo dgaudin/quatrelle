@@ -33,6 +33,22 @@ const ECHO_WAIT: i64 = 60;
 pub(crate) struct Echoes(HashMap<(String, String), VecDeque<(i64, Op)>>);
 
 impl Echoes {
+    /// The changes waiting for their echo made again on a message as a sync read it (it may have
+    /// read it before them), in the order they were sent: it shows what was sent.
+    pub(crate) fn redo(&self, m: &mut Summary) {
+        let Some(q) = self.0.get(&(m.key.account.clone(), m.key.folder.clone())) else { return };
+        for (_, op) in q {
+            if !op.keys().iter().any(|k| k.uid == m.key.uid && k.validity == m.key.validity) {
+                continue;
+            }
+            match op {
+                Op::SetFlag { flag, on, .. } => flag.set(&mut m.flags, *on),
+                Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
+                _ => {}
+            }
+        }
+    }
+
     /// Whether any is waiting for `account` (tests).
     #[cfg(test)]
     pub(crate) fn waiting(&self, account: &str) -> usize {

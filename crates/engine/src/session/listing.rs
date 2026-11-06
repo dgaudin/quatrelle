@@ -215,6 +215,32 @@ pub fn arrange_list<M: std::borrow::Borrow<Summary>>(list: &mut [M], arrange: Ar
     });
 }
 
+/// The order [`arrange_list`] puts a list in, one pair at a time (where a message goes in a list
+/// already arranged): by the arrangement's own key (a name lower-cased, reversed or not), then
+/// newest first; the same for every pair, so it's the sort's order.
+pub(super) fn arranged(arrange: Arrange, reverse: bool) -> impl Fn(&Summary, &Summary) -> std::cmp::Ordering {
+    move |a: &Summary, b: &Summary| {
+        let newest = || b.date.cmp(&a.date).then_with(|| b.key.cmp(&a.key));
+        let text: Option<fn(&Summary) -> String> = match arrange {
+            Arrange::From => Some(|m| person(Some(&m.from)).to_lowercase()),
+            Arrange::To => Some(|m| person(m.to.first()).to_lowercase()),
+            Arrange::Subject => Some(|m| m.base_subject().to_lowercase()),
+            _ => None,
+        };
+        let primary = match (text, arrange) {
+            (Some(text), _) => {
+                let o = text(a).cmp(&text(b));
+                return if reverse { o.reverse() } else { o }.then_with(newest);
+            }
+            (None, Arrange::Size) => b.size.cmp(&a.size),
+            (None, Arrange::Flag) => flag_rank(b).cmp(&flag_rank(a)),
+            (None, Arrange::Attachments) => b.has_attachments.cmp(&a.has_attachments),
+            (None, _) => b.date.cmp(&a.date),
+        };
+        if reverse { primary.reverse() } else { primary }.then_with(newest)
+    }
+}
+
 /// A folder of an account, by path.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FolderRef {

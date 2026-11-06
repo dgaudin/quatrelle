@@ -15,6 +15,7 @@ mod selecting;
 mod shown;
 mod source;
 mod store_errors;
+mod synced;
 mod text_first;
 
 #[test]

@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Engine tests: a flag or category changed on mail in the list is changed in the list as it
-//! stands, which must be the list built again.
+//! Engine tests: a flag or category changed on mail in the list, and what a sync changed in its
+//! folder, are changed in the list as it stands, which must be the list built again.
+
+use std::collections::BTreeMap;
 
 use super::*;
-use crate::model::PINNED;
+use crate::model::{Event, ListChange, PINNED};
 
-/// What a step can do: change a flag or a category on some messages, or open one.
+/// What a step can do: change a flag or a category on some messages, open one, or a sync's
+/// change to the folder (messages gone, messages changed each a way, messages come).
 #[derive(Clone, Debug)]
 enum Step {
     Flag(Vec<u32>, Flag, bool),
     Keyword(Vec<u32>, &'static str, bool),
     Open(u32),
+    Sync(Vec<u32>, Vec<(u32, u8)>, Vec<(u8, u8)>),
 }
 
 fn step(n: u32) -> impl Strategy<Value = Step> {
@@ -23,7 +27,90 @@ fn step(n: u32) -> impl Strategy<Value = Step> {
         3 => (uids.clone(), flag, any::<bool>()).prop_map(|(u, f, on)| Step::Flag(u, f, on)),
         2 => (uids, keyword, any::<bool>()).prop_map(|(u, k, on)| Step::Keyword(u, k, on)),
         3 => (0..n.max(1)).prop_map(Step::Open),
+        3 => (
+            prop::collection::vec(0..n.max(1), 0..3),
+            prop::collection::vec((0..n.max(1), any::<u8>()), 0..4),
+            prop::collection::vec(any::<(u8, u8)>(), 0..4),
+        )
+            .prop_map(|(gone, changed, come)| Step::Sync(gone, changed, come)),
     ]
+}
+
+/// A message as `folder` makes it, numbered `uid`.
+fn made(uid: u32, (b, parent): (u8, u8)) -> Summary {
+    let mut m = message(uid);
+    m.key.folder = "INBOX".into();
+    m.key.validity = 1;
+    m.date = NOW - i64::from(b % 5) * 3_600;
+    m.message_id = format!("<m{uid}@x>");
+    if b & 0x20 != 0 && u32::from(parent) < uid {
+        m.in_reply_to = format!("<m{parent}@x>");
+    }
+    m.from = EmailAddress::new(format!("Person {}", b % 3), format!("p{}@x", b % 3));
+    m.size = u32::from(b) * 1_000;
+    m.flags.seen = b & 1 != 0;
+    m.flags.flagged = b & 2 != 0;
+    m.has_attachments = b & 4 != 0;
+    m.flags.set_keyword(PINNED, b & 8 != 0);
+    m.flags.set_keyword("work", b & 0x10 != 0);
+    m
+}
+
+/// A message changed the way `how` says: its read mark, replied, a flag, a pin, the date, the
+/// sender, the subject, the preview, deleted.
+fn changed(m: &mut Summary, how: u8) {
+    match how % 9 {
+        0 => m.flags.seen = !m.flags.seen,
+        1 => m.flags.answered = !m.flags.answered,
+        2 => m.flags.flagged = !m.flags.flagged,
+        3 => {
+            let on = !m.flags.has(PINNED);
+            m.flags.set_keyword(PINNED, on);
+        }
+        4 => m.date -= 7_200,
+        5 => m.from = EmailAddress::new(format!("Person {}", how % 4), format!("p{}@x", how % 4)),
+        6 => m.subject = format!("Subject {how}"),
+        7 => m.preview = format!("Preview {how}"),
+        _ => m.flags.deleted = !m.flags.deleted,
+    }
+}
+
+/// The sync's change, as the store notes it, taken by the session: what the folder holds after.
+fn sync(s: &mut Session, gone: &[u32], how: &[(u32, u8)], come: &[(u8, u8)], next: &mut u32) -> BTreeMap<u32, Summary> {
+    let mut now: BTreeMap<u32, Summary> = s
+        .cache
+        .get(&("a".to_string(), "INBOX".to_string()))
+        .map(|st| st.messages.iter().map(|m| (m.key.uid, Summary::clone(m))).collect())
+        .unwrap_or_default();
+    let mut change = ListChange { validity: 1, ..ListChange::default() };
+    let mut touched = BTreeMap::new();
+    for uid in gone {
+        if now.remove(uid).is_some() {
+            touched.insert(*uid, None);
+        }
+    }
+    for (uid, b) in how {
+        if let Some(m) = now.get_mut(uid) {
+            changed(m, *b);
+            touched.insert(*uid, Some(m.clone()));
+        }
+    }
+    for bits in come {
+        let m = made(*next, *bits);
+        now.insert(*next, m.clone());
+        touched.insert(*next, Some(m));
+        *next += 1;
+    }
+    for (uid, m) in touched {
+        match m {
+            Some(m) => change.upserts.push(m),
+            None => change.removed.push(uid),
+        }
+    }
+    change.count = now.len();
+    change.print = ListChange::print(now.keys().copied());
+    s.apply(Event::FolderSynced { account: "a".into(), folder: "INBOX".into(), change: Box::new(change) });
+    now
 }
 
 /// A folder of `n` messages: dates that tie, conversations that form, flags and categories
@@ -66,9 +153,10 @@ fn key_in_inbox(uid: u32) -> MessageKey {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
-    /// Each change, opened message and step taken into the list as it stands leaves it as
+    /// Each change, opened message, sync and step taken into the list as it stands leaves it as
     /// building it again would: the messages, their rows, the selection, the focus and the
-    /// message read; filtered, arranged and grouped every way.
+    /// message read; filtered, arranged and grouped every way. A sync's change leaves the folder
+    /// in memory as the list on the disk after it, nothing read from the disk again.
     #[test]
     fn patched_list_equals_refresh(
         bits in prop::collection::vec(any::<(u8, u8)>(), 1..300),
@@ -87,6 +175,7 @@ proptest! {
         s.prefs.reverse_sort = reverse;
         s.filter = filter;
         s.open_view(View::Folder { account: "a".into(), folder: "INBOX".into() });
+        let mut next = n;
         for (at, st) in steps.iter().enumerate() {
             let keys = |u: &[u32]| u.iter().map(|&u| key_in_inbox(u % n)).collect::<Vec<_>>();
             match st {
@@ -97,6 +186,13 @@ proptest! {
                     if s.index_of(&k).is_some() {
                         s.open_message(&k);
                     }
+                }
+                Step::Sync(gone, how, come) => {
+                    let read = s.messages_read();
+                    let now = sync(&mut s, gone, how, come, &mut next);
+                    let held: BTreeMap<u32, Summary> = s.cache.get(&("a".to_string(), "INBOX".to_string())).map(|st| st.messages.iter().map(|m| (m.key.uid, Summary::clone(m))).collect()).unwrap_or_default();
+                    prop_assert_eq!(&held, &now, "the folder in memory after step {}", at);
+                    prop_assert_eq!(s.messages_read(), read, "nothing read again");
                 }
             }
             let patched = shown(&s);

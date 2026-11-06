@@ -45,7 +45,7 @@ mod writing;
 pub use accounts::{AccountState, UpdateCheck, VacationState, newer_release};
 pub use changing::MarkWork;
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
-use listing::{Preview, flag_rank, person, size_group};
+use listing::{Preview, arranged, flag_rank, person, size_group};
 pub use mailboxes::{
     CompactPhase, Compacted, DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL,
     Sizes, Source, Suggestion, directory_people, fill_name,

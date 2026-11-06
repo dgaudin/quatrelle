@@ -24,6 +24,15 @@ pub enum Event {
         account: String,
         folder: String,
     },
+    /// A sync changed a folder's list on disk, and what changed is told: the folder in memory
+    /// and the list on screen take it as they are, rather than reading all of the folder again
+    /// ([`Event::FolderChanged`] stays for what can't be told so: a first sync, a folder
+    /// numbered anew, more changed than [`ListChange`] carries).
+    FolderSynced {
+        account: String,
+        folder: String,
+        change: Box<ListChange>,
+    },
     /// A page of a folder's older mail read on the server ([`Job::Older`]), not kept; `more`
     /// when the server has more past it; `error` when it couldn't be asked.
     Older {

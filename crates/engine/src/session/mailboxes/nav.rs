@@ -96,6 +96,19 @@ impl ListNav {
         self.kept = OnceLock::new();
     }
 
+    /// Whether `k` is in `list`, the list this was built for: found by its hash, looked through
+    /// only when the hash is another key's (or the list is past the index).
+    pub(crate) fn holds(&self, list: &[Arc<Summary>], k: &MessageKey) -> bool {
+        if list.len() > u32::MAX as usize || self.len != list.len() {
+            return list.iter().any(|m| m.key == *k);
+        }
+        match self.pos.get(&key_hash(k)) {
+            None => false,
+            Some(&i) if list.get(i as usize).is_some_and(|m| m.key == *k) => true,
+            Some(_) => list.iter().any(|m| m.key == *k),
+        }
+    }
+
     /// The list's conversations were worked out once more.
     pub(super) fn threaded(&self) {
         self.threadings.fetch_add(1, Ordering::Relaxed);

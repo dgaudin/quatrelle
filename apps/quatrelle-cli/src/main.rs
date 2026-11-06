@@ -439,7 +439,7 @@ fn run() -> Result<(), String> {
                     }
                     None
                 }
-                Event::FolderChanged { folder, .. } if sent.as_deref() == Some(folder.as_str()) => Some(Ok(())),
+                Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if sent.as_deref() == Some(folder.as_str()) => Some(Ok(())),
                 Event::Notice { message, .. } if message.contains("no copy was saved") => Some(Err(message.clone())),
                 _ => None,
             });
