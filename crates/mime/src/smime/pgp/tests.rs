@@ -76,6 +76,35 @@ fn inline_pgp_counts_in_a_text_alone() {
     assert!(String::from_utf8_lossy(&text_entity(&[0x63, 0xE9], "x\r\nBcc: evil")).starts_with("Content-Type: text/plain; charset=xBcc:evil\r\n"));
 }
 
+/// A text sent in base64 holding a PGP block is looked into (decoded, a small one), as
+/// [`protection`] reads it: it's then opened as protected mail, not shown as its armor.
+#[test]
+fn inline_pgp_in_a_base64_text_is_found() {
+    let b64 = |text: &str| {
+        let mut out = String::new();
+        let table = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        for chunk in text.as_bytes().chunks(3) {
+            let n = chunk.iter().enumerate().fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+            for i in 0..4 {
+                out.push(if i <= chunk.len() { char::from(table[(n >> (18 - 6 * i) & 63) as usize]) } else { '=' });
+            }
+        }
+        out
+    };
+    let mail = |text: &str| {
+        format!("From: a@b.example\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{}\r\n", b64(text))
+    };
+    let block = mail("Hi,\r\n-----BEGIN PGP MESSAGE-----\r\n\r\nhQ==\r\n-----END PGP MESSAGE-----\r\n");
+    assert!(may_carry(block.as_bytes()) && crate::smime::is_protected(block.as_bytes()));
+    assert!(matches!(protection(block.as_bytes()), Protection::Inline { .. }));
+    // A plain text in base64, or a block quoted inside a line: nothing to open.
+    assert!(!may_carry(mail("Hello, nothing signed here.\r\n").as_bytes()));
+    assert!(!may_carry(mail("see > -----BEGIN PGP MESSAGE-----\r\n").as_bytes()));
+    // A big one isn't decoded to look.
+    let big = mail(&format!("{}\r\n-----BEGIN PGP MESSAGE-----\r\n", "x".repeat(KEYS_LOOKED_MAX)));
+    assert!(!may_carry(big.as_bytes()));
+}
+
 #[test]
 fn keys_a_message_carries_are_found() {
     let raw = "From: Ana <ana@posteo.example>\r\nAutocrypt: addr=ana@posteo.example; keydata=\r\n AQID\r\n BAUG\r\nautocrypt: addr=x@y.example; keydata=Bw==\r\n\

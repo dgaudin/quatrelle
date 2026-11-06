@@ -58,9 +58,9 @@ fn has_block(text: &[u8]) -> bool {
 const KEYS_LOOKED_MAX: usize = 2 << 20;
 
 /// Whether `raw` may be protected with OpenPGP or carry keys for it, from its header (and the
-/// text of a message that is one text, or a smaller multipart's bytes): PGP/MIME, an
-/// `Autocrypt:` header, a PGP block, an attached key. When it says no, [`protection`] is `None`
-/// and [`autocrypt`] and [`key_parts`] are empty.
+/// text of a message that is one text, decoded from base64 if it's sent so, or a smaller
+/// multipart's bytes): PGP/MIME, an `Autocrypt:` header, a PGP block, an attached key. When it
+/// says no, [`protection`] is `None` and [`autocrypt`] and [`key_parts`] are empty.
 pub fn may_carry(raw: &[u8]) -> bool {
     if raw.len() > RAW_MAX {
         return false;
@@ -80,10 +80,19 @@ pub fn may_carry(raw: &[u8]) -> bool {
         ("multipart", "signed") => protocol == "application/pgp-signature",
         ("multipart", "encrypted") => protocol == "application/pgp-encrypted",
         ("multipart", _) => raw.len() <= KEYS_LOOKED_MAX && find_ignoring_case(body, b"application/pgp-keys"),
-        // Quoted-printable leaves an armor line as it is (a text in base64 isn't looked into).
-        ("text", "plain") => find(body, b"-----BEGIN PGP ", 0).is_some(),
+        // Quoted-printable leaves an armor line as it is; a text in base64 is decoded to look.
+        ("text", "plain") => find(body, b"-----BEGIN PGP ", 0).is_some() || base64_block(root, body),
         _ => false,
     }
+}
+
+/// Whether `part`'s `body` is in base64 and holds a PGP block once decoded (as [`protection`]
+/// reads it). Only a text no bigger than [`KEYS_LOOKED_MAX`] is decoded: what's opened to be
+/// shown, a few microseconds a page.
+fn base64_block(part: &mail_parser::MessagePart<'_>, body: &[u8]) -> bool {
+    part.content_transfer_encoding().is_some_and(|e| e.trim().eq_ignore_ascii_case("base64"))
+        && body.len() <= KEYS_LOOKED_MAX
+        && mail_parser::decoders::base64::base64_decode(body).is_some_and(|text| has_block(&text))
 }
 
 /// Whether `needle` (lower-case) is in `hay`, in any case.
