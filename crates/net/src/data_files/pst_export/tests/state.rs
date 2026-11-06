@@ -148,7 +148,7 @@ fn what_the_cache_keeps_of_a_message_goes_through_a_data_file() {
     assert!(second.flags.seen && second.flags.answered && !second.flags.flagged && second.flags.keywords.is_empty(), "{:?}", second.flags);
     assert_eq!(second.in_reply_to, "m1@example.com");
     assert_eq!(second.references, ["m0@example.com", "m1@example.com"]);
-    let sent = &back.load_folder("b1", "Sent").unwrap().messages[0];
+    let sent = &back.load_folder("b1", "Sent Items").unwrap().messages[0];
     assert!(sent.flags.seen && sent.flags.forwarded, "{:?}", sent.flags);
     let raw = back.read_body(&sent.key).unwrap();
     assert!(String::from_utf8_lossy(&raw).contains("cleo@example.com"), "the Bcc is lost");
