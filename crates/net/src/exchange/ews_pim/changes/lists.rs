@@ -35,7 +35,7 @@ fn read_list(
 }
 
 /// The ids of the items `prefix` (`note:`, `task:`) names among `again` (deletions refused).
-fn ids<'a>(again: &'a [String], prefix: &str) -> Vec<String> {
+fn ids(again: &[String], prefix: &str) -> Vec<String> {
     again.iter().filter_map(|h| h.strip_prefix(prefix)).map(str::to_string).collect()
 }
 
