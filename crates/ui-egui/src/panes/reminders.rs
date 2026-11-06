@@ -133,7 +133,7 @@ pub fn show(ctx: &egui::Context, st: &mut State, s: &Session, t: &Tokens, acts: 
     // A window of its own, on top (not in the browser, where windows are drawn inside the page).
     if s.prefs.reminders_on_top && !ctx.embed_viewports() {
         let id = egui::ViewportId::from_hash_of("reminders-window");
-        let builder = egui::ViewportBuilder::default()
+        let builder = crate::os_window()
             .with_title(title.clone())
             .with_inner_size([480.0, 330.0])
             .with_min_inner_size([360.0, 240.0])

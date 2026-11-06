@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! The windows Quatrelle opens of its own on the system: their place asked for at their
-//! opening only, and what each says about itself when traced.
+//! The windows Quatrelle opens of its own on the system: the app id each carries, their place
+//! asked for at their opening only, and what each says about itself when traced.
 
 use egui::Ui;
+
+/// Quatrelle's id: the Linux app id (its `.desktop` file and icon are named so), the macOS bundle
+/// id and the Windows notifications' app id.
+pub const APP_ID: &str = "ai.storyteller.quatrelle";
+
+/// A window of Quatrelle's own beyond the main one (a message being written, one popped out, a
+/// meeting or appointment, a message's source, the reminders), carrying [`APP_ID`]: without it a
+/// Wayland dock shows no icon for it and a compositor's window rules can't match it.
+pub(crate) fn os_window() -> egui::ViewportBuilder {
+    egui::ViewportBuilder::default().with_app_id(APP_ID)
+}
 
 /// Whether this is the first frame of a window: its place is asked for once, at its opening, and
 /// left to the window manager from then on. A place handed in at every frame made a window the

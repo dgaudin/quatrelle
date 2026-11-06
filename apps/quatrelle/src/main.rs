@@ -461,7 +461,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title(if sample { "Quatrelle – Sample mailbox" } else { "Quatrelle" })
             // Matches the desktop entry (StartupWMClass) and icon name in packaging/linux.
-            .with_app_id("ai.storyteller.quatrelle")
+            .with_app_id(quatrelle_ui_egui::APP_ID)
             .with_inner_size([1320.0, 820.0])
             .with_min_inner_size([760.0, 480.0])
             .with_icon(Arc::new(app_icon())),

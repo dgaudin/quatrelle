@@ -10,7 +10,7 @@
 //! when the first notification is shown (the icon file lives in Quatrelle's data folder).
 
 /// Quatrelle's id: also the Linux app id and the macOS bundle id.
-pub const APP_ID: &str = "ai.storyteller.quatrelle";
+pub const APP_ID: &str = quatrelle_ui_egui::APP_ID;
 
 /// Whether an installed Quatrelle has made Windows know [`APP_ID`]: its Start menu shortcut
 /// (the installer's, for everyone or for this user). A portable copy, which writes nothing to

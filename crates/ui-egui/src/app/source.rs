@@ -17,8 +17,7 @@ impl MailApp {
             let key = v.key.clone();
             let subject = if v.subject.trim().is_empty() { tl!("(no subject)").to_string() } else { v.subject.trim().to_string() };
             let id = egui::ViewportId::from_hash_of(("source-window", key.to_id()));
-            let mut builder =
-                egui::ViewportBuilder::default().with_title(tf!("{subject} – Message source", subject = subject)).with_min_inner_size([420.0, 300.0]);
+            let mut builder = crate::os_window().with_title(tf!("{subject} – Message source", subject = subject)).with_min_inner_size([420.0, 300.0]);
             // Where the last one was, and its size: at its opening only (see `first_frame`).
             if first_frame(ctx, id) {
                 builder = match st.places.get("source") {
