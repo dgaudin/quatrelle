@@ -51,3 +51,25 @@ fn a_completed_follow_up_comes_back_complete() {
     let again = flags("Flagged again");
     assert!(again.flagged && !again.follow_up_complete(), "{again:?}");
 }
+
+/// The last reply or forward comes back with its arrow and, when Exchange said it, its time
+/// (PidTagLastVerbExecutionTime); one without a time, or with both marks (IMAP keeps both), as the
+/// reply.
+#[test]
+fn the_last_reply_or_forward_comes_back_with_its_time() {
+    let at = 1_790_000_000;
+    let replied = Flags { answered: true, acted: at, ..Default::default() };
+    let forwarded = Flags { forwarded: true, acted: at + 60, ..Default::default() };
+    let no_time = Flags { answered: true, ..Default::default() };
+    let both = Flags { answered: true, forwarded: true, ..Default::default() };
+    let got = round_trip("acted", &[("Replied", replied), ("Forwarded", forwarded), ("No time", no_time), ("Both", both)], NONE);
+    let flags = |s: &str| got.iter().find(|(subject, _)| subject == s).map(|(_, f)| f.clone()).unwrap();
+    let r = flags("Replied");
+    assert!(r.answered && !r.forwarded && r.acted == at, "{r:?}");
+    let f = flags("Forwarded");
+    assert!(f.forwarded && !f.answered && f.acted == at + 60, "{f:?}");
+    let n = flags("No time");
+    assert!(n.answered && n.acted == 0, "{n:?}");
+    let b = flags("Both");
+    assert!(b.answered && b.acted == 0, "{b:?}");
+}

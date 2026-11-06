@@ -96,6 +96,9 @@ pub(super) struct State {
     pub(super) complete: bool,
     pub(super) answered: bool,
     pub(super) forwarded: bool,
+    /// When it was last replied to or forwarded, as Exchange said (100 ns since 1601; none when
+    /// not said).
+    pub(super) acted: Option<i64>,
     /// When a flagged message is due, or a completed one was: 100 ns since 1601, at midnight of
     /// its day.
     pub(super) due: Option<i64>,
@@ -154,6 +157,7 @@ pub(super) fn state(s: &quatrelle_model::Summary, role: FolderRole, marks: &Expo
         complete,
         answered: f.answered,
         forwarded: f.forwarded,
+        acted: (f.acted > 0).then(|| filetime(f.acted)),
         due,
         done,
         categories: categories(f, &marks.categories),
@@ -308,10 +312,15 @@ pub(super) fn properties<'a>(m: &'a Owned, categories: &'a [&'a str]) -> Vec<Uni
             }
         }
     }
-    if st.answered {
-        out.extend([int(0x1081, VERB_REPLY), int(0x1080, ICON_REPLIED)]);
-    } else if st.forwarded {
-        out.extend([int(0x1081, VERB_FORWARD), int(0x1080, ICON_FORWARDED)]);
+    if st.answered || st.forwarded {
+        // The last thing done with it (Outlook keeps that one only; with both marks, as IMAP
+        // keeps them, the reply, as the list shows), and when, as Exchange said
+        // (PidTagLastVerbExecutionTime, R18).
+        let (verb, icon) = if st.answered { (VERB_REPLY, ICON_REPLIED) } else { (VERB_FORWARD, ICON_FORWARDED) };
+        out.extend([int(0x1081, verb), int(0x1080, icon)]);
+        if let Some(at) = st.acted.filter(|_| st.answered != st.forwarded) {
+            out.push(UnicodePstProperty::tagged(0x1082, UnicodePstValue::Time(at)));
+        }
     }
     if !categories.is_empty() {
         out.push(UnicodePstProperty::named(PS_PUBLIC_STRINGS, UnicodePstName::String("Keywords"), UnicodePstValue::MultipleUnicode(categories)));
