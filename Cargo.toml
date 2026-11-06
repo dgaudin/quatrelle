@@ -11,7 +11,7 @@ version = "1.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Didier Gaudin <didier.gaudin@gmail.com>", "the ArtCraft Team and the MailCraft contributors"]
-rust-version = "1.95"
+rust-version = "1.98"
 repository = "https://github.com/dgaudin/quatrelle"
 homepage = "https://github.com/dgaudin/quatrelle"
 
