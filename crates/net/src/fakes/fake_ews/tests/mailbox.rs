@@ -688,7 +688,9 @@ fn downloading_ahead_tells_of_the_folder() {
     pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
     until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
     let all = || store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.len() == 60 && f.messages.iter().all(|m| store.has_body(&m.key)));
-    until(&pool, "the Inbox told of once downloaded ahead", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX") && all());
+    until(&pool, "the Inbox told of once downloaded ahead", |e| {
+        matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX") && all()
+    });
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }

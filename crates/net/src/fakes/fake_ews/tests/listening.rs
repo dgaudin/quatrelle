@@ -165,7 +165,9 @@ fn new_mail_shows_before_it_is_downloaded_whole() {
     server.data.lock().unwrap().slow_sources = Some(Duration::from_secs(3));
     server.data.lock().unwrap().deliver(&inbox, &mail("Just now", "n1"), false, "2026-10-24T08:00:00Z");
     let new = || store.load_folder("a1", "INBOX").ok().and_then(|f| f.messages.iter().find(|m| m.subject == "Just now").map(|m| m.key.clone()));
-    until(&pool, "the new mail in the list", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX") && new().is_some());
+    until(&pool, "the new mail in the list", |e| {
+        matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX") && new().is_some()
+    });
     let key = new().unwrap();
     assert!(!store.has_body(&key), "shown before its source came");
     eventually("then downloaded whole", || store.has_body(&key));

@@ -437,7 +437,7 @@ fn worker_pool_end_to_end_over_tcp() {
     pool.submit(Job::Start { account: account.clone(), password: Some(Secret("pw".into())) });
     let seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
     assert!(seen.iter().any(|e| matches!(e, Event::Folders { folders, .. } if folders.len() == 4)));
-    assert!(seen.iter().any(|e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX")));
+    assert!(seen.iter().any(|e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX")));
     let inbox = store.load_folder("a1", "INBOX").unwrap();
     assert_eq!(inbox.messages.len(), 2);
 
@@ -448,7 +448,7 @@ fn worker_pool_end_to_end_over_tcp() {
 
     // Mark read: cache at once, server right after.
     pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
-    until(&pool, "flag change", |e| matches!(e, Event::FolderChanged { .. }));
+    until(&pool, "flag change", |e| matches!(e, Event::FolderChanged { .. } | Event::FolderSynced { .. }));
     assert!(store.load_folder("a1", "INBOX").unwrap().find(1).unwrap().flags.seen);
     let end = Instant::now() + Duration::from_secs(10);
     while !st.lock().unwrap().mailbox("INBOX").unwrap().msgs[0].flags.iter().any(|f| f == "\\Seen") {
@@ -467,7 +467,7 @@ fn worker_pool_end_to_end_over_tcp() {
         sent_folder: Some("Sent".into()),
     });
     until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
-    until(&pool, "sent copy", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Sent"));
+    until(&pool, "sent copy", |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Sent"));
     assert_eq!(st.lock().unwrap().mailbox("Sent").unwrap().msgs.len(), 1);
     assert!(smtp_log.join().unwrap().contains("Subject: e2e"));
     assert_eq!(store.load_folder("a1", "Sent").unwrap().messages[0].subject, "e2e");

@@ -486,7 +486,11 @@ fn an_exchange_account_syncs_changes_and_sends_through_graph() {
     eventually("flagged on the server", || data.lock().unwrap().message(&second).unwrap().flagged);
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key.clone()], to: "Projects".into() } });
     eventually("moved on the server", || data.lock().unwrap().message(&second).unwrap().folder == projects);
-    until(&pool, "the move shows in Projects", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Projects"));
+    until(
+        &pool,
+        "the move shows in Projects",
+        |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Projects"),
+    );
     assert!(
         store.load_folder("a1", "Projects").unwrap().messages.iter().any(|m| m.subject == "Sound mix" && m.key.uid == key.uid && m.flags.flagged)
     );
@@ -541,7 +545,11 @@ fn an_exchange_account_syncs_changes_and_sends_through_graph() {
     };
     pool.submit(send(7, vec!["zoe@contoso.example".into(), "boss@contoso.example".into()]));
     until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
-    until(&pool, "the copy in Sent", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Sent Items"));
+    until(
+        &pool,
+        "the copy in Sent",
+        |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Sent Items"),
+    );
     let out = String::from_utf8(data.lock().unwrap().sent.last().unwrap().clone()).unwrap();
     assert!(out.starts_with("Bcc: boss@contoso.example\r\nFrom:"), "{out}");
     assert!(data.lock().unwrap().messages.iter().any(|m| m.folder == sent));
@@ -550,7 +558,7 @@ fn an_exchange_account_syncs_changes_and_sends_through_graph() {
 
     // A draft replaces its earlier copy.
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft one", "d1"), folder: "Drafts".into(), replaces: None });
-    until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "Drafts"));
+    until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Drafts"));
     let draft = store.load_folder("a1", "Drafts").unwrap().messages.iter().find(|m| m.subject == "Draft one").unwrap().key.clone();
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft two", "d2"), folder: "Drafts".into(), replaces: Some(draft) });
     eventually("one draft left", || data.lock().unwrap().messages.iter().filter(|m| m.draft).count() == 1);
@@ -723,7 +731,7 @@ fn a_refused_token_is_renewed_once_before_asking_to_sign_in() {
     // without a third token request (CI hung on that, waiting for it, 29/10).
     let asked = |e: &Event| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. });
     let seen = until(&pool, "the Inbox synced with the renewed token", |e| {
-        asked(e) || matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX")
+        asked(e) || matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "INBOX")
     });
     assert!(!seen.iter().any(asked), "asked to sign in again: {seen:?}");
     let has = |s: &str| store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == s));

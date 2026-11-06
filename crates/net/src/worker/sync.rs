@@ -375,6 +375,8 @@ impl Worker {
         let _at_work = self.at_work();
         self.status(SyncStatus::Syncing { folder: path.to_string() });
         let (store, opts, id) = (self.store.clone(), self.options_for(path), self.id());
+        // What its saves change in the list, told the window as it is (see `tell_noted`).
+        let noting = store.note_changes(&id, path);
         // An edit still waiting is put back on the list once it's read (`apply_report`): the
         // list isn't shown before then, or it would show the server's old state a moment.
         let early = matches!(self.conn, Some(Conn::Ews(_))) && !self.waiting_in(path);
@@ -395,7 +397,7 @@ impl Worker {
                 let sink = &self.sink;
                 let mut listed = || {
                     if early {
-                        sink.emit(Event::FolderChanged { account: id.clone(), folder: path.to_string() });
+                        tell_noted(sink, &id, path, noting.so_far());
                     }
                 };
                 let r = crate::ews::sync_folder_then(c, &mut self.jstate, &store, &id, path, &opts, &mut listed);
@@ -416,12 +418,14 @@ impl Worker {
             None => Err(NetError::Closed("not connected".into())),
         };
         let newest = result.as_ref().ok().and_then(|r| r.newest);
-        self.apply_report(path, result);
+        self.apply_report(path, result, noting);
         newest
     }
 
     /// What a folder's sync changed: its counts, its list if any, and the account's state.
-    pub(super) fn apply_report(&mut self, path: &str, result: std::result::Result<SyncReport, NetError>) {
+    /// `noting`: what its saves changed in the list, told once an edit still waiting is made
+    /// again on it.
+    pub(super) fn apply_report(&mut self, path: &str, result: std::result::Result<SyncReport, NetError>, noting: NoteGuard) {
         match result {
             Ok(mut r) => {
                 // The token worked: a later refusal gets a fresh one again.
@@ -440,14 +444,22 @@ impl Worker {
                         self.publish_folders();
                     }
                 }
-                if r.touched() || first {
+                // A first list is read whole; otherwise what changed, as it is.
+                if first {
+                    drop(noting);
                     self.sink.emit(Event::FolderChanged { account: self.acc.id.clone(), folder: path.to_string() });
+                } else {
+                    tell_noted(&self.sink, &self.acc.id, path, noting.take());
                 }
                 if self.last_full.is_some() {
                     self.status(SyncStatus::Online { at: now() });
                 }
             }
-            Err(e) => self.failed(e),
+            Err(e) => {
+                // What was saved before it failed is on the disk all the same.
+                tell_noted(&self.sink, &self.acc.id, path, noting.take());
+                self.failed(e);
+            }
         }
     }
 
@@ -509,7 +521,7 @@ impl Worker {
                 break;
             }
             match done.recv_timeout(std::time::Duration::from_millis(25)) {
-                Ok(SyncDone::Folder(path, result, given)) => {
+                Ok(SyncDone::Folder(path, result, given, noted)) => {
                     // Known here before the folder is shown: a message in it may be read (and
                     // the mark sent) at once.
                     self.jstate.learn(given);
@@ -524,13 +536,19 @@ impl Worker {
                         // password while the password was fine.
                         Err(e) if reader_stops(&e) => {
                             log::warn!("{}: reading {path} on a connection of its own: {e}; read on the main one", self.acc.id);
+                            tell_noted(&self.sink, &self.acc.id, &path, noted);
                             self.opts.parallel = 0;
                             let opts = self.options_for(&path);
                             if let Ok(mut q) = queue.lock() {
                                 q.push_back((path, opts));
                             }
                         }
-                        result => self.apply_report(&path, result),
+                        result => {
+                            // Told as the reader noted it (and what's saved meanwhile here).
+                            let noting = self.store.note_changes(&self.acc.id, &path);
+                            tell_noted(&self.sink, &self.acc.id, &path, noted);
+                            self.apply_report(&path, result, noting);
+                        }
                     }
                 }
                 Ok(SyncDone::State(state)) => {
@@ -641,5 +659,16 @@ impl Worker {
                 }
             }
         }
+    }
+}
+
+/// What a sync's saves changed in a folder's list, told the window: as it is, so the folder it
+/// holds and its list take it (`FolderSynced`); as a change to read again when it can't be told
+/// so (`FolderChanged`); nothing when nothing changed.
+pub(super) fn tell_noted(sink: &Sink, account: &str, folder: &str, noted: Noted) {
+    match noted {
+        Noted::Nothing => {}
+        Noted::Changed(change) => sink.emit(Event::FolderSynced { account: account.to_string(), folder: folder.to_string(), change }),
+        Noted::Unknown => sink.emit(Event::FolderChanged { account: account.to_string(), folder: folder.to_string() }),
     }
 }
