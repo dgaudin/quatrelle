@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
+//! Handing a batch of messages to the writer.
+
+use super::*;
+
+pub(super) fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
+    let recipients: Vec<Vec<UnicodePstRecipient<'_>>> = batch
+        .iter()
+        .map(|m| {
+            m.recipients.iter().map(|(name, email, kind)| UnicodePstRecipient { name, email, recipient_type: *kind, ..Default::default() }).collect()
+        })
+        .collect();
+    let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch
+        .iter()
+        .map(|m| {
+            m.files
+                .iter()
+                .map(|(filename, mime_type, cid, data)| UnicodePstAttachment {
+                    filename,
+                    mime_type,
+                    content_id: cid.as_deref(),
+                    data,
+                    ..Default::default()
+                })
+                .collect()
+        })
+        .collect();
+    let messages: Vec<UnicodePstBatchMessage<'_>> = batch
+        .iter()
+        .zip(&recipients)
+        .zip(&files)
+        .map(|((m, r), f)| UnicodePstBatchMessage {
+            message: UnicodePstMessage {
+                subject: &m.subject,
+                sender_name: &m.from.0,
+                sender_email: &m.from.1,
+                recipients: r,
+                body: &m.body,
+                html_body: m.html.as_deref(),
+                message_id: &m.message_id,
+                delivery_time: m.time,
+                message_class: "IPM.Note",
+                properties: &[],
+            },
+            attachments: f,
+        })
+        .collect();
+    let (first, rest) = match (*created, messages.split_first()) {
+        (_, None) => return Ok(()),
+        (true, _) => (None, messages.as_slice()),
+        (false, Some((first, rest))) => (Some(first), rest),
+    };
+    if let Some(first) = first {
+        UnicodePstFile::create_in_folder_with_attachments(path, folder, &first.message, first.attachments).map_err(|e| e.to_string())?;
+        *created = true;
+    }
+    if !rest.is_empty() {
+        UnicodePstFile::append_many_in_folder_with_attachments(path, folder, rest).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
