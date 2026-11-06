@@ -2,7 +2,7 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Issue #19: sent mail gets its copy on the server, wherever that server keeps Sent Items, and
-//! one is made where it has none.
+//! one is made where it has none; a draft gets Drafts made the same way.
 
 use super::*;
 
@@ -133,6 +133,36 @@ fn the_flagged_sent_folder_takes_the_copy_wherever_it_is_listed() {
     copy_in(&st, "Sent");
     for other in ["Clients/Sent", "Sent Items"] {
         assert!(st.lock().unwrap().mailbox(other).is_some_and(|b| b.msgs.is_empty()), "{other} got it");
+    }
+    pool.submit(Job::Remove { account: "a1".into() });
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A server with no Drafts folder (GreenMail) refused every draft ("this account has no Drafts
+/// folder"): a message being written was lost, even as Quatrelle closed. It gets one made, as it
+/// gets Sent Items, the draft goes in it, and the account knows it as Drafts.
+#[test]
+fn a_draft_on_a_server_without_drafts_makes_the_folder() {
+    let st = State::new();
+    st.lock().unwrap().boxes.retain(|b| b.name != "Drafts");
+    let (mut pool, store, _log) = online(&st, "drafts-made");
+    let end = Instant::now() + Duration::from_secs(20);
+    while store.load_folders("a1").map_or(true, |f| f.is_empty()) {
+        assert!(Instant::now() < end, "never listed its folders");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(st.lock().unwrap().mailbox("Drafts").is_none());
+    let draft = b"From: me@studio.example\r\nSubject: Plans\r\n\r\nto finish\r\n".to_vec();
+    pool.submit(Job::SaveDraft { account: "a1".into(), raw: draft, folder: "Drafts".into(), replaces: None });
+    let end = Instant::now() + Duration::from_secs(20);
+    while st.lock().unwrap().mailbox("Drafts").is_none_or(|m| m.msgs.is_empty()) {
+        assert!(Instant::now() < end, "the draft never reached the server");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let end = Instant::now() + Duration::from_secs(20);
+    while !store.load_folders("a1").is_ok_and(|f| f.iter().any(|f| f.path == "Drafts" && f.role == FolderRole::Drafts)) {
+        assert!(Instant::now() < end, "Drafts never listed as Drafts");
+        std::thread::sleep(Duration::from_millis(50));
     }
     pool.submit(Job::Remove { account: "a1".into() });
     let _ = std::fs::remove_dir_all(store.root());
