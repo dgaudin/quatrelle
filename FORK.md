@@ -3315,6 +3315,105 @@ sur des messages fabriqués ; aucune donnée du propriétaire.
     celui du menu ; et `a6576973` laissait un avertissement (`color_image` réexporté pour les
     seuls essais), corrigé dans le commit suivant.
 
+### Hors relevé : R21, l'agenda Exchange par changement, et l'état gardé (2026-11-06)
+
+Deux défauts du calendrier Exchange (EWS) inscrits au carnet ; le calendrier du fork est le sien,
+rien n'est porté de l'origine. Les sondes d'abord, sur le faux serveur EWS (et le faux Graph) ;
+aucun vrai compte.
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `cf6a3f2c` | l'agenda et les contacts du compte lus par leurs changements (`SyncFolderItems`), l'état gardé avec eux ; un avis du serveur ne lit qu'eux |
+| `9947b5ba` | un « Afficher comme » ou un « Privé » choisi autour d'une réponse part après elle (`StoredEvent::changed_too`) |
+| `69721bc4` | EWS lit l'état voulu par l'organisateur (`PidLidIntendedBusyStatus`) |
+| `d6913d6f` | Graph : un rendez-vous changé par une version d'avant la 1.1 ne réécrit plus « normal » et « occupé » sur ceux du serveur (`Pim::version`) |
+
+- **Défaut 1, ce qui se passait** : à chaque changement de l'agenda dont le serveur prévenait (au
+  plus une fois par minute), toute la synchro des calendriers et des contacts tournait sur la
+  connexion principale : les 239 rendez-vous du propriétaire relus (3 à 6 s), avec les calendriers
+  des collègues cochés, les dossiers publics, les notes et les tâches ; un nouveau courrier
+  attendait la fin (R13 ne sert que les messages ouverts).
+- **Le choix** : comme le mode Exchange mis en cache, chaque dossier suivi par ses changements.
+  `SyncFolderItems` depuis l'état où la synchro précédente s'est arrêtée, gardé comme `ctag` de
+  l'entrée du calendrier (et du carnet d'adresses), ce que le `ctag` d'une collection CalDAV dit
+  déjà ; le moteur l'enregistre dans `pim.json` avec les rendez-vous lus, d'un seul coup, si bien
+  que l'état gardé n'est jamais plus récent que ce qui est gardé. Seuls les éléments créés ou
+  changés sont demandés (`GetItem`, les champs d'un rendez-vous) ; les supprimés partent ; le
+  reste est dit inchangé (`DavSync::kept`, que le moteur savait déjà garder tel quel). Pas de
+  `FindItem` avec restriction ni de comparaison des `ChangeKey` : cela relit la liste entière à
+  chaque fois, et c'est la liste qui coûtait. Une série dont une seule occurrence change arrive
+  changée (Exchange garde l'occurrence dans la série) : la série est relue avec ses occurrences
+  modifiées, et celles gardées ici de cette série partent avec elle. Rien n'a changé : l'état
+  gardé reste (il est toujours valable), rien n'est réécrit.
+- **Lecture complète, une fois** : pas d'état (une première synchro, un profil d'avant), un état
+  que le serveur refuse (`ErrorInvalidSyncStateData`, ou tout autre refus), ou plus de 40 pages
+  de changements. L'état du moment est pris d'abord (toutes les pages, les éléments laissés) : ce
+  qui change pendant la lecture vient la fois suivante.
+- **Le mode mis en cache gardé** : tout l'agenda reste dans le cache ; un rendez-vous qui sort de
+  la fenêtre des six mois n'en part plus (Outlook garde tout) ; un rendez-vous relu qui n'est plus
+  dans la fenêtre part, comme une lecture complète l'écarterait. Rien en double : un rendez-vous
+  créé ici revient une fois, par son élément ; une suppression que le serveur refuse fait relire
+  l'élément (il revient, comme avant). « Le serveur l'emporte » et Problèmes de synchronisation ›
+  Conflits passent par le même chemin (`gone_events`). Des rendez-vous qui partagent un UID
+  (dates d'un outil de planification) gardent les noms `UID/début` déjà donnés.
+- **Ce que déclenche un avis** (`worker/listening.rs`, `sync_pim_changes`) : `sync_changes`,
+  l'agenda et les contacts du compte seuls, après ce qui a changé ici ; ni les calendriers des
+  collègues, ni les dossiers publics, ni les notes, ni les tâches (elles ont leur propre avis).
+  La synchro complète (après chaque synchro du courrier, ou une modification faite ici) lit aussi
+  l'agenda et les contacts par changements.
+- **Sondes** (`fake_ews/tests/calendar_speed/changes.rs`, l'agenda du propriétaire : 219
+  rendez-vous, 20 séries hebdomadaires, 5 occurrences déplacées, 15 ms par élément servi) :
+
+  | | avant | après |
+  |---|---|---|
+  | un rendez-vous changé, synchro suivante | 244 éléments, 18 requêtes, 1,48 s | 1 élément, 3 requêtes, 0,14 s |
+  | une occurrence d'une série déplacée | 244 éléments, 18 requêtes, 1,48 s | 2 éléments (la série et l'occurrence), 4 requêtes, 0,20 s |
+  | un courrier arrivé pendant la synchro de l'agenda (avis du serveur, par le worker) | vu 1,61 s après | vu 0,25 s après |
+
+  Le calendrier gardé après chaque changement est celui d'une lecture complète (comparé élément par
+  élément, occurrences comprises).
+- **Défaut 2, trois points**, chacun montré d'abord par une sonde qui échouait :
+  - **un état ou un privé choisi entre une réponse et la synchro** (`engine/src/tests/calendar/answering.rs`) :
+    la synchro ne donnait que la réponse (AcceptItem), puis `settle_answers` marquait le rendez-vous
+    envoyé ; le choix restait affiché jusqu'à la lecture suivante, qui le perdait. Maintenant un
+    changement fait pendant qu'une réponse attend (ou avant elle, pas encore envoyé) est noté
+    (`changed_too`, posé par `StoredEvent::changed_here` aux endroits qui changent un rendez-vous) ;
+    la réponse donnée, le rendez-vous reste à envoyer et une synchro est demandée aussitôt : il
+    part comme tout changement de la copie d'un invité (sans le fuseau de l'organisateur, sans
+    prévenir personne). Une réponse refusée deux fois laisse aussi partir le changement ;
+  - **`IntendedFreeBusyStatus` pas lu** (`fake_ews/tests/answers.rs`) : EWS ne le nomme que sur une
+    demande de réunion ; c'est la propriété `PidLidIntendedBusyStatus` ([MS-OXOCAL], ensemble
+    Appointment, 0x8224), demandée avec chaque rendez-vous et lue en `X-MICROSOFT-CDO-INTENDEDSTATUS`,
+    que le moteur sait déjà appliquer : une réunion acceptée s'affiche aussitôt comme l'organisateur
+    l'a voulu (libre, absent…), comme Outlook, et c'est cet état qui part si un choix suit ;
+  - **Graph, un rendez-vous modifié avant la 1.1 et pas encore envoyé** (`fake_graph/tests/events.rs`) :
+    il porte « occupé » et « public » quel que soit le serveur, et la mise à jour les écrivait
+    (un rendez-vous privé et libre devenait public et occupé). Le document du calendrier porte
+    maintenant sa version (`Pim::version`, absente : 0) ; tant qu'elle est 0, la mise à jour
+    n'envoie la sensibilité et l'état que s'ils ont été choisis (privé, autre qu'occupé), et le
+    serveur garde les siens ; elle passe à 1 quand plus rien de changé alors n'attend, et un
+    nouveau profil y est d'emblée.
+- **Ce que le propriétaire verra** : un changement d'agenda dans Outlook ou sur le téléphone lu en
+  une fraction de seconde au lieu de 3 à 6 s, le courrier qui arrive en même temps aussitôt ; une
+  seule lecture complète après la mise à jour (pas d'état encore) ; dans le journal, « the calendar
+  read by its changes in … s: N made or changed, M deleted, K kept as they were ». Une réunion
+  acceptée montre l'état voulu par l'organisateur, et un Privé ou un Afficher comme posé juste
+  après la réponse reste.
+- **Vérifié** : les suites de `quatrelle-model`, `quatrelle-engine` et `quatrelle-net` ;
+  `cargo xtask ci` (wasm compris).
+- **Jamais essayé sur un vrai Exchange** : `SyncFolderItems` sur le dossier Calendrier par son nom
+  distingué (permis par le schéma), ce qu'il dit d'une occurrence déplacée (la série changée,
+  d'après [MS-OXOCAL] : l'occurrence est une pièce jointe de la série), le refus d'un état
+  ancien, et la présence de `PidLidIntendedBusyStatus` sur la copie d'un invité ; la réponse puis
+  la mise à jour de la même réunion, à la suite, sur le serveur du propriétaire.
+- **Reste, remarqué** :
+  - les calendriers des collègues et les dossiers publics sont toujours relus en entier à chaque
+    synchro complète (un quart d'heure) ; les suivre par changements est possible de la même façon ;
+  - les notes et les tâches aussi (petites) ;
+  - `PIM_EVERY` (une minute entre deux lectures sur avis) pourrait descendre maintenant qu'une
+    lecture coûte quelques requêtes ; laissé tel quel ;
+  - un rendez-vous sorti de la fenêtre des six mois reste dans le cache tant qu'il ne change pas.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
