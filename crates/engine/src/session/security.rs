@@ -288,6 +288,7 @@ impl Session {
             c.sign |= s.sign;
             c.encrypt |= s.encrypt;
         }
+        self.encryption_follows(c);
     }
 
     /// What `raw` shows once its protection is taken off, and what that protection was: a

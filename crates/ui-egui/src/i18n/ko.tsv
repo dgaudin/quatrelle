@@ -2023,3 +2023,10 @@ folder	Conflicts	충돌
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	S/MIME 또는 OpenPGP로 서명하고 암호화합니다. 자동은 모든 받는 사람이 받을 수 있는 방식, 또는 답장하는 메시지의 방식을 고릅니다
 	Automatic takes {scheme} for this message	이 메시지에는 자동이 {scheme}을(를) 씁니다
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	암호화해서 보낼 수 없습니다. {names}의 쓸 수 있는 OpenPGP 키가 없습니다. 키는 상대의 메일과 함께 오거나 파일 › 정보 › 보안에서 가져올 수 있습니다. 암호화하지 않고 보내려면 암호화를 끄세요.
+	Encrypt by itself when everyone can receive it	모두 받을 수 있으면 저절로 암호화
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Quatrelle에 모든 받는 사람의 인증서나 OpenPGP 키가 있는 동안 새 메시지를 암호화합니다. 직접 암호화를 고를 때까지입니다
+	Attach my public key	내 공개 키 첨부
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	내 OpenPGP 공개 키를 파일로 메시지에 붙여 받는 사람이 가져올 수 있게 합니다
+	Every recipient can receive it encrypted ({scheme})	모든 받는 사람이 암호화된 채로 받을 수 있습니다({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	{names}에게는 암호화할 수 없습니다: 쓸 수 있는 OpenPGP 키 없음
+	It can't be encrypted for {names}: no certificate	{names}에게는 암호화할 수 없습니다: 인증서 없음

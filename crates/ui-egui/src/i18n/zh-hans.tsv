@@ -2022,3 +2022,10 @@ menu	View	查看
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	用 S/MIME 或 OpenPGP 签名和加密：“自动”选择所有收件人都能接收的方式，或所回复邮件使用的方式
 	Automatic takes {scheme} for this message	“自动”为这封邮件选择 {scheme}
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	无法加密发送：{names} 没有可用的 OpenPGP 密钥。对方的密钥随其邮件而来，也可以在“文件 › 信息 › 安全”中导入；或关闭“加密”以不加密发送。
+	Encrypt by itself when everyone can receive it	所有人都能接收时自动加密
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	只要 Quatrelle 有每位收件人的证书或 OpenPGP 密钥，新邮件就会加密，直到你自己选择“加密”
+	Attach my public key	附加我的公钥
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	你的 OpenPGP 公钥作为文件随邮件发出，供收件人导入
+	Every recipient can receive it encrypted ({scheme})	所有收件人都能接收加密邮件（{scheme}）
+	It can't be encrypted for {names}: no usable OpenPGP key	无法为 {names} 加密：没有可用的 OpenPGP 密钥
+	It can't be encrypted for {names}: no certificate	无法为 {names} 加密：没有证书

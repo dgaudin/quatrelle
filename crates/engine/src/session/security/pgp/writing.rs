@@ -3,9 +3,10 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The session: writing with OpenPGP (adapted from upstream f32b54b). Which protection a message
 //! gets when the account has both a certificate and a key ([`Scheme`]), the job that signs and
-//! encrypts it as PGP/MIME, and whether the message being written can go encrypted to everyone
-//! in it ([`Reach`]). Nothing of it happens for an account without a key of its own
-//! ([`Session::pgp_active`]).
+//! encrypts it as PGP/MIME, the account's public key sent along (Autocrypt) or attached, and
+//! whether the message being written can go encrypted to everyone in it ([`Reach`]), encryption
+//! following that when the option asks. Nothing of it happens for an account without a key of its
+//! own ([`Session::pgp_active`]).
 
 use quatrelle_model::job::PgpWork;
 
@@ -14,6 +15,9 @@ use super::*;
 /// What a refusal to encrypt says, before the recipients it names (`: a@x, b@y`): none of them
 /// has a key Quatrelle can encrypt to (none known, run out, or withdrawn).
 pub const NO_KEY_TO_ENCRYPT: &str = "there's no usable OpenPGP key to encrypt to";
+
+/// What an attached public key is.
+const PGP_KEYS: &str = "application/pgp-keys";
 
 /// Which protection a message being written gets, when its account has both a certificate and
 /// an OpenPGP key.
@@ -187,10 +191,53 @@ impl Session {
         c.encrypt && self.scheme_for(c) == Some(Scheme::Pgp)
     }
 
+    /// `raw` (`c`, about to go) with the account's key in an `Autocrypt:` header (no
+    /// `prefer-encrypt`), so whoever answers can encrypt to it: only when the account has a key
+    /// that can be encrypted to, sends it along (`pgp.options`), and the message is from the
+    /// account's own address (Autocrypt's key is for the From address).
+    pub(crate) fn with_autocrypt(&self, c: &Compose, raw: Vec<u8>) -> Vec<u8> {
+        if !self.pgp_active(&c.account) || !self.pgp_settings(&c.account).autocrypt {
+            return raw;
+        }
+        let (Some(own), Some(a)) = (self.pgp_key(&c.account), self.account(&c.account)) else { return raw };
+        let email = a.config.email.trim().to_string();
+        let from = self.compose_from(c).email;
+        if email.is_empty() || !from.trim().eq_ignore_ascii_case(&email) || own.info.encryptable(self.clock.now).is_err() {
+            return raw;
+        }
+        let Ok(small) = openpgp::minimal(&own.public, &email) else { return raw };
+        [openpgp::autocrypt::header(&email, &small, false).as_bytes(), &raw].concat()
+    }
+
+    /// The account's public key attached to the message being written, once (`<address>.asc`,
+    /// `application/pgp-keys`), for its recipients to import.
+    pub fn attach_public_key(&mut self) -> CmdResult {
+        let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+        let account = c.account.clone();
+        let own =
+            self.pgp_key(&account).ok_or_else(|| CmdError::Disabled("this account has no OpenPGP key: make one in File › Info › Security".into()))?;
+        let armored = openpgp::armored_public(&own.public).map_err(|e| CmdError::Failed(e.to_string()))?;
+        let email = self.account(&account).map(|a| a.config.email.trim().to_string()).unwrap_or_default();
+        let name = format!("{}.asc", if email.is_empty() { "key" } else { email.as_str() });
+        let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+        let has = c.attachments.iter().any(|a| a.name == name && a.mime == PGP_KEYS);
+        if !has {
+            c.attachments.push(OutAttachment { name: name.clone(), mime: PGP_KEYS.into(), data: armored.into_bytes(), ..Default::default() });
+        }
+        Ok(serde_json::json!({ "attached": name, "already": has }))
+    }
+
+    /// A new message: encryption follows its recipients when the option asks it to (File ›
+    /// Options › Safety) and the account can encrypt, unless it's on already.
+    pub(in crate::session) fn encryption_follows(&self, c: &mut Compose) {
+        c.encrypt_auto = self.prefs.encrypt_when_possible && !c.encrypt && (self.identity(&c.account).is_some() || self.pgp_active(&c.account));
+    }
+
     /// Whether the message being written can go encrypted to everyone in it, and if not who
     /// can't; `None` when nothing is being written or its account can't encrypt at all. Worked
     /// out again only when its recipients, its protection or the keys known change (or the hour
-    /// does: keys run out).
+    /// does: keys run out). While encryption follows the recipients, it's turned on and off to
+    /// match.
     pub fn encryption_reach(&mut self) -> Option<Reach> {
         let c = self.compose.as_ref()?;
         let scheme = self.scheme_for(c)?;
@@ -217,6 +264,11 @@ impl Session {
                 r
             }
         };
+        if let Some(c) = self.compose.as_mut()
+            && c.encrypt_auto
+        {
+            c.encrypt = reach.everyone();
+        }
         Some(reach)
     }
 }

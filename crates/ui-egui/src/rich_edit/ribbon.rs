@@ -115,7 +115,7 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
                     });
                     groups.last(ui, &t, "Text");
                 }
-                ComposeTab::Options => options(ui, t, c, input, &mut groups),
+                ComposeTab::Options => options(ui, t, c, input, &mut groups, acts),
                 ComposeTab::FormatText => {
                     clipboard(ui, t, ed, c, &sel);
                     groups.end(ui, &t, "Clipboard");
@@ -441,7 +441,7 @@ fn tags(ui: &mut Ui, t: Tokens, c: &mut Compose) {
 
 /// Options: Bcc, encrypting and signing (S/MIME or OpenPGP), a read receipt, voting buttons,
 /// delay delivery, where replies go, the format.
-fn options(ui: &mut Ui, t: Tokens, c: &mut Compose, input: &RibbonInput<'_>, groups: &mut Groups) {
+fn options(ui: &mut Ui, t: Tokens, c: &mut Compose, input: &RibbonInput<'_>, groups: &mut Groups, acts: &mut Vec<Action>) {
     if widgets::big_toggle(ui, Icon::Bcc, "Bcc", &t, c.show_cc).on_hover_text(tl!("Hidden from the other recipients")).clicked() {
         c.show_cc = !c.show_cc;
     }
@@ -465,12 +465,21 @@ fn options(ui: &mut Ui, t: Tokens, c: &mut Compose, input: &RibbonInput<'_>, gro
         };
         if widgets::big_toggle(ui, Icon::Lock, "Encrypt", &t, c.encrypt).on_hover_text(encrypt_about).clicked() {
             c.encrypt = !c.encrypt;
+            // Chosen: it no longer follows the recipients.
+            c.encrypt_auto = false;
         }
         if widgets::big_toggle(ui, Icon::Seal, "Sign", &t, c.sign).on_hover_text(sign_about).clicked() {
             c.sign = !c.sign;
         }
         if input.has_cert && input.has_pgp {
             scheme_choice(ui, t, c, input.scheme_now);
+        }
+        if input.has_pgp
+            && widgets::big_button(ui, Icon::Attach, "Attach my public key", &t, true)
+                .on_hover_text(tl!("Your OpenPGP public key goes with the message as a file, for the recipients to import"))
+                .clicked()
+        {
+            acts.push(Action::Run("compose.attachPublicKey", json!({})));
         }
         groups.end(ui, &t, "Encrypt");
     }

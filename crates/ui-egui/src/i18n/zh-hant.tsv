@@ -2025,3 +2025,10 @@ folder	Conflicts	衝突
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	用 S/MIME 或 OpenPGP 簽署和加密：「自動」選擇所有收件人都能接收的方式，或所回覆郵件使用的方式
 	Automatic takes {scheme} for this message	「自動」為這封郵件選擇 {scheme}
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	無法加密寄出：{names} 沒有可用的 OpenPGP 金鑰。對方的金鑰隨其郵件而來，也可以在「檔案 › 資訊 › 安全性」中匯入；或關閉「加密」以不加密寄出。
+	Encrypt by itself when everyone can receive it	所有人都能接收時自動加密
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	只要 Quatrelle 有每位收件人的憑證或 OpenPGP 金鑰，新郵件就會加密，直到你自己選擇「加密」
+	Attach my public key	附加我的公開金鑰
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	你的 OpenPGP 公開金鑰以檔案隨郵件寄出，供收件人匯入
+	Every recipient can receive it encrypted ({scheme})	所有收件人都能接收加密郵件（{scheme}）
+	It can't be encrypted for {names}: no usable OpenPGP key	無法為 {names} 加密：沒有可用的 OpenPGP 金鑰
+	It can't be encrypted for {names}: no certificate	無法為 {names} 加密：沒有憑證

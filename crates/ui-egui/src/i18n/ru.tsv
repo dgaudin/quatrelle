@@ -2024,3 +2024,10 @@ menu	View	Просмотр
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Подписывать и шифровать с S/MIME или OpenPGP: «Авто» выбирает то, что могут получить все получатели, или то, каким пришло письмо, на которое вы отвечаете
 	Automatic takes {scheme} for this message	«Авто» выбирает {scheme} для этого письма
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Отправить зашифрованным нельзя: нет пригодного ключа OpenPGP для {names}. Ключ приходит с их письмами или импортируется в разделе Файл › Сведения › Безопасность; либо выключите «Зашифровать», чтобы отправить без шифрования.
+	Encrypt by itself when everyone can receive it	Шифровать само, когда все могут получить зашифрованное
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Новое письмо шифруется, пока у Quatrelle есть сертификат или ключ OpenPGP каждого получателя, — пока вы сами не выберете «Зашифровать»
+	Attach my public key	Приложить мой открытый ключ
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	Ваш открытый ключ OpenPGP уходит с письмом файлом, чтобы получатели его импортировали
+	Every recipient can receive it encrypted ({scheme})	Все получатели могут получить его зашифрованным ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	Для {names} зашифровать нельзя: нет пригодного ключа OpenPGP
+	It can't be encrypted for {names}: no certificate	Для {names} зашифровать нельзя: нет сертификата

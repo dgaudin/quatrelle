@@ -2021,3 +2021,10 @@ folder	Conflicts	競合
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	S/MIME か OpenPGP で署名・暗号化します。「自動」は全受信者が受け取れる方式、または返信元のメッセージの方式を選びます
 	Automatic takes {scheme} for this message	このメッセージでは「自動」は {scheme} を使います
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	暗号化して送れません: {names} の使える OpenPGP キーがありません。キーは相手のメールと一緒に届くか、ファイル › 情報 › セキュリティ でインポートできます。暗号化せずに送るには「暗号化」をオフにしてください。
+	Encrypt by itself when everyone can receive it	全員が受け取れるときは自動で暗号化する
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Quatrelle が全受信者の証明書か OpenPGP キーを持っている間は新しいメッセージを暗号化します。自分で「暗号化」を選ぶまで続きます
+	Attach my public key	公開キーを添付
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	あなたの OpenPGP 公開キーをファイルとしてメッセージに付け、受信者がインポートできるようにします
+	Every recipient can receive it encrypted ({scheme})	全受信者が暗号化されたまま受け取れます ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	{names} 宛てには暗号化できません: 使える OpenPGP キーがありません
+	It can't be encrypted for {names}: no certificate	{names} 宛てには暗号化できません: 証明書がありません

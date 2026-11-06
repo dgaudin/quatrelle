@@ -183,6 +183,10 @@ pub struct Prefs {
     /// first: it's taken out of every JPEG and PNG attached as the message is sent.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub keep_photo_location: bool,
+    /// A new message is encrypted by itself while every recipient can receive it encrypted
+    /// (S/MIME or OpenPGP), until Encrypt is chosen by hand. Off unless chosen.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub encrypt_when_possible: bool,
     /// Links from a message open where they really go: out of redirect wrappers, without the
     /// tags that say who clicked ([`mime::clean_link`]). On at first.
     pub clean_links: bool,
@@ -289,6 +293,7 @@ impl Default for Prefs {
             recent_searches: Vec::new(),
             recent_emoji: Vec::new(),
             keep_photo_location: false,
+            encrypt_when_possible: false,
             clean_links: true,
             pictures: PictureLoading::Known,
             meeting_browser: None,

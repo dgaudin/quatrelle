@@ -2025,3 +2025,10 @@ menu	View	Anzeigen
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	Mit S/MIME oder OpenPGP signieren und verschlüsseln: Automatisch nimmt das, was alle Empfänger empfangen können, oder das der beantworteten Nachricht
 	Automatic takes {scheme} for this message	Automatisch nimmt {scheme} für diese Nachricht
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	Sie kann nicht verschlüsselt gesendet werden: Für {names} gibt es keinen verwendbaren OpenPGP-Schlüssel. Der Schlüssel kommt mit ihrer Mail oder lässt sich unter Datei › Informationen › Sicherheit importieren; oder schalten Sie Verschlüsseln aus, um sie unverschlüsselt zu senden.
+	Encrypt by itself when everyone can receive it	Von selbst verschlüsseln, wenn alle es empfangen können
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	Eine neue Nachricht wird verschlüsselt, solange Quatrelle für jeden Empfänger ein Zertifikat oder einen OpenPGP-Schlüssel hat, bis Sie Verschlüsseln selbst wählen
+	Attach my public key	Meinen öffentlichen Schlüssel anhängen
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	Ihr öffentlicher OpenPGP-Schlüssel geht als Datei mit der Nachricht, damit die Empfänger ihn importieren
+	Every recipient can receive it encrypted ({scheme})	Alle Empfänger können sie verschlüsselt empfangen ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	Für {names} nicht verschlüsselbar: kein verwendbarer OpenPGP-Schlüssel
+	It can't be encrypted for {names}: no certificate	Für {names} nicht verschlüsselbar: kein Zertifikat

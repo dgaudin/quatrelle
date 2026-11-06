@@ -2020,3 +2020,10 @@ folder	Conflicts	התנגשויות
 	Sign and encrypt with S/MIME or OpenPGP: Automatic takes the one every recipient can receive, or the one of the message answered	חתימה והצפנה ב־S/MIME או ב־OpenPGP: «אוטומטי» בוחר את מה שכל הנמענים יכולים לקבל, או את מה שבו הגיעה ההודעה שעליה עונים
 	Automatic takes {scheme} for this message	«אוטומטי» בוחר ב־{scheme} להודעה זו
 	It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.	אי אפשר לשלוח אותה מוצפנת: אין מפתח OpenPGP שמיש עבור {names}. המפתח שלהם מגיע עם הדואר שלהם, או שאפשר לייבא אותו בקובץ › מידע › אבטחה; או כבו את «הצפנה» כדי לשלוח בלי הצפנה.
+	Encrypt by itself when everyone can receive it	הצפנה מעצמה כשכולם יכולים לקבל אותה
+	A new message is encrypted while every recipient has a certificate or an OpenPGP key Quatrelle can encrypt to, until you choose Encrypt yourself	הודעה חדשה מוצפנת כל עוד יש ל־Quatrelle תעודה או מפתח OpenPGP של כל נמען, עד שתבחרו «הצפנה» בעצמכם
+	Attach my public key	צירוף המפתח הציבורי שלי
+	Your OpenPGP public key goes with the message as a file, for the recipients to import	המפתח הציבורי של OpenPGP שלכם יוצא עם ההודעה כקובץ, כדי שהנמענים ייבאו אותו
+	Every recipient can receive it encrypted ({scheme})	כל הנמענים יכולים לקבל אותה מוצפנת ({scheme})
+	It can't be encrypted for {names}: no usable OpenPGP key	אי אפשר להצפין עבור {names}: אין מפתח OpenPGP שמיש
+	It can't be encrypted for {names}: no certificate	אי אפשר להצפין עבור {names}: אין תעודה
