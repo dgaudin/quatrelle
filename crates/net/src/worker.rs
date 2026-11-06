@@ -219,16 +219,12 @@ pub struct Pool {
     /// The server search still wanted ([`Job::SearchServer`]'s `search`; 0: none), shared with
     /// every worker so a search running stops when it's no longer wanted.
     search: Arc<AtomicU64>,
-    /// Edits to the cache, written on a thread of their own ([`edit_writer`]): marking a message
+    /// Edits to the cache, written on a thread of their own (`pool::edit_writer`): marking a message
     /// read rewrote its folder's list on the window's thread, seconds for a folder of a hundred
     /// thousand messages, at every message opened. `None` once the pool shuts down.
-    edits: Option<Sender<Edit>>,
+    edits: Option<Sender<pool::Edit>>,
     edits_thread: Option<JoinHandle<()>>,
 }
-
-/// An edit for the writer: the account, the change, the account's thread to tell after, and how
-/// many times the account had been removed when it was made ([`Store::while_kept`]).
-type Edit = (String, Op, Option<Sender<Job>>, u64);
 
 /// Write an edit to the cache and journal it (`Store::add_op`), report what changed, then hand it to
 /// the account's thread, which takes it to the server. Journaled first: a sync saving the folder
@@ -263,13 +259,6 @@ fn make_edit(store: &Store, sink: &Sink, account: &str, op: &Op) {
             }
         }
         Err(e) => sink.emit(Event::Notice { account, message: e.to_string() }),
-    }
-}
-
-/// The thread writing edits, in the order they were made, until the pool shuts down.
-fn edit_writer(store: Store, sink: Sink, rx: Receiver<Edit>) {
-    for (account, op, worker, seen) in rx {
-        write_edit(&store, &sink, account, op, worker, seen);
     }
 }
 
