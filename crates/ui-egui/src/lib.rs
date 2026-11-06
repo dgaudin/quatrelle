@@ -401,6 +401,8 @@ impl MailApp {
                 event_windows: Vec::new(),
                 event_window_ids: 0,
                 editor: None,
+                quote_editors: Default::default(),
+                quote_focus: None,
                 people: Default::default(),
                 craft_apps: Vec::new(),
                 language: i18n::AUTO.into(),

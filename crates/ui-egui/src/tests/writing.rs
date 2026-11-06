@@ -9,6 +9,7 @@ mod file_dialogs;
 mod lost_gpu;
 mod people_field;
 mod pgp;
+mod quote;
 mod rewrite;
 mod sending;
 mod typing;

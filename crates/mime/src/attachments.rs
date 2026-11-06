@@ -467,6 +467,14 @@ const QUOTED_PICTURE_MAX: usize = 25 << 20;
 /// kept by its address, as Outlook keeps it (never loaded here); tracking pictures left out.
 /// Also the indexes of the attachments the quote shows.
 pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<usize>) {
+    let (out, used, _) = quoted_pictures_given(p, raw);
+    (out, used)
+}
+
+/// [`quoted_pictures`], with each picture's address in the message and the `cid:` it was given
+/// (for the original sent as it came, [`crate::layout::quote_html`]); the pictures behind its
+/// boxes among them.
+pub fn quoted_pictures_given(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<usize>, Vec<(String, String)>) {
     let mut out: Vec<InlinePicture> = Vec::new();
     let mut used: Vec<usize> = Vec::new();
     let found: Vec<(String, Option<usize>)> = p
@@ -476,6 +484,7 @@ pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<u
         .filter_map(|s| s.image.clone())
         // And those its layout shows (a reply quotes it by its layout when it has one).
         .chain(layout_pictures(&p.layout))
+        .chain(crate::layout::background_pictures(&p.layout))
         .map(|src| {
             let at = picture_attachment(p, &src);
             (src, at)
@@ -532,7 +541,7 @@ pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<u
     };
     p.rich.iter_mut().flatten().for_each(&mut quote);
     crate::layout::each_span(&mut p.layout, &mut quote);
-    (out, used)
+    (out, used, given)
 }
 
 /// The pictures in a layout's text, in order.

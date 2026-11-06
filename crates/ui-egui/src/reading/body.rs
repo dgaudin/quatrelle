@@ -191,7 +191,8 @@ pub(super) fn rich_body(
     }
     let faces = crate::look::typefaces::loaded(ui.ctx());
     let zoom = s.prefs.reading_scale();
-    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, inline: &[], cells: 0, find: lit, hit: None };
+    let mut body =
+        Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, inline: &[], cells: 0, find: lit, hit: None, edit: None };
     if long_text::many_lines(p) {
         // Thousands of lines: laid out by what's in view.
         long_text::rich(&mut body, st, ui, width, theme::surface_rgb(&t));
@@ -237,6 +238,14 @@ pub(super) struct Body<'a> {
     /// The find bar's finds, lit where they're drawn, and where the current one was.
     pub(super) find: Option<find::Lit>,
     pub(super) hit: Option<Rect>,
+    /// Blocks of text drawn as text boxes, to change them (the original under a reply).
+    pub(super) edit: Option<&'a mut dyn CellEdit>,
+}
+
+/// Draws a block of text as a text box to change it (`false`: drawn as text after all).
+pub(super) trait CellEdit {
+    /// `page`: the colour it's on (its cell's), for its colours to read.
+    fn edit(&mut self, ui: &mut Ui, lines: &[Vec<mime::Span>], page: [u8; 3], acts: &mut Vec<Action>) -> bool;
 }
 
 /// The heights of the table cells of the messages drawn (their content and padding, as last
@@ -535,7 +544,13 @@ impl Body<'_> {
         };
         for (i, b) in blocks.iter().enumerate() {
             match b {
-                Block::Text(lines) => self.lines(st, ui, lines, width, page, main_align(align)),
+                Block::Text(lines) => {
+                    // A text box where it's changed: not in a pass that only measures.
+                    let edited = !ui.is_sizing_pass() && self.edit.as_deref_mut().is_some_and(|e| e.edit(ui, lines, page, self.acts));
+                    if !edited {
+                        self.lines(st, ui, lines, width, page, main_align(align));
+                    }
+                }
                 Block::Table(table) if depth < 16 => {
                     // A box with another right under it touches it, as a browser stacks them (a
                     // newsletter's blocks of one width, upstream issue #41): what parts them is

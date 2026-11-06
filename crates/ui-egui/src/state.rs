@@ -143,6 +143,10 @@ pub struct UiState {
     /// The body's cursor (characters), where pictures go.
     /// The message editor's state (selection, undo, what's typed next).
     pub(crate) editor: Option<rich_edit::Editor>,
+    /// The editors of the blocks of text of the originals under replies being written, and the
+    /// one with the cursor (its message, its place): the ribbon and pictures go to it.
+    pub(crate) quote_editors: reading::QuoteEditors,
+    pub(crate) quote_focus: Option<(u64, usize)>,
     /// The contacts fields on screen (To, Cc, Bcc, Replies to, Select Names' rows), by field, and
     /// the send held for the names still being resolved.
     pub(crate) people: dialogs::people_field::PeopleFields,

@@ -38,6 +38,9 @@ use attachments::*;
 pub(crate) use bodies::Bodies;
 pub(crate) use body::CellHeights;
 use body::*;
+pub(crate) use compose::QuoteEditors;
+#[cfg(test)]
+pub(crate) use compose::cell_box;
 pub use compose::compose_window;
 #[cfg(test)]
 pub(crate) use compose::picture_alone;
@@ -84,6 +87,7 @@ pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str, pict
         cells: 0,
         find: None,
         hit: None,
+        edit: None,
     };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
