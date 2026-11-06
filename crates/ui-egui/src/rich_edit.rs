@@ -546,7 +546,12 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let plain = c.plain;
     let tokens = *t;
     // The original under a reply isn't checked, as Outlook leaves it.
-    let check = if ed.in_quote { crate::spellcheck::Check { skip: vec![0..c.body.len()], ..check_for(c) } } else { check_for(c) };
+    let check = if ed.in_quote {
+        let whole = 0..c.body.len();
+        crate::spellcheck::Check { skip: std::iter::once(whole).collect(), ..check_for(c) }
+    } else {
+        check_for(c)
+    };
     let sizes = signature::with_room(pictures::sizes_as_set(picture_sizes(ed, c), c), &ed.signature);
     let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let text = buf.as_str();
