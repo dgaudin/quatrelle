@@ -114,6 +114,21 @@ pub fn split_marked(html: &str, class: &str) -> Option<(String, String, String)>
     Some((html.get(..start)?.to_string(), html.get(inner..end)?.to_string(), after.to_string()))
 }
 
+/// `p` (a saved message as parsed) with `html`, the part of its HTML that holds the original
+/// under it ([`QUOTE_CLASS`]), as its formatted text: that part's layout, lines, pictures and
+/// text, as the reading pane would show it.
+pub fn quoted_part(p: &Parsed, html: &str) -> Parsed {
+    let h = crate::layout::inline_css(html);
+    let layout = crate::layout::html_layout(&h);
+    let mut images = html_images(&h);
+    for src in crate::layout::background_pictures(&layout) {
+        if !images.contains(&src) && images.len() < 200 {
+            images.push(src);
+        }
+    }
+    Parsed { rich: html_to_rich(&h), layout, images, text: html_to_text(&h), had_html: true, ..p.clone() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

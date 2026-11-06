@@ -5,8 +5,9 @@
 //! to carry on writing it as Outlook opens one: as it was saved. Its recipients (Bcc too, which
 //! a draft's copy keeps), subject, importance and read receipt; its text with its formatting and
 //! the line over a quote; a signature written in HTML as that HTML again; its pictures in place
-//! (they came back as files) and its files; and the message it answers or forwards, which gets
-//! its flag once it's sent.
+//! (they came back as files) and its files; the original under a reply as it came, with what
+//! was changed in it; and the message it answers or forwards, which gets its flag once it's
+//! sent.
 
 use super::*;
 
@@ -55,7 +56,17 @@ impl Session {
             ..Default::default()
         };
         match html.as_deref() {
-            Some(h) => own_text(&mut c, h),
+            Some(h) => {
+                // The original under a reply, as it came, with what was changed in it.
+                let own = match mime::split_marked(h, mime::QUOTE_CLASS).filter(|(_, q, _)| !q.trim().is_empty()) {
+                    Some((own, q, _)) => {
+                        c.quote = Some(Arc::new(Quote::saved(key.clone(), &p, q)));
+                        own
+                    }
+                    None => h.to_string(),
+                };
+                own_text(&mut c, &own);
+            }
             None => c.set_text(p.text.clone()),
         }
         // The message it answers or forwards, for its flag once it's sent: as its copy names it,

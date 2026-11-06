@@ -14,6 +14,7 @@ mod names;
 mod people_field;
 mod pictures;
 mod places;
+mod quote;
 mod quoted;
 mod senders;
 mod sending;

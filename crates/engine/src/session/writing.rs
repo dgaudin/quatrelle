@@ -12,6 +12,7 @@ mod compose;
 mod drafts;
 mod items;
 mod names;
+mod quote;
 mod reopen;
 mod senders;
 mod sending;
@@ -23,6 +24,7 @@ pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
 pub(crate) use names::NameCheck;
 pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, group_entry};
+pub use quote::Quote;
 pub use senders::Sender;
 pub use sending::SendBlock;
 
@@ -211,6 +213,7 @@ impl Session {
         };
         let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && can;
         // The reply's own copy (the quote's pictures are put in it), the one shown left as it is.
+        let shown = r.parsed.clone();
         let mut parsed = Arc::unwrap_or_clone(r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?);
         if r.text_first && !answerable_from_text(&parsed, mode) {
             self.whole_here()?;
@@ -224,8 +227,16 @@ impl Session {
         me.extend(addr::parse_list(&from).unwrap_or_default().into_iter().map(|a| a.email));
         let raw = self.readable_raw(&r.key);
         // The pictures in the quoted message go with it (they showed as "[picture]", issue #10).
-        let (inline, quoted) = raw.as_deref().map(|raw| mime::quoted_pictures(&mut parsed, raw)).unwrap_or_default();
-        let (d, styles) = mime::reply_doc(&parsed, mode, &me, &self.clock, &sig, &self.quote_words);
+        let (inline, quoted, given) = raw.as_deref().map(|raw| mime::quoted_pictures_given(&mut parsed, raw)).unwrap_or_default();
+        // Written in HTML, the original goes as it came, its columns and all (the editor's text
+        // has no tables), after who sent it to whom and when, which stay the text's: as Outlook
+        // quotes it, changed where it stands.
+        let html = raw.as_deref().filter(|_| parsed.had_html).and_then(mime::html_body).unwrap_or_default();
+        let quote = shown.and_then(|shown| Quote::of(r.key.clone(), shown, &parsed, &given, &html)).map(Arc::new);
+        let (d, styles) = match quote {
+            Some(_) => mime::reply_head_doc(&parsed, mode, &me, &self.clock, &sig, &self.quote_words),
+            None => mime::reply_doc(&parsed, mode, &me, &self.clock, &sig, &self.quote_words),
+        };
         // Whoever it goes to, as worked out above (one's own message goes to its recipients):
         // a name alone can't be written to.
         if r.text_first && d.to.iter().chain(&d.cc).any(|a| a.email.trim().is_empty()) {
@@ -265,6 +276,7 @@ impl Session {
             encrypt: encrypted,
             came_as,
             window: self.prefs.reply_window,
+            quote,
             ..Default::default()
         });
         self.style_signature();
@@ -290,6 +302,7 @@ impl Session {
         if let Some(c) = self.compose.as_mut() {
             c.set_text(if sig.is_empty() { String::new() } else { format!("\n\n{sig}") });
             c.signature = sig;
+            c.quote = None;
             c.attachments = vec![OutAttachment { name, mime: "message/rfc822".into(), data: raw, ..Default::default() }];
         }
         self.style_signature();
@@ -298,12 +311,13 @@ impl Session {
 
     pub(super) fn compose_draft(&self, c: &Compose) -> Result<mime::Draft, CmdError> {
         let parse = |field: &str, s: &str| addr::parse_list(s).map_err(|bad| CmdError::Params(format!("{field}: not an email address: {bad}")));
-        let (body, html, inline) = c.bodies();
+        let (body, html, inline) = c.own_bodies();
         // A signature written in HTML goes as it was written, where its text stands (one that
-        // stands as itself already went in).
+        // stands as itself already went in); the original kept as it came after it all.
         let raw = self.account(&c.account).map(|a| a.config.signature_raw_html.clone()).unwrap_or_default();
         let html =
             if raw.trim().is_empty() || c.plain || c.body.contains(mime::rich::SIGNATURE) { html } else { with_html_signature(c, &raw).or(html) };
+        let (body, html, inline) = c.with_quote((body, html, inline));
         Ok(mime::Draft {
             reply_to: parse("Replies to", &c.reply_to)?,
             to: parse("To", &c.to)?,

@@ -19,7 +19,14 @@ impl MailApp {
     /// upstream 865a712); the cursor then goes after it.
     pub(crate) fn insert_picture(&mut self, mut params: serde_json::Value, size: Option<(u32, u32)>) {
         let (width, line) = rich_edit::placement(size);
-        params["at"] = json!(self.picture_at());
+        // At the text's cursor, or that of the block of the original being changed.
+        match self.quote_cell() {
+            Some((n, at)) => {
+                params["at"] = json!(at);
+                params["quoteCell"] = json!(n);
+            }
+            None => params["at"] = json!(self.picture_at()),
+        }
         if let Some(w) = width {
             params["width"] = json!(w);
         }
@@ -35,12 +42,24 @@ impl MailApp {
             // In place: the cursor goes after it (after the line break that follows a picture
             // on a line of its own, where the command says it ends).
             Ok(v) => {
-                if let Some(e) = self.ui.editor.as_mut() {
+                let cell = self.quote_cell().and_then(|(n, _)| self.session.compose.as_ref().map(|c| (c.id, n)));
+                let ed = match cell {
+                    Some(k) => self.ui.quote_editors.get_mut(&k),
+                    None => self.ui.editor.as_mut(),
+                };
+                if let Some(e) = ed {
                     let end = v["end"].as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(e.sel.start + 1);
                     e.sel = end..end;
                 }
             }
             Err(e) => self.session.notice(e.to_string(), true),
         }
+    }
+
+    /// The block of the original under a reply with the cursor, and where in it the cursor is.
+    fn quote_cell(&self) -> Option<(usize, usize)> {
+        let c = self.session.compose.as_ref().filter(|c| c.quote.is_some())?;
+        let (id, n) = self.ui.quote_focus.filter(|(id, _)| *id == c.id)?;
+        Some((n, self.ui.quote_editors.get(&(id, n)).map_or(0, |e| e.sel.start)))
     }
 }

@@ -103,6 +103,10 @@ pub struct Compose {
     /// The language model asked to rewrite the text written (not kept with the draft).
     #[serde(skip)]
     pub rewrite: Option<super::assistant::Rewrite>,
+    /// The original of a reply or forward written in HTML, kept as it came ([`super::Quote`]):
+    /// after the text, outside it, shown and changed where it stands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quote: Option<Arc<super::Quote>>,
 }
 
 impl Compose {
@@ -114,6 +118,12 @@ impl Compose {
         for a in &self.attachments {
             (&a.name, a.data.len()).hash(&mut h);
         }
+        // What was changed in the original under it.
+        if let Some(q) = &self.quote {
+            for (n, (text, _)) in &q.edits {
+                (n, text).hash(&mut h);
+            }
+        }
         h.finish()
     }
 
@@ -124,8 +134,14 @@ impl Compose {
 
     /// The text, HTML and pictures to send: formatted when the text uses formatting or has
     /// pictures (and the message isn't set to plain text), else plain text alone. A signature
-    /// written in HTML goes as it was written where it stands, and as text in the text.
+    /// written in HTML goes as it was written where it stands, and as text in the text; the
+    /// original of a reply kept as it came goes after it ([`super::Quote`]).
     pub fn bodies(&self) -> (String, Option<String>, Vec<mime::InlinePicture>) {
+        self.with_quote(self.own_bodies())
+    }
+
+    /// [`Compose::bodies`] of the text alone, without the original kept after it.
+    pub(super) fn own_bodies(&self) -> (String, Option<String>, Vec<mime::InlinePicture>) {
         let mut styles = self.styles.clone();
         styles.fit(&self.body);
         let mut used = mime::rich::pictures(&self.body, &styles);

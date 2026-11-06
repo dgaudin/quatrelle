@@ -28,9 +28,10 @@ mod edges;
 mod flat;
 mod lengths;
 mod styling;
+mod write;
 pub(crate) use blocks::background_pictures;
 use blocks::*;
-pub use clean::clean_html;
+pub use clean::{clean_html, quote_html};
 pub(crate) use edges::length_px;
 use edges::*;
 pub use edges::{Border, Edges, MAX_BORDER, MAX_PADDING, MAX_RADIUS, Padding, VAlign};
@@ -38,6 +39,7 @@ pub(crate) use flat::each_span;
 pub use flat::{cell_text, flatten, text_blocks};
 pub use styling::inline_css;
 pub(crate) use styling::{font_attr_px, font_px};
+pub use write::to_html;
 
 /// Tables nested deeper than this are flattened into text.
 const MAX_DEPTH: usize = 12;

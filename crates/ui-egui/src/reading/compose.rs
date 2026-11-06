@@ -8,6 +8,11 @@ use quatrelle_engine::{FieldId, SendBlock};
 use super::*;
 use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
 
+mod quote;
+pub(crate) use quote::QuoteEditors;
+#[cfg(test)]
+pub(crate) use quote::cell_box;
+
 /// The fields a choice dialog may ask about: the message's own, and From's other address (whose
 /// name Send never waits on: it isn't one of [`COMPOSE_FIELDS`]).
 const CHOICE_FIELDS: [&str; 5] = [COMPOSE_FIELDS[0], COMPOSE_FIELDS[1], COMPOSE_FIELDS[2], COMPOSE_FIELDS[3], "from"];
@@ -270,12 +275,19 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     let written = s.has_written_text();
     let recent_emoji = s.prefs.recent_emoji.clone();
     let signature = s.compose.as_ref().and_then(|c| s.account(&c.account)).map(|a| a.config.signature.clone()).unwrap_or_default();
-    let Some(c) = s.compose.as_mut() else { return };
+    // Out of the session while its form is drawn, so that the original under a reply can be
+    // drawn from the session as the reading pane draws a message; put back after, on every way
+    // out of this.
+    let Some(mut taken) = s.compose.take() else { return };
+    let c = &mut taken;
     // The editor's state belongs to one message.
-    if st.editor.as_ref().is_none_or(|e| e.id != c.id) {
-        st.editor = Some(rich_edit::Editor::new(c.id));
-    }
-    let Some(mut ed) = st.editor.take() else { return };
+    let mut ed = match st.editor.take() {
+        Some(e) if e.id == c.id => e,
+        _ => rich_edit::Editor::new(c.id),
+    };
+    let mut quote_eds = std::mem::take(&mut st.quote_editors);
+    // The block of the original with the cursor, while there is one: the ribbon works on it.
+    let quote_cell = st.quote_focus.filter(|(id, _)| *id == c.id && c.quote.is_some()).map(|(_, n)| n);
     // Why it couldn't go: over the message, in its own window when it has one.
     if let Some(msg) = st.compose_alert.clone() {
         let modal = egui::Modal::new(egui::Id::unique(("compose-alert", c.id))).frame(crate::dialogs::dialog_frame(&t)).show(ui.ctx(), |ui| {
@@ -411,7 +423,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         }
         egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
+            let on_quote =
+                quote_cell.and_then(|n| quote::with_cell(c, &mut quote_eds, n, |c, ed| rich_edit::compose_ribbon(ui, &t, ed, c, &input, acts)));
+            if on_quote.is_none() {
+                rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
+            }
         });
         super::assistant::rewrite_panel(&t, ui, c, acts);
         if let Some(b) = blocked {
@@ -546,8 +562,10 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             let body_id = rich_edit::body_id(c);
             // A picture pasted goes in as a picture: a screenshot (the window reads it off the
             // clipboard when there's no text there, and Ctrl+V comes as the picture), or one
-            // copied from a web page, which comes with its HTML alone (a picture, no text).
-            if ui.memory(|m| m.has_focus(body_id)) {
+            // copied from a web page, which comes with its HTML alone (a picture, no text). Into
+            // the block of the original with the cursor, when one has it.
+            let in_quote = quote_cell.is_some_and(|n| ui.memory(|m| m.has_focus(quote::cell_box(c.id, n))));
+            if ui.memory(|m| m.has_focus(body_id)) || in_quote {
                 let shots: Vec<Vec<u8>> = ui.input(|i| {
                     i.events
                         .iter()
@@ -568,9 +586,18 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             egui::ScrollArea::vertical().auto_shrink(false).id_salt("compose-body").show(ui, |ui| {
                 // Replies start above the quoted text.
                 rich_edit::body(ui, &t, &mut ed, c, focus_body.then_some(0), acts);
+                if ui.memory(|m| m.has_focus(body_id)) {
+                    st.quote_focus = None;
+                }
+                // The original, as it came, under the text: changed where it stands.
+                quote::show(s, st, ui, c, &mut quote_eds, acts);
             });
         });
     });
+    // Those of messages no longer being written go.
+    quote_eds.retain(|(id, _), _| *id == taken.id || s.composes.iter().any(|c| c.id == *id));
+    st.quote_editors = quote_eds;
+    s.compose = Some(taken);
     // A signature written in HTML, drawn where it stands in the text (with the whole session at
     // hand again).
     if let Some(c) = s.compose.as_ref() {

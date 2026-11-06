@@ -126,6 +126,9 @@ pub(crate) struct Editor {
     paste_plain: bool,
     /// Insert › Emoji's search and tab.
     emoji: emoji::Picker,
+    /// A block of text of the original under a reply, changed where it stands: as tall as its
+    /// text, without a hint, its spelling not checked.
+    pub(crate) in_quote: bool,
 }
 
 #[derive(Clone)]
@@ -158,6 +161,7 @@ impl Editor {
             tab: ComposeTab::Message,
             paste_plain: false,
             emoji: emoji::Picker::default(),
+            in_quote: false,
         }
     }
 
@@ -541,13 +545,20 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let sel = ed.sel.clone();
     let plain = c.plain;
     let tokens = *t;
-    let check = check_for(c);
+    // The original under a reply isn't checked, as Outlook leaves it.
+    let check = if ed.in_quote { crate::spellcheck::Check { skip: vec![0..c.body.len()], ..check_for(c) } } else { check_for(c) };
     let sizes = signature::with_room(pictures::sizes_as_set(picture_sizes(ed, c), c), &ed.signature);
     let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let text = buf.as_str();
         layout(ui, text, &following(&before, text, &styles, &typing, &sel), plain, &tokens, wrap, &check, &sizes)
     };
-    let height = ui.available_height().max(220.0);
+    // As tall as the pane; above the original of a reply shown as it came, as its text (a few
+    // lines at least); a block of that original, as its own.
+    let height = match (ed.in_quote, c.quote.is_some()) {
+        (true, _) => 0.0,
+        (false, true) => 96.0,
+        (false, false) => ui.available_height().max(220.0),
+    };
     // A right-click inside the selection keeps it (egui's text box moves the cursor on any
     // press); one outside it moves the cursor there, as Outlook does.
     let kept = ed.sel.clone();
@@ -557,7 +568,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let behind = ui.painter().add(egui::Shape::Noop);
     // No hint over a first line that's a list item or indented (its bullet is drawn there).
     let p0 = c.styles.para(0);
-    let hint = match (p0.list == List::None && p0.indent == 0, c.id == SIGNATURE_ID) {
+    let hint = match (p0.list == List::None && p0.indent == 0 && !ed.in_quote, c.id == SIGNATURE_ID) {
         (false, _) => "",
         (true, true) => tl!("Write your signature, or paste it…"),
         (true, false) => tl!("Write your message…"),
@@ -569,6 +580,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
         .lock_focus(true)
         .desired_width(f32::INFINITY)
         .min_size(vec2(ui.available_width(), height))
+        .desired_rows(if ed.in_quote { 1 } else { 4 })
         .layouter(&mut layouter)
         .show(ui);
     let mut cursor = out.cursor_range.map(|r| {

@@ -75,8 +75,9 @@ fn prefixed(prefix: &str, subject: &str) -> String {
 }
 
 /// The original under a reply or forward, the way Outlook lays it out: a rule, then who sent it
-/// to whom and when (labels in bold, in `words`), then the original with its own formatting.
-fn quoted_original(p: &Parsed, clock: &Clock, words: &QuoteWords) -> (String, rich::Styles) {
+/// to whom and when (labels in bold, in `words`), then (`body`) the original with its own
+/// formatting.
+fn quoted_original(p: &Parsed, clock: &Clock, words: &QuoteWords, body: bool) -> (String, rich::Styles) {
     let mut lines: Vec<(&str, String)> = vec![(&words.from, p.from.to_string()), (&words.sent, words.when(p.date, clock))];
     if !p.to.is_empty() {
         lines.push((&words.to, quatrelle_model::addr::format_list(&p.to)));
@@ -98,9 +99,11 @@ fn quoted_original(p: &Parsed, clock: &Clock, words: &QuoteWords) -> (String, ri
         st.restyle(&line, 1..1 + label.chars().count(), |_| bold.clone());
         rich::append(&mut text, &mut styles, &line, &st);
     }
-    let (orig, ost) = quoted_body(p);
-    rich::append(&mut text, &mut styles, "\n\n", &rich::Styles::plain("\n\n"));
-    rich::append(&mut text, &mut styles, &orig, &ost);
+    if body {
+        let (orig, ost) = quoted_body(p);
+        rich::append(&mut text, &mut styles, "\n\n", &rich::Styles::plain("\n\n"));
+        rich::append(&mut text, &mut styles, &orig, &ost);
+    }
     (text, styles)
 }
 
@@ -131,13 +134,31 @@ pub fn reply(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signatur
 /// the writer wants one; Outlook adds none), or empty. The original's header is written in
 /// `words`.
 pub fn reply_doc(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signature: &str, words: &QuoteWords) -> (Draft, rich::Styles) {
+    reply_doc_with(p, mode, me, clock, signature, words, true)
+}
+
+/// [`reply_doc`] without the original's body: who sent it to whom and when end the text, the
+/// original going after it as it came (its own HTML, shown as the reading pane shows it).
+pub fn reply_head_doc(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signature: &str, words: &QuoteWords) -> (Draft, rich::Styles) {
+    reply_doc_with(p, mode, me, clock, signature, words, false)
+}
+
+fn reply_doc_with(
+    p: &Parsed,
+    mode: ReplyMode,
+    me: &[String],
+    clock: &Clock,
+    signature: &str,
+    words: &QuoteWords,
+    with_body: bool,
+) -> (Draft, rich::Styles) {
     let mine = |a: &EmailAddress| me.iter().any(|m| m.eq_ignore_ascii_case(a.email.trim()));
     let sig = if signature.trim().is_empty() { String::new() } else { format!("\n\n{}", signature.trim_end()) };
     // The cursor's line, the signature, a blank line, then the original under its rule.
     let mut body = sig;
     let mut styles = rich::Styles::plain(&body);
     rich::append(&mut body, &mut styles, "\n\n", &rich::Styles::plain("\n\n"));
-    let (orig, ost) = quoted_original(p, clock, words);
+    let (orig, ost) = quoted_original(p, clock, words, with_body);
     rich::append(&mut body, &mut styles, &orig, &ost);
     let mut d = Draft::default();
     match mode {
