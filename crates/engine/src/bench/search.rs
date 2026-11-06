@@ -215,17 +215,17 @@ fn s_folders(store: &Store) -> Vec<String> {
 
 /// A search over every folder, counting the folders' lists read from the cache on disk (not
 /// found in memory) at each call: the calls, the time in them, the worst call, the lists read
-/// in all and the most in a call.
-fn search_lists(s: &mut Session, q: &str) -> (usize, Duration, Duration, u64, u64) {
+/// in all and the most in a call, and the messages they held in all.
+fn search_lists(s: &mut Session, q: &str) -> (usize, Duration, Duration, u64, u64, u64) {
     let call = |s: &mut Session, first: bool| {
-        let read = s.lists_read();
+        let (read, messages) = (s.lists_read(), s.messages_read());
         let t = Instant::now();
         if first {
             s.run_search_budgeted(q, SearchScope::All, SLICE);
         } else {
             s.search_more(SLICE);
         }
-        (t.elapsed(), s.lists_read() - read)
+        (t.elapsed(), s.lists_read() - read, s.messages_read() - messages)
     };
     let mut calls = vec![call(s, true)];
     while s.search_pending && calls.len() < 1_000_000 {
@@ -233,7 +233,7 @@ fn search_lists(s: &mut Session, q: &str) -> (usize, Duration, Duration, u64, u6
     }
     let total = calls.iter().map(|c| c.0).sum();
     let worst = calls.iter().map(|c| c.0).max().unwrap_or_default();
-    (calls.len(), total, worst, calls.iter().map(|c| c.1).sum(), calls.iter().map(|c| c.1).max().unwrap_or(0))
+    (calls.len(), total, worst, calls.iter().map(|c| c.1).sum(), calls.iter().map(|c| c.1).max().unwrap_or(0), calls.iter().map(|c| c.2).sum())
 }
 
 /// A search of everything in a mailbox bigger than the session's cache of folders' lists
@@ -259,18 +259,69 @@ fn lists_read_by_a_search_of_everything() {
     println!("{} messages in {} folders; opened: process {before:.0} MB", truth.messages, shape.folders);
     let accented = big::ACCENTED.to_lowercase().replace('ü', "u");
     for (i, q) in [big::RARE, accented.as_str(), big::FAR, "is:read", big::RARE].into_iter().enumerate() {
-        let (calls, total, worst, lists, most) = search_lists(&mut s, q);
+        let (calls, total, worst, lists, most, messages) = search_lists(&mut s, q);
         println!(
-            "{}{q}: {calls} calls, {:.2} s in them, worst {:.1} ms; {lists} lists read from the disk, at most {most} in a call; found {}",
+            "{}{q}: {calls} calls, {:.2} s in them, worst {:.1} ms; {lists} lists or pages read from the disk, at most {most} in a call, \
+             {messages} messages in them; found {}; process {:.0} MB",
             if i == 0 { "first search (the index built), " } else { "then " },
             total.as_secs_f64(),
             worst.as_secs_f64() * 1000.0,
-            s.list.len()
+            s.list.len(),
+            rss_mb()
         );
     }
     let cached: usize = s.cached_folders().len();
     println!("lists in memory: {cached} folders; process {:.0} MB (grew {:.0} MB)", rss_mb(), rss_mb() - before);
     drop(s);
     drop(store);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A restart over a mailbox whose index is kept (`MC_MESSAGES`, 50,000 by default, in 40
+/// folders, `MC_WORDS` and `MC_VOCABULARY` for longer texts): what opening the session costs, and
+/// the first search after it (the folders' kept indexes taken back), as the window carries it.
+///
+/// ```text
+/// cargo test -p quatrelle-engine --release --lib bench::search::a_restart_with_the_index_kept -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn a_restart_with_the_index_kept() {
+    let env = |k: &str, or: u64| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(or);
+    let messages = u32::try_from(env("MC_MESSAGES", 50_000)).unwrap_or(50_000);
+    let dir = std::env::temp_dir().join(format!("mc-search-restart-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    let shape = big::Shape {
+        messages,
+        inbox: messages / 50 * 12,
+        words: env("MC_WORDS", 40),
+        vocabulary: env("MC_VOCABULARY", 2048),
+        ..big::Shape::default()
+    };
+    let truth = big::generate(&store, NOW, shape).unwrap();
+    let mut s = window(&store);
+    report("the index built and kept", search(&mut s, big::RARE));
+    drop(s);
+    drop(store);
+    for run in 1..=2 {
+        let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+        let before = rss_mb();
+        let t = Instant::now();
+        let mut s = window(&store);
+        let opened = t.elapsed();
+        println!(
+            "restart {run}: the session opened in {:.1} ms; process {:.0} MB (grew {:.0} MB)",
+            opened.as_secs_f64() * 1000.0,
+            rss_mb(),
+            rss_mb() - before
+        );
+        let lists = s.lists_read();
+        let r = search(&mut s, big::RARE);
+        report("  the first search", r);
+        assert_eq!(r.3, truth.rare);
+        println!("  {} lists read from the disk; process {:.0} MB", s.lists_read() - lists, rss_mb());
+        drop(s);
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
