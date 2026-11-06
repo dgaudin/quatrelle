@@ -2059,3 +2059,4 @@ menu	View	Afficher
 	All files	Tous les fichiers
 	{ext} file	Fichier {ext}
 	This message is no longer in the list: open its folder to delete it.	Ce message n’est plus dans la liste : ouvrez son dossier pour le supprimer.
+	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Maj+Suppr supprime le courrier définitivement, comme Suppr dans Éléments supprimés
