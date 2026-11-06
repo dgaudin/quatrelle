@@ -3895,6 +3895,91 @@ que `712d7336` de l'origine lit.
   `every_command_survives_junk_params` ; chaque commit compilé seul
   (`cargo check --workspace --all-targets`) ; `cargo xtask ci` (wasm compris).
 
+### Hors relevé : R26, imprimer directement (2026-11-06)
+
+Demandé par le propriétaire, conception validée par lui : imprimer par la fenêtre d'impression du
+système, sans enregistrer de PDF d'abord. Avec, à sa demande, la reprise de `c97bbab5` de l'origine
+(la police des PDF lue par skrifa, ttf-parser n'étant plus maintenu).
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `cd5a58cd` | la fenêtre : `Services::print` / `take_printed` (`PrintOutcome`), Ctrl+P, ⋯ › Imprimer, le repli, trois textes dans les 13 catalogues, les tests |
+| `d22608a0` | l'application de bureau : le portail `org.freedesktop.portal.Print` (`desktop/printing.rs`) |
+| `26292069` | reprise de `c97bbab5` (auteur Zinadin Zidan), adaptée : skrifa 0.44, celle de `ui-egui` |
+| `e8bcffd6` | `deny.toml` : l'exception RUSTSEC-2026-0192 retirée, devenue sans objet |
+
+**Ce qui imprime.** Ctrl+P sur le message lu, dans le volet de lecture (module Courrier) ou dans la
+fenêtre d'un message ; ⋯ › Imprimer ; aussi Fichier › Imprimer et « Impression rapide » du menu de la
+liste, qui passaient déjà par `Action::Print`. Ctrl+P ne fait rien de nouveau ailleurs : pas dans un
+brouillon (réponse dans le volet ou fenêtre de rédaction, où il n'était pris par rien), pas dans
+Calendrier, Contacts, Tâches ou Notes. Le contenu ne change pas : le PDF texte de `crates/print`
+avec son en-tête, celui d'Enregistrer en PDF (`Session::message_pdf`).
+
+**La fenêtre d'impression** (`apps/quatrelle/src/desktop/printing.rs`, Linux et BSD) :
+
+- `PreparePrint` (titre : le nom du message, réglages et mise en page vides, `handle_token`,
+  `modal`) montre la fenêtre du système (imprimante, pages, copies, recto verso) ; sa réponse 0
+  donne un jeton, 1 est Annuler ; puis `Print` avec ce jeton imprime comme choisi, sans redemander.
+  Toujours dans cet ordre : `Print` seulement après « Imprimer ».
+- Le document passe par un **descripteur de fichier** (`h`, comme le veut la spécification : un
+  fichier ouvert en lecture, que le portail lit et que GTK envoie à CUPS) : le PDF est écrit dans un
+  fichier temporaire (`$TMPDIR`, 0600, nom neuf), rouvert en lecture et **effacé aussitôt**, avant
+  l'appel ; le descripteur garde les octets. Rien n'est demandé à enregistrer, rien ne reste.
+- Chaque réponse est un signal `Response` sur l'objet `Request` : il est écouté **avant** l'appel, au
+  chemin calculé d'avance (`/org/freedesktop/portal/desktop/request/<nom unique>/<jeton>`), puis à
+  celui que le portail rend s'il diffère (portail ancien). Le tout sur un fil à part (`print`) : la
+  fenêtre continue de se dessiner, et regarde chaque image (toutes les 100 ms au plus) si la réponse
+  est là, comme pour les dialogues de fichiers. Un `Ping` d'abord, pour qu'un portail lancé à la
+  demande soit là avant qu'on écoute son signal. Un appel sans réponse en une minute échoue.
+- **Après** : imprimé, la barre d'état dit « Envoyé à l'imprimante » ; Annuler ne dit rien ; un
+  second Ctrl+P pendant que la fenêtre est ouverte ne fait rien.
+- **Repli** (le comportement d'avant, PDF enregistré où l'on dit puis ouvert dans la visionneuse, et
+  la barre d'état : « La fenêtre d'impression du système n'est pas disponible : ouvert en PDF,
+  imprimez-le depuis la visionneuse ») : sous Windows et macOS (pas encore de fenêtre d'impression
+  ici), sans bus de session, sans portail, quand le portail répond par une erreur ou par un code
+  autre que 0 et 1, ou quand le fil s'arrête sans réponse ; la raison va au journal. Le repli
+  porte sur le message pour lequel on avait demandé (`where_asked`). Dans le navigateur, le PDF
+  est téléchargé, comme avant, avec « Téléchargé en PDF : imprimez-le depuis la visionneuse ».
+- La fenêtre d'impression n'est pas attachée à celle de Quatrelle (`parent_window` vide) : sous
+  Wayland il faudrait exporter la fenêtre par xdg-foreign. Elle s'ouvre comme une fenêtre à part.
+
+**Tests.** `ui-egui/src/tests/reading/printing.rs` (5, bureau factice) : Ctrl+P donne au service un
+PDF non vide qui commence par `%PDF`, rien d'enregistré ni d'ouvert, un second Ctrl+P ignoré,
+« Envoyé à l'imprimante » ; ⋯ › Imprimer fait de même et Annuler ne dit rien ; Ctrl+P dans une
+réponse en cours et dans le Calendrier n'imprime rien, le brouillon intact ; sans fenêtre
+d'impression, et quand elle échoue, le PDF enregistré et ouvert, avec le message. Dans
+l'application (5, sans D-Bus) : le chemin de la requête, les options et les signatures D-Bus des
+deux appels (`(ssa{sv}a{sv}a{sv})`, `(ssha{sv})`), la lecture des réponses (jeton absent ou du
+mauvais type : échec), le fichier relu entier par son descripteur et déjà effacé, la réponse du fil
+prise une fois (fil arrêté : échec).
+
+**Pas vérifié ici** (aucune impression réelle, le vrai portail n'a pas été appelé) : que GNOME
+montre sa fenêtre et imprime, la place de cette fenêtre, et le délai entre « Imprimer » et la
+réponse de `Print`. **Essai chez le propriétaire** : ouvrir un message, Ctrl+P ; la fenêtre
+d'impression de GNOME s'ouvre sans dialogue d'enregistrement ; choisir « Imprimer dans un fichier »
+(ou l'imprimante), Imprimer : le fichier ou la feuille contient l'en-tête et le texte, la barre
+d'état dit « Envoyé à l'imprimante », rien dans `/tmp` (`ls /tmp/quatrelle-print-*`) ; refaire et
+Annuler : rien ne se passe ; ⋯ › Imprimer et la fenêtre d'un message (double-clic, Ctrl+P) de même ;
+Ctrl+P dans une réponse : rien. En cas de repli inattendu, le journal dit pourquoi
+(« printing through the portal: … »).
+
+**La reprise de `c97bbab5`** : `pick.sh` a buté sur deux conflits (le fork écrivait le test des
+contours `glyf` autrement, et `Cargo.lock`), résolus pour le code de l'origine et un `Cargo.lock`
+régénéré ; skrifa en **0.44** (l'origine est passée à 0.49) pour qu'une seule version soit
+construite avec `ui-egui`. ttf-parser quitte `quatrelle-print` ; il reste dans l'arbre par la barre
+de titre Adwaita de winit (`sctk-adwaita` → `ab_glyph`), ce que `unmaintained = "workspace"` laisse
+de côté. Sonde : `cargo deny check advisories` sans l'exception RUSTSEC-2026-0192 signalait
+« `ttf-parser` is unmaintained » avant, « advisories ok » après ; l'exception, devenue sans objet
+(« advisory was not encountered »), est retirée. PDF identiques octet pour octet avant et après pour
+treize polices du poste (DejaVu Sans et Serif avec leur gras, Sans Mono, Math TeX Gyre ; Liberation
+Sans avec son gras, Serif, Mono ; Noto Sans et Noto Serif Hebrew variables, Noto Emoji ; Noto Color
+Emoji et le `.ttc` de Noto Sans Mono CJK, qui retombent sur Helvetica) et pour Helvetica seule, sur
+un texte latin, grec, cyrillique, hébreu, arabe, CJK et emoji.
+
+**Vérifié** : les suites de `quatrelle-ui-egui` (503) et de `quatrelle-print`, les tests de
+`desktop::printing`, clippy, `cargo xtask ci` (wasm compris). Au premier commit, `ui-egui` compilé et
+testé avant que le second n'existe (il n'ajoute au trait que des méthodes par défaut).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
