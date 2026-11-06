@@ -5550,6 +5550,7 @@ dependencies = [
 name = "quatrelle-ui-egui"
 version = "1.2.0"
 dependencies = [
+ "accesskit_consumer",
  "egui",
  "emojis",
  "harfrust",
