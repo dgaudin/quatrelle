@@ -21,12 +21,14 @@ mod about;
 mod info;
 mod open;
 mod options;
+mod pgp;
 mod security;
 
 use about::about;
 use info::info;
 use open::open;
 use options::options;
+pub use pgp::PgpAsk;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {

@@ -106,7 +106,18 @@ pub(in crate::tests) fn frame_with(
     events: Vec<Event>,
     png: Option<std::path::PathBuf>,
 ) -> (Vec<String>, Vec<egui::Shape>) {
-    let (w, h) = (1280usize, 800usize);
+    frame_with_size(ctx, a, tex, events, png, (1280, 800))
+}
+
+/// [`frame_with`] in a window `(w, h)` pixels big (a long page drawn whole).
+pub(in crate::tests) fn frame_with_size(
+    ctx: &egui::Context,
+    a: &mut MailApp,
+    tex: &mut Textures,
+    events: Vec<Event>,
+    png: Option<std::path::PathBuf>,
+    (w, h): (usize, usize),
+) -> (Vec<String>, Vec<egui::Shape>) {
     let input =
         RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w as f32, h as f32))), events, ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));

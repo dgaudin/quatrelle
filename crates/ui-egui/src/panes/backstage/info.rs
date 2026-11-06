@@ -84,9 +84,10 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
             }
         });
     });
-    // S/MIME, for accounts that send mail.
+    // S/MIME and OpenPGP, for accounts that send mail.
     if !a.is_data_file() {
         super::security::security(s, t, ui, a, acts);
+        super::pgp::pgp(s, t, ui, a, acts);
     }
 
     // Automatic replies: on or off, and a button to change them where the server has them.

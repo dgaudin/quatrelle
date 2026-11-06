@@ -1972,3 +1972,48 @@ folder	Conflicts	衝突
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	其金鑰會隨其郵件而來，也可以在「檔案 › 資訊 › 安全性」中從檔案匯入。
 	Import OpenPGP key	匯入 OpenPGP 金鑰
 	Keep this key for its owner's address	為其擁有者的地址保留此金鑰
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	像許多人和郵件程式那樣，用 OpenPGP 簽署和加密：使用你自己的金鑰，以及你寫信對象的金鑰。
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	OpenPGP 金鑰可在桌面應用程式中使用
+	No OpenPGP key	沒有 OpenPGP 金鑰
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	在帳戶有金鑰之前，不會用 OpenPGP 簽署或加密任何內容；用它簽署或加密的郵件照樣可以閱讀。
+	Create an OpenPGP key	建立 OpenPGP 金鑰
+	Import a key…	匯入金鑰…
+	A secret key file (.asc or .gpg), with its passphrase	私密金鑰檔案（.asc 或 .gpg）及其密語
+	Older key {key}: kept to decrypt mail sent to it	舊金鑰 {key}：保留下來以解密寄給它的郵件
+	Forget	忘記
+	Mail encrypted to it can't be read any more	加密給它的郵件將無法再閱讀
+	Sign and decrypt with this key again; the one in use is kept to decrypt	重新用此金鑰簽署和解密；正在使用的金鑰保留用於解密
+	Send my public key with my messages	隨我的郵件寄送我的公開金鑰
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	這樣對方的郵件程式就能驗證你的簽章，並加密給你的回覆（Autocrypt）。
+	Export public key…	匯出公開金鑰…
+	A file to give those who'll write to you	一個交給將寫信給你的人的檔案
+	Save a backup…	儲存備份…
+	The secret key in a file, locked with a passphrase	放在檔案中、用密語保護的私密金鑰
+	No backup of this key is saved	此金鑰沒有儲存備份
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	如果這台電腦遺失或其鑰匙圈被清空，加密給此金鑰的郵件將無法再閱讀。請儲存備份，並與其密語一起放在安全的地方。
+	This key ran out on {date}	此金鑰已於 {date} 到期
+	This key runs out on {date}	此金鑰將於 {date} 到期
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	延期會重新簽署，使其從今天起有效三年；然後請把你的公開金鑰重新寄給持有它的人。
+	Extend	延期
+	Keys of the people you write to: {n}	你寫信對象的金鑰：{n}
+	They come with their mail, or from a key file they gave you.	它們隨對方的郵件而來，或來自對方給你的金鑰檔案。
+	Import someone's key…	匯入他人的金鑰…
+	from their mail	來自其郵件
+	imported by you	由你匯入
+	Their signatures can't be checked any more, until their key comes again	在其金鑰再次到來之前，將無法驗證其簽章
+	Withdrawn on {date}	已於 {date} 撤銷
+	It ran out on {date}	已於 {date} 到期
+	Valid until {date}	有效期限至 {date}
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	你的 OpenPGP 公開金鑰已儲存在 {file}：請把它交給將寫信給你的人
+	Import an OpenPGP key	匯入 OpenPGP 金鑰
+	The passphrase {file} is locked with (none, if it has none):	保護 {file} 的密語（沒有就留空）：
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	其私密部分儲存在系統鑰匙圈中，而不在 Quatrelle 的檔案裡；密語不會儲存。
+	Save a backup of your OpenPGP key	儲存你的 OpenPGP 金鑰備份
+	A passphrase to lock {file} with, twice:	用於保護 {file} 的密語，輸入兩次：
+	The two passphrases aren't the same.	兩次輸入的密語不一致。
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	沒有這個密語，任何人（包括你）都無法開啟備份：請把兩者都放在安全的地方。GnuPG 和其他 OpenPGP 程式也能讀取它。
+	Forget this OpenPGP key?	忘記這個 OpenPGP 金鑰？
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	你用於 {who} 的金鑰將從這台電腦上移除，其私密部分也會從系統鑰匙圈中移除。
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	在重新匯入其備份之前，加密給它的郵件將無法在這裡閱讀。
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	它沒有儲存過備份：加密給它的郵件將無法再閱讀，無論在這裡還是別處。

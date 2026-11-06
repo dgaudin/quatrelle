@@ -1970,3 +1970,48 @@ folder	Conflicts	충돌
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	이 사람의 키는 본인의 메일과 함께 오며, 파일 › 정보 › 보안에서 파일로 가져올 수도 있습니다.
 	Import OpenPGP key	OpenPGP 키 가져오기
 	Keep this key for its owner's address	이 키를 소유자의 주소용으로 보관합니다
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	많은 사람과 메일 프로그램처럼 OpenPGP로 서명하고 암호화합니다: 내 키와 메일을 보내는 사람들의 키를 사용합니다.
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	OpenPGP 키는 데스크톱 앱에서 사용할 수 있습니다
+	No OpenPGP key	OpenPGP 키 없음
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	계정에 키가 생길 때까지 OpenPGP로 서명하거나 암호화하지 않습니다. OpenPGP로 서명되거나 암호화된 메일은 그래도 읽을 수 있습니다.
+	Create an OpenPGP key	OpenPGP 키 만들기
+	Import a key…	키 가져오기…
+	A secret key file (.asc or .gpg), with its passphrase	비밀 키 파일(.asc 또는 .gpg)과 암호 문구
+	Older key {key}: kept to decrypt mail sent to it	이전 키 {key}: 이 키로 보낸 메일을 해독하려고 보관합니다
+	Forget	삭제
+	Mail encrypted to it can't be read any more	이 키로 암호화된 메일은 더 이상 읽을 수 없습니다
+	Sign and decrypt with this key again; the one in use is kept to decrypt	이 키로 다시 서명하고 해독합니다. 사용 중인 키는 해독용으로 보관됩니다
+	Send my public key with my messages	내 메시지에 공개 키 함께 보내기
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	상대의 메일 프로그램이 내 서명을 확인하고 답장을 암호화할 수 있습니다 (Autocrypt).
+	Export public key…	공개 키 내보내기…
+	A file to give those who'll write to you	나에게 메일을 보낼 사람에게 줄 파일
+	Save a backup…	백업 저장…
+	The secret key in a file, locked with a passphrase	암호 문구로 잠근 파일에 담은 비밀 키
+	No backup of this key is saved	이 키의 백업이 저장되지 않았습니다
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	이 컴퓨터를 잃어버리거나 키체인이 비워지면 이 키로 암호화된 메일은 더 이상 읽을 수 없습니다. 백업을 저장하고 암호 문구와 함께 안전한 곳에 보관하세요.
+	This key ran out on {date}	이 키는 {date}에 만료되었습니다
+	This key runs out on {date}	이 키는 {date}에 만료됩니다
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	연장하면 오늘부터 3년 동안 유효하도록 다시 서명합니다. 그런 다음 공개 키를 가진 사람들에게 다시 보내세요.
+	Extend	연장
+	Keys of the people you write to: {n}	메일을 보내는 사람들의 키: {n}
+	They come with their mail, or from a key file they gave you.	상대의 메일과 함께 오거나, 상대가 준 키 파일에서 가져옵니다.
+	Import someone's key…	다른 사람의 키 가져오기…
+	from their mail	상대의 메일에서
+	imported by you	직접 가져옴
+	Their signatures can't be checked any more, until their key comes again	상대의 키가 다시 올 때까지 상대의 서명을 확인할 수 없습니다
+	Withdrawn on {date}	{date}에 철회됨
+	It ran out on {date}	{date}에 만료됨
+	Valid until {date}	{date}까지 유효
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	OpenPGP 공개 키를 {file}에 저장했습니다: 나에게 메일을 보낼 사람에게 주세요
+	Import an OpenPGP key	OpenPGP 키 가져오기
+	The passphrase {file} is locked with (none, if it has none):	{file}을(를) 잠근 암호 문구 (없으면 비워 두세요):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	비밀 부분은 Quatrelle의 파일이 아니라 시스템 키체인에 보관됩니다. 암호 문구는 보관하지 않습니다.
+	Save a backup of your OpenPGP key	OpenPGP 키 백업 저장
+	A passphrase to lock {file} with, twice:	{file}을(를) 잠글 암호 문구, 두 번:
+	The two passphrases aren't the same.	두 암호 문구가 같지 않습니다.
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	이 암호 문구가 없으면 누구도, 나조차도 백업을 열 수 없습니다: 둘 다 안전한 곳에 보관하세요. GnuPG와 다른 OpenPGP 프로그램도 읽을 수 있습니다.
+	Forget this OpenPGP key?	이 OpenPGP 키를 삭제할까요?
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	{who}의 키가 이 컴퓨터에서 삭제되고, 비밀 부분도 시스템 키체인에서 삭제됩니다.
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	백업을 다시 가져올 때까지 이 키로 암호화된 메일은 여기서 읽을 수 없습니다.
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	백업이 저장되지 않았습니다: 이 키로 암호화된 메일은 여기서도 어디서도 더 이상 읽을 수 없습니다.

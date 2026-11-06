@@ -1968,3 +1968,48 @@ menu	View	Weergeven
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	De sleutel komt met de e-mail van deze persoon, of kan uit een bestand worden geïmporteerd in Bestand › Info › Beveiliging.
 	Import OpenPGP key	OpenPGP-sleutel importeren
 	Keep this key for its owner's address	Deze sleutel bewaren voor het adres van de eigenaar
+	Sign and encrypt with OpenPGP, as many people and mail programs do: with a key of your own, and the keys of the people you write to.	Onderteken en versleutel met OpenPGP, zoals veel mensen en e-mailprogramma's doen: met een eigen sleutel en de sleutels van de mensen aan wie u schrijft.
+	OpenPGP	OpenPGP
+	OpenPGP keys work in the desktop app	OpenPGP-sleutels werken in de desktop-app
+	No OpenPGP key	Geen OpenPGP-sleutel
+	Nothing is signed or encrypted with OpenPGP until the account has a key; mail signed or encrypted with it is read anyway.	Er wordt niets ondertekend of versleuteld met OpenPGP tot het account een sleutel heeft; e-mail die zo is ondertekend of versleuteld wordt toch gelezen.
+	Create an OpenPGP key	Een OpenPGP-sleutel maken
+	Import a key…	Een sleutel importeren…
+	A secret key file (.asc or .gpg), with its passphrase	Een geheim sleutelbestand (.asc of .gpg), met de wachtzin
+	Older key {key}: kept to decrypt mail sent to it	Oudere sleutel {key}: bewaard om e-mail die ernaar is gestuurd te ontsleutelen
+	Forget	Vergeten
+	Mail encrypted to it can't be read any more	E-mail die ervoor is versleuteld kan niet meer worden gelezen
+	Sign and decrypt with this key again; the one in use is kept to decrypt	Weer met deze sleutel ondertekenen en ontsleutelen; de gebruikte wordt bewaard om te ontsleutelen
+	Send my public key with my messages	Mijn openbare sleutel met mijn berichten meesturen
+	Their mail programs can then check your signature and encrypt their answers to you (Autocrypt).	Hun e-mailprogramma's kunnen dan uw handtekening controleren en hun antwoorden aan u versleutelen (Autocrypt).
+	Export public key…	Openbare sleutel exporteren…
+	A file to give those who'll write to you	Een bestand voor wie u gaat schrijven
+	Save a backup…	Een back-up opslaan…
+	The secret key in a file, locked with a passphrase	De geheime sleutel in een bestand, vergrendeld met een wachtzin
+	No backup of this key is saved	Er is geen back-up van deze sleutel opgeslagen
+	If this computer is lost or its keychain emptied, mail encrypted to this key can't be read any more. Save a backup, and keep it with its passphrase somewhere safe.	Als deze computer verloren gaat of de sleutelbos wordt gewist, kan e-mail die voor deze sleutel is versleuteld niet meer worden gelezen. Sla een back-up op en bewaar die met de wachtzin op een veilige plek.
+	This key ran out on {date}	Deze sleutel is verlopen op {date}
+	This key runs out on {date}	Deze sleutel verloopt op {date}
+	Extending it signs it again to run three years from today; then send your public key again to those who have it.	Verlengen ondertekent hem opnieuw voor drie jaar vanaf vandaag; stuur uw openbare sleutel daarna opnieuw naar wie hem heeft.
+	Extend	Verlengen
+	Keys of the people you write to: {n}	Sleutels van de mensen aan wie u schrijft: {n}
+	They come with their mail, or from a key file they gave you.	Ze komen met hun e-mail, of uit een sleutelbestand dat ze u gaven.
+	Import someone's key…	Iemands sleutel importeren…
+	from their mail	uit hun e-mail
+	imported by you	door u geïmporteerd
+	Their signatures can't be checked any more, until their key comes again	Hun handtekeningen kunnen niet meer worden gecontroleerd, tot hun sleutel weer komt
+	Withdrawn on {date}	Ingetrokken op {date}
+	It ran out on {date}	Verlopen op {date}
+	Valid until {date}	Geldig tot {date}
+	Your OpenPGP public key is saved in {file}: give it to those who'll write to you	Uw openbare OpenPGP-sleutel is opgeslagen in {file}: geef hem aan wie u gaat schrijven
+	Import an OpenPGP key	Een OpenPGP-sleutel importeren
+	The passphrase {file} is locked with (none, if it has none):	De wachtzin waarmee {file} is vergrendeld (leeg als er geen is):
+	Its secret part is kept in the system's keychain, not in Quatrelle's files; the passphrase isn't kept.	Het geheime deel wordt bewaard in de sleutelbos van het systeem, niet in de bestanden van Quatrelle; de wachtzin wordt niet bewaard.
+	Save a backup of your OpenPGP key	Een back-up van uw OpenPGP-sleutel opslaan
+	A passphrase to lock {file} with, twice:	Een wachtzin om {file} mee te vergrendelen, twee keer:
+	The two passphrases aren't the same.	De twee wachtzinnen zijn niet hetzelfde.
+	Without this passphrase the backup can't be opened, by you or anyone: keep both somewhere safe. GnuPG and other OpenPGP programs read it too.	Zonder deze wachtzin kan niemand de back-up openen, ook u niet: bewaar beide op een veilige plek. GnuPG en andere OpenPGP-programma's lezen hem ook.
+	Forget this OpenPGP key?	Deze OpenPGP-sleutel vergeten?
+	Your key for {who} goes from this computer, its secret part from the system's keychain too.	Uw sleutel voor {who} verdwijnt van deze computer, het geheime deel ook uit de sleutelbos van het systeem.
+	Mail encrypted to it can't be read here any more, until its backup is imported again.	E-mail die ervoor is versleuteld kan hier niet meer worden gelezen, tot de back-up opnieuw is geïmporteerd.
+	No backup of it was saved: mail encrypted to it can't be read any more, here or anywhere.	Er is geen back-up van opgeslagen: e-mail die ervoor is versleuteld kan niet meer worden gelezen, hier noch elders.

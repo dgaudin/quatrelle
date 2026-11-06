@@ -312,6 +312,7 @@ impl MailApp {
             Action::UnlockCertificate(account) => {
                 self.ui.dialog = Some(Dialog::Certificate { account, path: String::new(), data: None, password: String::new() });
             }
+            Action::Pgp(ask) => self.pgp_ask(ask),
             Action::UseSmartCard(account) => {
                 let module = self.session.card_search().modules.first().cloned().unwrap_or_default();
                 self.ui.dialog = Some(Dialog::SmartCard { account, module, pin: String::new() });
