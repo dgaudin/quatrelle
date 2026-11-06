@@ -427,6 +427,9 @@ pub enum Job {
     /// [`HeldKey::at`]; `pin` kept in the system's keychain for it). Answered by
     /// [`Event::Identity`].
     UseHeldKey { account: AccountConfig, at: String, cert: Vec<u8>, pin: Option<Secret> },
+    /// OpenPGP work with the account's own keys, whose secret parts the network layer keeps in
+    /// the system's keychain (issue #36).
+    Pgp { account: AccountConfig, work: PgpWork },
 }
 
 impl Job {
@@ -493,6 +496,7 @@ impl Job {
             | Job::Protect { account, .. }
             | Job::SealDraft { account, .. }
             | Job::UseHeldKey { account, .. }
+            | Job::Pgp { account, .. }
             | Job::Decrypt { account, .. } => &account.id,
         }
     }
@@ -560,6 +564,9 @@ impl SyncStatus {
 mod events;
 pub use events::{Event, HeldKey, Revocation};
 
+mod pgp;
+pub use pgp::{NO_KEYCHAIN, PgpChange, PgpSignature, PgpWork};
+
 mod webex;
 pub use webex::{WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting};
 
@@ -573,6 +580,17 @@ mod tests {
         assert!(!format!("{j:?}").contains("hunter2"));
         let e = Event::Decrypted { key: MessageKey::default(), content: Some(Private(b"the plan".to_vec())), authenticated: true, error: None };
         assert!(!format!("{e:?}").contains("the plan"), "what decrypted mail says never prints");
+        let j = Job::Pgp {
+            account: AccountConfig::default(),
+            work: PgpWork::Import { file: Private(b"-----BEGIN PGP PRIVATE KEY BLOCK-----".to_vec()), passphrase: Secret("hunter2".into()) },
+        };
+        let shown = format!("{j:?}");
+        assert!(!shown.contains("hunter2") && !shown.contains("45, 45"), "neither the passphrase nor the key file: {shown}");
+        let j = Job::Pgp {
+            account: AccountConfig::default(),
+            work: PgpWork::Backup { fingerprint: "AB".into(), passphrase: Secret("correct horse".into()), path: "/tmp/k.asc".into() },
+        };
+        assert!(!format!("{j:?}").contains("correct horse") && !serde_json::to_string(&j).unwrap().contains("correct horse"));
     }
 
     /// What is written of a job or an event holds no secret either: a log or a file made of one

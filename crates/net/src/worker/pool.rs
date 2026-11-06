@@ -351,6 +351,7 @@ impl Pool {
             | Job::CheckRevocation { .. }
             | Job::FindHeldKeys { .. }
             | Job::UseHeldKey { .. }) => self.smime(j),
+            Job::Pgp { account, work } => self.pgp(account, work),
             j @ (Job::WebexSignIn { .. }
             | Job::WebexSignOut
             | Job::SetWebexSecret { .. }
@@ -417,8 +418,9 @@ impl Pool {
                 if let Some(c) = self.configs.remove(&account) {
                     self.creds.delete(&c);
                     self.creds.delete_smtp(&c);
-                    // Its certificates' keys go with it.
+                    // Its certificates' keys and its OpenPGP keys go with it.
                     smime::forget_all(self.creds.as_ref(), &c);
+                    pgp::forget_all(self.creds.as_ref(), &c);
                 }
             }
             Job::Search { account, query, .. } if !self.workers.contains_key(&account) => {

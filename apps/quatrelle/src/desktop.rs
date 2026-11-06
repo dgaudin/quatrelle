@@ -90,6 +90,7 @@ impl Desktop {
                 "vcf" => "Contact card".to_string(),
                 "txt" => "Text".to_string(),
                 "json" => "Quatrelle rules".to_string(),
+                "asc" => "OpenPGP key".to_string(),
                 "html" | "htm" => "Web page".to_string(),
                 e => format!("{} file", e.to_ascii_uppercase()),
             };
@@ -165,6 +166,14 @@ impl Services for Desktop {
                 one(self
                     .dialog("Import certificate")
                     .add_filter("Certificate with its key", &["p12", "pfx"])
+                    .add_filter("All files", &["*"])
+                    .pick_file()),
+                Some(false),
+            ),
+            FileAsk::PgpKey => (
+                one(self
+                    .dialog("Import OpenPGP key")
+                    .add_filter("OpenPGP key", &["asc", "gpg", "key", "pgp"])
                     .add_filter("All files", &["*"])
                     .pick_file()),
                 Some(false),

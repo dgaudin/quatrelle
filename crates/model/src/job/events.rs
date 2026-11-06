@@ -361,6 +361,28 @@ pub enum Event {
         cert: Vec<u8>,
         status: Revocation,
     },
+    /// The account's own OpenPGP keys after [`Job::Pgp`] (imported, made, extended, used or
+    /// forgotten): their public parts (binary), the one that signs and decrypts first; `changed`:
+    /// what was just done; or why it couldn't be done (nothing was).
+    PgpKeys {
+        account: String,
+        keys: Vec<Vec<u8>>,
+        changed: Option<PgpChange>,
+        error: Option<String>,
+    },
+    /// What [`PgpWork::Decrypt`] found inside (a MIME entity), and what a signature in it says.
+    PgpDecrypted {
+        key: MessageKey,
+        content: Option<Private>,
+        signature: Option<PgpSignature>,
+        error: Option<String>,
+    },
+    /// [`PgpWork::Backup`] wrote key `fingerprint`'s backup, or why it couldn't.
+    PgpBackedUp {
+        account: String,
+        fingerprint: String,
+        error: Option<String>,
+    },
 }
 
 /// A certificate with its private key held where Quatrelle can't read it.

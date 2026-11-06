@@ -322,6 +322,7 @@ mod connect;
 mod dav;
 mod listening;
 mod opening;
+mod pgp;
 mod pool;
 mod rest;
 mod scheduling;
