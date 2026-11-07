@@ -4902,6 +4902,34 @@ R27b : chaque sonde vue en échec avant sa correction (le journal sans `#[serde(
 bouton du volet de lecture, sa correction retirée un instant), les gardes vertes avant et après ;
 `cargo xtask ci` (wasm compris).
 
+### Hors relevé : R28, Récupérer les éléments supprimés (2026-11-07)
+
+Demandé par le propriétaire pour la 1.2, conception validée le 07/11. Suite de R27 : ce que
+Maj+Suppr envoie dans les éléments récupérables (`SoftDelete`) se retrouve et se ramène depuis
+Quatrelle, comme « Récupérer les éléments supprimés » d'Outlook.
+
+| Commit | Ce qu'il fait | Sondes : avant → après |
+|---|---|---|
+| `330a4a59` | `Job::ListRecoverable` / `RestoreRecoverable`, `Event::Recoverable` / `RecoverableDone` ; EWS : `FindItem` sur `recoverableitemsdeletions` (pages de 200, tri par dernière modification, date de suppression `PidTagDeletedOnTime` 0x668F sinon modification), Restaurer = `MoveItem` vers `deleteditems`, Purger = `DeleteItem HardDelete` ; Graph : lecture de `recoverableitemsdeletions`, `move` vers `deleteditems`, `permanentDelete` ; commandes `folder.recoverDeleted {account?}`, `recoverMore`, `recoverRestore {ids}`, `recoverPurge {ids}`, `recoverClose` ; état `Session::recovering` (jamais dans le cache) | faux EWS et faux Graph : **rien à lister** → Maj+Suppr puis liste : le message y est, Restaurer le remet dans Éléments supprimés, Purger l'efface (idem une fois « déjà parti » : compté fait) ; serveur trop ancien (`ErrorInvalidServerVersion`) → phrase claire ; moteur : fenêtre refusée hors ligne et sur IMAP, réponse d'une autre demande ignorée, doublons de page, ids inconnus refusés ; réponses hostiles (texte énorme, sans id, tailles négatives) bornées |
+| `29b4e774` | la fenêtre (filtre, tri par titre de colonne, Maj et Ctrl, Restaurer, Purger après question, Fermer) ; clic droit sur Éléments supprimés ; lien discret au-dessus de la liste ; 16 phrases dans les 13 catalogues | interface sans tête : fenêtre ouverte par le menu/le lien et listant les éléments ; Entrée seule ne purge rien ; Échap sur la question garde tout et reste dans la liste, Échap sur la liste la ferme (l'état de session est lâché) ; menu grisé avec une phrase (IMAP, échantillon, hors ligne) |
+
+**Microsoft Graph** (documentation de Microsoft lue le 07/11) : le dossier bien connu
+`recoverableitemsdeletions` se liste comme un dossier de courrier, `POST …/move` et
+`POST …/permanentDelete` existent (`Mail.ReadWrite`). Graph ne montre que du **courrier** : les
+rendez-vous, contacts et tâches supprimés n'y sont pas listés. Pas de taille dans le message :
+elle vient d'une propriété étendue (`Integer 0xe08`), 0 si le serveur ne la donne pas.
+
+**Pas vérifiable ici** (aucun vrai Exchange) : le dossier `recoverableitemsdeletions` d'un
+Exchange réel (permission, 2010 SP1 et plus), l'ordre et la date de suppression (0x668F), les
+types d'éléments autres que le courrier, le comportement de Graph sur un vrai locataire.
+**Essai chez le propriétaire** : Maj+Suppr un message de test, Entrée ; clic droit sur Éléments
+supprimés › « Récupérer les éléments supprimés… » : il est listé ; Restaurer le ramène dans
+Éléments supprimés (après la synchro) ; recommencer et Purger (Entrée confirme, Échap annule).
+
+**Pas fait** : pas de cible `fuzz/` (le lecteur de la réponse passe par l'analyseur XML d'EWS, hors
+cibles ; un test de réponse hostile le couvre) ; Graph : un message déjà parti compte comme erreur
+(404 non converti), le reste de la sélection n'est pas traité.
+
 ### État de la récupération : v0.32, vingt-neuvième partie : l'export du calendrier et des contacts vers un .pst (P4b) (2026-11-07)
 
 La seconde moitié du lot P4 de `merge-tools/survey-v0.32.md` (P4b), sur `main`. Après P4a, le
