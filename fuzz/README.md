@@ -14,7 +14,7 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `http` | an HTTP answer read whole and streamed to a file (lengths, chunks, to the end), a download's `Content-Range`; GitHub's release list, `SHA256SUMS.txt`, its quota header and tags |
 | `imap` | everything an IMAP server sends through a session (greeting to MOVE, with a folder sync and a message's text first) |
 | `jmap` | a JMAP server's answers (split at form feeds) through sign-in, folder list and folder sync; push events; URLs |
-| `search` | the search box: the query language, a query checked against a message and its text, folding, the index, the Advanced form, JMAP filters, modified UTF-7; lookalike senders, known names on other addresses, External |
+| `search` | the search box: the query language, its dates placed on any clock, a query checked against a message and its text, folding, the index, the Advanced form, JMAP filters, modified UTF-7; lookalike senders, known names on other addresses, External |
 | `signature` | a sender's name, address and message text (split at the first two line breaks): the author's own part, the signature's addresses and sites, the name asked of the directory, the signature checked against the sender |
 | `pgp` | OpenPGP keys, encrypted and signed messages, detached and cleartext signatures, inline PGP, Autocrypt headers; a secret key that opens, extended |
 | `pgp_mime` | a message source read for OpenPGP: PGP/MIME signed or encrypted, inline PGP, its `Autocrypt:` headers and attached keys, taken apart and put back; PGP/MIME never told unprotected from its header alone; written signed, then encrypted |

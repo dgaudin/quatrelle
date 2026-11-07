@@ -4,6 +4,8 @@
 //! The search model's tests: queries, the index, and what's kept of it.
 
 use super::*;
+mod date_terms;
+
 use std::collections::BTreeSet;
 
 use crate::{EmailAddress, Flags, MessageKey};
@@ -94,7 +96,7 @@ fn matching() {
     m2.flags.flagged = true;
     assert!(!q("is:complete", &m2) && q("-is:complete", &m2) && q("is:flagged", &m2));
     m2.flags.keywords.retain(|k| k != crate::FOLLOW_UP_COMPLETE);
-    let label = Query { clauses: vec![Clause { term: Term::Categorized(vec!["$label1".into()]), negated: false }] };
+    let label = Query { clauses: vec![Clause { term: Term::Categorized(vec!["$label1".into()]), negated: false }], problems: Vec::new() };
     assert!(!label.matches(&Doc { summary: &m2, body: None, indexed: false, awaiting: false }));
     assert!(Query::parse("").matches(&Doc { summary: &m, body: None, indexed: false, awaiting: false }));
 }

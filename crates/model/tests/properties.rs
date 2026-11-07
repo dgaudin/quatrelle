@@ -6,6 +6,7 @@
 
 use proptest::prelude::*;
 use quatrelle_model::addr::trust::{site, url_host};
+use quatrelle_model::dates::Clock;
 use quatrelle_model::search::{Advanced, Doc, Index, MAX_TOKEN_CHARS, Query, fold_word, tokens};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
 use quatrelle_model::{EmailAddress, ical, lookalike, utf7};
@@ -119,6 +120,31 @@ proptest! {
         let mut ix = Index::new();
         ix.add(0, &q);
         let _ = ix.candidates(&query);
+    }
+
+    /// Whatever is typed with date fields, placed on any clock (the ends of time too) and
+    /// checked against any date, never panics; a day written out holds from its start to the
+    /// next one's, and no longer.
+    #[test]
+    fn dates_are_placed_on_any_clock(
+        q in r#"(received|sent|date|after|before|reçu|avant|après):[a-zA-Zéè"'<>=./ 0-9-]{0,24}|\PC{0,40}"#,
+        now in any::<i64>(),
+        offset in any::<i32>(),
+        t in any::<i64>(),
+        (y, m, d) in (1970i64..=9999, 1u32..=12, 1u32..=28),
+    ) {
+        let clock = Clock::new(now, offset);
+        let mut query = Query::parse(&q);
+        query.resolve(&clock);
+        let _ = query.dates_hold(t);
+        let m_ = quatrelle_model::Summary { date: t, ..Default::default() };
+        let _ = query.matches(&Doc { summary: &m_, body: None, indexed: false, awaiting: false });
+        let mut day = Query::parse(&format!("received:{y:04}-{m:02}-{d:02}"));
+        prop_assert!(day.problems.is_empty());
+        day.resolve(&clock);
+        let start = clock.midnight(quatrelle_model::dates::days_from_civil(y, m, d));
+        let next = clock.midnight(quatrelle_model::dates::days_from_civil(y, m, d) + 1);
+        prop_assert!(day.dates_hold(start) && !day.dates_hold(next) && !day.dates_hold(start.saturating_sub(1)));
     }
 
     /// Plain words, typed with or without their accents, find the text that has them.

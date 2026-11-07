@@ -8,7 +8,10 @@
 //! the field: `from:`, `to:` (also `cc:`), `subject:`, `body:`, `has:attachment` /
 //! `hasattachments:yes`, `is:unread` / `is:read`, `is:flagged`, `is:complete` (a follow-up
 //! marked complete), `is:awaiting` (sent and not
-//! answered yet), `larger:` / `smaller:` (a size: `100KB`, `2MB`, bytes alone). A leading `-`
+//! answered yet), `larger:` / `smaller:` (a size: `100KB`, `2MB`, bytes alone), and dates:
+//! `received:` (also `sent:`, `date:`) a day, month or year, `today`, `"last week"`, a range
+//! `2024-01-01..2024-03-31` or `>=2024-03-01`; `after:X` is from X's start on and `before:X`
+//! before it ([`dates`]; the names are read in English and French). A leading `-`
 //! negates a term. `from:` and `to:` take a list,
 //! `from:ana,jun`, matching any of them (terms otherwise must all match).
 //!
@@ -25,6 +28,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{EmailAddress, Summary};
 
 mod advanced;
+pub mod dates;
 mod fold;
 mod fold_table;
 mod index;
@@ -32,6 +36,7 @@ mod matching;
 mod parse;
 
 pub use advanced::Advanced;
+pub use dates::{DateBound, DatePoint, DateSpec, Edge, Relative};
 pub(crate) use fold::words_and_parts;
 pub use fold::{MAX_TOKEN_CHARS, fold_mapped, fold_word, index_tokens, parts, tokens};
 #[cfg(test)]
@@ -83,6 +88,9 @@ pub enum Term {
     /// Mail the user sent that nobody has answered yet (`is:awaiting`): the caller works out
     /// which, from every conversation ([`Doc::awaiting`]).
     Awaiting,
+    /// Dated within a period (`received:2024`, `after:`, `before:`): named until
+    /// [resolved](Query::resolve) against the clock, and matching nothing before.
+    Date(DateSpec),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,6 +102,16 @@ pub struct Clause {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Query {
     pub clauses: Vec<Clause>,
+    /// What was typed but couldn't be read, in the order typed.
+    pub problems: Vec<Problem>,
+}
+
+/// Something typed that couldn't be read: left out of the search, or, when it wasn't meant as
+/// one (`before: launch`), looked for as the words typed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Problem {
+    /// A date that isn't one (`received:2024-13`, `after:party`): the term as typed.
+    Date(String),
 }
 
 /// What a query is checked against: the summary and, when cached, the body text.

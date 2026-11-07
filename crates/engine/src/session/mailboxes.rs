@@ -349,8 +349,11 @@ impl Session {
             // The servers can't tell what's waiting for a reply: checked here.
             let awaiting = super::searching::awaiting_wanted(&q).map(|on| (on, self.awaiting_now()));
             let hits = hits.into_iter().filter(|k| awaiting.as_ref().is_none_or(|(on, set)| set.contains(k) == *on));
+            let dated = self.search_query(&q);
             for key in hits.filter(|k| !have.contains(k)) {
-                if let Some(m) = self.summary_where(&key) {
+                if let Some(m) = self.summary_where(&key)
+                    && dated.dates_hold(m.date)
+                {
                     found.push(m);
                 }
             }
@@ -375,7 +378,9 @@ impl Session {
             && let Some((found_for, found)) = &self.found
             && found_for == q
         {
-            for m in found {
+            // The servers aren't asked the dates: what they found outside them isn't listed.
+            let dated = self.search_query(q);
+            for m in found.iter().filter(|m| dated.dates_hold(m.date)) {
                 let known = list.iter().any(|x| x.key == m.key || (!x.message_id.is_empty() && x.message_id == m.message_id));
                 if !known {
                     list.push(Arc::new(m.clone()));
