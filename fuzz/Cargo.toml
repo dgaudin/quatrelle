@@ -18,6 +18,7 @@ bin = [
     { name = "mime_parse", bench = false, test = false, doc = false, path = "fuzz_targets/mime_parse.rs" }, # raw message sources
     { name = "pgp", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp.rs" }, # OpenPGP keys, messages, signatures, Autocrypt
     { name = "pgp_mime", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp_mime.rs" }, # PGP/MIME, inline PGP, a message's keys; written for sending
+    { name = "msg", bench = false, test = false, doc = false, path = "fuzz_targets/pst/msg.rs" }, # Outlook message files (.msg)
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst/import.rs" }, # Outlook data file import
     { name = "pst_append", bench = false, test = false, doc = false, path = "fuzz_targets/pst/append.rs" }, # mail added to a damaged data file, and taken out again
     { name = "pst_item", bench = false, test = false, doc = false, path = "fuzz_targets/pst/item.rs" }, # a .pst item rebuilt from its properties

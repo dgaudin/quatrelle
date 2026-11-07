@@ -58,7 +58,7 @@ pub(crate) fn picture_media(data: &[u8]) -> &'static str {
 
 // Each module by its own name, wherever its file sits (`quatrelle_net::ews`, `crate::imap`).
 use data_files::pst_pim;
-pub use data_files::{pst, pst_export};
+pub use data_files::{msg, pst, pst_export};
 use exchange::ews_pim;
 pub use exchange::{ews, graph, graph_pim, ntlm};
 #[cfg(feature = "fakes")]
