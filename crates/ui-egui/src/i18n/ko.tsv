@@ -2064,3 +2064,6 @@ folder	Conflicts	충돌
 	{ext} file	{ext} 파일
 	This message is no longer in the list: open its folder to delete it.	이 메시지는 더 이상 목록에 없습니다. 삭제하려면 해당 폴더를 여세요.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del은 메일을 영구 삭제합니다 (지운 편지함에서 Del을 누를 때와 같습니다)
+	Drop to add them to {folder}	놓으면 {folder}에 추가됩니다
+	Added to {folder}: {n}	{folder}에 추가됨: {n}
+	Couldn't add {file} to {folder}: {error}	{file}을(를) {folder}에 추가할 수 없습니다: {error}

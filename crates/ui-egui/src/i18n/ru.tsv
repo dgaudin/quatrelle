@@ -2065,3 +2065,6 @@ menu	View	Просмотр
 	{ext} file	Файл {ext}
 	This message is no longer in the list: open its folder to delete it.	Этого письма больше нет в списке: откройте его папку, чтобы удалить его.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del удаляет почту окончательно, как Del в папке «Удалённые»
+	Drop to add them to {folder}	Отпустите, чтобы добавить их в {folder}
+	Added to {folder}: {n}	Добавлено в {folder}: {n}
+	Couldn't add {file} to {folder}: {error}	Не удалось добавить {file} в {folder}: {error}
