@@ -220,6 +220,7 @@ impl MailApp {
                 self.run("list.open", json!({"key": k.to_id()}));
             }
             Action::Dialog(d) => self.ui.dialog = Some(d),
+            Action::DeleteMail { for_good } => self.delete_mail(for_good),
             Action::Refuse(why) => self.session.notice(why, true),
             Action::FocusSearch => self.ui.focus_search = true,
             Action::FindInMessage => self.ui.find.pane.open(),

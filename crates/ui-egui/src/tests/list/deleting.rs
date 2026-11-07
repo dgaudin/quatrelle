@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: Shift+Delete deletes the mail selected for good, past Deleted Items. Asked first
 //! while the option says so: Enter deletes, Escape keeps. In the Outbox, it does what Delete does;
-//! in a message's page of its own, it deletes that message, not the list's selection.
+//! in a message's page of its own, it deletes that message, not the list's selection. In Deleted
+//! Items, every Delete (a row's button, its menu, the reading pane's) asks as the key does.
 
 use super::*;
 
@@ -148,5 +149,126 @@ fn in_a_messages_own_page_shift_delete_deletes_its_message() {
     assert!(tab.ui.dialog.is_none() && kept_as(&tab, "INBOX", other), "refused");
     assert_eq!(tab.session.store.as_ref().unwrap().load_folder("sample", "Archive").unwrap().messages.len(), archived, "Archive untouched");
     assert!(tab.session.notices.len() > said, "said why");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Where the buttons named `name` are (as a screen reader is told of them), the pointer left
+/// where it was.
+fn buttons(ctx: &egui::Context, a: &mut MailApp, name: &str) -> Vec<egui::Rect> {
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    let tree = out.platform_output.accesskit_update.expect("AccessKit is on");
+    tree.nodes
+        .iter()
+        .filter(|(_, n)| n.label() == Some(name) && !n.is_disabled())
+        .filter_map(|(_, n)| n.bounds())
+        .map(|b| egui::Rect::from_min_max(egui::pos2(b.x0 as f32, b.y0 as f32), egui::pos2(b.x1 as f32, b.y1 as f32)))
+        .collect()
+}
+
+/// The list's row for `subject`.
+fn row(ctx: &egui::Context, a: &mut MailApp, subject: &str) -> egui::Rect {
+    let rows = super::selecting::list_rows(ctx, a);
+    rows.into_iter().find(|(l, _)| l.contains(subject)).map(|(_, r)| r).unwrap_or_else(|| panic!("no row for {subject}"))
+}
+
+/// The Delete button a row shows under the pointer, clicked.
+fn hover_delete(ctx: &egui::Context, a: &mut MailApp, subject: &str) {
+    let r = row(ctx, a, subject);
+    frame(ctx, a, vec![Event::PointerMoved(r.center())]);
+    let at = buttons(ctx, a, "Delete").into_iter().find(|b| r.contains(b.center())).expect("the row hovered shows Delete");
+    super::selecting::click(ctx, a, at.center(), egui::PointerButton::Primary, Modifiers::NONE);
+    frame(ctx, a, vec![]);
+}
+
+/// Delete in the menu a right-click on a row gives, clicked.
+fn menu_delete(ctx: &egui::Context, a: &mut MailApp, subject: &str) {
+    let r = row(ctx, a, subject);
+    super::selecting::click(ctx, a, r.center(), egui::PointerButton::Secondary, Modifiers::NONE);
+    let at = buttons(ctx, a, "Delete")
+        .into_iter()
+        .find(|b| !r.contains(b.center()) && (b.min.x - r.center().x).abs() < 40.0)
+        .expect("the menu has Delete");
+    super::selecting::click(ctx, a, at.center(), egui::PointerButton::Primary, Modifiers::NONE);
+    frame(ctx, a, vec![]);
+}
+
+/// The sample with [`SUBJECT`] and another message in Deleted Items, shown there.
+fn in_deleted_items(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
+    let (mut a, dir, ctx) = opened(name);
+    ctx.enable_accesskit();
+    a.run("list.select", json!({"key": key_of(&a, SUBJECT).to_id()}));
+    a.run("list.select", json!({"key": key_of(&a, OTHER).to_id(), "add": true}));
+    press(&ctx, &mut a, Key::Delete, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && kept(&a, "Trash") && kept_as(&a, "Trash", OTHER), "moved to Deleted Items, unasked");
+    a.run("folder.open", json!({"account": "sample", "folder": "Trash"}));
+    frame(&ctx, &mut a, vec![]);
+    (a, dir, ctx)
+}
+
+const OTHER: &str = "Character turnarounds";
+
+/// In Deleted Items, where deleting is for good, the button a row shows under the pointer asks
+/// first, as the Delete key and the ribbon do; Escape keeps the message.
+#[test]
+fn in_deleted_items_the_rows_button_asks_first() {
+    let (mut a, dir, ctx) = in_deleted_items("trash-row-button");
+    hover_delete(&ctx, &mut a, SUBJECT);
+    assert!(asking(&a, 1), "the row's button asks");
+    assert!(kept(&a, "Trash"), "nothing deleted before the answer");
+    press(&ctx, &mut a, Key::Escape, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && kept(&a, "Trash"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Delete in a row's menu too; Enter deletes the message the menu was for, and only it.
+#[test]
+fn in_deleted_items_the_menus_delete_asks_first() {
+    let (mut a, dir, ctx) = in_deleted_items("trash-row-menu");
+    menu_delete(&ctx, &mut a, OTHER);
+    assert!(asking(&a, 1), "the menu's Delete asks");
+    assert!(kept_as(&a, "Trash", OTHER), "nothing deleted before the answer");
+    press(&ctx, &mut a, Key::Enter, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && !kept_as(&a, "Trash", OTHER), "Enter deletes it for good");
+    assert!(kept(&a, "Trash"), "only the one asked about");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A draft read in Deleted Items: the reading pane's Delete over it asks first too.
+#[test]
+fn in_deleted_items_a_drafts_delete_button_asks_first() {
+    const DRAFT: &str = "Re: Sound mix, version 3";
+    let (mut a, dir, ctx) = opened("trash-draft-button");
+    ctx.enable_accesskit();
+    a.run("mail.reply", json!({}));
+    a.run("compose.saveDraft", json!({}));
+    a.session.compose = None;
+    a.run("folder.open", json!({"account": "sample", "folder": "Drafts"}));
+    a.run("list.open", json!({"key": key_of(&a, DRAFT).to_id()}));
+    press(&ctx, &mut a, Key::Delete, Modifiers::NONE);
+    assert!(a.ui.dialog.is_none() && kept_as(&a, "Trash", DRAFT), "moved to Deleted Items, unasked");
+    a.run("folder.open", json!({"account": "sample", "folder": "Trash"}));
+    a.run("list.open", json!({"key": key_of(&a, DRAFT).to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    let list = row(&ctx, &mut a, DRAFT);
+    let at = buttons(&ctx, &mut a, "Delete").into_iter().find(|b| b.min.x > list.max.x).expect("the reading pane offers Delete");
+    super::selecting::click(&ctx, &mut a, at.center(), egui::PointerButton::Primary, Modifiers::NONE);
+    frame(&ctx, &mut a, vec![]);
+    assert!(asking(&a, 1), "asked first");
+    assert!(kept_as(&a, "Trash", DRAFT), "nothing deleted before the answer");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Anywhere else they move the mail to Deleted Items, unasked, as before.
+#[test]
+fn elsewhere_the_rows_button_and_menu_move_without_asking() {
+    let (mut a, dir, ctx) = opened("inbox-row-delete");
+    ctx.enable_accesskit();
+    frame(&ctx, &mut a, vec![]);
+    hover_delete(&ctx, &mut a, SUBJECT);
+    assert!(a.ui.dialog.is_none() && !kept(&a, "INBOX") && kept(&a, "Trash"), "moved, unasked");
+    menu_delete(&ctx, &mut a, OTHER);
+    assert!(a.ui.dialog.is_none() && !kept_as(&a, "INBOX", OTHER) && kept_as(&a, "Trash", OTHER), "moved, unasked");
     let _ = std::fs::remove_dir_all(dir);
 }

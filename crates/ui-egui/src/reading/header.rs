@@ -322,7 +322,7 @@ pub(super) fn actions(
                 acts.push(Action::Run("outbox.edit", json!({"key": r.key.to_id()})));
             }
             if widgets::pill_button(ui, Icon::Delete, "Delete", &t).clicked() {
-                acts.push(Action::Run("mail.delete", json!({})));
+                delete(s, &r.key, in_window, acts);
             }
         });
     } else if s.folder(&r.key.account, &r.key.folder).is_some_and(|f| f.role == quatrelle_engine::model::FolderRole::Drafts)
@@ -340,12 +340,22 @@ pub(super) fn actions(
                 acts.push(Action::Run("draft.edit", json!({"key": r.key.to_id()})));
             }
             if widgets::pill_button(ui, Icon::Delete, "Delete", &t).clicked() {
-                acts.push(Action::Run("mail.delete", json!({})));
+                delete(s, &r.key, in_window, acts);
             }
         });
     } else if !in_window && !placed {
         // On one line: their icons alone when it has no room for their words.
         let compact = ui.available_width() < action_width(ui, s, false);
         ui.horizontal(|ui| action_row(s, &t, ui, r, p, compact, acts));
+    }
+}
+
+/// Delete pressed on the message read: asked first where it's for good, as the Delete key does;
+/// in a window of its own, that window's message (not the list's selection), as its toolbar does.
+fn delete(s: &Session, key: &MessageKey, in_window: bool, acts: &mut Vec<Action>) {
+    if in_window {
+        acts.extend(crate::app::delete_from_window(s, key, false));
+    } else {
+        acts.push(Action::DeleteMail { for_good: false });
     }
 }

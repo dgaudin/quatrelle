@@ -170,6 +170,13 @@ pub enum Action {
     /// later (false).
     UpdateOnClose(bool),
     Open(MessageKey),
+    /// Delete the mail selected (Delete; Shift+Delete, `for_good`), asked first where that's
+    /// for good and the option says so: one answer for the keys, the ribbon, a row's button and
+    /// menu, and the reading pane's buttons, taken once what's asked before it (a row selected)
+    /// is done.
+    DeleteMail {
+        for_good: bool,
+    },
     Dialog(Dialog),
     /// An action from one message's window: done to that message (several can be written at
     /// once, each in a window of its own).

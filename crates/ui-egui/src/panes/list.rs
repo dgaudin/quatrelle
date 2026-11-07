@@ -628,7 +628,8 @@ fn message_row(
                 if !selected {
                     acts.push(Action::Run("list.select", json!({"key": m.key.to_id()})));
                 }
-                acts.push(Action::Run(cmd, params));
+                // Delete asks first where it's for good (Deleted Items), as the key does.
+                acts.push(if cmd == "mail.delete" { Action::DeleteMail { for_good: false } } else { Action::Run(cmd, params) });
             }
             bx -= 24.0;
         }
@@ -731,7 +732,7 @@ fn row_input(
         item(ui, acts, Icon::Junk, tl!("Report junk"), Action::Run("mail.junk", json!({})));
         ui.menu_button((widgets::menu_icon(Some(Icon::Junk)), tl!("Junk")), |ui| crate::junk_menu(ui, s, acts));
         item(ui, acts, Icon::Ignore, tl!("Ignore"), Action::Run("mail.ignore", json!({})));
-        item(ui, acts, Icon::Delete, tl!("Delete"), Action::Run("mail.delete", json!({})));
+        item(ui, acts, Icon::Delete, tl!("Delete"), Action::DeleteMail { for_good: false });
         ui.separator();
         // Find related, as Outlook's: the conversation, or everything from the sender.
         ui.menu_button((widgets::menu_icon(Some(Icon::Search)), tl!("Find related")), |ui| {

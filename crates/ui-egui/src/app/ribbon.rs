@@ -199,7 +199,6 @@ impl MailApp {
             });
             return;
         }
-        let confirm_delete = self.needs_delete_confirm();
         let ust = &mut self.ui;
         // A narrow window scrolls the ribbon sideways rather than cutting buttons off; each tab
         // keeps its own place (one shared place opened View scrolled as far as Home was, which
@@ -234,11 +233,7 @@ impl MailApp {
                         });
                         groups.end(ui, &t, "New");
                         if widgets::big_button(ui, Icon::Delete, "Delete", &t, enabled("mail.delete")).on_hover_text(tl!("Delete (Del)")).clicked() {
-                            if confirm_delete {
-                                acts.push(Action::Dialog(Dialog::ConfirmDelete { count: s.selection.len() }));
-                            } else {
-                                acts.push(Action::Run("mail.delete", json!({})));
-                            }
+                            acts.push(Action::DeleteMail { for_good: false });
                         }
                         // Ignore the conversation, as Outlook's Delete drop-down.
                         let r = widgets::big_more(ui, "More delete options", &t);

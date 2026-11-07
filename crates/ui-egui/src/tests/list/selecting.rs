@@ -7,7 +7,7 @@ use egui::accesskit::Role;
 use super::*;
 
 /// The rows of the message list as a screen reader is told of them: what each says, and where.
-fn list_rows(ctx: &egui::Context, a: &mut MailApp) -> Vec<(String, egui::Rect)> {
+pub(super) fn list_rows(ctx: &egui::Context, a: &mut MailApp) -> Vec<(String, egui::Rect)> {
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));
     out.textures_delta.clear();
@@ -39,7 +39,7 @@ fn says(ctx: &egui::Context, a: &mut MailApp, what: &str) -> bool {
 
 /// A click with keys held (held for the whole of it, as the input's modifiers say, not only on
 /// the pointer's events).
-fn click(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, button: egui::PointerButton, modifiers: Modifiers) {
+pub(super) fn click(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, button: egui::PointerButton, modifiers: Modifiers) {
     frame(ctx, a, vec![Event::ModifiersChanged(modifiers), Event::PointerMoved(at)]);
     frame(ctx, a, vec![Event::PointerButton { pos: at, button, pressed: true, modifiers }]);
     frame(ctx, a, vec![Event::PointerButton { pos: at, button, pressed: false, modifiers }]);
