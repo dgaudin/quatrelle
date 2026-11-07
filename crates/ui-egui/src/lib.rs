@@ -540,6 +540,8 @@ impl MailApp {
         if self.ui.quoted_in.replace(lang.code()) != Some(lang.code()) {
             self.session.quote_words = i18n::quote_words(lang);
             self.session.conflict_words = i18n::conflict_words(lang);
+            // The assistant's summaries in it too, whatever the mail's language.
+            self.session.assistant_language = format!("{} ({})", lang.name(), lang.code());
         }
     }
 

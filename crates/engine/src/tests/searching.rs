@@ -271,6 +271,7 @@ fn the_assistant_summarizes_the_message_being_read() {
     let (job_id, model, messages) = asked.unwrap();
     assert_eq!((job_id, model.as_str(), messages.len()), (id, "llama3", 2));
     assert!(messages[1].1.contains("Subject: "), "{:?}", messages[1]);
+    assert!(messages[0].1.contains("Write in English,"), "no interface language set: English; {:?}", messages[0]);
     assert_eq!(s.assistant.as_ref().map(|a| (a.key.clone(), a.answer.is_none())), Some((key.clone(), true)));
     // An answer to an older question is dropped; this one's kept.
     s.apply(Event::LlmAnswered { id: id + 1000, text: "old".into(), error: None });
@@ -459,4 +460,30 @@ fn the_assistant_suggests_where_a_message_goes() {
     let id = s.run("assistant.suggestFiling", &json!({})).unwrap()["asked"].as_u64().unwrap();
     s.apply(Event::LlmAnswered { id, text: "{\"folder\": \"Invoices\", \"category\": \"\"}".into(), error: None });
     assert_eq!(s.assistant.as_ref().and_then(|a| a.filing.clone()), Some(Default::default()));
+}
+
+/// A summary is written in the interface's language whatever the mail's (a French window gave
+/// English summaries of English mail, 07/11); a suggested reply keeps the mail's own language.
+#[test]
+fn the_assistant_summarizes_in_the_interface_language() {
+    let system_asked = |s: &mut Session| {
+        s.take_jobs().into_iter().find_map(|j| match j {
+            Job::AskLlm { messages, .. } => messages.first().map(|m| m.1.clone()),
+            _ => None,
+        })
+    };
+    let mut s = sample_session("assistant-language");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3", "key": "k1"})).unwrap();
+    let key = s.list.first().map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    s.assistant_language = "Français (fr)".into();
+    s.take_jobs();
+    s.run("assistant.summarize", &json!({})).unwrap();
+    let system = system_asked(&mut s).unwrap();
+    assert!(system.contains("Write in Français (fr), whatever language"), "{system}");
+    s.run("assistant.close", &json!({})).unwrap();
+    s.run("assistant.suggestReply", &json!({})).unwrap();
+    let system = system_asked(&mut s).unwrap();
+    assert!(system.contains("Write in the language the email is written in"), "{system}");
+    done(s);
 }

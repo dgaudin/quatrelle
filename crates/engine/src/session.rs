@@ -304,6 +304,9 @@ pub struct Session {
     /// The words of the copies kept in Sync Issues › Conflicts, in the interface's language (the
     /// app sets them; English without it).
     pub conflict_words: pim::ConflictWords,
+    /// The interface's language, for what the language model writes for the user to read (a
+    /// summary): its own name and code, `Français (fr)` (the app sets it; English without it).
+    pub assistant_language: String,
     pub prefs: Prefs,
     pub clock: Clock,
     pub notices: Vec<Notice>,
@@ -531,6 +534,7 @@ impl Session {
             drafted: HashSet::new(),
             quote_words: mime::QuoteWords::default(),
             conflict_words: pim::ConflictWords::default(),
+            assistant_language: String::new(),
             prefs: Prefs::default(),
             clock,
             notices: Vec::new(),

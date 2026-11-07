@@ -9,12 +9,12 @@ use super::*;
 const MAX_TEXT: usize = 24_000;
 
 /// How the model is asked for a summary.
-const SUMMARY_PROMPT: &str = "You summarize an email for the person who received it. Write in the language the email is written in. \
+const SUMMARY_PROMPT: &str = "You summarize an email for the person who received it. Write in {lang}, whatever language the email is written in. \
 Give the gist in at most five short bullet points starting with \"- \": who wants what, by when, and what is expected of the reader. \
 No preamble, and nothing that isn't in the email.";
 
 /// How the model is asked for a conversation's summary.
-const THREAD_PROMPT: &str = "You summarize an email conversation for one of the people in it. Write in the language the emails are written in. \
+const THREAD_PROMPT: &str = "You summarize an email conversation for one of the people in it. Write in {lang}, whatever language the emails are written in. \
 The messages come oldest first. Give, in at most seven short bullet points starting with \"- \": what it's about, what was decided or answered, \
 and what is still open or expected of whom, by when. No preamble, and nothing that isn't in the emails.";
 
@@ -137,6 +137,13 @@ pub struct LlmModels {
 }
 
 impl Session {
+    /// The language the model writes in for the user to read (a summary): the interface's, as the
+    /// app set it, else English. A reply and a rewrite keep the mail's own language.
+    fn answer_language(&self) -> String {
+        let lang: String = self.assistant_language.chars().filter(|c| !c.is_control()).take(60).collect();
+        if lang.trim().is_empty() { "English".to_string() } else { lang.trim().to_string() }
+    }
+
     /// Summarize the message being read with the language model set in Options; the answer
     /// comes in as [`Session::assistant`].
     pub fn summarize(&mut self) -> CmdResult {
@@ -275,8 +282,8 @@ impl Session {
                 }
                 p
             }
-            AssistKind::Summary if thread => THREAD_PROMPT.to_string(),
-            AssistKind::Summary => SUMMARY_PROMPT.to_string(),
+            AssistKind::Summary if thread => THREAD_PROMPT.replace("{lang}", &self.answer_language()),
+            AssistKind::Summary => SUMMARY_PROMPT.replace("{lang}", &self.answer_language()),
         };
         let id = self.fresh_id();
         self.assistant = Some(Assistant { id, key, kind, filing: None, answer: None });
