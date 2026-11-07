@@ -5,15 +5,15 @@
 //! delete it. How it shows, its categories and private tell no one (`"send": false`); on a
 //! series they change the series, as its window does.
 
-use egui::{RichText, Sense, Ui, vec2};
+use egui::{Button, RichText, Ui};
 use quatrelle_engine::model::ical::ShowAs;
 use quatrelle_engine::{AgendaItem, Session};
 use serde_json::json;
 
 use super::open;
 use crate::dialogs::pim_dialogs::{all_categories, show_as_label};
-use crate::icons::{self, Icon};
-use crate::{Action, theme};
+use crate::icons::Icon;
+use crate::{Action, theme, widgets};
 
 /// Whether the user may change `item` here: its calendar isn't read-only, and it's the event the
 /// uid finds (the user's own copy first), what the commands change. A colleague's copy of a
@@ -28,12 +28,12 @@ pub(super) fn changeable(s: &Session, item: &AgendaItem) -> bool {
 pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<Action>) {
     let found = s.find_event(&item.uid);
     let event = found.map(|(_, e)| &e.event);
-    if ui.button(tl!("Open")).clicked() {
+    if ui.button((widgets::menu_icon(Some(Icon::PopOut)), tl!("Open"))).clicked() {
         acts.extend(open(s, item));
         ui.close();
     }
     if let Some(url) = event.and_then(|e| e.join_link())
-        && ui.button(tl!("Join meeting")).clicked()
+        && ui.button((widgets::menu_icon(Some(Icon::Video)), tl!("Join meeting"))).clicked()
     {
         acts.push(Action::OpenMeeting(url));
         ui.close();
@@ -45,11 +45,13 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
     // Someone else's meeting: the user's answer, ticked; another one changes it.
     if let Some(answer) = &item.answer {
         ui.separator();
-        for (label, code, partstat) in
-            [("Accept", "accepted", "ACCEPTED"), ("Tentative", "tentative", "TENTATIVE"), ("Decline", "declined", "DECLINED")]
-        {
+        for (label, code, partstat, icon) in [
+            ("Accept", "accepted", "ACCEPTED", Icon::Done),
+            ("Tentative", "tentative", "TENTATIVE", Icon::Question),
+            ("Decline", "declined", "DECLINED", Icon::Close),
+        ] {
             let current = answer.eq_ignore_ascii_case(partstat);
-            if ui.radio(current, tl!(label)).clicked() {
+            if ui.add(Button::new((widgets::menu_icon(Some(icon)), tl!(label))).selected(current)).clicked() {
                 if !current {
                     acts.push(Action::Run("event.respond", json!({"uid": uid, "answer": code})));
                 }
@@ -60,9 +62,9 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
     // Ticked as the event changed is (a series, not an occurrence changed on its own).
     let (show_as, is_private) = event.map_or((item.show_as, item.private), |e| (e.show_as, e.private));
     ui.separator();
-    ui.menu_button(tl!("Show As"), |ui| {
+    ui.menu_button((widgets::menu_icon(Some(Icon::Clock)), tl!("Show As")), |ui| {
         for x in ShowAs::ALL {
-            if ui.radio(show_as == x, tl!(show_as_label(x))).clicked() {
+            if ui.add(Button::new((widgets::menu_icon(None), tl!(show_as_label(x)))).selected(show_as == x)).clicked() {
                 if x != show_as {
                     acts.push(Action::Run("event.update", json!({"uid": uid, "showAs": x.param(), "send": false})));
                 }
@@ -73,7 +75,7 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
     let has: Vec<String> = event.map(|e| e.categories.clone()).unwrap_or_default();
     let all = all_categories(s, &has);
     ui.add_enabled_ui(!all.is_empty(), |ui| {
-        ui.menu_button(tl!("Categorize"), |ui| {
+        ui.menu_button((widgets::menu_icon(Some(Icon::Tag)), tl!("Categorize")), |ui| {
             let dark = ui.visuals().dark_mode;
             for (name, color) in &all {
                 let mut on = has.iter().any(|c| c.eq_ignore_ascii_case(name));
@@ -89,29 +91,24 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
             }
         });
     });
-    ui.horizontal(|ui| {
-        let mut private = is_private;
-        if ui.checkbox(&mut private, tl!("Private")).changed() {
-            acts.push(Action::Run("event.update", json!({"uid": uid, "private": private, "send": false})));
-            ui.close();
-        }
-        let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-        icons::paint(ui.painter(), r, Icon::Lock, ui.visuals().weak_text_color());
-    });
+    if ui.add(Button::new((widgets::menu_icon(Some(Icon::Lock)), tl!("Private"))).selected(is_private)).clicked() {
+        acts.push(Action::Run("event.update", json!({"uid": uid, "private": !is_private, "send": false})));
+        ui.close();
+    }
     ui.separator();
     // A series asks which: this occurrence or all of it.
     if item.recurring {
-        ui.menu_button(tl!("Delete"), |ui| {
-            if ui.button(tl!("Delete this occurrence")).clicked() {
+        ui.menu_button((widgets::menu_icon(Some(Icon::Delete)), tl!("Delete")), |ui| {
+            if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Delete this occurrence"))).clicked() {
                 acts.push(Action::Run("event.delete", json!({"uid": uid, "occurrence": item.occurrence})));
                 ui.close();
             }
-            if ui.button(tl!("Delete the series")).clicked() {
+            if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Delete the series"))).clicked() {
                 acts.push(Action::Run("event.delete", json!({"uid": uid})));
                 ui.close();
             }
         });
-    } else if ui.button(tl!("Delete")).clicked() {
+    } else if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Delete"))).clicked() {
         acts.push(Action::Run("event.delete", json!({"uid": uid})));
         ui.close();
     }

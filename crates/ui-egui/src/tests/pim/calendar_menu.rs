@@ -112,6 +112,28 @@ fn a_right_click_opens_the_appointments_menu() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The appointment's menu draws an icon before each of its commands, as the message menu does, and
+/// they stay clickable (the earlier tests choose them).
+#[test]
+fn the_appointments_menu_has_an_icon_before_each_command() {
+    let (mut a, dir, ctx) = day_view("menu-icons", 0);
+    let lunch = shown(&a, "Lunch with Jun");
+    right_click(&ctx, &mut a, &lunch);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    for label in ["Open", "Show As", "Categorize", "Private", "Delete"] {
+        let at = text_at(&shapes, label).unwrap_or_else(|| panic!("{label} in the menu"));
+        let icon = shapes.iter().any(|s| match s {
+            egui::Shape::Mesh(m) => {
+                let r = m.calc_bounds();
+                r.max.x <= at.x && r.max.x > at.x - 90.0 && (r.center().y - at.y).abs() < 6.0
+            }
+            _ => false,
+        });
+        assert!(icon, "an icon before {label}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Dragged with the right button, an appointment doesn't move (only the left one takes hold).
 #[test]
 fn a_right_button_drag_moves_nothing() {

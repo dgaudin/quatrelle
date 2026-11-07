@@ -191,7 +191,7 @@ fn note(s: &Session, t: &Tokens, st: &mut UiState, ui: &mut Ui, n: &quatrelle_en
             }
         }
         ui.separator();
-        if ui.button(RichText::new(tl!("Delete")).color(t.danger)).clicked() {
+        if ui.button((widgets::menu_icon(Some(Icon::Delete)), RichText::new(tl!("Delete")).color(t.danger))).clicked() {
             if editing {
                 st.note_edit = None;
             }

@@ -298,6 +298,11 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.circle(8.0, 8.0, 6.5);
             pen.line(&[(5.0, 8.2), (7.2, 10.4), (11.2, 6.0)]);
         }
+        Icon::Question => {
+            pen.circle(8.0, 8.0, 6.5);
+            pen.line(&[(6.0, 6.3), (6.4, 5.2), (8.0, 4.7), (9.6, 5.4), (9.8, 6.8), (8.0, 8.2), (8.0, 9.4)]);
+            pen.line(&[(8.0, 11.0), (8.0, 11.3)]);
+        }
         Icon::Done => {
             // A tick, its short stroke down to the left of its foot.
             pen.line(&[(2.5, 8.6), (6.2, 12.3), (13.5, 3.7)]);

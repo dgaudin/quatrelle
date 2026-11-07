@@ -273,11 +273,11 @@ fn row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TaskRef, toda
         tu.selected = Some(task.uid.clone());
     }
     resp.context_menu(|ui| {
-        if ui.button(tl!(if done { "Mark as not complete" } else { "Mark Complete" })).clicked() {
+        if ui.button((widgets::menu_icon(Some(Icon::Complete)), tl!(if done { "Mark as not complete" } else { "Mark Complete" }))).clicked() {
             acts.push(Action::Run("task.complete", json!({"uid": task.uid, "done": !done})));
             ui.close();
         }
-        if ui.button(tl!("Delete")).clicked() {
+        if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Delete"))).clicked() {
             if picked {
                 tu.selected = None;
             }
