@@ -166,7 +166,9 @@ fn junk_dates_are_problems() {
     assert!(q("after:party", &m));
     // Leap days are days.
     assert!(Query::parse("received:2024-02-29").problems.is_empty() && !Query::parse("received:2023-02-29").problems.is_empty());
-    assert!(super::dates::is_day("2024-03-15") && super::dates::is_day("2024/3/5") && !super::dates::is_day("2024-03") && !super::dates::is_day("today"));
+    assert!(
+        super::dates::is_day("2024-03-15") && super::dates::is_day("2024/3/5") && !super::dates::is_day("2024-03") && !super::dates::is_day("today")
+    );
     // Never a crash, whatever the clock.
     for now in [i64::MIN, -1, 0, i64::MAX] {
         for typed in ["received:today", "received:lastweek", "received:9999", "before:1970", "received:..9999-12-31", "after:yesterday"] {

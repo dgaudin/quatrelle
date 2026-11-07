@@ -7,8 +7,8 @@ use super::*;
 
 mod ahead;
 mod busy;
-mod dates;
 mod by_change;
+mod dates;
 mod folding;
 mod paced;
 mod pages;
