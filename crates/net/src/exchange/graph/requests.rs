@@ -55,6 +55,11 @@ impl Client {
         self.request(r)
     }
 
+    /// A `POST` about one item (`path`): one already gone on the server is `NetError::Gone`.
+    pub(crate) fn post_item(&self, path: &str, body: Vec<u8>) -> Result<Value> {
+        self.request_as(Request::post(&format!("{}{path}", self.base), "application/json", body, MAX_JSON), true)
+    }
+
     /// An item changed (`PATCH`): one deleted on the server meanwhile is `NetError::Gone`.
     pub(crate) fn patch_item(&self, path: &str, body: Vec<u8>) -> Result<Value> {
         let mut r = Request::post(&format!("{}{path}", self.base), "application/json", body, MAX_JSON);
