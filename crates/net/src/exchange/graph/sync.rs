@@ -395,6 +395,11 @@ pub fn append(c: &Client, st: &State, folder: &str, raw: &[u8]) -> Result<String
     c.import(raw, Some(st.mailbox(folder)?), st.owner(folder))
 }
 
+/// File a message in a folder as mail received and read (not a draft).
+pub fn append_received(c: &Client, st: &State, folder: &str, raw: &[u8]) -> Result<String> {
+    c.import_received(raw, st.mailbox(folder)?, st.owner(folder))
+}
+
 /// Send a message. The MIME source names the recipients for Exchange, so anyone only on the
 /// envelope (Bcc) goes into a `Bcc:` header, which Exchange removes before delivery.
 pub fn send(c: &Client, raw: &[u8], recipients: &[String]) -> Result<()> {

@@ -211,6 +211,31 @@ impl Data {
                 }
                 ok(v)
             }
+            // A message made from its fields, in a folder: read and delivered when it carries
+            // `PidTagMessageFlags` 1 (and the delivery time), a draft otherwise.
+            ("POST", ["me", "mailFolders", id, "messages"]) => {
+                let Some(folder) = self.resolve(id) else { return not_found() };
+                let who = |a: &Value| a["emailAddress"]["address"].as_str().unwrap_or_default().to_string();
+                let to: Vec<String> = input["toRecipients"].as_array().map(|a| a.iter().map(who).collect()).unwrap_or_default();
+                let mut raw = format!("From: {}\r\nTo: {}\r\nSubject: {}\r\n", who(&input["from"]), to.join(", "), input["subject"].as_str().unwrap_or(""));
+                if let Some(m) = input["internetMessageId"].as_str() {
+                    raw.push_str(&format!("Message-ID: {m}\r\n"));
+                }
+                raw.push_str(&format!("\r\n{}\r\n", input["body"]["content"].as_str().unwrap_or("")));
+                let prop = |name: &str| {
+                    input["singleValueExtendedProperties"]
+                        .as_array()
+                        .and_then(|a| a.iter().find(|p| p["id"].as_str().is_some_and(|i| i.eq_ignore_ascii_case(name))))
+                        .and_then(|p| p["value"].as_str().map(str::to_string))
+                };
+                let read = prop("Integer 0x0E07").and_then(|v| v.parse::<u32>().ok()).is_some_and(|f| f & 1 != 0);
+                let received = prop("SystemTime 0x0E06").unwrap_or_else(|| "2030-01-01T00:00:00Z".into());
+                let new = self.deliver(&folder, raw.as_bytes(), read, &received);
+                if let Some(m) = self.messages.iter_mut().find(|m| m.id == new) {
+                    m.draft = !read;
+                }
+                ok(json!({ "id": new, "parentFolderId": folder }))
+            }
             ("POST", ["me", "messages"]) => {
                 let raw = unbase64(body);
                 let drafts = self.resolve("drafts").unwrap_or_default();

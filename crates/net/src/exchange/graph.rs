@@ -529,6 +529,7 @@ fn importance_header(m: &Value) -> String {
     }
 }
 
+mod filing;
 mod recoverable;
 mod requests;
 mod rules;
@@ -538,7 +539,7 @@ mod text_first;
 pub(crate) use requests::backoff_secs;
 use requests::send_through_limits;
 pub(crate) use sync::download_ahead;
-pub use sync::{append, apply_remote, fetch_body, find_on_server, list_folders, send, sync_folder, vote};
+pub use sync::{append, append_received, apply_remote, fetch_body, find_on_server, list_folders, send, sync_folder, vote};
 pub use text_first::{fetch_text, text_first};
 
 #[cfg(test)]

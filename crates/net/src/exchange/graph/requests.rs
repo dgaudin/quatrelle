@@ -55,6 +55,11 @@ impl Client {
         self.request(r)
     }
 
+    /// A `POST` of a JSON body (bytes already made).
+    pub(crate) fn post_raw(&self, path: &str, body: Vec<u8>) -> Result<Value> {
+        self.request(Request::post(&format!("{}{path}", self.base), "application/json", body, MAX_JSON))
+    }
+
     /// A `POST` about one item (`path`): one already gone on the server is `NetError::Gone`.
     pub(crate) fn post_item(&self, path: &str, body: Vec<u8>) -> Result<Value> {
         self.request_as(Request::post(&format!("{}{path}", self.base), "application/json", body, MAX_JSON), true)
