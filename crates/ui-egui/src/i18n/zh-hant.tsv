@@ -376,6 +376,7 @@
 	Empty Junk Email…	清空垃圾郵件…
 	Empty “{folder}”?	要清空「{folder}」嗎?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	其中所有內容將永久刪除，包括未下載到這台電腦的郵件。此動作無法復原。
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	其中的全部內容將從這裡刪除，但 Exchange 伺服器會在可復原的項目中保留一段時間。可在「刪除的郵件」的功能表中用「復原已刪除的項目」找回。
 	General	一般
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	我將離開到…

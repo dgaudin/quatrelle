@@ -376,6 +376,7 @@
 	Empty Junk Email…	迷惑メールを空にする…
 	Empty “{folder}”?	「{folder}」を空にしますか?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	このコンピューターにダウンロードされていないメールも含め、中身はすべて完全に削除されます。元に戻すことはできません。
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	中身はすべてここから削除されますが、Exchange サーバーは回復可能なアイテムとしてしばらく保管します。「削除済みアイテム」のメニューの「削除したアイテムを復元」で戻せます。
 	General	全般
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	不在にしています…

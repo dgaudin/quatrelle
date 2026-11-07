@@ -239,6 +239,7 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
                         folder: f.path.clone(),
                         name: crate::i18n::folder(f),
                         for_good: true,
+                        exchange: crate::dialogs::is_exchange(s, &id),
                     }));
                 }
             }

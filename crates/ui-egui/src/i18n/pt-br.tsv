@@ -377,6 +377,7 @@
 	Empty Junk Email…	Esvaziar Lixo eletrônico…
 	Empty “{folder}”?	Esvaziar “{folder}”?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	Tudo o que ela contém será excluído permanentemente, inclusive emails não baixados neste computador. Isso não pode ser desfeito.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	Todo o conteúdo será excluído daqui, mas o servidor Exchange o guarda por um tempo entre seus itens recuperáveis. Você pode trazê-lo de volta com “Recuperar itens excluídos”, no menu de Itens excluídos.
 	General	Geral
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	Estou fora até…

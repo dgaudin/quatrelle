@@ -377,6 +377,7 @@
 	Empty Junk Email…	Vider Courrier indésirable…
 	Empty “{folder}”?	Vider « {folder} » ?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	Tout son contenu sera supprimé définitivement, y compris le courrier non téléchargé sur cet ordinateur. Cette action est irréversible.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	Tout son contenu sera supprimé d’ici, mais le serveur Exchange le garde un temps parmi ses éléments récupérables. Vous pouvez le ramener avec « Récupérer les éléments supprimés », dans le menu de Éléments supprimés.
 	General	Général
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	Je suis absent jusqu’au…

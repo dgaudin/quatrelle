@@ -376,6 +376,7 @@
 	Empty Junk Email…	إفراغ البريد العشوائي…
 	Empty “{folder}”?	إفراغ «{folder}»؟
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	سيُحذف كل ما فيه نهائيًا، بما في ذلك البريد غير المُنزّل على هذا الكمبيوتر. لا يمكن التراجع عن ذلك.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	سيُحذف كل ما فيه من هنا، لكن خادم Exchange يحتفظ به لفترة ضمن عناصره القابلة للاسترداد. يمكنك إرجاعه عبر «استرداد العناصر المحذوفة» من قائمة العناصر المحذوفة.
 	General	عام
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	أنا غائب حتى…

@@ -310,3 +310,37 @@ fn the_question_says_an_exchange_server_keeps_the_mail_a_while() {
     press(&ctx, &mut a, Key::Escape, Modifiers::NONE);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The question to empty Deleted Items says an Exchange server keeps the mail a while (and how to
+/// bring it back); anywhere else (IMAP here) it can't be undone.
+#[test]
+fn emptying_says_an_exchange_server_keeps_the_mail_a_while() {
+    let (mut a, dir, ctx) = opened("empty-exchange");
+    let ask = |a: &mut MailApp| {
+        let exchange = crate::dialogs::is_exchange(&a.session, "sample");
+        a.ui.dialog =
+            Some(Dialog::ConfirmEmpty { account: "sample".into(), folder: "Trash".into(), name: "Deleted Items".into(), for_good: true, exchange });
+    };
+    for (ews, graph) in [(true, false), (false, true)] {
+        sample_config(&mut a, |c| {
+            c.ews = ews.then(|| "https://mail.contoso.example/EWS/Exchange.asmx".into());
+            c.graph = graph.then(|| "https://graph.microsoft.com/v1.0".into());
+        });
+        ask(&mut a);
+        frame(&ctx, &mut a, vec![]);
+        assert!(shows(&ctx, &mut a, "the Exchange server keeps it for a while"), "EWS {ews}, Graph {graph}: kept a while");
+        assert!(shows(&ctx, &mut a, "Recover deleted items"));
+        assert!(!shows(&ctx, &mut a, "This can't be undone."));
+    }
+    sample_config(&mut a, |c| {
+        c.ews = None;
+        c.graph = None;
+        c.imap.host = "imap.studio.example".into();
+    });
+    ask(&mut a);
+    frame(&ctx, &mut a, vec![]);
+    assert!(shows(&ctx, &mut a, "Everything in it will be deleted for good"), "IMAP: for good");
+    assert!(shows(&ctx, &mut a, "This can't be undone."));
+    assert!(!shows(&ctx, &mut a, "Exchange"));
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -377,6 +377,7 @@
 	Empty Junk Email…	Junk-E-Mail leeren…
 	Empty “{folder}”?	„{folder}“ leeren?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	Alles darin wird endgültig gelöscht, auch nicht auf diesen Computer heruntergeladene E-Mails. Dies kann nicht rückgängig gemacht werden.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	Der gesamte Inhalt wird von hier gelöscht, aber der Exchange-Server bewahrt ihn eine Zeit lang unter seinen wiederherstellbaren Elementen auf. Mit „Gelöschte Elemente wiederherstellen“ im Menü von Gelöschte Elemente holen Sie ihn zurück.
 	General	Allgemein
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	Ich bin abwesend bis…

@@ -128,6 +128,9 @@ pub enum Dialog {
         folder: String,
         name: String,
         for_good: bool,
+        /// The account is Exchange (EWS or Microsoft 365), whose server keeps what is emptied
+        /// a while among its recoverable items: the question says so, not "this can't be undone".
+        exchange: bool,
     },
     /// Open another mailbox in an Exchange account: a shared one, or someone's who made this
     /// account a delegate (Outlook's Open Other Mailbox).
@@ -800,4 +803,10 @@ impl RuleAct {
         };
         RuleAct { action, target }
     }
+}
+
+/// Whether the account is Exchange (EWS or Microsoft 365): its server keeps mail deleted for good
+/// a while among the recoverable items.
+pub(crate) fn is_exchange(s: &Session, account: &str) -> bool {
+    s.account(account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some())
 }

@@ -376,6 +376,7 @@
 	Empty Junk Email…	רוקן דואר זבל…
 	Empty “{folder}”?	לרוקן את „{folder}”?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	כל מה שבה יימחק לצמיתות, כולל דואר שלא הורד למחשב הזה. אי אפשר לבטל את זה.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	כל התוכן יימחק מכאן, אך שרת Exchange שומר אותו זמן מה בין הפריטים הניתנים לשחזור שלו. אפשר להחזיר אותו באמצעות ״שחזור פריטים שנמחקו״ בתפריט של פריטים שנמחקו.
 	General	כללי
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	אני לא זמין עד…
