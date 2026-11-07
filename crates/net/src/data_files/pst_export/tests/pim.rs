@@ -306,7 +306,8 @@ fn a_file_added_to_keeps_its_own_contacts() {
 
     for round in 0..2 {
         let done = export(&store, "a1", "Mine", &file, NONE, &mut |_| {}).unwrap();
-        assert_eq!((done.messages, done.contacts, done.notes), (1 - round, 1, 1), "{done:?}");
+        // Added to again: the card and note it has as they are now are there already.
+        assert_eq!((done.messages, done.contacts, done.notes, done.pim_already), (1 - round, 1 - round, 1 - round, 2 * round), "{done:?}");
         assert_eq!(UnicodePstFile::special_folder(&file, Special::Contacts).unwrap(), Some(vec!["Kontakte".to_string()]));
         assert_eq!(UnicodePstFile::special_folder(&file, Special::Notes).unwrap(), Some(vec!["Notes (2)".to_string()]));
         let back = Store::open(dir.join(format!("back{round}"))).unwrap();
@@ -320,5 +321,67 @@ fn a_file_added_to_keeps_its_own_contacts() {
         assert!(folders.iter().any(|f| f.path == "Notes" && f.total == 1), "{folders:?}");
         assert!(!folders.iter().any(|f| f.path == "Contacts"), "{folders:?}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Added to, a file's own item with the same name and text as one of the account's doesn't stand
+/// for it, nor do two of the account's with the same subject stand for each other; one changed
+/// since it was exported goes in again (beside its earlier copy). A mail folder of the file named
+/// as Outlook names one of its folders keeps its mail: the notes go beside it.
+#[test]
+fn a_file_added_to_takes_the_account_s_items_by_what_they_are() {
+    let dir = scratch("same-names");
+    let file = dir.join("Outlook.pst");
+    let first = hello(&file);
+    drop(UnicodePstFile::append_in_folder(&file, &["Notes"], &UnicodePstMessage { message_id: "<field@example.com>", ..first }).unwrap());
+    drop(UnicodePstFile::set_special_folder(&file, Special::Contacts, &["Kontakte"]).unwrap());
+    let name = [UnicodePstProperty::tagged(0x3001, outlook_pst::UnicodePstValue::Unicode("Sam Lee"))];
+    let sam = UnicodePstMessage { subject: "Sam Lee", message_class: "IPM.Contact", message_id: "", body: "", properties: &name, ..first };
+    drop(UnicodePstFile::append_in_folder(&file, &["Kontakte"], &sam).unwrap());
+
+    let store = Store::open(dir.join("cache")).unwrap();
+    let card = Card {
+        uid: "c1".into(),
+        name: "Sam Lee".into(),
+        emails: vec![typed("sam@other.example", "")],
+        phones: vec![typed("+1 1", "cell")],
+        ..Default::default()
+    };
+    let water = |uid: &str, d: u32| StoredTask {
+        task: Task { uid: uid.into(), subject: "Water plants".into(), due: Some(nov(d)), ..Default::default() },
+        ..Default::default()
+    };
+    let mut pim = Pim {
+        cards: vec![StoredCard { book: "local".into(), card, ..Default::default() }],
+        notes: vec![StoredNote { note: Note { uid: "n1".into(), text: "Call back".into(), color: 3, modified: 1 }, ..Default::default() }],
+        tasks: vec![water("t1", 4)],
+        ..Default::default()
+    };
+    store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
+    let done = export(&store, "a1", "Mine", &file, NONE, &mut |_| {}).unwrap();
+    assert_eq!((done.contacts, done.notes, done.tasks, done.pim_already), (1, 1, 1, 0), "{done:?}");
+    assert_eq!(UnicodePstFile::special_folder(&file, Special::Notes).unwrap(), Some(vec!["Notes (2)".to_string()]));
+
+    // The card's phone changed, the task done, a second task of the same subject: those go in.
+    pim.cards[0].card.phones[0].value = "+1 2".into();
+    pim.tasks[0].task.set_complete(true, nov(5));
+    pim.tasks.push(water("t2", 11));
+    store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
+    let done = export(&store, "a1", "Mine", &file, NONE, &mut |_| {}).unwrap();
+    assert_eq!((done.contacts, done.notes, done.tasks, done.pim_already), (1, 0, 2, 1), "{done:?}");
+
+    let back = Store::open(dir.join("back")).unwrap();
+    let imported = crate::pst::import(&file, &back, "b1", &mut |_| {}).unwrap();
+    assert_eq!((imported.messages, imported.contacts, imported.notes, imported.tasks), (2, 3, 1, 3), "{imported:?}");
+    let got: Pim = back.load_account_doc("b1", quatrelle_model::pim::PIM_DOC).unwrap();
+    let mut phones: Vec<Vec<String>> = got.cards.iter().map(|c| c.card.phones.iter().map(|p| p.value.clone()).collect()).collect();
+    phones.sort();
+    assert_eq!(phones, [vec![], vec!["+1 1".to_string()], vec!["+1 2".to_string()]]);
+    assert_eq!(got.cards.iter().filter(|c| c.card.emails.iter().any(|e| e.value == "sam@other.example")).count(), 2);
+    let mut tasks: Vec<(Option<i64>, bool)> = got.tasks.iter().map(|t| (t.task.due, t.task.is_complete())).collect();
+    tasks.sort();
+    assert_eq!(tasks, [(Some(nov(4)), false), (Some(nov(4)), true), (Some(nov(11)), false)]);
+    let folders = back.load_folders("b1").unwrap();
+    assert!(folders.iter().any(|f| f.path == "Notes" && f.total == 1), "{folders:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
