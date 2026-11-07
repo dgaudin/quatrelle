@@ -192,7 +192,14 @@ fn deeply_nested_lists_dont_overflow_the_stack() {
 fn an_internal_date_reads_with_its_zone_and_hostile_ones_are_refused() {
     assert_eq!(parse_internal_date("17-Jul-1996 02:44:25 -0700"), Some(837_596_665));
     assert_eq!(parse_internal_date(" 4-Jan-1970 00:00:05 +0000"), Some(3 * 86_400 + 5));
-    for bad in ["", "x", "17-Jul-99999999999999999999 02:44:25 -0700", "17-Jul-1996 02:44:25 -9999", "0-Jul-1996 02:44:25 +0000", "17-Jul-1996 02:44:25 \u{e9}\u{e9}"] {
+    for bad in [
+        "",
+        "x",
+        "17-Jul-99999999999999999999 02:44:25 -0700",
+        "17-Jul-1996 02:44:25 -9999",
+        "0-Jul-1996 02:44:25 +0000",
+        "17-Jul-1996 02:44:25 \u{e9}\u{e9}",
+    ] {
         assert_eq!(parse_internal_date(bad), None, "{bad}");
     }
     assert_eq!(parse_internal_date(&format!("17-Jul-1996 02:44:25 -0700{}", " ".repeat(10_000)).replace(' ', "x")), None);
