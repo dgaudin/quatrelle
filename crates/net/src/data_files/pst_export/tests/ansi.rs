@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! An Outlook 97–2002 (ANSI) data file added to: the account's mail goes in beside what it had,
-//! its strings 8-bit, and the import reads it all back.
+//! An Outlook 97–2002 (ANSI) data file added to: the account's mail, contacts, notes and tasks go
+//! in beside what it had, their strings 8-bit, and the import reads them all back.
 
 use super::*;
 use outlook_pst::messaging::store::AnsiStore;
@@ -84,9 +84,11 @@ fn an_account_goes_into_an_ansi_data_file_and_back() {
     store.save_folder("a1", "Sent", &sent).unwrap();
     let folder = |path: &str, role| quatrelle_model::Folder { account: "a1".into(), path: path.into(), role, selectable: true, ..Default::default() };
     store.save_folders("a1", &[folder("INBOX", FolderRole::Inbox), folder("Sent", FolderRole::Sent)]).unwrap();
+    store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &super::pim::account()).unwrap();
 
     let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| {}).unwrap();
     assert_eq!((done.messages, done.already), (3, 1));
+    assert_eq!((done.contacts, done.notes, done.tasks), (4, 2, 4));
     // Still Outlook 97–2002's format, its strings 8-bit: Windows-1252 where they fit, else UTF-8.
     assert!(matches!(std::fs::read(&file).unwrap().get(10..12), Some(&[14 | 15, 0])));
     let mut want =
@@ -98,7 +100,9 @@ fn an_account_goes_into_an_ansi_data_file_and_back() {
     // Read back by the import, every subject as it was written.
     let back = Store::open(dir.join("back")).unwrap();
     let imported = crate::pst::import(&file, &back, "b1", &mut |_| {}).unwrap();
-    assert_eq!(imported.messages, 5, "{imported:?}");
+    assert_eq!((imported.messages, imported.contacts, imported.notes, imported.tasks), (5, 4, 2, 4), "{imported:?}");
+    let got: quatrelle_model::pim::Pim = back.load_account_doc("b1", quatrelle_model::pim::PIM_DOC).unwrap();
+    super::pim::compare(&got, &super::pim::account());
     let folders = back.load_folders("b1").unwrap();
     let path = |role| folders.iter().find(|f| f.role == role).map(|f| f.path.clone()).unwrap();
     let mut subjects: Vec<String> = back.load_folder("b1", &path(FolderRole::Inbox)).unwrap().messages.iter().map(|m| m.subject.clone()).collect();

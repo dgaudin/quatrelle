@@ -66,6 +66,14 @@ impl Format {
         }
     }
 
+    /// Make the folders of `names` that are missing, the last with `class`.
+    pub(super) fn create_folder(self, path: &Path, names: &[&str], class: &str) -> io::Result<()> {
+        match self {
+            Format::Unicode => UnicodePstFile::create_folder(path, names, class).map(drop),
+            Format::Ansi => AnsiPstFile::create_folder(path, names, class).map(drop),
+        }
+    }
+
     /// The folder the file records as `role`, as names from the top of the file.
     pub(super) fn special_folder(self, path: &Path, role: Special) -> io::Result<Option<Vec<String>>> {
         match self {

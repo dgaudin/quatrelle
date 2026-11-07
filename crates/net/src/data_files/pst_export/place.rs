@@ -18,7 +18,7 @@ pub(super) const SPECIAL: [(FolderRole, Special); 4] = [
 ];
 
 /// The most a name taken already is numbered, "Отчёты (100)", in an ANSI file.
-const MAX_SUFFIX: usize = 100;
+pub(super) const MAX_SUFFIX: usize = 100;
 
 /// The special folder for `role`, when it has one.
 pub(super) fn special(role: FolderRole) -> Option<Special> {

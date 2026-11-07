@@ -66,7 +66,7 @@ const MAX_UID: usize = 2048;
 /// A meeting's uid from its global object id: the `UID` a calendar other than Outlook gave it,
 /// else the id in hexadecimal, as Outlook writes it in a calendar file (without the date of the
 /// occurrence it may name, so a series and its occurrences share one).
-pub(super) fn uid_of(id: &[u8]) -> String {
+pub(crate) fn uid_of(id: &[u8]) -> String {
     let hex = |b: &[u8]| b.iter().map(|b| format!("{b:02X}")).collect::<String>();
     if id.len() < 40 || id.get(..16) != Some(&GLOBAL_ID[..]) {
         return hex(id);

@@ -39,6 +39,13 @@ pub(super) fn members(one_offs: Option<Val<'_>>, wrapped: Option<Val<'_>>) -> Ve
     out
 }
 
+/// A contact group's member as [`members`] reads one from PidLidDistributionListMembers: the
+/// one-off entry id `one_off` wrapped (MS-OXCDATA 2.2.5.2: no flags, the wrapping provider, a type
+/// of 0, a one-off).
+pub(crate) fn wrapped_entry_id(one_off: &[u8]) -> Vec<u8> {
+    [&[0u8; 4][..], &WRAPPED, &[0], one_off].concat()
+}
+
 /// The contact group as a card (vCard 4's `KIND:group`, a `MEMBER` for each member) whose note
 /// lists its members, above its own text.
 pub(crate) fn group_of(x: &Extra, subject: &str, body: &str, uid: String) -> Card {
