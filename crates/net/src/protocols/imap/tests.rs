@@ -186,3 +186,24 @@ fn deeply_nested_lists_dont_overflow_the_stack() {
     // The count skips quoted strings and literals.
     assert_eq!(conn::nesting(b"* 1 FETCH (UID 1 BODY[] {5}\r\n(((((\r\n FLAGS (\"((\" \\Seen))"), 2);
 }
+
+/// RFC 3501's own example, with a zone; hostile ones are refused, never a panic.
+#[test]
+fn an_internal_date_reads_with_its_zone_and_hostile_ones_are_refused() {
+    assert_eq!(parse_internal_date("17-Jul-1996 02:44:25 -0700"), Some(837_596_665));
+    assert_eq!(parse_internal_date(" 4-Jan-1970 00:00:05 +0000"), Some(3 * 86_400 + 5));
+    for bad in ["", "x", "17-Jul-99999999999999999999 02:44:25 -0700", "17-Jul-1996 02:44:25 -9999", "0-Jul-1996 02:44:25 +0000", "17-Jul-1996 02:44:25 \u{e9}\u{e9}"] {
+        assert_eq!(parse_internal_date(bad), None, "{bad}");
+    }
+    assert_eq!(parse_internal_date(&format!("17-Jul-1996 02:44:25 -0700{}", " ".repeat(10_000)).replace(' ', "x")), None);
+}
+
+proptest::proptest! {
+    /// What the in-memory server writes reads back; any text at all is read or refused.
+    #[test]
+    fn an_internal_date_round_trips_and_junk_never_panics(t in 0i64..253_402_300_799, junk in "\\PC{0,80}") {
+        let text = crate::fakes::fake::internal_date(t);
+        proptest::prop_assert_eq!(parse_internal_date(&text), Some(t));
+        let _ = parse_internal_date(&junk);
+    }
+}
