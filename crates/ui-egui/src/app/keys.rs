@@ -175,10 +175,8 @@ impl MailApp {
                         }
                         continue;
                     }
-                    if asks_first(&self.session, self.session.selected_iter().map(|m| &m.key), for_good) {
-                        self.ui.dialog = Some(Dialog::ConfirmDelete { count: self.session.selection.len() });
-                        continue;
-                    }
+                    self.act(Action::DeleteMail { for_good });
+                    continue;
                 }
                 if id == "mail.move" {
                     self.ui.dialog = Some(Dialog::move_to());
@@ -231,14 +229,25 @@ impl MailApp {
 
     /// Deleting from Deleted Items is permanent: ask first.
     pub fn needs_delete_confirm(&self) -> bool {
-        asks_first(&self.session, self.session.selected_iter().map(|m| &m.key), false)
+        question(&self.session, self.session.selected_iter().map(|m| &m.key), 0, false).is_some()
+    }
+
+    /// Delete the mail selected ([`Action::DeleteMail`]): the question first where it's for good
+    /// and the option says so, else at once.
+    pub(crate) fn delete_mail(&mut self, for_good: bool) {
+        let n = self.session.selection.len();
+        match question(&self.session, self.session.selected_iter().map(|m| &m.key), n, for_good) {
+            Some(d) => self.ui.dialog = Some(d),
+            None => self.run(if for_good { "mail.deleteForGood" } else { "mail.delete" }, json!({})),
+        }
     }
 }
 
-/// Whether deleting these messages asks first, as the option says (on unless turned off): Delete
-/// for good (Shift+Delete) does, and Delete when all of them are in Deleted Items, where it's for
-/// good too. Not in the Outbox: deleting there only keeps a message from being sent.
-fn asks_first<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, for_good: bool) -> bool {
+/// What deleting these `count` messages asks first, as the option says (on unless turned off):
+/// Delete for good (Shift+Delete) does, and Delete when all of them are in Deleted Items, where
+/// it's for good too. Not in the Outbox: deleting there only keeps a message from being sent.
+/// None: they go at once.
+fn question<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, count: usize, for_good: bool) -> Option<Dialog> {
     let in_trash =
         |k: &MessageKey| s.account(&k.account).and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash)).is_some_and(|t| t.path == k.folder);
     let mut any = false;
@@ -249,7 +258,8 @@ fn asks_first<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, for_g
         all_in_trash &= in_trash(k);
         all_outbox &= s.outbox_entry(k).is_some();
     }
-    s.prefs.confirm_permanent_delete && any && if for_good { !all_outbox } else { all_in_trash }
+    let asks = s.prefs.confirm_permanent_delete && any && if for_good { !all_outbox } else { all_in_trash };
+    asks.then_some(Dialog::ConfirmDelete { count })
 }
 
 /// Delete (or, `for_good`, Shift+Delete) on the message of a window of its own, or of the
@@ -261,8 +271,8 @@ pub(crate) fn delete_from_window(s: &Session, key: &MessageKey, for_good: bool) 
         return vec![Action::Refuse(tl!("This message is no longer in the list: open its folder to delete it.").to_string())];
     }
     let close = Action::Run("message.closeWindow", json!({"key": key.to_id()}));
-    if asks_first(s, std::iter::once(key), for_good) {
-        return vec![Action::Open(key.clone()), Action::Dialog(Dialog::ConfirmDelete { count: 1 }), Action::FocusMain, close];
+    if let Some(d) = question(s, std::iter::once(key), 1, for_good) {
+        return vec![Action::Open(key.clone()), Action::Dialog(d), Action::FocusMain, close];
     }
     vec![Action::Open(key.clone()), Action::Run(if for_good { "mail.deleteForGood" } else { "mail.delete" }, json!({})), close]
 }
