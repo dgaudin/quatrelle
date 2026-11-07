@@ -213,7 +213,7 @@ fn an_on_premises_exchange_account_works_through_ews() {
     // As Outlook's Cached Exchange Mode does (`SoftDelete`): Recover Deleted Items brings it back.
     assert_eq!(data.lock().unwrap().recoverable.iter().filter(|i| i.folder == trash).count(), 3, "emptied into Recoverable Items");
     let gone = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Storyboard").unwrap().key.clone();
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone] } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone], tidy: false } });
     eventually("deleted for good", || !data.lock().unwrap().items.iter().any(|i| i.id == first));
     assert!(data.lock().unwrap().recoverable.iter().any(|i| i.id == first), "recoverable, as Shift+Delete in Outlook");
 
@@ -240,8 +240,26 @@ fn an_on_premises_exchange_account_works_through_ews() {
     until(&pool, "draft", |e| matches!(e, Event::FolderChanged { folder, .. } | Event::FolderSynced { folder, .. } if folder == "Drafts"));
     let draft = store.load_folder("a1", "Drafts").unwrap().messages.iter().find(|m| m.subject == "Draft one").unwrap().key.clone();
     assert!(store.load_folder("a1", "Drafts").unwrap().messages.iter().any(|m| m.flags.draft));
+    let one = data.lock().unwrap().items.iter().find(|i| i.draft).map(|i| i.id.clone()).unwrap();
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: mail("Draft two", "d2"), folder: "Drafts".into(), replaces: Some(draft) });
-    eventually("one draft left", || data.lock().unwrap().items.iter().filter(|i| i.draft).count() == 1);
+    eventually("one draft left", || {
+        let d = data.lock().unwrap();
+        d.items.iter().filter(|i| i.draft).count() == 1 && !d.items.iter().any(|i| i.id == one)
+    });
+    // Quatrelle's own tidying, unlike the user's deleting: purged (`HardDelete`), as Outlook,
+    // which saves a draft in place, leaves no earlier copy among the recoverable items.
+    let d = data.lock().unwrap();
+    assert!(d.purged.iter().any(|i| i.id == one) && !d.recoverable.iter().any(|i| i.id == one), "the earlier copy purged");
+    drop(d);
+    // The copy of a draft sent or discarded (the engine's `tidy`): purged too.
+    eventually("the new copy listed", || store.load_folder("a1", "Drafts").unwrap().messages.iter().any(|m| m.subject == "Draft two"));
+    let two = store.load_folder("a1", "Drafts").unwrap().messages.iter().find(|m| m.subject == "Draft two").unwrap().key.clone();
+    let two_id = data.lock().unwrap().items.iter().find(|i| i.draft).map(|i| i.id.clone()).unwrap();
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![two], tidy: true } });
+    eventually("its copy gone", || !data.lock().unwrap().items.iter().any(|i| i.draft));
+    let d = data.lock().unwrap();
+    assert!(d.purged.iter().any(|i| i.id == two_id) && !d.recoverable.iter().any(|i| i.id == two_id), "a sent draft's copy purged");
+    drop(d);
     pool.submit(Job::Remove { account: "a1".into() });
     let _ = std::fs::remove_dir_all(dir);
 }

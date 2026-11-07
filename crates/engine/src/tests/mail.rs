@@ -773,7 +773,7 @@ fn closing_counts_whats_lost_and_a_missing_password_is_asked_for() {
         .to_string();
     assert_eq!(s.lost_on_close(), (0, 0));
     let store = s.store.clone().unwrap();
-    store.save_ops(&a, &[quatrelle_model::Op::Expunge { keys: Vec::new() }]).unwrap();
+    store.save_ops(&a, &[quatrelle_model::Op::Expunge { keys: Vec::new(), tidy: false }]).unwrap();
     s.outbox.push((a.clone(), quatrelle_store::OutboxItem { id: 3, ..Default::default() }));
     s.outbox.push(("sample".into(), quatrelle_store::OutboxItem { id: 4, ..Default::default() }));
     assert_eq!(s.lost_on_close(), (1, 1), "only the online-only account's");

@@ -348,7 +348,9 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                 .collect();
             c.batch_ok(&reqs)
         }
-        Op::Expunge { keys } => {
+        // `DELETE` leaves it recoverable, Quatrelle's own tidying of drafts too (`tidy`): where
+        // EWS purges that, Graph's `permanentDelete` would, but it isn't used yet.
+        Op::Expunge { keys, .. } => {
             let reqs: Vec<(&str, String, Option<Value>)> =
                 ids(keys).into_iter().map(|(id, f)| ("DELETE", format!("{}/messages/{}", at(&f), seg(&id)), None)).collect();
             c.batch_ok(&reqs)

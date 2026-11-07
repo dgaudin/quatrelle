@@ -388,19 +388,19 @@ fn gmail_permanent_delete_moves_to_trash_then_expunges() {
     let key = |folder: &str, validity, uid| MessageKey { account: "a1".into(), folder: folder.into(), validity, uid };
     let count = |name: &str| st.lock().unwrap().mailbox(name).map_or(0, |b| b.msgs.len());
     // No Trash path given: plain EXPUNGE, which Gmail turns into an archive.
-    apply_remote(&mut c, &Op::Expunge { keys: vec![key("INBOX", 100, 1)] }).unwrap();
+    apply_remote(&mut c, &Op::Expunge { keys: vec![key("INBOX", 100, 1)], tidy: false }).unwrap();
     assert_eq!((count("INBOX"), count("[Gmail]/All Mail")), (3, 1));
     // With the Trash path: moved, then expunged; nothing left behind.
     let trash = Some("[Gmail]/Trash");
-    crate::worker::apply_remote_with(&mut c, &Op::Expunge { keys: vec![key("INBOX", 100, 2), key("INBOX", 100, 3)] }, trash).unwrap();
+    crate::worker::apply_remote_with(&mut c, &Op::Expunge { keys: vec![key("INBOX", 100, 2), key("INBOX", 100, 3)], tidy: false }, trash).unwrap();
     assert_eq!((count("INBOX"), count("[Gmail]/All Mail"), count("[Gmail]/Trash")), (1, 1, 1));
     // Keys already in Trash: expunged in place.
-    crate::worker::apply_remote_with(&mut c, &Op::Expunge { keys: vec![key("[Gmail]/Trash", 600, 1)] }, trash).unwrap();
+    crate::worker::apply_remote_with(&mut c, &Op::Expunge { keys: vec![key("[Gmail]/Trash", 600, 1)], tidy: false }, trash).unwrap();
     assert_eq!((count("[Gmail]/All Mail"), count("[Gmail]/Trash")), (1, 0));
     // Non-Gmail server: the Trash path is ignored.
     st.lock().unwrap().caps = "IMAP4rev1 UIDPLUS MOVE";
     let mut c = login(&st);
-    crate::worker::apply_remote_with(&mut c, &Op::Expunge { keys: vec![key("INBOX", 100, 4)] }, trash).unwrap();
+    crate::worker::apply_remote_with(&mut c, &Op::Expunge { keys: vec![key("INBOX", 100, 4)], tidy: false }, trash).unwrap();
     assert_eq!((count("INBOX"), count("[Gmail]/All Mail"), count("[Gmail]/Trash")), (0, 1, 0));
 }
 
@@ -431,11 +431,11 @@ fn remote_changes_flags_moves_deletes_and_appends() {
     let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 100, uid };
     apply_remote(&mut c, &Op::SetFlag { keys: vec![key(1), key(2)], flag: Flag::Seen, on: true }).unwrap();
     apply_remote(&mut c, &Op::Move { keys: vec![key(2)], to: "Archive".into() }).unwrap();
-    apply_remote(&mut c, &Op::Expunge { keys: vec![key(3)] }).unwrap();
+    apply_remote(&mut c, &Op::Expunge { keys: vec![key(3)], tidy: false }).unwrap();
     // A stale key (old UIDVALIDITY) is skipped, not applied to whatever has that UID now.
     let mut stale = key(1);
     stale.validity = 99;
-    apply_remote(&mut c, &Op::Expunge { keys: vec![stale] }).unwrap();
+    apply_remote(&mut c, &Op::Expunge { keys: vec![stale], tidy: false }).unwrap();
     let uid = c.append("Sent", "\\Seen", b"Subject: sent\r\n\r\nx\r\n").unwrap();
     assert_eq!(uid, Some(1));
     let mut s = st.lock().unwrap();

@@ -39,7 +39,7 @@ fn burst_op(i: u32, n: u32) -> Op {
     let uid = (i.wrapping_mul(7919) % n) + 1;
     match i % 10 {
         0 => Op::Move { keys: vec![key(uid)], to: "Archive".into() },
-        1 => Op::Expunge { keys: vec![key(uid)] },
+        1 => Op::Expunge { keys: vec![key(uid)], tidy: false },
         2 | 3 => Op::SetKeyword { keys: vec![key(uid)], keyword: "$label1".into(), on: i % 4 == 2, name: Some("Red".into()) },
         4 => Op::SetFlag { keys: vec![key(uid)], flag: Flag::Flagged, on: true },
         _ => Op::SetFlag { keys: vec![key(uid)], flag: Flag::Seen, on: !i.is_multiple_of(3) },
@@ -143,7 +143,7 @@ fn reapply_each(st: &mut FolderState, account: &str, folder: &str, ops: &[Op]) -
                     }
                 }
             }
-            Op::Move { keys, .. } | Op::Expunge { keys } => {
+            Op::Move { keys, .. } | Op::Expunge { keys, .. } => {
                 let gone = uids(keys);
                 st.messages.retain(|m| !gone.contains(&m.key.uid));
             }
@@ -176,7 +176,7 @@ fn any_op() -> impl Strategy<Value = Op> {
         2 => Op::SetKeyword { keys, keyword: "$label1".into(), on, name: Some("Red".into()) },
         3 => Op::SetKeyword { keys, keyword: "$label2".into(), on, name: None },
         4 => Op::Move { keys, to: "Archive".into() },
-        _ => Op::Expunge { keys },
+        _ => Op::Expunge { keys, tidy: false },
     })
 }
 
@@ -261,7 +261,7 @@ fn an_ops_json_from_before_is_read_first_and_empties() {
     let fpath = f.account_dir("a1").join("ops.json");
     let seen = Op::SetFlag { keys: vec![key(3)], flag: Flag::Seen, on: true };
     f.files.write(&fpath, &serde_json::to_vec(std::slice::from_ref(&seen)).unwrap()).unwrap();
-    f.add_op("a1", Op::Expunge { keys: vec![key(5)] }).unwrap();
+    f.add_op("a1", Op::Expunge { keys: vec![key(5)], tidy: false }).unwrap();
     f.save_folder("a1", "INBOX", &st).unwrap();
     let back = f.load_folder("a1", "INBOX").unwrap();
     assert!(back.find(3).unwrap().flags.seen && back.find(5).is_none());
@@ -269,4 +269,25 @@ fn an_ops_json_from_before_is_read_first_and_empties() {
     assert!(f.remove_op("a1", &seen).is_err(), "can't be read: not written over");
     f.fail(None, None);
     assert_eq!(f.load_ops("a1").unwrap().len(), 2);
+}
+
+/// Deleting for good, as a journal written before Quatrelle told its own tidying (a draft's
+/// earlier copies) from the user's deleting kept it: read back whole, as the user's (Exchange
+/// keeps it recoverable, the safe side), from either form of the journal, and taken out once
+/// done. The tidying is kept as such; the user's is written as before, without the field.
+#[test]
+fn a_deletion_written_before_tidying_was_told_apart_reads_as_the_users() {
+    let s = Store::memory();
+    let old = br#"{"op":"expunge","keys":[{"account":"a1","folder":"INBOX","validity":3,"uid":5}]}"#;
+    s.files.write(&s.account_dir("a1").join("ops.json"), &[b"[".as_slice(), old, b"]"].concat()).unwrap();
+    s.files.write(&s.account_dir("a1").join("ops").join("00000000000000000001.json"), old).unwrap();
+    let users = Op::Expunge { keys: vec![key(5)], tidy: false };
+    assert_eq!(s.load_ops("a1").unwrap(), [users.clone(), users.clone()], "both read, as the user's");
+    let tidy = Op::Expunge { keys: vec![key(6)], tidy: true };
+    s.add_op("a1", tidy.clone()).unwrap();
+    assert_eq!(s.load_ops("a1").unwrap().last(), Some(&tidy), "tidying read back as tidying");
+    s.remove_op("a1", &users).unwrap();
+    s.remove_op("a1", &users).unwrap();
+    assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&tidy), "the old ones taken out once done");
+    assert_eq!(serde_json::to_vec(&users).unwrap(), old.to_vec(), "the user's written as before");
 }

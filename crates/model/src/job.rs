@@ -69,6 +69,12 @@ pub enum Op {
     /// Delete permanently (`\Deleted` + `UID EXPUNGE`).
     Expunge {
         keys: Vec<MessageKey>,
+        /// Quatrelle's own tidying, not the user's deleting: a draft's earlier copies, and the
+        /// copy of one sent or discarded. Exchange purges these (`HardDelete`), where what the
+        /// user deletes for good stays recoverable (`SoftDelete`). Left out when false, so a
+        /// change written before it reads back as the user's.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        tidy: bool,
     },
     /// Create a folder (`CREATE`, then `SUBSCRIBE`). `path` is the server's name for it.
     CreateFolder {
@@ -179,7 +185,7 @@ impl Op {
     /// The messages a change touches (none for folder changes).
     pub fn keys(&self) -> &[MessageKey] {
         match self {
-            Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Move { keys, .. } | Op::Expunge { keys } => keys,
+            Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Move { keys, .. } | Op::Expunge { keys, .. } => keys,
             Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => &[],
         }
     }

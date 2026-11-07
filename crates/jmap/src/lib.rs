@@ -511,7 +511,7 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
             }
             c.set_emails(update, Vec::new()).await
         }
-        Op::Expunge { keys } => c.set_emails(Map::new(), ids(keys).into_iter().map(|(id, _)| id).collect()).await,
+        Op::Expunge { keys, .. } => c.set_emails(Map::new(), ids(keys).into_iter().map(|(id, _)| id).collect()).await,
         Op::CreateFolder { path } => {
             let (parent, name) = split_path(st, path)?;
             c.set_mailboxes(json!({"create": {"f": {"name": name, "parentId": parent}}})).await.map(|_| ())

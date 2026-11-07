@@ -123,8 +123,26 @@ fn a_server_accounts_draft_is_found_by_its_message_id() {
     assert!(matches!(s.take_jobs().as_slice(), [Job::SaveDraft { replaces: Some(k), .. }] if *k == first), "saved again in its place");
     assert_eq!(s.compose.as_ref().unwrap().saved_id, mid, "under the same Message-ID");
     let second = listed(&mut s, 8);
+    // Saved again before the server listed the last save: the copy listed is replaced, the one
+    // more goes. Quatrelle's own tidying, not the user's deleting (Exchange purges it).
+    let more = MessageKey { uid: 9, ..second.clone() };
+    let mut st = s.store.as_ref().unwrap().load_folder(&id, "Drafts").unwrap();
+    st.messages.push(Summary { key: more.clone(), message_id: mid.clone(), subject: "Plans".into(), ..Default::default() });
+    s.store.as_ref().unwrap().save_folder(&id, "Drafts", &st).unwrap();
+    s.apply(Event::FolderChanged { account: id.clone(), folder: "Drafts".into() });
+    s.run("compose.saveDraft", &json!({})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        matches!(jobs.as_slice(), [Job::Apply { op: Op::Expunge { keys, tidy: true }, .. }, Job::SaveDraft { replaces: Some(_), .. }] if keys.len() == 1),
+        "the copy more goes as tidying: {jobs:?}"
+    );
+    let second = listed(&mut s, 10);
     s.run("compose.discard", &json!({})).unwrap();
-    assert!(matches!(s.take_jobs().as_slice(), [Job::Apply { op: Op::Expunge { keys }, .. }] if *keys == vec![second]), "discarded: its copy goes");
+    let jobs = s.take_jobs();
+    assert!(
+        matches!(jobs.as_slice(), [Job::Apply { op: Op::Expunge { keys, tidy: true }, .. }] if *keys == vec![second]),
+        "discarded: its copy goes, as tidying: {jobs:?}"
+    );
     let _ = std::fs::remove_dir_all(s.store.as_ref().unwrap().root());
 }
 

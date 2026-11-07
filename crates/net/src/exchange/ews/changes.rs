@@ -185,10 +185,13 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         // Deleted for good as Outlook in Cached Exchange Mode deletes (Shift+Delete, Delete in
         // Deleted Items, emptying a folder): into Recoverable Items, where Recover Deleted Items
         // brings it back while the mailbox keeps deleted items; `HardDelete` left nothing to recover.
-        Op::Expunge { keys } => {
+        // Quatrelle's own tidying (a draft's earlier copies, a sent draft's copy) is purged:
+        // Outlook saves a draft in place and leaves no old versions to recover.
+        Op::Expunge { keys, tidy } => {
             let gone: Vec<String> = ids(keys).into_iter().map(|(id, _)| id).collect();
+            let how = if *tidy { "HardDelete" } else { "SoftDelete" };
             for chunk in gone.chunks(BATCH) {
-                c.call_all(&format!("<m:DeleteItem DeleteType=\"SoftDelete\"><m:ItemIds>{}</m:ItemIds></m:DeleteItem>", item_ids(chunk)))?;
+                c.call_all(&format!("<m:DeleteItem DeleteType=\"{how}\"><m:ItemIds>{}</m:ItemIds></m:DeleteItem>", item_ids(chunk)))?;
             }
             Ok(())
         }
