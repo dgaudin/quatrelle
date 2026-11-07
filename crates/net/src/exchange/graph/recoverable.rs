@@ -76,9 +76,10 @@ impl Client {
         let mut done = Vec::new();
         for id in ids {
             let r = if purge {
-                self.send_raw("POST", &format!("/me/messages/{}/permanentDelete", seg(id)), "application/json", Vec::new())
+                self.post_item(&format!("/me/messages/{}/permanentDelete", seg(id)), Vec::new())
             } else {
-                self.post(&format!("/me/messages/{}/move", seg(id)), &json!({"destinationId": "deleteditems"}))
+                let body = serde_json::to_vec(&json!({"destinationId": "deleteditems"})).unwrap_or_default();
+                self.post_item(&format!("/me/messages/{}/move", seg(id)), body)
             };
             match r {
                 Ok(_) | Err(NetError::Gone(_)) => done.push(id.clone()),
@@ -123,6 +124,24 @@ mod tests {
         let (done, failed) = c.restore_recoverable(&[items[0].id.clone()], true);
         assert!(failed.is_none() && done.len() == 1, "{failed:?}");
         assert!(c.recoverable_page(0, 50).unwrap().0.is_empty());
+    }
+
+    /// An item already gone (404, `ErrorItemNotFound`) counts as done and the rest goes on.
+    #[test]
+    fn an_item_already_gone_does_not_stop_the_selection() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"));
+        d.folder("Deleted Items", None, Some("deleteditems"));
+        let raw = b"From: a@x.example\r\nSubject: S\r\nMessage-ID: <s@x>\r\n\r\nHi.\r\n";
+        let a = d.deliver(&inbox, raw, true, "2026-10-01T10:00:00Z");
+        let server = serve(d);
+        let c = Client::connect(&server.base, TOKEN).unwrap();
+        c.send_raw("DELETE", &format!("/me/messages/{a}"), "application/json", Vec::new()).unwrap();
+        for purge in [false, true] {
+            let ids = vec!["missing".to_string(), a.clone()];
+            let (done, failed) = c.restore_recoverable(&ids, purge);
+            assert!(failed.is_none() && done.len() == 2, "purge={purge}: {failed:?}");
+        }
     }
 
     #[test]
