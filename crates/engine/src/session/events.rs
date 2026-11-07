@@ -174,6 +174,8 @@ impl Session {
                 self.compacted(&account, Compacted { account: String::new(), before, after, recompressed }, no_room, error)
             }
             Event::FolderSizes { account, server, folders, quota, error } => self.sizes_answered(&account, server, folders, quota, error),
+            Event::Recoverable { account, ask, offset, items, more, error } => self.recoverable_listed(&account, ask, offset, items, more, error),
+            Event::RecoverableDone { account, ask, done, purge, error } => self.recoverable_done(&account, ask, done, purge, error),
             Event::LlmAnswered { id, text, error } => self.llm_answered(id, text, error),
             Event::LlmModels { url, models, error } => self.llm_models_answered(url, models, error),
             Event::WebexSignedIn { user, error } => self.webex_signed_in(user, error),

@@ -131,6 +131,8 @@ pub struct Data {
     pub recoverable: Vec<It>,
     /// Mail deleted with `HardDelete` (`deleting.rs`): purged, out of the user's reach.
     pub purged: Vec<It>,
+    /// The server refuses to list Recoverable Items (`ErrorInvalidServerVersion`: Exchange 2007).
+    pub refuse_recoverable: bool,
     /// People who stopped sharing their calendar with the account: every request naming their
     /// mailbox, or one of their items, is refused (`ErrorAccessDenied`).
     pub withdrawn: Vec<String>,
@@ -340,6 +342,7 @@ impl Default for Data {
             undeletable: Vec::new(),
             recoverable: Vec::new(),
             purged: Vec::new(),
+            refuse_recoverable: false,
             withdrawn: Vec::new(),
             public_changes_refused: false,
             item_shapes: Vec::new(),

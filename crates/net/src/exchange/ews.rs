@@ -756,6 +756,7 @@ mod changes;
 mod directory;
 mod listening;
 mod mailbox;
+mod recoverable;
 mod reminders;
 mod requests;
 mod rules;

@@ -506,3 +506,64 @@ fn the_envelope_outlives_a_restart() {
     assert_eq!(s.new_unread(), 0);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Recover deleted items: the window reads the server (never the cache), restores into Deleted
+/// Items, purges, and is shut for servers that keep nothing.
+#[test]
+fn recover_deleted_items_lists_restores_and_purges() {
+    use crate::RecoverBlock;
+    use quatrelle_model::{AccountConfig, Folder, Recoverable, SyncStatus};
+    let mut s = Session::open(Some(temp("recover")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    let trash = Folder { account: id.clone(), path: "Deleted Items".into(), role: FolderRole::Trash, selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![trash] });
+    s.take_jobs();
+    // Not connected: the server has to be asked.
+    assert_eq!(s.recover_block(&id), Some(RecoverBlock::Offline));
+    assert!(matches!(s.run("folder.recoverDeleted", &json!({"account": id})), Err(CmdError::Disabled(_))));
+    s.apply(Event::Status { account: id.clone(), status: SyncStatus::Online { at: 1 } });
+    s.take_jobs();
+    s.run("folder.recoverDeleted", &json!({"account": id})).unwrap();
+    let jobs = s.take_jobs();
+    let ask = match jobs.as_slice() {
+        [Job::ListRecoverable { account, ask, offset: 0 }] if *account == id => *ask,
+        other => panic!("{other:?}"),
+    };
+    assert!(s.recovering.as_ref().unwrap().loading);
+    let item = |n: u32| Recoverable { id: format!("i{n}"), subject: format!("S{n}"), deleted: 100 + i64::from(n), ..Default::default() };
+    // An answer to another asking is dropped.
+    s.apply(Event::Recoverable { account: id.clone(), ask: ask + 99, offset: 0, items: vec![item(9)], more: false, error: None });
+    assert!(s.recovering.as_ref().unwrap().items.is_empty());
+    s.apply(Event::Recoverable { account: id.clone(), ask, offset: 0, items: vec![item(1), item(2)], more: true, error: None });
+    s.run("folder.recoverMore", &json!({})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::ListRecoverable { offset: 2, .. }]));
+    s.apply(Event::Recoverable { account: id.clone(), ask, offset: 2, items: vec![item(2), item(3)], more: false, error: None });
+    let ids = |s: &Session| s.recovering.as_ref().unwrap().items.iter().map(|i| i.id.clone()).collect::<Vec<_>>();
+    assert_eq!(ids(&s), ["i1", "i2", "i3"], "a repeated item is listed once");
+    // Restore one, purge another; what the window doesn't list is left alone.
+    assert!(s.run("folder.recoverRestore", &json!({"ids": ["nope"]})).is_err());
+    s.run("folder.recoverRestore", &json!({"ids": ["i1", "i1", "nope"]})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::RestoreRecoverable { ids, purge: false, .. }] if ids == &["i1"]));
+    assert!(s.run("folder.recoverPurge", &json!({"ids": ["i3"]})).is_err(), "one change at a time");
+    s.apply(Event::RecoverableDone { account: id.clone(), ask, done: vec!["i1".into()], purge: false, error: None });
+    assert_eq!(ids(&s), ["i2", "i3"]);
+    assert!(matches!(s.take_jobs().as_slice(), [Job::SyncFolder { folder, .. }] if folder == "Deleted Items"), "it comes into Deleted Items");
+    s.run("folder.recoverPurge", &json!({"ids": ["i3"]})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::RestoreRecoverable { purge: true, .. }]));
+    s.apply(Event::RecoverableDone { account: id.clone(), ask, done: vec!["i3".into()], purge: true, error: None });
+    assert_eq!(ids(&s), ["i2"]);
+    assert!(s.take_jobs().is_empty(), "a purge brings nothing into the folder");
+    s.run("folder.recoverClose", &json!({})).unwrap();
+    assert!(s.recovering.is_none());
+    // A server that keeps nothing: IMAP, or an account on this computer.
+    let imap = s.add_account(AccountConfig { name: "Mail".into(), email: "me@example.com".into(), ..Default::default() }, Some("pw".into())).unwrap();
+    assert_eq!(s.recover_block(&imap), Some(RecoverBlock::NoServer));
+    assert!(matches!(s.run("folder.recoverDeleted", &json!({"account": imap})), Err(CmdError::Disabled(_))));
+}

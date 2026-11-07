@@ -20,6 +20,21 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.empty_folder(&account, &folder)
         })
         .params(r#"{"account"?: string, "folder"?: string (Deleted Items and Junk are emptied for good; any other folder's mail goes to Deleted Items), "role"?: "trash"|"junk"}"#),
+        CommandSpec::new("folder.recoverDeleted", "Recover deleted items", "Folder › Deleted Items", |s, v| {
+            let account = account_param(s, v)?;
+            s.recover_deleted(&account)
+        })
+        .params(r#"{"account"?: string (an Exchange or Microsoft 365 account; default: the current one)} (opens the list of what the server keeps of the items deleted for good; the answer comes in after)"#)
+        .when(|s| if s.accounts.iter().any(|a| a.config.graph.is_some() || a.config.ews.is_some()) { None } else { Some("add an Exchange or Microsoft 365 account first") }),
+        CommandSpec::new("folder.recoverMore", "Read more deleted items", "Recover deleted items", |s, _| s.recover_more())
+            .params("{} (the next page of the list)"),
+        CommandSpec::new("folder.recoverRestore", "Restore deleted items", "Recover deleted items", |s, v| {
+            s.recover_items(&recover_ids(v), false)
+        })
+        .params(r#"{"ids": [string] (items of the list; they come back into Deleted Items)}"#),
+        CommandSpec::new("folder.recoverPurge", "Purge deleted items", "Recover deleted items", |s, v| s.recover_items(&recover_ids(v), true))
+            .params(r#"{"ids": [string] (items of the list, deleted for good: they can't be had again; the window asks first)}"#),
+        CommandSpec::new("folder.recoverClose", "Close the deleted items", "Recover deleted items", |s, _| s.recover_close()).params("{}"),
         CommandSpec::new("account.add", "Add account", "File › Accounts", add_account)
             .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "smtpUsername"?: string and "smtpPassword"?: string (the outgoing server's own sign-in, when it isn't the incoming server's), "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft), "userAgent"?: string (with ews: the User-Agent its requests name instead of Quatrelle's, for a server that lets in only clients it knows), "oauthClientId"?: string and "oauthTenant"?: string (Microsoft sign-in through your organisation's own app registration: its Application (client) ID, and its tenant in place of common), "onlineOnly"?: bool (keep none of its mail on this computer; not for POP)}"#),
         CommandSpec::new("account.importPst", "Open Outlook data file", "File › Open & Export", |s, v| {
@@ -552,4 +567,9 @@ pub(super) fn list_accounts(s: &mut Session, _: &Value) -> CmdResult {
             "folders": a.folders.iter().map(|f| json!({"path": f.path, "name": f.display_name(), "role": f.role.code(), "unread": f.unread, "total": f.total})).collect::<Vec<_>>(),
         }))
         .collect::<Vec<_>>()))
+}
+
+/// The item ids a command names (at most 20,000).
+fn recover_ids(v: &Value) -> Vec<String> {
+    v.get("ids").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).take(20_000).map(str::to_string).collect()).unwrap_or_default()
 }

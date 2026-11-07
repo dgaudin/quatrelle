@@ -6,6 +6,7 @@
 use super::*;
 
 mod filing;
+mod recovering;
 mod rules;
 
 pub(super) use filing::{file_here, file_name};
@@ -233,6 +234,8 @@ impl Worker {
             Job::GetRooms { .. } => self.rooms(),
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
             Job::ServerFolderSizes { .. } => self.folder_sizes(),
+            Job::ListRecoverable { ask, offset, .. } => self.list_recoverable(ask, offset),
+            Job::RestoreRecoverable { ask, ids, purge, .. } => self.restore_recoverable(ask, ids, purge),
             Job::FindCertificates { emails, .. } => self.directory_certificates(&emails),
             Job::SearchDirectory { query, .. } => self.search_directory(&query),
             Job::ExpandList { address, item_id, .. } => self.expand_list(address, item_id),

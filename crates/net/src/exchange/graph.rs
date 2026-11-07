@@ -529,6 +529,7 @@ fn importance_header(m: &Value) -> String {
     }
 }
 
+mod recoverable;
 mod requests;
 mod rules;
 mod sync;

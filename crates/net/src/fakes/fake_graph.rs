@@ -51,6 +51,9 @@ pub struct Msg {
 pub struct Data {
     pub folders: Vec<Fo>,
     pub messages: Vec<Msg>,
+    /// Mail deleted (`DELETE`): in Recoverable Items (`recoverableitemsdeletions`), until moved
+    /// back or purged (`permanentDelete`).
+    pub recoverable: Vec<Msg>,
     /// MIME sources handed to `sendMail`.
     pub sent: Vec<Vec<u8>>,
     /// Votes sent: (subject, choice).

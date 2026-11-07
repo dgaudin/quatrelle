@@ -358,6 +358,13 @@ pub enum Job {
     /// The same on the server (Server Data), with the mailbox's limits where the server tells
     /// them. Exchange only; answered by [`Event::FolderSizes`].
     ServerFolderSizes { account: String },
+    /// A page of what an Exchange server keeps of the items deleted for good (Recoverable Items:
+    /// Outlook's Recover Deleted Items), from the `offset`th on. Answered by
+    /// [`Event::Recoverable`], which carries `ask` back.
+    ListRecoverable { account: String, ask: u64, offset: u32 },
+    /// Bring items of Recoverable Items back into the Deleted Items folder, or with `purge` delete
+    /// them for good (they can't be had again). Answered by [`Event::RecoverableDone`].
+    RestoreRecoverable { account: String, ask: u64, ids: Vec<String>, purge: bool },
     /// Write the account's mail to an Outlook data file, which opens as `name`; `marks`: what only
     /// this computer keeps of it (when flagged messages are due, the categories' names).
     ExportPst {
@@ -489,6 +496,8 @@ impl Job {
             | Job::CompactDataFile { account }
             | Job::LocalFolderSizes { account }
             | Job::ServerFolderSizes { account }
+            | Job::ListRecoverable { account, .. }
+            | Job::RestoreRecoverable { account, .. }
             | Job::ExportPst { account, .. }
             | Job::GetRooms { account }
             | Job::FindCertificates { account, .. }
@@ -591,7 +600,9 @@ mod events;
 pub use events::{Event, HeldKey, ListChange, Revocation};
 
 mod pgp;
+mod recover;
 pub use pgp::{NO_KEYCHAIN, NOT_FOR_YOU, NOT_IN_BROWSER, PgpChange, PgpSignature, PgpWork, Unavailable};
+pub use recover::{RECOVERABLE_MAX, RECOVERABLE_PAGE, Recoverable, RecoverableKind};
 
 mod webex;
 pub use webex::{WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting};

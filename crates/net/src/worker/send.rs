@@ -39,6 +39,8 @@ impl Worker {
                 | Job::GetRooms { .. }
                 | Job::GetAvailability { .. }
                 | Job::ServerFolderSizes { .. }
+                | Job::ListRecoverable { .. }
+                | Job::RestoreRecoverable { .. }
                 | Job::FindCertificates { .. }
                 | Job::SearchDirectory { .. }
                 | Job::ExpandList { .. }

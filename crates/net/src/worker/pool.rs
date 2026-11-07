@@ -582,6 +582,14 @@ impl Pool {
                 let error = Some("the account is offline".to_string());
                 self.sink.emit(Event::FolderSizes { account, server: true, folders: Vec::new(), quota: None, error });
             }
+            Job::ListRecoverable { account, ask, offset } if !self.workers.contains_key(&account) => {
+                let error = Some("the account is offline".to_string());
+                self.sink.emit(Event::Recoverable { account, ask, offset, items: Vec::new(), more: false, error });
+            }
+            Job::RestoreRecoverable { account, ask, purge, .. } if !self.workers.contains_key(&account) => {
+                let error = Some("the account is offline".to_string());
+                self.sink.emit(Event::RecoverableDone { account, ask, done: Vec::new(), purge, error });
+            }
             Job::ReplaceOutlookRules { account } if !self.workers.contains_key(&account) => {
                 self.sink
                     .emit(Event::Notice { account, message: "the account is offline: connect it, then replace Outlook's copy of the rules".into() });

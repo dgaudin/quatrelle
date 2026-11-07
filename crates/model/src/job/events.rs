@@ -238,6 +238,25 @@ pub enum Event {
         quota: Option<MailboxQuota>,
         error: Option<String>,
     },
+    /// A page of Recoverable Items ([`Job::ListRecoverable`]): the items from `offset` on, whether
+    /// the server has `more`, or why they couldn't be read.
+    Recoverable {
+        account: String,
+        ask: u64,
+        offset: u32,
+        items: Vec<Recoverable>,
+        more: bool,
+        error: Option<String>,
+    },
+    /// What [`Job::RestoreRecoverable`] did: the ids it dealt with (`purge`: deleted for good,
+    /// else back in Deleted Items), or why it stopped (some may be done all the same).
+    RecoverableDone {
+        account: String,
+        ask: u64,
+        done: Vec<String>,
+        purge: bool,
+        error: Option<String>,
+    },
     /// How an export to a data file is going (`done`: finished, or failed with `error`).
     Exported {
         account: String,
