@@ -17,6 +17,8 @@ pub(crate) mod fake_graph;
 #[cfg(test)]
 pub(crate) mod fake_jmap;
 #[cfg(test)]
+pub(crate) mod fake_llm;
+#[cfg(test)]
 pub(crate) mod fake_webex;
 #[cfg(test)]
 mod real_layout;
