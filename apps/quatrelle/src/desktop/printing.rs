@@ -65,7 +65,7 @@ impl Printing {
 
 /// Write `pdf` to a new file in `dir`, open it for reading, and remove it: the open file keeps
 /// the bytes, and nothing is left behind (Unix keeps a removed file while it's open).
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn unlinked_copy(dir: &std::path::Path, pdf: &[u8]) -> Result<std::fs::File, String> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
@@ -273,7 +273,7 @@ mod tests {
     use super::*;
 
     /// The PDF handed over reads back whole from its descriptor, and no file is left.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn the_pdf_is_handed_over_and_no_file_is_left() {
         use std::io::Read;
