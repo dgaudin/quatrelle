@@ -90,7 +90,7 @@ fn an_account_round_trips_through_a_data_file() {
     let file = dir.join("Out.pst");
     let mut ticks = 0;
     let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| ticks += 1).unwrap();
-    assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, tasks: 0, notes: 0, contacts: 1 });
+    assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, tasks: 0, notes: 0, contacts: 1, pim_already: 0 });
     // The calendar beside it; the contact inside it, no address book beside it.
     let ics = std::fs::read_to_string(dir.join("Out Calendar.ics")).unwrap();
     assert!(ics.contains("SUMMARY:Screening") && ics.contains("BEGIN:VCALENDAR"), "{ics}");

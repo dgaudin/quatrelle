@@ -74,15 +74,21 @@ fn key(g: &GuidValue) -> GuidKey {
 pub(crate) const PINNED: &str = "X-Quatrelle-Pinned";
 /// …as it reads MailCraft's, which a file MailCraft exported keeps.
 const PINNED_UPSTREAM: &str = "X-MailCraft-Pinned";
+/// The property (in PS_PUBLIC_STRINGS) an export marks each item of the account's calendar,
+/// contacts, notes and tasks with: the item's uid in the account and a digest of what was
+/// written, so a file added to again tells the items it has from Quatrelle from changed ones and
+/// from its own (`pst_export::pim`).
+pub(crate) const EXPORTED_ITEM: &str = "X-Quatrelle-Item";
 
 /// The data file's named properties: (property set, number) → property id; and those named by a
-/// string that the import reads, the categories (`Keywords` in PS_PUBLIC_STRINGS) and a
-/// message's pin ([`PINNED`]).
+/// string that Quatrelle reads, the categories (`Keywords` in PS_PUBLIC_STRINGS), a message's pin
+/// ([`PINNED`]) and an exported item's mark ([`EXPORTED_ITEM`]).
 #[derive(Default)]
 pub(crate) struct Named {
     ids: HashMap<(GuidKey, u32), u16>,
     keywords: Option<u16>,
     pinned: Vec<u16>,
+    exported: Option<u16>,
 }
 
 impl Named {
@@ -114,6 +120,7 @@ impl Named {
                     Some(n) if (n.eq_ignore_ascii_case(PINNED) || n.eq_ignore_ascii_case(PINNED_UPSTREAM)) && named.pinned.len() < 2 => {
                         named.pinned.push(e.prop_id());
                     }
+                    Some(n) if n.eq_ignore_ascii_case(EXPORTED_ITEM) => named.exported = Some(e.prop_id()),
                     _ => {}
                 },
                 NamedPropertyId::StringOffset(_) => {}
@@ -135,6 +142,11 @@ impl Named {
     /// The properties holding a message's pin ([`PINNED`], and MailCraft's).
     pub(crate) fn pinned(&self) -> &[u16] {
         &self.pinned
+    }
+
+    /// The property holding an exported item's mark ([`EXPORTED_ITEM`]).
+    pub(crate) fn exported(&self) -> Option<u16> {
+        self.exported
     }
 
     fn id(&self, set: GuidKey, lid: u32) -> Option<u16> {

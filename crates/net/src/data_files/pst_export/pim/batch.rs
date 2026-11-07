@@ -47,6 +47,7 @@ pub(in super::super) fn properties<'a>(props: &'a [(Key, Value)], lists: &'a Lis
             Key::Tag(id) => UnicodePstProperty::tagged(*id, value),
             Key::Lid(set, id) => UnicodePstProperty::named(*set, UnicodePstName::Id(*id), value),
             Key::Keywords => UnicodePstProperty::named(PS_PUBLIC_STRINGS, UnicodePstName::String("Keywords"), value),
+            Key::Exported => UnicodePstProperty::named(PS_PUBLIC_STRINGS, UnicodePstName::String(crate::pst_pim::EXPORTED_ITEM), value),
         });
     }
     out

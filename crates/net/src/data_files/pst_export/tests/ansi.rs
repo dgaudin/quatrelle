@@ -113,7 +113,7 @@ fn an_account_goes_into_an_ansi_data_file_and_back() {
 
     // Added to again, nothing goes in twice.
     let again = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| {}).unwrap();
-    assert_eq!((again.messages, again.already), (0, 4));
+    assert_eq!((again.messages, again.already, again.pim_already), (0, 4, 10));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
