@@ -42,7 +42,9 @@ pub(crate) fn task_of(x: &Extra, subject: &str, body: &str, importance: i8, date
     let said = rest.iter().find_map(|l| l.get(..6).filter(|h| h.eq_ignore_ascii_case("RRULE:")).and_then(|_| l.get(6..))).map(str::trim);
     // The pattern counts from the task's first day: its start, else the day it's due.
     let from = start.or(due).unwrap_or(0).saturating_mul(86_400);
-    let rrule = match said.filter(|r| !r.is_empty()) {
+    // A rule said with a control character (a lone carriage return kept inside the line) isn't
+    // one: written out it would end its iCalendar line early. The item's pattern stands then.
+    let rrule = match said.filter(|r| !r.is_empty() && !r.contains(char::is_control)) {
         Some(rule) => Some(rule.to_string()),
         None => (!x.task_recurrence.is_empty()).then(|| recur::pattern(&x.task_recurrence, from, "").map(|p| p.rule)).flatten(),
     };
@@ -91,5 +93,18 @@ mod tests {
         assert_eq!(task_of(&late, "a", "", 0, 0, "u".into()).start, Some(5));
         let none = task_of(&Extra { task_recurrence: vec![1, 2, 3], ..Default::default() }, "a", "", 0, 0, "u".into());
         assert_eq!(none.rrule, None, "a damaged pattern is none");
+    }
+
+    /// Found by the fuzz target `pst_pim_text`: a carriage return alone inside the kept `RRULE:`
+    /// line came through, and would have ended the rule's iCalendar line early.
+    #[test]
+    fn a_kept_rule_with_a_control_character_is_no_rule() {
+        let body = |rule: &str| format!("Notes\n\nBEGIN:VTODO\nX-QUATRELLE-REST:1\nRRULE:{rule}\nEND:VTODO\n");
+        let t = task_of(&Extra::default(), "a", &body("FREQ=WEEKLY;BYDAY=MO"), 0, 0, "u".into());
+        assert_eq!(t.rrule.as_deref(), Some("FREQ=WEEKLY;BYDAY=MO"), "a rule kept reads back");
+        for bad in ["FREQ=DAILY\rX-INJECTED:1", "FREQ=DAILY\u{0}", "FREQ=\u{1b}DAILY"] {
+            let t = task_of(&Extra::default(), "a", &body(bad), 0, 0, "u".into());
+            assert_eq!(t.rrule, None, "{bad:?}");
+        }
     }
 }
