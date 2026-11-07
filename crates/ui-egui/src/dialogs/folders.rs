@@ -7,13 +7,22 @@ use super::*;
 
 pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
-        Dialog::ConfirmDelete { count } => {
+        Dialog::ConfirmDelete { count, exchange } => {
             ui.set_width(360.0);
             title(ui, t, "Delete permanently?");
-            let what = if *count == 1 {
-                tl!("This message will be deleted for good. This can't be undone.").to_string()
-            } else {
-                tf!("These {n} messages will be deleted for good. This can't be undone.", n = count)
+            // Exchange keeps what's deleted for good (`SoftDelete`, Graph's `DELETE`) as long as
+            // the server is set to: no time is said.
+            let what = match (*count == 1, *exchange) {
+                (true, false) => tl!("This message will be deleted for good. This can't be undone.").to_string(),
+                (false, false) => tf!("These {n} messages will be deleted for good. This can't be undone.", n = count),
+                (true, true) => {
+                    tl!("This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.")
+                        .to_string()
+                }
+                (false, true) => tf!(
+                    "These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.",
+                    n = count
+                ),
             };
             ui.label(RichText::new(what).color(t.dim));
             let (ok, cancel) = buttons(ui, t, "Delete", true);

@@ -289,9 +289,11 @@
 	Theme	ערכת נושא
 	Then	אז
 	These {n} messages will be deleted for good. This can't be undone.	{n} ההודעות האלה יימחקו לצמיתות. אי אפשר לבטל את זה.
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	{n} ההודעות האלה יימחקו מכאן, אבל שרת Exchange שומר אותן זמן מה בין הפריטים הניתנים לשחזור.
 	This folder	התיקייה הזו
 	This message couldn't be downloaded: {error}	לא ניתן היה להוריד את ההודעה: {error}
 	This message will be deleted for good. This can't be undone.	ההודעה הזו תימחק לצמיתות. אי אפשר לבטל את זה.
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	ההודעה הזו תימחק מכאן, אבל שרת Exchange שומר אותה זמן מה בין הפריטים הניתנים לשחזור.
 	This weekend	בסוף השבוע הזה
 	Three weeks ago	לפני שלושה שבועות
 	Thu	ה׳

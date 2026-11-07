@@ -289,9 +289,11 @@
 	Theme	Тема оформления
 	Then	Тогда
 	These {n} messages will be deleted for good. This can't be undone.	Эти письма ({n}) будут удалены окончательно. Это нельзя отменить.
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	Эти письма ({n}) будут удалены отсюда, но сервер Exchange ещё какое-то время хранит их среди восстанавливаемых элементов.
 	This folder	Эта папка
 	This message couldn't be downloaded: {error}	Не удалось загрузить это письмо: {error}
 	This message will be deleted for good. This can't be undone.	Это письмо будет удалено окончательно. Это нельзя отменить.
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	Это письмо будет удалено отсюда, но сервер Exchange ещё какое-то время хранит его среди восстанавливаемых элементов.
 	This weekend	В эти выходные
 	Three weeks ago	Три недели назад
 	Thu	чт

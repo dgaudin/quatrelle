@@ -246,20 +246,25 @@ impl MailApp {
 /// What deleting these `count` messages asks first, as the option says (on unless turned off):
 /// Delete for good (Shift+Delete) does, and Delete when all of them are in Deleted Items, where
 /// it's for good too. Not in the Outbox: deleting there only keeps a message from being sent.
-/// None: they go at once.
+/// None: they go at once. The question says when Exchange keeps them all a while.
 fn question<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, count: usize, for_good: bool) -> Option<Dialog> {
     let in_trash =
         |k: &MessageKey| s.account(&k.account).and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash)).is_some_and(|t| t.path == k.folder);
+    let exchange = |k: &MessageKey| s.account(&k.account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some());
     let mut any = false;
     let mut all_in_trash = true;
     let mut all_outbox = true;
+    let mut all_exchange = true;
     for k in keys {
         any = true;
         all_in_trash &= in_trash(k);
-        all_outbox &= s.outbox_entry(k).is_some();
+        let outbox = s.outbox_entry(k).is_some();
+        all_outbox &= outbox;
+        // An Outbox message was never on the server: nothing keeps it.
+        all_exchange &= !outbox && exchange(k);
     }
     let asks = s.prefs.confirm_permanent_delete && any && if for_good { !all_outbox } else { all_in_trash };
-    asks.then_some(Dialog::ConfirmDelete { count })
+    asks.then_some(Dialog::ConfirmDelete { count, exchange: all_exchange })
 }
 
 /// Delete (or, `for_good`, Shift+Delete) on the message of a window of its own, or of the

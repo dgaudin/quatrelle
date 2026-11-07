@@ -289,9 +289,11 @@
 	Theme	テーマ
 	Then	アクション
 	These {n} messages will be deleted for good. This can't be undone.	これら {n} 件のメッセージは完全に削除されます。元に戻すことはできません。
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	これら {n} 件のメッセージはここから削除されますが、Exchange サーバーはしばらくの間、回復可能なアイテムとして保持します。
 	This folder	このフォルダー
 	This message couldn't be downloaded: {error}	このメッセージをダウンロードできませんでした: {error}
 	This message will be deleted for good. This can't be undone.	このメッセージは完全に削除されます。元に戻すことはできません。
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	このメッセージはここから削除されますが、Exchange サーバーはしばらくの間、回復可能なアイテムとして保持します。
 	This weekend	今週末
 	Three weeks ago	3 週間前
 	Thu	木
