@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! The account's contacts, contact groups, notes and tasks as Outlook items, in the data file's
-//! own Contacts, Notes and Tasks folders (MS-OXOCNTC, MS-OXONOTE, MS-OXOTASK; the folders recorded
-//! as the file's, MS-OXOSFLD 2.2, so Outlook shows them as its own): a card as an `IPM.Contact`
-//! or, a group's, an `IPM.DistList` ([`contact`]), a note as an `IPM.StickyNote`, a task as an
+//! The account's calendar, contacts, contact groups, notes and tasks as Outlook items, in the data
+//! file's own Calendar, Contacts, Notes and Tasks folders (MS-OXOCAL, MS-OXOCNTC, MS-OXONOTE,
+//! MS-OXOTASK; the folders recorded as the file's, MS-OXOSFLD 2.2, so Outlook shows them as its
+//! own): an event as an `IPM.Appointment` ([`calendar`]), a card as an `IPM.Contact` or, a
+//! group's, an `IPM.DistList` ([`contact`]), a note as an `IPM.StickyNote`, a task as an
 //! `IPM.Task` ([`task`]). A file added to keeps its own items, and those it records as its
 //! special folders take the account's. Each item is marked with its uid and a digest of what went
 //! in (`pst_pim::EXPORTED_ITEM`): added to again, an item the file has as it is now isn't written
@@ -20,6 +21,7 @@ use super::*;
 
 mod batch;
 use batch::write_batch;
+pub(super) use batch::{Lists, lists, properties};
 
 /// PSETID_Address and PSETID_Note (MS-OXPROPS 1.3.2).
 pub(super) const PSETID_ADDRESS: GuidValue = GuidValue::new(0x0006_2004, 0, 0, [0xC0, 0, 0, 0, 0, 0, 0, 0x46]);
@@ -65,6 +67,24 @@ pub(super) struct File {
     pub(super) picture: bool,
 }
 
+/// Someone an item is to: an appointment's organizer or one of its attendees, with its
+/// PidTagRecipientFlags and PidTagRecipientTrackStatus when it has them (MS-OXOCAL 2.2.4.10).
+#[derive(Clone)]
+pub(super) struct Person {
+    pub(super) name: String,
+    pub(super) email: String,
+    pub(super) kind: UnicodePstRecipientType,
+    pub(super) flags: Option<i32>,
+    pub(super) track: Option<i32>,
+}
+
+/// An item attached to another, hidden: an appointment's changed occurrence (MS-OXOCAL 2.2.10.1),
+/// with the attachment's own properties (tagged).
+pub(super) struct Attached {
+    pub(super) item: Item,
+    pub(super) props: Vec<(u16, Value)>,
+}
+
 /// An item, ready to write.
 #[derive(Default)]
 pub(super) struct Item {
@@ -77,6 +97,13 @@ pub(super) struct Item {
     pub(super) modified: i64,
     pub(super) props: Vec<(Key, Value)>,
     pub(super) files: Vec<File>,
+    /// Who it's from (name, address): an appointment's organizer.
+    pub(super) sender: (String, String),
+    pub(super) people: Vec<Person>,
+    pub(super) attached: Vec<Attached>,
+    /// An occurrence of a series whose rule the pattern can't say, written on its own (not part
+    /// of what it is: counted only).
+    pub(super) occurrence: bool,
 }
 
 impl Item {
@@ -88,7 +115,8 @@ impl Item {
             Value::Bins(b) => b.iter().map(Vec::len).sum(),
             _ => 8,
         });
-        self.body.len().saturating_add(props.sum()).saturating_add(self.files.iter().map(|f| f.data.len()).sum())
+        let attached = self.attached.iter().map(|a| a.item.bytes()).fold(0usize, usize::saturating_add);
+        self.body.len().saturating_add(props.sum()).saturating_add(self.files.iter().map(|f| f.data.len()).sum()).saturating_add(attached)
     }
 
     /// The item marked as the account's item `uid`, with a digest of all that is written of it
@@ -132,6 +160,28 @@ impl Item {
             h.part(&f.data);
             h.part(&[u8::from(f.picture)]);
         }
+        // An appointment's organizer, guests and changed occurrences (none: nothing more, so the
+        // digest of an item without them is what it was).
+        if !self.sender.1.is_empty() || !self.people.is_empty() || !self.attached.is_empty() {
+            h.part(self.sender.0.as_bytes());
+            h.part(self.sender.1.as_bytes());
+            for p in &self.people {
+                let n = |v: Option<i32>| {
+                    v.map_or([0; 5], |n| {
+                        let b = n.to_le_bytes();
+                        [1, b[0], b[1], b[2], b[3]]
+                    })
+                };
+                h.part(&[p.name.as_bytes(), &[0], p.email.as_bytes(), &[0, p.kind as u8], &n(p.flags), &n(p.track)].concat());
+            }
+            for a in &self.attached {
+                a.item.digest_into(h);
+                for (id, v) in &a.props {
+                    h.part(&id.to_le_bytes());
+                    value_digest(h, v);
+                }
+            }
+        }
     }
 }
 
@@ -174,6 +224,10 @@ pub(super) fn crlf(s: &str) -> String {
 /// What went into the data file, and what a file added to had already (as it is now).
 #[derive(Default)]
 pub(super) struct Written {
+    pub(super) events: usize,
+    /// Occurrences of series whose rule Outlook's pattern can't say, each written as an
+    /// appointment of its own (among `events`).
+    pub(super) occurrences: usize,
     pub(super) contacts: usize,
     pub(super) notes: usize,
     pub(super) tasks: usize,
@@ -183,10 +237,13 @@ pub(super) struct Written {
 /// The account's items for each of the file's folders, those it has, each marked; `now` is when
 /// the export runs (Unix seconds), a card's time.
 fn items(pim: &Pim, now: i64) -> Vec<(Special, Vec<Item>)> {
+    let events: Vec<&quatrelle_model::ical::CalEvent> = pim.events.iter().map(|e| &e.event).collect();
+    let calendar = super::calendar::items(&events, now).into_iter().map(|(uid, item)| item.marked(&uid)).collect();
     let contacts: Vec<Item> = pim.cards.iter().map(|c| super::contact::item(&c.card, now).marked(&c.card.uid)).collect();
     let notes = pim.notes.iter().map(|n| note(&n.note, now).marked(&n.note.uid)).collect();
     let tasks = pim.tasks.iter().map(|t| super::task::item(&t.task, now).marked(&t.task.uid)).collect();
-    [(Special::Contacts, contacts), (Special::Notes, notes), (Special::Tasks, tasks)].into_iter().filter(|(_, items)| !items.is_empty()).collect()
+    let all = [(Special::Calendar, calendar), (Special::Contacts, contacts), (Special::Notes, notes), (Special::Tasks, tasks)];
+    all.into_iter().filter(|(_, items)| !items.is_empty()).collect()
 }
 
 /// A note (MS-OXONOTE 2.2.1): its text the body, its first line the subject, its colour.
@@ -206,7 +263,7 @@ fn note(n: &Note, now: i64) -> Item {
     }
 }
 
-/// Write the account's contacts, notes and tasks (`pim`) into the data file at `path` (in
+/// Write the account's calendar, contacts, notes and tasks (`pim`) into the data file at `path` (in
 /// `format`; made when there is none yet: `created`); `existing`: a file added to, whose special
 /// folders take them; `taken`: where the account's mail went, so a new folder isn't one of
 /// those. The file has the mail by then: one that can't record a folder as its own keeps the
@@ -253,6 +310,10 @@ pub(super) fn write(
             start = end;
         }
         match role {
+            Special::Calendar => {
+                done.events = count;
+                done.occurrences = items.iter().filter(|i| i.occurrence).count();
+            }
             Special::Contacts => done.contacts = count,
             Special::Notes => done.notes = count,
             _ => done.tasks = count,

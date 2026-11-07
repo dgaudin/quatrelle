@@ -12,10 +12,11 @@
 //! and sensitivity ([`item`]); signed and encrypted mail and reports as Outlook keeps them
 //! ([`kinds`]); an attached message as the message it is, and files of any size, a big one kept
 //! in a file of its own until its batch is written ([`files`]). Messages only known by their headers (never opened, on an account
-//! that keeps headers only) are counted as skipped. The account's contacts, contact groups, notes
-//! and tasks go in as Outlook's own items, in the file's Contacts, Notes and Tasks folders
-//! ([`pim`]). Events aren't mapped onto Outlook's items yet, so the account's calendar goes
-//! beside the file as `… Calendar.ics`, which every calendar reads.
+//! that keeps headers only) are counted as skipped. A meeting's request, cancellation or answer
+//! goes in as Outlook's meeting mail, with the meeting's own properties ([`meeting`]). The
+//! account's calendar, contacts, contact groups, notes and tasks go in as Outlook's own items, in
+//! the file's Calendar, Contacts, Notes and Tasks folders ([`pim`], [`calendar`]): nothing is
+//! written beside the file.
 //!
 //! A data file that's already there is added to, as Outlook's export does: its mail stays, the
 //! account's goes into folders of the same names, and messages already in it (by `Message-ID`)
@@ -59,8 +60,11 @@ pub struct Exported {
     pub skipped: usize,
     /// Messages a data file already there had (by `Message-ID`), not written again.
     pub already: usize,
-    /// Events written beside the data file (its calendar).
+    /// The account's events written into it as appointments (a series is one)…
     pub events: usize,
+    /// …of which occurrences of a series whose rule Outlook's pattern can't say, each written as
+    /// an appointment of its own (MS-OXOCAL has no place for the rule).
+    pub occurrences: usize,
     /// The account's tasks, notes and people (contact groups among them) written into it…
     pub tasks: usize,
     pub notes: usize,
@@ -69,11 +73,13 @@ pub struct Exported {
     pub pim_already: usize,
 }
 
+mod calendar;
 mod contact;
 mod files;
 mod format;
 mod item;
 mod kinds;
+mod meeting;
 mod pattern;
 mod pim;
 mod place;
@@ -222,8 +228,18 @@ pub fn export(
             if let Err(e) = std::fs::rename(&temp, path) {
                 return Err(format!("the data file couldn't be replaced ({e}): the mail is in {}", temp.display()));
             }
-            let events = calendar_beside(&pim, path, now).map_err(|e| e.to_string())?;
-            Ok(Exported { events, tasks: inside.tasks, notes: inside.notes, contacts: inside.contacts, pim_already: inside.already, ..done })
+            if inside.occurrences > 0 {
+                log::info!("{} occurrences of series whose rule Outlook can't keep went in one by one", inside.occurrences);
+            }
+            Ok(Exported {
+                events: inside.events,
+                occurrences: inside.occurrences,
+                tasks: inside.tasks,
+                notes: inside.notes,
+                contacts: inside.contacts,
+                pim_already: inside.already,
+                ..done
+            })
         }
         Err(e) => {
             let _ = std::fs::remove_file(&temp);
@@ -237,17 +253,6 @@ pub fn export(
 #[doc(hidden)]
 pub fn message_class(raw: &[u8]) -> Option<&'static str> {
     owned(raw, 0, item::State::default(), None).map(|m| m.class())
-}
-
-/// The account's calendar beside the data file: the events written.
-fn calendar_beside(pim: &quatrelle_model::pim::Pim, path: &Path, now: i64) -> quatrelle_store::Result<usize> {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Mail".into());
-    let dir = path.parent().unwrap_or(Path::new("."));
-    let events: Vec<quatrelle_model::ical::CalEvent> = pim.events.iter().map(|e| e.event.clone()).collect();
-    if !events.is_empty() {
-        quatrelle_store::write_atomic(&dir.join(format!("{stem} Calendar.ics")), quatrelle_model::ical::write(&events, None, now).as_bytes())?;
-    }
-    Ok(events.len())
 }
 
 /// A task's rule as the pattern an export writes for a task whose first day is `from`, and
@@ -272,4 +277,28 @@ pub fn read_back_text(body: &str) -> (quatrelle_model::vcard::Card, quatrelle_mo
 #[doc(hidden)]
 pub fn task_rule(pattern: &[u8], from: i64) -> Option<String> {
     crate::pst_pim::recurrence(pattern, from).map(|(rule, _)| rule)
+}
+
+/// The pattern an export writes for a repeating appointment starting at `start` (Unix seconds,
+/// in the zone `tzid`, an hour long) with `rule`, each of `moves` a changed occurrence: (which
+/// occurrence, how far it moved in seconds, its title); `None` when the pattern can't say the
+/// series. For the fuzz target, whose reader reads it back.
+#[doc(hidden)]
+pub fn appointment_pattern(rule: &str, start: i64, tzid: &str, moves: &[(usize, i64, &str)]) -> Option<Vec<u8>> {
+    use quatrelle_model::ical::{self, CalEvent};
+    let e = CalEvent { uid: "u".into(), start, end: start.saturating_add(3600), tzid: tzid.into(), rrule: Some(rule.into()), ..Default::default() };
+    let all = ical::starts(&e, i64::MAX);
+    let own: Vec<CalEvent> = moves
+        .iter()
+        .filter_map(|(i, by, title)| {
+            let r = *all.get(i.checked_rem(all.len())?)?;
+            let s = r.saturating_add(*by);
+            Some(CalEvent { recurrence_id: Some(r), start: s, end: s.saturating_add(3600), summary: (*title).into(), rrule: None, ..e.clone() })
+        })
+        .collect();
+    let own: Vec<&CalEvent> = own.iter().collect();
+    calendar::series(&e, &own)?.into_iter().find_map(|(k, v)| match (k, v) {
+        (pim::Key::Lid(_, 0x8216), pim::Value::Bin(b)) => Some(b),
+        _ => None,
+    })
 }

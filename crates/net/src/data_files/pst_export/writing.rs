@@ -107,7 +107,16 @@ pub(super) fn write(path: &Path, format: Format, folder: &[&str], batch: &[Owned
     let held: Vec<Held<'_>> = batch.iter().map(|m| held(m, true)).collect();
     let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch.iter().zip(&held).map(|(m, h)| attachments(m, h)).collect();
     let categories: Vec<Vec<&str>> = batch.iter().map(|m| m.state.categories.iter().map(String::as_str).collect()).collect();
-    let properties: Vec<Vec<UnicodePstProperty<'_>>> = batch.iter().zip(&categories).map(|(m, c)| item::properties(m, c)).collect();
+    // A meeting's own properties beside the message's.
+    let none = Vec::new();
+    let meetings: Vec<&Vec<(pim::Key, pim::Value)>> = batch.iter().map(|m| m.meeting.as_ref().map_or(&none, |x| &x.props)).collect();
+    let lists: Vec<pim::Lists<'_>> = meetings.iter().map(|p| pim::lists(p)).collect();
+    let properties: Vec<Vec<UnicodePstProperty<'_>>> = batch
+        .iter()
+        .zip(&categories)
+        .zip(meetings.iter().zip(&lists))
+        .map(|((m, c), (p, l))| [item::properties(m, c), pim::properties(p, l)].concat())
+        .collect();
     let messages: Vec<UnicodePstBatchMessage<'_>> = batch
         .iter()
         .zip(&held)

@@ -65,12 +65,15 @@ pub(super) struct Owned {
     pub(super) importance: i32,
     pub(super) sensitivity: Option<i32>,
     pub(super) state: State,
+    /// A meeting's request, cancellation or answer: its class and the meeting's properties
+    /// (`super::meeting`); else none.
+    pub(super) meeting: Option<super::meeting::Meeting>,
 }
 
 impl Owned {
-    /// Its class (PidTagMessageClass): what it is, else `IPM.Note`.
+    /// Its class (PidTagMessageClass): what it is, else a meeting's mail, else `IPM.Note`.
     pub(super) fn class(&self) -> &'static str {
-        self.kind.unwrap_or("IPM.Note")
+        self.kind.or(self.meeting.as_ref().map(|m| m.class)).unwrap_or("IPM.Note")
     }
 
     /// The bytes it holds until it is written: its text, its files' (not the big ones waiting in
@@ -182,14 +185,17 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize], 
     }
     let headers = header_block(raw);
     // Signed or encrypted mail is its one smime.p7m; other mail its files and attached messages.
-    let (body, html, files, kind) = match super::kinds::protected(raw, &p) {
-        Some(s) => (s.body, s.html, vec![s.file], Some(s.class)),
+    // A meeting's mail carries the meeting's properties when it is the message itself: Outlook
+    // takes a meeting from a message it received, not from one attached to another.
+    let (body, html, files, kind, meeting) = match super::kinds::protected(raw, &p) {
+        Some(s) => (s.body, s.html, vec![s.file], Some(s.class), None),
         None => {
             let kind = super::kinds::report(&headers, raw, &p);
+            let meeting = if path.is_empty() { super::meeting::of(raw, &p) } else { None };
             let mut files = super::files::of(raw, &p, path, spill, left);
             let mut html = mime::html_body(raw);
             super::files::fit_cids(&mut files, &mut html);
-            (p.text.clone(), html, files, kind)
+            (p.text.clone(), html, files, kind, meeting)
         }
     };
     let field = |name: &str| header_value(&headers, name).unwrap_or_default();
@@ -227,6 +233,7 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize], 
         importance,
         sensitivity,
         state,
+        meeting,
     })
 }
 

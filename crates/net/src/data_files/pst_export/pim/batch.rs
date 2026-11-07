@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Items as the writer takes them: their properties and files, written a batch at a time.
+//! Items as the writer takes them: their properties, recipients and files, and the items
+//! attached to them (an appointment's changed occurrences), written a batch at a time.
 
-use outlook_pst::UnicodePstName;
 use outlook_pst::messaging::named_prop::PS_PUBLIC_STRINGS;
+use outlook_pst::{UnicodePstAttachmentContent, UnicodePstEmbeddedMessage, UnicodePstName};
 
 use super::*;
 
@@ -53,6 +54,21 @@ pub(in super::super) fn properties<'a>(props: &'a [(Key, Value)], lists: &'a Lis
     out
 }
 
+/// An item's recipients as the writer takes them.
+fn recipients(item: &Item) -> Vec<UnicodePstRecipient<'_>> {
+    item.people
+        .iter()
+        .map(|p| UnicodePstRecipient { name: &p.name, email: &p.email, recipient_type: p.kind, flags: p.flags, track_status: p.track })
+        .collect()
+}
+
+/// What the writer takes of an item, built before it borrows it: its lists, then its properties
+/// and recipients; the same for each item attached to it, and the attachment's own properties.
+struct Parts<'a> {
+    lists: Lists<'a>,
+    attached: Vec<(Lists<'a>, Vec<UnicodePstProperty<'a>>)>,
+}
+
 /// An item's files as attachments; `picture`: the properties of a contact's picture.
 fn files<'a>(item: &'a Item, picture: &'a [UnicodePstProperty<'a>]) -> Vec<UnicodePstAttachment<'a>> {
     item.files
@@ -67,13 +83,13 @@ fn files<'a>(item: &'a Item, picture: &'a [UnicodePstProperty<'a>]) -> Vec<Unico
         .collect()
 }
 
-/// The message the writer writes for `item`, of its properties `p`.
-fn message<'a>(item: &'a Item, p: &'a [UnicodePstProperty<'a>]) -> UnicodePstMessage<'a> {
+/// The message the writer writes for `item`, of its properties `p` and recipients `r`.
+fn message<'a>(item: &'a Item, p: &'a [UnicodePstProperty<'a>], r: &'a [UnicodePstRecipient<'a>]) -> UnicodePstMessage<'a> {
     UnicodePstMessage {
         subject: &item.subject,
-        sender_name: "",
-        sender_email: "",
-        recipients: &[],
+        sender_name: &item.sender.0,
+        sender_email: &item.sender.1,
+        recipients: r,
         body: &item.body,
         html_body: None,
         message_id: "",
@@ -88,10 +104,49 @@ pub(super) fn write_batch(path: &Path, format: Format, folder: &[&str], batch: &
     // PidTagAttachmentContactPhoto, and hidden, as Outlook marks a contact's picture.
     let picture =
         [UnicodePstProperty::tagged(0x7FFF, UnicodePstValue::Boolean(true)), UnicodePstProperty::tagged(0x7FFE, UnicodePstValue::Boolean(true))];
-    let lists: Vec<Lists<'_>> = batch.iter().map(|item| lists(&item.props)).collect();
-    let own: Vec<Vec<UnicodePstProperty<'_>>> = batch.iter().zip(&lists).map(|(item, l)| properties(&item.props, l)).collect();
-    let attachments: Vec<Vec<UnicodePstAttachment<'_>>> = batch.iter().map(|item| files(item, &picture)).collect();
-    let messages: Vec<UnicodePstBatchMessage<'_>> =
-        batch.iter().zip(&own).zip(&attachments).map(|((item, p), f)| UnicodePstBatchMessage { message: message(item, p), attachments: f }).collect();
+    let parts: Vec<Parts<'_>> = batch
+        .iter()
+        .map(|item| Parts {
+            lists: lists(&item.props),
+            attached: item
+                .attached
+                .iter()
+                .map(|a| (lists(&a.item.props), a.props.iter().filter_map(|(id, v)| Some(UnicodePstProperty::tagged(*id, single(v)?))).collect()))
+                .collect(),
+        })
+        .collect();
+    let own: Vec<Vec<UnicodePstProperty<'_>>> = batch.iter().zip(&parts).map(|(item, p)| properties(&item.props, &p.lists)).collect();
+    let people: Vec<Vec<UnicodePstRecipient<'_>>> = batch.iter().map(recipients).collect();
+    // Each attached item's properties and recipients.
+    let inner: Vec<Vec<(Vec<UnicodePstProperty<'_>>, Vec<UnicodePstRecipient<'_>>)>> = batch
+        .iter()
+        .zip(&parts)
+        .map(|(item, p)| item.attached.iter().zip(&p.attached).map(|(a, (l, _))| (properties(&a.item.props, l), recipients(&a.item))).collect())
+        .collect();
+    let attachments: Vec<Vec<UnicodePstAttachment<'_>>> = batch
+        .iter()
+        .zip(&parts)
+        .zip(&inner)
+        .map(|((item, p), inner)| {
+            let mut out = files(item, &picture);
+            for ((a, (_, own)), (props, people)) in item.attached.iter().zip(&p.attached).zip(inner) {
+                let embedded = UnicodePstEmbeddedMessage { message: message(&a.item, props, people), attachments: files(&a.item, &picture) };
+                out.push(UnicodePstAttachment {
+                    filename: &a.item.subject,
+                    content: UnicodePstAttachmentContent::Message(Box::new(embedded)),
+                    properties: own,
+                    ..Default::default()
+                });
+            }
+            out
+        })
+        .collect();
+    let messages: Vec<UnicodePstBatchMessage<'_>> = batch
+        .iter()
+        .zip(&own)
+        .zip(&people)
+        .zip(&attachments)
+        .map(|(((item, p), r), f)| UnicodePstBatchMessage { message: message(item, p, r), attachments: f })
+        .collect();
     writing::append(path, format, folder, &messages)
 }

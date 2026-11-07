@@ -62,9 +62,7 @@ pub(super) fn open(s: &Session, t: &Tokens, ui: &mut Ui, b: &mut Backstage, acts
         "Export to Outlook data file",
         "Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.",
         |ui| {
-            ui.label(
-                RichText::new(tl!("Its contacts, notes and tasks go inside it; its calendar beside it, as an .ics file.")).color(t.faint).small(),
-            );
+            ui.label(RichText::new(tl!("Its contacts, calendar, notes and tasks go inside it too.")).color(t.faint).small());
             ui.horizontal_wrapped(|ui| {
                 for a in &s.accounts {
                     if ui.button(RichText::new(&a.config.email).small()).clicked() {
