@@ -97,10 +97,9 @@ impl Worker {
             file_each(&paths, |raw| match conn.as_mut() {
                 Some(Conn::Imap(c)) => c.append(&folder, "\\Seen", raw).map(|_| ()),
                 Some(Conn::Jmap(c)) => jmap::append(c, jstate, &folder, raw, &["$seen"]).map(|_| ()),
-                // Exchange: EWS takes it as received (not a draft); Graph only makes drafts of
-                // what it's given whole.
+                // Exchange: both take it as received and read (not a draft).
                 Some(Conn::Ews(c)) => c.create_received(raw, jstate.mailbox(&folder)?).map(|_| ()),
-                Some(Conn::Graph(c)) => crate::graph::append(c, jstate, &folder, raw).map(|_| ()),
+                Some(Conn::Graph(c)) => crate::graph::append_received(c, jstate, &folder, raw).map(|_| ()),
                 Some(Conn::Pop) => {
                     let flags = Flags { seen: true, ..Default::default() };
                     crate::pop::file_locally(&store, &account, &folder, raw, flags, now()).map(|_| ())
