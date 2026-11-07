@@ -8,12 +8,17 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use quatrelle_model::dates::Clock;
 use quatrelle_model::search::{Advanced, Doc, FolderIndex, Index, Query, fold_word, index_tokens, parts, tokens};
 use quatrelle_model::{lookalike, utf7};
 
 fuzz_target!(|data: &[u8]| {
     let text = String::from_utf8_lossy(data);
-    let q = Query::parse(&text);
+    let mut q = Query::parse(&text);
+    // A clock read from the input too, so dates are placed at the ends of time.
+    let now = data.get(..8).and_then(|b| b.try_into().ok()).map_or(0, i64::from_le_bytes);
+    q.resolve(&Clock::new(now, 3600));
+    let _ = q.dates_hold(now);
     let _ = q.index_words();
     let _ = q.needs_body();
     // The query checked against a message whose fields and body are the same text, then the

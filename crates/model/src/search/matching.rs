@@ -22,6 +22,16 @@ impl Query {
         v
     }
 
+    /// Whether a message dated `t` meets the query's dates (`received:`, `after:`, `before:`,
+    /// once [resolved](Query::resolve)); a query without any holds for every date. What a server
+    /// found for the query's words is checked by this, as the servers aren't asked the dates.
+    pub fn dates_hold(&self, t: i64) -> bool {
+        self.clauses.iter().all(|c| match &c.term {
+            Term::Date(spec) => spec.holds(t).unwrap_or(false) != c.negated,
+            _ => true,
+        })
+    }
+
     pub fn matches(&self, doc: &Doc<'_>) -> bool {
         self.clauses.iter().all(|c| clause_matches(&c.term, doc) != c.negated)
     }
@@ -72,6 +82,8 @@ fn clause_matches(term: &Term, doc: &Doc<'_>) -> bool {
         Term::Complete => m.flags.follow_up_complete(),
         Term::Important => m.importance > 0,
         Term::Awaiting => doc.awaiting,
+        // `sent:` and `received:` both read the list's date; nothing holds before it's placed.
+        Term::Date(spec) => spec.holds(m.date).unwrap_or(false),
         Term::Categorized(ks) if ks.is_empty() => m.flags.keywords.iter().any(|k| !k.starts_with('$')),
         Term::Categorized(ks) => ks.iter().any(|k| m.flags.has(k)),
         Term::Size(true, b) => u64::from(m.size) > *b,

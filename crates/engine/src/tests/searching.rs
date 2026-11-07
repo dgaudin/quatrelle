@@ -7,11 +7,12 @@ use super::*;
 
 mod ahead;
 mod busy;
+mod dates;
 mod by_change;
 mod folding;
 mod paced;
 mod pages;
-mod summaries;
+pub(super) mod summaries;
 
 #[test]
 fn what_the_server_finds_joins_what_the_index_found() {

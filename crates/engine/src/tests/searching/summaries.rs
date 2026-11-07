@@ -7,7 +7,7 @@
 use super::*;
 
 /// What every folder of the sample mailbox holds that `keep` keeps, counted from the summaries.
-fn counted(s: &mut Session, keep: impl Fn(&Summary) -> bool) -> usize {
+pub(super) fn counted(s: &mut Session, keep: impl Fn(&Summary) -> bool) -> usize {
     let mut n = 0;
     for (a, f) in s.scope_folders(SearchScope::All) {
         n += s.folder_state(&a, &f).messages.iter().filter(|m| keep(m)).count();

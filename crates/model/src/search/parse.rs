@@ -55,12 +55,17 @@ const FIELDS: &[&str] = &[
     "tag",
     "larger",
     "smaller",
+    "received",
+    "sent",
+    "date",
+    "after",
+    "before",
 ];
 
 /// True for a bare `field:` (optionally negated) still missing its value.
 fn field_waiting(tok: &str) -> bool {
     let name = tok.strip_prefix('-').unwrap_or(tok);
-    name.strip_suffix(':').is_some_and(|k| FIELDS.iter().any(|f| f.eq_ignore_ascii_case(k)))
+    name.strip_suffix(':').is_some_and(|k| FIELDS.iter().any(|f| f.eq_ignore_ascii_case(k)) || dates::field(k).is_some())
 }
 
 fn yes_no(v: &str) -> Option<bool> {
@@ -156,16 +161,36 @@ fn text_term(field: Field, value: &str) -> Option<Term> {
     Some(Term::Words(field, w))
 }
 
+/// A date term, or the problem with it: a date that isn't one is left out, never looked for as
+/// words (`received:2024` became two words, and matched nearly everything). A value that isn't
+/// meant as a date (`before: launch`, `after:party`) is still the words typed, as it was before
+/// these were fields, with the problem said all the same.
+fn date_term(spec: Option<DateSpec>, value: &str, tok: &str, problems: &mut Vec<Problem>) -> Option<Term> {
+    match spec {
+        Some(s) => Some(Term::Date(s)),
+        None => {
+            problems.push(Problem::Date(tok.chars().take(100).collect()));
+            // Apart: UAX #29 reads `before:launch` as one word, which no text holds.
+            let (key, _) = tok.split_once(':').unwrap_or((tok, ""));
+            if dates::looks_like_date(value) { None } else { text_term(Field::Any, &format!("{key} {value}")) }
+        }
+    }
+}
+
 impl Query {
     pub fn parse(input: &str) -> Query {
         let mut clauses = Vec::new();
+        let mut problems = Vec::new();
         for tok in split_tokens(input).into_iter().take(64) {
             let (negated, tok) = match tok.strip_prefix('-') {
                 Some(rest) if !rest.is_empty() => (true, rest.to_string()),
                 _ => (false, tok),
             };
             let term = match tok.split_once(':') {
-                Some((k, v)) if !v.is_empty() && !k.starts_with('"') => match k.to_ascii_lowercase().as_str() {
+                Some((k, v)) if !v.is_empty() && !k.starts_with('"') => match dates::field(k).map_or_else(|| k.to_ascii_lowercase(), str::to_string).as_str() {
+                    "received" | "sent" | "date" => date_term(dates::period(v), v, &tok, &mut problems),
+                    "after" => date_term(dates::after(v), v, &tok, &mut problems),
+                    "before" => date_term(dates::before(v), v, &tok, &mut problems),
                     "from" => list_term(Field::From, v),
                     "to" | "cc" => list_term(Field::To, v),
                     "larger" => size(v).map(|b| Term::Size(true, b)),
@@ -197,6 +222,6 @@ impl Query {
                 clauses.push(Clause { term, negated });
             }
         }
-        Query { clauses }
+        Query { clauses, problems }
     }
 }

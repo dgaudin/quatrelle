@@ -151,7 +151,7 @@ impl Session {
     /// The query as the index reads it: `category:Work` means the Work category's keyword
     /// (`$label2`), or its name's as Exchange keeps it (`work`); `is:categorized` means one of the
     /// categories.
-    pub(super) fn search_query(&self, q: &str) -> Query {
+    pub(crate) fn search_query(&self, q: &str) -> Query {
         let mut query = Query::parse(q);
         use quatrelle_model::search::Term;
         let both = |c: &quatrelle_model::organize::Category| [c.keyword.clone(), quatrelle_model::keyword_for(&c.name)];
@@ -167,6 +167,8 @@ impl Session {
                 *ks = self.prefs.categories.iter().flat_map(both).collect();
             }
         }
+        // `received:2024` is the year where the user is.
+        query.resolve(&self.clock);
         query
     }
 
