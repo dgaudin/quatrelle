@@ -75,9 +75,9 @@ pub(crate) const PINNED: &str = "X-Quatrelle-Pinned";
 /// …as it reads MailCraft's, which a file MailCraft exported keeps.
 const PINNED_UPSTREAM: &str = "X-MailCraft-Pinned";
 /// The property (in PS_PUBLIC_STRINGS) an export marks each item of the account's calendar,
-/// contacts, notes and tasks with: the item's uid in the account and a digest of what was
-/// written, so a file added to again tells the items it has from Quatrelle from changed ones and
-/// from its own (`pst_export::pim`).
+/// contacts, notes and tasks with: the item's uid, the account's (a digest of its id) and a digest
+/// of what was written, so a file added to again tells the items it has from Quatrelle from
+/// changed ones, from its own and from another account's (`pst_export::pim`).
 pub(crate) const EXPORTED_ITEM: &str = "X-Quatrelle-Item";
 
 /// The data file's named properties: (property set, number) → property id; and those named by a
