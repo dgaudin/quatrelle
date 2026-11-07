@@ -530,7 +530,7 @@ fn an_exchange_account_syncs_changes_and_sends_through_graph() {
     pool.submit(Job::Apply { account: "a1".into(), op: Op::EmptyFolder { path: "Deleted Items".into() } });
     eventually("emptied", || !data.lock().unwrap().messages.iter().any(|m| m.folder == trash));
     let gone = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Storyboard").unwrap().key.clone();
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone] } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone], tidy: false } });
     eventually("deleted for good", || data.lock().unwrap().message(&first).is_none());
 
     // Send: the Bcc goes in the MIME for Exchange; Sent Items has the copy.

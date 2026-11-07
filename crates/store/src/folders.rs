@@ -277,7 +277,7 @@ impl Store {
             .unwrap_or_default()
             .into_iter()
             .filter(|op| match op {
-                Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Expunge { keys } => touches(keys),
+                Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Expunge { keys, .. } => touches(keys),
                 Op::Move { keys, to } => to != folder && touches(keys),
                 _ => false,
             })
@@ -403,7 +403,7 @@ impl Store {
                     let uids: HashSet<u32> = keys.iter().filter(|k| in_folder(k)).map(|k| k.uid).collect();
                     st.messages.retain(|m| !uids.contains(&m.key.uid));
                 }
-                Op::Expunge { keys } => {
+                Op::Expunge { keys, .. } => {
                     sources_gone = keys.iter().filter(|k| in_folder(k)).collect();
                     let uids: HashSet<u32> = sources_gone.iter().map(|k| k.uid).collect();
                     st.messages.retain(|m| !uids.contains(&m.key.uid));

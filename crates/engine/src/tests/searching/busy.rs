@@ -188,7 +188,7 @@ fn mail_moved_or_deleted_during_a_search_is_not_found_where_it_was() {
             // one is deleted.
             s.apply_op("a1", Op::Move { keys: vec![gone[0].clone()], to: folder_path(1) });
             s.apply_op("a1", Op::Move { keys: vec![gone[1].clone()], to: folder_path(8) });
-            s.apply_op("a1", Op::Expunge { keys: vec![gone[2].clone()] });
+            s.apply_op("a1", Op::Expunge { keys: vec![gone[2].clone()], tidy: false });
             // On the server: one deleted in a folder still to read, as a sync brings it.
             let store = s.store.clone().unwrap();
             let mut st = store.load_folder("a1", &gone[3].folder).unwrap();
@@ -406,7 +406,7 @@ fn the_list_follows_a_long_search_at_a_pace() {
         // Past the first few hundred, a message found is deleted: it leaves the list at once.
         if gone.is_none() && s.list.len() > 1500 {
             let key = s.list[0].key.clone();
-            s.apply_op("a1", Op::Expunge { keys: vec![key.clone()] });
+            s.apply_op("a1", Op::Expunge { keys: vec![key.clone()], tidy: false });
             assert!(!s.list.iter().any(|m| m.key == key), "a message deleted leaves the list at once");
             gone = Some(key);
         }

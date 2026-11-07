@@ -66,7 +66,7 @@ impl Worker {
                 // deleted for good is noted, for removing the server's copy when the account says.
                 {
                     let gone: Vec<quatrelle_model::MessageKey> = match &op {
-                        Op::Expunge { keys } => keys.clone(),
+                        Op::Expunge { keys, .. } => keys.clone(),
                         Op::EmptyFolder { path } => {
                             self.store.load_folder(&self.acc.id, path).map(|f| f.messages.into_iter().map(|m| m.key).collect()).unwrap_or_default()
                         }
@@ -117,28 +117,28 @@ impl Worker {
                         let flags = quatrelle_model::Flags { draft: true, seen: true, ..Default::default() };
                         crate::pop::file_locally(&self.store, &self.acc.id, &folder, &raw, flags, now())?;
                         if let Some(old) = replaces {
-                            self.store.apply_op(&self.acc.id, &Op::Expunge { keys: vec![old] })?;
+                            self.store.apply_op(&self.acc.id, &Op::Expunge { keys: vec![old], tidy: true })?;
                         }
                         return Ok(());
                     }
                     if let Some(Conn::Jmap(c)) = self.conn.as_mut() {
                         jmap::append(c, &self.jstate, &folder, &raw, &["$draft", "$seen"])?;
                         if let Some(old) = replaces {
-                            jmap::apply_remote(c, &self.jstate, &Op::Expunge { keys: vec![old] })?;
+                            jmap::apply_remote(c, &self.jstate, &Op::Expunge { keys: vec![old], tidy: true })?;
                         }
                         return Ok(());
                     }
                     if let Some(Conn::Graph(c)) = self.conn.as_mut() {
                         crate::graph::append(c, &self.jstate, &folder, &raw)?;
                         if let Some(old) = replaces {
-                            crate::graph::apply_remote(c, &self.jstate, &Op::Expunge { keys: vec![old] })?;
+                            crate::graph::apply_remote(c, &self.jstate, &Op::Expunge { keys: vec![old], tidy: true })?;
                         }
                         return Ok(());
                     }
                     if let Some(Conn::Ews(c)) = self.conn.as_mut() {
                         crate::ews::append(c, &self.jstate, &folder, &raw)?;
                         if let Some(old) = replaces {
-                            crate::ews::apply_remote(c, &self.jstate, &Op::Expunge { keys: vec![old] })?;
+                            crate::ews::apply_remote(c, &self.jstate, &Op::Expunge { keys: vec![old], tidy: true })?;
                         }
                         return Ok(());
                     }

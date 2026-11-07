@@ -22,7 +22,7 @@ fn an_account_starts_from_an_existing_data_file() {
     old.save_folder("a1", "INBOX", &st).unwrap();
     old.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
     // Changes still to make on its server, and mail still to send: they stay behind.
-    old.save_ops("a1", &[quatrelle_model::Op::Expunge { keys: vec![k.clone()] }]).unwrap();
+    old.save_ops("a1", &[quatrelle_model::Op::Expunge { keys: vec![k.clone()], tidy: false }]).unwrap();
     old.outbox_add("a1", &crate::OutboxItem { id: 4, ..Default::default() }, b"Subject: later\r\n\r\nx").unwrap();
     let file = old.data_file("a1").unwrap();
     drop(old);
@@ -130,7 +130,7 @@ fn an_online_only_account_leaves_nothing_on_disk() {
     // New mail, changes, the Outbox and documents: in memory only.
     fill(&s, "a1", 2, "SECRET-ZOE");
     s.write_bodies(&[(k("a1", 3), b"Subject: x\r\n\r\nSECRET-BATCH".to_vec()), (k("a2", 3), b"Subject: x\r\n\r\nANA-BATCH".to_vec())]).unwrap();
-    s.save_ops("a1", &[quatrelle_model::Op::Expunge { keys: vec![k("a1", 1)] }]).unwrap();
+    s.save_ops("a1", &[quatrelle_model::Op::Expunge { keys: vec![k("a1", 1)], tidy: false }]).unwrap();
     s.outbox_add("a1", &crate::OutboxItem { id: 4, ..Default::default() }, b"Subject: later\r\n\r\nSECRET-OUTBOX").unwrap();
     s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": ["SECRET-NOTE"]})).unwrap();
     assert_eq!(s.load_folder("a1", "INBOX").unwrap().messages.len(), 2);

@@ -161,14 +161,14 @@ fn ops_apply_locally_and_persist() {
     assert!(s.load_folder("a1", "INBOX").unwrap().find(4).is_none());
 
     s.write_body(&k9, b"x").unwrap();
-    s.apply_op("a1", &Op::Expunge { keys: vec![k9.clone()] }).unwrap();
+    s.apply_op("a1", &Op::Expunge { keys: vec![k9.clone()], tidy: false }).unwrap();
     assert!(!s.has_body(&k9));
     assert_eq!(s.load_folder("a1", "INBOX").unwrap().messages.len(), 1);
 
     // A stale key (old UIDVALIDITY) changes nothing.
     let mut stale = st.messages[2].key.clone();
     stale.validity = 1;
-    s.apply_op("a1", &Op::Expunge { keys: vec![stale] }).unwrap();
+    s.apply_op("a1", &Op::Expunge { keys: vec![stale], tidy: false }).unwrap();
     assert_eq!(s.load_folder("a1", "INBOX").unwrap().messages.len(), 1);
 
     let ops = vec![Op::Move { keys: vec![k4], to: "Archive".into() }];
@@ -465,11 +465,11 @@ fn a_failing_store_says_so_and_writes_nothing_over() {
     // after it in a file of its own, nothing read or written again.
     s.fail(Some("00000000000000000001.json"), None);
     assert!(s.remove_op("a1", &waiting[0]).is_err());
-    let added = Op::Expunge { keys: vec![k9.clone()] };
+    let added = Op::Expunge { keys: vec![k9.clone()], tidy: false };
     s.add_op("a1", added.clone()).unwrap();
     s.fail(None, Some("state.json"));
     assert!(s.save_folder("a1", "INBOX", &FolderState::<Summary>::default()).is_err());
-    assert!(s.apply_op("a1", &Op::Expunge { keys: vec![k9.clone()] }).is_err());
+    assert!(s.apply_op("a1", &Op::Expunge { keys: vec![k9.clone()], tidy: false }).is_err());
 
     s.fail(None, None);
     assert_eq!(s.load_ops("a1").unwrap(), [waiting[0].clone(), added]);

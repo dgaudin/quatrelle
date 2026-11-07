@@ -263,7 +263,7 @@ fn a_jmap_account_syncs_changes_and_sends() {
 
     // Delete for good.
     let gone = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Storyboard").unwrap().key.clone();
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone] } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::Expunge { keys: vec![gone], tidy: false } });
     eventually("destroyed", || data.lock().unwrap().email(&first).is_none());
 
     // Send: stored in Sent, then submitted.

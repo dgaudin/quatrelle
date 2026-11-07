@@ -28,7 +28,7 @@ impl Session {
                 Op::SetKeyword { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), keyword, on, name }
             }
             Op::Move { keys, to } => Op::Move { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), to },
-            Op::Expunge { keys } => Op::Expunge { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect() },
+            Op::Expunge { keys, tidy } => Op::Expunge { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), tidy },
             other => other,
         };
         if !op.is_folder_op() && !matches!(op, Op::EmptyFolder { .. }) && op.keys().is_empty() {

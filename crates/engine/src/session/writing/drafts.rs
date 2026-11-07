@@ -24,7 +24,7 @@ impl Session {
             // The new copy first: the earlier ones go only once this one is kept.
             let key = self.file_locally(&c.account, &folder, &raw, false)?;
             if !earlier.is_empty() {
-                self.apply_op(&c.account.clone(), Op::Expunge { keys: earlier });
+                self.apply_op(&c.account.clone(), Op::Expunge { keys: earlier, tidy: true });
             }
             return Ok((Some(key), mid));
         }
@@ -32,7 +32,7 @@ impl Session {
         // any other (saved again before the first was listed) goes.
         let replaces = (!earlier.is_empty()).then(|| earlier.remove(0));
         if !earlier.is_empty() {
-            self.apply_op(&c.account.clone(), Op::Expunge { keys: earlier });
+            self.apply_op(&c.account.clone(), Op::Expunge { keys: earlier, tidy: true });
         }
         let job = self.draft_job(c, raw, folder, keep, replaces);
         self.jobs.push(job);
@@ -59,7 +59,7 @@ impl Session {
     pub(crate) fn remove_saved_copies(&mut self, c: &Compose) {
         let keys = self.saved_copies(c);
         if let Some(account) = keys.first().map(|k| k.account.clone()) {
-            self.apply_op(&account, Op::Expunge { keys });
+            self.apply_op(&account, Op::Expunge { keys, tidy: true });
         }
         self.note_drafts();
     }

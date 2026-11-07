@@ -12,8 +12,10 @@ impl Data {
     pub(super) fn take_items(&mut self, op: &El, gone: impl Fn(&It) -> bool) {
         let (taken, kept): (Vec<It>, Vec<It>) = std::mem::take(&mut self.items).into_iter().partition(|i| gone(i));
         self.items = kept;
-        if op.attr("DeleteType") == Some("SoftDelete") {
-            self.recoverable.extend(taken);
+        match op.attr("DeleteType") {
+            Some("SoftDelete") => self.recoverable.extend(taken),
+            Some("HardDelete") => self.purged.extend(taken),
+            _ => {}
         }
     }
 }

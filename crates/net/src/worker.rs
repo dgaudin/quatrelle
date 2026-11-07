@@ -679,7 +679,7 @@ pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, o
         }
         Op::SetKeyword { .. } => Ok(()),
         Op::Move { keys, to } => by_folder(c, keys, |c, folder, set| if folder == to { Ok(()) } else { c.uid_move(set, to) }),
-        Op::Expunge { keys } => expunge_keys(c, keys, trash),
+        Op::Expunge { keys, .. } => expunge_keys(c, keys, trash),
         Op::CreateFolder { path } => c.create(path),
         Op::RenameFolder { from, to } => c.rename(from, to),
         Op::DeleteFolder { path } => c.delete(path),

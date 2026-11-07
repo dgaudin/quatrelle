@@ -75,3 +75,20 @@ fn delete_for_good_in_the_outbox_cancels_the_send_as_delete_does() {
     assert!(s.list.is_empty() && store.outbox(sample::SAMPLE_ACCOUNT).is_empty());
     done(s);
 }
+
+/// What the user deletes for good goes as the user's (Exchange keeps it recoverable), not as
+/// Quatrelle's own tidying of drafts (which Exchange purges).
+#[test]
+fn delete_for_good_goes_to_the_server_as_the_users() {
+    let mut s = sample_session("for-good-server");
+    let a = s.accounts.iter_mut().find(|a| a.config.id == sample::SAMPLE_ACCOUNT).unwrap();
+    a.config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    let k = key_of(&s, "Sound mix, version 3");
+    s.run("list.open", &k).unwrap();
+    s.take_jobs();
+    s.run("mail.deleteForGood", &json!({})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::Expunge { tidy: false, .. }, .. })), "{jobs:?}");
+    assert!(!jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::Expunge { tidy: true, .. }, .. })));
+    done(s);
+}

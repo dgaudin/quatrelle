@@ -129,6 +129,8 @@ pub struct Data {
     /// Mail deleted with `SoftDelete` (`deleting.rs`): in Recoverable Items, where Recover Deleted
     /// Items finds it. `HardDelete` leaves nothing the user can reach.
     pub recoverable: Vec<It>,
+    /// Mail deleted with `HardDelete` (`deleting.rs`): purged, out of the user's reach.
+    pub purged: Vec<It>,
     /// People who stopped sharing their calendar with the account: every request naming their
     /// mailbox, or one of their items, is refused (`ErrorAccessDenied`).
     pub withdrawn: Vec<String>,
@@ -337,6 +339,7 @@ impl Default for Data {
             refused: Vec::new(),
             undeletable: Vec::new(),
             recoverable: Vec::new(),
+            purged: Vec::new(),
             withdrawn: Vec::new(),
             public_changes_refused: false,
             item_shapes: Vec::new(),

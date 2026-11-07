@@ -457,7 +457,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             let r = async {
                 quatrelle_jmap::append(&c, &st, &folder, &raw, &["$draft", "$seen"]).await?;
                 if let Some(old) = replaces {
-                    quatrelle_jmap::apply_remote(&c, &st, &Op::Expunge { keys: vec![old] }).await?;
+                    quatrelle_jmap::apply_remote(&c, &st, &Op::Expunge { keys: vec![old], tidy: true }).await?;
                 }
                 Ok::<(), Error>(())
             }

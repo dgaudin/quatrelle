@@ -371,7 +371,7 @@ impl Session {
         }
         let n = sel.len();
         for (a, keys) in by_account {
-            self.apply_op(&a, Op::Expunge { keys });
+            self.apply_op(&a, Op::Expunge { keys, tidy: false });
         }
         self.after_removal(next);
         Ok(serde_json::json!({ "deleted": n }))
