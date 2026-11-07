@@ -36,6 +36,7 @@ use crate::{NetError, Result};
 pub use quatrelle_jmap::{SyncOptions, SyncReport, fill_from_source, keep_source};
 
 mod ahead;
+mod arrival;
 mod kept;
 
 // For the worker, which doesn't ask for it yet.
@@ -192,6 +193,9 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
         }
     }
 
+    if info.exists > 0 {
+        arrival::fill(c, &mut st);
+    }
     sort_newest_first(&mut st.messages);
     let max_uid = st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0);
     st.uid_next = if info.uid_next > 0 { info.uid_next } else { max_uid.saturating_add(1) };

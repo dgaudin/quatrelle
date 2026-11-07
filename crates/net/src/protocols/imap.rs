@@ -79,6 +79,10 @@ pub fn uid_chunks(uids: &[u32], per: usize) -> Vec<Vec<u32>> {
 /// Parse an INTERNALDATE (`14-Oct-2026 09:30:00 +0200`) to Unix seconds.
 pub fn parse_internal_date(s: &str) -> Option<i64> {
     let s = s.trim();
+    // A real one is 26 characters; anything long is hostile.
+    if s.len() > 40 {
+        return None;
+    }
     let (date, rest) = s.split_once(' ')?;
     let mut d = date.trim().split('-');
     let day: u32 = d.next()?.trim().parse().ok()?;
@@ -98,7 +102,7 @@ pub fn parse_internal_date(s: &str) -> Option<i64> {
     let z = zone.trim_start_matches(['+', '-']);
     let zh: i64 = z.get(..2)?.parse().ok()?;
     let zm: i64 = z.get(2..4)?.parse().ok()?;
-    if !(1..=31).contains(&day) || h > 23 || m > 59 || sec > 60 {
+    if !(1..=31).contains(&day) || !(1..=9999).contains(&year) || h > 23 || m > 59 || sec > 60 || zm > 59 {
         return None;
     }
     let days = quatrelle_model::dates::days_from_civil(year, month, day);
