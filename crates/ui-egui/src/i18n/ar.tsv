@@ -2064,3 +2064,19 @@ folder	Conflicts	التعارضات
 	Drop to add them to {folder}	أفلتها لإضافتها إلى {folder}
 	Added to {folder}: {n}	أُضيفت إلى {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	تعذّرت إضافة {file} إلى {folder}: {error}
+	Recover deleted items	استرداد العناصر المحذوفة
+	Recover deleted items…	استرداد العناصر المحذوفة…
+	This server doesn't keep deleted items for you to bring back.	هذا الخادم لا يحتفظ بعناصر محذوفة يمكنك استردادها.
+	Connect first: the server keeps these items.	اتصل أولاً: الخادم هو الذي يحتفظ بهذه العناصر.
+	The list isn't open any more.	لم تعد القائمة مفتوحة.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	سيُحذف هذا العنصر نهائياً. لا يستطيع أحد استرداده، ولا يمكن التراجع عن ذلك.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	ستُحذف هذه العناصر ({n}) نهائياً. لا يستطيع أحد استردادها، ولا يمكن التراجع عن ذلك.
+	Purge	تطهير
+	Restore	استعادة
+	Search the deleted items	البحث في العناصر المحذوفة
+	The server said: {error}	ردّ الخادم: {error}
+	Purged: {n}	تم التطهير: {n}
+	Restored into Deleted Items: {n}	تمت الاستعادة إلى العناصر المحذوفة: {n}
+	The server keeps nothing deleted for good for this account.	لا يحتفظ الخادم بأي شيء محذوف نهائياً لهذا الحساب.
+	{n} items	{n} عنصر
+	Deleted	تاريخ الحذف

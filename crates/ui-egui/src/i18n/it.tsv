@@ -2067,3 +2067,19 @@ folder	Conflicts	Conflitti
 	Drop to add them to {folder}	Rilascia per aggiungerli a {folder}
 	Added to {folder}: {n}	Aggiunti a {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	Impossibile aggiungere {file} a {folder}: {error}
+	Recover deleted items	Recupera elementi eliminati
+	Recover deleted items…	Recupera elementi eliminati…
+	This server doesn't keep deleted items for you to bring back.	Questo server non conserva elementi eliminati che si possano recuperare.
+	Connect first: the server keeps these items.	Connettiti prima: è il server a conservare questi elementi.
+	The list isn't open any more.	L'elenco non è più aperto.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	Questo elemento verrà eliminato definitivamente. Nessuno potrà recuperarlo e l'operazione non si può annullare.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	Questi {n} elementi verranno eliminati definitivamente. Nessuno potrà recuperarli e l'operazione non si può annullare.
+	Purge	Elimina definitivamente
+	Restore	Ripristina
+	Search the deleted items	Cerca negli elementi eliminati
+	The server said: {error}	Risposta del server: {error}
+	Purged: {n}	Eliminati definitivamente: {n}
+	Restored into Deleted Items: {n}	Ripristinati in Posta eliminata: {n}
+	The server keeps nothing deleted for good for this account.	Il server non conserva nulla di eliminato definitivamente per questo account.
+	{n} items	{n} elementi
+	Deleted	Eliminato

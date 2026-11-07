@@ -2069,3 +2069,19 @@ folder	Conflicts	衝突
 	Drop to add them to {folder}	放開即可加入 {folder}
 	Added to {folder}: {n}	已加入 {folder}：{n}
 	Couldn't add {file} to {folder}: {error}	無法將 {file} 加入 {folder}：{error}
+	Recover deleted items	復原已刪除的項目
+	Recover deleted items…	復原已刪除的項目…
+	This server doesn't keep deleted items for you to bring back.	此伺服器不保留可供復原的已刪除項目。
+	Connect first: the server keeps these items.	請先連線：這些項目由伺服器保管。
+	The list isn't open any more.	清單已不再開啟。
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	此項目將被永久刪除。任何人都無法找回，且無法復原此動作。
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	這 {n} 個項目將被永久刪除。任何人都無法找回，且無法復原此動作。
+	Purge	清除
+	Restore	還原
+	Search the deleted items	搜尋已刪除的項目
+	The server said: {error}	伺服器回應：{error}
+	Purged: {n}	已清除：{n}
+	Restored into Deleted Items: {n}	已還原到「刪除的郵件」：{n}
+	The server keeps nothing deleted for good for this account.	伺服器沒有為此帳戶保留任何被永久刪除的項目。
+	{n} items	{n} 個項目
+	Deleted	刪除時間

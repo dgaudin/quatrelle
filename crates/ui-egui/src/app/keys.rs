@@ -17,6 +17,14 @@ impl MailApp {
                     let refusal = json!({"account": account, "domain": site});
                     self.run("account.refuseDomain", refusal);
                 }
+                // On the question about purging, Escape keeps everything and stays in the list
+                // (the dialog's own pass answers it); from the list, it closes it.
+                if matches!(&self.ui.dialog, Some(Dialog::Recover(f)) if f.confirming.is_some()) {
+                    return;
+                }
+                if matches!(&self.ui.dialog, Some(Dialog::Recover(_))) {
+                    self.run("folder.recoverClose", json!({}));
+                }
                 self.ui.dialog = None;
             }
             return;

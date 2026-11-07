@@ -2066,3 +2066,19 @@ menu	View	查看
 	Drop to add them to {folder}	放下即可添加到 {folder}
 	Added to {folder}: {n}	已添加到 {folder}：{n}
 	Couldn't add {file} to {folder}: {error}	无法将 {file} 添加到 {folder}：{error}
+	Recover deleted items	恢复已删除的项目
+	Recover deleted items…	恢复已删除的项目…
+	This server doesn't keep deleted items for you to bring back.	此服务器不保留可供恢复的已删除项目。
+	Connect first: the server keeps these items.	请先连接：这些项目由服务器保管。
+	The list isn't open any more.	列表已不再打开。
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	此项目将被永久删除。任何人都无法找回，且无法撤销。
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	这 {n} 个项目将被永久删除。任何人都无法找回，且无法撤销。
+	Purge	清除
+	Restore	还原
+	Search the deleted items	搜索已删除的项目
+	The server said: {error}	服务器回复：{error}
+	Purged: {n}	已清除：{n}
+	Restored into Deleted Items: {n}	已还原到“已删除邮件”：{n}
+	The server keeps nothing deleted for good for this account.	服务器没有为此账户保留任何被永久删除的项目。
+	{n} items	{n} 个项目
+	Deleted	删除时间

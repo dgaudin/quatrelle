@@ -2068,3 +2068,19 @@ folder	Conflicts	Conflitos
 	Drop to add them to {folder}	Solte para adicioná-los a {folder}
 	Added to {folder}: {n}	Adicionados a {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	Não foi possível adicionar {file} a {folder}: {error}
+	Recover deleted items	Recuperar itens excluídos
+	Recover deleted items…	Recuperar itens excluídos…
+	This server doesn't keep deleted items for you to bring back.	Este servidor não guarda itens excluídos para você recuperar.
+	Connect first: the server keeps these items.	Conecte-se primeiro: é o servidor que guarda estes itens.
+	The list isn't open any more.	A lista não está mais aberta.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	Este item será excluído definitivamente. Ninguém poderá recuperá-lo e isso não pode ser desfeito.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	Estes {n} itens serão excluídos definitivamente. Ninguém poderá recuperá-los e isso não pode ser desfeito.
+	Purge	Limpar
+	Restore	Restaurar
+	Search the deleted items	Pesquisar nos itens excluídos
+	The server said: {error}	Resposta do servidor: {error}
+	Purged: {n}	Limpos: {n}
+	Restored into Deleted Items: {n}	Restaurados em Itens excluídos: {n}
+	The server keeps nothing deleted for good for this account.	O servidor não guarda nada excluído definitivamente para esta conta.
+	{n} items	{n} itens
+	Deleted	Excluído

@@ -2069,3 +2069,19 @@ menu	View	Ver
 	Drop to add them to {folder}	Suéltelos para añadirlos a {folder}
 	Added to {folder}: {n}	Añadidos a {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	No se pudo añadir {file} a {folder}: {error}
+	Recover deleted items	Recuperar elementos eliminados
+	Recover deleted items…	Recuperar elementos eliminados…
+	This server doesn't keep deleted items for you to bring back.	Este servidor no guarda elementos eliminados que pueda recuperar.
+	Connect first: the server keeps these items.	Conéctese primero: el servidor guarda estos elementos.
+	The list isn't open any more.	La lista ya no está abierta.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	Este elemento se eliminará definitivamente. Nadie podrá recuperarlo y no se puede deshacer.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	Estos {n} elementos se eliminarán definitivamente. Nadie podrá recuperarlos y no se puede deshacer.
+	Purge	Purgar
+	Restore	Restaurar
+	Search the deleted items	Buscar en los elementos eliminados
+	The server said: {error}	Respuesta del servidor: {error}
+	Purged: {n}	Purgados: {n}
+	Restored into Deleted Items: {n}	Restaurados en Elementos eliminados: {n}
+	The server keeps nothing deleted for good for this account.	El servidor no guarda nada eliminado definitivamente para esta cuenta.
+	{n} items	{n} elementos
+	Deleted	Eliminado

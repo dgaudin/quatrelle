@@ -2067,3 +2067,19 @@ folder	Conflicts	충돌
 	Drop to add them to {folder}	놓으면 {folder}에 추가됩니다
 	Added to {folder}: {n}	{folder}에 추가됨: {n}
 	Couldn't add {file} to {folder}: {error}	{file}을(를) {folder}에 추가할 수 없습니다: {error}
+	Recover deleted items	삭제된 항목 복구
+	Recover deleted items…	삭제된 항목 복구…
+	This server doesn't keep deleted items for you to bring back.	이 서버는 복구할 수 있는 삭제된 항목을 보관하지 않습니다.
+	Connect first: the server keeps these items.	먼저 연결하세요. 이 항목은 서버가 보관합니다.
+	The list isn't open any more.	목록이 더 이상 열려 있지 않습니다.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	이 항목은 완전히 삭제됩니다. 아무도 되돌릴 수 없으며 이 작업은 취소할 수 없습니다.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	이 항목 {n}개는 완전히 삭제됩니다. 아무도 되돌릴 수 없으며 이 작업은 취소할 수 없습니다.
+	Purge	완전 삭제
+	Restore	복원
+	Search the deleted items	삭제된 항목 검색
+	The server said: {error}	서버 응답: {error}
+	Purged: {n}	완전 삭제됨: {n}
+	Restored into Deleted Items: {n}	삭제된 항목으로 복원됨: {n}
+	The server keeps nothing deleted for good for this account.	이 계정에는 서버가 보관 중인 영구 삭제 항목이 없습니다.
+	{n} items	{n}개 항목
+	Deleted	삭제됨

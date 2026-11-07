@@ -2065,3 +2065,19 @@ folder	Conflicts	競合
 	Drop to add them to {folder}	ドロップして {folder} に追加
 	Added to {folder}: {n}	{folder} に追加しました: {n}
 	Couldn't add {file} to {folder}: {error}	{file} を {folder} に追加できませんでした: {error}
+	Recover deleted items	削除したアイテムを復元
+	Recover deleted items…	削除したアイテムを復元…
+	This server doesn't keep deleted items for you to bring back.	このサーバーには、復元できる削除済みアイテムはありません。
+	Connect first: the server keeps these items.	先に接続してください。これらのアイテムはサーバーが保管しています。
+	The list isn't open any more.	一覧は閉じられました。
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	このアイテムは完全に削除されます。誰も元に戻せず、この操作は取り消せません。
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	これらの {n} 件のアイテムは完全に削除されます。誰も元に戻せず、この操作は取り消せません。
+	Purge	完全に削除
+	Restore	復元
+	Search the deleted items	削除したアイテムを検索
+	The server said: {error}	サーバーの応答: {error}
+	Purged: {n}	完全に削除: {n}
+	Restored into Deleted Items: {n}	削除済みアイテムに復元: {n}
+	The server keeps nothing deleted for good for this account.	このアカウントでは、完全に削除されたものはサーバーに残っていません。
+	{n} items	{n} 件
+	Deleted	削除日時
