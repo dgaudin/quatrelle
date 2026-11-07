@@ -4967,6 +4967,57 @@ sont adaptés, au nom du propriétaire.
   - `already` (marques) lit chaque élément des dossiers PIM du fichier avant d'écrire, comme
     `ids_in` pour le courrier : jamais mesuré sur un gros fichier.
 
+### État de la récupération : v0.32, trentième partie : les dates dans la recherche, le tri par heure de remise et le texte brut par message (P6a) (2026-11-07)
+
+Trois morceaux indépendants du lot P6 de `merge-tools/survey-v0.32.md` (P6a), sur `main`. Chacun
+est adapté au code du fork (recherche refaite par R14/R24, volet de lecture refait par le lot 3 de
+la 1.2) : tous au nom du propriétaire.
+
+| Commit de l'origine | Commit du fork | Sonde | avant | après |
+|---|---|---|---|---|
+| `41464ec1` (dates seulement), `427337f4` | `1dc50afe` | `search/tests/date_terms.rs` (périodes en fuseau local, jours, mois, années, intervalles, `>=`, `<`, fins de semaine, mots qui ne sont pas des dates), `tests/searching/dates.rs` (moteur : horloge de la session, aucun message lu ; trouvailles du serveur hors dates), un proptest (toute requête, toute horloge) | `received:2024` lu comme deux mots, aucune date reconnue ; ne compile pas | tout vert |
+| `62a459d3` (sans l'index de conversation) | `32607497` | `tests/mail/received.rs` (liste, titres, conversations, `received:`/`sent:`), `date_terms.rs`, `pst/tests/rebuilt.rs` | liste, titres et conversations rangés par l'en-tête `Date:` | rangés par l'heure de remise |
+| `ee0b46ad`, `01208ca2` | `91bca991` | `tests/reading/plain_text.rs` (menu ⋯, ruban Affichage, Options, un seul message, retour à la mise en forme) | lien « Afficher en texte brut » sur le texte, qui change tout le courrier | menu ⋯ (ce message seul), ruban, Options |
+
+- **Dates** : `received:`, `sent:`, `date:`, `after:`, `before:` prennent un jour, un mois, une
+  année (`2024`, `2024-03`, `2024-03-15`, `20240315`), un intervalle (`2024-01-01..2024-03-31`),
+  `>=`, `>`, `<`, `<=`, et les noms `today`, `yesterday`, `this/last week/month/year`. **En plus de
+  l'origine**, lus aussi en français, accents et apostrophes ignorés : `reçu:hier`,
+  `envoyé:aujourd'hui`, `reçu:"la semaine dernière"`, `date:"le mois dernier"`, `avant:2024-03-01`,
+  `après:…`. Le modèle reste pur : la date du jour arrive par `Query::resolve(&Clock)`, appelé dans
+  `Session::search_query`. Une valeur qui n'est pas une date (`before: launch`) reste des mots ; une
+  date fausse (`received:2024-13`) est omise et notée dans `Query::problems` (l'interface ne la dit
+  pas encore). Les serveurs ne reçoivent pas les dates : ce qu'ils trouvent hors des dates n'est
+  pas listé (`Query::dates_hold`, dans `refresh_list`, pour les clés et pour les messages trouvés).
+  Cible de fuzz `search` : horloge lue des octets, graine `dates`, dictionnaire.
+- **Tri par heure de remise** : le fork avait déjà `Summary::received` (EWS, Graph) et
+  `received_at()`. La liste, ses titres (Aujourd'hui, Hier…), les conversations, le seuil de
+  « nouveau courrier » et l'heure affichée (liste en cartes, tableau, fil du volet de lecture) les
+  utilisent maintenant au lieu de `Date:` ; `received:`, `after:` et `before:` lisent aussi cette
+  heure, `sent:` et `date:` l'en-tête. Le volet de lecture montre toujours le `Date:` du message.
+  L'import `.pst` garde l'heure de remise (`PidTagMessageDeliveryTime`) quand elle diffère du `Date:`.
+  `list.messages` donne `received`.
+- **Pas pris** : l'index de conversation d'Outlook (`Thread-Index` / `ConversationIndex`, ~200
+  lignes de threading) : le fork ne le lit ni en IMAP, ni en EWS, ni en Graph, et son
+  rattachement n'est utile qu'aux réponses à des messages d'un `.pst` sans `Message-ID`. Les noms
+  de fichiers joints (`attachment:`) et les réponses oui/non/inconnu (`Tri`) de `41464ec1` : le
+  fork n'a pas l'index de noms de fichiers ; la recherche reste à deux valeurs. Les champs de date
+  du formulaire de recherche avancée : pas d'interface pour eux. IMAP : `received` n'est pas
+  rempli (INTERNALDATE n'est pas lu), donc un compte IMAP reste rangé par `Date:`.
+- **Texte brut** : « Afficher en texte brut » (et, affiché ainsi, « Afficher avec la mise en
+  forme ») est dans le menu ⋯ du message, avec l'icône d'effacement de mise en forme du fork (aucune
+  icône nouvelle), et ne change que ce message ; Affichage › Messages › « Texte brut » et Fichier ›
+  Options › « Lire tout le courrier en texte brut » changent tout le courrier. L'état par message
+  est `UiState::shown_as` (oublié si le réglage général change). La commande `view.html` et le
+  réglage sont intacts. Trois textes nouveaux, traductions de l'origine dans les 13 catalogues ;
+  « Show HTML mail formatted (otherwise as plain text) » est remplacé.
+- **Vérifié** : chaque sonde avant (échec : ne compile pas, ou trouve autre chose) et après ;
+  `every_command_survives_junk_params` ; `cargo xtask ci` (wasm compris), journal `~/.tq/p6a-ci.log`.
+- **Reste, remarqué** : jamais essayé sur l'Exchange du propriétaire (que `DateTimeReceived` range
+  bien le courrier envoyé et le courrier relevé, que `received:`/`reçu:` y trouvent ce qu'on attend) ;
+  la recherche faite par Exchange ne reçoit pas les dates ; `Query::problems` à montrer dans la boîte
+  de recherche ; la même heure de remise pour IMAP (INTERNALDATE) à décider.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
