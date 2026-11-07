@@ -15,6 +15,7 @@
 
 mod external;
 mod people;
+pub mod signs;
 mod signature;
 
 use std::borrow::Cow;
