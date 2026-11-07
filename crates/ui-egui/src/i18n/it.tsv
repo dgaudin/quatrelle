@@ -376,6 +376,7 @@
 	Empty Junk Email…	Svuota Posta indesiderata…
 	Empty “{folder}”?	Svuotare «{folder}»?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	Tutto il contenuto verrà eliminato definitivamente, compresa la posta non scaricata su questo computer. Non si può annullare.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	Tutto il suo contenuto verrà eliminato da qui, ma il server Exchange lo conserva per un po’ tra i suoi elementi recuperabili. Puoi riaverlo con «Recupera elementi eliminati», nel menu di Posta eliminata.
 	General	Generale
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	Sono fuori fino al…

@@ -376,6 +376,7 @@
 	Empty Junk Email…	Ongewenste e-mail leegmaken…
 	Empty “{folder}”?	“{folder}” leegmaken?
 	Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.	Alles erin wordt definitief verwijderd, ook mail die niet naar deze computer is gedownload. Dit kan niet ongedaan worden gemaakt.
+	Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu.	Alles erin wordt hier verwijderd, maar de Exchange-server bewaart het een tijd onder zijn herstelbare items. U haalt het terug met ‘Verwijderde items herstellen’ in het menu van Verwijderde items.
 	General	Algemeen
 	Google (IMAP)	Google (IMAP)
 	I'm away until…	Ik ben weg tot…

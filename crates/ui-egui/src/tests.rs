@@ -268,8 +268,9 @@ pub(crate) fn tour() {
                 },
                 true,
             ),
-            Dialog::ConfirmEmpty { account: "sample".into(), folder: "Trash".into(), name: "Deleted Items".into(), for_good: true },
-            Dialog::ConfirmEmpty { account: "sample".into(), folder: "INBOX".into(), name: "Inbox".into(), for_good: false },
+            Dialog::ConfirmEmpty { account: "sample".into(), folder: "Trash".into(), name: "Deleted Items".into(), for_good: true, exchange: false },
+            Dialog::ConfirmEmpty { account: "sample".into(), folder: "Trash".into(), name: "Deleted Items".into(), for_good: true, exchange: true },
+            Dialog::ConfirmEmpty { account: "sample".into(), folder: "INBOX".into(), name: "Inbox".into(), for_good: false, exchange: false },
             Dialog::folder_size(&a.session, "sample"),
             Dialog::ReplaceOutlookRules { account: "sample".into(), email: "riley@studio.example".into() },
             Dialog::FolderProperties {

@@ -574,6 +574,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
                 folder: path.clone(),
                 name: crate::i18n::folder(f),
                 for_good: matches!(f.look(), FolderRole::Trash | FolderRole::Junk),
+                exchange: crate::dialogs::is_exchange(s, &account),
             }));
             ui.close();
         }

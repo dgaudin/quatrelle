@@ -191,16 +191,20 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 !close && !sizes
             })
         }
-        Dialog::ConfirmEmpty { account, folder, name, for_good } => {
+        Dialog::ConfirmEmpty { account, folder, name, for_good, exchange } => {
             ui.set_width(400.0);
             if *for_good {
                 title(ui, t, &tf!("Empty “{folder}”?", folder = name));
-                ui.label(
-                    RichText::new(tl!(
-                        "Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone."
-                    ))
-                    .color(t.dim),
-                );
+                // Exchange keeps what is emptied (`SoftDelete`, Graph's `DELETE`) as long as the
+                // server is set to: Recover deleted items brings it back.
+                let what = if *exchange {
+                    tl!(
+                        "Everything in it will be deleted from here, but the Exchange server keeps it for a while among its recoverable items. You can bring it back with Recover deleted items, in the Deleted Items menu."
+                    )
+                } else {
+                    tl!("Everything in it will be deleted for good, including mail not downloaded to this computer. This can't be undone.")
+                };
+                ui.label(RichText::new(what).color(t.dim));
             } else {
                 title(ui, t, &tf!("Delete everything in “{folder}”?", folder = name));
                 ui.label(RichText::new(tl!("Every message in it will be moved to Deleted Items.")).color(t.dim));
