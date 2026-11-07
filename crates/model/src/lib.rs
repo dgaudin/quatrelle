@@ -573,7 +573,7 @@ impl Summary {
 pub fn sort_newest_first<M: std::borrow::Borrow<Summary>>(list: &mut [M]) {
     list.sort_by(|a, b| {
         let (a, b) = (a.borrow(), b.borrow());
-        b.date.cmp(&a.date).then_with(|| b.key.cmp(&a.key))
+        b.received_at().cmp(&a.received_at()).then_with(|| b.key.cmp(&a.key))
     });
 }
 

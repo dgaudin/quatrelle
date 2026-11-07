@@ -176,3 +176,29 @@ fn junk_dates_are_problems() {
         }
     }
 }
+
+/// Sent late in 2023, it came in 2024: `received:` (and `after:`, `before:`) go by when it
+/// came, `sent:` and `date:` by its `Date:` (adapted from upstream 62a459d3).
+#[test]
+fn received_goes_by_when_it_came() {
+    let c = berlin(1_718_000_000);
+    let mut m = sample();
+    m.date = local(2024, 1, 1, &c) - 3600;
+    m.received = local(2024, 1, 1, &c) + 3600;
+    let check = |s: &str| {
+        let mut query = Query::parse(s);
+        query.resolve(&c);
+        (query.matches(&Doc { summary: &m, body: None, indexed: false, awaiting: false }), query.dates_hold(&m))
+    };
+    for (typed, holds) in [
+        ("received:2024", true),
+        ("after:2024", true),
+        ("before:2024", false),
+        ("sent:2024", false),
+        ("sent:2023", true),
+        ("date:2023", true),
+        ("-sent:2023", false),
+    ] {
+        assert_eq!(check(typed), (holds, holds), "{typed}");
+    }
+}

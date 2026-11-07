@@ -412,6 +412,7 @@ pub(super) fn summary_json(m: &quatrelle_model::Summary) -> Value {
     json!({
         "key": m.key.to_id(),
         "date": m.date,
+        "received": m.received_at(),
         "from": m.from.to_string(),
         "subject": m.subject,
         "preview": m.preview,

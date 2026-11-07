@@ -347,7 +347,7 @@ fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, u
         who = format!("{who} <{}>", m.from.email.trim());
     }
     let subject = if m.subject.is_empty() { tl!("(no subject)") } else { m.subject.as_str() };
-    let mut spoken = vec![who, subject.to_string(), crate::i18n::date(&dates::list_time(m.date, &s.clock))];
+    let mut spoken = vec![who, subject.to_string(), crate::i18n::date(&dates::list_time(m.received_at(), &s.clock))];
     for (on, word) in [
         (marks.warning, "Check who sent it"),
         (marks.external, "External"),
@@ -485,7 +485,7 @@ fn message_row(
     let right = r.max.x - 14.0;
     let line1 = r.min.y + if compact { 7.0 } else { 11.0 };
     // Sender (or recipients in Sent) and time.
-    let time = crate::i18n::date(&dates::list_time(m.date, &s.clock));
+    let time = crate::i18n::date(&dates::list_time(m.received_at(), &s.clock));
     let time_g = p.layout_no_wrap(time, if unread { theme::bold(12.0) } else { theme::regular(12.0) }, if unread { t.accent } else { t.dim });
     let mut tw = time_g.size().x;
     p.galley(egui::pos2(right - tw, line1 + 1.0), time_g, t.dim);

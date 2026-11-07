@@ -272,7 +272,7 @@ impl Session {
         quiet.extend(self.run_rules(&rest));
         // Mail older than a day (a resync after a long time away) isn't "new" any more.
         let cutoff = self.clock.now - 86_400;
-        let fresh: Vec<Summary> = arrived.into_iter().filter(|m| !m.flags.seen && m.date >= cutoff && !quiet.contains(&m.key)).collect();
+        let fresh: Vec<Summary> = arrived.into_iter().filter(|m| !m.flags.seen && m.received_at() >= cutoff && !quiet.contains(&m.key)).collect();
         self.add_to_envelope(&fresh);
         if self.prefs.notify {
             self.new_mail.extend(fresh.into_iter().rev());
@@ -352,7 +352,7 @@ impl Session {
             let dated = self.search_query(&q);
             for key in hits.filter(|k| !have.contains(k)) {
                 if let Some(m) = self.summary_where(&key)
-                    && dated.dates_hold(m.date)
+                    && dated.dates_hold(&m)
                 {
                     found.push(m);
                 }
@@ -380,7 +380,7 @@ impl Session {
         {
             // The servers aren't asked the dates: what they found outside them isn't listed.
             let dated = self.search_query(q);
-            for m in found.iter().filter(|m| dated.dates_hold(m.date)) {
+            for m in found.iter().filter(|m| dated.dates_hold(m)) {
                 let known = list.iter().any(|x| x.key == m.key || (!x.message_id.is_empty() && x.message_id == m.message_id));
                 if !known {
                     list.push(Arc::new(m.clone()));

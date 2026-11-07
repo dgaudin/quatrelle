@@ -181,7 +181,7 @@ pub(super) fn size_group(size: u32) -> &'static str {
 pub fn arrange_list<M: std::borrow::Borrow<Summary>>(list: &mut [M], arrange: Arrange, reverse: bool) {
     let newest = |a: &M, b: &M| {
         let (a, b) = (a.borrow(), b.borrow());
-        b.date.cmp(&a.date).then_with(|| b.key.cmp(&a.key))
+        b.received_at().cmp(&a.received_at()).then_with(|| b.key.cmp(&a.key))
     };
     // By a name: each one's name lower-cased once (it was in every comparison, twice), over
     // the list already newest first, which the sort keeps among equal names.
@@ -207,7 +207,7 @@ pub fn arrange_list<M: std::borrow::Borrow<Summary>>(list: &mut [M], arrange: Ar
                 Arrange::Size => b.size.cmp(&a.size),
                 Arrange::Flag => flag_rank(b).cmp(&flag_rank(a)),
                 Arrange::Attachments => b.has_attachments.cmp(&a.has_attachments),
-                Arrange::Date | Arrange::From | Arrange::To | Arrange::Subject => b.date.cmp(&a.date),
+                Arrange::Date | Arrange::From | Arrange::To | Arrange::Subject => b.received_at().cmp(&a.received_at()),
             }
         };
         let primary = if reverse { primary.reverse() } else { primary };
@@ -220,7 +220,7 @@ pub fn arrange_list<M: std::borrow::Borrow<Summary>>(list: &mut [M], arrange: Ar
 /// newest first; the same for every pair, so it's the sort's order.
 pub(super) fn arranged(arrange: Arrange, reverse: bool) -> impl Fn(&Summary, &Summary) -> std::cmp::Ordering {
     move |a: &Summary, b: &Summary| {
-        let newest = || b.date.cmp(&a.date).then_with(|| b.key.cmp(&a.key));
+        let newest = || b.received_at().cmp(&a.received_at()).then_with(|| b.key.cmp(&a.key));
         let text: Option<fn(&Summary) -> String> = match arrange {
             Arrange::From => Some(|m| person(Some(&m.from)).to_lowercase()),
             Arrange::To => Some(|m| person(m.to.first()).to_lowercase()),
@@ -235,7 +235,7 @@ pub(super) fn arranged(arrange: Arrange, reverse: bool) -> impl Fn(&Summary, &Su
             (None, Arrange::Size) => b.size.cmp(&a.size),
             (None, Arrange::Flag) => flag_rank(b).cmp(&flag_rank(a)),
             (None, Arrange::Attachments) => b.has_attachments.cmp(&a.has_attachments),
-            (None, _) => b.date.cmp(&a.date),
+            (None, _) => b.received_at().cmp(&a.received_at()),
         };
         if reverse { primary.reverse() } else { primary }.then_with(newest)
     }

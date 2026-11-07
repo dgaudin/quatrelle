@@ -136,15 +136,16 @@ proptest! {
         let clock = Clock::new(now, offset);
         let mut query = Query::parse(&q);
         query.resolve(&clock);
-        let _ = query.dates_hold(t);
-        let m_ = quatrelle_model::Summary { date: t, ..Default::default() };
+        let m_ = quatrelle_model::Summary { date: t, received: now, ..Default::default() };
+        let _ = query.dates_hold(&m_);
         let _ = query.matches(&Doc { summary: &m_, body: None, indexed: false, awaiting: false });
         let mut day = Query::parse(&format!("received:{y:04}-{m:02}-{d:02}"));
         prop_assert!(day.problems.is_empty());
         day.resolve(&clock);
         let start = clock.midnight(quatrelle_model::dates::days_from_civil(y, m, d));
         let next = clock.midnight(quatrelle_model::dates::days_from_civil(y, m, d) + 1);
-        prop_assert!(day.dates_hold(start) && !day.dates_hold(next) && !day.dates_hold(start.saturating_sub(1)));
+        let at = |t: i64| quatrelle_model::Summary { date: t, received: t, ..Default::default() };
+        prop_assert!(day.dates_hold(&at(start)) && !day.dates_hold(&at(next)) && !day.dates_hold(&at(start.saturating_sub(1))));
     }
 
     /// Plain words, typed with or without their accents, find the text that has them.
