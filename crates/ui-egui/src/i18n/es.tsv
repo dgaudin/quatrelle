@@ -2066,3 +2066,6 @@ menu	View	Ver
 	{ext} file	Archivo {ext}
 	This message is no longer in the list: open its folder to delete it.	Este mensaje ya no está en la lista: abre su carpeta para eliminarlo.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Mayús+Supr elimina el correo definitivamente, como Supr en Elementos eliminados
+	Drop to add them to {folder}	Suéltelos para añadirlos a {folder}
+	Added to {folder}: {n}	Añadidos a {folder}: {n}
+	Couldn't add {file} to {folder}: {error}	No se pudo añadir {file} a {folder}: {error}

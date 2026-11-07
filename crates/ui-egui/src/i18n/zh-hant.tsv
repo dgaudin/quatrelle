@@ -2066,3 +2066,6 @@ folder	Conflicts	衝突
 	{ext} file	{ext} 檔案
 	This message is no longer in the list: open its folder to delete it.	這封郵件已不在清單中：請開啟其所在資料夾後再刪除。
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del 會永久刪除郵件，與在「刪除的郵件」中按 Del 相同
+	Drop to add them to {folder}	放開即可加入 {folder}
+	Added to {folder}: {n}	已加入 {folder}：{n}
+	Couldn't add {file} to {folder}: {error}	無法將 {file} 加入 {folder}：{error}

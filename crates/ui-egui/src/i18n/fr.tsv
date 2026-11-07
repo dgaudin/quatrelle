@@ -2066,3 +2066,6 @@ menu	View	Afficher
 	{ext} file	Fichier {ext}
 	This message is no longer in the list: open its folder to delete it.	Ce message n’est plus dans la liste : ouvrez son dossier pour le supprimer.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Maj+Suppr supprime le courrier définitivement, comme Suppr dans Éléments supprimés
+	Drop to add them to {folder}	Déposez-les pour les ajouter à {folder}
+	Added to {folder}: {n}	Ajoutés à {folder} : {n}
+	Couldn't add {file} to {folder}: {error}	Impossible d'ajouter {file} à {folder} : {error}

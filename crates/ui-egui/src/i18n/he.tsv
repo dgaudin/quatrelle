@@ -2061,3 +2061,6 @@ folder	Conflicts	התנגשויות
 	{ext} file	קובץ {ext}
 	This message is no longer in the list: open its folder to delete it.	ההודעה הזו כבר לא ברשימה: פתח את התיקייה שלה כדי למחוק אותה.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del מוחק דואר לצמיתות, כמו Del בפריטים שנמחקו
+	Drop to add them to {folder}	שחררו כדי להוסיף אותם אל {folder}
+	Added to {folder}: {n}	נוספו אל {folder}: {n}
+	Couldn't add {file} to {folder}: {error}	לא ניתן להוסיף את {file} אל {folder}: {error}

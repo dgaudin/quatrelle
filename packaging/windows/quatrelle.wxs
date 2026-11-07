@@ -6,7 +6,7 @@
 
   Per-machine install into Program Files, a Start Menu shortcut, and quatrelle.exe on the App
   Paths list (so Win+R `quatrelle` starts it), and Quatrelle offered as the mail app and for
-  .eml, .ics and .vcf files (QuatrelleDefaultApp, below).
+  .eml, .msg, .ics and .vcf files (QuatrelleDefaultApp, below).
 
   UpgradeCode is fixed for Quatrelle forever (playbook §6); never change it.
 -->
@@ -76,7 +76,7 @@
 
       <!-- Lets Windows offer Quatrelle as a mail program. Nothing here makes it the default:
            the Capabilities key puts it on the list in Settings > Apps > Default apps (under Email
-           and the .eml, .ics and .vcf types) for the user to choose, and each extension's
+           and the .eml, .msg, .ics and .vcf types) for the user to choose, and each extension's
            OpenWithProgids entry adds it to Explorer's "Open with" menu. A link or a file path is
            passed as the one argument (apps/quatrelle/src/args.rs). Uninstalling removes it all. -->
       <Component Id="QuatrelleDefaultApp" Guid="B74ACD47-7B2E-4DEA-8113-42A3B3D00FDE">
@@ -92,6 +92,7 @@
           </RegistryKey>
           <RegistryKey Key="FileAssociations">
             <RegistryValue Name=".eml" Type="string" Value="Quatrelle.eml" />
+            <RegistryValue Name=".msg" Type="string" Value="Quatrelle.msg" />
             <RegistryValue Name=".ics" Type="string" Value="Quatrelle.ics" />
             <RegistryValue Name=".vcf" Type="string" Value="Quatrelle.vcf" />
           </RegistryKey>
@@ -105,6 +106,7 @@
           </RegistryKey>
           <RegistryKey Key="SupportedTypes">
             <RegistryValue Name=".eml" Type="string" Value="" />
+            <RegistryValue Name=".msg" Type="string" Value="" />
             <RegistryValue Name=".ics" Type="string" Value="" />
             <RegistryValue Name=".vcf" Type="string" Value="" />
           </RegistryKey>
@@ -135,6 +137,20 @@
         </RegistryKey>
         <RegistryKey Root="HKLM" Key="Software\Classes\.eml\OpenWithProgids">
           <RegistryValue Name="Quatrelle.eml" Type="string" Value="" />
+        </RegistryKey>
+
+        <!-- .msg (a saved Outlook message): offered under Open with, never taken from Outlook. -->
+        <RegistryKey Root="HKLM" Key="Software\Classes\Quatrelle.msg">
+          <RegistryValue Type="string" Value="Outlook message file" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Classes\.msg\OpenWithProgids">
+          <RegistryValue Name="Quatrelle.msg" Type="string" Value="" />
         </RegistryKey>
 
         <!-- .ics -->

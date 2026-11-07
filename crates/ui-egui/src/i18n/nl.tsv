@@ -2062,3 +2062,6 @@ menu	View	Weergeven
 	{ext} file	{ext}-bestand
 	This message is no longer in the list: open its folder to delete it.	Dit bericht staat niet meer in de lijst: open de map ervan om het te verwijderen.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del verwijdert e-mail definitief, net als Del in Verwijderde items
+	Drop to add them to {folder}	Laat los om ze aan {folder} toe te voegen
+	Added to {folder}: {n}	Toegevoegd aan {folder}: {n}
+	Couldn't add {file} to {folder}: {error}	{file} kon niet aan {folder} worden toegevoegd: {error}
