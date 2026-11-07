@@ -169,15 +169,24 @@ pub(super) fn state(s: &quatrelle_model::Summary, role: FolderRole, marks: &Expo
 }
 
 /// The message in `raw`, with `state`; `received` is when it was received (Unix seconds);
-/// `spill`: where its big files wait for their batch (none: they are held with it).
-pub(super) fn owned(raw: &[u8], received: i64, state: State, spill: Option<&Spill>) -> Option<Owned> {
-    owned_in(raw, received, state, &[], spill, super::files::MAX_ATTACHED)
+/// `owner`: whose mail it is, for a meeting it carries; `spill`: where its big files wait for
+/// their batch (none: they are held with it).
+pub(super) fn owned(raw: &[u8], received: i64, state: State, owner: &super::calendar::Owner, spill: Option<&Spill>) -> Option<Owned> {
+    owned_in(raw, received, state, owner, &[], spill, super::files::MAX_ATTACHED)
 }
 
 /// [`owned`] for a message attached `path.len()` deep (`path`: the index of each attached
 /// message down to it among its holder's attachments, empty for the message itself; `left`: what
 /// the attached messages below it may hold, [`super::files::of`]).
-pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize], spill: Option<&Spill>, left: usize) -> Option<Owned> {
+pub(super) fn owned_in(
+    raw: &[u8],
+    received: i64,
+    state: State,
+    owner: &super::calendar::Owner,
+    path: &[usize],
+    spill: Option<&Spill>,
+    left: usize,
+) -> Option<Owned> {
     let p = mime::parse(raw)?;
     let mut recipients = Vec::new();
     for (list, kind) in [(&p.to, UnicodePstRecipientType::To), (&p.cc, UnicodePstRecipientType::Cc), (&p.bcc, UnicodePstRecipientType::Bcc)] {
@@ -191,7 +200,7 @@ pub(super) fn owned_in(raw: &[u8], received: i64, state: State, path: &[usize], 
         Some(s) => (s.body, s.html, vec![s.file], Some(s.class), None),
         None => {
             let kind = super::kinds::report(&headers, raw, &p);
-            let meeting = if path.is_empty() { super::meeting::of(raw, &p) } else { None };
+            let meeting = if path.is_empty() { super::meeting::of(raw, &p, owner) } else { None };
             let mut files = super::files::of(raw, &p, path, spill, left);
             let mut html = mime::html_body(raw);
             super::files::fit_cids(&mut files, &mut html);
@@ -357,7 +366,7 @@ mod tests {
         // lines aren't header fields.
         let raw = b"Subject: x\nFrom: a@b\n\nImportance: high\r\nSensitivity: Private\r\n\r\nmore";
         assert_eq!(header_block(raw), "Subject: x\nFrom: a@b\r\n");
-        let m = owned(raw, 0, State::default(), None).unwrap();
+        let m = owned(raw, 0, State::default(), &Default::default(), None).unwrap();
         assert_eq!((m.importance, m.sensitivity), (1, None));
     }
 
@@ -365,10 +374,10 @@ mod tests {
     #[test]
     fn no_date_no_submit_time() {
         let submit = |m: &Owned| properties(m, &[]).iter().any(|p| matches!(p.key, outlook_pst::UnicodePstPropertyKey::Tag(0x0039)));
-        let m = owned(b"Subject: x\r\nFrom: a@b\r\n\r\nbody", 0, State::default(), None).unwrap();
+        let m = owned(b"Subject: x\r\nFrom: a@b\r\n\r\nbody", 0, State::default(), &Default::default(), None).unwrap();
         assert_eq!(m.date, 0);
         assert!(!submit(&m));
-        let m = owned(b"Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nSubject: x\r\n\r\nbody", 0, State::default(), None).unwrap();
+        let m = owned(b"Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nSubject: x\r\n\r\nbody", 0, State::default(), &Default::default(), None).unwrap();
         assert_eq!(m.date, (1_704_067_200 + EPOCH_1601) * 10_000_000);
         assert!(submit(&m));
     }
@@ -414,7 +423,7 @@ mod tests {
         let midnight = |day: i64| (day * 86_400 + EPOCH_1601) * 10_000_000;
         assert!(st.complete && !st.flagged && st.categories.is_empty(), "{st:?}");
         assert_eq!((st.due, st.done), (Some(midnight(3)), Some(midnight(2))));
-        let m = owned(b"Subject: x\r\n\r\nbody", 0, st, None).unwrap();
+        let m = owned(b"Subject: x\r\n\r\nbody", 0, st, &Default::default(), None).unwrap();
         let props = properties(&m, &[]);
         let tag = |id: u16| props.iter().find(|p| matches!(p.key, Key::Tag(t) if t == id)).map(|p| &p.value);
         let task = |lid: u32| {
@@ -441,7 +450,7 @@ mod tests {
         // Its day not known: complete all the same, without when.
         let st = state(&s, FolderRole::Inbox, &ExportMarks::default());
         assert!(st.complete && st.done.is_none());
-        let m = owned(b"Subject: x\r\n\r\nbody", 0, st, None).unwrap();
+        let m = owned(b"Subject: x\r\n\r\nbody", 0, st, &Default::default(), None).unwrap();
         let props = properties(&m, &[]);
         assert!(props.iter().any(|p| matches!((p.key, p.value), (Key::Tag(0x1090), UnicodePstValue::Integer32(COMPLETE)))));
         assert!(!props.iter().any(|p| matches!(p.key, Key::Tag(0x1091))));
@@ -450,7 +459,7 @@ mod tests {
         s.flags.flagged = true;
         let st = state(&s, FolderRole::Inbox, &marks);
         assert!(st.flagged && !st.complete && st.done.is_none());
-        let m = owned(b"Subject: x\r\n\r\nbody", 0, st, None).unwrap();
+        let m = owned(b"Subject: x\r\n\r\nbody", 0, st, &Default::default(), None).unwrap();
         let props = properties(&m, &[]);
         assert!(props.iter().any(|p| matches!((p.key, p.value), (Key::Tag(0x1090), UnicodePstValue::Integer32(FLAGGED)))));
         assert!(props.iter().any(|p| matches!(p.key, Key::Tag(0x1095))) && !props.iter().any(|p| matches!(p.key, Key::Tag(0x1091))));

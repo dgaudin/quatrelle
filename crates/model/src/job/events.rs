@@ -233,6 +233,10 @@ pub enum Event {
         /// Messages a data file already there had (by `Message-ID`), not written again.
         #[serde(default)]
         already: usize,
+        /// Occurrences of series whose rule Outlook can't keep, each written as an appointment
+        /// of its own.
+        #[serde(default)]
+        occurrences: usize,
         done: bool,
         error: Option<String>,
     },

@@ -329,6 +329,18 @@ fn meeting_mail_carries_its_meeting() {
     let class = |subject: &str| props_of(&file, &["Inbox"], subject, &[0x001A]).remove(0).as_ref().and_then(crate::pst::text_of);
     assert_eq!(class("Accepted: Review").as_deref(), Some("IPM.Schedule.Meeting.Resp.Pos"));
     assert_eq!(class("Plain").as_deref(), Some("IPM.Note"));
+    // Received (asfMeeting | asfReceived), not answered yet; its times, place, and when it changed.
+    let ids = [appt(0x8217), appt(0x8218), 0x0060, 0x0061, 0x0063, meeting(0x0002), meeting(0x0001), meeting(0x001A)];
+    let got = props_of(&file, &["Inbox"], "Review", &ids);
+    assert!(matches!(got[..2], [Some(V::Integer32(3)), Some(V::Integer32(5))]), "{got:?}");
+    assert!(matches!(got[2], Some(V::Time(t)) if t == item::filetime(invite.start)), "{got:?}");
+    assert!(matches!(got[3], Some(V::Time(t)) if t == item::filetime(invite.end)), "{got:?}");
+    assert!(matches!(got[4], Some(V::Boolean(true))), "{got:?}");
+    assert_eq!(got[5].as_ref().and_then(crate::pst::text_of).as_deref(), Some("Suite B"));
+    assert!(matches!(got[6..], [Some(V::Time(a)), Some(V::Time(b))] if a == b && a == item::filetime(1_790_000_000)), "{got:?}");
+    // The guest's answer to it: the guest's own, accepted.
+    let got = props_of(&file, &["Inbox"], "Accepted: Review", &[appt(0x8217), appt(0x8218)]);
+    assert!(matches!(got[..], [Some(V::Integer32(3)), Some(V::Integer32(3))]), "{got:?}");
 
     // Read back, the request still carries its calendar.
     let back = Store::open(dir.join("back")).unwrap();

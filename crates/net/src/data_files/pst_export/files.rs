@@ -137,7 +137,7 @@ pub(super) fn of(raw: &[u8], p: &mime::Parsed, path: &[usize], spill: Option<&Sp
             && a.size <= left
             && let Some(inner) = mime::attachment_data(raw, a.index)
             && let Some(below) = left.checked_sub(inner.len())
-            && let Some(message) = item::owned_in(&inner, 0, State::default(), &at(a.index), spill, below)
+            && let Some(message) = item::owned_in(&inner, 0, State::default(), &Default::default(), &at(a.index), spill, below)
         {
             let name = cut(Some(message.subject.trim()).filter(|s| !s.is_empty()).unwrap_or(a.name.trim_end_matches(".eml")), MAX_NAME);
             *slot = Some(File::Message { name, message: Box::new(message) });

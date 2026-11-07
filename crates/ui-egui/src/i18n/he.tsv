@@ -1801,6 +1801,7 @@ month	May	מאי
 	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} הודעות יוצאו ({already} כבר היו בקובץ הנתונים)
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} הודעות יוצאו ({skipped} שאינן במחשב הזה הושמטו; {already} כבר היו בקובץ הנתונים)
 	{name}: {messages} messages exported so far…	{name}: {messages} הודעות יוצאו עד כה…
+	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: {occurrences} מופעים של סדרות ש-Outlook אינו יכול לשמור את הכלל שלהן נכתבו אחד אחד
 	{name}: {messages} messages imported	{name}: {messages} הודעות יובאו
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} הודעות יובאו ({skipped} לא היו קריאות)
 	{name}: {messages} messages imported so far…	{name}: {messages} הודעות יובאו עד כה…

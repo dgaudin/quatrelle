@@ -1802,6 +1802,7 @@ month	May	5月
 	{name}: {messages} messages exported ({already} the data file already had)	{name}: 已导出 {messages} 封邮件（{already} 封已在数据文件中）
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: 已导出 {messages} 封邮件（{skipped} 封不在这台电脑上，已略过；{already} 封已在数据文件中）
 	{name}: {messages} messages exported so far…	{name}: 目前已导出 {messages} 封邮件…
+	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}：Outlook 无法保留其规则的系列中有 {occurrences} 次发生已逐个写入
 	{name}: {messages} messages imported	{name}: 已导入 {messages} 封邮件
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 已导入 {messages} 封邮件（{skipped} 封无法读取）
 	{name}: {messages} messages imported so far…	{name}: 目前已导入 {messages} 封邮件…

@@ -285,7 +285,7 @@ fn a_big_file_doesnt_need_the_cache_once_collected() {
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
     store.write_body(&key, &raw).unwrap();
     let spill = files::Spill::new(dir.join("Mail.pst.part-files"));
-    let m = item::owned(&store.read_body(&key).unwrap(), 0, item::State::default(), Some(&spill)).unwrap();
+    let m = item::owned(&store.read_body(&key).unwrap(), 0, item::State::default(), &Default::default(), Some(&spill)).unwrap();
     assert!(matches!(m.files.as_slice(), [files::File::Stored { .. }]));
     assert!(spill.bytes() >= 5 << 20);
     store.remove_body(&key);
@@ -320,7 +320,7 @@ fn attached_messages_hold_no_more_than_their_room() {
     let top = level("Top", ("Level 1.eml", "message/rfc822", &one));
     // Room for Level 1 and Level 2, not Level 3 as well.
     let room = one.len() + two.len() + three.len() / 2;
-    let m = item::owned_in(&top, 0, item::State::default(), &[], None, room).unwrap();
+    let m = item::owned_in(&top, 0, item::State::default(), &Default::default(), &[], None, room).unwrap();
     fn inner(m: &item::Owned) -> Option<&item::Owned> {
         match m.files.as_slice() {
             [files::File::Message { message, .. }] => Some(message.as_ref()),
@@ -331,7 +331,7 @@ fn attached_messages_hold_no_more_than_their_room() {
     assert_eq!(two_in.subject, "Level 2");
     assert!(matches!(two_in.files.as_slice(), [files::File::Data { name, .. }] if name == "Level 3.eml"), "Level 3 stays a file");
     // With the room it has, all three are attached messages.
-    let m = item::owned(&top, 0, item::State::default(), None).unwrap();
+    let m = item::owned(&top, 0, item::State::default(), &Default::default(), None).unwrap();
     let three_in = inner(inner(inner(&m).unwrap()).unwrap()).unwrap();
     assert_eq!(three_in.subject, "Level 3");
 }
@@ -354,7 +354,7 @@ fn long_names_keep_their_extension_and_long_ids_their_pictures() {
          --b\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=\"{name}\"\r\n\r\n%PDF-1.4\r\n--b--\r\n"
     )
     .into_bytes();
-    let m = item::owned(&raw, 0, item::State::default(), None).unwrap();
+    let m = item::owned(&raw, 0, item::State::default(), &Default::default(), None).unwrap();
     let [files::File::Data { cid: Some(short_cid), .. }, files::File::Data { name: short, .. }] = m.files.as_slice() else {
         panic!("two files: {:?}", mime::parse(&raw).map(|p| p.attachments))
     };

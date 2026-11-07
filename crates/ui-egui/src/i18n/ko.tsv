@@ -1804,6 +1804,7 @@ month	May	5월
 	{name}: {messages} messages exported ({already} the data file already had)	{name}: 메시지 {messages}개를 내보냈습니다(데이터 파일에 이미 있던 {already}개 제외)
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: 메시지 {messages}개를 내보냈습니다(이 컴퓨터에 없는 {skipped}개는 제외, 데이터 파일에 이미 있던 {already}개 제외)
 	{name}: {messages} messages exported so far…	{name}: 지금까지 메시지 {messages}개를 내보냈습니다…
+	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: Outlook이 규칙을 유지할 수 없는 되풀이 일정의 {occurrences}개 항목을 하나씩 기록했습니다
 	{name}: {messages} messages imported	{name}: 메시지 {messages}개를 가져왔습니다
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 메시지 {messages}개를 가져왔습니다({skipped}개는 읽을 수 없음)
 	{name}: {messages} messages imported so far…	{name}: 지금까지 메시지 {messages}개를 가져왔습니다…

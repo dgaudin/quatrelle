@@ -119,12 +119,14 @@ impl Session {
     }
 
     /// How an export is going; `left`: messages not on this computer, and ones the data file
-    /// already had.
-    pub(super) fn exported(&mut self, account: &str, messages: usize, left: (usize, usize), done: bool, error: Option<String>) {
+    /// already had; `occurrences`: those of series whose rule Outlook can't keep, each written as
+    /// an appointment of its own (said apart, once it's done).
+    pub(super) fn exported(&mut self, account: &str, messages: usize, left: (usize, usize), occurrences: usize, done: bool, error: Option<String>) {
         let (skipped, already) = left;
         let name = self.account(account).map(|a| a.config.email.clone()).unwrap_or_default();
         let (messages, skipped, already) = (messages.to_string(), skipped.to_string(), already.to_string());
         let args = [("name", name.as_str()), ("messages", messages.as_str()), ("skipped", skipped.as_str()), ("already", already.as_str())];
+        let finished = done && error.is_none();
         match (done, error, left) {
             (false, _, _) => self.notice_with("{name}: {messages} messages exported so far…", &args, false),
             (true, Some(e), _) => self.notice_with("{name} could not be exported: {error}", &[("name", &name), ("error", &e)], true),
@@ -138,6 +140,14 @@ impl Session {
                 &args,
                 false,
             ),
+        }
+        if finished && occurrences > 0 {
+            let occurrences = occurrences.to_string();
+            self.notice_with(
+                "{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one",
+                &[("name", &name), ("occurrences", &occurrences)],
+                false,
+            );
         }
     }
 

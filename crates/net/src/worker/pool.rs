@@ -192,13 +192,20 @@ impl Pool {
             // With the changes made just before it, waited for here rather than on the window's
             // thread (they're written on the edit writer's).
             edits_written(edits);
-            let mut progress =
-                |messages| sink.emit(Event::Exported { account: account.clone(), messages, skipped: 0, already: 0, done: false, error: None });
+            let mut progress = |messages| {
+                sink.emit(Event::Exported { account: account.clone(), messages, skipped: 0, already: 0, occurrences: 0, done: false, error: None })
+            };
             let event = match crate::pst_export::export(&store, &account, &name, std::path::Path::new(&path), &marks, &mut progress) {
-                Ok(done) => {
-                    Event::Exported { account, messages: done.messages, skipped: done.skipped, already: done.already, done: true, error: None }
-                }
-                Err(e) => Event::Exported { account, messages: 0, skipped: 0, already: 0, done: true, error: Some(e) },
+                Ok(done) => Event::Exported {
+                    account,
+                    messages: done.messages,
+                    skipped: done.skipped,
+                    already: done.already,
+                    occurrences: done.occurrences,
+                    done: true,
+                    error: None,
+                },
+                Err(e) => Event::Exported { account, messages: 0, skipped: 0, already: 0, occurrences: 0, done: true, error: Some(e) },
             };
             sink.emit(event);
         });
