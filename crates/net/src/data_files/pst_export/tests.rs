@@ -9,6 +9,7 @@ mod big;
 mod damaged;
 mod follow_up;
 mod kinds;
+mod pim;
 mod pinned;
 mod round_trip;
 mod seeds;
@@ -89,17 +90,17 @@ fn an_account_round_trips_through_a_data_file() {
     let file = dir.join("Out.pst");
     let mut ticks = 0;
     let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| ticks += 1).unwrap();
-    assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, contacts: 1 });
+    assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, tasks: 0, notes: 0, contacts: 1 });
+    // The calendar beside it; the contact inside it, no address book beside it.
     let ics = std::fs::read_to_string(dir.join("Out Calendar.ics")).unwrap();
     assert!(ics.contains("SUMMARY:Screening") && ics.contains("BEGIN:VCALENDAR"), "{ics}");
-    let vcf = std::fs::read_to_string(dir.join("Out Contacts.vcf")).unwrap();
-    assert!(vcf.contains("FN:Ana Lima"), "{vcf}");
+    assert!(!dir.join("Out Contacts.vcf").exists());
     assert!(ticks > 0);
 
     // Read back with the importer.
     let back = Store::open(dir.join("back")).unwrap();
     let imported = crate::pst::import(&file, &back, "b1", &mut |_| {}).unwrap();
-    assert_eq!(imported.messages, 3, "{imported:?}");
+    assert_eq!((imported.messages, imported.contacts), (3, 1), "{imported:?}");
     let all = back.load_folders("b1").unwrap();
     let inbox = back.load_folder("b1", "INBOX").unwrap();
     assert_eq!(inbox.messages.len(), 2, "{all:?}");

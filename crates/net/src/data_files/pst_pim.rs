@@ -25,14 +25,17 @@ mod files;
 mod groups;
 mod meetings;
 mod recur;
+mod rest;
 mod sharing;
 mod tasks;
 pub(crate) use files::{card_file, event_file};
-pub(crate) use groups::group_of;
+pub(crate) use groups::{group_of, wrapped_entry_id};
 pub(crate) use meetings::invitation;
-use meetings::{known_zone, uid_of, zone_key_name};
-use recur::recurrence_in;
+pub(crate) use meetings::uid_of;
+use meetings::{known_zone, zone_key_name};
 pub(crate) use recur::{Own, changed_events};
+pub(crate) use recur::{recurrence, recurrence_in};
+pub(crate) use rest::{split_rest, with_rest};
 pub(crate) use sharing::{put_before, sharing_lines};
 pub(crate) use tasks::task_of;
 
@@ -163,6 +166,22 @@ pub(crate) struct Extra {
     pub family: String,
     pub company: String,
     pub title: String,
+    /// A contact's department, office, profession, manager, assistant, nickname and spouse
+    /// (PidTagDepartmentName, PidTagOfficeLocation, PidTagProfession, PidTagManagerName,
+    /// PidTagAssistant, PidTagNickname, PidTagSpouseName).
+    pub department: String,
+    pub office: String,
+    pub profession: String,
+    pub manager: String,
+    pub assistant: String,
+    pub nickname: String,
+    pub spouse: String,
+    /// A contact's web page (PidLidHtml, else its business or personal home page) and instant
+    /// messaging address (PidLidInstantMessagingAddress).
+    pub web: String,
+    pub im: String,
+    /// A contact's wedding anniversary (PidTagWeddingAnniversary).
+    pub anniversary: Option<i64>,
     pub emails: Vec<String>,
     pub phones: Vec<(String, &'static str)>,
     /// Business, home and other addresses.
@@ -231,7 +250,24 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
     let n = |set, lid| named.id(set, lid).and_then(p);
     let ns = |set, lid| n(set, lid).and_then(Val::into_text).unwrap_or_default();
     let time = |set, lid, fallback: u16| n(set, lid).or_else(|| p(fallback)).and_then(|v| v.time());
-    let mut x = Extra { display: s(0x3001), given: s(0x3A06), family: s(0x3A11), company: s(0x3A16), title: s(0x3A17), ..Default::default() };
+    let mut x = Extra {
+        display: s(0x3001),
+        given: s(0x3A06),
+        family: s(0x3A11),
+        company: s(0x3A16),
+        title: s(0x3A17),
+        department: s(0x3A18),
+        office: s(0x3A19),
+        profession: s(0x3A46),
+        manager: s(0x3A4E),
+        assistant: s(0x3A30),
+        nickname: s(0x3A4F),
+        spouse: s(0x3A48),
+        ..Default::default()
+    };
+    x.web = [ns(PSETID_ADDRESS, 0x802B), s(0x3A51), s(0x3A50)].into_iter().map(|w| w.trim().to_string()).find(|w| !w.is_empty()).unwrap_or_default();
+    x.im = ns(PSETID_ADDRESS, 0x8062).trim().to_string();
+    x.anniversary = p(0x3A41).and_then(|v| v.time());
     // Email1/2/3: the address, or (for an Exchange address) the display address.
     for (address, original) in [(0x8083, 0x8084), (0x8093, 0x8094), (0x80A3, 0x80A4)] {
         let e = [ns(PSETID_ADDRESS, address), ns(PSETID_ADDRESS, original)].into_iter().find(|e| e.contains('@'));
@@ -367,10 +403,19 @@ pub(crate) fn journal_text(x: &Extra, subject: &str, body: &str) -> String {
         .join("\n")
 }
 
-/// The contact as a card.
+/// A day kept as the start of the day where it was set, in UTC, as `YYYY-MM-DD`.
+fn day_of(t: i64) -> String {
+    let (y, m, d) = civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// The contact as a card, with what an export kept in its text (a card of what Outlook has no
+/// place for, `rest`) back where it was.
 pub(crate) fn card_of(x: &Extra, body: &str, uid: String) -> Card {
     let name = if x.display.trim().is_empty() { format!("{} {}", x.given, x.family).trim().to_string() } else { x.display.trim().to_string() };
-    Card {
+    let (note, rest) = split_rest(&body.replace("\r\n", "\n"), "VCARD");
+    let text = |s: &str| s.trim().to_string();
+    let mut card = Card {
         uid,
         name,
         given: x.given.clone(),
@@ -378,22 +423,48 @@ pub(crate) fn card_of(x: &Extra, body: &str, uid: String) -> Card {
         emails: x.emails.iter().map(|e| Typed { value: e.clone(), kind: String::new() }).collect(),
         phones: x.phones.iter().map(|(v, k)| Typed { value: v.clone(), kind: (*k).to_string() }).collect(),
         org: x.company.clone(),
+        department: text(&x.department),
         title: x.title.clone(),
-        note: body.trim().to_string(),
+        profession: text(&x.profession),
+        office: text(&x.office),
+        manager: text(&x.manager),
+        assistant: text(&x.assistant),
+        web: x.web.replace(['\r', '\n'], ""),
+        im: x.im.replace(['\r', '\n'], ""),
+        nickname: text(&x.nickname),
+        spouse: text(&x.spouse),
+        anniversary: x.anniversary.map(day_of).unwrap_or_default(),
+        note,
         addresses: x.addresses.clone(),
-        // Kept as the start of the day where it was set, in UTC.
-        birthday: x
-            .birthday
-            .map(|t| {
-                let (y, m, d) = civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
-                format!("{y:04}-{m:02}-{d:02}")
-            })
-            .unwrap_or_default(),
+        birthday: x.birthday.map(day_of).unwrap_or_default(),
         // Outlook keeps it as a hidden attachment (MS-OXOCNTC 2.2.2.1.1), read by the caller.
         photo: x.photo.as_ref().map(|(media, bytes)| Photo { media: media.clone(), base64: base64_encode(bytes) }),
         extra: Vec::new(),
-        ..Card::default()
+    };
+    let more = if rest.is_empty() {
+        None
+    } else {
+        quatrelle_model::vcard::parse(&format!("BEGIN:VCARD\r\nVERSION:4.0\r\n{}\r\nEND:VCARD\r\n", rest.join("\r\n"))).pop()
+    };
+    if let Some(more) = more {
+        // An address's kind, which Outlook doesn't keep, beside the address it kept.
+        for e in more.emails {
+            match card.emails.iter_mut().find(|c| c.value == e.value && c.kind.is_empty()) {
+                Some(c) => c.kind = e.kind,
+                None => card.emails.push(e),
+            }
+        }
+        card.phones.extend(more.phones);
+        card.addresses.extend(more.addresses);
+        if !more.birthday.is_empty() {
+            card.birthday = more.birthday;
+        }
+        if !more.anniversary.is_empty() {
+            card.anniversary = more.anniversary;
+        }
+        card.extra.extend(more.extra);
     }
+    card
 }
 
 /// A contact's picture, from a hidden attachment: its media type (the item's own, or what the

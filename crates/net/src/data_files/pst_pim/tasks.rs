@@ -6,6 +6,7 @@
 //! `712d7336` of the project it was forked from reads them, into the fork's own task. How it
 //! repeats (PidLidTaskRecurrence, the RecurrencePattern a repeating appointment's starts with) is
 //! read into an RFC 5545 rule and kept with it: the fork's tasks don't repeat, so it isn't shown.
+//! A rule no pattern says, which an export keeps in the task's text (`rest`), comes back from there.
 
 use quatrelle_model::pim::{Task, TaskStatus};
 
@@ -37,13 +38,18 @@ pub(crate) fn task_of(x: &Extra, subject: &str, body: &str, importance: i8, date
     if x.done {
         status = TaskStatus::Completed;
     }
+    let (notes, rest) = split_rest(&body.replace("\r\n", "\n"), "VTODO");
+    let said = rest.iter().find_map(|l| l.get(..6).filter(|h| h.eq_ignore_ascii_case("RRULE:")).and_then(|_| l.get(6..))).map(str::trim);
     // The pattern counts from the task's first day: its start, else the day it's due.
     let from = start.or(due).unwrap_or(0).saturating_mul(86_400);
-    let rrule = (!x.task_recurrence.is_empty()).then(|| recur::pattern(&x.task_recurrence, from, "").map(|p| p.rule)).flatten();
+    let rrule = match said.filter(|r| !r.is_empty()) {
+        Some(rule) => Some(rule.to_string()),
+        None => (!x.task_recurrence.is_empty()).then(|| recur::pattern(&x.task_recurrence, from, "").map(|p| p.rule)).flatten(),
+    };
     let mut task = Task {
         uid,
         subject: subject.to_string(),
-        notes: body.trim().to_string(),
+        notes,
         // A start after the day it's due isn't one Outlook keeps: the due day stands.
         start: match (start, due) {
             (Some(s), Some(d)) if s > d => Some(d),

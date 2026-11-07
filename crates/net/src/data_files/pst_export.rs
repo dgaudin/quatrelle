@@ -12,9 +12,10 @@
 //! and sensitivity ([`item`]); signed and encrypted mail and reports as Outlook keeps them
 //! ([`kinds`]); an attached message as the message it is, and files of any size, a big one kept
 //! in a file of its own until its batch is written ([`files`]). Messages only known by their headers (never opened, on an account
-//! that keeps headers only) are counted as skipped. The writer makes mail items only, so the
-//! account's calendar and contacts go beside the file in the standard formats every calendar and
-//! address book reads (`… Calendar.ics`, `… Contacts.vcf`).
+//! that keeps headers only) are counted as skipped. The account's contacts, contact groups, notes
+//! and tasks go in as Outlook's own items, in the file's Contacts, Notes and Tasks folders
+//! ([`pim`]). Events aren't mapped onto Outlook's items yet, so the account's calendar goes
+//! beside the file as `… Calendar.ics`, which every calendar reads.
 //!
 //! A data file that's already there is added to, as Outlook's export does: its mail stays, the
 //! account's goes into folders of the same names, and messages already in it (by `Message-ID`)
@@ -58,16 +59,24 @@ pub struct Exported {
     pub skipped: usize,
     /// Messages a data file already there had (by `Message-ID`), not written again.
     pub already: usize,
-    /// Events and people written beside the data file.
+    /// Events written beside the data file (its calendar).
     pub events: usize,
+    /// The account's tasks, notes and people (contact groups among them) in it: written, or there
+    /// already in a file added to.
+    pub tasks: usize,
+    pub notes: usize,
     pub contacts: usize,
 }
 
+mod contact;
 mod files;
 mod format;
 mod item;
 mod kinds;
+mod pattern;
+mod pim;
 mod place;
+mod task;
 #[cfg(test)]
 mod tests;
 mod writing;
@@ -154,6 +163,11 @@ pub fn export(
     // Where each folder goes; in an ANSI file, folders whose names it would write alike apart.
     let placed: Vec<Vec<String>> = folders.iter().map(|f| place::place(f, &folders, &targets)).collect();
     let placed = if format == Format::Ansi { place::apart(&placed, &targets) } else { placed };
+    let pim: quatrelle_model::pim::Pim = store.load_account_doc(account, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| i64::try_from(d.as_secs()).unwrap_or(0)).unwrap_or(0);
+    // Where the mail went, so the contacts, notes and tasks of a new file don't go there.
+    let taken: Vec<Vec<String>> = folders.iter().zip(&placed).filter(|(f, _)| f.selectable).map(|(_, p)| p.clone()).collect();
+    let mut inside = pim::Written::default();
     let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
         for (f, folder) in folders.iter().zip(&placed).filter(|(f, _)| f.selectable) {
             let Ok(st) = store.load_folder(account, &f.path) else { continue };
@@ -188,6 +202,7 @@ pub fn export(
             }
         }
         place::record_special(&temp, format, &folders, &targets, created);
+        inside = pim::write(&temp, format, &pim, &taken, existing, &mut created, now)?;
         Ok(())
     }));
     let result = match written {
@@ -206,8 +221,8 @@ pub fn export(
             if let Err(e) = std::fs::rename(&temp, path) {
                 return Err(format!("the data file couldn't be replaced ({e}): the mail is in {}", temp.display()));
             }
-            let (events, contacts) = pim_beside(store, account, path).map_err(|e| e.to_string())?;
-            Ok(Exported { events, contacts, ..done })
+            let events = calendar_beside(&pim, path, now).map_err(|e| e.to_string())?;
+            Ok(Exported { events, tasks: inside.tasks, notes: inside.notes, contacts: inside.contacts, ..done })
         }
         Err(e) => {
             let _ = std::fs::remove_file(&temp);
@@ -223,19 +238,37 @@ pub fn message_class(raw: &[u8]) -> Option<&'static str> {
     owned(raw, 0, item::State::default(), None).map(|m| m.class())
 }
 
-/// The account's calendar and contacts beside the data file: (events, people) written.
-fn pim_beside(store: &Store, account: &str, path: &Path) -> quatrelle_store::Result<(usize, usize)> {
-    let pim: quatrelle_model::pim::Pim = store.load_account_doc(account, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
+/// The account's calendar beside the data file: the events written.
+fn calendar_beside(pim: &quatrelle_model::pim::Pim, path: &Path, now: i64) -> quatrelle_store::Result<usize> {
     let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Mail".into());
     let dir = path.parent().unwrap_or(Path::new("."));
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| i64::try_from(d.as_secs()).unwrap_or(0)).unwrap_or(0);
     let events: Vec<quatrelle_model::ical::CalEvent> = pim.events.iter().map(|e| e.event.clone()).collect();
     if !events.is_empty() {
         quatrelle_store::write_atomic(&dir.join(format!("{stem} Calendar.ics")), quatrelle_model::ical::write(&events, None, now).as_bytes())?;
     }
-    if !pim.cards.is_empty() {
-        let cards: String = pim.cards.iter().map(|c| quatrelle_model::vcard::write(&c.card)).collect();
-        quatrelle_store::write_atomic(&dir.join(format!("{stem} Contacts.vcf")), cards.as_bytes())?;
-    }
-    Ok((events.len(), pim.cards.len()))
+    Ok(events.len())
+}
+
+/// A task's rule as the pattern an export writes for a task whose first day is `from`, and
+/// whether it reads back as the rule (else the task's text keeps the rule). For the fuzz target.
+#[doc(hidden)]
+pub fn task_pattern(rule: &str, from: i64) -> Option<(Vec<u8>, bool)> {
+    let p = pattern::write(rule, from)?;
+    let says = pattern::says(&p, from, rule);
+    Some((p, says))
+}
+
+/// A contact's and a task's text as the import reads it back, what an export kept there
+/// (`pst_pim::rest`) put back in its place. For the fuzz target.
+#[doc(hidden)]
+pub fn read_back_text(body: &str) -> (quatrelle_model::vcard::Card, quatrelle_model::pim::Task) {
+    let x = crate::pst_pim::Extra::default();
+    (crate::pst_pim::card_of(&x, body, "c".into()), crate::pst_pim::task_of(&x, "Task", body, 0, 0, "t".into()))
+}
+
+/// The rule the import reads from a task's pattern, the task's first day `from` (Unix seconds,
+/// its midnight). For the fuzz target.
+#[doc(hidden)]
+pub fn task_rule(pattern: &[u8], from: i64) -> Option<String> {
+    crate::pst_pim::recurrence(pattern, from).map(|(rule, _)| rule)
 }
