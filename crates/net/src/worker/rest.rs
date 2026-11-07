@@ -56,6 +56,9 @@ struct Queue {
     refused: Option<String>,
 }
 
+/// How many messages brought by a copy may wait for their summary to be filled.
+const OWED_MAX: usize = 256;
+
 impl Queue {
     /// A key downloading needs nothing. One waiting moves to the front with its newer copy of the
     /// connection; a new one goes there too.
@@ -87,13 +90,16 @@ pub(super) struct Rest {
     /// The server refused a message's text for how it was asked: not asked again this session,
     /// on the main connection or a copy of it.
     text_refused: AtomicBool,
+    /// Messages a copy of the connection wrote while the main one worked: their summaries are
+    /// filled by the main connection ([`Rest::owes`]), as a copy never writes the folder's list.
+    owed: Mutex<Vec<MessageKey>>,
     store: Store,
     sink: Sink,
 }
 
 impl Rest {
     pub(super) fn new(store: Store, sink: Sink) -> Rest {
-        Rest { queue: Arc::default(), stopped: Arc::default(), text_refused: AtomicBool::new(false), store, sink }
+        Rest { queue: Arc::default(), stopped: Arc::default(), text_refused: AtomicBool::new(false), owed: Mutex::default(), store, sink }
     }
 
     /// Stop on the pool's flag, set as the account stops: the worker ending, which sets this one
@@ -114,6 +120,25 @@ impl Rest {
         for e in refused(&self.queue, key, error) {
             self.sink.emit(e);
         }
+    }
+
+    /// A copy of the connection wrote this message's source: its summary is still to fill.
+    pub(super) fn owe(&self, key: &MessageKey) {
+        let mut o = self.owed.lock().unwrap_or_else(PoisonError::into_inner);
+        if !o.contains(key) {
+            if o.len() >= OWED_MAX {
+                o.remove(0);
+            }
+            o.push(key.clone());
+        }
+    }
+
+    /// Whether this message's summary was left to fill, which is then done with.
+    pub(super) fn owes(&self, key: &MessageKey) -> bool {
+        let mut o = self.owed.lock().unwrap_or_else(PoisonError::into_inner);
+        let before = o.len();
+        o.retain(|k| k != key);
+        o.len() != before
     }
 
     /// The account has stopped.
