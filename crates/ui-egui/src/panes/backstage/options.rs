@@ -200,9 +200,20 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                 });
             });
         }
-        setting(ui, false, tl!("Show HTML mail formatted (otherwise as plain text)"), None, &mut |ui| {
-            switch(ui, s.prefs.show_html, tl!("Show HTML mail formatted (otherwise as plain text)"), "view.html", acts);
-        });
+        // Every message as plain text, out of the way; one message's More actions (⋯) and Show
+        // formatted switch that message alone (adapted from upstream ee0b46ad and 01208ca2).
+        setting(
+            ui,
+            false,
+            tl!("Read all mail as plain text"),
+            Some(tl!("Formatting, colours and pictures are left out. Show formatted, above a message, shows that one as it was sent.")),
+            &mut |ui| {
+                let mut v = !s.prefs.show_html;
+                if widgets::switch(ui, &t, &mut v, tl!("Read all mail as plain text")).changed() {
+                    acts.push(Action::Run("view.html", json!({"on": !v})));
+                }
+            },
+        );
     });
 
     // How much mail is kept on this computer, as Outlook's "Mail to keep offline" in Cached

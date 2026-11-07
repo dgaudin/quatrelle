@@ -395,6 +395,7 @@ impl MailApp {
                 }
             },
             Action::SetDark(d) => self.ui.dark = d,
+            Action::ShowFormatted(key, on) => self.ui.shown_as.set(&key, on, self.session.prefs.show_html),
             Action::SetSystemAccent(on) => self.ui.system_accent = on,
             Action::SetLanguage(l) => self.ui.language = l,
             Action::OpenUrl(url) => self.open_link(&url),

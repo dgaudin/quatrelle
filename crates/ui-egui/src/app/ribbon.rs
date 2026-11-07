@@ -497,6 +497,12 @@ impl MailApp {
                             if ui.checkbox(&mut v, tl!("Compact")).clicked() {
                                 acts.push(Action::Run("view.compact", json!({})));
                             }
+                            // All mail without its formatting; one message's More actions (⋯)
+                            // switch that message alone.
+                            let mut plain = !s.prefs.show_html;
+                            if ui.checkbox(&mut plain, tl!("Plain text")).on_hover_text(tl!("Show mail without its formatting")).clicked() {
+                                acts.push(Action::Run("view.html", json!({"on": !plain})));
+                            }
                         });
                         groups.end(ui, &t, "Messages");
                         widgets::stack(ui, |ui| {
