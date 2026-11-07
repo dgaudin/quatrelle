@@ -590,6 +590,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::CompactDataFile { .. }
         | Job::LocalFolderSizes { .. }
         | Job::ServerFolderSizes { .. }
+        | Job::ListRecoverable { .. }
+        | Job::RestoreRecoverable { .. }
         | Job::FindCertificates { .. }
         | Job::SearchDirectory { .. }
         | Job::ExpandList { .. }
@@ -801,6 +803,15 @@ impl Backend for WebBackend {
             Job::ExpandList { account, address, item_id } => {
                 let error = Some("only an Exchange account's lists are expanded".to_string());
                 emit(sh, Event::ListExpanded { account, address, item_id, members: Vec::new(), more: false, total: 0, error })
+            }
+            // Only Exchange keeps deleted items to bring back; a browser account is JMAP.
+            Job::ListRecoverable { account, ask, offset } => {
+                let error = Some("this server doesn't keep deleted items".to_string());
+                emit(sh, Event::Recoverable { account, ask, offset, items: Vec::new(), more: false, error })
+            }
+            Job::RestoreRecoverable { account, ask, purge, .. } => {
+                let error = Some("this server doesn't keep deleted items".to_string());
+                emit(sh, Event::RecoverableDone { account, ask, done: Vec::new(), purge, error })
             }
             Job::ServerFolderSizes { account } => {
                 let error = Some("this server doesn't tell each folder's size".to_string());
