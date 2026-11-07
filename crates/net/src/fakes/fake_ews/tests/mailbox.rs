@@ -761,3 +761,19 @@ fn categories_go_both_ways_as_outlook_keeps_them() {
     assert!(crate::ews_pim::master_categories(&c).unwrap().is_empty(), "no list: none, not a failure");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A message file filed in an Exchange folder goes in as mail received (not a draft), with its
+/// own source.
+#[test]
+fn a_message_file_is_filed_on_exchange_as_received_mail() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let raw = b"From: zoe@x.example\r\nTo: riley@contoso.example\r\nSubject: Filed\r\nMessage-ID: <f@x>\r\n\r\nHi.\r\n";
+    let id = c.create_received(raw, &inbox).unwrap();
+    let d = server.data.lock().unwrap();
+    let item = d.items.iter().find(|i| i.id == id).expect("the item is on the server");
+    assert_eq!((item.folder.as_str(), item.draft, item.read), (inbox.as_str(), false, true));
+    assert_eq!(item.raw, raw);
+}

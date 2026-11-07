@@ -162,6 +162,12 @@ impl Session {
             }
             Event::Rooms { account, lists, rooms, error } => self.rooms_answered(&account, lists, rooms, error),
             Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
+            Event::MessagesFiled { account, folder, added, failed } => {
+                if self.filed.len() < 100 {
+                    self.filed.push(Filed { account, folder, added, failed });
+                }
+            }
+            Event::MessageFileRead { path, raw } => self.message_file_read(&path, raw),
             Event::Imported { account, messages, skipped, done, error } => self.imported(&account, messages, skipped, done, error),
             Event::CompactProgress { account, in_place, done, total } => self.compact_progress(&account, in_place, done, total),
             Event::Compacted { account, before, after, recompressed, no_room, error } => {

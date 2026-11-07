@@ -192,6 +192,16 @@ const BODY_WORDS_BYTES: usize = 48 << 20;
 /// line in the log).
 pub static PANICS_CAUGHT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// What a drop of message files on a folder did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Filed {
+    pub account: String,
+    pub folder: String,
+    pub added: usize,
+    /// The files that couldn't go in: their names, and why.
+    pub failed: Vec<(String, String)>,
+}
+
 pub struct Session {
     pub store: Option<Store>,
     pub accounts: Vec<AccountState>,
@@ -297,6 +307,12 @@ pub struct Session {
     pub prefs: Prefs,
     pub clock: Clock,
     pub notices: Vec<Notice>,
+    /// Message files put into folders, for the window to say: what each drop did, taken as said
+    /// ([`Session::take_filed`]).
+    pub filed: Vec<Filed>,
+    /// A message file the network layer read (an Outlook `.msg`) to show, as `file.open` answers
+    /// one it reads itself; taken as shown.
+    pub opened_file: Option<CmdResult>,
     /// What the last changes can be put back to, newest last (Undo, Ctrl+Z).
     pub undo: Vec<Undo>,
     /// Bumped whenever `list` changes.
@@ -516,6 +532,8 @@ impl Session {
             prefs: Prefs::default(),
             clock,
             notices: Vec::new(),
+            filed: Vec::new(),
+            opened_file: None,
             undo: Vec::new(),
             revision: 0,
             pim_revision: 0,

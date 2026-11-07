@@ -12,6 +12,8 @@ pub(super) enum Edit {
     /// A change: the account, the change, the account's thread to tell after, and how many times
     /// the account had been removed when it was made ([`Store::while_kept`]).
     Apply(String, Op, Option<Sender<Job>>, u64),
+    /// Message files to put into a folder of an account on this computer.
+    File(String, String, Vec<String>),
     /// Answered once every change handed over before it is in the cache ([`edits_written`]).
     Flush(Sender<()>),
 }
@@ -35,6 +37,11 @@ fn edit_writer(store: Store, sink: Sink, rx: Receiver<Edit>) {
                 #[cfg(test)]
                 let _held = (account == HELD_ACCOUNT).then(|| HOLD_EDITS.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
                 write_edit(&store, &sink, account, op, worker, seen);
+            }
+            Edit::File(account, folder, paths) => {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| changes::file_here(&store, &sink, &account, &folder, &paths))).is_err() {
+                    log::error!("{account}: putting message files in a folder failed unexpectedly");
+                }
             }
             Edit::Flush(done) => {
                 let _ = done.send(());
@@ -116,6 +123,18 @@ impl Pool {
         });
         if let Err(e) = spawned {
             log::warn!("sign-in: {e}");
+        }
+    }
+
+    /// Message files into a folder of an account on this computer, after the changes before.
+    fn file_here(&mut self, account: String, folder: String, paths: Vec<String>) {
+        let edit = Edit::File(account, folder, paths);
+        let unsent = match &self.edits {
+            Some(tx) => tx.send(edit).err().map(|mpsc::SendError(e)| e),
+            None => Some(edit),
+        };
+        if let Some(Edit::File(account, folder, paths)) = unsent {
+            changes::file_here(&self.store, &self.sink, &account, &folder, &paths);
         }
     }
 
@@ -378,6 +397,17 @@ impl Pool {
                 }
             }
             Job::ImportPst { account, path } => self.import_pst(account, path),
+            Job::ReadMessageFile { path } => self.read_message_file(path),
+            // Into an account on this computer: with the other changes to its mail. An account
+            // with a server that isn't connected can't take them now.
+            Job::FileMessages { account, folder, paths } if !self.workers.contains_key(&account) => {
+                if self.configs.contains_key(&account) {
+                    let failed = paths.iter().map(|p| (changes::file_name(p), "the account is offline".to_string())).collect();
+                    self.sink.emit(Event::MessagesFiled { account, folder, added: 0, failed });
+                } else {
+                    self.file_here(account, folder, paths);
+                }
+            }
             Job::CompactDataFile { account } => self.compact(account),
             Job::AskLlm { id, url, model, messages } => {
                 let (sink, creds) = (self.sink.clone(), self.creds.clone());
