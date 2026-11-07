@@ -187,7 +187,7 @@ fn take_change(messages: &mut Vec<Arc<Summary>>, upserts: &[Arc<Summary>], remov
     if by_uid.is_empty() {
         return;
     }
-    let newest = |a: &Arc<Summary>, b: &Arc<Summary>| b.date.cmp(&a.date).then_with(|| b.key.cmp(&a.key));
+    let newest = |a: &Arc<Summary>, b: &Arc<Summary>| b.received_at().cmp(&a.received_at()).then_with(|| b.key.cmp(&a.key));
     let mut come: Vec<Arc<Summary>> = by_uid.into_values().cloned().collect();
     come.sort_by(newest);
     let mut merged = Vec::with_capacity(messages.len().saturating_add(come.len()));

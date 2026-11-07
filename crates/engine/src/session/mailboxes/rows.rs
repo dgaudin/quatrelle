@@ -55,7 +55,7 @@ impl Session {
         let (mut pinned_rows, mut pinned_of) = (Vec::new(), Vec::new());
         if self.prefs.conversations && !self.threads.is_empty() {
             for (ti, t) in self.threads.iter().enumerate() {
-                let Some(&newest) = t.messages.iter().max_by_key(|&&i| self.list.get(i).map_or(0, |m| m.date)) else { continue };
+                let Some(&newest) = t.messages.iter().max_by_key(|&&i| self.list.get(i).map_or(0, |m| m.received_at())) else { continue };
                 let unread = t.messages.iter().filter(|&&i| self.list.get(i).is_some_and(|m| !m.flags.seen)).count();
                 if t.messages.iter().any(|&i| pinned(i)) {
                     pinned_rows.push(Row::Message { index: newest, count: t.messages.len(), unread });
@@ -71,7 +71,7 @@ impl Session {
                     pinned_rows.push(Row::Message { index: i, count: 1, unread: usize::from(!m.flags.seen) });
                     pinned_of.push(Stands::One(i));
                 } else {
-                    push(&mut out, i, 1, usize::from(!m.flags.seen), m.date);
+                    push(&mut out, i, 1, usize::from(!m.flags.seen), m.received_at());
                     out_of.push(Stands::One(i));
                 }
             }

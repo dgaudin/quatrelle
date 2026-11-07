@@ -188,7 +188,8 @@ impl Query {
             };
             let term = match tok.split_once(':') {
                 Some((k, v)) if !v.is_empty() && !k.starts_with('"') => match dates::field(k).map_or_else(|| k.to_ascii_lowercase(), str::to_string).as_str() {
-                    "received" | "sent" | "date" => date_term(dates::period(v), v, &tok, &mut problems),
+                    "received" => date_term(dates::period(v), v, &tok, &mut problems),
+                    "sent" | "date" => date_term(dates::period(v).map(|s| DateSpec { sent: true, ..s }), v, &tok, &mut problems),
                     "after" => date_term(dates::after(v), v, &tok, &mut problems),
                     "before" => date_term(dates::before(v), v, &tok, &mut problems),
                     "from" => list_term(Field::From, v),

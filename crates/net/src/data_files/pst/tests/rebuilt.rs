@@ -95,6 +95,25 @@ fn memory_of_a_message_with_a_big_file() {
     eprintln!("a {len}-byte file: peak {peak} bytes above before ({:.2} of the file), source {} bytes", peak as f64 / len as f64, raw.len());
 }
 
+/// A received item keeps when it was sent as its date (its header's `Date:`) and is placed by
+/// when it was delivered; one delivered as it was dated keeps no second time (adapted from
+/// upstream 62a459d3).
+#[test]
+fn a_summary_is_placed_by_delivery() {
+    let header = Item {
+        headers: "From: Ana <ana@example.com>\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\nSubject: Plan\r\n".into(),
+        date: 1_704_070_800,
+        received: 1_704_070_800,
+        body: "b".into(),
+        ..Default::default()
+    };
+    let s = summary(header);
+    assert_eq!((s.date, s.received, s.received_at()), (1_704_067_200, 1_704_070_800, 1_704_070_800));
+    let own = Item { date: 1_704_067_200, received: 1_704_067_200, body: "b".into(), ..Default::default() };
+    let s = summary(own);
+    assert_eq!((s.date, s.received, s.received_at()), (1_704_067_200, 0, 1_704_067_200));
+}
+
 /// A received message's header is put back in the built source's own buffer without doubling
 /// it: the source waits in its import batch in that buffer, and a file that won't compress is
 /// stored as it is.

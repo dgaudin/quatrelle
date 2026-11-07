@@ -11,6 +11,7 @@ use super::*;
 pub(super) struct Glance {
     flags: Flags,
     date: i64,
+    received: i64,
     has_files: bool,
     preview: String,
 }
@@ -28,7 +29,8 @@ pub(super) fn to_raw(mut it: Item, fallback_id: &str) -> Result<Vec<u8>, String>
 /// its own can come well after the start, and it stops once it has its words.
 pub(super) fn message(mut it: Item, fallback_id: &str) -> Result<(Vec<u8>, Glance), String> {
     let text = take_text(&mut it);
-    let mut glance = Glance { flags: std::mem::take(&mut it.flags), date: it.date, has_files: false, preview: mime::preview(&text) };
+    let mut glance =
+        Glance { flags: std::mem::take(&mut it.flags), date: it.date, received: it.received, has_files: false, preview: mime::preview(&text) };
     let (raw, files) = build(it, text, fallback_id)?;
     glance.has_files = files;
     Ok((raw, glance))
@@ -259,13 +261,15 @@ fn bcc_line(bcc: &[EmailAddress]) -> String {
     list.join(",\r\n ")
 }
 
-/// A message's summary from its rebuilt source's headers, with its preview and attachments
-/// from the item it was built of (parsing the whole source again, attachments and all, only to
-/// find them cost more than reading it).
+/// A message's summary from its rebuilt source's headers, with its preview, attachments
+/// and the time it was delivered from the item it was built of (parsing the whole source again,
+/// attachments and all, only to find them cost more than reading it). The list places it by that
+/// time, the reading pane shows its `Date:`; one delivered as it was dated keeps no second time.
 pub(super) fn summary_of(raw: &[u8], glance: Glance, key: MessageKey, size: u32) -> quatrelle_model::Summary {
     let end = raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(raw.len(), |i| i + 4);
     let mut s = mime::summary_from_header(raw.get(..end).unwrap_or(raw), key, glance.flags, size, glance.date);
     s.has_attachments = glance.has_files;
     s.preview = glance.preview;
+    s.received = if glance.received == s.date { 0 } else { glance.received };
     s
 }

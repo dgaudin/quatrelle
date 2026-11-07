@@ -311,7 +311,7 @@ pub(super) fn table_row(
                 }
             }
             Col::Received => {
-                let when = crate::i18n::date(&dates::full_time(m.date, &s.clock));
+                let when = crate::i18n::date(&dates::full_time(m.received_at(), &s.clock));
                 text_cell(&p, when, if unread { t.accent } else { t.dim }, 12.0);
             }
             Col::Size => text_cell(&p, widgets::human_size(m.size as usize), t.dim, 12.0),

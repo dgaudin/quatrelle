@@ -226,7 +226,7 @@ pub fn threads<M: std::borrow::Borrow<Summary>>(msgs: &[M]) -> Vec<Thread> {
     let mut by_subject: HashMap<String, usize> = HashMap::new();
     let mut merged: Vec<Vec<usize>> = Vec::new();
     let first_subject = |g: &Vec<usize>| -> (String, bool) {
-        let oldest = g.iter().copied().min_by_key(|&i| msg(i).map_or(0, |m| m.date)).unwrap_or(0);
+        let oldest = g.iter().copied().min_by_key(|&i| msg(i).map_or(0, |m| m.received_at())).unwrap_or(0);
         let s = msg(oldest).map(|m| m.subject.as_str()).unwrap_or_default();
         // As `is_reply_subject` says, from the one base worked out.
         let base = base_subject(s);
@@ -256,9 +256,9 @@ pub fn threads<M: std::borrow::Borrow<Summary>>(msgs: &[M]) -> Vec<Thread> {
     let mut out: Vec<Thread> = merged
         .into_iter()
         .map(|mut v| {
-            v.sort_by_key(|&i| (msg(i).map_or(0, |m| m.date), i));
+            v.sort_by_key(|&i| (msg(i).map_or(0, |m| m.received_at()), i));
             v.dedup();
-            let latest = v.iter().filter_map(|&i| msg(i)).map(|m| m.date).max().unwrap_or(0);
+            let latest = v.iter().filter_map(|&i| msg(i)).map(Summary::received_at).max().unwrap_or(0);
             Thread { messages: v, latest }
         })
         .collect();
