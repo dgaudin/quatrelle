@@ -13,6 +13,7 @@ mod header_actions;
 mod linked_pictures;
 mod long_text;
 mod pgp;
+mod plain_text;
 mod previews;
 mod printing;
 mod rules;

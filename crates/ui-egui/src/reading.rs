@@ -36,8 +36,8 @@ pub(crate) use attachments::decode;
 pub(crate) use attachments::previewed_text;
 use attachments::*;
 pub(crate) use bodies::Bodies;
-pub(crate) use body::CellHeights;
 use body::*;
+pub(crate) use body::{CellHeights, ShownAs};
 pub(crate) use compose::QuoteEditors;
 #[cfg(test)]
 pub(crate) use compose::cell_box;
@@ -243,20 +243,21 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     if let Some(p) = r.parsed.as_ref().filter(|_| headed) {
         let most = (ui.available_height() * 0.45).max(140.0);
         let mut placed = false;
+        let formatted = shown_formatted(s, st, &r.key, p);
         egui::ScrollArea::vertical().auto_shrink([false, true]).max_height(most).id_salt(("reading-head", in_window, r.key.to_id())).show(ui, |ui| {
             egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: 18, bottom: 4 }).show(ui, |ui| {
-                placed = header::header(s, t, ui, &r, p, &summary, in_window, acts);
+                placed = header::header(s, t, ui, &r, p, &summary, formatted, in_window, acts);
             });
         });
         egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: 0, bottom: 4 }).show(ui, |ui| {
-            header::actions(s, t, ui, &r, p, in_window, placed, acts);
+            header::actions(s, t, ui, &r, p, formatted, in_window, placed, acts);
         });
     }
     // The find bar, at the bottom, while the message's text is shown.
     let locked = r.security.as_ref().is_some_and(security::still_locked);
     let can = viewing.is_none() && st.dialog.is_none() && r.parsed.is_some() && !locked;
     find::keys(st, ui, in_window, &r.key, can);
-    let formatted = r.parsed.as_ref().is_some_and(|p| s.prefs.show_html && !p.rich.is_empty());
+    let formatted = r.parsed.as_ref().is_some_and(|p| shown_formatted(s, st, &r.key, p));
     let (lit, offset) = match r.parsed.as_ref().filter(|_| can) {
         Some(p) => find::bar(st, ui, in_window, &r.key, p, formatted),
         None => (None, None),
@@ -330,7 +331,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
 
             // Attachments.
             // Pictures the formatted message shows in place aren't listed again as files.
-            let formatted = s.prefs.show_html && !p.rich.is_empty();
+            let formatted = shown_formatted(s, st, &r.key, p);
             let shown: Vec<usize> = if formatted { p.images.iter().filter_map(|i| mime::picture_attachment(p, i)).collect() } else { Vec::new() };
             let in_place = |a: &mime::AttachmentInfo| shown.contains(&a.index);
             // An invitation is shown as its card above, not as a file.
@@ -401,7 +402,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 hidden_bar(&t, ui, &r.key, p);
             }
             if p.had_html {
-                html_bar(s, &t, ui, p, acts);
+                html_bar(s, &t, ui, &r.key, p, formatted, acts);
             }
             if let Some(u) = &p.unsubscribe {
                 unsubscribe_line(&t, ui, u, acts);

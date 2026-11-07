@@ -78,6 +78,8 @@ pub struct UiState {
     /// The attachment shown in place of its message's text (a click on its chip), as Outlook
     /// previews attachments in the reading pane.
     pub attachment_view: Option<(MessageKey, usize)>,
+    /// The messages shown formatted or as plain text for themselves, not by the setting.
+    pub(crate) shown_as: crate::reading::ShownAs,
     /// The preview a plain click on a chip waits to show, and when: once the double-click time
     /// is out, as a double-click only opens the file (a click's preview showed behind it).
     pub attachment_click: Option<(MessageKey, usize, f64)>,

@@ -5,13 +5,16 @@
 
 use super::*;
 
+mod shown_as;
 mod table;
+pub(crate) use shown_as::*;
 use table::*;
 
-/// Above an HTML message: whether its web pictures are hidden, and a switch to plain text.
-pub(super) fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, p: &mime::Parsed, acts: &mut Vec<Action>) {
+/// Above an HTML message: whether its web pictures are hidden, and, shown as plain text, the way
+/// back to its formatting (for this message; the setting stays). The way to plain text isn't
+/// here, a click from the text: it's in More actions (⋯), View › Plain text and File › Options.
+pub(super) fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, p: &mime::Parsed, formatted: bool, acts: &mut Vec<Action>) {
     let web = s.remote_pictures();
-    let formatted = s.prefs.show_html && !p.rich.is_empty();
     if !web.is_empty() && !s.pictures_allowed() && formatted {
         egui::Frame::new().fill(t.chrome).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(
             ui,
@@ -53,24 +56,22 @@ pub(super) fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, p: &mime::Parsed, a
             ui.label(RichText::new(line).color(t.faint).small()).on_hover_text(about);
         });
     }
-    ui.horizontal(|ui| {
-        if formatted {
-            if ui.link(RichText::new(tl!("Show as plain text")).small()).clicked() {
-                acts.push(Action::Run("view.html", json!({"on": false})));
-            }
-            if !web.is_empty() && s.pictures_allowed() && s.prefs.trusted_senders.contains(&p.from.email.to_ascii_lowercase()) {
-                ui.label(RichText::new("·").color(t.faint).small());
+    let trusted = formatted && !web.is_empty() && s.pictures_allowed() && s.prefs.trusted_senders.contains(&p.from.email.to_ascii_lowercase());
+    if !formatted || trusted {
+        ui.horizontal(|ui| {
+            if trusted {
                 if ui.link(RichText::new(tl!("Stop showing pictures from this sender")).small()).clicked() {
                     acts.push(Action::Run("message.blockPictures", json!({})));
                 }
+            } else {
+                ui.label(RichText::new(tl!("Shown as text.")).color(t.faint).small());
+                if !p.rich.is_empty() && ui.link(RichText::new(tl!("Show formatted")).small()).clicked() {
+                    acts.push(Action::ShowFormatted(key.clone(), true));
+                }
             }
-        } else if !p.rich.is_empty() && ui.link(RichText::new(tl!("Show formatted")).small()).clicked() {
-            acts.push(Action::Run("view.html", json!({"on": true})));
-        } else if p.rich.is_empty() {
-            ui.label(RichText::new(tl!("Shown as text.")).color(t.faint).small());
-        }
-    });
-    ui.add_space(6.0);
+        });
+        ui.add_space(6.0);
+    }
 }
 
 /// A message that hides a lot of text from its reader: one quiet line saying how much (why it

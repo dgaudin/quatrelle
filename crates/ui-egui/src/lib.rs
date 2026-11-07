@@ -205,6 +205,9 @@ pub enum Action {
     /// Search every folder for this (shown in the box, with the Search tab).
     Search(String),
     SetDark(Option<bool>),
+    /// Show one message formatted (`true`) or as plain text, whatever the setting for all mail
+    /// says (that stays as it is).
+    ShowFormatted(MessageKey, bool),
     SetSystemAccent(bool),
     /// Print the open message: the system's print window, else a PDF opened in the viewer.
     Print,
@@ -379,6 +382,7 @@ impl MailApp {
                 search_drop: SearchDrop::None,
                 compose_alert: None,
                 attachment_view: None,
+                shown_as: Default::default(),
                 attachment_click: None,
                 attachment_selected: None,
                 attachments_active: false,

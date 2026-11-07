@@ -23,6 +23,7 @@ pub(super) fn header(
     r: &quatrelle_engine::Reading,
     p: &mime::Parsed,
     summary: &Option<Summary>,
+    formatted: bool,
     in_window: bool,
     acts: &mut Vec<Action>,
 ) -> bool {
@@ -133,7 +134,7 @@ pub(super) fn header(
                 ui.allocate_ui_with_layout(vec2(right, 0.0), egui::Layout::top_down(egui::Align::Max), |ui| {
                     if let Some(w) = with_actions {
                         ui.allocate_ui_with_layout(vec2(w, 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            action_row(s, &t, ui, r, p, false, acts);
+                            action_row(s, &t, ui, r, p, formatted, false, acts);
                         });
                         ui.add_space(6.0);
                     }
@@ -230,7 +231,17 @@ fn action_width(ui: &Ui, s: &Session, compact: bool) -> f32 {
 
 /// Reply | Reply all | Forward as one group, as Outlook's, then Assistant (with a language model
 /// set) and ⋯ with the rest; their icons alone when `compact`.
-fn action_row(s: &Session, t: &Tokens, ui: &mut Ui, r: &quatrelle_engine::Reading, p: &mime::Parsed, compact: bool, acts: &mut Vec<Action>) {
+#[allow(clippy::too_many_arguments)]
+fn action_row(
+    s: &Session,
+    t: &Tokens,
+    ui: &mut Ui,
+    r: &quatrelle_engine::Reading,
+    p: &mime::Parsed,
+    formatted: bool,
+    compact: bool,
+    acts: &mut Vec<Action>,
+) {
     ui.spacing_mut().item_spacing.x = 6.0;
     match widgets::button_group(ui, &REPLY_GROUP, t, compact) {
         Some(0) => acts.push(Action::Run("mail.reply", json!({}))),
@@ -273,6 +284,8 @@ fn action_row(s: &Session, t: &Tokens, ui: &mut Ui, r: &quatrelle_engine::Readin
             acts.push(Action::Run("message.headers", json!({})));
             ui.close();
         }
+        // One message as plain text, or formatted again; all mail's setting stays.
+        super::plain_text_item(ui, &r.key, p, formatted, acts);
         // View › View message source, where Outlook has it (issue #27); the eye is Bcc's icon.
         // "View" as a menu says it (in French « Afficher », not the ribbon tab's « Affichage »).
         let view = crate::i18n::tc("menu", "View");
@@ -297,6 +310,7 @@ pub(super) fn actions(
     ui: &mut Ui,
     r: &quatrelle_engine::Reading,
     p: &mime::Parsed,
+    formatted: bool,
     in_window: bool,
     placed: bool,
     acts: &mut Vec<Action>,
@@ -346,7 +360,7 @@ pub(super) fn actions(
     } else if !in_window && !placed {
         // On one line: their icons alone when it has no room for their words.
         let compact = ui.available_width() < action_width(ui, s, false);
-        ui.horizontal(|ui| action_row(s, &t, ui, r, p, compact, acts));
+        ui.horizontal(|ui| action_row(s, &t, ui, r, p, formatted, compact, acts));
     }
 }
 
