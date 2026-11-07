@@ -89,8 +89,8 @@ pub(crate) struct Pattern {
     pub changed: Vec<Changed>,
 }
 
-/// A recurrence pattern as (rule, deleted occurrences), given the first occurrence's start (UTC).
-#[cfg(test)]
+/// A recurrence pattern as (rule, deleted occurrences), given the first occurrence's start (UTC):
+/// a task's, as the export reads back the pattern it writes for one.
 pub(crate) fn recurrence(blob: &[u8], start: i64) -> Option<(String, Vec<i64>)> {
     recurrence_in(blob, start, "")
 }
