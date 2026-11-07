@@ -1804,6 +1804,7 @@ month	May	maggio
 	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} messaggi esportati ({already} erano già nel file di dati)
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} messaggi esportati (esclusi {skipped} non presenti su questo computer; {already} erano già nel file di dati)
 	{name}: {messages} messages exported so far…	{name}: {messages} messaggi esportati finora…
+	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: {occurrences} ricorrenze di serie la cui regola Outlook non può conservare sono state salvate una per una
 	{name}: {messages} messages imported	{name}: {messages} messaggi importati
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} messaggi importati ({skipped} non leggibili)
 	{name}: {messages} messages imported so far…	{name}: {messages} messaggi importati finora…

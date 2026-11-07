@@ -1801,6 +1801,7 @@ month	May	mei
 	{name}: {messages} messages exported ({already} the data file already had)	{name}: {messages} berichten geëxporteerd ({already} stonden al in het gegevensbestand)
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} berichten geëxporteerd ({skipped} die niet op deze computer staan, zijn overgeslagen; {already} stonden al in het gegevensbestand)
 	{name}: {messages} messages exported so far…	{name}: tot nu toe {messages} berichten geëxporteerd…
+	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: {occurrences} keren van reeksen waarvan Outlook de regel niet kan bewaren, zijn één voor één opgeslagen
 	{name}: {messages} messages imported	{name}: {messages} berichten geïmporteerd
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} berichten geïmporteerd ({skipped} konden niet worden gelezen)
 	{name}: {messages} messages imported so far…	{name}: tot nu toe {messages} berichten geïmporteerd…

@@ -174,6 +174,7 @@ pub fn export(
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| i64::try_from(d.as_secs()).unwrap_or(0)).unwrap_or(0);
     // Where the mail went, so the contacts, notes and tasks of a new file don't go there.
     let taken: Vec<Vec<String>> = folders.iter().zip(&placed).filter(|(f, _)| f.selectable).map(|(_, p)| p.clone()).collect();
+    let owner = owner(store, account);
     let mut inside = pim::Written::default();
     let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), String> {
         for (f, folder) in folders.iter().zip(&placed).filter(|(f, _)| f.selectable) {
@@ -184,7 +185,7 @@ pub fn export(
             for s in &st.messages {
                 let key = MessageKey { account: account.to_string(), folder: f.path.clone(), validity: s.key.validity, uid: s.key.uid };
                 let state = item::state(s, f.role, marks);
-                match store.read_body(&key).and_then(|raw| owned(&raw, s.received, state, Some(&spill))) {
+                match store.read_body(&key).and_then(|raw| owned(&raw, s.received, state, &owner, Some(&spill))) {
                     Some(m) if !m.message_id.is_empty() && had.contains(&quatrelle_model::thread::norm_id(&m.message_id)) => done.already += 1,
                     Some(m) => {
                         bytes = bytes.saturating_add(m.held());
@@ -209,7 +210,7 @@ pub fn export(
             }
         }
         place::record_special(&temp, format, &folders, &targets, created);
-        inside = pim::write(&temp, format, &pim, &taken, existing, &mut created, now)?;
+        inside = pim::write(&temp, format, &pim, &taken, existing, &mut created, now, &owner)?;
         Ok(())
     }));
     let result = match written {
@@ -252,7 +253,17 @@ pub fn export(
 /// files and attached messages read as it reads them. For the fuzz target.
 #[doc(hidden)]
 pub fn message_class(raw: &[u8]) -> Option<&'static str> {
-    owned(raw, 0, item::State::default(), None).map(|m| m.class())
+    owned(raw, 0, item::State::default(), &calendar::Owner::default(), None).map(|m| m.class())
+}
+
+/// Whose mail and calendar `account`'s are: its addresses (the one it sends from, the one it
+/// signs in as, the one its provider says it signed in as), and this computer's zone.
+fn owner(store: &Store, account: &str) -> calendar::Owner {
+    let config = store.load_accounts().unwrap_or_default().into_iter().find(|a| a.id == account);
+    let me =
+        config.map(|a| [a.email, a.username, a.oauth_user.unwrap_or_default()].into_iter().filter(|m| m.contains('@')).collect()).unwrap_or_default();
+    let zone = iana_time_zone::get_timezone().ok().and_then(|z| quatrelle_model::zone::Zone::named(&z)).unwrap_or_default();
+    calendar::Owner { me, zone }
 }
 
 /// A task's rule as the pattern an export writes for a task whose first day is `from`, and
@@ -297,7 +308,7 @@ pub fn appointment_pattern(rule: &str, start: i64, tzid: &str, moves: &[(usize, 
         })
         .collect();
     let own: Vec<&CalEvent> = own.iter().collect();
-    calendar::series(&e, &own)?.into_iter().find_map(|(k, v)| match (k, v) {
+    calendar::series(&e, &own, &calendar::Owner::default(), false)?.into_iter().find_map(|(k, v)| match (k, v) {
         (pim::Key::Lid(_, 0x8216), pim::Value::Bin(b)) => Some(b),
         _ => None,
     })

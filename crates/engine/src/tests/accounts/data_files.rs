@@ -132,16 +132,28 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
         if *account == id && path == "C:/out/Archive.pst" && name == "Archive 2024" && marks.due.get("due@example.com") == Some(&20_000)
             && marks.done.get("done@example.com") == Some(&19_000)
             && marks.categories.iter().any(|c| c.keyword == "$label4" && c.name == "To do")));
-    s.apply(Event::Exported { account: id.clone(), messages: 100, skipped: 0, already: 0, done: false, error: None });
+    s.apply(Event::Exported { account: id.clone(), messages: 100, skipped: 0, already: 0, occurrences: 0, done: false, error: None });
     assert!(s.notices.last().is_some_and(|n| n.text.contains("100 messages exported so far")));
-    s.apply(Event::Exported { account: id.clone(), messages: 120, skipped: 3, already: 0, done: true, error: None });
+    s.apply(Event::Exported { account: id.clone(), messages: 120, skipped: 3, already: 0, occurrences: 0, done: true, error: None });
     assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("120 messages exported (3 not on this computer")));
     // Added to a data file that had some already: said so.
-    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 0, already: 9, done: true, error: None });
+    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 0, already: 9, occurrences: 0, done: true, error: None });
     assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("5 messages exported (9 the data file already had)")));
-    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 2, already: 9, done: true, error: None });
+    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 2, already: 9, occurrences: 0, done: true, error: None });
     assert!(s.notices.last().is_some_and(|n| n.text.contains("(2 not on this computer were left out; 9 the data file already had)")));
-    s.apply(Event::Exported { account: id.clone(), messages: 0, skipped: 0, already: 0, done: true, error: Some("disk full".into()) });
+    // A series Outlook can't keep the rule of, written one occurrence at a time: the user is told.
+    s.apply(Event::Exported { account: id.clone(), messages: 5, skipped: 0, already: 0, occurrences: 40, done: true, error: None });
+    let last = &s.notices[s.notices.len() - 2..];
+    assert!(last[0].text.contains("5 messages exported") && last[1].text.contains("40 occurrences of series whose rule Outlook can't keep"));
+    s.apply(Event::Exported {
+        account: id.clone(),
+        messages: 0,
+        skipped: 0,
+        already: 0,
+        occurrences: 0,
+        done: true,
+        error: Some("disk full".into()),
+    });
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("disk full")));
     done(s);
 }
