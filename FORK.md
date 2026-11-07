@@ -4797,6 +4797,86 @@ s'applique ; `rpmbuild` ne compile rien (il emballe l'arbre préparé).
   0.11 (`keys`, `model`), accesskit 0.25.2 et accesskit_consumer 0.39.2, icu 2.4, log, open,
   picky, yoke, zerovec, tinystr ; les règles Dependabot (rsa 0.10, cms 0.3, zbus 6 retenus).
 
+### Hors relevé : R27, Maj+Suppr supprime définitivement (2026-11-07)
+
+Demandé par le propriétaire pour la 1.2, conception validée par lui le 06/11 : Maj+Suppr supprime
+définitivement, avec la question à chaque fois tant que l'option le dit, et, sur Exchange, le
+courrier supprimé définitivement reste récupérable comme avec Outlook en mode mis en cache.
+
+| Commit | Ce qu'il fait | Sondes : avant → après |
+|---|---|---|
+| `24542118` | la commande `mail.deleteForGood` (« Delete for good », Maj+Suppr, avec une sélection) ; la touche dans la liste, le volet de lecture et la fenêtre d'un message ; la question existante « Supprimer définitivement ? » ; le texte du refus dans les 13 catalogues | moteur (3) : **commande inconnue** → supprimé du dossier, absent d'Éléments supprimés, rien à annuler ; conversation entière et résultats de recherche ; Courrier d'envoi comme Suppr. Interface : Échap, option coupée, Courrier d'envoi : **rien ne se passait** → comme voulu |
+| `787c1410` | Entrée = Supprimer dans la question (Échap fermait déjà toute boîte) ; le texte d'aide de l'option | Suppr dans Éléments supprimés puis Entrée : **le message restait** → supprimé ; Maj+Suppr puis Entrée ; la page d'un message (navigateur) |
+| `fb7d9c53` | EWS : `DeleteItem` et `EmptyFolder` en `DeleteType="SoftDelete"` au lieu de `HardDelete` ; le faux serveur garde ce que `SoftDelete` prend (`recoverable`) | `an_on_premises_exchange_account_works_through_ews` : **dossier vidé, rien de récupérable** → les 3 messages vidés et le message supprimé définitivement dans les éléments récupérables |
+
+**Ce qui change pour le propriétaire.**
+
+- **Maj+Suppr**, dans la liste et le volet de lecture (module Courrier), sur la même sélection que
+  Suppr (une conversation entière, des résultats de recherche) : la question « Supprimer
+  définitivement ? » ; Entrée supprime, Échap annule (Tab jusqu'à Annuler puis Entrée annule
+  aussi). Option « Demander avant de supprimer définitivement » coupée : suppression immédiate.
+  Le message ne passe pas par Éléments supprimés ; Ctrl+Z ne le ramène pas et ne prétend pas le
+  faire (rien n'est mis dans la liste d'annulation, aucun avis « Annuler »).
+- **Courrier d'envoi** : Maj+Suppr fait comme Suppr (le message ne part pas), sans question.
+- **Calendrier, Contacts, Tâches, Notes** : rien ne change (`acts_on_mail`) ; la garde est dans
+  `mail_keys_leave_the_message_alone_in_other_modules`.
+- **La fenêtre d'un message** : Suppr et Maj+Suppr y suppriment son message, avec la même
+  question ; la fenêtre se ferme (Suppr n'y faisait rien, d'après le code : une fenêtre native
+  reçoit ses propres touches, que `shortcuts` ne lit pas). Le bouton Supprimer de sa barre passe par le même chemin
+  et demande donc maintenant, dans Éléments supprimés, avant de supprimer définitivement (il ne
+  demandait rien). Dans le navigateur, la page d'un message fait de même pour son message.
+- **Garde ajoutée** : un message dont la fenêtre est ouverte mais qui n'est plus dans la liste
+  (un autre dossier ouvert depuis) n'est pas supprimé : l'avis « Ce message n'est plus dans la
+  liste : ouvrez son dossier pour le supprimer ». Avant, le bouton Supprimer de la fenêtre
+  sélectionnait le message par `list.open` (refusé, message absent de la liste) puis lançait
+  `mail.delete` sur la sélection de la liste, quelle qu'elle soit.
+- **Windows** : egui y livre Maj+Suppr comme « Couper » (raccourci du presse-papiers d'egui-winit),
+  pas comme la touche ; un « Couper » avec Maj et sans Ctrl ni Alt est lu comme Maj+Suppr.
+- **L'option** a maintenant un texte d'aide : « Maj+Suppr supprime le courrier définitivement,
+  comme Suppr dans Éléments supprimés ».
+- **Exchange (EWS)** : Maj+Suppr, Suppr dans Éléments supprimés et Vider le dossier envoient
+  `SoftDelete` : le courrier va dans les éléments récupérables (dossier Deletions), d'où
+  « Récupérer les éléments supprimés » d'Outlook sur le web le ramène pendant la rétention (14 jours
+  par défaut sur Exchange Server). La boîte « Supprimer définitivement ? » dit toujours « Cette
+  action est irréversible », ce qui reste vrai depuis Quatrelle.
+
+**Pas changé.** Rendez-vous, contacts et tâches EWS : `MoveToDeletedItems` (aucun `HardDelete` de
+ce côté). Dossiers : `DeleteFolder DeleteType="MoveToDeletedItems"`, même pour la suppression
+définitive d'un dossier déjà dans Éléments supprimés ; la documentation de Microsoft (« Deleting
+items by using EWS ») dit qu'un dossier ne peut pas être « soft deleted », et qu'un dossier
+supprimé de Éléments supprimés (soft ou hard) n'est pas récupérable. Microsoft Graph : `DELETE
+/messages/{id}`, inchangé ; sa page ne dit pas où va le message, mais `permanentDelete` est
+documenté à part (« dans Purges… Outlook et Outlook sur le web ne peuvent pas y accéder ») et la
+page de `DELETE` renvoie au dossier `recoverableitemsdeletions` : `DELETE` n'est pas la suppression
+définitive. IMAP : `\Deleted` puis `UID EXPUNGE` (Gmail par sa corbeille) ; comptes locaux et
+`.pst` : retiré du fichier ; hors ligne : en file, comme avant.
+
+**Effet de bord à connaître (EWS).** `Op::Expunge` sert aussi à retirer les copies précédentes
+d'un brouillon à chaque enregistrement, et la copie d'un brouillon envoyé ou abandonné : elles
+vont aussi dans les éléments récupérables (avant : Purges). « Récupérer les éléments supprimés »
+d'Outlook sur le web peut donc lister d'anciennes versions de brouillons pendant la rétention.
+Outlook, qui met à jour un brouillon sur place, n'en laisse pas. Les distinguer demanderait une
+opération à part dans le modèle (file d'opérations gardée sur disque) : à décider.
+
+**Pas vérifiable ici** (aucun vrai Exchange) : que l'Exchange du propriétaire accepte `SoftDelete`
+(Exchange 2010 et plus le prennent ; 2007 seulement marque l'élément) ; que le message supprimé
+par Maj+Suppr, puis un dossier vidé, se retrouvent dans « Récupérer les éléments supprimés »
+d'Outlook sur le web et en reviennent ; la touche sous Windows (le « Couper » d'egui-winit) et
+dans la fenêtre native d'un message (les essais dessinent la fenêtre dans la principale).
+**Essai chez le propriétaire** : un message de test dans la boîte de réception Exchange,
+Maj+Suppr, Entrée ; il n'est pas dans Éléments supprimés ; dans OWA, Éléments supprimés ›
+« Récupérer les éléments supprimés de ce dossier » : il y est, Restaurer le ramène. Refaire avec
+Échap (rien ne bouge), avec l'option coupée (pas de question), dans la fenêtre d'un message
+(double-clic, Maj+Suppr), et Vider le dossier sur un dossier de test.
+
+**Reste, inchangé** : le bouton Supprimer qui paraît au survol d'une ligne de la liste et
+Supprimer du menu de la liste suppriment encore définitivement dans Éléments supprimés sans
+demander (le ruban et la touche demandent).
+
+**Vérifié** : chaque sonde avant (échec, sauf la garde du Calendrier, qui passait déjà : rien n'y
+était branché) et après ; `every_command_survives_junk_params` ; le commit `24542118` essayé seul
+(ses essais de l'interface, des catalogues et des fenêtres) ; `cargo xtask ci` (wasm compris).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
