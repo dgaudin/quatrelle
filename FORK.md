@@ -5038,6 +5038,26 @@ sont adaptés, au nom du propriétaire.
 - **Sonde** : `the_appointments_menu_has_an_icon_before_each_command` ; les tests existants du
   menu (répondre, Afficher comme, Privé, Supprimer) restent verts.
 
+### Hors relevé : R31, la CI de GitHub verte avant la 1.2.0 (2026-11-07)
+
+- **macOS** : `unlinked_copy` et son test (`apps/quatrelle/src/desktop/printing.rs`) n'existent plus
+  que sous `all(unix, not(macos))`, comme le module du portail qui les appelle seul. Pas d'autre
+  élément `cfg(unix)` dans `desktop/` qui soit mort sous macOS (`browsers.rs` est déjà gardé).
+  Raisonné sur les `cfg`, pas lancé pour macOS.
+- **Résumé d'un message apporté par une copie de la connexion** (tous postes, vu sous Windows) :
+  `Opened::bring` écrit le corps mais ne complétait jamais le résumé. Elle inscrit maintenant la clé
+  dans `Rest::owe` ; `Worker::fetch`, quand le message lui revient (la connexion principale l'a
+  « passé » pendant que la copie le prenait, ou le prend après), complète le résumé avec
+  `keep_source` et dit `Filled`, donc sans écriture concurrente de la liste du dossier. Liste
+  bornée à 256 clés. Sonde : `a_message_brought_by_a_copy_has_its_summary_filled` (échouait avant :
+  `Body` sans `Filled`). Laissé : le fil des gros messages entiers (`Rest`) ne complète pas non plus.
+- **Fuzz hebdomadaire** : reprise de `313ae7f3` (cible `x86_64-unknown-linux-gnu`), auteur d'origine.
+  `npx actions-up` : rien à changer.
+- **Tests dépendant du poste, à surveiller sur macOS** : `ui-egui/src/tests/rtl.rs` (déjà
+  `cfg!(macos)`), `app/alt_code.rs` (Windows), `net/src/worker/smime.rs`, `apps/quatrelle/src/secrets.rs`
+  (Windows), `net/src/stream/trust.rs`, `net/src/dns.rs`. Le test de réponse du fork utilise déjà
+  Commande+Haut (reprise de `94b9d88d` inutile) ; le fork n'a pas le test de compactage visé.
+
 ### État de la récupération : v0.32, trentième partie : les dates dans la recherche, le tri par heure de remise et le texte brut par message (P6a) (2026-11-07)
 
 Trois morceaux indépendants du lot P6 de `merge-tools/survey-v0.32.md` (P6a), sur `main`. Chacun
