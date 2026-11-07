@@ -5018,6 +5018,57 @@ la 1.2) : tous au nom du propriétaire.
   la recherche faite par Exchange ne reçoit pas les dates ; `Query::problems` à montrer dans la boîte
   de recherche ; la même heure de remise pour IMAP (INTERNALDATE) à décider.
 
+### État de la récupération : v0.32, trente et unième partie : les fichiers .msg d'Outlook (P6b) (2026-11-07)
+
+Un seul commit de l'origine (`467901df`, 53 fichiers, 1 300 lignes), repris en trois morceaux qui
+compilent, tous au nom du propriétaire : la reprise directe (`git cherry-pick`) donnait des
+conflits dans une quarantaine de fichiers (noms `mailcraft`, fichiers renommés ou refaits depuis), elle
+a été refaite à la main, fichier par fichier.
+
+| Morceau | Commit du fork | Sonde | avant | après |
+|---|---|---|---|---|
+| Lecteur et fuzz | `a1ab8925` | `data_files/msg/tests.rs` : un `.msg` fabriqué comme Outlook l'enregistre (texte, HTML, À et Cc, un fichier, un message joint avec son propre fichier), un objet OLE joint, fichiers abîmés, coupés et trop gros | ne compile pas (pas de lecteur) | tout vert ; 598 000 mutations de la graine sans panique |
+| Classement | `11e88682` | `worker/changes/filing/tests.rs` (serveur IMAP en mémoire, compte sur cet ordinateur), `fake_ews/tests/mailbox.rs` (EWS), `tests/files.rs` du moteur | pas de tâche `FileMessages` ; ne compile pas | tout vert |
+| Interface et paquets | `050c771b` | `tests/windows.rs` : dépôt de `.msg`, `.eml` et d'un PDF sur la fenêtre | tout allait en pièce jointe d'un nouveau message | les messages vont dans le dossier ouvert, le reste en pièce jointe |
+
+- **Lecteur** (`net/src/data_files/msg.rs`) : fichier composé (MS-CFB) lu avec `cfb` 0.15 (MIT ;
+  la 0.16.0 avait sept jours, la 0.15.0 plus de six semaines ; `cargo deny check` passe sans rien
+  changer à `deny.toml`). Propriétés, destinataires, pièces jointes, messages joints et propriétés
+  nommées (MS-OXMSG) sont donnés au **même constructeur d'élément que l'import .pst P2**
+  (`pst::item::item_of`, via `pst::Loose` et `Named::of_names`) : un `.msg` donne donc le même
+  message standard que le même élément d'un `.pst` (corps, HTML, RTF, destinataires, rendez-vous
+  et contacts compris, mêmes plafonds de profondeur). Plafonds propres au `.msg` : fichier 64 Mo,
+  flux 64 Mo, total lu 192 Mo, 4 000 propriétés, 5 000 destinataires, 1 000 pièces jointes, 1 000
+  valeurs par propriété, 50 000 noms, 16 niveaux de messages joints ; la lecture est sous
+  `catch_unwind` ; le stockage d'un objet OLE n'est pas pris pour un message joint.
+- **Classement** : tâches `FileMessages { account, folder, paths }` et `ReadMessageFile { path }`,
+  évènements `MessagesFiled` et `MessageFileRead`. Chaque fichier est rangé comme du courrier reçu
+  et lu : IMAP `APPEND \Seen`, JMAP `$seen`, EWS `CreateItem` avec `PR_MESSAGE_FLAGS = 1` (pas un
+  brouillon ; `Client::create_received`), Graph comme les brouillons (il ne sait rien faire de
+  plus d'un message entier), POP et comptes sur cet ordinateur par le fil des modifications du
+  pool (`Edit::File`, dans l'ordre des autres changements). Un compte à serveur non connecté
+  répond « le compte est hors ligne ». Au plus 500 fichiers par dépôt ; le dossier est relu après.
+  Le code est dans `worker/changes/filing.rs` (le dossier `worker/` avait déjà ses 16 fichiers).
+- **Interface** : la commande `file.addToFolder` ; `file.open` sur un `.msg` (ou tout fichier qui
+  commence par la signature OLE) demande la lecture au réseau et montre le message dans la même
+  fenêtre d'aperçu qu'un `.eml`. Sur la fenêtre principale, des fichiers `.eml` et `.msg` tenus
+  au-dessus d'un dossier ouvert disent « Déposez-les pour les ajouter à … » ; lâchés, ils vont dans
+  le dossier ; les autres fichiers déposés avec eux partent en pièces jointes d'un nouveau
+  message, comme avant. Trois textes nouveaux, dans les 13 catalogues (traductions de l'origine).
+- **Paquets** : Linux, `application/vnd.ms-outlook` dans le `.desktop` et le metainfo ; Windows,
+  `.msg` sous « Ouvrir avec » et dans la liste des applications par défaut, jamais pris à Outlook
+  (`UpgradeCode` inchangé). Rien de plus pour macOS (pas de liste de types à ce jour).
+- **Fuzz** : cible `msg` (`fuzz/fuzz_targets/pst/msg.rs`), dictionnaire, graine `outlook.msg`
+  (écrite par `cargo test -p quatrelle-net write_msg_fuzz_seed -- --ignored`), ligne dans
+  `fuzz/README.md`. `cargo fuzz` n'est pas installé sur ce poste : la cible n'a pas tourné ;
+  à la place, une boucle de mutations (octets changés, bits, plages à 0xFF, troncatures) de la
+  graine, 150 s, 598 000 fichiers lus et relus par le lecteur de messages : aucune panique.
+- **Pas pris** : le test contre un vrai GreenMail (`fakes/real_servers.rs`, ignoré par défaut).
+- **Reste, remarqué** : jamais essayé avec de vrais `.msg` d'Outlook (ceux des tests sont écrits
+  comme la spécification les décrit) ni sur l'Exchange du propriétaire (que `CreateItem` avec
+  `PR_MESSAGE_FLAGS` range bien en lu, dans le dossier voulu) ; le texte 8 bits d'un `.msg` en
+  ISO-2022-KR n'est pas signalé comme perdu (le `.pst` le fait) ; `cargo fuzz` à lancer ailleurs.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
