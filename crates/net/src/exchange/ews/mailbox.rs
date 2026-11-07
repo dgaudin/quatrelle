@@ -381,6 +381,18 @@ impl Client {
         Ok(m.find("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string())
     }
 
+    /// Store a MIME message in a folder as mail received and read (not a draft).
+    pub fn create_received(&self, raw: &[u8], folder: &str) -> Result<String> {
+        let m = self.call_one(&format!(
+            "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:FolderId Id=\"{}\"/></m:SavedItemFolderId>\
+             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent><t:ExtendedProperty>\
+             <t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/><t:Value>1</t:Value></t:ExtendedProperty></t:Message></m:Items></m:CreateItem>",
+            esc(folder),
+            b64(raw)
+        ))?;
+        Ok(m.find("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string())
+    }
+
     /// Answer a message's voting buttons with `choice`: a reply to it (so it stays in the
     /// conversation), its subject the choice's, carrying the choice (`PidLidVerbResponse`) for the
     /// sender's mail client to count; sent, with a copy in Sent Items.

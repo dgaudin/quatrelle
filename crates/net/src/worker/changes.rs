@@ -5,7 +5,10 @@
 
 use super::*;
 
+mod filing;
 mod rules;
+
+pub(super) use filing::{file_here, file_name};
 
 impl Worker {
     pub(super) fn handle(&mut self, job: Job) {
@@ -176,6 +179,7 @@ impl Worker {
                     }
                 }
             }
+            Job::FileMessages { folder, paths, .. } => self.file_messages(folder, paths),
             Job::FlushOutbox { .. } => self.flush_outbox(),
             Job::SyncDav { .. } => self.sync_dav(),
             Job::SyncCalendars { calendars, .. } => self.sync_calendars(&calendars),
@@ -237,6 +241,7 @@ impl Worker {
             | Job::Discover { .. }
             | Job::SignIn { .. }
             | Job::ImportPst { .. }
+            | Job::ReadMessageFile { .. }
             | Job::CompactDataFile { .. }
             | Job::AskLlm { .. }
             | Job::ListLlmModels { .. }

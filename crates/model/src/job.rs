@@ -339,6 +339,12 @@ pub enum Job {
     /// Ask where Quatrelle is published for its recent releases (File › About › Check for
     /// updates); answered by [`Event::Releases`].
     CheckUpdates,
+    /// Put message files into a folder of the account, as mail received and read: `.eml` as they
+    /// are, Outlook's `.msg` made standard messages. Answered by [`Event::MessagesFiled`].
+    FileMessages { account: String, folder: String, paths: Vec<String> },
+    /// Read a message file (an Outlook `.msg`) as a standard message, to show it. Answered by
+    /// [`Event::MessageFileRead`].
+    ReadMessageFile { path: String },
     /// Read an Outlook data file (`.pst`) into an account with no server.
     ImportPst { account: String, path: String },
     /// Compact the account's data file (Outlook's Compact Now): attachments an earlier version kept
@@ -479,6 +485,7 @@ impl Job {
             | Job::SyncDav { account }
             | Job::SyncCalendars { account, .. }
             | Job::ImportPst { account, .. }
+            | Job::FileMessages { account, .. }
             | Job::CompactDataFile { account }
             | Job::LocalFolderSizes { account }
             | Job::ServerFolderSizes { account }
@@ -494,6 +501,7 @@ impl Job {
             | Job::WorkOffline { .. }
             | Job::SetSync { .. }
             | Job::CheckUpdates
+            | Job::ReadMessageFile { .. }
             | Job::AskLlm { .. }
             | Job::ListLlmModels { .. }
             | Job::SetLlmKey { .. }

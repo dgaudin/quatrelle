@@ -184,6 +184,19 @@ pub enum Event {
         account: String,
         site: String,
     },
+    /// What [`Job::FileMessages`] did: how many went into the folder, and the files that
+    /// couldn't (their names, and why).
+    MessagesFiled {
+        account: String,
+        folder: String,
+        added: usize,
+        failed: Vec<(String, String)>,
+    },
+    /// A message file read ([`Job::ReadMessageFile`]): the message, or why it can't be read.
+    MessageFileRead {
+        path: String,
+        raw: Result<Vec<u8>, String>,
+    },
     /// How a data file import is going (`done`: finished, or failed with `error`). The folders
     /// come as [`Event::Folders`] first.
     Imported {

@@ -585,6 +585,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::Discover { .. }
         | Job::SignIn { .. }
         | Job::ImportPst { .. }
+        | Job::FileMessages { .. }
+        | Job::ReadMessageFile { .. }
         | Job::CompactDataFile { .. }
         | Job::LocalFolderSizes { .. }
         | Job::ServerFolderSizes { .. }
@@ -724,6 +726,9 @@ fn webex_refused() -> WebexError {
     WebexError::Failed("Webex needs the desktop app".into())
 }
 
+/// Why message files aren't read here.
+const DESKTOP_FILES: &str = "reading message files from the computer needs the desktop app";
+
 impl Backend for WebBackend {
     fn submit(&mut self, job: Job) {
         let sh = &self.shared;
@@ -747,6 +752,12 @@ impl Backend for WebBackend {
                     error: Some("opening Outlook data files needs the desktop app".into()),
                 },
             ),
+            // A page reads no files by their paths.
+            Job::FileMessages { account, folder, paths } => {
+                let failed = paths.into_iter().map(|p| (p, DESKTOP_FILES.to_string())).collect();
+                emit(sh, Event::MessagesFiled { account, folder, added: 0, failed })
+            }
+            Job::ReadMessageFile { path } => emit(sh, Event::MessageFileRead { path, raw: Err(DESKTOP_FILES.into()) }),
             // The browser keeps no data files: nothing to compact.
             Job::CompactDataFile { account } => emit(
                 sh,
