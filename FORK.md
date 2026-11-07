@@ -4797,7 +4797,7 @@ s'applique ; `rpmbuild` ne compile rien (il emballe l'arbre préparé).
   0.11 (`keys`, `model`), accesskit 0.25.2 et accesskit_consumer 0.39.2, icu 2.4, log, open,
   picky, yoke, zerovec, tinystr ; les règles Dependabot (rsa 0.10, cms 0.3, zbus 6 retenus).
 
-### Hors relevé : R27, Maj+Suppr supprime définitivement (2026-11-07)
+### Hors relevé : R27, Maj+Suppr supprime définitivement (2026-11-07, finitions R27b le même jour)
 
 Demandé par le propriétaire pour la 1.2, conception validée par lui le 06/11 : Maj+Suppr supprime
 définitivement, avec la question à chaque fois tant que l'option le dit, et, sur Exchange, le
@@ -4808,6 +4808,9 @@ courrier supprimé définitivement reste récupérable comme avec Outlook en mod
 | `24542118` | la commande `mail.deleteForGood` (« Delete for good », Maj+Suppr, avec une sélection) ; la touche dans la liste, le volet de lecture et la fenêtre d'un message ; la question existante « Supprimer définitivement ? » ; le texte du refus dans les 13 catalogues | moteur (3) : **commande inconnue** → supprimé du dossier, absent d'Éléments supprimés, rien à annuler ; conversation entière et résultats de recherche ; Courrier d'envoi comme Suppr. Interface : Échap, option coupée, Courrier d'envoi : **rien ne se passait** → comme voulu |
 | `787c1410` | Entrée = Supprimer dans la question (Échap fermait déjà toute boîte) ; le texte d'aide de l'option | Suppr dans Éléments supprimés puis Entrée : **le message restait** → supprimé ; Maj+Suppr puis Entrée ; la page d'un message (navigateur) |
 | `fb7d9c53` | EWS : `DeleteItem` et `EmptyFolder` en `DeleteType="SoftDelete"` au lieu de `HardDelete` ; le faux serveur garde ce que `SoftDelete` prend (`recoverable`) | `an_on_premises_exchange_account_works_through_ews` : **dossier vidé, rien de récupérable** → les 3 messages vidés et le message supprimé définitivement dans les éléments récupérables |
+| `e86e3f7c` (R27b) | `Op::Expunge { keys, tidy }` : le ménage des brouillons (copies remplacées, copie d'un brouillon envoyé ou abandonné) repart en `HardDelete` sur EWS ; ailleurs rien ne change ; le faux serveur garde ce que `HardDelete` prend (`purged`) | EWS : copie remplacée et copie d'un brouillon envoyé **récupérables** → purgées ; moteur : copies d'un brouillon **comme une suppression de l'utilisateur** → en ménage ; journal à l'ancienne forme, sans `#[serde(default)]` : **file perdue** → relue, en suppressions de l'utilisateur ; garde : Maj+Suppr part en suppression de l'utilisateur (passait déjà) |
+| `c9ca099c` (R27b) | `Action::DeleteMail { for_good }` : une seule décision pour les touches, le ruban, le bouton au survol d'une ligne, Supprimer du menu de la liste et le bouton Supprimer du volet de lecture (brouillon, Courrier d'envoi) ; dans la fenêtre d'un message, ce bouton supprime le message de la fenêtre | dans Éléments supprimés, bouton au survol, menu, Supprimer d'un brouillon lu : **supprimé sans question** → la question ; ailleurs, bouton et menu : déplacés sans question (garde, passait déjà) |
+| `ed763705` (R27b) | la question dit, quand tous les messages sont sur Exchange (EWS ou Microsoft 365), qu'ils sont supprimés d'ici mais que le serveur Exchange les garde un temps parmi ses éléments récupérables ; sinon « irréversible » ; 2 phrases dans les 13 catalogues | compte d'essai EWS puis Graph : **« irréversible »** → « le serveur Exchange le garde un temps » ; IMAP : « irréversible » |
 
 **Ce qui change pour le propriétaire.**
 
@@ -4837,8 +4840,17 @@ courrier supprimé définitivement reste récupérable comme avec Outlook en mod
 - **Exchange (EWS)** : Maj+Suppr, Suppr dans Éléments supprimés et Vider le dossier envoient
   `SoftDelete` : le courrier va dans les éléments récupérables (dossier Deletions), d'où
   « Récupérer les éléments supprimés » d'Outlook sur le web le ramène pendant la rétention (14 jours
-  par défaut sur Exchange Server). La boîte « Supprimer définitivement ? » dit toujours « Cette
-  action est irréversible », ce qui reste vrai depuis Quatrelle.
+  par défaut sur Exchange Server). La boîte « Supprimer définitivement ? » le dit (R27b) : quand
+  tous les messages sont sur un compte Exchange (EWS ou Microsoft 365), « Ce message sera supprimé
+  d'ici, mais le serveur Exchange le garde un temps parmi ses éléments récupérables », sans durée
+  (c'est le réglage du serveur) ; ailleurs (IMAP, compte local, `.pst`, Courrier d'envoi, mélange),
+  toujours « Cette action est irréversible ».
+- **Dans Éléments supprimés, toute suppression demande** (R27b) : le bouton qui paraît au survol
+  d'une ligne, Supprimer du menu du clic droit et le bouton Supprimer du volet de lecture (au-dessus
+  d'un brouillon ou d'un message du Courrier d'envoi) passent par la même décision que les touches
+  et le ruban (`Action::DeleteMail`). Ailleurs, ils déplacent vers Éléments supprimés sans
+  question, comme avant. Dans la fenêtre d'un message, ce bouton du volet supprime le message de
+  la fenêtre (il prenait la sélection de la liste).
 
 **Pas changé.** Rendez-vous, contacts et tâches EWS : `MoveToDeletedItems` (aucun `HardDelete` de
 ce côté). Dossiers : `DeleteFolder DeleteType="MoveToDeletedItems"`, même pour la suppression
@@ -4851,12 +4863,20 @@ page de `DELETE` renvoie au dossier `recoverableitemsdeletions` : `DELETE` n'est
 définitive. IMAP : `\Deleted` puis `UID EXPUNGE` (Gmail par sa corbeille) ; comptes locaux et
 `.pst` : retiré du fichier ; hors ligne : en file, comme avant.
 
-**Effet de bord à connaître (EWS).** `Op::Expunge` sert aussi à retirer les copies précédentes
-d'un brouillon à chaque enregistrement, et la copie d'un brouillon envoyé ou abandonné : elles
-vont aussi dans les éléments récupérables (avant : Purges). « Récupérer les éléments supprimés »
-d'Outlook sur le web peut donc lister d'anciennes versions de brouillons pendant la rétention.
-Outlook, qui met à jour un brouillon sur place, n'en laisse pas. Les distinguer demanderait une
-opération à part dans le modèle (file d'opérations gardée sur disque) : à décider.
+**Les brouillons (R27b).** `Op::Expunge` sert aussi à retirer les copies précédentes d'un
+brouillon à chaque enregistrement, et la copie d'un brouillon envoyé ou abandonné. Avec
+`fb7d9c53`, sur EWS, elles allaient aussi dans les éléments récupérables : « Récupérer les
+éléments supprimés » d'Outlook sur le web aurait listé d'anciennes versions de brouillons, ce
+qu'Outlook (qui met à jour un brouillon sur place) ne laisse pas. `Op::Expunge` a maintenant un
+champ `tidy` (le ménage de Quatrelle, pas la suppression de l'utilisateur), que le moteur met aux
+copies d'un brouillon et le travailleur à la copie qu'un nouvel enregistrement remplace : EWS le
+purge (`HardDelete`, comme avant R27). IMAP, JMAP, le cache, POP et Graph ne changent pas. Un champ
+plutôt qu'une variante : seul EWS le lit, partout ailleurs c'est le même effacement, et une
+version plus ancienne de Quatrelle relit encore le journal (elle ignore le champ). Il est
+`#[serde(default)]` et omis quand il est faux : le journal hors ligne écrit avant se relit en
+entier, chaque suppression comme celle de l'utilisateur (`SoftDelete`, le choix sûr), et la
+suppression de l'utilisateur s'écrit comme avant. Graph : `DELETE` laisse le ménage récupérable
+lui aussi ; `permanentDelete` (Purges) serait plus fidèle pour lui, pas fait.
 
 **Pas vérifiable ici** (aucun vrai Exchange) : que l'Exchange du propriétaire accepte `SoftDelete`
 (Exchange 2010 et plus le prennent ; 2007 seulement marque l'élément) ; que le message supprimé
@@ -4867,15 +4887,20 @@ dans la fenêtre native d'un message (les essais dessinent la fenêtre dans la p
 Maj+Suppr, Entrée ; il n'est pas dans Éléments supprimés ; dans OWA, Éléments supprimés ›
 « Récupérer les éléments supprimés de ce dossier » : il y est, Restaurer le ramène. Refaire avec
 Échap (rien ne bouge), avec l'option coupée (pas de question), dans la fenêtre d'un message
-(double-clic, Maj+Suppr), et Vider le dossier sur un dossier de test.
+(double-clic, Maj+Suppr), et Vider le dossier sur un dossier de test. R27b : la question dit que
+le serveur Exchange garde le message un temps ; un brouillon enregistré deux fois puis envoyé ne
+laisse aucune copie dans « Récupérer les éléments supprimés » (`HardDelete`, pas vérifiable ici
+non plus) ; dans Éléments supprimés, le bouton au survol et Supprimer du menu demandent.
 
-**Reste, inchangé** : le bouton Supprimer qui paraît au survol d'une ligne de la liste et
-Supprimer du menu de la liste suppriment encore définitivement dans Éléments supprimés sans
-demander (le ruban et la touche demandent).
+**Reste** : la question de Vider le dossier dit encore « Cette action est irréversible » sur
+Exchange, où `EmptyFolder` part en `SoftDelete` (hors du lot R27b).
 
 **Vérifié** : chaque sonde avant (échec, sauf la garde du Calendrier, qui passait déjà : rien n'y
 était branché) et après ; `every_command_survives_junk_params` ; le commit `24542118` essayé seul
 (ses essais de l'interface, des catalogues et des fenêtres) ; `cargo xtask ci` (wasm compris).
+R27b : chaque sonde vue en échec avant sa correction (le journal sans `#[serde(default)]` ; le
+bouton du volet de lecture, sa correction retirée un instant), les gardes vertes avant et après ;
+`cargo xtask ci` (wasm compris).
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
