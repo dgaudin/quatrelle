@@ -7,7 +7,9 @@ use super::*;
 use std::collections::{HashMap, VecDeque};
 
 pub(crate) mod links;
+mod pairs;
 mod rules;
+pub use pairs::html_link_pairs;
 use rules::{RULE_MARK, mark_rules};
 
 /// Most lines kept of a rich rendering (the rest is shown as text).

@@ -41,6 +41,7 @@ mod importance;
 pub(crate) mod index_text;
 mod inline_names;
 mod kept_cid;
+mod link_pairs;
 mod one_parse;
 mod parts_listed;
 mod reply_layout;
