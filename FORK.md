@@ -4995,6 +4995,33 @@ sont adaptés, au nom du propriétaire.
   - `already` (marques) lit chaque élément des dossiers PIM du fichier avant d'écrire, comme
     `ids_in` pour le courrier : jamais mesuré sur un gros fichier.
 
+### Hors relevé : R29, quatre corrections avant la 1.2.0 (2026-11-07)
+
+| Commit | Ce qu'il fait | Sonde : avant → après |
+|---|---|---|
+| `af3371f9` | Graph, Récupérer les éléments supprimés : un élément déjà parti (404 `ErrorItemNotFound`) compte comme fait et la sélection continue (`post_item`, comme EWS) ; une autre erreur arrête comme avant | `an_item_already_gone_does_not_stop_the_selection` : « HTTP 404 Not found. » → passe (restaurer et purger) |
+| `c1cc0f6f` | Graph, .msg et .eml rangés dans un dossier : le message est créé **à partir de ses champs** (`POST …/mailFolders/{id}/messages`) avec `PidTagMessageFlags` = 1 (lu, pas « non envoyé »), `PidTagMessageDeliveryTime` et `PidTagClientSubmitTime` tirées de sa date ; pièces jointes en `fileAttachment` (3 Mo au plus ensemble) ; trop gros ou refusé : ancienne voie (MIME en brouillon) puis `isRead` | `a_filed_message_is_received_and_read_not_a_draft` (faux Graph, qui apprend la route) : brouillon non lu → lu, dans le dossier, à sa date |
+| `f04940c9`, `d610e719` | IMAP : voir ci-dessous ; lecteur d'`INTERNALDATE` borné (40 caractères, année 1 à 9999, zone), proptest | `a_cache_without_arrival_times_gets_them_at_the_next_sync` : `received` à 0 → rempli ; proptest d'aller-retour et de texte quelconque |
+| `72de9a1f` | « Vider le dossier » sur Exchange (EWS, Microsoft 365) dit que le serveur garde les messages un temps parmi ses éléments récupérables et comment les ramener ; ailleurs « irréversible » ; une phrase, 13 catalogues | `emptying_says_an_exchange_server_keeps_the_mail_a_while` (EWS, Graph, puis IMAP) |
+
+- **IMAP, heure d'arrivée** : la consigne supposait que l'IMAP ne remplissait pas `received` ; c'était
+  déjà fait pour tout message synchronisé (`INTERNALDATE` est dans les `FETCH` d'en-têtes depuis
+  longtemps, `summary_from_header` le garde). Ce qui manquait : le courrier **déjà en cache** d'avant
+  (`received` à 0, retombe sur `Date:`). Rattrapage doux (`sync/arrival.rs`) à chaque synchro normale
+  d'un dossier : `UID FETCH <uids> (UID INTERNALDATE)` par paquets de 500, 5 000 au plus par
+  synchro, ni en-tête ni corps ; une erreur du serveur saute le rattrapage (la synchro continue, la
+  suivante reprend) ; un message dont le serveur ne dit rien garde le repli sur `Date:`. Pas de
+  resynchro complète. POP et compte sur cet ordinateur : pas de notion d'arrivée, repli sur `Date:`.
+  Effet de bord voulu : l'âge gardé se mesure alors sur l'arrivée réelle, un vieux message d'un
+  cache ancien peut donc sortir du cache à la synchro suivante, comme le veut le mode caché.
+- **Vider le dossier** : Graph vide par `DELETE` message par message ; on le tient pour
+  récupérable comme la boîte de Maj+Suppr (`ed763705`), non vérifié sur un vrai locataire.
+- **Pas vérifiable ici** : Graph réel : que `PidTagMessageFlags` à la création range bien en lu
+  (et que `PidTagMessageDeliveryTime` y fixe la date), l'apparence des pièces jointes et du
+  HTML recréés depuis les champs (le MIME d'origine n'est pas conservé : en-têtes autres que ceux
+  des champs perdus), la récupération après « Vider » ; IMAP réel : que le serveur répond à
+  `UID FETCH (UID INTERNALDATE)` sur deux comptes du propriétaire.
+
 ### État de la récupération : v0.32, trentième partie : les dates dans la recherche, le tri par heure de remise et le texte brut par message (P6a) (2026-11-07)
 
 Trois morceaux indépendants du lot P6 de `merge-tools/survey-v0.32.md` (P6a), sur `main`. Chacun
