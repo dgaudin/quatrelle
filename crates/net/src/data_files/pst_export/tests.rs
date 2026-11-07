@@ -12,6 +12,7 @@ mod follow_up;
 mod kinds;
 mod pim;
 mod pinned;
+mod replace;
 mod round_trip;
 mod seeds;
 mod special;
@@ -91,7 +92,10 @@ fn an_account_round_trips_through_a_data_file() {
     let file = dir.join("Out.pst");
     let mut ticks = 0;
     let done = export(&store, "a1", "Riley's mail", &file, NONE, &mut |_| ticks += 1).unwrap();
-    assert_eq!(done, Exported { messages: 3, skipped: 1, already: 0, events: 1, occurrences: 0, tasks: 0, notes: 0, contacts: 1, pim_already: 0 });
+    assert_eq!(
+        done,
+        Exported { messages: 3, skipped: 1, already: 0, events: 1, occurrences: 0, tasks: 0, notes: 0, contacts: 1, pim_already: 0, pim_replaced: 0 }
+    );
     // The calendar and the contact inside it: nothing beside it.
     assert!(!dir.join("Out Calendar.ics").exists() && !dir.join("Out Contacts.vcf").exists());
     assert_eq!(UnicodePstFile::special_folder(&file, outlook_pst::UnicodePstSpecialFolder::Calendar).unwrap(), Some(vec!["Calendar".to_string()]));

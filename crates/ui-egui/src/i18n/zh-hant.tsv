@@ -1805,6 +1805,7 @@ month	May	5月
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: 已匯出 {messages} 封郵件（{skipped} 封不在這台電腦上，已略過；{already} 封已在資料檔中）
 	{name}: {messages} messages exported so far…	{name}: 目前已匯出 {messages} 封郵件…
 	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}：Outlook 無法保留其規則的系列中有 {occurrences} 次發生已逐一寫入
+	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}：自上次匯出以來變更的 {replaced} 個行事曆項目、連絡人、附註或任務已取代其先前的複本
 	{name}: {messages} messages imported	{name}: 已匯入 {messages} 封郵件
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 已匯入 {messages} 封郵件（{skipped} 封無法讀取）
 	{name}: {messages} messages imported so far…	{name}: 目前已匯入 {messages} 封郵件…

@@ -1805,6 +1805,7 @@ month	May	Май
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: экспортировано писем: {messages} (пропущено отсутствующих на этом компьютере: {skipped}; уже были в файле данных: {already})
 	{name}: {messages} messages exported so far…	{name}: пока экспортировано писем: {messages}…
 	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: {occurrences} повторений серий, правило которых Outlook не может сохранить, записаны по одному
+	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} элементов календаря, контактов, заметок или задач, изменённых после последнего экспорта, заменили свои прежние копии
 	{name}: {messages} messages imported	{name}: импортировано писем: {messages}
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: импортировано писем: {messages} (не удалось прочитать: {skipped})
 	{name}: {messages} messages imported so far…	{name}: пока импортировано писем: {messages}…
