@@ -1802,6 +1802,7 @@ month	May	مايو
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: عدد الرسائل المصدّرة: {messages} (أُغفل ما ليس على هذا الكمبيوتر: {skipped}؛ كان في ملف البيانات من قبل: {already})
 	{name}: {messages} messages exported so far…	{name}: عدد الرسائل المصدّرة حتى الآن: {messages}…
 	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: كُتبت {occurrences} من تكرارات سلاسل لا يستطيع Outlook حفظ قاعدتها واحدةً تلو الأخرى
+	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: حلّت {replaced} من عناصر التقويم أو جهات الاتصال أو الملاحظات أو المهام التي تغيّرت منذ آخر تصدير محلّ نسخها السابقة
 	{name}: {messages} messages imported	{name}: عدد الرسائل المستوردة: {messages}
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: عدد الرسائل المستوردة: {messages} (تعذّرت قراءة: {skipped})
 	{name}: {messages} messages imported so far…	{name}: عدد الرسائل المستوردة حتى الآن: {messages}…

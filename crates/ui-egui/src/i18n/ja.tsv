@@ -1803,6 +1803,7 @@ month	May	5月
 	{name}: {messages} messages exported ({skipped} not on this computer were left out; {already} the data file already had)	{name}: {messages} 件のメッセージをエクスポートしました (このコンピューターにない {skipped} 件は除外しました。データ ファイルに既にあった {already} 件を除く)
 	{name}: {messages} messages exported so far…	{name}: これまでに {messages} 件のメッセージをエクスポートしました…
 	{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one	{name}: Outlook が規則を保持できない定期的な予定の {occurrences} 件の発生を 1 件ずつ書き込みました
+	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: 前回のエクスポート以降に変更された予定表のアイテム、連絡先、メモ、タスク {replaced} 件で以前のコピーを置き換えました
 	{name}: {messages} messages imported	{name}: {messages} 件のメッセージをインポートしました
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} 件のメッセージをインポートしました ({skipped} 件は読み込めませんでした)
 	{name}: {messages} messages imported so far…	{name}: これまでに {messages} 件のメッセージをインポートしました…

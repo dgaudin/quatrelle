@@ -119,9 +119,11 @@ impl Session {
     }
 
     /// How an export is going; `left`: messages not on this computer, and ones the data file
-    /// already had; `occurrences`: those of series whose rule Outlook can't keep, each written as
-    /// an appointment of its own (said apart, once it's done).
-    pub(super) fn exported(&mut self, account: &str, messages: usize, left: (usize, usize), occurrences: usize, done: bool, error: Option<String>) {
+    /// already had; `pim`: occurrences of series whose rule Outlook can't keep, each written as an
+    /// appointment of its own, and calendar items, contacts, notes or tasks that replaced their
+    /// earlier copies in the data file (each said apart, once it's done).
+    pub(super) fn exported(&mut self, account: &str, messages: usize, left: (usize, usize), pim: (usize, usize), done: bool, error: Option<String>) {
+        let (occurrences, replaced) = pim;
         let (skipped, already) = left;
         let name = self.account(account).map(|a| a.config.email.clone()).unwrap_or_default();
         let (messages, skipped, already) = (messages.to_string(), skipped.to_string(), already.to_string());
@@ -146,6 +148,14 @@ impl Session {
             self.notice_with(
                 "{name}: {occurrences} occurrences of series whose rule Outlook can't keep went in one by one",
                 &[("name", &name), ("occurrences", &occurrences)],
+                false,
+            );
+        }
+        if finished && replaced > 0 {
+            let replaced = replaced.to_string();
+            self.notice_with(
+                "{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies",
+                &[("name", &name), ("replaced", &replaced)],
                 false,
             );
         }
