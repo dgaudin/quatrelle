@@ -5022,6 +5022,22 @@ sont adaptés, au nom du propriétaire.
   des champs perdus), la récupération après « Vider » ; IMAP réel : que le serveur répond à
   `UID FETCH (UID INTERNALDATE)` sur deux comptes du propriétaire.
 
+### Hors relevé : R30, des icônes dans les menus du clic droit du calendrier (2026-11-07)
+
+- **Menu d'un événement** (`panes/calendar/menu.rs`) : Ouvrir `PopOut`, Rejoindre `Video`, Accepter
+  `Done`, Provisoire `Question` (nouvelle), Refuser `Close`, Afficher comme `Clock`, Catégoriser `Tag`,
+  Privé `Lock`, Supprimer et ses deux choix `Delete`. Les états restent visibles : le bouton du
+  choix en cours (réponse, Afficher comme, Privé) est mis en valeur (`Button::selected`) au lieu
+  d'un bouton radio ou d'une case ; la liste des catégories garde ses cases colorées.
+- **Faits aussi** : calendriers de la liste latérale (Actualiser `Sync`, Retirer `Delete`), tâches
+  (Marquer comme terminée `Complete`, Supprimer `Delete`), notes (Supprimer `Delete`).
+- **Laissés** : le menu des mois (liste de choix 1 à 6), celui des couleurs d'une note (a déjà sa
+  pastille), celui des colonnes des contacts (cases) : ce sont des choix, pas des commandes.
+- **Icône Fluent ajoutée** : `question_circle` (`@fluentui/svg-icons` 1.1.292, sans changement),
+  ligne dans `ATTRIBUTION.md`, `Icon::Question` et son dessin de secours.
+- **Sonde** : `the_appointments_menu_has_an_icon_before_each_command` ; les tests existants du
+  menu (répondre, Afficher comme, Privé, Supprimer) restent verts.
+
 ### État de la récupération : v0.32, trentième partie : les dates dans la recherche, le tri par heure de remise et le texte brut par message (P6a) (2026-11-07)
 
 Trois morceaux indépendants du lot P6 de `merge-tools/survey-v0.32.md` (P6a), sur `main`. Chacun
