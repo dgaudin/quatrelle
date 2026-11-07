@@ -4902,6 +4902,71 @@ R27b : chaque sonde vue en échec avant sa correction (le journal sans `#[serde(
 bouton du volet de lecture, sa correction retirée un instant), les gardes vertes avant et après ;
 `cargo xtask ci` (wasm compris).
 
+### État de la récupération : v0.32, vingt-neuvième partie : l'export du calendrier et des contacts vers un .pst (P4b) (2026-11-07)
+
+La seconde moitié du lot P4 de `merge-tools/survey-v0.32.md` (P4b), sur `main`. Après P4a, le
+courrier allait dans le fichier, mais le calendrier et les contacts restaient écrits à côté
+(`… Calendar.ics`, `… Contacts.vcf`), les notes et les tâches nulle part, et un compte sans
+courrier ne s'exportait pas du tout (« there is no mail on this computer to export »). Pour chaque
+commit, son test porté d'abord (adapté au modèle du fork), lancé contre le code d'alors, sur des
+fichiers fabriqués par l'écrivain du crate et relus par l'import du fork (P2) : aucune donnée du
+propriétaire. Aucun commit ne s'applique tel quel (modèle PIM du fork, export ANSI de P4a) : tous
+sont adaptés, au nom du propriétaire.
+
+| Commit de l'origine | Sonde | avant | après |
+|---|---|---|---|
+| `d3b8dc9f` (`1beba864`, adapté, avec la moitié PIM de `7e9adc80`) | ses deux tests (`tests/pim.rs`), et l'ANSI (`tests/ansi.rs`) | compte sans courrier : **export refusé** ; fichier complété : **aucun dossier Notes** | contacts, groupes, notes, tâches dans Contacts, Notes, Tâches du fichier (Unicode et ANSI), relus champ par champ |
+| `fe4fe116` (`288394fb`, adapté) | son test (homonymes) et les règles WKST | notes **écrites dans le dossier de courrier « Notes »** du fichier ; un contact du fichier homonyme pris pour celui du compte ; `WKST=MO` : FirstDOW **0** | marque `X-Quatrelle-Item` (uid et empreinte) ; dossier d'une autre sorte évité ; texte gardé marqué `X-QUATRELLE-REST:1` ; WKST dans les deux sens |
+| `95cc48d6` (`dca014c8`, adapté, avec la moitié réunion de `1a1f42ba`) | ses tests (`tests/calendar.rs`) et le proptest (400 règles) | calendrier seul : **export refusé** ; invitation : **aucune propriété de réunion** | rendez-vous dans le Calendrier du fichier, fuseaux, séries avec occurrences supprimées, déplacées, modifiées (attachées en exceptions), organisateur, invités et réponses, fichiers ; courrier de réunion en `IPM.Schedule.Meeting.*` |
+| `5d8a71c0` (`3ebdac28`, adapté) | ses tests (`tests/calendar/items.rs`) | fichier d'une série horaire copié **2 000 fois (200 Mo)** ; occurrence changée **perdue** ; dates ajoutées (`RDATE`) **oubliées** ; jours supprimés d'une série « journée entière » **décalés** ; courrier de réunion **sans état reçu** | fichiers sur la première seule ; occurrences restantes à part ; journées entières aux minuits de cet ordinateur ; réunion d'un autre reçue, avec la réponse de l'utilisateur ; avis du nombre d'occurrences écrites une à une |
+| `ba8082c6` | — | **sans objet** : la dépendance n'a pas bougé (`vendor/outlook-pst-rw` a déjà `41480031`) et le fork construit déjà ses destinataires avec `..Default::default()` | — |
+| `6a3be3f4` (`90443358`, adapté) | ses tests (`tests/replace.rs`) | deux exports : **« Standup » à côté de « Standup, moved »** (Unicode et ANSI) | l'ancienne copie retirée une fois la nouvelle écrite ; les autres intactes (même nœud) ; avis du nombre de remplacements |
+| `8e9a1299` (`3c8d3c27`, adapté) | son test (deux comptes) | le second compte **retire les copies du premier** (2 remplacées) | la marque nomme le compte (empreinte de son id) : chacun ne retire que les siennes |
+
+- **Adapté au modèle du fork** : la carte écrit dans les champs d'Outlook son service, sa
+  profession, son bureau, son responsable, son assistant, son surnom, son conjoint, son
+  anniversaire de mariage, sa page web et sa messagerie instantanée, que l'import lit maintenant
+  aussi (y compris d'un vrai fichier d'Outlook) ; sa photo est la pièce cachée marquée comme
+  telle ; ses fichiers sont ses lignes `X-QUATRELLE-ATTACH`. Ce qu'Outlook n'a pas (quatrième
+  adresse, téléphone d'une autre sorte, sorte d'une adresse, anniversaire sans année, autres
+  lignes) va dans un bloc vCard à la fin de la note, relu à l'import. La tâche garde son objet,
+  son importance, sa confidentialité, ses jours (jours depuis 1970) ; une règle que le motif ne
+  dit pas va dans un bloc à la fin de ses notes. L'événement : afficher comme, confidentialité,
+  rappel, fichiers par `quatrelle_model::pim::files` ; un fichier resté sur le serveur
+  (`X-QUATRELLE-SERVER-ATTACH`) n'est pas écrit. Une réunion est reçue quand le serveur a donné la
+  réponse de l'utilisateur (`my_answer`, elle d'abord) ou quand un autre l'organise (adresses du
+  compte : e-mail, nom d'utilisateur, utilisateur OAuth). Le modèle reçoit `zone_rule` et
+  `wall_clock` (de `a5bbc00a`). Les marques portent les noms de Quatrelle.
+- **Interface** : la page Fichier › Ouvrir et exporter › Exporter dit « Ses contacts, son
+  calendrier, ses notes et ses tâches y sont aussi enregistrés » (traductions de l'origine) ; deux
+  avis nouveaux après l'avis habituel, en mots de Quatrelle, dans les 13 catalogues : les
+  occurrences écrites une à une, les éléments qui ont remplacé leurs copies précédentes.
+- **Fuzz** : cible nouvelle `pst_pim_text` (texte gardé relu, règle d'une tâche écrite puis relue) ;
+  `pst_recurrence` lit aussi le motif qu'écrit l'export. `fuzz/Cargo.lock` inchangé.
+- **Accroc** : de `1beba864` à `3c8d3c27`, la bibliothèque `quatrelle-net` ne compilait que pour
+  ses tests (`pst_pim::recurrence` était `#[cfg(test)]`) : ni hors tests, ni dans `fuzz/` ;
+  corrigé par `7482eea7`, sans réécrire l'histoire.
+- **Ce que verra le propriétaire** en exportant (Fichier › Ouvrir et exporter › Exporter) : plus
+  de `.ics` ni de `.vcf` à côté ; dans le fichier, les dossiers Calendrier, Contacts, Notes et
+  Tâches (ceux du fichier s'il en a, quel que soit leur nom), avec tout ce qui est décrit plus
+  haut ; ré-exporté dans le même fichier, rien deux fois, ce qui a changé remplace sa copie ; un
+  compte sans courrier s'exporte. Relu dans Quatrelle (Fichier › Ouvrir un fichier de données),
+  tout revient.
+- **Vérifié** : chaque sonde avant (échec) et après ; les suites `.pst` de `quatrelle-net` (165),
+  le moteur et les catalogues ; `cargo check --bins` dans `fuzz/` ; `cargo xtask ci` (wasm
+  compris), journal `~/.tq/p4b-ci.log`.
+- **Reste, remarqué** :
+  - jamais ouvert dans un vrai Outlook : que les rendez-vous (fuseaux, séries, exceptions), les
+    contacts (photo, groupes et leur somme de contrôle), les notes et les tâches s'y montrent comme
+    prévu, et que le courrier de réunion s'y accepte ;
+  - les invités facultatifs et les salles partent en invités ordinaires (l'import ne lit pas leur
+    rôle) ; la réponse de l'utilisateur, le lien de réunion en ligne, la conférence et l'identifiant
+    Webex ne reviennent pas à l'import ;
+  - un fichier de rendez-vous resté sur le serveur Exchange (non téléchargé) n'est pas dans
+    l'export ;
+  - `already` (marques) lit chaque élément des dossiers PIM du fichier avant d'écrire, comme
+    `ids_in` pour le courrier : jamais mesuré sur un gros fichier.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
