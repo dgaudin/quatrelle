@@ -2065,3 +2065,19 @@ menu	View	Weergeven
 	Drop to add them to {folder}	Laat los om ze aan {folder} toe te voegen
 	Added to {folder}: {n}	Toegevoegd aan {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	{file} kon niet aan {folder} worden toegevoegd: {error}
+	Recover deleted items	Verwijderde items herstellen
+	Recover deleted items…	Verwijderde items herstellen…
+	This server doesn't keep deleted items for you to bring back.	Deze server bewaart geen verwijderde items die u kunt terughalen.
+	Connect first: the server keeps these items.	Maak eerst verbinding: de server bewaart deze items.
+	The list isn't open any more.	De lijst is niet meer geopend.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	Dit item wordt definitief verwijderd. Niemand kan het terughalen en dit kan niet ongedaan worden gemaakt.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	Deze {n} items worden definitief verwijderd. Niemand kan ze terughalen en dit kan niet ongedaan worden gemaakt.
+	Purge	Wissen
+	Restore	Herstellen
+	Search the deleted items	Zoeken in de verwijderde items
+	The server said: {error}	Antwoord van de server: {error}
+	Purged: {n}	Gewist: {n}
+	Restored into Deleted Items: {n}	Hersteld in Verwijderde items: {n}
+	The server keeps nothing deleted for good for this account.	De server bewaart voor dit account niets wat definitief is verwijderd.
+	{n} items	{n} items
+	Deleted	Verwijderd

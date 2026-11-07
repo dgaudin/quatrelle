@@ -2068,3 +2068,19 @@ menu	View	Просмотр
 	Drop to add them to {folder}	Отпустите, чтобы добавить их в {folder}
 	Added to {folder}: {n}	Добавлено в {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	Не удалось добавить {file} в {folder}: {error}
+	Recover deleted items	Восстановить удалённые элементы
+	Recover deleted items…	Восстановить удалённые элементы…
+	This server doesn't keep deleted items for you to bring back.	Этот сервер не хранит удалённые элементы, которые можно восстановить.
+	Connect first: the server keeps these items.	Сначала подключитесь: эти элементы хранит сервер.
+	The list isn't open any more.	Список больше не открыт.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	Этот элемент будет удалён навсегда. Никто не сможет его вернуть, и это нельзя отменить.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	Эти элементы ({n}) будут удалены навсегда. Никто не сможет их вернуть, и это нельзя отменить.
+	Purge	Удалить навсегда
+	Restore	Восстановить
+	Search the deleted items	Поиск среди удалённых элементов
+	The server said: {error}	Ответ сервера: {error}
+	Purged: {n}	Удалено навсегда: {n}
+	Restored into Deleted Items: {n}	Восстановлено в «Удалённые»: {n}
+	The server keeps nothing deleted for good for this account.	Сервер не хранит для этой учётной записи ничего, удалённого навсегда.
+	{n} items	Элементов: {n}
+	Deleted	Удалено

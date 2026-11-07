@@ -26,6 +26,9 @@ mod organize;
 mod other;
 pub(crate) mod people_field;
 mod pgp;
+mod recovering;
+pub use recovering::RecoverForm;
+pub(crate) use recovering::{link as recover_link, open as open_recovery, recover_blocked};
 pub(crate) mod pim_dialogs;
 mod writing;
 
@@ -200,6 +203,8 @@ pub enum Dialog {
         sort: SizeSort,
         kept: u64,
     },
+    /// Recover deleted items: what the server keeps of an account's deletions.
+    Recover(Box<RecoverForm>),
     Event(Box<crate::pim_dialogs::EventForm>),
     Contact(Box<crate::pim_dialogs::ContactForm>),
     /// An appointment dragged to another time: Outlook's questions before it moves.
@@ -675,6 +680,13 @@ pub(crate) fn show(
     if closing && let Dialog::TrustDomain { account, site } = d {
         acts.push(Action::Run("account.refuseDomain", json!({"account": account, "domain": site})));
     }
+    // The question about purging: Escape or a click outside is a no, back to the list.
+    if closing && let Dialog::Recover(f) = d {
+        if f.confirming.take().is_some() {
+            return keep;
+        }
+        acts.push(Action::Run("folder.recoverClose", json!({})));
+    }
     keep && !closing
 }
 
@@ -699,6 +711,7 @@ fn body(
         | Dialog::OpenSharedMailbox { .. } => accounts::draw(ui, d, s, people, t, acts),
         Dialog::Signature(..) | Dialog::Vacation(..) => mailbox::draw(ui, d, s, t, acts),
         Dialog::FolderSize { .. } => folder_sizes::draw(ui, d, s, t, acts),
+        Dialog::Recover(..) => recovering::draw(ui, d, s, t, acts),
         Dialog::ConfirmDelete { .. }
         | Dialog::MoveTo { .. }
         | Dialog::FolderName { .. }

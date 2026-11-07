@@ -6,6 +6,7 @@
 use super::*;
 
 mod pgp;
+mod recovering;
 mod trust;
 
 #[test]

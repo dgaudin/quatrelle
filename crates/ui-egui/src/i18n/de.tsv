@@ -2069,3 +2069,19 @@ menu	View	Anzeigen
 	Drop to add them to {folder}	Ablegen, um sie zu {folder} hinzuzufügen
 	Added to {folder}: {n}	Zu {folder} hinzugefügt: {n}
 	Couldn't add {file} to {folder}: {error}	{file} konnte nicht zu {folder} hinzugefügt werden: {error}
+	Recover deleted items	Gelöschte Elemente wiederherstellen
+	Recover deleted items…	Gelöschte Elemente wiederherstellen…
+	This server doesn't keep deleted items for you to bring back.	Dieser Server bewahrt keine gelöschten Elemente zum Wiederherstellen auf.
+	Connect first: the server keeps these items.	Zuerst verbinden: Der Server bewahrt diese Elemente auf.
+	The list isn't open any more.	Die Liste ist nicht mehr geöffnet.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	Dieses Element wird endgültig gelöscht. Niemand kann es zurückholen, und das lässt sich nicht rückgängig machen.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	Diese {n} Elemente werden endgültig gelöscht. Niemand kann sie zurückholen, und das lässt sich nicht rückgängig machen.
+	Purge	Endgültig löschen
+	Restore	Wiederherstellen
+	Search the deleted items	Gelöschte Elemente durchsuchen
+	The server said: {error}	Antwort des Servers: {error}
+	Purged: {n}	Endgültig gelöscht: {n}
+	Restored into Deleted Items: {n}	In Gelöschte Elemente wiederhergestellt: {n}
+	The server keeps nothing deleted for good for this account.	Der Server bewahrt für dieses Konto nichts endgültig Gelöschtes auf.
+	{n} items	{n} Elemente
+	Deleted	Gelöscht

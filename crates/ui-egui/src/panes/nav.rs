@@ -577,6 +577,19 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
             }));
             ui.close();
         }
+        // What the server keeps of the mail deleted for good, on Deleted Items.
+        if f.selectable && f.look() == FolderRole::Trash {
+            let blocked = crate::dialogs::recover_blocked(s, &account);
+            let r = ui.add_enabled(blocked.is_none(), egui::Button::new(tl!("Recover deleted items…")));
+            let r = match blocked {
+                Some(why) => r.on_disabled_hover_text(why),
+                None => r,
+            };
+            if r.clicked() {
+                crate::dialogs::open_recovery(&account, acts);
+                ui.close();
+            }
+        }
         ui.separator();
         if ui.button(tl!("New folder…")).clicked() {
             acts.push(Action::Dialog(Dialog::new_folder(&account, Some(&path))));

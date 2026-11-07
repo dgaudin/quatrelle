@@ -2064,3 +2064,19 @@ folder	Conflicts	התנגשויות
 	Drop to add them to {folder}	שחררו כדי להוסיף אותם אל {folder}
 	Added to {folder}: {n}	נוספו אל {folder}: {n}
 	Couldn't add {file} to {folder}: {error}	לא ניתן להוסיף את {file} אל {folder}: {error}
+	Recover deleted items	שחזור פריטים שנמחקו
+	Recover deleted items…	שחזור פריטים שנמחקו…
+	This server doesn't keep deleted items for you to bring back.	השרת הזה אינו שומר פריטים שנמחקו שאפשר לשחזר.
+	Connect first: the server keeps these items.	יש להתחבר קודם: השרת הוא ששומר את הפריטים האלה.
+	The list isn't open any more.	הרשימה אינה פתוחה עוד.
+	This item will be deleted for good. Nobody can bring it back, and this can't be undone.	הפריט הזה יימחק לצמיתות. אי אפשר יהיה לשחזר אותו, ואי אפשר לבטל את הפעולה.
+	These {n} items will be deleted for good. Nobody can bring them back, and this can't be undone.	{n} הפריטים האלה יימחקו לצמיתות. אי אפשר יהיה לשחזר אותם, ואי אפשר לבטל את הפעולה.
+	Purge	מחיקה סופית
+	Restore	שחזור
+	Search the deleted items	חיפוש בפריטים שנמחקו
+	The server said: {error}	תשובת השרת: {error}
+	Purged: {n}	נמחקו סופית: {n}
+	Restored into Deleted Items: {n}	שוחזרו אל הפריטים שנמחקו: {n}
+	The server keeps nothing deleted for good for this account.	השרת אינו שומר עבור החשבון הזה שום דבר שנמחק לצמיתות.
+	{n} items	{n} פריטים
+	Deleted	נמחק
