@@ -46,6 +46,7 @@ pub use text::*;
 pub use todo::write_task;
 use whole::*;
 use zones::*;
+pub use zones::{ZoneChange, ZoneRule, wall_clock, zone_rule};
 
 /// The most occurrences produced for one event in one expansion.
 const MAX_OCCURRENCES: usize = 2000;

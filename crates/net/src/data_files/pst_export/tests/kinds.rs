@@ -225,11 +225,15 @@ fn report(id: &str, kind: &str, status: &str, returned: (&str, &[u8])) -> Vec<u8
     raw
 }
 
-/// A delivery report and a read receipt keep a report's class, and come back as reports, the
-/// returned message attached as a message.
+/// A meeting request is meeting mail with its calendar; a delivery report and a read receipt keep
+/// a report's class, and come back as reports, the returned message attached as a message.
 #[test]
-fn reports_keep_their_classes() {
+fn meeting_mail_and_reports_keep_their_classes() {
     let dir = scratch("reports");
+    let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:review@studio.example\r\nDTSTAMP:20261101T100000Z\r\n\
+               DTSTART:20261110T100000Z\r\nDTEND:20261110T110000Z\r\nSUMMARY:Review\r\nORGANIZER:mailto:riley@studio.example\r\n\
+               ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:ana@studio.example\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let invite = build(&draft("Review", "Join us.", vec![file("invite.ics", "text/calendar; method=REQUEST", ics.as_bytes())]), "m1@studio.example");
     let sent = build(&draft("Proposal", "Here it is.", Vec::new()), "p1@studio.example");
     let dsn = "Reporting-MTA: dns; mx.studio.example\r\n\r\nFinal-Recipient: rfc822; nobody@studio.example\r\nAction: failed\r\nStatus: 5.1.1";
     let mdn =
@@ -237,9 +241,10 @@ fn reports_keep_their_classes() {
     let bounce = report("ndr", "delivery-status", dsn, ("message/rfc822", &sent));
     let head = sent.get(..sent.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 2).unwrap();
     let receipt = report("read", "disposition-notification", mdn, ("text/rfc822-headers", head));
-    let (path, back) = round_trip(&dir, &[bounce, receipt]);
+    let (path, back) = round_trip(&dir, &[invite, bounce, receipt]);
 
     let class = |subject: &str| text(in_file(&path, subject).properties().get(0x001A));
+    assert_eq!(class("Review").as_deref(), Some("IPM.Schedule.Meeting.Request"));
     assert_eq!(class("Report ndr").as_deref(), Some("REPORT.IPM.Note.NDR"));
     assert_eq!(class("Report read").as_deref(), Some("REPORT.IPM.Note.IPNRN"));
     // The bounce's returned message is an attached message in the file.
@@ -247,6 +252,10 @@ fn reports_keep_their_classes() {
     let attached = files.iter().find_map(|a| a.embedded_message()).unwrap();
     assert_eq!(text(attached.properties().get(0x0037)).as_deref(), Some("Proposal"));
 
+    let raw = imported(&back, "Review");
+    let p = mime::parse(&raw).unwrap();
+    let cal = p.attachments.iter().find(|a| a.mime.starts_with("text/calendar")).unwrap();
+    assert!(mime::attachment_text(&raw, cal.index).unwrap().contains("METHOD:REQUEST"));
     for (subject, kind, returned) in
         [("Report ndr", "delivery-status", "message/rfc822"), ("Report read", "disposition-notification", "text/rfc822-headers")]
     {
