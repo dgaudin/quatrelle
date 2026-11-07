@@ -121,6 +121,38 @@ impl Data {
                     None => not_found(),
                 }
             }
+            ("GET", ["me", "mailFolders", "recoverableitemsdeletions", "messages"]) => {
+                let mut list: Vec<&Msg> = self.recoverable.iter().collect();
+                list.sort_by(|a, b| b.received.cmp(&a.received));
+                let top: usize = q("$top").and_then(|t| t.parse().ok()).unwrap_or(10);
+                let skip: usize = q("$skip").and_then(|s| s.parse().ok()).unwrap_or(0);
+                let page: Vec<Value> = list.iter().skip(skip).take(top).map(|m| self.message_json(m)).collect();
+                let mut v = json!({ "value": page });
+                if skip + top < list.len() {
+                    v["@odata.nextLink"] = json!(format!("{base}{path}?$skip={}", skip + top));
+                }
+                ok(v)
+            }
+            ("POST", ["me", "messages", id, "permanentDelete"]) => {
+                let id = plain_id(id).to_string();
+                let before = self.recoverable.len() + self.messages.len();
+                self.recoverable.retain(|m| m.id != id);
+                self.messages.retain(|m| m.id != id);
+                if before == self.recoverable.len() + self.messages.len() { not_found() } else { (204, Vec::new(), "text/plain") }
+            }
+            ("POST", ["me", "messages", id, "move"]) if self.recoverable.iter().any(|m| m.id == plain_id(id)) => {
+                let dest = input["destinationId"].as_str().and_then(|d| self.resolve(d));
+                let at = self.recoverable.iter().position(|m| m.id == plain_id(id));
+                match (dest, at) {
+                    (Some(d), Some(at)) => {
+                        let mut m = self.recoverable.remove(at);
+                        m.folder = d;
+                        self.messages.push(m);
+                        ok(json!({ "id": id }))
+                    }
+                    _ => not_found(),
+                }
+            }
             ("GET", ["me", "mailFolders", id, "messages"]) => {
                 let Some(id) = self.resolve(id) else { return not_found() };
                 let mut list: Vec<&Msg> = self.messages.iter().filter(|m| m.folder == id).collect();
@@ -244,7 +276,9 @@ impl Data {
             },
             ("DELETE", ["me", "messages", id]) => {
                 let id = plain_id(id).to_string();
-                self.messages.retain(|m| m.id != id);
+                let (gone, kept): (Vec<Msg>, Vec<Msg>) = std::mem::take(&mut self.messages).into_iter().partition(|m| m.id == id);
+                self.messages = kept;
+                self.recoverable.extend(gone);
                 (204, Vec::new(), "text/plain")
             }
             ("POST", ["me", "messages", id, "createReply"]) => {

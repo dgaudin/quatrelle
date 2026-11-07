@@ -208,6 +208,9 @@ impl Data {
             // What changed since a state: here the state is the folder as it was (its messages'
             // ids and marks), and the changes are what differs now — as Exchange answers them.
             "SyncFolderItems" => out.extend(self.sync_folder_items(op)),
+            "FindItem" if op.find("DistinguishedFolderId").is_some_and(|f| f.attr("Id") == Some("recoverableitemsdeletions")) => {
+                out.push(self.recoverable_page(op));
+            }
             "FindItem" => {
                 // A folder the mailbox hasn't (a Notes folder, say): as Exchange answers.
                 let wanted_folders: Vec<String> =
@@ -632,6 +635,15 @@ impl Data {
                 let to = op.child("ToFolderId").and_then(|t| t.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 for id in ids(op.child("ItemIds")) {
                     let new = self.id("I");
+                    // Out of Recoverable Items: back into a folder, as Recover Deleted Items does.
+                    if let Some(at) = self.recoverable.iter().position(|i| i.id == id) {
+                        let mut it = self.recoverable.remove(at);
+                        it.id = new.clone();
+                        it.folder = to.clone();
+                        self.items.push(it);
+                        out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{new}\"/></t:Message></m:Items>")));
+                        continue;
+                    }
                     match self.items.iter_mut().find(|i| i.id == id) {
                         Some(it) => {
                             // Exchange gives a moved item a new id.
@@ -653,6 +665,14 @@ impl Data {
                     let task = self.pim.iter().any(|(i, _, el)| *i == id && el.name == "Task");
                     if task && op.attr("AffectedTaskOccurrences").is_none() {
                         out.push(err("ErrorInvalidRequest"));
+                        continue;
+                    }
+                    // Purged from Recoverable Items (`HardDelete`): out of the user's reach.
+                    if op.attr("DeleteType") == Some("HardDelete") && self.recoverable.iter().any(|i| i.id == id) {
+                        let (gone, kept): (Vec<It>, Vec<It>) = std::mem::take(&mut self.recoverable).into_iter().partition(|i| i.id == id);
+                        self.recoverable = kept;
+                        self.purged.extend(gone);
+                        out.push(ok(String::new()));
                         continue;
                     }
                     self.take_items(op, |i| i.id == id);

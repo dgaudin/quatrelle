@@ -48,7 +48,7 @@ pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row,
 use listing::{Preview, arranged, flag_rank, person, size_group};
 pub use mailboxes::{
     CompactPhase, Compacted, DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL,
-    Sizes, Source, Suggestion, directory_people, fill_name,
+    RecoverBlock, Recovered, Recovering, Sizes, Source, Suggestion, directory_people, fill_name,
 };
 use mailboxes::{Contacts, bare_name, directory_key};
 pub use opening::SenderMarks;
@@ -417,6 +417,8 @@ pub struct Session {
     pub compacted: Option<Compacted>,
     /// Folder Size: each of an account's folders' sizes here and on its server.
     pub sizes: Option<FolderSizes>,
+    /// Recover deleted items: the window listing what the server keeps of an account's deletions.
+    pub recovering: Option<Recovering>,
     /// What the language model was last asked about the message being read.
     pub assistant: Option<Assistant>,
     /// The models the language model's server offers (File › Options › Assistant).
@@ -584,6 +586,7 @@ impl Session {
             compact_phase: CompactPhase::Starting,
             compacted: None,
             sizes: None,
+            recovering: None,
             assistant: None,
             llm_models: None,
             oauth_available: Vec::new(),
