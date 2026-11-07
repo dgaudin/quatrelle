@@ -289,9 +289,11 @@
 	Theme	Thème
 	Then	Alors
 	These {n} messages will be deleted for good. This can't be undone.	Ces {n} messages seront supprimés définitivement. Cette action est irréversible.
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	Ces {n} messages seront supprimés d’ici, mais le serveur Exchange les garde un temps parmi ses éléments récupérables.
 	This folder	Ce dossier
 	This message couldn't be downloaded: {error}	Impossible de télécharger ce message : {error}
 	This message will be deleted for good. This can't be undone.	Ce message sera supprimé définitivement. Cette action est irréversible.
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	Ce message sera supprimé d’ici, mais le serveur Exchange le garde un temps parmi ses éléments récupérables.
 	This weekend	Ce week-end
 	Three weeks ago	Il y a trois semaines
 	Thu	jeu.

@@ -41,7 +41,7 @@ fn press(ctx: &egui::Context, a: &mut MailApp, k: Key, m: Modifiers) {
 }
 
 fn asking(a: &MailApp, n: usize) -> bool {
-    matches!(a.ui.dialog, Some(Dialog::ConfirmDelete { count }) if count == n)
+    matches!(a.ui.dialog, Some(Dialog::ConfirmDelete { count, .. }) if count == n)
 }
 
 #[test]
@@ -270,5 +270,43 @@ fn elsewhere_the_rows_button_and_menu_move_without_asking() {
     assert!(a.ui.dialog.is_none() && !kept(&a, "INBOX") && kept(&a, "Trash"), "moved, unasked");
     menu_delete(&ctx, &mut a, OTHER);
     assert!(a.ui.dialog.is_none() && !kept_as(&a, "INBOX", OTHER) && kept_as(&a, "Trash", OTHER), "moved, unasked");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Whether the window shows a text saying `what`.
+fn shows(ctx: &egui::Context, a: &mut MailApp, what: &str) -> bool {
+    frame_shapes(ctx, a, vec![], egui::vec2(1280.0, 800.0)).iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text().contains(what)))
+}
+
+fn sample_config(a: &mut MailApp, change: impl Fn(&mut quatrelle_engine::model::AccountConfig)) {
+    change(&mut a.session.accounts.iter_mut().find(|x| x.config.id == "sample").expect("the sample account").config);
+}
+
+/// The question tells the truth about Exchange: mail deleted for good there is kept a while
+/// among the server's recoverable items; anywhere else (IMAP here) it can't be undone.
+#[test]
+fn the_question_says_an_exchange_server_keeps_the_mail_a_while() {
+    let (mut a, dir, ctx) = opened("for-good-exchange");
+    for (ews, graph) in [(true, false), (false, true)] {
+        sample_config(&mut a, |c| {
+            c.ews = ews.then(|| "https://mail.contoso.example/EWS/Exchange.asmx".into());
+            c.graph = graph.then(|| "https://graph.microsoft.com/v1.0".into());
+        });
+        press(&ctx, &mut a, Key::Delete, Modifiers::SHIFT);
+        assert!(asking(&a, 1));
+        assert!(shows(&ctx, &mut a, "the Exchange server keeps it for a while"), "EWS {ews}, Graph {graph}: kept a while");
+        assert!(!shows(&ctx, &mut a, "This can't be undone."));
+        press(&ctx, &mut a, Key::Escape, Modifiers::NONE);
+    }
+    sample_config(&mut a, |c| {
+        c.ews = None;
+        c.graph = None;
+        c.imap.host = "imap.studio.example".into();
+    });
+    press(&ctx, &mut a, Key::Delete, Modifiers::SHIFT);
+    assert!(asking(&a, 1));
+    assert!(shows(&ctx, &mut a, "This message will be deleted for good. This can't be undone."), "IMAP: for good");
+    assert!(!shows(&ctx, &mut a, "Exchange"));
+    press(&ctx, &mut a, Key::Escape, Modifiers::NONE);
     let _ = std::fs::remove_dir_all(dir);
 }

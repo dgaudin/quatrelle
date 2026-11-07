@@ -228,7 +228,9 @@ pub(crate) fn tour() {
         for d in [
             Dialog::add_account(),
             Dialog::move_to(),
-            Dialog::ConfirmDelete { count: 2 },
+            Dialog::ConfirmDelete { count: 2, exchange: false },
+            Dialog::ConfirmDelete { count: 1, exchange: true },
+            Dialog::ConfirmDelete { count: 2, exchange: true },
             Dialog::LostOnClose { unsent: 2, changes: 1, sending: 1 },
             Dialog::ConfirmDeleteContact { uid: "zoe".into(), name: "Zoe Park".into() },
             Dialog::DeleteOccurrence { uid: "standup".into(), occurrence: 0, name: "Team stand-up".into() },

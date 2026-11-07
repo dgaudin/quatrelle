@@ -289,9 +289,11 @@
 	Theme	主题
 	Then	则
 	These {n} messages will be deleted for good. This can't be undone.	这 {n} 封邮件将被永久删除。此操作无法撤消。
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	这 {n} 封邮件将从这里删除，但 Exchange 服务器会在可恢复项目中保留一段时间。
 	This folder	此文件夹
 	This message couldn't be downloaded: {error}	无法下载此邮件: {error}
 	This message will be deleted for good. This can't be undone.	此邮件将被永久删除。此操作无法撤消。
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	此邮件将从这里删除，但 Exchange 服务器会在可恢复项目中保留一段时间。
 	This weekend	本周末
 	Three weeks ago	三周前
 	Thu	周四

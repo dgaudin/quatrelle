@@ -289,9 +289,11 @@
 	Theme	السمة
 	Then	ثم
 	These {n} messages will be deleted for good. This can't be undone.	ستُحذف هذه الرسائل ({n}) نهائيًا. لا يمكن التراجع عن ذلك.
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	ستُحذف هذه الرسائل ({n}) من هنا، لكن خادم Exchange يحتفظ بها مدة بين عناصره القابلة للاسترداد.
 	This folder	هذا المجلد
 	This message couldn't be downloaded: {error}	تعذّر تنزيل هذه الرسالة: {error}
 	This message will be deleted for good. This can't be undone.	ستُحذف هذه الرسالة نهائيًا. لا يمكن التراجع عن ذلك.
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	ستُحذف هذه الرسالة من هنا، لكن خادم Exchange يحتفظ بها مدة بين عناصره القابلة للاسترداد.
 	This weekend	عطلة نهاية هذا الأسبوع
 	Three weeks ago	قبل ثلاثة أسابيع
 	Thu	الخميس

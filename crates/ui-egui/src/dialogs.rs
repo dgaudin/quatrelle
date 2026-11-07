@@ -60,6 +60,9 @@ pub enum Dialog {
     },
     ConfirmDelete {
         count: usize,
+        /// All of them on Exchange (EWS or Microsoft 365), whose server keeps them a while among
+        /// its recoverable items: the question says so, not "this can't be undone".
+        exchange: bool,
     },
     /// Closing Quatrelle with messages being written (how many): save them as drafts?
     SaveOnClose(usize),

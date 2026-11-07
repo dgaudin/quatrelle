@@ -289,9 +289,11 @@
 	Theme	Thema
 	Then	Dan
 	These {n} messages will be deleted for good. This can't be undone.	Deze {n} berichten worden definitief verwijderd. Dit kan niet ongedaan worden gemaakt.
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	Deze {n} berichten worden hier verwijderd, maar de Exchange-server bewaart ze nog een tijd bij zijn herstelbare items.
 	This folder	Deze map
 	This message couldn't be downloaded: {error}	Dit bericht kon niet worden gedownload: {error}
 	This message will be deleted for good. This can't be undone.	Dit bericht wordt definitief verwijderd. Dit kan niet ongedaan worden gemaakt.
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	Dit bericht wordt hier verwijderd, maar de Exchange-server bewaart het nog een tijd bij zijn herstelbare items.
 	This weekend	Dit weekend
 	Three weeks ago	Drie weken geleden
 	Thu	do

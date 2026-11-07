@@ -289,9 +289,11 @@
 	Theme	Tema
 	Then	Entonces
 	These {n} messages will be deleted for good. This can't be undone.	Estos {n} mensajes se eliminarán definitivamente. No se puede deshacer.
+	These {n} messages will be deleted from here, but the Exchange server keeps them for a while among its recoverable items.	Estos {n} mensajes se eliminarán de aquí, pero el servidor Exchange los conserva un tiempo entre sus elementos recuperables.
 	This folder	Esta carpeta
 	This message couldn't be downloaded: {error}	No se pudo descargar este mensaje: {error}
 	This message will be deleted for good. This can't be undone.	Este mensaje se eliminará definitivamente. No se puede deshacer.
+	This message will be deleted from here, but the Exchange server keeps it for a while among its recoverable items.	Este mensaje se eliminará de aquí, pero el servidor Exchange lo conserva un tiempo entre sus elementos recuperables.
 	This weekend	Este fin de semana
 	Three weeks ago	Hace tres semanas
 	Thu	jue
