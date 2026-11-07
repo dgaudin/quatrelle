@@ -19,7 +19,13 @@ impl Worker {
             return;
         }
         if let Some(raw) = self.store.read_body(&key) {
+            // Brought by a copy of the connection meanwhile: its summary is filled now that this
+            // connection is free to save the list.
+            let filled = if self.rest.owes(&key) { crate::sync::keep_source(&self.store, &key, &raw).ok().flatten() } else { None };
             self.sink.emit(Event::Body { key, raw });
+            if let Some(summary) = filled {
+                self.sink.emit(Event::Filled { summary: Box::new(summary) });
+            }
             return;
         }
         let store = self.store.clone();
@@ -465,6 +471,9 @@ impl Opened {
             return Ok(Brought::Stopped);
         }
         self.store.write_body(key, &raw).map_err(|e| (false, e.into()))?;
+        // The summary isn't filled here (the main connection may be saving the folder's list):
+        // [`Worker::fetch`] does it when the message comes to it, the work done.
+        self.rest.owe(key);
         log::info!(
             "{}: downloaded on a copy of the connection while the main one works: {} bytes in {} ms",
             named(key),

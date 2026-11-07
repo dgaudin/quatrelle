@@ -170,3 +170,41 @@ fn a_big_message_opened_during_a_sync_shows_its_text_at_once() {
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A message a copy of the connection brought while the main one was syncing has its summary
+/// filled all the same (preview, files, size), by the main connection once it is free: the copy
+/// never writes the folder's list, which the sync may be saving.
+#[test]
+fn a_message_brought_by_a_copy_has_its_summary_filled() {
+    let st = State::new();
+    st.lock().unwrap().add("INBOX", "Opened during the sync", &[]);
+    st.lock().unwrap().add("Archive", "Old", &[]);
+    let store = store("imap-busy-open-filled");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.opts.prefetch = 0;
+    pool.submit(Job::Start { account: account("a1", serve_tcp(&st)), password: Some(Secret("pw".into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let key = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
+    assert!(store.load_folder("a1", "INBOX").unwrap().messages[0].preview.is_empty(), "not filled yet");
+    st.lock().unwrap().stall_on = Some(("SELECT \"Archive\"".into(), Duration::from_secs(3)));
+    pool.submit(Job::SyncAll { account: "a1".into() });
+    until(&pool, "the Archive's sync", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { folder }, .. } if folder == "Archive"));
+    pool.submit(Job::FetchBody { key: key.clone() });
+    // Whatever the order of the events, both come.
+    let mut told = (false, false);
+    let end = Instant::now() + Duration::from_secs(20);
+    while told != (true, true) {
+        assert!(Instant::now() < end, "never filled: {told:?}");
+        if let Some(e) = pool.wait(Duration::from_millis(100)) {
+            match e {
+                Event::Body { key: k, .. } if k == key => told.0 = true,
+                Event::Filled { summary } if summary.key == key => told.1 = true,
+                _ => {}
+            }
+        }
+    }
+    let kept = store.load_folder("a1", "INBOX").unwrap();
+    assert!(kept.messages.iter().any(|m| m.key == key && !m.preview.is_empty()), "the saved summary is filled");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
