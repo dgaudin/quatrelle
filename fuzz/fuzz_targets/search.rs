@@ -18,12 +18,14 @@ fuzz_target!(|data: &[u8]| {
     // A clock read from the input too, so dates are placed at the ends of time.
     let now = data.get(..8).and_then(|b| b.try_into().ok()).map_or(0, i64::from_le_bytes);
     q.resolve(&Clock::new(now, 3600));
-    let _ = q.dates_hold(now);
     let _ = q.index_words();
     let _ = q.needs_body();
-    // The query checked against a message whose fields and body are the same text, then the
-    // text folded and indexed.
-    let m = quatrelle_model::Summary { subject: text.to_string(), preview: text.to_string(), ..Default::default() };
+    // The query checked against a message whose fields and body are the same text, its dates
+    // from the input too (sent at `now`, received at the next eight bytes), then the text folded
+    // and indexed.
+    let received = data.get(8..16).and_then(|b| b.try_into().ok()).map_or(0, i64::from_le_bytes);
+    let m = quatrelle_model::Summary { subject: text.to_string(), preview: text.to_string(), date: now, received, ..Default::default() };
+    let _ = q.dates_hold(&m);
     let _ = q.matches(&Doc { summary: &m, body: Some(&text), indexed: false, awaiting: data.len() % 2 == 0 });
     let _ = q.matches(&Doc { summary: &m, body: None, indexed: true, awaiting: false });
     let _ = tokens(&fold_word(&text)).count();
