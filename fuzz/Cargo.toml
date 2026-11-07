@@ -27,6 +27,7 @@ bin = [
     { name = "pst_pim_text", bench = false, test = false, doc = false, path = "fuzz_targets/pst/pim_text.rs" }, # what an export keeps in a contact's and a task's text, and a task's rule as a pattern
     { name = "search", bench = false, test = false, doc = false, path = "fuzz_targets/search.rs" }, # the search box and its filters
     { name = "signature", bench = false, test = false, doc = false, path = "fuzz_targets/signature.rs" }, # the signature read against the sender
+    { name = "scam_answer", bench = false, test = false, doc = false, path = "fuzz_targets/scam_answer.rs" }, # the scam check: a model's answer read as hostile text, the request built from the same bytes, the local signs
     { name = "text_first", bench = false, test = false, doc = false, path = "fuzz_targets/text_first.rs" }, # Exchange's and Graph's answers, read as a message's text
     { name = "tnef", bench = false, test = false, doc = false, path = "fuzz_targets/tnef.rs" }, # Outlook's winmail.dat and compressed RTF
     { name = "trust", bench = false, test = false, doc = false, path = "fuzz_targets/trust.rs" }, # the URLs and hosts servers hand out

@@ -228,3 +228,13 @@ proptest! {
         prop_assert!(lookalike::lookup_name(&s).map_or(0, |n| n.chars().count()) <= 100);
     }
 }
+
+proptest! {
+    /// A model's answer is hostile text: reading it never panics, and what it gives is within bounds.
+    #[test]
+    fn reading_any_answer_never_panics(text in "(?s).{0,65536}") {
+        if let Some((score, reasons)) = quatrelle_model::scam::read_answer(&text) {
+            prop_assert!(score <= 100 && reasons.len() <= 3 && reasons.iter().all(|r| r.chars().count() <= 120));
+        }
+    }
+}
