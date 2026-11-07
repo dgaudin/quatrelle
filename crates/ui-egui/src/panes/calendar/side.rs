@@ -179,11 +179,11 @@ pub(super) fn calendar_row(
     if web.is_some() {
         let id = c.id.clone();
         row.response.interact(Sense::click()).context_menu(|ui| {
-            if ui.button(tl!("Refresh")).clicked() {
+            if ui.button((widgets::menu_icon(Some(Icon::Sync)), tl!("Refresh"))).clicked() {
                 acts.push(Action::Run("calendar.refreshSubscribed", json!({"calendar": id})));
                 ui.close();
             }
-            if ui.button(tl!("Remove this calendar")).clicked() {
+            if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Remove this calendar"))).clicked() {
                 acts.push(Action::Run("calendar.unsubscribe", json!({"calendar": id})));
                 ui.close();
             }
@@ -193,7 +193,7 @@ pub(super) fn calendar_row(
         && s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(&email)))
     {
         row.response.interact(Sense::click()).context_menu(|ui| {
-            if ui.button(tl!("Remove this calendar")).clicked() {
+            if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Remove this calendar"))).clicked() {
                 acts.push(Action::Run("calendar.closeShared", json!({"email": email})));
                 ui.close();
             }
