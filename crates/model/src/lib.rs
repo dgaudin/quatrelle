@@ -20,7 +20,7 @@ pub mod lookalike;
 pub mod mailto;
 pub mod organize;
 pub mod pim;
-pub mod scam;
+pub use lookalike::scam;
 pub mod search;
 pub mod thread;
 pub mod vcard;
