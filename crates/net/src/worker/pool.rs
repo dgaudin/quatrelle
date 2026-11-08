@@ -14,6 +14,8 @@ pub(super) enum Edit {
     Apply(String, Op, Option<Sender<Job>>, u64),
     /// Message files to put into a folder of an account on this computer.
     File(String, String, Vec<String>),
+    /// IMAP mail to archive for an account whose worker isn't running.
+    Archive(Box<AccountConfig>, Vec<MessageKey>, String),
     /// Answered once every change handed over before it is in the cache ([`edits_written`]).
     Flush(Sender<()>),
 }
@@ -41,6 +43,13 @@ fn edit_writer(store: Store, sink: Sink, rx: Receiver<Edit>) {
             Edit::File(account, folder, paths) => {
                 if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| changes::file_here(&store, &sink, &account, &folder, &paths))).is_err() {
                     log::error!("{account}: putting message files in a folder failed unexpectedly");
+                }
+            }
+            Edit::Archive(account, keys, to_account) => {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| changes::archive_here(&store, &sink, &account, keys, &to_account)))
+                    .is_err()
+                {
+                    log::error!("{}: archiving failed unexpectedly", account.id);
                 }
             }
             Edit::Flush(done) => {
@@ -615,6 +624,25 @@ impl Pool {
                     .map(|email| quatrelle_model::scheduling::Availability { email, slots: Vec::new(), error: Some(error.clone()) })
                     .collect();
                 self.sink.emit(Event::Availability { account, from, to, people, error: Some(error) });
+            }
+            // Working offline: what the cache keeps whole is archived, the deletions wait in the journal.
+            Job::Archive { account, keys, to_account } if !self.workers.contains_key(&account) => {
+                let Some(acc) = self.configs.get(&account).cloned() else {
+                    let kept = keys.into_iter().map(|k| (k, "the account isn't known".to_string())).collect();
+                    return self.sink.emit(Event::Archived { account, moved: Vec::new(), kept });
+                };
+                let edit = Edit::Archive(Box::new(acc), keys, to_account);
+                let unsent = match &self.edits {
+                    Some(tx) => tx.send(edit).err().map(|mpsc::SendError(e)| e),
+                    None => Some(edit),
+                };
+                if let Some(Edit::Archive(acc, keys, to_account)) = unsent {
+                    changes::archive_here(&self.store, &self.sink, &acc, keys, &to_account);
+                }
+            }
+            Job::PutBack { account, keys, .. } if !self.workers.contains_key(&account) => {
+                let kept = keys.into_iter().map(|k| (k, "the account is offline".to_string())).collect();
+                self.sink.emit(Event::PutBack { account, back: Vec::new(), kept });
             }
             // The change goes into the cache and the journal here, on the caller's thread, before
             // the account thread is free: it may be minutes into a full sync. Waiting meant a

@@ -342,6 +342,15 @@ pub enum Job {
     /// Put message files into a folder of the account, as mail received and read: `.eml` as they
     /// are, Outlook's `.msg` made standard messages. Answered by [`Event::MessagesFiled`].
     FileMessages { account: String, folder: String, paths: Vec<String> },
+    /// Move IMAP mail of `account` into the Archives account `to_account` on this computer: each
+    /// message copied, read back from there and compared, and only then deleted on the server
+    /// (through the account's journal, so a lost connection only delays it). At most 500 keys of
+    /// that one account; answered by [`Event::Archived`].
+    Archive { account: String, keys: Vec<MessageKey>, to_account: String },
+    /// Put archived mail (`keys`, in the Archives account) back on `account`'s server, into its
+    /// folder `to_folder`; each leaves Archives only once the server has it. Answered by
+    /// [`Event::PutBack`].
+    PutBack { account: String, keys: Vec<MessageKey>, to_folder: String },
     /// Read a message file (an Outlook `.msg`) as a standard message, to show it. Answered by
     /// [`Event::MessageFileRead`].
     ReadMessageFile { path: String },
@@ -493,6 +502,8 @@ impl Job {
             | Job::SyncCalendars { account, .. }
             | Job::ImportPst { account, .. }
             | Job::FileMessages { account, .. }
+            | Job::Archive { account, .. }
+            | Job::PutBack { account, .. }
             | Job::CompactDataFile { account }
             | Job::LocalFolderSizes { account }
             | Job::ServerFolderSizes { account }

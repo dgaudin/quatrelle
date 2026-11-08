@@ -10,6 +10,7 @@ mod filing;
 mod recovering;
 mod rules;
 
+pub(super) use archive::archive_here;
 pub(super) use filing::{file_here, file_name};
 
 impl Worker {
@@ -271,6 +272,8 @@ impl Worker {
             | Job::Pgp { .. }
             | Job::CheckUpdates
             | Job::StopSearch => {}
+            Job::Archive { keys, to_account, .. } => self.archive(keys, to_account),
+            Job::PutBack { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
         }
     }

@@ -19,6 +19,21 @@ pub enum Event {
         account: String,
         folders: Vec<Folder>,
     },
+    /// What [`Job::Archive`](crate::Job::Archive) did: `moved` pairs each message's key (now gone
+    /// from the account, or on its way out through the journal) with its key in the Archives
+    /// account; `kept` are those left where they were, with why (a message, in English).
+    Archived {
+        account: String,
+        moved: Vec<(crate::MessageKey, crate::MessageKey)>,
+        kept: Vec<(crate::MessageKey, String)>,
+    },
+    /// What [`Job::PutBack`](crate::Job::PutBack) did: `back` are the archived messages the server
+    /// has again, with their UID there when it is known; `kept` stay in Archives, with why.
+    PutBack {
+        account: String,
+        back: Vec<(crate::MessageKey, Option<u32>)>,
+        kept: Vec<(crate::MessageKey, String)>,
+    },
     /// A folder's cached contents changed on disk: reload it.
     FolderChanged {
         account: String,
