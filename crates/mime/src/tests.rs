@@ -47,6 +47,7 @@ mod parts_listed;
 mod reply_layout;
 mod report;
 mod report_status;
+mod table_footer;
 mod tables_left_open;
 mod text_attach;
 

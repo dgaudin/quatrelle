@@ -700,6 +700,8 @@ pub fn html_layout(html: &str) -> Vec<Block> {
     if crate::html::too_deep(html) {
         return Vec::new();
     }
+    // A table's footer at its end, as in the message's text (`html::footers_last`).
+    let html = &*crate::html::footers_last(html);
     let built = std::panic::catch_unwind(|| {
         let root = parse(html);
         let mut css = String::new();

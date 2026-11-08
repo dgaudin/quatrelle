@@ -7,6 +7,8 @@ use super::*;
 use std::collections::{HashMap, VecDeque};
 
 mod deep;
+mod footers;
+pub(crate) use footers::footers_last;
 pub(crate) mod links;
 mod pairs;
 mod rules;
@@ -270,6 +272,8 @@ pub fn html_to_rich(html: &str) -> RichText {
         None => html,
     };
     let html = flat_if_too_deep(html);
+    let html = html.as_ref();
+    let html = footers_last(html);
     let html = html.as_ref();
     // Wide enough that paragraphs stay one line each (the UI wraps them to the pane). Sizes,
     // typefaces and CSS bold are marked first: the converter keeps none of them.
@@ -607,6 +611,8 @@ pub fn html_images(html: &str) -> Vec<String> {
 pub(crate) fn html_to_words(html: &str) -> String {
     let html = flat_if_too_deep(html);
     let html = html.as_ref();
+    let html = footers_last(html);
+    let html = html.as_ref();
     let result = std::panic::catch_unwind(|| {
         html2text::config::with_decorator(html2text::render::TrivialDecorator::new()).raw_mode(true).string_from_read(html.as_bytes(), 400)
     });
@@ -656,6 +662,8 @@ pub fn html_to_text(html: &str) -> String {
         None => html,
     };
     let html = flat_if_too_deep(html);
+    let html = html.as_ref();
+    let html = footers_last(html);
     let html = html.as_ref();
     // Without table borders: mail lays itself out with tables, which came out boxed in `─` and
     // `│` rules (issue #41).
