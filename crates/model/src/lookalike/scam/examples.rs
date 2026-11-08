@@ -15,10 +15,18 @@ pub struct Example {
     pub scam: bool,
     /// Whether it is written in French.
     pub french: bool,
+    /// The name of the file it comes with, empty for none (a message saying "attached" with
+    /// nothing attached reads as a scam).
+    pub attachment: &'static str,
 }
 
 const fn ex(subject: &'static str, from_name: &'static str, from: &'static str, text: &'static str, scam: bool, french: bool) -> Example {
-    Example { subject, from_name, from, text, scam, french }
+    Example { subject, from_name, from, text, scam, french, attachment: "" }
+}
+
+/// The example with a file attached.
+const fn with_file(e: Example, attachment: &'static str) -> Example {
+    Example { attachment, ..e }
 }
 
 /// The examples, scams first.
@@ -135,13 +143,16 @@ pub const EXAMPLES: [Example; 20] = [
         false,
         true,
     ),
-    ex(
-        "Facture de novembre de votre fournisseur habituel",
-        "Marc Lefèvre",
-        "marc.lefevre@papeterie-lefevre.example",
-        "Bonjour, ci-joint la facture de novembre, aux mêmes conditions que d'habitude et avec les mêmes coordonnées que les mois précédents. N'hésitez pas à m'appeler pour la moindre question.",
-        false,
-        true,
+    with_file(
+        ex(
+            "Facture de novembre – Papeterie Lefèvre",
+            "Marc Lefèvre",
+            "marc.lefevre@papeterie-lefevre.example",
+            "Bonjour, ci-joint la facture de novembre, aux mêmes conditions que d'habitude et avec les mêmes coordonnées que les mois précédents. N'hésitez pas à m'appeler pour la moindre question.",
+            false,
+            true,
+        ),
+        "Facture-2026-11-047.pdf",
     ),
     ex(
         "A question about next week's order",
@@ -175,12 +186,15 @@ pub const EXAMPLES: [Example; 20] = [
         false,
         false,
     ),
-    ex(
-        "Invoice for October",
-        "Nora Fields",
-        "nora.fields@print-supplies.example",
-        "Hello, the October invoice is attached, on the usual terms and with the same payment details as before. Please call me if anything looks off. Best wishes, Nora.",
-        false,
-        false,
+    with_file(
+        ex(
+            "Invoice for October",
+            "Nora Fields",
+            "nora.fields@print-supplies.example",
+            "Hello, the October invoice is attached, on the usual terms and with the same payment details as before. Please call me if anything looks off. Best wishes, Nora.",
+            false,
+            false,
+        ),
+        "Invoice-2026-10.pdf",
     ),
 ];

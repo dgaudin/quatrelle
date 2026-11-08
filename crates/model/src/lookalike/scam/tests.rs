@@ -87,6 +87,13 @@ fn the_examples_are_ten_and_ten_half_in_french() {
         assert_eq!(EXAMPLES.iter().filter(|e| e.scam == scam && e.french == french).count(), n, "scam {scam}, french {french}");
     }
     assert_eq!(EXAMPLES.iter().map(|e| e.subject).collect::<BTreeSet<_>>().len(), 20, "each its own");
+    // An ordinary message saying a file is attached comes with one (without, it reads as a scam:
+    // the French invoice scored 80 on a real model, 08/11), and no subject vouches for itself.
+    for e in EXAMPLES.iter().filter(|e| !e.scam) {
+        let says_attached = ["ci-joint", "attached"].iter().any(|w| e.text.contains(w));
+        assert_eq!(says_attached, !e.attachment.is_empty(), "{}", e.subject);
+        assert!(!e.subject.contains("habituel") && !e.subject.contains("usual"), "{}", e.subject);
+    }
     for e in &EXAMPLES {
         assert!(e.from.ends_with(".example") && e.from.contains('@'), "{}: addresses are under `example`", e.from);
         assert!(!e.subject.is_empty() && e.text.chars().count() > 60, "{}", e.subject);

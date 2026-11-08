@@ -106,6 +106,7 @@ impl Session {
             trial.result.secs = now - trial.began;
             return;
         };
+        let files: Vec<String> = if e.attachment.is_empty() { Vec::new() } else { vec![e.attachment.to_string()] };
         let facts = Facts {
             from_name: e.from_name,
             from: e.from,
@@ -115,7 +116,7 @@ impl Session {
             known: false,
             signs: &[],
             link_targets: &[],
-            attachment_names: &[],
+            attachment_names: &files,
             text: e.text,
         };
         trial.id = id;
