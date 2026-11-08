@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod archive;
 pub mod utf7;
 
 /// What a folder is for (RFC 6154 special-use attributes, or the usual names when a server has
