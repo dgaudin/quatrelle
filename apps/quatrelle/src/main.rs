@@ -95,6 +95,13 @@ struct WindowInput {
 
 #[cfg(windows)]
 impl eframe::ViewportHooks for WindowInput {
+    /// No one-pixel offset of the window's contents: see `desktop/window_frame.rs`.
+    #[cfg(windows)]
+    fn window_created(&self, _viewport: egui::ViewportId, window: &winit::window::Window) {
+        use winit::platform::windows::WindowExtWindows as _;
+        window.set_undecorated_shadow(false);
+    }
+
     fn raw_input(&self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         quatrelle_ui_egui::alt_codes(ctx, raw_input, self.alt_pages);
     }
