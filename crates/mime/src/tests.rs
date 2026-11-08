@@ -47,6 +47,7 @@ mod parts_listed;
 mod reply_layout;
 mod report;
 mod report_status;
+mod tables_left_open;
 mod text_attach;
 
 /// Issue #1: a signature copied from Outlook (Word's HTML on the clipboard, only the copied

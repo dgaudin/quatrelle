@@ -695,6 +695,11 @@ pub fn html_layout(html: &str) -> Vec<Block> {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
+    // Nested deeper than any mail is: no layout, its words read flat (the layout's time grows
+    // with each table nested, as the text converter's does).
+    if crate::html::too_deep(html) {
+        return Vec::new();
+    }
     let built = std::panic::catch_unwind(|| {
         let root = parse(html);
         let mut css = String::new();

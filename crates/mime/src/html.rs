@@ -6,6 +6,7 @@
 use super::*;
 use std::collections::{HashMap, VecDeque};
 
+mod deep;
 pub(crate) mod links;
 mod pairs;
 mod rules;
@@ -268,6 +269,8 @@ pub fn html_to_rich(html: &str) -> RichText {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
+    let html = flat_if_too_deep(html);
+    let html = html.as_ref();
     // Wide enough that paragraphs stay one line each (the UI wraps them to the pane). Sizes,
     // typefaces and CSS bold are marked first: the converter keeps none of them.
     // Lines across it (an `<hr>`, Outlook's border over a quoted message) are marked first.
@@ -602,6 +605,8 @@ pub fn html_images(html: &str) -> Vec<String> {
 /// with no marks at all (no `[…]` around links and pictures, no `#` before titles, no `**`).
 /// It is made for each message downloaded: raw mode lays out no columns.
 pub(crate) fn html_to_words(html: &str) -> String {
+    let html = flat_if_too_deep(html);
+    let html = html.as_ref();
     let result = std::panic::catch_unwind(|| {
         html2text::config::with_decorator(html2text::render::TrivialDecorator::new()).raw_mode(true).string_from_read(html.as_bytes(), 400)
     });
@@ -609,6 +614,17 @@ pub(crate) fn html_to_words(html: &str) -> String {
         Ok(Ok(s)) => tidy_text(&s),
         _ => String::new(),
     }
+}
+
+/// `html`, or its words and links flat when it nests deeper than any mail does
+/// ([`deep::too_deep`]): the text converter's time grows with each table nested.
+fn flat_if_too_deep(html: &str) -> std::borrow::Cow<'_, str> {
+    if deep::too_deep(html) { std::borrow::Cow::Owned(deep::flattened(html)) } else { std::borrow::Cow::Borrowed(html) }
+}
+
+/// Whether `html` nests deeper than any mail does, and is read flat ([`deep::too_deep`]).
+pub(crate) fn too_deep(html: &str) -> bool {
+    deep::too_deep(html)
 }
 
 /// How much of an HTML body is read for its preview, in characters, from its `<body>`: a first
@@ -639,6 +655,8 @@ pub fn html_to_text(html: &str) -> String {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
+    let html = flat_if_too_deep(html);
+    let html = html.as_ref();
     // Without table borders: mail lays itself out with tables, which came out boxed in `─` and
     // `│` rules (issue #41).
     let result = std::panic::catch_unwind(|| html2text::config::plain().no_table_borders().string_from_read(html.as_bytes(), 400));
