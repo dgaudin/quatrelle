@@ -84,8 +84,7 @@ pub fn misleading_links(pairs: &[(String, String)]) -> Vec<Sign> {
 }
 
 /// Extensions of files that hide or run code.
-const RISKY: [&str; 17] =
-    ["html", "htm", "shtml", "zip", "rar", "7z", "iso", "img", "exe", "scr", "js", "vbs", "lnk", "bat", "cmd", "ps1", "docm"];
+const RISKY: [&str; 17] = ["html", "htm", "shtml", "zip", "rar", "7z", "iso", "img", "exe", "scr", "js", "vbs", "lnk", "bat", "cmd", "ps1", "docm"];
 /// Office files with macros, and the extensions that make a double extension suspicious.
 const MACROS: [&str; 2] = ["xlsm", "pptm"];
 const EXECUTABLE: [&str; 8] = ["exe", "scr", "js", "vbs", "lnk", "bat", "cmd", "ps1"];

@@ -15,8 +15,8 @@
 
 mod external;
 mod people;
-pub mod signs;
 mod signature;
+pub mod signs;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;

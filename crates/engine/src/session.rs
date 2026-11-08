@@ -63,9 +63,8 @@ pub use prefs::{
 use searching::SearchIndex;
 pub use searching::{IndexWork, SearchClock};
 pub use security::{
-    DEFAULT_CAP,
-    AccountPgp, CardSearch, KnownCert, Learn, Learnt, Lock, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey,
-    PgpCard, Reach, RevocationCheck, SMIME_DOC, Scheme, Seal, Security, SignedBy, SmimeSettings,
+    AccountPgp, CardSearch, DEFAULT_CAP, KnownCert, Learn, Learnt, Lock, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys,
+    PersonKey, PgpCard, Reach, RevocationCheck, SMIME_DOC, Scheme, Seal, Security, SignedBy, SmimeSettings,
 };
 use writing::NameCheck;
 pub use writing::{

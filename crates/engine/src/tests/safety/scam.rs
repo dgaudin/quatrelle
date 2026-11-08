@@ -244,7 +244,10 @@ fn the_cap_and_the_queue_hold() {
         jobs = s.take_jobs();
     }
     assert_eq!(subjects.len(), 50, "the queue holds 50");
-    assert!(subjects.iter().all(|t| !t.contains("Subject: Burst 9\n")) && subjects.iter().any(|t| t.contains("Subject: Burst 59\n")), "the newest are kept");
+    assert!(
+        subjects.iter().all(|t| !t.contains("Subject: Burst 9\n")) && subjects.iter().any(|t| t.contains("Subject: Burst 59\n")),
+        "the newest are kept"
+    );
     done(s);
 }
 
@@ -252,7 +255,8 @@ fn the_cap_and_the_queue_hold() {
 fn a_failing_or_silent_server_keeps_nothing() {
     let mut s = zoe("scam-fail");
     on(&mut s);
-    let msgs: Vec<(u32, Vec<u8>, bool)> = (0..4u32).map(|n| (20 + n, source(&format!("g{n}"), STRANGER, &format!("Try {n}"), "Pay now.", false), true)).collect();
+    let msgs: Vec<(u32, Vec<u8>, bool)> =
+        (0..4u32).map(|n| (20 + n, source(&format!("g{n}"), STRANGER, &format!("Try {n}"), "Pay now.", false), true)).collect();
     let keys = arrive(&mut s, &msgs, 60);
     let first = asks(&s.take_jobs());
     assert_eq!(first.len(), 1, "one at a time");
