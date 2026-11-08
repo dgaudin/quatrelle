@@ -30,7 +30,7 @@ pub const MAX_CAP: u32 = 2000;
 /// How many judged messages are remembered for this run (so one that failed is not asked again).
 const ASKED_MAX: usize = 50_000;
 /// The biggest source held in memory for a message waiting its turn.
-const SOURCE_MAX: usize = 2 << 20;
+const SOURCE_MAX: usize = 256 << 10;
 
 /// A message waiting to be checked.
 #[derive(Clone, Debug)]
@@ -55,8 +55,12 @@ pub(crate) struct ScamState {
     queue: VecDeque<Pending>,
     /// Messages whose source was asked for, to be checked when it comes.
     fetching: HashSet<MessageKey>,
-    /// Sources that came for them (a source over [`SOURCE_MAX`] isn't held: the cache has it).
+    /// Sources that came for them (a source over [`SOURCE_MAX`] isn't held: the cache has it, and
+    /// fifty waiting messages hold 12.5 MB at most).
     sources: HashMap<MessageKey, Vec<u8>>,
+    /// Messages whose source was asked for once already: one that still isn't here after is
+    /// given up on, never asked for again (no loop of downloads).
+    fetched: HashSet<MessageKey>,
     inflight: Option<Inflight>,
     /// `account` and Message-ID of every message asked this run, answered or not.
     asked: HashSet<(String, String)>,
@@ -275,6 +279,10 @@ impl Session {
         // What is left waits for its source: asked for now.
         let missing: Vec<MessageKey> = self.scam.queue.iter().map(|p| p.key.clone()).filter(|k| !self.scam.fetching.contains(k)).collect();
         for key in missing {
+            if self.scam.fetched.len() >= ASKED_MAX {
+                self.scam.fetched.clear();
+            }
+            self.scam.fetched.insert(key.clone());
             self.scam.fetching.insert(key.clone());
             self.jobs.push(Job::FetchBody { key });
         }
@@ -286,6 +294,10 @@ impl Session {
     fn scam_ask(&mut self, p: &Pending) -> bool {
         let held = self.scam.sources.remove(&p.key);
         let Some(raw) = held.or_else(|| self.store.as_ref().and_then(|s| s.read_body(&p.key))) else {
+            if !self.scam.fetched.insert(p.key.clone()) {
+                log::info!("scam check: a message's source never came, skipped");
+                return false;
+            }
             self.scam.fetching.insert(p.key.clone());
             self.jobs.push(Job::FetchBody { key: p.key.clone() });
             self.scam.queue.push_front(p.clone());

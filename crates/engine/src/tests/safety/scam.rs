@@ -311,3 +311,21 @@ fn not_a_scam_trusts_the_sender() {
     assert_eq!(asks(&s.take_jobs()).len(), 1);
     done(s);
 }
+
+/// A source over what the check holds in memory is read back from the cache; one the cache
+/// doesn't have either is given up on, never asked for again (no loop of downloads).
+#[test]
+fn a_source_that_cant_be_read_is_asked_for_once() {
+    let mut s = zoe("scam-source-once");
+    on(&mut s);
+    let raw = source("a9", STRANGER, "Big invoice", &"Pay now. ".repeat(40_000), false);
+    let keys = arrive(&mut s, &[(9, raw.clone(), false)], 60);
+    let jobs = s.take_jobs();
+    assert_eq!(jobs.iter().filter(|j| matches!(j, Job::FetchBody { key } if *key == keys[0])).count(), 1);
+    // It comes, too big to hold, and the cache doesn't have it (the worker would have kept it).
+    s.apply(Event::Body { key: keys[0].clone(), raw });
+    let jobs = s.take_jobs();
+    assert!(asks(&jobs).is_empty(), "nothing to send");
+    assert!(!jobs.iter().any(|j| matches!(j, Job::FetchBody { .. })), "not asked for again");
+    done(s);
+}
