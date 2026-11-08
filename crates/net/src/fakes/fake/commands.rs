@@ -43,6 +43,11 @@ impl Fake {
             st.deliver_on = None;
             st.add("INBOX", &subject, &[]);
         }
+        if (upper == "EXPUNGE" || upper.starts_with("UID EXPUNGE")) && st.refuse_expunge > 0 {
+            st.refuse_expunge -= 1;
+            self.say(&format!("{tag} NO [CANNOT] the server won't delete that"));
+            return;
+        }
         if upper == "IDLE" {
             // RFC 2177, without pushing anything: what came before IDLE isn't said again.
             self.idling = Some(tag.to_string());
@@ -190,6 +195,7 @@ impl Fake {
             // and archives the message into "[Gmail]/All Mail".
             let labels = st.caps.contains("X-GM-EXT-1");
             let mut copied_from = 0;
+            let mut everywhere: Vec<Vec<u8>> = Vec::new();
             let mut copyuid = String::new();
             {
                 let Some(b) = st.boxes.iter_mut().find(|b| b.name == sel) else {
@@ -302,11 +308,20 @@ impl Fake {
                             .collect();
                         dest = "[Gmail]/All Mail".into();
                     }
+                    // Gmail: gone from Trash is gone from All Mail too.
+                    if labels && b.attr == "\\Trash" {
+                        everywhere = b.msgs.iter().filter(|m| gone.contains(&m.uid)).map(|m| m.raw.clone()).collect();
+                    }
                     b.msgs.retain(|m| !gone.contains(&m.uid));
                     b.expunged.extend(gone.iter().map(|u| (*u, modseq_now + 1)));
                 } else {
                     extra = "BAD".into();
                 }
+            }
+            if !everywhere.is_empty()
+                && let Some(all) = st.mailbox("[Gmail]/All Mail")
+            {
+                all.msgs.retain(|m| !everywhere.contains(&m.raw));
             }
             if !moved.is_empty() || !dest.is_empty() {
                 st.modseq += 1;

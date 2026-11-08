@@ -77,6 +77,9 @@ pub struct State {
     pub stall_on: Option<(String, std::time::Duration)>,
     /// Bytes a second the server sends over TCP (0: as fast as it can), a line to the internet.
     pub rate: usize,
+    /// The next this many `EXPUNGE` / `UID EXPUNGE` are answered `NO` (a server that refuses to
+    /// delete).
+    pub refuse_expunge: usize,
 }
 
 impl State {
@@ -103,7 +106,25 @@ impl State {
             hang_up_idle: None,
             stall_on: None,
             rate: 0,
+            refuse_expunge: 0,
         }))
+    }
+
+    /// Make this server Gmail: `X-GM-EXT-1`, a Trash (`[Gmail]/Trash`, `\\Trash`) and an All Mail
+    /// (`[Gmail]/All Mail`, `\\All`). An expunge in a label folder only drops the label (the
+    /// message stays in All Mail); one in Trash removes it everywhere.
+    pub fn gmail(&mut self) {
+        self.caps = "IMAP4rev1 UIDPLUS MOVE CONDSTORE ENABLE QUOTA X-GM-EXT-1";
+        for (name, attr, validity) in [("[Gmail]/All Mail", "\\All", 500), ("[Gmail]/Trash", "\\Trash", 600)] {
+            if self.boxes.iter().all(|b| b.name != name) {
+                self.boxes.push(Mailbox { name: name.into(), attr, validity, uid_next: 1, msgs: Vec::new(), expunged: Vec::new() });
+            }
+        }
+    }
+
+    /// The next `n` expunges are refused.
+    pub fn refuse_expunge(&mut self, n: usize) {
+        self.refuse_expunge = n;
     }
 
     pub fn mailbox(&mut self, name: &str) -> Option<&mut Mailbox> {

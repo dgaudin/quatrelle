@@ -11,6 +11,7 @@ use quatrelle_model::{AccountConfig, Event, Flag, FolderRole, Job, MessageKey, O
 use super::*;
 use crate::worker::apply_remote;
 
+mod archive;
 mod arrival;
 mod hostile;
 mod idle;
