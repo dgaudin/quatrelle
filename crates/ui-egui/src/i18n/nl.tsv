@@ -2103,3 +2103,7 @@ menu	View	Weergeven
 	This message looks like a scam.	Dit bericht lijkt op oplichting.
 	This message could be a scam.	Dit bericht kan oplichting zijn.
 	Not a scam	Geen oplichting
+	{count} messages archived on this computer	{count} berichten gearchiveerd op deze computer
+	{count} messages put back on the server	{count} berichten teruggezet op de server
+	{count} messages stay where they were: {error}	{count} berichten blijven waar ze waren: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	Op de server teruggezette berichten konden niet uit het archief worden gehaald: {error}

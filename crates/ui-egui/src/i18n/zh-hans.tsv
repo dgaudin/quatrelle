@@ -2104,3 +2104,7 @@ menu	View	查看
 	This message looks like a scam.	这封邮件看起来像诈骗。
 	This message could be a scam.	这封邮件可能是诈骗。
 	Not a scam	不是诈骗
+	{count} messages archived on this computer	已在此计算机上归档 {count} 封邮件
+	{count} messages put back on the server	已将 {count} 封邮件放回服务器
+	{count} messages stay where they were: {error}	{count} 封邮件仍留在原处：{error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	放回服务器的邮件无法从归档中移除：{error}

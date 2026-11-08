@@ -9,6 +9,8 @@ use super::*;
 
 mod contacts;
 pub(crate) use contacts::Contacts;
+mod archive;
+pub(crate) use archive::Leaving;
 mod echo;
 pub(crate) use echo::Echoes;
 mod directory;
@@ -379,6 +381,10 @@ impl Session {
             }
             v
         };
+        // Mail on its way to or from the Archives account is out of the list meanwhile.
+        if !self.leaving.is_empty() {
+            list.retain(|m| !self.leaving.contains_key(&m.key));
+        }
         // The server's own findings, after the local ones (Outlook merges them so): a message
         // whose body is here shows once, from the index.
         if let Some((q, _)) = &self.search

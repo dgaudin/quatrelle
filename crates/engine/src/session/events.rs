@@ -18,8 +18,8 @@ impl Session {
             | Event::PgpKeys { .. }
             | Event::PgpDecrypted { .. }
             | Event::PgpBackedUp { .. }) => self.apply_smime(e),
-            // What archiving did is taken up with the move across accounts.
-            Event::Archived { .. } | Event::PutBack { .. } => {}
+            Event::Archived { account, moved, kept } => self.archived(&account, moved, kept),
+            Event::PutBack { account, back, kept } => self.put_back_done(&account, back, kept),
             Event::DirectoryPeople { account, query, people, more, error } => self.apply_directory(account, query, people, more, error),
             Event::ListExpanded { account, address, item_id, members, more, total, error } => {
                 self.list_expanded(&account, address, item_id, members, more, total, error)

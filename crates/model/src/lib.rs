@@ -34,7 +34,7 @@ pub use thread::voting;
 use serde::{Deserialize, Serialize};
 
 pub use addr::{Addressee, AddresseeKind, EmailAddress};
-pub use archive::{AccountRole, archive_folder};
+pub use archive::{AccountRole, MAX_BATCH as MAX_ARCHIVE_BATCH, archive_folder};
 pub use folder::{Folder, FolderRole, child_path, is_within, rebase_path, sort_folders, utf7};
 pub use job::{
     Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, Job, ListChange, MailboxQuota, Op, PUBLIC_FOLDERS, Private, RECOVERABLE_MAX, RECOVERABLE_PAGE,

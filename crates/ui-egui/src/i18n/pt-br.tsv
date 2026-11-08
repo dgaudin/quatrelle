@@ -2106,3 +2106,7 @@ folder	Conflicts	Conflitos
 	This message looks like a scam.	Esta mensagem parece um golpe.
 	This message could be a scam.	Esta mensagem pode ser um golpe.
 	Not a scam	Não é um golpe
+	{count} messages archived on this computer	{count} mensagens arquivadas neste computador
+	{count} messages put back on the server	{count} mensagens devolvidas ao servidor
+	{count} messages stay where they were: {error}	{count} mensagens ficaram onde estavam: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	As mensagens devolvidas ao servidor não puderam ser removidas dos arquivos: {error}

@@ -17,7 +17,7 @@ mod copy;
 pub(crate) use copy::{DELIMITER, copy_checked};
 
 /// Most messages archived by one job.
-pub(crate) const MAX_BATCH: usize = 500;
+pub(crate) use quatrelle_model::MAX_ARCHIVE_BATCH as MAX_BATCH;
 
 /// Room left on the disk after a batch.
 const SPARE: u64 = 100 << 20;

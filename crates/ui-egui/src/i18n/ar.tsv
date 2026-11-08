@@ -2102,3 +2102,7 @@ folder	Conflicts	التعارضات
 	This message looks like a scam.	تبدو هذه الرسالة احتيالًا.
 	This message could be a scam.	قد تكون هذه الرسالة احتيالًا.
 	Not a scam	ليست احتيالًا
+	{count} messages archived on this computer	تمت أرشفة {count} رسالة على هذا الكمبيوتر
+	{count} messages put back on the server	أُعيدت {count} رسالة إلى الخادم
+	{count} messages stay where they were: {error}	بقيت {count} رسالة في مكانها: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	تعذّر حذف الرسائل المُعادة إلى الخادم من الأرشيف: {error}

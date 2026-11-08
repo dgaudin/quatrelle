@@ -437,6 +437,8 @@ impl Session {
                 }
                 Ok(serde_json::json!({ "undone": "changes" }))
             }
+            Undo::Archive { account, back } => self.undo_archive(account, back),
+            Undo::PutBack { account, to, ids } => self.undo_put_back(account, to, ids),
             Undo::FollowUp { ops, days } => {
                 self.undo_follow_up(ops, days);
                 Ok(serde_json::json!({ "undone": "changes" }))

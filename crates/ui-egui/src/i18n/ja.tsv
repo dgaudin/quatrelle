@@ -2103,3 +2103,7 @@ folder	Conflicts	競合
 	This message looks like a scam.	このメッセージは詐欺のようです。
 	This message could be a scam.	このメッセージは詐欺かもしれません。
 	Not a scam	詐欺ではありません
+	{count} messages archived on this computer	{count} 件のメッセージをこのコンピューターにアーカイブしました
+	{count} messages put back on the server	{count} 件のメッセージをサーバーに戻しました
+	{count} messages stay where they were: {error}	{count} 件のメッセージは元の場所に残っています: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	サーバーに戻したメッセージをアーカイブから削除できませんでした: {error}

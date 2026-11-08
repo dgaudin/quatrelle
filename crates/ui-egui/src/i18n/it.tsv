@@ -2105,3 +2105,7 @@ folder	Conflicts	Conflitti
 	This message looks like a scam.	Questo messaggio sembra una truffa.
 	This message could be a scam.	Questo messaggio potrebbe essere una truffa.
 	Not a scam	Non è una truffa
+	{count} messages archived on this computer	{count} messaggi archiviati su questo computer
+	{count} messages put back on the server	{count} messaggi rimessi sul server
+	{count} messages stay where they were: {error}	{count} messaggi restano dove erano: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	I messaggi rimessi sul server non sono stati tolti dall’archivio: {error}

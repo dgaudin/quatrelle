@@ -2107,3 +2107,7 @@ folder	Conflicts	衝突
 	This message looks like a scam.	這封郵件看起來像詐騙。
 	This message could be a scam.	這封郵件可能是詐騙。
 	Not a scam	不是詐騙
+	{count} messages archived on this computer	已在此電腦上封存 {count} 封郵件
+	{count} messages put back on the server	已將 {count} 封郵件放回伺服器
+	{count} messages stay where they were: {error}	{count} 封郵件仍留在原處：{error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	放回伺服器的郵件無法從封存中移除：{error}

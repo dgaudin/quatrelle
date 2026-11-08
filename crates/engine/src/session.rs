@@ -118,6 +118,12 @@ pub enum Undo {
     /// Messages moved (deleted to Deleted Items, archived, moved): found again in `to` by their
     /// Message-ID (a move gives them new keys) and moved back where each came from.
     Move { account: String, to: String, back: Vec<(String, String)> },
+    /// IMAP mail archived on this computer (the worker said where each went): the copies in
+    /// Archives, each with the folder of the server it came from, to put back there.
+    Archive { account: String, back: Vec<(MessageKey, String)> },
+    /// Archived mail put back on the server, into `to` of `account`: found there again by Message-ID
+    /// (the server gave each a new number) and archived once more.
+    PutBack { account: String, to: String, ids: Vec<String> },
     /// Flags or keywords changed: the changes that put them back.
     Ops { account: String, ops: Vec<Op> },
     /// Follow-ups changed (flagged, cleared, marked complete): the flag and keyword changes that
@@ -318,6 +324,9 @@ pub struct Session {
     pub opened_file: Option<CmdResult>,
     /// What the last changes can be put back to, newest last (Undo, Ctrl+Z).
     pub undo: Vec<Undo>,
+    /// Messages on their way into or out of the Archives account: out of the list until the
+    /// network layer says how it went.
+    pub(crate) leaving: HashMap<MessageKey, mailboxes::Leaving>,
     /// Bumped whenever `list` changes.
     pub revision: u64,
     /// Bumped whenever a calendar or address book changes.
@@ -543,6 +552,7 @@ impl Session {
             filed: Vec::new(),
             opened_file: None,
             undo: Vec::new(),
+            leaving: HashMap::new(),
             revision: 0,
             pim_revision: 0,
             outbox: Vec::new(),

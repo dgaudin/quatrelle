@@ -2106,3 +2106,7 @@ menu	View	Просмотр
 	This message looks like a scam.	Это письмо похоже на мошенничество.
 	This message could be a scam.	Это письмо может быть мошенничеством.
 	Not a scam	Это не мошенничество
+	{count} messages archived on this computer	{count} сообщений архивировано на этом компьютере
+	{count} messages put back on the server	{count} сообщений возвращено на сервер
+	{count} messages stay where they were: {error}	{count} сообщений остались на месте: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	Письма, возвращённые на сервер, не удалось убрать из архива: {error}

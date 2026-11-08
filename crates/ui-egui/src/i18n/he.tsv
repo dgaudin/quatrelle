@@ -2102,3 +2102,7 @@ folder	Conflicts	התנגשויות
 	This message looks like a scam.	הודעה זו נראית כהונאה.
 	This message could be a scam.	הודעה זו עשויה להיות הונאה.
 	Not a scam	זו לא הונאה
+	{count} messages archived on this computer	{count} הודעות הועברו לארכיון במחשב זה
+	{count} messages put back on the server	{count} הודעות הוחזרו לשרת
+	{count} messages stay where they were: {error}	{count} הודעות נשארו במקומן: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	לא ניתן היה להסיר מהארכיון הודעות שהוחזרו לשרת: {error}

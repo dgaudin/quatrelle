@@ -2107,3 +2107,7 @@ menu	View	Anzeigen
 	This message looks like a scam.	Diese Nachricht sieht nach Betrug aus.
 	This message could be a scam.	Diese Nachricht könnte Betrug sein.
 	Not a scam	Kein Betrug
+	{count} messages archived on this computer	{count} Nachrichten auf diesem Computer archiviert
+	{count} messages put back on the server	{count} Nachrichten auf den Server zurückgelegt
+	{count} messages stay where they were: {error}	{count} Nachrichten bleiben, wo sie waren: {error}
+	archived mail put back on the server couldn't be taken out of Archives: {error}	Auf den Server zurückgelegte Nachrichten konnten nicht aus dem Archiv entfernt werden: {error}

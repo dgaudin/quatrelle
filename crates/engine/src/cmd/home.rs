@@ -91,7 +91,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(has_voting),
         CommandSpec::new("mail.forwardAsAttachment", "Forward as attachment", "Reading pane › More", |s, _| s.forward_as_attachment()).when(has_reading),
         // Home › Move
-        CommandSpec::new("mail.move", "Move to", "Home › Move", move_to).key("Mod+Shift+V").params(r#"{"folder": string}"#).when(has_selection),
+        CommandSpec::new("mail.move", "Move to", "Home › Move", move_to).key("Mod+Shift+V").params(
+            r#"{"folder": string, "account"?: string (another account's folder: from an IMAP account into the Archives account ("archives" makes it on first use) it archives the mail on this computer, checked before it is deleted on the server; from the Archives account to a folder of an IMAP account it puts the mail back; other pairs are refused)}"#,
+        ).when(has_selection),
         // Home › Tags
         CommandSpec::new("mail.markRead", "Mark as read", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, Some(true))).key("Mod+Q").when(has_selection),
         CommandSpec::new("mail.markUnread", "Mark as unread", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, Some(false))).key("Mod+U").when(has_selection),
@@ -226,6 +228,9 @@ pub(super) fn delete(s: &mut Session, v: &Value) -> CmdResult {
 
 pub(super) fn move_to(s: &mut Session, v: &Value) -> CmdResult {
     let folder = p::req_str(v, "folder")?;
+    if let Some(account) = p::str(v, "account") {
+        return s.move_across(account, folder);
+    }
     if let Some(role) = folder.strip_prefix("role:").and_then(FolderRole::from_code) {
         return s.move_selection(MoveTarget::Role(role));
     }

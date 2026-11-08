@@ -14,6 +14,9 @@ pub enum AccountRole {
     Archives,
 }
 
+/// Most messages one archiving job carries.
+pub const MAX_BATCH: usize = 500;
+
 /// Longest account name kept as a folder name in the archive.
 const MAX_NAME: usize = 100;
 
