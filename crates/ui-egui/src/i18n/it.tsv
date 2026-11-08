@@ -2109,3 +2109,5 @@ folder	Conflicts	Conflitti
 	{count} messages put back on the server	{count} messaggi rimessi sul server
 	{count} messages stay where they were: {error}	{count} messaggi restano dove erano: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	I messaggi rimessi sul server non sono stati tolti dall’archivio: {error}
+	Archive on this computer	Archivia su questo computer
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archivia e il tasto Backspace spostano la posta nell’account Archives di questo computer e la eliminano dal server solo dopo aver controllato la copia qui.

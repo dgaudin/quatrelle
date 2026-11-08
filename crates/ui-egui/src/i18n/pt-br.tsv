@@ -2110,3 +2110,5 @@ folder	Conflicts	Conflitos
 	{count} messages put back on the server	{count} mensagens devolvidas ao servidor
 	{count} messages stay where they were: {error}	{count} mensagens ficaram onde estavam: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	As mensagens devolvidas ao servidor não puderam ser removidas dos arquivos: {error}
+	Archive on this computer	Arquivar neste computador
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Arquivar e a tecla Backspace colocam o e-mail na conta Archives deste computador e só o excluem no servidor depois que a cópia daqui for conferida.

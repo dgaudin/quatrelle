@@ -29,8 +29,54 @@ impl Session {
     }
 
     /// Whether this account's mail is on an IMAP server (not on this computer, POP, or a web API).
-    fn is_imap(&self, account: &str) -> bool {
+    pub fn is_imap(&self, account: &str) -> bool {
         self.account(account).is_some_and(|a| !a.is_local() && a.config.pop.is_none() && !a.config.is_api())
+    }
+
+    /// Whether *Archive* files this account's mail on this computer: an IMAP account that says so.
+    pub(crate) fn archives_here(&self, account: &str) -> bool {
+        self.is_imap(account) && self.account(account).is_some_and(|a| a.config.archive_local)
+    }
+
+    /// *Archive* (the button, Backspace): each message goes to its account's Archive folder, or,
+    /// for an IMAP account set to archive on this computer, into the Archives account.
+    pub fn archive_selection(&mut self) -> CmdResult {
+        let sel = self.selected();
+        let (here, rest): (Vec<Arc<Summary>>, Vec<Arc<Summary>>) = sel.iter().cloned().partition(|m| self.archives_here(&m.key.account));
+        if here.is_empty() {
+            return self.move_selection(MoveTarget::Role(FolderRole::Archive));
+        }
+        let mut moved = 0;
+        if !rest.is_empty() {
+            moved = self.move_messages(&rest, &MoveTarget::Role(FolderRole::Archive))?;
+        }
+        let r = self.archive_messages(&here)?;
+        Ok(serde_json::json!({ "moved": moved, "archiving": r["archiving"] }))
+    }
+
+    /// `archive.settings`: whether *Archive* files into the Archives account, and the age (in
+    /// months, 1 to 120, or none) after which mail is offered for archiving. IMAP accounts only.
+    pub fn archive_settings(&mut self, account: &str, local: Option<bool>, after_months: Option<Option<u32>>) -> CmdResult {
+        if self.account(account).is_none() {
+            return Err(CmdError::Params(format!("no account `{account}`")));
+        }
+        if !self.is_imap(account) {
+            return Err(CmdError::Disabled("archiving on this computer is for IMAP accounts".into()));
+        }
+        if matches!(after_months, Some(Some(m)) if !(1..=120).contains(&m)) {
+            return Err(CmdError::Params("`afterMonths` is 1 to 120, or null".into()));
+        }
+        if let Some(a) = self.account_mut(account) {
+            if let Some(l) = local {
+                a.config.archive_local = l;
+            }
+            if let Some(m) = after_months {
+                a.config.archive_after_months = m;
+            }
+        }
+        self.save_accounts();
+        let c = self.account(account).map(|a| (a.config.archive_local, a.config.archive_after_months));
+        Ok(serde_json::json!({ "account": account, "local": c.map(|c| c.0), "afterMonths": c.and_then(|c| c.1) }))
     }
 
     /// The Archives account, made when there is none: an account on this computer named

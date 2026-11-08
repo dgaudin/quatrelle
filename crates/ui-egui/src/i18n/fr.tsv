@@ -2111,3 +2111,5 @@ menu	View	Afficher
 	{count} messages put back on the server	{count} messages remis sur le serveur
 	{count} messages stay where they were: {error}	{count} messages restent où ils étaient : {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Le courrier remis sur le serveur n’a pas pu être retiré des archives : {error}
+	Archive on this computer	Archiver sur cet ordinateur
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archiver et la touche Retour arrière rangent le courrier dans le compte Archives de cet ordinateur, et ne le suppriment sur le serveur qu’une fois la copie d’ici vérifiée.

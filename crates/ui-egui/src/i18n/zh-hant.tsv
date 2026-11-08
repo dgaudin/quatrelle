@@ -2111,3 +2111,5 @@ folder	Conflicts	衝突
 	{count} messages put back on the server	已將 {count} 封郵件放回伺服器
 	{count} messages stay where they were: {error}	{count} 封郵件仍留在原處：{error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	放回伺服器的郵件無法從封存中移除：{error}
+	Archive on this computer	封存到此電腦
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	「封存」按鈕和 Backspace 鍵會把郵件放進此電腦上的 Archives 帳戶，並且只在核對過這裡的副本後才在伺服器上刪除。

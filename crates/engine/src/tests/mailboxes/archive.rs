@@ -192,3 +192,53 @@ fn archived_mail_moves_back_to_a_folder_of_the_server_and_undo_archives_it_again
     assert_eq!((again[0].0.as_str(), again[0].2.as_str()), ("a1", id.as_str()));
     done(s);
 }
+
+#[test]
+fn the_archive_button_follows_the_accounts_setting() {
+    let mut s = two_accounts("archive-button");
+    // Not ticked: the server's Archive folder, as before (here none, so the move is refused).
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    let _ = s.run("mail.archive", &json!({}));
+    assert!(archive_jobs(s.take_jobs()).is_empty(), "nothing goes to Archives unless the account says so");
+    assert!(archives_of(&s).is_none());
+    // Ticked: Archive files the selection into the Archives account.
+    s.run("archive.settings", &json!({"account": "a1", "local": true})).unwrap();
+    assert!(s.account("a1").unwrap().config.archive_local);
+    let kept = s.store.as_ref().unwrap().load_accounts().unwrap();
+    assert!(kept.iter().any(|a| a.id == "a1" && a.archive_local), "kept");
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    s.run("mail.archive", &json!({})).unwrap();
+    let id = archives_of(&s).expect("made on first use");
+    let jobs = archive_jobs(s.take_jobs());
+    assert_eq!((jobs.len(), jobs[0].0.as_str(), jobs[0].2.as_str()), (1, "a1", id.as_str()));
+    assert!(!s.list.iter().any(|m| m.subject == "Plans"), "gone from the list at once");
+    // The other account is not ticked: its mail is not archived here.
+    s.run("folder.open", &json!({"account": "a2", "folder": "INBOX"})).unwrap();
+    s.run("list.select", &key_of(&s, "Recipes")).unwrap();
+    let _ = s.run("mail.archive", &json!({}));
+    assert!(archive_jobs(s.take_jobs()).is_empty());
+    // Unticked again.
+    s.run("archive.settings", &json!({"account": "a1", "local": false})).unwrap();
+    assert!(!s.account("a1").unwrap().config.archive_local);
+    done(s);
+}
+
+#[test]
+fn archive_settings_are_for_imap_accounts_and_checked() {
+    let mut s = two_accounts("archive-settings");
+    s.run("archive.settings", &json!({"account": "a1", "afterMonths": 12})).unwrap();
+    assert_eq!(s.account("a1").unwrap().config.archive_after_months, Some(12));
+    s.run("archive.settings", &json!({"account": "a1", "afterMonths": null})).unwrap();
+    assert_eq!(s.account("a1").unwrap().config.archive_after_months, None);
+    for bad in [json!(0), json!(121), json!(-3), json!("x")] {
+        assert!(s.run("archive.settings", &json!({"account": "a1", "afterMonths": bad})).is_err(), "{bad}");
+    }
+    assert!(s.run("archive.settings", &json!({"account": "a9", "local": true})).is_err());
+    assert!(s.run("archive.settings", &json!({})).is_err());
+    // Not for the Archives account itself, a local account.
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    s.run("mail.move", &json!({"account": "archives", "folder": "-"})).unwrap();
+    let id = archives_of(&s).unwrap();
+    assert!(s.run("archive.settings", &json!({"account": id, "local": true})).is_err());
+    done(s);
+}

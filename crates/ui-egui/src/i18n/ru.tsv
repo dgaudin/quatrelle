@@ -2110,3 +2110,5 @@ menu	View	Просмотр
 	{count} messages put back on the server	{count} сообщений возвращено на сервер
 	{count} messages stay where they were: {error}	{count} сообщений остались на месте: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Письма, возвращённые на сервер, не удалось убрать из архива: {error}
+	Archive on this computer	Архивировать на этом компьютере
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	«Архивировать» и клавиша Backspace помещают письма в учётную запись Archives на этом компьютере и удаляют их на сервере только после проверки копии здесь.

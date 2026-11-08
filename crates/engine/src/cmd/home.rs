@@ -18,7 +18,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("mail.deleteForGood", "Delete for good", "Home › Delete", |s, _| delete(s, &json!({"permanent": true})))
             .key("Shift+Delete")
             .when(has_selection),
-        CommandSpec::new("mail.archive", "Archive", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Archive)))
+        CommandSpec::new("mail.archive", "Archive", "Home › Delete", |s, _| s.archive_selection())
             .key("Backspace")
             .when(has_selection),
         CommandSpec::new("mail.ignore", "Ignore conversation", "Home › Delete", |s, _| s.ignore_selection()).when(has_selection),

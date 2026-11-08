@@ -2109,3 +2109,5 @@ folder	Conflicts	충돌
 	{count} messages put back on the server	메시지 {count}개를 서버로 되돌렸습니다
 	{count} messages stay where they were: {error}	메시지 {count}개는 원래 위치에 남아 있습니다: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	서버로 되돌린 메시지를 보관함에서 삭제하지 못했습니다: {error}
+	Archive on this computer	이 컴퓨터에 보관
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	보관 단추와 Backspace 키는 메일을 이 컴퓨터의 Archives 계정에 넣고, 여기 있는 사본을 확인한 뒤에만 서버에서 삭제합니다.

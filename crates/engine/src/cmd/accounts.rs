@@ -146,6 +146,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("account.update", "Account settings", "File › Info › Account settings", update_account).params(
             r#"{"account": string, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: …, "smtpHost"?: …, "smtpUsername"?: string|null (the outgoing server's own sign-in; null: the incoming server's), "smtpPassword"?: string, "jmap"?: string|null, "popHost"?: …, "popDelete"?: bool, "popKeepDays"?: number, "popDeleteWithTrash"?: bool, "onlineOnly"?: bool, "ews"?: string, "userAgent"?: string (Exchange: the User-Agent its requests name; "" for Quatrelle's), "oauthClientId"?: string|null and "oauthTenant"?: string|null (Microsoft sign-in through your organisation's own app registration; null or empty: the built-in one, common)}"#,
         ),
+        CommandSpec::new("archive.settings", "Archive on this computer", "File › Info › Account settings", archive_settings).params(
+            r#"{"account": string (an IMAP account), "local"?: bool (Archive and Backspace file mail into the Archives account on this computer, checked before it is deleted on the server), "afterMonths"?: number|null (1 to 120; null for off: mail older than that is offered for archiving)}"#,
+        ),
         CommandSpec::new("account.mailbox", "Mailbox settings", "File › Info › Mailbox settings", |s, v| {
             let id = account_param(s, v)?;
             let a = s.account(&id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
@@ -575,4 +578,17 @@ pub(super) fn list_accounts(s: &mut Session, _: &Value) -> CmdResult {
 /// The item ids a command names (at most 20,000).
 fn recover_ids(v: &Value) -> Vec<String> {
     v.get("ids").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).take(20_000).map(str::to_string).collect()).unwrap_or_default()
+}
+
+/// `archive.settings`: `afterMonths` absent leaves the age alone, null turns it off.
+fn archive_settings(s: &mut Session, v: &Value) -> CmdResult {
+    let account = p::req_str(v, "account")?.to_string();
+    let after = match v.get("afterMonths") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(n) => {
+            Some(Some(n.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or_else(|| CmdError::Params("`afterMonths` is 1 to 120, or null".into()))?))
+        }
+    };
+    s.archive_settings(&account, p::bool(v, "local"), after)
 }

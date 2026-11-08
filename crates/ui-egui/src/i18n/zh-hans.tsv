@@ -2108,3 +2108,5 @@ menu	View	查看
 	{count} messages put back on the server	已将 {count} 封邮件放回服务器
 	{count} messages stay where they were: {error}	{count} 封邮件仍留在原处：{error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	放回服务器的邮件无法从归档中移除：{error}
+	Archive on this computer	归档到此计算机
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	“归档”按钮和 Backspace 键会把邮件放入此计算机上的 Archives 账户，并且只在核对过这里的副本后才在服务器上删除。

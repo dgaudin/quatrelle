@@ -2111,3 +2111,5 @@ menu	View	Anzeigen
 	{count} messages put back on the server	{count} Nachrichten auf den Server zurückgelegt
 	{count} messages stay where they were: {error}	{count} Nachrichten bleiben, wo sie waren: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Auf den Server zurückgelegte Nachrichten konnten nicht aus dem Archiv entfernt werden: {error}
+	Archive on this computer	Auf diesem Computer archivieren
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archivieren und die Rücktaste legen die Nachrichten im Konto „Archives“ auf diesem Computer ab und löschen sie auf dem Server erst, nachdem die Kopie hier geprüft wurde.

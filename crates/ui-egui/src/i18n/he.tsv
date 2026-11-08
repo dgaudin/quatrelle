@@ -2106,3 +2106,5 @@ folder	Conflicts	התנגשויות
 	{count} messages put back on the server	{count} הודעות הוחזרו לשרת
 	{count} messages stay where they were: {error}	{count} הודעות נשארו במקומן: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	לא ניתן היה להסיר מהארכיון הודעות שהוחזרו לשרת: {error}
+	Archive on this computer	לארכיון במחשב זה
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	הלחצן ״ארכיון״ והמקש Backspace מעבירים את הדואר לחשבון Archives במחשב זה, ומוחקים אותו בשרת רק לאחר שההעתק כאן נבדק.

@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod archiving;
 mod pgp;
 mod recovering;
 mod trust;

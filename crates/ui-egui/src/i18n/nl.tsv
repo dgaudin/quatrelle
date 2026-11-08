@@ -2107,3 +2107,5 @@ menu	View	Weergeven
 	{count} messages put back on the server	{count} berichten teruggezet op de server
 	{count} messages stay where they were: {error}	{count} berichten blijven waar ze waren: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Op de server teruggezette berichten konden niet uit het archief worden gehaald: {error}
+	Archive on this computer	Archiveren op deze computer
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archiveren en de toets Backspace zetten de e-mail in het account Archives op deze computer en verwijderen die pas op de server nadat de kopie hier is gecontroleerd.

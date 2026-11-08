@@ -78,6 +78,18 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
                 acts.push(Action::EditSignature { account: id.clone(), insert: false });
             }
         });
+        // IMAP only: the other kinds of account have no Archive folder to leave for this computer.
+        if s.is_imap(&id) {
+            let about = tl!(
+                "Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked."
+            );
+            setting_row(ui, t, false, name(t, tl!("Archive")), Some(note(t, about)), |ui| {
+                let mut on = a.config.archive_local;
+                if ui.checkbox(&mut on, tl!("Archive on this computer")).changed() {
+                    acts.push(Action::Run("archive.settings", json!({"account": id, "local": on})));
+                }
+            });
+        }
         setting_row(ui, t, false, name(t, tl!("Remove account")), None, |ui| {
             if ui.button(RichText::new(tl!("Remove account…")).color(t.danger)).clicked() {
                 acts.push(Action::Dialog(Dialog::RemoveAccount { account: id.clone(), email: a.config.email.clone() }));

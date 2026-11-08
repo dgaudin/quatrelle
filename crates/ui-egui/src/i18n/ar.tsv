@@ -2106,3 +2106,5 @@ folder	Conflicts	التعارضات
 	{count} messages put back on the server	أُعيدت {count} رسالة إلى الخادم
 	{count} messages stay where they were: {error}	بقيت {count} رسالة في مكانها: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	تعذّر حذف الرسائل المُعادة إلى الخادم من الأرشيف: {error}
+	Archive on this computer	الأرشفة على هذا الكمبيوتر
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	يضع «أرشفة» ومفتاح Backspace البريد في حساب الأرشيف على هذا الكمبيوتر، ولا يحذفه من الخادم إلا بعد التحقق من النسخة هنا.

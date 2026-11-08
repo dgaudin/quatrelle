@@ -2107,3 +2107,5 @@ folder	Conflicts	競合
 	{count} messages put back on the server	{count} 件のメッセージをサーバーに戻しました
 	{count} messages stay where they were: {error}	{count} 件のメッセージは元の場所に残っています: {error}
 	archived mail put back on the server couldn't be taken out of Archives: {error}	サーバーに戻したメッセージをアーカイブから削除できませんでした: {error}
+	Archive on this computer	このコンピューターにアーカイブ
+	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	「アーカイブ」と Backspace キーは、メールをこのコンピューターの Archives アカウントに保存し、ここにあるコピーを確認してからサーバー上のメールを削除します。
