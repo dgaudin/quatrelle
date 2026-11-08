@@ -149,6 +149,18 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("archive.settings", "Archive on this computer", "File › Info › Account settings", archive_settings).params(
             r#"{"account": string (an IMAP account), "local"?: bool (Archive and Backspace file mail into the Archives account on this computer, checked before it is deleted on the server), "afterMonths"?: number|null (1 to 120; null for off: mail older than that is offered for archiving)}"#,
         ),
+        CommandSpec::new("archive.byAge", "Archive old mail", "Message list › Archive bar", |s, v| {
+            let id = account_param(s, v)?;
+            s.archive_by_age(&id)
+        })
+        .params(r#"{"account"?: string (the IMAP account whose bar offered it: archives the mail counted there, up to 2,000 a day)}"#)
+        .when(has_account),
+        CommandSpec::new("archive.notNow", "Not now", "Message list › Archive bar", |s, v| {
+            let id = account_param(s, v)?;
+            s.archive_not_now(&id)
+        })
+        .params(r#"{"account"?: string (the bar is put away until tomorrow)}"#)
+        .when(has_account),
         CommandSpec::new("account.mailbox", "Mailbox settings", "File › Info › Mailbox settings", |s, v| {
             let id = account_param(s, v)?;
             let a = s.account(&id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;

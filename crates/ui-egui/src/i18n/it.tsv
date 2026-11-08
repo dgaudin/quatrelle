@@ -2128,3 +2128,9 @@ folder	Conflicts	Conflitti
 	its source isn't kept in Archives	il suo sorgente non è conservato in Archives
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	il server non ha detto dove l’ha messo e non ha un Message-ID per ritrovarlo; è sul server e la copia resta in Archives
 	it isn't kept on this computer and the account is offline	non è conservato su questo computer e l’account è offline
+	Archive by age	Archivia per età
+	Archive mail older than	Archivia i messaggi più vecchi di
+	months	mesi
+	{count} messages older than {months} months in {account} can go to Archives.	{count} messaggi di {account} più vecchi di {months} mesi possono passare in Archives.
+	Not now	Non ora
+	Archiving: {done} of {total}	Archiviazione: {done} di {total}

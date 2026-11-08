@@ -2126,3 +2126,9 @@ menu	View	Weergeven
 	its source isn't kept in Archives	de bron ervan wordt niet bewaard in Archives
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	de server zei niet waar hij het bericht heeft gezet en het heeft geen Message-ID om het te vinden; het staat op de server en de kopie blijft in Archives
 	it isn't kept on this computer and the account is offline	het wordt niet op deze computer bewaard en het account is offline
+	Archive by age	Archiveren op leeftijd
+	Archive mail older than	Berichten archiveren die ouder zijn dan
+	months	maanden
+	{count} messages older than {months} months in {account} can go to Archives.	{count} berichten van {account} die ouder zijn dan {months} maanden kunnen naar Archives.
+	Not now	Niet nu
+	Archiving: {done} of {total}	Archiveren: {done} van {total}

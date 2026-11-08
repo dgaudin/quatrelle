@@ -9,6 +9,9 @@ use quatrelle_model::{AccountConfig, AccountRole, MAX_ARCHIVE_BATCH};
 
 use super::*;
 
+mod age;
+pub(crate) use age::AgeState;
+
 /// A message on its way into or out of the Archives account: kept out of the list until the
 /// network layer says how it went.
 #[derive(Clone, Debug)]
@@ -75,6 +78,9 @@ impl Session {
             }
         }
         self.save_accounts();
+        if after_months.is_some() {
+            self.age_settings_changed(account);
+        }
         let c = self.account(account).map(|a| (a.config.archive_local, a.config.archive_after_months));
         Ok(serde_json::json!({ "account": account, "local": c.map(|c| c.0), "afterMonths": c.and_then(|c| c.1) }))
     }
@@ -126,10 +132,19 @@ impl Session {
         Err(CmdError::Disabled(NOT_YET.into()))
     }
 
-    /// Ask the network layer to archive these messages (all IMAP mail), batch by batch.
+    /// Ask the network layer to archive these messages (all IMAP mail), batch by batch, and take
+    /// them out of the list.
     pub(crate) fn archive_messages(&mut self, sel: &[Arc<Summary>]) -> CmdResult {
-        let to = self.archives_account()?;
         let next = self.successor(&self.selection.clone());
+        self.queue_archive(sel)?;
+        self.refresh_list();
+        self.after_removal(next);
+        Ok(serde_json::json!({ "archiving": sel.len() }))
+    }
+
+    /// The jobs that archive these messages, and the messages marked as on their way.
+    pub(super) fn queue_archive(&mut self, sel: &[Arc<Summary>]) -> Result<(), CmdError> {
+        let to = self.archives_account()?;
         let mut by_account: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         for m in sel {
             by_account.entry(m.key.account.clone()).or_default().push(m.key.clone());
@@ -140,9 +155,7 @@ impl Session {
                 self.jobs.push(Job::Archive { account: account.clone(), keys: batch.to_vec(), to_account: to.clone() });
             }
         }
-        self.refresh_list();
-        self.after_removal(next);
-        Ok(serde_json::json!({ "archiving": sel.len() }))
+        Ok(())
     }
 
     /// Ask the network layer to put archived messages on the server, into `folder` of `account`.
@@ -174,6 +187,7 @@ impl Session {
     /// The network layer archived some messages: `moved` pairs each with its copy in Archives,
     /// `kept` stayed where they were.
     pub(crate) fn archived(&mut self, account: &str, moved: Vec<(MessageKey, MessageKey)>, kept: Vec<(MessageKey, String)>) {
+        self.age_progress(account, moved.len() + kept.len());
         for (from, _) in &moved {
             self.leaving.remove(from);
         }

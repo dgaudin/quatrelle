@@ -85,8 +85,13 @@ impl Session {
                 if matches!(status, SyncStatus::Online { .. }) {
                     self.mark_inbox(&account);
                 }
+                let connected = matches!(status, SyncStatus::Online { .. });
                 if let Some(a) = self.account_mut(&account) {
                     a.status = status;
+                }
+                // Once a day, mail older than the account's age is looked for (archiving by age).
+                if connected {
+                    self.consider_age(&account);
                 }
                 // Rules made while the account was offline reach its server now it's connected,
                 // and the ones it keeps that Quatrelle didn't make are listed.

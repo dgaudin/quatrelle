@@ -115,13 +115,24 @@ fn archiving_app(name: &str) -> (MailApp, std::path::PathBuf, Handed) {
     let archives =
         AccountConfig { id: "a2".into(), name: "Archives".into(), email: "Archives".into(), role: Some(AccountRole::Archives), ..Default::default() };
     store.save_accounts(&[work, archives]).unwrap();
-    store.save_folders("a1", &[folder("a1", "INBOX", FolderRole::Inbox), folder("a1", "Projects", FolderRole::Other), folder("a1", "Reports", FolderRole::Other)])
+    store
+        .save_folders(
+            "a1",
+            &[folder("a1", "INBOX", FolderRole::Inbox), folder("a1", "Projects", FolderRole::Other), folder("a1", "Reports", FolderRole::Other)],
+        )
         .unwrap();
     store.save_folders("a2", &[folder("a2", "Work", FolderRole::Other), folder("a2", "Work/INBOX", FolderRole::Other)]).unwrap();
     for (account, path, subject) in [("a1", "INBOX", "Plans"), ("a2", "Work/INBOX", "Old plans")] {
         let mut st = store.load_folder(account, path).unwrap();
         st.validity = 1;
         st.messages.push(message(account, path, 1, subject));
+        if (account, path) == ("a1", "INBOX") {
+            // A year and more old: what archiving by age finds.
+            let mut old = message(account, path, 2, "Ancient plans");
+            old.received = NOW - 400 * 86_400;
+            old.date = old.received;
+            st.messages.push(old);
+        }
         store.save_folder(account, path, &st).unwrap();
     }
     let s = Session::open(Some(store), Clock::new(NOW, 0));
@@ -272,5 +283,82 @@ fn dragging_a_folder_onto_a_folder_moves_it() {
     drag_text(&ctx, &mut a, "Projects", "Reports");
     let paths: Vec<String> = a.session.account("a1").map(|x| x.folders.iter().map(|f| f.path.clone()).collect()).unwrap_or_default();
     assert!(paths.iter().any(|p| p == "Reports/Projects"), "{paths:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// ---- By age: the bar ---------------------------------------------------------------------
+
+/// `archiving_app` (its Inbox holds an old message) with the account set to archive after a year,
+/// connected, and looked through.
+fn by_age_app(name: &str, ask: bool) -> (MailApp, std::path::PathBuf, Handed) {
+    let (mut a, dir, handed) = archiving_app(name);
+    if ask {
+        a.session.run("archive.settings", &json!({"account": "a1", "afterMonths": 12})).unwrap();
+    }
+    a.session.apply(MailEvent::Status { account: "a1".into(), status: quatrelle_engine::model::SyncStatus::Online { at: 1 } });
+    (a, dir, handed)
+}
+
+fn age_words() -> &'static str {
+    "1 messages older than 12 months in Work can go to Archives."
+}
+
+#[test]
+fn the_bar_offers_to_archive_by_age() {
+    let ctx = egui::Context::default();
+    // Off (the default): no bar.
+    let (mut a, dir, _) = by_age_app("age-bar-off", false);
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_none(), "off by default");
+    let _ = std::fs::remove_dir_all(dir);
+    // On: the bar, its two buttons; Not now puts it away, and it stays away.
+    let (mut a, dir, handed) = by_age_app("age-bar-not-now", true);
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_some(), "the bar");
+    let not_now = settled_text_at(&ctx, &mut a, "Not now", SIZE).expect("Not now");
+    click_at(&ctx, &mut a, not_now, 1, SIZE);
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_none(), "put away");
+    a.session.apply(MailEvent::Status { account: "a1".into(), status: quatrelle_engine::model::SyncStatus::Online { at: 2 } });
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_none(), "not asked again today");
+    assert!(archive_jobs(&handed).is_empty(), "nothing archived without Archive");
+    let _ = std::fs::remove_dir_all(dir);
+    // Archive: the job goes, and the progress line shows while it runs.
+    let (mut a, dir, handed) = by_age_app("age-bar-archive", true);
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_some());
+    let shelf = settled_text_at(&ctx, &mut a, age_words(), SIZE).unwrap();
+    // The ribbon has an Archive button too: the one in the bar is just under its words.
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    let at = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == "Archive" => Some(t.pos + t.galley.rect.center().to_vec2()),
+            _ => None,
+        })
+        .find(|p| p.y > shelf.y && p.y - shelf.y < 60.0)
+        .expect("the bar's Archive button");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    assert_eq!(archive_jobs(&handed), vec![("a1".to_string(), a.session.archives_id().unwrap())]);
+    assert!(settled_text_at(&ctx, &mut a, "Archiving: 0 of 1", SIZE).is_some(), "the progress line");
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_none(), "the bar is gone");
+    let _ = std::fs::remove_dir_all(dir);
+    // Connected no more: no bar.
+    let (mut a, dir, _) = by_age_app("age-bar-offline", true);
+    a.session.apply(MailEvent::Status { account: "a1".into(), status: quatrelle_engine::model::SyncStatus::Offline });
+    assert!(settled_text_at(&ctx, &mut a, age_words(), SIZE).is_none(), "offline");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_account_settings_offer_archiving_by_age() {
+    let (mut a, dir) = app("archive-by-age-box");
+    let ctx = egui::Context::default();
+    let imap =
+        a.session.run("account.add", &json!({"email": "zoe@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let words = "Archive mail older than";
+    info_texts(&ctx, &mut a, &imap);
+    let at = settled_text_at(&ctx, &mut a, words, SIZE).expect("the box's words");
+    assert!(a.session.account(&imap).unwrap().config.archive_after_months.is_none(), "off by default");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    assert_eq!(a.session.account(&imap).unwrap().config.archive_after_months, Some(12), "ticked: a year");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    assert!(a.session.account(&imap).unwrap().config.archive_after_months.is_none(), "and unticked");
     let _ = std::fs::remove_dir_all(dir);
 }

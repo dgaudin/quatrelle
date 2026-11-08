@@ -2125,3 +2125,9 @@ folder	Conflicts	التعارضات
 	its source isn't kept in Archives	مصدرها غير محفوظ في الأرشيف
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	لم يذكر الخادم أين وضعها وليس لها Message-ID للعثور عليها؛ هي على الخادم وتبقى النسخة في الأرشيف
 	it isn't kept on this computer and the account is offline	غير محفوظة على هذا الكمبيوتر والحساب غير متصل
+	Archive by age	الأرشفة حسب العمر
+	Archive mail older than	أرشفة الرسائل الأقدم من
+	months	أشهر
+	{count} messages older than {months} months in {account} can go to Archives.	يمكن نقل {count} رسالة من {account} أقدم من {months} أشهر إلى Archives.
+	Not now	ليس الآن
+	Archiving: {done} of {total}	جارٍ الأرشفة: {done} من {total}

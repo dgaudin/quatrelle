@@ -2127,3 +2127,9 @@ menu	View	查看
 	its source isn't kept in Archives	其源文件未保存在 Archives 中
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	服务器没有说明放在了哪里，且它没有可用来查找的 Message-ID；它在服务器上，副本仍留在 Archives 中
 	it isn't kept on this computer and the account is offline	它未保存在此计算机上，且账户处于脱机状态
+	Archive by age	按时间归档
+	Archive mail older than	归档早于以下时间的邮件
+	months	个月
+	{count} messages older than {months} months in {account} can go to Archives.	{account} 中早于 {months} 个月的 {count} 封邮件可以移到 Archives。
+	Not now	暂不
+	Archiving: {done} of {total}	正在归档：{done} / {total}

@@ -2130,3 +2130,9 @@ folder	Conflicts	衝突
 	its source isn't kept in Archives	其原始檔未儲存在 Archives 中
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	伺服器沒有說明放在哪裡，且它沒有可用來尋找的 Message-ID；它在伺服器上，副本仍留在 Archives 中
 	it isn't kept on this computer and the account is offline	它未儲存在此電腦上，且帳戶處於離線狀態
+	Archive by age	依時間封存
+	Archive mail older than	封存早於下列時間的郵件
+	months	個月
+	{count} messages older than {months} months in {account} can go to Archives.	{account} 中早於 {months} 個月的 {count} 封郵件可以移到 Archives。
+	Not now	暫不
+	Archiving: {done} of {total}	正在封存：{done} / {total}

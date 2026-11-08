@@ -656,6 +656,10 @@ impl MailApp {
         }
         self.send_body_work(&ctx);
         self.flush_jobs();
+        // Looking through an account for old mail goes on a few folders a frame.
+        if self.session.archive_scanning() {
+            ctx.request_repaint();
+        }
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);
         }

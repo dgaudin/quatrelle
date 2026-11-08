@@ -2126,3 +2126,9 @@ folder	Conflicts	競合
 	its source isn't kept in Archives	元のデータは Archives に保存されていません
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	サーバーが保存先を知らせず、探すための Message-ID もありません。サーバーにはあり、コピーは Archives に残ります
 	it isn't kept on this computer and the account is offline	このコンピューターに保存されておらず、アカウントはオフラインです
+	Archive by age	経過期間でアーカイブ
+	Archive mail older than	次の期間より古いメッセージをアーカイブ
+	months	か月
+	{count} messages older than {months} months in {account} can go to Archives.	{account} の {months} か月より古いメッセージ {count} 件を Archives に移せます。
+	Not now	今はしない
+	Archiving: {done} of {total}	アーカイブ中: {done} / {total}

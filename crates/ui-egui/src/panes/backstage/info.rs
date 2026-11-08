@@ -92,6 +92,35 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
                     acts.push(Action::Run("archive.settings", json!({"account": id, "local": on})));
                 }
             });
+            // By age: off by default; the bar asks before anything goes.
+            setting_row(ui, t, false, name(t, tl!("Archive by age")), None, |ui| {
+                let months = a.config.archive_after_months;
+                let mut on = months.is_some();
+                let shown = months.unwrap_or(12);
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut on, tl!("Archive mail older than")).changed() {
+                        acts.push(Action::Run("archive.settings", json!({"account": id, "afterMonths": if on { Some(shown) } else { None }})));
+                    }
+                    let mut choices = vec![1u32, 2, 3, 6, 9, 12, 18, 24, 36, 48, 60, 120];
+                    if !choices.contains(&shown) {
+                        choices.push(shown);
+                        choices.sort_unstable();
+                    }
+                    ui.add_enabled_ui(on, |ui| {
+                        egui::ComboBox::from_id_salt(("archive-months", id.as_str())).width(56.0).selected_text(shown.to_string()).show_ui(
+                            ui,
+                            |ui| {
+                                for m in choices {
+                                    if ui.selectable_label(m == shown, m.to_string()).clicked() && m != shown {
+                                        acts.push(Action::Run("archive.settings", json!({"account": id, "afterMonths": m})));
+                                    }
+                                }
+                            },
+                        );
+                    });
+                    ui.label(tl!("months"));
+                });
+            });
         }
         setting_row(ui, t, false, name(t, tl!("Remove account")), None, |ui| {
             if ui.button(RichText::new(tl!("Remove account…")).color(t.danger)).clicked() {

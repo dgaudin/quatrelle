@@ -2125,3 +2125,9 @@ folder	Conflicts	התנגשויות
 	its source isn't kept in Archives	המקור שלה אינו שמור ב־Archives
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	השרת לא אמר היכן שם אותה ואין לה Message-ID כדי למצוא אותה; היא בשרת וההעתק נשאר ב־Archives
 	it isn't kept on this computer and the account is offline	היא אינה שמורה במחשב זה והחשבון במצב לא מקוון
+	Archive by age	ארכוב לפי גיל
+	Archive mail older than	ארכב הודעות ישנות מ־
+	months	חודשים
+	{count} messages older than {months} months in {account} can go to Archives.	ניתן להעביר ל-Archives‏ {count} הודעות מ-{account} שגילן מעל {months} חודשים.
+	Not now	לא עכשיו
+	Archiving: {done} of {total}	מתבצע ארכוב: {done} מתוך {total}

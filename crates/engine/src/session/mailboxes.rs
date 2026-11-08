@@ -10,7 +10,7 @@ use super::*;
 mod contacts;
 pub(crate) use contacts::Contacts;
 mod archive;
-pub(crate) use archive::Leaving;
+pub(crate) use archive::{AgeState, Leaving};
 mod echo;
 pub(crate) use echo::Echoes;
 mod directory;

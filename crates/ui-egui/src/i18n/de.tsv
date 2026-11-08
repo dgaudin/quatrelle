@@ -2130,3 +2130,9 @@ menu	View	Anzeigen
 	its source isn't kept in Archives	ihr Quelltext ist im Archiv nicht gespeichert
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	der Server hat nicht gesagt, wohin er sie gelegt hat, und sie hat keine Message-ID zum Wiederfinden; sie liegt auf dem Server, und die Kopie bleibt im Archiv
 	it isn't kept on this computer and the account is offline	sie ist nicht auf diesem Computer gespeichert, und das Konto ist offline
+	Archive by age	Nach Alter archivieren
+	Archive mail older than	Nachrichten archivieren, die älter sind als
+	months	Monate
+	{count} messages older than {months} months in {account} can go to Archives.	{count} Nachrichten von {account}, die älter als {months} Monate sind, können nach Archives verschoben werden.
+	Not now	Jetzt nicht
+	Archiving: {done} of {total}	Archivierung: {done} von {total}

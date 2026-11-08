@@ -2129,3 +2129,9 @@ menu	View	Просмотр
 	its source isn't kept in Archives	её исходный текст не хранится в Archives
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	сервер не сообщил, куда поместил письмо, а Message-ID для поиска нет; оно на сервере, а копия остаётся в Archives
 	it isn't kept on this computer and the account is offline	на этом компьютере его нет, а учётная запись не в сети
+	Archive by age	Архивация по возрасту
+	Archive mail older than	Архивировать письма старше
+	months	мес.
+	{count} messages older than {months} months in {account} can go to Archives.	{count} писем из {account} старше {months} мес. можно перенести в Archives.
+	Not now	Не сейчас
+	Archiving: {done} of {total}	Архивация: {done} из {total}

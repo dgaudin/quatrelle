@@ -340,6 +340,8 @@ pub struct Session {
     /// Accounts whose rules were read on coming online: a look for new mail (every half minute)
     /// goes back to Syncing and then Online without reading them again.
     rules_online: std::collections::BTreeSet<String>,
+    /// Archiving by age: what is being looked through, offered and run, per account.
+    age: mailboxes::AgeState,
     /// The public folders each Exchange account's sync was last told to follow
     /// ([`Session::follow_public_favorites`]).
     followed_public: HashMap<String, Vec<String>>,
@@ -559,6 +561,7 @@ impl Session {
             flushed: BTreeSet::new(),
             rules_asked: std::collections::BTreeSet::new(),
             rules_online: std::collections::BTreeSet::new(),
+            age: Default::default(),
             followed_public: HashMap::new(),
             rules_refused_told: HashMap::new(),
             refused_once: HashSet::new(),
@@ -747,6 +750,7 @@ impl Session {
     /// Jobs for the network layer, oldest first.
     pub fn take_jobs(&mut self) -> Vec<Job> {
         self.update_calendar_reading();
+        self.step_age_scans();
         std::mem::take(&mut self.jobs)
     }
 

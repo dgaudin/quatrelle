@@ -28,6 +28,7 @@ pub(crate) struct ListRows {
 /// What a dragged row carries.
 pub struct DragKeys(pub Vec<MessageKey>);
 
+mod age_bar;
 mod table;
 pub use table::ColumnWidths;
 use table::*;
@@ -137,6 +138,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     let sep = ui.available_rect_before_wrap();
     ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
     crate::dialogs::recover_link(s, &t, ui, acts);
+    age_bar::show(s, &t, ui, acts);
     let sent_view = matches!(s.view_role(), Some(FolderRole::Sent | FolderRole::Drafts)) || s.view == quatrelle_engine::View::Outbox;
     // A table where the list is wide (see `Session::list_as_table`): its headings stay put above
     // the rows, sized as the rows are (the scroll bar's width aside).

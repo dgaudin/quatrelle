@@ -2130,3 +2130,9 @@ menu	View	Ver
 	its source isn't kept in Archives	su código fuente no se conserva en Archives
 	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	el servidor no dijo dónde la puso y no tiene Message-ID para encontrarla; está en el servidor y la copia sigue en Archives
 	it isn't kept on this computer and the account is offline	no está guardado en este equipo y la cuenta está sin conexión
+	Archive by age	Archivar por antigüedad
+	Archive mail older than	Archivar los mensajes de más de
+	months	meses
+	{count} messages older than {months} months in {account} can go to Archives.	{count} mensajes de {account} con más de {months} meses pueden pasar a Archives.
+	Not now	Ahora no
+	Archiving: {done} of {total}	Archivando: {done} de {total}
