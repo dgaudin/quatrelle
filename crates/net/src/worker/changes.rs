@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod archive;
 mod filing;
 mod recovering;
 mod rules;
