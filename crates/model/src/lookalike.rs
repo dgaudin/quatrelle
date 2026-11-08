@@ -15,8 +15,8 @@
 
 mod external;
 mod people;
-mod signature;
 pub mod scam;
+mod signature;
 pub mod signs;
 
 use std::borrow::Cow;
