@@ -2112,3 +2112,20 @@ menu	View	Просмотр
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Письма, возвращённые на сервер, не удалось убрать из архива: {error}
 	Archive on this computer	Архивировать на этом компьютере
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	«Архивировать» и клавиша Backspace помещают письма в учётную запись Archives на этом компьютере и удаляют их на сервере только после проверки копии здесь.
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	{count} сообщений архивировано на этом компьютере, {kept} остались на месте: {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	{count} сообщений возвращено на сервер, {kept} остались в Archives: {error}
+	Archived mail	Архив писем
+	Archived mail, kept on this computer only	Архив писем, хранится только на этом компьютере
+	Not available: archived mail has no server.	Недоступно: у архива писем нет сервера.
+	only IMAP mail can be archived on this computer	на этом компьютере можно архивировать только почту IMAP
+	there is no Archives account to archive into	нет учётной записи Archives для архивации
+	too many at once	слишком много за один раз
+	not enough room on the disk, space needed: {error}	недостаточно места на диске, требуется: {error}
+	the message is no longer in its folder	сообщения больше нет в его папке
+	the archived copy didn't read back the same	архивная копия при проверке оказалась другой
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	в этой учётной записи Gmail здесь нет папки «Корзина», поэтому письма нельзя удалить насовсем; они остаются на сервере и есть также в Archives
+	it isn't in the Archives account	его нет в учётной записи Archives
+	it is no longer in its folder	его больше нет в папке
+	its source isn't kept in Archives	её исходный текст не хранится в Archives
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	сервер не сообщил, куда поместил письмо, а Message-ID для поиска нет; оно на сервере, а копия остаётся в Archives
+	it isn't kept on this computer and the account is offline	на этом компьютере его нет, а учётная запись не в сети

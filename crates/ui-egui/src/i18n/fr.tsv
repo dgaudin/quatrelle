@@ -2113,3 +2113,20 @@ menu	View	Afficher
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Le courrier remis sur le serveur n’a pas pu être retiré des archives : {error}
 	Archive on this computer	Archiver sur cet ordinateur
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archiver et la touche Retour arrière rangent le courrier dans le compte Archives de cet ordinateur, et ne le suppriment sur le serveur qu’une fois la copie d’ici vérifiée.
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	{count} messages archivés sur cet ordinateur, {kept} sont restés où ils étaient : {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	{count} messages remis sur le serveur, {kept} sont restés dans Archives : {error}
+	Archived mail	Courrier archivé
+	Archived mail, kept on this computer only	Courrier archivé, conservé sur cet ordinateur seulement
+	Not available: archived mail has no server.	Indisponible : le courrier archivé n’a pas de serveur.
+	only IMAP mail can be archived on this computer	seul le courrier IMAP peut être archivé sur cet ordinateur
+	there is no Archives account to archive into	il n’y a pas de compte Archives où archiver
+	too many at once	trop de messages à la fois
+	not enough room on the disk, space needed: {error}	pas assez de place sur le disque, espace nécessaire : {error}
+	the message is no longer in its folder	le message n’est plus dans son dossier
+	the archived copy didn't read back the same	la copie archivée n’a pas été relue à l’identique
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	ce compte Gmail n’a pas de dossier Corbeille ici, son courrier ne peut donc pas être supprimé définitivement ; il reste sur le serveur et se trouve aussi dans Archives
+	it isn't in the Archives account	il n’est pas dans le compte Archives
+	it is no longer in its folder	il n’est plus dans son dossier
+	its source isn't kept in Archives	sa source n’est pas conservée dans Archives
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	le serveur n’a pas dit où il l’a mis et il n’a pas de Message-ID pour le retrouver ; il est sur le serveur, et la copie reste dans Archives
+	it isn't kept on this computer and the account is offline	il n’est pas conservé sur cet ordinateur et le compte est hors connexion

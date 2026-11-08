@@ -111,7 +111,8 @@ pub struct UiState {
     pub(super) shown_pictures: HashMap<String, (Option<(egui::TextureHandle, egui::Vec2)>, u64)>,
     /// The heights of HTML messages' table cells as last drawn, for their rows' alignment.
     pub(super) cell_heights: reading::CellHeights,
-    pub toast: Option<(String, bool, f64)>,
+    /// The notice on show: its words, whether it is an error, when it appeared, and whether Undo is on offer.
+    pub toast: Option<(String, bool, f64, bool)>,
     pub(super) seen_notices: usize,
     pub(super) scroll_to_focus: bool,
     /// A text field on the File page had the keyboard at the end of the last frame: Esc leaves it

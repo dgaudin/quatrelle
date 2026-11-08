@@ -2113,3 +2113,20 @@ folder	Conflicts	衝突
 	archived mail put back on the server couldn't be taken out of Archives: {error}	放回伺服器的郵件無法從封存中移除：{error}
 	Archive on this computer	封存到此電腦
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	「封存」按鈕和 Backspace 鍵會把郵件放進此電腦上的 Archives 帳戶，並且只在核對過這裡的副本後才在伺服器上刪除。
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	已在此電腦上封存 {count} 封郵件，{kept} 封仍留在原處：{error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	已把 {count} 封郵件放回伺服器，{kept} 封仍留在 Archives：{error}
+	Archived mail	已封存的郵件
+	Archived mail, kept on this computer only	已封存的郵件，僅儲存在此電腦上
+	Not available: archived mail has no server.	無法使用：已封存的郵件沒有伺服器。
+	only IMAP mail can be archived on this computer	只能在此電腦上封存 IMAP 郵件
+	there is no Archives account to archive into	沒有可封存到的 Archives 帳戶
+	too many at once	一次太多
+	not enough room on the disk, space needed: {error}	磁碟空間不足，需要：{error}
+	the message is no longer in its folder	該郵件已不在其資料夾中
+	the archived copy didn't read back the same	封存的副本讀回後與原件不一致
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	此 Gmail 帳戶在這裡沒有「垃圾桶」資料夾，因此無法永久刪除其郵件；郵件仍留在伺服器上，同時也在 Archives 中
+	it isn't in the Archives account	它不在 Archives 帳戶中
+	it is no longer in its folder	它已不在其資料夾中
+	its source isn't kept in Archives	其原始檔未儲存在 Archives 中
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	伺服器沒有說明放在哪裡，且它沒有可用來尋找的 Message-ID；它在伺服器上，副本仍留在 Archives 中
+	it isn't kept on this computer and the account is offline	它未儲存在此電腦上，且帳戶處於離線狀態

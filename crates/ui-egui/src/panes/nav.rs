@@ -165,12 +165,26 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             if resp.hovered() || resp.dragged() {
                 ui.painter().rect_filled(rect, 6.0, t.hover_row);
             }
+            // Mail dropped on the Archives account itself is archived. (Asked first: taking a
+            // payload of another type, as `section_drag` does, would drop this one.)
+            if a.config.role == Some(quatrelle_engine::model::AccountRole::Archives) && egui::DragAndDrop::has_payload_of_type::<DragKeys>(ui.ctx()) {
+                if resp.contains_pointer() {
+                    ui.painter().rect_filled(rect, 6.0, t.accent.gamma_multiply(0.3));
+                }
+                if let Some(p) = resp.dnd_release_payload::<DragKeys>()
+                    && p.0.iter().all(|k| k.account != a.config.id)
+                {
+                    acts.push(Action::Run("mail.move", json!({"account": a.config.id, "folder": "-"})));
+                }
+            }
             section_drag(ui, t, &resp, rect, &sections, at, acts);
             let chev = egui::Rect::from_min_size(rect.min + vec2(6.0, 9.0), vec2(12.0, 12.0));
             icons::paint(ui.painter(), chev, if open { Icon::ChevronDown } else { Icon::ChevronRight }, t.dim);
             ui.painter().circle_filled(rect.min + vec2(26.0, 15.0), 4.0, theme::account_color(a.config.color));
             let label = if a.config.id == quatrelle_engine::SYNC_ISSUES {
                 tl!("Sync Issues").to_string()
+            } else if a.config.role == Some(quatrelle_engine::model::AccountRole::Archives) {
+                a.config.name.clone()
             } else if a.is_data_file() {
                 a.config.email.clone()
             } else if a.is_local() {
@@ -528,9 +542,14 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
     }
     if f.selectable
         && let Some(p) = resp.dnd_release_payload::<DragKeys>()
-        && p.0.iter().all(|k| k.account == f.account)
     {
-        acts.push(Action::Run("mail.move", json!({"folder": f.path})));
+        // Into a folder of the account, or of another one: onto the Archives account's folder it
+        // archives, onto an IMAP account's folder archived mail is put back there.
+        if p.0.iter().all(|k| k.account == f.account) {
+            acts.push(Action::Run("mail.move", json!({"folder": f.path})));
+        } else if p.0.iter().all(|k| k.account != f.account) {
+            acts.push(Action::Run("mail.move", json!({"account": f.account, "folder": f.path})));
+        }
     }
     if let Some(p) = resp.dnd_release_payload::<DragFolder>()
         && p.account == f.account

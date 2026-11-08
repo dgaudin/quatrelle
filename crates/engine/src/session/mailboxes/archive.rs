@@ -164,7 +164,7 @@ impl Session {
     }
 
     /// Say that some messages stayed where they were, and why (the first reason, in the
-    /// network layer's words).
+    /// network layer's words), when nothing else is said of this batch.
     fn say_kept(&mut self, kept: &[(MessageKey, String)]) {
         let Some((_, why)) = kept.first() else { return };
         let count = kept.len().to_string();
@@ -184,9 +184,21 @@ impl Session {
             let back: Vec<(MessageKey, String)> = moved.iter().map(|(from, copy)| (copy.clone(), from.folder.clone())).collect();
             self.remember(Undo::Archive { account: account.to_string(), back });
             let count = moved.len().to_string();
-            self.notice_with("{count} messages archived on this computer", &[("count", &count)], false);
+            match kept.first() {
+                Some((_, why)) => {
+                    let left = kept.len().to_string();
+                    self.notice_with(
+                        "{count} messages archived on this computer, {kept} stayed where they were: {error}",
+                        &[("count", &count), ("kept", &left), ("error", why)],
+                        false,
+                    );
+                }
+                None => self.notice_with("{count} messages archived on this computer", &[("count", &count)], false),
+            }
+            self.offer_undo();
+        } else {
+            self.say_kept(&kept);
         }
-        self.say_kept(&kept);
         self.refresh_list();
     }
 
@@ -208,13 +220,29 @@ impl Session {
         }
         if !back.is_empty() {
             // Undo archives them again (moved by the user; one put back by Undo has no entry here).
+            let mut remembered = false;
             if let (Some(to), false) = (to, ids.is_empty()) {
                 self.remember(Undo::PutBack { account: account.to_string(), to, ids });
+                remembered = true;
             }
             let count = back.len().to_string();
-            self.notice_with("{count} messages put back on the server", &[("count", &count)], false);
+            match kept.first() {
+                Some((_, why)) => {
+                    let left = kept.len().to_string();
+                    self.notice_with(
+                        "{count} messages put back on the server, {kept} stayed in Archives: {error}",
+                        &[("count", &count), ("kept", &left), ("error", why)],
+                        false,
+                    );
+                }
+                None => self.notice_with("{count} messages put back on the server", &[("count", &count)], false),
+            }
+            if remembered {
+                self.offer_undo();
+            }
+        } else {
+            self.say_kept(&kept);
         }
-        self.say_kept(&kept);
         self.refresh_list();
     }
 

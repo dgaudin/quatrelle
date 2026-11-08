@@ -2109,3 +2109,20 @@ folder	Conflicts	競合
 	archived mail put back on the server couldn't be taken out of Archives: {error}	サーバーに戻したメッセージをアーカイブから削除できませんでした: {error}
 	Archive on this computer	このコンピューターにアーカイブ
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	「アーカイブ」と Backspace キーは、メールをこのコンピューターの Archives アカウントに保存し、ここにあるコピーを確認してからサーバー上のメールを削除します。
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	{count} 件をこのコンピューターにアーカイブしました。{kept} 件は元の場所に残っています: {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	{count} 件をサーバーに戻しました。{kept} 件は Archives に残っています: {error}
+	Archived mail	アーカイブしたメール
+	Archived mail, kept on this computer only	アーカイブしたメール。このコンピューターにのみ保存されます
+	Not available: archived mail has no server.	利用できません: アーカイブしたメールにはサーバーがありません。
+	only IMAP mail can be archived on this computer	このコンピューターにアーカイブできるのは IMAP のメールだけです
+	there is no Archives account to archive into	アーカイブ先の Archives アカウントがありません
+	too many at once	一度に多すぎます
+	not enough room on the disk, space needed: {error}	ディスクの空き容量が足りません。必要な容量: {error}
+	the message is no longer in its folder	メッセージはもうフォルダーにありません
+	the archived copy didn't read back the same	アーカイブしたコピーを読み戻すと内容が一致しませんでした
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	この Gmail アカウントにはごみ箱フォルダーがないため、メールを完全に削除できません。メールはサーバーに残り、Archives にもあります
+	it isn't in the Archives account	Archives アカウントにありません
+	it is no longer in its folder	もうフォルダーにありません
+	its source isn't kept in Archives	元のデータは Archives に保存されていません
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	サーバーが保存先を知らせず、探すための Message-ID もありません。サーバーにはあり、コピーは Archives に残ります
+	it isn't kept on this computer and the account is offline	このコンピューターに保存されておらず、アカウントはオフラインです

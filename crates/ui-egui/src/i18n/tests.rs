@@ -122,6 +122,24 @@ const KNOWN_ERRORS: [&str; 2] = [
     "this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it",
 ];
 
+/// The reasons the network layer gives for mail that stayed where it was when it was archived or
+/// put back (`net/src/worker/changes/archive.rs`); the notice says them through `i18n::error`.
+/// "not enough room on the disk, space needed: 101 MB" is read as its head and an amount.
+const KEPT_REASONS: [&str; 12] = [
+    "only IMAP mail can be archived on this computer",
+    "there is no Archives account to archive into",
+    "too many at once",
+    "not enough room on the disk, space needed: {error}",
+    "the message is no longer in its folder",
+    "the archived copy didn't read back the same",
+    "this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives",
+    "it isn't in the Archives account",
+    "it is no longer in its folder",
+    "its source isn't kept in Archives",
+    "the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives",
+    "it isn't kept on this computer and the account is offline",
+];
+
 /// What the engine says in the status bar (`Session::notice`, `notice_with`) and the wording of
 /// the errors that come up to it (`the server refused: {error}`): the interface translates both
 /// (`i18n::notice`, `i18n::error`), so every catalog must have them.
@@ -147,6 +165,7 @@ fn notice_wordings() -> BTreeSet<String> {
         out.extend(literals_after(&[src.to_string()], &[("#[error(", &[0])]).iter().filter_map(|l| error_wording(&l.replace("{0}", "{error}"))));
     }
     out.extend(KNOWN_ERRORS.map(str::to_string));
+    out.extend(KEPT_REASONS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
     out.insert(quatrelle_engine::STILL_COMING.to_string());
     // The keychain's refusal, as the network layer puts it before what the system said.
@@ -419,6 +438,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         "About",
         "Back",
         "Sample mailbox",
+        "Archived mail",
         "JMAP",
         "Google (IMAP)",
         "Microsoft 365 (IMAP)",
@@ -668,6 +688,28 @@ fn the_errors_translated_whole_are_what_the_network_says() {
     assert_eq!(error_wording("the disk is almost full ({left} GB left): mail waits"), None);
     assert_eq!(error_wording("{path}: {source}"), None);
     assert!(!has_words("{who}: {error}") && has_words("Not sent: {error}"));
+}
+
+/// The reasons for archived mail that stayed are still word for word what the network says, and
+/// the notice says them in the interface's language (the amount of room kept as it is).
+#[test]
+fn the_reasons_archived_mail_stayed_are_said_in_the_interfaces_language() {
+    let net = [include_str!("../../../net/src/worker/changes/archive.rs"), include_str!("../../../net/src/worker/changes/archive/copy.rs")]
+        .join("\n")
+        .replace("\r\n", "\n");
+    let joined: String = net.split("\\\n").enumerate().map(|(i, part)| if i == 0 { part } else { part.trim_start() }).collect();
+    for r in KEPT_REASONS.iter().filter(|r| !r.contains('{')) {
+        assert!(joined.contains(&format!("\"{r}\"")), "not in archive.rs any more: {r}");
+    }
+    assert!(joined.contains("not enough room on the disk, space needed: {mb} MB"));
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    for r in KEPT_REASONS.iter().filter(|r| !r.contains('{')) {
+        assert_ne!(error(r), *r, "untranslated: {r}");
+    }
+    let said = error("not enough room on the disk, space needed: 101 MB");
+    assert!(said.contains("101 MB") && !said.contains("not enough"), "{said}");
+    assert!(error("the server refused: x").contains("refusé"), "the server's refusals are said whole too");
+    set_current(Lang::EN);
 }
 
 /// The engine's notices are said in the interface's language: the wording, the error's wording

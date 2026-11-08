@@ -57,6 +57,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 .filter(|f| f.selectable && quatrelle_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle))
                 .collect();
             let mut chosen = None;
+            let mut across = None;
             egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                 for f in &folders {
                     let indent = "    ".repeat(f.depth());
@@ -64,7 +65,15 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                         chosen = Some(f.path.clone());
                     }
                 }
+                // Mail from one account only: archiving, or putting archived mail back.
+                if accounts.len() == 1 {
+                    across = super::move_across::other_accounts(ui, s, t, &account.config.id, &needle);
+                }
             });
+            if let Some(params) = across {
+                acts.push(Action::Run("mail.move", params));
+                return false;
+            }
             let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
             if enter && folders.len() == 1 {
                 chosen = folders.first().map(|f| f.path.clone());

@@ -97,7 +97,7 @@ fn archive_batch_with(
     let needed: u64 = keys.iter().filter_map(|k| known(k).map(|m| u64::from(m.size))).fold(0, u64::saturating_add);
     if !room(needed) {
         let mb = needed.div_ceil(1 << 20).saturating_add(SPARE >> 20);
-        let batch = Batch::keep_all(keys, &format!("not enough room on the disk ({mb} MB needed)"));
+        let batch = Batch::keep_all(keys, &format!("not enough room on the disk, space needed: {mb} MB"));
         out.kept.extend(batch.kept);
         return out;
     }

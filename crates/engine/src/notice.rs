@@ -24,6 +24,8 @@ pub struct Notice {
     pub values: Vec<(&'static str, String)>,
     pub at: i64,
     pub error: bool,
+    /// Undo is on offer while it shows (it says what a move did, and `edit.undo` puts it back).
+    pub undo: bool,
 }
 
 /// `template` with each `{name}` filled in from `values`, in one pass: a value is never read as
@@ -56,7 +58,7 @@ impl Session {
     /// A message for the status bar given whole: a fixed wording, or an error said in full.
     pub fn notice(&mut self, text: impl Into<String>, error: bool) {
         let at = self.clock.now;
-        self.push_notice(Notice { text: text.into(), template: "", values: Vec::new(), at, error });
+        self.push_notice(Notice { text: text.into(), template: "", values: Vec::new(), at, error, undo: false });
     }
 
     /// A message for the status bar from an English wording with `{name}` placeholders and
@@ -65,7 +67,14 @@ impl Session {
         let at = self.clock.now;
         let text = fill(template, values);
         let values = values.iter().map(|(k, v)| (*k, (*v).to_string())).collect();
-        self.push_notice(Notice { text, template, values, at, error });
+        self.push_notice(Notice { text, template, values, at, error, undo: false });
+    }
+
+    /// The last notice offers Undo while it shows.
+    pub(crate) fn offer_undo(&mut self) {
+        if let Some(n) = self.notices.last_mut() {
+            n.undo = true;
+        }
     }
 
     fn push_notice(&mut self, n: Notice) {

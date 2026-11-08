@@ -220,10 +220,12 @@ impl MailApp {
             self.ui.seen_notices = 0;
         }
         if let Some(n) = self.session.notices.get(self.ui.seen_notices..).and_then(|v| v.last()) {
-            self.ui.toast = Some((crate::i18n::notice(n), n.error, now));
+            self.ui.toast = Some((crate::i18n::notice(n), n.error, now, n.undo));
         }
         self.ui.seen_notices = self.session.notices.len();
-        let Some((text, error, at)) = self.ui.toast.clone() else { return };
+        let Some((text, error, at, undo)) = self.ui.toast.clone() else { return };
+        let undo = undo && !self.session.undo.is_empty();
+        let mut undone = false;
         let ttl = if error { 7.0 } else { 3.5 };
         if now - at > ttl {
             self.ui.toast = None;
@@ -260,8 +262,26 @@ impl MailApp {
                         ui.set_max_width(420.0);
                         // Already in the interface's language (`i18n::notice`).
                         ui.label(RichText::new(text).color(if error { Color32::WHITE } else { t.surface }));
+                        // The move it tells of, taken back (Ctrl+Z does the same while it shows).
+                        if undo
+                            && ui
+                                .add(
+                                    egui::Label::new(
+                                        RichText::new(tl!("Undo (Ctrl+Z)")).color(if error { Color32::WHITE } else { t.surface }).underline(),
+                                    )
+                                    .sense(Sense::click()),
+                                )
+                                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                .clicked()
+                        {
+                            undone = true;
+                        }
                     });
             });
+        if undone {
+            self.ui.toast = None;
+            self.act(Action::Run("edit.undo", json!({})));
+        }
     }
 }
 

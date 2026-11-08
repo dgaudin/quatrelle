@@ -57,7 +57,9 @@ impl Backstage {
 
 /// What kind of account it is, for the picker.
 fn kind(a: &AccountState) -> &'static str {
-    if a.is_data_file() {
+    if a.config.role == Some(quatrelle_engine::model::AccountRole::Archives) {
+        "Archived mail"
+    } else if a.is_data_file() {
         "Outlook data file"
     } else if a.is_local() {
         "Sample mailbox"

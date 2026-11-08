@@ -2111,3 +2111,20 @@ folder	Conflicts	충돌
 	archived mail put back on the server couldn't be taken out of Archives: {error}	서버로 되돌린 메시지를 보관함에서 삭제하지 못했습니다: {error}
 	Archive on this computer	이 컴퓨터에 보관
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	보관 단추와 Backspace 키는 메일을 이 컴퓨터의 Archives 계정에 넣고, 여기 있는 사본을 확인한 뒤에만 서버에서 삭제합니다.
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	메시지 {count}개를 이 컴퓨터에 보관했고, {kept}개는 제자리에 남았습니다: {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	메시지 {count}개를 서버에 되돌렸고, {kept}개는 Archives에 남았습니다: {error}
+	Archived mail	보관한 메일
+	Archived mail, kept on this computer only	보관한 메일, 이 컴퓨터에만 저장됨
+	Not available: archived mail has no server.	사용할 수 없음: 보관한 메일에는 서버가 없습니다.
+	only IMAP mail can be archived on this computer	이 컴퓨터에는 IMAP 메일만 보관할 수 있습니다
+	there is no Archives account to archive into	보관할 Archives 계정이 없습니다
+	too many at once	한 번에 너무 많습니다
+	not enough room on the disk, space needed: {error}	디스크 공간이 부족합니다. 필요한 공간: {error}
+	the message is no longer in its folder	메시지가 더 이상 폴더에 없습니다
+	the archived copy didn't read back the same	보관한 사본을 다시 읽었을 때 내용이 같지 않았습니다
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	이 Gmail 계정에는 휴지통 폴더가 없어 메일을 완전히 삭제할 수 없습니다. 메일은 서버에 남고 Archives에도 있습니다
+	it isn't in the Archives account	Archives 계정에 없습니다
+	it is no longer in its folder	더 이상 폴더에 없습니다
+	its source isn't kept in Archives	원본이 Archives에 저장되어 있지 않습니다
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	서버가 저장 위치를 알려 주지 않았고 찾을 Message-ID도 없습니다. 서버에 있으며 사본은 Archives에 남습니다
+	it isn't kept on this computer and the account is offline	이 컴퓨터에 저장되어 있지 않고 계정이 오프라인입니다

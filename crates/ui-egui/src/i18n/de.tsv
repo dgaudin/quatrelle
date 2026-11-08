@@ -2113,3 +2113,20 @@ menu	View	Anzeigen
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Auf den Server zurückgelegte Nachrichten konnten nicht aus dem Archiv entfernt werden: {error}
 	Archive on this computer	Auf diesem Computer archivieren
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archivieren und die Rücktaste legen die Nachrichten im Konto „Archives“ auf diesem Computer ab und löschen sie auf dem Server erst, nachdem die Kopie hier geprüft wurde.
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	{count} Nachrichten auf diesem Computer archiviert, {kept} sind geblieben, wo sie waren: {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	{count} Nachrichten auf den Server zurückgelegt, {kept} sind im Archiv geblieben: {error}
+	Archived mail	Archivierte Nachrichten
+	Archived mail, kept on this computer only	Archivierte Nachrichten, nur auf diesem Computer gespeichert
+	Not available: archived mail has no server.	Nicht verfügbar: Archivierte Nachrichten haben keinen Server.
+	only IMAP mail can be archived on this computer	Nur IMAP-Nachrichten können auf diesem Computer archiviert werden
+	there is no Archives account to archive into	es gibt kein Konto „Archives“, in das archiviert werden könnte
+	too many at once	zu viele auf einmal
+	not enough room on the disk, space needed: {error}	nicht genug Platz auf dem Datenträger, benötigt wird: {error}
+	the message is no longer in its folder	die Nachricht ist nicht mehr in ihrem Ordner
+	the archived copy didn't read back the same	die archivierte Kopie wurde nicht identisch zurückgelesen
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	dieses Gmail-Konto hat hier keinen Papierkorb, seine Nachrichten können also nicht endgültig gelöscht werden; sie bleiben auf dem Server und sind auch im Archiv
+	it isn't in the Archives account	sie ist nicht im Konto „Archives“
+	it is no longer in its folder	sie ist nicht mehr in ihrem Ordner
+	its source isn't kept in Archives	ihr Quelltext ist im Archiv nicht gespeichert
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	der Server hat nicht gesagt, wohin er sie gelegt hat, und sie hat keine Message-ID zum Wiederfinden; sie liegt auf dem Server, und die Kopie bleibt im Archiv
+	it isn't kept on this computer and the account is offline	sie ist nicht auf diesem Computer gespeichert, und das Konto ist offline

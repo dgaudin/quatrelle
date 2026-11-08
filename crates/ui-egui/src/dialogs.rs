@@ -20,6 +20,7 @@ mod closing;
 mod folder_sizes;
 mod folders;
 mod mailbox;
+mod move_across;
 mod moving;
 mod names;
 mod organize;

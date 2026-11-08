@@ -37,7 +37,10 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
     }
 
     // Account settings: where it connects, and every change to it, each with its own button.
-    let servers = if a.is_data_file() {
+    let archives = a.config.role == Some(quatrelle_engine::model::AccountRole::Archives);
+    let servers = if archives {
+        tl!("Archived mail, kept on this computer only").to_string()
+    } else if a.is_data_file() {
         tl!("Opened from an Outlook data file, kept on this computer only").to_string()
     } else if a.is_local() {
         tl!("Sample mailbox, kept on this computer only").to_string()
@@ -104,6 +107,7 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
 
     // Automatic replies: on or off, and a button to change them where the server has them.
     let (color, status) = match &a.vacation {
+        _ if archives => (t.faint, tl!("Not available: archived mail has no server.").to_string()),
         _ if a.is_data_file() => (t.faint, tl!("Not available: a data file has no server.").to_string()),
         _ if a.is_local() => (t.faint, tl!("Not available: the sample mailbox has no server.").to_string()),
         VacationState::Unknown | VacationState::Loading => (t.faint, tl!("Checking with the server…").to_string()),

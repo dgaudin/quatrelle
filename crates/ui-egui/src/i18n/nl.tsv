@@ -2109,3 +2109,20 @@ menu	View	Weergeven
 	archived mail put back on the server couldn't be taken out of Archives: {error}	Op de server teruggezette berichten konden niet uit het archief worden gehaald: {error}
 	Archive on this computer	Archiveren op deze computer
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Archiveren en de toets Backspace zetten de e-mail in het account Archives op deze computer en verwijderen die pas op de server nadat de kopie hier is gecontroleerd.
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	{count} berichten gearchiveerd op deze computer, {kept} bleven waar ze waren: {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	{count} berichten teruggezet op de server, {kept} bleven in Archives: {error}
+	Archived mail	Gearchiveerde e-mail
+	Archived mail, kept on this computer only	Gearchiveerde e-mail, alleen op deze computer bewaard
+	Not available: archived mail has no server.	Niet beschikbaar: gearchiveerde e-mail heeft geen server.
+	only IMAP mail can be archived on this computer	alleen IMAP-e-mail kan op deze computer worden gearchiveerd
+	there is no Archives account to archive into	er is geen account Archives om in te archiveren
+	too many at once	te veel tegelijk
+	not enough room on the disk, space needed: {error}	niet genoeg ruimte op de schijf, nodig: {error}
+	the message is no longer in its folder	het bericht staat niet meer in zijn map
+	the archived copy didn't read back the same	de gearchiveerde kopie is niet identiek teruggelezen
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	dit Gmail-account heeft hier geen map Prullenbak, dus de e-mail kan niet definitief worden verwijderd; hij blijft op de server en staat ook in Archives
+	it isn't in the Archives account	het staat niet in het account Archives
+	it is no longer in its folder	het staat niet meer in zijn map
+	its source isn't kept in Archives	de bron ervan wordt niet bewaard in Archives
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	de server zei niet waar hij het bericht heeft gezet en het heeft geen Message-ID om het te vinden; het staat op de server en de kopie blijft in Archives
+	it isn't kept on this computer and the account is offline	het wordt niet op deze computer bewaard en het account is offline

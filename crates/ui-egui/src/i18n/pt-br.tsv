@@ -2112,3 +2112,20 @@ folder	Conflicts	Conflitos
 	archived mail put back on the server couldn't be taken out of Archives: {error}	As mensagens devolvidas ao servidor não puderam ser removidas dos arquivos: {error}
 	Archive on this computer	Arquivar neste computador
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	Arquivar e a tecla Backspace colocam o e-mail na conta Archives deste computador e só o excluem no servidor depois que a cópia daqui for conferida.
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	{count} mensagens arquivadas neste computador, {kept} ficaram onde estavam: {error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	{count} mensagens devolvidas ao servidor, {kept} ficaram em Archives: {error}
+	Archived mail	E-mail arquivado
+	Archived mail, kept on this computer only	E-mail arquivado, mantido somente neste computador
+	Not available: archived mail has no server.	Indisponível: o e-mail arquivado não tem servidor.
+	only IMAP mail can be archived on this computer	somente e-mails IMAP podem ser arquivados neste computador
+	there is no Archives account to archive into	não há nenhuma conta Archives para arquivar
+	too many at once	muitos de uma vez
+	not enough room on the disk, space needed: {error}	não há espaço suficiente no disco, espaço necessário: {error}
+	the message is no longer in its folder	a mensagem não está mais na pasta
+	the archived copy didn't read back the same	a cópia arquivada não foi lida de volta idêntica
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	esta conta do Gmail não tem uma pasta Lixeira aqui, então seus e-mails não podem ser excluídos definitivamente; eles continuam no servidor e também estão em Archives
+	it isn't in the Archives account	não está na conta Archives
+	it is no longer in its folder	não está mais na pasta
+	its source isn't kept in Archives	a origem não está guardada em Archives
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	o servidor não disse onde a colocou e ela não tem Message-ID para ser encontrada; está no servidor e a cópia continua em Archives
+	it isn't kept on this computer and the account is offline	não está guardado neste computador e a conta está offline

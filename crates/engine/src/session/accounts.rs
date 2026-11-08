@@ -277,7 +277,9 @@ impl Session {
     /// them; new ones after the mailbox they came with.
     pub fn pane_sections(&self) -> Vec<PaneSection> {
         let mut natural = Vec::new();
-        for a in &self.accounts {
+        // The Archives account comes below the others, whenever it was made.
+        let archives = |a: &&AccountState| a.config.role == Some(quatrelle_model::AccountRole::Archives);
+        for a in self.accounts.iter().filter(|a| !archives(a)).chain(self.accounts.iter().filter(archives)) {
             natural.push(PaneSection { key: a.config.id.clone(), account: a.config.id.clone(), mailbox: None });
             for top in a.folders.iter().filter(|f| f.depth() == 0) {
                 if let Some(address) = &top.mailbox {

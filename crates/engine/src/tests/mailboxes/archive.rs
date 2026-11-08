@@ -242,3 +242,51 @@ fn archive_settings_are_for_imap_accounts_and_checked() {
     assert!(s.run("archive.settings", &json!({"account": id, "local": true})).is_err());
     done(s);
 }
+
+#[test]
+fn one_notice_says_what_left_and_what_stayed_and_offers_undo() {
+    let mut s = two_accounts("archive-notice");
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    s.run("mail.move", &json!({"account": "archives", "folder": "-"})).unwrap();
+    let mut keys = archive_jobs(s.take_jobs()).remove(0).1;
+    keys.push(MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 77 });
+    let id = archives_of(&s).unwrap();
+    let to = MessageKey { account: id, folder: "Studio/INBOX".into(), validity: 1, uid: 1 };
+    let before = s.notices.len();
+    s.apply(Event::Archived {
+        account: "a1".into(),
+        moved: vec![(keys[0].clone(), to.clone())],
+        kept: vec![(keys[1].clone(), "too many at once".into())],
+    });
+    assert_eq!(s.notices.len(), before + 1, "one notice, not two");
+    let n = s.notices.last().unwrap();
+    assert_eq!(n.text, "1 messages archived on this computer, 1 stayed where they were: too many at once");
+    assert!(n.undo && !n.error, "Undo is offered while it shows");
+    done(s);
+    // Nothing left: the reason alone, an error, no Undo.
+    let mut s = two_accounts("archive-notice-kept");
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    s.run("mail.move", &json!({"account": "archives", "folder": "-"})).unwrap();
+    let key = archive_jobs(s.take_jobs()).remove(0).1.remove(0);
+    s.apply(Event::Archived { account: "a1".into(), moved: Vec::new(), kept: vec![(key, "too many at once".into())] });
+    let n = s.notices.last().unwrap();
+    assert!(n.error && !n.undo, "{n:?}");
+    done(s);
+}
+
+#[test]
+fn the_archives_account_comes_after_the_others() {
+    let mut s = two_accounts("archive-last");
+    let order = |s: &Session| s.pane_sections().into_iter().map(|x| x.account).collect::<Vec<_>>();
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    s.run("mail.move", &json!({"account": "archives", "folder": "-"})).unwrap();
+    let id = archives_of(&s).unwrap();
+    assert_eq!(order(&s), vec!["a1".to_string(), "a2".to_string(), id.clone()]);
+    // An account added later still comes before it.
+    let added = s.run("account.add", &json!({"email": "ana@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    assert_eq!(order(&s), vec!["a1".to_string(), "a2".to_string(), added.clone(), id.clone()]);
+    // Also once the folder pane has been ordered by hand.
+    s.move_pane_section("a1", 1).unwrap();
+    assert_eq!(order(&s).last(), Some(&id));
+    done(s);
+}

@@ -2110,3 +2110,20 @@ menu	View	查看
 	archived mail put back on the server couldn't be taken out of Archives: {error}	放回服务器的邮件无法从归档中移除：{error}
 	Archive on this computer	归档到此计算机
 	Archive and Backspace file the mail into the Archives account on this computer, and delete it on the server only once the copy here has been checked.	“归档”按钮和 Backspace 键会把邮件放入此计算机上的 Archives 账户，并且只在核对过这里的副本后才在服务器上删除。
+	{count} messages archived on this computer, {kept} stayed where they were: {error}	已在此计算机上归档 {count} 封邮件，{kept} 封仍留在原处：{error}
+	{count} messages put back on the server, {kept} stayed in Archives: {error}	已把 {count} 封邮件放回服务器，{kept} 封仍留在 Archives：{error}
+	Archived mail	已归档的邮件
+	Archived mail, kept on this computer only	已归档的邮件，仅保存在此计算机上
+	Not available: archived mail has no server.	不可用：已归档的邮件没有服务器。
+	only IMAP mail can be archived on this computer	只能在此计算机上归档 IMAP 邮件
+	there is no Archives account to archive into	没有可归档到的 Archives 账户
+	too many at once	一次太多
+	not enough room on the disk, space needed: {error}	磁盘空间不足，需要：{error}
+	the message is no longer in its folder	该邮件已不在其文件夹中
+	the archived copy didn't read back the same	归档的副本回读后与原件不一致
+	this Gmail account has no Trash folder here, so its mail can't be deleted for good; it stays on the server and is also in Archives	此 Gmail 账户在这里没有“已删除邮件”文件夹，因此无法永久删除其邮件；邮件仍留在服务器上，同时也在 Archives 中
+	it isn't in the Archives account	它不在 Archives 账户中
+	it is no longer in its folder	它已不在其文件夹中
+	its source isn't kept in Archives	其源文件未保存在 Archives 中
+	the server didn't say where it put it and it has no Message-ID to find it by; it is on the server, and the copy stays in Archives	服务器没有说明放在了哪里，且它没有可用来查找的 Message-ID；它在服务器上，副本仍留在 Archives 中
+	it isn't kept on this computer and the account is offline	它未保存在此计算机上，且账户处于脱机状态
