@@ -329,3 +329,58 @@ fn a_source_that_cant_be_read_is_asked_for_once() {
     assert!(!jobs.iter().any(|j| matches!(j, Job::FetchBody { .. })), "not asked for again");
     done(s);
 }
+
+/// "Try it on examples": the twenty are put to the model one at a time; the counts, the wrong
+/// ones and the seconds a message took come out. Nothing of the user's is sent.
+#[test]
+fn the_test_counts_hits_and_misses() {
+    use quatrelle_model::scam::EXAMPLES;
+    let mut s = session_at("scam-trial-nomodel", "zoe@studio.example", true);
+    s.prefs.llm_model.clear();
+    assert!(s.run("assistant.testScam", &json!({})).is_err(), "no model set");
+    done(s);
+    let mut s = zoe("scam-trial");
+    let r = s.run("assistant.testScam", &json!({})).unwrap();
+    assert_eq!((r["running"].as_bool(), r["total"].as_u64()), (Some(true), Some(20)));
+    let mut missed = None;
+    for (i, e) in EXAMPLES.iter().enumerate() {
+        let jobs = s.take_jobs();
+        let q = asks(&jobs);
+        assert_eq!(q.len(), 1, "one question at a time ({i})");
+        assert!(q[0].1.contains(e.subject) && q[0].1.contains(e.from), "the example's own message goes: {}", q[0].1);
+        assert!(!q[0].1.contains("zoe@studio.example"), "nothing of the user's");
+        // A scam let through (the third), a normal message taken for one (the twelfth), one
+        // answered with nonsense (the fifth), each answer 4 s after the question.
+        s.clock.now += 4;
+        let text = match i {
+            2 => r#"{"score": 10, "reasons": []}"#.to_string(),
+            4 => "<html>".to_string(),
+            11 => r#"{"score": 55, "reasons": ["Odd"]}"#.to_string(),
+            _ if e.scam => SCAM.to_string(),
+            _ => r#"{"score": 3, "reasons": []}"#.to_string(),
+        };
+        if i == 2 {
+            missed = Some(e.subject);
+        }
+        answer(&mut s, q[0].0, &text);
+    }
+    assert!(asks(&s.take_jobs()).is_empty(), "twenty only");
+    let t = s.scam_test().cloned().expect("the result is kept");
+    assert!(!t.running);
+    assert_eq!((t.scams, t.spotted, t.normals, t.left_alone, t.unanswered), (10, 8, 10, 9, 1));
+    assert_eq!(t.misses.len(), 2, "{:?}", t.misses);
+    assert!(t.misses.iter().any(|m| Some(m.as_str()) == missed) && t.misses.iter().any(|m| m == EXAMPLES[11].subject));
+    assert_eq!(t.secs_per_message(), 4);
+    // Asked again, it starts over; a real arrival is not mixed with it.
+    let r = s.run("assistant.testScam", &json!({})).unwrap();
+    assert_eq!((r["running"].as_bool(), r["done"].as_u64()), (Some(true), Some(0)));
+    // A server that never answers: each question is given up on after a minute, the run ends.
+    for _ in 0..20 {
+        assert_eq!(asks(&s.take_jobs()).len(), 1);
+        s.clock.now += 61;
+        s.tick();
+    }
+    let t = s.scam_test().cloned().expect("the result");
+    assert!(!t.running && t.unanswered == 20 && t.spotted == 0, "{t:?}");
+    done(s);
+}

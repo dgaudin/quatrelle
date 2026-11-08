@@ -14,6 +14,9 @@ use crate::addr::trust::url_host;
 use crate::dates::civil_from_days;
 use crate::lookalike::signs::Sign;
 
+mod examples;
+pub use examples::{EXAMPLES, Example};
+
 /// The first characters of a message's text that are sent.
 pub const MAX_TEXT_CHARS: usize = 4000;
 /// The most link hosts sent.

@@ -10,13 +10,16 @@
 //! One question to the model at a time, a daily cap, a short queue. The model only ever adds a
 //! warning; its answer is hostile input (`quatrelle_model::scam::read_answer`).
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use quatrelle_model::lookalike::signs::{self, Sign};
 use quatrelle_model::lookalike::{self};
-use quatrelle_model::scam::{Facts, ScamDoc, Verdict, read_answer, request};
+use quatrelle_model::scam::{Facts, ScamDoc, Verdict, WARN_SCORE, read_answer, request};
 
 use super::*;
+
+mod trial;
+pub use trial::ScamTest;
 
 /// An account's document of verdicts and trusted senders.
 pub const SCAM_DOC: &str = "scam.json";
@@ -62,6 +65,8 @@ pub(crate) struct ScamState {
     /// given up on, never asked for again (no loop of downloads).
     fetched: HashSet<MessageKey>,
     inflight: Option<Inflight>,
+    /// "Try it on examples": the run in progress or the last one's result.
+    trial: Option<trial::Trial>,
     /// `account` and Message-ID of every message asked this run, answered or not.
     asked: HashSet<(String, String)>,
     /// The day (UTC, days since 1970) the count is for, and how many questions were asked in it.
@@ -71,7 +76,7 @@ pub(crate) struct ScamState {
 
 impl Session {
     /// Whether the account is an Exchange one (EWS or Microsoft 365): the only kind checked.
-    pub(crate) fn is_exchange(&self, account: &str) -> bool {
+    pub fn is_exchange(&self, account: &str) -> bool {
         self.account(account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some())
     }
 
@@ -106,6 +111,41 @@ impl Session {
             return None;
         }
         self.scam_doc(&key.account).verdicts.get(&id).map(|v| (v.score, v.reasons.clone()))
+    }
+
+    /// Read every account's document now (the window does it once a frame, cheap after the first), so
+    /// that what it draws can look verdicts up without loading anything.
+    pub fn scam_warm(&mut self) {
+        let ids: Vec<String> = self.accounts.iter().map(|a| a.config.id.clone()).collect();
+        for id in ids {
+            if !self.scam.docs.contains_key(&id) {
+                self.scam_doc(&id);
+            }
+        }
+    }
+
+    /// The verdict a message carries when it is a warning (a score of [`WARN_SCORE`] or more) and its
+    /// account's document is read ([`Session::scam_warm`]); `message_id` stands in for a message
+    /// that isn't listed.
+    pub fn scam_warning(&self, key: &MessageKey, message_id: &str) -> Option<(u8, &[String])> {
+        let listed = self.summary(key).map(|m| m.message_id.as_str()).filter(|id| !id.is_empty());
+        let v = self.scam.docs.get(&key.account)?.verdicts.get(listed.unwrap_or(message_id))?;
+        (v.score >= WARN_SCORE).then_some((v.score, v.reasons.as_slice()))
+    }
+
+    /// The score of a listed message's warning, for the list's mark.
+    pub fn scam_score(&self, m: &Summary) -> Option<u8> {
+        if m.message_id.is_empty() {
+            return None;
+        }
+        let v = self.scam.docs.get(&m.key.account)?.verdicts.get(&m.message_id)?;
+        (v.score >= WARN_SCORE).then_some(v.score)
+    }
+
+    /// Every address taken as not a scam, in any account's document read so far, sorted.
+    pub fn scam_trusted_all(&self) -> Vec<String> {
+        let all: BTreeSet<&String> = self.scam.docs.values().flat_map(|d| d.trusted.iter()).collect();
+        all.into_iter().cloned().collect()
     }
 
     /// The addresses an account's user said are not scams, sorted.
@@ -242,6 +282,9 @@ impl Session {
 
     /// Whether the language model's answer `id` was the scam check's: kept (or logged) if so.
     pub(crate) fn scam_answered(&mut self, id: u64, text: &str, error: Option<&str>) -> bool {
+        if self.trial_answered(id, text, error) {
+            return true;
+        }
         let Some(sent) = self.scam.inflight.take_if(|f| f.id == id) else { return false };
         match (error, read_answer(text)) {
             (Some(e), _) => log::info!("scam check: the model's server failed: {e}"),
@@ -258,6 +301,7 @@ impl Session {
 
     /// An answer that didn't come in time is given up on (called with every tick).
     pub(crate) fn scam_tick(&mut self) {
+        self.trial_tick();
         if self.scam.inflight.as_ref().is_some_and(|f| self.clock.now - f.since > ANSWER_SECS) {
             log::info!("scam check: no answer from the model within {ANSWER_SECS} s, skipped");
             self.scam.inflight = None;

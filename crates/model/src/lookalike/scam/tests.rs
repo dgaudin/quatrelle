@@ -78,3 +78,32 @@ fn the_document_keeps_what_it_should() {
     }
     assert!(!doc.trust("one-more@x.example"));
 }
+
+#[test]
+fn the_examples_are_ten_and_ten_half_in_french() {
+    use std::collections::BTreeSet;
+    assert_eq!(EXAMPLES.len(), 20);
+    for (scam, french, n) in [(true, true, 5), (true, false, 5), (false, true, 5), (false, false, 5)] {
+        assert_eq!(EXAMPLES.iter().filter(|e| e.scam == scam && e.french == french).count(), n, "scam {scam}, french {french}");
+    }
+    assert_eq!(EXAMPLES.iter().map(|e| e.subject).collect::<BTreeSet<_>>().len(), 20, "each its own");
+    for e in &EXAMPLES {
+        assert!(e.from.ends_with(".example") && e.from.contains('@'), "{}: addresses are under `example`", e.from);
+        assert!(!e.subject.is_empty() && e.text.chars().count() > 60, "{}", e.subject);
+        // Each one is a proper request to the model (the markers, the sender, the subject).
+        let f = Facts {
+            from_name: e.from_name,
+            from: e.from,
+            reply_to: None,
+            subject: e.subject,
+            date: 1_700_000_000,
+            known: false,
+            signs: &[],
+            link_targets: &[],
+            attachment_names: &[],
+            text: e.text,
+        };
+        let m = request(&f, "English");
+        assert!(m.last().is_some_and(|u| u.1.contains(e.subject) && u.1.contains(e.from)));
+    }
+}

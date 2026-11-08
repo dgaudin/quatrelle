@@ -50,6 +50,8 @@ pub struct SenderMarks {
     pub warning: bool,
     /// From outside the organisation (with the External tag on).
     pub external: bool,
+    /// The scam check's score for the message, when it is a warning (40 or more).
+    pub scam: Option<u8>,
 }
 
 impl Session {
@@ -280,6 +282,10 @@ impl Session {
     /// What the message list shows about a message's sender, as the check last gathered knows
     /// (nothing before it's gathered, nor for the user's own mail).
     pub fn sender_marks(&self, m: &Summary) -> SenderMarks {
+        SenderMarks { scam: self.scam_score(m), ..self.sender_marks_of(m) }
+    }
+
+    fn sender_marks_of(&self, m: &Summary) -> SenderMarks {
         let Some(s) = &self.senders else { return SenderMarks::default() };
         let email = m.from.email.trim();
         if email.is_empty() || s.check.is_own(email) {
@@ -293,6 +299,6 @@ impl Session {
                 SenderAddresses::Strangers => !s.check.knows(email),
                 SenderAddresses::Never => false,
             };
-        SenderMarks { address, warning: s.check.check(&m.from, m.bulk).is_some(), external: self.is_external(email) }
+        SenderMarks { address, warning: s.check.check(&m.from, m.bulk).is_some(), external: self.is_external(email), scam: None }
     }
 }
