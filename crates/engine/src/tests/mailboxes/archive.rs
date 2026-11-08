@@ -146,7 +146,7 @@ fn undo_puts_archived_mail_back() {
     s.run("edit.undo", &json!({})).unwrap();
     let jobs = s.take_jobs();
     assert!(
-        matches!(jobs.as_slice(), [Job::PutBack { account, keys, to_folder }] if account == "a1" && keys == &[to.clone()] && to_folder == "INBOX"),
+        matches!(jobs.as_slice(), [Job::PutBack { account, keys, to_folder }] if account == "a1" && keys.as_slice() == std::slice::from_ref(&to) && to_folder == "INBOX"),
         "{jobs:?}"
     );
     // It is told of, and puts nothing more to undo.
@@ -178,7 +178,7 @@ fn archived_mail_moves_back_to_a_folder_of_the_server_and_undo_archives_it_again
     s.run("mail.move", &json!({"account": "a1", "folder": "INBOX"})).unwrap();
     let jobs = s.take_jobs();
     assert!(
-        matches!(jobs.as_slice(), [Job::PutBack { account, keys, to_folder }] if account == "a1" && keys == &[to.clone()] && to_folder == "INBOX"),
+        matches!(jobs.as_slice(), [Job::PutBack { account, keys, to_folder }] if account == "a1" && keys.as_slice() == std::slice::from_ref(&to) && to_folder == "INBOX"),
         "{jobs:?}"
     );
     assert!(!s.list.iter().any(|m| m.subject == "Plans"), "it leaves Archives' list at once");
