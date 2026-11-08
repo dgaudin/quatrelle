@@ -368,8 +368,10 @@ fn the_test_counts_hits_and_misses() {
     let t = s.scam_test().cloned().expect("the result is kept");
     assert!(!t.running);
     assert_eq!((t.scams, t.spotted, t.normals, t.left_alone, t.unanswered), (10, 8, 10, 9, 1));
-    assert_eq!(t.misses.len(), 2, "{:?}", t.misses);
-    assert!(t.misses.iter().any(|m| Some(m.as_str()) == missed) && t.misses.iter().any(|m| m == EXAMPLES[11].subject));
+    assert_eq!(t.misses.len(), 3, "the two got wrong and the one unanswered: {:?}", t.misses);
+    assert!(t.misses.iter().any(|m| Some(m.subject.as_str()) == missed && m.scam && m.score == Some(10)), "{:?}", t.misses);
+    assert!(t.misses.iter().any(|m| m.subject == EXAMPLES[11].subject && !m.scam && m.score == Some(55)), "{:?}", t.misses);
+    assert!(t.misses.iter().any(|m| m.subject == EXAMPLES[4].subject && m.score.is_none()), "{:?}", t.misses);
     assert_eq!(t.secs_per_message(), 4);
     // Asked again, it starts over; a real arrival is not mixed with it.
     let r = s.run("assistant.testScam", &json!({})).unwrap();

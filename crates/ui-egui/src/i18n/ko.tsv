@@ -2098,8 +2098,9 @@ folder	Conflicts	충돌
 	Try it on examples	예제로 시험
 	Trying it on the examples: {done} of {total}	예제로 시험 중: {done}/{total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	사기 {scams}개 중 {spotted}개 탐지, 정상 메시지 {normals}개 중 {left}개 그대로 둠, 메시지당 {secs}초
-	Got wrong: {list}	틀린 것: {list}
-	{n} without an answer	응답 없음 {n}개
+	Flagged by mistake: {subject} (score {score})	잘못 경고함: {subject} (점수 {score})
+	Scam not spotted: {subject} (score {score})	놓친 사기: {subject} (점수 {score})
+	No answer: {subject}	응답 없음: {subject}
 	This message looks like a scam.	이 메시지는 사기로 보입니다.
 	This message could be a scam.	이 메시지는 사기일 수 있습니다.
 	Not a scam	사기가 아님

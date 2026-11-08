@@ -2099,8 +2099,9 @@ menu	View	Просмотр
 	Try it on examples	Попробовать на примерах
 	Trying it on the examples: {done} of {total}	Проверка на примерах: {done} из {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	Мошеннических писем распознано {spotted} из {scams}, обычных писем оставлено в покое {left} из {normals}, {secs} с на письмо
-	Got wrong: {list}	Ошибки: {list}
-	{n} without an answer	Без ответа: {n}
+	Flagged by mistake: {subject} (score {score})	Ошибочно отмечено: {subject} (оценка {score})
+	Scam not spotted: {subject} (score {score})	Мошенничество не распознано: {subject} (оценка {score})
+	No answer: {subject}	Нет ответа: {subject}
 	This message looks like a scam.	Это письмо похоже на мошенничество.
 	This message could be a scam.	Это письмо может быть мошенничеством.
 	Not a scam	Это не мошенничество

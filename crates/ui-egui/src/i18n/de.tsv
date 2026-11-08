@@ -2100,8 +2100,9 @@ menu	View	Anzeigen
 	Try it on examples	An Beispielen testen
 	Trying it on the examples: {done} of {total}	Test an den Beispielen: {done} von {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} von {scams} Betrugsversuchen erkannt, {left} von {normals} normalen Nachrichten in Ruhe gelassen, {secs} s pro Nachricht
-	Got wrong: {list}	Falsch beurteilt: {list}
-	{n} without an answer	{n} ohne Antwort
+	Flagged by mistake: {subject} (score {score})	Fälschlich gemeldet: {subject} (Wert {score})
+	Scam not spotted: {subject} (score {score})	Betrug nicht erkannt: {subject} (Wert {score})
+	No answer: {subject}	Keine Antwort: {subject}
 	This message looks like a scam.	Diese Nachricht sieht nach Betrug aus.
 	This message could be a scam.	Diese Nachricht könnte Betrug sein.
 	Not a scam	Kein Betrug

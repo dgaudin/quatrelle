@@ -273,7 +273,8 @@ fn the_test_on_examples_shows_its_result() {
         shown.iter().any(|t| t.starts_with("9 of 10 scams spotted, 10 of 10 normal messages left alone, ") && t.ends_with(" s a message")),
         "{line:?}"
     );
-    assert!(shown.iter().any(|t| t.starts_with("Got wrong: ") && t.contains("Payment") || t.starts_with("Got wrong: ")), "{shown:?}");
+    let third = quatrelle_engine::model::scam::EXAMPLES[2].subject;
+    assert!(shown.iter().any(|t| *t == format!("Scam not spotted: {third} (score 2)")), "each miss on its line, with its score: {shown:?}");
     a.ui.language = "fr".into();
     frame(&ctx, &mut a, vec![]);
     let shown = texts(&frame_shapes(&ctx, &mut a, vec![], TALL));

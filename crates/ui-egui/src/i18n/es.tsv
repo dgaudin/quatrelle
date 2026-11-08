@@ -2100,8 +2100,9 @@ menu	View	Ver
 	Try it on examples	Probar con ejemplos
 	Trying it on the examples: {done} of {total}	Probando con los ejemplos: {done} de {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} de {scams} estafas detectadas, {left} de {normals} mensajes normales sin avisar, {secs} s por mensaje
-	Got wrong: {list}	Fallos: {list}
-	{n} without an answer	{n} sin respuesta
+	Flagged by mistake: {subject} (score {score})	Marcado por error: {subject} (puntuación {score})
+	Scam not spotted: {subject} (score {score})	Estafa no detectada: {subject} (puntuación {score})
+	No answer: {subject}	Sin respuesta: {subject}
 	This message looks like a scam.	Este mensaje parece una estafa.
 	This message could be a scam.	Este mensaje podría ser una estafa.
 	Not a scam	No es una estafa

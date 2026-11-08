@@ -2096,8 +2096,9 @@ menu	View	Weergeven
 	Try it on examples	Proberen met voorbeelden
 	Trying it on the examples: {done} of {total}	Proberen met de voorbeelden: {done} van {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} van {scams} oplichtingsberichten herkend, {left} van {normals} gewone berichten met rust gelaten, {secs} s per bericht
-	Got wrong: {list}	Fout beoordeeld: {list}
-	{n} without an answer	{n} zonder antwoord
+	Flagged by mistake: {subject} (score {score})	Ten onrechte gemeld: {subject} (score {score})
+	Scam not spotted: {subject} (score {score})	Oplichting niet herkend: {subject} (score {score})
+	No answer: {subject}	Geen antwoord: {subject}
 	This message looks like a scam.	Dit bericht lijkt op oplichting.
 	This message could be a scam.	Dit bericht kan oplichting zijn.
 	Not a scam	Geen oplichting

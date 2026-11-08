@@ -2096,8 +2096,9 @@ folder	Conflicts	競合
 	Try it on examples	例で試す
 	Trying it on the examples: {done} of {total}	例で試しています: {done} / {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	詐欺 {scams} 件中 {spotted} 件を検出、通常のメッセージ {normals} 件中 {left} 件をそのまま通過、1 件あたり {secs} 秒
-	Got wrong: {list}	誤り: {list}
-	{n} without an answer	応答なし: {n} 件
+	Flagged by mistake: {subject} (score {score})	誤って警告: {subject}(スコア {score})
+	Scam not spotted: {subject} (score {score})	見逃した詐欺: {subject}(スコア {score})
+	No answer: {subject}	応答なし: {subject}
 	This message looks like a scam.	このメッセージは詐欺のようです。
 	This message could be a scam.	このメッセージは詐欺かもしれません。
 	Not a scam	詐欺ではありません

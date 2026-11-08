@@ -2097,8 +2097,9 @@ menu	View	查看
 	Try it on examples	用示例试一试
 	Trying it on the examples: {done} of {total}	正在用示例测试：{done} / {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{scams} 封诈骗邮件中识别出 {spotted} 封，{normals} 封正常邮件中放过 {left} 封，每封 {secs} 秒
-	Got wrong: {list}	判断有误：{list}
-	{n} without an answer	{n} 封无回应
+	Flagged by mistake: {subject} (score {score})	误报：{subject}(得分 {score})
+	Scam not spotted: {subject} (score {score})	未识别的诈骗：{subject}(得分 {score})
+	No answer: {subject}	无回答：{subject}
 	This message looks like a scam.	这封邮件看起来像诈骗。
 	This message could be a scam.	这封邮件可能是诈骗。
 	Not a scam	不是诈骗

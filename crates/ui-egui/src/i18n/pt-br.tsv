@@ -2099,8 +2099,9 @@ folder	Conflicts	Conflitos
 	Try it on examples	Testar com exemplos
 	Trying it on the examples: {done} of {total}	Testando com os exemplos: {done} de {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} de {scams} golpes detectados, {left} de {normals} mensagens normais deixadas em paz, {secs} s por mensagem
-	Got wrong: {list}	Erros: {list}
-	{n} without an answer	{n} sem resposta
+	Flagged by mistake: {subject} (score {score})	Marcado por engano: {subject} (pontuação {score})
+	Scam not spotted: {subject} (score {score})	Golpe não detectado: {subject} (pontuação {score})
+	No answer: {subject}	Sem resposta: {subject}
 	This message looks like a scam.	Esta mensagem parece um golpe.
 	This message could be a scam.	Esta mensagem pode ser um golpe.
 	Not a scam	Não é um golpe

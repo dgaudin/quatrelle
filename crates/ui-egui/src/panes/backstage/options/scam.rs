@@ -115,10 +115,12 @@ fn trial(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
         normals = r.normals,
         secs = r.secs_per_message()
     ));
-    if !r.misses.is_empty() {
-        ui.label(RichText::new(tf!("Got wrong: {list}", list = r.misses.join("; "))).color(t.dim).small());
-    }
-    if r.unanswered > 0 {
-        ui.label(RichText::new(tf!("{n} without an answer", n = r.unanswered)).color(t.dim).small());
+    // Each one on its line, with the score the model gave: how far over (or under) the line it was.
+    for m in &r.misses {
+        ui.label(match (m.score, m.scam) {
+            (Some(score), false) => tf!("Flagged by mistake: {subject} (score {score})", subject = m.subject, score = score),
+            (Some(score), true) => tf!("Scam not spotted: {subject} (score {score})", subject = m.subject, score = score),
+            (None, _) => tf!("No answer: {subject}", subject = m.subject),
+        });
     }
 }

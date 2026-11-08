@@ -2098,8 +2098,9 @@ folder	Conflicts	Conflitti
 	Try it on examples	Prova con degli esempi
 	Trying it on the examples: {done} of {total}	Prova sugli esempi: {done} di {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} truffe su {scams} individuate, {left} messaggi normali su {normals} lasciati stare, {secs} s a messaggio
-	Got wrong: {list}	Sbagliati: {list}
-	{n} without an answer	{n} senza risposta
+	Flagged by mistake: {subject} (score {score})	Segnalato per errore: {subject} (punteggio {score})
+	Scam not spotted: {subject} (score {score})	Truffa non individuata: {subject} (punteggio {score})
+	No answer: {subject}	Nessuna risposta: {subject}
 	This message looks like a scam.	Questo messaggio sembra una truffa.
 	This message could be a scam.	Questo messaggio potrebbe essere una truffa.
 	Not a scam	Non è una truffa

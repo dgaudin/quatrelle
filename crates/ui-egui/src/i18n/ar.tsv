@@ -2095,8 +2095,9 @@ folder	Conflicts	التعارضات
 	Try it on examples	جرّب على أمثلة
 	Trying it on the examples: {done} of {total}	الاختبار على الأمثلة: {done} من {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	تم اكتشاف {spotted} من {scams} رسائل احتيال، وترك {left} من {normals} رسائل عادية، {secs} ث لكل رسالة
-	Got wrong: {list}	أخطاء: {list}
-	{n} without an answer	{n} بلا إجابة
+	Flagged by mistake: {subject} (score {score})	وُسم خطأً: {subject} (الدرجة {score})
+	Scam not spotted: {subject} (score {score})	احتيال لم يُكتشف: {subject} (الدرجة {score})
+	No answer: {subject}	لا رد: {subject}
 	This message looks like a scam.	تبدو هذه الرسالة احتيالًا.
 	This message could be a scam.	قد تكون هذه الرسالة احتيالًا.
 	Not a scam	ليست احتيالًا

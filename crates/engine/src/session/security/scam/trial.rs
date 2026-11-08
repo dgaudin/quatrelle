@@ -24,10 +24,19 @@ pub struct ScamTest {
     pub left_alone: usize,
     /// Examples with no usable answer (server failed, nonsense, nothing within a minute).
     pub unanswered: usize,
-    /// The subjects the model got wrong.
-    pub misses: Vec<String>,
+    /// The examples the model got wrong or didn't answer about, in order.
+    pub misses: Vec<Miss>,
     /// Seconds from the first question to the last answer.
     pub secs: i64,
+}
+
+/// An example the model got wrong (its score), or gave no usable answer about.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct Miss {
+    pub subject: String,
+    /// The example is a scam (let through), or an ordinary message (taken for one).
+    pub scam: bool,
+    pub score: Option<u8>,
 }
 
 impl ScamTest {
@@ -144,13 +153,16 @@ impl Trial {
         r.done += 1;
         r.secs = now - self.began;
         match score {
-            None => r.unanswered += 1,
+            None => {
+                r.unanswered += 1;
+                r.misses.push(Miss { subject: e.subject.to_string(), scam: e.scam, score: None });
+            }
             Some(s) => {
                 let warns = s >= WARN_SCORE;
                 match (e.scam, warns) {
                     (true, true) => r.spotted += 1,
                     (false, false) => r.left_alone += 1,
-                    _ => r.misses.push(e.subject.to_string()),
+                    _ => r.misses.push(Miss { subject: e.subject.to_string(), scam: e.scam, score: Some(s) }),
                 }
             }
         }

@@ -2095,8 +2095,9 @@ folder	Conflicts	התנגשויות
 	Try it on examples	ניסוי על דוגמאות
 	Trying it on the examples: {done} of {total}	בדיקה על הדוגמאות: {done} מתוך {total}
 	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	זוהו {spotted} מתוך {scams} הונאות, {left} מתוך {normals} הודעות רגילות נותרו ללא הערה, {secs} שנ׳ להודעה
-	Got wrong: {list}	טעויות: {list}
-	{n} without an answer	{n} ללא תשובה
+	Flagged by mistake: {subject} (score {score})	סומן בטעות: {subject} (ציון {score})
+	Scam not spotted: {subject} (score {score})	הונאה שלא זוהתה: {subject} (ציון {score})
+	No answer: {subject}	אין תשובה: {subject}
 	This message looks like a scam.	הודעה זו נראית כהונאה.
 	This message could be a scam.	הודעה זו עשויה להיות הונאה.
 	Not a scam	זו לא הונאה

@@ -19,7 +19,7 @@ use quatrelle_model::scam::{Facts, ScamDoc, Verdict, WARN_SCORE, read_answer, re
 use super::*;
 
 mod trial;
-pub use trial::ScamTest;
+pub use trial::{Miss as ScamMiss, ScamTest};
 
 /// An account's document of verdicts and trusted senders.
 pub const SCAM_DOC: &str = "scam.json";
