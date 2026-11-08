@@ -2085,3 +2085,22 @@ folder	Conflicts	Conflitos
 	The server keeps nothing deleted for good for this account.	O servidor não guarda nada excluído definitivamente para esta conta.
 	{n} items	{n} itens
 	Deleted	Excluído
+	Scam check	Detecção de golpes
+	A language model reads the external mail that arrives and warns about what looks like a scam.	Um modelo de linguagem lê o e-mail externo que chega e avisa sobre o que parece um golpe.
+	Set a server and a model above first.	Defina primeiro um servidor e um modelo acima.
+	Spot scams in the external mail that arrives	Detectar golpes no e-mail externo recebido
+	External mail from unknown senders is sent to {host} to be read.	E-mails externos de remetentes desconhecidos são enviados a {host} para serem lidos.
+	Accounts it applies to	Contas em que vale
+	not for this kind of account yet	ainda não para este tipo de conta
+	At most {n} messages a day	No máximo {n} mensagens por dia
+	Senders you said are not scams	Remetentes que você marcou como seguros
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} mensagens escritas para o Quatrelle vão ao modelo uma a uma; nada seu é enviado.
+	Test the model	Teste do modelo
+	Try it on examples	Testar com exemplos
+	Trying it on the examples: {done} of {total}	Testando com os exemplos: {done} de {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} de {scams} golpes detectados, {left} de {normals} mensagens normais deixadas em paz, {secs} s por mensagem
+	Got wrong: {list}	Erros: {list}
+	{n} without an answer	{n} sem resposta
+	This message looks like a scam.	Esta mensagem parece um golpe.
+	This message could be a scam.	Esta mensagem pode ser um golpe.
+	Not a scam	Não é um golpe

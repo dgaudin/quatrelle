@@ -54,6 +54,7 @@ pub(super) fn assistant(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Act
             setting_row(ui, t, false, name(t, tl!("Model")), status.as_deref().map(|a| note(t, a)), |ui| model(s, t, ui, acts));
         },
     );
+    super::scam::scam(s, t, ui, acts);
 }
 
 /// The model's box: typed in, or picked from the server's list under its arrow; the button

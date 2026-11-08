@@ -2085,3 +2085,22 @@ menu	View	Просмотр
 	The server keeps nothing deleted for good for this account.	Сервер не хранит для этой учётной записи ничего, удалённого навсегда.
 	{n} items	Элементов: {n}
 	Deleted	Удалено
+	Scam check	Проверка на мошенничество
+	A language model reads the external mail that arrives and warns about what looks like a scam.	Языковая модель читает приходящую внешнюю почту и предупреждает о том, что похоже на мошенничество.
+	Set a server and a model above first.	Сначала укажите выше сервер и модель.
+	Spot scams in the external mail that arrives	Искать мошенничество во входящей внешней почте
+	External mail from unknown senders is sent to {host} to be read.	Внешние письма от неизвестных отправителей отправляются на {host} для прочтения.
+	Accounts it applies to	Учётные записи, к которым это относится
+	not for this kind of account yet	для этого типа учётной записи пока недоступно
+	At most {n} messages a day	Не более {n} писем в день
+	Senders you said are not scams	Отправители, которых вы признали безопасными
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} сообщений, написанных для Quatrelle, передаются модели по одному; ничего вашего не отправляется.
+	Test the model	Проверка модели
+	Try it on examples	Попробовать на примерах
+	Trying it on the examples: {done} of {total}	Проверка на примерах: {done} из {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	Мошеннических писем распознано {spotted} из {scams}, обычных писем оставлено в покое {left} из {normals}, {secs} с на письмо
+	Got wrong: {list}	Ошибки: {list}
+	{n} without an answer	Без ответа: {n}
+	This message looks like a scam.	Это письмо похоже на мошенничество.
+	This message could be a scam.	Это письмо может быть мошенничеством.
+	Not a scam	Это не мошенничество

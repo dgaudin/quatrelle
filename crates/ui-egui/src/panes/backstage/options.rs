@@ -9,6 +9,7 @@ use super::*;
 use crate::BrowserProfile;
 
 mod assistant;
+mod scam;
 mod webex;
 mod webex_rooms;
 

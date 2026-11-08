@@ -2081,3 +2081,22 @@ folder	Conflicts	التعارضات
 	The server keeps nothing deleted for good for this account.	لا يحتفظ الخادم بأي شيء محذوف نهائياً لهذا الحساب.
 	{n} items	{n} عنصر
 	Deleted	تاريخ الحذف
+	Scam check	كشف الاحتيال
+	A language model reads the external mail that arrives and warns about what looks like a scam.	يقرأ نموذج لغوي البريد الخارجي الوارد وينبّه إلى ما يبدو احتيالًا.
+	Set a server and a model above first.	حدّد أولًا خادمًا ونموذجًا في الأعلى.
+	Spot scams in the external mail that arrives	اكتشاف الاحتيال في البريد الخارجي الوارد
+	External mail from unknown senders is sent to {host} to be read.	يُرسل البريد الخارجي من مرسلين مجهولين إلى {host} لقراءته.
+	Accounts it applies to	الحسابات المشمولة
+	not for this kind of account yet	غير متاح بعد لهذا النوع من الحسابات
+	At most {n} messages a day	بحد أقصى {n} رسالة في اليوم
+	Senders you said are not scams	المرسلون الذين حددتهم على أنهم آمنون
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	تُرسل {n} رسالة كُتبت من أجل Quatrelle إلى النموذج واحدة تلو الأخرى؛ ولا يُرسل شيء من بريدك.
+	Test the model	اختبار النموذج
+	Try it on examples	جرّب على أمثلة
+	Trying it on the examples: {done} of {total}	الاختبار على الأمثلة: {done} من {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	تم اكتشاف {spotted} من {scams} رسائل احتيال، وترك {left} من {normals} رسائل عادية، {secs} ث لكل رسالة
+	Got wrong: {list}	أخطاء: {list}
+	{n} without an answer	{n} بلا إجابة
+	This message looks like a scam.	تبدو هذه الرسالة احتيالًا.
+	This message could be a scam.	قد تكون هذه الرسالة احتيالًا.
+	Not a scam	ليست احتيالًا

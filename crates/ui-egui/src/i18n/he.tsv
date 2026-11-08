@@ -2081,3 +2081,22 @@ folder	Conflicts	התנגשויות
 	The server keeps nothing deleted for good for this account.	השרת אינו שומר עבור החשבון הזה שום דבר שנמחק לצמיתות.
 	{n} items	{n} פריטים
 	Deleted	נמחק
+	Scam check	זיהוי הונאות
+	A language model reads the external mail that arrives and warns about what looks like a scam.	מודל שפה קורא את הדואר החיצוני שמגיע ומתריע על מה שנראה כהונאה.
+	Set a server and a model above first.	קודם הגדירו למעלה שרת ומודל.
+	Spot scams in the external mail that arrives	זיהוי הונאות בדואר חיצוני נכנס
+	External mail from unknown senders is sent to {host} to be read.	דואר חיצוני משולחים לא מוכרים נשלח אל {host} כדי שייקרא.
+	Accounts it applies to	חשבונות שההגדרה חלה עליהם
+	not for this kind of account yet	עדיין לא זמין לסוג חשבון זה
+	At most {n} messages a day	לכל היותר {n} הודעות ביום
+	Senders you said are not scams	שולחים שסימנתם כבטוחים
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} הודעות שנכתבו עבור Quatrelle נשלחות למודל אחת אחת; שום דבר שלכם לא נשלח.
+	Test the model	בדיקת המודל
+	Try it on examples	ניסוי על דוגמאות
+	Trying it on the examples: {done} of {total}	בדיקה על הדוגמאות: {done} מתוך {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	זוהו {spotted} מתוך {scams} הונאות, {left} מתוך {normals} הודעות רגילות נותרו ללא הערה, {secs} שנ׳ להודעה
+	Got wrong: {list}	טעויות: {list}
+	{n} without an answer	{n} ללא תשובה
+	This message looks like a scam.	הודעה זו נראית כהונאה.
+	This message could be a scam.	הודעה זו עשויה להיות הונאה.
+	Not a scam	זו לא הונאה

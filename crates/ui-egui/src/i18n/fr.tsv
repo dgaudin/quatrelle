@@ -2086,3 +2086,22 @@ menu	View	Afficher
 	The server keeps nothing deleted for good for this account.	Le serveur ne garde aucun élément supprimé définitivement pour ce compte.
 	{n} items	{n} éléments
 	Deleted	Supprimé
+	Scam check	Repérage des arnaques
+	A language model reads the external mail that arrives and warns about what looks like a scam.	Un modèle de langage lit le courrier externe qui arrive et prévient de ce qui ressemble à une arnaque.
+	Set a server and a model above first.	Réglez d'abord un serveur et un modèle ci-dessus.
+	Spot scams in the external mail that arrives	Repérer les arnaques dans le courrier externe reçu
+	External mail from unknown senders is sent to {host} to be read.	Les messages externes d'expéditeurs inconnus sont envoyés à {host} pour être lus.
+	Accounts it applies to	Comptes concernés
+	not for this kind of account yet	pas encore pour ce type de compte
+	At most {n} messages a day	Au plus {n} messages par jour
+	Senders you said are not scams	Expéditeurs que vous avez déclarés sûrs
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} messages écrits pour Quatrelle sont soumis au modèle un par un ; rien de vous n'est envoyé.
+	Test the model	Essai du modèle
+	Try it on examples	Tester sur des exemples
+	Trying it on the examples: {done} of {total}	Essai sur les exemples : {done} sur {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} arnaques sur {scams} repérées, {left} messages normaux sur {normals} laissés tranquilles, {secs} s par message
+	Got wrong: {list}	Erreurs : {list}
+	{n} without an answer	{n} sans réponse
+	This message looks like a scam.	Ce message ressemble à une arnaque.
+	This message could be a scam.	Ce message pourrait être une arnaque.
+	Not a scam	Ce n'est pas une arnaque

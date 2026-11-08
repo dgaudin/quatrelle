@@ -2082,3 +2082,22 @@ folder	Conflicts	競合
 	The server keeps nothing deleted for good for this account.	このアカウントでは、完全に削除されたものはサーバーに残っていません。
 	{n} items	{n} 件
 	Deleted	削除日時
+	Scam check	詐欺の検出
+	A language model reads the external mail that arrives and warns about what looks like a scam.	言語モデルが届いた外部のメールを読み、詐欺に見えるものを知らせます。
+	Set a server and a model above first.	先に上でサーバーとモデルを設定してください。
+	Spot scams in the external mail that arrives	届いた外部メールの詐欺を検出する
+	External mail from unknown senders is sent to {host} to be read.	未知の送信者からの外部メールは、読み取りのため {host} に送られます。
+	Accounts it applies to	対象のアカウント
+	not for this kind of account yet	この種類のアカウントにはまだ使えません
+	At most {n} messages a day	1 日に最大 {n} 件
+	Senders you said are not scams	安全と指定した送信者
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	Quatrelle 用に書いた {n} 件のメッセージを 1 件ずつモデルに渡します。あなたのメールは送られません。
+	Test the model	モデルの試験
+	Try it on examples	例で試す
+	Trying it on the examples: {done} of {total}	例で試しています: {done} / {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	詐欺 {scams} 件中 {spotted} 件を検出、通常のメッセージ {normals} 件中 {left} 件をそのまま通過、1 件あたり {secs} 秒
+	Got wrong: {list}	誤り: {list}
+	{n} without an answer	応答なし: {n} 件
+	This message looks like a scam.	このメッセージは詐欺のようです。
+	This message could be a scam.	このメッセージは詐欺かもしれません。
+	Not a scam	詐欺ではありません

@@ -2084,3 +2084,22 @@ folder	Conflicts	Conflitti
 	The server keeps nothing deleted for good for this account.	Il server non conserva nulla di eliminato definitivamente per questo account.
 	{n} items	{n} elementi
 	Deleted	Eliminato
+	Scam check	Rilevamento delle truffe
+	A language model reads the external mail that arrives and warns about what looks like a scam.	Un modello linguistico legge la posta esterna in arrivo e avvisa su ciò che sembra una truffa.
+	Set a server and a model above first.	Imposta prima un server e un modello qui sopra.
+	Spot scams in the external mail that arrives	Individua le truffe nella posta esterna in arrivo
+	External mail from unknown senders is sent to {host} to be read.	La posta esterna di mittenti sconosciuti viene inviata a {host} per essere letta.
+	Accounts it applies to	Account a cui si applica
+	not for this kind of account yet	non ancora per questo tipo di account
+	At most {n} messages a day	Al massimo {n} messaggi al giorno
+	Senders you said are not scams	Mittenti che hai indicato come sicuri
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} messaggi scritti per Quatrelle vanno al modello uno alla volta; nulla di tuo viene inviato.
+	Test the model	Prova del modello
+	Try it on examples	Prova con degli esempi
+	Trying it on the examples: {done} of {total}	Prova sugli esempi: {done} di {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} truffe su {scams} individuate, {left} messaggi normali su {normals} lasciati stare, {secs} s a messaggio
+	Got wrong: {list}	Sbagliati: {list}
+	{n} without an answer	{n} senza risposta
+	This message looks like a scam.	Questo messaggio sembra una truffa.
+	This message could be a scam.	Questo messaggio potrebbe essere una truffa.
+	Not a scam	Non è una truffa

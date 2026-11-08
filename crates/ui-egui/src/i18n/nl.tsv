@@ -2082,3 +2082,22 @@ menu	View	Weergeven
 	The server keeps nothing deleted for good for this account.	De server bewaart voor dit account niets wat definitief is verwijderd.
 	{n} items	{n} items
 	Deleted	Verwijderd
+	Scam check	Oplichtingscontrole
+	A language model reads the external mail that arrives and warns about what looks like a scam.	Een taalmodel leest de externe post die binnenkomt en waarschuwt voor wat op oplichting lijkt.
+	Set a server and a model above first.	Stel hierboven eerst een server en een model in.
+	Spot scams in the external mail that arrives	Oplichting herkennen in binnenkomende externe post
+	External mail from unknown senders is sent to {host} to be read.	Externe post van onbekende afzenders wordt ter lezing naar {host} gestuurd.
+	Accounts it applies to	Accounts waarvoor het geldt
+	not for this kind of account yet	nog niet voor dit soort account
+	At most {n} messages a day	Hoogstens {n} berichten per dag
+	Senders you said are not scams	Afzenders die u als veilig hebt aangemerkt
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} voor Quatrelle geschreven berichten gaan één voor één naar het model; er wordt niets van u verstuurd.
+	Test the model	Het model testen
+	Try it on examples	Proberen met voorbeelden
+	Trying it on the examples: {done} of {total}	Proberen met de voorbeelden: {done} van {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} van {scams} oplichtingsberichten herkend, {left} van {normals} gewone berichten met rust gelaten, {secs} s per bericht
+	Got wrong: {list}	Fout beoordeeld: {list}
+	{n} without an answer	{n} zonder antwoord
+	This message looks like a scam.	Dit bericht lijkt op oplichting.
+	This message could be a scam.	Dit bericht kan oplichting zijn.
+	Not a scam	Geen oplichting

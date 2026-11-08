@@ -2084,3 +2084,22 @@ folder	Conflicts	충돌
 	The server keeps nothing deleted for good for this account.	이 계정에는 서버가 보관 중인 영구 삭제 항목이 없습니다.
 	{n} items	{n}개 항목
 	Deleted	삭제됨
+	Scam check	사기 탐지
+	A language model reads the external mail that arrives and warns about what looks like a scam.	언어 모델이 도착한 외부 메일을 읽고 사기로 보이는 것을 알려 줍니다.
+	Set a server and a model above first.	먼저 위에서 서버와 모델을 설정하세요.
+	Spot scams in the external mail that arrives	받은 외부 메일에서 사기 탐지
+	External mail from unknown senders is sent to {host} to be read.	모르는 발신자의 외부 메일은 읽기 위해 {host}(으)로 전송됩니다.
+	Accounts it applies to	적용할 계정
+	not for this kind of account yet	이 종류의 계정에는 아직 사용할 수 없습니다
+	At most {n} messages a day	하루 최대 {n}개 메시지
+	Senders you said are not scams	안전하다고 지정한 발신자
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	Quatrelle용으로 작성한 메시지 {n}개를 하나씩 모델에 보냅니다. 내 메일은 전송되지 않습니다.
+	Test the model	모델 시험
+	Try it on examples	예제로 시험
+	Trying it on the examples: {done} of {total}	예제로 시험 중: {done}/{total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	사기 {scams}개 중 {spotted}개 탐지, 정상 메시지 {normals}개 중 {left}개 그대로 둠, 메시지당 {secs}초
+	Got wrong: {list}	틀린 것: {list}
+	{n} without an answer	응답 없음 {n}개
+	This message looks like a scam.	이 메시지는 사기로 보입니다.
+	This message could be a scam.	이 메시지는 사기일 수 있습니다.
+	Not a scam	사기가 아님

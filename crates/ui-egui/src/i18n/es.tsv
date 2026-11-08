@@ -2086,3 +2086,22 @@ menu	View	Ver
 	The server keeps nothing deleted for good for this account.	El servidor no guarda nada eliminado definitivamente para esta cuenta.
 	{n} items	{n} elementos
 	Deleted	Eliminado
+	Scam check	Detección de estafas
+	A language model reads the external mail that arrives and warns about what looks like a scam.	Un modelo de lenguaje lee el correo externo que llega y avisa de lo que parece una estafa.
+	Set a server and a model above first.	Primero indique arriba un servidor y un modelo.
+	Spot scams in the external mail that arrives	Detectar estafas en el correo externo recibido
+	External mail from unknown senders is sent to {host} to be read.	El correo externo de remitentes desconocidos se envía a {host} para que lo lea.
+	Accounts it applies to	Cuentas a las que se aplica
+	not for this kind of account yet	todavía no para este tipo de cuenta
+	At most {n} messages a day	Como máximo {n} mensajes al día
+	Senders you said are not scams	Remitentes que ha marcado como seguros
+	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} mensajes escritos para Quatrelle se envían al modelo de uno en uno; nada suyo se envía.
+	Test the model	Prueba del modelo
+	Try it on examples	Probar con ejemplos
+	Trying it on the examples: {done} of {total}	Probando con los ejemplos: {done} de {total}
+	{spotted} of {scams} scams spotted, {left} of {normals} normal messages left alone, {secs} s a message	{spotted} de {scams} estafas detectadas, {left} de {normals} mensajes normales sin avisar, {secs} s por mensaje
+	Got wrong: {list}	Fallos: {list}
+	{n} without an answer	{n} sin respuesta
+	This message looks like a scam.	Este mensaje parece una estafa.
+	This message could be a scam.	Este mensaje podría ser una estafa.
+	Not a scam	No es una estafa
