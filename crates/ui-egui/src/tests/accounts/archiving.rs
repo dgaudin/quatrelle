@@ -115,7 +115,8 @@ fn archiving_app(name: &str) -> (MailApp, std::path::PathBuf, Handed) {
     let archives =
         AccountConfig { id: "a2".into(), name: "Archives".into(), email: "Archives".into(), role: Some(AccountRole::Archives), ..Default::default() };
     store.save_accounts(&[work, archives]).unwrap();
-    store.save_folders("a1", &[folder("a1", "INBOX", FolderRole::Inbox), folder("a1", "Projects", FolderRole::Other)]).unwrap();
+    store.save_folders("a1", &[folder("a1", "INBOX", FolderRole::Inbox), folder("a1", "Projects", FolderRole::Other), folder("a1", "Reports", FolderRole::Other)])
+        .unwrap();
     store.save_folders("a2", &[folder("a2", "Work", FolderRole::Other), folder("a2", "Work/INBOX", FolderRole::Other)]).unwrap();
     for (account, path, subject) in [("a1", "INBOX", "Plans"), ("a2", "Work/INBOX", "Old plans")] {
         let mut st = store.load_folder(account, path).unwrap();
@@ -190,7 +191,12 @@ fn move_to_lists_the_archives_folders() {
 /// there (the folder pane's row, or an account's heading).
 fn drag(ctx: &egui::Context, a: &mut MailApp, subject: &str, onto: &str) {
     select(a, subject);
-    let from = settled_text_at(ctx, a, subject, SIZE).expect("the message in the list");
+    drag_text(ctx, a, subject, onto);
+}
+
+/// The same drag from any text on screen.
+fn drag_text(ctx: &egui::Context, a: &mut MailApp, text: &str, onto: &str) {
+    let from = settled_text_at(ctx, a, text, SIZE).expect("what is dragged");
     let at = settled_text_at(ctx, a, onto, SIZE).expect("the drop target");
     let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     for _ in 0..20 {
@@ -256,5 +262,15 @@ fn the_archives_account_is_named_in_the_folder_pane() {
     let ctx = egui::Context::default();
     assert!(settled_text_at(&ctx, &mut a, "Archives", SIZE).is_some());
     assert!(settled_text_at(&ctx, &mut a, "Archives (sample)", SIZE).is_none(), "not the sample mailbox");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dragging_a_folder_onto_a_folder_moves_it() {
+    let ctx = egui::Context::default();
+    let (mut a, dir, _handed) = archiving_app("drag-folder");
+    drag_text(&ctx, &mut a, "Projects", "Reports");
+    let paths: Vec<String> = a.session.account("a1").map(|x| x.folders.iter().map(|f| f.path.clone()).collect()).unwrap_or_default();
+    assert!(paths.iter().any(|p| p == "Reports/Projects"), "{paths:?}");
     let _ = std::fs::remove_dir_all(dir);
 }

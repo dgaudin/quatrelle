@@ -39,6 +39,13 @@ pub struct DragFolder {
 /// What a dragged account carries (its id).
 pub struct DragAccount(pub String);
 
+/// What was dropped on `resp`, if it is a `T`. egui's `dnd_release_payload::<T>()` takes the
+/// payload before it tries the type, so asking for the wrong one loses the drop for the right
+/// one: every drop in this pane asks through here.
+fn dropped<T: std::any::Any + Send + Sync>(resp: &egui::Response) -> Option<std::sync::Arc<T>> {
+    if egui::DragAndDrop::has_payload_of_type::<T>(&resp.ctx) { resp.dnd_release_payload::<T>() } else { None }
+}
+
 /// The key a folder is collapsed under (see `Prefs::collapsed`).
 fn folder_key(account: &str, path: &str) -> String {
     format!("folder:{account}/{path}")
@@ -171,7 +178,7 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
                 if resp.contains_pointer() {
                     ui.painter().rect_filled(rect, 6.0, t.accent.gamma_multiply(0.3));
                 }
-                if let Some(p) = resp.dnd_release_payload::<DragKeys>()
+                if let Some(p) = dropped::<DragKeys>(&resp)
                     && p.0.iter().all(|k| k.account != a.config.id)
                 {
                     acts.push(Action::Run("mail.move", json!({"account": a.config.id, "folder": "-"})));
@@ -385,7 +392,7 @@ fn section_drag(
         let y = if below { rect.bottom() } else { rect.top() };
         ui.painter().line_segment([egui::pos2(rect.left() + 4.0, y), egui::pos2(rect.right() - 4.0, y)], egui::Stroke::new(2.0, t.accent));
     }
-    if let Some(dragged) = resp.dnd_release_payload::<DragAccount>()
+    if let Some(dragged) = dropped::<DragAccount>(resp)
         && let Some(from) = sections.iter().position(|x| x.key == dragged.0)
         && dragged.0 != me.key
     {
@@ -462,12 +469,12 @@ fn shared_header(
     let address = top.mailbox.clone().unwrap_or_default();
     let resp = resp.on_hover_text(tf!("Shared mailbox {address}, opened by {email}", address = address, email = a.config.email));
     // Dropped messages or folders go into its top folder, as onto a folder.
-    if let Some(p) = resp.dnd_release_payload::<DragKeys>()
+    if let Some(p) = dropped::<DragKeys>(&resp)
         && p.0.iter().all(|k| k.account == top.account)
     {
         acts.push(Action::Run("mail.move", json!({"folder": top.path})));
     }
-    if let Some(p) = resp.dnd_release_payload::<DragFolder>()
+    if let Some(p) = dropped::<DragFolder>(&resp)
         && p.account == top.account
     {
         acts.push(Action::Run("folder.move", json!({"account": top.account, "folder": p.path, "parent": top.path})));
@@ -541,7 +548,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
         acts.push(Action::Run("folder.open", json!({"account": f.account, "folder": f.path})));
     }
     if f.selectable
-        && let Some(p) = resp.dnd_release_payload::<DragKeys>()
+        && let Some(p) = dropped::<DragKeys>(&resp)
     {
         // Into a folder of the account, or of another one: onto the Archives account's folder it
         // archives, onto an IMAP account's folder archived mail is put back there.
@@ -551,7 +558,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
             acts.push(Action::Run("mail.move", json!({"account": f.account, "folder": f.path})));
         }
     }
-    if let Some(p) = resp.dnd_release_payload::<DragFolder>()
+    if let Some(p) = dropped::<DragFolder>(&resp)
         && p.account == f.account
         && p.path != f.path
     {
