@@ -727,8 +727,10 @@ fn the_spelling_dialog_offers_a_correction() {
     crate::spellcheck::set_on(true);
     // Added to the dictionary: no longer underlined, from the preferences' list.
     a.run("spelling.add", json!({"word": "Servveur"}));
+    let held = crate::spellcheck::TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     crate::spellcheck::add_word("servveur");
     assert!(crate::spellcheck::misspelt("Le servveur").is_empty());
+    drop(held);
     assert!(a.session.prefs.spelling.iter().any(|w| w == "servveur"));
     let _ = std::fs::remove_dir_all(dir);
 }

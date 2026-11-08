@@ -177,8 +177,16 @@ fn bump() {
     GENERATION.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Held by a test that reads the added words back: every window a test makes replaces them with
+/// its own preferences' (empty), and tests run side by side (a check of a word just added failed
+/// on GitHub's runner, 07/11). One window in the app: nothing to wait for there.
+#[cfg(test)]
+pub(crate) static TEST_LOCK: Mutex<()> = Mutex::new(());
+
 /// The words the writer added, from the preferences (lower-case).
 pub fn set_personal(words: Vec<String>) {
+    #[cfg(test)]
+    let _held = TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Ok(mut p) = PERSONAL.write() {
         *p = words.into_iter().map(|w| w.to_lowercase()).collect();
     }
