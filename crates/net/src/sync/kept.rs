@@ -77,6 +77,13 @@ pub(crate) fn imap_date(t: i64) -> String {
     format!("{d}-{month}-{y}")
 }
 
+/// A time as IMAP writes a date and time (`14-Oct-2026 09:30:00 +0000`, RFC 3501 §9 `date-time`,
+/// the day padded to two characters), UTC.
+pub(crate) fn imap_datetime(t: i64) -> String {
+    let secs = t.rem_euclid(86_400);
+    format!("{:>11} {:02}:{:02}:{:02} +0000", imap_date(t), secs / 3600, secs % 3600 / 60, secs % 60)
+}
+
 /// The `SEARCH` keys listing what a folder keeps: what the server received since the cutoff
 /// (`SINCE`, by its INTERNALDATE, the day of the cutoff and after), or all of it.
 pub(super) fn listing(cutoff: Option<i64>) -> String {

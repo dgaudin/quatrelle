@@ -637,7 +637,14 @@ impl<S: Read + Write> Client<S> {
 
     /// Store a message in a folder; returns its UID when the server says (UIDPLUS `APPENDUID`).
     pub fn append(&mut self, folder: &str, flags: &str, raw: &[u8]) -> Result<Option<u32>> {
-        let head = format!("APPEND {} ({flags}) ", mailbox_arg(folder));
+        self.append_dated(folder, flags, None, raw)
+    }
+
+    /// [`Client::append`], the message given the time `received` (Unix seconds) as its internal
+    /// date, when one is set: what a client that files mail it kept sets (RFC 3501 §6.3.11).
+    pub fn append_dated(&mut self, folder: &str, flags: &str, received: Option<i64>, raw: &[u8]) -> Result<Option<u32>> {
+        let date = received.filter(|t| *t > 0).map(|t| format!("\"{}\" ", crate::sync::imap_datetime(t))).unwrap_or_default();
+        let head = format!("APPEND {} ({flags}) {date}", mailbox_arg(folder));
         let rs = self.cmd(&[Part::Text(&head), Part::Literal(raw)])?;
         for r in rs {
             if let Response::Done { outcome, .. } = r

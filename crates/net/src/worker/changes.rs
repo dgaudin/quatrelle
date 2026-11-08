@@ -273,7 +273,7 @@ impl Worker {
             | Job::CheckUpdates
             | Job::StopSearch => {}
             Job::Archive { keys, to_account, .. } => self.archive(keys, to_account),
-            Job::PutBack { .. } => {}
+            Job::PutBack { keys, to_folder, .. } => self.put_back(keys, to_folder),
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
         }
     }

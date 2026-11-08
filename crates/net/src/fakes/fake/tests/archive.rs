@@ -304,3 +304,105 @@ fn two_archives_into_one_folder_keep_both() {
     assert!(store.load_folders(ARCHIVES).unwrap().iter().any(|f| f.path == "Studio/Elsewhere"), "the other write survives");
     pool.submit(Job::Remove { account: "a1".into() });
 }
+
+fn put_back(pool: &mut crate::worker::Pool, keys: Vec<MessageKey>, folder: &str) {
+    pool.submit(Job::PutBack { account: "a1".into(), keys, to_folder: folder.into() });
+}
+
+type PutBack = (Vec<(MessageKey, Option<u32>)>, Vec<(MessageKey, String)>);
+
+fn put_back_done(pool: &crate::worker::Pool) -> PutBack {
+    let seen = until(pool, "put back", |e| matches!(e, Event::PutBack { .. }));
+    match seen.last() {
+        Some(Event::PutBack { back, kept, .. }) => (back.clone(), kept.clone()),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Mail archived, then put back: on the server again, with its marks, keywords and arrival time,
+/// and only then gone from Archives.
+#[test]
+fn put_back_mail_is_on_the_server_before_it_leaves_archives() {
+    let st = State::new();
+    let uid = st.lock().unwrap().add("INBOX", "one", &["\\Seen", "\\Flagged", "$Forwarded", "work"]);
+    let raw = originals(&st, "INBOX").remove(0);
+    let received = 1_700_000_000;
+    st.lock().unwrap().mailbox("INBOX").unwrap().msgs.iter_mut().find(|m| m.uid == uid).unwrap().received = received;
+    let store = store("archive-back");
+    let mut pool = online(&st, "back", store.clone());
+    archive(&mut pool, keys(&store, "INBOX"));
+    let (moved, _) = archived(&pool);
+    wait_for("the deletion", || count(&st, "INBOX") == 0);
+    // Put back into the Archive folder of the server.
+    put_back(&mut pool, vec![moved[0].1.clone()], "Archive");
+    let (back, kept) = put_back_done(&pool);
+    assert_eq!((back.len(), kept.len()), (1, 0), "{kept:?}");
+    assert_eq!(back[0].0, moved[0].1);
+    assert!(back[0].1.is_some(), "the server said where");
+    let there = st.lock().unwrap().mailbox("Archive").unwrap().msgs.iter().map(|m| (m.raw.clone(), m.flags.clone(), m.received)).collect::<Vec<_>>();
+    assert_eq!(there.len(), 1);
+    assert_eq!(there[0].0, raw);
+    for f in ["\\Seen", "\\Flagged", "$Forwarded", "work"] {
+        assert!(there[0].1.iter().any(|x| x == f), "{f} in {:?}", there[0].1);
+    }
+    assert_eq!(there[0].2, received, "its arrival time");
+    // Gone from Archives, and the folder it was in counts none.
+    assert!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.is_empty());
+    assert!(store.load_body(&moved[0].1).unwrap().is_none());
+    pool.submit(Job::Remove { account: "a1".into() });
+}
+
+/// A server that refuses the message: the archived copy stays, the user is told why.
+#[test]
+fn a_refused_append_keeps_the_archived_copy() {
+    let st = State::new();
+    st.lock().unwrap().add("INBOX", "one", &[]);
+    let store = store("archive-back-refused");
+    let mut pool = online(&st, "back refused", store.clone());
+    archive(&mut pool, keys(&store, "INBOX"));
+    let (moved, _) = archived(&pool);
+    wait_for("the deletion", || count(&st, "INBOX") == 0);
+    st.lock().unwrap().refuse_append(1);
+    put_back(&mut pool, vec![moved[0].1.clone()], "INBOX");
+    let (back, kept) = put_back_done(&pool);
+    assert!(back.is_empty());
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].0, moved[0].1);
+    assert_eq!(count(&st, "INBOX"), 0);
+    assert_eq!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.len(), 1, "still in Archives");
+    assert!(store.load_body(&moved[0].1).unwrap().is_some());
+    // And once the server takes it, it goes.
+    put_back(&mut pool, vec![moved[0].1.clone()], "INBOX");
+    let (back, kept) = put_back_done(&pool);
+    assert_eq!((back.len(), kept.len()), (1, 0), "{kept:?}");
+    assert_eq!(count(&st, "INBOX"), 1);
+    pool.submit(Job::Remove { account: "a1".into() });
+}
+
+/// A server without UIDPLUS doesn't say where the message went: it is found by its Message-ID.
+/// A message with none can't be found: it is on the server, and the archived copy stays.
+#[test]
+fn without_appenduid_the_message_is_found_by_its_message_id() {
+    let st = State::new();
+    st.lock().unwrap().caps = "IMAP4rev1 MOVE CONDSTORE ENABLE QUOTA";
+    st.lock().unwrap().add("INBOX", "withid", &[]);
+    st.lock()
+        .unwrap()
+        .add_raw("INBOX", b"From: Zoe <zoe@studio.example>\r\nSubject: bare\r\nDate: Wed, 14 Oct 2026 09:30:00 +0000\r\n\r\nNo id.\r\n".to_vec());
+    let store = store("archive-back-no-appenduid");
+    let mut pool = online(&st, "no appenduid", store.clone());
+    archive(&mut pool, keys(&store, "INBOX"));
+    let (moved, kept) = archived(&pool);
+    assert_eq!((moved.len(), kept.len()), (2, 0), "{kept:?}");
+    wait_for("the deletions", || count(&st, "INBOX") == 0);
+    put_back(&mut pool, moved.iter().map(|(_, to)| to.clone()).collect(), "INBOX");
+    let (back, kept) = put_back_done(&pool);
+    assert_eq!(count(&st, "INBOX"), 2, "both appended");
+    assert_eq!((back.len(), kept.len()), (1, 1), "{back:?} {kept:?}");
+    assert!(back[0].1.is_some(), "found by its Message-ID");
+    assert!(kept[0].1.contains("Message-ID"), "{}", kept[0].1);
+    let left = store.load_folder(ARCHIVES, "Studio/INBOX").unwrap();
+    assert_eq!(left.messages.len(), 1, "the one without an id stays in Archives");
+    assert_eq!(left.messages[0].key, kept[0].0);
+    pool.submit(Job::Remove { account: "a1".into() });
+}

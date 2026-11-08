@@ -97,6 +97,11 @@ fn search_key(ctx: &SearchCtx<'_>, keys: &[String], i: usize) -> (bool, usize) {
         "FROM" => (ctx.header("from").contains(&arg), 2),
         "TO" => (ctx.header("to").contains(&arg), 2),
         "CC" => (ctx.header("cc").contains(&arg), 2),
+        // `HEADER field string`: the field holds the string.
+        "HEADER" => {
+            let value = keys.get(i + 2).map(|a| a.to_lowercase()).unwrap_or_default();
+            (ctx.header(&arg).contains(&value), 3)
+        }
         "KEYWORD" => (ctx.m.flags.iter().any(|f| f.eq_ignore_ascii_case(&arg)), 2),
         // Received on that day or later, the time of day disregarded (`23-Oct-2024`).
         "SINCE" => {

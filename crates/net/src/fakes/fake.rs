@@ -27,8 +27,7 @@ pub const RECEIVED: i64 = 1_791_970_200;
 
 /// A time as an INTERNALDATE (`14-Oct-2026 09:30:00 +0000`, the day padded to two).
 pub fn internal_date(t: i64) -> String {
-    let secs = t.rem_euclid(86_400);
-    format!("{:>11} {:02}:{:02}:{:02} +0000", crate::sync::imap_date(t), secs / 3600, secs % 3600 / 60, secs % 60)
+    crate::sync::imap_datetime(t)
 }
 
 pub struct Mailbox {
@@ -80,6 +79,8 @@ pub struct State {
     /// The next this many `EXPUNGE` / `UID EXPUNGE` are answered `NO` (a server that refuses to
     /// delete).
     pub refuse_expunge: usize,
+    /// The next this many `APPEND` are answered `NO` (a mailbox that is full, or read-only).
+    pub refuse_append: usize,
 }
 
 impl State {
@@ -107,6 +108,7 @@ impl State {
             stall_on: None,
             rate: 0,
             refuse_expunge: 0,
+            refuse_append: 0,
         }))
     }
 
@@ -120,6 +122,11 @@ impl State {
                 self.boxes.push(Mailbox { name: name.into(), attr, validity, uid_next: 1, msgs: Vec::new(), expunged: Vec::new() });
             }
         }
+    }
+
+    /// The next `n` appends are refused.
+    pub fn refuse_append(&mut self, n: usize) {
+        self.refuse_append = n;
     }
 
     /// The next `n` expunges are refused.

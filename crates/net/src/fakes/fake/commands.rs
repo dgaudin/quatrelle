@@ -169,18 +169,25 @@ impl Fake {
                 self.selected = None;
             }
             ok(self, "");
+        } else if upper.starts_with("APPEND ") && st.refuse_append > 0 {
+            st.refuse_append -= 1;
+            self.say(&format!("{tag} NO [OVERQUOTA] the mailbox won't take it"));
         } else if upper.starts_with("APPEND ") {
             let name = quoted_arg(rest);
             let flags = paren_arg(rest);
+            // The internal date, when given: the quoted text after the flags.
+            let received =
+                rest.rsplit_once(')').and_then(|(_, after)| after.split('"').nth(1)).and_then(crate::imap::parse_internal_date).unwrap_or(RECEIVED);
             st.modseq += 1;
             let modseq = st.modseq;
             match st.mailbox(&name) {
                 Some(b) => {
                     let uid = b.uid_next;
                     b.uid_next += 1;
-                    b.msgs.push(Msg { uid, flags, raw: literal.unwrap_or_default(), modseq, received: RECEIVED });
+                    b.msgs.push(Msg { uid, flags, raw: literal.unwrap_or_default(), modseq, received });
                     let v = b.validity;
-                    ok(self, &format!("[APPENDUID {v} {uid}] "));
+                    // Without UIDPLUS the server doesn't say where it put the message.
+                    ok(self, &if st.caps.contains("UIDPLUS") { format!("[APPENDUID {v} {uid}] ") } else { String::new() });
                 }
                 None => self.say(&format!("{tag} NO [TRYCREATE] no such mailbox")),
             }

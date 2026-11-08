@@ -41,9 +41,9 @@ mod kept;
 
 // For the worker, which doesn't ask for it yet.
 pub(crate) use ahead::download_ahead;
-#[cfg(test)]
-pub(crate) use kept::imap_date;
 use kept::{Kept, age_out, keep_found, listing, mark_found, unix_now};
+#[cfg(test)]
+pub(crate) use kept::{imap_date, imap_datetime};
 
 /// Downloading ahead, one message at a time: whether to go on after one failed. A message the
 /// server won't give (gone meanwhile, or failing on its side) is left for when it's opened, and
