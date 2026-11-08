@@ -162,6 +162,9 @@ impl AccountConfig {
             oauth_tenant: None,
             trusted_domains: Vec::new(),
             withdrawn_domains: Vec::new(),
+            role: None,
+            archive_local: false,
+            archive_after_months: None,
         }
     }
 
