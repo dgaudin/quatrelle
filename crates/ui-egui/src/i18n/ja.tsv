@@ -2090,6 +2090,7 @@ folder	Conflicts	競合
 	Accounts it applies to	対象のアカウント
 	not for this kind of account yet	この種類のアカウントにはまだ使えません
 	At most {n} messages a day	1 日に最大 {n} 件
+	Today: {judged} messages checked, {warned} flagged	今日: {judged} 件を確認、{warned} 件を警告
 	Senders you said are not scams	安全と指定した送信者
 	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	Quatrelle 用に書いた {n} 件のメッセージを 1 件ずつモデルに渡します。あなたのメールは送られません。
 	Test the model	モデルの試験

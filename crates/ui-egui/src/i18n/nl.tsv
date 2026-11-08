@@ -2090,6 +2090,7 @@ menu	View	Weergeven
 	Accounts it applies to	Accounts waarvoor het geldt
 	not for this kind of account yet	nog niet voor dit soort account
 	At most {n} messages a day	Hoogstens {n} berichten per dag
+	Today: {judged} messages checked, {warned} flagged	Vandaag: {judged} berichten gecontroleerd, {warned} gemeld
 	Senders you said are not scams	Afzenders die u als veilig hebt aangemerkt
 	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} voor Quatrelle geschreven berichten gaan één voor één naar het model; er wordt niets van u verstuurd.
 	Test the model	Het model testen

@@ -42,6 +42,15 @@ struct Pending {
     message_id: String,
 }
 
+/// What the scam check did today, for Options ([`Session::scam_today`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ScamToday {
+    /// Messages the model judged.
+    pub judged: usize,
+    /// Of them, those it warns about.
+    pub warned: usize,
+}
+
 /// The question on its way to the model.
 #[derive(Clone, Debug)]
 struct Inflight {
@@ -122,6 +131,21 @@ impl Session {
                 self.scam_doc(&id);
             }
         }
+    }
+
+    /// What the check did today (the same UTC day as the daily cap): the messages judged, and how
+    /// many of them warn. Counted from the verdicts kept, so it holds across a restart; read once
+    /// the documents are ([`Session::scam_warm`]).
+    pub fn scam_today(&self) -> ScamToday {
+        let start = self.clock.now.div_euclid(86_400).saturating_mul(86_400);
+        let mut today = ScamToday::default();
+        for v in self.scam.docs.values().flat_map(|d| d.verdicts.values()).filter(|v| v.at >= start) {
+            today.judged += 1;
+            if v.score >= quatrelle_model::scam::WARN_SCORE {
+                today.warned += 1;
+            }
+        }
+        today
     }
 
     /// The verdict a message carries when it is a warning (a score of [`WARN_SCORE`] or more) and its

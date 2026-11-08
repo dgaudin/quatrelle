@@ -2093,6 +2093,7 @@ folder	Conflicts	Conflitos
 	Accounts it applies to	Contas em que vale
 	not for this kind of account yet	ainda não para este tipo de conta
 	At most {n} messages a day	No máximo {n} mensagens por dia
+	Today: {judged} messages checked, {warned} flagged	Hoje: {judged} mensagens verificadas, {warned} sinalizadas
 	Senders you said are not scams	Remetentes que você marcou como seguros
 	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} mensagens escritas para o Quatrelle vão ao modelo uma a uma; nada seu é enviado.
 	Test the model	Teste do modelo

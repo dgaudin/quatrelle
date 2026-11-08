@@ -386,3 +386,23 @@ fn the_test_counts_hits_and_misses() {
     assert!(!t.running && t.unanswered == 20 && t.spotted == 0, "{t:?}");
     done(s);
 }
+
+/// Options say what the check did today, counted from the verdicts kept (a restart doesn't zero
+/// it); the next day starts at none.
+#[test]
+fn the_day_counts_what_was_judged() {
+    let mut s = zoe("scam-today");
+    on(&mut s);
+    assert_eq!(s.scam_today(), crate::ScamToday::default());
+    let raw = source("a1", STRANGER, "Overdue invoice", "Pay now to the new account.", false);
+    let keys = arrive(&mut s, &[(5, raw.clone(), false)], 60);
+    s.take_jobs();
+    s.apply(Event::Body { key: keys[0].clone(), raw });
+    let q = asks(&s.take_jobs());
+    answer(&mut s, q[0].0, SCAM);
+    let t = s.scam_today();
+    assert_eq!((t.judged, t.warned), (1, 1));
+    s.clock.now += 86_400;
+    assert_eq!(s.scam_today(), crate::ScamToday::default(), "a new day");
+    done(s);
+}

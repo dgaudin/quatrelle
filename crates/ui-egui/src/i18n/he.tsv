@@ -2089,6 +2089,7 @@ folder	Conflicts	התנגשויות
 	Accounts it applies to	חשבונות שההגדרה חלה עליהם
 	not for this kind of account yet	עדיין לא זמין לסוג חשבון זה
 	At most {n} messages a day	לכל היותר {n} הודעות ביום
+	Today: {judged} messages checked, {warned} flagged	היום: נבדקו {judged} הודעות, סומנו {warned}
 	Senders you said are not scams	שולחים שסימנתם כבטוחים
 	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} הודעות שנכתבו עבור Quatrelle נשלחות למודל אחת אחת; שום דבר שלכם לא נשלח.
 	Test the model	בדיקת המודל

@@ -2094,6 +2094,7 @@ menu	View	Anzeigen
 	Accounts it applies to	Betroffene Konten
 	not for this kind of account yet	für diese Kontoart noch nicht verfügbar
 	At most {n} messages a day	Höchstens {n} Nachrichten pro Tag
+	Today: {judged} messages checked, {warned} flagged	Heute: {judged} Nachrichten geprüft, davon {warned} gemeldet
 	Senders you said are not scams	Absender, die Sie als unbedenklich eingestuft haben
 	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} für Quatrelle geschriebene Nachrichten gehen einzeln an das Modell; nichts von Ihnen wird gesendet.
 	Test the model	Modelltest

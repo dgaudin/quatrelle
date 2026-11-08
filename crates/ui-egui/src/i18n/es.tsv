@@ -2094,6 +2094,7 @@ menu	View	Ver
 	Accounts it applies to	Cuentas a las que se aplica
 	not for this kind of account yet	todavía no para este tipo de cuenta
 	At most {n} messages a day	Como máximo {n} mensajes al día
+	Today: {judged} messages checked, {warned} flagged	Hoy: {judged} mensajes revisados, {warned} señalados
 	Senders you said are not scams	Remitentes que ha marcado como seguros
 	{n} messages written for Quatrelle go to the model one at a time; nothing of yours is sent.	{n} mensajes escritos para Quatrelle se envían al modelo de uno en uno; nada suyo se envía.
 	Test the model	Prueba del modelo

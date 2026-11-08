@@ -53,7 +53,10 @@ pub(super) fn scam(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>)
             }
             ui.add_space(4.0);
             let cap = s.prefs.scam_daily_cap;
-            setting_row(ui, t, false, name(t, &tf!("At most {n} messages a day", n = cap)), None, |ui| {
+            // What it did today, from the verdicts kept: whether the ceiling is far or near.
+            let today = s.scam_today();
+            let done = note(t, &tf!("Today: {judged} messages checked, {warned} flagged", judged = today.judged, warned = today.warned));
+            setting_row(ui, t, false, name(t, &tf!("At most {n} messages a day", n = cap)), Some(done), |ui| {
                 let id = egui::Id::unique(("options-scam", "cap"));
                 let mut shown: u32 = ui.data_mut(|d| d.get_temp::<u32>(id)).unwrap_or(cap);
                 let r = ui.add(egui::DragValue::new(&mut shown).range(1..=2000));

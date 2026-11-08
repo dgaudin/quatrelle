@@ -27,7 +27,7 @@ pub(crate) use pgp::{OfferedKey, offered};
 pub use revocation::RevocationCheck;
 pub(crate) use revocation::Revocations;
 pub(crate) use scam::ScamState;
-pub use scam::{DEFAULT_CAP, ScamMiss, ScamTest};
+pub use scam::{DEFAULT_CAP, ScamMiss, ScamTest, ScamToday};
 
 /// An account's S/MIME settings (the account document `smime.json`).
 pub const SMIME_DOC: &str = "smime.json";

@@ -115,6 +115,7 @@ fn the_scam_option_is_greyed_without_a_model_and_lists_the_accounts() {
     assert!(shown.iter().any(|t| t == "not for this kind of account yet"), "{shown:?}");
     assert_eq!(shown.iter().filter(|t| *t == "not for this kind of account yet").count(), 1, "only the sample's");
     assert!(shown.iter().any(|t| t == "At most 200 messages a day"), "{shown:?}");
+    assert!(shown.iter().any(|t| t == "Today: 0 messages checked, 0 flagged"), "what it did today: {shown:?}");
     assert!(shown.iter().any(|t| t == "Try it on examples"), "{shown:?}");
     assert!(shown.iter().any(|t| t == "sam.doe@elsewhere.example"), "the safe sender is listed: {shown:?}");
     assert!(shown.iter().any(|t| t == "Remove"), "{shown:?}");
