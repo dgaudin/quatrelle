@@ -176,7 +176,11 @@ impl Session {
             Event::FolderSizes { account, server, folders, quota, error } => self.sizes_answered(&account, server, folders, quota, error),
             Event::Recoverable { account, ask, offset, items, more, error } => self.recoverable_listed(&account, ask, offset, items, more, error),
             Event::RecoverableDone { account, ask, done, purge, error } => self.recoverable_done(&account, ask, done, purge, error),
-            Event::LlmAnswered { id, text, error } => self.llm_answered(id, text, error),
+            Event::LlmAnswered { id, text, error } => {
+                if !self.scam_answered(id, &text, error.as_deref()) {
+                    self.llm_answered(id, text, error);
+                }
+            }
             Event::LlmModels { url, models, error } => self.llm_models_answered(url, models, error),
             Event::WebexSignedIn { user, error } => self.webex_signed_in(user, error),
             Event::WebexCreated { ask, meeting, error } => self.webex_created(ask, meeting, error),
@@ -278,6 +282,7 @@ impl Session {
                 }
                 self.index_body(&key, &raw);
                 self.downloaded(&key, true);
+                self.scam_body(&key, Some(&raw));
             }
             Event::Filled { summary } => self.filled(*summary),
             Event::TextFirst { key, raw } => self.show_text_first(&key, &raw),
@@ -292,6 +297,7 @@ impl Session {
                     r.error = Some(error);
                 }
                 self.downloaded(&key, false);
+                self.scam_body(&key, None);
             }
             Event::Sent { id, .. } => {
                 if let Some(c) = self.compose.clone().filter(|c| c.id == id) {

@@ -63,6 +63,7 @@ pub use prefs::{
 use searching::SearchIndex;
 pub use searching::{IndexWork, SearchClock};
 pub use security::{
+    DEFAULT_CAP,
     AccountPgp, CardSearch, KnownCert, Learn, Learnt, Lock, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey,
     PgpCard, Reach, RevocationCheck, SMIME_DOC, Scheme, Seal, Security, SignedBy, SmimeSettings,
 };
@@ -389,6 +390,8 @@ pub struct Session {
     cards: security::CardSearch,
     /// OpenPGP: each account's own keys.
     pgp: security::PgpState,
+    /// The scam check: the language model reads external mail as it arrives.
+    scam: security::ScamState,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
@@ -575,6 +578,7 @@ impl Session {
             revocation: Default::default(),
             cards: Default::default(),
             pgp: Default::default(),
+            scam: Default::default(),
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             envelope: Default::default(),

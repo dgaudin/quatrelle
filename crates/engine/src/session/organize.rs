@@ -219,6 +219,7 @@ impl Session {
         self.read_when_due();
         self.web_calendars_due();
         self.refresh_rooms_due();
+        self.scam_tick();
         // A new day moves the list's date headings (before the snoozes' early return).
         self.follow_the_day();
         let now = self.clock.now;

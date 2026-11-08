@@ -164,6 +164,32 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params(r#"{"how": "fix"|"shorter"|"formal"|"friendly"|"english"} (the text written, up to the signature or the message quoted)"#),
         CommandSpec::new("assistant.endRewrite", "Use the rewritten text", "Message › Review", |s, v| s.end_rewrite(p::bool(v, "use").unwrap_or(false)))
             .params(r#"{"use": bool} (true: in place of the text written; false: let it go)"#),
+        CommandSpec::new("assistant.scamCheck", "Spot scams in external mail", "File › Options › Assistant", |s, v| {
+            let accounts = match v.get("accounts") {
+                None | Some(Value::Null) => None,
+                Some(Value::Array(list)) => Some(
+                    list.iter().map(|a| a.as_str().map(str::to_string).ok_or_else(|| CmdError::Params("`accounts` is a list of account ids".into()))).collect::<Result<Vec<_>, _>>()?,
+                ),
+                Some(_) => return Err(CmdError::Params("`accounts` is a list of account ids".into())),
+            };
+            s.set_scam_check(p::bool(v, "enabled"), accounts, p::i64(v, "dailyCap"))
+        })
+        .params(r#"{"enabled"?: bool (needs a server and a model set), "accounts"?: [string] (Exchange accounts it applies to), "dailyCap"?: number (1 to 2000 messages a day, 200 by default)} → {"enabled", "accounts", "dailyCap"}"#),
+        CommandSpec::new("scam.notScam", "Not a scam", "Reading pane", |s, v| {
+            let k = parse_key(v).or_else(|| s.reading.as_ref().map(|r| r.key.clone())).ok_or_else(|| CmdError::Params("`key` is required".into()))?;
+            s.not_a_scam(&k)
+        })
+        .params(r#"{"key"?: string (the message on screen when not given)} → {"trusted", "address"} (its verdict goes; the sender is never sent to the model again)"#),
+        CommandSpec::new("scam.untrust", "Take back a trusted sender", "File › Options › Assistant", |s, v| s.scam_untrust(p::req_str(v, "address")?))
+            .params(r#"{"address": string} → {"removed"}"#),
+        CommandSpec::new("scam.verdict", "What the scam check found", "Reading pane", |s, v| {
+            let k = parse_key(v).or_else(|| s.reading.as_ref().map(|r| r.key.clone())).ok_or_else(|| CmdError::Params("`key` is required".into()))?;
+            Ok(match s.scam_verdict(&k) {
+                Some((score, reasons)) => json!({"score": score, "reasons": reasons}),
+                None => Value::Null,
+            })
+        })
+        .params(r#"{"key"?: string (the message on screen when not given)} → {"score": 0-100, "reasons": [string]} or null"#),
         CommandSpec::new("view.newMailWindow", "New messages in their own window", "File › Options › Mail", |s, v| {
             s.prefs.new_mail_window = p::bool(v, "on").unwrap_or(!s.prefs.new_mail_window);
             Ok(json!({"on": s.prefs.new_mail_window}))

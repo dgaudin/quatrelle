@@ -214,7 +214,7 @@ impl Session {
 
     /// [`Session::message_warning`] as the check stands, asking nothing: what the sender's header
     /// says, else what the message's own signature does.
-    fn warning_now(&self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
+    pub(in crate::session) fn warning_now(&self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
         let listed = self.listed(key, parsed);
         let s = self.senders.as_ref()?;
         s.check.check(&parsed.from, listed).or_else(|| s.check.check_signature(&parsed.from, &parsed.text, listed, &s.org))

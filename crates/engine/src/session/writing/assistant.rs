@@ -139,7 +139,7 @@ pub struct LlmModels {
 impl Session {
     /// The language the model writes in for the user to read (a summary): the interface's, as the
     /// app set it, else English. A reply and a rewrite keep the mail's own language.
-    fn answer_language(&self) -> String {
+    pub(crate) fn answer_language(&self) -> String {
         let lang: String = self.assistant_language.chars().filter(|c| !c.is_control()).take(60).collect();
         if lang.trim().is_empty() { "English".to_string() } else { lang.trim().to_string() }
     }

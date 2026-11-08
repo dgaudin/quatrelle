@@ -6,6 +6,7 @@
 
 use super::*;
 
+mod scam;
 mod senders;
 
 /// A JPEG whose EXIF block has a GPS block with a latitude (51° 30' 41.23").

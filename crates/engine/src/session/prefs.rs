@@ -241,6 +241,14 @@ pub struct Prefs {
     pub llm_url: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub llm_model: String,
+    /// The scam check (File › Options › Assistant): external mail arriving in the Exchange
+    /// accounts ticked in `scam_accounts` is read by that model; at most `scam_daily_cap`
+    /// messages a day. Off until turned on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub scam_check: bool,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub scam_accounts: BTreeSet<String>,
+    pub scam_daily_cap: u32,
 }
 
 impl Default for Prefs {
@@ -310,6 +318,9 @@ impl Default for Prefs {
             webex_signed_in: false,
             llm_url: String::new(),
             llm_model: String::new(),
+            scam_check: false,
+            scam_accounts: BTreeSet::new(),
+            scam_daily_cap: crate::session::DEFAULT_CAP,
             quick_steps: Vec::new(),
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),

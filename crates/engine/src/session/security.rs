@@ -19,11 +19,14 @@ use super::*;
 mod cards;
 mod pgp;
 mod revocation;
+mod scam;
 pub use cards::CardSearch;
 pub(crate) use pgp::PgpState;
 pub use pgp::{AccountPgp, Learn, Learnt, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey, PgpCard, Reach, Scheme};
 pub(crate) use pgp::{OfferedKey, offered};
 pub use revocation::RevocationCheck;
+pub use scam::DEFAULT_CAP;
+pub(crate) use scam::ScamState;
 pub(crate) use revocation::Revocations;
 
 /// An account's S/MIME settings (the account document `smime.json`).

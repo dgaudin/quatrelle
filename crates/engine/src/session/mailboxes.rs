@@ -271,6 +271,11 @@ impl Session {
         let rest: Vec<Summary> = arrived.iter().filter(|m| !quiet.contains(&m.key)).cloned().collect();
         quiet.extend(self.ignore_arrived(&rest));
         let rest: Vec<Summary> = arrived.iter().filter(|m| !quiet.contains(&m.key)).cloned().collect();
+        // Mail older than a day (a resync after a long time away) isn't looked at by the scam
+        // check either; one that a rule files away is (a rule doesn't make mail safe).
+        let cutoff = self.clock.now - 86_400;
+        let recent: Vec<Summary> = rest.iter().filter(|m| m.received_at() >= cutoff).cloned().collect();
+        self.scam_arrived(account, &recent);
         quiet.extend(self.run_rules(&rest));
         // Mail older than a day (a resync after a long time away) isn't "new" any more.
         let cutoff = self.clock.now - 86_400;
