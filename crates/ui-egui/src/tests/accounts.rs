@@ -397,7 +397,7 @@ fn the_options_choose_when_pictures_load() {
     let (mut a, dir) = app("options-pictures");
     let ctx = egui::Context::default();
     a.act(crate::Action::Backstage(crate::backstage::Page::Options));
-    let size = egui::vec2(1100.0, 3800.0);
+    let size = egui::vec2(1100.0, 4600.0);
     let now = settled_text_at(&ctx, &mut a, "From my contacts and the senders I trust", size).expect("the setting, as at first");
     click_at(&ctx, &mut a, now, 1, size);
     let always = settled_text_at(&ctx, &mut a, "Always", size).expect("its choices");

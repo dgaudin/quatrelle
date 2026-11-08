@@ -242,6 +242,8 @@ impl MailApp {
         }
         // Cheap when nothing changed; never while the book is being read, and never loads it.
         self.session.keep_senders_quietly();
+        // The scam check's verdicts are read, for the list's marks and the banner.
+        self.session.scam_warm();
         // The book done in this frame, after it drew: the next one shows what the check found.
         if reading && !self.session.contacts_pending() {
             ctx.request_repaint();

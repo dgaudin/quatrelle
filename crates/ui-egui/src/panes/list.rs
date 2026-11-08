@@ -349,6 +349,9 @@ fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, u
     }
     let subject = if m.subject.is_empty() { tl!("(no subject)") } else { m.subject.as_str() };
     let mut spoken = vec![who, subject.to_string(), crate::i18n::date(&dates::list_time(m.received_at(), &s.clock))];
+    if let Some(score) = marks.scam {
+        spoken.push(crate::reading::scam_headline(score).to_string());
+    }
     for (on, word) in [
         (marks.warning, "Check who sent it"),
         (marks.external, "External"),
@@ -387,11 +390,26 @@ fn external_galley(p: &egui::Painter, t: &theme::Tokens) -> std::sync::Arc<egui:
 
 /// The warning sign before a sender's name, from `left` on the line from `top`, its explanation
 /// under the pointer. How far the name moves for it.
-fn warning_mark(ui: &Ui, p: &egui::Painter, t: &theme::Tokens, resp: &egui::Response, left: f32, top: f32) -> f32 {
+fn warning_mark(
+    ui: &Ui,
+    p: &egui::Painter,
+    t: &theme::Tokens,
+    resp: &egui::Response,
+    marks: &quatrelle_engine::SenderMarks,
+    left: f32,
+    top: f32,
+) -> f32 {
     let ir = Rect::from_min_size(egui::pos2(left, top), vec2(15.0, 15.0));
     icons::paint(p, ir, Icon::Warning, t.danger);
     if ui.rect_contains_pointer(ir) {
-        resp.clone().on_hover_text(tl!("Check who sent it"));
+        let mut tip: Vec<String> = Vec::new();
+        if marks.warning {
+            tip.push(tl!("Check who sent it").to_string());
+        }
+        if let Some(score) = marks.scam {
+            tip.push(crate::reading::scam_headline(score).to_string());
+        }
+        resp.clone().on_hover_text(tip.join("\n"));
     }
     19.0
 }
@@ -506,8 +524,8 @@ fn message_row(
     }
     let mut name_x = x;
     // The sender doesn't add up: a warning sign before the name (the reading pane says what).
-    if marks.warning {
-        name_x += warning_mark(ui, &p, t, &resp, name_x, line1 + 1.0);
+    if marks.warning || marks.scam.is_some() {
+        name_x += warning_mark(ui, &p, t, &resp, &marks, name_x, line1 + 1.0);
     }
     let who = if sent_view { tf!("To: {names}", names = addr::display_list(&m.to)) } else { m.from.display().to_string() };
     let who = if count > 1 && !marks.address { format!("{who}  ({count})") } else { who };

@@ -29,8 +29,8 @@ pub(crate) mod pictures;
 mod plain;
 mod security;
 mod sender;
-mod sender_check;
 mod videos;
+mod warnings;
 pub(crate) use attachments::decode;
 #[cfg(test)]
 pub(crate) use attachments::previewed_text;
@@ -57,8 +57,8 @@ pub(crate) use long_text::{CHUNK, chunks};
 pub(crate) use pictures::color_image;
 use pictures::*;
 pub(crate) use pictures::{Got, Pictures, Want, decode_pixels, decode_round, png_of};
-pub(crate) use sender_check::{external_tag, sender_warning};
 pub(crate) use videos::Videos;
+pub(crate) use warnings::{external_tag, scam_banner, scam_headline, sender_warning};
 
 /// HTML written by hand (a signature) as a message shows it: its layout, text and links, its
 /// pictures from `pictures` (by `cid:`), those on the web only as their place (nothing is

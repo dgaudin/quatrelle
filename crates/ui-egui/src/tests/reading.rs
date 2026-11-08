@@ -17,10 +17,10 @@ mod plain_text;
 mod previews;
 mod printing;
 mod rules;
-mod senders;
 mod source;
 mod tables;
 mod text_first;
+mod warnings;
 
 #[test]
 fn renders_every_state_without_panicking() {

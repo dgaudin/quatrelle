@@ -257,13 +257,13 @@ pub(super) fn table_row(
             Col::Attach if m.has_attachments => {
                 icons::paint(&p, Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(13.0, 13.0)), Icon::Attach, t.dim);
             }
-            Col::Who if marks.warning || marks.address || marks.external => {
+            Col::Who if marks.warning || marks.scam.is_some() || marks.address || marks.external => {
                 // The warning sign before the name, the External tag at the column's end, the
                 // address between them after the name.
                 let inner = cell.shrink2(vec2(6.0, 0.0));
                 let mut left = inner.min.x;
-                if marks.warning {
-                    left += warning_mark(ui, &p, t, &resp, left, line1 - 7.5);
+                if marks.warning || marks.scam.is_some() {
+                    left += warning_mark(ui, &p, t, &resp, &marks, left, line1 - 7.5);
                 }
                 let mut right = inner.max.x;
                 let who = m.from.display().to_string();

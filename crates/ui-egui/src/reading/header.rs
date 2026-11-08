@@ -195,6 +195,12 @@ pub(super) fn header(
     if let Some(w) = &r.warning {
         sender_warning(&t, ui, w);
     }
+    // The model's finding, below the sender check's banner (which has said the advice already).
+    if let Some((score, reasons)) = s.scam_warning(&r.key, &p.message_id).map(|(sc, rs)| (sc, rs.to_vec()))
+        && scam_banner(&t, ui, score, &reasons, r.warning.is_none())
+    {
+        acts.push(Action::Run("scam.notScam", json!({"key": r.key.to_id()})));
+    }
     if let Some(sec) = &r.security {
         security::security_bar(s, &t, ui, r, sec);
     }

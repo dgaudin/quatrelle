@@ -10,7 +10,7 @@ use quatrelle_engine::model::lookalike::SenderWarning;
 use super::*;
 
 /// A message from `from` put at the top of the sample Inbox (unread), and its key.
-fn deliver(a: &mut MailApp, uid: u32, from: (&str, &str), subject: &str, body: &str) -> MessageKey {
+pub(super) fn deliver(a: &mut MailApp, uid: u32, from: (&str, &str), subject: &str, body: &str) -> MessageKey {
     let d = quatrelle_engine::mime::Draft { subject: subject.into(), body: body.into(), ..Default::default() };
     let raw =
         quatrelle_engine::mime::build(&d, &quatrelle_engine::model::EmailAddress::new(from.0, from.1), NOW, &format!("<senders{uid}@x>")).unwrap();
@@ -25,7 +25,7 @@ fn deliver(a: &mut MailApp, uid: u32, from: (&str, &str), subject: &str, body: &
 }
 
 /// What a screen reader is told in a frame of `size` (AccessKit on): every node's name or value.
-fn spoken(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> Vec<String> {
+pub(super) fn spoken(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> Vec<String> {
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));
     out.textures_delta.clear();
@@ -34,7 +34,7 @@ fn spoken(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> Vec<String>
 }
 
 /// Frames until the address book has read the mailbox (the sender check is gathered again then).
-fn settle(ctx: &egui::Context, a: &mut MailApp) {
+pub(super) fn settle(ctx: &egui::Context, a: &mut MailApp) {
     for _ in 0..200 {
         frame(ctx, a, vec![]);
         if !a.session.contacts_pending() {
@@ -44,7 +44,7 @@ fn settle(ctx: &egui::Context, a: &mut MailApp) {
     frame(ctx, a, vec![]);
 }
 
-const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
+pub(super) const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
 
 /// The reading pane says each case in its own words, above the message: Zoe Park's name from a
 /// Gmail address (a contact's name on someone else's address) as the check finds it, then each of
