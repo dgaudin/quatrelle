@@ -386,6 +386,8 @@ fn sent_folder(sh: &Rcs, id: &str, given: Option<String>) -> Option<String> {
 /// What S/MIME can't do in the browser: smart cards and the system's keychain.
 const BROWSER_SMIME: &str = "smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser";
 /// Revocation servers don't let a web page ask them.
+/// The local archive is the desktop app's: JMAP accounts aren't archived yet.
+const BROWSER_ARCHIVE: &str = "archiving mail on this computer is done by the Quatrelle desktop app, not in the browser";
 const BROWSER_REVOCATION: &str = "the browser can't ask a certificate's authority";
 
 async fn job(sh: &Rcs, id: &str, j: Job) {
@@ -586,6 +588,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::SignIn { .. }
         | Job::ImportPst { .. }
         | Job::FileMessages { .. }
+        | Job::Archive { .. }
+        | Job::PutBack { .. }
         | Job::ReadMessageFile { .. }
         | Job::CompactDataFile { .. }
         | Job::LocalFolderSizes { .. }
@@ -758,6 +762,14 @@ impl Backend for WebBackend {
             Job::FileMessages { account, folder, paths } => {
                 let failed = paths.into_iter().map(|p| (p, DESKTOP_FILES.to_string())).collect();
                 emit(sh, Event::MessagesFiled { account, folder, added: 0, failed })
+            }
+            Job::Archive { account, keys, .. } => {
+                let kept = keys.into_iter().map(|k| (k, BROWSER_ARCHIVE.to_string())).collect();
+                emit(sh, Event::Archived { account, moved: Vec::new(), kept })
+            }
+            Job::PutBack { account, keys, .. } => {
+                let kept = keys.into_iter().map(|k| (k, BROWSER_ARCHIVE.to_string())).collect();
+                emit(sh, Event::PutBack { account, back: Vec::new(), kept })
             }
             Job::ReadMessageFile { path } => emit(sh, Event::MessageFileRead { path, raw: Err(DESKTOP_FILES.into()) }),
             // The browser keeps no data files: nothing to compact.
