@@ -376,6 +376,10 @@ impl MailApp {
             },
             Action::Submit(id, p) => match self.session.run(id, &p) {
                 Ok(v) => {
+                    // A ready-made Quick Step set up: it runs on the selection now.
+                    let then = matches!(&self.ui.dialog, Some(Dialog::QuickStep(f)) if f.set_up && id == "quickStep.edit")
+                        .then(|| p.get("newName").or(p.get("name")).cloned())
+                        .flatten();
                     if id == "contact.create" {
                         self.ui.person = v.get("uid").and_then(Value::as_str).map(str::to_string);
                     }
@@ -387,6 +391,9 @@ impl MailApp {
                         self.ui.search_text.clear();
                     }
                     self.ui.dialog = None;
+                    if let Some(name) = then {
+                        self.run("quickStep.run", json!({"name": name}));
+                    }
                 }
                 Err(e) => {
                     if let Some(d) = self.ui.dialog.as_mut() {

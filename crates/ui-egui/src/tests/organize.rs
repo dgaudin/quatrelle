@@ -613,8 +613,19 @@ fn the_message_menu_has_an_icon_before_each_command() {
     frame_sized(&ctx, &mut a, vec![press(false)], SIZE);
     assert!(settled_text_at(&ctx, &mut a, "Reply all", SIZE).is_some(), "the menu open");
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
-    for label in ["Open in new window", "Reply", "Forward", "Follow up", "Move to…", "Ignore", "Delete", "Find related", "Categorize", "Create rule…"]
-    {
+    for label in [
+        "Open in new window",
+        "Reply",
+        "Forward",
+        "Follow up",
+        "Move to…",
+        "Ignore",
+        "Delete",
+        "Find related",
+        "Categorize",
+        "Create rule…",
+        "Quick steps",
+    ] {
         let at = text_at(&shapes, label).unwrap_or_else(|| panic!("{label} in the menu"));
         let icon = shapes.iter().any(|s| match s {
             egui::Shape::Mesh(m) => {
@@ -625,5 +636,100 @@ fn the_message_menu_has_an_icon_before_each_command() {
         });
         assert!(icon, "an icon before {label}");
     }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Opens the right-click menu of the first message, the frames settled.
+fn right_click_first(ctx: &egui::Context, a: &mut MailApp) {
+    let name = a.session.list.first().map(|m| m.from.name.clone()).unwrap_or_default();
+    let row = settled_text_at(ctx, a, &name, SIZE).expect("the first message's row");
+    let press = |pressed| Event::PointerButton { pos: row, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(ctx, a, vec![Event::PointerMoved(row)], SIZE);
+    frame_sized(ctx, a, vec![press(true)], SIZE);
+    frame_sized(ctx, a, vec![press(false)], SIZE);
+    assert!(settled_text_at(ctx, a, "Reply all", SIZE).is_some(), "the menu open");
+}
+
+/// The right-click menu has the Quick Steps, with the four ready-made ones the first time; a
+/// ready-made one asks for its setting at the first click, then does its work.
+#[test]
+fn the_message_menu_offers_quick_steps_and_the_ready_made_ones_ask_first() {
+    let (mut a, dir) = app("menu-quick-steps");
+    let ctx = egui::Context::default();
+    right_click_first(&ctx, &mut a);
+    let at = settled_text_at(&ctx, &mut a, "Quick steps", SIZE).expect("Quick steps in the message menu");
+    // Opening the submenu draws the four steps, added once.
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(at)], SIZE);
+    let handled = settled_text_at(&ctx, &mut a, "Handled", SIZE).expect("the ready-made steps");
+    assert!(a.session.prefs.quick_steps_seeded);
+    let names: Vec<&str> = a.session.prefs.quick_steps.iter().map(|q| q.name.as_str()).collect();
+    assert_eq!(names, ["Forward to my manager", "Write to the team", "Handled", "Reply then delete"]);
+    // One click on "Handled": its setting opens, with what it is for; nothing is done yet.
+    let before = a.session.selected().first().map(|m| m.flags.clone());
+    click_at(&ctx, &mut a, handled, 1, SIZE);
+    let Some(Dialog::QuickStep(f)) = &a.ui.dialog else { panic!("the setting opens") };
+    assert!(f.set_up && f.complete && f.read, "it shows what the step does");
+    assert_eq!(a.session.selected().first().map(|m| m.flags.clone()), before);
+    assert!(settled_text_at(&ctx, &mut a, "Set up this Quick Step: it runs once saved.", SIZE).is_some());
+    assert!(settled_text_at(&ctx, &mut a, "Mark complete", SIZE).is_some());
+    assert!(settled_text_at(&ctx, &mut a, "Then write", SIZE).is_some());
+    // Saved, it does its work on the selection and is set up.
+    let m = a.session.selected()[0].clone();
+    let Some(Dialog::QuickStep(f)) = a.ui.dialog.clone() else { panic!("the setting is open") };
+    a.act(crate::Action::Submit("quickStep.edit", f.params()));
+    assert!(a.ui.dialog.is_none());
+    assert!(!a.session.prefs.quick_steps[2].unset);
+    let archive = a.session.account("sample").and_then(|x| x.folder(quatrelle_engine::model::FolderRole::Archive)).map(|x| x.path.clone()).unwrap();
+    let there = a.session.folder_state("sample", &archive).messages.iter().find(|x| x.message_id == m.message_id).cloned();
+    assert!(there.is_some_and(|x| x.flags.seen), "read, and filed where it was set");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Ctrl+Shift+N on a step not set up yet opens its setting, as a click does.
+#[test]
+fn a_shortcut_on_a_step_not_set_up_opens_its_setting() {
+    let (mut a, dir) = app("quick-step-key");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("quickStep.seed", json!({"names": ["Forward to my manager", "Write to the team", "Handled", "Reply then delete"]}));
+    frame(&ctx, &mut a, vec![key(Key::ArrowDown, Modifiers::NONE)]);
+    let shifted = Event::Key {
+        key: Key::Exclamationmark,
+        physical_key: Some(Key::Num1),
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::COMMAND | Modifiers::SHIFT,
+    };
+    frame(&ctx, &mut a, vec![shifted]);
+    assert!(matches!(&a.ui.dialog, Some(Dialog::QuickStep(f)) if f.set_up && f.original.as_deref() == Some("Forward to my manager")));
+    assert!(a.session.compose.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The form of a Quick Step has "Mark complete" and "Then write", with the address for the
+/// writings that need one.
+#[test]
+fn the_quick_step_form_marks_complete_and_writes() {
+    let (mut a, dir) = app("quick-step-form");
+    let ctx = egui::Context::default();
+    let mut f = crate::dialogs::QuickStepForm::new(&a.session);
+    f.name = "Boss".into();
+    f.read = false;
+    f.move_to = crate::dialogs::StepMove::Stay;
+    f.write = crate::dialogs::StepWriting::Forward;
+    a.ui.dialog = Some(Dialog::QuickStep(Box::new(f.clone())));
+    assert!(settled_text_at(&ctx, &mut a, "Mark complete", SIZE).is_some());
+    assert!(settled_text_at(&ctx, &mut a, "Then write", SIZE).is_some());
+    // Forwarding needs an address; with one, the parameters carry it.
+    assert!(!f.ready());
+    f.to = "boss@studio.example".into();
+    f.complete = true;
+    assert!(f.ready());
+    assert_eq!(f.params()["write"], json!({"forward": {"to": "boss@studio.example"}}));
+    assert_eq!(f.params()["complete"], json!(true));
+    a.act(crate::Action::Submit("quickStep.create", f.params()));
+    assert!(a.ui.dialog.is_none() && a.session.prefs.quick_steps.len() == 1);
+    let again = crate::dialogs::QuickStepForm::edit(&a.session, &a.session.prefs.quick_steps[0]);
+    assert!(again.complete && again.write == crate::dialogs::StepWriting::Forward && again.to.starts_with("boss@studio.example"));
     let _ = std::fs::remove_dir_all(dir);
 }

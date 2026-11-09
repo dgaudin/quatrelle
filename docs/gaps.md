@@ -702,7 +702,11 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   categorized, with attachments, large, pinned, from specific people, or any search), over every
   folder but Deleted Items and Junk. The search language gains `larger:`/`smaller:` and lists
   in `from:`/`to:`.
-- **Quick Steps:** named sets of marks and one move, from the ribbon or Ctrl+Shift+1 to 9.
+- **Quick Steps:** named sets of marks and one move, from the ribbon, a message's right-click
+  menu or Ctrl+Shift+1 to 9. A step can also mark follow-up complete and open a reply, reply-all,
+  forward or new message in a window, filled in (nothing is sent; one message only). Four ready-made
+  steps (forward to my manager, write to the team, handled, reply then delete) are added the first
+  time the menu opens and ask for their address or folder at the first click.
 - **Calendar:** the Work Week view (Monday to Friday).
 - **Writing:** Insert date & time (written out, as numbers, with the time, or the time alone)
   and Word count (words, characters with and without spaces, paragraphs, lines; the selection's

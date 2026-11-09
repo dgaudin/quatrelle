@@ -25,6 +25,6 @@ pub(crate) use costs::Merging;
 pub(crate) use file_dialogs::FileDialogs;
 pub(crate) use keys::delete_from_window;
 pub(crate) use meetings::{meeting_browser, meeting_profile};
-pub(crate) use ribbon::junk_menu;
+pub(crate) use ribbon::{junk_menu, quick_steps_menu, run_quick_step};
 pub(crate) use search_box::{SearchDrop, scope_label};
 pub use windows::{WindowPlace, after_open};

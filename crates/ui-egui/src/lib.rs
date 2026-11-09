@@ -55,7 +55,7 @@ use quatrelle_engine::model::{MessageKey, SyncStatus};
 use quatrelle_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
 use serde_json::{Value, json};
 
-pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, scope_label};
+pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, quick_steps_menu, scope_label};
 pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;

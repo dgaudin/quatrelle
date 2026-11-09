@@ -1140,6 +1140,14 @@ month	May	5月
 	Then move to	その後の移動先
 	Don't move	移動しない
 	Delete this Quick Step	このクイック操作を削除
+	Forward to my manager	上司に転送
+	Write to the team	チームにメール作成
+	Handled	対応済み
+	Reply then delete	返信して削除
+	Set up this Quick Step: it runs once saved.	このクイック操作を設定してください。保存すると実行されます。
+	Then write	その後の作成
+	Forward to	転送先
+	New message to	新規メッセージの宛先
 	Date & time	日付と時刻
 	Word count	文字カウント
 	Words	単語数

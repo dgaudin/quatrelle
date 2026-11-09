@@ -1142,6 +1142,14 @@ month	May	5월
 	Then move to	그런 다음 이동할 위치
 	Don't move	이동 안 함
 	Delete this Quick Step	이 빠른 단계 삭제
+	Forward to my manager	내 관리자에게 전달
+	Write to the team	팀에게 쓰기
+	Handled	처리됨
+	Reply then delete	회신 후 삭제
+	Set up this Quick Step: it runs once saved.	이 빠른 단계를 설정하세요. 저장하면 실행됩니다.
+	Then write	그런 다음 작성
+	Forward to	전달 대상
+	New message to	새 메시지 받는 사람
 	Date & time	날짜 및 시간
 	Word count	단어 개수
 	Words	단어 수

@@ -747,6 +747,7 @@ fn row_input(
             Action::Run(if flags.seen { "mail.markUnread" } else { "mail.markRead" }, json!({})),
         );
         ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| crate::organize::follow_up_menu(ui, s, t, acts));
+        ui.menu_button((widgets::menu_icon(Some(Icon::Steps)), tl!("Quick steps")), |ui| crate::quick_steps_menu(ui, s, acts));
         ui.separator();
         item(ui, acts, Icon::Move, tl!("Move to…"), Action::Dialog(Dialog::move_to()));
         item(ui, acts, Icon::Archive, tl!("Archive"), Action::Run("mail.archive", json!({})));

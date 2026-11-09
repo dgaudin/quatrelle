@@ -200,6 +200,14 @@ impl MailApp {
                 } else {
                     json!({})
                 };
+                // A ready-made Quick Step not set up yet asks for its setting first.
+                if let Some(i) = id.strip_prefix("quickStep.").and_then(|n| n.parse::<usize>().ok()).and_then(|n| n.checked_sub(1)) {
+                    let act = super::run_quick_step(&self.session, i);
+                    if matches!(act, Action::Dialog(_)) && !self.session.selection.is_empty() {
+                        self.act(act);
+                        continue;
+                    }
+                }
                 self.run(id, params);
                 if moves_focus(id) {
                     self.ui.scroll_to_focus = true;

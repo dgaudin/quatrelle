@@ -532,9 +532,17 @@ impl MailApp {
 /// The ribbon's height (its tabs and its row of buttons), the same whichever tab is shown.
 pub(crate) const RIBBON_H: f32 = 65.0;
 
-/// The Quick Steps menu: each step (done to the selection), then making and changing them.
+/// The Quick Steps menu: each step (done to the selection), then making and changing them. The
+/// ready-made steps are added the first time it is drawn.
 pub(crate) fn quick_steps_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Action>) {
     let has = !s.selection.is_empty();
+    if !s.prefs.quick_steps_seeded {
+        // One call: the answer sets `quick_steps_seeded` before the next frame draws this.
+        acts.push(Action::Run(
+            "quickStep.seed",
+            json!({"names": [tl!("Forward to my manager"), tl!("Write to the team"), tl!("Handled"), tl!("Reply then delete")]}),
+        ));
+    }
     if s.prefs.quick_steps.is_empty() {
         ui.label(RichText::new(tl!("No Quick Steps yet.")).weak());
     }
@@ -544,7 +552,7 @@ pub(crate) fn quick_steps_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Ac
             b = b.shortcut_text(format!("Ctrl+Shift+{}", i + 1));
         }
         if ui.add_enabled(has, b).clicked() {
-            acts.push(Action::Run("quickStep.run", json!({"index": i})));
+            acts.push(run_quick_step(s, i));
             ui.close();
         }
     }
@@ -562,6 +570,15 @@ pub(crate) fn quick_steps_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Ac
                 }
             }
         });
+    }
+}
+
+/// What a click (or Ctrl+Shift+N) on the Quick Step at `i` does: run it, or, when it is a
+/// ready-made one not set up yet, open its setting first.
+pub(crate) fn run_quick_step(s: &Session, i: usize) -> Action {
+    match s.prefs.quick_steps.get(i) {
+        Some(q) if q.unset => Action::Dialog(Dialog::QuickStep(Box::new(crate::dialogs::QuickStepForm::set_up(s, q)))),
+        _ => Action::Run("quickStep.run", json!({"index": i})),
     }
 }
 
