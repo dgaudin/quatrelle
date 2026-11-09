@@ -108,6 +108,25 @@ impl Session {
                     }
                 }
                 sort_folders(&mut folders);
+                // The pool counts a folder as it syncs it, and lists them all again now and then
+                // (Drafts made, a draft's folder synced) with the others' counts from their last
+                // sync, from before mail read here since reached the server: a count it reports
+                // unchanged is no news, and the one counted here stands, until the folder is
+                // synced (`FolderChanged`).
+                let here: HashMap<String, (u32, u32)> =
+                    self.account(&account).map(|a| a.folders.iter().map(|f| (f.path.clone(), (f.unread, f.total))).collect()).unwrap_or_default();
+                for f in &mut folders {
+                    let now = (f.unread, f.total);
+                    let key = (account.clone(), f.path.clone());
+                    let synced = self.counts_stale.remove(&key);
+                    let before = self.reported_counts.insert(key, now);
+                    if before == Some(now)
+                        && !synced
+                        && let Some(&(unread, total)) = here.get(&f.path)
+                    {
+                        (f.unread, f.total) = (unread, total);
+                    }
+                }
                 let first = self.account(&account).is_some_and(|a| a.folders.is_empty());
                 if let Some(a) = self.account_mut(&account) {
                     a.folders = folders;
@@ -131,10 +150,24 @@ impl Session {
                 }
                 self.follow_public_favorites();
             }
-            // The echo of a flag or category changed here: the folder in memory has it already.
-            Event::FolderChanged { account, folder } if self.own_echo(&account, &folder) => {}
-            Event::FolderChanged { account, folder } => self.folder_changed(&account, &folder),
-            Event::FolderSynced { account, folder, change } => self.folder_synced(&account, &folder, *change),
+            Event::FolderChanged { account, folder } => match self.echo_of(&account, &folder) {
+                // The echo of a flag or category changed here: the folder in memory has it already.
+                mailboxes::Echo::Kept => {}
+                // A move or delete made here, on disk now: read again, its count no news.
+                mailboxes::Echo::Made => self.folder_changed(&account, &folder),
+                // Synced, or changed on disk otherwise: the next count reported for it is news,
+                // whatever it is (a mark undone on another device comes back this way). The count
+                // last reported is kept, for a change the server refuses.
+                mailboxes::Echo::None => {
+                    self.counts_stale.insert((account.clone(), folder.clone()));
+                    self.folder_changed(&account, &folder);
+                }
+            },
+            Event::FolderSynced { account, folder, change } => {
+                // A sync that found mail changed: the next count reported for the folder is news.
+                self.counts_stale.insert((account.clone(), folder.clone()));
+                self.folder_synced(&account, &folder, *change)
+            }
             Event::ServerSearched { account, query, keys, error, done } => {
                 if let Some(ss) = self.server_search.as_mut().filter(|ss| ss.query == query) {
                     // What's found so far shows at once; the account is done at its last answer.
@@ -340,7 +373,21 @@ impl Session {
                 self.after_outbox_change();
             }
             Event::DraftReturned { account, raw, error } => self.draft_returned(&account, &raw, &error),
-            Event::OpFailed { error, .. } => self.notice_with("The server refused a change: {error}", &[("error", &error)], true),
+            Event::OpFailed { account, op, error } => {
+                // What it counted here (a message read) didn't happen: the folders it names count
+                // as the server last said, which the sync that follows may not say again (its
+                // count unchanged, it reports none).
+                let folders: BTreeSet<String> = op.keys().iter().filter(|k| k.account == account).map(|k| k.folder.clone()).collect();
+                for f in folders {
+                    let reported = self.reported_counts.get(&(account.clone(), f.clone())).copied();
+                    if let (Some((unread, total)), Some(a)) = (reported, self.account_mut(&account))
+                        && let Some(folder) = a.folders.iter_mut().find(|x| x.path == f)
+                    {
+                        (folder.unread, folder.total) = (unread, total);
+                    }
+                }
+                self.notice_with("The server refused a change: {error}", &[("error", &error)], true);
+            }
             Event::OpenUrl { url } => {
                 if self.open_urls.len() < 8 {
                     self.open_urls.push(url);

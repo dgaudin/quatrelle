@@ -27,8 +27,8 @@ const ECHOES_MAX: usize = 1024;
 /// Seconds a change waits for its echo at most (a front end that never sends one).
 const ECHO_WAIT: i64 = 60;
 
-/// Flag and category changes sent for a server account's mail and not yet said back, by
-/// (account, folder): when each was sent, and the change.
+/// Changes sent for a server account's mail and not yet said back, by (account, folder): when
+/// each was sent, and the change.
 #[derive(Default)]
 pub(crate) struct Echoes(HashMap<(String, String), VecDeque<(i64, Op)>>);
 
@@ -57,13 +57,16 @@ impl Echoes {
 }
 
 impl Session {
-    /// A flag or category change sent to a server account (`Job::Apply`): its echo is waited for
-    /// in each folder it changes.
+    /// A change to mail sent to a server account (`Job::Apply`): its echo is waited for in each
+    /// folder the pool says it changed (where its mail was; the folder emptied).
     pub(crate) fn expect_echo(&mut self, account: &str, op: &Op) {
-        if !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) {
+        if op.is_folder_op() {
             return;
         }
-        let folders: BTreeSet<&str> = op.keys().iter().filter(|k| k.account == account).map(|k| k.folder.as_str()).collect();
+        let folders: BTreeSet<&str> = match op {
+            Op::EmptyFolder { path } => BTreeSet::from([path.as_str()]),
+            _ => op.keys().iter().filter(|k| k.account == account).map(|k| k.folder.as_str()).collect(),
+        };
         let now = self.clock.now;
         for f in folders {
             let q = self.echoes.0.entry((account.to_string(), f.to_string())).or_default();
@@ -79,29 +82,35 @@ impl Session {
         self.echoes.0.retain(|(a, _), _| a != account);
     }
 
-    /// Whether `folder` changing is the echo of one of the session's own changes, which the
-    /// folder in memory has already: then it's kept as it is, the list with it. A folder in
-    /// memory read from disk again before the change was there gets it the way the list does,
-    /// each change as its echo comes (not where a later one waiting changes the same, which says
-    /// how it ends).
-    pub(crate) fn own_echo(&mut self, account: &str, folder: &str) -> bool {
+    /// Whether `folder` changing is the echo of one of the session's own changes. A flag or
+    /// category the folder in memory has already: then it's kept as it is, the list with it
+    /// ([`Echo::Kept`]). A folder in memory read from disk again before the change was there gets
+    /// it the way the list does, each change as its echo comes (not where a later one waiting
+    /// changes the same, which says how it ends).
+    pub(crate) fn echo_of(&mut self, account: &str, folder: &str) -> Echo {
         let k = (account.to_string(), folder.to_string());
         let now = self.clock.now;
-        let Some(q) = self.echoes.0.get_mut(&k) else { return false };
+        let Some(q) = self.echoes.0.get_mut(&k) else { return Echo::None };
         while q.front().is_some_and(|(at, _)| now.saturating_sub(*at) > ECHO_WAIT) {
             q.pop_front();
         }
         let Some((_, op)) = q.pop_front() else {
             self.echoes.0.remove(&k);
-            return false;
+            return Echo::None;
         };
+        if !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) {
+            if q.is_empty() {
+                self.echoes.0.remove(&k);
+            }
+            return Echo::Made;
+        }
         let in_folder = |m: &&MessageKey| m.account == account && m.folder == folder;
         let superseded: HashSet<u32> =
             q.iter().filter(|(_, o)| same_change(o, &op)).flat_map(|(_, o)| o.keys().iter().filter(in_folder).map(|m| m.uid)).collect();
         if q.is_empty() {
             self.echoes.0.remove(&k);
         }
-        let Some(st) = self.cache.get_mut(&k) else { return false };
+        let Some(st) = self.cache.get_mut(&k) else { return Echo::Made };
         let uids: HashSet<u32> =
             op.keys().iter().filter(in_folder).filter(|m| m.validity == st.validity && !superseded.contains(&m.uid)).map(|m| m.uid).collect();
         let has = |f: &Flags| match &op {
@@ -110,7 +119,7 @@ impl Session {
             _ => true,
         };
         if st.messages.iter().filter(|m| uids.contains(&m.key.uid)).all(|m| has(&m.flags)) {
-            return true;
+            return Echo::Kept;
         }
         // As `apply_op_memory` makes it (a category keeps its name).
         for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
@@ -125,8 +134,20 @@ impl Session {
         if visible && !self.patch_list(&op) {
             self.refresh_list();
         }
-        true
+        Echo::Kept
     }
+}
+
+/// What a folder said changed is ([`Session::echo_of`]).
+#[derive(Debug, PartialEq)]
+pub(crate) enum Echo {
+    /// A flag or category changed here, which the folder in memory has: kept as it is.
+    Kept,
+    /// Another change made here (a move, a delete), or one to a folder not in memory: read from
+    /// disk, but no sync, so its count reported next isn't news.
+    Made,
+    /// Not one of the session's own: synced, or changed on disk otherwise.
+    None,
 }
 
 /// Whether `a` and `b` change the same flag or category (of the messages both name).

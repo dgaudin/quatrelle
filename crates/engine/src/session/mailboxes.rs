@@ -12,7 +12,7 @@ pub(crate) use contacts::Contacts;
 mod archive;
 pub(crate) use archive::{AgeState, Leaving};
 mod echo;
-pub(crate) use echo::Echoes;
+pub(crate) use echo::{Echo, Echoes};
 mod directory;
 pub(crate) use directory::{Directory, bare_name, directory_key};
 pub use directory::{DirectoryAnswer, directory_people, fill_name};

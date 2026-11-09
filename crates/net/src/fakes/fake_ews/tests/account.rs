@@ -697,3 +697,57 @@ fn a_server_that_lets_in_only_known_clients() {
     assert!(server.data.lock().unwrap().agents.iter().all(|a| a == EVOLUTION));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The unread count the pool reports for the Inbox of an Exchange account, after a message is
+/// read here and a draft saved, never goes back up (adapted from the origin's 022e5770): the
+/// engine keeps the count it made when a report is "as before" (`Event::Folders`), and takes a
+/// count that changed as news.
+#[test]
+fn the_exchange_inbox_count_reported_after_a_read_mark_and_a_draft_never_goes_back_up() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Drafts", None, Some("drafts"), "IPF.Note");
+    for n in 1..=3 {
+        d.deliver(&inbox, &mail(&format!("Mail {n}"), &format!("m{n}")), false, &format!("2024-05-0{n}T09:00:00Z"));
+    }
+    let server = serve(d);
+    let data = server.data.clone();
+    let store = crate::fake::tests_store("ews-counts-read-and-draft");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let counts = |events: &[Event]| -> Vec<u32> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Folders { folders, .. } => folders.iter().find(|f| f.path == "INBOX").map(|f| f.unread),
+                _ => None,
+            })
+            .collect()
+    };
+    let first = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
+    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true };
+    store.add_op("a1", read.clone()).unwrap();
+    store.apply_op("a1", &read).unwrap();
+    pool.submit(Job::Apply { account: "a1".into(), op: read });
+    let draft = b"From: riley@contoso.example\r\nSubject: Plans\r\nMessage-ID: <d1@x>\r\n\r\nhi\r\n".to_vec();
+    pool.submit(Job::SaveDraft { account: "a1".into(), raw: draft, folder: "Drafts".into(), replaces: None });
+    eventually("the message read on the server", || data.lock().unwrap().items.iter().filter(|i| i.read).count() == 1);
+    let mut seen = Vec::new();
+    let end = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < end {
+        if let Some(e) = pool.wait(Duration::from_millis(100)) {
+            seen.push(e);
+        }
+    }
+    let counts = counts(&seen);
+    assert!(counts.windows(2).all(|w| w[1] <= w[0]), "the count went back up: {counts:?}");
+    drop(pool);
+}
