@@ -175,11 +175,16 @@ impl Worker {
                     }
                     Err(e) => {
                         // Not lost: kept on this computer and saved when the account connects.
-                        match keep_draft(&self.store, &self.acc.id, &folder, replaces_kept, raw_kept) {
+                        match keep_draft(&self.store, &self.acc.id, &folder, replaces_kept, raw_kept.clone()) {
                             Ok(()) => self.notice(
                                 "the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects",
                             ),
-                            Err(k) => self.notice(format!("the draft couldn't be saved: {k}")),
+                            // Neither the server nor the disk: back to the screen, not lost.
+                            Err(k) => self.sink.emit(Event::DraftReturned {
+                                account: self.id(),
+                                raw: raw_kept,
+                                error: format!("{e}; and this computer's disk refused its copy: {k}"),
+                            }),
                         }
                         self.failed(e);
                     }

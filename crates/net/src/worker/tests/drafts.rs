@@ -110,3 +110,25 @@ fn a_draft_closed_twice_offline_is_one_copy() {
     assert_eq!(on_server(&st), 1);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// The server refuses a draft and the disk refuses its copy: it comes back whole, with why,
+/// for the screen (it was only a notice, and the message was lost).
+#[test]
+fn a_draft_the_server_and_the_disk_refuse_comes_back() {
+    let store = Store::failing();
+    store.fail(None, Some(PENDING_DRAFTS));
+    let mut pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let one = draft("one", "to finish");
+
+    // Offline: the pool keeps it itself.
+    pool.submit(Job::SaveDraft { account: "a1".into(), raw: one.clone(), folder: "Drafts".into(), replaces: None });
+    let events = pool.poll();
+    assert!(events.iter().any(|e| matches!(e, Event::DraftReturned { raw, .. } if *raw == one)), "offline: {events:?}");
+
+    // Online, the server refusing it (nothing listens on the port): the worker keeps it.
+    let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let mut w = worker_on(closed, &store, &pool.sink);
+    w.handle(Job::SaveDraft { account: "a1".into(), raw: one.clone(), folder: "Drafts".into(), replaces: None });
+    let events = pool.poll();
+    assert!(events.iter().any(|e| matches!(e, Event::DraftReturned { raw, error, .. } if *raw == one && !error.is_empty())), "{events:?}");
+}

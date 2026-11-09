@@ -573,12 +573,18 @@ impl Pool {
                 }
             }
             Job::SaveDraft { account, raw, folder, replaces } if !self.workers.contains_key(&account) => {
+                let raw_kept = raw.clone();
                 match keep_draft(&self.store, &account, &folder, replaces, raw) {
                     Ok(()) => self.sink.emit(Event::Notice {
                         account,
                         message: "the draft is kept on this computer; it goes to Drafts when you're back online".into(),
                     }),
-                    Err(e) => self.sink.emit(Event::Notice { account, message: format!("the draft couldn't be kept: {e}") }),
+                    // Not on the server, not on the disk: back to the screen, not lost.
+                    Err(e) => self.sink.emit(Event::DraftReturned {
+                        account,
+                        raw: raw_kept,
+                        error: format!("the account is offline and this computer's disk refused the draft: {e}"),
+                    }),
                 }
             }
             Job::Vote { key, choice } if !self.workers.contains_key(&key.account) => {

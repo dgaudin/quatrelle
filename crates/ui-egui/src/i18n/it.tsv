@@ -2134,3 +2134,4 @@ folder	Conflicts	Conflitti
 	{count} messages older than {months} months in {account} can go to Archives.	{count} messaggi di {account} più vecchi di {months} mesi possono passare in Archives.
 	Not now	Non ora
 	Archiving: {done} of {total}	Archiviazione: {done} di {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Non è stato possibile conservare una bozza: {error}. È stata riaperta per non perdere nulla

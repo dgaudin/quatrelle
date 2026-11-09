@@ -339,6 +339,7 @@ impl Session {
                 self.notice_with("Not sent: {error}", &[("error", &error)], true);
                 self.after_outbox_change();
             }
+            Event::DraftReturned { account, raw, error } => self.draft_returned(&account, &raw, &error),
             Event::OpFailed { error, .. } => self.notice_with("The server refused a change: {error}", &[("error", &error)], true),
             Event::OpenUrl { url } => {
                 if self.open_urls.len() < 8 {

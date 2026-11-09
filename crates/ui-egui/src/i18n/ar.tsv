@@ -2131,3 +2131,4 @@ folder	Conflicts	التعارضات
 	{count} messages older than {months} months in {account} can go to Archives.	يمكن نقل {count} رسالة من {account} أقدم من {months} أشهر إلى Archives.
 	Not now	ليس الآن
 	Archiving: {done} of {total}	جارٍ الأرشفة: {done} من {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	تعذّر حفظ مسودة: {error}. أُعيد فتحها حتى لا يضيع شيء

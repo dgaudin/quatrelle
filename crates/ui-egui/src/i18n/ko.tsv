@@ -2134,3 +2134,4 @@ folder	Conflicts	충돌
 	{count} messages older than {months} months in {account} can go to Archives.	{account}의 {months}개월보다 오래된 메시지 {count}개를 Archives로 옮길 수 있습니다.
 	Not now	나중에
 	Archiving: {done} of {total}	보관 중: {done}/{total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	임시 보관 메일을 저장하지 못했습니다: {error}. 아무것도 잃지 않도록 다시 열었습니다

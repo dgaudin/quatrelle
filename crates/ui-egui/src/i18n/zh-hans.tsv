@@ -2133,3 +2133,4 @@ menu	View	查看
 	{count} messages older than {months} months in {account} can go to Archives.	{account} 中早于 {months} 个月的 {count} 封邮件可以移到 Archives。
 	Not now	暂不
 	Archiving: {done} of {total}	正在归档：{done} / {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	无法保存草稿: {error}。已重新打开,以免丢失任何内容

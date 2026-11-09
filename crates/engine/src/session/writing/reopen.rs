@@ -12,6 +12,26 @@
 use super::*;
 
 impl Session {
+    /// A draft nothing could keep (the server and the disk both refused it, [`Event::DraftReturned`])
+    /// opens again in a window of its own, as it was written, the notice saying why: a draft is
+    /// never gone without being on the server, on the disk or on the screen.
+    pub(in crate::session) fn draft_returned(&mut self, account: &str, raw: &[u8], error: &str) {
+        let key = MessageKey { account: account.to_string(), ..Default::default() };
+        let mut c = self.compose_from_saved(account, &key, raw).unwrap_or_else(|_| {
+            // A source that can't be read is still shown, as the text it holds.
+            let mut c = Compose { id: self.fresh_id(), account: account.to_string(), ..Default::default() };
+            c.set_text(String::from_utf8_lossy(raw).into_owned());
+            c
+        });
+        // Still being written in a window or the pane: that one is the draft; no second copy.
+        let open = !c.saved_id.is_empty() && self.all_composes().any(|o| o.saved_id == c.saved_id);
+        if !open {
+            c.window = true;
+            self.composes.push(c);
+        }
+        self.notice_with("A draft couldn't be kept: {error}. It is open again so that nothing is lost", &[("error", error)], true);
+    }
+
     /// Message `raw`, kept at `key`, as one being written from `account`.
     pub(in crate::session) fn compose_from_saved(&mut self, account: &str, key: &MessageKey, raw: &[u8]) -> Result<Compose, CmdError> {
         let p = mime::parse(raw).ok_or_else(|| CmdError::Failed("the message can't be read".into()))?;

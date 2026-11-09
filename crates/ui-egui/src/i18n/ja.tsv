@@ -2132,3 +2132,4 @@ folder	Conflicts	競合
 	{count} messages older than {months} months in {account} can go to Archives.	{account} の {months} か月より古いメッセージ {count} 件を Archives に移せます。
 	Not now	今はしない
 	Archiving: {done} of {total}	アーカイブ中: {done} / {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	下書きを保存できませんでした: {error}。何も失われないように、もう一度開きました

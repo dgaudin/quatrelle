@@ -2136,3 +2136,4 @@ menu	View	Ver
 	{count} messages older than {months} months in {account} can go to Archives.	{count} mensajes de {account} con más de {months} meses pueden pasar a Archives.
 	Not now	Ahora no
 	Archiving: {done} of {total}	Archivando: {done} de {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	No se pudo guardar un borrador: {error}. Se ha vuelto a abrir para no perder nada

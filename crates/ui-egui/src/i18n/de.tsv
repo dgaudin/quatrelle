@@ -2136,3 +2136,4 @@ menu	View	Anzeigen
 	{count} messages older than {months} months in {account} can go to Archives.	{count} Nachrichten von {account}, die älter als {months} Monate sind, können nach Archives verschoben werden.
 	Not now	Jetzt nicht
 	Archiving: {done} of {total}	Archivierung: {done} von {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Ein Entwurf konnte nicht gesichert werden: {error}. Er ist wieder geöffnet, damit nichts verloren geht

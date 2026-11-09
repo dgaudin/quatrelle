@@ -297,6 +297,15 @@ pub enum Event {
         choice: String,
         error: Option<String>,
     },
+    /// A draft nothing could keep: the server refused it (or the account is offline) and this
+    /// computer's disk refused its copy. It comes back whole, to be opened in a window again,
+    /// `error` saying why: a draft is never gone without being on the server, on the disk or on
+    /// the screen.
+    DraftReturned {
+        account: String,
+        raw: Vec<u8>,
+        error: String,
+    },
     /// Something the user should see in the status bar.
     Notice {
         account: String,

@@ -2135,3 +2135,4 @@ menu	View	Просмотр
 	{count} messages older than {months} months in {account} can go to Archives.	{count} писем из {account} старше {months} мес. можно перенести в Archives.
 	Not now	Не сейчас
 	Archiving: {done} of {total}	Архивация: {done} из {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Не удалось сохранить черновик: {error}. Он открыт снова, чтобы ничего не потерялось

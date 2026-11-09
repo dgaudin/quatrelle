@@ -2131,3 +2131,4 @@ folder	Conflicts	התנגשויות
 	{count} messages older than {months} months in {account} can go to Archives.	ניתן להעביר ל-Archives‏ {count} הודעות מ-{account} שגילן מעל {months} חודשים.
 	Not now	לא עכשיו
 	Archiving: {done} of {total}	מתבצע ארכוב: {done} מתוך {total}
+	A draft couldn't be kept: {error}. It is open again so that nothing is lost	לא ניתן היה לשמור טיוטה: {error}. היא נפתחה מחדש כדי שדבר לא יאבד
