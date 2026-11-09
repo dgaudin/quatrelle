@@ -18,6 +18,52 @@ use crate::list::DragKeys;
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog};
 
+/// What a folder's row counts: the unread of the mail you receive, the items of Drafts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Count {
+    Unread(u32),
+    Items(u32),
+}
+
+impl From<u32> for Count {
+    fn from(n: u32) -> Count {
+        Count::Unread(n)
+    }
+}
+
+impl Count {
+    fn unread(self) -> u32 {
+        match self {
+            Count::Unread(n) => n,
+            Count::Items(_) => 0,
+        }
+    }
+
+    fn shown(self) -> u32 {
+        match self {
+            Count::Unread(n) | Count::Items(n) => n,
+        }
+    }
+
+    /// Items go between brackets, as Outlook's Drafts.
+    fn text(self) -> String {
+        match self {
+            Count::Unread(n) => n.to_string(),
+            Count::Items(n) => format!("[{n}]"),
+        }
+    }
+}
+
+/// Unread counts matter for mail you receive, not for Sent, Trash or the archive; Drafts shows
+/// how many items it holds.
+fn folder_count(f: &Folder) -> Count {
+    match f.look() {
+        FolderRole::Drafts => Count::Items(f.total),
+        FolderRole::Sent | FolderRole::Trash | FolderRole::Archive => Count::Unread(0),
+        _ => Count::Unread(f.unread),
+    }
+}
+
 fn role_icon(role: FolderRole) -> Icon {
     match role {
         FolderRole::Inbox => Icon::Inbox,
@@ -79,7 +125,7 @@ fn row(
     t: &Tokens,
     icon: Icon,
     label: &str,
-    unread: u32,
+    count: impl Into<Count>,
     depth: usize,
     selected: bool,
     drop_ok: bool,
@@ -88,9 +134,15 @@ fn row(
     // Plain names, no icons, as Outlook's folder pane.
     let _ = icon;
     let h = 26.0;
+    let count = count.into();
+    let unread = count.unread();
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), if draggable { Sense::click_and_drag() } else { Sense::click() });
     // To a screen reader, a folder is one choice among the folders: its name, and its unread count.
-    let spoken = if unread > 0 { format!("{label}, {}", tf!("Unread: {n}", n = unread)) } else { label.to_string() };
+    let spoken = match count {
+        Count::Items(n) if n > 0 => format!("{label}, {}", tf!("Items: {n}", n = n)),
+        _ if unread > 0 => format!("{label}, {}", tf!("Unread: {n}", n = unread)),
+        _ => label.to_string(),
+    };
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::TreeItem, ui.is_enabled(), selected, &spoken));
     let hovering_drop = drop_ok && (resp.dnd_hover_payload::<DragKeys>().is_some() || resp.dnd_hover_payload::<DragFolder>().is_some());
     let ctx = ui.ctx().clone();
@@ -105,18 +157,18 @@ fn row(
     }
     let x = rect.min.x + 10.0 + depth as f32 * 14.0;
     let font = if unread > 0 || selected { theme::bold(13.5) } else { theme::regular(13.5) };
-    let text_right = rect.max.x - if unread > 0 { 40.0 } else { 8.0 };
+    let text_right = rect.max.x - if count.shown() > 0 { 40.0 } else { 8.0 };
     // One line, as Outlook's: a name too long for the pane ends in "…" and is told whole under
     // the pointer ("All Inboxes" in French went on two lines and spilled out of its row).
     let galley = crate::widgets::one_line(ui, label, font, t.text, (text_right - x - 6.0).max(10.0));
     let cut = galley.elided;
     let gy = rect.center().y - galley.size().y / 2.0;
     ui.painter().with_clip_rect(egui::Rect::from_x_y_ranges(x..=text_right, rect.y_range())).galley(egui::pos2(x + 6.0, gy), galley, t.text);
-    if unread > 0 {
+    if count.shown() > 0 {
         ui.painter().text(
             egui::pos2(rect.max.x - 10.0, rect.center().y),
             egui::Align2::RIGHT_CENTER,
-            unread.to_string(),
+            count.text(),
             theme::bold(12.5),
             t.accent,
         );
@@ -527,13 +579,12 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
         }
         _ => crate::i18n::folder(f),
     };
-    // Unread counts matter for mail you receive, not for Sent or Drafts.
-    let unread = if matches!(f.look(), FolderRole::Sent | FolderRole::Drafts | FolderRole::Trash | FolderRole::Archive) { 0 } else { f.unread };
+    let count = folder_count(f);
     // Another mailbox opened here (Graph: its folders aren't marked with `mailbox`): its folders
     // stay in it (Exchange moves folders within a mailbox), and its top folder closes it.
     let owner = s.account(&f.account).and_then(|a| a.config.folder_owner(&f.path)).map(str::to_string);
     let user_folder = !f.is_fixed() && owner.is_none();
-    let resp = row(ui, t, role_icon(f.look()), &name, unread, depth, selected, f.selectable, user_folder && !favorite);
+    let resp = row(ui, t, role_icon(f.look()), &name, count, depth, selected, f.selectable, user_folder && !favorite);
     if let Some(collapsed) = collapse {
         let x = resp.rect.min.x + 10.0 + depth as f32 * 14.0 - 14.0;
         let chev = egui::Rect::from_min_size(egui::pos2(x, resp.rect.center().y - 6.0), vec2(12.0, 12.0));
@@ -648,4 +699,23 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
             ui.close();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Upstream issue #52: Drafts shows how many items it holds, between brackets, even read
+    /// ones; the other folders keep their unread.
+    #[test]
+    fn drafts_counts_its_items_and_the_others_their_unread() {
+        let drafts = Folder { role: FolderRole::Drafts, unread: 0, total: 3, ..Folder::default() };
+        assert_eq!(folder_count(&drafts), Count::Items(3));
+        assert_eq!(folder_count(&drafts).text(), "[3]");
+        let inbox = Folder { role: FolderRole::Inbox, unread: 2, total: 40, ..Folder::default() };
+        assert_eq!(folder_count(&inbox), Count::Unread(2));
+        assert_eq!(folder_count(&inbox).text(), "2");
+        let sent = Folder { role: FolderRole::Sent, unread: 1, total: 9, ..Folder::default() };
+        assert_eq!(folder_count(&sent).shown(), 0);
+    }
 }
