@@ -528,7 +528,7 @@ impl Worker {
                 }
                 // Busy: the change stays queued for the next pass.
                 Err(e @ NetError::Later(_)) => {
-                    log::warn!("{}: a change waits: {e}", self.acc.id);
+                    log::warn!("{}: a change waits ({}): {e}", self.acc.id, op.summary());
                     // On IMAP it is tried again soon; the folders it moved to are still read.
                     if self.waiting.is_some() {
                         break;

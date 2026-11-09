@@ -190,6 +190,30 @@ impl Op {
         }
     }
 
+    /// What the change is, for the log: its kind, the folders and the number of messages, never a
+    /// subject or an address (`Move of 2 messages in INBOX`).
+    pub fn summary(&self) -> String {
+        let (kind, folder) = match self {
+            Op::SetFlag { .. } => ("SetFlag", None),
+            Op::SetKeyword { .. } => ("SetKeyword", None),
+            Op::Move { .. } => ("Move", None),
+            Op::Expunge { .. } => ("Expunge", None),
+            Op::CreateFolder { path } => ("CreateFolder", Some(path.as_str())),
+            Op::RenameFolder { from, .. } => ("RenameFolder", Some(from.as_str())),
+            Op::DeleteFolder { path } => ("DeleteFolder", Some(path.as_str())),
+            Op::EmptyFolder { path } => ("EmptyFolder", Some(path.as_str())),
+        };
+        if let Some(folder) = folder {
+            return format!("{kind} of {folder}");
+        }
+        let keys = self.keys();
+        let mut folders: Vec<&str> = keys.iter().map(|k| k.folder.as_str()).collect();
+        folders.sort_unstable();
+        folders.dedup();
+        let n = keys.len();
+        format!("{kind} of {n} message{} in {}", if n == 1 { "" } else { "s" }, folders.join(", "))
+    }
+
     /// Whether this changes the folder list rather than messages.
     pub fn is_folder_op(&self) -> bool {
         matches!(self, Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. })
@@ -621,6 +645,17 @@ pub use webex::{WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_change_is_summed_up_without_a_subject_or_an_address() {
+        let key = |folder: &str, uid: u32| MessageKey { account: "me@studio.example".into(), folder: folder.into(), validity: 1, uid };
+        let mv = Op::Move { keys: vec![key("INBOX", 1), key("INBOX", 2), key("Sent", 3)], to: "Archive".into() };
+        assert_eq!(mv.summary(), "Move of 3 messages in INBOX, Sent");
+        let flag = Op::SetFlag { keys: vec![key("INBOX", 1)], flag: Flag::Seen, on: true };
+        assert_eq!(flag.summary(), "SetFlag of 1 message in INBOX");
+        assert_eq!(Op::EmptyFolder { path: "Trash".into() }.summary(), "EmptyFolder of Trash");
+        assert!(!mv.summary().contains("studio.example"));
+    }
 
     #[test]
     fn secrets_never_print() {
