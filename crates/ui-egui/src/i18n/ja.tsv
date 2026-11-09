@@ -1742,7 +1742,7 @@ month	May	5月
 	The data file could not be compacted: {error}	データ ファイルを圧縮できませんでした: {error}
 	The rule ran on the mail there now: 1 message matched	現在のメールにこのルールを適用しました: 1 件のメッセージが一致しました
 	The rule ran on the mail there now: {n} messages matched	現在のメールにこのルールを適用しました: {n} 件のメッセージが一致しました
-	The server refused a change: {error}	サーバーが変更を拒否しました: {error}
+	A change wasn't kept: {error}	変更が保持されませんでした: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	{who} の証明書の準備ができました: 今後は署名と暗号化を行います
 	Your certificate for {who} is ready: new messages are signed	{who} の証明書の準備ができました: 新しいメッセージに署名します
 	Your vote was sent: {choice}	投票を送信しました: {choice}

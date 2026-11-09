@@ -1744,7 +1744,7 @@ month	May	Май
 	The data file could not be compacted: {error}	Не удалось сжать файл данных: {error}
 	The rule ran on the mail there now: 1 message matched	Правило применено к имеющейся там почте: подошло 1 письмо
 	The rule ran on the mail there now: {n} messages matched	Правило применено к имеющейся там почте, подошло писем: {n}
-	The server refused a change: {error}	Сервер отклонил изменение: {error}
+	A change wasn't kept: {error}	Изменение не сохранено: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	Ваш сертификат для {who} готов: теперь письма подписываются и шифруются
 	Your certificate for {who} is ready: new messages are signed	Ваш сертификат для {who} готов: новые письма подписываются
 	Your vote was sent: {choice}	Ваш голос отправлен: {choice}

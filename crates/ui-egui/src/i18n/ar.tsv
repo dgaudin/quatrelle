@@ -1741,7 +1741,7 @@ month	May	مايو
 	The data file could not be compacted: {error}	تعذّر ضغط ملف البيانات: {error}
 	The rule ran on the mail there now: 1 message matched	طُبّقت القاعدة على البريد الموجود هناك: طابقتها رسالة واحدة
 	The rule ran on the mail there now: {n} messages matched	طُبّقت القاعدة على البريد الموجود هناك، وعدد الرسائل المطابقة: {n}
-	The server refused a change: {error}	رفض الخادم تغييرًا: {error}
+	A change wasn't kept: {error}	لم يُحفظ تغيير: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	شهادتك لـ {who} جاهزة: ستوقّع وتشفّر من الآن
 	Your certificate for {who} is ready: new messages are signed	شهادتك لـ {who} جاهزة: تُوقَّع الرسائل الجديدة
 	Your vote was sent: {choice}	أُرسل تصويتك: {choice}

@@ -1744,7 +1744,7 @@ month	May	5월
 	The data file could not be compacted: {error}	데이터 파일을 압축하지 못했습니다: {error}
 	The rule ran on the mail there now: 1 message matched	지금 있는 메일에 이 규칙을 적용했습니다: 메시지 1개가 일치했습니다
 	The rule ran on the mail there now: {n} messages matched	지금 있는 메일에 이 규칙을 적용했습니다: 메시지 {n}개가 일치했습니다
-	The server refused a change: {error}	서버가 변경을 거부했습니다: {error}
+	A change wasn't kept: {error}	변경 사항이 유지되지 않았습니다: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	{who}의 인증서가 준비되었습니다: 이제부터 서명하고 암호화합니다
 	Your certificate for {who} is ready: new messages are signed	{who}의 인증서가 준비되었습니다: 새 메시지에 서명합니다
 	Your vote was sent: {choice}	투표를 보냈습니다: {choice}

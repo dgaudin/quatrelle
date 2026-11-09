@@ -1744,7 +1744,7 @@ month	May	5月
 	The data file could not be compacted: {error}	無法壓縮資料檔: {error}
 	The rule ran on the mail there now: 1 message matched	此規則已套用至現有郵件: 有 1 封郵件符合
 	The rule ran on the mail there now: {n} messages matched	此規則已套用至現有郵件: 有 {n} 封郵件符合
-	The server refused a change: {error}	伺服器拒絕了一項變更: {error}
+	A change wasn't kept: {error}	有一項變更未保留: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	你的 {who} 憑證已就緒: 從現在起會簽署並加密
 	Your certificate for {who} is ready: new messages are signed	你的 {who} 憑證已就緒: 新郵件會簽署
 	Your vote was sent: {choice}	你的投票已傳送: {choice}

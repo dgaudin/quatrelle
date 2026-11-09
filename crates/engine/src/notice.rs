@@ -112,4 +112,16 @@ mod tests {
         }
         assert_eq!(s.notices.len(), NOTICE_MAX);
     }
+
+    /// A change the server refused is shown once as refused: the error already says "the server
+    /// refused", so the notice's own wording doesn't.
+    #[test]
+    fn a_change_that_failed_does_not_say_refused_twice() {
+        let mut s = Session::open(None, quatrelle_model::dates::Clock::default());
+        let op = quatrelle_model::Op::EmptyFolder { path: "Trash".into() };
+        s.apply(quatrelle_model::Event::OpFailed { account: "a1".into(), op, error: "the server refused: System Error (Failure)".into() });
+        let text = s.notices.last().map(|n| n.text.clone()).unwrap_or_default();
+        assert!(text.contains("System Error (Failure)"), "{text}");
+        assert_eq!(text.to_ascii_lowercase().matches("refused").count(), 1, "{text}");
+    }
 }

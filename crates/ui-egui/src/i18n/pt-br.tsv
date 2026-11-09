@@ -1745,7 +1745,7 @@ month	May	maio
 	The data file could not be compacted: {error}	Não foi possível compactar o arquivo de dados: {error}
 	The rule ran on the mail there now: 1 message matched	A regra foi aplicada aos emails que estão lá: 1 mensagem correspondeu
 	The rule ran on the mail there now: {n} messages matched	A regra foi aplicada aos emails que estão lá: {n} mensagens corresponderam
-	The server refused a change: {error}	O servidor recusou uma alteração: {error}
+	A change wasn't kept: {error}	Uma alteração não foi mantida: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	Seu certificado para {who} está pronto: ele assina e criptografa a partir de agora
 	Your certificate for {who} is ready: new messages are signed	Seu certificado para {who} está pronto: as novas mensagens são assinadas
 	Your vote was sent: {choice}	Seu voto foi enviado: {choice}

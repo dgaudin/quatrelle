@@ -1741,7 +1741,7 @@ month	May	mei
 	The data file could not be compacted: {error}	Het gegevensbestand kon niet worden gecomprimeerd: {error}
 	The rule ran on the mail there now: 1 message matched	De regel is toegepast op de mail die er nu staat: 1 bericht kwam overeen
 	The rule ran on the mail there now: {n} messages matched	De regel is toegepast op de mail die er nu staat: {n} berichten kwamen overeen
-	The server refused a change: {error}	De server heeft een wijziging geweigerd: {error}
+	A change wasn't kept: {error}	Een wijziging is niet behouden: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	Je certificaat voor {who} is klaar: vanaf nu wordt er ondertekend en versleuteld
 	Your certificate for {who} is ready: new messages are signed	Je certificaat voor {who} is klaar: nieuwe berichten worden ondertekend
 	Your vote was sent: {choice}	Je stem is verzonden: {choice}

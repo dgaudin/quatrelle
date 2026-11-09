@@ -1741,7 +1741,7 @@ month	May	מאי
 	The data file could not be compacted: {error}	לא ניתן היה לדחוס את קובץ הנתונים: {error}
 	The rule ran on the mail there now: 1 message matched	הכלל הופעל על הדואר שנמצא שם: הודעה אחת תאמה
 	The rule ran on the mail there now: {n} messages matched	הכלל הופעל על הדואר שנמצא שם: {n} הודעות תאמו
-	The server refused a change: {error}	השרת דחה שינוי: {error}
+	A change wasn't kept: {error}	שינוי לא נשמר: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	האישור שלך עבור {who} מוכן: מעכשיו ההודעות נחתמות ומוצפנות
 	Your certificate for {who} is ready: new messages are signed	האישור שלך עבור {who} מוכן: הודעות חדשות נחתמות
 	Your vote was sent: {choice}	ההצבעה שלך נשלחה: {choice}

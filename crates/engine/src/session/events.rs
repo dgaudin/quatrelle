@@ -386,7 +386,7 @@ impl Session {
                         (folder.unread, folder.total) = (unread, total);
                     }
                 }
-                self.notice_with("The server refused a change: {error}", &[("error", &error)], true);
+                self.notice_with("A change wasn't kept: {error}", &[("error", &error)], true);
             }
             Event::OpenUrl { url } => {
                 if self.open_urls.len() < 8 {

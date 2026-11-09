@@ -1742,7 +1742,7 @@ month	May	5月
 	The data file could not be compacted: {error}	无法压缩数据文件: {error}
 	The rule ran on the mail there now: 1 message matched	此规则已应用于现有邮件: 有 1 封邮件匹配
 	The rule ran on the mail there now: {n} messages matched	此规则已应用于现有邮件: 有 {n} 封邮件匹配
-	The server refused a change: {error}	服务器拒绝了一项更改: {error}
+	A change wasn't kept: {error}	有一项更改未保留: {error}
 	Your certificate for {who} is ready: it signs and encrypts from now on	你的 {who} 证书已就绪: 从现在起会签名并加密
 	Your certificate for {who} is ready: new messages are signed	你的 {who} 证书已就绪: 新邮件会签名
 	Your vote was sent: {choice}	你的投票已发送: {choice}
