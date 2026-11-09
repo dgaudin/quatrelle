@@ -5,6 +5,7 @@ use quatrelle_model::{Flag, Flags};
 
 use super::*;
 
+mod held;
 mod journal;
 mod noted;
 

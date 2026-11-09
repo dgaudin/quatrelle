@@ -587,12 +587,24 @@ impl Store {
         self.write_json(&self.root.join("accounts.json"), accounts)
     }
 
+    /// An account's folder list. The folders of its online archive (`Folder::archive`) are held
+    /// in memory from here on ([`Store::hold_folders`]): a new run knows them before it reads one.
     pub fn load_folders(&self, account: &str) -> Result<Vec<Folder>> {
-        self.read_json(&self.account_dir(account).join("folders.json"))
+        let folders: Vec<Folder> = self.read_json(&self.account_dir(account).join("folders.json"))?;
+        self.hold_archive(account, &folders);
+        Ok(folders)
     }
 
+    /// Keep an account's folder list; the folders of its online archive are held in memory from
+    /// here on, never written ([`Store::hold_folders`]).
     pub fn save_folders(&self, account: &str, folders: &[Folder]) -> Result<()> {
+        self.hold_archive(account, folders);
         self.write_json(&self.account_dir(account).join("folders.json"), folders)
+    }
+
+    fn hold_archive(&self, account: &str, folders: &[Folder]) {
+        let archive: Vec<&str> = folders.iter().filter(|f| f.archive).map(|f| f.path.as_str()).collect();
+        self.hold_folders(account, &archive);
     }
 }
 

@@ -612,6 +612,7 @@ mod tests {
             name: None,
             mailbox: None,
             mailbox_role: FolderRole::Other,
+            archive: false,
         };
         let mut list = vec![
             f("support@contoso.example/Projects", FolderRole::Other),

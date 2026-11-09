@@ -280,7 +280,8 @@ impl Files {
     }
 }
 
-/// Where each path goes: an account kept online only ([`Store::set_online_only`]) in memory,
+/// Where each path goes: an account kept online only ([`Store::set_online_only`]) in memory, and
+/// so the folders never kept here (an Exchange online archive's, [`Store::save_folders`]);
 /// everything else in the store's own files.
 #[derive(Clone, Debug)]
 pub(super) struct Routed {
@@ -290,22 +291,45 @@ pub(super) struct Routed {
     pub(super) held: Files,
     /// Those accounts (their folder names, `safe_segment`).
     pub(super) online: Arc<Mutex<std::collections::BTreeSet<String>>>,
+    /// The folders never written anywhere, by account (its folder name) and folder (its
+    /// directory's name): an online archive's.
+    pub(super) held_folders: Arc<Mutex<std::collections::BTreeMap<String, std::collections::BTreeSet<String>>>>,
 }
 
 impl Routed {
     pub(super) fn new(root: &Path, main: Files) -> Routed {
-        Routed { root: root.to_path_buf(), main, held: Files::Memory(Arc::default(), Arc::default()), online: Arc::default() }
+        Routed {
+            root: root.to_path_buf(),
+            main,
+            held: Files::Memory(Arc::default(), Arc::default()),
+            online: Arc::default(),
+            held_folders: Arc::default(),
+        }
+    }
+
+    pub(super) fn held_folders(&self) -> std::sync::MutexGuard<'_, std::collections::BTreeMap<String, std::collections::BTreeSet<String>>> {
+        self.held_folders.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Whether a path is inside a folder never written anywhere.
+    pub(super) fn in_held_folder(&self, p: &Path) -> bool {
+        let Ok(rel) = p.strip_prefix(&self.root) else { return false };
+        let mut parts = rel.iter().map(|s| s.to_str());
+        let (Some(Some(account)), Some(Some(folder))) = (parts.next(), parts.next()) else { return false };
+        self.held_folders().get(account).is_some_and(|dirs| dirs.contains(folder))
     }
 
     pub(super) fn online(&self) -> std::sync::MutexGuard<'_, std::collections::BTreeSet<String>> {
         self.online.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// The files a path is in: an online-only account's are held in memory.
+    /// The files a path is in: an online-only account's are held in memory, and a folder's
+    /// never written anywhere.
     fn at(&self, p: &Path) -> &Files {
         let account = p.strip_prefix(&self.root).ok().and_then(|r| r.iter().next()).and_then(|a| a.to_str());
         match account {
             Some(a) if self.online().contains(a) => &self.held,
+            Some(_) if self.in_held_folder(p) => &self.held,
             _ => &self.main,
         }
     }

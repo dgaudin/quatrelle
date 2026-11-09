@@ -41,7 +41,8 @@ impl Store {
         let dir = self.account_dir(account);
         let (from, to) = if on { (&self.files.main, &self.files.held) } else { (&self.files.held, &self.files.main) };
         let mut items = Vec::new();
-        for p in from.walk(&dir) {
+        // What's held of folders never written (an online archive's) stays behind.
+        for p in from.walk(&dir).into_iter().filter(|p| !self.files.in_held_folder(p)) {
             if let Ok(bytes) = from.read(&p) {
                 items.push((p, bytes));
             }
@@ -68,6 +69,36 @@ impl Store {
             _ => {}
         }
         Ok(())
+    }
+
+    /// The folders of an account that are never written to this computer (an Exchange online
+    /// archive's, read on the server as Outlook's Cached Exchange Mode reads it): their lists,
+    /// message sources, search indexes and documents are held in memory while Quatrelle runs,
+    /// whatever asks for them to be kept. `folders` replaces the account's list: a folder no
+    /// longer in it lets go of what was held.
+    pub fn hold_folders(&self, account: &str, folders: &[&str]) {
+        let a = safe_segment(account);
+        let wanted: std::collections::BTreeSet<String> = folders.iter().map(|f| format!("f{:016x}", fnv64(f))).collect();
+        let dropped: Vec<String> = {
+            let mut held = self.files.held_folders();
+            let before = held.get(&a).cloned().unwrap_or_default();
+            if before == wanted {
+                return;
+            }
+            if wanted.is_empty() {
+                held.remove(&a);
+            } else {
+                held.insert(a, wanted.clone());
+            }
+            before.difference(&wanted).cloned().collect()
+        };
+        // An online-only account's folders are all in memory: one that stops being the
+        // archive's keeps what it has there.
+        if !self.is_online_only(account) {
+            for dir in dropped {
+                let _ = self.files.held.remove_dir_all(&self.account_dir(account).join(dir));
+            }
+        }
     }
 
     /// Whether an account is kept online only.
@@ -160,6 +191,8 @@ impl Store {
     /// no one's (returned, when there is one), and what's kept outside data files goes.
     pub fn remove_account(&self, account: &str) -> Result<Option<PathBuf>> {
         let _gone = self.removing(account);
+        // What was held of its online archive goes with it.
+        self.hold_folders(account, &[]);
         if self.forget_online(account) {
             return Ok(None);
         }

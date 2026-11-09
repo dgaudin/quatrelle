@@ -151,6 +151,16 @@ pub struct Folder {
     /// `role` stays `Other`, so that it isn't taken for the account's own Inbox or Sent Items.
     #[serde(default, skip_serializing_if = "FolderRole::is_other")]
     pub mailbox_role: FolderRole,
+    /// A folder of the account's online archive (Exchange's archive mailbox): read on the server
+    /// when it's opened, never taken by the background sync nor kept on this computer, and
+    /// read-only. `mailbox` is set too (the archive's address, or `archive`), so it shows as a
+    /// mailbox of its own, but it is the account's: nothing is sent from it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub archive: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 fn yes() -> bool {
@@ -185,6 +195,13 @@ impl Folder {
         self.role != FolderRole::Other
             || self.path.eq_ignore_ascii_case("INBOX")
             || (self.mailbox.is_some() && (self.mailbox_role != FolderRole::Other || self.depth() == 0))
+    }
+
+    /// The shared mailbox the folder is in (its address): another mailbox the account opens, which
+    /// mail can be sent from and whose changes are listened to. The account's own online archive
+    /// isn't one.
+    pub fn shared_mailbox(&self) -> Option<&str> {
+        self.mailbox.as_deref().filter(|_| !self.archive)
     }
 
     /// The role the folder has where it is: its own mailbox's, or the shared mailbox's it's in.

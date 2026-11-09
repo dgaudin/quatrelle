@@ -25,6 +25,7 @@ fn a_full_sync_starts_with_the_inbox() {
         name: None,
         mailbox: None,
         mailbox_role: quatrelle_model::FolderRole::Other,
+        archive: false,
     };
     let folders = vec![
         f("ASP", FolderRole::Other),
