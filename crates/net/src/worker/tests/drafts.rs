@@ -91,3 +91,22 @@ fn a_draft_kept_is_queued_once_by_two_connections() {
     assert_eq!(on_server(&st), 1);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// The same draft closed twice offline (no copy known to replace) is one draft kept, and one
+/// copy in Drafts after the connection.
+#[test]
+fn a_draft_closed_twice_offline_is_one_copy() {
+    let (st, port) = server();
+    let store = crate::fake::store("t3-closed-twice");
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = worker_on(port, &store, &pool.sink);
+    for text in ["first", "second, longer"] {
+        w.handle(Job::KeepDraft { account: "a1".into(), raw: draft("one", text), folder: "Drafts".into(), replaces: None });
+    }
+    assert_eq!(kept(&store).len(), 1, "the newer version replaces the one kept");
+    assert!(String::from_utf8_lossy(&kept(&store)[0].raw).contains("second, longer"));
+    w.connect_and_sync();
+    run_queue(&mut w);
+    assert_eq!(on_server(&st), 1);
+    let _ = std::fs::remove_dir_all(store.root());
+}

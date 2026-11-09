@@ -283,10 +283,18 @@ fn keep_draft(store: &Store, account: &str, folder: &str, replaces: Option<quatr
     if let Some(r) = &replaces {
         list.retain(|d| d.replaces.as_ref() != Some(r));
     }
-    // The same version kept again (filing it failed): one entry, not two.
-    list.retain(|d| d.raw != raw);
+    // The same version kept again (filing it failed), or the same draft closed once more with
+    // no copy known to replace (its Message-ID, as the engine gives its copies the one it
+    // went by): one entry, not two.
+    let id = draft_id(&raw);
+    list.retain(|d| d.raw != raw && (id.is_none() || draft_id(&d.raw) != id));
     list.push(PendingDraft { folder: folder.to_string(), replaces, raw });
     store.save_account_doc(account, PENDING_DRAFTS, &list).map_err(NetError::from)
+}
+
+/// The Message-ID of a draft's source, when it has one.
+fn draft_id(raw: &[u8]) -> Option<String> {
+    quatrelle_mime::parse(raw).map(|p| p.message_id).filter(|id| !id.trim().is_empty())
 }
 
 /// A draft filed on the server leaves the list kept, and only then (the list is emptied from
