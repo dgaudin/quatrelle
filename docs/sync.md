@@ -175,7 +175,10 @@ queued ops that touch it are applied to the new cache again:
 
 Keys whose UIDVALIDITY no longer matches are skipped rather than applied to whatever now has that
 UID. If the server refuses a change, it is dropped, the folder's sync state is reset (forcing a full
-flag comparison) and the user is told.
+flag comparison) and the user is told. A refusal that is passing (response codes `UNAVAILABLE`,
+`SERVERBUG`, `INUSE`, `LIMIT` of RFC 5530, or Gmail's `System Error`) isn't final: the change stays
+in the journal and is tried again 30 s later, at the next full sync at the latest, three tries in
+all (counted in memory, afresh after a restart); the third refusal drops it as above.
 
 Folder changes (create, rename, move, delete) are pending actions too: `CREATE` + `SUBSCRIBE`,
 `RENAME` (subfolders follow; the cache directories move with them), `DELETE`. Deleting a folder
