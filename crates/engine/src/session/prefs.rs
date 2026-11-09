@@ -160,6 +160,9 @@ pub struct Prefs {
     /// Quick Steps: actions done to the selection in one go ([`quick_steps`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quick_steps: Vec<quick_steps::QuickStep>,
+    /// The ready-made Quick Steps were added (once; deleting them doesn't bring them back).
+    #[serde(default)]
+    pub quick_steps_seeded: bool,
     /// Play animations: hovers and selections easing, panes sliding, notices sliding in (off:
     /// everything changes at once).
     pub animations: bool,
@@ -322,6 +325,7 @@ impl Default for Prefs {
             scam_accounts: BTreeSet::new(),
             scam_daily_cap: crate::session::DEFAULT_CAP,
             quick_steps: Vec::new(),
+            quick_steps_seeded: false,
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),
             spelling: Vec::new(),

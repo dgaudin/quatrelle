@@ -6,6 +6,8 @@
 
 use super::*;
 
+mod quick_steps;
+
 #[test]
 fn every_command_survives_junk_params() {
     let mut s = sample_session("junk");

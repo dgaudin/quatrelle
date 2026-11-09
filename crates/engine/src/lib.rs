@@ -47,7 +47,7 @@ pub use session::{
         ACCOUNT_COLOR, AgendaItem, CONFLICTS, CalMode, ConflictWords, DueReminder, EVENT_HITS_MAX, EventHit, EventWhen, Module, NoteRef, Person,
         SYNC_ISSUES, TaskChange, TaskRef, WebexAsk, WebexState, parse_local,
     },
-    quick_steps::QuickStep,
+    quick_steps::{QuickStep, StepWrite},
     scheduling::{Fetched, RoomFinder},
     search_folders::SearchFolder,
 };

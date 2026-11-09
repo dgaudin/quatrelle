@@ -207,15 +207,25 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         // Home › Quick Steps
         CommandSpec::new("quickStep.list", "Quick Steps", "Home › Quick Steps", |s, _| Ok(json!(s.prefs.quick_steps))),
         CommandSpec::new("quickStep.create", "New Quick Step", "Home › Quick Steps", |s, v| {
-            let actions = quick_actions(v)?.ok_or_else(|| CmdError::Params("`actions` is required".into()))?;
-            s.create_quick_step(p::req_str(v, "name")?, actions)
+            let actions = quick_actions(v)?.unwrap_or_default();
+            let (complete, write) = quick_write(v)?;
+            s.create_quick_step(p::req_str(v, "name")?, actions, complete.unwrap_or(false), write.flatten())
         })
         .params(QUICK_STEP_PARAMS),
         CommandSpec::new("quickStep.edit", "Edit Quick Step", "Home › Quick Steps", |s, v| {
             let actions = quick_actions(v)?;
-            s.edit_quick_step(p::req_str(v, "name")?, p::str(v, "newName"), actions)
+            let (complete, write) = quick_write(v)?;
+            s.edit_quick_step(p::req_str(v, "name")?, p::str(v, "newName"), actions, complete, write)
         })
-        .params(r#"{"name": string, "newName"?: string, "actions"?: […] (as quickStep.create)}"#),
+        .params(r#"{"name": string, "newName"?: string, "actions"?: […], "complete"?: bool, "write"?: … (as quickStep.create; null: no writing)}"#),
+        CommandSpec::new("quickStep.seed", "Add the ready-made Quick Steps", "Home › Quick Steps", |s, v| {
+            let names = match v.get("names") {
+                Some(Value::Array(a)) if a.len() == 4 => a.iter().map(|n| n.as_str().map(str::to_string)).collect::<Option<Vec<_>>>(),
+                _ => None,
+            };
+            s.seed_quick_steps(&names.ok_or_else(|| CmdError::Params("`names` is 4 strings".into()))?)
+        })
+        .params(r#"{"names": [string; 4] (Forward to…, Write to…, Handled, Reply then delete: in the interface's language)}"#),
         CommandSpec::new("quickStep.delete", "Delete Quick Step", "Home › Quick Steps", |s, v| s.delete_quick_step(p::req_str(v, "name")?))
             .params(r#"{"name": string}"#),
         CommandSpec::new("quickStep.run", "Do a Quick Step", "Home › Quick Steps", |s, v| {
@@ -324,7 +334,22 @@ pub(super) fn unified(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"messages": s.list.len()}))
 }
 
-pub(super) const QUICK_STEP_PARAMS: &str = r#"{"name": string, "actions": [{"do": "markRead"|"flag"|"pin"} | {"do": "categorize", "value": name} | {"do": "moveTo", "value": folder} | {"do": "moveToRole", "value": "archive"|"trash"|…} | {"do": "delete"}] (a move comes last; one at most)}"#;
+pub(super) const QUICK_STEP_PARAMS: &str = r#"{"name": string, "actions": [{"do": "markRead"|"flag"|"pin"} | {"do": "categorize", "value": name} | {"do": "moveTo", "value": folder} | {"do": "moveToRole", "value": "archive"|"trash"|…} | {"do": "delete"}] (a move comes last; one at most), "complete"?: bool (follow-up done), "write"?: "reply"|"replyAll"|{"forward": {"to": addresses}}|{"newMessage": {"to": addresses}} (opens the message to finish; one message only)}"#;
+
+/// A Quick Step's `complete` and `write`, when given (`write: null` takes it off).
+#[allow(clippy::type_complexity)]
+pub(super) fn quick_write(v: &Value) -> Result<(Option<bool>, Option<Option<crate::session::quick_steps::StepWrite>>), CmdError> {
+    let complete = match v.get("complete") {
+        None | Some(Value::Null) => None,
+        Some(c) => Some(c.as_bool().ok_or_else(|| CmdError::Params("complete: true or false".into()))?),
+    };
+    let write = match v.get("write") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(w) => Some(Some(serde_json::from_value(w.clone()).map_err(|e| CmdError::Params(format!("write: {e}")))?)),
+    };
+    Ok((complete, write))
+}
 
 /// A Quick Step's `actions`, when given.
 pub(super) fn quick_actions(v: &Value) -> Result<Option<Vec<quatrelle_model::organize::RuleAction>>, CmdError> {
