@@ -20,6 +20,7 @@ mod idle;
 mod opening;
 mod pgp;
 mod pool;
+mod refusals;
 mod search;
 mod sent;
 mod sync;

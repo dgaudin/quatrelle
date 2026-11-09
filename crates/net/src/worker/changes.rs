@@ -10,6 +10,20 @@ mod filing;
 mod recovering;
 mod rules;
 
+/// How many times in all an IMAP change is tried when the server keeps refusing it for now
+/// (Gmail's "System Error", RFC 5530's `UNAVAILABLE`): the third refusal drops it, as a final one.
+const LATER_TRIES: u8 = 3;
+/// How long before a change refused for now is tried again.
+const LATER_EVERY: Duration = if cfg!(test) { Duration::from_millis(100) } else { Duration::from_secs(30) };
+
+/// The IMAP change at the head of the journal that the server refused for now: how many times in
+/// all, and when to try it again. In memory only: a restart counts afresh.
+pub(super) struct Waiting {
+    op: Op,
+    tries: u8,
+    pub(super) not_before: Instant,
+}
+
 pub(super) use archive::archive_here;
 pub(super) use filing::{file_here, file_name};
 
@@ -425,6 +439,27 @@ impl Worker {
         self.store.load_ops(&self.acc.id).unwrap_or_default().iter().any(|op| touches(op, path))
     }
 
+    /// Whether a change refused for now is due to be tried again.
+    pub(super) fn retry_due(&self) -> bool {
+        self.conn.is_some() && self.waiting.as_ref().is_some_and(|w| w.not_before <= Instant::now())
+    }
+
+    /// The server refused `op` for now. On IMAP it is tried again later (the refusal is returned
+    /// as it came); the third time it is the server's final word.
+    fn refused_for_now(&mut self, op: &Op, e: NetError) -> (Result<()>, bool) {
+        let NetError::Later(said) = e else { return (Err(e), false) };
+        if !matches!(self.conn, Some(Conn::Imap(_))) {
+            return (Err(NetError::Later(said)), false);
+        }
+        let tries = self.waiting.as_ref().filter(|w| w.op == *op).map_or(0, |w| w.tries).saturating_add(1);
+        if tries >= LATER_TRIES {
+            self.waiting = None;
+            return (Err(NetError::No(said)), true);
+        }
+        self.waiting = Some(Waiting { op: op.clone(), tries, not_before: Instant::now() + LATER_EVERY });
+        (Err(NetError::Later(said)), false)
+    }
+
     /// Replay offline changes on the server, oldest first.
     pub(super) fn replay(&mut self) {
         let mut destinations: Vec<String> = Vec::new();
@@ -434,7 +469,16 @@ impl Worker {
         let mut retried = false;
         // The queue is the journal's: bounded, in case taking an entry out keeps failing.
         for _ in 0..100_000 {
-            let Some(op) = self.store.first_op(&self.acc.id).unwrap_or_default() else { break };
+            let Some(op) = self.store.first_op(&self.acc.id).unwrap_or_default() else {
+                self.waiting = None;
+                break;
+            };
+            // The change refused for now waits for its time; the ones after it wait with it.
+            match &self.waiting {
+                Some(w) if w.op == op && w.not_before > Instant::now() => break,
+                Some(w) if w.op != op => self.waiting = None,
+                _ => {}
+            }
             let r = match self.conn.as_mut() {
                 Some(Conn::Imap(c)) => apply_remote_with(c, &op, trash.as_deref()),
                 Some(Conn::Jmap(c)) => jmap::apply_remote(c, &self.jstate, &op),
@@ -448,8 +492,15 @@ impl Worker {
                 Some(Conn::Pop) => Ok(()),
                 None => Err(NetError::Closed("not connected".into())),
             };
+            let (r, gave_up) = match r {
+                Err(e) => self.refused_for_now(&op, e),
+                ok => (ok, false),
+            };
+            // A change given up on isn't tried once more after the folders are listed anew.
+            retried |= gave_up;
             match r {
                 Ok(()) => {
+                    self.waiting = None;
                     retried = false;
                     match &op {
                         Op::Move { to, .. } => destinations.push(to.clone()),
@@ -478,6 +529,10 @@ impl Worker {
                 // Busy: the change stays queued for the next pass.
                 Err(e @ NetError::Later(_)) => {
                     log::warn!("{}: a change waits: {e}", self.acc.id);
+                    // On IMAP it is tried again soon; the folders it moved to are still read.
+                    if self.waiting.is_some() {
+                        break;
+                    }
                     return;
                 }
                 // A folder the change names may be one the last listing missed (one just renamed
@@ -486,6 +541,7 @@ impl Worker {
                 Err(_) if !retried && op_names_folder(&op) && self.relist() => retried = true,
                 Err(e) => {
                     retried = false;
+                    self.waiting = None;
                     // The server refused: drop the change and resync so the cache matches the
                     // server again (forcing a full flag check).
                     if let Err(e) = self.store.remove_op(&self.acc.id, &op) {

@@ -460,6 +460,8 @@ struct Worker {
     /// no push). A deadline, not a wait restarted by every job: while someone works (messages
     /// opened, pictures, read marks), the look kept being put off, and new mail with it.
     next_poll: Instant,
+    /// The IMAP change the server refused for now, tried again at its time (see `changes::Waiting`).
+    waiting: Option<changes::Waiting>,
     /// Big messages whose text came first, on their way whole. Shared with [`Worker::opened`].
     rest: Arc<rest::Rest>,
     /// The main connection's: messages opened while it's at work go to a copy of it.
@@ -541,6 +543,7 @@ impl Worker {
             soon: Vec::new(),
             search: Arc::new(AtomicU64::new(0)),
             next_poll: Instant::now() + POLL_EVERY,
+            waiting: None,
             listen: listening::Listening::default(),
             rest,
             opened: None,
@@ -612,6 +615,11 @@ impl Worker {
                     continue;
                 }
                 self.connect_and_sync();
+                continue;
+            }
+            // A change the server refused for now, tried again when its time comes.
+            if self.retry_due() {
+                self.replay();
                 continue;
             }
             if self.last_full.is_none_or(|t| t.elapsed() >= FULL_SYNC_EVERY) {

@@ -35,6 +35,10 @@ impl Worker {
             let next_soon = self.soon.iter().map(|(at, _)| *at).min();
             let poll_in = self.next_poll.saturating_duration_since(Instant::now());
             let mut wait = next_soon.map_or(poll_in, |at| at.saturating_duration_since(Instant::now()).min(poll_in));
+            // A change refused for now is tried again at its time.
+            if let Some(w) = &self.waiting {
+                wait = wait.min(w.not_before.saturating_duration_since(Instant::now()).max(Duration::from_millis(10)));
+            }
             // Listening that stopped starts again at its time, not at the next look.
             if let Some(retry) = self.listen.retry_in().filter(|_| self.main.is_none() && matches!(self.conn, Some(Conn::Ews(_)))) {
                 wait = wait.min(retry.max(Duration::from_millis(10)));
@@ -233,6 +237,10 @@ impl Worker {
         }
         if began.elapsed() > crate::stream::SLOW_CONNECT {
             log::info!("{}: the folders listed in {:.1} s", self.acc.id, began.elapsed().as_secs_f32());
+        }
+        // A change the server refused for now gets its try at every full sync at the latest.
+        if self.waiting.is_some() {
+            self.replay();
         }
         self.read_followed();
         self.let_go_of_online();
