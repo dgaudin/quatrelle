@@ -18,12 +18,13 @@ fn temp(name: &str) -> std::path::PathBuf {
     d
 }
 
-/// Whether the disk has told the room a file takes (`on_disk`): ZFS (FreeBSD's runner) counts a
-/// file's blocks only once its writes have reached the disk, and says one block of 512 bytes for
-/// megabytes until then, so room given back can't be seen there. Linux always tells.
+/// Whether the room a file takes on the disk (`on_disk`) can be compared before and after: not on
+/// FreeBSD, whose ZFS counts a file's blocks only once its writes have reached the disk, seconds
+/// later (512 bytes, then 3 MB, for a 25 MB data file), so room given back can't be seen there.
+/// Linux, macOS and Windows tell it at once.
 fn room_told(on_disk: u64) -> bool {
-    let told = on_disk > 64 * 1024;
-    assert!(told || !cfg!(target_os = "linux"), "the disk says {on_disk} bytes");
+    let told = !cfg!(target_os = "freebsd");
+    assert!(!told || on_disk > 0, "the disk says {on_disk} bytes");
     told
 }
 
