@@ -10,6 +10,7 @@ mod attendees;
 mod charsets;
 mod drafts;
 mod emoji;
+mod message_ids;
 mod names;
 mod people_field;
 mod pictures;
