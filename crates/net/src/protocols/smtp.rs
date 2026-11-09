@@ -3,11 +3,13 @@
 //! Message submission (RFC 6409) through `lettre`: implicit TLS on 465 (preferred, RFC 8314),
 //! STARTTLS on 587, or plain only for local test servers.
 
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::time::Duration;
 
 use lettre::address::{Address, Envelope};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Certificate, Tls, TlsParameters};
+use lettre::transport::smtp::extension::ClientId;
 use lettre::{SmtpTransport, Transport};
 use quatrelle_model::{Security, ServerConfig};
 use rustls::pki_types::CertificateDer;
@@ -31,7 +33,7 @@ pub fn send_with(server: &ServerConfig, user: &str, password: &str, oauth: bool,
     }
     let envelope = Envelope::new(Some(from), to).map_err(|e| NetError::Smtp(e.to_string()))?;
     let tls = |host: &str| tls_parameters(host, crate::stream::system_roots());
-    let mut b = SmtpTransport::builder_dangerous(server.host.as_str()).port(server.port).timeout(Some(Duration::from_secs(60)));
+    let mut b = SmtpTransport::builder_dangerous(server.host.as_str()).port(server.port).timeout(Some(Duration::from_secs(60))).hello_name(hello_for(server.host.as_str(), server.port));
     b = match server.security {
         Security::Tls => b.tls(Tls::Wrapper(tls(&server.host)?)),
         Security::StartTls => b.tls(Tls::Required(tls(&server.host)?)),
@@ -58,6 +60,28 @@ pub fn send_with(server: &ServerConfig, user: &str, password: &str, oauth: bool,
         }
     })?;
     Ok(())
+}
+
+/// What Quatrelle calls itself in its EHLO to `host` (RFC 5321 section 4.1.4): the address literal
+/// of this computer's address on the way there, since a desktop has no name the world knows
+/// (never the machine's name, which may say more than the server needs). lettre's own is
+/// `[127.0.0.1]`, and some providers' spam filters drop mail greeted so. The address is the one
+/// the system would send from: a socket "connected" without sending anything says it. No way to
+/// the server: lettre's default (the connection fails anyway). Adapted from a6f00b41.
+fn hello_for(host: &str, port: u16) -> ClientId {
+    let Some(server) = (host, port).to_socket_addrs().ok().and_then(|mut a| a.next()) else {
+        return ClientId::default();
+    };
+    let any: SocketAddr = if server.is_ipv4() { (Ipv4Addr::UNSPECIFIED, 0).into() } else { (Ipv6Addr::UNSPECIFIED, 0).into() };
+    let local = UdpSocket::bind(any).and_then(|s| {
+        s.connect(server)?;
+        s.local_addr()
+    });
+    match local.map(|a| a.ip()) {
+        Ok(IpAddr::V4(ip)) if !ip.is_unspecified() => ClientId::Ipv4(ip),
+        Ok(IpAddr::V6(ip)) if !ip.is_unspecified() => ip.to_ipv4_mapped().map_or(ClientId::Ipv6(ip), ClientId::Ipv4),
+        _ => ClientId::default(),
+    }
 }
 
 /// TLS for `host`: lettre's bundled Mozilla roots and `roots` (the system's, which IMAP and
@@ -97,7 +121,7 @@ fn refusal(code: u16, msg: &str, recipients: &[String]) -> NetError {
 #[cfg(test)]
 pub(crate) mod tests {
     use std::io::{BufRead, BufReader, Write};
-    use std::net::TcpListener;
+    use std::net::{TcpListener, UdpSocket};
 
     use super::*;
 
@@ -143,6 +167,45 @@ pub(crate) mod tests {
             log
         });
         (port, h)
+    }
+
+    /// The EHLO names this computer's address on the way to the server, as an address literal:
+    /// the loopback address only for a server on this computer, and this computer's own network
+    /// address for one reached through it (lettre's default is `[127.0.0.1]` for all). Adapted
+    /// from a6f00b41.
+    #[test]
+    fn ehlo_names_this_computers_address_on_the_way() {
+        let raw = b"From: z@x.example\r\nTo: a@y.example\r\nSubject: hi\r\n\r\nbody\r\n";
+        let to = ["a@y.example".to_string()];
+        let (port, h) = serve_once();
+        let server = ServerConfig { host: "127.0.0.1".into(), port, security: Security::None };
+        send(&server, "", "", "z@x.example", &to, raw).unwrap();
+        let log = h.join().unwrap();
+        assert!(log.starts_with("EHLO [127.0.0.1]\r\n"), "{log}");
+        // IPv6 loopback, where the system has it.
+        if let Ok(l) = TcpListener::bind("[::1]:0") {
+            let (port, h) = serve_once_on(l);
+            let server = ServerConfig { host: "::1".into(), port, security: Security::None };
+            send(&server, "", "", "z@x.example", &to, raw).unwrap();
+            let log = h.join().unwrap();
+            assert!(log.starts_with("EHLO [IPv6:::1]\r\n"), "{log}");
+        }
+        // This computer's network address (the one it would reach a documentation address from;
+        // nothing is sent there), where it has one: a server reached through it hears that.
+        let own = UdpSocket::bind("0.0.0.0:0").and_then(|s| {
+            s.connect("192.0.2.1:9")?;
+            s.local_addr()
+        });
+        let Some(own) = own.ok().map(|a| a.ip()).filter(|ip| !ip.is_loopback() && !ip.is_unspecified()) else {
+            eprintln!("no network address: the rest skipped");
+            return;
+        };
+        let (port, h) = serve_once_on(TcpListener::bind((own, 0)).unwrap());
+        let server = ServerConfig { host: own.to_string(), port, security: Security::None };
+        send(&server, "", "", "z@x.example", &to, raw).unwrap();
+        let log = h.join().unwrap();
+        assert!(log.starts_with(&format!("EHLO [{own}]\r\n")), "{log}");
+        assert!(!log.contains("127.0.0.1"), "{log}");
     }
 
     #[test]
