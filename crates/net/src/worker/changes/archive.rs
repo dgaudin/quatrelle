@@ -103,7 +103,9 @@ fn archive_batch_with(
     }
     let delimiters: HashMap<String, Option<char>> =
         store.load_folders(&acc.id).unwrap_or_default().into_iter().map(|f| (f.path, f.delimiter)).collect();
-    let name = if acc.name.trim().is_empty() { acc.email.as_str() } else { acc.name.as_str() };
+    // Each account under its address, as the folder pane shows it: the sender name is often the
+    // same on every account, and would put them all in one folder.
+    let name = if acc.email.trim().is_empty() { acc.name.as_str() } else { acc.email.as_str() };
     let mut stopped: Option<String> = None;
     for key in keys {
         if let Some(why) = &stopped {

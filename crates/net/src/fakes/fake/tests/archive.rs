@@ -121,11 +121,12 @@ fn archived_mail_is_copied_checked_then_gone_from_the_server() {
     archive(&mut pool, all[..2].to_vec());
     let (moved, kept) = archived(&pool);
     assert_eq!((moved.len(), kept.len()), (2, 0), "{kept:?}");
-    // In Archives, as the server had them, marks kept, under the account's name.
-    let there = store.load_folder(ARCHIVES, "Studio/INBOX").unwrap();
+    // In Archives, as the server had them, marks kept, under the account's address (its sender
+    // name is often the same on every account, which would mix them).
+    let there = store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap();
     assert_eq!(there.messages.len(), 2);
     for (from, to) in &moved {
-        assert_eq!((to.account.as_str(), to.folder.as_str()), (ARCHIVES, "Studio/INBOX"));
+        assert_eq!((to.account.as_str(), to.folder.as_str()), (ARCHIVES, "me@studio.example/INBOX"));
         let i = all.iter().position(|k| k == from).unwrap();
         assert_eq!(store.load_body(to).unwrap().as_deref(), Some(raws[i].as_slice()));
         let m = there.messages.iter().find(|m| m.key == *to).unwrap();
@@ -159,7 +160,7 @@ fn a_copy_that_fails_deletes_nothing() {
     assert_eq!(count(&st, "INBOX"), 2, "nothing deleted on the server");
     assert_eq!(keys(&store, "INBOX"), all);
     assert!(store.load_ops("a1").unwrap().is_empty());
-    assert!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.is_empty());
+    assert!(store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap().messages.is_empty());
     pool.submit(Job::Remove { account: "a1".into() });
 }
 
@@ -189,7 +190,7 @@ fn a_lost_connection_after_the_copy_deletes_at_the_next_connection_once() {
     wait_for("the journal done", || store.load_ops("a1").unwrap().is_empty());
     let expunges = st.lock().unwrap().log.iter().filter(|l| l.contains("EXPUNGE")).count();
     assert_eq!(expunges, 1);
-    assert_eq!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.len(), 1);
+    assert_eq!(store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap().messages.len(), 1);
     pool.submit(Job::Remove { account: "a1".into() });
 }
 
@@ -231,7 +232,7 @@ fn gmail_without_a_trash_folder_keeps_the_mail_and_says_so() {
     assert!(kept[0].1.contains("Trash"), "{}", kept[0].1);
     assert_eq!(count(&st, "INBOX"), 1, "still on the server");
     assert!(store.load_ops("a1").unwrap().is_empty());
-    assert_eq!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.len(), 1, "the copy is kept");
+    assert_eq!(store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap().messages.len(), 1, "the copy is kept");
     pool.submit(Job::Remove { account: "a1".into() });
 }
 
@@ -272,7 +273,7 @@ fn archiving_twice_copies_once() {
     let (again, kept) = archived(&pool);
     assert_eq!((again.len(), kept.len()), (1, 0), "{kept:?}");
     assert_eq!(again[0].1, moved[0].1, "the same copy");
-    assert_eq!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.len(), 1);
+    assert_eq!(store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap().messages.len(), 1);
     wait_for("the deletion", || count(&st, "INBOX") == 0);
     pool.submit(Job::Remove { account: "a1".into() });
 }
@@ -289,11 +290,11 @@ fn two_archives_into_one_folder_keep_both() {
     archive(&mut pool, all[..2].to_vec());
     let (first, _) = archived(&pool);
     // A move inside Archives meanwhile (the window's own write to the same account).
-    store.apply_op(ARCHIVES, &Op::CreateFolder { path: "Studio/Elsewhere".into() }).unwrap();
+    store.apply_op(ARCHIVES, &Op::CreateFolder { path: "me@studio.example/Elsewhere".into() }).unwrap();
     archive(&mut pool, all[2..].to_vec());
     let (second, _) = archived(&pool);
     assert_eq!((first.len(), second.len()), (2, 2));
-    let there = store.load_folder(ARCHIVES, "Studio/INBOX").unwrap();
+    let there = store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap();
     let mut uids: Vec<u32> = there.messages.iter().map(|m| m.key.uid).collect();
     uids.sort_unstable();
     uids.dedup();
@@ -301,7 +302,7 @@ fn two_archives_into_one_folder_keep_both() {
     for (_, to) in first.iter().chain(&second) {
         assert!(store.load_body(to).unwrap().is_some());
     }
-    assert!(store.load_folders(ARCHIVES).unwrap().iter().any(|f| f.path == "Studio/Elsewhere"), "the other write survives");
+    assert!(store.load_folders(ARCHIVES).unwrap().iter().any(|f| f.path == "me@studio.example/Elsewhere"), "the other write survives");
     pool.submit(Job::Remove { account: "a1".into() });
 }
 
@@ -347,7 +348,7 @@ fn put_back_mail_is_on_the_server_before_it_leaves_archives() {
     }
     assert_eq!(there[0].2, received, "its arrival time");
     // Gone from Archives, and the folder it was in counts none.
-    assert!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.is_empty());
+    assert!(store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap().messages.is_empty());
     assert!(store.load_body(&moved[0].1).unwrap().is_none());
     pool.submit(Job::Remove { account: "a1".into() });
 }
@@ -369,7 +370,7 @@ fn a_refused_append_keeps_the_archived_copy() {
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].0, moved[0].1);
     assert_eq!(count(&st, "INBOX"), 0);
-    assert_eq!(store.load_folder(ARCHIVES, "Studio/INBOX").unwrap().messages.len(), 1, "still in Archives");
+    assert_eq!(store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap().messages.len(), 1, "still in Archives");
     assert!(store.load_body(&moved[0].1).unwrap().is_some());
     // And once the server takes it, it goes.
     put_back(&mut pool, vec![moved[0].1.clone()], "INBOX");
@@ -401,7 +402,7 @@ fn without_appenduid_the_message_is_found_by_its_message_id() {
     assert_eq!((back.len(), kept.len()), (1, 1), "{back:?} {kept:?}");
     assert!(back[0].1.is_some(), "found by its Message-ID");
     assert!(kept[0].1.contains("Message-ID"), "{}", kept[0].1);
-    let left = store.load_folder(ARCHIVES, "Studio/INBOX").unwrap();
+    let left = store.load_folder(ARCHIVES, "me@studio.example/INBOX").unwrap();
     assert_eq!(left.messages.len(), 1, "the one without an id stays in Archives");
     assert_eq!(left.messages[0].key, kept[0].0);
     pool.submit(Job::Remove { account: "a1".into() });

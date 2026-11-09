@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The local archive: the account on this computer that IMAP mail is moved into, and the folder
-//! each archived message lands in (the source account's name, then its folders as they were).
+//! each archived message lands in (the source account's address, then its folders as they were).
 
 use serde::{Deserialize, Serialize};
 
