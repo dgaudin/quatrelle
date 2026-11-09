@@ -528,7 +528,12 @@ fn compact_now_tells_its_steps_and_what_it_gave_back() {
     assert_eq!(steps.last(), Some(&true), "the step in place told: {heard:?}");
     let Some(Event::Compacted { before, after, recompressed, no_room, error, .. }) = heard.last() else { panic!("{heard:?}") };
     assert_eq!((error, *recompressed, *no_room), (&None, 0, false));
-    assert!(after < before, "{before} → {after}");
+    // The room given back, where the file system tells the room the file takes (144 KiB before,
+    // 52 after on Linux): one that compresses it again (ZFS, FreeBSD's runner) says one block of
+    // 512 bytes, before and after.
+    if *before > 64 * 1024 {
+        assert!(after < before, "{before} → {after}");
+    }
     assert_eq!(p.store.read_body(&key(35)).map(|b| b.len()), Some(200_000 + 35 + "Subject: 35\r\n\r\n".len()));
     drop(p);
     let _ = std::fs::remove_dir_all(dir);
