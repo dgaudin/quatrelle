@@ -14,6 +14,7 @@ use crate::worker::apply_remote;
 mod archive;
 mod arrival;
 mod counts;
+mod folder_ops;
 mod hostile;
 mod idle;
 mod opening;

@@ -464,6 +464,9 @@ struct Worker {
     rest: Arc<rest::Rest>,
     /// The main connection's: messages opened while it's at work go to a copy of it.
     opened: Option<Arc<opening::Opened>>,
+    /// Folders gone from the server whose cache was kept as changes to the folders waited to be
+    /// sent ([`Worker::relist`]): it goes once they're sent.
+    gone_meanwhile: Vec<String>,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -541,6 +544,7 @@ impl Worker {
             listen: listening::Listening::default(),
             rest,
             opened: None,
+            gone_meanwhile: Vec::new(),
         }
     }
 
