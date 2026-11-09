@@ -33,7 +33,10 @@ pub fn send_with(server: &ServerConfig, user: &str, password: &str, oauth: bool,
     }
     let envelope = Envelope::new(Some(from), to).map_err(|e| NetError::Smtp(e.to_string()))?;
     let tls = |host: &str| tls_parameters(host, crate::stream::system_roots());
-    let mut b = SmtpTransport::builder_dangerous(server.host.as_str()).port(server.port).timeout(Some(Duration::from_secs(60))).hello_name(hello_for(server.host.as_str(), server.port));
+    let mut b = SmtpTransport::builder_dangerous(server.host.as_str())
+        .port(server.port)
+        .timeout(Some(Duration::from_secs(60)))
+        .hello_name(hello_for(server.host.as_str(), server.port));
     b = match server.security {
         Security::Tls => b.tls(Tls::Wrapper(tls(&server.host)?)),
         Security::StartTls => b.tls(Tls::Required(tls(&server.host)?)),
