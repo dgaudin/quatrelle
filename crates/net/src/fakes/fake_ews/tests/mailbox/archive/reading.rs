@@ -339,7 +339,8 @@ fn a_search_in_the_archive_runs_on_the_server() {
     let items = found(Some(PROJECTS));
     assert_eq!(items.len(), 30);
     assert!(items.iter().all(|m| m.key.folder == PROJECTS && m.subject.starts_with("ARCHIVE-SUBJECT-")));
-    assert_eq!(data.lock().unwrap().found_in[from..].iter().map(|(f, _, _)| f.clone()).collect::<Vec<_>>(), [projects.clone()]);
+    let asked: Vec<String> = data.lock().unwrap().found_in[from..].iter().map(|(f, _, _)| f.clone()).collect();
+    assert_eq!(asked, std::slice::from_ref(&projects), "asked of that folder, once");
     // Of the whole mailbox: the account's own folders only.
     let from = data.lock().unwrap().found_in.len();
     let items = found(None);

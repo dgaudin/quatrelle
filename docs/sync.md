@@ -334,6 +334,34 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   it (`Job::SyncFolder`), and it's listed only (`SyncOptions::list_only`: its newest 500, Show
   more for more, nothing downloaded ahead, no state asked for). What an earlier pass kept of
   one beyond that is let go at the next full pass, and its numbers with it.
+- **The online archive** (`Folder::archive`; Exchange's archive mailbox, Outlook's "Online
+  Archive"): read on the server, never synced, nothing of it kept, as Outlook's Cached Exchange
+  Mode never caches it. Autodiscover names it (`AlternativeMailbox` of type `Archive`,
+  `autodiscover::archive_mailbox`); its mail folders are listed with the account's, after its
+  shared mailboxes (`Client::archive_folders`: the tree under `archivemsgfolderroot`, with the
+  calls a shared mailbox's tree is listed with, routed by `X-AnchorMailbox` to the archive's
+  address when it has one), under a top folder named as the server names it ("Online Archive"
+  when it gives no name; the address in brackets when a folder or a shared mailbox has the
+  name). Each folder carries `archive`, `mailbox` (the archive's address, or `archive`) and no
+  role in the account, so its Inbox or Sent Items are never the account's: no new-mail notice,
+  no rule, nothing sent from it, a reply's copy in the account's own Sent Items
+  (`Folder::shared_mailbox` is what tells a shared mailbox from it). An archive that refuses, or
+  whose server is down, is logged and passed over; its folders leave the list until a later
+  listing succeeds, and a view on one goes to the Inbox.
+  `Worker::read_online` and `Session::read_on_server` are true for it, whatever the settings:
+  the full pass never walks it (`sync_order` leaves it out whoever asks), nothing of it is
+  downloaded ahead, it isn't subscribed to (`shared_to_listen`), and a search of the whole
+  account doesn't ask about it. Opened (`Job::SyncFolder`), a folder lists its newest 500
+  (`SyncOptions::list_only`), never more whatever it was asked to keep; what's older comes a
+  hundred at a time (`Job::Older`, without a date: the folder's list from where the last page
+  ended), held by the session. A search with one of its folders on view asks the server about
+  that folder (`Job::Search` with the folder, whatever the scope but "all mailboxes").
+  **Nothing on this computer:** the store holds an archive folder's directory in memory
+  (`Store::hold_folders`, set from the folder list each time it is saved or loaded, as
+  `Store::set_online_only` holds a whole account): its list, the sources of messages opened, its
+  search index and documents are there while Quatrelle runs and never reach the data file,
+  whatever path asked for them to be kept. The folder list itself (names and counts) and the
+  numbering of the items seen (opaque ids) are kept with the account's.
 - **Told of changes as they happen** (`worker/listening.rs`, `ews/listening.rs`), as Outlook's
   Cached Exchange Mode is: the account's main connection subscribes to every folder of its
   mailbox (`Subscribe`, `SubscribeToAllFolders`) and to the folders of each shared mailbox kept

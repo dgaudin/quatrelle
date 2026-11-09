@@ -21,6 +21,7 @@ _Status: v0.22, 2026-10-22._
 | 7 | **Webex meetings: not yet confirmed on a real account** | Built and tested against a fake Webex only. A real account must still confirm the browser sign-in, a create, an update and a delete, `"recurrence": null` when a repeat is removed, that no second invitation goes out, and the extended property on real on-premises Exchange (`docs/webex.md`, section 6). Webex is expected to refuse several days or dates in a monthly or yearly rule (not tried); the error is shown, nothing is converted. |
 | 8 | **Sending: a certificate Windows distrusts, below the root** | IMAP, POP, Sieve, HTTPS and SMTP trust the bundled Mozilla roots and the system's own, less the certificates in Windows' Untrusted Certificates (`Disallowed`). IMAP, POP, Sieve and HTTPS also refuse a server or intermediate certificate listed there; SMTP goes through lettre, which takes roots but no verifier of ours, so it checks only that the root isn't distrusted. |
 | 9 | **OpenPGP: what isn't done yet** | Your own OpenPGP key works in the desktop app only: in the browser, OpenPGP mail sent to you stays locked, and nothing is signed or encrypted with OpenPGP there (the page keeps no secret keys yet). A PGP block is read only in a message that is one plain text, not in HTML or beside attachments. Keys are version 4 and encryption SEIPDv1, so a correspondent with only a version 6 key can't be encrypted to. A key's trust is where it came from (their own mail, or a file you imported): no web of trust, no key servers, no WKD (they're other people's servers). Sending OpenPGP through Exchange (EWS) hasn't been tried on a real server: Exchange turns what it's given into its own form, and a signature may not survive it (`FORK.md`, part 27, says the check to make first). |
+| 10 | **Exchange's online archive: read-only on screen, the archive policy, and Exchange Online** | The archive's folders are listed under the account and read on the server (never synced, nothing kept, searched in the folder on view): `docs/sync.md`. Still to come in 1.4: the refusals and greyed commands that make it read-only on screen (a move or a delete there isn't refused yet), and the archive policy of a message or folder (`docs/superpowers/specs/2026-11-09-online-archive-design.md`). Later: moving mail between the mailbox and the archive, archiving by age into it. Exchange through EWS only: Microsoft Graph doesn't expose the archive. Never tried on a real server yet. |
 
 ## Done
 
@@ -826,3 +827,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   over and over (a 525 KB file fanning out to 3.8 GB) add nothing past it, and a value declared
   over 256 MB is an error before any of it is read. Attached messages (`PtypObject`) and
   zero-byte files come in; both were left out.
+- **Exchange's online archive, read from the server (first lot):** an Exchange account's archive
+  mailbox (Outlook's "Online Archive", which Autodiscover names) shows as a tree of its own
+  under the account, after its folders and shared mailboxes. A folder of it is read on the
+  server when it's opened (its newest few hundred, then a page at a time), a message when it's
+  opened, a search in the folder on view; nothing of it is synced in the background, listened
+  to, or written to this computer (the store holds its folders in memory), and its Inbox or
+  Sent Items are never taken for the account's. A search of the mailbox or of every mailbox
+  doesn't look there, as in Outlook. The fake Exchange has an archive mailbox, and its tests
+  read a folder of twenty thousand messages a page at a time.
