@@ -2137,3 +2137,5 @@ folder	Conflicts	衝突
 	Not now	暫不
 	Archiving: {done} of {total}	正在封存：{done} / {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	無法儲存草稿: {error}。已重新開啟,以免遺失任何內容
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	此帳戶的伺服器上沒有封存資料夾：若要將其郵件封存到此電腦，請在「檔案 › 資訊」中勾選「封存到此電腦」
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	此郵件已封存到此電腦：若要移動，請將其拖曳到封存中的其他資料夾

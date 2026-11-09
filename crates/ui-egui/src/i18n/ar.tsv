@@ -2132,3 +2132,5 @@ folder	Conflicts	التعارضات
 	Not now	ليس الآن
 	Archiving: {done} of {total}	جارٍ الأرشفة: {done} من {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	تعذّر حفظ مسودة: {error}. أُعيد فتحها حتى لا يضيع شيء
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	لا يحتوي هذا الحساب على مجلد أرشيف على خادمه: لأرشفة بريده على هذا الكمبيوتر، حدد «الأرشفة على هذا الكمبيوتر» في ملف › معلومات
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	هذا البريد مؤرشف بالفعل على هذا الكمبيوتر: اسحبه إلى مجلد آخر في الأرشيف لنقله

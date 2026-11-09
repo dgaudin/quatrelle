@@ -2137,3 +2137,5 @@ menu	View	Anzeigen
 	Not now	Jetzt nicht
 	Archiving: {done} of {total}	Archivierung: {done} von {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Ein Entwurf konnte nicht gesichert werden: {error}. Er ist wieder geöffnet, damit nichts verloren geht
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	dieses Konto hat auf seinem Server keinen Archivordner: Um seine E-Mails auf diesem Computer zu archivieren, aktivieren Sie „Auf diesem Computer archivieren“ unter Datei › Informationen
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	diese E-Mail ist bereits auf diesem Computer archiviert: Ziehen Sie sie in einen anderen Archivordner, um sie zu verschieben

@@ -2134,3 +2134,5 @@ menu	View	查看
 	Not now	暂不
 	Archiving: {done} of {total}	正在归档：{done} / {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	无法保存草稿: {error}。已重新打开,以免丢失任何内容
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	此账户的服务器上没有存档文件夹：要将其邮件归档到此计算机，请在“文件 › 信息”中勾选“归档到此计算机”
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	此邮件已归档到此计算机：要移动它，请将其拖到存档中的其他文件夹

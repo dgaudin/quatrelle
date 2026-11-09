@@ -122,6 +122,12 @@ const KNOWN_ERRORS: [&str; 2] = [
     "this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it",
 ];
 
+/// What *Archive* says when it has nowhere to put the mail (`engine/src/session/mailboxes/archive.rs`).
+const ARCHIVE_REFUSALS: [&str; 2] = [
+    "this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info",
+    "this mail is already archived on this computer: drag it to another folder of Archives to move it",
+];
+
 /// The reasons the network layer gives for mail that stayed where it was when it was archived or
 /// put back (`net/src/worker/changes/archive.rs`); the notice says them through `i18n::error`.
 /// "not enough room on the disk, space needed: 101 MB" is read as its head and an amount.
@@ -166,6 +172,7 @@ fn notice_wordings() -> BTreeSet<String> {
     }
     out.extend(KNOWN_ERRORS.map(str::to_string));
     out.extend(KEPT_REASONS.map(str::to_string));
+    out.extend(ARCHIVE_REFUSALS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
     out.insert(quatrelle_engine::STILL_COMING.to_string());
     // The keychain's refusal, as the network layer puts it before what the system said.
@@ -683,6 +690,10 @@ fn the_errors_translated_whole_are_what_the_network_says() {
     let joined: String = ews.split("\\\n").enumerate().map(|(i, part)| if i == 0 { part } else { part.trim_start() }).collect();
     for e in KNOWN_ERRORS {
         assert!(joined.contains(&format!("\"{e}\"")), "not in ews.rs any more: {e}");
+    }
+    let archive = include_str!("../../../engine/src/session/mailboxes/archive.rs").replace("\r\n", "\n");
+    for e in ARCHIVE_REFUSALS {
+        assert!(archive.contains(&format!("\"{e}\"")), "not in the engine's archive.rs any more: {e}");
     }
     assert_eq!(error_wording("the draft couldn't be saved: {k}").as_deref(), Some("the draft couldn't be saved: {error}"));
     assert_eq!(error_wording("the disk is almost full ({left} GB left): mail waits"), None);

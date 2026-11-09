@@ -2136,3 +2136,5 @@ menu	View	Просмотр
 	Not now	Не сейчас
 	Archiving: {done} of {total}	Архивация: {done} из {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Не удалось сохранить черновик: {error}. Он открыт снова, чтобы ничего не потерялось
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	у этой учётной записи нет папки архива на сервере: чтобы архивировать её почту на этом компьютере, отметьте «Архивировать на этом компьютере» в разделе Файл › Сведения
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	это письмо уже заархивировано на этом компьютере: перетащите его в другую папку архива, чтобы переместить

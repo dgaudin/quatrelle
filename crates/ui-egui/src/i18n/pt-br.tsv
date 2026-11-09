@@ -2136,3 +2136,5 @@ folder	Conflicts	Conflitos
 	Not now	Agora não
 	Archiving: {done} of {total}	Arquivando: {done} de {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Não foi possível manter um rascunho: {error}. Ele foi reaberto para que nada se perca
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	esta conta não tem pasta de arquivo no servidor: para arquivar os e-mails neste computador, marque “Arquivar neste computador” em Arquivo › Informações
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	este e-mail já está arquivado neste computador: arraste-o para outra pasta do arquivo para movê-lo

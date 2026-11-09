@@ -2135,3 +2135,5 @@ folder	Conflicts	Conflitti
 	Not now	Non ora
 	Archiving: {done} of {total}	Archiviazione: {done} di {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Non è stato possibile conservare una bozza: {error}. È stata riaperta per non perdere nulla
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	questo account non ha una cartella Archivio sul server: per archiviarne la posta su questo computer, seleziona «Archivia su questo computer» in File › Info
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	questa posta è già archiviata su questo computer: trascinala in un’altra cartella dell’archivio per spostarla

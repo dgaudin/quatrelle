@@ -290,3 +290,29 @@ fn the_archives_account_comes_after_the_others() {
     assert_eq!(order(&s).last(), Some(&id));
     done(s);
 }
+
+#[test]
+fn archive_with_nowhere_to_archive_says_what_to_do() {
+    let mut s = two_accounts("archive-nowhere");
+    // Not ticked, and no Archive folder on the server: say where the setting is.
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    let e = s.run("mail.archive", &json!({})).unwrap_err();
+    assert_eq!(
+        e.to_string(),
+        "this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info"
+    );
+    // Mail already in Archives: nothing more to archive it into.
+    s.run("mail.move", &json!({"account": "archives", "folder": "-"})).unwrap();
+    let from = archive_jobs(s.take_jobs()).remove(0).1.remove(0);
+    let id = archives_of(&s).unwrap();
+    let store = s.store.clone().unwrap();
+    keep(&store, &id, "me@studio.example/INBOX", &["Plans"]);
+    let to = store.load_folder(&id, "me@studio.example/INBOX").unwrap().messages[0].key.clone();
+    s.apply(Event::Archived { account: "a1".into(), moved: vec![(from, to)], kept: Vec::new() });
+    s.apply(Event::Folders { account: id.clone(), folders: store.load_folders(&id).unwrap() });
+    s.run("folder.open", &json!({"account": id, "folder": "me@studio.example/INBOX"})).unwrap();
+    s.run("list.select", &key_of(&s, "Plans")).unwrap();
+    let e = s.run("mail.archive", &json!({})).unwrap_err();
+    assert_eq!(e.to_string(), "this mail is already archived on this computer: drag it to another folder of Archives to move it");
+    done(s);
+}

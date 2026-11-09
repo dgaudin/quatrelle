@@ -2137,3 +2137,5 @@ menu	View	Afficher
 	Not now	Pas maintenant
 	Archiving: {done} of {total}	Archivage : {done} sur {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Un brouillon n’a pas pu être gardé : {error}. Il est rouvert pour que rien ne soit perdu
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	ce compte n’a pas de dossier Archive sur son serveur : pour archiver son courrier sur cet ordinateur, cochez « Archiver sur cet ordinateur » dans Fichier › Informations
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	ce courrier est déjà archivé sur cet ordinateur : faites-le glisser vers un autre dossier d’Archives pour le déplacer

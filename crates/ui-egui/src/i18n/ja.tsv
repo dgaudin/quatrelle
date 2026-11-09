@@ -2133,3 +2133,5 @@ folder	Conflicts	競合
 	Not now	今はしない
 	Archiving: {done} of {total}	アーカイブ中: {done} / {total}
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	下書きを保存できませんでした: {error}。何も失われないように、もう一度開きました
+	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	このアカウントのサーバーにはアーカイブ フォルダーがありません。このコンピューターにメールをアーカイブするには、[ファイル] › [情報] で「このコンピューターにアーカイブ」をオンにしてください
+	this mail is already archived on this computer: drag it to another folder of Archives to move it	このメールはすでにこのコンピューターにアーカイブされています。移動するには、アーカイブの別のフォルダーにドラッグしてください

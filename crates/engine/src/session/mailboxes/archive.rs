@@ -12,6 +12,12 @@ use super::*;
 mod age;
 pub(crate) use age::AgeState;
 
+/// *Archive* on an IMAP account not set to archive here, whose server has no Archive folder.
+const NO_ARCHIVE_FOLDER: &str =
+    "this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info";
+/// *Archive* on mail already in the Archives account.
+const ALREADY_ARCHIVED: &str = "this mail is already archived on this computer: drag it to another folder of Archives to move it";
+
 /// A message on its way into or out of the Archives account: kept out of the list until the
 /// network layer says how it went.
 #[derive(Clone, Debug)]
@@ -47,6 +53,9 @@ impl Session {
         let sel = self.selected();
         let (here, rest): (Vec<Arc<Summary>>, Vec<Arc<Summary>>) = sel.iter().cloned().partition(|m| self.archives_here(&m.key.account));
         if here.is_empty() {
+            if let Some(why) = self.nowhere_to_archive(&sel) {
+                return Err(CmdError::Failed(why.into()));
+            }
             return self.move_selection(MoveTarget::Role(FolderRole::Archive));
         }
         let mut moved = 0;
@@ -55,6 +64,20 @@ impl Session {
         }
         let r = self.archive_messages(&here)?;
         Ok(serde_json::json!({ "moved": moved, "archiving": r["archiving"] }))
+    }
+
+    /// Why *Archive* has nowhere to put `sel`, with what to do about it: mail already in Archives,
+    /// or an IMAP account not set to archive here whose server has no Archive folder.
+    fn nowhere_to_archive(&self, sel: &[Arc<Summary>]) -> Option<&'static str> {
+        let archived = |m: &Summary| self.account(&m.key.account).is_some_and(|a| a.config.role == Some(AccountRole::Archives));
+        if sel.iter().any(|m| archived(m)) {
+            return Some(ALREADY_ARCHIVED);
+        }
+        let no_folder = |m: &Summary| {
+            self.is_imap(&m.key.account)
+                && self.account(&m.key.account).is_some_and(|a| a.folder_beside(&m.key.folder, FolderRole::Archive).is_none())
+        };
+        sel.iter().any(|m| no_folder(m)).then_some(NO_ARCHIVE_FOLDER)
     }
 
     /// `archive.settings`: whether *Archive* files into the Archives account, and the age (in
