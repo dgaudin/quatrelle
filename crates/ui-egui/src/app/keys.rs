@@ -272,6 +272,10 @@ fn question<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, count: 
     let mut all_outbox = true;
     let mut all_exchange = true;
     for k in keys {
+        // The online archive's mail isn't deleted: no question, the command says so.
+        if s.read_only_folder(&k.account, &k.folder) {
+            return None;
+        }
         any = true;
         all_in_trash &= in_trash(k);
         let outbox = s.outbox_entry(k).is_some();

@@ -128,6 +128,10 @@ const ARCHIVE_REFUSALS: [&str; 2] = [
     "this mail is already archived on this computer: drag it to another folder of Archives to move it",
 ];
 
+/// What every change refused in the online archive says (`engine/src/session/mailboxes/archive/read_only.rs`),
+/// shown in a notice.
+const ONLINE_ARCHIVE_REFUSALS: [&str; 1] = [quatrelle_engine::ARCHIVE_READ_ONLY];
+
 /// The reasons the network layer gives for mail that stayed where it was when it was archived or
 /// put back (`net/src/worker/changes/archive.rs`); the notice says them through `i18n::error`.
 /// "not enough room on the disk, space needed: 101 MB" is read as its head and an amount.
@@ -173,6 +177,7 @@ fn notice_wordings() -> BTreeSet<String> {
     out.extend(KNOWN_ERRORS.map(str::to_string));
     out.extend(KEPT_REASONS.map(str::to_string));
     out.extend(ARCHIVE_REFUSALS.map(str::to_string));
+    out.extend(ONLINE_ARCHIVE_REFUSALS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
     out.insert(quatrelle_engine::STILL_COMING.to_string());
     // The keychain's refusal, as the network layer puts it before what the system said.
@@ -795,4 +800,20 @@ fn the_language_list_reads_in_order() {
     let latin = ["English", "Deutsch", "Español", "Français", "Italiano", "Nederlands", "Português (Brasil)"];
     assert_eq!(names.get(..latin.len()), Some(&latin[..]), "{names:?}");
     assert!(names.iter().skip(latin.len()).all(|n| !n.is_ascii()), "{names:?}");
+}
+
+/// The online archive's refusal is word for word the engine's, and the notice and the name of a
+/// nameless archive read in French from the catalog.
+#[test]
+fn the_online_archive_says_its_words_in_the_interfaces_language() {
+    let source = include_str!("../../../engine/src/session/mailboxes/archive/read_only.rs").replace("\r\n", "\n");
+    for e in ONLINE_ARCHIVE_REFUSALS {
+        assert!(source.contains(&format!("\"{e}\"")), "not in the engine's read_only.rs any more: {e}");
+    }
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    let said = error(quatrelle_engine::ARCHIVE_READ_ONLY);
+    assert!(said.contains("lecture seule") && !said.contains("read-only"), "{said}");
+    assert_eq!(tc("folder", quatrelle_engine::model::ONLINE_ARCHIVE), "Archive en ligne");
+    assert_eq!(tc("folder", "Online Archive - Riley"), "Online Archive - Riley", "a name the server gave stays as it is");
+    set_current(Lang::EN);
 }

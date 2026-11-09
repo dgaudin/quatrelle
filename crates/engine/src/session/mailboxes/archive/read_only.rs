@@ -25,6 +25,11 @@ impl Session {
         self.selection.iter().any(|k| self.read_only_folder(&k.account, &k.folder))
     }
 
+    /// Whether the folder on view is in the online archive.
+    pub fn view_read_only(&self) -> bool {
+        matches!(&self.view, View::Folder { account, folder } if self.read_only_folder(account, folder))
+    }
+
     /// Refuse a change to these messages when any is in the archive, so nothing is changed.
     pub(crate) fn refuse_archive_mail<'a>(&self, keys: impl IntoIterator<Item = &'a MessageKey>) -> Result<(), CmdError> {
         if keys.into_iter().any(|k| self.read_only_folder(&k.account, &k.folder)) { Err(refusal()) } else { Ok(()) }
@@ -42,7 +47,7 @@ impl Session {
 
     /// Whether a Quick Step that moves mail can't run on the selection: some of it is in the
     /// archive, or the step files it in a folder of the archive. A step that only marks can.
-    pub(crate) fn quick_step_refused(&self, actions: &[quatrelle_model::organize::RuleAction]) -> bool {
+    pub fn quick_step_refused(&self, actions: &[quatrelle_model::organize::RuleAction]) -> bool {
         use quatrelle_model::organize::RuleAction;
         let moves = actions.iter().any(|a| matches!(a, RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) | RuleAction::Delete));
         if !moves {

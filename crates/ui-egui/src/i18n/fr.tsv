@@ -2147,3 +2147,6 @@ menu	View	Afficher
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Un brouillon n’a pas pu être gardé : {error}. Il est rouvert pour que rien ne soit perdu
 	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	ce compte n’a pas de dossier Archive sur son serveur : pour archiver son courrier sur cet ordinateur, cochez « Archiver sur cet ordinateur » dans Fichier › Informations
 	this mail is already archived on this computer: drag it to another folder of Archives to move it	ce courrier est déjà archivé sur cet ordinateur : faites-le glisser vers un autre dossier d’Archives pour le déplacer
+folder	Online Archive	Archive en ligne
+	Online archive of {email}, read-only in this version	Archive en ligne du compte {email}, en lecture seule dans cette version
+	the online archive is read-only in this version: use Outlook to move or delete its mail	l’archive en ligne est en lecture seule dans cette version : utilisez Outlook pour déplacer ou supprimer son courrier

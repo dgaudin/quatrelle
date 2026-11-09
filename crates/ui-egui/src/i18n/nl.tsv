@@ -2143,3 +2143,6 @@ menu	View	Weergeven
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Een concept kon niet worden bewaard: {error}. Het is opnieuw geopend zodat er niets verloren gaat
 	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	dit account heeft geen archiefmap op de server: vink ‘Archiveren op deze computer’ aan in Bestand › Info om de e-mail op deze computer te archiveren
 	this mail is already archived on this computer: drag it to another folder of Archives to move it	deze e-mail is al gearchiveerd op deze computer: sleep hem naar een andere archiefmap om hem te verplaatsen
+folder	Online Archive	Online-archief
+	Online archive of {email}, read-only in this version	Online-archief van {email}, alleen-lezen in deze versie
+	the online archive is read-only in this version: use Outlook to move or delete its mail	het online-archief is in deze versie alleen-lezen: gebruik Outlook om de berichten te verplaatsen of te verwijderen

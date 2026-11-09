@@ -2147,3 +2147,6 @@ menu	View	Anzeigen
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	Ein Entwurf konnte nicht gesichert werden: {error}. Er ist wieder geöffnet, damit nichts verloren geht
 	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	dieses Konto hat auf seinem Server keinen Archivordner: Um seine E-Mails auf diesem Computer zu archivieren, aktivieren Sie „Auf diesem Computer archivieren“ unter Datei › Informationen
 	this mail is already archived on this computer: drag it to another folder of Archives to move it	diese E-Mail ist bereits auf diesem Computer archiviert: Ziehen Sie sie in einen anderen Archivordner, um sie zu verschieben
+folder	Online Archive	Online-Archiv
+	Online archive of {email}, read-only in this version	Online-Archiv von {email}, in dieser Version schreibgeschützt
+	the online archive is read-only in this version: use Outlook to move or delete its mail	das Online-Archiv ist in dieser Version schreibgeschützt: Verwenden Sie Outlook, um seine E-Mails zu verschieben oder zu löschen

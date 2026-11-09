@@ -482,14 +482,15 @@ fn shared_header(
 ) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click_and_drag());
     section_drag(ui, t, &resp, rect, sections, at, acts);
-    let dropping = resp.dnd_hover_payload::<DragKeys>().is_some() || resp.dnd_hover_payload::<DragFolder>().is_some();
+    // The online archive takes nothing dropped on it: it is read-only.
+    let dropping = !top.archive && (resp.dnd_hover_payload::<DragKeys>().is_some() || resp.dnd_hover_payload::<DragFolder>().is_some());
     if resp.hovered() || dropping {
         ui.painter().rect_filled(rect, 6.0, if dropping { t.accent.gamma_multiply(0.3) } else { t.hover_row });
     }
     let chev = egui::Rect::from_min_size(rect.min + vec2(6.0, 9.0), vec2(12.0, 12.0));
     icons::paint(ui.painter(), chev, if open { Icon::ChevronDown } else { Icon::ChevronRight }, t.dim);
     let ir = egui::Rect::from_min_size(rect.min + vec2(20.0, 8.0), vec2(14.0, 14.0));
-    icons::paint(ui.painter(), ir, Icon::People, t.dim);
+    icons::paint(ui.painter(), ir, if top.archive { Icon::Archive } else { Icon::People }, t.dim);
     let name = crate::i18n::folder(top);
     crate::widgets::named(ui, &resp, &name, true, Some(open));
     // Its unread mail, as Outlook shows a collapsed mailbox's Inbox.
@@ -513,6 +514,19 @@ fn shared_header(
         );
     }
     let address = top.mailbox.clone().unwrap_or_default();
+    // The online archive is another mailbox of the account, read-only: its menu is the account's
+    // refresh and its place among the mailboxes, nothing of a shared mailbox's.
+    if top.archive {
+        let resp = resp.on_hover_text(tf!("Online archive of {email}, read-only in this version", email = a.config.email));
+        resp.context_menu(|ui| {
+            if ui.button(tl!("Send / Receive")).clicked() {
+                acts.push(Action::Run("mail.sync", json!({})));
+                ui.close();
+            }
+            move_items(ui, sections, at, acts);
+        });
+        return resp.clicked();
+    }
     let resp = resp.on_hover_text(tf!("Shared mailbox {address}, opened by {email}", address = address, email = a.config.email));
     // Dropped messages or folders go into its top folder, as onto a folder.
     if let Some(p) = dropped::<DragKeys>(&resp)
@@ -577,8 +591,9 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
     // Another mailbox opened here (Graph: its folders aren't marked with `mailbox`): its folders
     // stay in it (Exchange moves folders within a mailbox), and its top folder closes it.
     let owner = s.account(&f.account).and_then(|a| a.config.folder_owner(&f.path)).map(str::to_string);
-    let user_folder = !f.is_fixed() && owner.is_none();
-    let resp = row(ui, t, role_icon(f.look()), &name, count, depth, selected, f.selectable, user_folder && !favorite);
+    // The online archive is read-only: nothing is dropped on its folders, none is dragged or edited.
+    let user_folder = !f.is_fixed() && owner.is_none() && !f.archive;
+    let resp = row(ui, t, role_icon(f.look()), &name, count, depth, selected, f.selectable && !f.archive, user_folder && !favorite);
     if let Some(collapsed) = collapse {
         let x = resp.rect.min.x + 10.0 + depth as f32 * 14.0 - 14.0;
         let chev = egui::Rect::from_min_size(egui::pos2(x, resp.rect.center().y - 6.0), vec2(12.0, 12.0));
@@ -593,6 +608,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
         acts.push(Action::Run("folder.open", json!({"account": f.account, "folder": f.path})));
     }
     if f.selectable
+        && !f.archive
         && let Some(p) = dropped::<DragKeys>(&resp)
     {
         // Into a folder of the account, or of another one: onto the Archives account's folder it
@@ -604,6 +620,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
         }
     }
     if let Some(p) = dropped::<DragFolder>(&resp)
+        && !f.archive
         && p.account == f.account
         && p.path != f.path
     {
@@ -639,7 +656,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
         }
         // Delete All, as Outlook's: Deleted Items and Junk are emptied for good, any other
         // folder's mail goes to Deleted Items.
-        if f.selectable && ui.button(tl!("Delete all…")).clicked() {
+        if f.selectable && !f.archive && ui.button(tl!("Delete all…")).clicked() {
             acts.push(Action::Dialog(Dialog::ConfirmEmpty {
                 account: account.clone(),
                 folder: path.clone(),
@@ -663,7 +680,7 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
             }
         }
         ui.separator();
-        if ui.button(tl!("New folder…")).clicked() {
+        if !f.archive && ui.button(tl!("New folder…")).clicked() {
             acts.push(Action::Dialog(Dialog::new_folder(&account, Some(&path))));
             ui.close();
         }

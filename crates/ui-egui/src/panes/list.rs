@@ -625,6 +625,7 @@ fn message_row(
     let mut clicked_action = false;
     if hovered {
         let mut bx = right - 22.0;
+        let in_archive = s.read_only_folder(&m.key.account, &m.key.folder);
         let actions: [(Icon, &str, &'static str, serde_json::Value); 3] = [
             (Icon::Delete, tl!("Delete"), "mail.delete", json!({})),
             (Icon::Flag, tl!(if m.flags.flagged { "Unflag" } else { "Flag" }), "mail.flag", json!({})),
@@ -635,7 +636,8 @@ fn message_row(
                 json!({}),
             ),
         ];
-        for (ic, tip, cmd, params) in actions {
+        // The online archive's mail has no Delete button: it can't be deleted.
+        for (ic, tip, cmd, params) in actions.into_iter().filter(|a| !(in_archive && a.2 == "mail.delete")) {
             let br = Rect::from_min_size(egui::pos2(bx, line2 - 3.0), vec2(22.0, 22.0));
             let bresp = ui.interact(br, id.with(cmd), Sense::click()).on_hover_text(tip);
             crate::widgets::named(ui, &bresp, tip, true, None);
@@ -749,12 +751,23 @@ fn row_input(
         ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| crate::organize::follow_up_menu(ui, s, t, acts));
         ui.menu_button((widgets::menu_icon(Some(Icon::Steps)), tl!("Quick steps")), |ui| crate::quick_steps_menu(ui, s, acts));
         ui.separator();
-        item(ui, acts, Icon::Move, tl!("Move to…"), Action::Dialog(Dialog::move_to()));
-        item(ui, acts, Icon::Archive, tl!("Archive"), Action::Run("mail.archive", json!({})));
-        item(ui, acts, Icon::Junk, tl!("Report junk"), Action::Run("mail.junk", json!({})));
-        ui.menu_button((widgets::menu_icon(Some(Icon::Junk)), tl!("Junk")), |ui| crate::junk_menu(ui, s, acts));
-        item(ui, acts, Icon::Ignore, tl!("Ignore"), Action::Run("mail.ignore", json!({})));
-        item(ui, acts, Icon::Delete, tl!("Delete"), Action::DeleteMail { for_good: false });
+        // Mail of the online archive (or a selection with some in it) is only read: what moves or
+        // deletes it is greyed, as in the ribbon.
+        let locked = s.read_only_folder(&key.account, &key.folder) || s.selection_read_only();
+        let change = |ui: &mut Ui, acts: &mut Vec<Action>, icon: Icon, label: &str, act: Action| {
+            if ui.add_enabled(!locked, egui::Button::new((widgets::menu_icon(Some(icon)), label))).clicked() {
+                acts.push(act);
+                ui.close();
+            }
+        };
+        change(ui, acts, Icon::Move, tl!("Move to…"), Action::Dialog(Dialog::move_to()));
+        change(ui, acts, Icon::Archive, tl!("Archive"), Action::Run("mail.archive", json!({})));
+        change(ui, acts, Icon::Junk, tl!("Report junk"), Action::Run("mail.junk", json!({})));
+        ui.add_enabled_ui(!locked, |ui| {
+            ui.menu_button((widgets::menu_icon(Some(Icon::Junk)), tl!("Junk")), |ui| crate::junk_menu(ui, s, acts));
+        });
+        change(ui, acts, Icon::Ignore, tl!("Ignore"), Action::Run("mail.ignore", json!({})));
+        change(ui, acts, Icon::Delete, tl!("Delete"), Action::DeleteMail { for_good: false });
         ui.separator();
         // Find related, as Outlook's: the conversation, or everything from the sender.
         ui.menu_button((widgets::menu_icon(Some(Icon::Search)), tl!("Find related")), |ui| {

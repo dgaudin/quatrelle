@@ -362,3 +362,5 @@ fn the_account_settings_offer_archiving_by_age() {
     assert!(a.session.account(&imap).unwrap().config.archive_after_months.is_none(), "and unticked");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+mod online_archive;

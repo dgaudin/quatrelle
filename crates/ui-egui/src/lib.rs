@@ -582,6 +582,8 @@ impl MailApp {
             {
                 self.ui.compose_alert = Some(reading::send_block_text(b));
             }
+            // The online archive's refusal is said: the user asked for a change that isn't made.
+            Err(CmdError::Disabled(m)) if m == quatrelle_engine::ARCHIVE_READ_ONLY => self.session.notice(m, true),
             // Not possible now (a button that does nothing to do): logged, never shown.
             Err(CmdError::Disabled(m)) => log::info!("{id}: {m}"),
             // What went wrong with the message being written is said over it, in its own

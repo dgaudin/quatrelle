@@ -2147,3 +2147,6 @@ menu	View	Ver
 	A draft couldn't be kept: {error}. It is open again so that nothing is lost	No se pudo guardar un borrador: {error}. Se ha vuelto a abrir para no perder nada
 	this account has no Archive folder on its server: to archive its mail on this computer, tick “Archive on this computer” in File › Info	esta cuenta no tiene carpeta de archivo en su servidor: para archivar su correo en este equipo, marque «Archivar en este equipo» en Archivo › Información
 	this mail is already archived on this computer: drag it to another folder of Archives to move it	este correo ya está archivado en este equipo: arrástrelo a otra carpeta del archivo para moverlo
+folder	Online Archive	Archivo en línea
+	Online archive of {email}, read-only in this version	Archivo en línea de {email}, de solo lectura en esta versión
+	the online archive is read-only in this version: use Outlook to move or delete its mail	el archivo en línea es de solo lectura en esta versión: use Outlook para mover o eliminar su correo

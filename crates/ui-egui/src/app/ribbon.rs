@@ -255,7 +255,7 @@ impl MailApp {
                                 acts.push(Action::Run("mail.cleanUp", json!({})));
                                 ui.close();
                             }
-                            if ui.add_enabled(enabled("folder.cleanUp"), egui::Button::new(tl!("Clean up folder"))).on_hover_text(tip).clicked() {
+                            if ui.add_enabled(enabled("folder.cleanUp") && !s.view_read_only(), egui::Button::new(tl!("Clean up folder"))).on_hover_text(tip).clicked() {
                                 acts.push(Action::Run("folder.cleanUp", json!({})));
                                 ui.close();
                             }
@@ -551,7 +551,8 @@ pub(crate) fn quick_steps_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Ac
         if i < 9 {
             b = b.shortcut_text(format!("Ctrl+Shift+{}", i + 1));
         }
-        if ui.add_enabled(has, b).clicked() {
+        // A step that moves mail is off while some of the selection is in the online archive.
+        if ui.add_enabled(has && !s.quick_step_refused(&q.actions), b).clicked() {
             acts.push(run_quick_step(s, i));
             ui.close();
         }
@@ -591,7 +592,9 @@ pub(crate) fn junk_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Action>) 
         ("junk.neverBlockSender", "Never block sender", "Their mail is never treated as junk"),
         ("junk.neverBlockDomain", "Never block sender's domain", "Mail from anyone at their domain is never treated as junk"),
     ] {
-        if ui.add_enabled(has, egui::Button::new(tl!(label))).on_hover_text(tl!(tip)).clicked() {
+        // Blocking a sender sends the mail to Junk, which the online archive's mail can't go to.
+        let on = has && !(id == "junk.blockSender" && s.selection_read_only());
+        if ui.add_enabled(on, egui::Button::new(tl!(label))).on_hover_text(tl!(tip)).clicked() {
             acts.push(Action::Run(id, json!({})));
             ui.close();
         }
