@@ -379,9 +379,10 @@ pub(super) fn column_widths(rows: &[Vec<mime::layout::Cell>]) -> Vec<Option<mime
     out
 }
 
-/// A table of figures — four columns or more, text in every cell — sized as a browser sizes one:
-/// each column's least width (its longest word) and its width on one line (its widest content
-/// unwrapped), padding added; the width it asks for is both. `None` for any other table (a
+/// A table of figures — four columns or more, text in every cell (centred or not) — sized as a
+/// browser sizes one: each column's least width (its longest word, its line when it isn't to
+/// wrap) and its width on one line (its widest content unwrapped), padding added; a width it
+/// asks for in pixels is both, unless its text needs more. `None` for any other table (a
 /// layout's), whose columns share its width as before.
 fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::layout::Width>], zoom: f32) -> Option<Vec<(f32, f32)>> {
     use mime::layout::Width;
@@ -400,7 +401,9 @@ fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::la
             if span == 1 && !c.blocks.is_empty() {
                 // Padding, and a few pixels to spare: a word short of one is cut in two.
                 let pad = padding_of(c).sum().x + 6.0;
-                let (lo, hi) = (longest_word(ui, &c.blocks, zoom)? + pad, natural_width(ui, &c.blocks, zoom)? + pad);
+                let (word, line) = text_widths(ui, &c.blocks, zoom, 0)?;
+                // A cell not to wrap can't be narrower than its line.
+                let (lo, hi) = (if c.nowrap { line } else { word } + pad, line + pad);
                 if let Some((a, b)) = widths.get_mut(col) {
                     (*a, *b) = (a.max(lo), b.max(hi));
                 }
@@ -410,7 +413,12 @@ fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::la
     }
     for (i, w) in widths.iter_mut().enumerate() {
         match asked.get(i).copied().flatten() {
-            Some(Width::Px(px)) => *w = (px as f32 * zoom, px as f32 * zoom),
+            // The width the message sets, widened to what its text can't do without (its longest
+            // word, its line when it doesn't wrap), as a browser widens a column.
+            Some(Width::Px(px)) => {
+                let least = w.0.max(px as f32 * zoom);
+                *w = (least, least);
+            }
             Some(Width::Percent(_)) => return None,
             None => {
                 let least = f32::from(PAD) * 2.0;
@@ -419,6 +427,39 @@ fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::la
         }
     }
     Some(widths)
+}
+
+/// A cell's text: the width of its longest word and of its widest line, looking through the
+/// one-cell boxes a centred paragraph is laid out as (their padding added); `None` for anything
+/// else (a picture, a table of its own).
+fn text_widths(ui: &Ui, blocks: &[mime::layout::Block], zoom: f32, depth: u8) -> Option<(f32, f32)> {
+    let mut out = (0.0f32, 0.0f32);
+    for b in blocks {
+        let (lo, hi) = match b {
+            mime::layout::Block::Text(_) => {
+                let one = std::slice::from_ref(b);
+                (longest_word(ui, one, zoom)?, natural_width(ui, one, zoom)?)
+            }
+            mime::layout::Block::Table(t) => {
+                let [row] = t.rows.as_slice() else { return None };
+                let [c] = row.as_slice() else { return None };
+                if depth >= 3
+                    || t.width.is_some()
+                    || c.width.is_some()
+                    || t.background_image.is_some()
+                    || c.background_image.is_some()
+                    || !c.overlays.is_empty()
+                {
+                    return None;
+                }
+                let (lo, hi) = text_widths(ui, &c.blocks, zoom, depth + 1)?;
+                let pad = padding_of(c).sum().x;
+                (lo + pad, hi + pad)
+            }
+        };
+        out = (out.0.max(lo), out.1.max(hi));
+    }
+    Some(out)
 }
 
 /// How wide formatted text's longest word is (what it can't be narrower than, wrapped); `None`

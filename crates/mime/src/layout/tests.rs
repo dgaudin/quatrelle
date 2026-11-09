@@ -491,3 +491,14 @@ fn a_line_break_alone_is_room_only_between_two_boxes() {
     assert!(t.rows[0][1].blocks.is_empty(), "{:?}", t.rows[0][1]);
     assert_eq!(t.rows[1][0].blocks.len(), 1, "nothing after the box: {:?}", t.rows[1][0].blocks);
 }
+
+/// A cell that says its text isn't to wrap (`nowrap`, as Outlook writes a report's cells, or
+/// `white-space: nowrap`) keeps that, so its column can be as wide as its line.
+#[test]
+fn a_cell_that_says_not_to_wrap_keeps_it() {
+    let b = html_layout(
+        "<table><tr><td nowrap=\"\">Rapport de garde</td><td style=\"white-space: nowrap\">B</td><td style=\"white-space:normal\">C</td><td>D</td></tr></table>",
+    );
+    let Some(Block::Table(t)) = b.first() else { panic!("a table: {b:?}") };
+    assert_eq!(t.rows[0].iter().map(|c| c.nowrap).collect::<Vec<_>>(), [true, true, false, false]);
+}

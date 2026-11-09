@@ -191,3 +191,56 @@ fn a_newsletters_stacked_blocks_touch_and_keep_their_tint() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A report as Outlook writes one: a table 2100 pixels wide, each column's width set in pixels,
+/// each cell `nowrap` with its text in a centred paragraph. Its narrow columns went one letter
+/// per line: the centred paragraphs
+/// (one-cell boxes) made it a layout's table, squeezed into the pane, and a column set narrower
+/// than its text kept that width. Now each column is at least as wide as its line, as
+/// Thunderbird and Outlook show it, and the table scrolls sideways.
+#[test]
+fn a_report_of_set_widths_keeps_its_words_whole() {
+    let widths = [90u32, 58, 52, 80, 400, 860, 560];
+    let cell = |w: u32, bg: &str, t: &str| {
+        format!(
+            "<td width=\"{w}\" nowrap=\"\" style=\"width:{}.0pt;{bg}padding:0cm 3.5pt 0cm 3.5pt;height:14.4pt\">\
+             <p class=\"MsoNormal\" align=\"center\" style=\"text-align:center\"><span style=\"font-size:11.0pt;\
+             font-family:&quot;Aptos Narrow&quot;,sans-serif;color:black\">{t}<o:p></o:p></span></p></td>",
+            w * 3 / 4
+        )
+    };
+    let row = |bg: &str, texts: [&str; 7]| format!("<tr>{}</tr>", widths.iter().zip(texts).map(|(w, t)| cell(*w, bg, t)).collect::<String>());
+    let mut html = String::from(
+        "<table class=\"MsoNormalTable\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" width=\"2100\" style=\"width:1575.0pt;border-collapse:collapse\">",
+    );
+    html +=
+        &row("background:#AEABAB;", ["<b>Jour</b>", "<b>Début</b>", "<b>Durée</b>", "<b>Nature</b>", "<b>Site</b>", "<b>Détail</b>", "<b>Suite</b>"]);
+    for _ in 0..6 {
+        html += &row(
+            "",
+            ["12/03/2026", "2h15", "45min", "Sauvegarde", "Studio Alpha", "Une copie de nuit arrêtée à mi-chemin", "Copie relancée, finie à 6 h"],
+        );
+    }
+    html += "</table>";
+    let (mut a, dir) = app_with_html("set-widths", "Rapport de garde", &html);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Rapport de garde").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    for width in [1400.0, 3600.0] {
+        let mut shown = Vec::new();
+        for _ in 0..30 {
+            shown = frame_shapes(&ctx, &mut a, vec![], egui::vec2(width, 1200.0));
+        }
+        let lines = |text: &str| {
+            shown.iter().find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text() == text => Some(t.galley.rows.len()),
+                _ => None,
+            })
+        };
+        for text in ["Jour", "Début", "Durée", "Nature", "12/03/2026", "2h15", "45min", "Sauvegarde"] {
+            assert_eq!(lines(text), Some(1), "{text} on one line at {width}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

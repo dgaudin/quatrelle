@@ -142,6 +142,10 @@ pub struct Cell {
     /// cell unless it says otherwise, the top for boxes laid out as columns with CSS.
     #[serde(default, skip_serializing_if = "is_top")]
     pub valign: VAlign,
+    /// Its text isn't to wrap (`nowrap`, `white-space: nowrap`, as Outlook writes a report's
+    /// cells): a table of figures gives its column the width of its line.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nowrap: bool,
 }
 
 fn is_top(v: &VAlign) -> bool {

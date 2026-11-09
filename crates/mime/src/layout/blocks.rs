@@ -234,6 +234,8 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         radius: c.radius(),
                                         padding: c.padding(cellpadding),
                                         valign: c.valign(Some(tr)),
+                                        nowrap: c.attr("nowrap").is_some()
+                                            || c.style("white-space").is_some_and(|v| v.trim().eq_ignore_ascii_case("nowrap")),
                                     }
                                 })
                                 .collect::<Vec<Cell>>()
@@ -343,6 +345,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         radius: if own { c.radius() } else { 0 },
                                         padding: if own { c.padding(None) } else { None },
                                         valign: VAlign::Top,
+                                        nowrap: false,
                                     }
                                 })
                                 .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
