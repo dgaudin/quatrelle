@@ -40,6 +40,12 @@ pub struct Tokens {
 }
 
 impl Tokens {
+    /// The label of a command that is off, in the ribbon: a grey that still reads (4.5:1 on the
+    /// ribbon's colour); `faint` is for what isn't text to read.
+    pub fn quiet_text(&self) -> Color32 {
+        if self.dark { Color32::from_rgb(0x8F, 0x96, 0x9F) } else { Color32::from_rgb(0x66, 0x6E, 0x78) }
+    }
+
     pub fn light() -> Tokens {
         Tokens {
             dark: false,
@@ -446,6 +452,17 @@ mod tests {
         assert_eq!(box_color(Some(grey), grey, &t), None);
         assert_eq!(box_color(Some([0xf4, 0xf4, 0xf4]), grey, &t), None);
         assert_eq!(box_color(Some([0xff, 0xff, 0xff]), [0xff, 0xff, 0xff], &t), None);
+    }
+
+    /// Upstream issue #45: a command that is off kept a label at 3:1 on the ribbon, hard to read.
+    #[test]
+    fn the_label_of_a_command_that_is_off_reads_on_the_ribbon() {
+        for t in [Tokens::light(), Tokens::dark()] {
+            let ratio = contrast(rgb(t.quiet_text()), rgb(t.chrome));
+            assert!(ratio >= 4.5, "dark {}: {ratio}", t.dark);
+            // Still quieter than the text of a command that is on.
+            assert!(contrast(rgb(t.quiet_text()), rgb(t.chrome)) < contrast(rgb(t.text), rgb(t.chrome)));
+        }
     }
 
     #[test]

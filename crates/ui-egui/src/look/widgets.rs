@@ -115,7 +115,7 @@ pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bo
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
     named(ui, &resp, label, enabled, None);
     reached(ui, rect);
-    let color = if enabled { t.text } else { t.faint };
+    let color = if enabled { t.text } else { t.quiet_text() };
     hover_fill(ui, &resp, rect, t, enabled);
     let ir = egui::Rect::from_min_size(rect.min + vec2(8.0, 7.0), vec2(16.0, 16.0));
     icons::paint(ui.painter(), ir, icon, if enabled { t.accent } else { t.faint });
@@ -402,7 +402,7 @@ fn small(ui: &mut Ui, icon: Icon, galley: std::sync::Arc<egui::Galley>, t: &Toke
         _ => t.text,
     };
     icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(4.0, 3.0), vec2(16.0, 16.0)), icon, icon_color);
-    let text = if enabled { t.text } else { t.faint };
+    let text = if enabled { t.text } else { t.quiet_text() };
     ui.painter().galley_with_override_text_color(rect.min + vec2(24.0, (SMALL_H - galley.size().y) / 2.0), galley, text);
     resp
 }
@@ -434,7 +434,7 @@ enum Big {
 fn big(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, kind: Big) -> Response {
     let label = tl!(label);
     let enabled = kind != Big::Off;
-    let text = if enabled { t.text } else { t.faint };
+    let text = if enabled { t.text } else { t.quiet_text() };
     // Long names break between words onto a second line, as Outlook's do.
     let mut galley = ui.painter().layout(label.to_string(), theme::regular(12.5), text, 76.0);
     // Two lines at most: a longer name makes the button wider instead.
