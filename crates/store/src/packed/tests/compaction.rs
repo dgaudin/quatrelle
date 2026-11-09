@@ -37,7 +37,9 @@ fn a_data_file_compacts_and_others_wait_for_it() {
     };
     let (before, after) = store.compact_data_file("a1").unwrap().unwrap();
     assert_eq!(before, full);
-    assert!(after < full / 2, "{full} → {after}");
+    if room_told(full) {
+        assert!(after < full / 2, "{full} → {after}");
+    }
     assert_eq!(crate::packed::on_disk(&std::fs::metadata(&file).unwrap()), after);
     assert!(reader.join().unwrap(), "read while it was compacted");
     for uid in (4..=300).step_by(4) {
@@ -70,7 +72,9 @@ fn a_data_file_killed_after_compacting_needs_no_repair() {
             store.remove_body(&key(uid));
         }
         let (before, after) = store.compact_data_file("a1").unwrap().unwrap();
-        assert!(after < before, "{before} → {after}: the test needs a compaction");
+        if room_told(before) {
+            assert!(after < before, "{before} → {after}: the test needs a compaction");
+        }
         // No destructor runs: the data file is left as a crash leaves it.
         std::process::exit(3);
     }

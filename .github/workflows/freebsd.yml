@@ -37,6 +37,8 @@ jobs:
       # The same craft-fonts commit as release.yml, release-wip.yml and ci.yml, so this builds and
       # tests with the fonts that ship.
       craft-fonts-ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+      # Every crate's tests run, a failure in one or not: the weekly run tells them all at once.
+      cargo-test-extra-args: --no-fail-fast
       # aarch64 is cross-compiled in the x86_64 VM now (it was emulated, and outlasted the 5-hour
       # limit), but it's a second VM run: x86_64 always, aarch64 only when asked for by hand.
       architectures: ${{ github.event_name == 'workflow_dispatch' && inputs.aarch64 && '["x86_64","aarch64"]' || '["x86_64"]' }}

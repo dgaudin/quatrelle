@@ -18,6 +18,15 @@ fn temp(name: &str) -> std::path::PathBuf {
     d
 }
 
+/// Whether the disk has told the room a file takes (`on_disk`): ZFS (FreeBSD's runner) counts a
+/// file's blocks only once its writes have reached the disk, and says one block of 512 bytes for
+/// megabytes until then, so room given back can't be seen there. Linux always tells.
+fn room_told(on_disk: u64) -> bool {
+    let told = on_disk > 64 * 1024;
+    assert!(told || !cfg!(target_os = "linux"), "the disk says {on_disk} bytes");
+    told
+}
+
 fn account(id: &str, email: &str) -> AccountConfig {
     AccountConfig { id: id.into(), email: email.into(), ..Default::default() }
 }
