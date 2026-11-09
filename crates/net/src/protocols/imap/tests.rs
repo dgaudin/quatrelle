@@ -214,3 +214,30 @@ proptest::proptest! {
         let _ = parse_internal_date(&junk);
     }
 }
+
+/// A refusal that is passing (RFC 5530's `UNAVAILABLE`, `SERVERBUG`, `INUSE`, `LIMIT`, or Gmail's
+/// `System Error` with no code) is for later; the others are the server's final word.
+#[test]
+fn a_passing_refusal_is_for_later_and_the_others_are_final() {
+    let said = |line: &str| {
+        let mut c = Client::from_stream(Script::new(format!("* OK hi\r\nM1 NO {line}\r\n").as_bytes())).unwrap();
+        c.noop().unwrap_err()
+    };
+    for line in ["System Error (Failure)", "[UNAVAILABLE] try again", "[serverbug] oops", "[INUSE] busy", "[LIMIT] too many"] {
+        assert!(matches!(said(line), NetError::Later(m) if m.contains(line)), "{line}: for later, with the server's words");
+    }
+    for line in [
+        "[NONEXISTENT] no such folder",
+        "[NOPERM] no",
+        "[OVERQUOTA] full",
+        "[TRYCREATE] make it",
+        "[ALREADYEXISTS] there",
+        "no reason",
+        "[ALERT]é quota full",
+    ] {
+        assert!(matches!(said(line), NetError::No(_)), "{line}: final");
+    }
+    // A command the server finds malformed is not a passing refusal.
+    let mut c = Client::from_stream(Script::new(b"* OK hi\r\nM1 BAD System Error\r\n")).unwrap();
+    assert!(matches!(c.noop(), Err(NetError::Bad(_))));
+}

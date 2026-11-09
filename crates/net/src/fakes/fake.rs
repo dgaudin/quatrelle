@@ -81,6 +81,9 @@ pub struct State {
     pub refuse_expunge: usize,
     /// The next this many `APPEND` are answered `NO` (a mailbox that is full, or read-only).
     pub refuse_append: usize,
+    /// Commands starting with this text (case ignored) are answered `NO` with this text, this many
+    /// times each (a server's passing failure, or a refusal with a code).
+    pub refuse_on: Vec<(String, String, usize)>,
 }
 
 impl State {
@@ -109,6 +112,7 @@ impl State {
             rate: 0,
             refuse_expunge: 0,
             refuse_append: 0,
+            refuse_on: Vec::new(),
         }))
     }
 
@@ -127,6 +131,11 @@ impl State {
     /// The next `n` appends are refused.
     pub fn refuse_append(&mut self, n: usize) {
         self.refuse_append = n;
+    }
+
+    /// The next `n` commands starting with `command` are answered `NO` followed by `answer`.
+    pub fn refuse_command(&mut self, command: &str, answer: &str, n: usize) {
+        self.refuse_on.push((command.to_ascii_uppercase(), answer.to_string(), n));
     }
 
     /// The next `n` expunges are refused.

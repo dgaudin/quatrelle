@@ -120,6 +120,17 @@ fn info(o: &imap_proto::Outcome<'_>) -> String {
     o.information.as_deref().unwrap_or("").to_string()
 }
 
+/// What a `NO` means: for later when it is passing (response codes `UNAVAILABLE`, `SERVERBUG`,
+/// `INUSE` and `LIMIT` of RFC 5530, or Gmail's `System Error`, which carries no code), the server's
+/// words kept; the server's final word otherwise. imap-proto doesn't know those codes, so they
+/// are the start of the text.
+fn refusal(o: &imap_proto::Outcome<'_>) -> NetError {
+    let text = info(o);
+    let upper = text.trim_start().to_ascii_uppercase();
+    let passing = ["[UNAVAILABLE", "[SERVERBUG", "[INUSE", "[LIMIT"].iter().any(|c| upper.starts_with(c)) || upper.starts_with("SYSTEM ERROR");
+    if passing { NetError::Later(text) } else { NetError::No(text) }
+}
+
 /// The destination UIDs of a `COPYUID` code among a command's responses (at most 100,000).
 fn copied_uids(rs: &[Response<'_>]) -> Vec<u32> {
     let mut out = Vec::new();

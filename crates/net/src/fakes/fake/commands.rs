@@ -48,6 +48,12 @@ impl Fake {
             self.say(&format!("{tag} NO [CANNOT] the server won't delete that"));
             return;
         }
+        if let Some(i) = st.refuse_on.iter().position(|(c, _, n)| *n > 0 && upper.starts_with(c.as_str())) {
+            st.refuse_on[i].2 -= 1;
+            let answer = st.refuse_on[i].1.clone();
+            self.say(&format!("{tag} NO {answer}"));
+            return;
+        }
         if upper == "IDLE" {
             // RFC 2177, without pushing anything: what came before IDLE isn't said again.
             self.idling = Some(tag.to_string());
