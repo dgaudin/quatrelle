@@ -242,3 +242,47 @@ fn a_data_file_left_by_a_crash_needs_no_repair() {
     drop(store);
     let _ = std::fs::remove_dir_all(&t);
 }
+
+/// An account removed while another thread still writes for it (an import not stopped yet): a
+/// write that begins just as the account lets go of its file never puts the removed account's
+/// file back among the open ones under its id (adapted from the origin's 0a7dbcc3). It waits,
+/// then finds no name and makes a file of its own; so a new account given the id gets that file,
+/// and the removed one's is left as it was. (Closed, then forgotten in a second step, the file
+/// came back with no name for every later write of the id.)
+#[test]
+fn a_write_as_an_account_lets_go_never_lends_it_the_old_file() {
+    use std::sync::Mutex;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    let t = temp("let-go-write");
+    let s = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    s.write_body(&key(1), b"Subject: before\r\n\r\nx").unwrap();
+    let old = s.data_file("a1").expect("zoe's file");
+    // As it lets go, another thread starts a write for the account and has the time to open.
+    let (tx, rx) = mpsc::channel::<()>();
+    let tx = Mutex::new(tx);
+    let crate::Files::Packed(packs) = &s.files.main else { panic!("packed") };
+    *Mutex::lock(&packs.let_go_hook).unwrap() = Some(Box::new(move || {
+        let _ = tx.lock().unwrap().send(());
+        std::thread::sleep(Duration::from_millis(200));
+    }));
+    std::thread::scope(|scope| {
+        let store = &s;
+        scope.spawn(move || {
+            rx.recv().unwrap();
+            let _ = store.write_body(&key(2), b"Subject: late\r\n\r\ny");
+        });
+        let kept = s.remove_account("a1").unwrap();
+        assert_eq!(kept.as_ref(), Some(&old), "the removed account's file is kept");
+    });
+    *Mutex::lock(&packs.let_go_hook).unwrap() = None;
+    // The id given to a new account: its folders go in a file of its own.
+    let folder = quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), ..Default::default() };
+    s.save_folders("a1", std::slice::from_ref(&folder)).unwrap();
+    let new = s.data_file("a1").expect("the new account's file");
+    assert_ne!(new, old, "the new account writes in the removed one's file");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}

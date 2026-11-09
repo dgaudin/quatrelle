@@ -84,6 +84,9 @@ pub(crate) struct Packs {
     recompressing: Mutex<std::collections::HashSet<String>>,
     /// The writes to the data files, counted ([`Writes`]).
     writes: Writes,
+    /// A test's account let go of: run once its file is closed, before its name is forgotten.
+    #[cfg(test)]
+    pub(super) let_go_hook: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
 impl std::fmt::Debug for Packs {
@@ -106,6 +109,8 @@ impl Packs {
             compacted: Condvar::new(),
             recompressing: Mutex::default(),
             writes: Writes::default(),
+            #[cfg(test)]
+            let_go_hook: Mutex::default(),
         };
         p.take_over_old_files();
         p.bring_in_folders()?;
@@ -466,12 +471,29 @@ impl Packs {
         }
     }
 
+    /// An account's data file closed and its name forgotten together, under the lock an open takes
+    /// (and looks the name up under): an open begun before ends first and is closed, one begun
+    /// after finds no name and makes a file of its own. Closed and then forgotten in a second
+    /// step, an open begun between the two put the old file back among the open ones with no
+    /// name, and every later write for the id went into it: a new account given the id wrote in
+    /// the removed one's file. Returns whether it was open, and its name.
+    fn close_and_forget(&self, account: &str) -> (bool, Option<String>) {
+        let mut open = Packs::lock(&self.open);
+        let was_open = open.remove(account).is_some();
+        #[cfg(test)]
+        if let Some(hook) = Packs::lock(&self.let_go_hook).as_ref() {
+            hook();
+        }
+        let name = Packs::lock(&self.names).remove(account);
+        drop(open);
+        (was_open, name)
+    }
+
     /// An account let go but its data file kept where it is, as Outlook keeps a removed account's
     /// `.pst`: closed and no longer anyone's, so it can be opened again (File › Open & Export) and
     /// the same address added again gets a file of its own beside it. Returns the file.
     pub(crate) fn let_go(&self, account: &str) -> Option<PathBuf> {
-        Packs::lock(&self.open).remove(account);
-        let name = Packs::lock(&self.names).remove(account);
+        let (_, name) = self.close_and_forget(account);
         if let Ok(json) = serde_json::to_vec_pretty(&*Packs::lock(&self.names)) {
             let _ = write_atomic(&self.root.join(NAMES), &json);
         }
@@ -482,8 +504,7 @@ impl Packs {
         match self.place(p) {
             // The account goes: its data file with it.
             Place::Account(a) => {
-                let had = Packs::lock(&self.open).remove(&a).is_some();
-                let name = Packs::lock(&self.names).remove(&a);
+                let (had, name) = self.close_and_forget(&a);
                 if let Ok(json) = serde_json::to_vec_pretty(&*Packs::lock(&self.names)) {
                     let _ = write_atomic(&self.root.join(NAMES), &json);
                 }
