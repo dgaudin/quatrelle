@@ -739,7 +739,9 @@ fn the_exchange_inbox_count_reported_after_a_read_mark_and_a_draft_never_goes_ba
     pool.submit(Job::Apply { account: "a1".into(), op: read });
     let draft = b"From: riley@contoso.example\r\nSubject: Plans\r\nMessage-ID: <d1@x>\r\n\r\nhi\r\n".to_vec();
     pool.submit(Job::SaveDraft { account: "a1".into(), raw: draft, folder: "Drafts".into(), replaces: None });
-    eventually("the message read on the server", || data.lock().unwrap().items.iter().filter(|i| i.read).count() == 1);
+    // The fake saves the draft read too: count the Inbox only, or a read mark and a draft that both
+    // land between two looks make 2 at once and never 1.
+    eventually("the message read on the server", || data.lock().unwrap().items.iter().filter(|i| i.folder == inbox && i.read).count() == 1);
     let mut seen = Vec::new();
     let end = Instant::now() + Duration::from_secs(3);
     while Instant::now() < end {
