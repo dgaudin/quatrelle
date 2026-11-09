@@ -30,6 +30,26 @@ Content-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r
 Content-Type: text/plain\r\nContent-Disposition: attachment; filename=\"plan.txt\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n\
 nine=0A\r\n--=_mcc6512b6a89c44875_1--\r\n";
 
+/// `text` with the 16 hex digits after each `marker` made `0`s: the Message-ID and the boundaries
+/// come from the session's randomness, which differs from run to run.
+fn without_randomness(text: &str, markers: &[&str]) -> String {
+    let mut out = text.to_string();
+    for marker in markers {
+        let mut from = 0;
+        while let Some(at) = out.get(from..).and_then(|t| t.find(marker)) {
+            let start = from + at + marker.len();
+            let end = start + 16;
+            if out.get(start..end).is_none_or(|d| !d.bytes().all(|b| b.is_ascii_hexdigit())) {
+                from = start;
+                continue;
+            }
+            out.replace_range(start..end, "0000000000000000");
+            from = end;
+        }
+    }
+    out
+}
+
 #[test]
 fn nothing_changes_for_an_account_without_a_key() {
     let mut s = sample_session("pgp-no-key-send");
@@ -41,7 +61,8 @@ fn nothing_changes_for_an_account_without_a_key() {
     s.run("compose.attach", &json!({"name": "plan.txt", "data": b"nine\n".to_vec()})).unwrap();
     s.run("compose.send", &json!({})).unwrap();
     let raw = last_sent(&s);
-    assert_eq!(String::from_utf8_lossy(&raw), BEFORE.replace("{VERSION}", env!("CARGO_PKG_VERSION")));
+    let masked = |t: &str| without_randomness(t, &["<6acf6ec0.", "=_mc"]);
+    assert_eq!(masked(&String::from_utf8_lossy(&raw)), masked(&BEFORE.replace("{VERSION}", env!("CARGO_PKG_VERSION"))));
     // Nothing of OpenPGP is offered: no scheme to choose, nothing to encrypt with.
     s.run("mail.new", &json!({})).unwrap();
     assert!(matches!(s.run("compose.security", &json!({"scheme": "pgp"})), Err(CmdError::Disabled(_))));
