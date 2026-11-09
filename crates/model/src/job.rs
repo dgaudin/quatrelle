@@ -586,6 +586,10 @@ pub const IMAP_TEXT_FIRST_OVER: u32 = 256 << 10;
 /// sync in the background; another is read from the server when it is opened.
 pub const PUBLIC_FOLDERS: &str = "Public Folders";
 
+/// The folder an Exchange online archive is listed under when the server gives it no name of
+/// its own (Autodiscover's `DisplayName`): the interface shows it in its own language.
+pub const ONLINE_ARCHIVE: &str = "Online Archive";
+
 /// An account's public folders kept in sync ([`PUBLIC_FOLDERS`]): the Favorites among them, a
 /// list of paths the session writes with the account for its sync to read.
 pub const FOLLOWED_PUBLIC_DOC: &str = "public-followed.json";

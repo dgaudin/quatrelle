@@ -31,24 +31,47 @@ pub(super) struct Alternative {
 }
 
 /// The mailboxes an Autodiscover answer maps to the account: `AlternativeMailbox` entries for
-/// mailboxes it may open (`Delegate`, `TeamMailbox`), not its archive.
+/// mailboxes it may open (`Delegate`, `TeamMailbox`), not its archive ([`archive_mailbox`]).
 pub(super) fn alternative_mailboxes(xml: &str) -> Vec<Alternative> {
     let doc = parse(xml);
     let mut alts = Vec::new();
     doc.all("AlternativeMailbox", &mut alts);
     alts.iter()
         .filter(|a| a.text_of("Type").is_some_and(|t| matches!(t.trim(), "Delegate" | "TeamMailbox")))
-        .map(|a| {
-            let text = |k: &str| a.text_of(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && v.len() < 500);
-            Alternative {
-                name: text("DisplayName").unwrap_or_default(),
-                smtp: text("SmtpAddress").filter(|v| v.contains('@')),
-                legacy_dn: text("LegacyDN"),
-            }
-        })
+        .map(|a| alternative(a))
         .take(MAX_SHARED)
         .collect()
 }
+
+/// One `AlternativeMailbox` entry, its texts bounded.
+fn alternative(a: &El) -> Alternative {
+    let text = |k: &str| a.text_of(k).map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && v.len() < 500);
+    Alternative { name: text("DisplayName").unwrap_or_default(), smtp: text("SmtpAddress").filter(|v| v.contains('@')), legacy_dn: text("LegacyDN") }
+}
+
+/// The account's online archive in an Autodiscover answer: the first `AlternativeMailbox` of type
+/// `Archive` (Exchange 2010 SP1 and later; Outlook's "Online Archive"), with the name the server
+/// gives it (shortened, without control characters; empty when it gives none) and its address
+/// when it has one.
+pub(super) fn archive_mailbox(xml: &str) -> Option<Alternative> {
+    let doc = parse(xml);
+    let mut alts = Vec::new();
+    doc.all("AlternativeMailbox", &mut alts);
+    let a = alts.iter().find(|a| a.text_of("Type").is_some_and(|t| t.trim() == "Archive"))?;
+    let mut found = alternative(a);
+    found.name = clean_name(a.text_of("DisplayName").unwrap_or_default());
+    found.smtp = found.smtp.filter(|s| s.len() < 320 && !s.chars().any(|c| c.is_control() || c.is_whitespace()));
+    Some(found)
+}
+
+/// A name the server gives (a mailbox's, a folder's) as it's shown: without control characters,
+/// at most [`MAX_NAME`] characters.
+pub(super) fn clean_name(name: &str) -> String {
+    name.trim().chars().filter(|c| !c.is_control()).take(MAX_NAME).collect::<String>().trim().to_string()
+}
+
+/// Characters kept of a name the server gives.
+pub(super) const MAX_NAME: usize = 120;
 
 /// The domain of an address, when it can name a host (letters, digits, dots and hyphens), in
 /// lower case.

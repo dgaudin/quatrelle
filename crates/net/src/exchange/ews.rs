@@ -144,6 +144,8 @@ pub struct Client {
     /// The folders of the shared mailboxes listed: the mailbox each is in (its address) and the
     /// role it has there (`Other` for its top folder and the folders that aren't special).
     shared_roles: RefCell<HashMap<String, (String, FolderRole)>>,
+    /// The folders of the account's online archive, as last listed (`shared.rs`).
+    archive: RefCell<shared::ArchiveListed>,
     /// The User-Agent every request names, instead of Quatrelle's (a server that lets in only the
     /// clients it knows).
     user_agent: Option<String>,
@@ -398,6 +400,7 @@ impl Client {
             shared_open: RefCell::new(Vec::new()),
             discovered: RefCell::new(None),
             shared_roles: RefCell::new(HashMap::new()),
+            archive: RefCell::default(),
             replace_outlook_rules: Cell::new(false),
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
@@ -431,6 +434,7 @@ impl Client {
             shared_open: self.shared_open.clone(),
             discovered: self.discovered.clone(),
             shared_roles: self.shared_roles.clone(),
+            archive: self.archive.clone(),
             replace_outlook_rules: Cell::new(false),
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
@@ -768,7 +772,7 @@ mod xml;
 
 #[cfg(test)]
 pub(crate) use autodiscover::TEST_BASES;
-use autodiscover::{alternative_mailboxes, autodiscover_public, autodiscover_smtp, autodiscover_urls};
+use autodiscover::{alternative_mailboxes, archive_mailbox, autodiscover_public, autodiscover_smtp, autodiscover_urls, clean_name};
 pub use autodiscover::{autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};

@@ -217,9 +217,21 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                     format!("<AlternativeMailbox><Type>Delegate</Type><DisplayName>{}</DisplayName>{id}</AlternativeMailbox>", esc(&b.name))
                 })
                 .collect();
-            let public = format!(
-                "{public}{mapped}<AlternativeMailbox><Type>Archive</Type><DisplayName>Online Archive</DisplayName><SmtpAddress>archive@contoso.example</SmtpAddress></AlternativeMailbox>"
-            );
+            // Its online archive, when it has one.
+            let archive = shared
+                .lock()
+                .unwrap()
+                .archive
+                .as_ref()
+                .map(|a| {
+                    let name = if a.name.is_empty() { String::new() } else { format!("<DisplayName>{}</DisplayName>", esc(&a.name)) };
+                    let address = a.address.as_ref().map(|s| format!("<SmtpAddress>{}</SmtpAddress>", esc(s))).unwrap_or_default();
+                    format!(
+                        "<AlternativeMailbox><Type>Archive</Type>{name}{address}<OwnerSmtpAddress>riley@contoso.example</OwnerSmtpAddress></AlternativeMailbox>"
+                    )
+                })
+                .unwrap_or_default();
+            let public = format!("{public}{mapped}{archive}");
             let answer = format!(
                 "<?xml version=\"1.0\"?><Autodiscover><Response><User><DisplayName>Riley</DisplayName></User><Account><AccountType>email</AccountType><Action>settings</Action>\
                  <Protocol><Type>EXCH</Type><EwsUrl>{url}</EwsUrl></Protocol>{public}</Account></Response></Autodiscover>"

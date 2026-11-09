@@ -108,6 +108,24 @@ impl Client {
                 Err(e) => log::warn!("shared mailbox {}: {e}", sm.address),
             }
         }
+        // The online archive, under a folder of its own after all the rest (named so it can't be
+        // taken for a folder or a shared mailbox of the account). One that refuses, or whose
+        // server is down, is passed over: the account's own folders are listed all the same.
+        *self.archive.borrow_mut() = Default::default();
+        if let Some((name, address)) = self.online_archive() {
+            let taken = out.iter().any(|m| m.parent.is_none() && m.name.eq_ignore_ascii_case(&name));
+            let top = if taken { format!("{name} ({})", address.as_deref().unwrap_or(&self.email)) } else { name };
+            match self.archive_folders(&top) {
+                Ok(f) if !f.is_empty() => {
+                    log::info!("online archive: {} folders", f.len().saturating_sub(1));
+                    // What isn't found in the account's own mailbox is asked for there too.
+                    open.extend(address.filter(|a| a.contains('@') && !open.iter().any(|o| o.eq_ignore_ascii_case(a))));
+                    out.extend(f);
+                }
+                Ok(_) => log::info!("online archive: no folders"),
+                Err(e) => log::warn!("online archive: {e}"),
+            }
+        }
         *self.shared_open.borrow_mut() = open;
         Ok(out)
     }

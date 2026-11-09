@@ -261,6 +261,13 @@ pub struct Data {
     pub reminders: reminders::Reminders,
     /// The attachments `GetAttachment` was asked for, by id, in order.
     pub attachments_given: Vec<String>,
+    /// The account's online archive (`archive.rs`), when it has one: Autodiscover names it.
+    pub archive: Option<archive::ArchiveBox>,
+    /// Each listing of a mail folder's items (`FindItem`): the folder, the offset and how many
+    /// were asked for at most.
+    pub found_in: Vec<(String, usize, usize)>,
+    /// The folders whose items' properties or sources were given (`GetItem`), one for each item.
+    pub given_from: Vec<String>,
     next: u32,
 }
 
@@ -398,6 +405,9 @@ impl Default for Data {
             told: std::collections::HashMap::new(),
             reminders: Default::default(),
             attachments_given: Vec::new(),
+            archive: None,
+            found_in: Vec::new(),
+            given_from: Vec::new(),
             next: 0,
         };
         d.folders.push(Fo {
@@ -516,7 +526,8 @@ impl Data {
             }
             "DistinguishedFolderId" => {
                 let known = el.attr("Id")?;
-                self.folders.iter().find(|f| f.owner.is_empty() && f.known.as_deref() == Some(known)).map(|f| f.id.clone())
+                let owner = self.owner_of_known(known);
+                self.folders.iter().find(|f| f.owner == owner && f.known.as_deref() == Some(known)).map(|f| f.id.clone())
             }
             _ => None,
         }
@@ -765,6 +776,7 @@ fn xml(e: &El) -> String {
     format!("<t:{0}{attrs}>{1}{inner}</t:{0}>", e.name, esc(&e.text))
 }
 
+mod archive;
 mod attachments;
 mod deleting;
 mod directory;
@@ -777,6 +789,7 @@ mod streaming;
 mod syncing;
 mod tasks;
 
+pub use archive::ArchiveBox;
 pub use fields::Verb;
 use fields::{MICROSOFT_FIELDS, fields_named, flag_xml, take_flag_update, text_fields};
 pub use server::serve;

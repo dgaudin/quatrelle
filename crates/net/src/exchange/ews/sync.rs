@@ -141,6 +141,16 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Fol
             f.mailbox_role = *role;
         }
     }
+    // The online archive's folders say so: read on the server, never synced nor kept.
+    let archive = c.archive.borrow();
+    for (f, id) in &mut found {
+        if let Some(role) = archive.roles.get(id.as_str()) {
+            f.mailbox = Some(archive.mailbox.clone());
+            f.mailbox_role = *role;
+            f.role = FolderRole::Other;
+            f.archive = true;
+        }
+    }
     Ok(found.into_iter().map(|(f, _)| f).collect())
 }
 

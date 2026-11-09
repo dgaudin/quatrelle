@@ -5,6 +5,17 @@
 
 use super::*;
 
+/// The folder an online archive is listed under when the server gives it no name.
+pub use quatrelle_model::ONLINE_ARCHIVE;
+
+/// The folders of the account's online archive as last listed: what their `mailbox` says (the
+/// archive's address, or `archive`), and each one's id with the role it has there.
+#[derive(Clone, Debug, Default)]
+pub(super) struct ArchiveListed {
+    pub(super) mailbox: String,
+    pub(super) roles: HashMap<String, FolderRole>,
+}
+
 /// Mailboxes remembered without a calendar, at most (other people's calendars are listed by the
 /// few hundred at most).
 const MAX_WITHOUT_CALENDAR: usize = 500;
@@ -136,10 +147,17 @@ impl Client {
             let doc = self.call(&format!(
                 "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{ids}</m:FolderIds></m:GetFolder>"
             ))?;
-            let found: Vec<Option<String>> = messages(&doc)
-                .iter()
-                .map(|m| if m.attr("ResponseClass") == Some("Error") { None } else { m.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string) })
-                .collect();
+            let found: Vec<Option<String>> =
+                messages(&doc)
+                    .iter()
+                    .map(|m| {
+                        if m.attr("ResponseClass") == Some("Error") {
+                            None
+                        } else {
+                            m.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string)
+                        }
+                    })
+                    .collect();
             let skip: Vec<String> = found.iter().skip(SPECIAL.len()).flatten().cloned().collect();
             {
                 let mut roles = self.shared_roles.borrow_mut();
@@ -150,47 +168,112 @@ impl Client {
                     }
                 }
             }
-            let mut out = vec![Mailbox { id: root_id.clone(), name: top.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 }];
-            let mut offset = 0;
-            loop {
-                let m = self.call_one(&format!(
-                    "<m:FindFolder Traversal=\"Deep\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
-                     <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:ParentFolderId\"/>\
-                     <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
-                     <t:FieldURI FieldURI=\"folder:FolderClass\"/>{HIDDEN}</t:AdditionalProperties></m:FolderShape>\
-                     <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
-                     <m:ParentFolderIds><t:DistinguishedFolderId Id=\"msgfolderroot\">{mb}</t:DistinguishedFolderId></m:ParentFolderIds></m:FindFolder>"
-                ))?;
-                let Some(rf) = m.child("RootFolder") else { break };
-                let folders = rf.folders();
-                let n = folders.len();
-                for f in folders {
-                    let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
-                    let class = f.text_of("FolderClass").unwrap_or("");
-                    if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note.")) || skip.contains(&id) || is_hidden(f) || out.len() >= MAX_FOLDERS {
-                        continue;
-                    }
-                    let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).or_else(|| Some(root_id.clone()));
-                    let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
-                    self.shared_roles.borrow_mut().entry(id.clone()).or_insert_with(|| (sm.address.clone(), FolderRole::Other));
-                    out.push(Mailbox {
-                        name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
-                        parent,
-                        role: FolderRole::Other,
-                        total: count("TotalCount"),
-                        unread: count("UnreadCount"),
-                        id,
-                    });
-                }
-                let last = rf.attr("IncludesLastItemInRange").is_none_or(|v| v == "true");
-                offset += n;
-                if last || n == 0 || out.len() >= MAX_FOLDERS {
-                    break;
-                }
+            let out = self.mail_tree(&distinguished("msgfolderroot", Some(&sm.address)), &root_id, top, &skip)?;
+            let mut roles = self.shared_roles.borrow_mut();
+            for m in &out {
+                roles.entry(m.id.clone()).or_insert_with(|| (sm.address.clone(), FolderRole::Other));
             }
-            keep_rooted(&mut out);
             Ok(out)
         })
+    }
+
+    /// The mail folders under a mailbox's root (`root`, the element naming it; `root_id`, its
+    /// id), with a folder named `top` standing for the root: mail folders only (`IPF.Note` and
+    /// containers), without the hidden ones nor those in `skip`, a page at a time, at most
+    /// [`MAX_FOLDERS`]; one whose parent isn't listed is left out.
+    fn mail_tree(&self, root: &str, root_id: &str, top: &str, skip: &[String]) -> Result<Vec<Mailbox>> {
+        let mut out = vec![Mailbox { id: root_id.to_string(), name: top.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 }];
+        let mut offset = 0;
+        loop {
+            let m = self.call_one(&format!(
+                "<m:FindFolder Traversal=\"Deep\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
+                 <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:ParentFolderId\"/>\
+                 <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
+                 <t:FieldURI FieldURI=\"folder:FolderClass\"/>{HIDDEN}</t:AdditionalProperties></m:FolderShape>\
+                 <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
+                 <m:ParentFolderIds>{root}</m:ParentFolderIds></m:FindFolder>"
+            ))?;
+            let Some(rf) = m.child("RootFolder") else { break };
+            let folders = rf.folders();
+            let n = folders.len();
+            for f in folders {
+                let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
+                let class = f.text_of("FolderClass").unwrap_or("");
+                if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note."))
+                    || skip.contains(&id)
+                    || is_hidden(f)
+                    || out.len() >= MAX_FOLDERS
+                {
+                    continue;
+                }
+                let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).or_else(|| Some(root_id.to_string()));
+                let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
+                out.push(Mailbox {
+                    name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
+                    parent,
+                    role: FolderRole::Other,
+                    total: count("TotalCount"),
+                    unread: count("UnreadCount"),
+                    id,
+                });
+            }
+            let last = rf.attr("IncludesLastItemInRange").is_none_or(|v| v == "true");
+            offset += n;
+            if last || n == 0 || out.len() >= MAX_FOLDERS {
+                break;
+            }
+        }
+        keep_rooted(&mut out);
+        Ok(out)
+    }
+
+    /// The account's online archive, as its Autodiscover answer names it (asked once): its name
+    /// ([`ONLINE_ARCHIVE`] when the server gives none) and its address, when it has one.
+    pub(super) fn online_archive(&self) -> Option<(String, Option<String>)> {
+        let found = archive_mailbox(&self.discovery()?)?;
+        let name = if found.name.is_empty() { ONLINE_ARCHIVE.to_string() } else { found.name };
+        Some((name, found.smtp))
+    }
+
+    /// The online archive's mail folders, under a folder named for it (`top`): the tree under
+    /// `archivemsgfolderroot`, listed with the calls a shared mailbox's is, routed to the
+    /// archive's address when it has one. Nothing without an archive. Names are shortened and
+    /// lose their control characters; the folders listed are noted ([`ArchiveListed`]), its
+    /// Deleted Items with its role there.
+    pub(super) fn archive_folders(&self, top: &str) -> Result<Vec<Mailbox>> {
+        let Some((_, address)) = self.online_archive() else { return Ok(Vec::new()) };
+        let list = || {
+            let doc = self.call(&format!(
+                "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{}{}</m:FolderIds></m:GetFolder>",
+                distinguished("archivemsgfolderroot", None),
+                distinguished("archivedeleteditems", None)
+            ))?;
+            let answers = messages(&doc);
+            let Some(root) = answers.first() else { return Ok(Vec::new()) };
+            check_message(root)?;
+            let Some(root_id) = root.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string) else { return Ok(Vec::new()) };
+            let deleted = answers
+                .get(1)
+                .filter(|m| m.attr("ResponseClass") != Some("Error"))
+                .and_then(|m| m.find("FolderId"))
+                .and_then(|f| f.attr("Id"))
+                .map(str::to_string);
+            let mut out = self.mail_tree(&distinguished("archivemsgfolderroot", None), &root_id, top, &[])?;
+            for m in out.iter_mut().skip(1) {
+                m.name = clean_name(&m.name);
+            }
+            let mut listed = ArchiveListed { mailbox: address.clone().unwrap_or_else(|| "archive".into()), roles: HashMap::new() };
+            for m in &out {
+                let role = if Some(&m.id) == deleted.as_ref() { FolderRole::Trash } else { FolderRole::Other };
+                listed.roles.insert(m.id.clone(), role);
+            }
+            *self.archive.borrow_mut() = listed;
+            Ok(out)
+        };
+        match &address {
+            Some(a) => self.anchored_to(a, list),
+            None => list(),
+        }
     }
 
     /// The address Exchange knows someone's mailbox by. Another mailbox or calendar is asked

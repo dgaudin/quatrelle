@@ -106,6 +106,10 @@ impl Data {
                         out.push(err("ErrorAccessDenied"));
                         continue;
                     }
+                    if let Some(code) = self.archive_error(&f) {
+                        out.push(err(code));
+                        continue;
+                    }
                     let root = f.attr("Id") == Some("publicfoldersroot");
                     match self.folder_id(&f).and_then(|id| self.folders.iter().find(|x| x.id == id).cloned()) {
                         // The root is the hierarchy's; any other public folder, its content's.
@@ -165,6 +169,15 @@ impl Data {
                     .map(|f| self.folder_xml(f))
                     .collect();
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", all.concat())));
+            }
+            // Deep, in the online archive: refused without one, or by one that refuses.
+            "FindFolder"
+                if op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| f.attr("Id")).is_some_and(super::archive::is_archive_id) =>
+            {
+                match op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.archive_error(f)) {
+                    Some(code) => out.push(err(code)),
+                    None => out.push(self.archive_tree(op)),
+                }
             }
             "FindFolder" => {
                 // Deep: everything under the root (the mailbox's, not the public folders), in pages.
@@ -228,6 +241,9 @@ impl Data {
                 // Pages by offset, as Exchange does (up to 1000 at a time).
                 let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
                 let max = max.min(1000);
+                if self.found_in.len() < 100_000 {
+                    self.found_in.extend(wanted_folders.iter().map(|f| (f.clone(), offset, max)));
+                }
                 let mut list: Vec<&It> = self.items.iter().filter(|i| wanted_folders.contains(&i.folder)).collect();
                 // A query: Exchange's own index (AQS words), over subjects, addresses and bodies.
                 if let Some(q) = op.child("QueryString") {
@@ -388,6 +404,11 @@ impl Data {
                         }
                         out.push(ok(format!("<m:Items>{}</m:Items>", xml(&el))));
                         continue;
+                    }
+                    if let Some(folder) = self.items.iter().find(|i| i.id == id).map(|i| i.folder.clone())
+                        && self.given_from.len() < 100_000
+                    {
+                        self.given_from.push(folder);
                     }
                     match self.items.iter().find(|i| i.id == id) {
                         Some(i) if self.unrouted(&i.folder) || self.unanchored(&i.folder) => out.push(err("ErrorItemNotFound")),
