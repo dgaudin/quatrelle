@@ -406,6 +406,8 @@ impl Data {
                         continue;
                     }
                     if let Some(folder) = self.items.iter().find(|i| i.id == id).map(|i| i.folder.clone())
+                        && !self.unrouted(&folder)
+                        && !self.unanchored(&folder)
                         && self.given_from.len() < 100_000
                     {
                         self.given_from.push(folder);

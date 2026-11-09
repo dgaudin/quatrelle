@@ -107,7 +107,9 @@ impl Worker {
         let paths: Vec<String> = match &folder {
             Some(f) => vec![f.clone()],
             None => {
-                let mut fs: Vec<&quatrelle_model::Folder> = self.folders.iter().collect();
+                // Not the online archive: a search of the whole mailbox doesn't look there, as in
+                // Outlook (one of its folders is searched when it's the one on view).
+                let mut fs: Vec<&quatrelle_model::Folder> = self.folders.iter().filter(|f| !f.archive).collect();
                 fs.sort_by_key(|f| std::cmp::Reverse(f.total));
                 fs.into_iter().map(|f| f.path.clone()).collect()
             }

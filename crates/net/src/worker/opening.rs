@@ -72,7 +72,15 @@ impl Worker {
     /// kept numbered as a search's finds are, but not kept.
     pub(super) fn older(&mut self, folder: &str, offset: u32) {
         let account = self.id();
-        let before = self.opts.since(now()).unwrap_or(i64::MAX);
+        // The online archive's list here is its newest few hundred, by count: what's older is
+        // the rest of the folder's list, past them. Elsewhere, what's older than the time kept.
+        let archive = self.folders.iter().any(|f| f.path == folder && f.archive);
+        let (before, offset) = if archive {
+            let listed = self.store.load_folder(&account, folder).map(|f| f.messages.len()).unwrap_or(0);
+            (None, u32::try_from(listed).unwrap_or(u32::MAX).saturating_add(offset))
+        } else {
+            (Some(self.opts.since(now()).unwrap_or(i64::MAX)), offset)
+        };
         let numbered = self.jstate.len();
         let r = (|| -> Result<(Vec<quatrelle_model::Summary>, bool)> {
             if self.conn.is_none() {

@@ -347,10 +347,19 @@ impl Worker {
     /// Outlook's Cached Exchange Mode does: a public folder not followed (a Favorite, when public
     /// Favorites are kept), and a shared mailbox's folder when shared mailboxes aren't kept.
     pub(super) fn read_online(&self, path: &str) -> bool {
+        // The online archive, always: nothing of it is synced nor kept, whatever the settings.
+        if self.in_archive(path) {
+            return true;
+        }
         if quatrelle_model::is_public_folder(path) {
             return !self.followed.contains(path);
         }
         self.acc.shared_online && self.folders.iter().any(|f| f.path == path && f.mailbox.is_some())
+    }
+
+    /// Whether a folder is one of the account's online archive.
+    pub(super) fn in_archive(&self, path: &str) -> bool {
+        self.folders.iter().any(|f| f.path == path && f.archive)
     }
 
     /// How a folder is read: how many of its newest, and whether it's only listed. A folder
@@ -358,6 +367,11 @@ impl Worker {
     /// read on the server is listed when opened, its newest few hundred, nothing downloaded.
     pub(super) fn options_for(&self, path: &str) -> SyncOptions {
         let more = self.windows.get(path).copied().unwrap_or(0);
+        // The online archive's folders are years of mail: never more than their newest few
+        // hundred listed, whatever was asked to be kept (what's older comes a page at a time).
+        if self.in_archive(path) {
+            return SyncOptions { window: ONLINE_WINDOW, prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
+        }
         if self.read_online(path) {
             return SyncOptions { window: more.max(ONLINE_WINDOW), prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
         }

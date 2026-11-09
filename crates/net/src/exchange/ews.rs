@@ -773,7 +773,7 @@ mod xml;
 #[cfg(test)]
 pub(crate) use autodiscover::TEST_BASES;
 use autodiscover::{alternative_mailboxes, archive_mailbox, autodiscover_public, autodiscover_smtp, autodiscover_urls, clean_name};
-pub use autodiscover::{autodiscover, autodiscover_as};
+pub use autodiscover::{archive_named, autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};

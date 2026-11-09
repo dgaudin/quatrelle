@@ -31,3 +31,8 @@
 "{0}\x0d\x0a"
 "NIL"
 "a1 OK"
+# An Autodiscover answer naming the online archive.
+"<AlternativeMailbox>"
+"<Type>Archive</Type>"
+"<DisplayName>"
+"<SmtpAddress>"

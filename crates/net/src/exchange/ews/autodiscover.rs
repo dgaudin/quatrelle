@@ -64,6 +64,12 @@ pub(super) fn archive_mailbox(xml: &str) -> Option<Alternative> {
     Some(found)
 }
 
+/// The online archive an Autodiscover answer names, as [`archive_mailbox`] reads it: its name and
+/// its address (the fuzz target reads it so).
+pub fn archive_named(xml: &str) -> Option<(String, Option<String>)> {
+    archive_mailbox(xml).map(|a| (a.name, a.smtp))
+}
+
 /// A name the server gives (a mailbox's, a folder's) as it's shown: without control characters,
 /// at most [`MAX_NAME`] characters.
 pub(super) fn clean_name(name: &str) -> String {

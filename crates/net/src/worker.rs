@@ -773,7 +773,8 @@ fn log_event(e: &Event) {
 /// it is in), then what mail is about, the rest, the archive, and the public folders followed
 /// last — an account with public folders and years of archives takes minutes, and the Inbox
 /// must not wait for them, nor the user's own folders named after "Public Folders". Folders not
-/// `walked` (read on the server) are listed when opened.
+/// `walked` (read on the server) are listed when opened; a folder of the online archive is never
+/// walked, whatever `walked` says.
 fn sync_order(folders: &[Folder], walked: impl Fn(&Folder) -> bool) -> Vec<String> {
     let rank = |f: &Folder| match f.role {
         _ if is_public_folder(&f.path) => 7,
@@ -785,7 +786,7 @@ fn sync_order(folders: &[Folder], walked: impl Fn(&Folder) -> bool) -> Vec<Strin
         quatrelle_model::FolderRole::Other => 5,
         quatrelle_model::FolderRole::Archive => 6,
     };
-    let mut v: Vec<(&Folder, u8)> = folders.iter().filter(|f| f.selectable && walked(f)).map(|f| (f, rank(f))).collect();
+    let mut v: Vec<(&Folder, u8)> = folders.iter().filter(|f| f.selectable && !f.archive && walked(f)).map(|f| (f, rank(f))).collect();
     v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.path.cmp(&b.0.path)));
     v.into_iter().map(|(f, _)| f.path.clone()).collect()
 }

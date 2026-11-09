@@ -98,17 +98,33 @@ pub fn search(c: &Client, st: &mut State, account: &str, folders: &[String], que
 
 /// A page of a folder's mail older than what's kept (`before`, Unix seconds), newest first from
 /// `offset`, read on the server with what a list shows (Cached Exchange Mode's "more on the
-/// server"): numbered, not kept. Whether the server has more past it.
-pub fn older(c: &Client, st: &mut State, account: &str, folder: &str, before: i64, offset: usize, page: usize) -> Result<(Vec<Summary>, bool)> {
+/// server"): numbered, not kept. Whether the server has more past it. Without `before`, the page
+/// of the folder's whole list from `offset` (a folder read on the server, whose list here is its
+/// newest by count, not by date).
+pub fn older(
+    c: &Client,
+    st: &mut State,
+    account: &str,
+    folder: &str,
+    before: Option<i64>,
+    offset: usize,
+    page: usize,
+) -> Result<(Vec<Summary>, bool)> {
     let id = st.mailbox(folder)?.to_string();
+    let restriction = before
+        .map(|b| {
+            format!(
+                "<m:Restriction><t:IsLessThan><t:FieldURI FieldURI=\"item:DateTimeReceived\"/><t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsLessThan></m:Restriction>",
+                crate::ews_pim::utc(b)
+            )
+        })
+        .unwrap_or_default();
     let m = c.call_one(&format!(
         "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{HEADER_FIELDS}{FLAG_FIELDS}<t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/></t:AdditionalProperties></m:ItemShape>\
-         <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
-         <m:Restriction><t:IsLessThan><t:FieldURI FieldURI=\"item:DateTimeReceived\"/><t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsLessThan></m:Restriction>\
+         <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>{restriction}\
          <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
          <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
         page.clamp(1, 1000),
-        crate::ews_pim::utc(before),
         esc(&id)
     ))?;
     let more = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")) == Some("false");

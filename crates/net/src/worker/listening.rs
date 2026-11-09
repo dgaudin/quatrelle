@@ -141,10 +141,11 @@ impl Worker {
             return out;
         }
         for f in &self.folders {
-            let (Some(address), Some(id)) = (&f.mailbox, self.jstate.mailboxes.get(&f.path)) else { continue };
+            // Not the online archive: it's read when opened, never listened to.
+            let (Some(address), Some(id)) = (f.shared_mailbox(), self.jstate.mailboxes.get(&f.path)) else { continue };
             match out.iter_mut().find(|(a, _)| a == address) {
                 Some((_, ids)) => ids.push(id.clone()),
-                None => out.push((address.clone(), vec![id.clone()])),
+                None => out.push((address.to_string(), vec![id.clone()])),
             }
         }
         out
@@ -154,7 +155,7 @@ impl Worker {
     fn inbox_of(&self, mailbox: Option<&str>) -> Option<String> {
         match mailbox {
             None => self.inbox(),
-            Some(a) => self.folders.iter().find(|f| f.mailbox.as_deref() == Some(a) && f.mailbox_role == FolderRole::Inbox).map(|f| f.path.clone()),
+            Some(a) => self.folders.iter().find(|f| f.shared_mailbox() == Some(a) && f.mailbox_role == FolderRole::Inbox).map(|f| f.path.clone()),
         }
     }
 

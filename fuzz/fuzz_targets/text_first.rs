@@ -8,7 +8,8 @@
 //! `parse_text_first`. Each of an EWS answer's response messages is read as a refusal too
 //! (`check_message`, with the fields its `MessageXml` names), as a `GetReminders` answer
 //! (`reminders_listed`), for the server's version (`server_major`) and for each message's marks
-//! (`marks_listed`).
+//! (`marks_listed`), and the whole of it as an Autodiscover answer naming the account's online
+//! archive (`archive_named`).
 #![no_main]
 
 use std::io::{self, Read, Write};
@@ -60,6 +61,14 @@ fuzz_target!(|data: &[u8]| {
         let _ = quatrelle_net::ews::reminders_listed(&root);
         let _ = quatrelle_net::ews::marks_listed(&root);
         let _ = quatrelle_net::ews::server_major(&root);
+        // And as an Autodiscover answer naming the account's online archive: a name that can be
+        // shown, an address that can route a request.
+        if let Some((name, address)) = quatrelle_net::ews::archive_named(&String::from_utf8_lossy(rest)) {
+            assert!(name.chars().count() <= 120 && !name.chars().any(char::is_control), "{name:?}");
+            if let Some(a) = address {
+                assert!(a.contains('@') && a.len() < 320 && !a.chars().any(|c| c.is_control() || c.is_whitespace()), "{a:?}");
+            }
+        }
         quatrelle_net::ews::text_first(&root)
     } else {
         match serde_json::from_slice(rest) {
