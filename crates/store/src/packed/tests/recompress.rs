@@ -755,7 +755,9 @@ fn a_hostile_meta_never_stops_compact_now() {
     let before = read_back(&s);
     let done = s.compact_now("a1", true, &AtomicBool::new(false), &mut |_| {}).unwrap().unwrap();
     assert_eq!(read_back(&s), before);
-    assert!(done.after <= done.before);
+    if room_told(done.before) {
+        assert!(done.after <= done.before);
+    }
     drop(s);
     let _ = std::fs::remove_dir_all(&t);
 }

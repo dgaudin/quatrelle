@@ -60,7 +60,8 @@ jobs:
           crashed=()
           for target in $(cargo +nightly fuzz list); do
             echo "::group::fuzzing $target"
-            mkdir -p "corpus/$target"
+            # A target with no seeds yet starts from nothing rather than failing the run.
+            mkdir -p "corpus/$target" "seeds/$target"
             if ! cargo +nightly fuzz run -O --target "$FUZZ_TARGET" "$target" "corpus/$target" "seeds/$target" -- \
               -dict="dicts/$target.dict" -max_len=65536 -rss_limit_mb=2048 -timeout=10 \
               -max_total_time="$FUZZ_SECONDS" -print_final_stats=1; then
