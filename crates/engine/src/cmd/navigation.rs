@@ -236,31 +236,31 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .when(has_selection),
         CommandSpec::new("quickStep.1", "Quick Step 1", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(0)))
             .key("Mod+Shift+1")
-            .when(has_selection),
+            .when(step_enabled::<0>),
         CommandSpec::new("quickStep.2", "Quick Step 2", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(1)))
             .key("Mod+Shift+2")
-            .when(has_selection),
+            .when(step_enabled::<1>),
         CommandSpec::new("quickStep.3", "Quick Step 3", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(2)))
             .key("Mod+Shift+3")
-            .when(has_selection),
+            .when(step_enabled::<2>),
         CommandSpec::new("quickStep.4", "Quick Step 4", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(3)))
             .key("Mod+Shift+4")
-            .when(has_selection),
+            .when(step_enabled::<3>),
         CommandSpec::new("quickStep.5", "Quick Step 5", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(4)))
             .key("Mod+Shift+5")
-            .when(has_selection),
+            .when(step_enabled::<4>),
         CommandSpec::new("quickStep.6", "Quick Step 6", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(5)))
             .key("Mod+Shift+6")
-            .when(has_selection),
+            .when(step_enabled::<5>),
         CommandSpec::new("quickStep.7", "Quick Step 7", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(6)))
             .key("Mod+Shift+7")
-            .when(has_selection),
+            .when(step_enabled::<6>),
         CommandSpec::new("quickStep.8", "Quick Step 8", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(7)))
             .key("Mod+Shift+8")
-            .when(has_selection),
+            .when(step_enabled::<7>),
         CommandSpec::new("quickStep.9", "Quick Step 9", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(8)))
             .key("Mod+Shift+9")
-            .when(has_selection),
+            .when(step_enabled::<8>),
         // Search Folders
         CommandSpec::new("searchFolder.list", "Search Folders", "Folder pane › Search Folders", |s, _| Ok(json!(s.prefs.search_folders))),
         CommandSpec::new("searchFolder.create", "New Search Folder", "Folder pane › Search Folders", |s, v| {

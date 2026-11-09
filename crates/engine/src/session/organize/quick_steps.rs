@@ -161,6 +161,10 @@ impl Session {
         if q.unset {
             return Err(CmdError::Params("set up this Quick Step first".into()));
         }
+        // Before any mark: a step that moves does nothing on the online archive's mail.
+        if self.quick_step_refused(&q.actions) {
+            return Err(CmdError::Disabled(crate::ARCHIVE_READ_ONLY.into()));
+        }
         if q.write.is_some() && self.selection.len() > 1 {
             return Err(CmdError::Disabled("a Quick Step that writes works on one message".into()));
         }

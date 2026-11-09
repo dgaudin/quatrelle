@@ -10,7 +10,9 @@ use quatrelle_model::{AccountConfig, AccountRole, MAX_ARCHIVE_BATCH};
 use super::*;
 
 mod age;
+mod read_only;
 pub(crate) use age::AgeState;
+pub use read_only::ARCHIVE_READ_ONLY;
 
 /// *Archive* on an IMAP account not set to archive here, whose server has no Archive folder.
 const NO_ARCHIVE_FOLDER: &str =
@@ -50,6 +52,7 @@ impl Session {
     /// *Archive* (the button, Backspace): each message goes to its account's Archive folder, or,
     /// for an IMAP account set to archive on this computer, into the Archives account.
     pub fn archive_selection(&mut self) -> CmdResult {
+        self.refuse_archive_selection()?;
         let sel = self.selected();
         let (here, rest): (Vec<Arc<Summary>>, Vec<Arc<Summary>>) = sel.iter().cloned().partition(|m| self.archives_here(&m.key.account));
         if here.is_empty() {
@@ -137,6 +140,8 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        self.refuse_archive_selection()?;
+        self.refuse_archive_folder(account, folder)?;
         let wants_archives = account.eq_ignore_ascii_case("archives");
         if !wants_archives && self.account(account).is_none() {
             return Err(CmdError::Params(format!("no account `{account}`")));

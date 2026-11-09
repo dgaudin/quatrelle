@@ -19,6 +19,16 @@ fn has_selection(s: &Session) -> Option<&'static str> {
     if s.selection.is_empty() { Some("no message selected") } else { None }
 }
 
+/// Mail selected that may be moved, deleted or filed away: not any of it in the online archive.
+fn can_change_mail(s: &Session) -> Option<&'static str> {
+    has_selection(s).or_else(|| s.selection_read_only().then_some(crate::ARCHIVE_READ_ONLY))
+}
+
+/// A Quick Step run from its place in the ribbon: off when it moves mail the archive holds.
+fn step_enabled<const I: usize>(s: &Session) -> Option<&'static str> {
+    has_selection(s).or_else(|| s.prefs.quick_steps.get(I).is_some_and(|q| s.quick_step_refused(&q.actions)).then_some(crate::ARCHIVE_READ_ONLY))
+}
+
 fn has_reading(s: &Session) -> Option<&'static str> {
     match &s.reading {
         // (One being got ready is, once the command runs: `Session::run` finishes it first.)

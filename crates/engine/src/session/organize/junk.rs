@@ -92,6 +92,10 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        // Blocking a sender sends the mail to Junk, which the online archive doesn't allow.
+        if which == JunkList::Blocked {
+            self.refuse_archive_selection()?;
+        }
         let mut added = Vec::new();
         for m in &sel {
             let email = m.from.email.trim().to_ascii_lowercase();

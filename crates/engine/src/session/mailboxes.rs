@@ -11,6 +11,7 @@ mod contacts;
 pub(crate) use contacts::Contacts;
 mod archive;
 pub(crate) use archive::{AgeState, Leaving};
+pub use archive::ARCHIVE_READ_ONLY;
 mod echo;
 pub(crate) use echo::{Echo, Echoes};
 mod directory;

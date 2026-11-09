@@ -6,6 +6,8 @@ use quatrelle_model::{AccountConfig, Folder};
 
 use super::*;
 
+mod read_only;
+
 const TOP: &str = "Online Archive - Riley";
 const OLD_INBOX: &str = "Online Archive - Riley/Inbox";
 const OLD_SENT: &str = "Online Archive - Riley/Sent Items";

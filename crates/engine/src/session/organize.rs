@@ -152,6 +152,7 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        self.refuse_archive_selection()?;
         if sel.iter().any(|m| m.message_id.is_empty()) {
             return Err(CmdError::Failed("a message without a Message-ID can't be snoozed".into()));
         }
@@ -305,6 +306,7 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        self.refuse_archive_selection()?;
         if sel.iter().all(|m| self.is_ignored(m)) {
             for m in &sel {
                 for id in Self::conversation_ids(m) {
@@ -402,7 +404,8 @@ impl Session {
             // Moves last, so flags and categories are set on the message before it leaves. Mail
             // filed in a folder is still new mail (announced, as Outlook does); mail a rule sends
             // to Deleted Items or Junk isn't.
-            if let Some(to) = dest.filter(|to| *to != m.key.folder) {
+            let to_archive = |to: &String| self.read_only_folder(&a, to) || self.read_only_folder(&a, &m.key.folder);
+            if let Some(to) = dest.filter(|to| *to != m.key.folder && !to_archive(to)) {
                 let role = self.folder(&a, &to).map(|f| f.role);
                 if matches!(role, Some(FolderRole::Trash | FolderRole::Junk)) {
                     quiet.push(m.key.clone());
@@ -507,6 +510,9 @@ impl Session {
     /// Deleted Items ([`quatrelle_model::cleanup`]). In these folders, every conversation, or
     /// (`only`) those holding these messages. Bodies not downloaded are left alone.
     pub fn clean_up(&mut self, folders: &[(String, String)], only: Option<&[MessageKey]>) -> CmdResult {
+        for (a, f) in folders {
+            self.refuse_archive_folder(a, f)?;
+        }
         let categories: Vec<String> = self.prefs.categories.iter().map(|c| c.keyword.clone()).collect();
         let mut gone: Vec<MessageKey> = Vec::new();
         let mut looked = 0usize;

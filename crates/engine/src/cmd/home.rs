@@ -13,15 +13,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params(r#"{"account"?: string, "to"?: string (who it's to, "Name <address>")}"#)
             .when(has_account),
         // Home › Delete
-        CommandSpec::new("mail.delete", "Delete", "Home › Delete", delete).key("Delete").params(r#"{"permanent"?: bool}"#).when(has_selection),
+        CommandSpec::new("mail.delete", "Delete", "Home › Delete", delete).key("Delete").params(r#"{"permanent"?: bool}"#).when(can_change_mail),
         // Shift+Delete: past Deleted Items (in the Outbox, as Delete: the message isn't sent).
         CommandSpec::new("mail.deleteForGood", "Delete for good", "Home › Delete", |s, _| delete(s, &json!({"permanent": true})))
             .key("Shift+Delete")
-            .when(has_selection),
+            .when(can_change_mail),
         CommandSpec::new("mail.archive", "Archive", "Home › Delete", |s, _| s.archive_selection())
             .key("Backspace")
-            .when(has_selection),
-        CommandSpec::new("mail.ignore", "Ignore conversation", "Home › Delete", |s, _| s.ignore_selection()).when(has_selection),
+            .when(can_change_mail),
+        CommandSpec::new("mail.ignore", "Ignore conversation", "Home › Delete", |s, _| s.ignore_selection()).when(can_change_mail),
         CommandSpec::new("mail.cleanUp", "Clean up conversation", "Home › Delete › Clean Up", |s, _| {
             let sel = s.selected();
             let keys: Vec<quatrelle_model::MessageKey> = sel.iter().map(|m| m.key.clone()).collect();
@@ -30,7 +30,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             folders.dedup();
             s.clean_up(&folders, Some(&keys))
         })
-        .when(has_selection),
+        .when(can_change_mail),
         CommandSpec::new("folder.cleanUp", "Clean up folder", "Home › Delete › Clean Up", |s, v| {
             let folders = match p::str(v, "folder") {
                 Some(f) => {
@@ -49,7 +49,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.clean_up(&folders, None)
         })
         .params(r#"{"account"?: string, "folder"?: string (none: the folder on screen)}"#),
-        CommandSpec::new("mail.junk", "Report junk", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Junk))).when(has_selection),
+        CommandSpec::new("mail.junk", "Report junk", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Junk))).when(can_change_mail),
         CommandSpec::new("mail.notJunk", "Not junk", "Home › Delete", |s, v| {
             // "Always trust mail from this sender", as Outlook asks.
             if p::bool(v, "always").unwrap_or(false) {
@@ -59,10 +59,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.move_selection(MoveTarget::Role(FolderRole::Inbox))
         })
         .params(r#"{"always"?: bool}"#)
-        .when(has_selection),
+        .when(can_change_mail),
         // Home › Delete › Junk
         CommandSpec::new("junk.blockSender", "Block sender", "Home › Delete › Junk", |s, _| s.junk_list_selection(JunkList::Blocked, false))
-            .when(has_selection),
+            .when(can_change_mail),
         CommandSpec::new("junk.neverBlockSender", "Never block sender", "Home › Delete › Junk", |s, _| s.junk_list_selection(JunkList::Safe, false))
             .when(has_selection),
         CommandSpec::new("junk.neverBlockDomain", "Never block sender's domain", "Home › Delete › Junk", |s, _| {
@@ -93,7 +93,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         // Home › Move
         CommandSpec::new("mail.move", "Move to", "Home › Move", move_to).key("Mod+Shift+V").params(
             r#"{"folder": string, "account"?: string (another account's folder: from an IMAP account into the Archives account ("archives" makes it on first use) it archives the mail on this computer, checked before it is deleted on the server; from the Archives account to a folder of an IMAP account it puts the mail back; other pairs are refused)}"#,
-        ).when(has_selection),
+        ).when(can_change_mail),
         // Home › Tags
         CommandSpec::new("mail.markRead", "Mark as read", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, Some(true))).key("Mod+Q").when(has_selection),
         CommandSpec::new("mail.markUnread", "Mark as unread", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, Some(false))).key("Mod+U").when(has_selection),
@@ -109,7 +109,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("mail.pin", "Pin / Unpin", "Home › Tags", |s, v| s.pin_selection(p::bool(v, "on"))).params(r#"{"on"?: bool}"#).when(has_selection),
         CommandSpec::new("mail.snooze", "Snooze", "Home › Tags", snooze)
             .params(r#"{"preset": "later"|"tomorrow"|"weekend"|"nextWeek"} | {"until": unix seconds}"#)
-            .when(has_selection),
+            .when(can_change_mail),
         CommandSpec::new("mail.unsnooze", "Unsnooze", "Home › Tags", |s, _| s.unsnooze_selection()).when(has_selection),
         CommandSpec::new("mail.moveToFocused", "Move to Focused", "Home › Move", |s, _| s.set_focus_for_selection(true)).when(has_selection),
         CommandSpec::new("mail.moveToOther", "Move to Other", "Home › Move", |s, _| s.set_focus_for_selection(false)).when(has_selection),

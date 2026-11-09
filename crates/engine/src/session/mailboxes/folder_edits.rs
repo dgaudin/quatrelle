@@ -42,6 +42,9 @@ impl Session {
         if self.account(account).is_none() {
             return Err(CmdError::Params(format!("no account `{account}`")));
         }
+        if let Some(p) = parent {
+            self.refuse_archive_folder(account, p)?;
+        }
         if let Some(p) = parent
             && self.folder(account, p).is_none()
         {
@@ -58,6 +61,7 @@ impl Session {
 
     /// Rename a folder (it stays where it is).
     pub fn rename_folder(&mut self, account: &str, path: &str, name: &str) -> CmdResult {
+        self.refuse_archive_folder(account, path)?;
         let f = self.user_folder(account, path)?;
         let d = f.delimiter.or(self.delimiter(account));
         let to = quatrelle_model::child_path(Self::parent_of(path, d), d, name).map_err(CmdError::Params)?;
@@ -73,6 +77,10 @@ impl Session {
 
     /// Move a folder inside another (`None`: to the top).
     pub fn move_folder(&mut self, account: &str, path: &str, parent: Option<&str>) -> CmdResult {
+        self.refuse_archive_folder(account, path)?;
+        if let Some(p) = parent {
+            self.refuse_archive_folder(account, p)?;
+        }
         let f = self.user_folder(account, path)?;
         let d = f.delimiter.or(self.delimiter(account));
         let d = d.ok_or_else(|| CmdError::Failed("this server has no subfolders".into()))?;
@@ -106,6 +114,7 @@ impl Session {
     /// Delete a folder: into Deleted Items, or for good when it is already there (or
     /// `permanent`, or there is no Deleted Items folder). Subfolders go with it.
     pub fn delete_folder(&mut self, account: &str, path: &str, permanent: bool) -> CmdResult {
+        self.refuse_archive_folder(account, path)?;
         let f = self.user_folder(account, path)?;
         let d = f.delimiter.or(self.delimiter(account));
         let trash = self.account(account).and_then(|a| a.folder(FolderRole::Trash)).map(|t| t.path.clone());
@@ -312,6 +321,7 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        self.refuse_archive_selection()?;
         let next = self.successor(&self.selection.clone());
         let moved = self.move_messages(&sel, &target)?;
         self.after_removal(next);
@@ -322,6 +332,13 @@ impl Session {
     /// Junk), or to an explicit folder, each one undoable; those already there stay. How many
     /// moved. What's shown next is the caller's ([`Session::after_removal`]).
     pub(crate) fn move_messages(&mut self, msgs: &[Arc<Summary>], target: &MoveTarget) -> Result<usize, CmdError> {
+        // The online archive is read-only: mail in it stays, and nothing is filed into it.
+        self.refuse_archive_mail(msgs.iter().map(|m| &m.key))?;
+        if let MoveTarget::Folder(f) = target {
+            for m in msgs {
+                self.refuse_archive_folder(&m.key.account, f)?;
+            }
+        }
         // By account, and by mailbox within it: mail in another mailbox opened here goes to
         // that mailbox's own Deleted Items, Archive… (Exchange moves mail within a mailbox).
         let mut groups: BTreeMap<(String, Option<String>), Vec<&Summary>> = BTreeMap::new();
@@ -373,6 +390,7 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        self.refuse_archive_selection()?;
         let next = self.successor(&self.selection.clone());
         let mut by_account: HashMap<String, Vec<MessageKey>> = HashMap::new();
         for m in &sel {
