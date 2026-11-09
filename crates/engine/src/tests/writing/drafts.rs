@@ -271,6 +271,32 @@ fn a_draft_opens_again_as_it_was_saved() {
     done(s);
 }
 
+/// Upstream issue #52: a forward begun and left in Drafts marks its message `[Draft]` as a reply
+/// does (the forward names the message only in its own copy), and sent, it no longer does.
+#[test]
+fn a_forward_left_in_drafts_marks_its_message() {
+    let mut s = sample_session("forward-marks");
+    let poster = key_of(&s, "Your proof for the festival poster is ready");
+    let subject = "Your proof for the festival poster is ready";
+    assert!(!marked(&s, subject));
+    s.run("list.open", &poster).unwrap();
+    s.run("mail.forward", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ann@x.example"})).unwrap();
+    s.run("compose.saveDraft", &json!({})).unwrap();
+    s.compose = None;
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    assert!(marked(&s, subject), "the forwarded message carries the mark");
+    assert!(!marked(&s, "Sound mix, version 3"));
+    // Carried on and discarded: the mark goes.
+    s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
+    let draft = key_of(&s, "Fwd: Your proof for the festival poster is ready");
+    s.run("draft.edit", &draft).unwrap();
+    s.run("compose.discard", &json!({})).unwrap();
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    assert!(!marked(&s, subject), "discarded: no longer marked");
+    done(s);
+}
+
 /// A signature written in HTML comes back from Drafts as it went in: where it stood, the same
 /// HTML, its picture with it once (it came back as text, the HTML lost).
 #[test]

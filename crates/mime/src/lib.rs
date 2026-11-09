@@ -58,6 +58,7 @@ pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
 pub use html::*;
 pub use photos::without_location;
+use reply::forward_of;
 pub use reply::{
     QUOTE_CLASS, QuoteWords, ReplyMode, SIGNATURE_CLASS, SOURCE_HEADER, draft_copy, quoted_body, quoted_part, reply, reply_doc, reply_head_doc,
     sending_options, split_marked,
@@ -186,6 +187,7 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         importance: importance(m),
         voting: Vec::new(),
         voted: String::new(),
+        forward_of: forward_of(m),
     }
 }
 

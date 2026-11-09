@@ -69,17 +69,21 @@ impl Session {
     /// message with a reply not sent yet.
     pub(crate) fn note_drafts(&mut self) {
         let mut ids: HashSet<String> = self.set_aside.iter().map(|c| norm_id(&c.in_reply_to)).filter(|m| !m.is_empty()).collect();
-        let drafts: Vec<(String, String)> =
-            self.accounts.iter().filter_map(|a| a.folder(FolderRole::Drafts).map(|f| (a.config.id.clone(), f.path.clone()))).collect();
-        for (account, path) in drafts {
+        for (account, path) in drafts_of(self) {
             ids.extend(self.folder_state(&account, &path).messages.iter().map(|m| norm_id(&m.in_reply_to)).filter(|m| !m.is_empty()));
         }
         self.drafted = ids;
+        let mut forwarded: HashSet<MessageKey> =
+            self.set_aside.iter().filter(|c| c.mode == Some(ReplyMode::Forward)).filter_map(|c| c.source.clone()).collect();
+        for (account, path) in drafts_of(self) {
+            forwarded.extend(self.folder_state(&account, &path).messages.iter().filter_map(|m| MessageKey::from_id(&m.forward_of)));
+        }
+        self.forwarded = forwarded;
     }
 
-    /// Whether a reply to `m` waits in Drafts (or set aside).
+    /// Whether a reply to `m`, or a forward of it, waits in Drafts (or set aside).
     pub fn has_draft_reply(&self, m: &Summary) -> bool {
-        !m.message_id.is_empty() && self.drafted.contains(&m.message_id)
+        (!m.message_id.is_empty() && self.drafted.contains(&m.message_id)) || self.forwarded.contains(&m.key)
     }
 
     /// The message going by `Message-ID` `mid` in the account: among its folders read so far,
@@ -173,4 +177,9 @@ impl Session {
         self.bring_back(c);
         Ok(serde_json::json!({ "compose": id }))
     }
+}
+
+/// Every account's Drafts folder: the account and its path.
+fn drafts_of(s: &Session) -> Vec<(String, String)> {
+    s.accounts.iter().filter_map(|a| a.folder(FolderRole::Drafts).map(|f| (a.config.id.clone(), f.path.clone()))).collect()
 }

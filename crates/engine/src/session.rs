@@ -304,6 +304,8 @@ pub struct Session {
     /// The messages a reply waits for, in Drafts or set aside, by `Message-ID`
     /// ([`Session::has_draft_reply`]).
     pub(crate) drafted: HashSet<String>,
+    /// The messages a forward waits for, by place ([`Summary::forward_of`]).
+    pub(crate) forwarded: HashSet<MessageKey>,
     /// The words the original's header is written with under a reply, in the interface's
     /// language (the app sets them; English without it).
     pub quote_words: mime::QuoteWords,
@@ -551,6 +553,7 @@ impl Session {
             set_aside: Vec::new(),
             interactive: false,
             drafted: HashSet::new(),
+            forwarded: HashSet::new(),
             quote_words: mime::QuoteWords::default(),
             conflict_words: pim::ConflictWords::default(),
             assistant_language: String::new(),

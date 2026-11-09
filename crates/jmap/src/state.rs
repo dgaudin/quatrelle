@@ -377,6 +377,10 @@ pub fn fill_from_source(m: &mut Summary, raw: &[u8]) {
         (m.in_reply_to, m.references) = (full.in_reply_to, full.references);
     }
     m.bulk = m.bulk || full.bulk;
+    // A draft's header as Graph and EWS list it may leave out the message it forwards.
+    if !full.forward_of.is_empty() {
+        m.forward_of = full.forward_of;
+    }
     m.importance = if m.importance != 0 { m.importance } else { full.importance };
     if m.size == 0 {
         m.size = u32::try_from(raw.len()).unwrap_or(u32::MAX);

@@ -64,6 +64,17 @@ pub fn sending_options(raw: &[u8]) -> (i8, bool, Option<(ReplyMode, String)>) {
     (importance(&m), receipt, header_raw(m.root(), SOURCE_HEADER).and_then(source_of))
 }
 
+/// The message a draft of a forward forwards, as its [`SOURCE_HEADER`] names it (a key's id,
+/// [`MessageKey::to_id`]); empty for any other message, a reply's draft included (it is known by
+/// its In-Reply-To).
+pub(crate) fn forward_of(m: &Message<'_>) -> String {
+    let named = header_raw(m.root(), SOURCE_HEADER).and_then(source_of);
+    match named {
+        Some((ReplyMode::Forward, key)) => MessageKey::from_id(&key).map(|k| k.to_id()).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
 /// A [`SOURCE_HEADER`] read back: its mode and the message's key.
 fn source_of(v: &str) -> Option<(ReplyMode, String)> {
     let (word, hex) = v.trim().split_once(' ')?;

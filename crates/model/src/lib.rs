@@ -522,6 +522,11 @@ pub struct Summary {
     /// and checked; an encrypted one may be signed inside too).
     #[serde(default, skip_serializing_if = "Smime::is_none")]
     pub smime: Smime,
+    /// A draft of a forward: the message it forwards ([`MessageKey::to_id`]), as the draft's
+    /// copy names it, for the list to mark that message `[Draft]` as it marks one a reply was
+    /// begun to; empty for other mail.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub forward_of: String,
 }
 
 /// What a message's header says protects it: S/MIME (RFC 8551 §3.2) or OpenPGP (RFC 3156).

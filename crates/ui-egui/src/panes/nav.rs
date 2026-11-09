@@ -165,13 +165,7 @@ fn row(
     let gy = rect.center().y - galley.size().y / 2.0;
     ui.painter().with_clip_rect(egui::Rect::from_x_y_ranges(x..=text_right, rect.y_range())).galley(egui::pos2(x + 6.0, gy), galley, t.text);
     if count.shown() > 0 {
-        ui.painter().text(
-            egui::pos2(rect.max.x - 10.0, rect.center().y),
-            egui::Align2::RIGHT_CENTER,
-            count.text(),
-            theme::bold(12.5),
-            t.accent,
-        );
+        ui.painter().text(egui::pos2(rect.max.x - 10.0, rect.center().y), egui::Align2::RIGHT_CENTER, count.text(), theme::bold(12.5), t.accent);
     }
     if cut { resp.on_hover_text(label) } else { resp }
 }
