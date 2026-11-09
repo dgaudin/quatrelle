@@ -255,7 +255,11 @@ impl MailApp {
                                 acts.push(Action::Run("mail.cleanUp", json!({})));
                                 ui.close();
                             }
-                            if ui.add_enabled(enabled("folder.cleanUp") && !s.view_read_only(), egui::Button::new(tl!("Clean up folder"))).on_hover_text(tip).clicked() {
+                            if ui
+                                .add_enabled(enabled("folder.cleanUp") && !s.view_read_only(), egui::Button::new(tl!("Clean up folder")))
+                                .on_hover_text(tip)
+                                .clicked()
+                            {
                                 acts.push(Action::Run("folder.cleanUp", json!({})));
                                 ui.close();
                             }

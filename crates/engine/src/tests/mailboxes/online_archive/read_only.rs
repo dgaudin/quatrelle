@@ -89,9 +89,7 @@ fn the_online_archive_refuses_every_change() {
     let jobs = s.take_jobs();
     assert!(jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::SetFlag { flag: Flag::Seen, on: true, .. }, .. })), "{jobs:?}");
     // Reply opens a message in the account.
-    store
-        .write_body(&key, b"From: Zoe Park <zoe@contoso.example>\r\nTo: riley@contoso.example\r\nSubject: Old 1\r\n\r\nHello.\r\n")
-        .unwrap();
+    store.write_body(&key, b"From: Zoe Park <zoe@contoso.example>\r\nTo: riley@contoso.example\r\nSubject: Old 1\r\n\r\nHello.\r\n").unwrap();
     s.open_message(&key);
     s.run("mail.reply", &json!({})).unwrap();
     assert_eq!(s.compose.as_ref().map(|c| c.account.as_str()), Some(id.as_str()));
@@ -154,7 +152,9 @@ fn the_commands_that_change_mail_are_off_in_the_archive() {
     let (mut s, store, _id, _key) = archive_open("online-archive-off");
     assert!(s.read_only_folder(&_id, PROJECTS) && !s.read_only_folder(&_id, "INBOX"));
     let off = |s: &Session, id: &str| s.registry().get(id).and_then(|c| (c.enabled)(s));
-    for c in ["mail.move", "mail.delete", "mail.deleteForGood", "mail.archive", "mail.junk", "mail.notJunk", "mail.ignore", "mail.snooze", "mail.cleanUp"] {
+    for c in
+        ["mail.move", "mail.delete", "mail.deleteForGood", "mail.archive", "mail.junk", "mail.notJunk", "mail.ignore", "mail.snooze", "mail.cleanUp"]
+    {
         assert_eq!(off(&s, c), Some(ARCHIVE_READ_ONLY), "{c}");
     }
     s.run("quickStep.create", &json!({"name": "Bin", "actions": [{"do": "delete"}]})).unwrap();

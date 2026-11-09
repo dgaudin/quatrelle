@@ -80,9 +80,13 @@ fn colours(shapes: &[egui::Shape], text: &str) -> Vec<String> {
     shapes
         .iter()
         .filter_map(|s| match s {
-            egui::Shape::Text(t) if t.galley.text() == text => {
-                Some(format!("{:?} {:?} {:?} {:?}", t.galley.job.sections.first().map(|x| x.format.color), t.fallback_color, t.override_text_color, t.opacity_factor))
-            }
+            egui::Shape::Text(t) if t.galley.text() == text => Some(format!(
+                "{:?} {:?} {:?} {:?}",
+                t.galley.job.sections.first().map(|x| x.format.color),
+                t.fallback_color,
+                t.override_text_color,
+                t.opacity_factor
+            )),
             _ => None,
         })
         .collect()
