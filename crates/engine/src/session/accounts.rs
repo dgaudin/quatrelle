@@ -477,7 +477,8 @@ impl Session {
         }
         // Exchange, keeping mail for a time (Cached Exchange Mode): what's older is read on the
         // server, a page at a time, and held in memory; the others keep more of it, as before.
-        if a.config.ews.is_some() && self.prefs.keep_days > 0 {
+        // The online archive's, always: nothing of it is kept, whatever the time kept.
+        if a.config.ews.is_some() && (self.prefs.keep_days > 0 || self.in_online_archive(account, folder)) {
             let offset = match &self.older {
                 Some((oa, of, items, _)) if oa == account && of == folder => items.len(),
                 _ => 0,
@@ -512,10 +513,14 @@ impl Session {
         for id in ids {
             let folders: Vec<String> = {
                 let Some(a) = self.account(&id) else { continue };
+                // Not the online archive: it's read on the server, nothing of it is brought here.
                 match folder {
+                    Some(f) if a.folders.iter().any(|x| x.path == f && x.archive) => {
+                        return Err(CmdError::Params(format!("`{f}` is in the online archive, which is read on the server")));
+                    }
                     Some(f) if a.folders.iter().any(|x| x.path == f) => vec![f.to_string()],
                     Some(f) => return Err(CmdError::Params(format!("no folder `{f}` in account `{id}`"))),
-                    None => a.folders.iter().filter(|x| x.selectable).map(|x| x.path.clone()).collect(),
+                    None => a.folders.iter().filter(|x| x.selectable && !x.archive).map(|x| x.path.clone()).collect(),
                 }
             };
             for f in folders {
@@ -759,8 +764,14 @@ impl AccountState {
 
     /// The mailbox a folder path is in (`None`: this account's own), whether the server marks
     /// its folders (`mailbox`, Exchange) or names them after the address (Graph's `/users`).
+    /// The account's own online archive isn't another mailbox: nothing is sent from it, and what
+    /// goes beside one of its folders (a reply's copy, mail deleted) is the account's.
     pub fn folder_mailbox(&self, path: &str) -> Option<String> {
-        self.folders.iter().find(|f| f.path == path).and_then(|f| f.mailbox.clone()).or_else(|| self.config.folder_owner(path).map(str::to_string))
+        match self.folders.iter().find(|f| f.path == path) {
+            Some(f) if f.archive => None,
+            Some(f) if f.mailbox.is_some() => f.mailbox.clone(),
+            _ => self.config.folder_owner(path).map(str::to_string),
+        }
     }
 
     /// The folder for a role in the mailbox `path` is in: another mailbox's own (its Deleted

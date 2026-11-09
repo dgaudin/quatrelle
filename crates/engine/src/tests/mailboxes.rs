@@ -8,6 +8,7 @@ use super::*;
 
 mod age;
 mod archive;
+mod online_archive;
 
 /// Outlook's "Download all" brings every message not on this computer yet, a batch at a time:
 /// each answer asks for the next, a message already kept isn't asked for again, and when the

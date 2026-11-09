@@ -181,14 +181,23 @@ impl Session {
     }
 
     /// Whether a folder is read on the server when it's opened rather than kept on this
-    /// computer, as Outlook's Cached Exchange Mode does: a public folder not followed, and a
-    /// shared mailbox's folder when the account doesn't keep them.
+    /// computer, as Outlook's Cached Exchange Mode does: a public folder not followed, a
+    /// shared mailbox's folder when the account doesn't keep them, and a folder of the online
+    /// archive, always (no setting, no Favorite keeps it).
     pub fn read_on_server(&self, account: &str, folder: &str) -> bool {
         let Some(a) = self.account(account) else { return false };
+        if self.in_online_archive(account, folder) {
+            return true;
+        }
         if quatrelle_model::is_public_folder(folder) {
             return a.config.ews.is_some() && !self.follows_public(account, folder);
         }
         a.config.shared_online && a.folders.iter().any(|f| f.path == folder && f.mailbox.is_some())
+    }
+
+    /// Whether a folder is one of the account's online archive (Exchange's archive mailbox).
+    pub fn in_online_archive(&self, account: &str, folder: &str) -> bool {
+        self.account(account).is_some_and(|a| a.folders.iter().any(|f| f.path == folder && f.archive))
     }
 
     /// Tell each Exchange account's sync which public folders to keep in sync: the Favorites

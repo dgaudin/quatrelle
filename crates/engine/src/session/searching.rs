@@ -23,7 +23,15 @@ impl Session {
     /// The folders a search looks in: the one on view, it and the folders inside it, its
     /// account's (every account's from a unified view), or every account's.
     pub(crate) fn scope_folders(&self, scope: SearchScope) -> Vec<(String, String)> {
-        let every = |a: &AccountState| a.folders.iter().filter(|f| f.selectable).map(|f| (a.config.id.clone(), f.path.clone())).collect::<Vec<_>>();
+        // The online archive is searched in the folder on view, whatever the scope but every
+        // mailbox: its other folders aren't here to look in. And a search of a mailbox, or of
+        // every mailbox, doesn't look in the archive, as in Outlook.
+        if scope != SearchScope::All && self.view_in_archive().is_some() {
+            return self.view_folders();
+        }
+        let every = |a: &AccountState| {
+            a.folders.iter().filter(|f| f.selectable && !f.archive).map(|f| (a.config.id.clone(), f.path.clone())).collect::<Vec<_>>()
+        };
         match (scope, &self.view) {
             (SearchScope::Current, _) => self.view_folders(),
             (SearchScope::Subfolders, View::Folder { account, folder }) => {
@@ -44,6 +52,14 @@ impl Session {
             (SearchScope::Subfolders, _) => self.view_folders(),
             (SearchScope::Mailbox, View::Folder { account, .. }) => self.account(account).map(every).unwrap_or_default(),
             (SearchScope::Mailbox | SearchScope::All, _) => self.accounts.iter().flat_map(every).collect(),
+        }
+    }
+
+    /// The folder on view, when it's one of an online archive: its account and path.
+    pub(crate) fn view_in_archive(&self) -> Option<(String, String)> {
+        match &self.view {
+            View::Folder { account, folder } if self.in_online_archive(account, folder) => Some((account.clone(), folder.clone())),
+            _ => None,
         }
     }
 
@@ -308,6 +324,13 @@ impl Session {
             let c = &a.config;
             !a.is_local() && (c.ews.is_some() || (c.pop.is_none() && c.jmap.is_none() && c.graph.is_none()))
         };
+        // In the online archive, the server is asked about the folder on view: its mail isn't
+        // here, and a search of the mailbox doesn't look in the archive.
+        if scope != SearchScope::All
+            && let Some((account, folder)) = self.view_in_archive()
+        {
+            return self.account(&account).filter(|a| indexed(a)).map(|a| vec![(a.config.id.clone(), Some(folder))]).unwrap_or_default();
+        }
         match scope {
             SearchScope::Mailbox => match &self.view {
                 View::Folder { account, .. } => {

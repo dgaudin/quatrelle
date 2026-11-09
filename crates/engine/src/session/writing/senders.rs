@@ -42,7 +42,7 @@ impl Session {
                 label: EmailAddress::new(a.config.name.clone(), a.config.email.clone()).to_string(),
             });
             let mut seen = vec![a.config.email.to_ascii_lowercase()];
-            let opened = a.config.shared_mailboxes.iter().cloned().chain(a.folders.iter().filter_map(|f| f.mailbox.clone()));
+            let opened = a.config.shared_mailboxes.iter().cloned().chain(a.folders.iter().filter_map(|f| f.shared_mailbox().map(str::to_string)));
             for from in opened.chain(a.config.send_from.iter().cloned()) {
                 let Some(email) = one_address(&from).map(|e| e.email) else { continue };
                 if seen.contains(&email.to_ascii_lowercase()) {
@@ -103,8 +103,13 @@ impl Session {
     pub(super) fn remember_sender(&mut self, c: &Compose) {
         let Some(email) = one_address(&c.from).map(|a| a.email) else { return };
         let Some(a) = self.account_mut(&c.account) else { return };
-        let opened =
-            a.config.shared_mailboxes.iter().chain(a.folders.iter().filter_map(|f| f.mailbox.as_ref())).any(|m| m.eq_ignore_ascii_case(&email));
+        let opened = a
+            .config
+            .shared_mailboxes
+            .iter()
+            .map(String::as_str)
+            .chain(a.folders.iter().filter_map(|f| f.shared_mailbox()))
+            .any(|m| m.eq_ignore_ascii_case(&email));
         if opened || a.config.send_from.first().is_some_and(|f| *f == c.from) {
             return;
         }
