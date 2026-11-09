@@ -169,7 +169,10 @@ impl Worker {
                     Ok(())
                 })();
                 match r {
-                    Ok(()) => self.sync_one(&filed),
+                    Ok(()) => {
+                        forget_draft(&self.store, &self.acc.id, &raw_kept);
+                        self.sync_one(&filed)
+                    }
                     Err(e) => {
                         // Not lost: kept on this computer and saved when the account connects.
                         match keep_draft(&self.store, &self.acc.id, &folder, replaces_kept, raw_kept) {

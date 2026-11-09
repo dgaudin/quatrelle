@@ -283,8 +283,24 @@ fn keep_draft(store: &Store, account: &str, folder: &str, replaces: Option<quatr
     if let Some(r) = &replaces {
         list.retain(|d| d.replaces.as_ref() != Some(r));
     }
+    // The same version kept again (filing it failed): one entry, not two.
+    list.retain(|d| d.raw != raw);
     list.push(PendingDraft { folder: folder.to_string(), replaces, raw });
     store.save_account_doc(account, PENDING_DRAFTS, &list).map_err(NetError::from)
+}
+
+/// A draft filed on the server leaves the list kept, and only then (the list is emptied from
+/// the disk one draft at a time, as each is filed). One that can't be taken off stays, and
+/// would be filed again: logged, never fatal.
+fn forget_draft(store: &Store, account: &str, raw: &[u8]) {
+    let result = store.load_account_doc::<Vec<PendingDraft>>(account, PENDING_DRAFTS).and_then(|mut list| {
+        let before = list.len();
+        list.retain(|d| d.raw != raw);
+        if list.len() == before { Ok(()) } else { store.save_account_doc(account, PENDING_DRAFTS, &list) }
+    });
+    if let Err(e) = result {
+        log::warn!("{account}: the draft filed couldn't be taken off the list kept: {e}");
+    }
 }
 
 pub use quatrelle_model::MICROSOFT_NO_PASSWORDS;

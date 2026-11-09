@@ -5,6 +5,8 @@
 
 use super::*;
 
+mod drafts;
+
 /// A full sync walks the Inbox first, then what mail is about, then the rest, the archive and
 /// the public folders followed last: a mailbox of public folders and years of archives must not
 /// hold the Inbox back, nor the user's folders named after "Public Folders". The public folders

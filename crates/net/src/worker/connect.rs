@@ -310,13 +310,15 @@ impl Worker {
         }
         self.replay();
         self.flush_outbox();
-        // Drafts kept while offline go to the server first.
+        // Drafts kept while offline go to the server first. They stay on disk until each one is
+        // filed ([`forget_draft`]): a worker given up or a connection lost before then loses none.
         let kept: Vec<PendingDraft> = self.store.load_account_doc(&self.acc.id, PENDING_DRAFTS).unwrap_or_default();
-        if !kept.is_empty() {
-            let _ = self.store.save_account_doc(&self.acc.id, PENDING_DRAFTS, &Vec::<PendingDraft>::new());
-            for d in kept.into_iter().rev() {
-                self.queue.push_front(Job::SaveDraft { account: self.acc.id.clone(), raw: d.raw, folder: d.folder, replaces: d.replaces });
+        for d in kept.into_iter().rev() {
+            // Not queued twice by a connection made again before the queue was done.
+            if self.queue.iter().any(|j| matches!(j, Job::SaveDraft { raw, .. } if *raw == d.raw)) {
+                continue;
             }
+            self.queue.push_front(Job::SaveDraft { account: self.acc.id.clone(), raw: d.raw, folder: d.folder, replaces: d.replaces });
         }
         self.last_full = None;
     }
