@@ -245,7 +245,9 @@ mod portal {
             // The socket where its path needs no escaping in a bus address (zbus doesn't undo it).
             let plain = |p: &std::path::Path| p.to_str().is_some_and(|s| s.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_/.".contains(&b)));
             let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).filter(|p| plain(p) && p.is_dir());
-            let socket = runtime.unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join(format!("quatrelle-mute-portal-{}", std::process::id()));
+            // Named apart from the folder: without XDG_RUNTIME_DIR (FreeBSD) both are in /tmp, and
+            // a bus can't listen on a folder's path.
+            let socket = runtime.unwrap_or_else(|| std::path::PathBuf::from("/tmp")).join(format!("quatrelle-mute-bus-{}", std::process::id()));
             let _ = std::fs::remove_file(&socket);
             let config = format!(
                 "<!DOCTYPE busconfig PUBLIC \"-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN\" \
