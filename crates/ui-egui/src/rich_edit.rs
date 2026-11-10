@@ -129,6 +129,17 @@ pub(crate) struct Editor {
     /// A block of text of the original under a reply, changed where it stands: as tall as its
     /// text, without a hint, its spelling not checked.
     pub(crate) in_quote: bool,
+    /// Its text as last drawn: a selection that goes on into other blocks is worked out and lit
+    /// from it (`reading/compose/across.rs`).
+    pub(crate) drawn: Option<Drawn>,
+}
+
+/// A text box's text as drawn: laid out, where, and the box's own place.
+#[derive(Clone)]
+pub(crate) struct Drawn {
+    pub galley: Arc<Galley>,
+    pub pos: egui::Pos2,
+    pub rect: Rect,
 }
 
 #[derive(Clone)]
@@ -162,7 +173,16 @@ impl Editor {
             paste_plain: false,
             emoji: emoji::Picker::default(),
             in_quote: false,
+            drawn: None,
         }
+    }
+
+    /// The cursor was put at `at` by a change made around the editor (a selection across blocks
+    /// taken out): what's typed next is a step of its own to undo.
+    pub(crate) fn settle(&mut self, at: usize) {
+        self.sel = at..at;
+        self.typing = None;
+        self.last_change = 0.0;
     }
 
     fn remember(&mut self, c: &Compose, cursor: usize) {
@@ -186,6 +206,19 @@ fn selection(ctx: &egui::Context, id: egui::Id, n: usize) -> Option<Range<usize>
     let state = egui::TextEdit::load_state(ctx, id)?;
     let r = state.cursor.char_range()?.as_sorted_char_range();
     Some(r.start.0.min(n)..r.end.0.min(n))
+}
+
+/// The ends of the selection in text box `id`: where it started, and where the cursor is.
+pub(crate) fn caret(ctx: &egui::Context, id: egui::Id) -> Option<(usize, usize)> {
+    let r = egui::TextEdit::load_state(ctx, id)?.cursor.char_range()?;
+    Some((r.secondary.index.0, r.primary.index.0))
+}
+
+/// Select from `from` to the cursor at `to` in text box `id`.
+pub(crate) fn set_caret(ctx: &egui::Context, id: egui::Id, from: usize, to: usize) {
+    let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+    state.cursor.set_char_range(Some(CCursorRange::two(CCursor::new(from), CCursor::new(to))));
+    state.store(ctx, id);
 }
 
 fn set_selection(ctx: &egui::Context, id: egui::Id, r: Range<usize>) {
@@ -588,6 +621,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
         .desired_rows(if ed.in_quote { 1 } else { 4 })
         .layouter(&mut layouter)
         .show(ui);
+    ed.drawn = Some(Drawn { galley: out.galley.clone(), pos: out.galley_pos, rect: out.response.rect });
     let mut cursor = out.cursor_range.map(|r| {
         let r = r.as_sorted_char_range();
         r.start.0..r.end.0
@@ -651,7 +685,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
 }
 
 /// The rectangles a selection covers, one per row (galley coordinates).
-fn selection_rects(g: &Galley, sel: Range<usize>) -> Vec<Rect> {
+pub(crate) fn selection_rects(g: &Galley, sel: Range<usize>) -> Vec<Rect> {
     let mut out: Vec<Rect> = Vec::new();
     // Long selections are drawn in full; past this many characters only their start is.
     for i in sel.start..sel.end.min(sel.start + 20_000) {

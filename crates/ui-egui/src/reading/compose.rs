@@ -8,7 +8,9 @@ use quatrelle_engine::{FieldId, SendBlock};
 use super::*;
 use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
 
+mod across;
 mod quote;
+pub(crate) use across::AcrossState;
 pub(crate) use quote::QuoteEditors;
 #[cfg(test)]
 pub(crate) use quote::cell_box;
@@ -560,6 +562,10 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
             ui.add_space(8.0);
             let body_id = rich_edit::body_id(c);
+            // The keys of a selection across the text and the original's blocks, before any of
+            // their text boxes sees them.
+            across::before(st, ui, c, &mut ed, &mut quote_eds);
+            let quote_cell = st.quote_focus.filter(|(id, _)| *id == c.id && c.quote.is_some()).map(|(_, n)| n);
             // A picture pasted goes in as a picture: a screenshot (the window reads it off the
             // clipboard when there's no text there, and Ctrl+V comes as the picture), or one
             // copied from a web page, which comes with its HTML alone (a picture, no text). Into
@@ -589,8 +595,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 if ui.memory(|m| m.has_focus(body_id)) {
                     st.quote_focus = None;
                 }
+                let mut drawn: Vec<(usize, rich_edit::Drawn)> = ed.drawn.clone().map(|d| (0, d)).into_iter().collect();
                 // The original, as it came, under the text: changed where it stands.
-                quote::show(s, st, ui, c, &mut quote_eds, acts);
+                drawn.extend(quote::show(s, st, ui, c, &mut quote_eds, acts));
+                // A selection that goes on from one of these texts into others.
+                across::after(st, ui, c, drawn);
             });
         });
     });

@@ -249,6 +249,8 @@ pub(super) struct Body<'a> {
 pub(super) trait CellEdit {
     /// `page`: the colour it's on (its cell's), for its colours to read.
     fn edit(&mut self, ui: &mut Ui, lines: &[Vec<mime::Span>], page: [u8; 3], acts: &mut Vec<Action>) -> bool;
+    /// Whether `block` was taken out (a paragraph, a table and all it holds): not drawn.
+    fn gone(&self, block: &mime::layout::Block) -> bool;
 }
 
 /// The heights of the table cells of the messages drawn (their content and padding, as last
@@ -551,6 +553,9 @@ impl Body<'_> {
             A::Right => Align::Max,
         };
         for (i, b) in blocks.iter().enumerate() {
+            if self.edit.as_deref().is_some_and(|e| e.gone(b)) {
+                continue;
+            }
             match b {
                 Block::Text(lines) => {
                     // A text box where it's changed: not in a pass that only measures.

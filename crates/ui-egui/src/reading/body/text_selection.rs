@@ -242,7 +242,7 @@ impl Doc {
 /// How far a selection drag scrolls this frame with the pointer at `y`, at or past the top or
 /// bottom of `view`; faster the farther it goes. A positive delta moves the content down.
 /// (PdfCraft's, for its pages, with its band of the view's edge narrowed to the last pixels.)
-fn edge_delta(y: f32, view: Rect, dt: f32) -> f32 {
+pub(crate) fn edge_delta(y: f32, view: Rect, dt: f32) -> f32 {
     if !y.is_finite() || !dt.is_finite() || view.height() < 4.0 * EDGE {
         return 0.0;
     }

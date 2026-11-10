@@ -417,6 +417,7 @@ impl MailApp {
                 editor: None,
                 quote_editors: Default::default(),
                 quote_focus: None,
+                across: Default::default(),
                 people: Default::default(),
                 craft_apps: Vec::new(),
                 language: i18n::AUTO.into(),

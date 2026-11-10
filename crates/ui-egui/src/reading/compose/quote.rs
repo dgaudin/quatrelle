@@ -67,6 +67,10 @@ struct Cells<'a> {
     /// What was typed in each, and the one with the cursor.
     changed: Vec<(usize, String, mime::rich::Styles)>,
     focus: Option<usize>,
+    /// The blocks taken out, by where they are: not drawn.
+    removed: Vec<usize>,
+    /// Each block of text as drawn, for a selection that goes across them ([`across`]).
+    drawn: Vec<(usize, rich_edit::Drawn)>,
 }
 
 impl CellEdit for Cells<'_> {
@@ -91,27 +95,43 @@ impl CellEdit for Cells<'_> {
         let text = std::mem::replace(&mut self.c.body, body);
         let styles = std::mem::replace(&mut self.c.styles, own);
         self.changed.push((n, text, styles));
+        if let Some(d) = ed.drawn.clone() {
+            self.drawn.push((n.saturating_add(1), d));
+        }
         self.eds.insert((id, n), ed);
         true
+    }
+
+    fn gone(&self, block: &mime::layout::Block) -> bool {
+        self.removed.contains(&(std::ptr::from_ref(block) as usize))
     }
 }
 
 /// `c`'s quote, under its text: drawn as the reading pane draws it, each block of its text a
 /// text box. Its pictures behind boxes come from the message quoted, those on the web only once
 /// that message's are allowed (nothing is loaded otherwise); those in its text are the reply's.
-pub(super) fn show(s: &Session, st: &mut UiState, ui: &mut Ui, c: &mut Compose, eds: &mut QuoteEditors, acts: &mut Vec<Action>) {
-    let Some(q) = c.quote.clone() else { return };
+/// Gives each block of text as drawn ([`across`]'s numbers).
+pub(super) fn show(
+    s: &Session,
+    st: &mut UiState,
+    ui: &mut Ui,
+    c: &mut Compose,
+    eds: &mut QuoteEditors,
+    acts: &mut Vec<Action>,
+) -> Vec<(usize, rich_edit::Drawn)> {
+    let Some(q) = c.quote.clone() else { return Vec::new() };
     let t = st.tokens;
     ui.add_space(4.0);
     // Sent as plain text, it goes as its text: shown so.
     if c.plain {
         ui.add(egui::Label::new(RichText::new(q.text()).font(theme::regular(14.5)).color(t.text)).wrap());
         ui.add_space(8.0);
-        return;
+        return Vec::new();
     }
     let index: HashMap<usize, usize> =
         mime::layout::text_blocks(&q.blocks).into_iter().enumerate().map(|(n, (lines, _))| (lines.as_ptr() as usize, n)).collect();
-    let mut cells = Cells { c, q: &q, index, eds, tokens: t, changed: Vec::new(), focus: None };
+    let removed = q.removed_blocks().into_iter().map(|b| std::ptr::from_ref(b) as usize).collect();
+    let mut cells = Cells { c, q: &q, index, eds, tokens: t, changed: Vec::new(), focus: None, removed, drawn: Vec::new() };
     let mut shown: Vec<String> = Vec::new();
     let width = ui.available_width();
     let faces = crate::look::typefaces::loaded(ui.ctx());
@@ -133,7 +153,7 @@ pub(super) fn show(s: &Session, st: &mut UiState, ui: &mut Ui, c: &mut Compose, 
         };
         body.blocks(st, ui, &q.blocks, width, theme::surface_rgb(&t), mime::layout::Align::Left, 0);
     }
-    let (changed, focus) = (std::mem::take(&mut cells.changed), cells.focus);
+    let (changed, focus, drawn) = (std::mem::take(&mut cells.changed), cells.focus, std::mem::take(&mut cells.drawn));
     drop(cells);
     // Kept once the drawing let go of the quote (it isn't copied for each letter typed).
     drop(q);
@@ -144,4 +164,5 @@ pub(super) fn show(s: &Session, st: &mut UiState, ui: &mut Ui, c: &mut Compose, 
         st.quote_focus = Some((c.id, n));
     }
     ui.add_space(8.0);
+    drawn
 }

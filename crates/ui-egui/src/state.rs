@@ -150,6 +150,9 @@ pub struct UiState {
     /// one with the cursor (its message, its place): the ribbon and pictures go to it.
     pub(crate) quote_editors: reading::QuoteEditors,
     pub(crate) quote_focus: Option<(u64, usize)>,
+    /// A selection that goes across the text being written and its original's blocks, and what
+    /// it took out, to undo (`reading/compose/across.rs`).
+    pub(crate) across: reading::AcrossState,
     /// The contacts fields on screen (To, Cc, Bcc, Replies to, Select Names' rows), by field, and
     /// the send held for the names still being resolved.
     pub(crate) people: dialogs::people_field::PeopleFields,
