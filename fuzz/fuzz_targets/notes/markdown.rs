@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! A note's Markdown (a note from Exchange or a data file is hostile text): its lines and
 //! segments inside the text, in order, covering it, on characters' boundaries, within the caps;
-//! the window's edits at positions taken from the same bytes, their selection inside the text
-//! they give, and a tick changing one byte or none.
+//! the window's edits (marks, Enter, Tab) at positions taken from the same bytes, their selection
+//! inside the text they give, and a tick changing one byte or none.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -48,6 +48,12 @@ fuzz_target!(|data: &[u8]| {
     }
     if let Some(e) = markdown::enter(&text, a) {
         check_edit(&e);
+    }
+    for out in [false, true] {
+        if let Some(e) = markdown::indent(&text, a..b, out) {
+            check_edit(&e);
+            check(&e.text);
+        }
     }
     let mut t = text.to_string();
     let ticked = markdown::toggle_tick(&mut t, b);

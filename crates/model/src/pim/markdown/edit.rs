@@ -98,6 +98,68 @@ pub fn enter(text: &str, at: usize) -> Option<Edit> {
     Some(Edit { text: out, select: cursor..cursor })
 }
 
+/// What Tab (or, `out`, Shift+Tab) does on the list items the selection `select` (bytes, either
+/// way round) touches: each goes a level in (two spaces before it) or out (two spaces, or a tab,
+/// taken off), up to [`super::MAX_DEPTH`] levels; the selection moves with the text. `None` when
+/// no list item is touched: Tab is then the text box's own.
+pub fn indent(text: &str, select: Range<usize>, out: bool) -> Option<Edit> {
+    let (x, y) = (floor(text, select.start), floor(text, select.end));
+    let (a, b) = (x.min(y), x.max(y));
+    let all = read(text);
+    let touched: Vec<&Line> = all
+        .iter()
+        .filter(|l| l.range.start <= b && a <= l.range.end)
+        .filter(|l| matches!(l.block, Block::Bullet { .. } | Block::Numbered { .. } | Block::Tick { .. }))
+        .filter(|l| text.get(l.range.clone()).is_some_and(|w| !w.contains('\n')))
+        .collect();
+    if touched.is_empty() {
+        return None;
+    }
+    let deepest = super::MAX_DEPTH.saturating_sub(1);
+    // Each line's change: where, how many bytes taken off, and how many put in.
+    let mut changes: Vec<(usize, usize, usize)> = Vec::with_capacity(touched.len());
+    for l in touched {
+        let s = l.range.start;
+        let words = text.get(l.range.clone())?;
+        let depth = match l.block {
+            Block::Bullet { depth } | Block::Numbered { depth, .. } | Block::Tick { depth, .. } => depth,
+            _ => 0,
+        };
+        if out {
+            let lead = words.bytes().take_while(|c| *c == b' ').count();
+            let off = if words.starts_with('\t') { 1 } else { lead.min(2) };
+            if off > 0 {
+                changes.push((s, off, 0));
+            }
+        } else if depth < deepest {
+            changes.push((s, 0, 2));
+        }
+    }
+    let mut out_text = String::with_capacity(text.len().saturating_add(changes.len().saturating_mul(2)));
+    let mut done = 0;
+    for &(s, off, put) in &changes {
+        out_text.push_str(text.get(done..s)?);
+        out_text.push_str(if put > 0 { "  " } else { "" });
+        done = s.saturating_add(off);
+    }
+    out_text.push_str(text.get(done..)?);
+    // A position after the changes before it: moved by what they put in and took off; one in
+    // what was taken off goes to where the line now starts.
+    let moved = |p: usize| {
+        let mut q = p;
+        for &(s, off, put) in changes.iter().rev() {
+            if p >= s.saturating_add(off) {
+                q = q.saturating_sub(off).saturating_add(put);
+            } else if p >= s {
+                q = q.saturating_sub(p.saturating_sub(s));
+            }
+        }
+        q.min(out_text.len())
+    };
+    let (na, nb) = (moved(a), moved(b));
+    Some(Edit { select: na..nb, text: out_text })
+}
+
 /// A list item's marker (`- `, `1. `), its number moved on by `step`.
 fn list_marker(words: &str, p: &Prefix, step: u32) -> Option<String> {
     let marker = words.get(p.indent..p.marks)?;

@@ -170,6 +170,26 @@ fn enter_goes_on_with_a_list_or_ends_it() {
 }
 
 #[test]
+fn tab_takes_a_list_in_and_shift_tab_out() {
+    let i = |t: &str, r: std::ops::Range<usize>, out| indent(t, r, out).map(|e| (e.text, e.select));
+    assert_eq!(i("- one", 5..5, false), Some(("  - one".into(), 7..7)));
+    assert_eq!(i("  - one", 7..7, true), Some(("- one".into(), 5..5)));
+    assert_eq!(i("\t- one", 0..0, true), Some(("- one".into(), 0..0)), "a tab taken off as a level");
+    assert_eq!(i("1. a\n- [ ] b\nc", 0..10, false), Some(("  1. a\n  - [ ] b\nc".into(), 2..14)), "each item selected, not the text after");
+    assert_eq!(i("- a", 0..0, true), Some(("- a".into(), 0..0)), "at the left already: kept, and the key taken");
+    assert_eq!(i(" - a", 3..3, true), Some(("- a".into(), 2..2)), "one space off");
+    // A selection inside the spaces taken off goes to the line's start.
+    assert_eq!(i("  - a", 1..1, true), Some(("- a".into(), 0..0)));
+    // Seven levels at most.
+    let deep = format!("{}- a", "  ".repeat(7));
+    assert_eq!(i(&deep, 0..0, false), Some((deep.clone(), 0..0)));
+    // No list item: the text box's own Tab.
+    assert_eq!(i("plain", 2..2, false), None);
+    assert_eq!(i("```\n- one\n```", 6..6, false), None, "in code");
+    assert_eq!(i("- é", 3..3, false).map(|(t, _)| t), Some("  - é".into()), "inside a character: held to it");
+}
+
+#[test]
 fn the_bar_puts_marks_on_and_takes_them_off() {
     let m = |t: &str, r: std::ops::Range<usize>, mark| {
         let e = toggle_mark(t, r, mark);
@@ -311,6 +331,11 @@ proptest! {
         check_edit(&toggle_mark(&text, a..b, mark));
         if let Some(e) = enter(&text, a) {
             check_edit(&e);
+        }
+        for out in [false, true] {
+            if let Some(e) = indent(&text, a..b, out) {
+                check_edit(&e);
+            }
         }
         let mut t = text.clone();
         let ticked = toggle_tick(&mut t, a);

@@ -4,9 +4,9 @@
 //! tick, a quote, code...) and its segments (their kind and style, and their bytes), the marks
 //! segments of their own so the note's window can draw them pale. A small subset, in
 //! Quatrelle's own code rather than CommonMark: what isn't recognised stays text, as written.
-//! Reading never changes the text; [`toggle_tick`], [`toggle_mark`] and [`enter`] make the edits
-//! the window offers. The text is hostile (a note from a server or a data file): it is read
-//! within caps, every range falls on character boundaries, and nothing here panics.
+//! Reading never changes the text; [`toggle_tick`], [`toggle_mark`], [`enter`] and [`indent`]
+//! make the edits the window offers. The text is hostile (a note from a server or a data file):
+//! it is read within caps, every range falls on character boundaries, and nothing here panics.
 
 use std::ops::Range;
 
@@ -15,7 +15,7 @@ mod inline;
 #[cfg(test)]
 mod tests;
 
-pub use edit::{Edit, Mark, enter, toggle_mark, toggle_tick};
+pub use edit::{Edit, Mark, enter, indent, toggle_mark, toggle_tick};
 
 /// Most of a text read as Markdown (a note is at most 256 KiB): what's past it is one plain line.
 pub const MAX_READ: usize = 256 * 1024;
