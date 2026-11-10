@@ -187,7 +187,7 @@ fn a_changed_file_is_asked_about() {
     a.logic(&ctx);
     frame(&ctx, &mut a, vec![]);
     assert!(matches!(&a.ui.dialog, Some(Dialog::ImportChanged { account }) if *account == id));
-    let shapes = settled(&ctx, &mut a);
+    settled(&ctx, &mut a);
     assert!(settled_text_at(&ctx, &mut a, "The file has changed", SIZE).is_some());
     let no = settled_text_at(&ctx, &mut a, "No", SIZE).expect("the No button");
     click_at(&ctx, &mut a, no, 1, SIZE);
