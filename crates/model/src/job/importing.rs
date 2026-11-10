@@ -167,9 +167,11 @@ mod tests {
     /// Damaged journals are errors, never a panic; one past the caps is refused as it is read.
     #[test]
     fn a_damaged_journal_is_an_error() {
-        for bad in ["", "[]", "{\"folders\":7}", "{\"folders\":[{\"ids\":[-1]}]}", "{\"size\":\"big\"}", "{\"folders\":[{\"ids\":[1,2"] {
+        for bad in ["", "7", "{\"folders\":7}", "{\"folders\":[{\"ids\":[-1]}]}", "{\"size\":\"big\"}", "{\"folders\":[{\"ids\":[1,2"] {
             assert!(ImportJournal::from_json(bad.as_bytes()).is_err(), "{bad}");
         }
+        // A list reads as a journal's fields in order: an empty one is no journal.
+        assert!(ImportJournal::from_json(b"[]").is_ok_and(|j| !j.is_some()));
         let many = format!("{{\"path\":\"p\",\"folders\":[{}]}}", vec!["{}"; MAX_IMPORT_FOLDERS + 1].join(","));
         assert!(ImportJournal::from_json(many.as_bytes()).unwrap_err().contains("folders"));
         let half = format!("{{\"ids\":[{}]}}", vec!["1"; MAX_IMPORT_IDS / 2 + 1].join(","));
