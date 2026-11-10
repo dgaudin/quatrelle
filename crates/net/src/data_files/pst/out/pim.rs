@@ -23,7 +23,23 @@ const MAX_FILES: usize = 8 << 20;
 impl Out<'_> {
     /// A contact, contact group, calendar item, task, note or journal entry (anything else in
     /// their folders is left out).
-    pub(in super::super) fn add_pim(&mut self, mut it: Item) {
+    pub(in super::super) fn add_pim(&mut self, it: Item) {
+        let (before, events) = (self.pim_len(), self.pim.events.len());
+        self.pim_item(it);
+        // Something came in, under the number worked out for it: the next takes a higher one.
+        if self.pim_len() > before {
+            self.pim_changed = true;
+            self.pim_floor = before.max(self.pim_floor).saturating_add(1);
+            self.event_again(events);
+        }
+    }
+
+    /// The contacts, calendar items, notes and tasks held.
+    fn pim_len(&self) -> usize {
+        self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len() + self.pim.tasks.len()
+    }
+
+    fn pim_item(&mut self, mut it: Item) {
         let Some(x) = it.extra.take() else { return };
         let x = &x;
         // Its files left out as they were read count, whatever becomes of it.
@@ -31,7 +47,9 @@ impl Out<'_> {
             self.lose(reason, n);
         }
         let files = std::mem::take(&mut it.files);
-        let n = self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len() + self.pim.tasks.len();
+        // The number of those held, as ever; an import gone on with never takes one again that
+        // an earlier run gave out.
+        let n = self.pim_len().max(self.pim_floor);
         let uid = format!("pst-{}-{n}@quatrelle.invalid", self.account);
         let class = it.class.to_ascii_lowercase();
         if class.starts_with("ipm.activity") {

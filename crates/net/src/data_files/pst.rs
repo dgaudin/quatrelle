@@ -36,6 +36,7 @@ use quatrelle_store::{FolderState, Store};
 mod chunked;
 mod embedded;
 mod item;
+mod journal;
 mod open;
 mod out;
 mod props;
@@ -44,10 +45,14 @@ mod rebuild;
 mod report;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+pub(crate) use tests::data_file as test_file;
 
 use chunked::Shared;
 use embedded::{Holder, Part, item_with_files};
 use item::{File, Item, attachment, item, message_class, message_code_page, picture_of, unread_attachment};
+use journal::Tell;
+pub use journal::{Progress, Run};
 use open::Recycle;
 use out::Out;
 #[doc(hidden)]
@@ -118,6 +123,11 @@ pub struct Imported {
     pub tasks: usize,
     /// Items that couldn't be read or written.
     pub skipped: usize,
+    /// The messages of the folders that are imported, as the file counts them (`None`: its
+    /// counts couldn't be read).
+    pub total: Option<usize>,
+    /// It ended because it was asked to stop: the rest of the file is still to come in.
+    pub stopped: bool,
     /// Why the folder list or the contacts, calendar and notes couldn't be saved at the end, when
     /// they couldn't: the messages above came in all the same.
     pub last_save: Option<String>,
@@ -182,9 +192,25 @@ pub fn import(path: &Path, store: &Store, account: &str, progress: &mut dyn FnMu
     import_recycled(path, store, account, Recycle::default(), progress)
 }
 
+/// [`import`] as `run` says: one that can be stopped, or the account's own gone on with from its
+/// journal. `progress` is told the messages in so far, their total and the folder being read, at
+/// each folder begun and every so often. Going on with a file that changed ends with
+/// [`quatrelle_model::IMPORT_FILE_CHANGED`] unless `run` allows it; with no journal (or a damaged
+/// one, set aside), with [`quatrelle_model::IMPORT_NO_JOURNAL`]: nothing is imported then.
+pub fn import_run(path: &Path, store: &Store, account: &str, run: Run<'_>, progress: &mut dyn FnMut(&Progress<'_>)) -> Result<Imported, String> {
+    let mut told = |p: &Progress<'_>| progress(p);
+    import_with(path, store, account, Recycle::default(), run, Tell::Full(&mut told))
+}
+
 /// [`import`], the handle that reads items opened again as `recycle` says.
 fn import_recycled(path: &Path, store: &Store, account: &str, recycle: Recycle, progress: &mut dyn FnMut(usize)) -> Result<Imported, String> {
-    let mut out = Out::new(store, account, progress);
+    let mut told = |n| progress(n);
+    import_with(path, store, account, recycle, Run::default(), Tell::Count(&mut told))
+}
+
+fn import_with<'a>(path: &Path, store: &'a Store, account: &'a str, recycle: Recycle, run: Run<'a>, tell: Tell<'a>) -> Result<Imported, String> {
+    let mut out = Out::watched(store, account, tell, run);
+    out.begin(path, &run)?;
     // `!BDN` then the client magic: `SM` a data file, `SO` Outlook's offline copy of a server
     // account (MS-PST 2.2.2.6).
     let mut head = [0u8; 10];
@@ -379,14 +405,63 @@ type ReadItem<'a> = dyn Fn(&EntryId) -> io::Result<Item> + 'a;
 
 fn walk(store: &dyn PstStore, read: &ReadItem<'_>, out: &mut Out<'_>) -> io::Result<()> {
     let top = store.open_folder(&store.properties().ipm_sub_tree_entry_id()?)?;
+    out.started(count(store, &*top));
     visit(store, &*top, (None, false), 0, read, out);
     Ok(())
+}
+
+/// The messages of the folders that are imported, from the folders' own counts
+/// (`PidTagContentCount`): no item is read. `None` when a count can't be read.
+fn count(store: &dyn PstStore, top: &dyn PstFolder) -> Option<usize> {
+    fn under(store: &dyn PstStore, folder: &dyn PstFolder, depth: usize, n: &mut usize) -> Option<()> {
+        if depth >= MAX_DEPTH {
+            return Some(());
+        }
+        let nodes: Vec<u32> = folder.hierarchy_table().map(|t| t.rows_matrix().map(|row| u32::from(row.id())).collect()).unwrap_or_default();
+        for node in nodes {
+            // One that can't be opened is left out of the import too.
+            let Ok(sub) = store.properties().make_entry_id(NodeId::from(node)).and_then(|e| store.open_folder(&e)) else { continue };
+            let (mail, pim) = folder_kind(&*sub);
+            if mail {
+                *n = n.saturating_add(usize::try_from(sub.properties().content_count().ok()?).ok()?);
+            }
+            if mail || pim {
+                under(store, &*sub, depth + 1, n)?;
+            }
+        }
+        Some(())
+    }
+    // The reader may panic on a damaged table: then the import goes on without a total.
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let mut n = 0;
+        under(store, top, 0, &mut n).map(|()| n)
+    }))
+    .ok()
+    .flatten()
+}
+
+/// Whether a folder of the data file holds mail, or contacts, calendar items, tasks, notes or
+/// journal entries (neither: it is left out).
+fn folder_kind(sub: &dyn PstFolder) -> (bool, bool) {
+    // Mail folders (no class means mail, in old files), contacts and calendars.
+    let class = sub.properties().get(0x3613).and_then(text_of).unwrap_or_default();
+    let mail = (class.is_empty() || class.starts_with("IPF.Note") || class.starts_with("IPF.Imap"))
+        // Outlook's RSS Feeds folder is its own bookkeeping, not mail.
+        && !class.starts_with("IPF.Note.OutlookHomepage");
+    let pim = !mail
+        && (class.starts_with("IPF.Contact")
+            || class.starts_with("IPF.Appointment")
+            || class.starts_with("IPF.Task")
+            || class.starts_with("IPF.StickyNote")
+            // Quatrelle has no journal: its entries come in as notes.
+            || class.starts_with("IPF.Journal"));
+    (mail, pim)
 }
 
 /// Read the folders under `folder`: they go under `parent` (`.0`), and are thrown away (`.1`) when
 /// it's Deleted Items or under it.
 fn visit(store: &dyn PstStore, folder: &dyn PstFolder, (parent, trash): (Option<&str>, bool), depth: usize, read: &ReadItem<'_>, out: &mut Out<'_>) {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_DEPTH || out.stopped {
         return;
     }
     // The reader may panic on a damaged table (it runs behind `catch_unwind` in `import`, which
@@ -403,6 +478,9 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, (parent, trash): (Option<
         }
     };
     for node in nodes {
+        if out.stopped {
+            return;
+        }
         let mut at = Visited { trash: trash || special_folder(store, 0x35E3) == Some(node), ..Default::default() };
         let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| visit_one(store, node, parent, read, out, &mut at)));
         if done.is_err() {
@@ -444,37 +522,35 @@ fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadI
             return;
         }
     };
-    // Mail folders (no class means mail, in old files), contacts and calendars.
-    let class = sub.properties().get(0x3613).and_then(text_of).unwrap_or_default();
-    let mail = (class.is_empty() || class.starts_with("IPF.Note") || class.starts_with("IPF.Imap"))
-        // Outlook's RSS Feeds folder is its own bookkeeping, not mail.
-        && !class.starts_with("IPF.Note.OutlookHomepage");
+    let (mail, pim) = folder_kind(&*sub);
     // Outlook's own Outbox, when it has nothing waiting (Quatrelle has an Outbox of its own).
     let empty = sub.contents_table().is_none_or(|t| t.rows_matrix().next().is_none());
     if empty && special_folder(store, 0x35E2) == Some(node) {
         return;
     }
     if !mail {
-        if class.starts_with("IPF.Contact")
-            || class.starts_with("IPF.Appointment")
-            || class.starts_with("IPF.Task")
-            || class.starts_with("IPF.StickyNote")
-            // Quatrelle has no journal: its entries come in as notes.
-            || class.starts_with("IPF.Journal")
-        {
+        if pim {
             at.sub = Some(sub.clone());
-            read_items(store, &*sub, read, out);
+            read_items(store, node, &*sub, read, out);
         }
         return;
     }
     let name = sub.properties().get(0x3001).and_then(text_of).unwrap_or_default();
-    let path = out.add_folder(parent, &name);
+    let path = out.folder_for(node, parent, &name);
     (at.sub, at.mail, at.path) = (Some(sub.clone()), true, Some(path.clone()));
     if let Some(contents) = sub.contents_table() {
         for row in contents.rows_matrix() {
+            let id = u32::from(row.id());
+            if out.stop() {
+                break;
+            }
+            // Written by an earlier run of this import: not read again.
+            if out.seen(node, id) {
+                continue;
+            }
             #[cfg(test)]
             tests::fault(&name);
-            let item = store.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| read(&e));
+            let item = store.properties().make_entry_id(NodeId::from(id)).and_then(|e| read(&e));
             match item {
                 // Thrown away: only counted.
                 Ok(i) if at.trash && out::is_pim(&i.class) => out.skipped += 1,
@@ -484,9 +560,11 @@ fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadI
                     out.skipped += 1;
                 }
             }
+            out.item_done(node, id);
         }
     }
     out.save_folder(&path);
+    out.folder_done();
 }
 
 /// The node of one of the store's special folders (`0x35E2`: the Outbox, `0x35E3`: Deleted Items), from its entry id
@@ -499,15 +577,24 @@ fn special_folder(store: &dyn PstStore, prop: u16) -> Option<u32> {
 }
 
 /// A contacts or calendar folder's items.
-fn read_items(store: &dyn PstStore, folder: &dyn PstFolder, read: &ReadItem<'_>, out: &mut Out<'_>) {
+fn read_items(store: &dyn PstStore, node: u32, folder: &dyn PstFolder, read: &ReadItem<'_>, out: &mut Out<'_>) {
     let Some(contents) = folder.contents_table() else { return };
     for row in contents.rows_matrix() {
-        match store.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| read(&e)) {
+        let id = u32::from(row.id());
+        if out.stop() {
+            return;
+        }
+        if out.seen(node, id) {
+            continue;
+        }
+        match store.properties().make_entry_id(NodeId::from(id)).and_then(|e| read(&e)) {
             Ok(i) => out.add_pim(i),
             Err(e) => {
                 log::info!("an item could not be read: {e}");
                 out.skipped += 1;
             }
         }
+        out.item_done(node, id);
     }
+    out.folder_done();
 }

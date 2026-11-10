@@ -220,6 +220,9 @@ pub struct Pool {
     /// The server search still wanted ([`Job::SearchServer`]'s `search`; 0: none), shared with
     /// every worker so a search running stops when it's no longer wanted.
     search: Arc<AtomicU64>,
+    /// The data file imports that are running, by account: set, the flag stops the import at its
+    /// next item ([`Job::StopImport`]).
+    imports: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     /// Edits to the cache, written on a thread of their own (`pool::edit_writer`): marking a message
     /// read rewrote its folder's list on the window's thread, seconds for a folder of a hundred
     /// thousand messages, at every message opened. `None` once the pool shuts down.

@@ -396,6 +396,14 @@ pub enum Job {
     ReadMessageFile { path: String },
     /// Read an Outlook data file (`.pst`) into an account with no server.
     ImportPst { account: String, path: String },
+    /// Stop the account's import at its next item: what came in stays, and the end is told by
+    /// [`Event::Imported`] with `stopped`.
+    StopImport { account: String },
+    /// Go on with an import that was stopped or cut short, from the data file at `path` (the
+    /// journal's, or where the file is now), into the same account. A file that isn't the one
+    /// the import began with ends it with [`IMPORT_FILE_CHANGED`] and nothing imported, unless
+    /// `allow_changed`: then what the journal doesn't have comes in.
+    ResumeImport { account: String, path: String, allow_changed: bool },
     /// Compact the account's data file (Outlook's Compact Now): attachments an earlier version kept
     /// uncompressed made smaller first, then compacted in place; told as it goes by
     /// [`Event::CompactProgress`], answered by [`Event::Compacted`].
@@ -546,6 +554,8 @@ impl Job {
             | Job::SyncDav { account }
             | Job::SyncCalendars { account, .. }
             | Job::ImportPst { account, .. }
+            | Job::StopImport { account }
+            | Job::ResumeImport { account, .. }
             | Job::FileMessages { account, .. }
             | Job::Archive { account, .. }
             | Job::PutBack { account, .. }
@@ -658,6 +668,8 @@ impl SyncStatus {
 
 mod events;
 pub use events::{Event, HeldKey, ListChange, Revocation};
+mod importing;
+pub use importing::{IMPORT_DOC, IMPORT_FILE_CHANGED, IMPORT_NO_JOURNAL, ImportJournal, ImportedFolder, MAX_IMPORT_FOLDERS, MAX_IMPORT_IDS};
 
 mod pgp;
 mod policy;

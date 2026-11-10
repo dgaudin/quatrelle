@@ -7,6 +7,8 @@ use quatrelle_store::CompactStep;
 
 use super::*;
 
+mod importing;
+
 /// What the edit writer's thread is handed, in order.
 pub(super) enum Edit {
     /// A change: the account, the change, the account's thread to tell after, and how many times
@@ -97,6 +99,7 @@ impl Pool {
             webex_jobs: None,
             offline: false,
             search: Arc::new(AtomicU64::new(0)),
+            imports: Arc::default(),
         }
     }
 
@@ -319,49 +322,6 @@ impl Pool {
         }
     }
 
-    /// Import a data file on a thread of its own: an Outlook one (`.pst`), or Quatrelle's own
-    /// (`.quatrelle`, copied in as it is).
-    fn import_pst(&mut self, account: String, path: String) {
-        let sink = self.sink.clone();
-        let store = self.store.clone();
-        let id = account.clone();
-        let spawned = std::thread::Builder::new().name("mail-import".into()).spawn(move || {
-            if path.to_ascii_lowercase().ends_with(".quatrelle") {
-                match store.import_data_file(&account, std::path::Path::new(&path)) {
-                    Ok(messages) => {
-                        let folders = store.load_folders(&account).unwrap_or_default();
-                        let paths: Vec<String> = folders.iter().map(|f| f.path.clone()).collect();
-                        sink.emit(Event::Folders { account: account.clone(), folders });
-                        for folder in paths {
-                            sink.emit(Event::FolderChanged { account: account.clone(), folder });
-                        }
-                        sink.emit(Event::Imported { account, messages, skipped: 0, done: true, error: None });
-                    }
-                    Err(e) => sink.emit(Event::Imported { account, messages: 0, skipped: 0, done: true, error: Some(e.to_string()) }),
-                }
-                return;
-            }
-            let mut progress = |messages| sink.emit(Event::Imported { account: account.clone(), messages, skipped: 0, done: false, error: None });
-            let result = crate::pst::import(std::path::Path::new(&path), &store, &account, &mut progress);
-            match result {
-                Ok(done) => {
-                    let paths: Vec<String> = done.folders.iter().map(|f| f.path.clone()).collect();
-                    sink.emit(Event::Folders { account: account.clone(), folders: done.folders });
-                    for folder in paths {
-                        sink.emit(Event::FolderChanged { account: account.clone(), folder });
-                    }
-                    // A last save that failed is said with what came in (the account stays).
-                    sink.emit(Event::Imported { account, messages: done.messages, skipped: done.skipped, done: true, error: done.last_save });
-                }
-                Err(e) => sink.emit(Event::Imported { account, messages: 0, skipped: 0, done: true, error: Some(e) }),
-            }
-        });
-        // No thread, no import: it ends here, as a failed one (the account isn't left importing).
-        if let Err(e) = spawned {
-            self.sink.emit(Event::Imported { account: id, messages: 0, skipped: 0, done: true, error: Some(format!("import: {e}")) });
-        }
-    }
-
     /// Called (from worker threads) after every event, e.g. to request a UI repaint.
     pub fn set_waker(&self, f: Arc<dyn Fn() + Send + Sync>) {
         if let Ok(mut w) = self.sink.wake.lock() {
@@ -405,7 +365,9 @@ impl Pool {
                     log::warn!("autoconfiguration: {e}");
                 }
             }
-            Job::ImportPst { account, path } => self.import_pst(account, path),
+            Job::ImportPst { account, path } => self.import_pst(account, path, None),
+            Job::ResumeImport { account, path, allow_changed } => self.import_pst(account, path, Some(allow_changed)),
+            Job::StopImport { account } => self.stop_import(&account),
             Job::ReadMessageFile { path } => self.read_message_file(path),
             // Into an account on this computer: with the other changes to its mail. An account
             // with a server that isn't connected can't take them now.

@@ -550,6 +550,36 @@ The walk over the folder tree lives in `pst.rs`; an item is read from its proper
 `pst/item.rs`, through `pst/props.rs`'s `Val` (a closure gives each property's value, so tests can
 build items without a file), written out again in `pst/rebuild.rs`, and saved by `pst/out.rs`.
 
+**Followed, stopped, gone on with** (`pst/journal.rs`, design in
+`docs/superpowers/specs/2026-11-10-stoppable-import-design.md`). Before the first message the
+folders' own counts (`PidTagContentCount`) of the mail folders that are imported are added up: the
+total `Event::Imported` carries with the folder being read (`None` when a count can't be read; no
+item is read to count). `Job::StopImport` sets the account's flag in the pool, asked before each
+item: the readers return, and the import ends as a whole one does (`Out::finish`), told `stopped`.
+
+The import keeps a journal, the account document `import.json` (`model::ImportJournal`): the
+file's path, size and modification time, the total, whether it finished, and for each folder of
+the file already begun (by its node) the folder it became, its next number and the nodes of the
+items dealt with, sorted. It is written when the folders are about to be read, after each page of
+mail (`PAGE_MESSAGES`), at a folder's end when 512 items or 2 seconds have passed since, and at
+the end, always in this order: the mail and the lists of the folders being read (`ListWriter::save`
+keeps a list as it stands, part-way), the contacts and calendar, **then the journal**, then the
+folder list. So a quit or a crash leaves at most items written but not noted, and never a folder
+the journal has that can't be made again. It is hostile input like any cache file: read with caps
+(2,000,000 ids, 10,000 folders; past them it is no longer written), a damaged one is set aside
+(`import.json.bad`) and the import can then only be started over (`IMPORT_NO_JOURNAL`).
+
+`Job::ResumeImport { account, path, allow_changed }` goes on from the journal, never by itself.
+The file must have the journal's size and date, else it ends with `IMPORT_FILE_CHANGED` and
+nothing imported, unless `allow_changed` (then what the journal doesn't have comes in). Items in
+the journal are skipped without being read. A folder of the journal goes on from its next number
+(`Store::list_writer_from`: its list is opened again at its first new message, full pages read
+but not written again, the marks made since kept), so an item written but not noted is written
+again over itself. Folders the account has that the journal doesn't (made by a later run, or by
+the user) are set aside while the file's are made, and come back at the end; contacts, notes and
+tasks numbered at or past the journal's next number are dropped before they come in again, and a
+calendar item that keeps its id from the file gives way to itself coming in again.
+
 ## POP accounts (`crates/net/src/protocols/pop.rs`)
 
 A POP account (RFC 1939; SSL/TLS, `STLS` or none; `USER`/`PASS` or `AUTH XOAUTH2`) has the

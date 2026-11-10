@@ -19,7 +19,16 @@ fn a_failed_last_save_keeps_the_account() {
     let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let late = s.run("account.importPst", &json!({"path": "C:/Mail/late.pst"})).unwrap()["account"].as_str().unwrap().to_string();
     inbox_of(&mut s, &late);
-    s.apply(Event::Imported { account: late.clone(), messages: 30, skipped: 0, done: true, error: Some("disk full".into()) });
+    s.apply(Event::Imported {
+        account: late.clone(),
+        messages: 30,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("disk full".into()),
+    });
     assert!(s.account(&late).is_some(), "what came in is kept");
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("30 messages imported") && n.text.contains("disk full")));
     assert_eq!(s.account(&late).unwrap().status, SyncStatus::Offline);
@@ -35,7 +44,16 @@ fn a_failed_last_save_is_kept_across_a_restart() {
     let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let late = s.run("account.importPst", &json!({"path": "C:/Mail/late.pst"})).unwrap()["account"].as_str().unwrap().to_string();
     inbox_of(&mut s, &late);
-    s.apply(Event::Imported { account: late.clone(), messages: 30, skipped: 0, done: true, error: Some("disk full".into()) });
+    s.apply(Event::Imported {
+        account: late.clone(),
+        messages: 30,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("disk full".into()),
+    });
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("disk full") && !n.text.contains("again")));
     // A file of contacts only: they were written, the folder list after them wasn't.
     let cards = s.run("account.importPst", &json!({"path": "C:/Mail/cards.pst"})).unwrap()["account"].as_str().unwrap().to_string();
@@ -47,14 +65,32 @@ fn a_failed_last_save_is_kept_across_a_restart() {
         ..Default::default()
     });
     store.save_account_doc(&cards, quatrelle_model::pim::PIM_DOC, &pim).unwrap();
-    s.apply(Event::Imported { account: cards.clone(), messages: 0, skipped: 0, done: true, error: Some("disk full".into()) });
+    s.apply(Event::Imported {
+        account: cards.clone(),
+        messages: 0,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("disk full".into()),
+    });
     assert!(s.account(&cards).is_some(), "contacts came in: the account stays");
     assert!(s.pim[&cards].cards.iter().any(|c| c.card.name == "Ana Lima"), "and they show");
     // The folder list can't be saved again either: said, and the account has no folders after.
     store.fail(None, Some("folders.json"));
     let lost = s.run("account.importPst", &json!({"path": "C:/Mail/lost.pst"})).unwrap()["account"].as_str().unwrap().to_string();
     inbox_of(&mut s, &lost);
-    s.apply(Event::Imported { account: lost.clone(), messages: 5, skipped: 0, done: true, error: Some("disk full".into()) });
+    s.apply(Event::Imported {
+        account: lost.clone(),
+        messages: 5,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("disk full".into()),
+    });
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("Import the file again")));
     store.fail(None, None);
 
@@ -71,7 +107,16 @@ fn a_failed_import_that_brought_nothing_goes() {
     let store = temp("pst-nothing");
     let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let bad = s.run("account.importPst", &json!({"path": "/tmp/notes.txt"})).unwrap()["account"].as_str().unwrap().to_string();
-    s.apply(Event::Imported { account: bad.clone(), messages: 0, skipped: 0, done: true, error: Some("not an Outlook data file".into()) });
+    s.apply(Event::Imported {
+        account: bad.clone(),
+        messages: 0,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("not an Outlook data file".into()),
+    });
     assert!(s.account(&bad).is_none());
     let _ = std::fs::remove_dir_all(store.root());
 }
@@ -88,7 +133,16 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     assert!(matches!(s.take_jobs().as_slice(), [Job::ImportPst { account, path }] if *account == id && path.ends_with("Archive 2024.pst")));
 
     // The import reports progress, then its folders, then that it's done: the Inbox opens.
-    s.apply(Event::Imported { account: id.clone(), messages: 200, skipped: 0, done: false, error: None });
+    s.apply(Event::Imported {
+        account: id.clone(),
+        messages: 200,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: false,
+        error: None,
+    });
     assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("200")));
     let inbox = quatrelle_model::Folder {
         account: id.clone(),
@@ -107,7 +161,16 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
         ..Default::default()
     });
     s.store.clone().unwrap().save_account_doc(&id, quatrelle_model::pim::PIM_DOC, &pim).unwrap();
-    s.apply(Event::Imported { account: id.clone(), messages: 250, skipped: 2, done: true, error: None });
+    s.apply(Event::Imported {
+        account: id.clone(),
+        messages: 250,
+        skipped: 2,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: None,
+    });
     assert!(s.pim[&id].cards.iter().any(|c| c.card.name == "Ana Lima"));
     assert!(!s.pim[&id].calendars.is_empty(), "with a calendar to add to");
     assert!(s.notices.last().is_some_and(|n| n.text.contains("250 messages imported (2 could not be read)")));
@@ -116,7 +179,16 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
 
     // A file that isn't one: the account goes again.
     let bad = s.run("account.importPst", &json!({"path": "/tmp/notes.txt"})).unwrap()["account"].as_str().unwrap().to_string();
-    s.apply(Event::Imported { account: bad.clone(), messages: 0, skipped: 0, done: true, error: Some("not an Outlook data file".into()) });
+    s.apply(Event::Imported {
+        account: bad.clone(),
+        messages: 0,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("not an Outlook data file".into()),
+    });
     assert!(s.account(&bad).is_none());
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("notes.txt could not be opened")));
 

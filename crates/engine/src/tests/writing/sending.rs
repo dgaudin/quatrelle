@@ -22,7 +22,16 @@ fn data_file_session(name: &str) -> (Session, String) {
         ..Default::default()
     };
     s.apply(Event::Folders { account: id.clone(), folders: vec![folder("INBOX", FolderRole::Inbox), folder("Sent Items", FolderRole::Sent)] });
-    s.apply(Event::Imported { account: id.clone(), messages: 0, skipped: 0, done: true, error: None });
+    s.apply(Event::Imported {
+        account: id.clone(),
+        messages: 0,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: None,
+    });
     s.take_jobs();
     (s, id)
 }

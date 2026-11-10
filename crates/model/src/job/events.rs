@@ -225,12 +225,18 @@ pub enum Event {
         path: String,
         raw: Result<Vec<u8>, String>,
     },
-    /// How a data file import is going (`done`: finished, or failed with `error`). The folders
-    /// come as [`Event::Folders`] first.
+    /// How a data file import is going (`done`: finished, stopped or failed with `error`). The
+    /// folders come as [`Event::Folders`] first. `messages` of `total` (`None`: the file's counts
+    /// couldn't be read) are in, the folder being read is `folder` (its path; empty before the
+    /// first and at the end); `stopped`: it ended because it was asked to
+    /// ([`Job::StopImport`](super::Job::StopImport)), and can be gone on with.
     Imported {
         account: String,
         messages: usize,
         skipped: usize,
+        total: Option<usize>,
+        folder: String,
+        stopped: bool,
         done: bool,
         error: Option<String>,
     },

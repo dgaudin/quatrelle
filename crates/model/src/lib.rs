@@ -36,9 +36,10 @@ pub use addr::{Addressee, AddresseeKind, EmailAddress};
 pub use folder::archive::{AccountRole, MAX_BATCH as MAX_ARCHIVE_BATCH, archive_folder};
 pub use folder::{Folder, FolderRole, child_path, is_within, rebase_path, sort_folders, utf7};
 pub use job::{
-    ArchiveTag, Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, Job, ListChange, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, MAX_TAG_NAME, MailboxQuota,
-    ONLINE_ARCHIVE, Op, PUBLIC_FOLDERS, Private, RECOVERABLE_MAX, RECOVERABLE_PAGE, Recoverable, RecoverableKind, Revocation, Secret, SyncStatus,
-    WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting, is_public_folder, is_tag_id,
+    ArchiveTag, Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, IMPORT_DOC, IMPORT_FILE_CHANGED, IMPORT_NO_JOURNAL, ImportJournal, ImportedFolder,
+    Job, ListChange, MAX_ARCHIVE_TAGS, MAX_IMPORT_FOLDERS, MAX_IMPORT_IDS, MAX_TAG_DAYS, MAX_TAG_NAME, MailboxQuota, ONLINE_ARCHIVE, Op,
+    PUBLIC_FOLDERS, Private, RECOVERABLE_MAX, RECOVERABLE_PAGE, Recoverable, RecoverableKind, Revocation, Secret, SyncStatus, WEBEX_REDIRECT_PORT,
+    WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting, is_public_folder, is_tag_id,
 };
 
 /// How a connection to a server is secured.

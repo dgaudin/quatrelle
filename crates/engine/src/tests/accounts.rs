@@ -61,7 +61,16 @@ fn pop_accounts_download_and_can_start_from_a_data_file() {
         .unwrap()
         .to_string();
     assert!(matches!(s.take_jobs().as_slice(), [Job::ImportPst { path, .. }] if path == "C:/Mail/old.pst"), "held until the file is in");
-    s.apply(Event::Imported { account: id.clone(), messages: 40, skipped: 0, done: true, error: None });
+    s.apply(Event::Imported {
+        account: id.clone(),
+        messages: 40,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: None,
+    });
     assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.id == id));
     // A file that can't be read: the account stays, and connects anyway.
     let id =
@@ -70,7 +79,16 @@ fn pop_accounts_download_and_can_start_from_a_data_file() {
             .unwrap()
             .to_string();
     s.take_jobs();
-    s.apply(Event::Imported { account: id.clone(), messages: 0, skipped: 0, done: true, error: Some("Outlook has this data file open".into()) });
+    s.apply(Event::Imported {
+        account: id.clone(),
+        messages: 0,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some("Outlook has this data file open".into()),
+    });
     assert!(s.account(&id).is_some());
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("Outlook has this data file open")));
     assert!(matches!(s.take_jobs().as_slice(), [Job::Start { .. }]));

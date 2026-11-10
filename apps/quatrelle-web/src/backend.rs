@@ -589,6 +589,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::Discover { .. }
         | Job::SignIn { .. }
         | Job::ImportPst { .. }
+        | Job::StopImport { .. }
+        | Job::ResumeImport { .. }
         | Job::FileMessages { .. }
         | Job::Archive { .. }
         | Job::PutBack { .. }
@@ -750,12 +752,15 @@ impl Backend for WebBackend {
             Job::SignIn { account } => {
                 status(sh, &account.id, SyncStatus::NeedsPassword { error: "signing in through Google or Microsoft needs the desktop app".into() })
             }
-            Job::ImportPst { account, .. } => emit(
+            Job::ImportPst { account, .. } | Job::ResumeImport { account, .. } => emit(
                 sh,
                 Event::Imported {
                     account,
                     messages: 0,
                     skipped: 0,
+                    total: None,
+                    folder: String::new(),
+                    stopped: false,
                     done: true,
                     error: Some("opening Outlook data files needs the desktop app".into()),
                 },

@@ -13,7 +13,7 @@ use super::super::open::{HANDLE_CACHE, Recycle};
 use super::super::{import, import_recycled};
 
 /// A data file of `n` messages in its Inbox, in a folder of its own.
-fn data_file(name: &str, n: usize) -> (PathBuf, PathBuf) {
+pub(crate) fn data_file(name: &str, n: usize) -> (PathBuf, PathBuf) {
     let dir = std::env::temp_dir().join(format!("quatrelle-pst-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();

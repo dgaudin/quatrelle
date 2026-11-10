@@ -269,6 +269,8 @@ impl Worker {
             | Job::Discover { .. }
             | Job::SignIn { .. }
             | Job::ImportPst { .. }
+            | Job::StopImport { .. }
+            | Job::ResumeImport { .. }
             | Job::ReadMessageFile { .. }
             | Job::CompactDataFile { .. }
             | Job::AskLlm { .. }

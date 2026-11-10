@@ -6,6 +6,7 @@
 use super::*;
 
 mod drafts;
+mod importing;
 
 /// A full sync walks the Inbox first, then what mail is about, then the rest, the archive and
 /// the public folders followed last: a mailbox of public folders and years of archives must not
