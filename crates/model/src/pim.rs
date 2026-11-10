@@ -10,6 +10,7 @@ use crate::ical::CalEvent;
 use crate::vcard::Card;
 
 pub mod files;
+pub mod markdown;
 pub mod scheduling;
 pub mod tasks;
 

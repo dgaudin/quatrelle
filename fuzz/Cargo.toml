@@ -32,6 +32,7 @@ bin = [
     { name = "scam_answer", bench = false, test = false, doc = false, path = "fuzz_targets/scam_answer.rs" }, # the scam check: a model's answer read as hostile text, the request built from the same bytes, the local signs
     { name = "text_first", bench = false, test = false, doc = false, path = "fuzz_targets/text_first.rs" }, # Exchange's and Graph's answers, read as a message's text
     { name = "tnef", bench = false, test = false, doc = false, path = "fuzz_targets/tnef.rs" }, # Outlook's winmail.dat and compressed RTF
+    { name = "markdown", bench = false, test = false, doc = false, path = "fuzz_targets/notes/markdown.rs" }, # a note's Markdown, and the edits its window makes
     { name = "trust", bench = false, test = false, doc = false, path = "fuzz_targets/trust.rs" }, # the URLs and hosts servers hand out
     { name = "vcard", bench = false, test = false, doc = false, path = "fuzz_targets/vcard.rs" }, # contact cards
 ]
