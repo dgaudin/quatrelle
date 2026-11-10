@@ -448,3 +448,45 @@ fn a_drag_whose_press_was_not_seen_still_leaves_its_block() {
     assert_eq!((sel.anchor.block, sel.head.block), (from.block, to.block), "{sel:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Seen in the real window: with a selection across blocks there, a new press elsewhere left
+/// the block it had started in selected (its text box kept its own range, drawn without the
+/// keyboard), so a new drag showed two selections. A press without Shift clears every block's
+/// selection and puts the cursor there; so does an arrow that ends a selection in another block.
+#[test]
+fn a_new_press_clears_the_selection_of_every_block() {
+    let (mut a, dir, ctx) = reply_to_two("across-again", SIZE, |_| {});
+    // What the text's editor draws as selected, with or without the keyboard.
+    fn selected(a: &MailApp) -> bool {
+        a.ui.editor.as_ref().is_some_and(|e| e.id == compose(a).id && !e.sel.is_empty())
+    }
+    let (from, to, rule) = (at(&a, "To: "), at(&a, "Morgan Lee"), at(&a, "\nFrom: Sam"));
+    let (p, q, r) = (place(&a, from), place(&a, to), place(&a, rule));
+    drag(&ctx, &mut a, p, q);
+    assert!(ac(&a).sel.as_ref().is_some_and(|s| s.spans()) && selected(&a), "selected from the text into the original");
+    // A press on the rule over the second message: nothing is selected any more.
+    step(&ctx, &mut a, vec![Event::PointerMoved(r)]);
+    step(&ctx, &mut a, vec![button(r, true, Modifiers::NONE)]);
+    step(&ctx, &mut a, vec![]);
+    assert!(ac(&a).sel.is_none());
+    assert!(!selected(&a), "the text's own selection went with it");
+    // Dragged up from there: one selection, from the rule into the block above.
+    step(&ctx, &mut a, vec![Event::PointerMoved(q)]);
+    step(&ctx, &mut a, vec![button(q, false, Modifiers::NONE)]);
+    step(&ctx, &mut a, vec![]);
+    let sel = ac(&a).sel.clone().expect("a new selection, upward");
+    assert_eq!((sel.anchor.block, sel.head.block), (rule.block, to.block));
+    assert!(!selected(&a), "the text isn't part of it");
+    // From the text again, then an arrow: the cursor at its end, in the other block, and the
+    // text's own selection gone.
+    step(&ctx, &mut a, vec![Event::PointerMoved(p)]);
+    step(&ctx, &mut a, vec![button(p, true, Modifiers::NONE)]);
+    step(&ctx, &mut a, vec![Event::PointerMoved(q)]);
+    step(&ctx, &mut a, vec![button(q, false, Modifiers::NONE)]);
+    step(&ctx, &mut a, vec![]);
+    assert!(ac(&a).sel.as_ref().is_some_and(|s| s.anchor.block == 0 && s.spans()) && selected(&a));
+    step(&ctx, &mut a, vec![key(Key::ArrowRight, Modifiers::NONE)]);
+    step(&ctx, &mut a, vec![]);
+    assert!(ac(&a).sel.is_none() && !selected(&a), "an arrow leaves a cursor alone");
+    let _ = std::fs::remove_dir_all(dir);
+}

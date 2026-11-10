@@ -149,11 +149,26 @@ fn len_of(c: &Compose, block: usize) -> usize {
     c.block_text(block).map_or(0, |(t, _)| t.chars().count())
 }
 
+/// Nothing stays selected in the blocks other than `keep`: a text box without the keyboard still
+/// shows the selection its editor remembers (for a menu or the ribbon to work on), which stayed
+/// lit under a new selection made elsewhere.
+fn clear_others(c: &Compose, ed: &mut rich_edit::Editor, eds: &mut QuoteEditors, keep: Option<usize>) {
+    if keep != Some(0) {
+        ed.sel = ed.sel.end..ed.sel.end;
+    }
+    for ((id, n), e) in eds.iter_mut() {
+        if *id == c.id && keep != Some(n.saturating_add(1)) {
+            e.sel = e.sel.end..e.sel.end;
+        }
+    }
+}
+
 /// The cursor at `at`, alone, its block with the keyboard.
 fn put_cursor(st: &mut UiState, ui: &Ui, c: &Compose, ed: &mut rich_edit::Editor, eds: &mut QuoteEditors, at: QuotePoint) {
     let id = box_of(c, at.block);
     ui.memory_mut(|m| m.request_focus(id));
     rich_edit::set_caret(ui.ctx(), id, at.at, at.at);
+    clear_others(c, ed, eds, Some(at.block));
     match at.block.checked_sub(1) {
         None => {
             ed.settle(at.at);
@@ -414,7 +429,14 @@ fn moved(a: &AcrossState, c: &Compose, blocks: &[usize], head: QuotePoint, h_x: 
 /// After the text and the original's blocks are drawn (`drawn`, each with its number): the
 /// pointer's part (a drag that leaves its block, Shift with a click, a drag held at the view's
 /// edge scrolling), and the selection lit in the blocks other than the one it started in.
-pub(super) fn after(st: &mut UiState, ui: &mut Ui, c: &Compose, drawn: Vec<(usize, rich_edit::Drawn)>) {
+pub(super) fn after(
+    st: &mut UiState,
+    ui: &mut Ui,
+    c: &Compose,
+    ed: &mut rich_edit::Editor,
+    eds: &mut QuoteEditors,
+    drawn: Vec<(usize, rich_edit::Drawn)>,
+) {
     let mut a = st.across.take(c.id);
     a.drawn = drawn;
     if a.drawn.len() < 2 || c.plain {
@@ -453,8 +475,10 @@ pub(super) fn after(st: &mut UiState, ui: &mut Ui, c: &Compose, drawn: Vec<(usiz
                 a.pressed = None;
             }
             (hit, _) => {
+                // A press without Shift: the cursor there, and nothing else selected anywhere.
                 a.sel = None;
                 a.pressed = hit;
+                clear_others(c, ed, eds, hit);
             }
         }
         trace(|| format!("press at {p:?} in block {hit:?}, shift {shift}: pressed {:?}, selection {:?}", a.pressed, a.sel));

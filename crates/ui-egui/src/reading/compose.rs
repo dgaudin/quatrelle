@@ -601,7 +601,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 // The original, as it came, under the text: changed where it stands.
                 drawn.extend(quote::show(s, st, ui, c, &mut quote_eds, acts));
                 // A selection that goes on from one of these texts into others.
-                across::after(st, ui, c, drawn);
+                across::after(st, ui, c, &mut ed, &mut quote_eds, drawn);
             });
         });
     });
