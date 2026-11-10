@@ -284,21 +284,6 @@ impl Store {
             .collect()
     }
 
-    /// Write a folder's list a page at a time (importing a data file, the whole list needn't be
-    /// held): messages are handed over in rising number order, then [`ListWriter::finish`]. The
-    /// pages come out as [`Store::save_folder`] makes them.
-    pub fn list_writer(&self, account: &str, folder: &str) -> ListWriter {
-        ListWriter {
-            account: account.to_string(),
-            folder: folder.to_string(),
-            pages: Vec::new(),
-            firsts: Vec::new(),
-            page: Vec::new(),
-            total: 0,
-            unread: 0,
-        }
-    }
-
     /// Several files at once (one transaction in a data file).
     pub(super) fn write_files(&self, items: &[(PathBuf, Vec<u8>)]) -> Result<()> {
         #[cfg(not(target_arch = "wasm32"))]
