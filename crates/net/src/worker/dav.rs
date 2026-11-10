@@ -255,7 +255,7 @@ impl Worker {
         let pim = self.load_pim();
         let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
         let password = self.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).secret.clone();
-        let dav = crate::dav::Dav::new(&user, &password, crate::dav::trust_of(&self.acc, &pim));
+        let dav = crate::dav::Dav::for_account(&user, &password, &self.acc, &pim);
         let host = self.acc.pop.as_ref().map_or(self.acc.imap.host.as_str(), |p| p.host.as_str());
         let done = crate::dav::sync(&dav, &self.acc.email, host, &pim, now(), system_zone());
         self.dav_done(done);

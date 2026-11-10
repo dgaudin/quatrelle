@@ -508,11 +508,16 @@ the sync before replaced, is given the item made before anything is sent. Withou
 appointment made then moved during the first sync was made a second time (02/11: Outlook showed
 it on Monday and on Tuesday), and so was a contact, note or task changed during it.
 
-The password goes only to the sites the account trusts (its servers' and address's registrable
+A request goes only to the sites the account trusts (its servers' and address's registrable
 domains, the domains the user allowed, and the homes found and saved before, unless the user
 removed their site): a request whose address, redirect or href (principal, home, collection,
 item) is on any other site is not sent at all, with or without the password, and is
-`NetError::Untrusted`. Discovery skips such a start
+`NetError::Untrusted`. The password is never sent first: a request goes without it, and it
+answers a server that asks for it (a 401 offering Basic), which then has it for the rest of the
+sync. It answers only on a site of the account's servers, an allowed domain or a saved home
+(`Trust::of_servers`): the address's own domain, often a website kept by someone else than the
+mail, is asked where the calendars are but is `Untrusted` once it asks for the password, so the
+user is asked first. Discovery skips such a start
 when another one finds the home (an address's website commonly redirects everything to a web
 host), and asks only when none does. A look for a missing home that ends so doesn't stop the
 sync: what has a home syncs, the site comes back in `DavSync::untrusted` to ask about once

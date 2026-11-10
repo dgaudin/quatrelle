@@ -115,7 +115,7 @@ pub fn serve() -> Server {
             let mut d = shared.lock().unwrap();
             d.log.push(format!("{method} {path}"));
             if !authorized {
-                respond(&mut s, "401 Unauthorized", &[], "");
+                respond(&mut s, "401 Unauthorized", &[("WWW-Authenticate", "Basic realm=\"dav\"".into())], "");
                 continue;
             }
             match (method.as_str(), path.as_str()) {

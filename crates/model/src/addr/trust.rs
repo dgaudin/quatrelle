@@ -107,8 +107,17 @@ impl Trust {
     /// `extra` (URLs, or hosts, known only to the worker and the engine: the saved CalDAV and
     /// CardDAV homes) unless its site was withdrawn. An empty or unreadable one is ignored.
     pub fn of(acc: &AccountConfig, extra: &[&str]) -> Trust {
-        let mut t = Trust::default();
+        let mut t = Trust::of_servers(acc, extra);
         t.add(acc.email.rsplit_once('@').map(|(_, d)| d));
+        t
+    }
+
+    /// The same without the address's own domain, unless a server is on it or the user allowed
+    /// it: where the password may answer a server that asks for it and that the account wasn't
+    /// set up with (CalDAV and CardDAV, looked for from the address). An address's domain is
+    /// often a website kept by someone else than the mail.
+    pub fn of_servers(acc: &AccountConfig, extra: &[&str]) -> Trust {
+        let mut t = Trust::default();
         t.add(Some(&acc.imap.host));
         t.add(Some(&acc.smtp.host));
         t.add(acc.pop.as_ref().map(|p| p.host.as_str()));
@@ -218,6 +227,25 @@ mod tests {
             assert_eq!(url_host(url).as_deref(), want, "{url}");
         }
         assert!(url_host(&format!("https://{}.example/", "a".repeat(300))).is_none(), "capped");
+    }
+
+    /// The password answers a server found from the address only on a site of the account's
+    /// servers, or one allowed: the address's domain alone is no reason.
+    #[test]
+    fn the_addresss_domain_is_no_server_of_the_account() {
+        let server = |host: &str| ServerConfig { host: host.into(), port: 993, security: Security::Tls };
+        let acc = AccountConfig {
+            email: "zoe@example.org".into(),
+            imap: server("imap.host.example"),
+            smtp: server("smtp.host.example"),
+            ..Default::default()
+        };
+        let t = Trust::of_servers(&acc, &["https://dav.saved.example/home/"]);
+        assert!(t.allows("dav.host.example") && t.allows("dav.saved.example") && !t.allows("example.org") && !t.allows("www.example.org"));
+        assert!(Trust::of(&acc, &[]).allows("www.example.org"), "a request may still go there");
+        // On the address's domain itself, or allowed by the user: it is.
+        assert!(Trust::of_servers(&AccountConfig { imap: server("mail.example.org"), ..acc.clone() }, &[]).allows("example.org"));
+        assert!(Trust::of_servers(&AccountConfig { trusted_domains: vec!["example.org".into()], ..acc }, &[]).allows("dav.example.org"));
     }
 
     #[test]

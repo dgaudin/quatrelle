@@ -33,48 +33,54 @@ fn hrefs_are_made_absolute() {
     assert_eq!(dav.absolute("https://h.example/dav/cal/", "//h.example/x").unwrap(), "https://h.example/x", "the scheme is kept");
 }
 
+/// The first request of a look for calendars, as the fake server logs it: twice at the start of
+/// a session, once without the password (refused) and once with it.
+const WELL_KNOWN: &str = "PROPFIND /.well-known/caldav";
+
 /// Whether a request as the server saw it carried the password.
 fn password_seen(request: &str) -> bool {
     request.to_ascii_lowercase().contains("authorization: basic dtpw")
 }
 
-/// A redirect is followed, with the password, only to a site the account trusts: to any other,
-/// nothing at all is sent (with the password or without: a request without one gets a 401,
-/// read as a failed sign-in), and the request is `Untrusted`.
+/// A redirect is followed only to a site the account trusts, and the password goes along once
+/// a server asked for it: to any other site nothing at all is sent, with the password or
+/// without, and the request is `Untrusted`.
 #[test]
 fn a_redirect_is_followed_only_to_a_trusted_site() {
     use crate::http::tests::{bind, serve, serve_on};
     let multi = || b"HTTP/1.1 207 Multi-Status\r\nContent-Length: 0\r\n\r\n".to_vec();
+    let asks = || b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"dav\"\r\nContent-Length: 0\r\n\r\n".to_vec();
     for (method, depth) in [("PROPFIND", "0"), ("REPORT", "1")] {
         let go = |dav: &Dav, url: &str| dav.request(method, url, Some(depth), "<x/>", &[]).map(|r| r.0.status);
         let dav = Dav::new("u", "p", trusting(&["127.0.0.1"]));
-        // Same server: both legs carry it.
-        let (a, ha) = serve(vec![b"HTTP/1.1 301 Moved\r\nLocation: /dav/\r\n\r\n".to_vec(), multi()]);
+        // Same server: asked for, the password is on both legs.
+        let (a, ha) = serve(vec![asks(), b"HTTP/1.1 301 Moved\r\nLocation: /dav/\r\n\r\n".to_vec(), multi()]);
         assert_eq!(go(&dav, &format!("{a}/")).unwrap(), 207);
         let seen = ha.join().unwrap();
-        assert!(seen.len() == 2 && seen.iter().all(|r| password_seen(r)), "{method}: {seen:?}");
-        assert!(seen[1].starts_with(&format!("{method} /dav/ ")), "{}", seen[1]);
+        assert!(seen.len() == 3 && !password_seen(&seen[0]) && password_seen(&seen[1]) && password_seen(&seen[2]), "{method}: {seen:?}");
+        assert!(seen[2].starts_with(&format!("{method} /dav/ ")), "{}", seen[2]);
         // Another site: nothing goes there.
         let (b, hb) = serve(Vec::new());
         let (a, ha) = serve(vec![format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {}/dav/\r\n\r\n", by_name(&b)).into_bytes()]);
         assert_eq!(untrusted(go(&dav, &format!("{a}/"))), "localhost", "{method}");
-        assert!(password_seen(&ha.join().unwrap()[0]));
+        assert!(!password_seen(&ha.join().unwrap()[0]), "a server that didn't ask for the password doesn't see it");
         assert!(hb.join().unwrap().is_empty(), "{method}: nothing reached the other site");
-        // Both trusted: A -> B -> A, the password on every leg.
+        // Both trusted: A -> B -> A, each server given the password once it asks.
         let dav = Dav::new("u", "p", trusting(&["127.0.0.1", "localhost"]));
         let ((la, a), (lb, b)) = (bind(), bind());
         let b = by_name(&b);
-        let ha = serve_on(la, vec![format!("HTTP/1.1 302 Found\r\nLocation: {b}/two\r\n\r\n").into_bytes(), multi()]);
-        let hb = serve_on(lb, vec![format!("HTTP/1.1 302 Found\r\nLocation: {a}/three\r\n\r\n").into_bytes()]);
+        let ha = serve_on(la, vec![asks(), format!("HTTP/1.1 302 Found\r\nLocation: {b}/two\r\n\r\n").into_bytes(), multi()]);
+        let hb = serve_on(lb, vec![asks(), format!("HTTP/1.1 302 Found\r\nLocation: {a}/three\r\n\r\n").into_bytes()]);
         assert_eq!(go(&dav, &format!("{a}/one")).unwrap(), 207);
         let (seen_a, seen_b) = (ha.join().unwrap(), hb.join().unwrap());
-        assert!(password_seen(&seen_a[0]) && password_seen(&seen_b[0]) && password_seen(&seen_a[1]), "{method}");
-        assert!(seen_a[1].starts_with(&format!("{method} /three ")), "{}", seen_a[1]);
+        assert!(!password_seen(&seen_a[0]) && password_seen(&seen_a[1]), "{method}: asked, then given");
+        assert!(!password_seen(&seen_b[0]) && password_seen(&seen_b[1]), "{method}: the other server too");
+        assert!(password_seen(&seen_a[2]) && seen_a[2].starts_with(&format!("{method} /three ")), "{}", seen_a[2]);
     }
 }
 
-/// A PUT is never redirected (the redirect is the answer, nothing is sent again): the
-/// password stays with the server it was given for.
+/// A PUT is never redirected (the redirect is the answer, nothing is sent again): nothing goes
+/// to the server it names.
 #[test]
 fn a_put_is_not_sent_on_after_a_redirect() {
     use crate::http::tests::serve;
@@ -83,7 +89,7 @@ fn a_put_is_not_sent_on_after_a_redirect() {
     let r = Dav::new("u", "p", trusting(&["127.0.0.1"])).put(&format!("{a}/x.ics"), "text/calendar", "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", None);
     assert!(r.is_err(), "{r:?}");
     let seen = ha.join().unwrap();
-    assert!(seen.len() == 1 && seen[0].starts_with("PUT /x.ics ") && password_seen(&seen[0]), "{seen:?}");
+    assert!(seen.len() == 1 && seen[0].starts_with("PUT /x.ics ") && !password_seen(&seen[0]), "{seen:?}");
     assert!(hb.join().unwrap().is_empty(), "nothing reached the other server");
 }
 
@@ -104,8 +110,9 @@ fn a_well_known_redirect_within_the_site_signs_in() {
     let dav = Dav::new(USER, PASSWORD, trusting(&[&s.base]));
     let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", s.base)).unwrap();
     assert_eq!(home, Some(format!("{}/dav/cal/", s.base)));
-    // The fake answers 401 to a request without the password: each one carried it.
-    assert_eq!(s.data.lock().unwrap().log, ["PROPFIND /.well-known/caldav", "PROPFIND /dav/", "PROPFIND /dav/principals/me/"]);
+    // The fake answers 401 to a request without the password: the first asked for it, and
+    // each one after carried it.
+    assert_eq!(s.data.lock().unwrap().log, [WELL_KNOWN, WELL_KNOWN, "PROPFIND /dav/", "PROPFIND /dav/principals/me/"]);
 }
 
 #[test]
@@ -114,7 +121,7 @@ fn a_well_known_redirect_to_another_site_is_untrusted_and_sends_nothing_there() 
     a.data.lock().unwrap().well_known = Some(format!("{}/dav/", by_name(&b.base)));
     let dav = Dav::new(USER, PASSWORD, trusting(&[&a.base]));
     assert_eq!(untrusted(dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", a.base))), "localhost");
-    assert_eq!(a.data.lock().unwrap().log, ["PROPFIND /.well-known/caldav"]);
+    assert_eq!(a.data.lock().unwrap().log, [WELL_KNOWN, WELL_KNOWN]);
     assert!(b.data.lock().unwrap().log.is_empty(), "nothing at all reached the other site: {:?}", b.data.lock().unwrap().log);
 }
 
@@ -126,7 +133,7 @@ fn once_trusted_it_works() {
     let dav = Dav::new(USER, PASSWORD, trusting(&[&a.base, "localhost"]));
     let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", a.base)).unwrap();
     assert_eq!(home, Some(format!("{}/dav/cal/", by_name(&b.base))));
-    assert_eq!(b.data.lock().unwrap().log, ["PROPFIND /dav/", "PROPFIND /dav/principals/me/"], "signed in there");
+    assert_eq!(b.data.lock().unwrap().log, ["PROPFIND /dav/", "PROPFIND /dav/", "PROPFIND /dav/principals/me/"], "asked, then signed in there");
 }
 
 /// The review's case: a start on the account's own site whose answer names another site (the
@@ -148,9 +155,9 @@ fn an_href_on_another_site_is_never_requested() {
         // `localhost` reaches this very server: a request sent there would be in its log.
         let log = s.data.lock().unwrap().log.clone();
         let want: &[&str] = if principal {
-            &["PROPFIND /.well-known/caldav", "PROPFIND /dav/"]
+            &[WELL_KNOWN, WELL_KNOWN, "PROPFIND /dav/"]
         } else {
-            &["PROPFIND /.well-known/caldav", "PROPFIND /dav/", "PROPFIND /dav/principals/me/"]
+            &[WELL_KNOWN, WELL_KNOWN, "PROPFIND /dav/", "PROPFIND /dav/principals/me/"]
         };
         assert_eq!(log, want, "principal: {principal}");
     }
@@ -318,7 +325,7 @@ fn a_site_removed_is_looked_at_again_and_asked_about() {
     let again = syncing::sync_from(&dav, &starts, &forgotten, 200, Zone::UTC).unwrap();
     assert_eq!(again.untrusted.as_deref(), Some("localhost"), "the question comes back");
     assert_eq!(again.caldav_home, None);
-    assert_eq!(s.data.lock().unwrap().log, ["PROPFIND /.well-known/caldav"], "only the start, on the account's own server");
+    assert_eq!(s.data.lock().unwrap().log, [WELL_KNOWN, WELL_KNOWN], "only the start, on the account's own server");
 }
 
 /// A collection a home's listing names on another site is never requested.
@@ -328,7 +335,7 @@ fn a_collection_on_another_site_is_never_requested() {
     s.data.lock().unwrap().collections_at = by_name(&s.base);
     let dav = Dav::new(USER, PASSWORD, trusting(&[&s.base]));
     assert_eq!(untrusted(dav.collections(Kind::Calendars, &format!("{}/dav/cal/", s.base))), "localhost");
-    assert_eq!(s.data.lock().unwrap().log, ["PROPFIND /dav/cal/"], "nothing else, under either name");
+    assert_eq!(s.data.lock().unwrap().log, ["PROPFIND /dav/cal/", "PROPFIND /dav/cal/"], "nothing else, under either name");
 }
 
 /// A deletion saved with an address that can't be read safely can never be sent: it is
@@ -383,4 +390,48 @@ fn a_contacts_look_stopped_elsewhere_leaves_the_calendars_syncing() {
     let found = syncing::sync_from(&allowed, &starts, &merged, 160, Zone::UTC).unwrap();
     assert_eq!((found.looked, found.untrusted.as_deref()), (true, None));
     assert_eq!(found.carddav_home, Some(format!("{}/dav/card/", by_name(&web.base))));
+}
+
+/// The password answers a request for it, and only from a site of the account's servers or one
+/// the user allowed. The address's own domain is often a website kept by someone else: it is
+/// asked where the calendars are, without the password, and one that asks for it gets nothing
+/// until the user allows it.
+#[test]
+fn the_password_only_answers_a_site_that_may_have_it() {
+    use crate::http::tests::serve;
+    use quatrelle_model::ServerConfig;
+    let asks = || b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"dav\"\r\nContent-Length: 0\r\n\r\n".to_vec();
+    let multi = || b"HTTP/1.1 207 Multi-Status\r\nContent-Length: 0\r\n\r\n".to_vec();
+    let mail = |host: &str| ServerConfig { host: host.into(), ..Default::default() };
+    // The address is at 127.0.0.1, the mail at another site.
+    let elsewhere =
+        AccountConfig { email: "u@127.0.0.1".into(), imap: mail("mail.studio.example"), smtp: mail("mail.studio.example"), ..Default::default() };
+    let go = |acc: &AccountConfig, answers: Vec<Vec<u8>>| {
+        let (base, seen) = serve(answers);
+        let dav = Dav::for_account("u", "p", acc, &Pim::default());
+        let got = dav.request("PROPFIND", &format!("{base}/.well-known/caldav"), Some("0"), "<x/>", &[]).map(|r| r.0.status);
+        (got, seen.join().unwrap())
+    };
+
+    let (got, seen) = go(&elsewhere, vec![asks(), multi()]);
+    assert!(seen.len() == 1 && !password_seen(&seen[0]), "asked without the password, and not answered: {seen:?}");
+    assert_eq!(untrusted(got), "127.0.0.1", "the site is the user's to allow");
+
+    // A site that answers without asking for it never sees it.
+    let (got, seen) = go(&elsewhere, vec![multi()]);
+    assert!(got.is_ok() && seen.len() == 1 && !password_seen(&seen[0]), "{seen:?}");
+
+    // The mail server's own site, and a site the user allowed: asked first, then signed in to.
+    let own = AccountConfig { imap: mail("127.0.0.1"), ..elsewhere.clone() };
+    let allowed = AccountConfig { trusted_domains: vec!["127.0.0.1".into()], ..elsewhere.clone() };
+    for acc in [&own, &allowed] {
+        let (got, seen) = go(acc, vec![asks(), multi()]);
+        assert_eq!(got.unwrap(), 207);
+        assert!(seen.len() == 2 && !password_seen(&seen[0]) && password_seen(&seen[1]), "{seen:?}");
+    }
+
+    // A sign-in Quatrelle can't make (no Basic offered): the password stays here.
+    let other = b"HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Negotiate\r\nContent-Length: 0\r\n\r\n".to_vec();
+    let (got, seen) = go(&own, vec![other, multi()]);
+    assert!(matches!(got, Err(NetError::Auth(_))) && seen.len() == 1 && !password_seen(&seen[0]), "{seen:?}");
 }
