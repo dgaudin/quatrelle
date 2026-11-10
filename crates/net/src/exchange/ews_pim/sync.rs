@@ -476,14 +476,32 @@ fn read_notes(c: &Client, pim: &Pim, again: &[String], out: &mut DavSync) {
         }
         // A note is a message to Exchange, which wants it said that it is only saved (it refused
         // with "MessageDisposition attribute is required").
-        let r = c.call_one(&format!(
-            "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"notes\"/></m:SavedItemFolderId><m:Items>{}</m:Items></m:CreateItem>",
-            note_xml(&n.note)
-        ));
+        let create = |sized: bool| {
+            c.call_one(&format!(
+                "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"notes\"/></m:SavedItemFolderId><m:Items>{}</m:Items></m:CreateItem>",
+                note_xml(&n.note, sized)
+            ))
+        };
+        let mut sent = n.note.clone();
+        let r = match create(true) {
+            // A server that won't take the window's size: the note goes without it, and its size
+            // goes back to the server's (none), said with the rest.
+            Err(NetError::No(e)) if n.note.size().is_some() => {
+                log::info!("ews: a note's size refused ({e}): made without it");
+                let r = create(false);
+                if r.is_ok() {
+                    (sent.width, sent.height) = (0, 0);
+                    out.notes_size_refused.push(n.note.uid.clone());
+                    out.errors.push(format!("{}: the server didn't keep its size ({e})", n.note.title()));
+                }
+                r
+            }
+            r => r,
+        };
         match r {
             Ok(m) => {
                 let (id, etag) = new_id(&m);
-                out.pushed_notes.push(StoredNote { href: format!("note:{id}"), etag, note: n.note.clone(), dirty: false });
+                out.pushed_notes.push(StoredNote { href: format!("note:{id}"), etag, note: sent, dirty: false });
             }
             Err(x) => out.errors.push(format!("{}: {x}", n.note.title())),
         }

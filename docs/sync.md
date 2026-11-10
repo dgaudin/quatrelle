@@ -463,6 +463,14 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   `pim.json` is saved with them, and the worker reads both. One changed here and not yet sent stays. On a large
   mailbox, 25,390 of 25,761 appointments: the session holds 49 MB rather than 105 away from
   the calendar, and a save of the calendar and contacts writes 1.6 MB rather than 35.
+- **Notes** (`ews_pim/contacts.rs`, `note_of`, `note_xml`) are Outlook's sticky notes
+  (`IPM.StickyNote` in the Notes folder), made again at each change as contacts are, from the
+  note's `dirty` mark like the rest (no journal). Each goes with its colour and its window's size
+  (PSETID_Note's PidLidNoteColor, PidLidNoteWidth and PidLidNoteHeight, ids 35584, 35586 and
+  35587, Integer), read with them; a size read is held to 160 by 120 and 4000. A server that
+  refuses a note made with its size gets it again without: the note is stored, its size goes back
+  to the server's (none, `DavSync::notes_size_refused`) and a notice says so. Microsoft 365
+  accounts over Graph don't sync notes: they stay on this computer, size and all.
 - **Rooms and free/busy** (`ews_pim/scheduling.rs`), on the account's second connection so a
   long sync never holds them: `GetRoomLists`, then `GetRooms` for each list (an empty answer
   where the organisation set no lists up: the engine then offers the rooms the calendar knows);

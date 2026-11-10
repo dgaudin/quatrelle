@@ -468,7 +468,7 @@ impl Data {
                         out.push(err("ErrorSchemaValidation"));
                         continue;
                     }
-                    if let Some(refused) = self.refuses_recipients(&m, op.attr("SendMeetingInvitations")) {
+                    if let Some(refused) = self.refuses_recipients(&m, op.attr("SendMeetingInvitations")).or_else(|| self.refuses_note_size(&m)) {
                         out.push(refused);
                         continue;
                     }

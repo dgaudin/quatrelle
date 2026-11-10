@@ -6,6 +6,7 @@
 use super::*;
 
 mod files;
+mod notes;
 
 /// Three plain appointments carrying one UID: the sync hands the engine three distinct
 /// identities, not one.
@@ -158,37 +159,6 @@ fn a_meeting_moves_to_another_day_on_the_server() {
         el.text_of("Start").unwrap_or_default().to_string()
     };
     assert_eq!(day, "2026-10-14T17:46:40Z", "the server has the new day");
-}
-
-#[test]
-fn sticky_notes_sync_with_the_notes_folder() {
-    use quatrelle_model::pim::{Note, Pim, StoredNote};
-    let mut d = Data::default();
-    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
-    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
-    let notes = d.folder("Notes", None, Some("notes"), "IPF.StickyNote");
-    let old = parse(
-        "<t:Message><t:ItemClass>IPM.StickyNote</t:ItemClass><t:Subject>Call Ana</t:Subject><t:Body BodyType=\"Text\">Call Ana\r\nabout the mix</t:Body>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertySetId=\"0006200E-0000-0000-C000-000000000046\" PropertyId=\"35584\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty></t:Message>",
-    );
-    d.pim.push(("N1".into(), notes, old.kids[0].clone()));
-    let server = serve(d);
-    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let mut pim = Pim::default();
-    pim.notes.push(StoredNote {
-        note: Note { uid: "n-local".into(), text: "Buy paper\n170 gsm".into(), color: 1, modified: 5, ..Default::default() },
-        dirty: true,
-        ..Default::default()
-    });
-    let sync = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
-    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
-    let list = sync.notes.unwrap();
-    let ana = list.iter().find(|n| n.href == "note:N1").unwrap();
-    assert_eq!((ana.note.text.as_str(), ana.note.color), ("Call Ana\nabout the mix", 2));
-    assert!(list.iter().any(|n| n.note.text == "Buy paper\n170 gsm" && n.note.color == 1), "made in the Notes folder, its colour kept");
-    assert_eq!(sync.pushed_notes.len(), 1);
-    assert!(sync.pushed_notes[0].href.starts_with("note:"));
 }
 
 #[test]

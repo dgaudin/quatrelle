@@ -224,9 +224,17 @@ const PHONE_KEYS: [(&str, &str); 9] = [
     ("OtherTelephone", ""),
 ];
 
-/// A sticky note's colour (MS-OXONOTE PidLidNoteColor), as EWS asks for it.
-pub(super) const NOTE_COLOR: &str =
-    r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35584" PropertyType="Integer"/>"#;
+/// A sticky note's colour and its window's size (MS-OXONOTE PidLidNoteColor 0x8B00,
+/// PidLidNoteWidth 0x8B02, PidLidNoteHeight 0x8B03, in PSETID_Note), as EWS names them.
+const NOTE_COLOR: &str = r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35584" PropertyType="Integer"/>"#;
+const NOTE_WIDTH: &str = r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35586" PropertyType="Integer"/>"#;
+const NOTE_HEIGHT: &str = r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35587" PropertyType="Integer"/>"#;
+/// What a note is read with, besides all its properties: its colour and its window's size.
+pub(super) const NOTE_FIELDS: &str = concat!(
+    r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35584" PropertyType="Integer"/>"#,
+    r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35586" PropertyType="Integer"/>"#,
+    r#"<t:ExtendedFieldURI PropertySetId="0006200E-0000-0000-C000-000000000046" PropertyId="35587" PropertyType="Integer"/>"#
+);
 
 /// A note in Exchange's Notes folder (`IPM.StickyNote`).
 pub fn note_of(it: &El) -> Option<StoredNote> {
@@ -236,28 +244,43 @@ pub fn note_of(it: &El) -> Option<StoredNote> {
     let id = it.child("ItemId")?;
     let href = format!("note:{}", id.attr("Id")?);
     let text = it.text_of("Body").map(str::to_string).filter(|b| !b.trim().is_empty()).unwrap_or_else(|| text(it, "Subject"));
-    let color = it
-        .children("ExtendedProperty")
-        .find(|p| p.find("ExtendedFieldURI").and_then(|f| f.attr("PropertyId")) == Some("35584"))
-        .and_then(|p| p.text_of("Value"))
-        .and_then(|v| v.trim().parse::<u8>().ok())
+    let named = |id: &str| {
+        it.children("ExtendedProperty")
+            .find(|p| p.find("ExtendedFieldURI").and_then(|f| f.attr("PropertyId")) == Some(id))
+            .and_then(|p| p.text_of("Value"))
+            .map(str::trim)
+    };
+    let color = named("35584")
+        .and_then(|v| v.parse::<u8>().ok())
         .filter(|c| *c < quatrelle_model::pim::NOTE_COLORS)
         .unwrap_or(quatrelle_model::pim::NOTE_YELLOW);
+    let side = |id: &str, min: u16| named(id).and_then(|v| v.parse::<i64>().ok()).map_or(0, |v| quatrelle_model::pim::note_side(v, min));
+    let (width, height) = (side("35586", quatrelle_model::pim::NOTE_MIN_WIDTH), side("35587", quatrelle_model::pim::NOTE_MIN_HEIGHT));
     let modified = it.text_of("LastModifiedTime").and_then(quatrelle_jmap::utc_date).unwrap_or(0);
     Some(StoredNote {
         href: href.clone(),
         etag: id.attr("ChangeKey").unwrap_or("").to_string(),
-        note: Note { uid: href, text: text.replace("\r\n", "\n"), color, modified, ..Default::default() },
+        note: Note { uid: href, text: text.replace("\r\n", "\n"), color, modified, width, height },
         dirty: false,
     })
 }
 
-/// A note as EWS creates it: a message of class `IPM.StickyNote`, its first line the subject.
-pub(super) fn note_xml(n: &Note) -> String {
+/// A note as EWS creates it: a message of class `IPM.StickyNote`, its first line the subject;
+/// its window's size when it has one and `sized`.
+pub(super) fn note_xml(n: &Note, sized: bool) -> String {
     let subject: String = n.title().chars().take(255).collect();
+    let size = n
+        .size()
+        .filter(|_| sized)
+        .map(|(w, h)| {
+            format!(
+                "<t:ExtendedProperty>{NOTE_WIDTH}<t:Value>{w}</t:Value></t:ExtendedProperty><t:ExtendedProperty>{NOTE_HEIGHT}<t:Value>{h}</t:Value></t:ExtendedProperty>"
+            )
+        })
+        .unwrap_or_default();
     format!(
         "<t:Message><t:ItemClass>IPM.StickyNote</t:ItemClass><t:Subject>{}</t:Subject><t:Body BodyType=\"Text\">{}</t:Body>\
-         <t:ExtendedProperty>{NOTE_COLOR}<t:Value>{}</t:Value></t:ExtendedProperty></t:Message>",
+         <t:ExtendedProperty>{NOTE_COLOR}<t:Value>{}</t:Value></t:ExtendedProperty>{size}</t:Message>",
         esc(&subject),
         esc(&n.text),
         n.color

@@ -59,6 +59,17 @@ impl Data {
         })
     }
 
+    /// The refusal of a sticky note made with its window's size, when that's refused
+    /// ([`Data::refuse_note_size`]).
+    pub(super) fn refuses_note_size(&self, item: &El) -> Option<String> {
+        let size = |p: &El| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyId")).is_some_and(|id| id == "35586" || id == "35587");
+        (self.refuse_note_size && item.children("ExtendedProperty").any(size)).then(|| {
+            "<m:R ResponseClass=\"Error\"><m:MessageText>The extended property attribute combination is invalid.</m:MessageText>\
+             <m:ResponseCode>ErrorInvalidExtendedProperty</m:ResponseCode><m:DescriptiveLinkKey>0</m:DescriptiveLinkKey><m:Items/></m:R>"
+                .to_string()
+        })
+    }
+
     /// The refusal of an answer to a meeting, when answers are refused ([`Data::refuse_answers`]):
     /// the field Exchange names in its `MessageXml`, after the code, as Exchange writes it.
     pub(super) fn refuses_answer(&self) -> Option<String> {

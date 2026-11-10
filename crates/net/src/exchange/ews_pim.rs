@@ -137,7 +137,7 @@ pub(crate) const FIELD_REFUSED: [&str; 3] = ["ErrorInvalidPropertyRequest", "Err
 /// Every item of a distinguished folder, with all its properties (bodies as text); a
 /// calendar's from `since` on, with the fields read of an appointment.
 fn items(c: &Client, folder: &str, since: Option<i64>) -> Result<Vec<El>> {
-    items_in(c, &format!("<t:DistinguishedFolderId Id=\"{folder}\"/>"), if folder == "notes" { NOTE_COLOR } else { "" }, since)
+    items_in(c, &format!("<t:DistinguishedFolderId Id=\"{folder}\"/>"), if folder == "notes" { NOTE_FIELDS } else { "" }, since)
 }
 
 /// Every item of a folder (given as its EWS folder id element), with all its properties; a
@@ -584,7 +584,7 @@ mod sync;
 mod tasks;
 
 pub use categories::master_categories;
-use contacts::{NOTE_COLOR, contact_xml, note_xml};
+use contacts::{NOTE_FIELDS, contact_xml, note_xml};
 pub use contacts::{card_of, note_of};
 use events::{event_fields, listed_exception, modified_occurrences, occurrence_item_id};
 pub use events::{event_of, exception_of, own_organizer};

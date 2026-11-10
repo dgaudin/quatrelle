@@ -43,7 +43,7 @@ fn ids(again: &[String], prefix: &str) -> Vec<String> {
 /// keeps them on this computer (an error).
 pub(in crate::exchange::ews_pim) fn notes_read(c: &Client, pim: &Pim, again: &[String]) -> Result<(Vec<StoredNote>, String)> {
     let here = pim.notes.iter().any(|n| n.href.starts_with("note:"));
-    let (found, touched, state) = read_list(c, "notes", "the notes", &pim.notes_state, here, &ids(again, "note:"), Shape::All(NOTE_COLOR))?;
+    let (found, touched, state) = read_list(c, "notes", "the notes", &pim.notes_state, here, &ids(again, "note:"), Shape::All(NOTE_FIELDS))?;
     let mut list: Vec<StoredNote> = found.iter().filter_map(note_of).collect();
     if let Some(touched) = touched {
         // Those kept, unchanged there; one changed here is the engine's.

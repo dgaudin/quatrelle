@@ -70,11 +70,16 @@ impl Session {
                 e.notify &= e.dirty;
             }
         }
-        // Notes stored on the server: their item there, and no longer to send.
+        // Notes stored on the server: their item there, and no longer to send. One whose size
+        // the server refused has the server's size back (none).
         for x in &sync.pushed_notes {
+            let sized = !sync.notes_size_refused.contains(&x.note.uid);
             for n in p.notes.iter_mut().filter(|n| n.note.uid == x.note.uid) {
                 n.href = x.href.clone();
                 n.etag = x.etag.clone();
+                if !sized {
+                    (n.note.width, n.note.height) = (x.note.width, x.note.height);
+                }
                 n.dirty &= n.note != x.note;
             }
         }

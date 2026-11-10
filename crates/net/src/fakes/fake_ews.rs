@@ -152,6 +152,9 @@ pub struct Data {
     /// Refuse each item of a `GetItem` naming `item:Body`, the way `refuse_fields_each` does, with
     /// a `MessageText` saying so in words, as Exchange writes one.
     pub refuse_text_each: bool,
+    /// Refuse a sticky note made with its window's size (PidLidNoteWidth, PidLidNoteHeight), as a
+    /// server whose schema won't take them might.
+    pub refuse_note_size: bool,
     /// The public folder mailbox holding the public folders' content (Exchange 2013 and
     /// later): reading inside them is only answered when routed there.
     pub pf_mailbox: Option<String>,
@@ -359,6 +362,7 @@ impl Default for Data {
             refuse_fields_each: false,
             refuse_text: false,
             refuse_text_each: false,
+            refuse_note_size: false,
             pf_mailbox: None,
             pf_hierarchy: None,
             rules: Vec::new(),

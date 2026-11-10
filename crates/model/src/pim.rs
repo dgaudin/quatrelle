@@ -416,6 +416,10 @@ pub struct DavSync {
     pub notes: Option<Vec<StoredNote>>,
     #[serde(default)]
     pub pushed_notes: Vec<StoredNote>,
+    /// Notes stored without the window's size they were sent with (the server refused it), by
+    /// uid: their size goes back to the server's (none), as said in [`DavSync::errors`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes_size_refused: Vec<String>,
     /// The server's tasks, read in full (`None`: it keeps none, so tasks stay on this
     /// computer), and the tasks stored there this time.
     #[serde(default)]

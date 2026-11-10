@@ -103,7 +103,11 @@ fn a_notes_size_is_kept_and_sent() {
     s.set_clock(NOW + 60, 0);
     s.run("note.update", &json!({"uid": uid, "width": 500, "height": 400})).unwrap();
     let n = note(&s);
-    assert_eq!((n.note.size(), n.dirty, n.note.modified, n.note.text.as_str()), (Some((500, 400)), true, NOW + 60, "Sized"), "to send, the text as it was");
+    assert_eq!(
+        (n.note.size(), n.dirty, n.note.modified, n.note.text.as_str()),
+        (Some((500, 400)), true, NOW + 60, "Sized"),
+        "to send, the text as it was"
+    );
     assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { .. })), "asks for a sync");
     let listed = s.run("note.list", &json!({})).unwrap();
     assert!(listed["notes"].as_array().unwrap().iter().any(|x| x["uid"] == uid.as_str() && x["width"] == 500 && x["height"] == 400));
@@ -132,5 +136,32 @@ fn a_notes_size_is_kept_and_sent() {
     // A note kept before had no size: it reads as none set.
     let old: quatrelle_model::pim::Note = serde_json::from_str(r#"{"uid": "a", "text": "b"}"#).unwrap();
     assert_eq!((old.width, old.height, old.color, old.size()), (0, 0, quatrelle_model::pim::NOTE_YELLOW, None));
+    done(s);
+}
+
+/// A server that didn't keep a note's size: the size goes back to the server's (none), the note
+/// is no longer to send, and a notice says why.
+#[test]
+fn a_notes_size_the_server_refused_goes_back() {
+    let mut s = Session::open(Some(temp("notes-size-refused")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let uid = s.run("note.create", &json!({"text": "Wide", "width": 900, "height": 700})).unwrap()["uid"].as_str().unwrap().to_string();
+    let note = |s: &Session| s.pim[&id].notes.iter().find(|n| n.note.uid == uid).unwrap().clone();
+    let sent = quatrelle_model::pim::Note { width: 0, height: 0, ..note(&s).note };
+    let sync = quatrelle_model::pim::DavSync {
+        pushed_notes: vec![quatrelle_model::pim::StoredNote { href: "note:S2".into(), note: sent, ..Default::default() }],
+        notes_size_refused: vec![uid.clone()],
+        errors: vec!["Wide: the server didn't keep its size (ErrorInvalidExtendedProperty)".into()],
+        ..Default::default()
+    };
+    s.apply_dav(&id, &sync);
+    let n = note(&s);
+    assert_eq!((n.note.size(), n.dirty, n.href.as_str(), n.note.text.as_str()), (None, false, "note:S2", "Wide"));
+    assert!(s.notices.iter().any(|x| x.text.contains("didn't keep its size")), "{:?}", s.notices);
     done(s);
 }
