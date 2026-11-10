@@ -7,8 +7,10 @@ use super::*;
 
 mod shown_as;
 mod table;
+pub(crate) mod text_selection;
 pub(crate) use shown_as::*;
 use table::*;
+pub(crate) use text_selection::TextSelection;
 
 /// Above an HTML message: whether its web pictures are hidden, and, shown as plain text, the way
 /// back to its formatting (for this message; the setting stays). The way to plain text isn't
@@ -367,18 +369,23 @@ impl Body<'_> {
         let t = st.tokens;
         for line in lines {
             if line.is_empty() {
+                text_selection::blank(st);
                 ui.add_space(9.0 * self.zoom);
                 continue;
             }
             // A line across the message (an `<hr>`, the border Outlook draws over each message a
             // reply quotes), in the colour of the window's own dividers.
             if line.iter().any(|sp| sp.rule) {
+                // Copied as a paragraph's gap.
+                text_selection::blank(st);
                 ui.add_space(4.0 * self.zoom);
                 let (r, _) = ui.allocate_exact_size(vec2(width, 1.0), egui::Sense::hover());
                 ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, t.border));
                 ui.add_space(4.0 * self.zoom);
                 continue;
             }
+            // Each line starts a line of the text selected (`text_selection`), its runs side by side.
+            text_selection::line(st);
             // A line with right-to-left text is laid out whole, egui putting it in order (its links
             // show, but as text).
             if line.iter().any(|sp| crate::bidi::has_rtl(&sp.text)) && line.iter().all(|sp| sp.image.is_none()) {
@@ -408,7 +415,7 @@ impl Body<'_> {
                 let r = ui
                     .scope(|ui| {
                         ui.set_max_width(width);
-                        crate::bidi::add_selectable_label(ui, job)
+                        text_selection::rtl_run(st, ui, job)
                     })
                     .inner;
                 if let Some(m) = marks.iter().find(|m| m.current) {
@@ -473,7 +480,7 @@ impl Body<'_> {
                         // Inside a link, its place is the link's.
                         Some(match &sp.link {
                             Some(_) => ui.add(egui::Link::new(RichText::new(text).color(t.accent))),
-                            None => ui.label(RichText::new(text).color(t.faint)),
+                            None => ui.add(egui::Label::new(RichText::new(text).color(t.faint)).selectable(false)),
                         })
                     }
                 }
@@ -512,13 +519,13 @@ impl Body<'_> {
             Some(link) => {
                 // Hovered, a link says where it will open (cleaned, when links are).
                 let shown = if self.s.prefs.clean_links { mime::clean_link(link) } else { link.clone() };
-                let r = ui.add(egui::Link::new(text)).on_hover_text(shown);
+                let r = text_selection::run(st, ui, text, Some(fg)).on_hover_text(shown);
                 if r.clicked() {
                     self.acts.push(Action::OpenUrl(link.clone()));
                 }
                 r
             }
-            None => ui.label(text),
+            None => text_selection::run(st, ui, text, None),
         };
         if let Some(m) = marks.iter().find(|m| m.current) {
             self.hit = Some(find::place(r.rect, m.range.start, sp.text.len(), 17.0 * self.zoom));

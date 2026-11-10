@@ -7,6 +7,8 @@ use crate::*;
 
 impl MailApp {
     pub(crate) fn shortcuts(&mut self, ctx: &egui::Context) {
+        // A message's text had the keyboard last frame (it says so again while it keeps it).
+        let text_keys = std::mem::take(&mut self.ui.text_selection.keys);
         if self.ui.backstage.is_none() {
             self.ui.backstage_typing = false;
         }
@@ -163,6 +165,11 @@ impl MailApp {
             if text_selected && matches!(combo.as_str(), "Mod+A" | "Mod+C") {
                 continue;
             }
+            // Clicked into a message's text: Ctrl+A, the copy and Shift with the arrows, Home
+            // and End (Ctrl too) select in it, not in the message list (from upstream 0eeb5d6a).
+            if text_keys && text_key(&combo) {
+                continue;
+            }
             if let Some(spec) = reg.by_shortcut(&combo) {
                 let id = spec.id;
                 // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
@@ -307,6 +314,12 @@ pub(crate) fn delete_from_window(s: &Session, key: &MessageKey, for_good: bool) 
 /// previous. New mail, Send / Receive, Undo, Search, the modules and the address book act anywhere.
 fn acts_on_mail(id: &str) -> bool {
     (id.starts_with("mail.") && !matches!(id, "mail.new" | "mail.sync")) || id.starts_with("quickStep.") || id.starts_with("list.")
+}
+
+/// The keys a message's text takes while it has the keyboard.
+fn text_key(combo: &str) -> bool {
+    let shifted = combo.strip_prefix("Mod+").unwrap_or(combo).strip_prefix("Shift+");
+    matches!(combo, "Mod+A" | "Mod+C") || shifted.is_some_and(|k| matches!(k, "Left" | "Right" | "Up" | "Down" | "Home" | "End"))
 }
 
 /// Shift+Delete on Windows, which egui hands over as Cut (a clipboard shortcut there), not as

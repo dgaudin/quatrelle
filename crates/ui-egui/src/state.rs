@@ -186,8 +186,10 @@ pub struct UiState {
     pub(crate) videos: reading::Videos,
     /// The open message's body on its way back from the reading lane.
     pub(crate) bodies: reading::Bodies,
-    /// Long message texts laid out by what's in view: their parts' heights, and their selection.
+    /// Long message texts laid out by what's in view: their parts' heights.
     pub(crate) long_text: HashMap<egui::Id, reading::LongText>,
+    /// What's selected of the message texts shown, and whether one has the keyboard.
+    pub(crate) text_selection: reading::TextSelection,
     /// Find in the message: the reading pane's bar and the message windows'.
     pub(crate) find: reading::Finds,
     /// The File page, while it's open.

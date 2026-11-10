@@ -37,7 +37,7 @@ pub(crate) use attachments::previewed_text;
 use attachments::*;
 pub(crate) use bodies::Bodies;
 use body::*;
-pub(crate) use body::{CellHeights, ShownAs};
+pub(crate) use body::{CellHeights, ShownAs, TextSelection};
 pub(crate) use compose::QuoteEditors;
 #[cfg(test)]
 pub(crate) use compose::cell_box;
@@ -414,6 +414,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             if han_missing(ui, &p.text) {
                 st.han_missing = true;
             }
+            // The text is selected as one, whatever it's drawn as (`text_selection`, from
+            // upstream 0eeb5d6a).
+            text_selection::begin(st, ui, ui.scope_id().with(("message-text", r.key.to_id())), in_window);
             if formatted {
                 hit = rich_body(s, st, ui, &r.key, p, lit.clone(), acts);
             } else if p.text.len() > long_text::LONG {
@@ -422,11 +425,15 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             } else if crate::bidi::has_rtl(&p.text) {
                 // Right-to-left text, against the right edge where it starts; selected with the
                 // pointer as it reads, and right-click copies it as written too.
-                let r = crate::bidi::selectable_label(ui, &p.text, theme::regular(14.5), t.text);
+                let job = egui::text::LayoutJob::simple(p.text.clone(), theme::regular(14.5), t.text, ui.available_width());
+                let r = text_selection::rtl_run(st, ui, job);
                 rtl_copy_menu(&r, None, &p.text);
             } else {
-                hit = plain::plain_body(&t, ui, &p.text, lit.as_ref(), acts);
+                hit = plain::plain_body(st, ui, &p.text, lit.as_ref(), acts);
             }
+            // Laid out by what's in view, a long text's copy of all of it is its text.
+            let long = if formatted { long_text::many_lines(p) } else { p.text.len() > long_text::LONG };
+            text_selection::finish(st, ui, long.then_some(p.text.as_str()));
         });
     });
     if can {

@@ -106,13 +106,13 @@ fn slash_opens_the_bar_but_not_while_typing() {
     assert_eq!(a.ui.find.pane.query, "", "the slash isn't typed in it");
     let shown = frames(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
     assert!(!a.ui.find.pane.open, "Escape closes it");
-    // A click in the message's text (selected as a box is, never typed in): `/` is the bar's.
+    // A click in the message's text (selected, never typed in): `/` is the bar's.
     let at = shown.iter().rev().find_map(|s| match s {
         egui::Shape::Text(t) if t.galley.text().starts_with("L'\u{c9}quipe") => Some(t.pos + egui::vec2(20.0, 8.0)),
         _ => None,
     });
     click_at(&ctx, &mut a, at.expect("the message's text"), 1, egui::vec2(1280.0, 800.0));
-    assert!(ctx.text_edit_focused(), "the text holds the keyboard");
+    assert!(a.ui.text_selection.keys, "the text has the keys");
     frames(&ctx, &mut a, slash());
     assert!(a.ui.find.pane.open && field_focused(&ctx), "opened from the message's text");
     frames(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);

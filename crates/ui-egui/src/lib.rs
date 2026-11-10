@@ -435,6 +435,7 @@ impl MailApp {
                 videos: reading::Videos::default(),
                 bodies: reading::Bodies::default(),
                 long_text: HashMap::new(),
+                text_selection: Default::default(),
                 find: reading::Finds::default(),
                 backstage: None,
                 mini_month: None,
