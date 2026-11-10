@@ -59,7 +59,7 @@ fn an_import_is_stopped_and_gone_on_with() {
     assert_eq!(store.load_folder("p1", "INBOX").unwrap().messages.len(), N);
     // A file that changed is said with what the account holds, so nothing there is taken for
     // lost; an account with no journal can't be gone on with.
-    std::fs::OpenOptions::new().append(true).open(&pst).unwrap().set_len(std::fs::metadata(&pst).unwrap().len() + 512).unwrap();
+    std::fs::OpenOptions::new().write(true).open(&pst).unwrap().set_len(std::fs::metadata(&pst).unwrap().len() + 512).unwrap();
     p.submit(Job::ResumeImport { account: "p1".into(), path: path.clone(), allow_changed: false });
     let end = until_done(&p, &mut Vec::new(), |_| {});
     assert!(matches!(&end, Event::Imported { messages: N, error: Some(e), .. } if e == quatrelle_model::IMPORT_FILE_CHANGED), "{end:?}");
