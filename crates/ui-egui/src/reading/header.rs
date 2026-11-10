@@ -151,7 +151,8 @@ pub(super) fn header(
     let complete = summary.as_ref().is_some_and(|m| m.flags.follow_up_complete());
     let importance = summary.as_ref().map_or(0, |m| m.importance);
     let acted = summary.as_ref().and_then(|m| acted_line(s, &m.flags));
-    if flagged || complete || importance != 0 || acted.is_some() {
+    let policy = s.message_policy(&r.key);
+    if flagged || complete || importance != 0 || acted.is_some() || policy.is_some() {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             if let Some((icon, text)) = acted {
@@ -182,6 +183,10 @@ pub(super) fn header(
                 };
                 let overdue = due.is_some_and(|d| d < today);
                 ui.label(RichText::new(text).color(if overdue { t.danger } else { t.dim }).small());
+                ui.add_space(10.0);
+            }
+            if let Some(p) = &policy {
+                ui.label(RichText::new(crate::panes::policy::policy_line(p)).color(t.dim).small());
                 ui.add_space(10.0);
             }
             if importance > 0 {

@@ -2150,3 +2150,9 @@ folder	Conflicts	衝突
 folder	Online Archive	線上封存
 	Online archive of {email}, read-only in this version	{email} 的線上封存，此版本中為唯讀
 	the online archive is read-only in this version: use Outlook to move or delete its mail	線上封存在此版本中為唯讀：請使用 Outlook 移動或刪除其中的郵件
+	Archive policy	封存原則
+	As its folder	與資料夾相同
+	Archive policy: {name}.	封存原則：{name}。
+	Planned for {date}.	預定於 {date}。
+	a message is no longer in the mailbox under that name: the server moved it	信箱中已沒有該名稱的郵件：伺服器已將其移走
+	that isn't one of the server's archive policy tags	這不是伺服器的封存原則之一

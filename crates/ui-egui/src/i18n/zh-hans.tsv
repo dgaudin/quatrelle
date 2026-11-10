@@ -2147,3 +2147,9 @@ menu	View	查看
 folder	Online Archive	在线存档
 	Online archive of {email}, read-only in this version	{email} 的在线存档，此版本中为只读
 	the online archive is read-only in this version: use Outlook to move or delete its mail	在线存档在此版本中为只读：请使用 Outlook 移动或删除其中的邮件
+	Archive policy	存档策略
+	As its folder	与文件夹相同
+	Archive policy: {name}.	存档策略：{name}。
+	Planned for {date}.	计划于 {date}。
+	a message is no longer in the mailbox under that name: the server moved it	邮箱中已没有该名称的邮件：服务器已将其移走
+	that isn't one of the server's archive policy tags	这不是服务器的存档策略之一

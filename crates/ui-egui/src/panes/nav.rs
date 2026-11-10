@@ -679,6 +679,9 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
                 ui.close();
             }
         }
+        if owner.is_none() && f.mailbox.is_none() && f.selectable {
+            super::policy::archive_policy_menu(ui, s, acts, super::policy::PolicyFor::Folder(&account, &path));
+        }
         ui.separator();
         if !f.archive && ui.button(tl!("New folder…")).clicked() {
             acts.push(Action::Dialog(Dialog::new_folder(&account, Some(&path))));

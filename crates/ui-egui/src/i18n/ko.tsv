@@ -2148,3 +2148,9 @@ folder	Conflicts	충돌
 folder	Online Archive	온라인 보관함
 	Online archive of {email}, read-only in this version	{email}의 온라인 보관함, 이 버전에서는 읽기 전용
 	the online archive is read-only in this version: use Outlook to move or delete its mail	온라인 보관함은 이 버전에서 읽기 전용입니다. 메일을 이동하거나 삭제하려면 Outlook을 사용하세요
+	Archive policy	보관 정책
+	As its folder	폴더와 동일
+	Archive policy: {name}.	보관 정책: {name}.
+	Planned for {date}.	예정일: {date}.
+	a message is no longer in the mailbox under that name: the server moved it	이 이름의 메시지가 사서함에 없습니다. 서버가 이동했습니다
+	that isn't one of the server's archive policy tags	서버의 보관 정책이 아닙니다

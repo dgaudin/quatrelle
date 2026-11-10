@@ -2145,3 +2145,9 @@ folder	Conflicts	التعارضات
 folder	Online Archive	الأرشيف عبر الإنترنت
 	Online archive of {email}, read-only in this version	الأرشيف عبر الإنترنت لـ {email}، للقراءة فقط في هذا الإصدار
 	the online archive is read-only in this version: use Outlook to move or delete its mail	الأرشيف عبر الإنترنت للقراءة فقط في هذا الإصدار: استخدم Outlook لنقل بريده أو حذفه
+	Archive policy	سياسة الأرشفة
+	As its folder	مثل المجلد
+	Archive policy: {name}.	سياسة الأرشفة: {name}.
+	Planned for {date}.	مخطط له في {date}.
+	a message is no longer in the mailbox under that name: the server moved it	لم تعد رسالة في صندوق البريد بهذا الاسم: نقلها الخادم
+	that isn't one of the server's archive policy tags	هذه ليست إحدى سياسات الأرشفة في الخادم

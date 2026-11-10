@@ -132,6 +132,11 @@ const ARCHIVE_REFUSALS: [&str; 2] = [
 /// shown in a notice.
 const ONLINE_ARCHIVE_REFUSALS: [&str; 1] = [quatrelle_engine::ARCHIVE_READ_ONLY];
 
+/// What the network layer says when an archive policy tag can't be set (`net/src/exchange/ews/changes.rs`),
+/// shown in the notice of a change that wasn't kept through `i18n::error`.
+const POLICY_REFUSALS: [&str; 2] =
+    ["a message is no longer in the mailbox under that name: the server moved it", "that isn't one of the server's archive policy tags"];
+
 /// The reasons the network layer gives for mail that stayed where it was when it was archived or
 /// put back (`net/src/worker/changes/archive.rs`); the notice says them through `i18n::error`.
 /// "not enough room on the disk, space needed: 101 MB" is read as its head and an amount.
@@ -178,6 +183,7 @@ fn notice_wordings() -> BTreeSet<String> {
     out.extend(KEPT_REASONS.map(str::to_string));
     out.extend(ARCHIVE_REFUSALS.map(str::to_string));
     out.extend(ONLINE_ARCHIVE_REFUSALS.map(str::to_string));
+    out.extend(POLICY_REFUSALS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
     out.insert(quatrelle_engine::STILL_COMING.to_string());
     // The keychain's refusal, as the network layer puts it before what the system said.
@@ -697,6 +703,10 @@ fn the_errors_translated_whole_are_what_the_network_says() {
         assert!(joined.contains(&format!("\"{e}\"")), "not in ews.rs any more: {e}");
     }
     let archive = include_str!("../../../engine/src/session/mailboxes/archive.rs").replace("\r\n", "\n");
+    let changes = include_str!("../../../net/src/exchange/ews/changes.rs").replace("\r\n", "\n");
+    for e in POLICY_REFUSALS {
+        assert!(changes.contains(&format!("\"{e}\"")), "not in the network layer's changes.rs any more: {e}");
+    }
     for e in ARCHIVE_REFUSALS {
         assert!(archive.contains(&format!("\"{e}\"")), "not in the engine's archive.rs any more: {e}");
     }

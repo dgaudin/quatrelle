@@ -2149,3 +2149,9 @@ menu	View	Просмотр
 folder	Online Archive	Онлайн-архив
 	Online archive of {email}, read-only in this version	Онлайн-архив {email}, в этой версии только для чтения
 	the online archive is read-only in this version: use Outlook to move or delete its mail	онлайн-архив в этой версии доступен только для чтения: чтобы переместить или удалить его почту, используйте Outlook
+	Archive policy	Политика архивации
+	As its folder	Как у папки
+	Archive policy: {name}.	Политика архивации: {name}.
+	Planned for {date}.	Запланировано на {date}.
+	a message is no longer in the mailbox under that name: the server moved it	письма с таким именем больше нет в почтовом ящике: сервер его переместил
+	that isn't one of the server's archive policy tags	это не одна из политик архивации сервера

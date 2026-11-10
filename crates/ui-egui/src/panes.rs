@@ -10,5 +10,6 @@ pub(crate) mod nav;
 pub(crate) mod notes;
 pub(crate) mod organize;
 pub(crate) mod people;
+pub(crate) mod policy;
 pub(crate) mod reminders;
 pub(crate) mod tasks;

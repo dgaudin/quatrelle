@@ -64,6 +64,11 @@ impl Session {
         Some(MessagePolicy { name, day: day.clone() })
     }
 
+    /// The id of the archive tag a message carries of its own, as last read.
+    pub fn message_archive_tag(&self, key: &MessageKey) -> Option<&str> {
+        self.policy.messages.get(key)?.0.as_deref()
+    }
+
     /// The id of the archive tag a folder carries of its own.
     pub fn folder_archive_tag(&self, account: &str, folder: &str) -> Option<&str> {
         self.account(account)?.folders.iter().find(|f| f.path == folder)?.archive_tag.as_deref()

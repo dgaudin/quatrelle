@@ -2150,3 +2150,9 @@ menu	View	Ver
 folder	Online Archive	Archivo en línea
 	Online archive of {email}, read-only in this version	Archivo en línea de {email}, de solo lectura en esta versión
 	the online archive is read-only in this version: use Outlook to move or delete its mail	el archivo en línea es de solo lectura en esta versión: use Outlook para mover o eliminar su correo
+	Archive policy	Directiva de archivado
+	As its folder	Como su carpeta
+	Archive policy: {name}.	Directiva de archivado: {name}.
+	Planned for {date}.	Previsto para el {date}.
+	a message is no longer in the mailbox under that name: the server moved it	un mensaje ya no está en el buzón con ese nombre: el servidor lo movió
+	that isn't one of the server's archive policy tags	esa no es una de las directivas de archivado del servidor

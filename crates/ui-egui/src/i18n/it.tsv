@@ -2148,3 +2148,9 @@ folder	Conflicts	Conflitti
 folder	Online Archive	Archivio online
 	Online archive of {email}, read-only in this version	Archivio online di {email}, in sola lettura in questa versione
 	the online archive is read-only in this version: use Outlook to move or delete its mail	l’archivio online è in sola lettura in questa versione: usa Outlook per spostare o eliminare la sua posta
+	Archive policy	Criterio di archiviazione
+	As its folder	Come la cartella
+	Archive policy: {name}.	Criterio di archiviazione: {name}.
+	Planned for {date}.	Previsto per il {date}.
+	a message is no longer in the mailbox under that name: the server moved it	un messaggio non è più nella casella con quel nome: il server l’ha spostato
+	that isn't one of the server's archive policy tags	non è uno dei criteri di archiviazione del server
