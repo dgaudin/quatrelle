@@ -125,14 +125,15 @@ impl MailApp {
                     tasks::ribbon(s, &mut self.ui, ui, &mut groups, acts);
                 } else if s.module == Module::Notes {
                     if widgets::big_accent(ui, Icon::Note, "New note", &t, !s.accounts.is_empty()).clicked() {
-                        notes::new_note(&mut self.ui, acts);
+                        notes::new_note(acts);
                     }
                     groups.end(ui, &t, "New");
-                    let editing = self.ui.note_edit.as_ref().map(|(u, _)| u.clone());
+                    // The note selected in the grid.
+                    let editing = self.ui.note_selected.clone().filter(|u| s.note(u).is_some());
                     if widgets::big_button(ui, Icon::Delete, "Delete", &t, editing.is_some()).clicked()
                         && let Some(uid) = editing.clone()
                     {
-                        self.ui.note_edit = None;
+                        self.ui.note_selected = None;
                         acts.push(Action::Run("note.delete", json!({"uid": uid})));
                     }
                     // The note's colour, as Outlook's Categorize on a note.

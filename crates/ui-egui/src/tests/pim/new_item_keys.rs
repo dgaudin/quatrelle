@@ -109,7 +109,8 @@ fn ctrl_n_in_notes_starts_a_new_note() {
     let before = a.session.notes("").len();
     ctrl_n(&ctx, &mut a);
     assert_eq!(a.session.notes("").len(), before + 1, "a new note");
-    assert!(a.ui.note_edit.is_some(), "written on at once");
+    assert_eq!(a.ui.note_windows.len(), 1, "its window open");
+    assert!(ctx.text_edit_focused(), "written in at once");
     assert!(a.session.compose.is_none(), "no message");
     let _ = std::fs::remove_dir_all(dir);
 }

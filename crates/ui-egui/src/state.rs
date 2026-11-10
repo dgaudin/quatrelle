@@ -216,8 +216,7 @@ pub struct UiState {
     pub people_list: people::ListSettings,
     /// The message table's column widths, as dragged (see `list::ColumnWidths`).
     pub list_columns: list::ColumnWidths,
-    /// Notes: the search, the note being written on (and its text), a new note to write on,
-    /// and the keyboard to give its text box.
+    /// Notes: the search, the note selected in the grid, and the notes open in windows.
     pub(crate) notes_query: String,
     /// The calendar's search (issue #33): what's typed, the switches, what it found.
     pub(crate) cal_search: calendar::CalSearch,
@@ -227,10 +226,10 @@ pub struct UiState {
     pub(crate) cal_drag: Option<calendar::Drag>,
     /// The appointment or empty half hour selected in the calendar's grid ([`calendar::Pick`]).
     pub(crate) cal_pick: Option<calendar::Pick>,
-    pub(crate) note_edit: Option<(String, String)>,
+    pub(crate) note_selected: Option<String>,
     /// Tasks: the search, the one picked and its form, the task being typed in.
     pub(crate) tasks: tasks::TasksUi,
-    pub(crate) note_focus: bool,
+    pub(crate) note_windows: Vec<notes::NoteWindow>,
     /// The person whose card is shown (uid).
     pub(crate) person: Option<String>,
     /// The invitations of the messages shown (the reading pane's, those in windows), each worked out once per calendar change.

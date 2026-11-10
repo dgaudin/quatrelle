@@ -2168,3 +2168,5 @@ folder	Online Archive	Онлайн-архив
 	{name}: the import could not go on: {error}	{name}: импорт не удалось продолжить: {error}
 	The file has changed	Файл изменился
 	The file has changed since the import began. Bring in what is new?	Файл изменился с начала импорта. Добавить новое?
+	Tick box	Флажок
+	{title} – Note	{title} – Заметка

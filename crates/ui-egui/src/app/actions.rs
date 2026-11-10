@@ -233,10 +233,9 @@ impl MailApp {
             Action::FindInMessage => self.ui.find.pane.open(),
             Action::NewNote => match self.session.run("note.create", &json!({})) {
                 Ok(v) => {
-                    if let Some(uid) = v.get("uid").and_then(Value::as_str) {
+                    if let Some(note) = v.get("uid").and_then(Value::as_str).and_then(|uid| self.session.note(uid)) {
                         self.ui.notes_query.clear();
-                        self.ui.note_edit = Some((uid.to_string(), String::new()));
-                        self.ui.note_focus = true;
+                        notes::open(&mut self.ui, note);
                     }
                 }
                 Err(e) => self.session.notice(e.to_string(), true),

@@ -2167,3 +2167,5 @@ folder	Online Archive	온라인 보관함
 	{name}: the import could not go on: {error}	{name}: 가져오기를 이어할 수 없었습니다: {error}
 	The file has changed	파일이 바뀌었습니다
 	The file has changed since the import began. Bring in what is new?	가져오기를 시작한 뒤 파일이 바뀌었습니다. 새로운 내용을 가져올까요?
+	Tick box	확인란
+	{title} – Note	{title} – 메모

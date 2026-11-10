@@ -242,7 +242,7 @@ impl MailApp {
             Module::Tasks => self.ui.tasks.focus_new = true,
             Module::Notes => {
                 let mut acts = Vec::new();
-                notes::new_note(&mut self.ui, &mut acts);
+                notes::new_note(&mut acts);
                 for a in acts {
                     self.act(a);
                 }

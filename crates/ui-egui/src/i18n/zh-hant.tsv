@@ -2169,3 +2169,5 @@ folder	Online Archive	線上封存
 	{name}: the import could not go on: {error}	{name}: 匯入無法繼續: {error}
 	The file has changed	檔案已變更
 	The file has changed since the import began. Bring in what is new?	匯入開始後檔案已變更。要匯入新增的內容嗎？
+	Tick box	核取方塊
+	{title} – Note	{title} – 便箋

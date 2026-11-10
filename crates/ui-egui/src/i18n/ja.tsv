@@ -2165,3 +2165,5 @@ folder	Online Archive	オンライン アーカイブ
 	{name}: the import could not go on: {error}	{name}: インポートを続けられませんでした: {error}
 	The file has changed	ファイルが変更されています
 	The file has changed since the import began. Bring in what is new?	インポートの開始後にファイルが変更されました。新しい分を取り込みますか?
+	Tick box	チェックボックス
+	{title} – Note	{title} – メモ

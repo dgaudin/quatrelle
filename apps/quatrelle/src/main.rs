@@ -232,8 +232,9 @@ impl eframe::App for App {
         if let Some(server) = &self.instance {
             server.close();
         }
-        // The address book's latest changes (it's written a minute at most after each), and the
-        // local accounts' marks still waiting on their thread.
+        // What the notes' windows hold; the address book's latest changes (it's written a minute
+        // at most after each), and the local accounts' marks still waiting on their thread.
+        self.app.save_open_notes();
         self.app.session.save_contacts();
         self.app.session.finish_local_marks();
         // A test build downloaded and checked: installed now that Quatrelle closes (unless it was

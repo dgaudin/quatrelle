@@ -2164,3 +2164,5 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	{name}: the import could not go on: {error}	{name}: تعذّرت متابعة الاستيراد: {error}
 	The file has changed	تغيّر الملف
 	The file has changed since the import began. Bring in what is new?	تغيّر الملف منذ بدء الاستيراد. هل تريد جلب الجديد؟
+	Tick box	خانة اختيار
+	{title} – Note	{title} – ملاحظة

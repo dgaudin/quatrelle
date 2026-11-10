@@ -559,6 +559,7 @@ impl MailApp {
         self.source_windows(&ctx, &mut acts);
         self.compose_windows(&ctx, &mut acts);
         self.event_windows(&ctx, &mut acts);
+        notes::windows(&ctx, &self.session, &mut self.ui, &mut acts);
         self.compacting_window(&ctx);
 
         // The address book reads the session's people: what is known now, listed again as the

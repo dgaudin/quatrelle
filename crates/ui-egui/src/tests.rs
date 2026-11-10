@@ -551,6 +551,16 @@ pub(crate) fn pim_tour(a: &mut MailApp, ctx: &egui::Context) {
     a.ui.people_query = "nobody-at-all".into();
     frame(ctx, a, vec![]);
     a.ui.people_query.clear();
+    // Notes: the grid, and a note open in its window (its bar and its ⋯).
+    a.run("view.module", json!({"name": "notes"}));
+    frame(ctx, a, vec![]);
+    if let Some(n) = a.session.notes("").first() {
+        crate::notes::open(&mut a.ui, &n.note);
+        for _ in 0..3 {
+            frame(ctx, a, vec![]);
+        }
+        a.ui.note_windows.clear();
+    }
     a.run("view.module", json!({"name": "mail"}));
     frame(ctx, a, vec![]);
 }

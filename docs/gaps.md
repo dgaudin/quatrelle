@@ -183,7 +183,13 @@ From [issue #1](https://github.com/ZIDAN44/mailcraft/issues/1), an Exchange user
   the message (Back to message, Open, Save As): pictures, a PDF's pages, text, attached mail,
   and Word documents, Excel workbooks and PowerPoint slides read by Quatrelle itself.
 - **Notes**, as Outlook's: coloured sticky notes (Ctrl+5), kept in an Exchange mailbox's
-  Notes folder (EWS) or on this computer.
+  Notes folder (EWS) or on this computer. Since 1.4 each note opens in a window of its own
+  (double-click, Enter or New note), in its colour, resized by its edges, several at once; its
+  size is the note's, read from and written to Exchange and `.pst` files, sent once a resize
+  ends. It is written in Markdown, formatted as it is typed with the marks left pale (titles,
+  bold, italic, struck, code, quotes, lists, ticks a click ticks, links opened by Ctrl+click
+  through the usual check), with a small bar and Ctrl+B, Ctrl+I, Enter and Tab for lists; the
+  grid's tiles show the notes so formatted. In the browser the window is drawn inside the page.
 - **People in three layouts** (Outlook's Change View): the list with an a–z index, business
   cards, and a phone list.
 - **Other people's Exchange calendars**, opened by their address (read-only), through Graph or

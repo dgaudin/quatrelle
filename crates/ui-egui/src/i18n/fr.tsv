@@ -2169,3 +2169,5 @@ folder	Online Archive	Archive en ligne
 	{name}: the import could not go on: {error}	{name} : l’import n’a pas pu continuer : {error}
 	The file has changed	Le fichier a changé
 	The file has changed since the import began. Bring in what is new?	Le fichier a changé depuis le début de l’import. Importer ce qui est nouveau ?
+	Tick box	Case à cocher
+	{title} – Note	{title} – Note

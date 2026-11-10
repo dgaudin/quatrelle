@@ -30,6 +30,11 @@ pub(super) fn first_frame(ctx: &egui::Context, viewport: egui::ViewportId) -> bo
     !seen
 }
 
+/// A window closed for good opens afresh next time: its place asked for again ([`first_frame`]).
+pub(super) fn forget_first_frame(ctx: &egui::Context, viewport: egui::ViewportId) {
+    ctx.data_mut(|d| d.remove::<bool>(egui::Id::unique(("first-frame", viewport))));
+}
+
 /// `QUATRELLE_TRACE_WINDOWS=1`: what a window of the app says about itself — its outer and inner
 /// rectangles, its monitor, its scale — logged each time it changes, with the window's id, so a
 /// window that the window manager and the app seem to fight over (one that jumps between two

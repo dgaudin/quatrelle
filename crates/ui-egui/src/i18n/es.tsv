@@ -2169,3 +2169,5 @@ folder	Online Archive	Archivo en línea
 	{name}: the import could not go on: {error}	{name}: la importación no pudo continuar: {error}
 	The file has changed	El archivo ha cambiado
 	The file has changed since the import began. Bring in what is new?	El archivo ha cambiado desde que empezó la importación. ¿Traer lo nuevo?
+	Tick box	Casilla
+	{title} – Note	{title} – Nota

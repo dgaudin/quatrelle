@@ -2164,3 +2164,5 @@ folder	Online Archive	ארכיון מקוון
 	{name}: the import could not go on: {error}	{name}: אי אפשר היה להמשיך בייבוא: {error}
 	The file has changed	הקובץ השתנה
 	The file has changed since the import began. Bring in what is new?	הקובץ השתנה מאז תחילת הייבוא. להביא את החדש?
+	Tick box	תיבת סימון
+	{title} – Note	{title} – פתק

@@ -36,6 +36,11 @@ impl Session {
         out
     }
 
+    /// The note `uid`, wherever it is (a note's window reads it at each frame).
+    pub fn note(&self, uid: &str) -> Option<&quatrelle_model::pim::Note> {
+        self.pim.values().flat_map(|p| p.notes.iter()).map(|n| &n.note).find(|n| n.uid == uid)
+    }
+
     fn note_account(&self, uid: &str) -> Result<String, CmdError> {
         self.pim
             .iter()

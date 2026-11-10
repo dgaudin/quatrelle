@@ -2166,3 +2166,5 @@ folder	Online Archive	在线存档
 	{name}: the import could not go on: {error}	{name}: 导入无法继续: {error}
 	The file has changed	文件已更改
 	The file has changed since the import began. Bring in what is new?	导入开始后文件已更改。要导入新增的内容吗？
+	Tick box	复选框
+	{title} – Note	{title} – 便笺
