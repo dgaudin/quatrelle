@@ -33,8 +33,9 @@ pub(super) use batch::{Lists, lists, properties};
 /// PSETID_Address and PSETID_Note (MS-OXPROPS 1.3.2).
 pub(super) const PSETID_ADDRESS: GuidValue = GuidValue::new(0x0006_2004, 0, 0, [0xC0, 0, 0, 0, 0, 0, 0, 0x46]);
 const PSETID_NOTE: GuidValue = GuidValue::new(0x0006_200E, 0, 0, [0xC0, 0, 0, 0, 0, 0, 0, 0x46]);
-/// A note's size in Outlook's window, as Outlook makes one (PidLidNoteWidth, PidLidNoteHeight).
-const NOTE_SIZE: (i32, i32) = (200, 166);
+/// A note's size in Outlook's window, as Outlook makes one (PidLidNoteWidth, PidLidNoteHeight):
+/// what a note whose size was never set is written with.
+const NOTE_SIZE: (u16, u16) = (200, 166);
 
 /// A property's value.
 pub(super) enum Value {
@@ -266,9 +267,11 @@ fn items(pim: &Pim, now: i64, owner: &super::calendar::Owner, account: &str) -> 
     all.into_iter().filter(|(_, items)| !items.is_empty()).collect()
 }
 
-/// A note (MS-OXONOTE 2.2.1): its text the body, its first line the subject, its colour.
+/// A note (MS-OXONOTE 2.2.1): its text the body, its first line the subject, its colour, its
+/// window's size (Outlook's usual one when never set).
 fn note(n: &Note, now: i64) -> Item {
     let color = if n.color < NOTE_COLORS { n.color } else { NOTE_YELLOW };
+    let (width, height) = n.size().unwrap_or(NOTE_SIZE);
     Item {
         class: "IPM.StickyNote",
         subject: n.title().to_string(),
@@ -276,8 +279,8 @@ fn note(n: &Note, now: i64) -> Item {
         modified: filetime(if n.modified > 0 { n.modified } else { now }),
         props: vec![
             lid(PSETID_NOTE, 0x8B00, Value::Int(i32::from(color))),
-            lid(PSETID_NOTE, 0x8B02, Value::Int(NOTE_SIZE.0)),
-            lid(PSETID_NOTE, 0x8B03, Value::Int(NOTE_SIZE.1)),
+            lid(PSETID_NOTE, 0x8B02, Value::Int(i32::from(width))),
+            lid(PSETID_NOTE, 0x8B03, Value::Int(i32::from(height))),
         ],
         ..Default::default()
     }

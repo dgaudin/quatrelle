@@ -247,6 +247,9 @@ pub(crate) struct Extra {
     pub uid: String,
     /// A note's colour (PidLidNoteColor: blue, green, pink, yellow, white).
     pub note_color: Option<u8>,
+    /// A note's window size (PidLidNoteWidth, PidLidNoteHeight), held to its bounds; 0: none.
+    pub note_width: u16,
+    pub note_height: u16,
     /// When it last changed.
     pub modified: Option<i64>,
     /// The contact's picture (its media type, and its bytes), when the item holds one.
@@ -380,6 +383,12 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
     if let Some(Val::Int(c)) = n(PSETID_NOTE, 0x8B00) {
         x.note_color = u8::try_from(c).ok().filter(|c| *c < quatrelle_model::pim::NOTE_COLORS);
     }
+    let side = |lid, min| match n(PSETID_NOTE, lid) {
+        Some(Val::Int(v)) => quatrelle_model::pim::note_side(v, min),
+        _ => 0,
+    };
+    x.note_width = side(0x8B02, quatrelle_model::pim::NOTE_MIN_WIDTH);
+    x.note_height = side(0x8B03, quatrelle_model::pim::NOTE_MIN_HEIGHT);
     x.modified = p(0x3008).and_then(|v| v.time());
     x.sequence = match n(PSETID_APPOINTMENT, 0x8201) {
         Some(Val::Int(s)) => u32::try_from(s).unwrap_or(0),

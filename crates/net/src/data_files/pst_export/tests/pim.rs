@@ -152,7 +152,7 @@ pub(super) fn account() -> Pim {
         },
     ];
     let notes = vec![
-        Note { uid: "n1".into(), text: "Shopping\nLenses\nTape".into(), color: 1, modified: 1_790_000_000, ..Default::default() },
+        Note { uid: "n1".into(), text: "Shopping\nLenses\nTape".into(), color: 1, modified: 1_790_000_000, width: 320, height: 240 },
         Note { uid: "n2".into(), text: "Call back".into(), color: 3, modified: 1_790_000_100, ..Default::default() },
     ];
     Pim {
@@ -185,7 +185,14 @@ pub(super) fn compare(got: &Pim, pim: &Pim) {
         assert_eq!(h, w, "{}", w.name);
     }
     let notes = |p: &Pim| p.notes.iter().map(|n| n.note.clone()).collect::<Vec<_>>();
-    assert_eq!(by(&notes(got), |n| n.uid.clear(), |n| n.text.clone()), by(&notes(pim), |n| n.uid.clear(), |n| n.text.clone()));
+    // A note whose size was never set comes back at Outlook's usual size, as it was written.
+    let usual = |n: &mut Note| {
+        n.uid.clear();
+        if n.size().is_none() {
+            (n.width, n.height) = (200, 166);
+        }
+    };
+    assert_eq!(by(&notes(got), |n| n.uid.clear(), |n| n.text.clone()), by(&notes(pim), usual, |n| n.text.clone()));
     let tasks = |p: &Pim| p.tasks.iter().map(|t| t.task.clone()).collect::<Vec<_>>();
     let (have, want) = (by(&tasks(got), |t| t.uid.clear(), |t| t.subject.clone()), by(&tasks(pim), |t| t.uid.clear(), |t| t.subject.clone()));
     assert_eq!(have.len(), want.len(), "{have:#?}");
@@ -243,7 +250,9 @@ fn contacts_groups_notes_and_tasks_round_trip_inside_a_data_file() {
     assert!(matches!(props_of(&file, &["Tasks"], "Book the stage", &[percent])[0], Some(V::Floating64(f)) if f == 0.4));
     let note = |lid| named_id(&file, 0x0006_200E, lid).unwrap();
     let got = props_of(&file, &["Notes"], "Shopping", &[note(0x8B00), note(0x8B02), note(0x8B03)]);
-    assert!(matches!(got[..], [Some(V::Integer32(1)), Some(V::Integer32(200)), Some(V::Integer32(166))]), "{got:?}");
+    assert!(matches!(got[..], [Some(V::Integer32(1)), Some(V::Integer32(320)), Some(V::Integer32(240))]), "its own size: {got:?}");
+    let got = props_of(&file, &["Notes"], "Call back", &[note(0x8B02), note(0x8B03)]);
+    assert!(matches!(got[..], [Some(V::Integer32(200)), Some(V::Integer32(166))]), "never set, Outlook's usual size: {got:?}");
 
     // Read back by the import: every field.
     let back = Store::open(dir.join("back")).unwrap();

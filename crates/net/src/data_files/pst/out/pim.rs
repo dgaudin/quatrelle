@@ -78,7 +78,8 @@ impl Out<'_> {
                 text: text.trim_end().to_string(),
                 color: x.note_color.unwrap_or(NOTE_YELLOW),
                 modified: x.modified.unwrap_or(it.date),
-                ..Default::default()
+                width: x.note_width,
+                height: x.note_height,
             };
             self.pim.notes.push(StoredNote { note, ..Default::default() });
             self.no_place(&files);
