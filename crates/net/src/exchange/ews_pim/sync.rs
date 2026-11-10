@@ -474,8 +474,10 @@ fn read_notes(c: &Client, pim: &Pim, again: &[String], out: &mut DavSync) {
             out.errors.push(format!("{}: {e}", n.note.title()));
             continue;
         }
+        // A note is a message to Exchange, which wants it said that it is only saved (it refused
+        // with "MessageDisposition attribute is required").
         let r = c.call_one(&format!(
-            "<m:CreateItem><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"notes\"/></m:SavedItemFolderId><m:Items>{}</m:Items></m:CreateItem>",
+            "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"notes\"/></m:SavedItemFolderId><m:Items>{}</m:Items></m:CreateItem>",
             note_xml(&n.note)
         ));
         match r {

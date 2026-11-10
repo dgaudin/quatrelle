@@ -436,6 +436,11 @@ impl Data {
                 let folder = op.child("SavedItemFolderId").and_then(|s| s.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 for mut m in op.child("Items").map(|i| i.kids.clone()).unwrap_or_default() {
                     let sticky = m.text_of("ItemClass").is_some_and(|c| c.starts_with("IPM.StickyNote"));
+                    // As Exchange: a message (a sticky note is one) is made with its disposition said.
+                    if m.name == "Message" && op.attr("MessageDisposition").is_none() {
+                        out.push(err("ErrorMessageDispositionRequired"));
+                        continue;
+                    }
                     if folder.strip_prefix("mailbox:").is_some_and(|who| !self.editors.iter().any(|e| e == who)) {
                         out.push(err("ErrorAccessDenied"));
                         continue;
