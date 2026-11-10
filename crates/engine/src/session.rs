@@ -42,7 +42,7 @@ mod security;
 mod writing;
 // The list's, the settings', the message being written's and organizing mail's own parts,
 // named here as before.
-pub use accounts::{AccountState, UpdateCheck, VacationState, newer_release};
+pub use accounts::{AccountState, ImportState, UnfinishedImport, UpdateCheck, VacationState, newer_release};
 pub use changing::MarkWork;
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, arranged, flag_rank, person, size_group};
@@ -436,6 +436,13 @@ pub struct Session {
     pub discovered: HashMap<String, Option<(Option<AccountConfig>, String)>>,
     /// Accounts waiting for a data file to come in before they connect (their start).
     held: HashMap<String, Job>,
+    /// The data files being imported, by account, and the imports left unfinished (read from
+    /// their journals when the session opens; never started again by themselves).
+    pub importing: HashMap<String, ImportState>,
+    pub unfinished_imports: HashMap<String, UnfinishedImport>,
+    /// Accounts whose data file has changed since their import began: the interface asks whether
+    /// to bring in what is new (`account.resumeImport` with `allowChanged`).
+    pub ask_import: Vec<String>,
     /// The account whose data file is being compacted (Compact Now), how far it has come, and
     /// the last one compacted here with its size before and after.
     pub compacting: Option<String>,
@@ -616,6 +623,9 @@ impl Session {
             pictures_for: BTreeSet::new(),
             discovered: HashMap::new(),
             held: HashMap::new(),
+            importing: HashMap::new(),
+            unfinished_imports: HashMap::new(),
+            ask_import: Vec::new(),
             compacting: None,
             compact_phase: CompactPhase::Starting,
             compacted: None,
@@ -696,6 +706,9 @@ impl Session {
         }
         // Counted again on opening, unless big: a big data file's counts were kept as it came in
         // and with every change since (counting meant reading its every folder's list).
+        for id in &local {
+            s.read_unfinished(id);
+        }
         for id in local {
             let kept: u64 = s.account(&id).map(|a| a.folders.iter().map(|f| u64::from(f.total)).sum()).unwrap_or(0);
             if kept <= RECOUNT_MAX {

@@ -6,6 +6,7 @@
 use super::*;
 
 mod data_files;
+mod importing;
 mod trust;
 
 #[test]

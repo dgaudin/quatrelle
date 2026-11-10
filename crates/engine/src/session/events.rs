@@ -208,7 +208,9 @@ impl Session {
                 }
             }
             Event::MessageFileRead { path, raw } => self.message_file_read(&path, raw),
-            Event::Imported { account, messages, skipped, done, error, .. } => self.imported(&account, messages, skipped, done, error),
+            Event::Imported { account, messages, skipped, total, folder, stopped, done, error } => {
+                self.imported(accounts::ImportReport { account, messages, skipped, total, folder, stopped, done, error })
+            }
             Event::CompactProgress { account, in_place, done, total } => self.compact_progress(&account, in_place, done, total),
             Event::Compacted { account, before, after, recompressed, no_room, error } => {
                 self.compacted(&account, Compacted { account: String::new(), before, after, recompressed }, no_room, error)

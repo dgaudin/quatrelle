@@ -5,6 +5,10 @@
 
 use super::*;
 
+mod importing;
+pub(in crate::session) use importing::ImportReport;
+pub use importing::{ImportState, UnfinishedImport};
+
 impl Session {
     /// Add an account (the password goes to the keychain through the `Start` job).
     pub fn add_account(&mut self, mut config: AccountConfig, password: Option<String>) -> Result<String, CmdError> {
@@ -92,6 +96,7 @@ impl Session {
             vacation: VacationState::Unknown,
         });
         self.save_accounts();
+        self.begin_import(&id, false, 0, None);
         self.jobs.push(Job::ImportPst { account: id.clone(), path: path.to_string() });
         Ok(serde_json::json!({ "account": id, "importing": true }))
     }
@@ -179,88 +184,9 @@ impl Session {
         if let Some(a) = self.account_mut(account) {
             a.status = SyncStatus::Syncing { folder: String::new() };
         }
+        self.begin_import(account, false, 0, None);
         self.jobs.push(Job::ImportPst { account: account.to_string(), path: path.to_string() });
         Ok(serde_json::json!({ "account": account, "importing": true }))
-    }
-
-    pub(super) fn imported(&mut self, account: &str, messages: usize, skipped: usize, done: bool, error: Option<String>) {
-        let Some(name) = self.account(account).map(|a| a.config.email.clone()) else { return };
-        if !done {
-            self.notice_with("{name}: {messages} messages imported so far…", &[("name", &name), ("messages", &messages.to_string())], false);
-            return;
-        }
-        if let Some(a) = self.account_mut(account) {
-            a.status = SyncStatus::Offline;
-        }
-        // The file's contacts, calendar, notes and tasks, written next to its mail.
-        let pim =
-            self.store.clone().and_then(|store| store.load_account_doc::<quatrelle_model::pim::Pim>(account, quatrelle_model::pim::PIM_DOC).ok());
-        // An error after mail or anything else came in is the last save failing: what came in
-        // stays (the import used to end there, and the account went with all it had written).
-        let came_in =
-            messages > 0 || pim.as_ref().is_some_and(|p| !(p.cards.is_empty() && p.events.is_empty() && p.notes.is_empty() && p.tasks.is_empty()));
-        // An account that was waiting for its data file connects now.
-        if let Some(start) = self.held.remove(account) {
-            self.jobs.push(start);
-            if let Some(e) = &error
-                && !came_in
-            {
-                self.notice_with("{name}: the data file could not be opened: {error}", &[("name", &name), ("error", e)], true);
-                return;
-            }
-        }
-        match error {
-            Some(e) if !came_in => {
-                // Nothing came in: the account goes again, and the file it was starting.
-                let _ = self.drop_account(account, false);
-                self.notice_with("{name} could not be opened: {error}", &[("name", &name), ("error", &e)], true);
-            }
-            error => {
-                // The file's contacts and calendar came in too.
-                if let Some(mut p) = pim {
-                    p.ensure_defaults();
-                    p.events.iter_mut().for_each(|e| e.event.adopt_kept_conference());
-                    self.pim.insert(account.to_string(), p);
-                    self.pim_unread.remove(account);
-                    self.forget_contacts();
-                    self.pim_revision = self.pim_revision.wrapping_add(1);
-                }
-                let messages = messages.to_string();
-                if let Some(e) = error {
-                    // The folder list came with the end and is held here: saved again, or the
-                    // next start would find none and the mail out of reach.
-                    self.finish_local_marks();
-                    let kept = match (&self.store, self.account(account)) {
-                        (Some(store), Some(a)) if !a.folders.is_empty() => {
-                            store.save_folders(account, &a.folders).inspect_err(|e| log::warn!("{account}: folders not saved: {e}")).is_ok()
-                        }
-                        _ => false,
-                    };
-                    let values = [("name", name.as_str()), ("messages", messages.as_str()), ("error", e.as_str())];
-                    if kept {
-                        self.notice_with("{name}: {messages} messages imported, but the last of it could not be saved: {error}", &values, true);
-                    } else {
-                        self.notice_with(
-                            "{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.",
-                            &values,
-                            true,
-                        );
-                    }
-                } else if skipped > 0 {
-                    let skipped = skipped.to_string();
-                    self.notice_with(
-                        "{name}: {messages} messages imported ({skipped} could not be read)",
-                        &[("name", &name), ("messages", &messages), ("skipped", &skipped)],
-                        false,
-                    );
-                } else {
-                    self.notice_with("{name}: {messages} messages imported", &[("name", &name), ("messages", &messages)], false);
-                }
-                if let Some(inbox) = self.account(account).and_then(|a| a.folder(FolderRole::Inbox)).map(|f| f.path.clone()) {
-                    self.open_view(View::Folder { account: account.to_string(), folder: inbox });
-                }
-            }
-        }
     }
 
     /// Move an account up (`by` < 0) or down the folder pane, as Outlook moves a mailbox.
@@ -340,6 +266,9 @@ impl Session {
         self.cache.retain(|(a, _), _| a != id);
         self.forget_echoes(id);
         self.pim.remove(id);
+        self.importing.remove(id);
+        self.unfinished_imports.remove(id);
+        self.ask_import.retain(|a| a != id);
         // An account added later under the same id has its own calendar and contacts to save.
         self.pim_unread.remove(id);
         self.forget_rooms(id);

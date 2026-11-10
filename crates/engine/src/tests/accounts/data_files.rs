@@ -7,7 +7,7 @@
 use super::*;
 
 /// The folder list an import's end brings, as the pool sends it before saying it's done.
-fn inbox_of(s: &mut Session, id: &str) {
+pub(super) fn inbox_of(s: &mut Session, id: &str) {
     let inbox = quatrelle_model::Folder { account: id.into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
     s.apply(Event::Folders { account: id.into(), folders: vec![inbox] });
 }
@@ -143,7 +143,9 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
         done: false,
         error: None,
     });
-    assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("200")));
+    // Followed in the status bar (`import_of`), not by a notice for each step.
+    assert_eq!(s.import_of(&id).map(|i| i.done), Some(200));
+    assert!(!s.notices.last().is_some_and(|n| n.text.contains("200")));
     let inbox = quatrelle_model::Folder {
         account: id.clone(),
         path: "INBOX".into(),

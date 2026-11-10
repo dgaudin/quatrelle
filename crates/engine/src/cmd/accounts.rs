@@ -42,6 +42,18 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.import_pst(&path)
         })
         .params(r#"{"path": string (a .pst or .quatrelle data file; its mail goes into a new account on this computer)}"#),
+        CommandSpec::new("account.stopImport", "Stop the import", "Account", |s, v| {
+            let account = s.import_account(p::str(v, "account"), true)?;
+            s.stop_import(&account)
+        })
+        .params(r#"{"account"?: string (default: the only account being imported) } (the import ends at its next message; what came in stays and the import can be gone on with)"#)
+        .when(|s| if s.can_stop_import() { None } else { Some("no import is running") }),
+        CommandSpec::new("account.resumeImport", "Go on with the import", "Account", |s, v| {
+            let account = s.import_account(p::str(v, "account"), false)?;
+            s.resume_import(&account, p::str(v, "path"), p::bool(v, "allowChanged").unwrap_or(false))
+        })
+        .params(r#"{"account"?: string (default: the only account whose import is not finished), "path"?: string (the data file, when it is no longer where it was), "allowChanged"?: bool (the file has changed since the import began: bring in what is new)} (goes on in the same account from where it stopped, with no message twice; never started by itself)"#)
+        .when(|s| if s.can_resume_import() { None } else { Some("no import is waiting to go on") }),
         CommandSpec::new("account.exportPst", "Export to Outlook data file", "File › Open & Export", |s, v| {
             let path = p::req_str(v, "path")?.to_string();
             let account = match p::str(v, "account") {
