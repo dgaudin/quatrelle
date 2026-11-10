@@ -103,7 +103,7 @@ fn contacts_notes_and_tasks_changed_while_they_went_up_are_made_once() {
             },
         ],
         notes: vec![StoredNote {
-            note: Note { uid: "n-local".into(), text: format!("Buy paper {n}"), color: 1, modified: 5 },
+            note: Note { uid: "n-local".into(), text: format!("Buy paper {n}"), color: 1, modified: 5, ..Default::default() },
             dirty: true,
             ..Default::default()
         }],

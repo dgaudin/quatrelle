@@ -222,6 +222,23 @@ pub struct Note {
     /// When it was last changed (Unix seconds).
     #[serde(default)]
     pub modified: i64,
+    /// Its window's size, in pixels, as Outlook keeps it (MS-OXONOTE PidLidNoteWidth and
+    /// PidLidNoteHeight); 0: never set, so its window opens at the usual size.
+    #[serde(default)]
+    pub width: u16,
+    #[serde(default)]
+    pub height: u16,
+}
+
+/// A note's smallest window, and the largest side of one.
+pub const NOTE_MIN_WIDTH: u16 = 160;
+pub const NOTE_MIN_HEIGHT: u16 = 120;
+pub const NOTE_MAX_SIDE: u16 = 4000;
+
+/// A side of a note's window as read from elsewhere (a server, a data file): 0 or less, none
+/// set; anything else held to `min` and [`NOTE_MAX_SIDE`].
+pub fn note_side(v: i64, min: u16) -> u16 {
+    if v <= 0 { 0 } else { u16::try_from(v.min(i64::from(NOTE_MAX_SIDE))).unwrap_or(NOTE_MAX_SIDE).max(min) }
 }
 
 fn yellow() -> u8 {
@@ -237,6 +254,11 @@ impl Note {
     /// Its first line: what a list of notes shows as its title.
     pub fn title(&self) -> &str {
         self.text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("")
+    }
+
+    /// Its window's size (width, height), when one was set.
+    pub fn size(&self) -> Option<(u16, u16)> {
+        (self.width > 0 && self.height > 0).then_some((self.width, self.height))
     }
 }
 

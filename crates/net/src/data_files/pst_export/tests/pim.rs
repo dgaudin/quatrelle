@@ -152,8 +152,8 @@ pub(super) fn account() -> Pim {
         },
     ];
     let notes = vec![
-        Note { uid: "n1".into(), text: "Shopping\nLenses\nTape".into(), color: 1, modified: 1_790_000_000 },
-        Note { uid: "n2".into(), text: "Call back".into(), color: 3, modified: 1_790_000_100 },
+        Note { uid: "n1".into(), text: "Shopping\nLenses\nTape".into(), color: 1, modified: 1_790_000_000, ..Default::default() },
+        Note { uid: "n2".into(), text: "Call back".into(), color: 3, modified: 1_790_000_100, ..Default::default() },
     ];
     Pim {
         cards: [ana, ben, crew, pair].into_iter().map(|card| StoredCard { book: "local".into(), card, ..Default::default() }).collect(),
@@ -353,7 +353,10 @@ fn a_file_added_to_takes_the_account_s_items_by_what_they_are() {
     };
     let mut pim = Pim {
         cards: vec![StoredCard { book: "local".into(), card, ..Default::default() }],
-        notes: vec![StoredNote { note: Note { uid: "n1".into(), text: "Call back".into(), color: 3, modified: 1 }, ..Default::default() }],
+        notes: vec![StoredNote {
+            note: Note { uid: "n1".into(), text: "Call back".into(), color: 3, modified: 1, ..Default::default() },
+            ..Default::default()
+        }],
         tasks: vec![water("t1", 4)],
         ..Default::default()
     };

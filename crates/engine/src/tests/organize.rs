@@ -20,7 +20,8 @@ fn every_command_survives_junk_params() {
         json!({"value": "sideways", "index": -1, "path": "", "data": [999, -4]}),
         json!({"query": "\"unterminated from: -", "scope": 3}),
         json!({"email": "@", "password": "", "imapPort": 99_999_999}),
-        json!({"index": 1e300, "limit": -5, "on": "yes"}),
+        json!({"index": 1e300, "limit": -5, "on": "yes", "width": 1e300, "height": -3}),
+        json!({"width": "wide", "height": 120.5, "uid": "x"}),
         json!({"url": "https://acme.webex.com/meet/x", "was": 3, "name": [1], "details": {"a": 1}, "remove": "yes", "uid": 5, "conference": {"url": [], "label": {}}}),
         json!({"summary": "s", "start": "2026-01-01", "conference": "x"}),
     ];

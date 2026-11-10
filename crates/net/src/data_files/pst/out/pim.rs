@@ -59,7 +59,7 @@ impl Out<'_> {
                 self.skipped += 1;
                 return;
             }
-            let note = Note { uid, text, color: NOTE_YELLOW, modified: x.modified.unwrap_or(it.date) };
+            let note = Note { uid, text, color: NOTE_YELLOW, modified: x.modified.unwrap_or(it.date), ..Default::default() };
             self.pim.notes.push(StoredNote { note, ..Default::default() });
             self.no_place(&files);
         } else if class.starts_with("ipm.distlist") {
@@ -73,8 +73,13 @@ impl Out<'_> {
                 self.skipped += 1;
                 return;
             }
-            let note =
-                Note { uid, text: text.trim_end().to_string(), color: x.note_color.unwrap_or(NOTE_YELLOW), modified: x.modified.unwrap_or(it.date) };
+            let note = Note {
+                uid,
+                text: text.trim_end().to_string(),
+                color: x.note_color.unwrap_or(NOTE_YELLOW),
+                modified: x.modified.unwrap_or(it.date),
+                ..Default::default()
+            };
             self.pim.notes.push(StoredNote { note, ..Default::default() });
             self.no_place(&files);
         } else if class.starts_with("ipm.task") {

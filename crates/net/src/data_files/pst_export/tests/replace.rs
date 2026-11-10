@@ -32,7 +32,7 @@ fn account() -> Pim {
         ..Default::default()
     };
     let note = |uid: &str, text: &str| StoredNote {
-        note: Note { uid: uid.into(), text: text.into(), color: 3, modified: 1_790_000_000 },
+        note: Note { uid: uid.into(), text: text.into(), color: 3, modified: 1_790_000_000, ..Default::default() },
         ..Default::default()
     };
     let task = |uid: &str, subject: &str| StoredTask {

@@ -49,14 +49,17 @@ impl Session {
         self.account(account).is_some_and(|a| !a.is_local() && a.config.ews.is_some())
     }
 
-    /// A new note; returns its uid.
-    pub fn create_note(&mut self, account: Option<&str>, text: &str, color: Option<u8>) -> CmdResult {
+    /// A new note (its window's size, when given, checked by the command); returns its uid.
+    pub fn create_note(&mut self, account: Option<&str>, text: &str, color: Option<u8>, size: Option<(u16, u16)>) -> CmdResult {
         let account = self.pim_account(account)?;
+        let (width, height) = size.unwrap_or_default();
         let note = quatrelle_model::pim::Note {
             uid: self.new_uid(),
             text: cap_note(text),
             color: color.unwrap_or(quatrelle_model::pim::NOTE_YELLOW).min(quatrelle_model::pim::NOTE_COLORS - 1),
             modified: self.clock.now,
+            width,
+            height,
         };
         let uid = note.uid.clone();
         let remote = self.notes_sync(&account);
@@ -69,8 +72,8 @@ impl Session {
         Ok(serde_json::json!({"uid": uid, "account": account}))
     }
 
-    /// Change a note's text or colour.
-    pub fn update_note(&mut self, uid: &str, text: Option<&str>, color: Option<u8>) -> CmdResult {
+    /// Change a note's text, colour or window's size (sent to the server as its text is).
+    pub fn update_note(&mut self, uid: &str, text: Option<&str>, color: Option<u8>, size: Option<(u16, u16)>) -> CmdResult {
         let account = self.note_account(uid)?;
         let remote = self.notes_sync(&account);
         let now = self.clock.now;
@@ -82,6 +85,9 @@ impl Session {
         }
         if let Some(c) = color {
             n.note.color = c.min(quatrelle_model::pim::NOTE_COLORS - 1);
+        }
+        if let Some((w, h)) = size {
+            (n.note.width, n.note.height) = (w, h);
         }
         if n.note == before {
             return Ok(serde_json::json!({"uid": uid, "changed": false}));

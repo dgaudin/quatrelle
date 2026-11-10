@@ -324,23 +324,45 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let list: Vec<Value> = s
                 .notes(p::str(v, "query").unwrap_or(""))
                 .into_iter()
-                .map(|n| json!({"uid": n.note.uid, "text": n.note.text, "color": n.note.color, "modified": n.note.modified, "account": n.account}))
+                .map(|n| {
+                    let note = &n.note;
+                    json!({"uid": note.uid, "text": note.text, "color": note.color, "modified": note.modified, "width": note.width, "height": note.height, "account": n.account})
+                })
                 .collect();
             Ok(json!({"notes": list}))
         })
         .params(r#"{"query"?: string}"#),
         CommandSpec::new("note.create", "New note", "Notes", |s, v| {
             let color = p::u64(v, "color").and_then(|c| u8::try_from(c).ok());
-            s.create_note(p::str(v, "account"), p::str(v, "text").unwrap_or(""), color)
+            s.create_note(p::str(v, "account"), p::str(v, "text").unwrap_or(""), color, note_size(v)?)
         })
-        .params(r#"{"text"?: string, "color"?: 0|1|2|3|4 (blue, green, pink, yellow, white), "account"?: string}"#),
+        .params(r#"{"text"?: string, "color"?: 0|1|2|3|4 (blue, green, pink, yellow, white), "width"?: 160..4000, "height"?: 120..4000 (its window's size, both or neither; else the usual size), "account"?: string}"#),
         CommandSpec::new("note.update", "Edit note", "Notes", |s, v| {
             let color = p::u64(v, "color").and_then(|c| u8::try_from(c).ok());
-            s.update_note(p::req_str(v, "uid")?, p::str(v, "text"), color)
+            s.update_note(p::req_str(v, "uid")?, p::str(v, "text"), color, note_size(v)?)
         })
-        .params(r#"{"uid": string, "text"?: string, "color"?: 0|1|2|3|4}"#),
+        .params(r#"{"uid": string, "text"?: string, "color"?: 0|1|2|3|4, "width"?: 160..4000, "height"?: 120..4000 (its window's size, both or neither)}"#),
         CommandSpec::new("note.delete", "Delete note", "Notes", |s, v| s.delete_note(p::req_str(v, "uid")?)).params(r#"{"uid": string}"#),
     ]
+}
+
+/// A note's window size from command params: `width` and `height` together, each a whole
+/// number of pixels within its bounds; anything else refused.
+fn note_size(v: &Value) -> Result<Option<(u16, u16)>, CmdError> {
+    use quatrelle_model::pim::{NOTE_MAX_SIDE, NOTE_MIN_HEIGHT, NOTE_MIN_WIDTH};
+    let side = |k: &str, min: u16| -> Result<Option<u16>, CmdError> {
+        let Some(x) = v.get(k) else { return Ok(None) };
+        let n = x.as_u64().or_else(|| x.as_f64().filter(|f| f.is_finite() && *f >= 0.0 && f.fract() == 0.0).map(|f| f as u64));
+        n.and_then(|n| u16::try_from(n).ok())
+            .filter(|n| (min..=NOTE_MAX_SIDE).contains(n))
+            .map(Some)
+            .ok_or_else(|| CmdError::Params(format!("`{k}` is a whole number from {min} to {NOTE_MAX_SIDE}")))
+    };
+    match (side("width", NOTE_MIN_WIDTH)?, side("height", NOTE_MIN_HEIGHT)?) {
+        (Some(w), Some(h)) => Ok(Some((w, h))),
+        (None, None) => Ok(None),
+        _ => Err(CmdError::Params("`width` and `height` go together".into())),
+    }
 }
 
 /// The user, as the organizer of a meeting in `account`.
