@@ -55,6 +55,50 @@ pub fn text_blocks(blocks: &[Block]) -> Vec<(&RichText, Align)> {
     out
 }
 
+/// A block of a laid-out message, where it stands: the blocks of text it holds
+/// ([`text_blocks`]' numbers: one for a block of text, a table's cells' for a table) and how deep
+/// it is (0: not in a table).
+#[derive(Clone, Debug)]
+pub struct BlockAt<'a> {
+    pub block: &'a Block,
+    pub texts: std::ops::Range<usize>,
+    pub depth: usize,
+}
+
+/// Every block of `blocks` in reading order, a table before what its cells hold: a block's place
+/// in this list is its number (what was taken out of the original under a reply is kept by it).
+pub fn all_blocks(blocks: &[Block]) -> Vec<BlockAt<'_>> {
+    fn walk<'a>(blocks: &'a [Block], n: &mut usize, out: &mut Vec<BlockAt<'a>>, depth: usize) {
+        if depth > MAX_DEPTH * 2 {
+            return;
+        }
+        for b in blocks {
+            match b {
+                Block::Text(_) => {
+                    out.push(BlockAt { block: b, texts: *n..n.saturating_add(1), depth });
+                    *n = n.saturating_add(1);
+                }
+                Block::Table(t) => {
+                    let at = out.len();
+                    out.push(BlockAt { block: b, texts: *n..*n, depth });
+                    for cell in t.rows.iter().flatten() {
+                        walk(&cell.blocks, n, out, depth + 1);
+                        for o in &cell.overlays {
+                            walk(&o.blocks, n, out, depth + 1);
+                        }
+                    }
+                    if let Some(own) = out.get_mut(at) {
+                        own.texts.end = *n;
+                    }
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(blocks, &mut 0, &mut out, 0);
+    out
+}
+
 /// A block of formatted lines as text and styles to edit, its paragraphs lined up as `align`.
 pub fn cell_text(lines: &RichText, align: Align) -> (String, Styles) {
     let (t, mut st) = rich::from_rich(lines);

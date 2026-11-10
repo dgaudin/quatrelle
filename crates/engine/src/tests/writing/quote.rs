@@ -169,3 +169,97 @@ fn the_original_comes_back_with_a_draft_and_from_the_outbox() {
     let _ = MILL;
     done(s);
 }
+
+/// The owner's report (2026-11-10): what's selected from the text into the original, or across
+/// its blocks, couldn't be taken out in one go. From the middle of the text to the end of the
+/// original's last block: the text is cut there, every block of the original goes (its tables,
+/// its picture), nothing of it is sent and its picture isn't attached any more; put back, the
+/// message goes as it came. A table taken in part keeps its cells, emptied of what was selected.
+#[test]
+fn a_selection_across_the_text_and_the_original_is_taken_out() {
+    use crate::QuotePoint;
+    let mut s = sample_session("quote-across");
+    open_mill(&mut s);
+    s.run("mail.reply", &json!({})).unwrap();
+    let c = s.compose.as_mut().unwrap();
+    let before = c.written();
+    let came = c.bodies().1.unwrap_or_default();
+    let cut = c.body.chars().count() / 2;
+    let kept: String = c.body.chars().take(cut).collect();
+    let last = c.quote.as_ref().unwrap().cells();
+    let end = c.block_text(last).map(|(t, _)| t.chars().count()).unwrap();
+    let (from, to) = (QuotePoint { block: 0, at: cut }, QuotePoint { block: last, at: end });
+    // Copied, it reads in order.
+    let text = c.text_across(from, to);
+    let places: Vec<usize> = ["updated invoice", "+00 1234 5678", "A warning in red", "Mill"].iter().map(|w| text.find(w).expect(w)).collect();
+    assert!(places.is_sorted(), "{text}");
+    // Taken out, the far end first as a drag upward gives it.
+    assert_eq!(c.delete_across(to, from), Some(from), "the cursor where the two ends meet");
+    assert_eq!(c.body, kept);
+    assert_eq!(c.selectable_blocks(), [0], "no block of the original is left to select in");
+    let (text, html, pictures) = c.bodies();
+    let html = html.unwrap_or_default();
+    for gone in ["updated invoice", "<table", "1234", "A warning in red", "cid:phone@mill.example"] {
+        assert!(!html.contains(gone), "{gone} in {html}");
+    }
+    assert!(!text.contains("A warning in red"), "{text}");
+    assert!(pictures.is_empty(), "a picture nothing shows any more isn't attached");
+    assert!(html.contains("class=\"quatrelle-quote\""), "{html}");
+    let after = c.written();
+    assert!(c.is_written(&after) && !c.is_written(&before));
+    // Put back: as it came.
+    c.set_written(before.clone());
+    assert!(c.is_written(&before));
+    assert_eq!(c.bodies().1.unwrap_or_default(), came);
+    assert_eq!(c.bodies().2.len(), 1);
+    // In part: from inside the first paragraph to inside the warning. The paragraph is cut, the
+    // table stays with the cells between emptied and the warning's cut, the picture's cell (it
+    // was whole between the two) empty, so the picture goes.
+    let (first, warn) = (cell_with(c, "updated invoice"), cell_with(c, "A warning in red"));
+    assert_eq!(
+        c.delete_across(QuotePoint { block: first + 1, at: 7 }, QuotePoint { block: warn + 1, at: 2 }),
+        Some(QuotePoint { block: first + 1, at: 7 })
+    );
+    let q = c.quote.clone().unwrap();
+    assert_eq!(q.cell(first).unwrap().0, "We will");
+    assert_eq!(q.cell(warn).unwrap().0, "warning in red");
+    assert!(q.removed.is_empty(), "no block is wholly taken: {:?}", q.removed);
+    let (_, html, pictures) = c.bodies();
+    let html = html.unwrap_or_default();
+    assert!(html.contains("We will<") && html.contains("warning in red") && html.contains("<table") && html.contains(">Mill<"), "{html}");
+    assert!(!html.contains("1234") && !html.contains("cid:phone@mill.example") && pictures.is_empty(), "{html}");
+    done(s);
+}
+
+/// A message being written is kept as before when nothing was taken out of its original (the
+/// messages already saved read back the same), and what was taken out is kept with it.
+#[test]
+fn what_was_taken_out_of_the_original_is_kept_with_the_message() {
+    use crate::QuotePoint;
+    let mut s = sample_session("quote-across-kept");
+    open_mill(&mut s);
+    s.run("mail.reply", &json!({})).unwrap();
+    let c = s.compose.as_mut().unwrap();
+    let saved = serde_json::to_value(&*c).unwrap();
+    assert!(saved["quote"].get("removed").is_none(), "nothing new in a message nothing was taken out of");
+    let again: crate::Compose = serde_json::from_value(saved).unwrap();
+    assert!(again.quote == c.quote && again.bodies() == c.bodies(), "one saved before reads back as it was");
+    let first = cell_with(c, "updated invoice");
+    let end = c.block_text(c.quote.as_ref().unwrap().cells()).map(|(t, _)| t.chars().count()).unwrap();
+    c.delete_across(QuotePoint { block: first + 1, at: 7 }, QuotePoint { block: c.quote.as_ref().unwrap().cells(), at: end });
+    let saved = serde_json::to_value(&*c).unwrap();
+    let again: crate::Compose = serde_json::from_value(saved).unwrap();
+    assert!(again.bodies() == c.bodies(), "read back, it goes out the same");
+    assert!(!again.quote.as_ref().unwrap().removed.is_empty());
+    // Saved to Drafts and opened again: its original is as it was left.
+    s.run("compose.saveDraft", &json!({})).unwrap();
+    s.compose = None;
+    s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
+    let key = s.list.iter().find(|m| m.subject == "Re: Invoice").map(|m| m.key.clone()).expect("in Drafts");
+    s.run("draft.edit", &json!({"key": key.to_id()})).unwrap();
+    let c = s.compose.as_ref().expect("being written again");
+    let q = c.quote.clone().expect("its original");
+    assert!(q.text().contains("We will") && !q.text().contains("1234") && !q.text().contains("A warning in red"), "{}", q.text());
+    assert!(!c.bodies().1.unwrap_or_default().contains("<table"));
+    done(s);
+}

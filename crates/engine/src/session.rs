@@ -68,8 +68,8 @@ pub use security::{
 };
 use writing::NameCheck;
 pub use writing::{
-    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Outcome, Quote, Resolved, Rewrite,
-    SendBlock, SendCheck, Sender, add_pictures, group_entry, style_signature,
+    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Outcome, Quote, QuotePoint, Resolved,
+    Rewrite, SendBlock, SendCheck, Sender, Written, add_pictures, group_entry, style_signature,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

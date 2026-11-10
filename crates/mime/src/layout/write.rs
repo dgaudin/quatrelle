@@ -10,9 +10,15 @@ use super::*;
 
 /// `blocks` as HTML, the `n`th block of text ([`text_blocks`]' order) as `text(n)` writes it.
 pub fn to_html(blocks: &[Block], text: &mut dyn FnMut(usize) -> String) -> String {
+    to_html_without(blocks, &|_| false, text)
+}
+
+/// [`to_html`] without the blocks `gone` names (a paragraph, a table and all it holds, taken out
+/// of the original under a reply): the blocks of text left keep their numbers.
+pub fn to_html_without(blocks: &[Block], gone: &dyn Fn(&Block) -> bool, text: &mut dyn FnMut(usize) -> String) -> String {
     let mut out = String::new();
     let mut n = 0usize;
-    write(blocks, text, &mut n, &mut out, 0);
+    write(blocks, gone, text, &mut n, &mut out, 0);
     out
 }
 
@@ -59,11 +65,16 @@ fn edges(e: &Edges, radius: u8) -> String {
     css
 }
 
-fn write(blocks: &[Block], text: &mut dyn FnMut(usize) -> String, n: &mut usize, out: &mut String, depth: usize) {
+fn write(blocks: &[Block], gone: &dyn Fn(&Block) -> bool, text: &mut dyn FnMut(usize) -> String, n: &mut usize, out: &mut String, depth: usize) {
     if depth > MAX_DEPTH * 2 {
         return;
     }
     for b in blocks {
+        if gone(b) {
+            // Its blocks of text are counted all the same, written nowhere.
+            write(std::slice::from_ref(b), &|_| false, &mut |_| String::new(), n, &mut String::new(), depth);
+            continue;
+        }
         match b {
             Block::Text(_) => {
                 out.push_str(&text(*n));
@@ -104,7 +115,7 @@ fn write(blocks: &[Block], text: &mut dyn FnMut(usize) -> String, n: &mut usize,
                         if !c.overlays.is_empty() {
                             out.push_str("<div style=\"position:relative\">");
                         }
-                        write(&c.blocks, text, n, out, depth + 1);
+                        write(&c.blocks, gone, text, n, out, depth + 1);
                         for o in &c.overlays {
                             let x = if o.from_right { format!("right:{}px", o.x) } else { format!("left:{}px", o.x) };
                             let y = if o.from_bottom { format!("bottom:{}px", o.y) } else { format!("top:{}px", o.y) };
@@ -115,7 +126,7 @@ fn write(blocks: &[Block], text: &mut dyn FnMut(usize) -> String, n: &mut usize,
                             };
                             let bg = o.background.map(|c| format!(";background-color:{}", hex(c))).unwrap_or_default();
                             out.push_str(&format!("<div style=\"position:absolute;{x};{y}{w}{bg};padding:4px\">"));
-                            write(&o.blocks, text, n, out, depth + 1);
+                            write(&o.blocks, gone, text, n, out, depth + 1);
                             out.push_str("</div>");
                         }
                         if !c.overlays.is_empty() {

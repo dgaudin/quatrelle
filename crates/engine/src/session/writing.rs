@@ -24,7 +24,7 @@ pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
 pub(crate) use names::NameCheck;
 pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, group_entry};
-pub use quote::Quote;
+pub use quote::{Quote, QuotePoint, Written};
 pub use senders::Sender;
 pub use sending::SendBlock;
 

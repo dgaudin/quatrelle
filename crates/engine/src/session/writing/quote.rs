@@ -7,12 +7,15 @@
 //! of its own. It goes out after the text: as its own HTML while nothing in it was changed, else
 //! its layout written out again around the changed text.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use mime::layout::{Block, cell_text, text_blocks};
+use mime::layout::{Block, all_blocks, cell_text, text_blocks};
 use mime::rich::{self, Styles};
 
 use super::*;
+
+mod across;
+pub use across::{QuotePoint, Written};
 
 /// The original under a reply or forward, as it came.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +35,10 @@ pub struct Quote {
     /// The blocks of text changed here, by their place ([`text_blocks`]): text and styles.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub edits: BTreeMap<usize, (String, Styles)>,
+    /// The blocks taken out of it here (a paragraph, a table and all it holds), by their place
+    /// in reading order ([`all_blocks`]): they aren't shown and don't go out.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub removed: BTreeSet<usize>,
 }
 
 impl Quote {
@@ -49,6 +56,7 @@ impl Quote {
             html: mime::layout::quote_html(html, given, &parsed.trackers.pictures),
             given: given.to_vec(),
             edits: BTreeMap::new(),
+            removed: BTreeSet::new(),
         })
     }
 
@@ -72,9 +80,27 @@ impl Quote {
         text_blocks(&self.blocks).get(n).map(|(lines, align)| cell_text(lines, *align))
     }
 
+    /// The blocks taken out of it, as laid out (a table stands for all it holds).
+    pub fn removed_blocks(&self) -> Vec<&Block> {
+        if self.removed.is_empty() {
+            return Vec::new();
+        }
+        all_blocks(&self.blocks).into_iter().enumerate().filter(|(o, _)| self.removed.contains(o)).map(|(_, b)| b.block).collect()
+    }
+
+    /// The blocks of text taken out of it (their own, or with the table they're in).
+    pub fn gone(&self) -> BTreeSet<usize> {
+        if self.removed.is_empty() {
+            return BTreeSet::new();
+        }
+        all_blocks(&self.blocks).into_iter().enumerate().filter(|(o, _)| self.removed.contains(o)).flat_map(|(_, b)| b.texts).collect()
+    }
+
     /// Its text, for the plain-text twin: each block of text on lines of its own.
     pub fn text(&self) -> String {
+        let gone = self.gone();
         (0..self.cells())
+            .filter(|n| !gone.contains(n))
             .filter_map(|n| self.cell(n))
             .map(|(t, s)| rich::to_text(&t, &s))
             .filter(|t| !t.trim().is_empty())
@@ -84,11 +110,13 @@ impl Quote {
 
     /// Its HTML as it goes out: as it came, or with its changed text written into its layout.
     pub fn html(&self) -> String {
-        if self.edits.is_empty() {
+        if self.edits.is_empty() && self.removed.is_empty() {
             return self.html.clone();
         }
         let blocks = text_blocks(&self.blocks);
-        let out = mime::layout::to_html(&self.blocks, &mut |n| {
+        let removed: Vec<*const Block> = self.removed_blocks().into_iter().map(std::ptr::from_ref).collect();
+        let gone = |b: &Block| removed.iter().any(|r| std::ptr::eq(*r, b));
+        let out = mime::layout::to_html_without(&self.blocks, &gone, &mut |n| {
             let (t, s) = match self.edits.get(&n) {
                 Some(e) => e.clone(),
                 None => blocks.get(n).map(|(lines, align)| cell_text(lines, *align)).unwrap_or_default(),
