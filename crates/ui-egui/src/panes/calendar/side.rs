@@ -168,11 +168,25 @@ pub(super) fn calendar_row(
                 None => a.config.email.clone(),
             },
         };
-        ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate()).on_hover_text(tip);
-        if web.is_some_and(|w| w.error.is_some()) {
-            ui.label(RichText::new(tl!("couldn't be read")).color(t.danger).small());
+        // What follows the name is kept room for first: a name cut to the row's whole width put it
+        // past the pane's edge, and the pane then couldn't be narrower than its longest row.
+        let after = if web.is_some_and(|w| w.error.is_some()) {
+            Some((tl!("couldn't be read"), t.danger))
         } else if c.read_only {
-            ui.label(RichText::new(tl!("read-only")).color(t.faint).small());
+            Some((tl!("read-only"), t.faint))
+        } else {
+            None
+        };
+        let room = after.map_or(0.0, |(text, color)| {
+            let font = egui::TextStyle::Small.resolve(ui.style());
+            ui.painter().layout_no_wrap(text.to_string(), font, color).size().x + ui.spacing().item_spacing.x
+        });
+        ui.scope(|ui| {
+            ui.set_max_width((ui.available_width() - room).max(24.0));
+            ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate()).on_hover_text(tip);
+        });
+        if let Some((text, color)) = after {
+            ui.label(RichText::new(text).color(color).small());
         }
     });
     // Subscribed to: right-click reads it again, or removes it.
