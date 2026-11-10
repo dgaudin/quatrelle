@@ -213,3 +213,19 @@ fn a_refusal_is_said_in_a_notice() {
     assert!(!handed.borrow().iter().any(|j| matches!(j, Job::Apply { .. })));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The Move to dialog lists the folders mail may be moved to: not the archive's, which the
+/// engine refuses at the click.
+#[test]
+fn the_move_dialog_doesnt_offer_the_archive() {
+    let ctx = egui::Context::default();
+    let (mut a, dir, _) = exchange_app("oa-move-dialog");
+    let key = message("a1", "INBOX", 1, "").key;
+    a.session.run("list.select", &json!({"key": key.to_id()})).unwrap();
+    a.ui.dialog = Some(crate::Dialog::MoveTo { filter: String::new() });
+    let shapes = settle(&ctx, &mut a);
+    let listed: Vec<String> = texts(&shapes).into_iter().filter(|t| t.starts_with(' ')).collect();
+    assert!(listed.iter().any(|t| t.trim() == "Sent Items") || texts(&shapes).iter().any(|t| t == "Sent Items"), "{:?}", texts(&shapes));
+    assert!(!listed.iter().any(|t| t.trim() == "Projects" || t.trim() == "2019"), "the archive's folders are offered: {listed:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

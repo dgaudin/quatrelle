@@ -54,7 +54,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             let folders: Vec<&Folder> = account
                 .folders
                 .iter()
-                .filter(|f| f.selectable && quatrelle_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle))
+                .filter(|f| f.selectable && !f.archive && quatrelle_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle))
                 .collect();
             let mut chosen = None;
             let mut across = None;
@@ -133,7 +133,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 if needle.is_empty() && ui.selectable_label(false, RichText::new(tl!("(Top level)")).italics()).clicked() {
                     chosen = Some(None);
                 }
-                for f in acc.folders.iter().filter(|f| !quatrelle_engine::model::is_within(&f.path, folder, d)) {
+                for f in acc.folders.iter().filter(|f| !f.archive && !quatrelle_engine::model::is_within(&f.path, folder, d)) {
                     if !quatrelle_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle) {
                         continue;
                     }
