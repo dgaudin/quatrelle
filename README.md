@@ -191,8 +191,8 @@ of your own in `assets/icon.png` and run it again to use that instead.
 ## License and credits
 
 MIT OR Apache-2.0. Quatrelle started as a fork of [ZIDAN44/mailcraft](https://github.com/ZIDAN44/mailcraft)
-(© the ArtCraft Team and the MailCraft contributors); what it changed from it, and why, is in
-[FORK.md](FORK.md) (in French). The rest is © Didier Gaudin.
+(© the ArtCraft Team and the MailCraft contributors); what it changed from it is in
+[FORK.md](FORK.md). The rest is © Didier Gaudin.
 
 Built on [`mail-parser`](https://github.com/stalwartlabs/mail-parser) and
 [`mail-builder`](https://github.com/stalwartlabs/mail-builder) (Stalwart Labs, Apache-2.0 / MIT),

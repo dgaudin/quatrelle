@@ -558,8 +558,7 @@ The walk over the folder tree lives in `pst.rs`; an item is read from its proper
 `pst/item.rs`, through `pst/props.rs`'s `Val` (a closure gives each property's value, so tests can
 build items without a file), written out again in `pst/rebuild.rs`, and saved by `pst/out.rs`.
 
-**Followed, stopped, gone on with** (`pst/journal.rs`, design in
-`docs/superpowers/specs/2026-11-10-stoppable-import-design.md`). Before the first message the
+**Followed, stopped, gone on with** (`pst/journal.rs`). Before the first message the
 folders' own counts (`PidTagContentCount`) of the mail folders that are imported are added up: the
 total `Event::Imported` carries with the folder being read (`None` when a count can't be read; no
 item is read to count). `Job::StopImport` sets the account's flag in the pool, asked before each
