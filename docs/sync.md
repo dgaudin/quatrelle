@@ -138,6 +138,11 @@ JMAP accounts wait for the main connection as before (their copy would need the 
   wait for `DONE`'s answer); the probes also keep it in a NAT's memory. A wait for mail that
   loses its connection after a minute or more connects again at once without an error status
   (`failed_waiting`); one lost sooner, or a new connection that fails, is an error as above.
+- **A panic in an account's work** ends neither its thread nor the account: each turn of the
+  loop, and each job of the second connection, runs behind `catch_unwind` (`worker/connect.rs`,
+  `fenced`). The work in hand is given up, the connection dropped, the account's status says an
+  internal error stopped it, and it connects again after a wait that grows from 30 s to 15 min
+  while panics keep coming.
 
 ### Reading folders on connections of their own
 

@@ -349,7 +349,7 @@ mod smime;
 mod sync;
 mod webex;
 
-use connect::{SyncDone, connect_for_sync, reader_stops, sync_folders};
+use connect::{SyncDone, connect_for_sync, fenced, reader_stops, sync_folders};
 
 /// Largest picture downloaded for a message.
 const MAX_PICTURE: usize = 8 << 20;
@@ -585,68 +585,6 @@ impl Worker {
                     return;
                 }
             }
-        }
-    }
-
-    fn run(mut self, rx: Receiver<Job>) {
-        self.status(SyncStatus::Connecting);
-        while !self.closed {
-            self.drain(&rx);
-            if self.closed {
-                break;
-            }
-            self.fresh_token();
-            if let Some(job) = self.queue.pop_front() {
-                self.handle(job);
-                continue;
-            }
-            if self.conn.is_none() {
-                if self.auth_failed {
-                    match rx.recv() {
-                        Ok(j) => push_job(&mut self.queue, j),
-                        Err(_) => break,
-                    }
-                    continue;
-                }
-                let wait = self.next_attempt.saturating_duration_since(Instant::now());
-                if !wait.is_zero() {
-                    match rx.recv_timeout(wait) {
-                        Ok(j) => push_job(&mut self.queue, j),
-                        Err(RecvTimeoutError::Timeout) => {}
-                        Err(RecvTimeoutError::Disconnected) => break,
-                    }
-                    continue;
-                }
-                self.connect_and_sync();
-                continue;
-            }
-            // A change the server refused for now, tried again when its time comes.
-            if self.retry_due() {
-                self.replay();
-                continue;
-            }
-            if self.last_full.is_none_or(|t| t.elapsed() >= FULL_SYNC_EVERY) {
-                self.sync_all(&rx);
-                continue;
-            }
-            // Nothing asked: a few more messages downloaded whole, with a look at the Inbox every
-            // half minute meanwhile.
-            if !self.ahead.is_empty() && self.room_to_download() {
-                // Told of changes, what changed is read between two steps.
-                if self.listening() {
-                    self.hear(Duration::ZERO);
-                }
-                if Instant::now() < self.ahead_poll {
-                    self.ahead_step();
-                } else {
-                    self.look_between_downloads();
-                }
-                continue;
-            }
-            self.wait_for_mail(&rx);
-        }
-        if let Some(Conn::Imap(c)) = self.conn.as_mut() {
-            c.logout();
         }
     }
 }

@@ -589,3 +589,55 @@ fn an_export_has_the_marks_made_just_before_it() {
     drop(pool);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The job that panics in a test's account loop, standing for a bug met in an account's work.
+const TRIPS: &str = "a panic";
+
+/// Panics on [`TRIPS`]: called by the account's loop in tests, before it handles a job.
+pub(super) fn trip(job: &Job) {
+    if matches!(job, Job::GetVacation { account } if account == TRIPS) {
+        panic!("tripped on purpose");
+    }
+}
+
+/// A panic in an account's work costs that work only: the thread goes on, says so once, and
+/// answers the next job. It used to end there, and the account with it until the next start.
+#[test]
+fn a_panic_in_an_accounts_work_doesnt_end_its_thread() {
+    let store = crate::fake::tests_store("panic-in-work");
+    let p = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig { id: "a1".into(), email: "riley@studio.example".into(), ..Default::default() };
+    let mut w = Worker::new(acc, Auth::shared("pw"), store, p.sink.clone(), SyncOptions::default());
+    // Waiting to be signed in: the loop handles jobs and connects to nothing.
+    w.auth_failed = true;
+    let (tx, rx) = mpsc::channel();
+    let thread = std::thread::spawn(move || w.run(rx));
+    tx.send(Job::GetVacation { account: TRIPS.into() }).unwrap();
+    tx.send(Job::GetVacation { account: "a1".into() }).unwrap();
+    let mut seen = Vec::new();
+    let until = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < until && !seen.iter().any(|e| matches!(e, Event::Vacation { .. })) {
+        seen.extend(p.wait(Duration::from_millis(50)));
+    }
+    assert!(
+        seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::Error { error }, .. } if error.contains("internal error"))),
+        "{seen:?}"
+    );
+    assert!(seen.iter().any(|e| matches!(e, Event::Vacation { .. })), "the job after it is answered: {seen:?}");
+    drop(tx);
+    assert!(thread.join().is_ok(), "and the thread ends when the account stops, not before");
+}
+
+/// The wait after a panic grows while they keep coming, to a cap, and starts over after an hour
+/// without one.
+#[test]
+fn the_wait_after_a_panic_grows_then_starts_over() {
+    let mut p = connect::Panics::default();
+    let t = Instant::now();
+    let waits: Vec<u64> = (0..8).map(|_| p.wait(t).as_secs()).collect();
+    assert_eq!(waits, [30, 60, 120, 240, 480, 900, 900, 900]);
+    for _ in 0..100 {
+        assert_eq!(p.wait(t).as_secs(), 900, "no overflow however many");
+    }
+    assert_eq!(p.wait(t + Duration::from_secs(3600)).as_secs(), 30);
+}

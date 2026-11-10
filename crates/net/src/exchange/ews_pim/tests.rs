@@ -26,6 +26,32 @@ fn recurrences_both_ways() {
     assert!(junk.find("Recurrence").and_then(recurrence_json).is_some(), "a bad number falls back");
 }
 
+/// A rule from a calendar file, with an end that is no date: no end is sent, and nothing of the
+/// rule's own text reaches the request.
+#[test]
+fn a_rule_whose_end_is_no_date_is_sent_without_one() {
+    let start = quatrelle_jmap::utc_date("2026-10-05T09:00:00Z").unwrap_or(0);
+    for until in ["€€€", "2026é231", "<t:x/>2", "2026-12-31"] {
+        let xml = recurrence_xml(&format!("FREQ=DAILY;UNTIL={until}"), start).unwrap();
+        assert!(xml.contains("<t:NoEndRecurrence>") && !xml.contains("EndDate"), "{until}: {xml}");
+    }
+}
+
+proptest::proptest! {
+    /// Any rule at all is read without a panic, and an end date sent is a date.
+    #[test]
+    fn any_rule_is_read(rule in "\\PC{0,60}", until in "\\PC{0,12}", start in -4_000_000_000i64..8_000_000_000i64) {
+        for rule in [rule.clone(), format!("FREQ=WEEKLY;UNTIL={until}"), format!("FREQ=MONTHLY;BYDAY={until};UNTIL={rule}")] {
+            if let Some(r) = recurrence_of(&rule, start)
+                && let Some(end) = r["range"]["endDate"].as_str()
+            {
+                proptest::prop_assert!(end.len() == 10 && end.bytes().all(|b| b.is_ascii_digit() || b == b'-'), "{end}");
+            }
+            let _ = recurrence_xml(&rule, start);
+        }
+    }
+}
+
 #[test]
 fn contacts_both_ways() {
     let card = Card {

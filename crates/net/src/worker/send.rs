@@ -28,29 +28,35 @@ impl Worker {
                 }
                 Err(RecvTimeoutError::Disconnected) => break,
             };
-            self.fresh_token();
-            match job {
-                Job::Send { account, id, raw, from, recipients, sent_folder } => {
-                    self.send_quick(Job::Send { account, id, raw, from, recipients, sent_folder });
-                }
-                Job::SyncCalendars { calendars, .. } if !calendars.is_empty() => self.read_ticked(calendars, &mut reading),
-                j @ (Job::GetVacation { .. }
-                | Job::SetVacation { .. }
-                | Job::GetRooms { .. }
-                | Job::GetAvailability { .. }
-                | Job::ServerFolderSizes { .. }
-                | Job::ListRecoverable { .. }
-                | Job::RestoreRecoverable { .. }
-                | Job::FindCertificates { .. }
-                | Job::SearchDirectory { .. }
-                | Job::ExpandList { .. }
-                | Job::SyncCalendars { .. }) => self.handle(j),
-                // Anything else belongs to the main connection.
-                other => {
-                    if let Some(m) = &self.main {
-                        let _ = m.send(other);
+            // Behind the same fence as the main connection's turns (`fenced`).
+            let done = fenced(|| {
+                self.fresh_token();
+                match job {
+                    Job::Send { account, id, raw, from, recipients, sent_folder } => {
+                        self.send_quick(Job::Send { account, id, raw, from, recipients, sent_folder });
+                    }
+                    Job::SyncCalendars { calendars, .. } if !calendars.is_empty() => self.read_ticked(calendars, &mut reading),
+                    j @ (Job::GetVacation { .. }
+                    | Job::SetVacation { .. }
+                    | Job::GetRooms { .. }
+                    | Job::GetAvailability { .. }
+                    | Job::ServerFolderSizes { .. }
+                    | Job::ListRecoverable { .. }
+                    | Job::RestoreRecoverable { .. }
+                    | Job::FindCertificates { .. }
+                    | Job::SearchDirectory { .. }
+                    | Job::ExpandList { .. }
+                    | Job::SyncCalendars { .. }) => self.handle(j),
+                    // Anything else belongs to the main connection.
+                    other => {
+                        if let Some(m) = &self.main {
+                            let _ = m.send(other);
+                        }
                     }
                 }
+            });
+            if done.is_none() {
+                self.after_quick_panic();
             }
         }
         for r in reading {

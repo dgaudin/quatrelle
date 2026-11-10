@@ -157,8 +157,11 @@ pub fn recurrence_of(rule: &str, start: i64) -> Option<Value> {
         _ => return None,
     };
     let start_date = format!("{y:04}-{m:02}-{d:02}");
-    let range = if let Some(u) = get("UNTIL").filter(|u| u.len() >= 8) {
-        json!({"type": "endDate", "startDate": start_date, "endDate": format!("{}-{}-{}", &u[0..4], &u[4..6], &u[6..8])})
+    // The rule comes from a calendar file: an `UNTIL` is a date only when it starts with eight
+    // digits (cut on bytes, anything else stopped the account's thread).
+    let until = get("UNTIL").and_then(|u| u.get(..8)).filter(|d| d.bytes().all(|b| b.is_ascii_digit()));
+    let range = if let Some((y, m, d)) = until.and_then(|u| Some((u.get(0..4)?, u.get(4..6)?, u.get(6..8)?))) {
+        json!({"type": "endDate", "startDate": start_date, "endDate": format!("{y}-{m}-{d}")})
     } else if let Some(n) = get("COUNT").and_then(|v| v.parse::<u64>().ok()) {
         json!({"type": "numbered", "startDate": start_date, "numberOfOccurrences": n})
     } else {
@@ -671,6 +674,20 @@ mod tests {
         let r = recurrence_of("FREQ=WEEKLY", start).unwrap();
         assert_eq!(r["pattern"]["daysOfWeek"], json!(["monday"]), "the start's own day");
         assert!(recurrence_of("FREQ=SECONDLY", start).is_none() && recurrence_of("junk", start).is_none());
+    }
+
+    /// An `UNTIL` that isn't a date (a calendar file's own text) ends nothing, and stops nothing.
+    #[test]
+    fn an_until_that_is_no_date_is_left_out() {
+        let start = quatrelle_jmap::utc_date("2026-10-05T09:00:00Z").unwrap();
+        for until in ["€€€", "2026123é", "2026é231", "ééééé", "2026-12-31", "<b>12345"] {
+            let r = recurrence_of(&format!("FREQ=DAILY;UNTIL={until}"), start).unwrap();
+            assert_eq!(r["range"]["type"], json!("noEnd"), "{until}");
+        }
+        for until in ["20261231", "20261231T235959Z", "20261231é"] {
+            let r = recurrence_of(&format!("FREQ=DAILY;UNTIL={until}"), start).unwrap();
+            assert_eq!(r["range"]["endDate"], json!("2026-12-31"), "{until}");
+        }
     }
 
     fn v_start() -> Value {

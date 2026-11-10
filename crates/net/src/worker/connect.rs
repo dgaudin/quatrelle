@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! An account's worker: signing in and connecting (IMAP, JMAP, Graph, EWS, POP), and what a failure means.
+//! An account's worker: its loop, which a panic in its work doesn't end; signing in and connecting
+//! (IMAP, JMAP, Graph, EWS, POP), and what a failure means.
 
 use super::*;
 use quatrelle_model::EWS_FOUND_DOC;
@@ -35,7 +36,144 @@ const LOST_AFTER: Duration = Duration::from_secs(60);
 #[cfg(test)]
 const LOST_AFTER: Duration = Duration::from_millis(200);
 
+/// Said when an account's work was given up after a panic.
+const GAVE_UP: &str = "an internal error stopped what this account was doing; it goes on with the rest";
+
+/// The wait after a panic in an account's work, the first time; doubled at each one since, up to
+/// [`PANIC_WAIT_MAX`], and back to this after [`PANIC_FORGOTTEN`] without one.
+const PANIC_WAIT: Duration = Duration::from_secs(30);
+const PANIC_WAIT_MAX: Duration = Duration::from_secs(900);
+const PANIC_FORGOTTEN: Duration = Duration::from_secs(3600);
+
+/// What `work` gave, or `None` when it panicked. An account's threads run their work behind
+/// this: a panic that got past every other guard (a server's answer or a file nobody thought
+/// of) costs the work in hand, where it used to end the thread, and the account with it until
+/// Quatrelle started again. The panic itself is in the log already (the app's panic hook).
+pub(super) fn fenced<T>(work: impl FnOnce() -> T) -> Option<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).ok()
+}
+
+/// The panics an account's thread has caught: how long it waits after the next.
+#[derive(Default)]
+pub(super) struct Panics {
+    run: u32,
+    last: Option<Instant>,
+}
+
+impl Panics {
+    /// One more, at `now`: the wait before the account's work goes on.
+    pub(super) fn wait(&mut self, now: Instant) -> Duration {
+        if self.last.is_some_and(|l| now.saturating_duration_since(l) >= PANIC_FORGOTTEN) {
+            self.run = 0;
+        }
+        let wait = PANIC_WAIT.saturating_mul(1u32.checked_shl(self.run).unwrap_or(u32::MAX)).min(PANIC_WAIT_MAX);
+        self.run = self.run.saturating_add(1);
+        self.last = Some(now);
+        wait
+    }
+}
+
 impl Worker {
+    pub(super) fn run(mut self, rx: Receiver<Job>) {
+        self.status(SyncStatus::Connecting);
+        // A panic in a turn costs that turn's work, not the account: see `after_panic`.
+        let mut panics = Panics::default();
+        while !self.closed {
+            match fenced(|| self.turn(&rx)) {
+                Some(true) => {}
+                Some(false) => break,
+                None => self.after_panic(&mut panics),
+            }
+        }
+        if let Some(Conn::Imap(c)) = self.conn.as_mut() {
+            c.logout();
+        }
+    }
+
+    /// One turn of the account's loop: a job, a connection, a sync, or a wait for mail. `false`
+    /// once the account stops.
+    fn turn(&mut self, rx: &Receiver<Job>) -> bool {
+        self.drain(rx);
+        if self.closed {
+            return false;
+        }
+        self.fresh_token();
+        if let Some(job) = self.queue.pop_front() {
+            #[cfg(test)]
+            tests::trip(&job);
+            self.handle(job);
+            return true;
+        }
+        if self.conn.is_none() {
+            if self.auth_failed {
+                match rx.recv() {
+                    Ok(j) => push_job(&mut self.queue, j),
+                    Err(_) => return false,
+                }
+                return true;
+            }
+            let wait = self.next_attempt.saturating_duration_since(Instant::now());
+            if !wait.is_zero() {
+                match rx.recv_timeout(wait) {
+                    Ok(j) => push_job(&mut self.queue, j),
+                    Err(RecvTimeoutError::Timeout) => {}
+                    Err(RecvTimeoutError::Disconnected) => return false,
+                }
+                return true;
+            }
+            self.connect_and_sync();
+            return true;
+        }
+        // A change the server refused for now, tried again when its time comes.
+        if self.retry_due() {
+            self.replay();
+            return true;
+        }
+        if self.last_full.is_none_or(|t| t.elapsed() >= FULL_SYNC_EVERY) {
+            self.sync_all(rx);
+            return true;
+        }
+        // Nothing asked: a few more messages downloaded whole, with a look at the Inbox every
+        // half minute meanwhile.
+        if !self.ahead.is_empty() && self.room_to_download() {
+            // Told of changes, what changed is read between two steps.
+            if self.listening() {
+                self.hear(Duration::ZERO);
+            }
+            if Instant::now() < self.ahead_poll {
+                self.ahead_step();
+            } else {
+                self.look_between_downloads();
+            }
+            return true;
+        }
+        self.wait_for_mail(rx);
+        true
+    }
+
+    /// A turn of the loop panicked: what it was doing is given up (a job taken from the queue
+    /// isn't tried again), the connection is dropped (its state is unknown), and the account
+    /// connects again after a wait that grows while panics keep coming: one that comes back at
+    /// every sync must not spin.
+    pub(super) fn after_panic(&mut self, panics: &mut Panics) {
+        let wait = panics.wait(Instant::now());
+        log::error!("{}: internal error: the account's work in hand was given up; going on in {} s", self.acc.id, wait.as_secs());
+        self.gave_up(wait);
+    }
+
+    /// The same on the second connection, which connects when next asked.
+    pub(super) fn after_quick_panic(&mut self) {
+        log::error!("{}: internal error: the second connection's work in hand was given up", self.acc.id);
+        self.gave_up(Duration::ZERO);
+        self.notice(GAVE_UP);
+    }
+
+    fn gave_up(&mut self, wait: Duration) {
+        self.conn = None;
+        self.next_attempt = Instant::now() + wait;
+        self.status(SyncStatus::Error { error: GAVE_UP.into() });
+    }
+
     /// The wait for new mail failed. A connection lost after a while of waiting (the keepalive, or
     /// IDLE's end, found it dead: the office's gateway changed over, 02/11) is made again at once,
     /// saying nothing: the account showed an error each time, with nothing for the user to do.
