@@ -47,8 +47,7 @@ fn named(id: u32, value: u32) -> String {
 /// An account with a Notes folder holding one note resized in Outlook (640 by 90), and one made
 /// here at 300 by 250, to send.
 fn sized(refuse: bool) -> (super::super::server::Server, Pim) {
-    let mut d = Data::default();
-    d.refuse_note_size = refuse;
+    let mut d = Data { refuse_note_size: refuse, ..Default::default() };
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
     d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
