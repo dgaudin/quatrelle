@@ -542,6 +542,8 @@ guests send them requests when saved and cancellations when deleted.
 On IMAP hosts, automatic replies are a Sieve script (RFC 5228) with a `vacation` action
 (RFC 5230), limited to dates with `currentdate` (RFC 5260), kept over ManageSieve (RFC 5804). A
 script the user already runs stays in charge of their other rules: ours `include`s it (RFC 6609).
+One answer of the server is capped as a whole (4 MB, 50,000 words, two minutes), the greeting
+read before STARTTLS included.
 
 ## Outlook data files (`crates/net/src/data_files/pst.rs`)
 
