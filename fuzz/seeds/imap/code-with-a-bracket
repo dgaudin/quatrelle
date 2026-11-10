@@ -1,0 +1,4 @@
+* OK [BADCHARSET (a]b)]é
+* OK [BADCHARSET (a]éb)]é x
+M1 OK [BADCHARSET (a]b)]é
+M2 NO [ALERT] a]é b]€

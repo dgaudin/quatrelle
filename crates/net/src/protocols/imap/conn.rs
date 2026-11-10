@@ -16,25 +16,39 @@ pub(super) const MAX_NESTING: usize = 64;
 
 /// How deep a response's parenthesised lists nest, outside quoted strings and literals.
 pub(super) fn nesting(raw: &[u8]) -> usize {
-    let (mut depth, mut deepest, mut i) = (0usize, 0usize, 0usize);
+    let (mut depth, mut deepest) = (0usize, 0usize);
+    outside(raw, |b| match b {
+        b'(' => {
+            depth += 1;
+            deepest = deepest.max(depth);
+        }
+        b')' => depth = depth.saturating_sub(1),
+        _ => {}
+    });
+    deepest
+}
+
+/// Each byte of a response outside its quoted strings and literals (the quotes themselves and
+/// the line ends are given).
+fn outside(raw: &[u8], mut each: impl FnMut(u8)) {
+    let mut i = 0usize;
     let mut quoted = false;
     while let Some(&b) = raw.get(i) {
         i += 1;
         if quoted {
             match b {
                 b'\\' => i += 1,
-                b'"' => quoted = false,
+                b'"' => {
+                    quoted = false;
+                    each(b);
+                }
                 _ => {}
             }
             continue;
         }
+        each(b);
         match b {
             b'"' => quoted = true,
-            b'(' => {
-                depth += 1;
-                deepest = deepest.max(depth);
-            }
-            b')' => depth = depth.saturating_sub(1),
             // A literal: its bytes, after the line end, are data.
             b'\n' => {
                 let line = raw.get(..i.saturating_sub(1)).unwrap_or_default();
@@ -46,7 +60,52 @@ pub(super) fn nesting(raw: &[u8]) -> usize {
             _ => {}
         }
     }
-    deepest
+}
+
+/// A response the parser isn't given, known to make imap-proto 0.17 panic: `METADATA` data
+/// (RFC 5464, which Quatrelle doesn't ask for: its reader unwraps and slices what the server
+/// sent), and a message whose `INTERNALDATE` is `NIL` (unwrapped as a string).
+pub(super) fn beyond_the_parser(raw: &[u8]) -> bool {
+    const METADATA: &[u8] = b"* METADATA";
+    const NIL_DATE: &[u8] = b"INTERNALDATE NIL";
+    if raw.get(..METADATA.len()).is_some_and(|start| start.eq_ignore_ascii_case(METADATA)) {
+        return true;
+    }
+    // Only outside strings and literals: a message may say anything.
+    let mut bare = Vec::new();
+    outside(raw, |b| bare.push(b));
+    bare.windows(NIL_DATE.len()).any(|w| w.eq_ignore_ascii_case(NIL_DATE))
+}
+
+/// Whether a response, made ready by [`ready`], is given to the parser. imap-proto parses lists
+/// by recursion: a thousand nested `(` overflow the thread's stack, which no `Result` catches.
+/// Nothing real nests that deep.
+pub(super) fn parser_takes(fixed: &[u8]) -> bool {
+    nesting(fixed) <= MAX_NESTING && !beyond_the_parser(fixed)
+}
+
+/// A response's bytes as the parser wants them.
+pub(super) fn ready(raw: Vec<u8>) -> Vec<u8> {
+    // imap-proto wants CRLF line ends; tolerate servers that send bare LF.
+    let fixed = if raw.ends_with(b"\r\n") { raw } else { crlf_line_ends(&raw) };
+    space_after_code(fixed)
+}
+
+/// A response read by imap-proto, or `None` when it doesn't understand it. The library has
+/// panicked on answers a server may send ([`beyond_the_parser`], [`space_after_code`]); one
+/// found later is caught here and is a response not understood, as `quatrelle-pgp` does for
+/// rPGP.
+fn parse(fixed: &[u8]) -> Option<Response<'static>> {
+    if !parser_takes(fixed) {
+        return None;
+    }
+    match std::panic::catch_unwind(|| Response::parse(fixed).ok().map(|(_, r)| r.into_owned())) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            log::warn!("the IMAP parser gave up on a response of {} bytes; taken as not understood", fixed.len());
+            None
+        }
+    }
 }
 
 /// What one command may cost: the bytes and number of its responses, and how long it may run.
@@ -202,19 +261,8 @@ impl<S: Read + Write> Conn<S> {
 
     /// The next response, parsed. `Err(raw)` when `imap-proto` doesn't understand it.
     pub fn read(&mut self) -> Result<std::result::Result<Response<'static>, Vec<u8>>> {
-        let raw = self.read_raw()?;
-        // imap-proto wants CRLF line ends; tolerate servers that send bare LF.
-        let fixed = if raw.ends_with(b"\r\n") { raw } else { crlf_line_ends(&raw) };
-        let fixed = space_after_code(fixed);
-        // imap-proto parses lists by recursion: a thousand nested `(` overflow the thread's
-        // stack, which no `Result` catches. Nothing real nests that deep.
-        if nesting(&fixed) > MAX_NESTING {
-            return Ok(Err(fixed));
-        }
-        Ok(match Response::parse(&fixed) {
-            Ok((_, r)) => Ok(r.into_owned()),
-            Err(_) => Err(fixed),
-        })
+        let fixed = ready(self.read_raw()?);
+        Ok(parse(&fixed).ok_or(fixed))
     }
 
     pub fn send(&mut self, bytes: &[u8]) -> Result<()> {
@@ -308,10 +356,15 @@ pub(super) fn space_after_code(mut raw: Vec<u8>) -> Vec<u8> {
     if text.first() != Some(&b'[') {
         return raw;
     }
-    let Some(close) = text.iter().position(|&b| b == b']') else { return raw };
-    if text.get(close + 1).is_some_and(|b| !b.is_ascii()) {
-        let at = line.len() - text.len() + close + 1;
-        raw.insert(at, b' ');
+    // Every `]` before a non-ASCII character, not the first only: a code's own text may hold
+    // one (`[BADCHARSET (a]b)]é`), and the code then ends at a later one.
+    let start = line.len().saturating_sub(text.len());
+    let after: Vec<usize> =
+        text.windows(2).enumerate().filter(|(_, w)| matches!(w, [b']', next] if !next.is_ascii())).map(|(i, _)| start + i + 1).collect();
+    for at in after.into_iter().rev() {
+        if at <= raw.len() {
+            raw.insert(at, b' ');
+        }
     }
     raw
 }

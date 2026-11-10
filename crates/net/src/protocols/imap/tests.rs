@@ -241,3 +241,62 @@ fn a_passing_refusal_is_for_later_and_the_others_are_final() {
     let mut c = Client::from_stream(Script::new(b"* OK hi\r\nM1 BAD System Error\r\n")).unwrap();
     assert!(matches!(c.noop(), Err(NetError::Bad(_))));
 }
+
+/// Three answers the IMAP parsing library panicked on (0.17.0): a message's date that is `NIL`,
+/// a `METADATA` value that isn't UTF-8, and a status code whose own text holds a `]`, closed
+/// before a non-ASCII character. Each is a response not understood, and the command goes on to
+/// its end.
+#[test]
+fn answers_the_parsing_library_panicked_on_are_not_understood() {
+    let nil_date: &[u8] = b"* 1 FETCH (INTERNALDATE NIL)\r\n";
+    let metadata: &[u8] = b"* METADATA \"INBOX\" (/private/comment \"\xff\")\r\n";
+    let mailbox: &[u8] = b"* METADATA \"IN\xffBOX\" (/private/comment \"x\")\r\n";
+    let badcharset = "* OK [BADCHARSET (a]b)]\u{e9}\r\n".as_bytes();
+    let tagged = "M1 OK [BADCHARSET (a]b)]\u{e9}\r\n".as_bytes();
+    for answer in [nil_date, metadata, mailbox, badcharset] {
+        let server = [b"* OK hi\r\n", answer, b"* SEARCH 4 2\r\nM1 OK done\r\n"].concat();
+        let mut c = Client::from_stream(Script::new(&server)).unwrap();
+        assert_eq!(c.uid_search("ALL").unwrap(), vec![2, 4], "{}", String::from_utf8_lossy(answer));
+    }
+    // As the greeting (read before TLS on a STARTTLS account), and as a command's completion.
+    assert!(Client::from_stream(Script::new(nil_date)).is_err() && Client::from_stream(Script::new(metadata)).is_err());
+    assert!(Client::from_stream(Script::new(badcharset)).is_ok());
+    let mut c = Client::from_stream(Script::new(&[b"* OK hi\r\n", tagged].concat())).unwrap();
+    assert!(c.noop().is_ok(), "the code ends at its last bracket");
+}
+
+/// Told apart outside strings and literals only: a message that says `INTERNALDATE NIL` is read.
+#[test]
+fn what_the_parser_isnt_given() {
+    use super::conn::beyond_the_parser;
+    assert!(beyond_the_parser(b"* 1 FETCH (UID 4 internaldate nil)\r\n"));
+    assert!(beyond_the_parser(b"* 1 FETCH (BODY[] {3}\r\nabc INTERNALDATE NIL)\r\n"));
+    assert!(beyond_the_parser(b"* metadata INBOX (/shared/comment NIL)\r\n"));
+    assert!(!beyond_the_parser(b"* 1 FETCH (UID 4 INTERNALDATE \"01-Jan-2024 10:00:00 +0100\")\r\n"));
+    assert!(!beyond_the_parser(b"* 1 FETCH (BODY[] {16}\r\nINTERNALDATE NIL)\r\n"));
+    assert!(!beyond_the_parser(b"* 1 FETCH (ENVELOPE (NIL \"INTERNALDATE NIL\" NIL))\r\n"));
+    assert!(!beyond_the_parser(b"* OK metadata\r\n") && !beyond_the_parser(b""));
+    let server = b"* OK hi\r\n* 1 FETCH (UID 1 BODY[] {16}\r\nINTERNALDATE NIL)\r\nM1 OK done\r\n";
+    let mut c = Client::from_stream(Script::new(server)).unwrap();
+    assert_eq!(c.uid_fetch("1", "BODY.PEEK[]", "").unwrap().len(), 1);
+}
+
+/// The fuzz target's seeds (`fuzz/seeds/imap`), each response given to the parser as a
+/// connection gives it, without the fence around it: the fuzzer counts a caught panic too.
+#[test]
+fn the_fuzz_seeds_are_parsed_without_a_panic() {
+    use super::conn::{Conn, parser_takes, ready};
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fuzz/seeds/imap");
+    let mut seeds = 0;
+    for seed in std::fs::read_dir(dir).unwrap() {
+        let mut conn = Conn::new(Script::new(&std::fs::read(seed.unwrap().path()).unwrap()));
+        while let Ok(raw) = conn.read_raw() {
+            let fixed = ready(raw);
+            if parser_takes(&fixed) {
+                let _ = imap_proto::Response::parse(&fixed);
+            }
+        }
+        seeds += 1;
+    }
+    assert!(seeds >= 4, "the session and the three answers the library panicked on");
+}

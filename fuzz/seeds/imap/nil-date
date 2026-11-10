@@ -1,0 +1,13 @@
+* OK ready
+M1 OK done
+M2 OK in
+M3 OK done
+* 1 EXISTS
+* OK [UIDVALIDITY 7] ok
+* OK [UIDNEXT 2] ok
+M4 OK [READ-WRITE] selected
+* SEARCH 1
+M5 OK done
+* 1 FETCH (UID 1 FLAGS () RFC822.SIZE 9 INTERNALDATE NIL)
+M6 OK done
+* 1 FETCH (internaldate nil)
