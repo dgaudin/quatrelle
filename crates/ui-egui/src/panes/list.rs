@@ -261,7 +261,25 @@ const FOOTER_H: f32 = 76.0;
 fn footer(s: &Session, t: &theme::Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     if let Some((account, folder, n)) = s.more_on_server() {
         ui.label(RichText::new(tf!("{n} more on the server", n = n)).color(t.dim).small());
-        if s.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder) {
+        let on_its_way = s.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder);
+        // The online archive's list fills by itself, as Outlook's does: its end in view asks for
+        // the next page, with no button. Asked again a few seconds later when a page didn't come
+        // (the server down), not at every frame.
+        if s.in_online_archive(&account, &folder) {
+            let id = ui.scope_id().with(("archive-fills", &account, &folder, n));
+            let now = ui.input(|i| i.time);
+            let asked: Option<f64> = ui.data(|d| d.get_temp(id));
+            if !on_its_way && asked.is_none_or(|at| now - at > 5.0) {
+                ui.data_mut(|d| d.insert_temp(id, now));
+                acts.push(Action::Run("folder.more", json!({"account": account, "folder": folder})));
+            }
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(tl!("Getting them from the server…")).color(t.dim).small());
+            });
+            return;
+        }
+        if on_its_way {
             ui.horizontal(|ui| {
                 ui.spinner();
                 ui.label(RichText::new(tl!("Getting them from the server…")).color(t.dim).small());

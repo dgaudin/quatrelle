@@ -231,3 +231,35 @@ fn the_move_dialog_doesnt_offer_the_archive() {
     assert!(!listed.iter().any(|t| t.trim() == "Projects" || t.trim() == "2019"), "the archive's folders are offered: {listed:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An archive folder with more mail on the server than is listed: no "Show more" button (Outlook
+/// has none there); the next page is asked for by itself once the end of the list is in view, a
+/// single time while it is on its way.
+#[test]
+fn the_archive_fills_by_itself_at_the_end_of_its_list() {
+    let (mut a, dir, handed) = exchange_app("archive-fills");
+    open_projects(&mut a);
+    for acc in &mut a.session.accounts {
+        for f in acc.folders.iter_mut().filter(|f| f.path == PROJECTS) {
+            f.total = 300;
+        }
+    }
+    handed.borrow_mut().clear();
+    let ctx = egui::Context::default();
+    let shown = settle(&ctx, &mut a);
+    assert!(!texts(&shown).iter().any(|t| t == "Show more"), "no button in the archive: {:?}", texts(&shown));
+    let asked = handed.borrow().iter().filter(|j| matches!(j, Job::Older { folder, .. } if folder == PROJECTS)).count();
+    assert_eq!(asked, 1, "the next page asked for once, by itself: {:?}", handed.borrow());
+    // The account's own folder keeps its button.
+    a.session.run("folder.open", &json!({"account": "a1", "folder": "INBOX"})).unwrap();
+    for acc in &mut a.session.accounts {
+        for f in acc.folders.iter_mut().filter(|f| f.path == "INBOX") {
+            f.total = 300;
+        }
+    }
+    handed.borrow_mut().clear();
+    let shown = settle(&ctx, &mut a);
+    assert!(texts(&shown).iter().any(|t| t == "Show more"), "the mailbox keeps its button: {:?}", texts(&shown));
+    assert!(!handed.borrow().iter().any(|j| matches!(j, Job::Older { .. } | Job::MoreMail { .. })), "nothing asked without a click");
+    let _ = std::fs::remove_dir_all(dir);
+}
