@@ -174,7 +174,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             };
             s.set_scam_check(p::bool(v, "enabled"), accounts, p::i64(v, "dailyCap"))
         })
-        .params(r#"{"enabled"?: bool (needs a server and a model set), "accounts"?: [string] (Exchange accounts it applies to), "dailyCap"?: number (1 to 2000 messages a day, 200 by default)} → {"enabled", "accounts", "dailyCap"}"#),
+        .params(r#"{"enabled"?: bool (needs a server and a model set), "accounts"?: [string] (the accounts it applies to, any with a server; turned on with none chosen: the Exchange ones, else all of them), "dailyCap"?: number (1 to 2000 messages a day, 200 by default)} → {"enabled", "accounts", "dailyCap"}"#),
         CommandSpec::new("assistant.testScam", "Try the scam check on examples", "File › Options › Assistant", |s, _| s.start_scam_test())
             .params(r#"{} → {"running", "done", "total", "scams", "spotted", "normals", "leftAlone", "unanswered", "misses": [string], "secondsPerMessage"} (twenty messages written for Quatrelle go to the model one at a time; nothing of yours is sent)"#),
         CommandSpec::new("scam.notScam", "Not a scam", "Reading pane", |s, v| {

@@ -2100,7 +2100,6 @@ folder	Conflicts	衝突
 	Spot scams in the external mail that arrives	辨識收到的外部郵件中的詐騙
 	External mail from unknown senders is sent to {host} to be read.	來自未知寄件者的外部郵件會傳送到 {host} 供其閱讀。
 	Accounts it applies to	適用的帳戶
-	not for this kind of account yet	尚不支援這種類型的帳戶
 	At most {n} messages a day	每天最多 {n} 封郵件
 	Today: {judged} messages checked, {warned} flagged	今天：已檢查 {judged} 封郵件，標記 {warned} 封
 	Senders you said are not scams	你標記為安全的寄件者

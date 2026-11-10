@@ -2098,7 +2098,6 @@ folder	Conflicts	Conflitti
 	Spot scams in the external mail that arrives	Individua le truffe nella posta esterna in arrivo
 	External mail from unknown senders is sent to {host} to be read.	La posta esterna di mittenti sconosciuti viene inviata a {host} per essere letta.
 	Accounts it applies to	Account a cui si applica
-	not for this kind of account yet	non ancora per questo tipo di account
 	At most {n} messages a day	Al massimo {n} messaggi al giorno
 	Today: {judged} messages checked, {warned} flagged	Oggi: {judged} messaggi controllati, {warned} segnalati
 	Senders you said are not scams	Mittenti che hai indicato come sicuri

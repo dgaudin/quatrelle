@@ -22,6 +22,7 @@ fn session_at(name: &str, email: &str, exchange: bool) -> Session {
         email: email.into(),
         username: "zoe".into(),
         ews: exchange.then(|| "https://mail.studio.example/EWS/Exchange.asmx".into()),
+        imap: imap_server(!exchange),
         ..Default::default()
     };
     store.save_accounts(&[config]).unwrap();
@@ -33,6 +34,11 @@ fn session_at(name: &str, email: &str, exchange: bool) -> Session {
     s.apply(Event::FolderChanged { account: ME.into(), folder: "INBOX".into() });
     s.take_jobs();
     s
+}
+
+/// An IMAP server's settings (`yes`), or none.
+fn imap_server(yes: bool) -> quatrelle_model::ServerConfig {
+    quatrelle_model::ServerConfig { host: if yes { "imap.studio.example".into() } else { String::new() }, ..Default::default() }
 }
 
 fn zoe(name: &str) -> Session {
@@ -101,24 +107,48 @@ fn verdict(s: &mut Session, key: &MessageKey) -> Value {
 }
 
 #[test]
-fn the_scam_option_needs_a_model_and_exchange() {
+fn the_scam_option_needs_a_model_and_an_account_with_a_server() {
     let store = temp("scam-option");
-    let config = AccountConfig { id: ME.into(), email: "zoe@studio.example".into(), username: "zoe".into(), ..Default::default() };
-    store.save_accounts(&[config]).unwrap();
+    // An account kept on this computer only (no server), and an IMAP one.
+    let local = AccountConfig { id: ME.into(), email: "zoe@studio.example".into(), username: "zoe".into(), ..Default::default() };
+    store.save_accounts(std::slice::from_ref(&local)).unwrap();
     let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(s.run("assistant.scamCheck", &json!({"enabled": true})).is_err(), "no model set");
     s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "glm"})).unwrap();
-    assert!(s.run("assistant.scamCheck", &json!({"accounts": [ME]})).is_err(), "an IMAP account");
+    assert!(s.run("assistant.scamCheck", &json!({"accounts": [ME]})).is_err(), "an account with no server receives no mail");
+    assert!(s.run("assistant.scamCheck", &json!({"accounts": ["nobody"]})).is_err(), "no such account");
     assert!(s.run("assistant.scamCheck", &json!({"accounts": "zoe"})).is_err());
     assert!(s.run("assistant.scamCheck", &json!({"dailyCap": 0})).is_err() && s.run("assistant.scamCheck", &json!({"dailyCap": 2001})).is_err());
     let r = s.run("assistant.scamCheck", &json!({"enabled": true, "dailyCap": 50})).unwrap();
     assert_eq!((r["enabled"].as_bool(), r["dailyCap"].as_u64()), (Some(true), Some(50)));
-    assert!(!s.prefs.scam_check || s.prefs.scam_accounts.is_empty(), "nothing is ticked when no account is Exchange");
+    assert!(!s.prefs.scam_check || s.prefs.scam_accounts.is_empty(), "nothing is ticked when no account has a server");
     done(s);
     let mut s = zoe("scam-option-ews");
     assert!(!s.prefs.scam_check, "off until turned on");
     let r = s.run("assistant.scamCheck", &json!({"enabled": true})).unwrap();
     assert_eq!(r["accounts"], json!([ME]), "every Exchange account, ticked");
+    done(s);
+    // With no Exchange account, the IMAP one is ticked; with both, the Exchange one alone, and the
+    // IMAP one can be added by hand.
+    let mut s = session_at("scam-option-imap", "zoe@studio.example", false);
+    let r = s.run("assistant.scamCheck", &json!({"enabled": true})).unwrap();
+    assert_eq!(r["accounts"], json!([ME]), "the IMAP account, ticked when there's no Exchange one");
+    done(s);
+    let store = temp("scam-option-both");
+    let work = AccountConfig {
+        id: "work".into(),
+        email: "zoe@studio.example".into(),
+        ews: Some("https://mail.studio.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let home = AccountConfig { id: "home".into(), email: "zoe.park@gmail.com".into(), imap: imap_server(true), ..Default::default() };
+    store.save_accounts(&[work, home]).unwrap();
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "glm"})).unwrap();
+    let r = s.run("assistant.scamCheck", &json!({"enabled": true})).unwrap();
+    assert_eq!(r["accounts"], json!(["work"]), "the Exchange account alone");
+    let r = s.run("assistant.scamCheck", &json!({"accounts": ["work", "home"]})).unwrap();
+    assert_eq!(r["accounts"], json!(["home", "work"]), "the IMAP one is a tick away");
     done(s);
 }
 
@@ -166,7 +196,9 @@ fn known_senders_internal_mail_and_the_backlog_are_not_sent() {
     assert_eq!(asked("scam-known", known, STRANGER, 60, true, true), 0, "a known sender, no sign");
     assert_eq!(asked("scam-inside", nothing, ("Bob", "bob@studio.example"), 60, true, true), 0, "internal");
     assert_eq!(asked("scam-old", nothing, STRANGER, 3 * 86_400, true, true), 0, "older than a day");
-    assert_eq!(asked("scam-imap", nothing, STRANGER, 60, false, true), 0, "an IMAP account");
+    assert_eq!(asked("scam-imap", nothing, STRANGER, 60, false, true), 1, "an IMAP account is checked as well");
+    assert_eq!(asked("scam-imap-known", known, STRANGER, 60, false, true), 0, "a known sender on IMAP, no sign");
+    assert_eq!(asked("scam-imap-inside", nothing, ("Bob", "bob@studio.example"), 60, false, true), 0, "internal, on IMAP");
     assert_eq!(asked("scam-off", nothing, STRANGER, 60, true, false), 0, "the option off");
     let safe: &dyn Fn(&mut Session) = &|s| {
         s.prefs.safe_senders.insert(STRANGER.1.into());
@@ -281,11 +313,28 @@ fn a_failing_or_silent_server_keeps_nothing() {
 }
 
 #[test]
-fn an_organisation_unknown_sends_nothing() {
-    let mut s = session_at("scam-noorg", "zoe.park@gmail.com", true);
+fn a_personal_mailbox_takes_everyone_else_for_outside() {
+    // A mail service's address says nothing of an organisation: everyone but the user is outside.
+    let mut s = session_at("scam-noorg", "zoe.park@gmail.com", false);
     on(&mut s);
-    arrive(&mut s, &[(5, source("h1", STRANGER, "Hello", "Pay now.", false), true)], 60);
-    assert!(asks(&s.take_jobs()).is_empty(), "a mail service's address says nothing of the organisation");
+    let other = source("h1", ("Sam Doe", "sam.doe@gmail.com"), "Hello", "Pay now.", false);
+    let own = source("h2", ("Zoe Park", "zoe.park@gmail.com"), "Note to self", "Buy bread.", false);
+    arrive(&mut s, &[(5, other, true), (6, own, true)], 60);
+    let q = asks(&s.take_jobs());
+    assert_eq!(q.len(), 1, "one question at a time");
+    assert!(q[0].1.contains("sam.doe@gmail.com"), "the stranger at the same mail service is asked about");
+    answer(&mut s, q[0].0, SCAM);
+    assert!(asks(&s.take_jobs()).is_empty(), "the user's own mail is never sent");
+    done(s);
+}
+
+#[test]
+fn an_organisation_unknown_sends_nothing() {
+    // An address that is no address: no organisation to tell by, and no mail service either.
+    let mut s = session_at("scam-noorg-none", "zoe", false);
+    on(&mut s);
+    arrive(&mut s, &[(5, source("h3", STRANGER, "Hello", "Pay now.", false), true)], 60);
+    assert!(asks(&s.take_jobs()).is_empty());
     done(s);
 }
 

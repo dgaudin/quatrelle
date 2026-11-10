@@ -2100,7 +2100,6 @@ menu	View	Afficher
 	Spot scams in the external mail that arrives	Repérer les arnaques dans le courrier externe reçu
 	External mail from unknown senders is sent to {host} to be read.	Les messages externes d'expéditeurs inconnus sont envoyés à {host} pour être lus.
 	Accounts it applies to	Comptes concernés
-	not for this kind of account yet	pas encore pour ce type de compte
 	At most {n} messages a day	Au plus {n} messages par jour
 	Today: {judged} messages checked, {warned} flagged	Aujourd'hui : {judged} messages vérifiés, dont {warned} signalés
 	Senders you said are not scams	Expéditeurs que vous avez déclarés sûrs

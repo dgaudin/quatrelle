@@ -2095,7 +2095,6 @@ folder	Conflicts	התנגשויות
 	Spot scams in the external mail that arrives	זיהוי הונאות בדואר חיצוני נכנס
 	External mail from unknown senders is sent to {host} to be read.	דואר חיצוני משולחים לא מוכרים נשלח אל {host} כדי שייקרא.
 	Accounts it applies to	חשבונות שההגדרה חלה עליהם
-	not for this kind of account yet	עדיין לא זמין לסוג חשבון זה
 	At most {n} messages a day	לכל היותר {n} הודעות ביום
 	Today: {judged} messages checked, {warned} flagged	היום: נבדקו {judged} הודעות, סומנו {warned}
 	Senders you said are not scams	שולחים שסימנתם כבטוחים

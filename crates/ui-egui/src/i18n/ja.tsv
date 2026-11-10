@@ -2096,7 +2096,6 @@ folder	Conflicts	競合
 	Spot scams in the external mail that arrives	届いた外部メールの詐欺を検出する
 	External mail from unknown senders is sent to {host} to be read.	未知の送信者からの外部メールは、読み取りのため {host} に送られます。
 	Accounts it applies to	対象のアカウント
-	not for this kind of account yet	この種類のアカウントにはまだ使えません
 	At most {n} messages a day	1 日に最大 {n} 件
 	Today: {judged} messages checked, {warned} flagged	今日: {judged} 件を確認、{warned} 件を警告
 	Senders you said are not scams	安全と指定した送信者

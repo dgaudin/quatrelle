@@ -2100,7 +2100,6 @@ menu	View	Anzeigen
 	Spot scams in the external mail that arrives	Betrug in eingehender externer Post erkennen
 	External mail from unknown senders is sent to {host} to be read.	Externe Post unbekannter Absender wird zum Lesen an {host} gesendet.
 	Accounts it applies to	Betroffene Konten
-	not for this kind of account yet	für diese Kontoart noch nicht verfügbar
 	At most {n} messages a day	Höchstens {n} Nachrichten pro Tag
 	Today: {judged} messages checked, {warned} flagged	Heute: {judged} Nachrichten geprüft, davon {warned} gemeldet
 	Senders you said are not scams	Absender, die Sie als unbedenklich eingestuft haben

@@ -34,22 +34,18 @@ pub(super) fn scam(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>)
                 ui.add_space(4.0);
             }
             ui.label(name(t, tl!("Accounts it applies to")));
-            for a in &s.accounts {
+            // Every account that receives mail from a server; one kept on this computer only (the
+            // sample mailbox, the local archive, a data file) receives none and isn't listed.
+            for a in s.accounts.iter().filter(|a| s.scam_checkable(&a.config.id)) {
                 let id = a.config.id.clone();
-                let exchange = s.is_exchange(&id);
-                let mut ticked = exchange && s.prefs.scam_accounts.contains(&id);
-                ui.horizontal(|ui| {
-                    if ui.add_enabled(exchange, egui::Checkbox::new(&mut ticked, a.config.email.as_str())).changed() {
-                        let mut list: Vec<String> = s.prefs.scam_accounts.iter().filter(|x| **x != id).cloned().collect();
-                        if ticked {
-                            list.push(id.clone());
-                        }
-                        acts.push(Action::Run("assistant.scamCheck", json!({"accounts": list})));
+                let mut ticked = s.prefs.scam_accounts.contains(&id);
+                if ui.checkbox(&mut ticked, a.config.email.as_str()).changed() {
+                    let mut list: Vec<String> = s.prefs.scam_accounts.iter().filter(|x| **x != id).cloned().collect();
+                    if ticked {
+                        list.push(id.clone());
                     }
-                    if !exchange {
-                        ui.label(note(t, tl!("not for this kind of account yet")));
-                    }
-                });
+                    acts.push(Action::Run("assistant.scamCheck", json!({"accounts": list})));
+                }
             }
             ui.add_space(4.0);
             let cap = s.prefs.scam_daily_cap;

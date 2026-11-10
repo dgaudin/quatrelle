@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! The scam check: external mail that arrives in an Exchange account's Inbox is read by the
+//! The scam check: external mail that arrives in the Inbox of an account with a server (Exchange,
+//! IMAP, JMAP or POP; not one kept on this computer only) is read by the
 //! assistant's language model (an option in File › Options › Assistant, off until turned on), and
 //! what it finds is kept as a verdict by Message-ID (`scam.json`).
 //!
@@ -84,9 +85,17 @@ pub(crate) struct ScamState {
 }
 
 impl Session {
-    /// Whether the account is an Exchange one (EWS or Microsoft 365): the only kind checked.
+    /// Whether the account is an Exchange one (EWS or Microsoft 365): those are ticked when the
+    /// option is turned on with nothing chosen.
     pub fn is_exchange(&self, account: &str) -> bool {
         self.account(account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some())
+    }
+
+    /// Whether the account's mail can be checked: any account that receives mail from a server
+    /// (Exchange, IMAP, JMAP, POP), not one kept on this computer only (the sample mailbox, the local
+    /// archive, a data file).
+    pub fn scam_checkable(&self, account: &str) -> bool {
+        self.account(account).is_some_and(|a| !a.is_local())
     }
 
     /// An account's verdicts and trusted senders, read from `scam.json` the first time (a file
@@ -204,7 +213,7 @@ impl Session {
         Ok(serde_json::json!({ "removed": removed }))
     }
 
-    /// The option: `enabled`, the accounts it applies to (Exchange ones) and the daily cap.
+    /// The option: `enabled`, the accounts it applies to (those with a server) and the daily cap.
     pub fn set_scam_check(&mut self, enabled: Option<bool>, accounts: Option<Vec<String>>, cap: Option<i64>) -> CmdResult {
         if enabled == Some(true) && (self.prefs.llm_url.trim().is_empty() || self.prefs.llm_model.trim().is_empty()) {
             return Err(CmdError::Disabled("set a language model's server and model in File › Options › Assistant first".into()));
@@ -214,8 +223,10 @@ impl Session {
                 if self.account(a).is_none() {
                     return Err(CmdError::Params(format!("no account `{a}`")));
                 }
-                if !self.is_exchange(a) {
-                    return Err(CmdError::Params(format!("`{a}` isn't an Exchange account: the scam check is for those only")));
+                if !self.scam_checkable(a) {
+                    return Err(CmdError::Params(format!(
+                        "`{a}` is kept on this computer only: the scam check is for mail that arrives from a server"
+                    )));
                 }
             }
         }
@@ -233,21 +244,33 @@ impl Session {
         if let Some(c) = cap {
             self.prefs.scam_daily_cap = c;
         }
-        // Turned on with nothing chosen: every Exchange account.
+        // Turned on with nothing chosen: every Exchange account (an organisation's mail, what the
+        // check was made for); with none, every account that can be checked. The others are a tick
+        // away in Options.
         if enabled == Some(true) && self.prefs.scam_accounts.is_empty() {
-            let all: Vec<String> = self.accounts.iter().map(|a| a.config.id.clone()).filter(|id| self.is_exchange(id)).collect();
-            self.prefs.scam_accounts = all.into_iter().collect();
+            let ids: Vec<String> = self.accounts.iter().map(|a| a.config.id.clone()).collect();
+            let mut chosen: Vec<String> = ids.iter().filter(|id| self.is_exchange(id)).cloned().collect();
+            if chosen.is_empty() {
+                chosen = ids.into_iter().filter(|id| self.scam_checkable(id)).collect();
+            }
+            self.prefs.scam_accounts = chosen.into_iter().collect();
         }
         Ok(serde_json::json!({ "enabled": self.prefs.scam_check, "accounts": self.prefs.scam_accounts, "dailyCap": self.prefs.scam_daily_cap }))
     }
 
-    /// Whether `email` is outside the organisation: the organisation as the sender check has it
-    /// (the domains listed in Options, else the accounts'), **whatever the External tag says**.
-    /// With no organisation to tell by, no one is: nothing is sent rather than everything.
-    pub(crate) fn is_outside(&mut self, email: &str) -> bool {
-        let org = self.org_domains();
-        if org.is_empty() || email.trim().is_empty() {
+    /// Whether `email`, writing to `account`, is outside the organisation: the organisation as
+    /// the sender check has it (the domains listed in Options, else the accounts'), **whatever the
+    /// External tag says**. With no organisation to tell by, no one is (nothing is sent rather than
+    /// everything), unless the account's own address is at a mail service (gmail.com…): a personal
+    /// mailbox has no organisation, and everyone but the user is outside it.
+    pub(crate) fn is_outside(&mut self, account: &str, email: &str) -> bool {
+        if email.trim().is_empty() {
             return false;
+        }
+        let org = self.org_domains();
+        if org.is_empty() {
+            let personal = self.account(account).is_some_and(|a| lookalike::is_free_mail(&lookalike::domain_of(&a.config.email)));
+            return personal && self.senders.as_ref().is_some_and(|s| !s.check.is_own(email));
         }
         self.senders.as_ref().is_some_and(|s| !s.check.is_own(email) && lookalike::is_external(email, &org))
     }
@@ -258,7 +281,7 @@ impl Session {
         if !self.prefs.scam_check
             || arrived.is_empty()
             || !self.prefs.scam_accounts.contains(account)
-            || !self.is_exchange(account)
+            || !self.scam_checkable(account)
             || self.prefs.llm_url.trim().is_empty()
             || self.prefs.llm_model.trim().is_empty()
         {
@@ -270,7 +293,7 @@ impl Session {
         for m in batch {
             let email = m.from.email.trim().to_string();
             if m.message_id.is_empty()
-                || !self.is_outside(&email)
+                || !self.is_outside(account, &email)
                 || self.sender_safe(&email)
                 || self.scam_doc(account).trusts(&email)
                 || self.scam_doc(account).verdicts.contains_key(&m.message_id)
@@ -378,7 +401,7 @@ impl Session {
         }
         let Some(parsed) = quatrelle_mime::parse(&raw) else { return false };
         let email = parsed.from.email.trim().to_string();
-        if !self.prefs.scam_check || self.sender_safe(&email) || self.scam_doc(&account).trusts(&email) || !self.is_outside(&email) {
+        if !self.prefs.scam_check || self.sender_safe(&email) || self.scam_doc(&account).trusts(&email) || !self.is_outside(&account, &email) {
             return false;
         }
         self.keep_senders();

@@ -2099,7 +2099,6 @@ folder	Conflicts	Conflitos
 	Spot scams in the external mail that arrives	Detectar golpes no e-mail externo recebido
 	External mail from unknown senders is sent to {host} to be read.	E-mails externos de remetentes desconhecidos são enviados a {host} para serem lidos.
 	Accounts it applies to	Contas em que vale
-	not for this kind of account yet	ainda não para este tipo de conta
 	At most {n} messages a day	No máximo {n} mensagens por dia
 	Today: {judged} messages checked, {warned} flagged	Hoje: {judged} mensagens verificadas, {warned} sinalizadas
 	Senders you said are not scams	Remetentes que você marcou como seguros

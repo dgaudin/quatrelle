@@ -2097,7 +2097,6 @@ menu	View	查看
 	Spot scams in the external mail that arrives	识别收到的外部邮件中的诈骗
 	External mail from unknown senders is sent to {host} to be read.	来自未知发件人的外部邮件会发送到 {host} 供其阅读。
 	Accounts it applies to	适用的账户
-	not for this kind of account yet	暂不支持这种类型的账户
 	At most {n} messages a day	每天最多 {n} 封邮件
 	Today: {judged} messages checked, {warned} flagged	今天：已检查 {judged} 封邮件，标记 {warned} 封
 	Senders you said are not scams	你标记为安全的发件人

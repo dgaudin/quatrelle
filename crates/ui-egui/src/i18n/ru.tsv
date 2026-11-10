@@ -2099,7 +2099,6 @@ menu	View	Просмотр
 	Spot scams in the external mail that arrives	Искать мошенничество во входящей внешней почте
 	External mail from unknown senders is sent to {host} to be read.	Внешние письма от неизвестных отправителей отправляются на {host} для прочтения.
 	Accounts it applies to	Учётные записи, к которым это относится
-	not for this kind of account yet	для этого типа учётной записи пока недоступно
 	At most {n} messages a day	Не более {n} писем в день
 	Today: {judged} messages checked, {warned} flagged	Сегодня: проверено сообщений — {judged}, отмечено — {warned}
 	Senders you said are not scams	Отправители, которых вы признали безопасными

@@ -2096,7 +2096,6 @@ menu	View	Weergeven
 	Spot scams in the external mail that arrives	Oplichting herkennen in binnenkomende externe post
 	External mail from unknown senders is sent to {host} to be read.	Externe post van onbekende afzenders wordt ter lezing naar {host} gestuurd.
 	Accounts it applies to	Accounts waarvoor het geldt
-	not for this kind of account yet	nog niet voor dit soort account
 	At most {n} messages a day	Hoogstens {n} berichten per dag
 	Today: {judged} messages checked, {warned} flagged	Vandaag: {judged} berichten gecontroleerd, {warned} gemeld
 	Senders you said are not scams	Afzenders die u als veilig hebt aangemerkt

@@ -50,6 +50,14 @@ fn app_with_backend(name: &str, backend: Box<dyn crate::Backend>) -> (MailApp, s
         ews: Some("https://mail.work.example/EWS/Exchange.asmx".into()),
         ..Default::default()
     });
+    accounts.push(AccountConfig {
+        id: "home".into(),
+        name: "Zoe Park".into(),
+        email: "zoe.park@home.example".into(),
+        username: "zoe.park".into(),
+        imap: quatrelle_engine::model::ServerConfig { host: "imap.home.example".into(), ..Default::default() },
+        ..Default::default()
+    });
     store.save_accounts(&accounts).unwrap();
     let s = Session::open(Some(store), Clock::new(NOW, 0));
     (MailApp::new(s, backend, Box::new(NullServices(NOW))), dir)
@@ -110,10 +118,12 @@ fn the_scam_option_is_greyed_without_a_model_and_lists_the_accounts() {
     let line = shown.iter().find(|t| t.starts_with("External mail from unknown senders")).cloned().unwrap_or_default();
     assert_eq!(line, "External mail from unknown senders is sent to llm.studio.example to be read.");
     assert!(!shown.iter().any(|t| t.contains("hunter2") || t.contains("/v1/secret") || t.contains("8443")), "no key, no path: {shown:?}");
-    // Accounts: the Exchange one by its address, the sample (not Exchange) with its reason.
+    // Accounts: those with a server by their address (Exchange and IMAP alike); the sample, kept
+    // on this computer only, isn't listed.
     assert!(shown.iter().any(|t| t == "zoe@work.example"), "{shown:?}");
-    assert!(shown.iter().any(|t| t == "not for this kind of account yet"), "{shown:?}");
-    assert_eq!(shown.iter().filter(|t| *t == "not for this kind of account yet").count(), 1, "only the sample's");
+    assert!(shown.iter().any(|t| t == "zoe.park@home.example"), "the IMAP account can be ticked: {shown:?}");
+    let sample = a.session.accounts.iter().find(|x| x.is_local()).map(|x| x.config.email.clone()).unwrap_or_default();
+    assert!(!sample.is_empty() && !shown.contains(&sample), "the sample receives no mail: {shown:?}");
     assert!(shown.iter().any(|t| t == "At most 200 messages a day"), "{shown:?}");
     assert!(shown.iter().any(|t| t == "Today: 0 messages checked, 0 flagged"), "what it did today: {shown:?}");
     assert!(shown.iter().any(|t| t == "Try it on examples"), "{shown:?}");

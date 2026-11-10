@@ -2098,7 +2098,6 @@ folder	Conflicts	충돌
 	Spot scams in the external mail that arrives	받은 외부 메일에서 사기 탐지
 	External mail from unknown senders is sent to {host} to be read.	모르는 발신자의 외부 메일은 읽기 위해 {host}(으)로 전송됩니다.
 	Accounts it applies to	적용할 계정
-	not for this kind of account yet	이 종류의 계정에는 아직 사용할 수 없습니다
 	At most {n} messages a day	하루 최대 {n}개 메시지
 	Today: {judged} messages checked, {warned} flagged	오늘: {judged}개 확인, {warned}개 경고
 	Senders you said are not scams	안전하다고 지정한 발신자
