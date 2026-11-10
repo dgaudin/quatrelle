@@ -28,6 +28,13 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::trust_domain(&account, &site));
             }
         }
+        // A data file changed while its import was stopped: asked once, when nothing else is open.
+        while self.ui.dialog.is_none() && self.ui.backstage.is_none() && !self.session.ask_import.is_empty() {
+            let account = self.session.ask_import.remove(0);
+            if self.session.account(&account).is_some() {
+                self.ui.dialog = Some(Dialog::ImportChanged { account });
+            }
+        }
         self.open_files_come();
         let news = self.session.take_new_mail();
         if !news.is_empty() {
@@ -281,6 +288,7 @@ impl MailApp {
                     }
                 }
             }
+            Action::ResumeImport(account) => self.resume_import(account),
             Action::ExportDataFile(account) => self.export_data_file(account, false),
             Action::AddToDataFile(account) => self.export_data_file(account, true),
             Action::ExportRules => {

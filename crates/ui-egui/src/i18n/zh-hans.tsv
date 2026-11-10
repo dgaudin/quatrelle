@@ -1817,7 +1817,6 @@ month	May	5月
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}：自上次导出以来更改的 {replaced} 个日历项、联系人、备注或任务已替换其先前的副本
 	{name}: {messages} messages imported	{name}: 已导入 {messages} 封邮件
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 已导入 {messages} 封邮件（{skipped} 封无法读取）
-	{name}: {messages} messages imported so far…	{name}: 目前已导入 {messages} 封邮件…
 	{rules} stay on this computer: the server can't run them	{rules} 留在这台电脑上: 服务器无法运行它们
 	{rule} stays on this computer: the server can't run it	{rule} 留在这台电脑上: 服务器无法运行它
 	{who} is signed in	{who} 已登录
@@ -2152,3 +2151,18 @@ folder	Online Archive	在线存档
 	Planned for {date}.	计划于 {date}。
 	a message is no longer in the mailbox under that name: the server moved it	邮箱中已没有该名称的邮件：服务器已将其移走
 	that isn't one of the server's archive policy tags	这不是服务器的存档策略之一
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} / {total} 封邮件
+	{name}: {done} of {total} messages	{name}: {done} / {total} 封邮件
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} 封邮件
+	{name}: {done} messages	{name}: {done} 封邮件
+	{name}: stopping the import…	{name}: 正在停止导入…
+	Stop	停止
+	Stop the import	停止导入
+	Stop the import of {name}	停止导入: {name}
+	Go on with the import	继续导入
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: 导入已停止，{total} 封邮件中已有 {done} 封。右键单击该账户即可继续。
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: 导入已停止，已有 {done} 封邮件。右键单击该账户即可继续。
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: 此次导入已带入的内容没有记录，因此无法继续。请重新打开该文件，完整导入。
+	{name}: the import could not go on: {error}	{name}: 导入无法继续: {error}
+	The file has changed	文件已更改
+	The file has changed since the import began. Bring in what is new?	导入开始后文件已更改。要导入新增的内容吗？

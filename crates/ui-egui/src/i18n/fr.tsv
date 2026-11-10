@@ -1820,7 +1820,6 @@ month	May	mai
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name} : {replaced} éléments du calendrier, contacts, notes ou tâches modifiés depuis le dernier export ont remplacé leurs copies précédentes
 	{name}: {messages} messages imported	{name} : {messages} messages importés
 	{name}: {messages} messages imported ({skipped} could not be read)	{name} : {messages} messages importés ({skipped} n’ont pas pu être lus)
-	{name}: {messages} messages imported so far…	{name} : {messages} messages importés pour l’instant…
 	{rules} stay on this computer: the server can't run them	{rules} restent sur cet ordinateur : le serveur ne peut pas les exécuter
 	{rule} stays on this computer: the server can't run it	{rule} reste sur cet ordinateur : le serveur ne peut pas l’exécuter
 	{who} is signed in	{who} est connecté
@@ -2155,3 +2154,18 @@ folder	Online Archive	Archive en ligne
 	Planned for {date}.	Prévu le {date}.
 	a message is no longer in the mailbox under that name: the server moved it	un message n’est plus dans la boîte sous ce nom : le serveur l’a déplacé
 	that isn't one of the server's archive policy tags	ce n’est pas l’une des stratégies d’archivage du serveur
+	{name}: {folder} — {done} of {total} messages	{name} : {folder} — {done} sur {total} messages
+	{name}: {done} of {total} messages	{name} : {done} sur {total} messages
+	{name}: {folder} — {done} messages	{name} : {folder} — {done} messages
+	{name}: {done} messages	{name} : {done} messages
+	{name}: stopping the import…	{name} : arrêt de l’import…
+	Stop	Arrêter
+	Stop the import	Arrêter l’import
+	Stop the import of {name}	Arrêter l’import : {name}
+	Go on with the import	Reprendre l’import
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name} : import arrêté, {done} messages sur {total} sont là. Reprenez-le par un clic droit sur le compte.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name} : import arrêté, {done} messages sont là. Reprenez-le par un clic droit sur le compte.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name} : ce qu’avait apporté cet import n’a pas été noté, il ne peut donc pas reprendre. Ouvrez de nouveau le fichier pour l’importer en entier.
+	{name}: the import could not go on: {error}	{name} : l’import n’a pas pu continuer : {error}
+	The file has changed	Le fichier a changé
+	The file has changed since the import began. Bring in what is new?	Le fichier a changé depuis le début de l’import. Importer ce qui est nouveau ?

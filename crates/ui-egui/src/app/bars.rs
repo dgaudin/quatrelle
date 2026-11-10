@@ -5,6 +5,8 @@
 
 use crate::*;
 
+pub(crate) mod importing;
+
 impl MailApp {
     pub(crate) fn top_bar(&mut self, ui: &mut Ui, acts: &mut Vec<Action>) {
         let t = self.ui.tokens;
@@ -90,6 +92,7 @@ impl MailApp {
         let mut again: Option<String> = None;
         let mut restart = false;
         let mut zoom_to: Option<u16> = None;
+        let mut stop_imports: Vec<String> = Vec::new();
         ui.horizontal_centered(|ui| {
             // The items of what's shown: the list's mail, or (in People) the contacts.
             if s.module == Module::People {
@@ -110,6 +113,8 @@ impl MailApp {
             if let Some((done, total, _)) = s.download_progress() {
                 ui.label(RichText::new(tf!("Downloading {done} of {total}", done = done, total = total)).color(t.accent).small());
             }
+            // A data file coming in: where it is, how far, and a way to stop it.
+            stop_imports = importing::import_lines(ui, s, &t);
             if !s.outbox.is_empty() {
                 ui.label(RichText::new(tf!("Outbox: {n}", n = s.outbox.len())).color(t.warn).small());
             }
@@ -205,6 +210,9 @@ impl MailApp {
         });
         if let Some(id) = again {
             self.sign_in_again(&id);
+        }
+        for account in stop_imports {
+            self.act(Action::Run("account.stopImport", json!({"account": account})));
         }
         if restart {
             self.act(Action::RestartToUpdate);

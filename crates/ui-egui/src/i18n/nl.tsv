@@ -1816,7 +1816,6 @@ month	May	mei
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} agenda-items, contactpersonen, notities of taken die sinds de vorige export zijn gewijzigd, hebben hun eerdere kopieën vervangen
 	{name}: {messages} messages imported	{name}: {messages} berichten geïmporteerd
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} berichten geïmporteerd ({skipped} konden niet worden gelezen)
-	{name}: {messages} messages imported so far…	{name}: tot nu toe {messages} berichten geïmporteerd…
 	{rules} stay on this computer: the server can't run them	{rules} blijven op deze computer: de server kan ze niet uitvoeren
 	{rule} stays on this computer: the server can't run it	{rule} blijft op deze computer: de server kan deze niet uitvoeren
 	{who} is signed in	{who} is aangemeld
@@ -2151,3 +2150,18 @@ folder	Online Archive	Online-archief
 	Planned for {date}.	Gepland voor {date}.
 	a message is no longer in the mailbox under that name: the server moved it	een bericht staat onder die naam niet meer in de mailbox: de server heeft het verplaatst
 	that isn't one of the server's archive policy tags	dat is niet een van de archiefbeleidsregels van de server
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} van {total} berichten
+	{name}: {done} of {total} messages	{name}: {done} van {total} berichten
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} berichten
+	{name}: {done} messages	{name}: {done} berichten
+	{name}: stopping the import…	{name}: import wordt gestopt…
+	Stop	Stoppen
+	Stop the import	Import stoppen
+	Stop the import of {name}	Import stoppen: {name}
+	Go on with the import	Import hervatten
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: import gestopt, {done} van {total} berichten zijn er. Klik met de rechtermuisknop op het account om verder te gaan.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: import gestopt, {done} berichten zijn er. Klik met de rechtermuisknop op het account om verder te gaan.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: wat deze import al had binnengehaald is niet bijgehouden, dus hij kan niet verder. Open het bestand opnieuw om het helemaal te importeren.
+	{name}: the import could not go on: {error}	{name}: de import kon niet verder: {error}
+	The file has changed	Het bestand is gewijzigd
+	The file has changed since the import began. Bring in what is new?	Het bestand is gewijzigd sinds de import begon. Wat nieuw is erbij halen?

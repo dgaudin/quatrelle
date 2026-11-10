@@ -1819,7 +1819,6 @@ month	May	maggio
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} elementi del calendario, contatti, note o attività modificati dall'ultima esportazione hanno sostituito le copie precedenti
 	{name}: {messages} messages imported	{name}: {messages} messaggi importati
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} messaggi importati ({skipped} non leggibili)
-	{name}: {messages} messages imported so far…	{name}: {messages} messaggi importati finora…
 	{rules} stay on this computer: the server can't run them	{rules} restano su questo computer: il server non può eseguirle
 	{rule} stays on this computer: the server can't run it	{rule} resta su questo computer: il server non può eseguirla
 	{who} is signed in	{who} ha effettuato l'accesso
@@ -2153,3 +2152,18 @@ folder	Online Archive	Archivio online
 	Planned for {date}.	Previsto per il {date}.
 	a message is no longer in the mailbox under that name: the server moved it	un messaggio non è più nella casella con quel nome: il server l’ha spostato
 	that isn't one of the server's archive policy tags	non è uno dei criteri di archiviazione del server
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} di {total} messaggi
+	{name}: {done} of {total} messages	{name}: {done} di {total} messaggi
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} messaggi
+	{name}: {done} messages	{name}: {done} messaggi
+	{name}: stopping the import…	{name}: arresto dell’importazione…
+	Stop	Interrompi
+	Stop the import	Interrompi l’importazione
+	Stop the import of {name}	Interrompi l’importazione: {name}
+	Go on with the import	Riprendi l’importazione
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: importazione interrotta, {done} messaggi su {total} sono qui. Fai clic con il pulsante destro sull’account per riprenderla.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: importazione interrotta, {done} messaggi sono qui. Fai clic con il pulsante destro sull’account per riprenderla.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: ciò che questa importazione aveva portato non è stato annotato, quindi non può riprendere. Apri di nuovo il file per importarlo per intero.
+	{name}: the import could not go on: {error}	{name}: l’importazione non ha potuto continuare: {error}
+	The file has changed	Il file è cambiato
+	The file has changed since the import began. Bring in what is new?	Il file è cambiato dall’inizio dell’importazione. Importare le novità?

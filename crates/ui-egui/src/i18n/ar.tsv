@@ -1816,7 +1816,6 @@ month	May	مايو
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: حلّت {replaced} من عناصر التقويم أو جهات الاتصال أو الملاحظات أو المهام التي تغيّرت منذ آخر تصدير محلّ نسخها السابقة
 	{name}: {messages} messages imported	{name}: عدد الرسائل المستوردة: {messages}
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: عدد الرسائل المستوردة: {messages} (تعذّرت قراءة: {skipped})
-	{name}: {messages} messages imported so far…	{name}: عدد الرسائل المستوردة حتى الآن: {messages}…
 	{rules} stay on this computer: the server can't run them	تبقى {rules} على هذا الكمبيوتر: لا يستطيع الخادم تشغيلها
 	{rule} stays on this computer: the server can't run it	تبقى {rule} على هذا الكمبيوتر: لا يستطيع الخادم تشغيلها
 	{who} is signed in	سجّل {who} الدخول
@@ -2150,3 +2149,18 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Planned for {date}.	مخطط له في {date}.
 	a message is no longer in the mailbox under that name: the server moved it	لم تعد رسالة في صندوق البريد بهذا الاسم: نقلها الخادم
 	that isn't one of the server's archive policy tags	هذه ليست إحدى سياسات الأرشفة في الخادم
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} من {total} رسالة
+	{name}: {done} of {total} messages	{name}: {done} من {total} رسالة
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} رسالة
+	{name}: {done} messages	{name}: {done} رسالة
+	{name}: stopping the import…	{name}: جارٍ إيقاف الاستيراد…
+	Stop	إيقاف
+	Stop the import	إيقاف الاستيراد
+	Stop the import of {name}	إيقاف الاستيراد: {name}
+	Go on with the import	متابعة الاستيراد
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: توقّف الاستيراد، وصلت {done} من {total} رسالة. انقر بزر الماوس الأيمن على الحساب لمتابعته.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: توقّف الاستيراد، وصلت {done} رسالة. انقر بزر الماوس الأيمن على الحساب لمتابعته.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: لم يُسجَّل ما جلبه هذا الاستيراد، لذلك لا يمكن متابعته. افتح الملف من جديد لاستيراده كاملًا.
+	{name}: the import could not go on: {error}	{name}: تعذّرت متابعة الاستيراد: {error}
+	The file has changed	تغيّر الملف
+	The file has changed since the import began. Bring in what is new?	تغيّر الملف منذ بدء الاستيراد. هل تريد جلب الجديد؟

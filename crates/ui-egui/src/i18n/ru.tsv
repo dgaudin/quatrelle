@@ -1819,7 +1819,6 @@ month	May	Май
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} элементов календаря, контактов, заметок или задач, изменённых после последнего экспорта, заменили свои прежние копии
 	{name}: {messages} messages imported	{name}: импортировано писем: {messages}
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: импортировано писем: {messages} (не удалось прочитать: {skipped})
-	{name}: {messages} messages imported so far…	{name}: пока импортировано писем: {messages}…
 	{rules} stay on this computer: the server can't run them	{rules} остаются на этом компьютере: сервер не может их выполнять
 	{rule} stays on this computer: the server can't run it	{rule} остаётся на этом компьютере: сервер не может его выполнять
 	{who} is signed in	{who}: вход выполнен
@@ -2154,3 +2153,18 @@ folder	Online Archive	Онлайн-архив
 	Planned for {date}.	Запланировано на {date}.
 	a message is no longer in the mailbox under that name: the server moved it	письма с таким именем больше нет в почтовом ящике: сервер его переместил
 	that isn't one of the server's archive policy tags	это не одна из политик архивации сервера
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} из {total} сообщений
+	{name}: {done} of {total} messages	{name}: {done} из {total} сообщений
+	{name}: {folder} — {done} messages	{name}: {folder} — сообщений: {done}
+	{name}: {done} messages	{name}: сообщений: {done}
+	{name}: stopping the import…	{name}: остановка импорта…
+	Stop	Остановить
+	Stop the import	Остановить импорт
+	Stop the import of {name}	Остановить импорт: {name}
+	Go on with the import	Продолжить импорт
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: импорт остановлен, {done} из {total} сообщений уже здесь. Щёлкните учётную запись правой кнопкой, чтобы продолжить.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: импорт остановлен, сообщений уже здесь: {done}. Щёлкните учётную запись правой кнопкой, чтобы продолжить.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: то, что уже принёс этот импорт, не записано, поэтому продолжить его нельзя. Откройте файл снова, чтобы импортировать его целиком.
+	{name}: the import could not go on: {error}	{name}: импорт не удалось продолжить: {error}
+	The file has changed	Файл изменился
+	The file has changed since the import began. Bring in what is new?	Файл изменился с начала импорта. Добавить новое?

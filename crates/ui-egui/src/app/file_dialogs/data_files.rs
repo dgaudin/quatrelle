@@ -13,6 +13,20 @@
 use crate::*;
 
 impl MailApp {
+    /// Go on with `account`'s unfinished import; where its file is, when it isn't where it was,
+    /// is asked with the system's file dialog.
+    pub(crate) fn resume_import(&mut self, account: String) {
+        let Some(left) = self.session.unfinished_import(&account).cloned() else { return };
+        let mut params = json!({"account": account});
+        if !std::path::Path::new(&left.path).exists() {
+            let Some(path) = self.file_answer_one(FileAsk::DataFile, Action::ResumeImport(account.clone())) else { return };
+            params["path"] = json!(path.to_string_lossy());
+        }
+        if let Err(e) = self.session.run("account.resumeImport", &params) {
+            self.session.notice(e.to_string(), true);
+        }
+    }
+
     /// Export `account`'s mail to an Outlook data file: a new one (Save as, named after the
     /// account's address, as Outlook names a data file), or with `existing` one already there
     /// (Open).

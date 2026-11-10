@@ -1820,7 +1820,6 @@ month	May	maio
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} itens do calendário, contatos, notas ou tarefas alterados desde a última exportação substituíram suas cópias anteriores
 	{name}: {messages} messages imported	{name}: {messages} mensagens importadas
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} mensagens importadas ({skipped} não puderam ser lidas)
-	{name}: {messages} messages imported so far…	{name}: {messages} mensagens importadas até agora…
 	{rules} stay on this computer: the server can't run them	{rules} ficam neste computador: o servidor não consegue executá-las
 	{rule} stays on this computer: the server can't run it	{rule} fica neste computador: o servidor não consegue executá-la
 	{who} is signed in	{who} entrou
@@ -2154,3 +2153,18 @@ folder	Online Archive	Arquivo online
 	Planned for {date}.	Previsto para {date}.
 	a message is no longer in the mailbox under that name: the server moved it	uma mensagem não está mais na caixa com esse nome: o servidor a moveu
 	that isn't one of the server's archive policy tags	essa não é uma das políticas de arquivamento do servidor
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} de {total} mensagens
+	{name}: {done} of {total} messages	{name}: {done} de {total} mensagens
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} mensagens
+	{name}: {done} messages	{name}: {done} mensagens
+	{name}: stopping the import…	{name}: parando a importação…
+	Stop	Parar
+	Stop the import	Parar a importação
+	Stop the import of {name}	Parar a importação: {name}
+	Go on with the import	Continuar a importação
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: importação parada, {done} de {total} mensagens estão aqui. Clique com o botão direito na conta para continuá-la.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: importação parada, {done} mensagens estão aqui. Clique com o botão direito na conta para continuá-la.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: o que esta importação já trouxe não foi anotado, então ela não pode continuar. Abra o arquivo de novo para importá-lo por inteiro.
+	{name}: the import could not go on: {error}	{name}: a importação não pôde continuar: {error}
+	The file has changed	O arquivo mudou
+	The file has changed since the import began. Bring in what is new?	O arquivo mudou desde o início da importação. Trazer o que é novo?

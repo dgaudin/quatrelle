@@ -1816,7 +1816,6 @@ month	May	מאי
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} פריטי לוח שנה, אנשי קשר, הערות או משימות ששונו מאז הייצוא האחרון החליפו את העותקים הקודמים שלהם
 	{name}: {messages} messages imported	{name}: {messages} הודעות יובאו
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} הודעות יובאו ({skipped} לא היו קריאות)
-	{name}: {messages} messages imported so far…	{name}: {messages} הודעות יובאו עד כה…
 	{rules} stay on this computer: the server can't run them	{rules} נשארים במחשב הזה: השרת לא יכול להפעיל אותם
 	{rule} stays on this computer: the server can't run it	{rule} נשאר במחשב הזה: השרת לא יכול להפעיל אותו
 	{who} is signed in	{who} מחובר
@@ -2150,3 +2149,18 @@ folder	Online Archive	ארכיון מקוון
 	Planned for {date}.	מתוכנן ל-{date}.
 	a message is no longer in the mailbox under that name: the server moved it	הודעה כבר אינה בתיבת הדואר בשם זה: השרת העביר אותה
 	that isn't one of the server's archive policy tags	זו אינה אחת ממדיניות הארכוב של השרת
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} מתוך {total} הודעות
+	{name}: {done} of {total} messages	{name}: {done} מתוך {total} הודעות
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} הודעות
+	{name}: {done} messages	{name}: {done} הודעות
+	{name}: stopping the import…	{name}: מפסיק את הייבוא…
+	Stop	עצור
+	Stop the import	עצור את הייבוא
+	Stop the import of {name}	עצור את הייבוא: {name}
+	Go on with the import	המשך בייבוא
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: הייבוא נעצר, {done} מתוך {total} הודעות נמצאות כאן. לחצו לחיצה ימנית על החשבון כדי להמשיך.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: הייבוא נעצר, {done} הודעות נמצאות כאן. לחצו לחיצה ימנית על החשבון כדי להמשיך.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: מה שהייבוא הזה כבר הביא לא נרשם, ולכן אי אפשר להמשיך בו. פתחו את הקובץ שוב כדי לייבא אותו במלואו.
+	{name}: the import could not go on: {error}	{name}: אי אפשר היה להמשיך בייבוא: {error}
+	The file has changed	הקובץ השתנה
+	The file has changed since the import began. Bring in what is new?	הקובץ השתנה מאז תחילת הייבוא. להביא את החדש?

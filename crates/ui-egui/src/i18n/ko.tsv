@@ -1819,7 +1819,6 @@ month	May	5월
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: 마지막 내보내기 이후 변경된 일정 항목, 연락처, 메모 또는 작업 {replaced}개가 이전 사본을 대체했습니다
 	{name}: {messages} messages imported	{name}: 메시지 {messages}개를 가져왔습니다
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 메시지 {messages}개를 가져왔습니다({skipped}개는 읽을 수 없음)
-	{name}: {messages} messages imported so far…	{name}: 지금까지 메시지 {messages}개를 가져왔습니다…
 	{rules} stay on this computer: the server can't run them	{rules}은(는) 이 컴퓨터에 남습니다: 서버에서 실행할 수 없습니다
 	{rule} stays on this computer: the server can't run it	{rule}은(는) 이 컴퓨터에 남습니다: 서버에서 실행할 수 없습니다
 	{who} is signed in	{who} 로그인됨
@@ -2153,3 +2152,18 @@ folder	Online Archive	온라인 보관함
 	Planned for {date}.	예정일: {date}.
 	a message is no longer in the mailbox under that name: the server moved it	이 이름의 메시지가 사서함에 없습니다. 서버가 이동했습니다
 	that isn't one of the server's archive policy tags	서버의 보관 정책이 아닙니다
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — 메시지 {total}개 중 {done}개
+	{name}: {done} of {total} messages	{name}: 메시지 {total}개 중 {done}개
+	{name}: {folder} — {done} messages	{name}: {folder} — 메시지 {done}개
+	{name}: {done} messages	{name}: 메시지 {done}개
+	{name}: stopping the import…	{name}: 가져오기를 멈추는 중…
+	Stop	중지
+	Stop the import	가져오기 중지
+	Stop the import of {name}	가져오기 중지: {name}
+	Go on with the import	가져오기 이어하기
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: 가져오기를 중지했습니다. 메시지 {total}개 중 {done}개가 들어와 있습니다. 이어하려면 계정을 마우스 오른쪽 버튼으로 클릭하세요.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: 가져오기를 중지했습니다. 메시지 {done}개가 들어와 있습니다. 이어하려면 계정을 마우스 오른쪽 버튼으로 클릭하세요.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: 이 가져오기가 이미 들여온 내용이 기록되지 않아 이어할 수 없습니다. 파일을 다시 열어 처음부터 전부 가져오세요.
+	{name}: the import could not go on: {error}	{name}: 가져오기를 이어할 수 없었습니다: {error}
+	The file has changed	파일이 바뀌었습니다
+	The file has changed since the import began. Bring in what is new?	가져오기를 시작한 뒤 파일이 바뀌었습니다. 새로운 내용을 가져올까요?

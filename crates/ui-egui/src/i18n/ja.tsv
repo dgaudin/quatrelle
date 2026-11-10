@@ -1817,7 +1817,6 @@ month	May	5月
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: 前回のエクスポート以降に変更された予定表のアイテム、連絡先、メモ、タスク {replaced} 件で以前のコピーを置き換えました
 	{name}: {messages} messages imported	{name}: {messages} 件のメッセージをインポートしました
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} 件のメッセージをインポートしました ({skipped} 件は読み込めませんでした)
-	{name}: {messages} messages imported so far…	{name}: これまでに {messages} 件のメッセージをインポートしました…
 	{rules} stay on this computer: the server can't run them	{rules} はこのコンピューターに残ります: サーバーでは実行できません
 	{rule} stays on this computer: the server can't run it	{rule} はこのコンピューターに残ります: サーバーでは実行できません
 	{who} is signed in	{who} はサインインしています
@@ -2151,3 +2150,18 @@ folder	Online Archive	オンライン アーカイブ
 	Planned for {date}.	予定日: {date}。
 	a message is no longer in the mailbox under that name: the server moved it	この名前のメッセージはメールボックスにありません。サーバーが移動しました
 	that isn't one of the server's archive policy tags	サーバーのアーカイブ ポリシーにありません
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {total} 件中 {done} 件
+	{name}: {done} of {total} messages	{name}: {total} 件中 {done} 件
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} 件
+	{name}: {done} messages	{name}: {done} 件
+	{name}: stopping the import…	{name}: インポートを停止しています…
+	Stop	停止
+	Stop the import	インポートを停止
+	Stop the import of {name}	インポートを停止: {name}
+	Go on with the import	インポートを続ける
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: インポートを停止しました。{total} 件中 {done} 件のメッセージが取り込まれています。続けるにはアカウントを右クリックしてください。
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: インポートを停止しました。{done} 件のメッセージが取り込まれています。続けるにはアカウントを右クリックしてください。
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: このインポートで取り込んだ分が記録されていないため、続けられません。ファイルをもう一度開いて、最初から取り込んでください。
+	{name}: the import could not go on: {error}	{name}: インポートを続けられませんでした: {error}
+	The file has changed	ファイルが変更されています
+	The file has changed since the import began. Bring in what is new?	インポートの開始後にファイルが変更されました。新しい分を取り込みますか?

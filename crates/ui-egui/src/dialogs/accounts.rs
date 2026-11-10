@@ -437,6 +437,25 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
             }
             !(allow || refuse)
         }
+        Dialog::ImportChanged { account } => {
+            ui.set_width(400.0);
+            title(ui, t, "The file has changed");
+            // The account was removed while the question waited: nothing to ask.
+            if s.account(account).is_none() {
+                return false;
+            }
+            ui.add(egui::Label::new(RichText::new(tl!("The file has changed since the import began. Bring in what is new?")).color(t.dim)).wrap());
+            ui.add_space(10.0);
+            let (mut yes, mut no) = (false, false);
+            button_row(ui, |ui| {
+                yes = widgets::primary_button(ui, tl!("Yes"), t, true).clicked();
+                no = ui.button(tl!("No")).clicked();
+            });
+            if yes {
+                acts.push(Action::Run("account.resumeImport", json!({"account": account, "allowChanged": true})));
+            }
+            !(yes || no)
+        }
         Dialog::RemoveAccount { account, email } => {
             ui.set_width(380.0);
             title(ui, t, "Remove account?");

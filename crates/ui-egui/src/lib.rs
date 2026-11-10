@@ -289,6 +289,9 @@ pub enum Action {
     DragOut(usize),
     /// Choose an Outlook data file and open it.
     OpenDataFile,
+    /// Go on with an account's unfinished import (the file dialog asks where the file is when it
+    /// isn't where it was).
+    ResumeImport(String),
     /// Choose an existing data file for the account being added (its mail comes in first).
     PickAccountDataFile,
     /// An action from a message's own window, on that message (its attachments, Save As, Print).

@@ -62,6 +62,10 @@ pub enum Dialog {
         account: String,
         site: String,
     },
+    /// The data file of an import has changed since it began: bring in what is new?
+    ImportChanged {
+        account: String,
+    },
     ConfirmDelete {
         count: usize,
         /// All of them on Exchange (EWS or Microsoft 365), whose server keeps them a while among
@@ -339,6 +343,7 @@ impl Dialog {
                     | Dialog::PgpForget { .. }
                     | Dialog::MailboxClosed { .. }
                     | Dialog::TrustDomain { .. }
+                    | Dialog::ImportChanged { .. }
                     | Dialog::EmptySubject
                     | Dialog::SaveChanges
                     | Dialog::SendCheck(_)
@@ -709,6 +714,7 @@ fn body(
         Dialog::AddAccount(..)
         | Dialog::Password { .. }
         | Dialog::TrustDomain { .. }
+        | Dialog::ImportChanged { .. }
         | Dialog::RemoveAccount { .. }
         | Dialog::MailboxClosed { .. }
         | Dialog::EditAccount(..)

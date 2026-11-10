@@ -1820,7 +1820,6 @@ month	May	Mai
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}: {replaced} seit dem letzten Export geänderte Kalenderelemente, Kontakte, Notizen oder Aufgaben haben ihre früheren Kopien ersetzt
 	{name}: {messages} messages imported	{name}: {messages} Nachrichten importiert
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} Nachrichten importiert ({skipped} konnten nicht gelesen werden)
-	{name}: {messages} messages imported so far…	{name}: bisher {messages} Nachrichten importiert…
 	{rules} stay on this computer: the server can't run them	{rules} bleiben auf diesem Computer: Der Server kann sie nicht ausführen
 	{rule} stays on this computer: the server can't run it	{rule} bleibt auf diesem Computer: Der Server kann sie nicht ausführen
 	{who} is signed in	{who} ist angemeldet
@@ -2155,3 +2154,18 @@ folder	Online Archive	Online-Archiv
 	Planned for {date}.	Geplant für {date}.
 	a message is no longer in the mailbox under that name: the server moved it	eine Nachricht ist unter diesem Namen nicht mehr im Postfach: der Server hat sie verschoben
 	that isn't one of the server's archive policy tags	das ist keine der Archivierungsrichtlinien des Servers
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} von {total} Nachrichten
+	{name}: {done} of {total} messages	{name}: {done} von {total} Nachrichten
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} Nachrichten
+	{name}: {done} messages	{name}: {done} Nachrichten
+	{name}: stopping the import…	{name}: Import wird angehalten…
+	Stop	Anhalten
+	Stop the import	Import anhalten
+	Stop the import of {name}	Import anhalten: {name}
+	Go on with the import	Import fortsetzen
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: Import angehalten, {done} von {total} Nachrichten sind da. Mit Rechtsklick auf das Konto setzen Sie ihn fort.
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: Import angehalten, {done} Nachrichten sind da. Mit Rechtsklick auf das Konto setzen Sie ihn fort.
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: Was dieser Import schon gebracht hat, wurde nicht vermerkt, er kann deshalb nicht fortgesetzt werden. Öffnen Sie die Datei erneut, um sie ganz zu importieren.
+	{name}: the import could not go on: {error}	{name}: Der Import konnte nicht fortgesetzt werden: {error}
+	The file has changed	Die Datei hat sich geändert
+	The file has changed since the import began. Bring in what is new?	Die Datei hat sich seit Beginn des Imports geändert. Neues importieren?

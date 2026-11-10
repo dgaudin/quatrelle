@@ -6,6 +6,7 @@
 use super::*;
 
 mod archiving;
+mod importing;
 mod pgp;
 mod recovering;
 mod trust;

@@ -1819,7 +1819,6 @@ month	May	5月
 	{name}: {replaced} calendar items, contacts, notes or tasks changed since the last export replaced their earlier copies	{name}：自上次匯出以來變更的 {replaced} 個行事曆項目、連絡人、附註或任務已取代其先前的複本
 	{name}: {messages} messages imported	{name}: 已匯入 {messages} 封郵件
 	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 已匯入 {messages} 封郵件（{skipped} 封無法讀取）
-	{name}: {messages} messages imported so far…	{name}: 目前已匯入 {messages} 封郵件…
 	{rules} stay on this computer: the server can't run them	{rules} 留在這台電腦上: 伺服器無法執行它們
 	{rule} stays on this computer: the server can't run it	{rule} 留在這台電腦上: 伺服器無法執行它
 	{who} is signed in	{who} 已登入
@@ -2155,3 +2154,18 @@ folder	Online Archive	線上封存
 	Planned for {date}.	預定於 {date}。
 	a message is no longer in the mailbox under that name: the server moved it	信箱中已沒有該名稱的郵件：伺服器已將其移走
 	that isn't one of the server's archive policy tags	這不是伺服器的封存原則之一
+	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} / {total} 封郵件
+	{name}: {done} of {total} messages	{name}: {done} / {total} 封郵件
+	{name}: {folder} — {done} messages	{name}: {folder} — {done} 封郵件
+	{name}: {done} messages	{name}: {done} 封郵件
+	{name}: stopping the import…	{name}: 正在停止匯入…
+	Stop	停止
+	Stop the import	停止匯入
+	Stop the import of {name}	停止匯入: {name}
+	Go on with the import	繼續匯入
+	{name}: import stopped, {done} of {total} messages are here. Right-click the account to go on with it.	{name}: 匯入已停止，{total} 封郵件中已有 {done} 封。在帳戶上按一下滑鼠右鍵即可繼續。
+	{name}: import stopped, {done} messages are here. Right-click the account to go on with it.	{name}: 匯入已停止，已有 {done} 封郵件。在帳戶上按一下滑鼠右鍵即可繼續。
+	{name}: what this import had brought in was not noted, so it can't go on. Open the file again to bring it in whole.	{name}: 此次匯入已帶入的內容沒有記錄，因此無法繼續。請重新開啟該檔案，完整匯入。
+	{name}: the import could not go on: {error}	{name}: 匯入無法繼續: {error}
+	The file has changed	檔案已變更
+	The file has changed since the import began. Bring in what is new?	匯入開始後檔案已變更。要匯入新增的內容嗎？

@@ -256,6 +256,16 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
                     acts.push(Action::Run("mail.sync", json!({})));
                     ui.close();
                 }
+                // A data file's import: stopped while it runs, gone on with when it isn't finished.
+                if s.import_of(&config.id).is_some_and(|i| !i.stopping) {
+                    if ui.button(tl!("Stop the import")).clicked() {
+                        acts.push(Action::Run("account.stopImport", json!({"account": config.id})));
+                        ui.close();
+                    }
+                } else if s.unfinished_import(&config.id).is_some() && ui.button(tl!("Go on with the import")).clicked() {
+                    acts.push(Action::ResumeImport(config.id.clone()));
+                    ui.close();
+                }
                 // A Microsoft account with a password (refused there) switches to Microsoft sign-in.
                 let switch = quatrelle_engine::model::microsoft_password_account(&config)
                     && quatrelle_engine::model::microsoft_sign_in_possible(&config, &s.oauth_available);
