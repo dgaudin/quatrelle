@@ -13,7 +13,7 @@ _Status: v0.22, 2026-10-22._
 | # | Gap | Notes |
 |---|---|---|
 | 1 | **Browser version: accounts other than JMAP** | The web build syncs JMAP accounts over `fetch`, with push, and keeps its cache in IndexedDB; the server must allow the page (CORS). A browser can't open IMAP or SMTP connections, so IMAP accounts would need a relay server that holds the password and speaks JMAP to the page: a server product of its own, not built. |
-| 2 | **Right-to-left: inside the editor, selecting, Hebrew in the browser** | The window mirrors and right-to-left mail and interface text read right to left. In the message editor a line that mixes right-to-left and left-to-right words is shown in the order egui lays it out (reordering it would put the caret in the wrong places); right-to-left mail can't be selected with the pointer (egui 0.36's text layout counts right-to-left letters wrongly, so a selection would copy nothing), but a right-click copies the line or the whole message as written. Release builds draw Arabic, Japanese and Thai in the browser with fonts from [storytold/craft-fonts](https://github.com/storytold/craft-fonts); it has no Hebrew or Korean font yet, and its Simplified Chinese one is too large for the page, so those still need the system (the desktop app) until craft-fonts has them. |
+| 2 | **Right-to-left: inside the editor, Hebrew in the browser** | The window mirrors and right-to-left mail and interface text read right to left. Right-to-left mail is selected with the pointer as it reads (the Craft apps' egui counts its letters right), as part of the message's one selection (Ctrl+A, Shift with the arrows, a drag that scrolls) and copied as written; a right-click copies the line or the whole message too. In the message editor a line that mixes right-to-left and left-to-right words is shown in the order egui lays it out (reordering it would put the caret in the wrong places). Release builds draw Arabic, Japanese and Thai in the browser with fonts from [storytold/craft-fonts](https://github.com/storytold/craft-fonts); it has no Hebrew or Korean font yet, and its Simplified Chinese one is too large for the page, so those still need the system (the desktop app) until craft-fonts has them. |
 | 3 | **Outlook data files: what the `.pst` libraries can't do** | Mail, contacts, calendar items, notes and tasks come in (tasks to Tasks, with their due day, done or not); export writes the mail as `.pst` and the calendar and contacts beside it as `.ics` and `.vcf`. The writer (`outlook-pst-rw`) makes mail items only, marked read, so contacts, appointments and flags can't go inside the `.pst`; an attached message comes in as an attached `.eml` without the files inside it (the reader, a fixed copy of `outlook-pst-rw`, opens them now; the import doesn't yet); export doesn't write tasks yet. |
 | 4 | **Drag attachments out on a Wayland-only desktop** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND), and on Wayland desktops through XWayland, which the window opens on by default. With `QUATRELLE_WAYLAND=1`, or on a desktop without XWayland, the window is native Wayland, where it would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
 | 5 | **On-premises Exchange: Kerberos-only servers** | EWS signs in with NTLMv2 or Basic and is found with Autodiscover; a server that only takes Kerberos can't be signed in to. ActiveSync is licensed and out of scope. |
@@ -836,3 +836,24 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   Sent Items are never taken for the account's. A search of the mailbox or of every mailbox
   doesn't look there, as in Outlook. The fake Exchange has an archive mailbox, and its tests
   read a folder of twenty thousand messages a page at a time.
+- **A message's text selects as one text** (adapted from upstream `0eeb5d6a` and `eb02aee6`): a
+  formatted message is drawn in pieces (a line's words, its bold words and links, a table's cells,
+  a quote, a right-to-left line, a long text's blocks), and each was an egui label with a
+  selection of its own: Ctrl+A took only the piece clicked, Shift with the arrows (Home and End
+  too) went to the message list instead, and a selection dragged past the top or bottom of the
+  reading pane neither scrolled nor grew; a message's own window was the same. A plain message
+  was a text box that couldn't be typed in, whole but on its own. The pieces are now one text with
+  one selection (`reading/body/text_selection.rs`), in the reading pane and in a message's own
+  window, for every kind of body (plain, formatted, tables, quotes, right to left, a long text in
+  parts, a message whose text came first): Ctrl+A selects the whole message and a copy has it in
+  reading order, a line break between lines; Shift with the arrows, Home, End and Ctrl goes on
+  across lines and blocks and keeps its end in view; Shift+click, double- and triple-click work
+  across them; a drag held at or past the view's edge scrolls, faster the farther out (not on the
+  last line before the edge), the wheel scrolls during a drag, and the selection keeps growing
+  either way; the shading of a line of several pieces runs on without a seam. The scroll bar
+  beside the text leaves the selection as it is. Clicked into, the text has Ctrl+A, Ctrl+C and
+  Shift with the arrows; a click in the message list gives them back to it (Ctrl+A there selects
+  every message), and so does another message shown in its place. A message's own window gives
+  them to its text from the start. On a touch screen a finger dragged over the text scrolls it.
+  The find bar's finds, plain text's addresses (links opened with a click), pictures and the
+  right-click copy of right-to-left text are as they were.
