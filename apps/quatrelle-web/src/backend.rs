@@ -367,7 +367,7 @@ async fn remote(sh: &Rcs, id: &str, op: Op) {
                 Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } => {
                     relist(sh, id).await;
                 }
-                Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } => {}
+                Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
             }
             touched.sort();
             touched.dedup();
@@ -519,6 +519,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
                 error: Some("appointments' files come from Exchange, which the browser doesn't reach".into()),
             },
         ),
+        // An archive policy is Exchange's, which the browser doesn't reach.
+        Job::ReadArchiveTag { .. } => {}
         // Voting buttons come with Exchange accounts, which the browser doesn't reach.
         Job::Vote { key, choice } => {
             let error = Some("voting buttons can only be answered on Exchange and Microsoft 365 accounts".to_string());
