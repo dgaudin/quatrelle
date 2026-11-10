@@ -124,6 +124,7 @@ mod navigation;
 mod people;
 mod pgp;
 mod pim;
+mod policy;
 mod scheduling;
 mod security;
 mod tasks;
@@ -138,6 +139,7 @@ pub fn registry() -> Registry {
     let mut all = Vec::new();
     all.extend(home::commands());
     all.extend(navigation::commands());
+    all.extend(policy::commands());
     all.extend(compose::commands());
     all.extend(people::commands());
     all.extend(view::commands());

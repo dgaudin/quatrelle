@@ -48,7 +48,7 @@ pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row,
 use listing::{Preview, arranged, flag_rank, person, size_group};
 pub use mailboxes::{
     ARCHIVE_READ_ONLY, CompactPhase, Compacted, DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS,
-    MAX_SUGGESTIONS, MAX_TOTAL, RecoverBlock, Recovered, Recovering, Sizes, Source, Suggestion, directory_people, fill_name,
+    MAX_SUGGESTIONS, MAX_TOTAL, MessagePolicy, RecoverBlock, Recovered, Recovering, Sizes, Source, Suggestion, directory_people, fill_name,
 };
 use mailboxes::{Contacts, bare_name, directory_key};
 pub use opening::SenderMarks;
@@ -344,6 +344,8 @@ pub struct Session {
     rules_online: std::collections::BTreeSet<String>,
     /// Archiving by age: what is being looked through, offered and run, per account.
     age: mailboxes::AgeState,
+    /// Exchange's archive policy: the server's tags, those of the messages opened (`mailboxes/archive/policy.rs`).
+    policy: mailboxes::PolicyState,
     /// The public folders each Exchange account's sync was last told to follow
     /// ([`Session::follow_public_favorites`]).
     followed_public: HashMap<String, Vec<String>>,
@@ -571,6 +573,7 @@ impl Session {
             rules_asked: std::collections::BTreeSet::new(),
             rules_online: std::collections::BTreeSet::new(),
             age: Default::default(),
+            policy: Default::default(),
             followed_public: HashMap::new(),
             rules_refused_told: HashMap::new(),
             refused_once: HashSet::new(),

@@ -26,6 +26,9 @@ impl Data {
                 return (format!("{}Response", op.name), out);
             }
         }
+        if let Some(done) = self.policy_route(op) {
+            return done;
+        }
         match op.name.as_str() {
             "GetAttachment" => out.extend(self.get_attachment(op)),
             "GetUserPhoto" => {
@@ -186,7 +189,7 @@ impl Data {
                 let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000).min(3);
                 let public = self.public_ids();
                 let all: Vec<Fo> = self.folders.iter().filter(|f| f.id != "ROOT" && f.owner.is_empty() && !public.contains(&f.id)).cloned().collect();
-                let page: Vec<String> = all.iter().skip(offset).take(max).map(|f| self.folder_xml(f)).collect();
+                let page: Vec<String> = all.iter().skip(offset).take(max).map(|f| self.with_folder_policy(op, &f.id, self.folder_xml(f))).collect();
                 let last = offset + max >= all.len();
                 out.push(ok(format!(
                     "<m:RootFolder TotalItemsInView=\"{}\" IncludesLastItemInRange=\"{last}\"><t:Folders>{}</t:Folders></m:RootFolder>",
@@ -420,7 +423,7 @@ impl Data {
                              <m:ResponseCode>ErrorInvalidPropertyRequest</m:ResponseCode></m:R>"
                                 .to_string(),
                         ),
-                        Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.item_xml(i, mime, text)))),
+                        Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.with_item_policy(op, &i.id, self.item_xml(i, mime, text))))),
                         None => out.push(err("ErrorItemNotFound")),
                     }
                 }

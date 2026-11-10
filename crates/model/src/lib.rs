@@ -36,9 +36,9 @@ pub use addr::{Addressee, AddresseeKind, EmailAddress};
 pub use folder::archive::{AccountRole, MAX_BATCH as MAX_ARCHIVE_BATCH, archive_folder};
 pub use folder::{Folder, FolderRole, child_path, is_within, rebase_path, sort_folders, utf7};
 pub use job::{
-    Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, Job, ListChange, MailboxQuota, ONLINE_ARCHIVE, Op, PUBLIC_FOLDERS, Private, RECOVERABLE_MAX,
-    RECOVERABLE_PAGE, Recoverable, RecoverableKind, Revocation, Secret, SyncStatus, WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields,
-    WebexMeeting, is_public_folder,
+    ArchiveTag, Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, Job, ListChange, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, MAX_TAG_NAME, MailboxQuota,
+    ONLINE_ARCHIVE, Op, PUBLIC_FOLDERS, Private, RECOVERABLE_MAX, RECOVERABLE_PAGE, Recoverable, RecoverableKind, Revocation, Secret, SyncStatus,
+    WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting, is_public_folder, is_tag_id,
 };
 
 /// How a connection to a server is secured.
@@ -613,6 +613,7 @@ mod tests {
             mailbox: None,
             mailbox_role: FolderRole::Other,
             archive: false,
+            archive_tag: None,
         };
         let mut list = vec![
             f("support@contoso.example/Projects", FolderRole::Other),

@@ -94,6 +94,16 @@ pub enum Op {
     EmptyFolder {
         path: String,
     },
+    /// Give messages (`keys`) or a folder's mail (`folder`) one of the server's archive policy
+    /// tags, or take theirs off (`tag` none: the folder's applies again). Exchange only.
+    SetArchiveTag {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        keys: Vec<MessageKey>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        folder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tag: Option<String>,
+    },
 }
 
 /// Automatic replies (out of office): sent once per sender while on, between the dates when
@@ -185,7 +195,11 @@ impl Op {
     /// The messages a change touches (none for folder changes).
     pub fn keys(&self) -> &[MessageKey] {
         match self {
-            Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Move { keys, .. } | Op::Expunge { keys, .. } => keys,
+            Op::SetFlag { keys, .. }
+            | Op::SetKeyword { keys, .. }
+            | Op::Move { keys, .. }
+            | Op::Expunge { keys, .. }
+            | Op::SetArchiveTag { keys, .. } => keys,
             Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => &[],
         }
     }
@@ -202,6 +216,8 @@ impl Op {
             Op::RenameFolder { from, .. } => ("RenameFolder", Some(from.as_str())),
             Op::DeleteFolder { path } => ("DeleteFolder", Some(path.as_str())),
             Op::EmptyFolder { path } => ("EmptyFolder", Some(path.as_str())),
+            Op::SetArchiveTag { folder: Some(path), .. } => ("SetArchiveTag", Some(path.as_str())),
+            Op::SetArchiveTag { .. } => ("SetArchiveTag", None),
         };
         if let Some(folder) = folder {
             return format!("{kind} of {folder}");
@@ -493,13 +509,18 @@ pub enum Job {
     /// OpenPGP work with the account's own keys, whose secret parts the network layer keeps in
     /// the system's keychain (issue #36).
     Pgp { account: AccountConfig, work: PgpWork },
+    /// Read the archive policy tag a message carries and the day the server plans to move it
+    /// (Exchange), asked when it is opened: not part of a list's sync.
+    ReadArchiveTag { key: MessageKey },
 }
 
 impl Job {
     pub fn account(&self) -> &str {
         match self {
             Job::Start { account, .. } | Job::SmtpPassword { account, .. } => &account.id,
-            Job::FetchBody { key } | Job::FetchTextFirst { key } | Job::ReadOnline { key } | Job::Vote { key, .. } => &key.account,
+            Job::FetchBody { key } | Job::FetchTextFirst { key } | Job::ReadOnline { key } | Job::ReadArchiveTag { key } | Job::Vote { key, .. } => {
+                &key.account
+            }
             Job::Remove { account }
             | Job::SyncAll { account }
             | Job::SyncFolder { account, .. }
@@ -639,8 +660,10 @@ mod events;
 pub use events::{Event, HeldKey, ListChange, Revocation};
 
 mod pgp;
+mod policy;
 mod recover;
 pub use pgp::{NO_KEYCHAIN, NOT_FOR_YOU, NOT_IN_BROWSER, PgpChange, PgpSignature, PgpWork, Unavailable};
+pub use policy::{ArchiveTag, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, MAX_TAG_NAME, is_tag_id};
 pub use recover::{RECOVERABLE_MAX, RECOVERABLE_PAGE, Recoverable, RecoverableKind};
 
 mod webex;

@@ -38,12 +38,16 @@ impl Client {
 
         let mut out: Vec<Mailbox> = Vec::new();
         let mut offset = 0;
+        // Each folder's archive tag comes with its counts, from a server that offers tags (the
+        // others don't know the field).
+        let tag = if self.folder_tags_asked() { "<t:FieldURI FieldURI=\"folder:ArchiveTag\"/>" } else { "" };
+        self.folder_tags.borrow_mut().clear();
         loop {
             let doc = self.call(&format!(
                 "<m:FindFolder Traversal=\"Deep\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
                  <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:ParentFolderId\"/>\
                  <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
-                 <t:FieldURI FieldURI=\"folder:FolderClass\"/>{HIDDEN}\
+                 <t:FieldURI FieldURI=\"folder:FolderClass\"/>{tag}{HIDDEN}\
                  </t:AdditionalProperties></m:FolderShape>\
                  <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
                  <m:ParentFolderIds>{}</m:ParentFolderIds></m:FindFolder>",
@@ -69,6 +73,9 @@ impl Client {
                 }
                 let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).filter(|p| Some(p) != root.as_ref());
                 let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
+                if let Some(own) = shared::own_tag(f) {
+                    self.folder_tags.borrow_mut().insert(id.clone(), own);
+                }
                 out.push(Mailbox {
                     name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
                     parent,

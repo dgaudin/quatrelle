@@ -373,7 +373,10 @@ impl Session {
                 self.after_outbox_change();
             }
             Event::DraftReturned { account, raw, error } => self.draft_returned(&account, &raw, &error),
+            Event::ArchiveTags { account, tags } => self.tags_told(account, tags),
+            Event::ArchiveTagRead { key, tag, date } => self.tag_read(key, tag, date),
             Event::OpFailed { account, op, error } => {
+                self.policy_failed(&account, &op);
                 // What it counted here (a message read) didn't happen: the folders it names count
                 // as the server last said, which the sync that follows may not say again (its
                 // count unchanged, it reports none).

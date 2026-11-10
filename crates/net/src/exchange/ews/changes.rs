@@ -195,6 +195,46 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             }
             Ok(())
         }
+        // An archive policy tag: set on messages or on a folder, or taken off. A message the
+        // server no longer has under that id (it moved it into the archive meanwhile) is an
+        // error, not a change made here only: the engine says so and puts the old tag back.
+        Op::SetArchiveTag { keys, folder, tag } => {
+            if tag.as_deref().is_some_and(|t| !quatrelle_model::is_tag_id(t)) {
+                return Err(NetError::No("that isn't one of the server's archive policy tags".into()));
+            }
+            let tag = tag.as_deref().map(esc);
+            match folder {
+                Some(path) => {
+                    let id = st.mailbox(path)?.to_string();
+                    let change = match &tag {
+                        Some(t) => format!(
+                            "<t:SetFolderField><t:FieldURI FieldURI=\"folder:ArchiveTag\"/><t:Folder><t:ArchiveTag IsExplicit=\"true\">{t}</t:ArchiveTag>\
+                             </t:Folder></t:SetFolderField>"
+                        ),
+                        None => "<t:DeleteFolderField><t:FieldURI FieldURI=\"folder:ArchiveTag\"/></t:DeleteFolderField>".into(),
+                    };
+                    c.call_one(&format!(
+                        "<m:UpdateFolder><m:FolderChanges><t:FolderChange><t:FolderId Id=\"{}\"/><t:Updates>{change}</t:Updates></t:FolderChange>\
+                         </m:FolderChanges></m:UpdateFolder>",
+                        esc(&id)
+                    ))
+                    .map(drop)
+                }
+                None => {
+                    if ids(keys).len() < keys.len() {
+                        return Err(NetError::No("a message is no longer in the mailbox under that name: the server moved it".into()));
+                    }
+                    let change = match &tag {
+                        Some(t) => format!(
+                            "<t:SetItemField><t:FieldURI FieldURI=\"item:ArchiveTag\"/><t:Message><t:ArchiveTag IsExplicit=\"true\">{t}</t:ArchiveTag>\
+                             </t:Message></t:SetItemField>"
+                        ),
+                        None => "<t:DeleteItemField><t:FieldURI FieldURI=\"item:ArchiveTag\"/></t:DeleteItemField>".into(),
+                    };
+                    update(keys, &change)
+                }
+            }
+        }
         Op::CreateFolder { path } => {
             let (parent, name) = split_path(st, path)?;
             c.call_one(&format!(

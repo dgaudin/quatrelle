@@ -146,6 +146,10 @@ pub struct Client {
     shared_roles: RefCell<HashMap<String, (String, FolderRole)>>,
     /// The folders of the account's online archive, as last listed (`shared.rs`).
     archive: RefCell<shared::ArchiveListed>,
+    /// The server's personal archive tags, once asked (`shared/policy.rs`).
+    tags: RefCell<Option<Vec<quatrelle_model::ArchiveTag>>>,
+    /// The archive tag each folder of the account carries of its own, by folder id, as last listed.
+    folder_tags: RefCell<HashMap<String, String>>,
     /// The User-Agent every request names, instead of Quatrelle's (a server that lets in only the
     /// clients it knows).
     user_agent: Option<String>,
@@ -401,6 +405,8 @@ impl Client {
             discovered: RefCell::new(None),
             shared_roles: RefCell::new(HashMap::new()),
             archive: RefCell::default(),
+            tags: RefCell::new(None),
+            folder_tags: RefCell::new(HashMap::new()),
             replace_outlook_rules: Cell::new(false),
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
@@ -435,6 +441,8 @@ impl Client {
             discovered: self.discovered.clone(),
             shared_roles: self.shared_roles.clone(),
             archive: self.archive.clone(),
+            tags: self.tags.clone(),
+            folder_tags: self.folder_tags.clone(),
             replace_outlook_rules: Cell::new(false),
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
@@ -777,10 +785,11 @@ pub use autodiscover::{archive_named, autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};
+pub use shared::tags_listed;
 use sync::restriction;
 pub use sync::{
-    AheadTodo, download_ahead, fetch_body, find_by_message_id, find_lost, find_on_server, list_folders, older, read_online, search, sync_folder,
-    sync_folder_then,
+    AheadTodo, download_ahead, fetch_body, find_by_message_id, find_lost, find_on_server, list_folders, older, read_archive_tag, read_online, search,
+    sync_folder, sync_folder_then,
 };
 pub use text_first::{fetch_text, text_first};
 pub use xml::{El, esc, parse, unb64};

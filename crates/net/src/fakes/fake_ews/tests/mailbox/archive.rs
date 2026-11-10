@@ -6,7 +6,8 @@ use quatrelle_model::{Folder, FolderRole};
 
 use super::*;
 
-mod reading;
+mod policy;
+pub(super) mod reading;
 
 fn connect(server: &super::super::super::server::Server) -> crate::ews::Client {
     crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap()

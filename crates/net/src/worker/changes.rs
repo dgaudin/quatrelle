@@ -81,6 +81,7 @@ impl Worker {
                 }
             }
             Job::Vote { key, choice } => self.vote(key, choice),
+            Job::ReadArchiveTag { key } => self.read_archive_tag(key),
             Job::Apply { op, .. } => {
                 // POP: a move is carried out here (there's no server copy to come back); what's
                 // deleted for good is noted, for removing the server's copy when the account says.
@@ -510,7 +511,7 @@ impl Worker {
                         }
                         Op::CreateFolder { .. } | Op::DeleteFolder { .. } => relist = true,
                         Op::EmptyFolder { path } => destinations.push(path.clone()),
-                        Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } => {}
+                        Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
                     }
                     if let Err(e) = self.store.remove_op(&self.acc.id, &op) {
                         self.notice(e.to_string());

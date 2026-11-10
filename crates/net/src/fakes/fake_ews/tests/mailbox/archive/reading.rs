@@ -18,7 +18,7 @@ fn minute(i: usize) -> String {
     format!("2019-01-{:02}T{:02}:{:02}:00Z", 1 + i / 1440, i / 60 % 24, i % 60)
 }
 
-fn account(server: &crate::fakes::fake_ews::server::Server) -> AccountConfig {
+pub(super) fn account(server: &crate::fakes::fake_ews::server::Server) -> AccountConfig {
     AccountConfig {
         id: "a1".into(),
         email: "riley@contoso.example".into(),

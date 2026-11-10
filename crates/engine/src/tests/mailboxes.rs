@@ -107,6 +107,7 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
         mailbox: None,
         mailbox_role: FolderRole::Other,
         archive: false,
+        archive_tag: None,
     };
     let folders = vec![
         f("INBOX", FolderRole::Inbox),

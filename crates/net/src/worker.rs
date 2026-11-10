@@ -721,6 +721,8 @@ pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, o
         Op::RenameFolder { from, to } => c.rename(from, to),
         Op::DeleteFolder { path } => c.delete(path),
         Op::EmptyFolder { path } => c.empty(path),
+        // An archive policy is Exchange's.
+        Op::SetArchiveTag { .. } => Ok(()),
     }
 }
 
@@ -797,6 +799,7 @@ fn jumps_queue(j: &Job) -> bool {
         Job::FetchBody { .. }
             | Job::FetchTextFirst { .. }
             | Job::ReadOnline { .. }
+            | Job::ReadArchiveTag { .. }
             | Job::FetchPhoto { .. }
             | Job::FetchEventFile { .. }
             | Job::GetServerRules { .. }

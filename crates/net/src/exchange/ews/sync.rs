@@ -143,6 +143,15 @@ pub fn read_online(c: &Client, st: &mut State, store: &Store, key: &MessageKey) 
     c.download(&id)
 }
 
+/// A message's own archive policy tag and the day the server plans to move it, read when it is
+/// opened. A message the server has no id for (not found) has none.
+pub fn read_archive_tag(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<(Option<String>, Option<String>)> {
+    match server_id(c, st, store, key)? {
+        Some(id) => c.item_archive_tag(&id),
+        None => Ok((None, None)),
+    }
+}
+
 /// Refresh the folder list (and the folder ids behind it).
 pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
     let boxes = c.mailboxes()?;
@@ -156,6 +165,11 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Fol
             f.mailbox = Some(address.clone());
             f.mailbox_role = *role;
         }
+    }
+    // The archive policy tag a folder carries of its own.
+    let tagged = c.folder_tags.borrow();
+    for (f, id) in &mut found {
+        f.archive_tag = tagged.get(id.as_str()).cloned();
     }
     // The online archive's folders say so: read on the server, never synced nor kept.
     let archive = c.archive.borrow();

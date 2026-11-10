@@ -122,7 +122,7 @@ impl Session {
                     *unread_delta.entry(f.clone()).or_default() -= i64::try_from(unread).unwrap_or(0);
                     st.messages.retain(|m| !mine.contains(&m.key.uid));
                 }
-                Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => {}
+                Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } | Op::SetArchiveTag { .. } => {}
             }
         }
         if let Some(a) = self.account_mut(account) {
@@ -270,7 +270,12 @@ impl Session {
                     }
                 }
                 Op::DeleteFolder { path } => a.folders.retain(|f| !quatrelle_model::is_within(&f.path, path, f.delimiter.or(delimiter))),
-                Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => {}
+                Op::SetFlag { .. }
+                | Op::SetKeyword { .. }
+                | Op::Move { .. }
+                | Op::Expunge { .. }
+                | Op::EmptyFolder { .. }
+                | Op::SetArchiveTag { .. } => {}
             }
             sort_folders(&mut a.folders);
         }
@@ -305,7 +310,8 @@ impl Session {
                     self.focus = None;
                 }
             }
-            Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => {}
+            Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } | Op::SetArchiveTag { .. } => {
+            }
         }
         // A Favorite public folder renamed or deleted: its sync follows.
         if matches!(op, Op::RenameFolder { .. } | Op::DeleteFolder { .. }) {

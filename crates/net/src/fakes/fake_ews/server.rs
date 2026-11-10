@@ -381,7 +381,10 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         // response messages: automatic replies, room lists and rooms, free/busy.
         let plain = name.starts_with("GetUserOof")
             || name.starts_with("SetUserOof")
-            || matches!(name.as_str(), "GetRoomListsResponse" | "GetRoomsResponse" | "GetUserAvailabilityResponse");
+            || matches!(
+                name.as_str(),
+                "GetRoomListsResponse" | "GetRoomsResponse" | "GetUserAvailabilityResponse" | "GetUserRetentionPolicyTagsResponse"
+            );
         let inner = if plain {
             parts.concat()
         } else {

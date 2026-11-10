@@ -526,6 +526,8 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
             c.set_mailboxes(json!({"destroy": [id], "onDestroyRemoveEmails": true})).await.map(|_| ())
         }
         Op::EmptyFolder { path } => c.empty(st.mailbox(path)?).await,
+        // An archive policy is Exchange's: JMAP has no such thing.
+        Op::SetArchiveTag { .. } => Ok(()),
     }
 }
 

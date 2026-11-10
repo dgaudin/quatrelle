@@ -263,6 +263,8 @@ pub struct Data {
     pub attachments_given: Vec<String>,
     /// The account's online archive (`archive.rs`), when it has one: Autodiscover names it.
     pub archive: Option<archive::ArchiveBox>,
+    /// The archive policy: the tags it offers and the tag each message and folder carries (`policy.rs`).
+    pub policy: Policy,
     /// Each listing of a mail folder's items (`FindItem`): the folder, the offset and how many
     /// were asked for at most.
     pub found_in: Vec<(String, usize, usize)>,
@@ -406,6 +408,7 @@ impl Default for Data {
             reminders: Default::default(),
             attachments_given: Vec::new(),
             archive: None,
+            policy: Policy::default(),
             found_in: Vec::new(),
             given_from: Vec::new(),
             next: 0,
@@ -782,6 +785,7 @@ mod deleting;
 mod directory;
 mod fields;
 mod meetings;
+mod policy;
 mod reminders;
 mod route;
 mod server;
@@ -792,6 +796,7 @@ mod tasks;
 pub use archive::ArchiveBox;
 pub use fields::Verb;
 use fields::{MICROSOFT_FIELDS, fields_named, flag_xml, take_flag_update, text_fields};
+pub use policy::{Policy, TAG_DELETE, TAG_FIVE, TAG_NEVER, TAG_YEAR};
 pub use server::serve;
 
 #[cfg(test)]

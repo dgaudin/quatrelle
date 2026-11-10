@@ -6,6 +6,7 @@ use quatrelle_model::{AccountConfig, Folder};
 
 use super::*;
 
+mod policy;
 mod read_only;
 
 const TOP: &str = "Online Archive - Riley";

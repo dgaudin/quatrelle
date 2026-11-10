@@ -122,6 +122,7 @@ impl Session {
         self.anchor = Some(key.clone());
         let thread = self.thread_of(key);
         self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None, text_first: false });
+        self.ask_archive_tag(key);
         if self.body.defer {
             // Read and parsed on another thread: the pane waits for it.
             self.defer_read(key);

@@ -379,6 +379,8 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             c.send_raw("DELETE", &format!("{}/mailFolders/{}", at(path), seg(&id)), "application/json", Vec::new()).map(|_| ())
         }
         Op::EmptyFolder { path } => c.empty(st.mailbox(path)?, st.owner(path)),
+        // An archive policy is on-premises Exchange's (EWS).
+        Op::SetArchiveTag { .. } => Ok(()),
     }
 }
 
