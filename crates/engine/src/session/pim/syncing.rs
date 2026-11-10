@@ -88,12 +88,21 @@ impl Session {
         if let Some(server) = &sync.notes {
             // The state they were read up to, kept with them.
             p.notes_state.clone_from(&sync.notes_state);
+            // A note keeps the name it has here when the server's copy takes its place (the
+            // server names a note by its item, which changes each time the note is sent): its
+            // open window and the selection follow it by that name.
+            let names: std::collections::HashMap<String, String> =
+                p.notes.iter().filter(|n| !n.href.is_empty()).map(|n| (n.href.clone(), n.note.uid.clone())).collect();
             p.notes.retain(|n| n.dirty || n.href.is_empty());
             for x in server {
                 // Deleted here, the server not told yet (offline): it stays deleted.
                 let deleting = p.deleted.iter().any(|d| d.href == x.href);
                 if !deleting && !p.notes.iter().any(|n| !n.href.is_empty() && n.href == x.href) {
-                    p.notes.push(x.clone());
+                    let mut x = x.clone();
+                    if let Some(name) = names.get(&x.href) {
+                        x.note.uid.clone_from(name);
+                    }
+                    p.notes.push(x);
                 }
             }
         }

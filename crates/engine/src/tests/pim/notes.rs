@@ -165,3 +165,48 @@ fn a_notes_size_the_server_refused_goes_back() {
     assert!(s.notices.iter().any(|x| x.text.contains("didn't keep its size")), "{:?}", s.notices);
     done(s);
 }
+
+/// A note sent to Exchange is read back from it under the server's own id. It used to come back
+/// as another note (the server's id for its name), so its open window, which follows the note by
+/// its name, found it gone and closed a moment after it opened.
+#[test]
+fn a_note_keeps_its_name_once_the_server_has_it() {
+    let mut s = Session::open(Some(temp("notes-uid-kept")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let uid = s.run("note.create", &json!({"text": "Call the lab"})).unwrap()["uid"].as_str().unwrap().to_string();
+    let mine = s.pim[&id].notes.iter().find(|n| n.note.uid == uid).unwrap().note.clone();
+    // The sync that sent it: made on the server as S1, then the folder read again.
+    let server = |href: &str, text: &str| quatrelle_model::pim::StoredNote {
+        href: href.into(),
+        note: quatrelle_model::pim::Note { uid: href.into(), text: text.into(), ..mine.clone() },
+        ..Default::default()
+    };
+    let sync = quatrelle_model::pim::DavSync {
+        pushed_notes: vec![quatrelle_model::pim::StoredNote { href: "note:S1".into(), note: mine.clone(), ..Default::default() }],
+        notes: Some(vec![server("note:S1", "Call the lab"), server("note:S9", "Someone else's")]),
+        ..Default::default()
+    };
+    s.apply_dav(&id, &sync);
+    assert_eq!(s.pim[&id].notes.len(), 2);
+    let n = s.note(&uid).expect("the note is still there under its name").clone();
+    assert_eq!(n.text, "Call the lab");
+    // Changed here, it is made again on the server under another id: still the same note.
+    s.run("note.update", &json!({"uid": uid, "text": "Call the lab at nine"})).unwrap();
+    let changed = s.note(&uid).unwrap().clone();
+    let sync = quatrelle_model::pim::DavSync {
+        pushed_notes: vec![quatrelle_model::pim::StoredNote { href: "note:S2".into(), note: changed, ..Default::default() }],
+        notes: Some(vec![server("note:S2", "Call the lab at nine"), server("note:S9", "Someone else's")]),
+        ..Default::default()
+    };
+    s.apply_dav(&id, &sync);
+    assert_eq!(s.note(&uid).map(|n| n.text.as_str()), Some("Call the lab at nine"));
+    assert_eq!(s.pim[&id].notes.len(), 2, "and it is there once");
+    // A note first seen on the server has the server's id for its name, and keeps it too.
+    assert!(s.note("note:S9").is_some());
+    done(s);
+}
