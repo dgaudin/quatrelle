@@ -21,6 +21,7 @@ impl MailApp {
     pub(crate) fn settle_composes(&mut self, ctx: &egui::Context) {
         let live: std::collections::HashSet<u64> = self.session.all_composes().map(|c| c.id).collect();
         self.ui.editors.retain(|id, _| live.contains(id));
+        self.ui.across.keep(&live);
         self.ui.compose_shown.retain(|id| live.contains(id));
         if self.ui.dialog_for.is_some_and(|id| !live.contains(&id)) {
             self.ui.dialog_for = None;

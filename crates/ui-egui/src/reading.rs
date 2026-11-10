@@ -39,6 +39,8 @@ pub(crate) use bodies::Bodies;
 use body::*;
 pub(crate) use body::{CellHeights, ShownAs, TextSelection};
 #[cfg(test)]
+pub(crate) use compose::AcrossState;
+#[cfg(test)]
 pub(crate) use compose::cell_box;
 pub use compose::compose_window;
 #[cfg(test)]
@@ -46,7 +48,7 @@ pub(crate) use compose::picture_alone;
 #[cfg(test)]
 pub(crate) use compose::send_block_lines;
 pub(crate) use compose::send_block_text;
-pub(crate) use compose::{AcrossState, QuoteEditors};
+pub(crate) use compose::{Across, QuoteEditors};
 pub(crate) use find::Finds;
 #[cfg(test)]
 pub(crate) use find::{Doc as FindDoc, MOST as FIND_MOST, field_id as find_field_id, fills as find_fills};

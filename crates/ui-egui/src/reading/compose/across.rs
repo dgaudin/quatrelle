@@ -52,14 +52,54 @@ struct Step {
     at: QuotePoint,
 }
 
-/// The selection across the blocks of the message being written, between frames.
+/// The selections across blocks of the messages being written, each message its own: several
+/// are drawn in one frame (the one in the main window, each one in a window of its own), and one
+/// state for them all was emptied by each in turn, so no drag ever left its block while another
+/// message was open.
+#[derive(Default)]
+pub(crate) struct Across(std::collections::HashMap<u64, AcrossState>);
+
+impl Across {
+    fn take(&mut self, compose: u64) -> AcrossState {
+        self.0.remove(&compose).unwrap_or_default()
+    }
+
+    fn put(&mut self, compose: u64, a: AcrossState) {
+        self.0.insert(compose, a);
+    }
+
+    /// Those of messages no longer written go.
+    pub(crate) fn keep(&mut self, live: &std::collections::HashSet<u64>) {
+        self.0.retain(|id, _| live.contains(id));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get(&self, compose: u64) -> Option<&AcrossState> {
+        self.0.get(&compose)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn of(&mut self, compose: u64) -> &mut AcrossState {
+        self.0.entry(compose).or_default()
+    }
+}
+
+/// `QUATRELLE_TRACE_SELECTION=1`: what a press, a drag leaving its block and a release in a
+/// message being written were taken for, in `quatrelle.log`: a selection that doesn't go on into
+/// the next block on someone's machine can be followed there.
+fn trace(say: impl FnOnce() -> String) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("QUATRELLE_TRACE_SELECTION").is_some_and(|v| !v.is_empty())) {
+        log::info!("selection: {}", say());
+    }
+}
+
+/// The selection across the blocks of one message being written, between frames.
 #[derive(Default)]
 pub(crate) struct AcrossState {
-    /// The message it's for.
-    compose: u64,
     pub(crate) sel: Option<Span>,
     /// The block a press landed in, while the pointer is held.
-    pressed: Option<usize>,
+    pub(crate) pressed: Option<usize>,
     /// The block with the keyboard when the frame began.
     focus: Option<usize>,
     /// Each block as last drawn.
@@ -69,12 +109,6 @@ pub(crate) struct AcrossState {
 }
 
 impl AcrossState {
-    fn of(&mut self, compose: u64) {
-        if self.compose != compose {
-            *self = AcrossState { compose, ..Default::default() };
-        }
-    }
-
     fn drawn_of(&self, block: usize) -> Option<&rich_edit::Drawn> {
         self.drawn.iter().find(|(k, _)| *k == block).map(|(_, d)| d)
     }
@@ -89,9 +123,10 @@ impl AcrossState {
     /// The block, and the letter in it, nearest `p`: the block nearest up or down, then across.
     fn nearest(&self, p: egui::Pos2) -> Option<QuotePoint> {
         let gap = |v: f32, r: egui::Rangef| if v < r.min { r.min - v } else { (v - r.max).max(0.0) };
-        let mut best: Option<((f32, f32), usize)> = None;
+        let mut best: Option<((f32, f32, f32), usize)> = None;
         for (k, d) in &self.drawn {
-            let score = (gap(p.y, d.rect.y_range()), gap(p.x, d.rect.x_range()));
+            // Of two that hold it (one drawn over another), the smaller.
+            let score = (gap(p.y, d.rect.y_range()), gap(p.x, d.rect.x_range()), d.rect.area());
             if best.is_none_or(|(b, _)| score < b) {
                 best = Some((score, *k));
             }
@@ -161,15 +196,14 @@ fn forward(k: Key) -> bool {
 /// The selection's keys, taken before the text boxes see them: with a selection across blocks,
 /// and where one starts (Ctrl+A, Shift with an arrow at a block's edge).
 pub(super) fn before(st: &mut UiState, ui: &mut Ui, c: &mut Compose, ed: &mut rich_edit::Editor, eds: &mut QuoteEditors) {
-    let mut a = std::mem::take(&mut st.across);
-    a.of(c.id);
+    let mut a = st.across.take(c.id);
     keys(&mut a, st, ui, c, ed, eds);
     // The block it started in shows its own part, to its end on the side the selection goes.
     if let Some(s) = a.sel.as_ref().filter(|s| s.spans()) {
         let to = if s.head > s.anchor { len_of(c, s.anchor.block) } else { 0 };
         rich_edit::set_caret(ui.ctx(), box_of(c, s.anchor.block), s.anchor.at, to);
     }
-    st.across = a;
+    st.across.put(c.id, a);
 }
 
 fn keys(a: &mut AcrossState, st: &mut UiState, ui: &mut Ui, c: &mut Compose, ed: &mut rich_edit::Editor, eds: &mut QuoteEditors) {
@@ -381,13 +415,12 @@ fn moved(a: &AcrossState, c: &Compose, blocks: &[usize], head: QuotePoint, h_x: 
 /// pointer's part (a drag that leaves its block, Shift with a click, a drag held at the view's
 /// edge scrolling), and the selection lit in the blocks other than the one it started in.
 pub(super) fn after(st: &mut UiState, ui: &mut Ui, c: &Compose, drawn: Vec<(usize, rich_edit::Drawn)>) {
-    let mut a = std::mem::take(&mut st.across);
-    a.of(c.id);
+    let mut a = st.across.take(c.id);
     a.drawn = drawn;
     if a.drawn.len() < 2 || c.plain {
         a.sel = None;
         a.pressed = None;
-        st.across = a;
+        st.across.put(c.id, a);
         return;
     }
     let ctx = ui.ctx().clone();
@@ -424,8 +457,29 @@ pub(super) fn after(st: &mut UiState, ui: &mut Ui, c: &Compose, drawn: Vec<(usiz
                 a.pressed = hit;
             }
         }
+        trace(|| format!("press at {p:?} in block {hit:?}, shift {shift}: pressed {:?}, selection {:?}", a.pressed, a.sel));
+    } else if pressed {
+        trace(|| {
+            format!(
+                "press at {:?} not taken: view {clip:?}, layer there {:?}, ours {layer:?}",
+                origin.or(latest),
+                origin.or(latest).and_then(|p| ctx.layer_id_at(p))
+            )
+        });
+    }
+    // The text box egui itself is dragging a selection in is where it started, whatever became
+    // of the press (one this didn't see, or took for another's).
+    if down && a.pressed.is_none() && !a.sel.as_ref().is_some_and(|s| s.dragging) {
+        a.pressed = a.drawn.iter().map(|(k, _)| *k).find(|k| ctx.is_being_dragged(box_of(c, *k)));
+        if let Some(k) = a.pressed {
+            a.sel = None;
+            trace(|| format!("drag found in block {k} without its press"));
+        }
     }
     if !down {
+        if a.pressed.is_some() || a.sel.as_ref().is_some_and(|s| s.dragging) {
+            trace(|| format!("release: selection {:?}", a.sel));
+        }
         a.pressed = None;
         if let Some(s) = a.sel.as_mut().filter(|s| s.dragging) {
             s.dragging = false;
@@ -449,7 +503,9 @@ pub(super) fn after(st: &mut UiState, ui: &mut Ui, c: &Compose, drawn: Vec<(usiz
             // The drag leaves the block it started in: from where that block's own selection
             // started.
             (None, Some(k), Some(head)) if head.block != k => {
-                if let Some((at, _)) = rich_edit::caret(&ctx, box_of(c, k)) {
+                let caret = rich_edit::caret(&ctx, box_of(c, k));
+                trace(|| format!("drag from block {k} (its selection {caret:?}) reaches {head:?} at {p:?}"));
+                if let Some((at, _)) = caret {
                     a.sel = Some(Span { dragging: true, ..Span::new(QuotePoint { block: k, at }, head) });
                 }
             }
@@ -472,5 +528,5 @@ pub(super) fn after(st: &mut UiState, ui: &mut Ui, c: &Compose, drawn: Vec<(usiz
             ui.scroll_to_rect(d.galley.pos_from_cursor(CCursor::new(s.head.at)).translate(d.pos.to_vec2()).expand(8.0), None);
         }
     }
-    st.across = a;
+    st.across.put(c.id, a);
 }

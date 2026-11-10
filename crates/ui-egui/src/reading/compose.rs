@@ -10,6 +10,8 @@ use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
 
 mod across;
 mod quote;
+pub(crate) use across::Across;
+#[cfg(test)]
 pub(crate) use across::AcrossState;
 pub(crate) use quote::QuoteEditors;
 #[cfg(test)]
