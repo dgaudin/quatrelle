@@ -233,7 +233,7 @@ fn own_key(s: &Session, t: &Tokens, ui: &mut Ui, id: &str, k: &OwnKey, c: &PgpCa
 }
 
 /// The keys of the people the account writes to: the most recently used first, each with its
-/// fingerprint, how it came and « Forget ».
+/// fingerprint, how it came, « Confirm » for one that came in mail and « Forget ».
 fn people(s: &Session, t: &Tokens, ui: &mut Ui, id: &str, c: &PgpCard, acts: &mut Vec<Action>) {
     let label = tf!("Keys of the people you write to: {n}", n = c.people.len());
     setting_row(ui, t, false, name(t, &label), Some(note(t, tl!("They come with their mail, or from a key file they gave you."))), |ui| {
@@ -247,10 +247,20 @@ fn people(s: &Session, t: &Tokens, ui: &mut Ui, id: &str, c: &PgpCard, acts: &mu
         let came = match p.learnt {
             Learnt::FromMail => tl!("from their mail"),
             Learnt::ByHand => tl!("imported by you"),
+            Learnt::Confirmed => tl!("confirmed by you"),
         };
         let (_, bad) = validity(s, &p.info);
         let about = RichText::new(format!("{} · {came}", p.info.spaced())).size(12.0).color(if bad { t.danger } else { t.faint });
         setting_row(ui, t, false, name(t, &p.email), Some(about), |ui| {
+            // A key from mail is theirs on its own word, until the user says they compared it.
+            if p.learnt == Learnt::FromMail
+                && ui
+                    .button(tl!("Confirm"))
+                    .on_hover_text(tl!("You compared this fingerprint with its owner some other way: their signatures count as theirs from now on"))
+                    .clicked()
+            {
+                acts.push(Action::Run("pgp.confirmPublic", json!({"account": id, "email": p.email, "fingerprint": p.info.fingerprint})));
+            }
             if ui.button(tl!("Forget")).on_hover_text(tl!("Their signatures can't be checked any more, until their key comes again")).clicked() {
                 acts.push(Action::Run("pgp.forgetPublic", json!({"account": id, "email": p.email})));
             }

@@ -70,7 +70,8 @@ impl Session {
     }
 
     /// What a signature says, as the reading pane shows it: it holds, by a key for the sender
-    /// valid now, or with what's wrong with its key; or it doesn't hold, or can't be checked.
+    /// valid now (trusted when the user vouched for that key or it's the account's own, else
+    /// unverified), or with what's wrong with its key; or it doesn't hold, or can't be checked.
     /// `keys` are those it was checked with, `owner` the address they were kept for: how the key
     /// came is said, and its use written down.
     pub(super) fn pgp_signed_by(&mut self, account: &str, sig: &PgpSignature, keys: &[Vec<u8>], from: &str, owner: &str) -> SignedBy {
@@ -100,15 +101,13 @@ impl Session {
                     }
                     learnt = self.key_used(account, owner, &i.fingerprint);
                 }
-                SignedBy {
-                    seal: if problems.is_empty() { Seal::Trusted } else { Seal::Untrusted(problems) },
-                    cert: None,
-                    key: info,
-                    learnt,
-                    at: *at,
-                    weak: *weak,
-                    revocation: None,
-                }
+                // A key that only came with their mail isn't proof of who signed.
+                let seal = match learnt {
+                    _ if !problems.is_empty() => Seal::Untrusted(problems),
+                    Some(how) if !how.vouched() => Seal::Unverified,
+                    _ => Seal::Trusted,
+                };
+                SignedBy { seal, cert: None, key: info, learnt, at: *at, weak: *weak, revocation: None }
             }
             PgpSignature::Bad => broken("the message was changed after it was signed, or the signature isn't the sender's".into()),
             PgpSignature::Unknown { key_id } => {

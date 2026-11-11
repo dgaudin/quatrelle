@@ -1979,9 +1979,12 @@ menu	View	查看
 	This message is encrypted to a key Quatrelle doesn't have.	这封邮件被加密给了一个 Quatrelle 没有的密钥。
 	OpenPGP key {fingerprint}	OpenPGP 密钥 {fingerprint}
 	Their key came with their own mail.	其密钥随其本人的邮件而来。
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	其密钥随其本人的邮件而来，而任何人都可以冒用他人名义发送密钥。请用其他方式与对方核对指纹，然后在“文件 › 信息 › 安全”中确认该密钥。
 	You imported their key.	其密钥是你导入的。
+	You confirmed their key.	其密钥已由你确认。
 	It's one of your own keys.	这是你自己的密钥之一。
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	由 {signer} 签名：签名有效（OpenPGP 密钥 {key}）。
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	由 {signer} 签名：签名有效，但其密钥尚未确认（OpenPGP 密钥 {key}）。
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	使用 Quatrelle 没有的 OpenPGP 密钥 {key} 签名，因此无法验证签名。
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	其密钥会随其邮件而来，也可以在“文件 › 信息 › 安全”中从文件导入。
 	Import OpenPGP key	导入 OpenPGP 密钥
@@ -1996,6 +1999,8 @@ menu	View	查看
 	A secret key file (.asc or .gpg), with its passphrase	私钥文件（.asc 或 .gpg）及其密码短语
 	Older key {key}: kept to decrypt mail sent to it	旧密钥 {key}：保留下来以解密发给它的邮件
 	Forget	忘记
+	Confirm	确认
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	你已用其他方式与密钥所有者核对过此指纹：今后其签名将视为本人所签
 	Mail encrypted to it can't be read any more	加密给它的邮件将无法再阅读
 	Sign and decrypt with this key again; the one in use is kept to decrypt	重新用此密钥签名和解密；正在使用的密钥保留用于解密
 	Send my public key with my messages	随我的邮件发送我的公钥
@@ -2015,6 +2020,7 @@ menu	View	查看
 	Import someone's key…	导入他人的密钥…
 	from their mail	来自其邮件
 	imported by you	由你导入
+	confirmed by you	由你确认
 	Their signatures can't be checked any more, until their key comes again	在其密钥再次到来之前，将无法验证其签名
 	Withdrawn on {date}	已于 {date} 撤销
 	It ran out on {date}	已于 {date} 过期

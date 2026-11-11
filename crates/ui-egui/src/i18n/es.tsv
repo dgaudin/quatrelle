@@ -1982,9 +1982,12 @@ menu	View	Ver
 	This message is encrypted to a key Quatrelle doesn't have.	Este mensaje está cifrado para una clave que Quatrelle no tiene.
 	OpenPGP key {fingerprint}	Clave OpenPGP {fingerprint}
 	Their key came with their own mail.	Su clave llegó con su propio correo.
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	Su clave llegó con su propio correo, y cualquiera puede enviar una clave en nombre de otra persona. Compara su huella digital con esa persona por otro medio y luego confírmala en Archivo › Información › Seguridad.
 	You imported their key.	Importaste su clave.
+	You confirmed their key.	Confirmaste su clave.
 	It's one of your own keys.	Es una de tus propias claves.
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	Firmado por {signer}: la firma es válida (clave OpenPGP {key}).
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	Firmado por {signer}: la firma es válida, pero su clave no está confirmada (clave OpenPGP {key}).
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Firmado con la clave OpenPGP {key}, que Quatrelle no tiene, así que la firma no se puede comprobar.
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Su clave llega con su correo, o se puede importar de un archivo en Archivo › Información › Seguridad.
 	Import OpenPGP key	Importar clave OpenPGP
@@ -1999,6 +2002,8 @@ menu	View	Ver
 	A secret key file (.asc or .gpg), with its passphrase	Un archivo de clave secreta (.asc o .gpg), con su frase de contraseña
 	Older key {key}: kept to decrypt mail sent to it	Clave anterior {key}: se conserva para descifrar el correo enviado a ella
 	Forget	Olvidar
+	Confirm	Confirmar
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	Comparaste esta huella digital con su propietario por otro medio: a partir de ahora sus firmas cuentan como suyas
 	Mail encrypted to it can't be read any more	El correo cifrado para ella ya no se podrá leer
 	Sign and decrypt with this key again; the one in use is kept to decrypt	Firmar y descifrar de nuevo con esta clave; la que está en uso se conserva para descifrar
 	Send my public key with my messages	Enviar mi clave pública con mis mensajes
@@ -2018,6 +2023,7 @@ menu	View	Ver
 	Import someone's key…	Importar la clave de alguien…
 	from their mail	de su correo
 	imported by you	importada por ti
+	confirmed by you	confirmada por ti
 	Their signatures can't be checked any more, until their key comes again	Sus firmas ya no se podrán comprobar, hasta que su clave vuelva a llegar
 	Withdrawn on {date}	Retirada el {date}
 	It ran out on {date}	Caducó el {date}

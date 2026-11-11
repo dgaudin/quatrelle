@@ -154,6 +154,50 @@ Subject: Figures\r\n\r\nThe figures.\r\n";
     done(s);
 }
 
+/// A key that came with someone's mail checks their signature, but it isn't proof of who they
+/// are: anyone can send a key in someone's name. Trusted is for a key the user vouched for.
+#[test]
+fn a_key_that_came_with_the_mail_isnt_trusted() {
+    let mut s = sample_session("forged-pgp-own-key");
+    s.clock.now = PGP_NOW;
+    // Eve makes a key in the director's name and sends it with her signed message.
+    let eve = openpgp::generate("The Director", "director@victim.example", PGP_NOW, &mut rand_core::OsRng).unwrap();
+    let entity = "Content-Type: text/plain; charset=utf-8\r\n\r\nPay Eve today.\r\n";
+    let brings = openpgp::autocrypt::header("director@victim.example", &eve.public, false);
+    let sent = pgp_signed(&outer("f6", "The Director <director@victim.example>", &brings), entity, &eve, PGP_NOW);
+    open_raw(&mut s, 9706, &sent);
+    let signed = security(&s).signed.unwrap();
+    assert_eq!(signed.learnt, Some(Learnt::FromMail));
+    assert_ne!(signed.seal, Seal::Trusted, "trusted on the word of the message itself");
+    done(s);
+}
+
+/// A message's `Date` is its sender's to write: one set years ahead mustn't pin the key it
+/// brings against every real message after it.
+#[test]
+fn a_date_in_the_future_doesnt_pin_a_key() {
+    let mut s = sample_session("forged-pgp-date");
+    s.clock.now = PGP_NOW;
+    let (forged, real) = (
+        openpgp::generate("Bo", "bo@studio.example", PGP_NOW, &mut rand_core::OsRng).unwrap(),
+        openpgp::generate("Bo", "bo@studio.example", PGP_NOW, &mut rand_core::OsRng).unwrap(),
+    );
+    let mail = |id: &str, date: &str, key: &openpgp::Unlocked| {
+        format!(
+            "From: Bo <bo@studio.example>\r\nTo: riley@studio.example\r\nSubject: Hello\r\nDate: {date}\r\nMessage-ID: <{id}@forged.example>\r\n{}\
+MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello.\r\n",
+            openpgp::autocrypt::header("bo@studio.example", &key.public, false)
+        )
+        .into_bytes()
+    };
+    open_raw(&mut s, 9707, &mail("f7", "Mon, 01 Jan 2035 09:00:00 +0000", &forged));
+    assert_eq!(s.person_key("sample", "bo@studio.example").unwrap().info.fingerprint, forged.info.fingerprint);
+    s.clock.now = PGP_NOW + 86_400;
+    open_raw(&mut s, 9708, &mail("f8", "Sat, 16 Jan 2027 09:00:00 +0000", &real));
+    assert_eq!(s.person_key("sample", "bo@studio.example").unwrap().info.fingerprint, real.info.fingerprint, "the later message's key");
+    done(s);
+}
+
 /// A certificate no authority this computer trusts stands behind isn't kept to encrypt to: the
 /// message that brings it could be anyone's.
 #[test]
@@ -243,5 +287,38 @@ fn a_kept_certificate_is_checked_again_before_encrypting() {
     s.run("compose.security", &json!({"encrypt": true})).unwrap();
     let err = s.run("compose.send", &json!({})).unwrap_err().to_string();
     assert!(err.contains("bo@posteo.example") && !err.contains("ana@posteo.example"), "{err}");
+    done(s);
+}
+
+/// Confirming a key that came with mail (its fingerprint compared with its owner) makes its
+/// signatures theirs. Until then, a key that replaced another says so on everything it signs.
+#[test]
+fn a_confirmed_key_is_trusted_and_a_changed_one_says_so_until_then() {
+    let mut s = sample_session("forged-pgp-confirm");
+    s.clock.now = PGP_NOW;
+    let make = || openpgp::generate("Bo", "bo@studio.example", PGP_NOW, &mut rand_core::OsRng).unwrap();
+    let (first, second, third) = (make(), make(), make());
+    let entity = "Content-Type: text/plain; charset=utf-8\r\n\r\nHello.\r\n";
+    let from_bo = |id: &str, key: &openpgp::Unlocked, brings: bool| {
+        let extra = if brings { openpgp::autocrypt::header("bo@studio.example", &key.public, false) } else { String::new() };
+        pgp_signed(&outer(id, "Bo <bo@studio.example>", &extra), entity, key, PGP_NOW)
+    };
+    open_raw(&mut s, 9721, &from_bo("c1", &first, true));
+    assert_eq!((seal(&s), security(&s).key_changed), (Seal::Unverified, false));
+    // Another key in Bo's name: said on the message that brings it, and on the next it signs.
+    open_raw(&mut s, 9722, &from_bo("c2", &second, true));
+    assert_eq!((seal(&s), security(&s).key_changed), (Seal::Unverified, true));
+    open_raw(&mut s, 9723, &from_bo("c3", &second, false));
+    assert_eq!((seal(&s), security(&s).key_changed), (Seal::Unverified, true), "still said: no one confirmed it");
+    // Confirmed by its fingerprint (never another's): trusted, and no longer a key that changed.
+    assert!(s.run("pgp.confirmPublic", &json!({"email": "bo@studio.example", "fingerprint": first.info.fingerprint})).is_err());
+    s.run("pgp.confirmPublic", &json!({"email": "Bo@Studio.example", "fingerprint": second.info.spaced()})).unwrap();
+    let sec = security(&s);
+    assert_eq!((sec.signed.as_ref().unwrap().seal.clone(), sec.key_changed), (Seal::Trusted, false), "what's open says so");
+    assert_eq!(sec.signed.unwrap().learnt, Some(Learnt::Confirmed));
+    // And mail can't replace it any more.
+    open_raw(&mut s, 9724, &from_bo("c4", &third, true));
+    assert_eq!(s.person_key("sample", "bo@studio.example").unwrap().info.fingerprint, second.info.fingerprint);
+    assert!(matches!(seal(&s), Seal::UnknownKey(_)), "signed with a key that isn't Bo's: {:?}", seal(&s));
     done(s);
 }

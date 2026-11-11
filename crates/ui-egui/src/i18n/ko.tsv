@@ -1980,9 +1980,12 @@ folder	Conflicts	충돌
 	This message is encrypted to a key Quatrelle doesn't have.	이 메시지는 Quatrelle에 없는 키로 암호화되어 있습니다.
 	OpenPGP key {fingerprint}	OpenPGP 키 {fingerprint}
 	Their key came with their own mail.	이 사람의 키는 본인의 메일과 함께 왔습니다.
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	이 사람의 키는 본인의 메일과 함께 왔지만, 누구나 다른 사람의 이름으로 키를 보낼 수 있습니다. 다른 방법으로 본인과 지문을 비교한 다음 파일 › 정보 › 보안에서 확인하세요.
 	You imported their key.	이 사람의 키를 직접 가져왔습니다.
+	You confirmed their key.	이 사람의 키를 직접 확인했습니다.
 	It's one of your own keys.	내 키 중 하나입니다.
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	{signer}의 서명: 서명이 유효합니다 (OpenPGP 키 {key}).
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	{signer}의 서명: 서명은 유효하지만 키가 확인되지 않았습니다 (OpenPGP 키 {key}).
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Quatrelle에 없는 OpenPGP 키 {key}로 서명되어 서명을 확인할 수 없습니다.
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	이 사람의 키는 본인의 메일과 함께 오며, 파일 › 정보 › 보안에서 파일로 가져올 수도 있습니다.
 	Import OpenPGP key	OpenPGP 키 가져오기
@@ -1997,6 +2000,8 @@ folder	Conflicts	충돌
 	A secret key file (.asc or .gpg), with its passphrase	비밀 키 파일(.asc 또는 .gpg)과 암호 문구
 	Older key {key}: kept to decrypt mail sent to it	이전 키 {key}: 이 키로 보낸 메일을 해독하려고 보관합니다
 	Forget	삭제
+	Confirm	확인
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	이 지문을 다른 방법으로 키의 주인과 비교했습니다: 이제부터 이 사람의 서명은 본인의 것으로 인정됩니다
 	Mail encrypted to it can't be read any more	이 키로 암호화된 메일은 더 이상 읽을 수 없습니다
 	Sign and decrypt with this key again; the one in use is kept to decrypt	이 키로 다시 서명하고 해독합니다. 사용 중인 키는 해독용으로 보관됩니다
 	Send my public key with my messages	내 메시지에 공개 키 함께 보내기
@@ -2016,6 +2021,7 @@ folder	Conflicts	충돌
 	Import someone's key…	다른 사람의 키 가져오기…
 	from their mail	상대의 메일에서
 	imported by you	직접 가져옴
+	confirmed by you	직접 확인함
 	Their signatures can't be checked any more, until their key comes again	상대의 키가 다시 올 때까지 상대의 서명을 확인할 수 없습니다
 	Withdrawn on {date}	{date}에 철회됨
 	It ran out on {date}	{date}에 만료됨

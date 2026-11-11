@@ -1978,9 +1978,12 @@ menu	View	Weergeven
 	This message is encrypted to a key Quatrelle doesn't have.	Dit bericht is versleuteld voor een sleutel die Quatrelle niet heeft.
 	OpenPGP key {fingerprint}	OpenPGP-sleutel {fingerprint}
 	Their key came with their own mail.	De sleutel kwam met de eigen e-mail van deze persoon.
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	De sleutel kwam met de eigen e-mail van deze persoon, en iedereen kan een sleutel uit naam van een ander sturen. Vergelijk de vingerafdruk op een andere manier met deze persoon en bevestig de sleutel dan in Bestand › Info › Beveiliging.
 	You imported their key.	U hebt deze sleutel geïmporteerd.
+	You confirmed their key.	U hebt deze sleutel bevestigd.
 	It's one of your own keys.	Het is een van uw eigen sleutels.
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	Ondertekend door {signer}: de handtekening klopt (OpenPGP-sleutel {key}).
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	Ondertekend door {signer}: de handtekening klopt, maar de sleutel is niet bevestigd (OpenPGP-sleutel {key}).
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Ondertekend met de OpenPGP-sleutel {key}, die Quatrelle niet heeft, dus de handtekening kan niet worden gecontroleerd.
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	De sleutel komt met de e-mail van deze persoon, of kan uit een bestand worden geïmporteerd in Bestand › Info › Beveiliging.
 	Import OpenPGP key	OpenPGP-sleutel importeren
@@ -1995,6 +1998,8 @@ menu	View	Weergeven
 	A secret key file (.asc or .gpg), with its passphrase	Een geheim sleutelbestand (.asc of .gpg), met de wachtzin
 	Older key {key}: kept to decrypt mail sent to it	Oudere sleutel {key}: bewaard om e-mail die ernaar is gestuurd te ontsleutelen
 	Forget	Vergeten
+	Confirm	Bevestigen
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	U hebt deze vingerafdruk op een andere manier met de eigenaar vergeleken: voortaan gelden hun handtekeningen als de hunne
 	Mail encrypted to it can't be read any more	E-mail die ervoor is versleuteld kan niet meer worden gelezen
 	Sign and decrypt with this key again; the one in use is kept to decrypt	Weer met deze sleutel ondertekenen en ontsleutelen; de gebruikte wordt bewaard om te ontsleutelen
 	Send my public key with my messages	Mijn openbare sleutel met mijn berichten meesturen
@@ -2014,6 +2019,7 @@ menu	View	Weergeven
 	Import someone's key…	Iemands sleutel importeren…
 	from their mail	uit hun e-mail
 	imported by you	door u geïmporteerd
+	confirmed by you	door u bevestigd
 	Their signatures can't be checked any more, until their key comes again	Hun handtekeningen kunnen niet meer worden gecontroleerd, tot hun sleutel weer komt
 	Withdrawn on {date}	Ingetrokken op {date}
 	It ran out on {date}	Verlopen op {date}

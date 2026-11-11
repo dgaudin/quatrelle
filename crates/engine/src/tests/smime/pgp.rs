@@ -230,6 +230,8 @@ fn reopen(s: &mut Session, key: &quatrelle_model::MessageKey) {
 #[test]
 fn a_newer_messages_key_replaces_an_older_ones_and_says_so_once() {
     let mut s = sample_session("pgp-key-changed");
+    // After both messages were written (one dated ahead of the clock counts as written now).
+    s.clock.now = NOW + 30 * DAY;
     let (a, forged) = (bo_key(), bo_key());
     let first = open_raw(&mut s, 9001, &mail("Bo <bo@studio.example>", OCT_24, &pgp::autocrypt::header("bo@studio.example", &a.public, false)));
     assert!(!security(&s).key_changed, "a first key changes nothing");

@@ -4,8 +4,10 @@
 //! The session: correspondents' OpenPGP keys (adapted from upstream f32b54b), learnt on this
 //! computer only: from their mail (its `Autocrypt:` header for the address it comes from, a key
 //! attached for that address), or imported from a file. A newer message's key replaces an older
-//! one's (Autocrypt Level 1 §2.3), never one imported by hand; a key that changes is said once,
-//! on the message that brought it. At most [`PEOPLE_MAX`] per account, the one used least
+//! one's (Autocrypt Level 1 §2.3), never one imported by hand or confirmed; a key that changes
+//! is said on the message that brought it, and on those it signs until the user confirms it.
+//! A key from mail checks signatures without being proof of who made them
+//! ([`Learnt::vouched`]). At most [`PEOPLE_MAX`] per account, the one used least
 //! recently let go first, never one imported by hand. Kept in the account's `pgp-people.json`,
 //! read as any file is (a damaged one is set aside, never fatal).
 //!
@@ -40,6 +42,18 @@ pub enum Learnt {
     FromMail,
     /// Imported by the user: only « Forget » lets it go.
     ByHand,
+    /// From their mail, then confirmed by the user, who compared its fingerprint with its
+    /// owner: kept as one imported is.
+    Confirmed,
+}
+
+impl Learnt {
+    /// The user vouched for the key (imported or confirmed it): its signatures are its owner's.
+    /// One that only came in mail says no more than that the same key signed: anyone can send a
+    /// key in someone's name.
+    pub fn vouched(self) -> bool {
+        self != Learnt::FromMail
+    }
 }
 
 /// Someone's key.
@@ -157,7 +171,7 @@ impl PeopleKeys {
                 }
                 return Learn::Same;
             }
-            if k.learnt == Learnt::ByHand || message_date < k.from_date {
+            if k.learnt.vouched() || message_date < k.from_date {
                 return Learn::Kept;
             }
             let previous = k.info.fingerprint.clone();
@@ -216,6 +230,19 @@ impl PeopleKeys {
         };
         self.keys.insert(email, k);
         learn
+    }
+
+    /// `email`'s key (`fingerprint`, as the user read it) confirmed by them: theirs from now on,
+    /// whatever mail says, and no longer a key that changed. False when that isn't the key kept.
+    pub fn confirm(&mut self, email: &str, fingerprint: &str) -> bool {
+        let wanted: String = fingerprint.chars().filter(|c| !c.is_whitespace()).collect();
+        let Some(k) = self.keys.get_mut(&address(email)).filter(|k| k.info.fingerprint.eq_ignore_ascii_case(&wanted)) else { return false };
+        if k.learnt == Learnt::FromMail {
+            k.learnt = Learnt::Confirmed;
+        }
+        k.previous = None;
+        k.change_shown = true;
+        true
     }
 
     /// `email`'s key forgotten; whether there was one.
@@ -309,11 +336,13 @@ impl Session {
         if offered.is_empty() {
             return;
         }
-        let Some((from, date)) = self.summary(key).map(|m| (address(&m.from.email), m.date)) else { return };
+        let now = self.clock.now;
+        // When it was written is its sender's to say: never later than it came, so a date set
+        // years ahead can't keep the key it brings against every message after it.
+        let Some((from, date)) = self.summary(key).map(|m| (address(&m.from.email), m.date.min(m.received_at()).min(now))) else { return };
         if from.is_empty() || self.own_address(&from) {
             return;
         }
-        let now = self.clock.now;
         let people = self.pgp.people.entry(key.account.clone()).or_default();
         let mut changed = false;
         for o in offered {
@@ -373,6 +402,32 @@ impl Session {
         self.save_people(account);
         self.notice_with("OpenPGP keys kept for {who}", &[("who", &added.join(", "))], false);
         Ok(serde_json::json!({ "added": added }))
+    }
+
+    /// The user compared `email`'s key (`fingerprint`) with its owner: it's theirs from now on.
+    pub fn confirm_public_key(&mut self, account: &str, email: &str, fingerprint: &str) -> CmdResult {
+        self.pgp_config(account)?;
+        if !self.pgp.people.get_mut(account).is_some_and(|p| p.confirm(email, fingerprint)) {
+            return Err(CmdError::Params(format!("that isn't the OpenPGP key kept for `{}`", address(email))));
+        }
+        self.save_people(account);
+        // What's open says so.
+        let shown: Vec<MessageKey> = self.reading.iter().chain(&self.windows).filter(|r| r.key.account == account).map(|r| r.key.clone()).collect();
+        for key in shown {
+            self.show_again(&key);
+        }
+        Ok(serde_json::json!({ "confirmed": address(email) }))
+    }
+
+    /// Whether a signature (`signed`, on mail from `from`) was made with a key that replaced the
+    /// one learnt for its sender before, and that the user hasn't confirmed: said on every
+    /// message it signs, until they do.
+    pub(in crate::session) fn signed_with_a_changed_key(&self, account: &str, from: &str, signed: Option<&SignedBy>) -> bool {
+        let Some(made_with) = signed.filter(|s| !matches!(s.seal, Seal::Broken(_) | Seal::UnknownKey(_))).and_then(|s| s.key.as_ref()) else {
+            return false;
+        };
+        self.person_key(account, from)
+            .is_some_and(|k| k.learnt == Learnt::FromMail && k.previous.is_some() && k.info.fingerprint == made_with.fingerprint)
     }
 
     /// Forget the key Quatrelle has for `email`.

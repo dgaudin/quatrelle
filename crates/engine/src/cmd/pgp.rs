@@ -114,6 +114,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({ "known": known }))
         })
         .params(r#"{"account"?: string}"#),
+        CommandSpec::new("pgp.confirmPublic", "Confirm someone's key", "File › Info › Security", |s, v| {
+            let account = account_param(s, v)?;
+            s.confirm_public_key(&account, p::req_str(v, "email")?, p::req_str(v, "fingerprint")?)
+        })
+        .params(r#"{"email": string, "fingerprint": string (the key's, as compared with its owner), "account"?: string}"#),
         CommandSpec::new("pgp.forgetPublic", "Forget someone's key", "File › Info › Security", |s, v| {
             let account = account_param(s, v)?;
             s.forget_public_key(&account, p::req_str(v, "email")?)

@@ -154,16 +154,17 @@ fn a_signature_says_whose_key_made_it_and_whether_it_holds() {
     assert!(matches!(&sec.signed.as_ref().unwrap().seal, Seal::UnknownKey(id) if id.len() == 16), "{sec:?}");
     assert!(text(&s).contains("the proof is approved"));
     assert!(s.reading.as_ref().unwrap().parsed.as_ref().unwrap().attachments.is_empty(), "signature.asc isn't an attachment");
-    // Her mail brings her key (Autocrypt): it holds, by her key, learnt from her mail.
+    // Her mail brings her key (Autocrypt): it holds, by her key, learnt from her mail, which
+    // isn't proof it's hers.
     open_raw(&mut s, 9602, signed_by_ana(true).as_bytes());
     let signed = security(&s).signed.unwrap();
-    assert_eq!(signed.seal, Seal::Trusted);
+    assert_eq!(signed.seal, Seal::Unverified);
     assert_eq!(signed.key.as_ref().unwrap().emails, ["ana@posteo.example"]);
     assert_eq!(signed.learnt, Some(Learnt::FromMail));
     // Checking with it is using it: the least used goes first, not this one.
     s.clock.now = PGP_NOW + 5 * DAY;
     open_raw(&mut s, 9603, signed_by_ana(false).as_bytes());
-    assert_eq!(seal(&s), Seal::Trusted, "her key is known from now on");
+    assert_eq!(seal(&s), Seal::Unverified, "her key is known from now on");
     assert_eq!(s.person_key("sample", "ana@posteo.example").unwrap().last_used, PGP_NOW + 5 * DAY);
     // Changed after it was signed.
     open_raw(&mut s, 9604, signed_by_ana(false).replace("is approved", "is rejected").as_bytes());
@@ -178,12 +179,13 @@ fn a_signature_says_whose_key_made_it_and_whether_it_holds() {
     assert_eq!(security(&s).signed.unwrap().key.unwrap().emails, ["ana@posteo.example"]);
     // Signed in the text itself (cleartext): the text without its armor.
     open_raw(&mut s, 9606, &from_ana(false, "text/plain; charset=us-ascii", &String::from_utf8(pgpdata("ana-clearsigned.txt")).unwrap()));
-    assert_eq!(seal(&s), Seal::Trusted);
+    assert_eq!(seal(&s), Seal::Unverified);
     assert!(text(&s).contains("signed in the text itself") && !text(&s).contains("BEGIN PGP"), "{}", text(&s));
-    // Her key imported by hand: said so.
+    // Her key imported by hand: said so, and trusted.
     s.run("pgp.importPublic", &json!({"data": pgpdata("ana.asc")})).unwrap();
     open_raw(&mut s, 9607, signed_by_ana(false).as_bytes());
     assert_eq!(security(&s).signed.unwrap().learnt, Some(Learnt::ByHand));
+    assert_eq!(seal(&s), Seal::Trusted);
     // Nothing of it asked of the network layer.
     assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::Pgp { .. })));
     done(s);
@@ -203,7 +205,7 @@ fn encrypted_mail_is_decrypted_in_memory_only() {
     assert!(sec.pgp);
     assert_eq!(sec.lock, Some(Lock::Open { authenticated: true }));
     let signed = sec.signed.expect("signed inside");
-    assert_eq!(signed.seal, Seal::Trusted, "by Ana, whose key came with it");
+    assert_eq!(signed.seal, Seal::Unverified, "by Ana's key, which came with it");
     assert_eq!(signed.learnt, Some(Learnt::FromMail));
     assert!(text(&s).contains("quokkaplan"));
     // Not asked for again; nothing from the web.

@@ -3,8 +3,9 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The reading pane: how a message was protected (S/MIME or OpenPGP), said above it in
 //! Quatrelle's own colours, outside anything the message itself draws, so a message can't pass
-//! for signed. OpenPGP's lines (adapted from upstream f32b54b) also say how the signer's key came,
-//! and, once, that it changed.
+//! for signed. OpenPGP's lines (adapted from upstream f32b54b) also say how the signer's key came
+//! (green only for a key the user imported or confirmed: one that came with the mail isn't proof
+//! of who sent it), and that it changed.
 
 use quatrelle_engine::{Learnt, Lock, Reading, RevocationCheck, Seal, Security, smime};
 
@@ -75,7 +76,8 @@ fn spaced(fingerprint: &str) -> String {
     chars.chunks(4).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>().join(" ")
 }
 
-/// OpenPGP: the key kept for the sender changed with this message (said once).
+/// OpenPGP: the key kept for the sender changed with this message, or signed it and isn't
+/// confirmed yet.
 fn key_changed(s: &Session, t: &Tokens, ui: &mut Ui, r: &Reading) {
     let from = r.parsed.as_ref().map(|p| p.from.email.clone()).unwrap_or_default();
     let hover = s.person_key(&r.key.account, &from).map(|k| {
@@ -134,7 +136,10 @@ pub(super) fn security_bar(s: &Session, t: &Tokens, ui: &mut Ui, r: &Reading, se
         ui.add_space(4.0);
     }
     let Some(signed) = &sec.signed else { return };
-    let named = |name: &str, emails: &[String]| match emails.first() {
+    // Who signed: the address the message is from when the certificate or key is for it (one
+    // may list others, and list them first), else the first it names.
+    let from = r.parsed.as_ref().map(|p| p.from.email.trim().to_lowercase()).unwrap_or_default();
+    let named = |name: &str, emails: &[String]| match emails.iter().find(|e| e.eq_ignore_ascii_case(&from)).or(emails.first()) {
         Some(e) if !name.is_empty() && !name.eq_ignore_ascii_case(e) => format!("{name} <{e}>"),
         Some(e) => e.clone(),
         None => name.to_string(),
@@ -152,8 +157,13 @@ pub(super) fn security_bar(s: &Session, t: &Tokens, ui: &mut Ui, r: &Reading, se
         .map(|h| h + signed_at.as_deref().unwrap_or_default());
     // How an OpenPGP signer's key came.
     let came = signed.key.as_ref().map(|_| match signed.learnt {
+        // Not proof of who they are: said in full where the signature holds by it.
+        Some(Learnt::FromMail) if signed.seal == Seal::Unverified => tl!(
+            "Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security."
+        ),
         Some(Learnt::FromMail) => tl!("Their key came with their own mail."),
         Some(Learnt::ByHand) => tl!("You imported their key."),
+        Some(Learnt::Confirmed) => tl!("You confirmed their key."),
         None => tl!("It's one of your own keys."),
     });
     let checked = match &signed.revocation {
@@ -175,6 +185,15 @@ pub(super) fn security_bar(s: &Session, t: &Tokens, ui: &mut Ui, r: &Reading, se
                 }
             };
             line(ui, t, Icon::Seal, t.ok, text, weak, hover);
+        }
+        Seal::Unverified => {
+            let key = signed.key.as_ref().map(|k| k.key_id.clone()).unwrap_or_default();
+            let text = tf!(
+                "Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).",
+                signer = who.unwrap_or_default(),
+                key = key
+            );
+            line(ui, t, Icon::Seal, t.warn, text, weak, hover);
         }
         Seal::UnknownKey(key) => line(
             ui,

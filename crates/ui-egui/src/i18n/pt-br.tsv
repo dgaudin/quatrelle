@@ -1981,9 +1981,12 @@ folder	Conflicts	Conflitos
 	This message is encrypted to a key Quatrelle doesn't have.	Esta mensagem está criptografada para uma chave que o Quatrelle não tem.
 	OpenPGP key {fingerprint}	Chave OpenPGP {fingerprint}
 	Their key came with their own mail.	A chave veio com os próprios e-mails dessa pessoa.
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	A chave veio com os próprios e-mails dessa pessoa, e qualquer um pode enviar uma chave em nome de alguém. Compare a impressão digital da chave com essa pessoa por outro meio e depois confirme-a em Arquivo › Informações › Segurança.
 	You imported their key.	Você importou a chave dessa pessoa.
+	You confirmed their key.	Você confirmou a chave dessa pessoa.
 	It's one of your own keys.	É uma das suas próprias chaves.
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	Assinada por {signer}: a assinatura é válida (chave OpenPGP {key}).
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	Assinada por {signer}: a assinatura é válida, mas a chave não foi confirmada (chave OpenPGP {key}).
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Assinada com a chave OpenPGP {key}, que o Quatrelle não tem, então a assinatura não pode ser verificada.
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	A chave vem com os e-mails dessa pessoa, ou pode ser importada de um arquivo em Arquivo › Informações › Segurança.
 	Import OpenPGP key	Importar chave OpenPGP
@@ -1998,6 +2001,8 @@ folder	Conflicts	Conflitos
 	A secret key file (.asc or .gpg), with its passphrase	Um arquivo de chave secreta (.asc ou .gpg), com a frase secreta
 	Older key {key}: kept to decrypt mail sent to it	Chave anterior {key}: guardada para descriptografar os e-mails enviados a ela
 	Forget	Esquecer
+	Confirm	Confirmar
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	Você comparou esta impressão digital com o dono da chave por outro meio: daqui em diante as assinaturas dessa pessoa contam como dela
 	Mail encrypted to it can't be read any more	Os e-mails criptografados para ela não poderão mais ser lidos
 	Sign and decrypt with this key again; the one in use is kept to decrypt	Assinar e descriptografar de novo com esta chave; a que está em uso é guardada para descriptografar
 	Send my public key with my messages	Enviar minha chave pública com minhas mensagens
@@ -2017,6 +2022,7 @@ folder	Conflicts	Conflitos
 	Import someone's key…	Importar a chave de alguém…
 	from their mail	dos e-mails da pessoa
 	imported by you	importada por você
+	confirmed by you	confirmada por você
 	Their signatures can't be checked any more, until their key comes again	As assinaturas dessa pessoa não poderão mais ser verificadas, até a chave dela chegar de novo
 	Withdrawn on {date}	Retirada em {date}
 	It ran out on {date}	Expirou em {date}

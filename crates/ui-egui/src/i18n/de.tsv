@@ -1982,9 +1982,12 @@ menu	View	Anzeigen
 	This message is encrypted to a key Quatrelle doesn't have.	Diese Nachricht ist für einen Schlüssel verschlüsselt, den Quatrelle nicht hat.
 	OpenPGP key {fingerprint}	OpenPGP-Schlüssel {fingerprint}
 	Their key came with their own mail.	Der Schlüssel kam mit der eigenen Mail dieser Person.
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	Der Schlüssel kam mit der eigenen Mail dieser Person, und jeder kann einen Schlüssel im Namen eines anderen schicken. Vergleichen Sie seinen Fingerabdruck auf anderem Weg mit der Person und bestätigen Sie ihn dann unter Datei › Informationen › Sicherheit.
 	You imported their key.	Sie haben diesen Schlüssel importiert.
+	You confirmed their key.	Sie haben diesen Schlüssel bestätigt.
 	It's one of your own keys.	Es ist einer Ihrer eigenen Schlüssel.
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	Signiert von {signer}: Die Signatur ist gültig (OpenPGP-Schlüssel {key}).
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	Signiert von {signer}: Die Signatur ist gültig, aber der Schlüssel ist nicht bestätigt (OpenPGP-Schlüssel {key}).
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Signiert mit dem OpenPGP-Schlüssel {key}, den Quatrelle nicht hat, daher kann die Signatur nicht geprüft werden.
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	Der Schlüssel kommt mit der Mail dieser Person oder kann aus einer Datei importiert werden, unter Datei › Informationen › Sicherheit.
 	Import OpenPGP key	OpenPGP-Schlüssel importieren
@@ -1999,6 +2002,8 @@ menu	View	Anzeigen
 	A secret key file (.asc or .gpg), with its passphrase	Eine geheime Schlüsseldatei (.asc oder .gpg) mit ihrer Passphrase
 	Older key {key}: kept to decrypt mail sent to it	Älterer Schlüssel {key}: behalten, um an ihn gesendete Mail zu entschlüsseln
 	Forget	Vergessen
+	Confirm	Bestätigen
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	Sie haben diesen Fingerabdruck auf anderem Weg mit der Person verglichen: Ihre Signaturen gelten von nun an als ihre eigenen
 	Mail encrypted to it can't be read any more	An ihn verschlüsselte Mail kann nicht mehr gelesen werden
 	Sign and decrypt with this key again; the one in use is kept to decrypt	Wieder mit diesem Schlüssel signieren und entschlüsseln; der verwendete wird zum Entschlüsseln behalten
 	Send my public key with my messages	Meinen öffentlichen Schlüssel mit meinen Nachrichten senden
@@ -2018,6 +2023,7 @@ menu	View	Anzeigen
 	Import someone's key…	Schlüssel einer Person importieren…
 	from their mail	aus ihrer Mail
 	imported by you	von Ihnen importiert
+	confirmed by you	von Ihnen bestätigt
 	Their signatures can't be checked any more, until their key comes again	Ihre Signaturen können nicht mehr geprüft werden, bis ihr Schlüssel wieder kommt
 	Withdrawn on {date}	Am {date} zurückgezogen
 	It ran out on {date}	Am {date} abgelaufen

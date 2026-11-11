@@ -1982,9 +1982,12 @@ folder	Conflicts	衝突
 	This message is encrypted to a key Quatrelle doesn't have.	這封郵件被加密給了一個 Quatrelle 沒有的金鑰。
 	OpenPGP key {fingerprint}	OpenPGP 金鑰 {fingerprint}
 	Their key came with their own mail.	其金鑰隨其本人的郵件而來。
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	其金鑰隨其本人的郵件而來，而任何人都可以冒用他人名義傳送金鑰。請用其他方式與對方核對指紋，然後在「檔案 › 資訊 › 安全性」中確認該金鑰。
 	You imported their key.	其金鑰是你匯入的。
+	You confirmed their key.	其金鑰已由你確認。
 	It's one of your own keys.	這是你自己的金鑰之一。
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	由 {signer} 簽署：簽章有效（OpenPGP 金鑰 {key}）。
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	由 {signer} 簽署：簽章有效，但其金鑰尚未確認（OpenPGP 金鑰 {key}）。
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	使用 Quatrelle 沒有的 OpenPGP 金鑰 {key} 簽署，因此無法驗證簽章。
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	其金鑰會隨其郵件而來，也可以在「檔案 › 資訊 › 安全性」中從檔案匯入。
 	Import OpenPGP key	匯入 OpenPGP 金鑰
@@ -1999,6 +2002,8 @@ folder	Conflicts	衝突
 	A secret key file (.asc or .gpg), with its passphrase	私密金鑰檔案（.asc 或 .gpg）及其密語
 	Older key {key}: kept to decrypt mail sent to it	舊金鑰 {key}：保留下來以解密寄給它的郵件
 	Forget	忘記
+	Confirm	確認
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	你已用其他方式與金鑰擁有者核對過此指紋：今後其簽章將視為本人所簽
 	Mail encrypted to it can't be read any more	加密給它的郵件將無法再閱讀
 	Sign and decrypt with this key again; the one in use is kept to decrypt	重新用此金鑰簽署和解密；正在使用的金鑰保留用於解密
 	Send my public key with my messages	隨我的郵件寄送我的公開金鑰
@@ -2018,6 +2023,7 @@ folder	Conflicts	衝突
 	Import someone's key…	匯入他人的金鑰…
 	from their mail	來自其郵件
 	imported by you	由你匯入
+	confirmed by you	由你確認
 	Their signatures can't be checked any more, until their key comes again	在其金鑰再次到來之前，將無法驗證其簽章
 	Withdrawn on {date}	已於 {date} 撤銷
 	It ran out on {date}	已於 {date} 到期

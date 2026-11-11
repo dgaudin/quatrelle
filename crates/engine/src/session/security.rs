@@ -104,7 +104,7 @@ impl Security {
     /// Encrypted without anything to tell whether it was changed on the way: CBC, not signed.
     pub fn unauthenticated(&self) -> bool {
         matches!(self.lock, Some(Lock::Open { authenticated: false }))
-            && !matches!(self.signed.as_ref().map(|s| &s.seal), Some(Seal::Trusted | Seal::Untrusted(_)))
+            && !matches!(self.signed.as_ref().map(|s| &s.seal), Some(Seal::Trusted | Seal::Untrusted(_) | Seal::Unverified))
     }
 }
 
@@ -146,6 +146,9 @@ pub enum Seal {
     Trusted,
     /// It holds, but the certificate can't be trusted for this message, for these reasons.
     Untrusted(Vec<smime::Problem>),
+    /// OpenPGP: it holds, by a key for the sender that came with their mail and that the user
+    /// never confirmed. The same key signed as before; whose it is, only its mail says.
+    Unverified,
     /// It doesn't hold (the message changed after it was signed), or can't be read: why.
     Broken(String),
     /// OpenPGP: made with a key Quatrelle doesn't have (its key ID), so it can't be checked.
@@ -376,10 +379,12 @@ impl Session {
         }
         // Header fields inside were protected by an encryption that opened or a signature that
         // holds: inside anything else they're only what someone wrote there.
-        let holds = matches!(sec.signed.as_ref().map(|s| &s.seal), Some(Seal::Trusted | Seal::Untrusted(_)));
+        let holds = matches!(sec.signed.as_ref().map(|s| &s.seal), Some(Seal::Trusted | Seal::Untrusted(_) | Seal::Unverified));
         sec.headers &= holds || matches!(sec.lock, Some(Lock::Open { .. }));
-        // A key it brought replaced the sender's: said on it, once.
+        // A key it brought replaced the sender's: said on it, once; and on what that key signs,
+        // until the user confirms it.
         sec.key_changed = self.key_change_shown(key);
+        sec.key_changed |= sec.pgp && self.signed_with_a_changed_key(&key.account, &sender(&cur), sec.signed.as_ref());
         (std::borrow::Cow::Owned(cur), (any || sec.key_changed).then_some(sec))
     }
 

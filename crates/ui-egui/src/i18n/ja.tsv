@@ -1978,9 +1978,12 @@ folder	Conflicts	競合
 	This message is encrypted to a key Quatrelle doesn't have.	このメッセージは Quatrelle にないキーに向けて暗号化されています。
 	OpenPGP key {fingerprint}	OpenPGP キー {fingerprint}
 	Their key came with their own mail.	この人のキーは本人のメールに付いてきました。
+	Their key came with their own mail, and anyone can send a key in someone's name. Compare its fingerprint with them some other way, then confirm it in File › Info › Security.	この人のキーは本人のメールに付いてきましたが、他人の名前でキーを送ることは誰にでもできます。別の方法で本人とフィンガープリントを照合してから、ファイル › 情報 › セキュリティ で確認済みにしてください。
 	You imported their key.	この人のキーはあなたがインポートしました。
+	You confirmed their key.	この人のキーはあなたが確認しました。
 	It's one of your own keys.	あなた自身のキーの 1 つです。
 	Signed by {signer}: the signature holds (OpenPGP key {key}).	{signer} による署名: 署名は有効です (OpenPGP キー {key})。
+	Signed by {signer}: the signature holds, but its key isn't confirmed (OpenPGP key {key}).	{signer} による署名: 署名は有効ですが、キーは確認されていません (OpenPGP キー {key})。
 	Signed with the OpenPGP key {key}, which Quatrelle doesn't have, so the signature can't be checked.	Quatrelle にない OpenPGP キー {key} で署名されているため、署名を確認できません。
 	Their key comes with their mail, or can be imported from a file in File › Info › Security.	この人のキーは本人のメールに付いてくるか、ファイル › 情報 › セキュリティ でファイルからインポートできます。
 	Import OpenPGP key	OpenPGP キーをインポート
@@ -1995,6 +1998,8 @@ folder	Conflicts	競合
 	A secret key file (.asc or .gpg), with its passphrase	秘密鍵ファイル (.asc または .gpg) とそのパスフレーズ
 	Older key {key}: kept to decrypt mail sent to it	以前のキー {key}: このキー宛てのメールを復号するために保持しています
 	Forget	削除
+	Confirm	確認
+	You compared this fingerprint with its owner some other way: their signatures count as theirs from now on	このフィンガープリントを別の方法で持ち主と照合しました: 今後、この人の署名は本人のものとして扱われます
 	Mail encrypted to it can't be read any more	このキー宛てに暗号化されたメールは読めなくなります
 	Sign and decrypt with this key again; the one in use is kept to decrypt	このキーでもう一度署名と復号を行います。使用中のキーは復号用に保持されます
 	Send my public key with my messages	自分の公開鍵をメッセージに添える
@@ -2014,6 +2019,7 @@ folder	Conflicts	競合
 	Import someone's key…	ほかの人のキーをインポート…
 	from their mail	相手のメールから
 	imported by you	あなたがインポート
+	confirmed by you	あなたが確認
 	Their signatures can't be checked any more, until their key comes again	相手のキーがまた届くまで、相手の署名を確認できなくなります
 	Withdrawn on {date}	{date} に取り消し
 	It ran out on {date}	{date} に期限切れ

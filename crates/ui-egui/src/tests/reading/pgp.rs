@@ -121,11 +121,21 @@ fn the_security_bar_says_what_openpgp_found() {
     open(&mut a, signed_by_ana(None).as_bytes());
     let t = drawn(&ctx, &mut a, &mut tex, "unknown");
     assert!(has(&t, "Signed with the OpenPGP key ") && has(&t, "which Quatrelle doesn't have, so the signature can't be checked."), "{t:?}");
-    // It came with her mail: the signature holds, and the bar says how the key came.
+    // It came with her mail: the signature holds, by a key that isn't proof it's hers, and the
+    // bar says what to do about it.
     open(&mut a, signed_by_ana(Some(&ana)).as_bytes());
+    let t = drawn(&ctx, &mut a, &mut tex, "unconfirmed");
+    assert!(has(&t, "Signed by Ana Lima <ana@posteo.example>: the signature holds, but its key isn't confirmed (OpenPGP key "), "{t:?}");
+    assert!(has(&t, "Their key came with their own mail, and anyone can send a key in someone's name."), "{t:?}");
+    // Confirmed in File › Info › Security: the bar says the signature is hers.
+    let fingerprint = pgp::info(&ana).unwrap().fingerprint;
+    a.session.run("pgp.confirmPublic", &json!({"email": "ana@posteo.example", "fingerprint": fingerprint})).unwrap();
     let t = drawn(&ctx, &mut a, &mut tex, "good");
     assert!(has(&t, "Signed by Ana Lima <ana@posteo.example>: the signature holds (OpenPGP key "), "{t:?}");
-    assert!(has(&t, "Their key came with their own mail."), "{t:?}");
+    assert!(has(&t, "You confirmed their key."), "{t:?}");
+    // Forgotten, it comes again with her next mail, as any key from mail.
+    a.session.run("pgp.forgetPublic", &json!({"email": "ana@posteo.example"})).unwrap();
+    open(&mut a, signed_by_ana(Some(&ana)).as_bytes());
     // Changed after it was signed.
     open(&mut a, signed_by_ana(None).replace("is approved", "is rejected").as_bytes());
     let t = drawn(&ctx, &mut a, &mut tex, "broken");
