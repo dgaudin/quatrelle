@@ -119,6 +119,48 @@ pub(crate) fn sample() -> Vec<u8> {
     cf.into_inner().into_inner()
 }
 
+/// A message file whose attachments all claim the sectors of one big stream: a small file that
+/// says it holds many times its own size.
+pub(crate) fn inflated(files: usize, each: usize) -> Vec<u8> {
+    let mut cf = CompoundFile::create(Cursor::new(Vec::new())).unwrap();
+    write_props(&mut cf, "", TOP_HEADER, &[(0x001A_001F, P::Text("IPM.Note")), (0x0037_001F, P::Text("Figures"))]);
+    for i in 0..files {
+        let dir = format!("/__attach_version1.0_#{i:08X}");
+        cf.create_storage(&dir).unwrap();
+        // The first one's bytes are the big stream; the others' are made to point at it below.
+        let data = if i == 0 { vec![b'x'; each] } else { vec![b'y'; 4096] };
+        write_props(&mut cf, &dir, PART_HEADER, &[(0x3707_001F, P::Text("figures.bin")), (0x3705_0003, P::Int(1)), (0x3701_0102, P::Bin(data))]);
+    }
+    cf.flush().unwrap();
+    let mut bytes = cf.into_inner().into_inner();
+    // Directory entries are 128 bytes: the name, then (at 116) the first sector and (at 120) the size.
+    let name = utf16le("__substg1.0_37010102");
+    let entries: Vec<usize> = (0..bytes.len() / 128).map(|n| n * 128).filter(|at| bytes[*at..].starts_with(&name) && bytes[at + 66] == 2).collect();
+    let size_of = |bytes: &[u8], at: usize| u64::from_le_bytes(bytes[at + 120..at + 128].try_into().unwrap());
+    let big = *entries.iter().max_by_key(|at| size_of(&bytes, **at)).unwrap();
+    let claim: Vec<u8> = bytes[big + 116..big + 128].to_vec();
+    for at in entries {
+        bytes[at + 116..at + 128].copy_from_slice(&claim);
+    }
+    bytes
+}
+
+/// A file can't hold more than its own size: what is read of its streams stays within it,
+/// however many of them claim the same bytes (a megabyte said two hundred times is read once
+/// or so, not two hundred times), and the message is still read or refused, never a crash.
+#[test]
+fn a_file_that_claims_more_than_its_size_is_read_within_it() {
+    let bytes = inflated(200, 1 << 20);
+    assert!(bytes.len() < 4 << 20, "{} bytes", bytes.len());
+    let read = streams_read(&bytes);
+    assert!(read <= bytes.len(), "{read} bytes of streams read from a file of {}", bytes.len());
+    let _ = to_mime(&bytes);
+    // An honest file is read whole.
+    let honest = sample();
+    assert!(streams_read(&honest) > 0 && streams_read(&honest) <= honest.len());
+    assert!(to_mime(&honest).is_ok());
+}
+
 /// Issue #38: a message saved from Outlook reads as the message it is: its subject, sender,
 /// recipients (To and Cc), date, text and formatted text, its file, and the message attached
 /// to it with that one's own file.
@@ -201,4 +243,5 @@ fn write_msg_fuzz_seed() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fuzz/seeds/msg");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("outlook.msg"), sample()).unwrap();
+    std::fs::write(dir.join("inflated.msg"), inflated(12, 16 << 10)).unwrap();
 }

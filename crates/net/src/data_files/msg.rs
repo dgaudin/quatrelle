@@ -22,8 +22,6 @@ use crate::pst_pim::Named;
 pub const MAX_FILE: usize = 64 << 20;
 /// The most read of one stream (a body, an attachment's bytes).
 const MAX_STREAM: u64 = 64 << 20;
-/// The most read of all of a file's streams together.
-const MAX_TOTAL: usize = 192 << 20;
 const MAX_PROPS: usize = 4_000;
 const MAX_RECIPIENTS: usize = 5_000;
 const MAX_ATTACHMENTS: usize = 1_000;
@@ -64,10 +62,20 @@ enum ReadFile {
     Message(Box<Read1>),
 }
 
-/// Reads with a running total, so no file costs more than [`MAX_TOTAL`].
+/// Reads with a running total, so no file costs more than its own size: a compound file can say
+/// the same sectors are many streams', and a small one would be read as many times its size.
 struct Reader<'a> {
     cf: CompoundFile<Cursor<&'a [u8]>>,
     used: usize,
+    /// The most read of all the file's streams together: the file's size.
+    most: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn open(bytes: &'a [u8]) -> Result<Reader<'a>, String> {
+        let cf = CompoundFile::open(Cursor::new(bytes)).map_err(|e| format!("not an Outlook message file: {e}"))?;
+        Ok(Reader { cf, used: 0, most: bytes.len().min(MAX_FILE) })
+    }
 }
 
 impl Reader<'_> {
@@ -76,7 +84,7 @@ impl Reader<'_> {
             return None;
         }
         let len = self.cf.entry(path).ok()?.len();
-        let room = u64::try_from(MAX_TOTAL.saturating_sub(self.used)).unwrap_or(0);
+        let room = u64::try_from(self.most.saturating_sub(self.used)).unwrap_or(0);
         if len > MAX_STREAM || len > room {
             return None;
         }
@@ -248,17 +256,19 @@ fn vals(ps: &[Prop], cp: u32) -> Vec<(u16, Val<'_>)> {
     ps.iter().map(|p| (p.id, val(p, cp))).collect()
 }
 
-fn loose(m: &Read1) -> Loose<'_> {
-    let cp = code_page(&m.props);
+/// The message as the import's item reader takes one. Its files' bytes are handed over, not
+/// copied: they are the bulk of what was read.
+fn loose(m: &mut Read1) -> Loose<'_> {
+    let Read1 { props, recipients, files } = m;
+    let cp = code_page(props);
     Loose {
-        props: vals(&m.props, cp),
-        recipients: m.recipients.iter().map(|r| vals(r, cp)).collect(),
-        files: m
-            .files
-            .iter()
+        props: vals(props, cp),
+        recipients: recipients.iter().map(|r| vals(r, cp)).collect(),
+        files: files
+            .iter_mut()
             .map(|f| match f {
                 ReadFile::Data { name, mime, cid, data } => {
-                    LooseFile::Data { name: name.clone(), mime: mime.clone(), cid: cid.clone(), data: data.clone() }
+                    LooseFile::Data { name: std::mem::take(name), mime: std::mem::take(mime), cid: std::mem::take(cid), data: std::mem::take(data) }
                 }
                 ReadFile::Message(inner) => LooseFile::Message(Box::new(loose(inner))),
             })
@@ -280,16 +290,24 @@ pub fn to_mime(bytes: &[u8]) -> Result<Vec<u8>, String> {
         return Err("not an Outlook message file".into());
     }
     let read = std::panic::catch_unwind(|| -> Result<(Read1, Named), String> {
-        let cf = CompoundFile::open(Cursor::new(bytes)).map_err(|e| format!("not an Outlook message file: {e}"))?;
-        let mut r = Reader { cf, used: 0 };
+        let mut r = Reader::open(bytes)?;
         let names = r.names();
         Ok((r.message("", TOP_HEADER, 0), names))
     });
-    let (m, named) = read.map_err(|_| "the file is damaged".to_string())??;
+    let (mut m, named) = read.map_err(|_| "the file is damaged".to_string())??;
     if m.props.is_empty() {
         return Err("the file holds no message".into());
     }
-    loose_message(&loose(&m), &named)
+    loose_message(&loose(&mut m), &named)
+}
+
+/// How many bytes of streams reading `bytes` as a message file takes.
+#[cfg(test)]
+fn streams_read(bytes: &[u8]) -> usize {
+    let Ok(mut r) = Reader::open(bytes) else { return 0 };
+    let _ = r.names();
+    let _ = r.message("", TOP_HEADER, 0);
+    r.used
 }
 
 #[cfg(test)]
