@@ -286,3 +286,52 @@ fn a_write_as_an_account_lets_go_never_lends_it_the_old_file() {
     drop(s);
     let _ = std::fs::remove_dir_all(t);
 }
+
+/// The data files hold the mail, and the computer may be shared: their folder and each of them
+/// are the owner's alone, a file from an earlier version and one set aside as damaged included;
+/// a folder of the user's own that the files were put in keeps the access it had.
+#[cfg(unix)]
+#[test]
+fn data_files_are_the_owners_alone() {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    let open = |p: &std::path::Path, m: u32| std::fs::set_permissions(p, std::fs::Permissions::from_mode(m)).unwrap();
+    let t = temp("owner-only");
+    let files = t.join("Quatrelle Files");
+    let s = Store::open_packed(t.join("app"), &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+    let file = s.data_file("a1").unwrap();
+    assert_eq!(mode(&files), 0o700, "the folder");
+    assert_eq!(mode(&file), 0o600, "a data file made new");
+    drop(s);
+
+    // As an earlier version left them: open to the computer's other accounts.
+    open(&files, 0o755);
+    open(&file, 0o644);
+    let s = Store::open_packed(t.join("app"), &files).unwrap();
+    assert_eq!(s.load_account_doc::<serde_json::Value>("a1", "pim.json").unwrap(), serde_json::json!({"notes": []}));
+    assert_eq!((mode(&files), mode(&file)), (0o700, 0o600), "closed when next opened");
+    drop(s);
+
+    // Damaged: set aside, and the one made in its place is the owner's alone too.
+    std::fs::write(&file, vec![0xA5u8; 4096]).unwrap();
+    open(&file, 0o644);
+    let s = Store::open_packed(t.join("app"), &files).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": [1]})).unwrap();
+    let aside = std::fs::read_dir(&files).unwrap().flatten().map(|e| e.path()).find(|p| p.to_string_lossy().ends_with(".damaged")).expect("set aside");
+    assert_eq!((mode(&file), mode(&aside)), (0o600, 0o600));
+    drop(s);
+
+    // A folder of the user's own, there before: its access is theirs to choose; the files in it
+    // are still the owner's alone.
+    let own = t.join("Shared drive");
+    std::fs::create_dir_all(&own).unwrap();
+    open(&own, 0o755);
+    let s = Store::open_packed(t.join("app2"), &own).unwrap();
+    s.save_accounts(&[account("b1", "ana@example.org")]).unwrap();
+    s.save_account_doc("b1", "pim.json", &serde_json::json!({})).unwrap();
+    assert_eq!((mode(&own), mode(&s.data_file("b1").unwrap())), (0o755, 0o600));
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}

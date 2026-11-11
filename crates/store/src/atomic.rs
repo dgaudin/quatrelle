@@ -145,11 +145,34 @@ pub(crate) fn private_dir(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A data file, there or about to be made, that on Unix only its owner may read or write: one
+/// not there yet is made empty and closed (whatever fills it then never has it open to others),
+/// and one others can read (an earlier version made them so) is closed. Best effort: a file that
+/// can't be closed is still used.
+pub(crate) fn owner_only_file(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        match fs::symlink_metadata(path) {
+            Ok(m) if m.is_file() && m.permissions().mode() & OTHERS != 0 => {
+                let _ = fs::set_permissions(path, fs::Permissions::from_mode(OWNER_READ_WRITE));
+            }
+            Ok(_) => {}
+            Err(_) => drop(owner_only_new_file(path)),
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
+/// Group and world access, of any kind.
+#[cfg(unix)]
+const OTHERS: u32 = 0o077;
+
 /// Takes away group and world access to `dir`, when it has any. Best effort.
 #[cfg(unix)]
 fn close_to_others(dir: &Path) {
     use std::os::unix::fs::PermissionsExt;
-    const OTHERS: u32 = 0o077;
     let open_to_others = fs::metadata(dir).map(|m| m.permissions().mode() & OTHERS != 0).unwrap_or(false);
     if open_to_others {
         let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o700));

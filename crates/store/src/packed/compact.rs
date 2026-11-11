@@ -85,7 +85,7 @@ impl Packs {
         let began = Instant::now();
         let mut db = loop {
             match held.take() {
-                None => break builder(&path).create(&path).map_err(other)?,
+                None => break open_file(&path).map_err(other)?,
                 Some(arc) => match Arc::try_unwrap(arc) {
                     Ok(db) => break db,
                     Err(arc) if began.elapsed() > LET_GO => {
@@ -115,7 +115,7 @@ impl Packs {
         // after (redb's issue 1165), whether the compaction went to the end or not; it's opened
         // again at once, with nothing to check.
         drop(db);
-        let reopened = builder(&path).create(&path).map_err(other);
+        let reopened = open_file(&path).map_err(other);
         let after = size();
         log::info!("{}: compacted from {before} to {after} bytes in {:.1} s", path.display(), began.elapsed().as_secs_f32());
         // One that can't be opened again is opened (or set aside) by whatever wants it next.

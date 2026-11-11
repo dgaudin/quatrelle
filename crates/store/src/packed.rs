@@ -46,6 +46,19 @@ fn other(e: impl std::fmt::Display) -> io::Error {
 /// How an account's data file is opened: what a repair does is said in the log, every tenth of the
 /// way (a file Quatrelle didn't close is gone through whole before it opens; each commit keeps
 /// what makes that unneeded, [`Packs::change`], but one written by an earlier version needs it).
+/// Whether a folder is one Quatrelle names itself ("Quatrelle Files", or the name it had before).
+fn is_quatrelles(dir: &Path) -> bool {
+    dir.file_name().is_some_and(|n| n == crate::location::FILES_FOLDER || n == crate::legacy::OLD_FILES)
+}
+
+/// Open an account's data file, making it when it isn't there. On Unix only its owner may read
+/// it: made so before anything is written to it, and closed if an earlier version left it open
+/// to the computer's other accounts.
+fn open_file(path: &Path) -> std::result::Result<Database, redb::DatabaseError> {
+    crate::atomic::owner_only_file(path);
+    builder(path).create(path)
+}
+
 fn builder(path: &Path) -> redb::Builder {
     let mut b = Database::builder();
     b.set_cache_size(CACHE);
@@ -98,7 +111,14 @@ impl std::fmt::Debug for Packs {
 impl Packs {
     /// Data files for the store at `root`, kept in `dir`; folders from before are brought in.
     pub(crate) fn open(root: &Path, dir: &Path) -> Result<Packs> {
-        fs::create_dir_all(dir).map_err(io_err(dir))?;
+        // The mail is in there: a folder that is Quatrelle's (made now, or under its name) is
+        // its owner's alone, as the app folder is. One of the user's own keeps the access they
+        // gave it; the data files in it are closed one by one ([`open_file`]).
+        if !dir.exists() || is_quatrelles(dir) {
+            crate::atomic::private_dir(dir)?;
+        } else {
+            fs::create_dir_all(dir).map_err(io_err(dir))?;
+        }
         let names: BTreeMap<String, String> = fs::read(root.join(NAMES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let p = Packs {
             root: root.to_path_buf(),
@@ -238,7 +258,7 @@ impl Packs {
         }
         // Made new: it says how it's kept (`META`).
         let mut fresh = !path.exists();
-        let db = match builder(&path).create(&path) {
+        let db = match open_file(&path) {
             Ok(db) => db,
             Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
                 return Err(other(format!("{} is open in another copy of Quatrelle", path.display())));
@@ -251,7 +271,7 @@ impl Packs {
                 log::warn!("{}: {e}; set aside as {}", path.display(), aside.display());
                 fs::rename(&path, &aside)?;
                 fresh = true;
-                builder(&path).create(&path).map_err(other)?
+                open_file(&path).map_err(other)?
             }
         };
         if fresh {

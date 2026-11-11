@@ -148,7 +148,13 @@ pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
     };
     let created = !to.exists();
     let copy = || -> Result<(), String> {
-        fs::create_dir_all(&to).map_err(|e| format!("{}: {e}", to.display()))?;
+        // A folder made for them, or under Quatrelle's own name, is the owner's alone; one the
+        // user had keeps its access. Each file copied is the owner's alone either way.
+        if created || to.ends_with(FILES_FOLDER) {
+            crate::atomic::private_dir(&to).map_err(|e| e.to_string())?;
+        } else {
+            fs::create_dir_all(&to).map_err(|e| format!("{}: {e}", to.display()))?;
+        }
         for src in &list {
             let dst = to.join(src.file_name().unwrap_or_default());
             if dst.exists() {
@@ -158,6 +164,7 @@ pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
             if !same(src, &dst) {
                 return Err(format!("{} didn't copy whole", dst.display()));
             }
+            crate::atomic::owner_only_file(&dst);
         }
         Ok(())
     };
@@ -219,6 +226,13 @@ mod tests {
         assert_eq!(files_dir(&base), elsewhere);
         assert_eq!(fs::read(elsewhere.join("zoe@studio.example.quatrelle")).unwrap(), vec![7u8; 3 << 20]);
         assert!(!first.exists(), "the old folder went once empty");
+        // Where they went is the owner's alone, as each file is (they came open to others).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!((mode(&elsewhere), mode(&elsewhere.join("old.quatrelle"))), (0o700, 0o600));
+        }
         assert_eq!(pending_move(&base), None);
         assert_eq!(apply_pending_move(&base).unwrap(), None, "done once");
         let _ = fs::remove_dir_all(t);
