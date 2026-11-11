@@ -109,6 +109,8 @@ A typical run (with `--write` and `--call`):
 ```text
 chats: 3 (one-to-one 1, group 1, meeting 0, other 1)
 chats of other kinds: unknownFutureValue 1
+chats of other kinds, by id: 19:...unq.gbl.spaces 1
+chats of other kinds, last message from: app bot 1
 chats made in another organisation: 1
 messages, the 3 newest chats: read 2, refused 1
 messages refused, by kind: one-to-one 0, group 0, meeting 0, other 1
@@ -135,6 +137,8 @@ call: opened
 |---|---|
 | `chats: N (one-to-one …, group …, meeting …, other …)` | Graph lists your chats, by kind. `at least N`: there were more than 10 pages (500 chats); only those were counted. `chats: no (403 …)`: Graph refused (a permission is missing: step 3 or 4; or the account has no Teams: sign in with the one you use Teams with, not an administrator's account). |
 | `chats of other kinds: …` | Only when some are `other`: their kinds as Graph names them (`none` when it gives none). |
+| `chats of other kinds, by id: …` | The shapes of their ids, never the ids: the number before the colon and the domain Teams ends them with (`19:...thread.v2`, `19:...unq.gbl.spaces`; `another` for any other), or one of Teams' own threads (`48:notes`). |
+| `chats of other kinds, last message from: …` | Who wrote their last message, by Graph's kind of identity: `app bot` (an app), `person aadUser` (someone of an organisation), `person personalMicrosoftAccountUser` and the like, `nobody` (an event, such as a call that ended), `no message`. |
 | `chats made in another organisation: N` | Chats another organisation's member started (a meeting of theirs, for one). `not known (no tenant)`: the sign-in didn't say which organisation is yours. |
 | `messages, the N newest chats: read R, refused F` | The 20 chats with the latest messages (fewer if you have fewer): a page of messages asked of each. |
 | `messages refused, …` | Only when some were refused: those chats by kind, how many were made in another organisation, and why (Graph's status and error code, with how many times). |

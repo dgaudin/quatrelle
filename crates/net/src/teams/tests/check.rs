@@ -93,6 +93,58 @@ fn check_reads_the_twenty_newest_chats_and_counts_refusals() {
 }
 
 #[test]
+fn check_says_what_the_other_chats_are() {
+    // Chats of a kind Graph doesn't name: the shape of their ids (Teams' own forms only) and
+    // who wrote their last message (Graph's names for kinds of identity only).
+    let chats = r#"{"value": [
+        {"id": "19:a_b@unq.gbl.spaces", "chatType": "unknownFutureValue", "lastMessagePreview": {"createdDateTime": "2026-10-29T10:00:00Z",
+            "from": {"application": {"id": "app-1", "displayName": "Workflows", "applicationIdentityType": "bot"}, "device": null, "user": null}}},
+        {"id": "19:c_d@unq.gbl.spaces", "chatType": "unknownFutureValue", "lastMessagePreview": {"createdDateTime": "2026-10-29T09:00:00Z",
+            "from": {"application": null, "device": null, "user": {"id": "u-x", "displayName": "Zebulon", "userIdentityType": "personalMicrosoftAccountUser"}}}},
+        {"id": "48:notes", "chatType": "unknownFutureValue", "lastMessagePreview": {"createdDateTime": "2026-10-29T08:00:00Z", "from": null}},
+        {"id": "19:e@zq.secret.example", "chatType": "unknownFutureValue", "lastMessagePreview": null},
+        {"id": "19:g@thread.v2", "chatType": "group", "lastMessagePreview": {"createdDateTime": "2026-10-29T07:00:00Z",
+            "from": {"application": {"applicationIdentityType": "bot"}, "device": null, "user": null}}}
+    ]}"#;
+    let mut answers = vec![answer(200, ME_JSON), answer(200, chats)];
+    answers.extend((0..5).map(|_| answer(200, r#"{"value": []}"#)));
+    let (base, h) = crate::http::tests::serve(answers);
+    let (c, me) = TeamsClient::connect(&base, "t").unwrap();
+    let mut lines = Vec::new();
+    run_check(&c, &me, &opts(), &mut |l| lines.push(l.to_string())).unwrap();
+    assert_eq!(h.join().unwrap().len(), 7, "the user, the list, and the five chats read");
+    assert_eq!(line(&lines, "chats of other kinds:"), "chats of other kinds: unknownFutureValue 4");
+    assert_eq!(line(&lines, "chats of other kinds, by id:"), "chats of other kinds, by id: 19:...unq.gbl.spaces 2, 19:...another 1, 48:notes 1");
+    assert_eq!(
+        line(&lines, "chats of other kinds, last message from:"),
+        "chats of other kinds, last message from: app bot 1, no message 1, nobody 1, person personalMicrosoftAccountUser 1"
+    );
+    for l in &lines {
+        assert!(!l.contains("secret") && !l.contains("Zebulon") && !l.contains("Workflows") && !l.contains('@'), "{l}");
+    }
+}
+
+#[test]
+fn chat_ids_are_said_by_their_shape_alone() {
+    for (id, said) in [
+        (Some("19:a_b@unq.gbl.spaces"), "19:...unq.gbl.spaces"),
+        (Some("19:meeting_x@thread.v2"), "19:...thread.v2"),
+        (Some("19:x@thread.skype"), "19:...thread.skype"),
+        (Some("48:notes"), "48:notes"),
+        (Some("48:zq-secret"), "48:..."),
+        (Some("28:bot-id"), "28:..."),
+        (Some("19:x@contoso.example"), "19:...another"),
+        (Some("19:a@b@thread.v2"), "19:...thread.v2"),
+        (Some("no-colon"), "unreadable"),
+        (Some("12345:x"), "unreadable"),
+        (Some("ab:x"), "unreadable"),
+        (None, "none"),
+    ] {
+        assert_eq!(check::id_shape(id), said, "{id:?}");
+    }
+}
+
+#[test]
 fn chat_kinds_are_said_as_graph_names_them_or_not_at_all() {
     assert_eq!(check::kind_name(Some("unknownFutureValue")), "unknownFutureValue");
     assert_eq!(check::kind_name(Some("")), "none");
@@ -348,7 +400,10 @@ fn check_says_nothing_private() {
     }
     let secret_url = "https://contoso.sharepoint.com/sites/nightingale/secret-banana.pdf";
     c.messages[1].attachments = vec![("reference".into(), secret_url.into())];
-    let mut t = FakeTeams { chats: vec![c], ..FakeTeams::new(me_secret.clone(), secret_tenant) };
+    let mut odd =
+        FakeChat::new("19:quixote-odd@secret.example", "unknownFutureValue", Some("Nightingale bots"), vec![me_secret.clone(), other.clone()]);
+    odd.messages.push(FakeMessage::new("msg-quixote-odd", Some("oid-9b2a-other"), &rfc3339(now - 20 * MINUTE), "<p>secret-banana</p>"));
+    let mut t = FakeTeams { chats: vec![c, odd], ..FakeTeams::new(me_secret.clone(), secret_tenant) };
     t.shares.insert(secret_url.into(), b"secret-banana".to_vec());
     let server = serve_teams(t);
     let all = CheckOptions {
@@ -368,6 +423,7 @@ fn check_says_nothing_private() {
     r.unwrap();
     lines.extend(more);
     assert!(lines.iter().any(|l| l == "write, mark the chat read: yes"), "{lines:#?}");
+    assert!(lines.iter().any(|l| l == "chats of other kinds, by id: 19:...another 1"), "{lines:#?}");
     let t = teams_of(&server);
     let mut private: Vec<String> =
         ["Zebulon", "Quixote", "quixote", "zq@", "secret", "Nightingale", "Nightjar", "Philippa", "banana", "sharepoint", secret_tenant, "oid-"]

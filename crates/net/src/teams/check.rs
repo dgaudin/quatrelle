@@ -32,17 +32,15 @@ use crate::{NetError, Result};
 
 /// 6. The approved cadences, for an hour.
 mod hour;
+/// How the check names what it counts.
+mod names;
+
+pub(super) use names::{ByName, author, id_shape, kind_name};
 
 /// Pages followed at most per listing.
 const PAGES: usize = 10;
 /// The chats whose messages are read, the most recently active first.
 const READ_CHATS: usize = 20;
-/// Names said at most in a count by name, and names kept at most (the others are counted
-/// under "more").
-const NAMES_SAID: usize = 8;
-const NAMES_KEPT: usize = 64;
-/// Longest kind of chat said as Graph names it.
-const MAX_KIND: usize = 32;
 /// Longest Graph error code said.
 const MAX_CODE: usize = 64;
 /// A shared file's bytes counted at most (none kept).
@@ -185,7 +183,7 @@ impl Check<'_> {
         let mut listed = Listed::default();
         let mine = self.opts.tenant.clone();
         let (mut kinds, mut total, mut foreign) = ([0usize; 4], 0usize, 0usize);
-        let mut others = ByName::default();
+        let (mut others, mut other_ids, mut other_authors) = (ByName::default(), ByName::default(), ByName::default());
         let mut all: Vec<Listing> = Vec::new();
         let mut next: Option<String> = None;
         let mut end = String::new();
@@ -212,6 +210,8 @@ impl Check<'_> {
                     Some("meeting") => 2,
                     _ => {
                         others.add(kind_name(named));
+                        other_ids.add(id_shape(chat.get("id").and_then(Value::as_str)));
+                        other_authors.add(author(chat));
                         3
                     }
                 };
@@ -240,6 +240,8 @@ impl Check<'_> {
         self.say(format!("chats: {least}{total} (one-to-one {one}, group {group}, meeting {meeting}, other {other}){end}"));
         if other > 0 {
             self.say(format!("chats of other kinds: {}", others.said()));
+            self.say(format!("chats of other kinds, by id: {}", other_ids.said()));
+            self.say(format!("chats of other kinds, last message from: {}", other_authors.said()));
         }
         match mine {
             Some(_) => self.say(format!("chats made in another organisation: {foreign}")),
@@ -644,47 +646,4 @@ fn ms_of(t: &str) -> Option<i64> {
 fn rfc3339(ms: i64) -> String {
     let day = utc(ms.div_euclid(1000));
     format!("{}.{:03}Z", day.trim_end_matches('Z'), ms.rem_euclid(1000))
-}
-
-/// A kind of chat as Graph names it (`unknownFutureValue`), said only when it looks like one
-/// of its names: `none` when there is none, `unreadable` otherwise.
-pub(super) fn kind_name(kind: Option<&str>) -> String {
-    match kind {
-        None | Some("") => "none".into(),
-        Some(k) if k.len() <= MAX_KIND && k.bytes().all(|b| b.is_ascii_alphanumeric()) => k.into(),
-        Some(_) => "unreadable".into(),
-    }
-}
-
-/// Counts by name (kinds of chat, reasons): the first [`NAMES_KEPT`] names kept, the others
-/// counted under "more" at once.
-#[derive(Default)]
-pub(super) struct ByName {
-    names: Vec<(String, usize)>,
-    more: usize,
-}
-
-impl ByName {
-    pub(super) fn add(&mut self, name: String) {
-        if let Some((_, n)) = self.names.iter_mut().find(|(k, _)| *k == name) {
-            *n += 1;
-        } else if self.names.len() < NAMES_KEPT {
-            self.names.push((name, 1));
-        } else {
-            self.more += 1;
-        }
-    }
-
-    /// `c 5, a 3, b 3`: the largest counts first (then by name), [`NAMES_SAID`] at most, the
-    /// rest summed as `more N`.
-    pub(super) fn said(&self) -> String {
-        let mut names: Vec<&(String, usize)> = self.names.iter().collect();
-        names.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-        let more = self.more + names.iter().skip(NAMES_SAID).map(|(_, n)| n).sum::<usize>();
-        let mut said: Vec<String> = names.iter().take(NAMES_SAID).map(|(k, n)| format!("{k} {n}")).collect();
-        if more > 0 {
-            said.push(format!("more {more}"));
-        }
-        said.join(", ")
-    }
 }
