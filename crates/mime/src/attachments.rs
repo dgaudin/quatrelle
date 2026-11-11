@@ -21,7 +21,7 @@ pub use index_text::{IndexDoc, MAX_INDEX_CHARS, index_doc};
 #[doc(hidden)]
 pub use index_text::{IndexStats, index_doc_stats};
 use parts::sent_bytes;
-pub(crate) use parts::{contents, files_of, header_raw};
+pub(crate) use parts::{contents, dmarc_failed, files_of, header_raw};
 pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, part_name, text_first};
 
 /// A part's size: its bytes (`data`), or, with none yet (a message's text that came first), the

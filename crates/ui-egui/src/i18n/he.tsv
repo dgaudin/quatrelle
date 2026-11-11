@@ -1913,6 +1913,7 @@ folder	Conflicts	התנגשויות
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: נמחק בשרת בינתיים; השינוי שנעשה כאן בוטל (עותק נמצא בבעיות סנכרון › התנגשויות)
 	Careful: you know {name} as {known}, but this comes from {real}.	זהירות: אתם מכירים את {name} בכתובת {known}, אבל ההודעה הגיעה מ־{real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	זהירות: בחתימה מופיע {shown}, אבל ההודעה הגיעה מ־{real}.
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	זהירות: ההודעה הזו טוענת שהיא מגיעה מ-{real}, אך שרת הדואר לא הצליח לאשר זאת (DMARC נכשל).
 	Show sender addresses in the message list	הצגת כתובות השולחים ברשימת ההודעות
 	Tag mail from outside the organisation	סימון דואר מחוץ לארגון
 	Sender addresses in the message list	כתובות השולחים ברשימת ההודעות

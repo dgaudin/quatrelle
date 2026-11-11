@@ -401,6 +401,39 @@ fn source(n: u32, from: &str, headers: &str, kind: &str, body: &str) -> Vec<u8> 
 
 const DANA: (&str, &str) = ("Dr. Dana Whitfield, CEO", "dw.ceo@gmail.com");
 
+/// What the receiving server wrote when a message failed its sender's domain's check.
+const DMARC_FAILED: &str = "Authentication-Results: mx.studio.example; spf=pass smtp.mailfrom=bulk.evil.example;\r\n dkim=none; dmarc=fail (p=none) header.from=studio.example\r\n";
+
+/// Mail that says it's from the organisation, from someone known or from a safe sender is the
+/// mail that's believed: when the receiving server found its sender's domain doesn't vouch for
+/// it, that's said, whoever it claims to be from.
+#[test]
+fn a_trusted_address_the_server_couldnt_confirm_is_said() {
+    let mut s = zoe_session("dmarc-failed");
+    card(&mut s, "Dana Whitfield", "dana@corp.example");
+    s.run("junk.edit", &json!({"list": "safe", "entry": "billing@supplier.example"})).unwrap();
+    for (n, from) in [
+        (1, "Sam Okafor <sam@studio.example>"),
+        (2, "Zoe Park <zoe@studio.example>"),
+        (3, "Dana Whitfield <dana@corp.example>"),
+        (4, "Billing <billing@supplier.example>"),
+    ] {
+        deliver_raw(&mut s, n, &source(n, from, DMARC_FAILED, "text/plain", "Can you pay this invoice today?"));
+        let real = from.split(['<', '>']).nth(1).unwrap_or_default().to_string();
+        assert_eq!(warning(&s), Some(SenderWarning::NotConfirmed { real }), "{from}");
+    }
+    // Confirmed, or not said to have failed: nothing. Nor for a stranger, whom nothing vouches
+    // for either way.
+    let passed = DMARC_FAILED.replace("dmarc=fail", "dmarc=pass");
+    deliver_raw(&mut s, 5, &source(5, "Sam Okafor <sam@studio.example>", &passed, "text/plain", "Lunch?"));
+    assert_eq!(warning(&s), None);
+    deliver_raw(&mut s, 6, &source(6, "Sam Okafor <sam@studio.example>", "", "text/plain", "Lunch?"));
+    assert_eq!(warning(&s), None);
+    deliver_raw(&mut s, 7, &source(7, "News <news@shop.example>", DMARC_FAILED, "text/plain", "Sale."));
+    assert_eq!(warning(&s), None);
+    done(s);
+}
+
 /// What a message says of itself is its sender's to write: a list's header, `Precedence: bulk`
 /// or a no-reply address on a domain of their own doesn't put out the warning for a known
 /// person's name on another address, in the reading pane or in the list.

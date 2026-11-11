@@ -6,7 +6,8 @@
 //! what it finds is kept as a verdict by Message-ID (`scam.json`).
 //!
 //! Only what could be a scam is sent: an unknown sender's mail, or a known sender's when the message
-//! shows a local sign of trouble (`lookalike::signs`). Mail already there is never sent (only what
+//! shows a local sign of trouble (`lookalike::signs`). A safe sender's mail, or one the user said
+//! is not a scam, is excused unless its server wrote that the address wasn't confirmed. Mail already there is never sent (only what
 //! `note_new_mail` takes for new, within a day), nor internal mail, nor a message already judged.
 //! One question to the model at a time, a daily cap, a short queue. The model only ever adds a
 //! warning; its answer is hostile input (`quatrelle_model::scam::read_answer`).
@@ -175,6 +176,11 @@ impl Session {
         (v.score >= WARN_SCORE).then_some(v.score)
     }
 
+    /// Whether `address` was taken as not a scam, in any account's document read so far.
+    pub(crate) fn scam_trusts(&self, address: &str) -> bool {
+        self.scam.docs.values().any(|d| d.trusts(address))
+    }
+
     /// Every address taken as not a scam, in any account's document read so far, sorted.
     pub fn scam_trusted_all(&self) -> Vec<String> {
         let all: BTreeSet<&String> = self.scam.docs.values().flat_map(|d| d.trusted.iter()).collect();
@@ -292,12 +298,9 @@ impl Session {
         batch.sort_by_key(|m| (m.received_at(), m.key.uid));
         for m in batch {
             let email = m.from.email.trim().to_string();
-            if m.message_id.is_empty()
-                || !self.is_outside(account, &email)
-                || self.sender_safe(&email)
-                || self.scam_doc(account).trusts(&email)
-                || self.scam_doc(account).verdicts.contains_key(&m.message_id)
-            {
+            // A safe sender's mail, or one taken as not a scam, is excused once its source is
+            // read ([`Session::scam_ask`]): not when its server says the address wasn't confirmed.
+            if m.message_id.is_empty() || !self.is_outside(account, &email) || self.scam_doc(account).verdicts.contains_key(&m.message_id) {
                 continue;
             }
             self.scam.queue.push_back(Pending { key: m.key.clone(), message_id: m.message_id.clone() });
@@ -401,7 +404,11 @@ impl Session {
         }
         let Some(parsed) = quatrelle_mime::parse(&raw) else { return false };
         let email = parsed.from.email.trim().to_string();
-        if !self.prefs.scam_check || self.sender_safe(&email) || self.scam_doc(&account).trusts(&email) || !self.is_outside(&account, &email) {
+        // Being a safe sender, or taken as not a scam, is said of an address: it excuses a
+        // message only while nothing says the address was borrowed.
+        let failed = signs::auth_failures(&header_text(&raw));
+        let excused = failed.is_empty() && (self.sender_safe(&email) || self.scam_doc(&account).trusts(&email));
+        if !self.prefs.scam_check || excused || !self.is_outside(&account, &email) {
             return false;
         }
         self.keep_senders();
@@ -415,7 +422,7 @@ impl Session {
         let names: Vec<String> = parsed.attachments.iter().filter(|a| !a.inline).map(|a| a.name.clone()).collect();
         found.extend(signs::misleading_links(&pairs));
         found.extend(signs::risky_attachments(&names));
-        found.extend(signs::auth_failures(&header_text(&raw)));
+        found.extend(failed);
         if known && found.is_empty() {
             return false;
         }
@@ -460,5 +467,5 @@ impl Session {
 /// A message source's header: everything before the first blank line.
 fn header_text(raw: &[u8]) -> String {
     let end = raw.windows(4).position(|w| w == b"\r\n\r\n").or_else(|| raw.windows(2).position(|w| w == b"\n\n")).unwrap_or(raw.len());
-    String::from_utf8_lossy(raw.get(..end.min(16 * 1024)).unwrap_or(raw)).into_owned()
+    String::from_utf8_lossy(raw.get(..end.min(64 * 1024)).unwrap_or(raw)).into_owned()
 }

@@ -51,7 +51,7 @@ pub use attachments::{
 };
 #[doc(hidden)]
 pub use attachments::{IndexStats, index_doc_stats};
-use attachments::{attached, files_of, has_real_attachments, header_raw};
+use attachments::{attached, dmarc_failed, files_of, has_real_attachments, header_raw};
 use files::attachment_name;
 pub use files::{alt_code_char, alt_code_pages, alt_code_system_pages, mime_from_name, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
@@ -275,6 +275,11 @@ pub struct Parsed {
     /// from this message's own header: whatever account it came through.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub bulk: bool,
+    /// The receiving server wrote that the message failed its sender's domain's check
+    /// (`dmarc=fail` in an `Authentication-Results` field): who it says it's from isn't
+    /// confirmed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dmarc_failed: bool,
 }
 
 /// A run of text in a rich (HTML) message, with its formatting.
@@ -410,6 +415,7 @@ fn parse_as(raw: &[u8], read: fn(Option<AddressList<'_>>) -> Vec<EmailAddress>) 
         trackers: tracking,
         unsubscribe,
         bulk: is_bulk(&m),
+        dmarc_failed: dmarc_failed(raw),
     })
 }
 

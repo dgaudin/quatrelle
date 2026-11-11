@@ -1913,6 +1913,7 @@ folder	Conflicts	التعارضات
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: حُذف على الخادم في هذه الأثناء؛ وتم التخلي عن التغيير الذي أُجري هنا (توجد نسخة في مشكلات المزامنة › التعارضات)
 	Careful: you know {name} as {known}, but this comes from {real}.	انتبه: تعرف {name} بالعنوان {known}، لكن هذه الرسالة من {real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	انتبه: يذكر التوقيع {shown}، لكن هذه الرسالة من {real}.
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	تنبيه: تقول هذه الرسالة إنها من {real}، لكن خادم البريد لم يستطع تأكيد ذلك (فشل DMARC).
 	Show sender addresses in the message list	إظهار عناوين المرسلين في قائمة الرسائل
 	Tag mail from outside the organisation	وسم البريد الوارد من خارج المؤسسة
 	Sender addresses in the message list	عناوين المرسلين في قائمة الرسائل

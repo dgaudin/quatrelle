@@ -1916,6 +1916,7 @@ folder	Conflicts	Conflitti
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: eliminato sul server nel frattempo; la modifica fatta qui è stata scartata (una copia è in Problemi di sincronizzazione › Conflitti)
 	Careful: you know {name} as {known}, but this comes from {real}.	Attenzione: conosci {name} come {known}, ma questo arriva da {real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	Attenzione: la firma riporta {shown}, ma questo arriva da {real}.
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	Attenzione: questo messaggio dice di venire da {real}, ma il server di posta non ha potuto confermarlo (DMARC non superato).
 	Show sender addresses in the message list	Mostra gli indirizzi dei mittenti nell'elenco dei messaggi
 	Tag mail from outside the organisation	Contrassegna la posta dall'esterno dell'organizzazione
 	Sender addresses in the message list	Indirizzi dei mittenti nell'elenco dei messaggi

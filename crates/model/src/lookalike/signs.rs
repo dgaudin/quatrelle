@@ -22,7 +22,7 @@ pub enum Sign {
 /// The most misleading links kept.
 const MAX_LINKS: usize = 5;
 /// How much of the headers is read for [`auth_failures`].
-const MAX_HEADERS: usize = 8 * 1024;
+const MAX_HEADERS: usize = 64 * 1024;
 
 /// The host of a web address (`http` or `https`), lowercased, without user, port or path.
 fn target_host(target: &str) -> Option<String> {
@@ -107,7 +107,7 @@ pub fn risky_attachments(names: &[String]) -> Vec<Sign> {
 
 /// The failures the `Authentication-Results` headers report (`spf=fail`, `dkim=fail`,
 /// `dmarc=fail`), one of each at most, in that order. Only that header is read (folded lines
-/// joined), in the first 8 KiB of `headers`; a `Received:` line that says the same counts for nothing.
+/// joined), in the first 64 KiB of `headers`; a `Received:` line that says the same counts for nothing.
 pub fn auth_failures(headers: &str) -> Vec<Sign> {
     let mut end = headers.len().min(MAX_HEADERS);
     while !headers.is_char_boundary(end) {

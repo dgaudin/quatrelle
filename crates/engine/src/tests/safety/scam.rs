@@ -455,3 +455,39 @@ fn the_day_counts_what_was_judged() {
     assert_eq!(s.scam_today(), crate::ScamToday::default(), "a new day");
     done(s);
 }
+
+/// "Not a scam" and the safe senders are said of an address. A message that wears one, when its
+/// server wrote that the address wasn't confirmed, is judged like a stranger's.
+#[test]
+fn a_trusted_address_the_server_couldnt_confirm_is_judged() {
+    let mut s = zoe("scam-borrowed");
+    on(&mut s);
+    s.run("junk.edit", &json!({"list": "safe", "entry": "billing@supplier.example"})).unwrap();
+    let keys = arrive(&mut s, &[(5, source("b1", STRANGER, "Invoice", "Pay now.", false), true)], 60);
+    let q = asks(&s.take_jobs());
+    answer(&mut s, q[0].0, SCAM);
+    s.run("list.open", &json!({"key": keys[0].to_id()})).unwrap();
+    s.run("scam.notScam", &json!({})).unwrap();
+    // As themselves: excused.
+    let billing = ("Billing", "billing@supplier.example");
+    arrive(
+        &mut s,
+        &[(6, source("b2", STRANGER, "Another", "Pay now.", false), true), (7, source("b3", billing, "Invoice", "Pay now.", false), true)],
+        60,
+    );
+    assert!(asks(&s.take_jobs()).is_empty());
+    // With the server's word that the address wasn't confirmed: judged, and the model is told.
+    let failed = |raw: Vec<u8>| {
+        let mut out = b"Authentication-Results: mx.studio.example; dkim=none; dmarc=fail header.from=elsewhere.example\r\n".to_vec();
+        out.extend_from_slice(&raw);
+        out
+    };
+    arrive(&mut s, &[(8, failed(source("b4", STRANGER, "Third", "Pay now.", false)), true)], 60);
+    let q = asks(&s.take_jobs());
+    assert_eq!(q.len(), 1);
+    assert!(q[0].1.contains("dmarc"), "{}", q[0].1);
+    answer(&mut s, q[0].0, SCAM);
+    arrive(&mut s, &[(9, failed(source("b5", billing, "Invoice", "Pay now.", false)), true)], 60);
+    assert_eq!(asks(&s.take_jobs()).len(), 1);
+    done(s);
+}

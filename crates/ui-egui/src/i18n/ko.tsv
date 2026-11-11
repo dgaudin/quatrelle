@@ -1916,6 +1916,7 @@ folder	Conflicts	충돌
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 그 사이 서버에서 삭제되었습니다. 여기서 한 변경 내용은 버려졌습니다 (사본은 동기화 문제 › 충돌에 있습니다)
 	Careful: you know {name} as {known}, but this comes from {real}.	주의: {name}님은 {known}(으)로 알고 있는 사람이지만, 이 메일은 {real}에서 왔습니다.
 	Careful: the signature gives {shown}, but this comes from {real}.	주의: 서명에는 {shown}(이)라고 되어 있지만, 이 메일은 {real}에서 왔습니다.
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	주의: 이 메시지는 {real}에서 왔다고 하지만 메일 서버가 이를 확인하지 못했습니다 (DMARC 실패).
 	Show sender addresses in the message list	메시지 목록에 보낸 사람 주소 표시
 	Tag mail from outside the organisation	조직 외부 메일에 태그 지정
 	Sender addresses in the message list	메시지 목록의 보낸 사람 주소

@@ -1913,6 +1913,7 @@ folder	Conflicts	Conflicten
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: intussen op de server verwijderd; de wijziging die hier is gemaakt, is verworpen (een kopie staat in Synchronisatieproblemen › Conflicten)
 	Careful: you know {name} as {known}, but this comes from {real}.	Let op: u kent {name} als {known}, maar dit komt van {real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	Let op: de handtekening vermeldt {shown}, maar dit komt van {real}.
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	Let op: dit bericht zegt van {real} te komen, maar de mailserver kon dat niet bevestigen (DMARC mislukt).
 	Show sender addresses in the message list	Afzenderadressen in de berichtenlijst tonen
 	Tag mail from outside the organisation	E-mail van buiten de organisatie markeren
 	Sender addresses in the message list	Afzenderadressen in de berichtenlijst

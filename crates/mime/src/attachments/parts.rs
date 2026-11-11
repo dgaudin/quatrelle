@@ -63,3 +63,31 @@ pub(crate) fn sent_bytes(p: MessagePart<'_>) -> Option<Vec<u8>> {
 pub(crate) fn header_raw<'m>(m: MessageRef<'m>, name: &str) -> Option<&'m str> {
     m.headers().get(name).and_then(|h| std::str::from_utf8(h.raw_value()).ok())
 }
+
+/// How much of a message's header is read for what the receiving server wrote in it.
+const SERVER_HEADER_MAX: usize = 256 << 10;
+
+/// Whether an `Authentication-Results` field of `raw`'s header (RFC 8601) says the message
+/// failed its sender's domain's check (`dmarc=fail`). Only a failure is read: anyone on the way
+/// can write a pass, and a failure added by the sender only works against them.
+pub(crate) fn dmarc_failed(raw: &[u8]) -> bool {
+    let head = String::from_utf8_lossy(raw.get(..raw.len().min(SERVER_HEADER_MAX)).unwrap_or_default());
+    let says_so = |field: &str| {
+        let f: String = field.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_ascii_lowercase();
+        f.starts_with("authentication-results:") && f.contains("dmarc=fail")
+    };
+    let mut field = String::new();
+    for line in head.lines() {
+        if line.is_empty() {
+            break;
+        }
+        if !line.starts_with([' ', '\t']) {
+            if says_so(&field) {
+                return true;
+            }
+            field.clear();
+        }
+        field.push_str(line);
+    }
+    says_so(&field)
+}

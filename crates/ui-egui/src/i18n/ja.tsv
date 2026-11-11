@@ -1914,6 +1914,7 @@ folder	Conflicts	競合
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: その間にサーバーで削除されました。ここで行った変更は破棄されました (コピーは 同期の問題 › 競合 にあります)
 	Careful: you know {name} as {known}, but this comes from {real}.	注意: {name} は {known} として知られていますが、実際は {real} から届いています。
 	Careful: the signature gives {shown}, but this comes from {real}.	注意: 署名には {shown} とありますが、実際は {real} から届いています。
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	注意: このメッセージは {real} からとなっていますが、メールサーバーはそれを確認できませんでした (DMARC 失敗)。
 	Show sender addresses in the message list	メッセージ一覧に差出人のアドレスを表示
 	Tag mail from outside the organisation	組織外からのメールにタグを付ける
 	Sender addresses in the message list	メッセージ一覧の差出人アドレス

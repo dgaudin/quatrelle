@@ -1918,6 +1918,7 @@ folder	Conflicts	衝突
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 期間已在伺服器上刪除；在此所做的變更已捨棄 (副本在 同步問題 › 衝突 中)
 	Careful: you know {name} as {known}, but this comes from {real}.	小心：你認識的 {name} 地址是 {known}，但這封郵件來自 {real}。
 	Careful: the signature gives {shown}, but this comes from {real}.	小心：簽名顯示的是 {shown}，但這封郵件來自 {real}。
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	注意：這封郵件自稱來自 {real}，但郵件伺服器無法確認（DMARC 未通過）。
 	Show sender addresses in the message list	在郵件清單中顯示寄件者地址
 	Tag mail from outside the organisation	標記來自組織外部的郵件
 	Sender addresses in the message list	郵件清單中的寄件者地址

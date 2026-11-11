@@ -3,7 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! What the reading pane says about who sent a message: the warning when the sender doesn't add
 //! up (a look-alike domain, an address in the name, a known person's name on another address,
-//! a signature giving another address), and the External tag beside the sender's name.
+//! a signature giving another address, a believed address the server couldn't confirm), and the
+//! External tag beside the sender's name.
 
 use super::*;
 
@@ -22,6 +23,9 @@ pub(crate) fn sender_warning(t: &Tokens, ui: &mut Ui, w: &quatrelle_engine::mode
         }
         SenderWarning::SignatureShowsOther { shown, real } => {
             tf!("Careful: the signature gives {shown}, but this comes from {real}.", shown = shown, real = real)
+        }
+        SenderWarning::NotConfirmed { real } => {
+            tf!("Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).", real = real)
         }
     };
     egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {

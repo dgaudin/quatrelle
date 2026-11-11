@@ -1914,6 +1914,7 @@ folder	Conflicts	冲突
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 期间已在服务器上删除；在此所做的更改已放弃 (副本在 同步问题 › 冲突 中)
 	Careful: you know {name} as {known}, but this comes from {real}.	当心：你认识的 {name} 地址是 {known}，但这封邮件来自 {real}。
 	Careful: the signature gives {shown}, but this comes from {real}.	当心：签名显示的是 {shown}，但这封邮件来自 {real}。
+	Careful: this says it comes from {real}, but the mail server couldn't confirm that (DMARC failed).	注意：这封邮件自称来自 {real}，但邮件服务器无法确认（DMARC 未通过）。
 	Show sender addresses in the message list	在邮件列表中显示发件人地址
 	Tag mail from outside the organisation	标记来自组织外部的邮件
 	Sender addresses in the message list	邮件列表中的发件人地址

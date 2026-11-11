@@ -217,7 +217,25 @@ impl Session {
     /// says, else what the message's own signature does.
     pub(in crate::session) fn warning_now(&self, parsed: &mime::Parsed) -> Option<SenderWarning> {
         let s = self.senders.as_ref()?;
-        s.check.check(&parsed.from).or_else(|| s.check.check_signature(&parsed.from, &parsed.text, &s.org))
+        s.check.check(&parsed.from).or_else(|| s.check.check_signature(&parsed.from, &parsed.text, &s.org)).or_else(|| self.not_confirmed(parsed))
+    }
+
+    /// The message says it's from an address that's believed (the user's own, one at the
+    /// organisation, someone known, a safe sender or one taken as not a scam), and the
+    /// receiving server wrote that its sender's domain doesn't vouch for it: the one case where
+    /// being known is the danger. A stranger's failed check says nothing more about a stranger.
+    fn not_confirmed(&self, parsed: &mime::Parsed) -> Option<SenderWarning> {
+        if !parsed.dmarc_failed {
+            return None;
+        }
+        let s = self.senders.as_ref()?;
+        let real = parsed.from.email.trim().to_lowercase();
+        if real.is_empty() {
+            return None;
+        }
+        let inside = !s.org.is_empty() && !lookalike::is_external(&real, &s.org);
+        let believed = s.check.knows(&real) || inside || self.sender_safe(&real) || self.scam_trusts(&real);
+        believed.then_some(SenderWarning::NotConfirmed { real })
     }
 
     /// The directory question: an opened message's sender, neither the user nor known by address,

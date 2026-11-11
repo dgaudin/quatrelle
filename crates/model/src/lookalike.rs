@@ -44,6 +44,10 @@ pub enum SenderWarning {
     /// The message's own signature gives an address or a website (`shown`: the address, or the
     /// site's domain) that belongs elsewhere than where it came from (`real`): [`signature`].
     SignatureShowsOther { shown: String, real: String },
+    /// The message says it comes from `real`, an address that's believed (the user's own, the
+    /// organisation's, someone known, a safe sender), and the receiving server wrote that its
+    /// domain doesn't vouch for it (DMARC failed).
+    NotConfirmed { real: String },
 }
 
 /// Big mail services whose names are close to each other (`mail.com`, `gmail.com`): neither is

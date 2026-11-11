@@ -205,6 +205,20 @@ fn summary_fields() {
     assert_eq!(s.size, 321);
 }
 
+/// What the receiving server wrote about the sender's domain is read from the header alone, a
+/// failure only, however the field is folded or cased.
+#[test]
+fn a_failed_sender_check_is_read_from_the_header() {
+    let read =
+        |headers: &str, body: &str| parse(format!("From: ana@x.example\r\n{headers}Subject: Hi\r\n\r\n{body}").as_bytes()).unwrap().dmarc_failed;
+    assert!(read("Authentication-Results: mx.x.example; dmarc=fail header.from=x.example\r\n", "Hello"));
+    assert!(read("AUTHENTICATION-RESULTS: mx.x.example;\r\n spf=pass;\r\n\tDMARC = Fail (p=none)\r\n", "Hello"));
+    assert!(read("Authentication-Results: a; dmarc=pass\r\nAuthentication-Results: b; dmarc=fail\r\n", "Hello"));
+    assert!(!read("Authentication-Results: mx.x.example; spf=fail; dmarc=pass\r\n", "Hello"));
+    assert!(!read("X-Note: dmarc=fail\r\nReceived: from dmarc=fail\r\n", "Hello"));
+    assert!(!read("", "Authentication-Results: mx.x.example; dmarc=fail\r\n"), "the body says nothing");
+}
+
 #[test]
 fn bulk_mail_is_recognised() {
     let s = |head: &str| summary_from_header(format!("{head}From: a@x.example\r\nSubject: s\r\n\r\nb").as_bytes(), key(), Flags::default(), 0, 0);
