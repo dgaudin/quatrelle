@@ -47,9 +47,11 @@ impl Revocations {
 impl Session {
     /// For a signature by `path` (the signer's certificate, then its issuers): what's known of
     /// its being withdrawn, asking its authority when nothing current is. `None`: not asked
-    /// (the switch is off, or there's no issuer to ask about).
+    /// (the switch is off, there's no issuer to ask about, or no authority this computer trusts
+    /// stands behind the chain: where to ask is written in the certificates themselves, and a
+    /// chain anyone made would have its maker told each time the message is opened).
     pub(super) fn revocation_of(&mut self, path: &[Vec<u8>], problems: &mut Vec<smime::Problem>) -> Option<RevocationCheck> {
-        if !self.prefs.check_revocation || path.len() < 2 {
+        if !self.prefs.check_revocation || path.len() < 2 || problems.contains(&smime::Problem::UnknownIssuer) {
             return None;
         }
         let cert = path.first()?;

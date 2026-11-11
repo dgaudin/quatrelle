@@ -166,6 +166,27 @@ fn an_untrusted_certificate_isnt_kept_to_encrypt_to() {
     done(s);
 }
 
+/// A chain no trusted authority stands behind names the addresses to ask about its withdrawal:
+/// asking them would tell its maker the message was opened.
+#[test]
+fn an_untrusted_chain_isnt_asked_about() {
+    let mut s = sample_session("forged-smime-revocation");
+    s.clock.now = LATER;
+    s.run("view.checkRevocation", &json!({"on": true})).unwrap();
+    // Riley's certificate and its authority's both come with the signature (OpenSSL's, over
+    // this entity); nothing here trusts them.
+    let entity = "Content-Type: text/plain; charset=utf-8\r\n\r\nHello.\r\n";
+    let signature = testdata("sig-with-chain.der");
+    let sent =
+        quatrelle_mime::smime::signed_message(outer("f9", "Riley <riley@studio.example>", "").as_bytes(), entity.as_bytes(), &signature, "=_f9");
+    s.take_jobs();
+    open_raw(&mut s, 9710, &sent);
+    assert_eq!(seal(&s), Seal::Untrusted(vec![smime::Problem::UnknownIssuer]));
+    assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::CheckRevocation { .. })), "asked the chain's own addresses");
+    assert_eq!(security(&s).signed.unwrap().revocation, None);
+    done(s);
+}
+
 /// A signing subkey that ran out doesn't sign for its owner any more, though the key it belongs
 /// to is still valid.
 #[test]
