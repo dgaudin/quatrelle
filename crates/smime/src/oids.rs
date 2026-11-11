@@ -56,6 +56,7 @@ pub const SUBJECT_KEY_ID: Oid = Oid::new_unwrap("2.5.29.14");
 pub const KEY_USAGE: Oid = Oid::new_unwrap("2.5.29.15");
 pub const SUBJECT_ALT_NAME: Oid = Oid::new_unwrap("2.5.29.17");
 pub const BASIC_CONSTRAINTS: Oid = Oid::new_unwrap("2.5.29.19");
+pub const NAME_CONSTRAINTS: Oid = Oid::new_unwrap("2.5.29.30");
 pub const EXT_KEY_USAGE: Oid = Oid::new_unwrap("2.5.29.37");
 pub const ANY_EXTENDED_KEY_USAGE: Oid = Oid::new_unwrap("2.5.29.37.0");
 pub const EMAIL_PROTECTION: Oid = Oid::new_unwrap("1.3.6.1.5.5.7.3.4");

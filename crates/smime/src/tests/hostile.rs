@@ -38,3 +38,35 @@ fn signers_by_the_hundred_arent_each_hashed_for() {
     let many = with_signers(&cms, 300);
     assert_eq!(verify(&many, Some(&content)).err(), Some(Error::Malformed("the signature names too many signers")));
 }
+
+/// When the chain fixtures (`chain-*.pem`, a root of their own) are in date.
+const CHAIN_NOW: i64 = 1_800_000_000;
+
+/// What's wrong with trusting `leaf` for `from`, under the chain test root, through `between`.
+fn chain_problems(leaf: &str, between: &[&str], from: &str) -> Vec<cert::Problem> {
+    let others: Vec<Vec<u8>> = between.iter().map(|n| pem(n)).collect();
+    cert::check(&pem(leaf), &others, &[pem("chain-root.pem")], CHAIN_NOW, from).unwrap()
+}
+
+/// An authority signs only what it was allowed to (RFC 5280 §6): for the addresses its own
+/// certificate names, as deep as it says, with a key that may sign certificates, for email. A
+/// certificate it had no right to make isn't from an authority this computer trusts.
+#[test]
+fn an_authority_signs_only_what_it_was_allowed_to() {
+    let untrusted = vec![cert::Problem::UnknownIssuer];
+    // An ordinary chain, and one whose authority is kept to its own domain, used within it.
+    assert_eq!(chain_problems("chain-ana.pem", &["chain-ca-ok.pem"], "ana@studio.example"), []);
+    assert_eq!(chain_problems("chain-names-ana.pem", &["chain-ca-names.pem"], "ana@studio.example"), []);
+    // Kept to studio.example, it made a certificate for another domain's director; and for an
+    // address it was told to leave out.
+    assert_eq!(chain_problems("chain-names-director.pem", &["chain-ca-names.pem"], "director@victim.example"), untrusted);
+    assert_eq!(chain_problems("chain-names-eve.pem", &["chain-ca-names.pem"], "eve@studio.example"), untrusted);
+    // An authority for web servers only.
+    assert_eq!(chain_problems("chain-tls-director.pem", &["chain-ca-tls.pem"], "director@victim.example"), untrusted);
+    // One whose key may not sign certificates.
+    assert_eq!(chain_problems("chain-nosign-director.pem", &["chain-ca-nosign.pem"], "director@victim.example"), untrusted);
+    // One that may have no authority under it, and has one.
+    assert_eq!(chain_problems("chain-deep-director.pem", &["chain-ca-deep.pem", "chain-ca-short.pem"], "director@victim.example"), untrusted);
+    // A certificate that says, critically, something Quatrelle doesn't read.
+    assert_eq!(chain_problems("chain-critical.pem", &["chain-ca-ok.pem"], "ana@studio.example"), vec![cert::Problem::NotForEmail]);
+}

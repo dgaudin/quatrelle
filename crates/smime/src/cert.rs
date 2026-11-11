@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Certificates: what one says (whose it is, who issued it, until when), whether a signature
 //! made with its key holds, and whether it can be trusted for a sender's mail (RFC 8550 §3,
 //! RFC 5280 §6): a chain to a trusted root, each certificate signed by the next and in date, for
-//! email, and naming the address the message is from.
+//! email, and naming the address the message is from; each authority on the way signing only
+//! what its own certificate lets it ([`constraints`]).
 
 use der::asn1::ObjectIdentifier;
 use der::{Decode, Encode, Tag, Tagged};
@@ -13,6 +15,8 @@ use x509_cert::ext::pkix::name::GeneralName;
 use x509_cert::ext::pkix::{BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages, SubjectAltName};
 
 use crate::{Error, oids};
+
+mod constraints;
 
 /// What a certificate says, for showing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -333,7 +337,8 @@ const CHAIN_MAX: usize = 8;
 
 /// What's wrong with trusting `signer` (DER) for mail from `from` at `now`: a chain to one of
 /// `roots` through `others` (the certificates the message carried), every certificate on it in
-/// date and the ones above it authorities, made for email, and for that address. Empty: trusted.
+/// date and the ones above it authorities allowed to sign it, made for email, and for that
+/// address. Empty: trusted.
 pub fn check(signer: &[u8], others: &[Vec<u8>], roots: &[Vec<u8>], now: i64, from: &str) -> Result<Vec<Problem>, Error> {
     check_with_path(signer, others, roots, now, from).map(|(p, _)| p)
 }
@@ -354,7 +359,7 @@ pub fn check_with_path(signer: &[u8], others: &[Vec<u8>], roots: &[Vec<u8>], now
         .is_none_or(|KeyUsage(u)| u.contains(KeyUsages::DigitalSignature) || u.contains(KeyUsages::NonRepudiation));
     let for_mail = extension::<ExtendedKeyUsage>(&leaf, oids::EXT_KEY_USAGE)
         .is_none_or(|ExtendedKeyUsage(u)| u.iter().any(|o| *o == oids::EMAIL_PROTECTION || *o == oids::ANY_EXTENDED_KEY_USAGE));
-    if !for_signing || !for_mail {
+    if !for_signing || !for_mail || constraints::unread_critical(&leaf) {
         problems.push(Problem::NotForEmail);
     }
     if let Err(p) = in_date(&leaf, now) {
@@ -368,8 +373,10 @@ pub fn check_with_path(signer: &[u8], others: &[Vec<u8>], roots: &[Vec<u8>], now
         .filter_map(|(d, root)| parse(d).ok().map(|c| (d, c, root)))
         .collect();
     let is_root = |d: &[u8]| roots.iter().any(|r| r.as_slice() == d);
-    let mut current: (Vec<u8>, Certificate) = (signer.to_vec(), leaf);
+    let mut current: (Vec<u8>, Certificate) = (signer.to_vec(), leaf.clone());
     let mut trusted = is_root(signer);
+    // The authorities already on the chain, under the one looked at.
+    let mut below = 0usize;
     for _ in 0..CHAIN_MAX {
         if trusted {
             break;
@@ -381,9 +388,14 @@ pub fn check_with_path(signer: &[u8], others: &[Vec<u8>], roots: &[Vec<u8>], now
         let Some((d, cand, _)) = up else { break };
         // A root is one of `roots` however it was reached: messages often carry the root too.
         let root = is_root(d);
-        if !root && !is_ca(cand) {
+        if !root && !constraints::may_issue(cand) {
             break;
         }
+        // What it's kept to holds for a root too: how deep, and for which names.
+        if !constraints::deep_enough(cand, below) || !constraints::allows(cand, &leaf) {
+            break;
+        }
+        below = below.saturating_add(1);
         if let Err(p) = in_date(cand, now)
             && !problems.contains(&p)
         {
