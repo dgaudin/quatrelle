@@ -20,6 +20,11 @@ use x509_cert::attr::Attribute;
 use crate::cert::{self, Hash};
 use crate::{Error, Identity, der_of, oids};
 
+/// The most signers a signature may name (mail has one, seldom two), and the most certificates
+/// read from one (a chain is a few long).
+pub const SIGNERS_MAX: usize = 8;
+pub const CERTS_MAX: usize = 64;
+
 /// A signature that holds.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Signed {
@@ -149,7 +154,6 @@ fn single(attrs: &SetOfVec<Attribute>, oid: ObjectIdentifier) -> Option<&Any> {
     (a.values.len() == 1).then(|| a.values.iter().next()).flatten()
 }
 
-/// Checks the signature `cms` (BER or DER `ContentInfo` of `SignedData`). `detached` is the
 /// The certificates a CMS SignedData carries, whatever it signs: also the bundle a directory
 /// keeps someone's certificates in (Active Directory's `userSMIMECertificate`), which signs
 /// nothing.
@@ -164,6 +168,7 @@ pub fn certificates(cms: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
         .certificates
         .iter()
         .flat_map(|s| s.0.iter())
+        .take(CERTS_MAX)
         .filter_map(|c| match c {
             CertificateChoices::Certificate(c) => c.to_der().ok(),
             CertificateChoices::Other(_) => None,
@@ -171,10 +176,15 @@ pub fn certificates(cms: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
         .collect())
 }
 
+/// Checks the signature `cms` (BER or DER `ContentInfo` of `SignedData`). `detached` is the
 /// content for a detached signature (the first part of a `multipart/signed`, as received); for
 /// one that carries its content (`application/pkcs7-mime; smime-type=signed-data`), it's `None`
 /// and the content comes back. The first signer whose signature holds is the one returned; none
 /// holding is [`Error::BadSignature`].
+///
+/// The content is hashed once for each digest algorithm, whatever the number of signers, and a
+/// signature naming more than [`SIGNERS_MAX`] of them isn't read: each could otherwise be a
+/// reason to hash the whole message again.
 pub fn verify(cms: &[u8], detached: Option<&[u8]>) -> Result<(Signed, Vec<u8>), Error> {
     let der_bytes = der_of(cms)?;
     let ci = ContentInfo::from_der(&der_bytes).map_err(|_| Error::Malformed("not a signature"))?;
@@ -188,16 +198,22 @@ pub fn verify(cms: &[u8], detached: Option<&[u8]>) -> Result<(Signed, Vec<u8>), 
         (None, Some(c)) => c,
         (None, None) => return Err(Error::Malformed("the signed content is missing")),
     };
+    if sd.signer_infos.0.len() > SIGNERS_MAX {
+        return Err(Error::Malformed("the signature names too many signers"));
+    }
     let certs: Vec<(Vec<u8>, Certificate)> = sd
         .certificates
         .iter()
         .flat_map(|s| s.0.iter())
+        .take(CERTS_MAX)
         .filter_map(|c| match c {
             CertificateChoices::Certificate(c) => c.to_der().ok().map(|d| (d, c.clone())),
             CertificateChoices::Other(_) => None,
         })
         .collect();
     let mut seen_signer = false;
+    // The content's digest, made once for each algorithm the signers name.
+    let mut digests: Vec<(Hash, Vec<u8>)> = Vec::new();
     for si in sd.signer_infos.0.iter() {
         let Some((signer_der, signer)) = certs.iter().find(|(_, c)| identifies(&si.sid, c)) else { continue };
         seen_signer = true;
@@ -205,9 +221,11 @@ pub fn verify(cms: &[u8], detached: Option<&[u8]>) -> Result<(Signed, Vec<u8>), 
         let Some(hash) = Hash::from_oid(&si.digest_alg.oid) else { continue };
         let type_ok =
             single(attrs, oids::CONTENT_TYPE).and_then(|v| v.decode_as::<ObjectIdentifier>().ok()) == Some(sd.encap_content_info.econtent_type);
-        let digest_ok = single(attrs, oids::MESSAGE_DIGEST)
-            .and_then(|v| v.decode_as::<OctetString>().ok())
-            .is_some_and(|d| d.as_bytes() == hash.digest(&content));
+        if !digests.iter().any(|(h, _)| *h == hash) {
+            digests.push((hash, hash.digest(&content)));
+        }
+        let digest = digests.iter().find(|(h, _)| *h == hash).map(|(_, d)| d.as_slice()).unwrap_or_default();
+        let digest_ok = single(attrs, oids::MESSAGE_DIGEST).and_then(|v| v.decode_as::<OctetString>().ok()).is_some_and(|d| d.as_bytes() == digest);
         if !type_ok || !digest_ok {
             continue;
         }

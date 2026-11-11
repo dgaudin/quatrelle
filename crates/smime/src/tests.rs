@@ -5,6 +5,8 @@
 
 use super::*;
 
+mod hostile;
+
 /// The fixtures were made on 2026-10-24; their certificates run for two years.
 const NOW: i64 = 1_792_900_000;
 
