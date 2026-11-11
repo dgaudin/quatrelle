@@ -1,0 +1,24 @@
+From: Eve <eve@evil.example>
+To: riley@studio.example
+Reply-To: eve@evil.example
+Subject: Hello
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256; protocol="application/pgp-signature"; boundary="sig"
+
+--sig
+Content-Type: text/plain; charset=utf-8; hp="clear"
+From: The Director <director@victim.example>
+Authentication-Results: mx.studio.example; dmarc=pass
+Subject: Urgent transfer
+
+Pay Eve today.
+
+--sig
+Content-Type: application/pgp-signature; name="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+AQID
+-----END PGP SIGNATURE-----
+
+--sig--

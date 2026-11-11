@@ -271,6 +271,38 @@ MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nThe plan.\r\
     assert!(String::from_utf8_lossy(&quoted_printable("a\u{e9}= ")).contains("a=C3=A9=3D=20"));
 }
 
+/// What a protected entity may say of its message: what the reader sees and answers to, never
+/// who sent it unless that's who it came from (or the caller checked), nor what the receiving
+/// server wrote. What the outside adds for the reader is dropped.
+#[test]
+fn an_entity_names_another_sender_only_when_checked() {
+    let raw = b"From: Eve <eve@evil.example>\r\nSender: eve@evil.example\r\nTo: riley@studio.example\r\nReply-To: eve@evil.example\r\n\
+Cc: eve@evil.example\r\nSubject: [...]\r\nDate: Sat, 24 Oct 2026 09:00:00 +0000\r\nAuthentication-Results: mx.studio.example; dmarc=fail\r\n\
+Message-ID: <outside@evil.example>\r\nMIME-Version: 1.0\r\nContent-Type: application/pkcs7-mime\r\n\r\nAQID\r\n";
+    let entity = b"Content-Type: text/plain; hp=\"cipher\"\r\nFrom: The Director <Director@Victim.example>\r\nTo: riley@studio.example\r\n\
+Subject: Urgent transfer\r\nAuthentication-Results: mx.studio.example; dmarc=pass\r\nMessage-ID: <inside@victim.example>\r\n\r\nPay Eve.\r\n";
+    assert_eq!(sender_inside(entity).as_deref(), Some("director@victim.example"));
+    assert_eq!(sender_inside(b"Content-Type: text/plain\r\nFrom: boss@victim.example\r\n\r\nx"), None, "no header protection");
+    assert_eq!(sender_inside(b"Content-Type: text/plain; hp=\"clear\"\r\n\r\nx"), None, "no sender inside");
+    let (back, was) = with_entity_protected(raw, entity);
+    assert!(was);
+    let text = String::from_utf8_lossy(&back).to_string();
+    let p = crate::parse(&back).unwrap_or_default();
+    assert_eq!((p.from.email.as_str(), p.subject.as_str()), ("eve@evil.example", "Urgent transfer"));
+    assert!(p.reply_to.is_empty() && p.cc.is_empty(), "added outside: {:?} {:?}", p.reply_to, p.cc);
+    assert_eq!(p.message_id, "outside@evil.example");
+    assert!(text.contains("Sender: eve@evil.example") && text.contains("dmarc=fail") && !text.contains("dmarc=pass"), "{text}");
+    assert!(text.contains("Date: Sat, 24 Oct 2026"), "no date inside: the one outside stays");
+    // Checked by the caller: the sender inside, and no Sender left from outside.
+    let (back, _) = with_entity_and_sender(raw, entity);
+    let text = String::from_utf8_lossy(&back).to_string();
+    assert_eq!(crate::parse(&back).unwrap_or_default().from.email.to_lowercase(), "director@victim.example");
+    assert!(!text.contains("Sender:") && text.contains("dmarc=fail") && !text.contains("dmarc=pass"), "{text}");
+    // The same address inside as outside is the message's own.
+    let own = b"Content-Type: text/plain; hp=\"clear\"\r\nFrom: Eve Adams <EVE@evil.example>\r\n\r\nHello.\r\n";
+    assert_eq!(crate::parse(&with_entity(raw, own)).unwrap_or_default().from.name, "Eve Adams");
+}
+
 #[test]
 fn base64_is_standard() {
     assert_eq!(base64_lines(b""), b"");

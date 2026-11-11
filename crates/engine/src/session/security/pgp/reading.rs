@@ -158,16 +158,13 @@ impl Session {
             mime::pgp::Protection::None => Step::Not,
             mime::pgp::Protection::Signed { content, signature } => {
                 sec.pgp = true;
-                if sec.signed.is_none() {
-                    let done = self.check_pgp(&account, &from, |keys| openpgp::verify(&content, &signature, keys).map(|c| ((), Some(c))));
-                    sec.signed = Some(match done {
-                        Ok((_, by)) => by.unwrap_or_else(|| broken("the signature can't be read".into())),
-                        Err(e) => broken(e.to_string()),
-                    });
-                }
-                let (next, headers) = mime::smime::with_entity_protected(cur, &content);
-                sec.headers |= headers;
-                Step::Next(next)
+                let check = &mut |s: &mut Session, from: &str| match s
+                    .check_pgp(&account, from, |keys| openpgp::verify(&content, &signature, keys).map(|c| ((), Some(c))))
+                {
+                    Ok((_, by)) => by.unwrap_or_else(|| broken("the signature can't be read".into())),
+                    Err(e) => broken(e.to_string()),
+                };
+                Step::Next(self.take_off(cur, &content, sec, check))
             }
             mime::pgp::Protection::Encrypted(data) => {
                 sec.pgp = true;
@@ -306,11 +303,12 @@ impl Session {
         self.show_again(&key);
     }
 
-    /// A layer of OpenPGP taken off as [`Session::readable_raw`] reads: nothing checked again.
-    pub(crate) fn readable_pgp(&self, key: &MessageKey, cur: &[u8]) -> Option<Vec<u8>> {
+    /// A layer of OpenPGP taken off as [`Session::readable_raw`] reads: nothing checked again
+    /// (`theirs`: the message shows the sender named inside it).
+    pub(crate) fn readable_pgp(&self, key: &MessageKey, cur: &[u8], theirs: bool) -> Option<Vec<u8>> {
         match mime::pgp::protection(cur) {
             mime::pgp::Protection::None => None,
-            mime::pgp::Protection::Signed { content, .. } => Some(mime::smime::with_entity(cur, &content)),
+            mime::pgp::Protection::Signed { content, .. } => Some(put_back(cur, &content, theirs).0),
             mime::pgp::Protection::Encrypted(_) => self.opened.get(key).map(|(entity, _)| mime::smime::with_entity(cur, entity)),
             mime::pgp::Protection::Inline { body, charset } => match openpgp::inline(&body)? {
                 openpgp::Inline::Signed(block) => {

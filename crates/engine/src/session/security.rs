@@ -83,6 +83,9 @@ pub struct Security {
     pub signed: Option<SignedBy>,
     /// Its subject and addresses came from inside, where they were protected (RFC 9788).
     pub headers: bool,
+    /// The sender shown is the one named inside (header protection), not the one it came
+    /// from: its signature is trusted for that sender.
+    pub sender_inside: bool,
     /// OpenPGP: the key it brought for its sender replaced the one learnt before (said once).
     pub key_changed: bool,
     /// It was protected with OpenPGP, not S/MIME.
@@ -147,6 +150,12 @@ pub(super) struct Protecting {
     compose: Compose,
     from: String,
     recipients: Vec<String>,
+}
+
+/// `cur` with `entity` in place of its content, and whether `entity` carried its message's
+/// header fields; `theirs`: the sender named inside is taken, its signature being trusted for them.
+fn put_back(cur: &[u8], entity: &[u8], theirs: bool) -> (Vec<u8>, bool) {
+    if theirs { mime::smime::with_entity_and_sender(cur, entity) } else { mime::smime::with_entity_protected(cur, entity) }
 }
 
 /// The sender's address, from a message's headers.
@@ -320,25 +329,20 @@ impl Session {
                 },
                 mime::smime::Protection::Signed { content, signature } => {
                     any = true;
-                    if sec.signed.is_none() {
-                        sec.signed = Some(self.check_signature(&key.account, &signature, Some(&content), &sender(&cur)));
-                    }
-                    let (next, headers) = mime::smime::with_entity_protected(&cur, &content);
-                    sec.headers |= headers;
-                    cur = next;
+                    let check = &mut |s: &mut Session, from: &str| s.check_signature(&key.account, &signature, Some(&content), from);
+                    cur = self.take_off(&cur, &content, &mut sec, check);
                 }
                 mime::smime::Protection::Opaque(cms) => {
                     any = true;
-                    if sec.signed.is_none() {
-                        sec.signed = Some(self.check_signature(&key.account, &cms, None, &sender(&cur)));
-                    }
+                    let check = &mut |s: &mut Session, from: &str| s.check_signature(&key.account, &cms, None, from);
                     match smime::carried(&cms) {
-                        Ok(content) => {
-                            let (next, headers) = mime::smime::with_entity_protected(&cur, &content);
-                            sec.headers |= headers;
-                            cur = next;
+                        Ok(content) => cur = self.take_off(&cur, &content, &mut sec, check),
+                        Err(_) => {
+                            if sec.signed.is_none() {
+                                sec.signed = Some(check(self, &sender(&cur)));
+                            }
+                            break;
                         }
-                        Err(_) => break,
                     }
                 }
                 mime::smime::Protection::Encrypted(cms) => {
@@ -362,23 +366,60 @@ impl Session {
                 }
             }
         }
+        // Header fields inside were protected by an encryption that opened or a signature that
+        // holds: inside anything else they're only what someone wrote there.
+        let holds = matches!(sec.signed.as_ref().map(|s| &s.seal), Some(Seal::Trusted | Seal::Untrusted(_)));
+        sec.headers &= holds || matches!(sec.lock, Some(Lock::Open { .. }));
         // A key it brought replaced the sender's: said on it, once.
         sec.key_changed = self.key_change_shown(key);
         (std::borrow::Cow::Owned(cur), (any || sec.key_changed).then_some(sec))
     }
 
+    /// One layer of a message taken off: `cur` with `entity`, what its signature or encryption
+    /// held, in place of its content. `check` checks this layer's signature for a sender's
+    /// address; it's what `sec` says of the message when nothing outside it was signed.
+    ///
+    /// The signature vouches for the sender shown. An entity can name another sender than the one
+    /// its message came from (header protection): that one is shown only when the signature is
+    /// trusted for them. Otherwise the sender stays the one it came from, and the signature is
+    /// checked for that one: signing an entity that says "From: the director" proves nothing.
+    fn take_off(&mut self, cur: &[u8], entity: &[u8], sec: &mut Security, check: &mut dyn FnMut(&mut Session, &str) -> SignedBy) -> Vec<u8> {
+        let outside = sender(cur);
+        let inside = mime::smime::sender_inside(entity).filter(|a| *a != outside);
+        let mut theirs = false;
+        if sec.signed.is_none() {
+            let for_inside = inside.map(|a| check(self, &a)).filter(|by| by.seal == Seal::Trusted);
+            theirs = for_inside.is_some();
+            sec.signed = Some(match for_inside {
+                Some(by) => by,
+                None => check(self, &outside),
+            });
+        }
+        let (next, headers) = put_back(cur, entity, theirs);
+        sec.headers |= headers;
+        sec.sender_inside |= theirs;
+        next
+    }
+
+    /// Whether message `key`, as it's shown, shows the sender named inside it
+    /// ([`Security::sender_inside`]).
+    fn shows_sender_inside(&self, key: &MessageKey) -> bool {
+        self.reading.iter().chain(&self.windows).filter(|r| r.key == *key).any(|r| r.security.as_ref().is_some_and(|s| s.sender_inside))
+    }
+
     /// A message as it reads: what [`Session::unwrap`] shows, without checking anything again.
     pub fn readable_raw(&self, key: &MessageKey) -> Option<Vec<u8>> {
         let mut cur = self.store.as_ref()?.read_body(key)?;
+        let theirs = self.shows_sender_inside(key);
         for _ in 0..4 {
             cur = match mime::smime::protection(&cur) {
-                mime::smime::Protection::None => match self.readable_pgp(key, &cur) {
+                mime::smime::Protection::None => match self.readable_pgp(key, &cur, theirs) {
                     Some(next) => next,
                     None => break,
                 },
-                mime::smime::Protection::Signed { content, .. } => mime::smime::with_entity(&cur, &content),
+                mime::smime::Protection::Signed { content, .. } => put_back(&cur, &content, theirs).0,
                 mime::smime::Protection::Opaque(cms) => match smime::carried(&cms) {
-                    Ok(c) => mime::smime::with_entity(&cur, &c),
+                    Ok(c) => put_back(&cur, &c, theirs).0,
                     Err(_) => break,
                 },
                 mime::smime::Protection::Encrypted(_) => match self.opened.get(key) {

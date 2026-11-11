@@ -19,6 +19,9 @@ fuzz_target!(|raw: &[u8]| {
             assert!(carries && smime::is_protected(raw), "signed PGP/MIME told unprotected");
             let (inner, _) = smime::with_entity_protected(raw, &content);
             let _ = quatrelle_mime::parse(&inner);
+            // The sender an entity names is taken only when the caller checked it.
+            let _ = smime::sender_inside(&content);
+            let _ = smime::with_entity_and_sender(raw, &content);
         }
         pgp::Protection::Encrypted(_) => assert!(carries && smime::is_protected(raw), "encrypted PGP/MIME told unprotected"),
         pgp::Protection::Inline { body, charset } => {

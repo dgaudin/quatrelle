@@ -52,6 +52,108 @@ fn pgp_signed(outer: &str, entity: &str, key: &openpgp::Unlocked, now: i64) -> V
 const AS_THE_DIRECTOR: &str = "Content-Type: text/plain; charset=utf-8; hp=\"clear\"\r\nFrom: The Director <director@victim.example>\r\n\
 Subject: Urgent transfer\r\n\r\nPay Eve today.\r\n";
 
+/// S/MIME: Riley's own (trusted) certificate signs an entity that names the director as its
+/// sender. The sender shown stays the one the message came from, whom the certificate is for.
+#[test]
+fn a_sender_named_inside_isnt_vouched_for_by_anothers_certificate() {
+    let mut s = with_certificate("forged-smime-inside");
+    let signature = smime::sign(AS_THE_DIRECTOR.as_bytes(), &riley(), LATER, &mut rand_core::OsRng).unwrap();
+    let sent = quatrelle_mime::smime::signed_message(
+        outer("f1", "Riley <riley@studio.example>", "").as_bytes(),
+        AS_THE_DIRECTOR.as_bytes(),
+        &signature,
+        "=_f1",
+    );
+    open_raw(&mut s, 9701, &sent);
+    assert!(!(shown_from(&s) == "director@victim.example" && seal(&s) == Seal::Trusted), "a trusted seal over a sender the certificate isn't for");
+    assert_eq!(shown_from(&s), "riley@studio.example");
+    assert_eq!(seal(&s), Seal::Trusted, "signed by whom it came from");
+    assert_eq!(shown(&s).subject, "Urgent transfer", "the rest of what was signed shows");
+    done(s);
+}
+
+/// OpenPGP: the same, with Ana's key (imported by hand).
+#[test]
+fn a_sender_named_inside_isnt_vouched_for_by_anothers_key() {
+    let mut s = sample_session("forged-pgp-inside");
+    s.clock.now = PGP_NOW;
+    s.run("pgp.importPublic", &json!({"data": pgpdata("ana.asc")})).unwrap();
+    let sent = pgp_signed(&outer("f2", "Ana Lima <ana@posteo.example>", ""), AS_THE_DIRECTOR, &ana_key(), PGP_NOW);
+    open_raw(&mut s, 9702, &sent);
+    assert!(!(shown_from(&s) == "director@victim.example" && seal(&s) == Seal::Trusted), "a trusted seal over a sender the key isn't for");
+    assert_eq!(shown_from(&s), "ana@posteo.example");
+    assert_eq!(seal(&s), Seal::Trusted);
+    done(s);
+}
+
+/// A signature trusted for the sender named inside does show that sender: a list that rewrote
+/// the outer From doesn't hide who signed.
+#[test]
+fn a_sender_named_inside_shows_when_the_signature_is_theirs() {
+    let mut s = with_certificate("forged-smime-theirs");
+    let entity =
+        "Content-Type: text/plain; charset=utf-8; hp=\"clear\"\r\nFrom: Riley <riley@studio.example>\r\nSubject: Minutes\r\n\r\nAttached.\r\n";
+    let signature = smime::sign(entity.as_bytes(), &riley(), LATER, &mut rand_core::OsRng).unwrap();
+    let sent = quatrelle_mime::smime::signed_message(
+        outer("f3", "Riley via Team <team@lists.example>", "").as_bytes(),
+        entity.as_bytes(),
+        &signature,
+        "=_f3",
+    );
+    let key = open_raw(&mut s, 9703, &sent);
+    assert_eq!(shown_from(&s), "riley@studio.example");
+    assert_eq!(seal(&s), Seal::Trusted);
+    // What a reply reads is what's shown.
+    let readable = s.readable_raw(&key).unwrap();
+    assert_eq!(quatrelle_mime::parse(&readable).unwrap().from.email, "riley@studio.example");
+    done(s);
+}
+
+/// Header protection without a signature says nothing of who sent it: an entity that isn't signed
+/// (here inside a signature that doesn't hold) can't name another sender. And header fields the
+/// receiving server wrote can't be replaced from inside.
+#[test]
+fn unsigned_header_protection_names_no_other_sender() {
+    let mut s = with_certificate("forged-unsigned-inside");
+    let entity = "Content-Type: text/plain; charset=utf-8; hp=\"clear\"\r\nFrom: The Director <director@victim.example>\r\n\
+Authentication-Results: mx.studio.example; dmarc=pass\r\nSubject: Urgent transfer\r\n\r\nPay Eve today.\r\n";
+    let signature = smime::sign(b"Content-Type: text/plain\r\n\r\nSomething else.\r\n", &riley(), LATER, &mut rand_core::OsRng).unwrap();
+    let sent = quatrelle_mime::smime::signed_message(
+        outer("f4", "Eve <eve@evil.example>", "Authentication-Results: mx.studio.example; dmarc=fail\r\nReply-To: eve@evil.example\r\n").as_bytes(),
+        entity.as_bytes(),
+        &signature,
+        "=_f4",
+    );
+    let key = open_raw(&mut s, 9704, &sent);
+    assert!(matches!(seal(&s), Seal::Broken(_)));
+    assert_eq!(shown_from(&s), "eve@evil.example");
+    assert!(!security(&s).headers, "nothing was protected by a signature that doesn't hold");
+    let readable = String::from_utf8_lossy(&s.readable_raw(&key).unwrap()).to_string();
+    assert!(readable.contains("dmarc=fail") && !readable.contains("dmarc=pass"), "{readable}");
+    done(s);
+}
+
+/// With header protection, what the outside adds for the reader isn't taken: a Reply-To put on
+/// the way would send the answer (and the decrypted text it quotes) to someone else.
+#[test]
+fn a_reply_to_added_outside_protected_headers_is_dropped() {
+    let mut s = with_certificate("forged-reply-to");
+    let entity = "Content-Type: text/plain; charset=utf-8; hp=\"clear\"\r\nFrom: Riley <riley@studio.example>\r\nTo: riley@studio.example\r\n\
+Subject: Figures\r\n\r\nThe figures.\r\n";
+    let signature = smime::sign(entity.as_bytes(), &riley(), LATER, &mut rand_core::OsRng).unwrap();
+    let sent = quatrelle_mime::smime::signed_message(
+        outer("f5", "Riley <riley@studio.example>", "Reply-To: eve@evil.example\r\nCc: eve@evil.example\r\n").as_bytes(),
+        entity.as_bytes(),
+        &signature,
+        "=_f5",
+    );
+    open_raw(&mut s, 9705, &sent);
+    assert_eq!(seal(&s), Seal::Trusted);
+    let p = shown(&s);
+    assert!(p.reply_to.is_empty() && p.cc.is_empty(), "{:?} {:?}", p.reply_to, p.cc);
+    done(s);
+}
+
 /// A signing subkey that ran out doesn't sign for its owner any more, though the key it belongs
 /// to is still valid.
 #[test]

@@ -236,33 +236,91 @@ fn parameter(field: &[u8], name: &str) -> Option<String> {
     })
 }
 
+/// The header fields a protected entity may give its message (RFC 9788): what its reader sees
+/// and answers to. Any other field inside is ignored: what the receiving server wrote
+/// (`Authentication-Results`, `Received`), what threads the message, what lists it.
+const INSIDE: [&str; 12] =
+    ["from", "sender", "reply-to", "to", "cc", "subject", "date", "followup-to", "mail-followup-to", "mail-reply-to", "comments", "keywords"];
+
+/// Of them, the ones that say who sent it.
+const WHO: [&str; 2] = ["from", "sender"];
+
+/// Whether an entity's `Content-Type` field says its header fields are its message's (`hp=`).
+fn has_protected_headers(content_type: &[u8]) -> bool {
+    parameter(content_type, "hp").is_some_and(|v| v == "clear" || v == "cipher")
+}
+
+/// The address in a `From` field, lower-case.
+fn address_of(field: &[u8]) -> String {
+    let mut m = b"From: ".to_vec();
+    m.extend_from_slice(field.splitn(2, |b| *b == b':').nth(1).unwrap_or_default());
+    m.extend_from_slice(b"\r\n\r\n");
+    crate::parse(&m).map(|p| p.from.email.trim().to_lowercase()).unwrap_or_default()
+}
+
+/// The sender a protected entity names (the address in the `From` among its protected header
+/// fields, lower-case); `None` without header protection or without a `From` inside.
+pub fn sender_inside(entity: &[u8]) -> Option<String> {
+    // Its header only: an entity whose header is longer than this names no one.
+    let entity = crlf(entity.get(..entity.len().min(64 << 10)).unwrap_or_default());
+    let (head, _) = entity_parts(&entity);
+    let inner = fields(head);
+    let content_type = inner.iter().find(|(n, _)| n == "content-type").map(|(_, f)| f.as_slice()).unwrap_or_default();
+    if !has_protected_headers(content_type) {
+        return None;
+    }
+    inner.iter().find(|(n, _)| n == "from").map(|(_, f)| address_of(f)).filter(|a| !a.is_empty())
+}
+
 /// [`with_entity`], and whether `entity` carried its message's header fields (header protection,
 /// RFC 9788: `hp=` on its `Content-Type`). Those then replace the outer ones, which a server or
-/// anyone on the way could have changed (or, for encrypted mail, were left `[...]`); `HP-Outer`
-/// fields, and the Legacy Display part written for programs that don't read it, aren't shown.
-/// Without `hp=`, header fields inside other than `Content-*` are ignored.
+/// anyone on the way could have changed (or, for encrypted mail, were left `[...]`): the fields
+/// a reader sees and answers to ([`INSIDE`]), the outer ones of those dropped even when the
+/// inside has none (a `Reply-To` added on the way would take the answer). `HP-Outer` fields, and
+/// the Legacy Display part written for programs that don't read it, aren't shown. Without
+/// `hp=`, header fields inside other than `Content-*` are ignored.
+///
+/// Who sent it is taken from inside only when it's the address outside: anyone can write another
+/// `From` in an entity, signed or not. A caller that checked the signature for the sender named
+/// inside ([`sender_inside`]) uses [`with_entity_and_sender`].
 pub fn with_entity_protected(raw: &[u8], entity: &[u8]) -> (Vec<u8>, bool) {
+    put_back(raw, entity, false)
+}
+
+/// [`with_entity_protected`], the sender named inside taken whatever the outside says: for an
+/// entity whose signature was checked, and is trusted, for that sender.
+pub fn with_entity_and_sender(raw: &[u8], entity: &[u8]) -> (Vec<u8>, bool) {
+    put_back(raw, entity, true)
+}
+
+fn put_back(raw: &[u8], entity: &[u8], sender_checked: bool) -> (Vec<u8>, bool) {
     let entity = crlf(entity);
     let (head, body) = entity_parts(&entity);
     let inner = fields(head);
     let content_type = inner.iter().find(|(n, _)| n == "content-type").map(|(_, f)| f.as_slice()).unwrap_or_default();
-    let protected = parameter(content_type, "hp").is_some_and(|v| v == "clear" || v == "cipher");
-    let names: Vec<&str> =
-        inner.iter().map(|(n, _)| n.as_str()).filter(|n| !n.starts_with("content-") && *n != "hp-outer" && *n != "mime-version").collect();
-    let mut out = Vec::new();
+    let protected = has_protected_headers(content_type);
     let raw = crlf(raw);
-    for (name, f) in fields(split(&raw).0) {
-        if name.starts_with("content-") || name == "mime-version" || (protected && names.contains(&name.as_str())) {
+    let outer = fields(split(&raw).0);
+    // The sender inside is the message's when it's the one outside, or was checked.
+    let from_inside = inner.iter().find(|(n, _)| n == "from").map(|(_, f)| address_of(f)).filter(|a| !a.is_empty());
+    let from_outside = outer.iter().find(|(n, _)| n == "from").map(|(_, f)| address_of(f)).unwrap_or_default();
+    let who_inside = protected && from_inside.as_ref().is_some_and(|a| sender_checked || *a == from_outside);
+    let taken = |name: &str| protected && INSIDE.contains(&name) && (who_inside || !WHO.contains(&name));
+    let given: Vec<&str> = inner.iter().map(|(n, _)| n.as_str()).filter(|n| taken(n)).collect();
+    let mut out = Vec::new();
+    for (name, f) in &outer {
+        let name = name.as_str();
+        // Replaced from inside; a date, with no other to show, only by one given inside.
+        let replaced = taken(name) && (name != "date" || given.contains(&name));
+        if name.starts_with("content-") || name == "mime-version" || replaced {
             continue;
         }
-        out.extend_from_slice(&f);
+        out.extend_from_slice(f);
         out.extend_from_slice(b"\r\n");
     }
-    if protected {
-        for (_, f) in inner.iter().filter(|(n, _)| !n.starts_with("content-") && n != "hp-outer" && n != "mime-version") {
-            out.extend_from_slice(f);
-            out.extend_from_slice(b"\r\n");
-        }
+    for (_, f) in inner.iter().filter(|(n, _)| taken(n)) {
+        out.extend_from_slice(f);
+        out.extend_from_slice(b"\r\n");
     }
     out.extend_from_slice(b"MIME-Version: 1.0\r\n");
     for (_, f) in inner.iter().filter(|(n, _)| n.starts_with("content-")) {
