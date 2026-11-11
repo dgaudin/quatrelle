@@ -63,7 +63,7 @@ fn an_answer_is_read_from_its_json() {
 
 #[test]
 fn the_document_keeps_what_it_should() {
-    let v = |at: i64, score: u8| Verdict { score, reasons: vec!["r".into()], model: "m".into(), at };
+    let v = |at: i64, score: u8| Verdict { score, reasons: vec!["r".into()], model: "m".into(), at, judged: Vec::new() };
     let mut doc = ScamDoc::default();
     for i in 0..=MAX_VERDICTS {
         doc.keep(&format!("id{i}"), v(i as i64, 50));
@@ -77,6 +77,30 @@ fn the_document_keeps_what_it_should() {
         doc.trust(&format!("a{i}@x.example"));
     }
     assert!(!doc.trust("one-more@x.example"));
+}
+
+/// A Message-ID is its sender's: what's kept under one says which messages were judged, and
+/// another message under it never lowers the score.
+#[test]
+fn a_verdict_says_which_messages_it_judged() {
+    let v = |score: u8, fingerprint: &str| Verdict { score, reasons: vec!["r".into()], model: "m".into(), at: 1, judged: vec![fingerprint.into()] };
+    let mut doc = ScamDoc::default();
+    doc.keep("id", v(5, "harmless"));
+    assert!(doc.judged("id", "harmless") && !doc.judged("id", "scam") && !doc.judged("other", "harmless"));
+    doc.keep("id", v(85, "scam"));
+    assert_eq!(doc.verdicts.get("id").map(|v| (v.score, v.reasons.len())), Some((85, 1)));
+    doc.keep("id", v(3, "another"));
+    let kept = doc.verdicts.get("id").unwrap();
+    assert_eq!((kept.score, kept.reasons.len(), kept.judged.as_slice()), (85, 1, &["harmless".to_string(), "scam".into(), "another".into()][..]));
+    for i in 0..2 * MAX_JUDGED {
+        doc.keep("id", v(1, &format!("f{i}")));
+    }
+    let kept = doc.verdicts.get("id").unwrap();
+    assert_eq!((kept.score, kept.judged.len()), (85, MAX_JUDGED));
+    assert!(doc.judged("id", &format!("f{}", 2 * MAX_JUDGED - 1)) && !doc.judged("id", "scam"), "the newest are kept");
+    // A file written before fingerprints were kept reads, judging nothing yet.
+    let old: ScamDoc = serde_json::from_str(r#"{"verdicts": {"id": {"score": 50}}}"#).unwrap();
+    assert!(!old.judged("id", "x"));
 }
 
 #[test]

@@ -491,3 +491,31 @@ fn a_trusted_address_the_server_couldnt_confirm_is_judged() {
     assert_eq!(asks(&s.take_jobs()).len(), 1);
     done(s);
 }
+
+/// A Message-ID is its sender's to choose: a harmless message judged first mustn't answer for a
+/// second one sent under the same identifier. The second is judged for what it says, and the
+/// warning it earns shows.
+#[test]
+fn a_judged_message_id_doesnt_excuse_another_message() {
+    let mut s = zoe("scam-same-id");
+    on(&mut s);
+    arrive(&mut s, &[(5, source("same", STRANGER, "Hello", "Nice to meet you last week.", false), true)], 60);
+    let q = asks(&s.take_jobs());
+    answer(&mut s, q[0].0, r#"{"score": 3, "reasons": []}"#);
+    let keys = arrive(&mut s, &[(6, source("same", STRANGER, "Hello", "Wire 40,000 to this new account today.", false), true)], 60);
+    let q = asks(&s.take_jobs());
+    assert_eq!(q.len(), 1, "the second message is read for itself");
+    assert!(q[0].1.contains("Wire 40,000"), "{}", q[0].1);
+    answer(&mut s, q[0].0, SCAM);
+    assert_eq!(verdict(&mut s, &keys[0])["score"], 85);
+    // The very same message again (moved back, listed twice) isn't sent twice.
+    arrive(&mut s, &[(7, source("same", STRANGER, "Hello", "Wire 40,000 to this new account today.", false), true)], 60);
+    assert!(asks(&s.take_jobs()).is_empty());
+    // Nor does a harmless third one take the warning away.
+    arrive(&mut s, &[(8, source("same", STRANGER, "Hello", "Sorry, wrong thread.", false), true)], 60);
+    let q = asks(&s.take_jobs());
+    assert_eq!(q.len(), 1);
+    answer(&mut s, q[0].0, r#"{"score": 2, "reasons": []}"#);
+    assert_eq!(verdict(&mut s, &keys[0])["score"], 85, "a warning stays");
+    done(s);
+}

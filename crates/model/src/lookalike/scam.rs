@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The scam check's pure parts: the request put to the language model for one message from outside,
-//! the model's answer read as hostile input, and the document that keeps what was judged.
+//! the model's answer read as hostile input, and the document that keeps what was judged (by
+//! Message-ID, with a fingerprint of each message judged under it).
 //!
 //! The model only ever adds a warning: a low score shows nothing and removes nothing. The message is
 //! given between markers as data to judge; the answer's shape is fixed and checked here.
@@ -31,6 +32,8 @@ const MAX_DEPTH: usize = 8;
 /// The most reasons kept, and the longest of them, in characters.
 pub const MAX_REASONS: usize = 3;
 pub const MAX_REASON_CHARS: usize = 120;
+/// The most messages judged under one Message-ID whose fingerprints are kept.
+pub const MAX_JUDGED: usize = 8;
 /// The most verdicts and trusted senders kept.
 pub const MAX_VERDICTS: usize = 20_000;
 pub const MAX_TRUSTED: usize = 5_000;
@@ -148,6 +151,11 @@ pub struct Verdict {
     /// When, in seconds since 1970.
     #[serde(default)]
     pub at: i64,
+    /// What was judged under this Message-ID: a fingerprint of each message's content as it was
+    /// put to the model, the newest last ([`MAX_JUDGED`] at most). The identifier is its
+    /// sender's to choose: only a message already judged is excused by it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub judged: Vec<String>,
 }
 
 /// The first JSON object in `text`, within [`MAX_JSON`] bytes of its opening brace and at most
@@ -217,10 +225,26 @@ pub struct ScamDoc {
 }
 
 impl ScamDoc {
+    /// Whether the message whose content has this `fingerprint` was judged under `message_id`.
+    pub fn judged(&self, message_id: &str, fingerprint: &str) -> bool {
+        self.verdicts.get(message_id).is_some_and(|v| v.judged.iter().any(|f| f == fingerprint))
+    }
+
     /// Keep a verdict (its reasons only from [`WARN_SCORE`] up); the oldest go past [`MAX_VERDICTS`].
+    /// One already kept for the same Message-ID is for another message under that identifier:
+    /// the higher score of the two stays (a later harmless message never takes a warning away),
+    /// with what both judged.
     pub fn keep(&mut self, message_id: &str, mut v: Verdict) {
         if v.score < WARN_SCORE {
             v.reasons.clear();
+        }
+        if let Some(old) = self.verdicts.get(message_id) {
+            let mut judged = old.judged.clone();
+            judged.retain(|f| !v.judged.contains(f));
+            judged.append(&mut v.judged);
+            let from = judged.len().saturating_sub(MAX_JUDGED);
+            let judged = judged.split_off(from);
+            v = if old.score > v.score { Verdict { judged, ..old.clone() } } else { Verdict { judged, ..v } };
         }
         self.verdicts.insert(message_id.to_string(), v);
         while self.verdicts.len() > MAX_VERDICTS {

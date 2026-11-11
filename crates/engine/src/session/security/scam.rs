@@ -3,7 +3,8 @@
 //! The scam check: external mail that arrives in the Inbox of an account with a server (Exchange,
 //! IMAP, JMAP or POP; not one kept on this computer only) is read by the
 //! assistant's language model (an option in File › Options › Assistant, off until turned on), and
-//! what it finds is kept as a verdict by Message-ID (`scam.json`).
+//! what it finds is kept as a verdict by Message-ID (`scam.json`), with a fingerprint of what was
+//! judged: the identifier is its sender's to choose, so it excuses only the very message judged.
 //!
 //! Only what could be a scam is sent: an unknown sender's mail, or a known sender's when the message
 //! shows a local sign of trouble (`lookalike::signs`). A safe sender's mail, or one the user said
@@ -58,7 +59,22 @@ pub struct ScamToday {
 struct Inflight {
     id: u64,
     pending: Pending,
+    /// What was put to the model ([`fingerprint`]).
+    judging: String,
     since: i64,
+}
+
+/// A fingerprint of a message as it's put to the model (the question's own text) and of the
+/// whole of its text (the question holds its start only): two messages sent under one Message-ID
+/// are told apart by it. SHA-256, half of it, in hex: its sender mustn't be able to make a second
+/// message that reads the same to it.
+fn fingerprint(question: &str, text: &str) -> String {
+    use sha2::Digest as _;
+    let mut h = sha2::Sha256::new();
+    h.update((question.len() as u64).to_be_bytes());
+    h.update(question.as_bytes());
+    h.update(text.as_bytes());
+    h.finalize().iter().take(16).map(|b| format!("{b:02x}")).collect()
 }
 
 /// The session's scam check: each account's document (read when first needed), what waits, and the
@@ -78,8 +94,8 @@ pub(crate) struct ScamState {
     inflight: Option<Inflight>,
     /// "Try it on examples": the run in progress or the last one's result.
     trial: Option<trial::Trial>,
-    /// `account` and Message-ID of every message asked this run, answered or not.
-    asked: HashSet<(String, String)>,
+    /// `account`, Message-ID and fingerprint of every message asked this run, answered or not.
+    asked: HashSet<(String, String, String)>,
     /// The day (UTC, days since 1970) the count is for, and how many questions were asked in it.
     day: i64,
     count: u32,
@@ -300,7 +316,9 @@ impl Session {
             let email = m.from.email.trim().to_string();
             // A safe sender's mail, or one taken as not a scam, is excused once its source is
             // read ([`Session::scam_ask`]): not when its server says the address wasn't confirmed.
-            if m.message_id.is_empty() || !self.is_outside(account, &email) || self.scam_doc(account).verdicts.contains_key(&m.message_id) {
+            // Nor is a Message-ID already judged an excuse here: its sender chose it, and only
+            // the source tells whether this is the message that was judged.
+            if m.message_id.is_empty() || !self.is_outside(account, &email) {
                 continue;
             }
             self.scam.queue.push_back(Pending { key: m.key.clone(), message_id: m.message_id.clone() });
@@ -340,7 +358,7 @@ impl Session {
             (Some(e), _) => log::info!("scam check: the model's server failed: {e}"),
             (None, None) => log::info!("scam check: the model's answer had no verdict"),
             (None, Some((score, reasons))) => {
-                let v = Verdict { score, reasons, model: self.prefs.llm_model.trim().to_string(), at: self.clock.now };
+                let v = Verdict { score, reasons, model: self.prefs.llm_model.trim().to_string(), at: self.clock.now, judged: vec![sent.judging] };
                 self.scam_doc(&sent.pending.key.account).keep(&sent.pending.message_id, v);
                 self.save_scam(&sent.pending.key.account);
             }
@@ -398,10 +416,6 @@ impl Session {
             return false;
         };
         let account = p.key.account.clone();
-        let asked_key = (account.clone(), p.message_id.clone());
-        if self.scam.asked.contains(&asked_key) || self.scam_doc(&account).verdicts.contains_key(&p.message_id) {
-            return false;
-        }
         let Some(parsed) = quatrelle_mime::parse(&raw) else { return false };
         let email = parsed.from.email.trim().to_string();
         // Being a safe sender, or taken as not a scam, is said of an address: it excuses a
@@ -426,18 +440,9 @@ impl Session {
         if known && found.is_empty() {
             return false;
         }
-        let today = self.clock.now.div_euclid(86_400);
-        if self.scam.day != today {
-            self.scam.day = today;
-            self.scam.count = 0;
-        }
-        if self.scam.count >= self.prefs.scam_daily_cap {
-            log::info!("scam check: the day's cap of {} is reached, a message isn't checked", self.prefs.scam_daily_cap);
-            return false;
-        }
+        let reply_to = parsed.reply_to.first().map(|r| r.email.trim().to_string()).filter(|r| !r.is_empty() && !r.eq_ignore_ascii_case(&email));
         let mut targets: Vec<String> = quatrelle_mime::html_links(&html);
         targets.extend(pairs.iter().map(|(_, t)| t.clone()));
-        let reply_to = parsed.reply_to.first().map(|r| r.email.trim().to_string()).filter(|r| !r.is_empty() && !r.eq_ignore_ascii_case(&email));
         let lang = self.answer_language();
         let facts = Facts {
             from_name: &parsed.from.name,
@@ -452,13 +457,28 @@ impl Session {
             text: &parsed.text,
         };
         let messages = request(&facts, &lang);
+        // Judged already, or asked this run: this very message, not just its Message-ID.
+        let judging = fingerprint(messages.last().map(|m| m.1.as_str()).unwrap_or_default(), &parsed.text);
+        let asked_key = (account.clone(), p.message_id.clone(), judging.clone());
+        if self.scam.asked.contains(&asked_key) || self.scam_doc(&account).judged(&p.message_id, &judging) {
+            return false;
+        }
+        let today = self.clock.now.div_euclid(86_400);
+        if self.scam.day != today {
+            self.scam.day = today;
+            self.scam.count = 0;
+        }
+        if self.scam.count >= self.prefs.scam_daily_cap {
+            log::info!("scam check: the day's cap of {} is reached, a message isn't checked", self.prefs.scam_daily_cap);
+            return false;
+        }
         if self.scam.asked.len() >= ASKED_MAX {
             self.scam.asked.clear();
         }
         self.scam.asked.insert(asked_key);
         self.scam.count += 1;
         let id = self.fresh_id();
-        self.scam.inflight = Some(Inflight { id, pending: p.clone(), since: self.clock.now });
+        self.scam.inflight = Some(Inflight { id, pending: p.clone(), judging, since: self.clock.now });
         self.jobs.push(Job::AskLlm { id, url: self.prefs.llm_url.trim().to_string(), model: self.prefs.llm_model.trim().to_string(), messages });
         true
     }

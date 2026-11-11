@@ -21,6 +21,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
+# The scam check's fingerprint of what it judged (the same generation as the S/MIME crate's).
+sha2 = "0.10"
 
 [dev-dependencies]
 # S/MIME tests read PEM and play the network layer's decrypting.

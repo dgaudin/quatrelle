@@ -64,7 +64,7 @@ fn app_with_backend(name: &str, backend: Box<dyn crate::Backend>) -> (MailApp, s
 }
 
 fn verdict(score: u8, reasons: &[&str]) -> Verdict {
-    Verdict { score, reasons: reasons.iter().map(|r| r.to_string()).collect(), model: "glm".into(), at: NOW }
+    Verdict { score, reasons: reasons.iter().map(|r| r.to_string()).collect(), model: "glm".into(), at: NOW, judged: Vec::new() }
 }
 
 /// Keep the verdicts for the messages `kept` in the sample account's `scam.json`, before the app has
