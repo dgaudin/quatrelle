@@ -67,6 +67,10 @@ pub(super) struct Out<'a> {
     pub(super) walked: Walked,
 }
 
+/// The longest folder name kept, in characters: a name becomes a path, a key of the cache and a
+/// label, and a data file can give one of any length.
+pub(super) const MAX_FOLDER_NAME: usize = 255;
+
 impl<'a> Out<'a> {
     /// Nothing written yet, into `account`'s cache.
     #[cfg(test)]
@@ -106,7 +110,9 @@ impl<'a> Out<'a> {
 
     /// A folder's name as it is kept.
     pub(super) fn clean(&self, name: &str) -> String {
-        let name = name.trim().replace('/', "∕");
+        // Cut before anything is copied: the name is as long as the file says.
+        let name: String = name.trim().chars().take(MAX_FOLDER_NAME).map(|c| if c == '/' { '∕' } else { c }).collect();
+        let name = name.trim_end().to_string();
         if name.is_empty() { "Folder".to_string() } else { name }
     }
 

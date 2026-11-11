@@ -489,3 +489,21 @@ fn a_folder_listed_again_is_entered_once() {
     let entered = (0..u32::try_from(MAX_FOLDERS).unwrap() * 2).filter(|n| walked.enter(*n)).count();
     assert_eq!(entered + 2, MAX_FOLDERS, "no more than the most, whatever the file lists");
 }
+
+/// A folder's name is as long as the file says: kept within a length a path and a label bear.
+#[test]
+fn a_folder_s_name_is_kept_within_a_length() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-pst-name-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let mut progress = |_: usize| {};
+    let mut out = Out::new(&store, "a1", &mut progress);
+    let long = format!("  {}/{}  ", "é".repeat(200_000), "x".repeat(200_000));
+    let path = out.add_folder(None, &long);
+    let kept = out.clean(&long);
+    assert_eq!(kept.chars().count(), out::MAX_FOLDER_NAME);
+    assert!(!kept.contains('/') && path.len() < 4 * out::MAX_FOLDER_NAME, "{} bytes of path", path.len());
+    assert_eq!(out.clean(" Projects/2026 "), "Projects∕2026");
+    assert_eq!(out.clean("   "), "Folder");
+    let _ = std::fs::remove_dir_all(dir);
+}
