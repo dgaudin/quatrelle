@@ -102,14 +102,20 @@ const EXECUTABLE_EXTENSIONS: &[&[&str]] = &[
     &["mde", "mda", "mdz", "ade", "adp", "accde"],
     // Windows: shortcuts, links and shell files that launch something.
     &["lnk", "url", "website", "scf", "library-ms", "searchconnector-ms", "settingcontent-ms", "diagcab"],
+    // Windows: settings files that connect somewhere or start a command, update packages and
+    // cabinets, Office add-ins and the data files that fetch or run (web queries, SYLK).
+    &["rdp", "search-ms", "theme", "themepack", "wsb", "ws", "ps2", "msu", "cab"],
+    &["xlam", "ppam", "wll", "iqy", "slk"],
     // Windows: disk images that mount and run.
     &["iso", "img", "vhd", "vhdx"],
     // macOS: app bundles, disk images, installers, AppleScript and Automator.
     &["app", "dmg", "pkg", "mpkg", "applescript", "scpt", "workflow", "action", "command", "tool"],
+    // macOS: link files that open a place or a program, and Terminal's settings files.
+    &["inetloc", "fileloc", "webloc", "terminal"],
     // Linux and other Unix systems: packages, self-running images, launchers and shells.
     &["deb", "rpm", "appimage", "run", "bin", "desktop", "sh", "bash", "zsh", "csh", "ksh"],
     // Anywhere: interpreters and runtimes that an operating system may set up to open.
-    &["jar", "apk", "py", "pyw", "pl", "rb", "php", "lua"],
+    &["jar", "jnlp", "class", "apk", "py", "pyw", "pyc", "pyz", "pyzw", "pl", "rb", "php", "lua"],
 ];
 
 /// The extension of the picture or PDF that `data` is, from its first bytes: for one sent as just
@@ -313,6 +319,31 @@ mod tests {
             "loader.js",
             "update.msi",
             "plugin.xll",
+            // A link or a settings file that starts a program, a connection or a download.
+            "Invoice.rdp",
+            "viewer.jnlp",
+            "open.inetloc",
+            "open.fileloc",
+            "site.webloc",
+            "find.search-ms",
+            "look.theme",
+            "look.themepack",
+            "shell.terminal",
+            "box.wsb",
+            "rates.iqy",
+            "sheet.slk",
+            // Packages, add-ins and compiled code.
+            "patch.msu",
+            "drivers.cab",
+            "addin.xlam",
+            "addin.ppam",
+            "addin.wll",
+            "Main.class",
+            "tool.pyz",
+            "tool.pyzw",
+            "tool.pyc",
+            "old.ps2",
+            "job.ws",
         ];
         for name in run {
             assert!(runs_code(name), "{name} should count as code");
