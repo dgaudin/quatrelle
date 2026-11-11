@@ -407,9 +407,7 @@ impl Session {
         self.keep_senders();
         let known = self.senders.as_ref().is_some_and(|s| s.check.knows(&email));
         let mut found: Vec<Sign> = Vec::new();
-        if let Some(key) = Some(&p.key)
-            && self.warning_now(key, &parsed).is_some()
-        {
+        if self.warning_now(&parsed).is_some() {
             found.push(Sign::SenderWarning);
         }
         let html = quatrelle_mime::html_body(&raw).unwrap_or_default();

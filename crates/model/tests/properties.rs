@@ -208,8 +208,8 @@ proptest! {
         let mut people = lookalike::KnownPeople::new();
         people.add(&EmailAddress::new(format!("{first} {last}"), "them@work.example"));
         let from = EmailAddress::new(format!("{last}, {first}"), "them.too@gmail.com");
-        prop_assert_eq!(people.check(&from, false).is_some(), key.is_some());
-        let _ = people.check(&EmailAddress::new(junk.clone(), junk.clone()), false);
+        prop_assert_eq!(people.check(&from).is_some(), key.is_some());
+        let _ = people.check(&EmailAddress::new(junk.clone(), junk.clone()));
         let _ = lookalike::name_key(&junk);
     }
 

@@ -469,13 +469,13 @@ impl KnownPeople {
     /// when the address is known itself (someone with two names, or a contact under another
     /// name), when it's at the organisation domain of one of that person's addresses (another
     /// address of theirs, or a colleague's at work: a mail service doesn't count, anyone can
-    /// sign up there), or when `listed` (a mailing list or someone sending for the author, as
-    /// `List-Id` or `Sender` say) and the address isn't at a mail service: lists send their
-    /// members' mail under the members' names. An impersonator adding those headers to free
-    /// mail is still caught. Someone known only from the directory
+    /// sign up there). A mailing list's header (`List-Id`, `Precedence: bulk`) excuses nothing,
+    /// though lists do send their members' mail under the members' names: whoever writes the
+    /// message writes that header too. A list the user writes to is known by its address.
+    /// Someone known only from the directory
     /// ([`KnownPeople::add_from_directory`]) only from a mail service or a domain imitating one of
     /// theirs: among its thousands of names, a namesake at a customer is the likelier.
-    pub fn check(&self, from: &EmailAddress, listed: bool) -> Option<SenderWarning> {
+    pub fn check(&self, from: &EmailAddress) -> Option<SenderWarning> {
         let real = from.email.trim().to_lowercase();
         let domain = domain_of(&real);
         if domain.is_empty() || self.knows_address(&real) {
@@ -483,9 +483,6 @@ impl KnownPeople {
         }
         let Known { name: known_as, addresses: theirs, vouched } = self.by_name.get(&drawn_key(&from.name)?)?;
         let free = super::is_free_mail(&domain);
-        if listed && !free {
-            return None;
-        }
         if !free && theirs.iter().any(|a| related(&domain_of(a), &domain)) {
             return None;
         }
@@ -538,7 +535,7 @@ mod tests {
     }
 
     fn warned(k: &KnownPeople, name: &str, email: &str) -> bool {
-        k.check(&EmailAddress::new(name, email), false).is_some()
+        k.check(&EmailAddress::new(name, email)).is_some()
     }
 
     #[test]
@@ -605,7 +602,7 @@ mod tests {
     fn a_known_name_on_a_strange_address_is_caught() {
         let k = people();
         assert_eq!(
-            k.check(&EmailAddress::new("Jane Director", "jane.director1984@gmail.com"), false),
+            k.check(&EmailAddress::new("Jane Director", "jane.director1984@gmail.com")),
             Some(SenderWarning::NameOfKnownPerson {
                 name: "Jane Director".into(),
                 known: "jane.director@gmail.com".into(),
@@ -614,7 +611,7 @@ mod tests {
         );
         // Called by the name the user knows her by.
         assert!(matches!(
-            k.check(&EmailAddress::new("Director, Jane", "ceo.office@outlook.com"), false),
+            k.check(&EmailAddress::new("Director, Jane", "ceo.office@outlook.com")),
             Some(SenderWarning::NameOfKnownPerson { name, .. }) if name == "Jane Director"
         ));
         assert!(warned(&k, "JANE DIRECTOR", "jane@corp-payments.example"));
@@ -624,8 +621,10 @@ mod tests {
         // A digit or letter drawn like another: `1` for `i`, `rn` for `m`.
         assert!(warned(&k, "Jane D1rector", "jd@corp-pay.example"));
         assert!(warned(&k, "Robert Brovvn", "rb@gmail.com"));
-        // A list header on free mail doesn't excuse it.
-        assert!(k.check(&EmailAddress::new("Jane Director", "jd1984@gmail.com"), true).is_some());
+        // A mailing list's address isn't hers either: a list header is its sender's to write,
+        // and excuses nothing.
+        assert!(warned(&k, "Jane Director", "dev@lists.example"));
+        assert!(warned(&k, "Jane Director", "contact@some-company.example"));
     }
 
     #[test]
@@ -643,8 +642,6 @@ mod tests {
         assert!(!warned(&k, "Info", "info@other.example"));
         assert!(!warned(&k, "IT Support", "it-support@gmail.com"));
         assert!(!warned(&k, "Bob", "bob.smith@gmail.com"));
-        // A mailing list sending her mail from its own domain.
-        assert!(k.check(&EmailAddress::new("Jane Director", "dev@lists.example"), true).is_none());
         // Someone else entirely, or no address.
         assert!(!warned(&k, "John Smith", "john@gmail.com"));
         assert!(!warned(&k, "Jane Director", ""));
@@ -662,7 +659,7 @@ mod tests {
         assert!(k.knows_address("jean.martin@corp.example"));
         assert!(!warned(&k, "Jean Martin", "jean.martin@client.example"), "a namesake at a customer");
         assert_eq!(
-            k.check(&EmailAddress::new("Jean Martin", "jean.martin.1984@gmail.com"), false),
+            k.check(&EmailAddress::new("Jean Martin", "jean.martin.1984@gmail.com")),
             Some(SenderWarning::NameOfKnownPerson {
                 name: "Jean Martin".into(),
                 known: "jean.martin@corp.example".into(),
@@ -692,10 +689,10 @@ mod tests {
         let huge = "x".repeat(1 << 20);
         k.add(&EmailAddress::new(huge.clone(), "a@b.example"));
         k.add(&EmailAddress::new("Jane Director", huge.clone()));
-        assert!(k.check(&EmailAddress::new(huge, "c@d.example"), false).is_none());
+        assert!(k.check(&EmailAddress::new(huge, "c@d.example")).is_none());
         for name in ["\u{0}\u{0}", "́́́ ́́", "ǅ ǈ", "İstanbul Ünal", "\u{202e}Jane Director", "Ⅻ Ⅻ"] {
             let _ = name_key(name);
-            let _ = k.check(&EmailAddress::new(name, "x@y.example"), false);
+            let _ = k.check(&EmailAddress::new(name, "x@y.example"));
         }
     }
 }

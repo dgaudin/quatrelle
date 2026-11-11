@@ -190,9 +190,8 @@ impl Session {
 
     /// What's open says what the check says now (a sender just saved as a contact is fine).
     fn warn_open(&mut self) {
-        let reading = self.reading.as_ref().and_then(|r| r.parsed.as_ref().map(|p| self.warning_now(&r.key, p)));
-        let windows: Vec<Option<Option<SenderWarning>>> =
-            self.windows.iter().map(|w| w.parsed.as_ref().map(|p| self.warning_now(&w.key, p))).collect();
+        let reading = self.reading.as_ref().and_then(|r| r.parsed.as_ref().map(|p| self.warning_now(p)));
+        let windows: Vec<Option<Option<SenderWarning>>> = self.windows.iter().map(|w| w.parsed.as_ref().map(|p| self.warning_now(p))).collect();
         if let (Some(warning), Some(r)) = (reading, self.reading.as_mut()) {
             r.warning = warning;
         }
@@ -209,37 +208,26 @@ impl Session {
     /// domain, the organisation's site in her signature, is known by address then).
     pub(crate) fn message_warning(&mut self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
         self.keep_senders();
-        let warning = self.warning_now(key, parsed);
+        let warning = self.warning_now(parsed);
         self.ask_about_sender(key, parsed);
         warning
     }
 
     /// [`Session::message_warning`] as the check stands, asking nothing: what the sender's header
     /// says, else what the message's own signature does.
-    pub(in crate::session) fn warning_now(&self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
-        let listed = self.listed(key, parsed);
+    pub(in crate::session) fn warning_now(&self, parsed: &mime::Parsed) -> Option<SenderWarning> {
         let s = self.senders.as_ref()?;
-        s.check.check(&parsed.from, listed).or_else(|| s.check.check_signature(&parsed.from, &parsed.text, listed, &s.org))
-    }
-
-    /// The message came through a list or in bulk as its own header says (a message opened in a
-    /// window, or from another folder, needn't be in the list; an Exchange listing carries no
-    /// `List-Id`), or as its row does: a list sends its members' mail under their names.
-    fn listed(&self, key: &MessageKey, parsed: &mime::Parsed) -> bool {
-        parsed.bulk || self.summary(key).is_some_and(|m| m.bulk)
+        s.check.check(&parsed.from).or_else(|| s.check.check_signature(&parsed.from, &parsed.text, &s.org))
     }
 
     /// The directory question: an opened message's sender, neither the user nor known by address,
     /// whose name is a person's, has that name asked of the user's Exchange directory, as a
-    /// person would type it. Not for a list's or bulk mail (excused from the warning anyway)
-    /// unless it comes from a mail service; nothing without an Exchange account.
+    /// person would type it. A list's or bulk mail is asked about like any other (what says
+    /// it's one is its sender's to write); nothing without an Exchange account.
     fn ask_about_sender(&mut self, key: &MessageKey, parsed: &mime::Parsed) {
         let Some(s) = self.senders.as_ref() else { return };
         let email = parsed.from.email.trim();
         if email.is_empty() || s.check.knows(email) {
-            return;
-        }
-        if self.listed(key, parsed) && !lookalike::is_free_mail(&lookalike::domain_of(email)) {
             return;
         }
         let Some(account) = self.directory_account(Some(&key.account)) else { return };
@@ -248,10 +236,10 @@ impl Session {
     }
 
     /// What doesn't add up about a sender outside the mailbox (a message file, an attached
-    /// message): `listed`, it came through a list or in bulk. Nothing for the user's own.
-    pub fn sender_warning(&mut self, from: &EmailAddress, listed: bool) -> Option<SenderWarning> {
+    /// message). Nothing for the user's own.
+    pub fn sender_warning(&mut self, from: &EmailAddress) -> Option<SenderWarning> {
         self.keep_senders();
-        self.senders.as_ref().and_then(|s| s.check.check(from, listed))
+        self.senders.as_ref().and_then(|s| s.check.check(from))
     }
 
     /// The domains the user deals with: their own accounts', and those of the people they write
@@ -299,6 +287,6 @@ impl Session {
                 SenderAddresses::Strangers => !s.check.knows(email),
                 SenderAddresses::Never => false,
             };
-        SenderMarks { address, warning: s.check.check(&m.from, m.bulk).is_some(), external: self.is_external(email), scam: None }
+        SenderMarks { address, warning: s.check.check(&m.from).is_some(), external: self.is_external(email), scam: None }
     }
 }

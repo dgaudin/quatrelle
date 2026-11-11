@@ -401,6 +401,32 @@ fn source(n: u32, from: &str, headers: &str, kind: &str, body: &str) -> Vec<u8> 
 
 const DANA: (&str, &str) = ("Dr. Dana Whitfield, CEO", "dw.ceo@gmail.com");
 
+/// What a message says of itself is its sender's to write: a list's header, `Precedence: bulk`
+/// or a no-reply address on a domain of their own doesn't put out the warning for a known
+/// person's name on another address, in the reading pane or in the list.
+#[test]
+fn a_list_header_excuses_nothing() {
+    let mut s = zoe_session("list-header");
+    card(&mut s, "Dana Whitfield", "dana@corp.example");
+    let warned =
+        |real: &str| Some(SenderWarning::NameOfKnownPerson { name: "Dana Whitfield".into(), known: "dana@corp.example".into(), real: real.into() });
+    for (n, headers) in [
+        (1, "List-Id: <announce.some-company.example>\r\n"),
+        (2, "Precedence: bulk\r\n"),
+        (3, "List-Unsubscribe: <mailto:leave@some-company.example>\r\nAuto-Submitted: auto-generated\r\n"),
+    ] {
+        let raw = source(n, "Dana Whitfield <contact@some-company.example>", headers, "text/plain", "Can you pay this invoice today?");
+        let key = deliver_raw(&mut s, n, &raw);
+        assert_eq!(warning(&s), warned("contact@some-company.example"), "{headers}");
+        let m = s.summary(&key).unwrap().clone();
+        assert!(m.bulk && s.sender_marks(&m).warning, "{headers}");
+    }
+    let raw = source(4, "Dana Whitfield <noreply@some-company.example>", "", "text/plain", "Can you pay this invoice today?");
+    deliver_raw(&mut s, 4, &raw);
+    assert_eq!(warning(&s), warned("noreply@some-company.example"));
+    done(s);
+}
+
 #[test]
 fn an_unknown_persons_name_is_asked_once() {
     let mut s = zoe_session("question-once");
@@ -419,19 +445,21 @@ fn an_unknown_persons_name_is_asked_once() {
 }
 
 #[test]
-fn no_question_when_known_or_no_person_or_bulk_or_no_exchange() {
+fn no_question_when_known_or_no_person_or_no_exchange() {
     let mut s = zoe_session("question-none");
     card(&mut s, "Dana Whitfield", "dana@corp.example");
     asked(&mut s);
     deliver(&mut s, 1, ("Dana Whitfield", "dana@corp.example"), "Known");
     deliver(&mut s, 2, ("IT Support", "helpdesk@gmail.com"), "A team");
     deliver(&mut s, 3, ("Dana", "dana.w@gmail.com"), "One word");
-    let list = source(4, "Ravi Menon <news@corp-news.example>", "List-Id: <weekly.corp-news.example>\r\n", "text/plain", "This week.");
-    deliver_raw(&mut s, 4, &list);
     assert!(asked(&mut s).is_empty());
-    for name in ["dana whitfield", "it support", "dana", "ravi menon"] {
+    for name in ["dana whitfield", "it support", "dana"] {
         assert!(!s.directory_searching(ME, name), "{name}");
     }
+    // A list's header dispenses with nothing: its sender wrote it.
+    let list = source(4, "Ravi Menon <news@corp-news.example>", "List-Id: <weekly.corp-news.example>\r\n", "text/plain", "This week.");
+    deliver_raw(&mut s, 4, &list);
+    assert_eq!(asked(&mut s), ["ravi menon"]);
     done(s);
     // No Exchange account: no directory to ask.
     let mut s = zoe_session_on("question-imap", false);

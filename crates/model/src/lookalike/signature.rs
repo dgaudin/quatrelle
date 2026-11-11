@@ -311,9 +311,9 @@ impl SenderCheck {
     /// - **c.** an address carrying the sender's name, the mail coming from a mail service.
     ///
     /// Mail services' addresses and sites, those related to the sender's domain and the user's
-    /// own addresses never count. Nothing for the user's own mail, a known sender, or `listed`
-    /// mail (a list, bulk) unless it comes from a mail service.
-    pub fn check_signature(&self, from: &EmailAddress, text: &str, listed: bool, org: &BTreeSet<String>) -> Option<SenderWarning> {
+    /// own addresses never count. Nothing for the user's own mail or a known sender. A list's or
+    /// bulk mail's header excuses nothing: its sender wrote it.
+    pub fn check_signature(&self, from: &EmailAddress, text: &str, org: &BTreeSet<String>) -> Option<SenderWarning> {
         let real = from.email.trim().to_lowercase();
         let domain = domain_of(&real);
         // The user's own mail, or a known sender's (`knows` counts the user's own addresses).
@@ -321,9 +321,6 @@ impl SenderCheck {
             return None;
         }
         let free = is_free_mail(&domain);
-        if listed && !free {
-            return None;
-        }
         let outside = is_external(&real, org);
         let senders_name = if free { name_key(&from.name) } else { None };
         signature_shows(text).into_iter().find_map(|shown| {
@@ -367,8 +364,8 @@ mod tests {
         SenderCheck::new(org(), k, ["ana@studio.example".to_string()])
     }
 
-    fn warns(c: &SenderCheck, name: &str, email: &str, text: &str, listed: bool) -> Option<SenderWarning> {
-        c.check_signature(&EmailAddress::new(name, email), text, listed, &org())
+    fn warns(c: &SenderCheck, name: &str, email: &str, text: &str) -> Option<SenderWarning> {
+        c.check_signature(&EmailAddress::new(name, email), text, &org())
     }
 
     fn shown(shown: &str, real: &str) -> Option<SenderWarning> {
@@ -494,7 +491,7 @@ mod tests {
         ] {
             let text = format!("Gracias.\n\nBo\n{header}\n\n{mine}");
             assert!(!own_text(&text).contains("Hola"), "{header:?}");
-            assert_eq!(zoe.check_signature(&EmailAddress::new("Bo Chen", "bo@supplier.example"), &text, false, &org()), None, "{header:?}");
+            assert_eq!(zoe.check_signature(&EmailAddress::new("Bo Chen", "bo@supplier.example"), &text, &org()), None, "{header:?}");
         }
         // Gmail's German and Dutch lines, wrapped over two.
         for attribution in [
@@ -504,7 +501,7 @@ mod tests {
         ] {
             let text = format!("Danke.\n\nBo\n{attribution}\n\n{mine}");
             assert_eq!(own_text(&text), "Danke.\n\nBo\n", "{attribution:?}");
-            assert_eq!(zoe.check_signature(&EmailAddress::new("Bo Chen", "bo@supplier.example"), &text, false, &org()), None, "{attribution:?}");
+            assert_eq!(zoe.check_signature(&EmailAddress::new("Bo Chen", "bo@supplier.example"), &text, &org()), None, "{attribution:?}");
         }
         // A link on the line after a From line isn't a label.
         let text = "From: our team\nhttps://www.studio.example\n\nDana";
@@ -561,14 +558,14 @@ mod tests {
             "Bonjour,\n\nj'ai écrit à support@studio.example sans réponse",
             "I can't log in to www.studio.example",
         ] {
-            assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), None, "{text:?}");
+            assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text), None, "{text:?}");
         }
         // A signature's line: a name, a title, separators, the site.
         let text = "Cordialement,\n\nDana Whitfield | CEO | Studio | www.studio.example";
-        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), shown("studio.example", "marie.client@gmail.com"));
+        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text), shown("studio.example", "marie.client@gmail.com"));
         // A label is a word, separators and a phone number's digits aren't.
         let text = "Merci.\n\nEmail : dana@corp.example";
-        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), shown("dana@corp.example", "marie.client@gmail.com"));
+        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text), shown("dana@corp.example", "marie.client@gmail.com"));
         let text = "Merci.\n\nTél. : +33 1 23 45 67 89 – Web : www.studio.example";
         assert_eq!(signature_shows(text), vec![Shown::Site("studio.example".into())]);
         // A sentence of more words, even with a separator, isn't (Ruling 17: only the part
@@ -582,51 +579,46 @@ mod tests {
     fn a_one_line_signature_is_read_by_its_parts() {
         let c = knowing(&[]);
         let text = "Merci.\n\nDana Whitfield – Directrice Générale – Studio SAS – www.studio.example";
-        assert_eq!(warns(&c, "Dana Whitfield", "dg.studio@gmail.com", text, false), shown("studio.example", "dg.studio@gmail.com"));
+        assert_eq!(warns(&c, "Dana Whitfield", "dg.studio@gmail.com", text), shown("studio.example", "dg.studio@gmail.com"));
         assert_eq!(signature_shows("Dana Whitfield, CEO, Studio, Paris, France • www.studio.example"), vec![Shown::Site("studio.example".into())]);
         assert_eq!(signature_shows("Dana Whitfield — Head of Finance · dana@corp.example"), vec![Shown::Address("dana@corp.example".into())]);
         // A separator stuck to a word doesn't part the line.
         assert_eq!(signature_shows("Dana Whitfield, CEO, Studio, Paris, France •www.studio.example"), vec![]);
-        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", "I can't log in to www.studio.example", false), None);
+        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", "I can't log in to www.studio.example"), None);
     }
 
     #[test]
     fn case_a_the_organisation_from_outside() {
         let c = knowing(&[]);
         let text = "Please wire it today.\n\nDana Whitfield\nCEO\nwww.studio.example";
-        assert_eq!(warns(&c, "Direction", "dg.studio@gmail.com", text, false), shown("studio.example", "dg.studio@gmail.com"));
-        // A mailing list header on a mail service excuses nothing.
-        assert_eq!(warns(&c, "Direction", "dg.studio@gmail.com", text, true), shown("studio.example", "dg.studio@gmail.com"));
+        assert_eq!(warns(&c, "Direction", "dg.studio@gmail.com", text), shown("studio.example", "dg.studio@gmail.com"));
         // A site under the organisation's domain, the sender's address in capitals.
         let text = "Pay now.\n-- \nhttps://intranet.studio.example/finance";
-        assert_eq!(warns(&c, "Direction", "DG.Studio@Gmail.com", text, false), shown("intranet.studio.example", "dg.studio@gmail.com"));
+        assert_eq!(warns(&c, "Direction", "DG.Studio@Gmail.com", text), shown("intranet.studio.example", "dg.studio@gmail.com"));
         // From inside the organisation, a colleague's page is no warning; with no organisation,
         // nothing is.
-        assert_eq!(warns(&c, "Bo Chen", "bo@eu.studio.example", text, false), None);
+        assert_eq!(warns(&c, "Bo Chen", "bo@eu.studio.example", text), None);
         let none = BTreeSet::new();
-        assert_eq!(c.check_signature(&EmailAddress::new("Direction", "dg.studio@gmail.com"), text, false, &none), None);
+        assert_eq!(c.check_signature(&EmailAddress::new("Direction", "dg.studio@gmail.com"), text, &none), None);
     }
 
     #[test]
     fn case_b_an_address_known_exactly() {
         let c = knowing(&[("Dana Whitfield", "dana@corp.example")]);
         let text = "Merci de traiter ce virement.\n\nDana Whitfield\nDirectrice générale\ndana@corp.example";
-        assert_eq!(
-            warns(&c, "Direction Générale", "dg@corp-direction.example", text, false),
-            shown("dana@corp.example", "dg@corp-direction.example")
-        );
+        assert_eq!(warns(&c, "Direction Générale", "dg@corp-direction.example", text), shown("dana@corp.example", "dg@corp-direction.example"));
     }
 
     #[test]
     fn case_c_the_senders_name_on_free_mail() {
         let c = knowing(&[]);
         let text = "Call me.\n\nDana Whitfield\ndana.whitfield@unknown.example";
-        assert_eq!(warns(&c, "Dana Whitfield", "dw.ceo@gmail.com", text, false), shown("dana.whitfield@unknown.example", "dw.ceo@gmail.com"));
-        assert!(warns(&c, "Whitfield, Dana", "dw.ceo@yahoo.co.uk", "Dana\nwhitfield_dana@unknown.example", false).is_some());
+        assert_eq!(warns(&c, "Dana Whitfield", "dw.ceo@gmail.com", text), shown("dana.whitfield@unknown.example", "dw.ceo@gmail.com"));
+        assert!(warns(&c, "Whitfield, Dana", "dw.ceo@yahoo.co.uk", "Dana\nwhitfield_dana@unknown.example").is_some());
         // From an organisation's own domain the name is its business.
-        assert_eq!(warns(&c, "Dana Whitfield", "dw@other-corp.example", text, false), None);
+        assert_eq!(warns(&c, "Dana Whitfield", "dw@other-corp.example", text), None);
         // Another name in the address.
-        assert_eq!(warns(&c, "Dana Whitfield", "dw.ceo@gmail.com", "Call me.\n\nbo.chen@unknown.example", false), None);
+        assert_eq!(warns(&c, "Dana Whitfield", "dw.ceo@gmail.com", "Call me.\n\nbo.chen@unknown.example"), None);
     }
 
     #[test]
@@ -635,27 +627,27 @@ mod tests {
         // The sender is known.
         let c = knowing(&[("Direction", "dg.studio@gmail.com")]);
         assert!(c.knows("dg.studio@gmail.com"));
-        assert_eq!(warns(&c, "Direction", "dg.studio@gmail.com", case_a, false), None);
+        assert_eq!(warns(&c, "Direction", "dg.studio@gmail.com", case_a), None);
         let c = knowing(&[("Dana Whitfield", "dana@corp.example")]);
-        // A list from its own domain.
-        assert_eq!(warns(&c, "Corp News", "news@corp-news.example", case_a, true), None);
-        assert_eq!(warns(&c, "Corp News", "news@corp-news.example", case_a, false), shown("studio.example", "news@corp-news.example"));
+        // A newsletter from its own domain is no exception: what says it's one is its sender's
+        // to write.
+        assert_eq!(warns(&c, "Corp News", "news@corp-news.example", case_a), shown("studio.example", "news@corp-news.example"));
         // A mail service's address in the signature.
-        assert_eq!(warns(&c, "Dana Whitfield", "dw.ceo@gmail.com", "Hi\n-- \nDana Whitfield\nsomeone@gmail.com", false), None);
+        assert_eq!(warns(&c, "Dana Whitfield", "dw.ceo@gmail.com", "Hi\n-- \nDana Whitfield\nsomeone@gmail.com"), None);
         // A third party's signature, in what the sender forwards or answers.
         let third = "Voir ci-dessous.\n\nDe : Dana Whitfield <dana@corp.example>\nEnvoyé : lundi 3 novembre 2026\nÀ : Bob\n\nDana Whitfield\nwww.studio.example\ndana@corp.example";
-        assert_eq!(warns(&c, "Bob Martin", "bob@partner.example", third, false), None);
+        assert_eq!(warns(&c, "Bob Martin", "bob@partner.example", third), None);
         let unquoted = third.replace("De :", "Re :");
-        assert!(warns(&c, "Bob Martin", "bob@partner.example", &unquoted, false).is_some());
+        assert!(warns(&c, "Bob Martin", "bob@partner.example", &unquoted).is_some());
         // A domain related to the sender's.
-        assert_eq!(warns(&c, "Ana Lopez", "ana@studio.example", "Hi\n\nwww.mail.studio.example", false), None);
-        assert_eq!(warns(&c, "Dana Whitfield", "dana@mail.corp.example", "Hi\n\nDana\ndana@corp.example", false), None);
+        assert_eq!(warns(&c, "Ana Lopez", "ana@studio.example", "Hi\n\nwww.mail.studio.example"), None);
+        assert_eq!(warns(&c, "Dana Whitfield", "dana@mail.corp.example", "Hi\n\nDana\ndana@corp.example"), None);
         // The user's own address, in their message quoted without a mark (Review Focus 1).
-        assert_eq!(warns(&c, "Bob Martin", "bob@partner.example", "Agreed.\n\nAna Lopez\nana@studio.example", false), None);
+        assert_eq!(warns(&c, "Bob Martin", "bob@partner.example", "Agreed.\n\nAna Lopez\nana@studio.example"), None);
         // The user's own mail; no address at all.
-        assert_eq!(warns(&c, "Ana Lopez", "ana@studio.example", "Hi\n\nDana\ndana@corp.example\nwww.studio.example", false), None);
-        assert_eq!(warns(&c, "Dana Whitfield", "", case_a, false), None);
-        assert_eq!(warns(&c, "Dana Whitfield", "not an address", case_a, false), None);
+        assert_eq!(warns(&c, "Ana Lopez", "ana@studio.example", "Hi\n\nDana\ndana@corp.example\nwww.studio.example"), None);
+        assert_eq!(warns(&c, "Dana Whitfield", "", case_a), None);
+        assert_eq!(warns(&c, "Dana Whitfield", "not an address", case_a), None);
     }
 
     #[test]
@@ -679,7 +671,7 @@ mod tests {
         ];
         let started = Instant::now();
         for text in &texts {
-            let _ = c.check_signature(&from, text, false, &org());
+            let _ = c.check_signature(&from, text, &org());
             let own = own_text(text);
             assert!(own.len() <= READ_MOST);
             assert!(signature_shows(text).len() <= MOST_SHOWN);

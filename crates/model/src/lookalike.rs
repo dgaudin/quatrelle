@@ -203,14 +203,15 @@ impl SenderCheck {
     }
 
     /// What's wrong with `from` as a sender: an address in its name, a look-alike domain, or a
-    /// known person's name on an address that isn't theirs. `listed`: the message came through a
-    /// mailing list or from someone sending for its author ([`KnownPeople::check`]).
-    pub fn check(&self, from: &EmailAddress, listed: bool) -> Option<SenderWarning> {
+    /// known person's name on an address that isn't theirs ([`KnownPeople::check`]). What the
+    /// message says of itself (a list's header, `Precedence: bulk`) excuses nothing: its sender
+    /// wrote it.
+    pub fn check(&self, from: &EmailAddress) -> Option<SenderWarning> {
         if self.is_own(&from.email) {
             return None;
         }
         check_sender_shaped(from, &self.known, self.shapes.iter().map(|(k, s)| (k.as_str(), Cow::Borrowed(s.as_str()))))
-            .or_else(|| self.people.check(from, listed))
+            .or_else(|| self.people.check(from))
     }
 }
 
