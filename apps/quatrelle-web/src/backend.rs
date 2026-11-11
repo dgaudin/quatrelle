@@ -613,6 +613,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::WebexCreate { .. }
         | Job::WebexUpdate { .. }
         | Job::WebexDelete { .. }
+        | Job::Teams { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
@@ -811,6 +812,8 @@ impl Backend for WebBackend {
             Job::WebexUpdate { id, .. } => emit(sh, Event::WebexUpdated { id, meeting: None, error: Some(webex_refused()) }),
             Job::WebexDelete { id, .. } => emit(sh, Event::WebexDeleted { id, error: Some(webex_refused()) }),
             Job::WebexSignOut | Job::SetWebexSecret { .. } => {}
+            // Teams needs the desktop app: the browser's build never shows it.
+            Job::Teams { .. } => {}
             Job::FindCertificates { account, .. } => {
                 let error = Some("only an Exchange account's address book keeps certificates".to_string());
                 emit(sh, Event::DirectoryCertificates { account, found: Vec::new(), error })

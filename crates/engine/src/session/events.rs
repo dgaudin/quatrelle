@@ -228,6 +228,7 @@ impl Session {
             Event::WebexCreated { ask, meeting, error } => self.webex_created(ask, meeting, error),
             Event::WebexUpdated { id, meeting, error } => self.webex_updated(&id, meeting, error),
             Event::WebexDeleted { error, .. } => self.webex_deleted(error),
+            Event::Teams { .. } => {}
             Event::Exported { account, messages, skipped, already, occurrences, replaced, done, error } => {
                 self.exported(&account, messages, (skipped, already), (occurrences, replaced), done, error)
             }

@@ -491,6 +491,12 @@ pub enum Event {
         fingerprint: String,
         error: Option<String>,
     },
+    /// What the Teams worker reports ([`Job::Teams`]). Its key in JSON is `teams`: `event` is
+    /// this enum's tag.
+    Teams {
+        #[serde(rename = "teams")]
+        event: teams::Event,
+    },
 }
 
 /// What saves of a folder's list changed in it ([`Event::FolderSynced`]): the messages come or

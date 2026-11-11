@@ -13,6 +13,7 @@ pub mod files;
 pub mod markdown;
 pub mod scheduling;
 pub mod tasks;
+pub mod teams;
 
 pub use tasks::{DueGroup, StoredTask, Task, TaskStatus};
 

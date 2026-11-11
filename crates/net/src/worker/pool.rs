@@ -435,6 +435,7 @@ impl Pool {
             | Job::WebexCreate { .. }
             | Job::WebexUpdate { .. }
             | Job::WebexDelete { .. }) => self.webex(j),
+            Job::Teams { .. } => log::debug!("teams: not running"),
             Job::SealDraft { account, raw, folder, replaces, keep } => {
                 let raw = self.seal(&account, raw.0);
                 let account = account.id;

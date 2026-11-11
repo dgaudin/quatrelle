@@ -223,6 +223,19 @@ pub fn is_teams_link(url: &str) -> bool {
         || (on("teams.live.com") && path.starts_with("meet"))
 }
 
+/// Whether a web address opens a Teams chat or one of its messages (`https://teams.microsoft.com/l/chat/…`
+/// or `…/l/message/…`, or the same on `teams.cloud.microsoft`): over `https`, on Teams' own host
+/// exactly (no subdomain), and launchable ([`launchable_link`]).
+pub fn is_teams_chat_link(url: &str) -> bool {
+    let https = url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://"));
+    let Some((host, path)) = web_host_and_path(url) else { return false };
+    let path = path.to_ascii_lowercase();
+    https
+        && (host == "teams.microsoft.com" || host == "teams.cloud.microsoft")
+        && (path.starts_with("l/chat/") || path.starts_with("l/message/"))
+        && launchable_link(url)
+}
+
 /// Whether a web address may be handed to a browser to open: `http` or `https`, no whitespace or
 /// control character, at most 2,048 bytes, and a plain host ([`web_host_and_path`]).
 pub fn launchable_link(url: &str) -> bool {

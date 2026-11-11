@@ -527,6 +527,24 @@ fn a_teams_meeting_link_is_told_from_look_alikes() {
     }
 }
 
+/// A link that opens a Teams chat: Teams' own hosts only, over `https`, and nothing a browser
+/// would take elsewhere.
+#[test]
+fn teams_chat_links_are_teams_own() {
+    assert!(is_teams_chat_link("https://teams.microsoft.com/l/chat/19%3Aa%40thread.v2/0?tenantId=x"));
+    assert!(is_teams_chat_link("https://teams.cloud.microsoft/l/chat/19%3Aa%40thread.v2/conversations"));
+    assert!(is_teams_chat_link("https://teams.microsoft.com/l/message/19%3Aa%40thread.v2/1?context=x"));
+    assert!(!is_teams_chat_link("http://teams.microsoft.com/l/chat/19%3Aa/0"));
+    assert!(!is_teams_chat_link("https://teams.microsoft.com.evil.example/l/chat/19%3Aa/0"));
+    assert!(!is_teams_chat_link("https://eu.teams.microsoft.com/l/chat/19%3Aa/0"));
+    assert!(!is_teams_chat_link("https://evil.example/l/chat/19%3Aa/0"));
+    assert!(!is_teams_chat_link("https://teams.microsoft.com@evil.example/l/chat/19%3Aa/0"));
+    assert!(!is_teams_chat_link("https://teams.microsoft.com/l/chat/19%3Aa/0 x"));
+    assert!(!is_teams_chat_link("https://teams.microsoft.com/l/meetup-join/x"));
+    assert!(!is_teams_chat_link("https://teams.microsoft.com/l/chatx/19%3Aa/0"));
+    assert!(!is_teams_link("https://teams.microsoft.com/l/chat/19%3Aa/0"), "a chat link is no meeting");
+}
+
 fn webex_event(id: &str) -> CalEvent {
     CalEvent { uid: "w1".into(), start: 1_792_000_000, end: 1_792_003_600, webex_id: Some(id.into()), ..Default::default() }
 }

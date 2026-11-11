@@ -282,6 +282,7 @@ impl Worker {
             | Job::WebexCreate { .. }
             | Job::WebexUpdate { .. }
             | Job::WebexDelete { .. }
+            | Job::Teams { .. }
             | Job::LocalFolderSizes { .. }
             | Job::ExportPst { .. }
             | Job::ImportIdentity { .. }

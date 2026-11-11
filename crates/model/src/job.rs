@@ -10,7 +10,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AccountConfig, Flag, Folder, MessageKey, organize::Rule};
+use crate::{AccountConfig, Flag, Folder, MessageKey, organize::Rule, pim::teams};
 
 /// A password in transit. Its `Debug` form and what it serializes to are redacted, so it never
 /// reaches a log or a file: nothing writes a [`Job`] or an [`Event`] to read it back.
@@ -520,6 +520,12 @@ pub enum Job {
     /// Read the archive policy tag a message carries and the day the server plans to move it
     /// (Exchange), asked when it is opened: not part of a list's sync.
     ReadArchiveTag { key: MessageKey },
+    /// Work for the Teams worker, which keeps the Teams copy apart from the accounts. Its key in
+    /// JSON is `teams`: `job` is this enum's tag.
+    Teams {
+        #[serde(rename = "teams")]
+        job: teams::Job,
+    },
 }
 
 impl Job {
@@ -588,7 +594,8 @@ impl Job {
             | Job::WebexDelete { .. }
             | Job::StopSearch
             | Job::CheckRevocation { .. }
-            | Job::FindHeldKeys { .. } => "",
+            | Job::FindHeldKeys { .. }
+            | Job::Teams { .. } => "",
             Job::SignIn { account }
             | Job::ImportIdentity { account, .. }
             | Job::ForgetIdentity { account }
