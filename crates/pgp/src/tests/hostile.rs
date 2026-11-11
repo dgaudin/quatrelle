@@ -130,3 +130,32 @@ fn a_file_of_many_keys_is_read_so_far() {
     let armored = p.to_armored_string(Default::default()).unwrap().replace('\n', "\r\n");
     assert_eq!(public_keys(format!("  \r\n{armored}   \n").as_bytes()).unwrap().len(), 1);
 }
+
+/// A standalone or timestamp signature covers one byte of what it's checked over: the sender's
+/// own, lifted from elsewhere, would hold over any text that starts alike. Only signatures over a
+/// message (binary or text) count.
+#[test]
+fn only_signatures_over_a_message_count() {
+    use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+    use pgp::types::{KeyDetails as _, SigningKey as _};
+    let ana = unlocked("Ana <ana@posteo.example>");
+    let key = crate::message::secret(&ana.secret).unwrap();
+    for typ in [SignatureType::Standalone, SignatureType::Timestamp] {
+        let mut config = SignatureConfig::from_key(rand_core::OsRng, &key.primary_key, typ).unwrap();
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.primary_key.fingerprint())).unwrap(),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(crate::stamp(NOW))).unwrap(),
+        ];
+        // rPGP makes none itself: hashed and signed by hand, over the one byte such a signature covers.
+        let mut hasher = config.hash_alg.new_hasher().unwrap();
+        hasher.update(b"C");
+        let len = config.hash_signature_data(&mut hasher).unwrap();
+        hasher.update(&config.trailer(len).unwrap());
+        let hash = hasher.finalize();
+        let bytes = key.primary_key.sign(&pgp::types::Password::empty(), config.hash_alg, &hash).unwrap();
+        let made = pgp::packet::Signature::from_config(config, [hash[0], hash[1]], bytes).unwrap();
+        let signature = pgp::composed::DetachedSignature::new(made).to_armored_bytes(Default::default()).unwrap();
+        let said = verify(b"Content-Type: text/plain\r\n\r\nPay Eve.\r\n", &signature, &[&ana.public]).unwrap();
+        assert_eq!(said, Check::Bad, "{typ:?}");
+    }
+}

@@ -8,7 +8,7 @@ use pgp::composed::{
 };
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::packet::{Signature, Subpacket, SubpacketData};
+use pgp::packet::{Signature, SignatureType, Subpacket, SubpacketData};
 use pgp::types::{KeyDetails, Password, SigningKey, VerifyingKey};
 use rand_core::{CryptoRng, RngCore};
 
@@ -51,6 +51,13 @@ fn weak(s: &Signature) -> bool {
 
 fn when(s: &Signature) -> Option<i64> {
     s.created().map(|t| i64::from(t.as_secs()))
+}
+
+/// Whether `s` is a signature over a message: binary or text. A standalone or timestamp
+/// signature covers one byte of what it's checked over, and the others sign keys: none of them
+/// says anything about a message, whoever made it.
+fn over_a_message(s: &Signature) -> bool {
+    matches!(s.typ(), Some(SignatureType::Binary | SignatureType::Text))
 }
 
 /// The key ID a signature names as its maker.
@@ -110,7 +117,7 @@ fn check(s: &Signature, keys: &[&[u8]], verify: &dyn Fn(Component<'_>) -> bool) 
                 continue;
             }
             named = true;
-            if verify(c) {
+            if over_a_message(s) && verify(c) {
                 return Check::Good { key: i, at: when(s), weak: weak(s) };
             }
         }
