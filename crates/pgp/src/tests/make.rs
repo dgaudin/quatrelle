@@ -136,11 +136,11 @@ proptest! {
     fn a_made_key_signs_and_encrypts_round_trip(data in proptest::collection::vec(any::<u8>(), 0..=64 << 10)) {
         let k = riley();
         let sig = sign(&data, &k.secret, NOW, &mut rand_core::OsRng).unwrap();
-        prop_assert_eq!(verify(&data, sig.as_bytes(), &[&k.public]).unwrap(), Check::Good { key: 0, at: Some(NOW), weak: false });
+        prop_assert_eq!(verify(&data, sig.as_bytes(), &[&k.public]).unwrap(), Check::Good { key: 0, at: Some(NOW), weak: false, until: Some(NOW + VALID_FOR_SECS as i64) });
         let sealed = encrypt(&data, &[&k.public], Some(&k.secret), NOW, &mut rand_core::OsRng).unwrap();
         let d = decrypt(sealed.as_bytes(), &[&k.secret], &[&k.public]).unwrap();
         prop_assert_eq!(d.data, data);
-        prop_assert_eq!(d.check, Some(Check::Good { key: 0, at: Some(NOW), weak: false }));
+        prop_assert_eq!(d.check, Some(Check::Good { key: 0, at: Some(NOW), weak: false, until: Some(NOW + VALID_FOR_SECS as i64) }));
     }
 }
 

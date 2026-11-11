@@ -75,7 +75,7 @@ fn mail_encrypted_and_signed_reads_back() {
     // Ana reads it, the signature checked with the keys that could have made it.
     let d = decrypt(sealed.as_bytes(), &[&ana.secret], &[&ana.public, &bo.public]).unwrap();
     assert_eq!(d.data, text);
-    assert_eq!(d.check, Some(Check::Good { key: 1, at: Some(NOW), weak: false }));
+    assert_eq!(d.check, Some(Check::Good { key: 1, at: Some(NOW), weak: false, until: None }));
     // Without Bo's key: signed by someone unknown, named by key ID.
     let d = decrypt(sealed.as_bytes(), &[&ana.secret], &[]).unwrap();
     assert_eq!(d.check, Some(Check::Unknown(bo.info.key_id.clone())));
@@ -109,7 +109,7 @@ fn detached_signatures_hold_or_dont() {
     let part = b"Content-Type: text/plain\r\n\r\nSigned.\r\n";
     let sig = sign(part, &bo.secret, NOW, &mut rand_core::OsRng).unwrap();
     assert!(sig.starts_with("-----BEGIN PGP SIGNATURE-----"));
-    assert_eq!(verify(part, sig.as_bytes(), &[&zoe.public, &bo.public]).unwrap(), Check::Good { key: 1, at: Some(NOW), weak: false });
+    assert_eq!(verify(part, sig.as_bytes(), &[&zoe.public, &bo.public]).unwrap(), Check::Good { key: 1, at: Some(NOW), weak: false, until: None });
     assert_eq!(verify(b"Content-Type: text/plain\r\n\r\nChanged.\r\n", sig.as_bytes(), &[&bo.public]).unwrap(), Check::Bad);
     assert_eq!(verify(part, sig.as_bytes(), &[&zoe.public]).unwrap(), Check::Unknown(bo.info.key_id.clone()));
     assert!(verify(part, b"-----BEGIN PGP SIGNATURE-----\n\nAAAA\n-----END PGP SIGNATURE-----\n", &[&bo.public]).is_err());

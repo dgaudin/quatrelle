@@ -72,7 +72,7 @@ fn answer_decrypt(a: &mut MailApp) {
         let keys: Vec<&[u8]> = verify_with.iter().map(Vec::as_slice).collect();
         let d = pgp::decrypt(&data, &[&riley.secret], &keys).unwrap();
         let signature = d.check.map(|c| match c {
-            pgp::Check::Good { key, at, weak } => PgpSignature::Good { key, at, weak },
+            pgp::Check::Good { key, at, weak, until } => PgpSignature::Good { key, at, weak, until },
             pgp::Check::Bad => PgpSignature::Bad,
             pgp::Check::Unknown(key_id) => PgpSignature::Unknown { key_id },
         });

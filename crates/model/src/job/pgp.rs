@@ -102,8 +102,15 @@ impl PgpWork {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "seal", rename_all = "camelCase")]
 pub enum PgpSignature {
-    /// It holds, by the `key`th of the keys given, made at `at`; `weak`: over SHA-1 or older.
-    Good { key: usize, at: Option<i64>, weak: bool },
+    /// It holds, by the `key`th of the keys given, made at `at`; `weak`: over SHA-1 or older;
+    /// `until`: when the part of the key that made it (or the signature itself) runs out.
+    Good {
+        key: usize,
+        at: Option<i64>,
+        weak: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        until: Option<i64>,
+    },
     /// It doesn't hold.
     Bad,
     /// It was made by a key not given (its key ID).

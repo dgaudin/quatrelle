@@ -9,6 +9,7 @@ use super::*;
 use crate::session::{Lock, Seal};
 use quatrelle_smime as smime;
 
+mod forged;
 mod pgp;
 
 /// After the test certificates were made, before they run out.

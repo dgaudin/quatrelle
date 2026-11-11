@@ -190,7 +190,7 @@ pub(crate) fn decrypt(
         other => other.to_string(),
     })?;
     let signature = d.check.map(|c| match c {
-        pgp::Check::Good { key, at, weak } => PgpSignature::Good { key, at, weak },
+        pgp::Check::Good { key, at, weak, until } => PgpSignature::Good { key, at, weak, until },
         pgp::Check::Bad => PgpSignature::Bad,
         pgp::Check::Unknown(key_id) => PgpSignature::Unknown { key_id },
     });

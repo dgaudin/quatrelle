@@ -30,7 +30,7 @@ const USE_KEPT_EVERY: i64 = 86_400;
 /// What a check says, as the network layer passes it.
 fn as_signature(c: openpgp::Check) -> PgpSignature {
     match c {
-        openpgp::Check::Good { key, at, weak } => PgpSignature::Good { key, at, weak },
+        openpgp::Check::Good { key, at, weak, until } => PgpSignature::Good { key, at, weak, until },
         openpgp::Check::Bad => PgpSignature::Bad,
         openpgp::Check::Unknown(key_id) => PgpSignature::Unknown { key_id },
     }
@@ -71,7 +71,7 @@ impl Session {
     /// came is said, and its use written down.
     pub(super) fn pgp_signed_by(&mut self, account: &str, sig: &PgpSignature, keys: &[Vec<u8>], from: &str, owner: &str) -> SignedBy {
         match sig {
-            PgpSignature::Good { key, at, weak } => {
+            PgpSignature::Good { key, at, weak, until } => {
                 let info = keys.get(*key).and_then(|k| openpgp::info(k).ok());
                 let mut problems = Vec::new();
                 let mut learnt = None;
@@ -83,6 +83,13 @@ impl Session {
                             openpgp::Problem::NotYetValid(t) => smime::Problem::NotYetValid(t),
                             openpgp::Problem::NoEncryption => continue,
                         });
+                    }
+                    // The part of the key that signed (a subkey of its own end), or the
+                    // signature itself, ran out: before now, or before it was made.
+                    if let Some(end) = until.filter(|end| *end <= self.clock.now || at.is_some_and(|at| at > *end))
+                        && !problems.iter().any(|p| matches!(p, smime::Problem::Expired(_)))
+                    {
+                        problems.push(smime::Problem::Expired(end));
                     }
                     if !from.trim().is_empty() && !i.is_for(from) {
                         problems.push(smime::Problem::OtherAddress(i.emails.clone()));

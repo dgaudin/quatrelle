@@ -19,8 +19,10 @@ use crate::{Error, MAX, guard, stamp};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Check {
     /// It holds, made by `keys[key]` (of the keys given to check it with) at `at`; `weak`: over
-    /// SHA-1 or older, which no longer proves much.
-    Good { key: usize, at: Option<i64>, weak: bool },
+    /// SHA-1 or older, which no longer proves much. `until`: when it stops counting, the caller's
+    /// to compare with the time: the end of the part of the key that made it (a signing subkey
+    /// runs out on its own), or the signature's own when it has one and that's sooner.
+    Good { key: usize, at: Option<i64>, weak: bool, until: Option<i64> },
     /// It was made by one of the keys given, and it doesn't hold: what it covers was changed.
     Bad,
     /// It was made by a key not given (its key ID, hex).
@@ -58,6 +60,20 @@ fn when(s: &Signature) -> Option<i64> {
 /// says anything about a message, whoever made it.
 fn over_a_message(s: &Signature) -> bool {
     matches!(s.typ(), Some(SignatureType::Binary | SignatureType::Text))
+}
+
+/// When a signature says it runs out itself (few do).
+fn runs_out(s: &Signature) -> Option<i64> {
+    let secs = s.signature_expiration_time().map(|d| std::time::Duration::from(d).as_secs()).unwrap_or(0);
+    (secs > 0).then(|| when(s).unwrap_or(0).saturating_add(i64::try_from(secs).unwrap_or(i64::MAX)))
+}
+
+/// The sooner of two ends (`None`: no end).
+fn sooner(a: Option<i64>, b: Option<i64>) -> Option<i64> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
 }
 
 /// The key ID a signature names as its maker.
@@ -105,7 +121,7 @@ fn check(s: &Signature, keys: &[&[u8]], verify: &dyn Fn(Component<'_>) -> bool) 
     let mut named = false;
     for (i, data) in keys.iter().enumerate() {
         let Ok(key) = parse_public(data) else { continue };
-        for (part, _, _) in analyse(&key).sign {
+        for (part, _, until) in analyse(&key).sign {
             let c = match part {
                 Part::Primary => Component::Primary(&key.primary_key),
                 Part::Sub(n) => match key.public_subkeys.get(n) {
@@ -118,7 +134,7 @@ fn check(s: &Signature, keys: &[&[u8]], verify: &dyn Fn(Component<'_>) -> bool) 
             }
             named = true;
             if over_a_message(s) && verify(c) {
-                return Check::Good { key: i, at: when(s), weak: weak(s) };
+                return Check::Good { key: i, at: when(s), weak: weak(s), until: sooner(until, runs_out(s)) };
             }
         }
     }

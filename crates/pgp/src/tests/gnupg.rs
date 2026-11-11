@@ -170,3 +170,28 @@ fn gnupg_reads_a_key_and_mail_quatrelle_made() {
         std::panic::resume_unwind(e);
     }
 }
+
+/// A signature says until when it counts: the end of the part of the key that made it (GnuPG's
+/// key for Kim signs with a subkey valid for a day; the key itself has no end), or its own.
+#[test]
+fn a_signature_says_when_its_key_part_runs_out() {
+    use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+    use pgp::types::KeyDetails as _;
+    let kim = public("kim.asc");
+    assert_eq!(info(&kim).unwrap().expires, None);
+    let said = verify(&testdata("part.txt"), &testdata("kim-part.sig"), &[&kim]).unwrap();
+    assert_eq!(said, Check::Good { key: 0, at: Some(1_780_315_200), weak: false, until: Some(1_780_358_400) });
+    // A signature that runs out an hour after it was made.
+    let ana = super::unlocked("Ana <ana@posteo.example>");
+    let key = crate::message::secret(&ana.secret).unwrap();
+    let mut config = SignatureConfig::from_key(rand_core::OsRng, &key.primary_key, SignatureType::Binary).unwrap();
+    config.hashed_subpackets = vec![
+        Subpacket::regular(SubpacketData::IssuerFingerprint(key.primary_key.fingerprint())).unwrap(),
+        Subpacket::regular(SubpacketData::SignatureCreationTime(crate::stamp(NOW))).unwrap(),
+        Subpacket::regular(SubpacketData::SignatureExpirationTime(pgp::types::Duration::from_secs(3600))).unwrap(),
+    ];
+    let made = config.sign(&key.primary_key, &pgp::types::Password::empty(), &b"part"[..]).unwrap();
+    let signature = pgp::composed::DetachedSignature::new(made).to_armored_bytes(Default::default()).unwrap();
+    let said = verify(b"part", &signature, &[&ana.public]).unwrap();
+    assert_eq!(said, Check::Good { key: 0, at: Some(NOW), weak: false, until: Some(NOW + 3600) });
+}
