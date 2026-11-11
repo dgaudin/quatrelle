@@ -159,3 +159,13 @@ fn only_signatures_over_a_message_count() {
         assert_eq!(said, Check::Bad, "{typ:?}");
     }
 }
+
+/// A block in a text is opened within a few megabytes: GnuPG's, eight kilobytes that hold six
+/// megabytes, is refused before it's all decompressed, and read where there's room.
+#[test]
+fn a_block_is_opened_within_what_its_reader_takes() {
+    let block = gnupg::testdata("compressed-inline.asc");
+    assert!(block.len() < 16 << 10);
+    assert_eq!(open_within(&block, &[], 4 << 20).unwrap_err(), Error::TooBig);
+    assert_eq!(open(&block, &[]).unwrap().data.len(), 6 << 20);
+}

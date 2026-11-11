@@ -44,6 +44,7 @@ fuzz_target!(|input: &[u8]| {
     if let Some(ana) = ana() {
         let _ = pgp::decrypt(input, &[&ana.secret], &[&ana.public, input]);
         let _ = pgp::open(input, &[&ana.public, input]);
+        let _ = pgp::open_within(input, &[&ana.public], 64 << 10);
         let _ = pgp::verify(b"Content-Type: text/plain\r\n\r\nx\r\n", input, &[&ana.public, input]);
         let _ = pgp::verify_cleartext(input, &[&ana.public]);
     }

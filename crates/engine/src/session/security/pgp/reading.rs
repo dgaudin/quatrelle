@@ -27,6 +27,10 @@ pub(crate) enum Step {
 /// written whole).
 const USE_KEPT_EVERY: i64 = 86_400;
 
+/// The most a PGP block in a text may hold: it's opened where the message is shown, and a few
+/// kilobytes can decompress to a thousand times as much. As much as a text is shown up to.
+const INLINE_MAX: usize = 4 << 20;
+
 /// What a check says, as the network layer passes it.
 fn as_signature(c: openpgp::Check) -> PgpSignature {
     match c {
@@ -192,7 +196,7 @@ impl Session {
                 }
                 Some(openpgp::Inline::Message(block)) => {
                     sec.pgp = true;
-                    match self.check_pgp(&account, &from, |keys| openpgp::open(block, keys).map(|d| (d.data, d.check))) {
+                    match self.check_pgp(&account, &from, |keys| openpgp::open_within(block, keys, INLINE_MAX).map(|d| (d.data, d.check))) {
                         Ok((data, by)) => {
                             if sec.signed.is_none() {
                                 sec.signed = by;
@@ -317,7 +321,7 @@ impl Session {
                     self.opened.get(key).map(|(entity, _)| mime::smime::with_entity(cur, entity))
                 }
                 openpgp::Inline::Message(block) => {
-                    let d = openpgp::open(block, &[]).ok()?;
+                    let d = openpgp::open_within(block, &[], INLINE_MAX).ok()?;
                     Some(mime::smime::with_entity(cur, &mime::pgp::text_entity(&d.data, &charset)))
                 }
             },

@@ -70,3 +70,19 @@ fn a_signing_subkey_that_ran_out_is_said() {
     assert_eq!(seal(&s), Seal::Untrusted(vec![smime::Problem::Expired(1_780_358_400)]));
     done(s);
 }
+
+/// A PGP block in a text, a few kilobytes that decompress to megabytes: not opened past what a
+/// text is shown up to.
+#[test]
+fn a_compressed_block_in_a_text_isnt_opened_past_a_few_megabytes() {
+    let mut s = sample_session("forged-pgp-bomb");
+    s.clock.now = PGP_NOW;
+    let block = String::from_utf8(pgpdata("compressed-inline.asc")).unwrap().replace('\n', "\r\n");
+    assert!(block.len() < 16 << 10);
+    let sent =
+        format!("{}MIME-Version: 1.0\r\nContent-Type: text/plain; charset=us-ascii\r\n\r\n{block}", outer("f11", "Eve <eve@evil.example>", ""));
+    open_raw(&mut s, 9712, sent.as_bytes());
+    let text = shown(&s).text;
+    assert!(text.len() < 1 << 20, "{} bytes shown", text.len());
+    done(s);
+}

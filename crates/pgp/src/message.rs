@@ -224,8 +224,8 @@ pub(crate) fn read_capped(r: &mut impl std::io::Read, max: usize, fail: &Error) 
 }
 
 /// What a message that isn't encrypted (any more) holds: decompressed, read to its end (no more
-/// than [`MAX`]), and its signature checked with `keys`.
-fn unpack(msg: Message<'_>, keys: &[&[u8]], fail: Error) -> Result<Decrypted, Error> {
+/// than `max`), and its signature checked with `keys`.
+fn unpack(msg: Message<'_>, keys: &[&[u8]], fail: Error, max: usize) -> Result<Decrypted, Error> {
     // Compressed, or signed over something compressed (a few layers deep at most).
     let mut msg = msg;
     for _ in 0..4 {
@@ -234,7 +234,7 @@ fn unpack(msg: Message<'_>, keys: &[&[u8]], fail: Error) -> Result<Decrypted, Er
     if msg.is_compressed() || msg.is_encrypted() {
         return Err(fail);
     }
-    let data = read_capped(&mut msg, MAX, &fail)?;
+    let data = read_capped(&mut msg, max.min(MAX), &fail)?;
     let check = match &msg {
         Message::Signed { reader, .. } => {
             // The first signature that holds, else what the first says.
@@ -257,6 +257,12 @@ fn unpack(msg: Message<'_>, keys: &[&[u8]], fail: Error) -> Result<Decrypted, Er
 
 /// A signed (not encrypted) message, armored or binary: what it holds and its signature checked.
 pub fn open(data: &[u8], keys: &[&[u8]]) -> Result<Decrypted, Error> {
+    open_within(data, keys, MAX)
+}
+
+/// [`open`], for a message that may hold `max` bytes at most ([`Error::TooBig`] past it, found
+/// before more is decompressed): what's read where it can't take long, a block in a text.
+pub fn open_within(data: &[u8], keys: &[&[u8]], max: usize) -> Result<Decrypted, Error> {
     if data.len() > MAX {
         return Err(Error::TooBig);
     }
@@ -266,7 +272,7 @@ pub fn open(data: &[u8], keys: &[&[u8]]) -> Result<Decrypted, Error> {
         if msg.is_encrypted() {
             return Err(Error::Decrypt);
         }
-        unpack(msg, keys, bad)
+        unpack(msg, keys, bad, max)
     })
 }
 
@@ -298,7 +304,7 @@ pub fn decrypt(data: &[u8], secrets: &[&[u8]], keys: &[&[u8]]) -> Result<Decrypt
         if msg.is_encrypted() {
             return Err(Error::Decrypt);
         }
-        unpack(msg, keys, Error::Decrypt)
+        unpack(msg, keys, Error::Decrypt, MAX)
     })
 }
 
