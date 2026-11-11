@@ -34,6 +34,10 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
                 ui.label(tl!("Email address"));
                 let r = ui
                     .add(egui::TextEdit::singleline(&mut f.email).hint_text(tl!("you@example.com")).min_size(vec2(300.0, 26.0)).desired_width(300.0));
+                if r.changed() {
+                    // Another address: what was confirmed was the servers found for the last.
+                    f.servers_confirmed = false;
+                }
                 if r.changed() && !f.servers_edited {
                     f.guess();
                     f.found_for = None;
@@ -288,7 +292,11 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
                 );
             }
             let email = f.email.trim().to_ascii_lowercase();
+            // Found through DNS records alone: shown, and nothing goes there until confirmed.
+            let to_confirm = f.confirm_servers(ui, s, t);
+            let confirmed = !to_confirm || f.servers_confirmed;
             match (&f.found_source, s.discovered.get(&email)) {
+                (Some(_), _) if to_confirm => {}
                 (Some(src), _) if f.found_for.as_deref() == Some(email.as_str()) => {
                     ui.label(RichText::new(tf!("Settings found: {source}", source = src)).color(t.ok).small());
                 }
@@ -359,7 +367,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
                         crate::icons::Icon::Person,
                         &tf!("Sign in with {provider}", provider = name),
                         t,
-                        !f.email.trim().is_empty(),
+                        !f.email.trim().is_empty() && confirmed,
                     )
                     .clicked()
                     {
@@ -374,7 +382,12 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
                     ui.label(RichText::new(tl!("in your browser: no password stored")).color(t.faint).small());
                 });
             }
-            let ready = !f.graph && !consumer && !f.email.trim().is_empty() && !f.password.is_empty() && (!f.jmap || !f.jmap_url.trim().is_empty());
+            let ready = !f.graph
+                && !consumer
+                && !f.email.trim().is_empty()
+                && !f.password.is_empty()
+                && (!f.jmap || !f.jmap_url.trim().is_empty())
+                && confirmed;
             let (ok, cancel) = buttons(ui, t, "Connect", ready);
             if ok {
                 if !f.jmap && !f.ews && f.imap_host.is_empty() {

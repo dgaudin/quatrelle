@@ -41,7 +41,12 @@ fn microsoft_365_domains_are_proposed_through_graph_with_their_own_registration(
     let mut c = quatrelle_engine::model::AccountConfig::guess("zoe@contoso.example");
     c.graph = Some(quatrelle_engine::model::GRAPH_URL.into());
     c.oauth = Some("microsoft".into());
-    a.session.apply(MailEvent::Discovered { email: "zoe@contoso.example".into(), config: Some(Box::new(c)), source: "Microsoft 365".into() });
+    a.session.apply(MailEvent::Discovered {
+        email: "zoe@contoso.example".into(),
+        config: Some(Box::new(c)),
+        source: "Microsoft 365".into(),
+        unverified: false,
+    });
     frame(&ctx, &mut a, vec![]);
     let Some(Dialog::AddAccount(f)) = a.ui.dialog.as_mut() else { panic!("the Add account dialog") };
     assert!(f.graph, "proposed through Graph");

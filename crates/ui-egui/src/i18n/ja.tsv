@@ -2167,3 +2167,5 @@ folder	Online Archive	オンライン アーカイブ
 	The file has changed since the import began. Bring in what is new?	インポートの開始後にファイルが変更されました。新しい分を取り込みますか?
 	Tick box	チェックボックス
 	{title} – Note	{title} – メモ
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	これらのサーバーは、ドメインの DNS レコードから見つかりましたが、その内容は何も保証されていません: {incoming} (受信メール) と {smtp} (送信メール)。パスワードはこれらのサーバーに送信されます。ご利用のメールプロバイダーのサーバーであることを確認してください。
+	These are my mail provider's servers	これらは自分のメールプロバイダーのサーバーです

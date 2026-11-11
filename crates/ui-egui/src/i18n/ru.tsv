@@ -2170,3 +2170,5 @@ folder	Online Archive	Онлайн-архив
 	The file has changed since the import began. Bring in what is new?	Файл изменился с начала импорта. Добавить новое?
 	Tick box	Флажок
 	{title} – Note	{title} – Заметка
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Эти серверы найдены по DNS-записям домена, подлинность которых ничем не подтверждена: {incoming} (входящая почта) и {smtp} (исходящая почта). Ваш пароль будет отправлен на них. Убедитесь, что это серверы вашего почтового провайдера.
+	These are my mail provider's servers	Это серверы моего почтового провайдера

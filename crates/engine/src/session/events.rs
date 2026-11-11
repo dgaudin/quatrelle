@@ -418,8 +418,14 @@ impl Session {
                     }
                 }
             }
-            Event::Discovered { email, config, source } => {
-                self.discovered.insert(email.trim().to_ascii_lowercase(), Some((config.map(|c| *c), source)));
+            Event::Discovered { email, config, source, unverified } => {
+                let email = email.trim().to_ascii_lowercase();
+                if unverified && config.is_some() {
+                    self.discovered_unverified.insert(email.clone());
+                } else {
+                    self.discovered_unverified.remove(&email);
+                }
+                self.discovered.insert(email, Some((config.map(|c| *c), source)));
             }
             Event::Releases { releases, error } => {
                 self.update = match error {

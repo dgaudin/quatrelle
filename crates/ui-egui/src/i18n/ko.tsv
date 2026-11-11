@@ -2169,3 +2169,5 @@ folder	Online Archive	온라인 보관함
 	The file has changed since the import began. Bring in what is new?	가져오기를 시작한 뒤 파일이 바뀌었습니다. 새로운 내용을 가져올까요?
 	Tick box	확인란
 	{title} – Note	{title} – 메모
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	이 서버들은 도메인의 DNS 레코드를 통해 찾았으며, 그 내용은 아무것도 보증하지 않습니다: {incoming}(받는 메일) 및 {smtp}(보내는 메일). 암호가 이 서버들로 전송됩니다. 사용 중인 메일 공급자의 서버가 맞는지 확인하세요.
+	These are my mail provider's servers	내 메일 공급자의 서버가 맞습니다

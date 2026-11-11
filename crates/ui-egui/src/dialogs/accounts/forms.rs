@@ -48,6 +48,9 @@ pub struct AccountForm {
     /// The address whose looked-up settings are filled in, and where they came from.
     pub found_for: Option<String>,
     pub found_source: Option<String>,
+    /// The user ticked that servers found through DNS alone are their provider's (asked for
+    /// each address found: `Session::found_unconfirmed`).
+    pub servers_confirmed: bool,
     /// Microsoft sign-in through the organisation's own app registration: its Application
     /// (client) ID and tenant (empty: the one built into this copy, at `common`).
     pub client_id: String,
@@ -175,8 +178,45 @@ impl AccountForm {
         self.pop_security = Security::Tls;
     }
 
+    /// The incoming server the account would use, by the kind of server picked.
+    pub(crate) fn incoming_host(&self) -> &str {
+        if self.pop { &self.pop_host } else { &self.imap_host }
+    }
+
+    /// Whether the servers in the form were found through DNS alone and still wait for the
+    /// user's word: nothing is sent to them until then. (Exchange and JMAP name their own.)
+    pub(crate) fn servers_to_confirm(&self, s: &Session) -> bool {
+        !self.graph && !self.ews && !self.jmap && s.found_unconfirmed(&self.email, self.incoming_host(), &self.smtp_host)
+    }
+
+    /// The servers found through DNS alone, shown with what that means and a box to tick:
+    /// whether they wait for it (`servers_to_confirm`).
+    pub(crate) fn confirm_servers(&mut self, ui: &mut Ui, s: &Session, t: &Tokens) -> bool {
+        let to_confirm = self.servers_to_confirm(s);
+        if to_confirm {
+            ui.add_space(4.0);
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tf!(
+                        "These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.",
+                        incoming = self.incoming_host(),
+                        smtp = self.smtp_host
+                    ))
+                    .color(t.warn)
+                    .small(),
+                )
+                .wrap(),
+            );
+            ui.checkbox(&mut self.servers_confirmed, tl!("These are my mail provider's servers"));
+        }
+        to_confirm
+    }
+
     pub(crate) fn params(&self) -> serde_json::Value {
         let mut p = self.server_params();
+        if self.servers_confirmed {
+            p["serversConfirmed"] = json!(true);
+        }
         if self.online_only == Some(true) && !self.pop {
             p["onlineOnly"] = json!(true);
         }

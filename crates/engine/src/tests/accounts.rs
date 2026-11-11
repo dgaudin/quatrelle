@@ -168,7 +168,12 @@ fn microsoft_accounts_can_bring_their_own_app_registration() {
     s.run("account.discover", &json!({"email": "ana@contoso.example"})).unwrap();
     let mut found = quatrelle_model::AccountConfig::guess("ana@contoso.example");
     found.graph = Some(quatrelle_model::GRAPH_URL.into());
-    s.apply(Event::Discovered { email: "ana@contoso.example".into(), config: Some(Box::new(found)), source: "Microsoft 365".into() });
+    s.apply(Event::Discovered {
+        email: "ana@contoso.example".into(),
+        config: Some(Box::new(found)),
+        source: "Microsoft 365".into(),
+        unverified: false,
+    });
     let r = s.run("account.discover", &json!({"email": "ana@contoso.example"})).unwrap();
     assert_eq!(r["graph"].as_str(), Some(quatrelle_model::GRAPH_URL));
     let _ = std::fs::remove_dir_all(root);
@@ -184,7 +189,7 @@ fn server_settings_are_looked_up_once() {
     assert!(s.take_jobs().is_empty(), "asked once");
     let mut c = quatrelle_model::AccountConfig::guess("zoe@example.org");
     c.imap.host = "imap.example.org".into();
-    s.apply(Event::Discovered { email: "zoe@example.org".into(), config: Some(Box::new(c)), source: "example.org".into() });
+    s.apply(Event::Discovered { email: "zoe@example.org".into(), config: Some(Box::new(c)), source: "example.org".into(), unverified: false });
     let r = s.run("account.discover", &json!({"email": "zoe@example.org"})).unwrap();
     assert_eq!((r["found"].as_bool(), r["imap"]["host"].as_str()), (Some(true), Some("imap.example.org")));
 }

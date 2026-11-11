@@ -434,6 +434,9 @@ pub struct Session {
     pictures_for: BTreeSet<MessageKey>,
     /// Server settings looked up per address (lower case): `None` while looking.
     pub discovered: HashMap<String, Option<(Option<AccountConfig>, String)>>,
+    /// The addresses whose settings were found through DNS records nothing vouches for
+    /// (`Event::Discovered::unverified`): see `found_unconfirmed`.
+    pub discovered_unverified: BTreeSet<String>,
     /// Accounts waiting for a data file to come in before they connect (their start).
     held: HashMap<String, Job>,
     /// The data files being imported, by account, and the imports left unfinished (read from
@@ -622,6 +625,7 @@ impl Session {
             pictures: HashMap::new(),
             pictures_for: BTreeSet::new(),
             discovered: HashMap::new(),
+            discovered_unverified: BTreeSet::new(),
             held: HashMap::new(),
             importing: HashMap::new(),
             unfinished_imports: HashMap::new(),

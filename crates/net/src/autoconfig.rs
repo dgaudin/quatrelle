@@ -15,7 +15,12 @@
 //! 5. DNS SRV records (RFC 6186: `_imaps._tcp`, `_imap._tcp`, `_submissions._tcp`,
 //!    `_submission._tcp`).
 //!
-//! The first answer wins; a POP server offered alongside is kept (`pop`) for POP accounts. Only
+//! The first answer wins; a POP server offered alongside is kept (`pop`) for POP accounts.
+//! Steps 1 and 2 are answered over HTTPS in the domain's own name, or by the database about the
+//! domain. Steps 3 to 5 start from a DNS answer nothing vouches for: servers found that way
+//! off the address's own domain are marked ([`Found::unverified`]), and the user is shown them
+//! and confirms before a password goes there (RFC 6186, section 6). A server without
+//! encryption is never taken from a file. Only
 //! the domain's own server is told the address; the others are asked about the domain, and
 //! only when the user types an address into the account dialog. Everything fetched is hostile input: sizes are capped and
 //! a bad file is simply skipped.
@@ -35,6 +40,10 @@ const MAX_XML: usize = 256 << 10;
 pub struct Found {
     pub config: AccountConfig,
     pub source: String,
+    /// The servers were named through DNS records nothing vouches for (a mail exchanger or an
+    /// SRV record) and aren't on the address's own domain: they are shown, and the user says
+    /// they are right before a password goes to them.
+    pub unverified: bool,
 }
 
 fn unescape(s: &str) -> String {
@@ -70,10 +79,12 @@ fn blocks<'a>(xml: &'a str, tag: &str, attr: &str) -> Vec<&'a str> {
 fn server(block: &str, email: &str) -> Option<(ServerConfig, String)> {
     let host = text_of(block, "hostname")?;
     let port: u16 = text_of(block, "port")?.parse().ok()?;
+    // A server without encryption (`plain`, or a kind nobody knows) is never taken from a file
+    // found on the network: the password would travel in the clear, with nothing said.
     let security = match text_of(block, "socketType").unwrap_or_default().to_ascii_uppercase().as_str() {
         "SSL" | "TLS" => Security::Tls,
         "STARTTLS" => Security::StartTls,
-        _ => Security::None,
+        _ => return None,
     };
     let (local, domain) = email.rsplit_once('@').unwrap_or((email, ""));
     let user = text_of(block, "username").unwrap_or_else(|| "%EMAILADDRESS%".into());
@@ -84,16 +95,15 @@ fn server(block: &str, email: &str) -> Option<(ServerConfig, String)> {
 }
 
 /// The best IMAP and SMTP servers of a Mozilla autoconfig file, and its POP server when it has
-/// one (in `pop`). Encrypted servers are preferred; one without encryption is only taken when
-/// nothing else is offered.
+/// one (in `pop`). Only encrypted servers are taken (TLS before STARTTLS): a file that offers
+/// none for IMAP or for SMTP is no answer.
 pub fn parse_config(xml: &str, email: &str) -> Option<AccountConfig> {
     let pick = |tag: &str, kind: &str| -> Option<(ServerConfig, String)> {
         let mut all: Vec<(ServerConfig, String)> =
             blocks(xml, tag, &format!("type=\"{kind}\"")).into_iter().filter_map(|b| server(b, email)).collect();
         all.sort_by_key(|(s, _)| match s.security {
             Security::Tls => 0,
-            Security::StartTls => 1,
-            Security::None => 2,
+            Security::StartTls | Security::None => 1,
         });
         all.into_iter().next()
     };
@@ -149,10 +159,31 @@ pub fn at_microsoft_365(mx: &[String], autodiscover: Option<&str>) -> bool {
 /// Exchange Online through Microsoft Graph, for a domain Microsoft 365 hosts; the settings found
 /// otherwise (IMAP's), if any, stay for whoever picks IMAP anyway.
 fn microsoft_365(email: &str, found: Option<Found>) -> Found {
+    let unverified = found.as_ref().is_some_and(|f| f.unverified);
     let mut config = found.map(|f| f.config).unwrap_or_else(|| AccountConfig::guess(email));
     config.graph = Some(quatrelle_model::GRAPH_URL.to_string());
     config.oauth = Some("microsoft".into());
-    Found { config, source: "Microsoft 365 (Exchange Online hosts this domain's mail)".into() }
+    // Signing in with Microsoft sends no password to the servers found; the IMAP settings kept
+    // beside it keep their mark, for whoever picks IMAP.
+    Found { config, source: "Microsoft 365 (Exchange Online hosts this domain's mail)".into(), unverified }
+}
+
+/// Settings reached through a DNS answer (a mail exchanger, an SRV record), which nothing
+/// vouches for: anyone on the network can answer first, name a host of their own and serve a
+/// configuration there under a certificate of their own. They need no confirming only when
+/// every server is on the address's own site: the connection then checks a certificate in that
+/// domain's name, which only the domain's owner has (found servers are always encrypted).
+fn through_dns(config: AccountConfig, source: String, domain: &str) -> Found {
+    use quatrelle_model::addr::trust::site;
+    let own = site(domain);
+    let hosts = [Some(&config.imap), Some(&config.smtp), config.pop.as_ref()];
+    let within = hosts.into_iter().flatten().all(|s| s.security != Security::None && site(&s.host) == own);
+    Found { config, source, unverified: !within }
+}
+
+/// Whether a name DNS gave reads as a host name (an SRV target is any bytes at all).
+fn host_name(host: &str) -> bool {
+    !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
 }
 
 /// Find settings for `email` (see the module docs for the order).
@@ -182,43 +213,46 @@ fn settings_for(email: &str, domain: &str, l: &mut Lookups<'_>, mx: &[String], a
         format!("https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml"),
     ] {
         if let Some(c) = try_url(l, &url) {
-            return Some(Found { config: c, source: domain.to_string() });
+            return Some(Found { config: c, source: domain.to_string(), unverified: false });
         }
     }
     if let Some(c) = try_url(l, &format!("https://autoconfig.thunderbird.net/v1.1/{domain}")) {
-        return Some(Found { config: c, source: "the ISP database".into() });
+        return Some(Found { config: c, source: "the ISP database".into(), unverified: false });
     }
     if let Some(mx) = mx.first() {
         let base = base_domain(mx);
         if base != domain {
             if let Some(c) = try_url(l, &format!("https://autoconfig.thunderbird.net/v1.1/{base}")) {
-                return Some(Found { config: c, source: format!("the ISP database ({base} handles this domain's mail)") });
+                return Some(through_dns(c, format!("the ISP database ({base} handles this domain's mail)"), domain));
             }
             // The mail provider's own configuration (asked about the domain, not the address).
             if let Some(c) = try_url(l, &format!("https://autoconfig.{base}/mail/config-v1.1.xml?emaildomain={domain}")) {
-                return Some(Found { config: c, source: base });
+                return Some(through_dns(c, base, domain));
             }
         }
     }
     // Where Outlook looks: the host an `_autodiscover._tcp` record names, which providers point
     // at their configuration server.
     if let Some(host) = autodiscover
-        && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+        && host_name(host)
         && let Some(c) = try_url(l, &format!("https://{host}/mail/config-v1.1.xml?emaildomain={domain}"))
     {
-        return Some(Found { config: c, source: base_domain(host) });
+        return Some(through_dns(c, base_domain(host), domain));
     }
-    let imap = (l.srv)(&format!("_imaps._tcp.{domain}"))
-        .map(|(h, p)| ServerConfig { host: h, port: p, security: Security::Tls })
-        .or_else(|| (l.srv)(&format!("_imap._tcp.{domain}")).map(|(h, p)| ServerConfig { host: h, port: p, security: Security::StartTls }));
-    let smtp = (l.srv)(&format!("_submissions._tcp.{domain}"))
-        .map(|(h, p)| ServerConfig { host: h, port: p, security: Security::Tls })
-        .or_else(|| (l.srv)(&format!("_submission._tcp.{domain}")).map(|(h, p)| ServerConfig { host: h, port: p, security: Security::StartTls }));
+    let named = |l: &mut Lookups<'_>, service: &str, security: Security| {
+        (l.srv)(&format!("{service}.{domain}")).filter(|(h, _)| host_name(h)).map(|(h, p)| ServerConfig {
+            host: h.to_ascii_lowercase(),
+            port: p,
+            security,
+        })
+    };
+    let imap = named(l, "_imaps._tcp", Security::Tls).or_else(|| named(l, "_imap._tcp", Security::StartTls));
+    let smtp = named(l, "_submissions._tcp", Security::Tls).or_else(|| named(l, "_submission._tcp", Security::StartTls));
     if let (Some(imap), Some(smtp)) = (imap, smtp) {
         let mut c = AccountConfig::guess(email);
         c.imap = imap;
         c.smtp = smtp;
-        return Some(Found { config: c, source: "DNS (SRV records)".into() });
+        return Some(through_dns(c, "DNS (SRV records)".into(), domain));
     }
     None
 }
@@ -266,7 +300,7 @@ mod tests {
             parse_config(&XML.replace("<port>993</port>", "<port>x</port>").replace("<port>143</port>", "<port>0</port>"), "z@example.org").is_none()
         );
         let evil = XML.replace("imap.example.org", "imap.example.org/../x");
-        assert_eq!(parse_config(&evil, "z@example.org").unwrap().imap.host, "plain.example.org", "bad host names are skipped");
+        assert!(parse_config(&evil, "z@example.org").is_none(), "bad host names are skipped, and the one in the clear is no fallback");
     }
 
     /// Live: real DNS and the real ISP database (only domain names are sent). Run by hand with
@@ -348,6 +382,90 @@ mod tests {
         assert!(!at_microsoft_365(&["outlook-com.olc.protection.outlook.com".into()], None), "Outlook.com's own, not Microsoft 365's");
         assert!(!at_microsoft_365(&["mx.contoso.example".into()], Some("autoconfig.contoso.example")));
         assert!(at_microsoft_365(&[], Some("OUTLOOK.office365.com")));
+    }
+
+    /// The DNS answers that lead off the address's domain come from anyone on the network: a
+    /// mail exchanger or an SRV record naming a host of theirs, which serves a configuration
+    /// under a certificate of its own. What is found that way is marked, for the user to see
+    /// and confirm; what the domain itself says over HTTPS, or the ISP database about the
+    /// domain, is not.
+    #[test]
+    fn servers_named_through_dns_alone_are_to_be_confirmed() {
+        let theirs = XML.replace("example.org", "attacker.example");
+        let mut no_mx = |_: &str| Vec::new();
+        let mut no_srv = |_: &str| None;
+        // A mail exchanger on another site, then that site's own configuration.
+        let mut fetch = |url: &str| url.starts_with("https://autoconfig.attacker.example/").then(|| theirs.clone());
+        let mut mx = |_: &str| vec!["mx.attacker.example".to_string()];
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut mx, srv: &mut no_srv }).unwrap();
+        assert_eq!(f.config.imap.host, "imap.attacker.example");
+        assert!(f.unverified, "through the mail exchanger");
+        // The ISP database asked about the exchanger's site is no better: the exchanger was DNS's.
+        let mut fetch = |url: &str| (url == "https://autoconfig.thunderbird.net/v1.1/attacker.example").then(|| theirs.clone());
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut mx, srv: &mut no_srv }).unwrap();
+        assert!(f.unverified, "through the mail exchanger and the ISP database");
+        // An Autodiscover record naming their host.
+        let mut fetch = |url: &str| url.starts_with("https://cfg.attacker.example/").then(|| theirs.clone());
+        let mut srv = |name: &str| name.starts_with("_autodiscover.").then(|| ("cfg.attacker.example".to_string(), 443));
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut no_mx, srv: &mut srv }).unwrap();
+        assert!(f.unverified, "through the Autodiscover record");
+        // SRV records naming their servers.
+        let mut none = |_: &str| None;
+        let mut srv = |name: &str| match name {
+            "_imaps._tcp.studio.example" => Some(("imap.attacker.example".to_string(), 993)),
+            "_submissions._tcp.studio.example" => Some(("smtp.attacker.example".to_string(), 465)),
+            _ => None,
+        };
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut none, mx: &mut no_mx, srv: &mut srv }).unwrap();
+        assert!(f.unverified, "through SRV records");
+        // One of the two elsewhere is enough.
+        let mut srv = |name: &str| match name {
+            "_imaps._tcp.studio.example" => Some(("imap.studio.example".to_string(), 993)),
+            "_submissions._tcp.studio.example" => Some(("smtp.attacker.example".to_string(), 465)),
+            _ => None,
+        };
+        assert!(discover_with("zoe@studio.example", &mut Lookups { fetch: &mut none, mx: &mut no_mx, srv: &mut srv }).unwrap().unverified);
+
+        // SRV records naming the domain's own servers: their certificate will be the domain's.
+        let mut srv = |name: &str| match name {
+            "_imaps._tcp.studio.example" => Some(("imap.studio.example".to_string(), 993)),
+            "_submission._tcp.studio.example" => Some(("smtp.studio.example".to_string(), 587)),
+            _ => None,
+        };
+        assert!(!discover_with("zoe@studio.example", &mut Lookups { fetch: &mut none, mx: &mut no_mx, srv: &mut srv }).unwrap().unverified);
+        // The domain's own configuration, over HTTPS in its name, wherever it sends the mail.
+        let mut fetch = |url: &str| url.starts_with("https://autoconfig.studio.example/").then(|| theirs.clone());
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut mx, srv: &mut no_srv }).unwrap();
+        assert!(!f.unverified && f.config.imap.host == "imap.attacker.example");
+        // The ISP database about the domain itself.
+        let mut fetch = |url: &str| (url == "https://autoconfig.thunderbird.net/v1.1/studio.example").then(|| theirs.clone());
+        assert!(!discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut mx, srv: &mut no_srv }).unwrap().unverified);
+        // Microsoft 365 by its exchanger: the IMAP settings kept beside it keep their mark.
+        let mut fetch = |url: &str| url.starts_with("https://autoconfig.outlook.com/").then(|| theirs.clone());
+        let mut microsoft = |_: &str| vec!["studio-example.mail.protection.outlook.com".to_string()];
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut microsoft, srv: &mut no_srv }).unwrap();
+        assert!(f.config.graph.is_some() && f.config.imap.host == "imap.attacker.example" && f.unverified);
+        // An SRV target that is no host name is no server.
+        let mut srv = |name: &str| match name {
+            "_imaps._tcp.studio.example" => Some(("imap.studio.example/x".to_string(), 993)),
+            "_submissions._tcp.studio.example" => Some(("smtp.studio.example".to_string(), 465)),
+            _ => None,
+        };
+        assert!(discover_with("zoe@studio.example", &mut Lookups { fetch: &mut none, mx: &mut no_mx, srv: &mut srv }).is_none());
+    }
+
+    /// A configuration that offers a server without encryption only is not taken: found
+    /// settings never send a password in the clear. (Such a server can still be typed in.)
+    #[test]
+    fn a_server_without_encryption_is_never_found() {
+        let plain = XML.replace("<socketType>SSL</socketType>", "<socketType>plain</socketType>");
+        assert!(parse_config(&plain, "zoe@example.org").is_none(), "IMAP in the clear only");
+        let smtp = XML.replace("<socketType>STARTTLS</socketType>", "<socketType>plain</socketType>");
+        assert!(parse_config(&smtp, "zoe@example.org").is_none(), "SMTP in the clear only");
+        let unknown = XML.replace("<socketType>STARTTLS</socketType>", "<socketType>whatever</socketType>");
+        assert!(parse_config(&unknown, "zoe@example.org").is_none(), "a kind of connection nobody knows");
+        let c = parse_config(XML, "zoe@example.org").unwrap();
+        assert!(c.imap.security == Security::Tls && c.pop.is_some_and(|p| p.security == Security::Tls), "the encrypted ones are");
     }
 
     #[test]

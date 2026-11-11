@@ -2167,3 +2167,5 @@ folder	Online Archive	Online-archief
 	The file has changed since the import began. Bring in what is new?	Het bestand is gewijzigd sinds de import begon. Wat nieuw is erbij halen?
 	Tick box	Selectievakje
 	{title} – Note	{title} – Notitie
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Deze servers zijn gevonden via de DNS-records van het domein, waar niemand voor instaat: {incoming} (inkomende e-mail) en {smtp} (uitgaande e-mail). Uw wachtwoord wordt naar deze servers gestuurd. Controleer of ze van uw e-mailprovider zijn.
+	These are my mail provider's servers	Dit zijn de servers van mijn e-mailprovider

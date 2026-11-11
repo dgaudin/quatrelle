@@ -144,10 +144,14 @@ pub enum Event {
         error: Option<String>,
     },
     /// Server settings found for an address (`None`: nothing published; guess instead).
+    /// `unverified`: the servers were named through DNS records nothing vouches for, off the
+    /// address's own domain; they are shown and confirmed before a password goes to them.
     Discovered {
         email: String,
         config: Option<Box<AccountConfig>>,
         source: String,
+        #[serde(default)]
+        unverified: bool,
     },
     /// Show this page in the browser (an OAuth sign-in page).
     OpenUrl {

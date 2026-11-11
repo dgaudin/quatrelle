@@ -319,3 +319,47 @@ fn server_settings_list_add_and_remove_domains() {
     assert_eq!(trusted(&a, &id), ["fastmail.com"]);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Servers found through DNS records alone are shown in the Add account dialog with a warning,
+/// and Connect does nothing until the user has ticked that they are their provider's. A new
+/// address asks again.
+#[test]
+fn servers_found_through_dns_alone_are_shown_and_confirmed() {
+    let (mut a, dir) = app("found-unverified");
+    let ctx = egui::Context::default();
+    a.ui.dialog = Some(Dialog::add_account_with("zoe@studio.example", false));
+    frame(&ctx, &mut a, vec![]);
+    let mut found = quatrelle_engine::model::AccountConfig::guess("zoe@studio.example");
+    found.imap.host = "imap.elsewhere.example".into();
+    found.smtp.host = "smtp.elsewhere.example".into();
+    a.session.apply(MailEvent::Discovered {
+        email: "zoe@studio.example".into(),
+        config: Some(Box::new(found)),
+        source: "DNS".into(),
+        unverified: true,
+    });
+    frame(&ctx, &mut a, vec![]);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    let drawn = |part: &str| shapes.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text().contains(part)));
+    assert!(drawn("imap.elsewhere.example (incoming mail) and smtp.elsewhere.example (outgoing mail)"), "the servers are shown, with the warning");
+    assert!(drawn("These are my mail provider's servers"));
+    assert!(!drawn("Settings found"), "not said as found for sure");
+    let Some(Dialog::AddAccount(f)) = a.ui.dialog.as_mut() else { panic!("the Add account dialog") };
+    assert_eq!(f.imap_host, "imap.elsewhere.example");
+    assert!(f.servers_to_confirm(&a.session));
+    f.password = "pw".into();
+    let p = f.params();
+    // Sent all the same (a script, a key): the engine refuses, and the dialog stays.
+    let before = a.session.accounts.len();
+    a.act(crate::Action::Submit("account.add", p));
+    assert!(a.session.accounts.len() == before && a.ui.dialog.is_some());
+    // Ticked: it goes.
+    let Some(Dialog::AddAccount(f)) = a.ui.dialog.as_mut() else { panic!("the Add account dialog") };
+    f.servers_confirmed = true;
+    let p = f.params();
+    assert_eq!(p["serversConfirmed"], true);
+    a.act(crate::Action::Submit("account.add", p));
+    assert_eq!(a.session.accounts.len(), before + 1);
+    assert!(a.ui.dialog.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -376,3 +376,56 @@ fn trust_asked_during_a_sync_asks_once() {
     asked(&mut s);
     assert!(s.ask_trust.is_empty());
 }
+
+/// Servers found through DNS records nothing vouches for (a mail exchanger or an SRV record
+/// leading off the address's domain) get no account, and so no password, until the user has
+/// seen them and said they are right. Other servers typed in their place are the user's own.
+#[test]
+fn servers_found_through_dns_alone_are_confirmed_before_an_account_is_added() {
+    let mut s = Session::open(Some(temp("found-unverified")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let mut found = quatrelle_model::AccountConfig::guess("zoe@studio.example");
+    found.imap.host = "imap.elsewhere.example".into();
+    found.smtp.host = "smtp.elsewhere.example".into();
+    s.run("account.discover", &json!({"email": "zoe@studio.example"})).unwrap();
+    s.take_jobs();
+    let discovered = |unverified: bool| Event::Discovered {
+        email: "Zoe@Studio.example".into(),
+        config: Some(Box::new(found.clone())),
+        source: "DNS".into(),
+        unverified,
+    };
+    s.apply(discovered(true));
+    assert_eq!(s.run("account.discover", &json!({"email": "zoe@studio.example"})).unwrap()["unverified"], true);
+    let add = |s: &mut Session, more: serde_json::Value| {
+        let mut p =
+            json!({"email": "zoe@studio.example", "password": "pw", "imapHost": "imap.elsewhere.example", "smtpHost": "smtp.elsewhere.example"});
+        for (k, v) in more.as_object().unwrap() {
+            p[k] = v.clone();
+        }
+        s.run("account.add", &p)
+    };
+    let refused = add(&mut s, json!({})).unwrap_err().to_string();
+    assert!(refused.contains("imap.elsewhere.example") && refused.contains("smtp.elsewhere.example"), "the servers are named: {refused}");
+    assert!(s.accounts.is_empty() && s.take_jobs().is_empty(), "nothing was added, nothing sent");
+    // One of the two typed over: the other is still the one found.
+    assert!(add(&mut s, json!({"imapHost": "imap.studio.example"})).is_err());
+    assert!(add(&mut s, json!({"pop": true, "popHost": "IMAP.elsewhere.example"})).is_err(), "as a POP server too");
+    // The user's own servers; Exchange Online, which signs in with Microsoft.
+    assert!(s.found_unconfirmed("zoe@studio.example", "imap.elsewhere.example", "smtp.studio.example"));
+    assert!(!s.found_unconfirmed("zoe@studio.example", "imap.studio.example", "smtp.studio.example"));
+    assert!(!s.found_unconfirmed("ana@studio.example", "imap.elsewhere.example", "smtp.elsewhere.example"), "another address");
+    // Confirmed.
+    add(&mut s, json!({"serversConfirmed": true})).unwrap();
+    assert_eq!(s.accounts.len(), 1);
+
+    // Settings the domain vouched for need no word.
+    let mut s = Session::open(Some(temp("found-verified")), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.apply(discovered(false));
+    assert_eq!(s.run("account.discover", &json!({"email": "zoe@studio.example"})).unwrap()["unverified"], false);
+    add(&mut s, json!({})).unwrap();
+    // And a later answer that is vouched for takes the mark away.
+    let mut s = Session::open(Some(temp("found-again")), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.apply(discovered(true));
+    s.apply(discovered(false));
+    add(&mut s, json!({})).unwrap();
+}

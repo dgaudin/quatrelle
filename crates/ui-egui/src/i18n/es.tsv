@@ -2171,3 +2171,5 @@ folder	Online Archive	Archivo en línea
 	The file has changed since the import began. Bring in what is new?	El archivo ha cambiado desde que empezó la importación. ¿Traer lo nuevo?
 	Tick box	Casilla
 	{title} – Note	{title} – Nota
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Estos servidores se han encontrado mediante los registros DNS del dominio, que nada garantiza: {incoming} (correo entrante) y {smtp} (correo saliente). Tu contraseña se les enviará. Comprueba que son los de tu proveedor de correo.
+	These are my mail provider's servers	Son los servidores de mi proveedor de correo

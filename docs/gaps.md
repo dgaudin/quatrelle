@@ -863,3 +863,16 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   them to its text from the start. On a touch screen a finger dragged over the text scrolls it.
   The find bar's finds, plain text's addresses (links opened with a click), pictures and the
   right-click copy of right-to-left text are as they were.
+- **Network input, after a security review:** server settings found from an address through
+  DNS records alone (a mail exchanger or an SRV record leading off the address's domain, which
+  anyone on the network can answer) are shown in the Add account dialog and wait for a tick
+  before Connect; the command line wants `--accept-found`; what the domain says over HTTPS in
+  its own name, and the ISP database about it, are taken as before. A server without
+  encryption is never taken from a found configuration. DNS queries have random ids and take
+  an answer only for the question asked. CalDAV and CardDAV send the password only to a server
+  that asks for it, on a site of the account's servers or one the user allowed: the address's
+  own domain is asked where the calendars are, and the user is asked first if it wants the
+  password. A panic in an account's work no longer stops the account (the work in hand is
+  given up and it connects again); three answers the IMAP parsing library panicked on are read
+  as not understood; an Exchange appointment's recurrence end is read as text; one ManageSieve
+  answer is capped as a whole.

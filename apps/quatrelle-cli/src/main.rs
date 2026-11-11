@@ -10,6 +10,7 @@
 //!   add --email E [--name N] [--username U] [--imap HOST:PORT] [--smtp HOST:PORT]
 //!       [--imap-security tls|starttls|none] [--smtp-security tls|starttls|none]
 //!       [--jmap SESSION-URL]   (a JMAP account instead of IMAP and SMTP)
+//!       [--accept-found]       (use servers found through DNS records alone)
 //!                                  add an account (servers guessed from the address)
 //!   test [--account ID]            sign in to IMAP and list the folders
 //!   sync [--account ID]            download new mail into the cache
@@ -239,6 +240,14 @@ fn run() -> Result<(), String> {
             // No servers given: look them up (the domain's autoconfig, the ISP database, DNS).
             if args.opt("--imap").is_none() && args.opt("--smtp").is_none() && args.opt("--jmap").is_none() {
                 match quatrelle_net::autoconfig::discover(&email) {
+                    // Found through DNS records nothing vouches for: shown, and used only once
+                    // accepted (the password would go to them).
+                    Some(f) if f.unverified && !args.flag("--accept-found") => {
+                        return Err(format!(
+                            "the servers found for this address came from DNS records nothing vouches for: {}:{} (incoming) and {}:{} (outgoing). If they are your mail provider's, add --accept-found; otherwise give --imap and --smtp",
+                            f.config.imap.host, f.config.imap.port, f.config.smtp.host, f.config.smtp.port
+                        ));
+                    }
                     Some(f) => {
                         errln!("settings found: {}", f.source);
                         p["imapHost"] = json!(f.config.imap.host);

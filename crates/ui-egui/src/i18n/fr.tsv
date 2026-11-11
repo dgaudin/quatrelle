@@ -2171,3 +2171,5 @@ folder	Online Archive	Archive en ligne
 	The file has changed since the import began. Bring in what is new?	Le fichier a changé depuis le début de l’import. Importer ce qui est nouveau ?
 	Tick box	Case à cocher
 	{title} – Note	{title} – Note
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Ces serveurs ont été trouvés par les enregistrements DNS du domaine, que rien ne garantit : {incoming} (courrier entrant) et {smtp} (courrier sortant). Votre mot de passe leur sera envoyé. Vérifiez que ce sont bien ceux de votre fournisseur de messagerie.
+	These are my mail provider's servers	Ce sont bien les serveurs de mon fournisseur de messagerie

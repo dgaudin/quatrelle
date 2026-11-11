@@ -11,6 +11,21 @@ pub use importing::{ImportState, UnfinishedImport};
 
 impl Session {
     /// Add an account (the password goes to the keychain through the `Start` job).
+    /// Whether an account for `email` on these servers would send its password to one found
+    /// through DNS records nothing vouches for (a mail exchanger or an SRV record that leads
+    /// off the address's domain: anyone on the network can have answered). Such servers are
+    /// shown, and the user says they are right, before the account is added. Servers typed
+    /// in their place are the user's own.
+    pub fn found_unconfirmed(&self, email: &str, incoming: &str, smtp: &str) -> bool {
+        let email = email.trim().to_ascii_lowercase();
+        if !self.discovered_unverified.contains(&email) {
+            return false;
+        }
+        let Some(Some((Some(found), _))) = self.discovered.get(&email) else { return false };
+        let same = |typed: &str, found: &str| !found.trim().is_empty() && typed.trim().eq_ignore_ascii_case(found.trim());
+        same(incoming, &found.imap.host) || found.pop.as_ref().is_some_and(|p| same(incoming, &p.host)) || same(smtp, &found.smtp.host)
+    }
+
     pub fn add_account(&mut self, mut config: AccountConfig, password: Option<String>) -> Result<String, CmdError> {
         config.email = config.email.trim().to_string();
         if !addr::is_valid_email(&config.email) {

@@ -2168,3 +2168,5 @@ folder	Online Archive	在线存档
 	The file has changed since the import began. Bring in what is new?	导入开始后文件已更改。要导入新增的内容吗？
 	Tick box	复选框
 	{title} – Note	{title} – 便笺
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	这些服务器是通过该域名的 DNS 记录找到的，而这些记录没有任何保证：{incoming}（收件）和 {smtp}（发件）。您的密码将发送给它们。请确认它们是您的邮件服务商的服务器。
+	These are my mail provider's servers	这些是我的邮件服务商的服务器

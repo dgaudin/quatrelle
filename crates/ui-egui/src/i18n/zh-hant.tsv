@@ -2171,3 +2171,5 @@ folder	Online Archive	線上封存
 	The file has changed since the import began. Bring in what is new?	匯入開始後檔案已變更。要匯入新增的內容嗎？
 	Tick box	核取方塊
 	{title} – Note	{title} – 便箋
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	這些伺服器是透過該網域的 DNS 記錄找到的，而這些記錄沒有任何保證：{incoming}（收件）和 {smtp}（寄件）。您的密碼將傳送給它們。請確認它們是您的郵件服務商的伺服器。
+	These are my mail provider's servers	這些是我的郵件服務商的伺服器

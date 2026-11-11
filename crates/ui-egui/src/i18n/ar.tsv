@@ -2166,3 +2166,5 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	The file has changed since the import began. Bring in what is new?	تغيّر الملف منذ بدء الاستيراد. هل تريد جلب الجديد؟
 	Tick box	خانة اختيار
 	{title} – Note	{title} – ملاحظة
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	عُثر على هذه الخوادم من خلال سجلات DNS الخاصة بالنطاق، ولا شيء يضمن صحتها: {incoming} (البريد الوارد) و{smtp} (البريد الصادر). سيتم إرسال كلمة المرور إليها. تأكد من أنها خوادم مزود بريدك.
+	These are my mail provider's servers	هذه خوادم مزود بريدي

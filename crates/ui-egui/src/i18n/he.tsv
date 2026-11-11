@@ -2166,3 +2166,5 @@ folder	Online Archive	ארכיון מקוון
 	The file has changed since the import began. Bring in what is new?	הקובץ השתנה מאז תחילת הייבוא. להביא את החדש?
 	Tick box	תיבת סימון
 	{title} – Note	{title} – פתק
+	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	השרתים האלה נמצאו דרך רשומות ה-DNS של הדומיין, שאין להן שום ערובה: {incoming} (דואר נכנס) ו-{smtp} (דואר יוצא). הסיסמה שלך תישלח אליהם. יש לוודא שאלה השרתים של ספק הדואר שלך.
+	These are my mail provider's servers	אלה השרתים של ספק הדואר שלי

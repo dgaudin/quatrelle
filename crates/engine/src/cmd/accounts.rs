@@ -36,7 +36,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params(r#"{"ids": [string] (items of the list, deleted for good: they can't be had again; the window asks first)}"#),
         CommandSpec::new("folder.recoverClose", "Close the deleted items", "Recover deleted items", |s, _| s.recover_close()).params("{}"),
         CommandSpec::new("account.add", "Add account", "File › Accounts", add_account)
-            .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "smtpUsername"?: string and "smtpPassword"?: string (the outgoing server's own sign-in, when it isn't the incoming server's), "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft), "userAgent"?: string (with ews: the User-Agent its requests name instead of Quatrelle's, for a server that lets in only clients it knows), "oauthClientId"?: string and "oauthTenant"?: string (Microsoft sign-in through your organisation's own app registration: its Application (client) ID, and its tenant in place of common), "onlineOnly"?: bool (keep none of its mail on this computer; not for POP)}"#),
+            .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "smtpUsername"?: string and "smtpPassword"?: string (the outgoing server's own sign-in, when it isn't the incoming server's), "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft), "userAgent"?: string (with ews: the User-Agent its requests name instead of Quatrelle's, for a server that lets in only clients it knows), "oauthClientId"?: string and "oauthTenant"?: string (Microsoft sign-in through your organisation's own app registration: its Application (client) ID, and its tenant in place of common), "onlineOnly"?: bool (keep none of its mail on this computer; not for POP), "serversConfirmed"?: bool (the servers `account.discover` found through DNS alone, marked `unverified`, were shown and are the right ones: without it they are refused)}"#),
         CommandSpec::new("account.importPst", "Open Outlook data file", "File › Open & Export", |s, v| {
             let path = p::req_str(v, "path")?.to_string();
             s.import_pst(&path)
@@ -78,6 +78,8 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     "username": c.username,
                     // Microsoft 365 hosts the domain's mail: Exchange Online through Graph.
                     "graph": c.graph,
+                    // Found through DNS alone: to be shown and confirmed (`serversConfirmed`).
+                    "unverified": s.discovered_unverified.contains(&email),
                 })),
                 Some(Some((None, _))) => Ok(json!({"found": false})),
                 Some(None) => Ok(json!({"pending": true})),
@@ -313,6 +315,14 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         archive_local: false,
         archive_after_months: None,
     };
+    // Servers found through DNS alone get no password until the user has seen them.
+    let incoming = config.pop.as_ref().unwrap_or(&config.imap);
+    if !plain && !p::bool(v, "serversConfirmed").unwrap_or(false) && s.found_unconfirmed(email, &incoming.host, &config.smtp.host) {
+        return Err(CmdError::Params(format!(
+            "the servers found for this address ({} and {}) came from DNS records nothing vouches for: check that they are your mail provider's, then confirm them (`serversConfirmed`), or give the right ones",
+            incoming.host, config.smtp.host
+        )));
+    }
     // A registration built in, or the account's own (Microsoft).
     // A line break or tab pasted in with the user name: no server would ever take it (in an
     // Exchange `DOMAIN\user`, a `\r` read from JSON became part of it, and sign-in failed).

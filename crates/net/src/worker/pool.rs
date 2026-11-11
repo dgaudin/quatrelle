@@ -355,11 +355,11 @@ impl Pool {
                 let sink = self.sink.clone();
                 let spawned = std::thread::Builder::new().name("mail-discover".into()).spawn(move || {
                     let found = crate::autoconfig::discover(&email);
-                    let (config, source) = match found {
-                        Some(f) => (Some(Box::new(f.config)), f.source),
-                        None => (None, String::new()),
+                    let (config, source, unverified) = match found {
+                        Some(f) => (Some(Box::new(f.config)), f.source, f.unverified),
+                        None => (None, String::new(), false),
                     };
-                    sink.emit(Event::Discovered { email, config, source });
+                    sink.emit(Event::Discovered { email, config, source, unverified });
                 });
                 if let Err(e) = spawned {
                     log::warn!("autoconfiguration: {e}");
