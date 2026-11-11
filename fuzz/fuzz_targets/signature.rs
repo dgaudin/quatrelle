@@ -21,5 +21,5 @@ fuzz_target!(|data: &[u8]| {
     people.add(&EmailAddress::new("Dana Whitfield", "dana@corp.example"));
     let known: BTreeSet<String> = ["studio.example".to_string()].into();
     let check = lookalike::SenderCheck::new(known.clone(), people, ["ana@studio.example".to_string()]);
-    let _ = check.check_signature(&EmailAddress::new(name, email), text, data.len() % 2 == 0, &known);
+    let _ = check.check_signature(&EmailAddress::new(name, email), text, &known);
 });

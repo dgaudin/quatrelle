@@ -270,7 +270,7 @@ fn a_compressed_block_in_a_text_isnt_opened_past_a_few_megabytes() {
 /// longer) isn't encrypted to: its chain is checked again when the message goes.
 #[test]
 fn a_kept_certificate_is_checked_again_before_encrypting() {
-    let mut s = with_certificate("forged-smime-encrypt");
+    let s = with_certificate("forged-smime-encrypt");
     let ana = der::pem::decode_vec(String::from_utf8(testdata("ana.pem")).unwrap().as_bytes()).unwrap().1;
     let eve = smime::read_p12(&testdata("zoe-aes.p12"), "secret").unwrap();
     // As an older file could hold them: Ana's, issued by the authority Riley's own came with,

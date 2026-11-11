@@ -36,6 +36,10 @@ fuzz_target!(|data: &[u8]| {
     };
     let _ = scam::request(&facts, subject);
     let mut doc = ScamDoc::default();
-    doc.keep(from, Verdict { score: 50, reasons: vec![text.to_string()], model: String::new(), at: 0 });
+    doc.keep(
+        from,
+        Verdict { score: 50, reasons: vec![text.to_string()], model: String::new(), at: 0, judged: vec![text.chars().take(32).collect()] },
+    );
+    let _ = doc.judged(from, text);
     doc.trust(from);
 });

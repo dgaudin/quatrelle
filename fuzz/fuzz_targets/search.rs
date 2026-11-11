@@ -55,8 +55,7 @@ fuzz_target!(|data: &[u8]| {
     people.add(&quatrelle_model::EmailAddress::new(email, name));
     let check = lookalike::SenderCheck::new(known, people, [name.to_string()]);
     let from = quatrelle_model::EmailAddress::new(name, email);
-    let _ = check.check(&from, false);
-    let _ = check.check(&from, true);
+    let _ = check.check(&from);
     let _ = lookalike::name_key(name);
     let _ = lookalike::is_free_mail(email);
     let org = lookalike::clean_domain(name).into_iter().collect();

@@ -153,7 +153,11 @@ written (`Compose`), preferences and status-bar notices.
   `net/src/worker/pgp.rs`). An account's secret keys live only in the system keychain, the
   engine holds their public parts (`pgp.json`) and its correspondents' keys (`pgp-people.json`,
   learnt from the From address's Autocrypt header and attached keys, or imported; at most
-  10,000, the least used from mail let go first). **Nothing is active until the account has a
+  10,000, the least used from mail let go first). A key from mail checks signatures as
+  `Seal::Unverified`; `Seal::Trusted` is for the account's own keys and those the user
+  imported or confirmed by fingerprint (`pgp.confirmPublic`). Whichever the scheme, a seal is
+  for the sender shown: `Session::take_off` shows a sender named inside a signed part only
+  when the signature is trusted for that address. **Nothing is active until the account has a
   key** (`Session::pgp_active`): no Autocrypt header, no signing, no encryption, no scheme
   choice. Reading is always on: `Session::unwrap` takes PGP/MIME and PGP blocks apart as it
   takes S/MIME, signatures checked here, decryption asked of the pool and kept in memory only.
