@@ -155,6 +155,14 @@ fn chats_follow_pages_to_the_end() {
 }
 
 #[test]
+fn chats_ask_for_kinds_by_their_names() {
+    // Kinds of chat added after v1.0 come by name, not as `unknownFutureValue`.
+    let server = serve_teams(teams_with(vec![chat(CHAT, T0, 1)]));
+    client(&server).chats(None).unwrap();
+    assert!(headers(&server, "chats").contains(&("prefer".into(), "include-unknown-enum-members".into())), "{:?}", headers(&server, "chats"));
+}
+
+#[test]
 fn messages_after_a_watermark_only_newer() {
     let mut ch = chat(CHAT, T0, 60);
     // An old message edited after all the others: newest by lastModifiedDateTime.

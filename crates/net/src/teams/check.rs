@@ -3,12 +3,15 @@
 //! The step 0 check: what a user runs on their own Microsoft 365 account to learn whether
 //! Graph serves their Teams chats, before anything else is built on it.
 //!
-//! It reads the chats and the newest chat's messages, counts what it finds (chats by kind,
-//! messages, reactions by form, shared files), tries each write Quatrelle will need on a chat
-//! the user names, and, if asked, runs the approved polling cadences for an hour to measure
-//! the 429 rate. It says only counts, yes or no, HTTP status numbers and durations: never a
+//! It reads the chats and the messages of the twenty most recently active (a page each,
+//! every page of the newest one read), counts what it finds (chats by kind and by organisation,
+//! the chats Graph refuses to read and why, messages, reactions by form, shared files), tries
+//! each write Quatrelle will need on a chat the user names, and, if asked, runs the approved
+//! polling cadences for an hour to measure the 429 rate. It says only counts, kinds of chat as
+//! Graph names them, yes or no, HTTP statuses with Graph's error codes, and durations: never a
 //! name, an address, a topic, a message's text, a chat or message id or a user's object id
-//! (an error is said by its status alone, never its text, which carries the address asked).
+//! (an error is said by its status and code alone, never its text, which carries the address
+//! asked).
 //! Every message it posts is soft-deleted before it returns, whatever failed in between.
 //!
 //! The hour outlives an access token (60 to 90 minutes): a request refused for its token is
@@ -18,8 +21,8 @@
 //! Ages are measured on Graph's own clock (its `Date` header, or failing that the newest time
 //! Graph wrote in what was read), never on this computer's.
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::collections::HashSet;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -27,8 +30,21 @@ use super::{Me, Range, TeamsClient};
 use crate::graph::utc;
 use crate::{NetError, Result};
 
+/// 6. The approved cadences, for an hour.
+mod hour;
+
 /// Pages followed at most per listing.
 const PAGES: usize = 10;
+/// The chats whose messages are read, the most recently active first.
+const READ_CHATS: usize = 20;
+/// Names said at most in a count by name, and names kept at most (the others are counted
+/// under "more").
+const NAMES_SAID: usize = 8;
+const NAMES_KEPT: usize = 64;
+/// Longest kind of chat said as Graph names it.
+const MAX_KIND: usize = 32;
+/// Longest Graph error code said.
+const MAX_CODE: usize = 64;
 /// A shared file's bytes counted at most (none kept).
 const MAX_DOWNLOAD: usize = 50 << 20;
 /// Longest chat or message id, or shared file address, taken from an answer.
@@ -45,19 +61,10 @@ const THUMBS_UP: &str = "\u{1f44d}";
 const SWEEP_SLACK: i64 = 10_000;
 /// Between two writes in the chat (Graph takes one a second per chat).
 const PACE: Duration = Duration::from_secs(1);
-/// The approved cadences: the chat list, the open chat, the chats active lately.
-const LIST_EVERY: Duration = Duration::from_secs(10);
-const OPEN_EVERY: Duration = Duration::from_secs(3);
-const ACTIVE_EVERY: Duration = Duration::from_secs(60);
-/// What "active lately" is (milliseconds), and how many such chats are read at most.
-const ACTIVE_FOR: i64 = 7 * 86_400_000;
-const ACTIVE_MAX: usize = 20;
-/// How often the hour says how it is going.
-const REPORT_EVERY: Duration = Duration::from_secs(600);
 
 #[cfg(test)]
 thread_local! {
-    /// Tests: how often the hour says how it is going, in place of [`REPORT_EVERY`].
+    /// Tests: how often the hour says how it is going, in place of the hour's `REPORT_EVERY`.
     pub(super) static REPORT_EVERY_IN_TESTS: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
 }
 
@@ -81,13 +88,13 @@ pub struct CheckOptions {
 pub fn run_check(client: &TeamsClient, me: &Me, opts: &CheckOptions, say: &mut dyn FnMut(&str)) -> Result<()> {
     let mut ck = Check { client, me, opts, say, seen: None, sent: Vec::new() };
     let listed = ck.chats()?;
-    let tally = ck.newest_messages(listed.newest.as_deref());
-    ck.reactions_and_files(&tally);
+    let read = ck.read_recent(&listed.recent);
+    ck.reactions_and_files(&read.tally);
     if let Some(chat) = &opts.write_chat {
         ck.write(chat, listed.write_tenant);
     }
     if let Some(d) = opts.hour {
-        ck.hour(d, listed.newest, tally.newest);
+        ck.hour(d, read.newest, read.watermark, &read.refused);
     }
     let s = client.stats();
     ck.say(format!("in all: requests {}, throttled {}", s.requests, s.throttled));
@@ -108,24 +115,50 @@ struct Check<'a> {
 /// What the chat list gave.
 #[derive(Default)]
 struct Listed {
-    /// The chat with the most recent message.
-    newest: Option<String>,
+    /// The [`READ_CHATS`] chats with the most recent messages, the newest first.
+    recent: Vec<Listing>,
     /// The write chat's tenant, as the list gives it.
     write_tenant: Option<String>,
 }
 
-/// What the newest chat's messages hold.
+/// A chat as the list gives it.
+struct Listing {
+    id: String,
+    /// One-to-one, group, meeting, other: 0 to 3.
+    kind: usize,
+    /// Made in another organisation than the signed-in user's.
+    foreign: bool,
+    /// When its last message came (milliseconds).
+    at: Option<i64>,
+}
+
+/// What reading the newest chats gave.
 #[derive(Default)]
-struct Tally {
+struct Read {
+    /// Reactions and files, over every chat read.
+    tally: Tally,
+    /// The newest chat read: its id, its messages (every page), and its watermark (the newest
+    /// `lastModifiedDateTime`, in milliseconds).
+    newest: Option<String>,
     messages: usize,
     capped: bool,
+    end: String,
+    watermark: Option<i64>,
+    /// The chats Graph refused for good (an answer such as 403, not a failure that may pass):
+    /// the hour leaves them out.
+    refused: HashSet<String>,
+}
+
+/// What the messages read hold.
+#[derive(Default)]
+struct Tally {
     reacted: usize,
     named: usize,
     emoji: usize,
     other: usize,
     files: usize,
     first_file: Option<String>,
-    /// The newest `lastModifiedDateTime` (milliseconds): the chat's watermark.
+    /// The newest `lastModifiedDateTime` (milliseconds).
     newest: Option<i64>,
 }
 
@@ -147,10 +180,13 @@ impl Check<'_> {
         self.seen = self.seen.max(t);
     }
 
-    /// 1. The chats, by kind.
+    /// 1. The chats, by kind and by organisation.
     fn chats(&mut self) -> Result<Listed> {
         let mut listed = Listed::default();
-        let (mut kinds, mut total, mut newest_at) = ([0usize; 4], 0usize, None);
+        let mine = self.opts.tenant.clone();
+        let (mut kinds, mut total, mut foreign) = ([0usize; 4], 0usize, 0usize);
+        let mut others = ByName::default();
+        let mut all: Vec<Listing> = Vec::new();
         let mut next: Option<String> = None;
         let mut end = String::new();
         let mut capped = true;
@@ -169,24 +205,29 @@ impl Check<'_> {
             };
             for chat in &page.items {
                 total += 1;
-                let kind = match chat.get("chatType").and_then(Value::as_str) {
+                let named = chat.get("chatType").and_then(Value::as_str);
+                let kind = match named {
                     Some("oneOnOne") => 0,
                     Some("group") => 1,
                     Some("meeting") => 2,
-                    _ => 3,
+                    _ => {
+                        others.add(kind_name(named));
+                        3
+                    }
                 };
                 if let Some(k) = kinds.get_mut(kind) {
                     *k += 1;
                 }
+                let made_in = text_of(chat, "tenantId");
+                let is_foreign = mine.as_deref().is_some_and(|m| made_in.as_deref().is_some_and(|t| !t.eq_ignore_ascii_case(m)));
+                foreign += usize::from(is_foreign);
                 let Some(id) = id_of(chat) else { continue };
                 let at = chat.pointer("/lastMessagePreview/createdDateTime").and_then(Value::as_str).and_then(ms_of);
                 self.saw(at);
-                if listed.newest.is_none() || at > newest_at {
-                    (listed.newest, newest_at) = (Some(id.clone()), at);
-                }
                 if self.opts.write_chat.as_deref() == Some(id.as_str()) {
-                    listed.write_tenant = text_of(chat, "tenantId");
+                    listed.write_tenant = made_in;
                 }
+                all.push(Listing { id, kind, foreign: is_foreign, at });
             }
             next = page.next;
             if next.is_none() {
@@ -197,49 +238,104 @@ impl Check<'_> {
         let [one, group, meeting, other] = kinds;
         let least = if capped { "at least " } else { "" };
         self.say(format!("chats: {least}{total} (one-to-one {one}, group {group}, meeting {meeting}, other {other}){end}"));
+        if other > 0 {
+            self.say(format!("chats of other kinds: {}", others.said()));
+        }
+        match mine {
+            Some(_) => self.say(format!("chats made in another organisation: {foreign}")),
+            None => self.say("chats made in another organisation: not known (no tenant)".into()),
+        }
+        // The most recently active first (a chat without a message last), whatever order the
+        // pages came in.
+        all.sort_by_key(|c| std::cmp::Reverse(c.at));
+        all.truncate(READ_CHATS);
+        listed.recent = all;
         Ok(listed)
     }
 
-    /// 2. The newest chat's messages, read backwards from now.
-    fn newest_messages(&mut self, chat: Option<&str>) -> Tally {
-        let mut t = Tally::default();
-        let Some(chat) = chat else {
-            self.say("messages in the newest chat: 0 (no chat)".into());
-            return t;
-        };
+    /// 2. The newest chats' messages, read backwards from now.
+    ///
+    /// A page of each, every page of the newest one Graph lets be read. What Graph refuses is
+    /// counted by kind of chat, by organisation and by why.
+    fn read_recent(&mut self, recent: &[Listing]) -> Read {
+        let mut read = Read::default();
         let Some(before) = self.now().map(rfc3339) else {
-            self.say("messages in the newest chat: not read (no server time)".into());
-            return t;
+            self.say(format!("messages, the {} newest chats: not read (no server time)", recent.len()));
+            self.say("messages in the newest chat read: 0 (no chat read)".into());
+            return read;
         };
-        let mut next: Option<String> = None;
-        t.capped = true;
-        let mut end = String::new();
-        for _ in 0..PAGES {
-            let page = match self.client.messages(chat, Range::Before(&before), next.as_deref()) {
-                Ok(p) => p,
+        let (mut ok, mut kinds, mut foreign) = (0usize, [0usize; 4], 0usize);
+        let mut why_not = ByName::default();
+        for chat in recent {
+            let all = read.newest.is_none();
+            match self.read_chat(&chat.id, &before, all, &mut read) {
+                Ok(()) => {
+                    ok += 1;
+                    if all {
+                        read.newest = Some(chat.id.clone());
+                    }
+                }
                 Err(e) => {
-                    end = format!(", then no ({})", why(&e));
-                    t.capped = t.messages > 0;
-                    break;
+                    if let Some(k) = kinds.get_mut(chat.kind) {
+                        *k += 1;
+                    }
+                    foreign += usize::from(chat.foreign);
+                    why_not.add(why(&e));
+                    if matches!(e, NetError::Protocol(_)) {
+                        read.refused.insert(chat.id.clone());
+                    }
+                }
+            }
+        }
+        self.saw(read.tally.newest);
+        let refused = recent.len().saturating_sub(ok);
+        self.say(format!("messages, the {} newest chats: read {ok}, refused {refused}", recent.len()));
+        if refused > 0 {
+            let [one, group, meeting, other] = kinds;
+            self.say(format!("messages refused, by kind: one-to-one {one}, group {group}, meeting {meeting}, other {other}"));
+            if self.opts.tenant.is_some() {
+                self.say(format!("messages refused, made in another organisation: {foreign}"));
+            }
+            self.say(format!("messages refused, why: {}", why_not.said()));
+        }
+        if read.newest.is_none() {
+            self.say("messages in the newest chat read: 0 (no chat read)".into());
+        } else {
+            let least = if read.capped { "at least " } else { "" };
+            self.say(format!("messages in the newest chat read: {least}{}{}", read.messages, read.end));
+        }
+        read
+    }
+
+    /// A chat's messages before `before`: its first page, or with `all` every page (the newest
+    /// chat read: its messages counted, its watermark kept). An error on the first page is
+    /// the chat refused; on a later one, the count stops there.
+    fn read_chat(&mut self, chat: &str, before: &str, all: bool, read: &mut Read) -> Result<()> {
+        let mut next: Option<String> = None;
+        for i in 0..if all { PAGES } else { 1 } {
+            let page = match self.client.messages(chat, Range::Before(before), next.as_deref()) {
+                Ok(p) => p,
+                Err(e) if i == 0 => return Err(e),
+                Err(e) => {
+                    read.end = format!(", then no ({})", why(&e));
+                    read.capped = true;
+                    return Ok(());
                 }
             };
             for m in &page.items {
-                t.count(m);
+                read.tally.count(m);
+                if all {
+                    read.messages += 1;
+                    read.watermark = read.watermark.max(m.get("lastModifiedDateTime").and_then(Value::as_str).and_then(ms_of));
+                }
             }
             next = page.next;
             if next.is_none() {
-                t.capped = false;
-                break;
+                return Ok(());
             }
         }
-        self.saw(t.newest);
-        if t.messages == 0 && !end.is_empty() {
-            self.say(format!("messages in the newest chat: no{}", end.trim_start_matches(", then no")));
-        } else {
-            let least = if t.capped { "at least " } else { "" };
-            self.say(format!("messages in the newest chat: {least}{}{end}", t.messages));
-        }
-        t
+        read.capped = all;
+        Ok(())
     }
 
     /// 3 and 4. Reactions by form, and shared files (the first one downloaded, counted only).
@@ -265,7 +361,6 @@ impl Check<'_> {
 
 impl Tally {
     fn count(&mut self, m: &Value) {
-        self.messages += 1;
         self.newest = self.newest.max(m.get("lastModifiedDateTime").and_then(Value::as_str).and_then(ms_of));
         let reactions = m.get("reactions").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
         if !reactions.is_empty() {
@@ -468,198 +563,8 @@ impl Check<'_> {
     }
 }
 
-/// 6. The approved cadences, for `d`: the 429 rate they meet.
-impl Check<'_> {
-    fn hour(&mut self, d: Duration, newest: Option<String>, watermark: Option<i64>) {
-        let before = self.client.stats();
-        let start = Instant::now();
-        // No request starts past the end: only one already sent (its waits on a 429) can overrun.
-        let end = start.checked_add(d).unwrap_or(start);
-        let from = self.now();
-        // Each chat's watermark (milliseconds): what its incremental reads start after.
-        let mut marks: HashMap<String, i64> = HashMap::new();
-        if let (Some(chat), Some(at)) = (&newest, watermark.or(from)) {
-            marks.insert(chat.clone(), at);
-        }
-        // The list's chats, with when their last message came.
-        let mut list: Vec<(String, Option<i64>)> = Vec::new();
-        let every = report_every();
-        let (mut at_list, mut at_open, mut at_active, mut at_report) = (Duration::ZERO, Duration::ZERO, Duration::ZERO, every);
-        let mut h = Hourly::default();
-        loop {
-            let t = start.elapsed();
-            if t >= d {
-                break;
-            }
-            if t >= at_list {
-                at_list = t.saturating_add(LIST_EVERY);
-                let mut r = self.client.chats(None);
-                if self.renewed(&r, &mut h) {
-                    r = self.client.chats(None);
-                }
-                let r = r.map(|p| {
-                    list = p
-                        .items
-                        .iter()
-                        .filter_map(|c| Some((id_of(c)?, c.pointer("/lastMessagePreview/createdDateTime")?.as_str().and_then(ms_of))))
-                        .collect();
-                    true
-                });
-                let newest_at = list.iter().filter_map(|(_, at)| *at).max();
-                self.saw(newest_at);
-                if !h.settle(r) {
-                    break;
-                }
-            }
-            if t >= at_open {
-                at_open = t.saturating_add(OPEN_EVERY);
-                if let Some(chat) = &newest {
-                    let r = self.incremental_renewing(chat, &mut marks, from, end, &mut h);
-                    if !h.settle(r) {
-                        break;
-                    }
-                }
-            }
-            if t >= at_active {
-                at_active = t.saturating_add(ACTIVE_EVERY);
-                let since = self.now().map(|n| n.saturating_sub(ACTIVE_FOR));
-                let active: Vec<String> = list
-                    .iter()
-                    .filter(|(id, at)| Some(id) != newest.as_ref() && since.is_some_and(|s| at.is_some_and(|a| a >= s)))
-                    .take(ACTIVE_MAX)
-                    .map(|(id, _)| id.clone())
-                    .collect();
-                // The end of the hour, or a token refused for good, stops the pass; a chat that
-                // fails otherwise doesn't.
-                for chat in &active {
-                    let r = self.incremental_renewing(chat, &mut marks, from, end, &mut h);
-                    if !h.settle(r) {
-                        break;
-                    }
-                }
-            }
-            if h.over() {
-                break;
-            }
-            if t >= at_report {
-                at_report = at_report.saturating_add(every);
-                let s = self.client.stats();
-                let (requests, throttled) = (s.requests.saturating_sub(before.requests), s.throttled.saturating_sub(before.throttled));
-                self.say(format!("hour, after {} min: requests {requests}, throttled {throttled}, failed {}", t.as_secs() / 60, h.failed));
-            }
-            let wake = at_list.min(at_open).min(at_active).min(at_report).min(d);
-            let wait = wake.saturating_sub(start.elapsed());
-            if !wait.is_zero() {
-                (self.opts.sleep)(wait);
-            }
-        }
-        let s = self.client.stats();
-        let (requests, throttled) = (s.requests.saturating_sub(before.requests), s.throttled.saturating_sub(before.throttled));
-        let rate = if requests == 0 { 0.0 } else { f64::from(throttled) * 100.0 / f64::from(requests) };
-        let cut = if h.cut { ", cut short at the end" } else { "" };
-        let renewed = if h.renewed > 0 { format!(", sign-in renewed {}", h.renewed) } else { String::new() };
-        self.say(format!(
-            "hour, {} s: requests {requests}, throttled {throttled}, failed {}, 429 rate {rate:.1} %{}{cut}{renewed}",
-            start.elapsed().as_secs(),
-            h.failed,
-            h.stopped
-        ));
-    }
-
-    /// When `r` is a refused token and [`CheckOptions::renew`] gives a new one: the client takes
-    /// it, and the request is to be made once more. Once only: a second refusal stops the hour.
-    fn renewed<T>(&self, r: &Result<T>, h: &mut Hourly) -> bool {
-        if !matches!(r, Err(NetError::Auth(_))) {
-            return false;
-        }
-        let Some(token) = self.opts.renew.as_ref().and_then(|renew| renew()) else { return false };
-        self.client.set_token(&token);
-        h.renewed = h.renewed.saturating_add(1);
-        true
-    }
-
-    /// [`Self::incremental`], made once more after a refused token is renewed.
-    fn incremental_renewing(
-        &mut self,
-        chat: &str,
-        marks: &mut HashMap<String, i64>,
-        from: Option<i64>,
-        end: Instant,
-        h: &mut Hourly,
-    ) -> Result<bool> {
-        let r = self.incremental(chat, marks, from, end);
-        if self.renewed(&r, h) { self.incremental(chat, marks, from, end) } else { r }
-    }
-
-    /// A chat's messages changed after its watermark, every page; the watermark moved to the
-    /// newest change seen. `false` when `end` came first (no page is asked for past it).
-    fn incremental(&mut self, chat: &str, marks: &mut HashMap<String, i64>, from: Option<i64>, end: Instant) -> Result<bool> {
-        let Some(mark) = marks.get(chat).copied().or(from) else { return Ok(true) };
-        let after = rfc3339(mark);
-        let mut newest = mark;
-        let mut next: Option<String> = None;
-        for _ in 0..PAGES {
-            if Instant::now() >= end {
-                return Ok(false);
-            }
-            let page = self.client.messages(chat, Range::After(&after), next.as_deref())?;
-            for m in &page.items {
-                newest = newest.max(m.get("lastModifiedDateTime").and_then(Value::as_str).and_then(ms_of).unwrap_or(newest));
-            }
-            match page.next {
-                Some(n) => next = Some(n),
-                None => break,
-            }
-        }
-        marks.insert(chat.to_string(), newest);
-        Ok(true)
-    }
-}
-
-/// How the hour's requests went.
-#[derive(Default)]
-struct Hourly {
-    failed: u32,
-    /// The hour's end came in the middle of a pass.
-    cut: bool,
-    /// Why the hour stopped before its end (`, stopped (401)`), or empty.
-    stopped: String,
-    /// Tokens renewed.
-    renewed: u32,
-}
-
-impl Hourly {
-    /// Note how a request went: whether the hour goes on.
-    fn settle(&mut self, r: Result<bool>) -> bool {
-        match r {
-            Ok(done) => self.cut |= !done,
-            Err(e) => {
-                self.failed = self.failed.saturating_add(1);
-                if matches!(e, NetError::Auth(_)) {
-                    self.stopped = format!(", stopped ({})", why(&e));
-                }
-            }
-        }
-        !self.over()
-    }
-
-    /// Whether the hour is over before its time: cut at the end, or the token refused for good.
-    fn over(&self) -> bool {
-        self.cut || !self.stopped.is_empty()
-    }
-}
-
-/// How often the hour says how it is going.
-fn report_every() -> Duration {
-    #[cfg(test)]
-    if let Some(d) = REPORT_EVERY_IN_TESTS.with(std::cell::Cell::get) {
-        return d;
-    }
-    REPORT_EVERY
-}
-
-/// An error said without its text (which can carry the address asked): its HTTP status, or
-/// what kind of failure it was.
+/// An error said without its text (which can carry the address asked): its HTTP status and
+/// Graph's error code (`403 Forbidden`), or what kind of failure it was.
 fn why(e: &NetError) -> String {
     if let NetError::Protocol(m) = e
         && m.starts_with("the shared file is larger")
@@ -667,7 +572,18 @@ fn why(e: &NetError) -> String {
         return format!("over {} MiB", MAX_DOWNLOAD >> 20);
     }
     let text = e.to_string();
-    let status = text.split("HTTP ").skip(1).map(|rest| rest.chars().take_while(char::is_ascii_digit).collect::<String>()).find(|s| s.len() == 3);
+    let status = text.split("HTTP ").skip(1).find_map(|rest| {
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+        if digits.len() != 3 {
+            return None;
+        }
+        let code: String = rest
+            .get(3..)
+            .and_then(|r| r.strip_prefix(' '))
+            .map(|r| r.chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')).take(MAX_CODE).collect())
+            .unwrap_or_default();
+        Some(if code.is_empty() { digits } else { format!("{digits} {code}") })
+    });
     if let Some(s) = status {
         return s;
     }
@@ -728,4 +644,47 @@ fn ms_of(t: &str) -> Option<i64> {
 fn rfc3339(ms: i64) -> String {
     let day = utc(ms.div_euclid(1000));
     format!("{}.{:03}Z", day.trim_end_matches('Z'), ms.rem_euclid(1000))
+}
+
+/// A kind of chat as Graph names it (`unknownFutureValue`), said only when it looks like one
+/// of its names: `none` when there is none, `unreadable` otherwise.
+pub(super) fn kind_name(kind: Option<&str>) -> String {
+    match kind {
+        None | Some("") => "none".into(),
+        Some(k) if k.len() <= MAX_KIND && k.bytes().all(|b| b.is_ascii_alphanumeric()) => k.into(),
+        Some(_) => "unreadable".into(),
+    }
+}
+
+/// Counts by name (kinds of chat, reasons): the first [`NAMES_KEPT`] names kept, the others
+/// counted under "more" at once.
+#[derive(Default)]
+pub(super) struct ByName {
+    names: Vec<(String, usize)>,
+    more: usize,
+}
+
+impl ByName {
+    pub(super) fn add(&mut self, name: String) {
+        if let Some((_, n)) = self.names.iter_mut().find(|(k, _)| *k == name) {
+            *n += 1;
+        } else if self.names.len() < NAMES_KEPT {
+            self.names.push((name, 1));
+        } else {
+            self.more += 1;
+        }
+    }
+
+    /// `c 5, a 3, b 3`: the largest counts first (then by name), [`NAMES_SAID`] at most, the
+    /// rest summed as `more N`.
+    pub(super) fn said(&self) -> String {
+        let mut names: Vec<&(String, usize)> = self.names.iter().collect();
+        names.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let more = self.more + names.iter().skip(NAMES_SAID).map(|(_, n)| n).sum::<usize>();
+        let mut said: Vec<String> = names.iter().take(NAMES_SAID).map(|(k, n)| format!("{k} {n}")).collect();
+        if more > 0 {
+            said.push(format!("more {more}"));
+        }
+        said.join(", ")
+    }
 }

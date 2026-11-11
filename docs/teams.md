@@ -8,8 +8,9 @@ the writes Quatrelle needs work, and how often Graph throttles the polling Quatr
 numbers decide what is built next.
 
 The check signs in in the browser, keeps the tokens in memory only (nothing is written to disk or
-to the keychain), and prints counts, yes or no, HTTP status numbers and durations: never a name,
-an address, a chat's topic, a message's text or an id. Its output can be pasted back as it is.
+to the keychain), and prints counts, kinds of chat as Graph names them, yes or no, HTTP statuses
+with Graph's error codes, and durations: never a name, an address, a chat's topic, a message's
+text or an id. Its output can be pasted back as it is.
 
 ## 1. Registering the app (once)
 
@@ -58,6 +59,7 @@ Done by an administrator of the Microsoft 365 tenant, in the
    | `Files.ReadWrite` | sending a file in a chat (it goes to the sender's OneDrive) |
    | `Files.Read.All` | opening the files others shared in a chat |
    | `offline_access` | staying signed in (a refresh token) |
+   | `openid`, `email` | who signed in (an ID token), under *OpenId permissions* |
 
    **Add permissions**. Quatrelle asks for exactly these at sign-in, nothing more.
 4. Optional: **Grant admin consent for \<your organisation\>** on the same page, then **Yes**.
@@ -70,7 +72,7 @@ Done by an administrator of the Microsoft 365 tenant, in the
    to do.
 5. **Overview**: copy the **Application (client) ID** and the **Directory (tenant) ID**. They are
    not secrets. They are what `--client` and `--tenant` take below; later, they go into Quatrelle's
-   options or the repository's build secrets.
+   options, or into a build made on your own computer (a published build never carries them).
 
 ## 2. Running the check
 
@@ -105,8 +107,14 @@ quatrelle-cli teams check --client … --tenant … --write "<chat link>" --hour
 A typical run (with `--write` and `--call`):
 
 ```text
-chats: 2 (one-to-one 1, group 1, meeting 0, other 0)
-messages in the newest chat: 4
+chats: 3 (one-to-one 1, group 1, meeting 0, other 1)
+chats of other kinds: unknownFutureValue 1
+chats made in another organisation: 1
+messages, the 3 newest chats: read 2, refused 1
+messages refused, by kind: one-to-one 0, group 0, meeting 0, other 1
+messages refused, made in another organisation: 1
+messages refused, why: 403 Forbidden 1
+messages in the newest chat read: 4
 reactions: 2 on 1 messages (by name 1, as emoji 1, other 0)
 file attachments: 1, the first downloads: yes, 9 bytes
 write, send (1/2): yes
@@ -125,20 +133,25 @@ call: opened
 
 | Line | Meaning |
 |---|---|
-| `chats: N (one-to-one …, group …, meeting …, other …)` | Graph lists your chats, by kind. `at least N`: there were more than 10 pages (500 chats); only those were counted. `chats: no (403)`: Graph refused (a permission is missing: step 3 or 4). |
-| `messages in the newest chat: N` | The messages Graph gives for the chat with the latest message (`at least`: more than 10 pages). `0 (no chat)`: the account has none. |
-| `reactions: N on M messages (by name …, as emoji …, other …)` | How Graph writes reactions in that chat: as names (`like`, `heart`…), as emoji, or otherwise. |
-| `file attachments: N, the first downloads: yes, B bytes` | Files shared in that chat, and whether the first one can be downloaded (its bytes are counted, not kept). `none to try`, or `no (403)` and the like. |
-| `write, …` | Only with `--write`: each write Quatrelle needs, `yes`, `no (<HTTP status>)`, or `not tried` when an earlier step failed. See below. |
+| `chats: N (one-to-one …, group …, meeting …, other …)` | Graph lists your chats, by kind. `at least N`: there were more than 10 pages (500 chats); only those were counted. `chats: no (403 …)`: Graph refused (a permission is missing: step 3 or 4; or the account has no Teams: sign in with the one you use Teams with, not an administrator's account). |
+| `chats of other kinds: …` | Only when some are `other`: their kinds as Graph names them (`none` when it gives none). |
+| `chats made in another organisation: N` | Chats another organisation's member started (a meeting of theirs, for one). `not known (no tenant)`: the sign-in didn't say which organisation is yours. |
+| `messages, the N newest chats: read R, refused F` | The 20 chats with the latest messages (fewer if you have fewer): a page of messages asked of each. |
+| `messages refused, …` | Only when some were refused: those chats by kind, how many were made in another organisation, and why (Graph's status and error code, with how many times). |
+| `messages in the newest chat read: N` | Every message of the newest chat Graph let be read (`at least`: more than 10 pages). `0 (no chat read)`: none could be. |
+| `reactions: N on M messages (by name …, as emoji …, other …)` | How Graph writes reactions in the chats read: as names (`like`, `heart`…), as emoji, or otherwise. |
+| `file attachments: N, the first downloads: yes, B bytes` | Files shared in the chats read, and whether the first one can be downloaded (its bytes are counted, not kept). `none to try`, or `no (403 …)` and the like. |
+| `write, …` | Only with `--write`: each write Quatrelle needs, `yes`, `no (<HTTP status> <code>)`, or `not tried` when an earlier step failed. See below. |
 | `write, stray test messages swept: N` | Only when a send's answer was lost: the test messages found and deleted anyway. |
 | `write, test messages left undeleted: N` | Should be `0`. Otherwise delete the test messages by hand in that chat. |
 | `hour, after N min: requests …, throttled …, failed …` | Only with `--hour`, every 10 minutes: how it is going. |
-| `hour, S s: requests R, throttled T, failed F, 429 rate X %` | The hour's totals: `throttled` is the number of 429 (Too Many Requests) answers. It may end with `, stopped (401)` (the sign-in ran out and couldn't be renewed), `, cut short at the end`, or `, sign-in renewed N` (the access token was renewed in the hour, as expected after 60 to 90 minutes). |
+| `hour, S s: requests R, throttled T, failed F, 429 rate X %` | The hour's totals: `throttled` is the number of 429 (Too Many Requests) answers. It may end with `, stopped (401 …)` (the sign-in ran out and couldn't be renewed), `, cut short at the end`, or `, sign-in renewed N` (the access token was renewed in the hour, as expected after 60 to 90 minutes). |
 | `in all: requests R, throttled T` | Every request of the run, and the 429 answers among them. |
 | `call: opened` | Only with `--call`: the call link was opened. `call: no (…)` says why. |
 
-A status in brackets is Graph's HTTP status: `401` the sign-in was refused, `403` a permission is
-missing or the action isn't allowed, `404` not found, `429` throttled, `5xx` Graph's own trouble.
+A status in brackets is Graph's HTTP status, followed by its error code when it gives one
+(`403 Forbidden`): `401` the sign-in was refused, `403` a permission is missing or the action
+isn't allowed, `404` not found, `429` throttled, `5xx` Graph's own trouble.
 
 ## 4. `--write <chat>`: the writes
 
@@ -176,10 +189,11 @@ quatrelle-cli teams check --client … --tenant … --hour
 ```
 
 After the rest of the check, it polls for **an hour** at the pace Quatrelle plans: the chat list
-every 10 seconds, the newest chat every 3 seconds, and the chats active in the last 7 days (20 at
-most) every minute. It reads only, and prints a line every 10 minutes and a total at the end: the
-`429 rate` is what this is for. Keep the computer awake (no sleep) during that hour; the access
-token is renewed in memory when it runs out.
+every 10 seconds, the newest chat it could read every 3 seconds, and the chats active in the last
+7 days (20 at most) every minute, leaving out the chats Graph refused to read. It reads only, and
+prints a line every 10 minutes and a total at the end: the `429 rate` is what this is for. Keep
+the computer awake (no sleep) during that hour; the access token is renewed in memory when it
+runs out.
 
 ## 6. `--call <chat>`: a call
 
@@ -193,6 +207,6 @@ called until you confirm there. It prints `call: opened`, or why not; it never p
 
 ## 7. Sending the result back
 
-Everything printed on the standard output is numbers, yes or no, HTTP statuses and durations: copy
-it as it is and paste it back. The sign-in address printed on the error output (`Open this address
+Everything printed on the standard output is numbers, kinds of chat, yes or no, HTTP statuses with
+Graph's error codes, and durations: copy it as it is and paste it back. The sign-in address printed on the error output (`Open this address
 to sign in: …`) carries the app's client id and no secret, and needn't be sent.

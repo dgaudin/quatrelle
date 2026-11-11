@@ -25,8 +25,9 @@ use crate::{NetError, Result};
 
 /// Largest JSON answer accepted.
 const MAX_JSON: usize = 8 << 20;
-/// Sent with every message read: reactions, message types and the like added to Graph after
-/// v1.0 was published come as they are rather than as `unknownFutureValue`.
+/// Sent with every chat list and message read: kinds of chat, reactions, message types and the
+/// like added to Graph after v1.0 was published come as they are rather than as
+/// `unknownFutureValue`.
 const PREFER_ENUMS: &str = "include-unknown-enum-members";
 /// Chats and messages asked for per page (the most Graph gives).
 const TOP: u32 = 50;
@@ -137,7 +138,7 @@ impl TeamsClient {
             Some(n) => self.own(n)?,
             None => self.at(&format!("/me/chats?$top={TOP}&$expand=lastMessagePreview&$orderby=lastMessagePreview/createdDateTime%20desc")),
         };
-        page(self.json("GET", &url, None, false)?)
+        page(self.json("GET", &url, None, true)?)
     }
 
     /// A chat's members, every page.

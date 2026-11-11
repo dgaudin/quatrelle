@@ -423,7 +423,7 @@ mod tests {
         .unwrap();
         let has = |start: &str| lines.iter().any(|l| l.starts_with(start));
         assert!(lines.iter().any(|l| l == "chats: 2 (one-to-one 1, group 1, meeting 0, other 0)"), "{lines:#?}");
-        assert!(lines.iter().any(|l| l == "messages in the newest chat: 4"), "{lines:#?}");
+        assert!(lines.iter().any(|l| l == "messages in the newest chat read: 4"), "{lines:#?}");
         assert!(lines.iter().any(|l| l == "reactions: 2 on 1 messages (by name 1, as emoji 1, other 0)"), "{lines:#?}");
         assert!(has("file attachments: 1, the first downloads: yes, 9 bytes"), "{lines:#?}");
         assert!(lines.iter().any(|l| l == "write, send (1/2): yes"), "{lines:#?}");

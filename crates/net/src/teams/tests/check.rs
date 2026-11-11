@@ -38,6 +38,103 @@ fn kinded(id: &str, kind: &'static str, start: i64, n: i64) -> FakeChat {
     FakeChat { kind, ..chat(id, start, n) }
 }
 
+/// A chat made in another organisation.
+fn foreign(id: &str, kind: &'static str, start: i64, n: i64) -> FakeChat {
+    FakeChat { tenant: Some("tenant-other".into()), ..kinded(id, kind, start, n) }
+}
+
+#[test]
+fn check_reads_the_twenty_newest_chats_and_counts_refusals() {
+    // 25 chats ten minutes apart, `c0` the newest. The first three are refused for good, the
+    // fourth fails; two were made in another organisation, two are of kinds Graph didn't name.
+    let chats: Vec<FakeChat> = (0..25)
+        .map(|i| {
+            let (id, start) = (format!("19:c{i}@thread.v2"), T0 + (100 - i) * 10 * MINUTE);
+            match i {
+                0 => foreign(&id, "meeting", start, 2),
+                1 => foreign(&id, "unknownFutureValue", start, 2),
+                2 => kinded(&id, "meeting", start, 2),
+                3 => kinded(&id, "", start, 2),
+                _ => kinded(&id, if i % 2 == 0 { "oneOnOne" } else { "group" }, start, 3),
+            }
+        })
+        .collect();
+    let mut t = teams_with(chats);
+    t.chats[4].messages[0].reactions = vec![("like".into(), "u-ana".into())];
+    t.chats[9].messages[1].reactions = vec![("😀".into(), ME.into())];
+    t.chats[9].messages[2].attachments = vec![("reference".into(), SHARED.into())];
+    t.forbid_reads = (0..3).map(|i| format!("19:c{i}@thread.v2")).collect();
+    t.fail_reads = vec!["19:c3@thread.v2".into()];
+    t.shares.insert(SHARED.into(), b"hello".to_vec());
+    let server = serve_teams(t);
+    let (r, lines) = check(&server, &CheckOptions { tenant: Some(TENANT.into()), ..opts() });
+    r.unwrap();
+    for said in [
+        "chats: 25 (one-to-one 11, group 10, meeting 2, other 2)",
+        "chats of other kinds: none 1, unknownFutureValue 1",
+        "chats made in another organisation: 2",
+        "messages, the 20 newest chats: read 16, refused 4",
+        "messages refused, by kind: one-to-one 0, group 0, meeting 2, other 2",
+        "messages refused, made in another organisation: 2",
+        "messages refused, why: 403 Forbidden 3, 500 InternalServerError 1",
+        "messages in the newest chat read: 3",
+        "reactions: 2 on 2 messages (by name 1, as emoji 1, other 0)",
+        "file attachments: 1, the first downloads: yes, 5 bytes",
+    ] {
+        let start = said.split(':').next().unwrap();
+        assert_eq!(line(&lines, &format!("{start}:")), said, "{lines:#?}");
+    }
+    // The twenty newest read once each, the five oldest never.
+    let reads = teams_of(&server).message_reads;
+    for i in 0..25 {
+        let n = reads.iter().filter(|(c, _)| *c == format!("19:c{i}@thread.v2")).count();
+        assert_eq!(n, usize::from(i < 20), "c{i}: {reads:?}");
+    }
+}
+
+#[test]
+fn chat_kinds_are_said_as_graph_names_them_or_not_at_all() {
+    assert_eq!(check::kind_name(Some("unknownFutureValue")), "unknownFutureValue");
+    assert_eq!(check::kind_name(Some("")), "none");
+    assert_eq!(check::kind_name(None), "none");
+    assert_eq!(check::kind_name(Some("a kind")), "unreadable");
+    assert_eq!(check::kind_name(Some("zq@secret.example")), "unreadable");
+    assert_eq!(check::kind_name(Some(&"k".repeat(33))), "unreadable");
+    // Counts by name: the largest first, eight at most, the rest summed.
+    let mut by = check::ByName::default();
+    for (name, n) in [("b", 3), ("a", 3), ("c", 5)] {
+        for _ in 0..n {
+            by.add(name.to_string());
+        }
+    }
+    assert_eq!(by.said(), "c 5, a 3, b 3");
+    let mut by = check::ByName::default();
+    for i in 0..200 {
+        by.add(format!("k{i}"));
+    }
+    // The first 64 names are kept, the others counted under "more" straight away.
+    assert_eq!(by.said(), "k0 1, k1 1, k10 1, k11 1, k12 1, k13 1, k14 1, k15 1, more 192");
+}
+
+#[test]
+fn check_hour_leaves_out_the_chats_refused() {
+    // The newest chat is refused for good: the hour polls the newest one read instead, and
+    // never the refused one.
+    let now = clock();
+    let recent = |id: &str, ago_min: i64| chat(id, now - ago_min * MINUTE, 2);
+    let mut t = teams_with(vec![recent("19:refused@thread.v2", 1), recent("19:read@thread.v2", 2), recent("19:other@thread.v2", 3)]);
+    t.forbid_reads.push("19:refused@thread.v2".into());
+    let server = serve_teams(t);
+    let opts = CheckOptions { hour: Some(Duration::from_millis(500)), sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))), ..opts() };
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    let t = teams_of(&server);
+    let polled = |chat: &str| t.message_reads.iter().filter(|(c, f)| c == chat && f.starts_with("lastModifiedDateTime gt ")).count();
+    assert_eq!(polled("19:refused@thread.v2"), 0, "{:?}", t.message_reads);
+    assert!(polled("19:read@thread.v2") >= 1 && polled("19:other@thread.v2") >= 1, "{:?}", t.message_reads);
+    assert!(line(&lines, "hour, ").contains(", failed 0, "), "{lines:#?}");
+}
+
 #[test]
 fn check_counts_by_kind_and_reaction_forms() {
     let mut newest = kinded("19:new@thread.v2", "group", T0 + 1000 * MINUTE, 5);
@@ -59,7 +156,7 @@ fn check_counts_by_kind_and_reaction_forms() {
     let (r, lines) = check(&server, &opts());
     r.unwrap();
     assert_eq!(line(&lines, "chats:"), "chats: 6 (one-to-one 3, group 2, meeting 1, other 0)");
-    assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: 5");
+    assert_eq!(line(&lines, "messages in the newest chat read:"), "messages in the newest chat read: 5");
     assert_eq!(line(&lines, "reactions:"), "reactions: 3 on 2 messages (by name 2, as emoji 1, other 0)");
     assert_eq!(line(&lines, "file attachments:"), "file attachments: 2, the first downloads: yes, 5 bytes");
     assert!(line(&lines, "in all:").starts_with("in all: requests "));
@@ -76,8 +173,9 @@ fn check_caps_listings_at_ten_pages() {
     let (r, lines) = check(&server, &opts());
     r.unwrap();
     assert!(line(&lines, "chats:").starts_with("chats: at least 500 "), "{lines:#?}");
-    assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: at least 500");
-    assert_eq!((hits(&server, "chats"), hits(&server, "messages")), (10, 10));
+    assert_eq!(line(&lines, "messages in the newest chat read:"), "messages in the newest chat read: at least 500");
+    // Every page of the newest chat, the first of the nineteen next.
+    assert_eq!((hits(&server, "chats"), hits(&server, "messages")), (10, 10 + 19));
 }
 
 #[test]
@@ -86,7 +184,10 @@ fn check_on_an_empty_account() {
     let (r, lines) = check(&server, &opts());
     r.unwrap();
     assert_eq!(line(&lines, "chats:"), "chats: 0 (one-to-one 0, group 0, meeting 0, other 0)");
-    assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: 0 (no chat)");
+    assert_eq!(line(&lines, "chats made in another organisation:"), "chats made in another organisation: not known (no tenant)");
+    assert_eq!(line(&lines, "messages, the 0 newest chats:"), "messages, the 0 newest chats: read 0, refused 0");
+    assert!(!lines.iter().any(|l| l.starts_with("messages refused") || l.starts_with("chats of other kinds")), "{lines:#?}");
+    assert_eq!(line(&lines, "messages in the newest chat read:"), "messages in the newest chat read: 0 (no chat read)");
     assert_eq!(line(&lines, "reactions:"), "reactions: 0 on 0 messages (by name 0, as emoji 0, other 0)");
     assert_eq!(line(&lines, "file attachments:"), "file attachments: 0, the first downloads: none to try");
 
@@ -95,7 +196,7 @@ fn check_on_an_empty_account() {
     let (r, lines) = check(&server, &opts());
     r.unwrap();
     assert_eq!(line(&lines, "chats:"), "chats: 1 (one-to-one 1, group 0, meeting 0, other 0)");
-    assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: 0");
+    assert_eq!(line(&lines, "messages in the newest chat read:"), "messages in the newest chat read: 0");
     assert_eq!(line(&lines, "file attachments:"), "file attachments: 0, the first downloads: none to try");
 }
 
@@ -150,7 +251,7 @@ fn check_write_probes_answer_yes() {
     let server = write_server(|_| {});
     let (r, lines) = check(&server, &CheckOptions { tenant: Some("another".into()), ..write_opts() });
     r.unwrap();
-    assert_eq!(line(&lines, "write, mark the chat read:"), "write, mark the chat read: no (400)");
+    assert_eq!(line(&lines, "write, mark the chat read:"), "write, mark the chat read: no (400 BadRequest)");
 }
 
 #[test]
@@ -159,8 +260,8 @@ fn check_write_probes_clean_up_after_a_failure() {
     let server = write_server(|t| t.forbid_post.push(CHAT.into()));
     let (r, lines) = check(&server, &write_opts());
     r.unwrap();
-    assert_eq!(line(&lines, "write, send (1/2):"), "write, send (1/2): no (403)");
-    assert_eq!(line(&lines, "write, send (2/2):"), "write, send (2/2): no (403)");
+    assert_eq!(line(&lines, "write, send (1/2):"), "write, send (1/2): no (403 Forbidden)");
+    assert_eq!(line(&lines, "write, send (2/2):"), "write, send (2/2): no (403 Forbidden)");
     assert_eq!(line(&lines, "write, react:"), "write, react: not tried");
     assert_eq!(line(&lines, "write, test messages left undeleted:"), "write, test messages left undeleted: 0");
     assert!(mine(&server).is_empty());
@@ -170,7 +271,7 @@ fn check_write_probes_clean_up_after_a_failure() {
     let server = write_server(|t| _ = t.fail_next.insert("setReaction".into(), 1));
     let (r, lines) = check(&server, &write_opts());
     r.unwrap();
-    assert_eq!(line(&lines, "write, react:"), "write, react: no (500)");
+    assert_eq!(line(&lines, "write, react:"), "write, react: no (500 InternalServerError)");
     assert_eq!(line(&lines, "write, edit:"), "write, edit: yes");
     let sent = mine(&server);
     assert_eq!(sent.len(), 2);
@@ -180,7 +281,7 @@ fn check_write_probes_clean_up_after_a_failure() {
     let server = write_server(|t| _ = t.fail_next.insert("softDelete".into(), 1));
     let (r, lines) = check(&server, &write_opts());
     r.unwrap();
-    assert_eq!(line(&lines, "write, soft delete by /users:"), "write, soft delete by /users: no (500)");
+    assert_eq!(line(&lines, "write, soft delete by /users:"), "write, soft delete by /users: no (500 InternalServerError)");
     assert_eq!(line(&lines, "write, test messages left undeleted:"), "write, test messages left undeleted: 0");
     let sent = mine(&server);
     assert!(sent.len() == 2 && sent.iter().all(|(_, deleted)| *deleted), "{sent:?}");
@@ -201,7 +302,7 @@ fn check_sweeps_a_send_whose_answer_was_lost() {
     let server = write_server(|t| _ = t.answer_lost.insert("post".into(), 1));
     let (r, lines) = check(&server, &write_opts());
     r.unwrap();
-    assert_eq!(line(&lines, "write, send (1/2):"), "write, send (1/2): no (503)");
+    assert_eq!(line(&lines, "write, send (1/2):"), "write, send (1/2): no (503 ServiceUnavailable)");
     assert_eq!(line(&lines, "write, send (2/2):"), "write, send (2/2): yes");
     assert_eq!(line(&lines, "write, stray test messages swept:"), "write, stray test messages swept: 1");
     assert_eq!(line(&lines, "write, test messages left undeleted:"), "write, test messages left undeleted: 0");
@@ -295,7 +396,7 @@ fn check_survives_throttling() {
     let server = serve_teams(t);
     let (r, lines) = check(&server, &opts());
     r.unwrap();
-    assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: 3");
+    assert_eq!(line(&lines, "messages in the newest chat read:"), "messages in the newest chat read: 3");
     assert_eq!(line(&lines, "file attachments:"), "file attachments: 1, the first downloads: yes, 10 bytes");
     let all = line(&lines, "in all:");
     let throttled: u32 = all.rsplit("throttled ").next().unwrap().parse().unwrap();
@@ -327,9 +428,10 @@ fn check_hour_runs_the_cadences() {
     let lists = hits(&server, "chats");
     assert!(lists >= 2, "the check's list, then the cadence's: {lists}");
     let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
+    let polled = |chat: &str| t.message_reads.iter().filter(|(c, f)| c == chat && f.starts_with("lastModifiedDateTime gt ")).count();
     assert!(t.message_reads.iter().all(|(_, f)| f.starts_with("lastModifiedDateTime gt ") || f.starts_with("lastModifiedDateTime lt ")));
     assert!(reads("19:newest@thread.v2") >= 2, "the check's read, then the cadence's: {:?}", t.message_reads);
-    assert_eq!((reads("19:yesterday@thread.v2"), reads("19:last-week@thread.v2"), reads("19:last-month@thread.v2")), (1, 1, 0));
+    assert_eq!((polled("19:yesterday@thread.v2"), polled("19:last-week@thread.v2"), polled("19:last-month@thread.v2")), (1, 1, 0));
     for c in &t.chats {
         assert!(reads(&c.id) <= lists as usize * 4, "{}: {} reads for {lists} lists", c.id, reads(&c.id));
     }
@@ -342,7 +444,9 @@ fn check_hour_stops_at_its_deadline() {
     let now = clock();
     let chats = (0..22).map(|i| chat(&format!("19:busy{i}@thread.v2"), now - (i + 1) * MINUTE, 1)).collect();
     let mut t = teams_with(chats);
+    // From the hour on: the user, the list and the twenty chats read before it go unthrottled.
     t.throttle_every = Some(2);
+    t.throttle_from = 22;
     let server = serve_teams(t);
     let opts = CheckOptions { hour: Some(Duration::from_secs(2)), sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))), ..opts() };
     let (r, lines) = check(&server, &opts);
@@ -351,7 +455,8 @@ fn check_hour_stops_at_its_deadline() {
     let secs: u64 = end.trim_start_matches("hour, ").split(' ').next().unwrap().parse().unwrap();
     assert!(secs <= 2 + 1, "a request's wait past the end at most: {end}");
     assert!(end.ends_with(", cut short at the end"), "{end}");
-    assert!(teams_of(&server).message_reads.len() < 10, "{}", teams_of(&server).message_reads.len());
+    let polled = teams_of(&server).message_reads.iter().filter(|(_, f)| f.starts_with("lastModifiedDateTime gt ")).count();
+    assert!(polled < 10, "{polled}");
 }
 
 #[test]
@@ -361,18 +466,19 @@ fn check_without_a_date_uses_graphs_newest_time() {
         {"id": "19:old@thread.v2", "chatType": "group", "lastMessagePreview": {"createdDateTime": "2026-10-20T08:00:00Z"}},
         {"id": "19:new@thread.v2", "chatType": "oneOnOne", "lastMessagePreview": {"createdDateTime": "2026-10-29T10:00:00.500Z"}}
     ]}"#;
-    let (base, h) = crate::http::tests::serve(vec![answer(200, ME_JSON), answer(200, chats), answer(200, r#"{"value": []}"#)]);
+    let (base, h) =
+        crate::http::tests::serve(vec![answer(200, ME_JSON), answer(200, chats), answer(200, r#"{"value": []}"#), answer(200, r#"{"value": []}"#)]);
     let (c, me) = TeamsClient::connect(&base, "t").unwrap();
     let mut lines = Vec::new();
     run_check(&c, &me, &opts(), &mut |l| lines.push(l.to_string())).unwrap();
     let seen = h.join().unwrap();
-    assert_eq!(seen.len(), 3);
-    assert!(
-        seen[2].starts_with("GET /chats/19%3Anew%40thread.v2/messages?$filter=lastModifiedDateTime%20lt%202026-10-29T10%3A00%3A00.501Z&"),
-        "{}",
-        seen[2]
-    );
-    assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: 0");
+    assert_eq!(seen.len(), 4);
+    // The newest first, then the other, both before the same time.
+    for (i, chat) in [(2, "new"), (3, "old")] {
+        let start = format!("GET /chats/19%3A{chat}%40thread.v2/messages?$filter=lastModifiedDateTime%20lt%202026-10-29T10%3A00%3A00.501Z&");
+        assert!(seen[i].starts_with(&start), "{}", seen[i]);
+    }
+    assert_eq!(line(&lines, "messages in the newest chat read:"), "messages in the newest chat read: 0");
 }
 
 #[test]
@@ -388,8 +494,9 @@ fn check_hour_goes_on_past_a_failing_chat() {
     let (r, lines) = check(&server, &opts);
     r.unwrap();
     let t = teams_of(&server);
-    let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
-    assert_eq!((reads("19:broken@thread.v2"), reads("19:b@thread.v2"), reads("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
+    // A failure isn't a refusal: the broken chat is still polled.
+    let polled = |chat: &str| t.message_reads.iter().filter(|(c, f)| c == chat && f.starts_with("lastModifiedDateTime gt ")).count();
+    assert_eq!((polled("19:broken@thread.v2"), polled("19:b@thread.v2"), polled("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
     assert!(line(&lines, "hour, ").contains(", failed 1, "), "{lines:#?}");
     assert!(!line(&lines, "hour, ").contains("cut short"), "{lines:#?}");
 }
@@ -471,12 +578,13 @@ fn check_hour_renews_an_expired_token_and_goes_on() {
     assert!(end.contains(", failed 0, ") && end.ends_with(", sign-in renewed 1"), "{end}");
     assert_eq!(calls.get(), 1);
     let t = teams_of(&server);
-    let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
-    assert_eq!((reads("19:newest@thread.v2"), reads("19:a@thread.v2"), reads("19:c@thread.v2")), (2, 1, 1), "{:?}", t.message_reads);
+    let polled = |chat: &str| t.message_reads.iter().filter(|(c, f)| c == chat && f.starts_with("lastModifiedDateTime gt ")).count();
+    assert_eq!((polled("19:newest@thread.v2"), polled("19:a@thread.v2"), polled("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
 
-    // Run out in the middle of the active chats' pass: renewed there, the pass goes on.
+    // Run out in the middle of the active chats' pass (after the check's four reads, the open
+    // chat's and a's): renewed there, the pass goes on.
     let mut t = teams_with(hour_chats());
-    t.token_expires = Some(("messages", 4, "renewed".into()));
+    t.token_expires = Some(("messages", 7, "renewed".into()));
     let server = serve_teams(t);
     let (opts, calls) = renewing(|| Some("renewed".into()));
     let (r, lines) = check(&server, &opts);
@@ -484,26 +592,27 @@ fn check_hour_renews_an_expired_token_and_goes_on() {
     assert!(line(&lines, "hour, ").ends_with(", failed 0, 429 rate 0.0 %, sign-in renewed 1"), "{lines:#?}");
     assert_eq!(calls.get(), 1);
     let t = teams_of(&server);
-    let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
-    assert_eq!((reads("19:a@thread.v2"), reads("19:b@thread.v2"), reads("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
-    assert_eq!(hits(&server, "messages"), 6, "the check's, the open chat's, a, b refused, b again, c");
+    let polled = |chat: &str| t.message_reads.iter().filter(|(c, f)| c == chat && f.starts_with("lastModifiedDateTime gt ")).count();
+    assert_eq!((polled("19:a@thread.v2"), polled("19:b@thread.v2"), polled("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
+    assert_eq!(hits(&server, "messages"), 9, "the check's four, the open chat's, a, b refused, b again, c");
 }
 
 #[test]
 fn check_hour_stops_at_once_when_the_token_cant_be_renewed() {
-    // The token runs out at the first active chat's read, and can't be renewed: the hour stops
-    // there, without asking for the other chats with a token refused.
+    // The token runs out at the first active chat's read (after the check's four reads and the
+    // open chat's), and can't be renewed: the hour stops there, without asking for the other
+    // chats with a token refused.
     let mut t = teams_with(hour_chats());
-    t.token_expires = Some(("messages", 3, "renewed".into()));
+    t.token_expires = Some(("messages", 6, "renewed".into()));
     let server = serve_teams(t);
     let (opts, calls) = renewing(|| None);
     let (r, lines) = check(&server, &opts);
     r.unwrap();
-    assert!(line(&lines, "hour, ").contains(", failed 1, 429 rate 0.0 %, stopped (401)"), "{lines:#?}");
+    assert!(line(&lines, "hour, ").contains(", failed 1, 429 rate 0.0 %, stopped (401 InvalidAuthenticationToken)"), "{lines:#?}");
     assert_eq!(calls.get(), 1);
     let t = teams_of(&server);
-    assert_eq!(t.message_reads.len(), 2, "the check's and the open chat's: {:?}", t.message_reads);
-    assert_eq!(hits(&server, "messages"), 3, "and the refused one, no other");
+    assert_eq!(t.message_reads.len(), 5, "the check's four and the open chat's: {:?}", t.message_reads);
+    assert_eq!(hits(&server, "messages"), 6, "and the refused one, no other");
     assert_eq!(hits(&server, "chats"), 2);
 
     // Renewed, but the new token is refused too: a second 401 in a row stops the hour.
@@ -513,8 +622,8 @@ fn check_hour_stops_at_once_when_the_token_cant_be_renewed() {
     let (opts, calls) = renewing(|| Some("not-the-one".into()));
     let (r, lines) = check(&server, &opts);
     r.unwrap();
-    assert!(line(&lines, "hour, ").contains(", failed 1, 429 rate 0.0 %, stopped (401)"), "{lines:#?}");
+    assert!(line(&lines, "hour, ").contains(", failed 1, 429 rate 0.0 %, stopped (401 InvalidAuthenticationToken)"), "{lines:#?}");
     assert_eq!(calls.get(), 1);
     assert_eq!(hits(&server, "chats"), 3, "the check's list, the refused one, its one retry");
-    assert_eq!(teams_of(&server).message_reads.len(), 1, "the check's read only");
+    assert_eq!(teams_of(&server).message_reads.len(), 4, "the check's four reads only");
 }

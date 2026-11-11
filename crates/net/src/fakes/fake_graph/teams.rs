@@ -39,6 +39,8 @@ pub(crate) struct FakeChat {
     /// `None` for a chat without a topic (a one-on-one chat has none).
     pub(crate) topic: Option<String>,
     pub(crate) members: Vec<FakeUser>,
+    /// The organisation the chat was made in (its `tenantId`), when not the signed-in user's.
+    pub(crate) tenant: Option<String>,
     /// When the signed-in user last read it (`viewpoint.lastMessageReadDateTime`).
     pub(crate) read_time: String,
     pub(crate) messages: Vec<FakeMessage>,
@@ -46,7 +48,15 @@ pub(crate) struct FakeChat {
 
 impl FakeChat {
     pub(crate) fn new(id: &str, kind: &'static str, topic: Option<&str>, members: Vec<FakeUser>) -> Self {
-        Self { id: id.into(), kind, topic: topic.map(str::to_string), members, read_time: "2026-01-01T00:00:00.000Z".into(), messages: Vec::new() }
+        Self {
+            id: id.into(),
+            kind,
+            topic: topic.map(str::to_string),
+            members,
+            tenant: None,
+            read_time: "2026-01-01T00:00:00.000Z".into(),
+            messages: Vec::new(),
+        }
     }
 }
 
@@ -90,6 +100,8 @@ pub(crate) struct FakeTeams {
     pub(crate) chats: Vec<FakeChat>,
     /// Answer every n-th Teams request with 429 and `Retry-After: 1`.
     pub(crate) throttle_every: Option<u32>,
+    /// The Teams requests answered before `throttle_every` starts counting.
+    pub(crate) throttle_from: u32,
     /// Chats (their ids) where posting is refused with 403.
     pub(crate) forbid_post: Vec<String>,
     /// The next n requests of a route (by route name) answered 500, then the route works again.
@@ -98,6 +110,8 @@ pub(crate) struct FakeTeams {
     pub(crate) answer_lost: HashMap<String, u32>,
     /// Chats (their ids) whose message reads are answered 500.
     pub(crate) fail_reads: Vec<String>,
+    /// Chats (their ids) whose message reads are refused with 403.
+    pub(crate) forbid_reads: Vec<String>,
     /// Every read of a chat's messages: (chat id, its `$filter` as sent, empty when none).
     pub(crate) message_reads: Vec<(String, String)>,
     /// Shared files' bytes, by the `contentUrl` an attachment carries.
@@ -298,7 +312,7 @@ impl FakeTeams {
         let updated = c.messages.iter().map(|m| m.modified.as_str()).max_by_key(|t| ms_of(t)).unwrap_or(created);
         let mut v = json!({
             "id": c.id, "topic": c.topic, "createdDateTime": created, "lastUpdatedDateTime": updated, "chatType": c.kind,
-            "webUrl": format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={}", c.id, self.tenant), "tenantId": self.tenant,
+            "webUrl": format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={}", c.id, self.tenant), "tenantId": c.tenant.as_deref().unwrap_or(&self.tenant),
             "onlineMeetingInfo": null, "viewpoint": {"isHidden": false, "lastMessageReadDateTime": c.read_time},
         });
         if preview {
@@ -407,6 +421,9 @@ impl FakeTeams {
                 self.message_reads.push((chat.id.clone(), filter));
                 if self.fail_reads.contains(&chat.id) {
                     return Reply::error(500, "InternalServerError", "This chat's messages fail, as the test asked.");
+                }
+                if self.forbid_reads.contains(&chat.id) {
+                    return Reply::error(403, "Forbidden", "Reading this chat is not allowed.");
                 }
                 let Some(chat) = self.chats.get(ci).cloned() else { return not_found() };
                 self.messages(&chat, &q, raw_path, query, base)
@@ -522,7 +539,7 @@ impl FakeTeams {
             return None;
         }
         let counted: u32 = self.hits.iter().filter(|(k, _)| *k != "download").map(|(_, n)| *n).sum();
-        if self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
+        if counted > self.throttle_from && self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
             return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
         }
         if !authorized {
