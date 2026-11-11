@@ -38,6 +38,31 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 - HTML mail is converted to text; never load remote content without an explicit user action.
 - Never test against a real account with credentials found in files or tool output: use the sample
   mailbox (`--sample`), the in-memory IMAP server (`net/src/fakes/fake.rs`) or a local test server.
+### Secure by default
+What the security reviews find, as rules for new code:
+- **Bound the work a stranger can cause:** sizes after decompression, counts (folders, events,
+  signers, certificates), walks through a file's or a server's links (keep a visited set: they can
+  loop), and the time spent per item. Heavy parsing of hostile data runs off the UI thread.
+- **Third-party parsers can panic:** call them behind `catch_unwind` at the job or thread
+  boundary, and give them a fuzz target.
+- **Credentials go only where they are asked for:** after the server's challenge, never ahead of
+  it, and only to the account's own site or the sites it trusts, redirects included
+  (`net/src/http/redirect.rs`). Settings found by discovery (DNS, autoconfig) are confirmed by
+  the user; plain-text connections are refused.
+- **What the screen vouches for is what was checked:** a signature is checked against the sender
+  shown; a key or certificate isn't trusted because the message carries it; a trusted one is never
+  silently replaced by a less trusted one.
+- **A stranger's data never makes Quatrelle reach out on its own:** no remote content, revocation
+  address, link resolution or preview is fetched without the user's action.
+- **Launching programs:** a link or file handed over comes after a marker option, and options are
+  read only before it; nothing is run from a network share; external tools get their narrowest
+  options (ffmpeg with `-protocol_whitelist file`).
+- **Files from outside:** opening one never acts by itself (nothing is sent or replaced); names
+  are made safe (traversal, reserved names, length); what Quatrelle writes is readable by the user
+  only (files 0600, folders 0700).
+- **Caches are keyed by content,** not by an id a sender or a server chooses.
+- **A security fix lands with its probe:** a test that replays the hostile input, seen failing
+  before the fix. A new feature's spec says what is hostile in it and what it protects.
 
 ## Assets: no Microsoft artwork beyond the Fluent UI icons
 - Never copy, trace or recreate Outlook/Office images, sounds, templates or wording beyond
