@@ -35,6 +35,7 @@ fn a_messages_pictures_come_from_one_read() {
         textures_made(&ctx, &mut a, WINDOW);
     }
     let store = a.session.store.clone().unwrap();
+    ask_for_files(&mut a, &k);
     a.run("list.open", json!({"key": k.to_id()}));
     let reads = store.reads();
     let (mut most, mut made) = (0, 0);
@@ -81,6 +82,7 @@ fn one_extraction_per_message() {
     let mut files = pictures(36);
     files.push(("report.pdf".into(), "application/pdf", pdf(10)));
     let k = with_files(&mut a, 9002, files);
+    ask_for_files(&mut a, &k);
     a.run("list.open", json!({"key": k.to_id()}));
     let (frames, most) = pump(&ctx, &mut a, WINDOW, 60, |a| a.ui.pictures.ready() == 37);
     assert!(frames < 60, "36 thumbnails and the PDF's first page ({} ready)", a.ui.pictures.ready());

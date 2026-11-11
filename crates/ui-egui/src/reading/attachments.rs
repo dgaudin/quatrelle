@@ -12,6 +12,21 @@ pub(super) fn kind_icon(k: AttachmentKind) -> Icon {
     }
 }
 
+/// Most attachments remembered as asked for; past them, the oldest asks are forgotten together.
+const ASKED: usize = 512;
+
+impl UiState {
+    /// The user asked to see this attachment (a click on its chip). A PDF or a video is handed
+    /// to a decoder only from then on: the platform's video tools and the PDF renderer read a
+    /// stranger's file, so showing a message alone never starts them.
+    pub(crate) fn ask_thumbnail(&mut self, key: &MessageKey, index: usize) {
+        if self.thumbs_asked.len() >= ASKED {
+            self.thumbs_asked.clear();
+        }
+        self.thumbs_asked.insert((key.clone(), index));
+    }
+}
+
 /// A picture or PDF attachment's thumbnail, once made: taken out of its message with its others,
 /// in one read, and decoded a step at a time (each read the whole message again in the frame
 /// drawing it: upstream 321bef2). Its message's text alone here: none.
@@ -133,10 +148,13 @@ pub(super) fn attachment_card(
 ) {
     let t = st.tokens;
     let kind = a.kind();
+    // A PDF or a video shows its kind's icon until the user asks to see it (a click on the
+    // chip, or its preview open): only then is it handed to a decoder.
+    let asked = st.thumbs_asked.contains(&(key.clone(), a.index)) || st.attachment_view.as_ref().is_some_and(|(k, i)| k == key && *i == a.index);
     let thumb = match kind {
         AttachmentKind::Image => thumbnail(s, st, key, a.index, Want::Thumb),
-        AttachmentKind::Pdf => thumbnail(s, st, key, a.index, Want::PdfFirst),
-        AttachmentKind::Video => video_preview(s, st, ui.ctx(), key, a),
+        AttachmentKind::Pdf if asked => thumbnail(s, st, key, a.index, Want::PdfFirst),
+        AttachmentKind::Video if asked => video_preview(s, st, ui.ctx(), key, a),
         _ => None,
     };
     // The Craft app for the file, when it's installed.
@@ -224,6 +242,10 @@ pub(super) fn attachment_card(
         st.attachments_active = true;
         // Another click lets go of a preview still waiting.
         st.attachment_click = None;
+    }
+    // A click on the chip itself asks to see the file: its thumbnail is made from now on.
+    if resp.clicked() && !on_more && coming.is_none() && matches!(kind, AttachmentKind::Pdf | AttachmentKind::Video) {
+        st.ask_thumbnail(key, a.index);
     }
     // A plain click shows it in place of the message's text, as Outlook previews attachments,
     // once the double-click time is out ([`settle_attachment_click`]): a double-click only opens

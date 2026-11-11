@@ -78,6 +78,14 @@ fn with_files(a: &mut MailApp, uid: u32, files: Vec<(String, &str, Vec<u8>)>) ->
     with_files_and_html(a, uid, files, None, Vec::new())
 }
 
+/// The user asked to see each of a message's files (a click on each chip): a PDF's or a video's
+/// thumbnail is made only from then on.
+fn ask_for_files(a: &mut MailApp, key: &MessageKey) {
+    for index in 0..128 {
+        a.ui.ask_thumbnail(key, index);
+    }
+}
+
 /// A message of this source put first in the Inbox, and the Inbox shown.
 fn with_raw(a: &mut MailApp, uid: u32, raw: &[u8]) -> MessageKey {
     use quatrelle_engine::mime;

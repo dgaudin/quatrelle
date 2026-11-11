@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Video attachments' thumbnails: their files written and their frames decoded on the pictures
-//! lane, not in a frame, and no more of them kept than so many (the tests of upstream b580c87 and
+//! Video attachments' thumbnails: made only once the user asked to see the file, their files
+//! written and their frames decoded on the pictures lane, not in a frame, and no more of them kept than so many (the tests of upstream b580c87 and
 //! 51d1cd0).
 
 use super::*;
@@ -34,6 +34,7 @@ fn videos_past_those_kept_make_no_texture_each_frame() {
     frame(&ctx, &mut a, vec![]);
     let files = (0..70).map(|i| (format!("clip {i}.mp4"), "video/mp4", vec![i as u8; 64])).collect();
     let k = with_files(&mut a, 9018, files);
+    ask_for_files(&mut a, &k);
     a.run("list.open", json!({"key": k.to_id()}));
     let input = || RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, WINDOW)), ..Default::default() };
     for _ in 0..10 {
@@ -87,6 +88,8 @@ fn a_video_is_written_and_decoded_off_the_window() {
     let left = with_files(&mut a, 9031, vec![("left.mp4".into(), "video/mp4", vec![3u8; 64])]);
     let k = with_files(&mut a, 9030, vec![("clip.mp4".into(), "video/mp4", vec![7u8; 64])]);
     let take = || std::mem::take(&mut *held.lock().unwrap());
+    ask_for_files(&mut a, &left);
+    ask_for_files(&mut a, &k);
     // Opened and left before its work ran: cancelled, it writes nothing.
     a.run("list.open", json!({"key": left.to_id()}));
     pump(&ctx, &mut a, WINDOW, 2, |_| false);
@@ -113,5 +116,33 @@ fn a_video_is_written_and_decoded_off_the_window() {
     pump(&ctx, &mut a, WINDOW, 2, |_| false);
     assert!(a.ui.video_thumbs.values().all(|(t, _)| t.is_some()) && a.ui.video_thumbs.len() == 1, "its thumbnail shows");
     assert!(take().is_empty(), "nothing asked again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A video or a PDF from a stranger is read by decoders only when the user asks to see it:
+/// showing its message writes no file, asks the platform for no frame and renders no page; a
+/// click on its chip does.
+#[test]
+fn a_video_or_a_pdf_is_decoded_only_once_asked_for() {
+    let (mut a, dir) = app("decode-on-request");
+    let ctx = egui::Context::default();
+    let held = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(HeldFrames(held.clone()));
+    frame(&ctx, &mut a, vec![]);
+    let files = vec![("clip.mp4".into(), "video/mp4", vec![7u8; 64]), ("plan.pdf".into(), "application/pdf", pdf(1))];
+    let k = with_files(&mut a, 9040, files);
+    a.run("list.open", json!({"key": k.to_id()}));
+    pump(&ctx, &mut a, WINDOW, 6, |_| false);
+    let asked = std::mem::take(&mut *held.lock().unwrap()).len();
+    assert_eq!(asked, 0, "the message shown: nothing of its video or its PDF is read");
+    assert!(a.ui.video_files.is_empty() && a.ui.video_frames.is_empty());
+    // The user asks for each (a click on its chip).
+    let indices: Vec<usize> = a.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.attachments.iter().map(|f| f.index).collect()).unwrap();
+    for i in indices {
+        a.ui.ask_thumbnail(&k, i);
+    }
+    pump(&ctx, &mut a, WINDOW, 3, |_| false);
+    let asked = std::mem::take(&mut *held.lock().unwrap()).len();
+    assert_eq!(asked, 2, "the video's file and the PDF's first page, once asked for");
     let _ = std::fs::remove_dir_all(dir);
 }

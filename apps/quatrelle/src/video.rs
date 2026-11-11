@@ -138,10 +138,11 @@ fn from_file(ok: Option<Vec<u8>>, out: &Path) -> Option<Vec<u8>> {
     png
 }
 
-/// One frame, `at` seconds in, from ffmpeg.
+/// One frame, `at` seconds in, from ffmpeg. It reads files only: a "video" that is a playlist
+/// can't send it to the network (`-protocol_whitelist`, whatever the installed one's default).
 fn ffmpeg(ffmpeg: &Path, video: &Path, at: &str) -> Option<Vec<u8>> {
     let mut cmd = Command::new(ffmpeg);
-    cmd.args(["-nostdin", "-loglevel", "error", "-ss", at, "-i"]).arg(video).args([
+    cmd.args(["-nostdin", "-loglevel", "error", "-protocol_whitelist", "file", "-ss", at, "-i"]).arg(video).args([
         "-frames:v",
         "1",
         "-vf",

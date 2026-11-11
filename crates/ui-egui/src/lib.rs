@@ -398,6 +398,7 @@ impl MailApp {
                 dialog: None,
                 pictures: reading::Pictures::default(),
                 video_thumbs: HashMap::new(),
+                thumbs_asked: Default::default(),
                 shown_pictures: HashMap::new(),
                 cell_heights: reading::CellHeights::default(),
                 toast: None,

@@ -106,6 +106,9 @@ pub struct UiState {
     /// Video attachments' thumbnails, and the frame each was last shown in
     /// (`reading/attachments.rs`).
     pub(super) video_thumbs: HashMap<(MessageKey, usize), (Option<egui::TextureHandle>, u64)>,
+    /// The PDF and video attachments the user asked to see (a click on the chip): only those
+    /// are handed to a decoder for a thumbnail ([`UiState::ask_thumbnail`]).
+    pub(crate) thumbs_asked: std::collections::HashSet<(MessageKey, usize)>,
     /// Web and carried pictures as shown (texture, own size), by address, and the frame each was
     /// last shown in (the oldest go when there are too many).
     pub(super) shown_pictures: HashMap<String, (Option<(egui::TextureHandle, egui::Vec2)>, u64)>,
