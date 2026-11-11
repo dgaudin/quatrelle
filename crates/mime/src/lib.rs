@@ -63,7 +63,7 @@ pub use reply::{
     QUOTE_CLASS, QuoteWords, ReplyMode, SIGNATURE_CLASS, SOURCE_HEADER, draft_copy, quoted_body, quoted_part, reply, reply_doc, reply_head_doc,
     sending_options, split_marked,
 };
-pub use trackers::{Trackers, clean_link, trackers, tracks_click};
+pub use trackers::{Trackers, clean_link, link_destination, trackers, tracks_click};
 
 /// `bytes` read in the character set `charset` names (`iso-8859-1`, `shift_jis`), when it's one
 /// known: for showing a source's text that isn't UTF-8 (View message source, issue #27).

@@ -16,7 +16,9 @@ impl MailApp {
     /// app window opens in the profile chosen ([`meeting_profile`]); one the browser no longer
     /// has gives way to the one it used last, and the user is told.
     pub(crate) fn open_meeting(&mut self, url: &str) {
-        let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
+        // Where the link goes in the end: a Teams address inside the organisation's link check
+        // is Teams' own, and opens in the app window. Any other link opens as links do.
+        let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::link_destination(url) } else { url.to_string() };
         let u = cleaned.trim();
         if !quatrelle_engine::model::ical::is_teams_link(u) {
             self.open_link(url);

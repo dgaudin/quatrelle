@@ -489,7 +489,7 @@ impl Body<'_> {
             };
             // A picture in a link follows it, as in Outlook and browsers.
             if let (Some(link), Some(r)) = (&sp.link, r) {
-                let shown = if self.s.prefs.clean_links { mime::clean_link(link) } else { link.clone() };
+                let shown = if self.s.prefs.clean_links { mime::link_destination(link) } else { link.clone() };
                 let r = r.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(shown);
                 if r.clicked() {
                     self.acts.push(Action::OpenUrl(link.clone()));
@@ -519,8 +519,9 @@ impl Body<'_> {
         };
         let r = match &sp.link {
             Some(link) => {
-                // Hovered, a link says where it will open (cleaned, when links are).
-                let shown = if self.s.prefs.clean_links { mime::clean_link(link) } else { link.clone() };
+                // Hovered, a link says where it goes in the end (cleaned, when links are; one
+                // that passes through the organisation's check when clicked still opens through it).
+                let shown = if self.s.prefs.clean_links { mime::link_destination(link) } else { link.clone() };
                 let r = text_selection::run(st, ui, text, Some(fg)).on_hover_text(shown);
                 if r.clicked() {
                     self.acts.push(Action::OpenUrl(link.clone()));

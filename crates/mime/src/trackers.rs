@@ -96,7 +96,6 @@ const COUNTERS: &[&str] = &[
 /// Wrappers that carry the real address in a query parameter: (host or host suffix, path
 /// prefix, parameter).
 const WRAPPERS: &[(&str, &str, &str)] = &[
-    ("safelinks.protection.outlook.com", "/", "url"),
     ("www.google.com", "/url", "q"),
     ("www.google.com", "/url", "url"),
     ("google.com", "/url", "q"),
@@ -109,6 +108,12 @@ const WRAPPERS: &[(&str, &str, &str)] = &[
     ("www.linkedin.com", "/redir/redirect", "url"),
     ("steamcommunity.com", "/linkfilter/", "url"),
 ];
+
+/// Wrappers an organisation puts around the links of the mail it receives, to check the real
+/// address at the moment it's clicked (Microsoft Defender's Safe Links): the same shape as
+/// [`WRAPPERS`], but a link opens through them. Taking one off would open a page the check
+/// would have stopped. Proofpoint's URL Defense is one too (its address is read in `unwrapped`).
+const GATES: &[(&str, &str, &str)] = &[("safelinks.protection.outlook.com", "/", "url")];
 
 /// The longest link looked at (longer ones are left as they are).
 const LINK_MAX: usize = 8192;
@@ -180,17 +185,19 @@ fn percent_decode(s: &str, plus: bool) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// The address a wrapper carries, when `url` is one.
-fn unwrapped(url: &str) -> Option<String> {
+/// The address a wrapper carries, when `url` is one. `gates`: also one that checks the address
+/// when it's clicked ([`GATES`]), which is taken off only to say where a link goes.
+fn unwrapped(url: &str, gates: bool) -> Option<String> {
     let u = split(url)?;
     let inner = if host_is(&u.host, "urldefense.com") {
         // Proofpoint v3: `/v3/__https://real.example/path__;…`.
-        u.path.strip_prefix("/v3/__").and_then(|p| p.split_once("__;")).map(|(real, _)| real.to_string())
+        u.path.strip_prefix("/v3/__").filter(|_| gates).and_then(|p| p.split_once("__;")).map(|(real, _)| real.to_string())
     } else if host_is(&u.host, "awstrack.me") {
         // Amazon SES: `/L0/<the address, percent-encoded>/1/…`.
         u.path.strip_prefix("/L0/").and_then(|p| p.split('/').next()).and_then(|p| percent_decode(p, false))
     } else {
-        let (_, _, param) = WRAPPERS.iter().find(|(host, path, _)| host_is(&u.host, host) && u.path.starts_with(path))?;
+        let known = WRAPPERS.iter().chain(GATES.iter().filter(|_| gates));
+        let (_, _, param) = known.into_iter().find(|(host, path, _)| host_is(&u.host, host) && u.path.starts_with(path))?;
         u.query?.split('&').find_map(|pair| {
             let (k, v) = pair.split_once('=')?;
             k.eq_ignore_ascii_case(param).then(|| percent_decode(v, true)).flatten()
@@ -205,16 +212,27 @@ fn is_tag(name: &str) -> bool {
     name.starts_with("utm_") || TAGS.contains(&name.as_str())
 }
 
-/// `url` as it really goes: out of the redirect wrappers that carry the real address (a few deep
-/// at most), and without the query parameters that only identify the reader. Anything that isn't
-/// an `http(s)` address comes back as it was.
+/// `url` as it's opened: out of the redirect wrappers that carry the real address (a few deep at
+/// most), and without the query parameters that only identify the reader. A wrapper that checks
+/// the address when it's clicked stays ([`GATES`]): the link opens through the organisation's
+/// check. Anything that isn't an `http(s)` address comes back as it was.
 pub fn clean_link(url: &str) -> String {
+    cleaned(url, false)
+}
+
+/// Where `url` goes in the end, for showing: [`clean_link`], out of the wrappers that check the
+/// address when it's clicked too. Never what's opened.
+pub fn link_destination(url: &str) -> String {
+    cleaned(url, true)
+}
+
+fn cleaned(url: &str, gates: bool) -> String {
     let mut url = url.trim().to_string();
     if url.len() > LINK_MAX {
         return url;
     }
     for _ in 0..4 {
-        match unwrapped(&url) {
+        match unwrapped(&url, gates) {
             Some(inner) if inner != url => url = inner,
             _ => break,
         }
@@ -251,7 +269,7 @@ fn original_authority<'a>(url: &'a str, scheme: &str) -> &'a str {
 pub fn tracks_click(url: &str) -> bool {
     let Some(u) = split(url.trim()) else { return false };
     COUNTERS.iter().any(|c| host_is(&u.host, c))
-        || unwrapped(url).is_some()
+        || unwrapped(url, true).is_some()
         || u.query.is_some_and(|q| q.split('&').any(|p| is_tag(p.split('=').next().unwrap_or(p))))
 }
 
@@ -293,12 +311,7 @@ mod tests {
             ("https://shop.example/sale?utm_source=news&utm_medium=email&id=7#top", "https://shop.example/sale?id=7#top"),
             ("https://shop.example/?fbclid=abc", "https://shop.example/"),
             ("https://Shop.Example:8443/a?MC_EID=1&q=x+y", "https://Shop.Example:8443/a?q=x+y"),
-            (
-                "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fdocs.example%2Fplan%3Fv%3D2%26utm_campaign%3Dq3&data=05%7C01&reserved=0",
-                "https://docs.example/plan?v=2",
-            ),
             ("https://www.google.com/url?q=https://site.example/page&sa=D&ust=1", "https://site.example/page"),
-            ("https://urldefense.com/v3/__https://portal.example/login__;!!abc$", "https://portal.example/login"),
             ("https://abcd.r.us-east-1.awstrack.me/L0/https:%2F%2Fapp.example%2Fwelcome/1/0100-x/abc=", "https://app.example/welcome"),
             ("https://l.facebook.com/l.php?u=https%3A%2F%2Fevent.example%2F&h=AT0", "https://event.example/"),
             // Nothing to take out, or not a web address: as it was.
@@ -309,6 +322,27 @@ mod tests {
         ] {
             assert_eq!(clean_link(link), clean, "{link}");
         }
+    }
+
+    /// A wrapper that checks the address when it's clicked (Microsoft's Safe Links, Proofpoint's
+    /// URL Defense) is the organisation's own protection: the link opens through it. Where it
+    /// goes is still told, for showing.
+    #[test]
+    fn links_checked_when_clicked_open_through_their_check() {
+        let safe = "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fdocs.example%2Fplan%3Fv%3D2%26utm_campaign%3Dq3&data=05%7C01&reserved=0";
+        let defended = "https://urldefense.com/v3/__https://portal.example/login__;!!abc$";
+        assert_eq!(clean_link(safe), safe);
+        assert_eq!(clean_link(defended), defended);
+        assert_eq!(link_destination(safe), "https://docs.example/plan?v=2");
+        assert_eq!(link_destination(defended), "https://portal.example/login");
+        // A redirect that only counts the click, around one that checks: taken off down to the check.
+        let counted = format!("https://www.google.com/url?q={}", safe.replace('%', "%25").replace('&', "%26"));
+        assert_eq!(clean_link(&counted), safe);
+        assert_eq!(link_destination(&counted), "https://docs.example/plan?v=2");
+        // Both still tell their sender the link was followed.
+        assert!(tracks_click(safe) && tracks_click(defended));
+        // Elsewhere the two say the same.
+        assert_eq!(link_destination("https://shop.example/?fbclid=abc"), "https://shop.example/");
     }
 
     #[test]
@@ -341,6 +375,7 @@ mod tests {
             "https://é.example/%E2%82",
         ] {
             let _ = clean_link(link);
+            let _ = link_destination(link);
             let _ = tracks_click(link);
         }
         assert_eq!(clean_link("http://[::1]:8080/a?utm_x=1&b=2"), "http://[::1]:8080/a?b=2");
