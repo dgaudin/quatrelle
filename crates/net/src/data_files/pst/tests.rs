@@ -476,3 +476,16 @@ mod rebuilt;
 mod report;
 mod resume;
 mod seeds;
+
+/// A data file names a folder's subfolders by number, and a crafted one can list a folder under
+/// itself or twice: a walk enters each once, and a bounded number of them.
+#[test]
+fn a_folder_listed_again_is_entered_once() {
+    let mut walked = Walked::default();
+    assert!(walked.enter(0x8022));
+    assert!(walked.enter(0x8042));
+    assert!(!walked.enter(0x8022), "a folder under itself");
+    assert!(!walked.enter(0x8042), "a folder listed twice");
+    let entered = (0..u32::try_from(MAX_FOLDERS).unwrap() * 2).filter(|n| walked.enter(*n)).count();
+    assert_eq!(entered + 2, MAX_FOLDERS, "no more than the most, whatever the file lists");
+}

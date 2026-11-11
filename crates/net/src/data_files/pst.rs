@@ -82,6 +82,21 @@ pub(crate) fn loose_message(m: &Loose<'_>, named: &crate::pst_pim::Named) -> Res
 
 /// Folders nested deeper than this are left out.
 const MAX_DEPTH: usize = 32;
+/// The folders of one data file that are read, at most.
+pub(crate) const MAX_FOLDERS: usize = 20_000;
+
+/// The folders a walk of a data file has entered, by their node. A file names each folder's
+/// subfolders by number, and nothing stops a damaged or crafted one from listing a folder under
+/// itself, or twice: each is entered once, and [`MAX_FOLDERS`] of them at most, so a walk ends.
+#[derive(Default)]
+pub(crate) struct Walked(std::collections::HashSet<u32>);
+
+impl Walked {
+    /// Whether the folder at `node` is entered now: not one entered before, nor one past the most.
+    pub(crate) fn enter(&mut self, node: u32) -> bool {
+        self.0.len() < MAX_FOLDERS && self.0.insert(node)
+    }
+}
 /// Attachments larger than this are left out of the imported message.
 const MAX_ATTACHMENT: usize = 100 * 1024 * 1024;
 /// A value (a body, an attachment's bytes, a table's rows, a store's, folder's or the name map's
@@ -413,12 +428,16 @@ fn walk(store: &dyn PstStore, read: &ReadItem<'_>, out: &mut Out<'_>) -> io::Res
 /// The messages of the folders that are imported, from the folders' own counts
 /// (`PidTagContentCount`): no item is read. `None` when a count can't be read.
 fn count(store: &dyn PstStore, top: &dyn PstFolder) -> Option<usize> {
-    fn under(store: &dyn PstStore, folder: &dyn PstFolder, depth: usize, n: &mut usize) -> Option<()> {
+    fn under(store: &dyn PstStore, folder: &dyn PstFolder, depth: usize, n: &mut usize, walked: &mut Walked) -> Option<()> {
         if depth >= MAX_DEPTH {
             return Some(());
         }
         let nodes: Vec<u32> = folder.hierarchy_table().map(|t| t.rows_matrix().map(|row| u32::from(row.id())).collect()).unwrap_or_default();
         for node in nodes {
+            // A folder listed again (under itself, or twice) is counted once, as it is read once.
+            if !walked.enter(node) {
+                continue;
+            }
             // One that can't be opened is left out of the import too.
             let Ok(sub) = store.properties().make_entry_id(NodeId::from(node)).and_then(|e| store.open_folder(&e)) else { continue };
             let (mail, pim) = folder_kind(&*sub);
@@ -426,7 +445,7 @@ fn count(store: &dyn PstStore, top: &dyn PstFolder) -> Option<usize> {
                 *n = n.saturating_add(usize::try_from(sub.properties().content_count().ok()?).ok()?);
             }
             if mail || pim {
-                under(store, &*sub, depth + 1, n)?;
+                under(store, &*sub, depth + 1, n, walked)?;
             }
         }
         Some(())
@@ -434,7 +453,7 @@ fn count(store: &dyn PstStore, top: &dyn PstFolder) -> Option<usize> {
     // The reader may panic on a damaged table: then the import goes on without a total.
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let mut n = 0;
-        under(store, top, 0, &mut n).map(|()| n)
+        under(store, top, 0, &mut n, &mut Walked::default()).map(|()| n)
     }))
     .ok()
     .flatten()
@@ -480,6 +499,11 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, (parent, trash): (Option<
     for node in nodes {
         if out.stopped {
             return;
+        }
+        // A folder the file lists again, under itself or twice, was read: not again.
+        if !out.walked.enter(node) {
+            log::warn!("a folder listed more than once in the data file is read once");
+            continue;
         }
         let mut at = Visited { trash: trash || special_folder(store, 0x35E3) == Some(node), ..Default::default() };
         let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| visit_one(store, node, parent, read, out, &mut at)));

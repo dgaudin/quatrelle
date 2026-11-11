@@ -111,6 +111,8 @@ fn ids_in(path: &Path) -> Result<HashSet<String>, String> {
         let mut ids = HashSet::new();
         let top = any.open_folder(&any.properties().ipm_sub_tree_entry_id()?)?;
         let mut stack = vec![(top, 0usize)];
+        // Each folder once: a file whose folders list themselves would be read without end.
+        let mut walked = crate::pst::Walked::default();
         while let Some((folder, depth)) = stack.pop() {
             if let Some(contents) = folder.contents_table() {
                 for row in contents.rows_matrix() {
@@ -125,7 +127,11 @@ fn ids_in(path: &Path) -> Result<HashSet<String>, String> {
                 && let Some(table) = folder.hierarchy_table()
             {
                 for row in table.rows_matrix() {
-                    if let Ok(sub) = any.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| any.open_folder(&e)) {
+                    let node = u32::from(row.id());
+                    if !walked.enter(node) {
+                        continue;
+                    }
+                    if let Ok(sub) = any.properties().make_entry_id(NodeId::from(node)).and_then(|e| any.open_folder(&e)) {
                         stack.push((sub, depth + 1));
                     }
                 }

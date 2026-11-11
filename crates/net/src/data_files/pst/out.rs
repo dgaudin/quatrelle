@@ -63,6 +63,8 @@ pub(super) struct Out<'a> {
     /// Sources read but not yet written, and their size.
     pub(super) pending: Vec<(MessageKey, Vec<u8>)>,
     pub(super) pending_bytes: usize,
+    /// The folders of the file entered so far: each is read once.
+    pub(super) walked: Walked,
 }
 
 impl<'a> Out<'a> {
@@ -98,6 +100,7 @@ impl<'a> Out<'a> {
             pim_files: 0,
             pending: Vec::new(),
             pending_bytes: 0,
+            walked: Walked::default(),
         }
     }
 
