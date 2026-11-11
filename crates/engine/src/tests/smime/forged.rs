@@ -154,6 +154,18 @@ Subject: Figures\r\n\r\nThe figures.\r\n";
     done(s);
 }
 
+/// A certificate no authority this computer trusts stands behind isn't kept to encrypt to: the
+/// message that brings it could be anyone's.
+#[test]
+fn an_untrusted_certificate_isnt_kept_to_encrypt_to() {
+    let mut s = sample_session("forged-smime-kept");
+    s.clock.now = LATER;
+    open_raw(&mut s, 9709, &testdata("signed-clear.eml"));
+    assert_eq!(seal(&s), Seal::Untrusted(vec![smime::Problem::UnknownIssuer]));
+    assert!(s.smime_settings("sample").known.is_empty(), "kept: {:?}", s.smime_settings("sample").known.keys());
+    done(s);
+}
+
 /// A signing subkey that ran out doesn't sign for its owner any more, though the key it belongs
 /// to is still valid.
 #[test]
@@ -186,5 +198,29 @@ fn a_compressed_block_in_a_text_isnt_opened_past_a_few_megabytes() {
     open_raw(&mut s, 9712, sent.as_bytes());
     let text = shown(&s).text;
     assert!(text.len() < 1 << 20, "{} bytes shown", text.len());
+    done(s);
+}
+
+/// A certificate kept before only trusted ones were (or one whose authority is trusted no
+/// longer) isn't encrypted to: its chain is checked again when the message goes.
+#[test]
+fn a_kept_certificate_is_checked_again_before_encrypting() {
+    let mut s = with_certificate("forged-smime-encrypt");
+    let ana = der::pem::decode_vec(String::from_utf8(testdata("ana.pem")).unwrap().as_bytes()).unwrap().1;
+    let eve = smime::read_p12(&testdata("zoe-aes.p12"), "secret").unwrap();
+    // As an older file could hold them: Ana's, issued by the authority Riley's own came with,
+    // and someone else's certificate under Bo's address.
+    let known = |cert: &[u8]| crate::session::KnownCert { cert: cert.to_vec(), seen: LATER, ..Default::default() };
+    let mut settings = s.smime_settings("sample");
+    settings.known.insert("ana@posteo.example".into(), known(&ana));
+    settings.known.insert("bo@posteo.example".into(), known(eve.certificate()));
+    let store = s.store.clone().unwrap();
+    store.save_account_doc("sample", "smime.json", &settings).unwrap();
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(LATER, 0));
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@posteo.example, bo@posteo.example", "subject": "Plan"})).unwrap();
+    s.run("compose.security", &json!({"encrypt": true})).unwrap();
+    let err = s.run("compose.send", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("bo@posteo.example") && !err.contains("ana@posteo.example"), "{err}");
     done(s);
 }

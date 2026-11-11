@@ -65,11 +65,19 @@ pub struct SmimeSettings {
 /// Said while the address book is asked for recipients' certificates.
 const LOOKING_UP: &str = "Looking for these recipients' certificates in the Exchange address book: send it again in a moment.";
 
-/// Someone's certificate, from a signed message of theirs.
+/// Someone's certificate, from a signed message of theirs (one whose signature was trusted for
+/// them) or from the Exchange address book.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct KnownCert {
     pub cert: Vec<u8>,
+    /// The certificates that issued it, as the message brought them: its chain is checked
+    /// again, with them, each time mail is encrypted to it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub chain: Vec<Vec<u8>>,
+    /// It came from the account's own address book, which is taken at its word.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub directory: bool,
     /// They said they read AES-GCM.
     pub gcm: bool,
     /// When it was last seen (Unix seconds).
@@ -443,7 +451,8 @@ impl Session {
     }
 
     /// A signature checked: whether it holds, and whether its certificate is to be trusted for
-    /// mail from `from`. A certificate that holds for its sender is remembered, to encrypt to them.
+    /// mail from `from`. A certificate trusted for its sender is remembered, to encrypt to them:
+    /// never one that isn't (anyone can sign with a certificate they made in someone's name).
     fn check_signature(&mut self, account: &str, cms: &[u8], content: Option<&[u8]>, from: &str) -> SignedBy {
         match smime::verify(cms, content) {
             Ok((signed, _)) => {
@@ -451,9 +460,8 @@ impl Session {
                 let (mut problems, path) = smime::cert::check_with_path(&signed.signer, &signed.certs, &roots, self.clock.now, from)
                     .unwrap_or_else(|_| (vec![smime::Problem::UnknownIssuer], Vec::new()));
                 let revocation = self.revocation_of(&path, &mut problems);
-                let for_sender = !problems.iter().any(|p| matches!(p, smime::Problem::OtherAddress(_) | smime::Problem::NotForEmail));
-                if for_sender && !from.is_empty() {
-                    self.remember_cert(account, from, &signed);
+                if problems.is_empty() && !from.is_empty() {
+                    self.remember_cert(account, from, &signed, path.get(1..).unwrap_or_default());
                 }
                 SignedBy {
                     seal: if problems.is_empty() { Seal::Trusted } else { Seal::Untrusted(problems) },
@@ -480,11 +488,11 @@ impl Session {
         }
     }
 
-    fn remember_cert(&mut self, account: &str, from: &str, signed: &smime::Signed) {
+    fn remember_cert(&mut self, account: &str, from: &str, signed: &smime::Signed, issuers: &[Vec<u8>]) {
         let now = self.clock.now;
         let s = self.smime.entry(account.to_string()).or_default();
-        let known = KnownCert { cert: signed.signer.clone(), gcm: signed.reads_gcm(), seen: now };
-        let changed = s.known.get(from).is_none_or(|k| k.cert != known.cert || k.gcm != known.gcm);
+        let known = KnownCert { cert: signed.signer.clone(), chain: issuers.to_vec(), directory: false, gcm: signed.reads_gcm(), seen: now };
+        let changed = s.known.get(from).is_none_or(|k| k.cert != known.cert || k.gcm != known.gcm || k.chain != known.chain || k.directory);
         // At most a few thousand people; the oldest seen goes first.
         if s.known.len() >= 5000
             && !s.known.contains_key(from)
@@ -507,9 +515,18 @@ impl Session {
             return s.chain.first().map(|c| (c.clone(), true));
         }
         let k = s.known.get(&email)?;
-        // Out of date certificates aren't encrypted to.
-        let info = smime::cert::info(&k.cert).ok()?;
-        (info.not_after >= self.clock.now).then(|| (k.cert.clone(), k.gcm))
+        if self.revocation.withdrawn(&k.cert) {
+            return None;
+        }
+        // The address book's is taken at its word, while it's in date. One a message brought
+        // is checked again, as it was when it came: still trusted for that address today (a
+        // file written before only trusted ones were kept may hold others).
+        let usable = if k.directory {
+            smime::cert::info(&k.cert).is_ok_and(|i| i.not_before <= self.clock.now && self.clock.now <= i.not_after)
+        } else {
+            smime::cert::check(&k.cert, &k.chain, &self.anchors(), self.clock.now, &email).is_ok_and(|problems| problems.is_empty())
+        };
+        usable.then(|| (k.cert.clone(), k.gcm))
     }
 
     /// Before `c` goes: what signing and encrypting it takes. `None` when it's neither; else the
@@ -611,7 +628,7 @@ impl Session {
             s.looked_up.insert(email.clone(), false);
             match best {
                 Some((cert, _)) => {
-                    s.known.insert(email, KnownCert { cert, gcm: false, seen: now });
+                    s.known.insert(email, KnownCert { cert, chain: Vec::new(), directory: true, gcm: false, seen: now });
                     kept += 1;
                 }
                 None => none += 1,

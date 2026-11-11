@@ -37,6 +37,13 @@ pub enum RevocationCheck {
     Unknown(String),
 }
 
+impl Revocations {
+    /// Whether an authority said it withdrew `cert` (DER).
+    pub(super) fn withdrawn(&self, cert: &[u8]) -> bool {
+        matches!(self.heard.get(cert), Some((Revocation::Revoked { .. }, _)))
+    }
+}
+
 impl Session {
     /// For a signature by `path` (the signer's certificate, then its issuers): what's known of
     /// its being withdrawn, asking its authority when nothing current is. `None`: not asked
