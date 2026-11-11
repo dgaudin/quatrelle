@@ -134,6 +134,11 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, pics: &mut crate::r
                     .color(t.dim)
                     .small(),
             );
+            // A program there is never started from a link, whoever the server is.
+            if quatrelle_engine::mime::share_runs_code(link) {
+                ui.add_space(4.0);
+                ui.label(RichText::new(tl!("This file could run a program: it is shown in its folder, not opened.")).color(t.dim).small());
+            }
             ui.add_space(6.0);
             ui.checkbox(always, tl!("Don't ask again for this server"));
             let (ok, cancel) = buttons(ui, t, "Open", true);

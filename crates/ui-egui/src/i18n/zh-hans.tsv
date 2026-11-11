@@ -2186,3 +2186,4 @@ folder	Online Archive	在线存档
 	Left out because one file adds {max} at most: {n}	因一个文件最多添加 {max} 项而略过:{n}
 	Nobody is invited: the guests the file names are left out.	不会邀请任何人:文件中列出的与会者会被略过。
 	Add a file only when you know where it comes from.	仅在知道文件来源时才添加。
+	This file could run a program: it is shown in its folder, not opened.	此文件可能会运行程序:只在其文件夹中显示,不会打开。

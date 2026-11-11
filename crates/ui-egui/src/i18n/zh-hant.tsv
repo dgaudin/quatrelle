@@ -2189,3 +2189,4 @@ folder	Online Archive	線上封存
 	Left out because one file adds {max} at most: {n}	因一個檔案最多加入 {max} 項而略過:{n}
 	Nobody is invited: the guests the file names are left out.	不會邀請任何人:檔案中列出的與會者會被略過。
 	Add a file only when you know where it comes from.	只有在知道檔案來源時才加入。
+	This file could run a program: it is shown in its folder, not opened.	此檔案可能會執行程式:只在其資料夾中顯示,不會開啟。

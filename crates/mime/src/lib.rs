@@ -19,7 +19,7 @@ mod css;
 mod fonts;
 pub mod layout;
 use html::links;
-pub use links::{find_links, link_written_addresses, share_link, share_parts};
+pub use links::{find_links, link_written_addresses, share_link, share_parts, share_runs_code};
 pub mod markup;
 pub mod office;
 pub mod rich;

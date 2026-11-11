@@ -2184,3 +2184,4 @@ folder	Online Archive	ארכיון מקוון
 	Left out because one file adds {max} at most: {n}	הושמטו כי קובץ אחד מוסיף {max} לכל היותר: {n}
 	Nobody is invited: the guests the file names are left out.	אף אחד לא מוזמן: המוזמנים שהקובץ מציין מושמטים.
 	Add a file only when you know where it comes from.	הוסיפו קובץ רק אם ידוע לכם מהיכן הגיע.
+	This file could run a program: it is shown in its folder, not opened.	הקובץ הזה עלול להפעיל תוכנית: הוא מוצג בתיקייה שלו ולא נפתח.

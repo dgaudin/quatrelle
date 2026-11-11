@@ -2184,3 +2184,4 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Left out because one file adds {max} at most: {n}	استُبعدت لأن الملف الواحد يضيف {max} على الأكثر: {n}
 	Nobody is invited: the guests the file names are left out.	لا يُدعى أحد: المدعوون المذكورون في الملف يُستبعدون.
 	Add a file only when you know where it comes from.	أضف ملفًا فقط إذا كنت تعرف مصدره.
+	This file could run a program: it is shown in its folder, not opened.	قد يشغّل هذا الملف برنامجًا: يُعرض في مجلده ولا يُفتح.

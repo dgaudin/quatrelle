@@ -2189,3 +2189,4 @@ folder	Online Archive	Archivo en línea
 	Left out because one file adds {max} at most: {n}	Omitidos porque un archivo añade {max} como máximo: {n}
 	Nobody is invited: the guests the file names are left out.	No se invita a nadie: los invitados que nombra el archivo se dejan fuera.
 	Add a file only when you know where it comes from.	Añada un archivo solo si sabe de dónde viene.
+	This file could run a program: it is shown in its folder, not opened.	Este archivo podría ejecutar un programa: se muestra en su carpeta, no se abre.

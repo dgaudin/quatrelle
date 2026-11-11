@@ -2187,3 +2187,4 @@ folder	Online Archive	온라인 보관함
 	Left out because one file adds {max} at most: {n}	파일 하나로 최대 {max}개까지만 추가되어 제외됨: {n}
 	Nobody is invited: the guests the file names are left out.	아무도 초대되지 않습니다. 파일에 적힌 참석자는 제외됩니다.
 	Add a file only when you know where it comes from.	출처를 아는 파일만 추가하세요.
+	This file could run a program: it is shown in its folder, not opened.	이 파일은 프로그램을 실행할 수 있습니다. 열지 않고 폴더에서 보여 줍니다.

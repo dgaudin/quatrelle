@@ -2185,3 +2185,4 @@ folder	Online Archive	Online-archief
 	Left out because one file adds {max} at most: {n}	Weggelaten omdat één bestand er hoogstens {max} toevoegt: {n}
 	Nobody is invited: the guests the file names are left out.	Er wordt niemand uitgenodigd: de gasten die het bestand noemt, worden weggelaten.
 	Add a file only when you know where it comes from.	Voeg een bestand alleen toe als u weet waar het vandaan komt.
+	This file could run a program: it is shown in its folder, not opened.	Dit bestand kan een programma starten: het wordt in zijn map getoond, niet geopend.

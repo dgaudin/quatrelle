@@ -138,6 +138,14 @@ pub fn share_parts(link: &str) -> Option<(String, String)> {
     (!host.is_empty() && !path.is_empty()).then(|| (host.to_string(), unc))
 }
 
+/// Whether a share's link ([`share_link`]) names a file that would run code if the system
+/// opened it (a program, a script, a shortcut…): such a file is shown in its folder, never
+/// opened. A link that can't be read as a share counts too: nothing of it is opened.
+pub fn share_runs_code(link: &str) -> bool {
+    let Some((_, unc)) = share_parts(link) else { return true };
+    unc.rsplit('\\').find(|part| !part.trim().is_empty()).is_some_and(crate::runs_code)
+}
+
 /// The shares written in `text` (`\\server\share\…`, `<\\server\share\a folder>` with its
 /// spaces, `file://…`, `smb://…`), each with its link.
 fn find_shares(text: &str) -> Vec<(Range<usize>, String)> {
@@ -346,6 +354,21 @@ mod tests {
         assert_eq!(found(r"\\srv\boites\jean@example.fr\notes").len(), 1);
         // Shown, and opened on Windows, as Windows writes it.
         assert_eq!(share_parts("file://nas/Partage%20RH/a.txt"), Some(("nas".to_string(), r"\\nas\Partage RH\a.txt".to_string())));
+        // A file that would run is told from a folder or a document, however the link ends.
+        for (text, runs) in [
+            (r"\\files-01\Tools\setup.exe", true),
+            (r"\\files-01\Tools\Setup.EXE\", true),
+            (r"\\files-01\Tools\report.pdf.lnk", true),
+            ("smb://files-01/Tools/run%2Ehta", true),
+            ("file://files-01/Tools/go.cmd%20", true),
+            (r"\\files-01\Common\Projects\2026", false),
+            (r"\\files-01\Common\minutes.docx", false),
+            (r"\\files-01.exe\Common", false),
+        ] {
+            let link = share_link(text).unwrap_or_else(|| panic!("{text} is a share"));
+            assert_eq!(share_runs_code(&link), runs, "{text} ({link})");
+        }
+        assert!(share_runs_code("file://"), "what isn't a share is never opened");
         // Not shares: a file on this computer, no share name, junk.
         for text in [r"C:\Users\me\file.txt", "file:///home/me/notes.txt", r"\\server", r"\\localhost\c$", r"\\\\\\", r"a\\b\c", "file:/x/y"] {
             assert!(found(text).is_empty(), "{text}: {:?}", found(text));
