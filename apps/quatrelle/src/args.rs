@@ -22,11 +22,13 @@ Usage: quatrelle [options] [mailto:LINK | FILE]…
   --cmd ID[=JSON]   run a command once the window opens (repeatable), e.g.
                     --cmd 'list.open={\"key\":\"sample:1:1:INBOX\"}' --cmd mail.reply
   --log             also write the log to the terminal
+  --handed          what follows is links and files only (the system's entries use it)
   --version, -V     print the version
   --help, -h        print this
 
+Options come first: after a link or a file, nothing is read as an option.
 A mailto: link starts a new message; a .eml or .msg file is shown, and a .ics or .vcf
-file's events or people are added. If Quatrelle is running, they open there.
+file's events or people are added once you agree. If Quatrelle is running, they open there.
 
 A portable copy keeps its data beside the app when portable.txt is there.
 The command-line client is quatrelle-cli (quatrelle-cli --help).";
@@ -42,6 +44,29 @@ pub fn version_line() -> String {
 
 /// Options followed by a value of their own.
 const WITH_VALUE: [&str; 2] = ["--data", "--cmd"];
+/// What the system's entries put before the link or file they hand over: nothing after it is an
+/// option.
+const HANDED: &str = "--handed";
+
+/// The arguments Quatrelle reads its options from: those before the first link or file, or
+/// before `--handed`. A link's text comes from whoever wrote the link, and a program that
+/// passes it on without quoting it right splits it into several arguments: none of those may be
+/// taken for `--cmd`, `--data` or any other option, so whatever follows what was handed over is
+/// only ever links and files.
+pub fn options(args: &[String]) -> &[String] {
+    let mut skip = false;
+    for (i, a) in args.iter().enumerate() {
+        if std::mem::take(&mut skip) {
+            continue;
+        }
+        if a != HANDED && (a.starts_with('-') || a == "/?") {
+            skip = WITH_VALUE.contains(&a.as_str());
+            continue;
+        }
+        return args.get(..i).unwrap_or_default();
+    }
+    args
+}
 /// Most links and files taken from one launch.
 const MAX_HANDED: usize = 64;
 
@@ -175,6 +200,31 @@ mod tests {
         assert_eq!(h(&["--data"]), Vec::<String>::new(), "a missing value is fine");
         let many: Vec<String> = (0..200).map(|i| format!("mailto:{i}@x.example")).collect();
         assert_eq!(handed(&many).len(), MAX_HANDED);
+    }
+
+    /// A link's text can't bring options: whatever follows a link or a file, or `--handed`, is
+    /// never one, however the link was split on its way here.
+    #[test]
+    fn nothing_after_a_link_or_a_file_is_an_option() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        // A link with a quote in it, as a program that doesn't encode quotes passes it on.
+        let split = args(&["mailto:a@x.example", "--cmd", "mail.new={}", "--cmd", "compose.send", "--data", r"\\far\share"]);
+        assert!(options(&split).is_empty(), "{:?}", options(&split));
+        assert_eq!(handed(&split), ["mailto:a@x.example"]);
+        // The installed entries say where the options end, whatever comes after.
+        let entry = args(&["--handed", "--cmd", "folder.empty", "mailto:a@x.example", "--sample"]);
+        assert!(options(&entry).is_empty(), "{:?}", options(&entry));
+        assert_eq!(handed(&entry), ["mailto:a@x.example"]);
+        // A file's path passed unquoted, with an option's look in its name.
+        let path = args(&["x", "--cmd", "folder.empty", ".eml"]);
+        assert!(options(&path).is_empty(), "{:?}", options(&path));
+        // Options a launch really gives, before what it hands over, are read as ever.
+        let own = args(&["--sample", "--cmd", "mail.new", "--data", "D:/Mail", "mailto:a@x.example", "--dark"]);
+        assert_eq!(options(&own), args(&["--sample", "--cmd", "mail.new", "--data", "D:/Mail"]).as_slice());
+        let only = args(&["--sample", "--cmd", "list.open={}", "--cmd", "mail.reply", "--light"]);
+        assert_eq!(options(&only), only.as_slice());
+        assert_eq!(options(&args(&["/?"])), args(&["/?"]).as_slice());
+        assert!(options(&[]).is_empty());
     }
 
     /// A path a launcher passed unquoted, split at its spaces, is one path again; files that are

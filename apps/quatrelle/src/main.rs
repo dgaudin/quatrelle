@@ -349,7 +349,11 @@ fn fewer_malloc_arenas() {}
 fn main() -> eframe::Result {
     fewer_malloc_arenas();
     // `args()` panics on an argument that isn't Unicode (a file name in another encoding).
-    let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
+    let given: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
+    // `mailto:` links and mail files: Quatrelle as the system's mail app, or Open with (`args.rs`).
+    let handed = args::handed(&given);
+    // Options are read only before what was handed over: a link's text never brings one.
+    let args: Vec<String> = args::options(&given).to_vec();
     if args.iter().any(|a| a == "--version" || a == "-V") {
         say_out(&args::version_line());
         return Ok(());
@@ -360,8 +364,6 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     let cmd_args = args.clone();
-    // `mailto:` links and mail files: Quatrelle as the system's mail app, or Open with (`args.rs`).
-    let handed = args::handed(&args);
     let sample = args.iter().any(|a| a == "--sample");
     // Text pasted from Outlook, Word or a web page keeps its look.
     quatrelle_ui_egui::set_clipboard_html(|| read_clipboard(|c| c.get().html().ok()).filter(|h| !h.trim().is_empty()));

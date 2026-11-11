@@ -78,7 +78,8 @@
            the Capabilities key puts it on the list in Settings > Apps > Default apps (under Email
            and the .eml, .msg, .ics and .vcf types) for the user to choose, and each extension's
            OpenWithProgids entry adds it to Explorer's "Open with" menu. A link or a file path is
-           passed as the one argument (apps/quatrelle/src/args.rs). Uninstalling removes it all. -->
+           passed as the one argument, after `--handed` so that nothing in it is read as an
+           option (apps/quatrelle/src/args.rs). Uninstalling removes it all. -->
       <Component Id="QuatrelleDefaultApp" Guid="B74ACD47-7B2E-4DEA-8113-42A3B3D00FDE">
         <RegistryKey Root="HKLM" Key="Software\RegisteredApplications">
           <RegistryValue Name="Quatrelle" Type="string" Value="Software\Quatrelle\Capabilities" KeyPath="yes" />
@@ -102,7 +103,7 @@
         <RegistryKey Root="HKLM" Key="Software\Classes\Applications\quatrelle.exe">
           <RegistryValue Name="FriendlyAppName" Type="string" Value="Quatrelle" />
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; --handed &quot;%1&quot;" />
           </RegistryKey>
           <RegistryKey Key="SupportedTypes">
             <RegistryValue Name=".eml" Type="string" Value="" />
@@ -121,7 +122,7 @@
             <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
           </RegistryKey>
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; --handed &quot;%1&quot;" />
           </RegistryKey>
         </RegistryKey>
 
@@ -132,7 +133,7 @@
             <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
           </RegistryKey>
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; --handed &quot;%1&quot;" />
           </RegistryKey>
         </RegistryKey>
         <RegistryKey Root="HKLM" Key="Software\Classes\.eml\OpenWithProgids">
@@ -146,7 +147,7 @@
             <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
           </RegistryKey>
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; --handed &quot;%1&quot;" />
           </RegistryKey>
         </RegistryKey>
         <RegistryKey Root="HKLM" Key="Software\Classes\.msg\OpenWithProgids">
@@ -160,7 +161,7 @@
             <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
           </RegistryKey>
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; --handed &quot;%1&quot;" />
           </RegistryKey>
         </RegistryKey>
         <RegistryKey Root="HKLM" Key="Software\Classes\.ics\OpenWithProgids">
@@ -174,7 +175,7 @@
             <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
           </RegistryKey>
           <RegistryKey Key="shell\open\command">
-            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; --handed &quot;%1&quot;" />
           </RegistryKey>
         </RegistryKey>
         <RegistryKey Root="HKLM" Key="Software\Classes\.vcf\OpenWithProgids">
