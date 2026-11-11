@@ -78,7 +78,7 @@
            the Capabilities key puts it on the list in Settings > Apps > Default apps (under Email
            and the .eml, .msg, .ics and .vcf types) for the user to choose, and each extension's
            OpenWithProgids entry adds it to Explorer's "Open with" menu. A link or a file path is
-           passed as the one argument, after `--handed` so that nothing in it is read as an
+           passed as the one argument, after the handed-over marker option so that nothing in it is read as an
            option (apps/quatrelle/src/args.rs). Uninstalling removes it all. -->
       <Component Id="QuatrelleDefaultApp" Guid="B74ACD47-7B2E-4DEA-8113-42A3B3D00FDE">
         <RegistryKey Root="HKLM" Key="Software\RegisteredApplications">
