@@ -118,6 +118,7 @@ pub(crate) use compose::mark_from_internet;
 mod files;
 pub use files::is_message_file;
 pub(crate) use files::message_preview;
+pub use crate::session::pim::{MAX_FILE_CARDS, MAX_FILE_EVENTS};
 mod home;
 mod kept_files;
 mod navigation;

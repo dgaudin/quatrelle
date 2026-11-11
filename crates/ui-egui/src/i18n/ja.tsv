@@ -2176,3 +2176,12 @@ folder	Online Archive	オンライン アーカイブ
 	{title} – Note	{title} – メモ
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	これらのサーバーは、ドメインの DNS レコードから見つかりましたが、その内容は何も保証されていません: {incoming} (受信メール) と {smtp} (送信メール)。パスワードはこれらのサーバーに送信されます。ご利用のメールプロバイダーのサーバーであることを確認してください。
 	These are my mail provider's servers	これらは自分のメールプロバイダーのサーバーです
+	Add these events to your calendar?	これらの予定をカレンダーに追加しますか?
+	Add these people to your contacts?	これらの人を連絡先に追加しますか?
+	Events in {file}: {n}	{file} の予定: {n}
+	People in {file}: {n}	{file} の連絡先: {n}
+	They go to {place} ({account}).	追加先: {place} ({account})。
+	Already there, left as they are: {n}	既にあるためそのまま残すもの: {n}
+	Left out because one file adds {max} at most: {n}	1 つのファイルから追加できるのは {max} 件までのため除外: {n}
+	Nobody is invited: the guests the file names are left out.	誰も招待されません。ファイルに書かれた出席者は取り込まれません。
+	Add a file only when you know where it comes from.	出どころが分かっているファイルだけを追加してください。

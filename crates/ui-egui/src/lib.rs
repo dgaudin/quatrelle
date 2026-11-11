@@ -269,6 +269,8 @@ pub enum Action {
     MakeMeetingProfile,
     /// A network share's link the user said to open ([`Dialog::OpenShare`]).
     OpenShare(String),
+    /// A calendar or contacts file the user said to add ([`Dialog::AddFromFile`]): its path.
+    AddFile(String),
     /// Run a command for the open dialog: it closes on success and shows the error otherwise.
     Submit(&'static str, Value),
     /// Server settings' Save with a domain typed and not added: `account.trustDomain`'s params,
@@ -602,33 +604,20 @@ impl MailApp {
     }
 
     /// A `mailto:` link or a mail file the system handed Quatrelle (as its mail app, or through
-    /// Open with): a new message to write, the message shown, or the events or people added and
-    /// shown. Nothing is sent and nothing is attached.
+    /// Open with): a new message to write, the message shown, or what a calendar or contacts
+    /// file holds, with the question whether to add it. Nothing is sent, nothing is attached
+    /// and nothing is added.
     pub fn open_handed(&mut self, what: &str) {
         use quatrelle_engine::CmdError;
         let mailto = quatrelle_engine::model::mailto::is_mailto(what);
         let r = if mailto { self.session.run("mail.mailto", &json!({"url": what})) } else { self.session.run("file.open", &json!({"path": what})) };
         let name = what.rsplit(['/', '\\']).next().unwrap_or(what).to_string();
-        // How many the answer says were added or left out (none when it doesn't say).
-        let tally = |answer: &Value, field: &str| answer[field].as_u64().unwrap_or(0);
         match r {
             Ok(_) if mailto => self.ui.backstage = None,
             Ok(v) => {
                 self.ui.backstage = None;
-                let left_out = tally(&v, "skipped");
-                let left_out =
-                    if left_out > 0 { format!(" {}", tf!("Left out because they couldn't be read: {n}", n = left_out)) } else { String::new() };
                 match v.get("kind").and_then(Value::as_str) {
-                    Some("calendar") => {
-                        self.run("view.calendar", json!({}));
-                        let added = tf!("Added to your calendar from {file}: {n}", file = name, n = tally(&v, "added"));
-                        self.session.notice(format!("{added}{left_out}"), false);
-                    }
-                    Some("contacts") => {
-                        self.run("view.people", json!({}));
-                        let added = tf!("Added to your contacts from {file}: {n}", file = name, n = tally(&v, "added"));
-                        self.session.notice(format!("{added}{left_out}"), false);
-                    }
+                    Some("calendar" | "contacts") => self.ui.dialog = Some(Dialog::AddFromFile(Box::new(dialogs::FileHolds::from_answer(&v)))),
                     // An Outlook message file: shown once it's read (`pump`).
                     Some("reading") => {}
                     _ => self.ui.dialog = Some(Dialog::preview(&v, &self.session.clock)),
@@ -639,6 +628,31 @@ impl MailApp {
             }
             Err(CmdError::Disabled(_)) => {
                 self.session.notice(tl!("Add an account first: events and people are kept with an account.").to_string(), true)
+            }
+            Err(e) => self.session.notice(tf!("Couldn't open {file}: {error}", file = name, error = e.to_string()), true),
+        }
+    }
+
+    /// Add a calendar file's events or a contacts file's people, which the user agreed to
+    /// ([`Dialog::AddFromFile`]), and show them.
+    pub(crate) fn add_file(&mut self, path: &str) {
+        let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_string();
+        // How many the answer says were added or left out (none when it doesn't say).
+        let tally = |answer: &Value, field: &str| answer[field].as_u64().unwrap_or(0);
+        match self.session.run("file.add", &json!({"path": path})) {
+            Ok(v) => {
+                let left_out = tally(&v, "skipped");
+                let left_out =
+                    if left_out > 0 { format!(" {}", tf!("Left out because they couldn't be read: {n}", n = left_out)) } else { String::new() };
+                let calendar = v.get("kind").and_then(Value::as_str) == Some("calendar");
+                let added = if calendar {
+                    self.run("view.calendar", json!({}));
+                    tf!("Added to your calendar from {file}: {n}", file = name, n = tally(&v, "added"))
+                } else {
+                    self.run("view.people", json!({}));
+                    tf!("Added to your contacts from {file}: {n}", file = name, n = tally(&v, "added"))
+                };
+                self.session.notice(format!("{added}{left_out}"), false);
             }
             Err(e) => self.session.notice(tf!("Couldn't open {file}: {error}", file = name, error = e.to_string()), true),
         }

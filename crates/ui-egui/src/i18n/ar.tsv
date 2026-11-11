@@ -2175,3 +2175,12 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	{title} – Note	{title} – ملاحظة
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	عُثر على هذه الخوادم من خلال سجلات DNS الخاصة بالنطاق، ولا شيء يضمن صحتها: {incoming} (البريد الوارد) و{smtp} (البريد الصادر). سيتم إرسال كلمة المرور إليها. تأكد من أنها خوادم مزود بريدك.
 	These are my mail provider's servers	هذه خوادم مزود بريدي
+	Add these events to your calendar?	هل تريد إضافة هذه الأحداث إلى تقويمك؟
+	Add these people to your contacts?	هل تريد إضافة هؤلاء الأشخاص إلى جهات اتصالك؟
+	Events in {file}: {n}	الأحداث في {file}: {n}
+	People in {file}: {n}	الأشخاص في {file}: {n}
+	They go to {place} ({account}).	ستُضاف إلى {place} ({account}).
+	Already there, left as they are: {n}	موجودة من قبل وتبقى كما هي: {n}
+	Left out because one file adds {max} at most: {n}	استُبعدت لأن الملف الواحد يضيف {max} على الأكثر: {n}
+	Nobody is invited: the guests the file names are left out.	لا يُدعى أحد: المدعوون المذكورون في الملف يُستبعدون.
+	Add a file only when you know where it comes from.	أضف ملفًا فقط إذا كنت تعرف مصدره.

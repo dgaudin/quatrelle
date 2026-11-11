@@ -718,7 +718,7 @@ fn a_strangers_invitation_and_files_bring_no_webex_id() {
         let mut s = signed_in("webex-import");
         let path = std::env::temp_dir().join(format!("quatrelle-webex-import-{n}-{}.ics", std::process::id()));
         std::fs::write(&path, ics(method)).unwrap();
-        s.run("file.open", &json!({"path": path.to_string_lossy()})).unwrap();
+        s.run("file.add", &json!({"path": path.to_string_lossy()})).unwrap();
         let _ = std::fs::remove_file(&path);
         let planted = s.pim_mut("sample").events.iter().find(|e| e.event.summary == "Planted").map(|e| e.event.clone()).expect("imported");
         assert_eq!(planted.webex_id, None, "{method:?}");

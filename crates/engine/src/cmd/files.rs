@@ -6,6 +6,8 @@
 
 use quatrelle_model::Job;
 
+use crate::session::pim::FromFile;
+
 use super::*;
 
 /// Largest message file read (`.eml`).
@@ -22,7 +24,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"url": "mailto:…" (RFC 6068: to, cc, bcc, subject and body; nothing is attached)}"#),
         CommandSpec::new("file.open", "Open a mail file", "Another app › Open with Quatrelle", open_mail_file)
-            .params(r#"{"path": string (.eml and .msg show the message; .ics adds its events to the calendar, .vcf its people to the contacts)}"#),
+            .params(r#"{"path": string (.eml and .msg show the message; .ics and .vcf answer what the file holds, and add nothing)}"#),
+        CommandSpec::new("file.add", "Add a calendar or contacts file", "Another app › Open with Quatrelle (once agreed to)", add_pim_file)
+            .params(r#"{"path": string (.ics adds its events to the calendar, .vcf its people to the contacts; nobody is invited, nothing is replaced)}"#),
         CommandSpec::new("file.addToFolder", "Add message files to a folder", "Folder pane (files dropped on a folder)", add_to_folder)
             .params(r#"{"paths": [string] (.eml and Outlook .msg files), "folder"?: string (the folder open), "account"?: string}"#),
     ]
@@ -92,15 +96,34 @@ fn sniff(bytes: &[u8]) -> &'static str {
     }
 }
 
-/// Open `path`: a message is answered with what to show (as `attachment.preview` answers); a
-/// calendar's events and a contacts file's people are added to the account on screen.
-fn open_mail_file(s: &mut Session, v: &Value) -> CmdResult {
-    let given = p::req_str(v, "path")?;
-    let path = given.trim();
+/// The file named by a command's `path`: the path as given, and the file's own name.
+fn named(v: &Value) -> Result<(&str, String), CmdError> {
+    let path = p::req_str(v, "path")?.trim();
     if path.is_empty() {
         return Err(CmdError::Params("`path` is required".into()));
     }
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_string();
+    Ok((path, path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()))
+}
+
+/// The first few titles of what a file would add, each cut short: enough to tell what it is.
+fn titles<'a>(all: impl Iterator<Item = &'a str>) -> Vec<String> {
+    all.take(5).map(|t| t.trim().chars().take(80).collect()).collect()
+}
+
+/// What a calendar or contacts file would add, said before anything is added.
+fn held<T>(kind: &str, name: &str, path: &str, held: &FromFile<T>, titles: Vec<String>, s: &Session) -> Value {
+    let account = s.account(&held.account).map(|a| a.config.email.clone()).unwrap_or_default();
+    json!({
+        "kind": kind, "name": name, "path": path, "count": held.items.len(), "already": held.already,
+        "unreadable": held.unreadable, "more": held.more, "titles": titles, "into": held.place_name, "account": account,
+    })
+}
+
+/// Open `path`: a message is answered with what to show (as `attachment.preview` answers). A
+/// calendar or a contacts file is only read: the answer says what it holds and where it would
+/// go, and `file.add` adds it once the user has said so.
+fn open_mail_file(s: &mut Session, v: &Value) -> CmdResult {
+    let (path, name) = named(v)?;
     // Most files are small: read once (up to the smaller cap), again only for a bigger message.
     let head = read_capped(path, MAX_PIM).ok();
     let kind = kind(path, head.as_deref().unwrap_or_default());
@@ -110,41 +133,19 @@ fn open_mail_file(s: &mut Session, v: &Value) -> CmdResult {
                 Some(b) => b,
                 None => read_capped(path, MAX_PIM)?,
             };
-            let cal = quatrelle_model::ical::parse(&String::from_utf8_lossy(&bytes), i64::from(s.clock.offset));
-            let (mut added, mut skipped, mut first) = (0usize, 0usize, None);
-            for mut e in cal.events {
-                // A file's Webex meeting is not the user's.
-                e.webex_id = None;
-                let start = e.start;
-                match s.create_event(None, None, e) {
-                    Ok(_) => {
-                        added += 1;
-                        first = first.or(Some(start));
-                    }
-                    Err(e @ CmdError::Disabled(_)) => return Err(e),
-                    Err(_) => skipped += 1,
-                }
-            }
-            // The calendar goes to the first one's day, to show it.
-            if let Some(start) = first {
-                s.cal_day = Some(start.saturating_add(i64::from(s.clock.offset)).div_euclid(86_400));
-            }
-            Ok(json!({"kind": kind, "name": name, "added": added, "skipped": skipped, "start": first}))
+            let events = s.file_events(&String::from_utf8_lossy(&bytes))?;
+            let titles = titles(events.items.iter().map(|e| e.summary.as_str()));
+            Ok(held(kind, &name, path, &events, titles, s))
         }
         "contacts" => {
             let bytes = match head {
                 Some(b) => b,
                 None => read_capped(path, MAX_PIM)?,
             };
-            let (mut added, mut skipped) = (0usize, 0usize);
-            for c in quatrelle_model::vcard::parse(&String::from_utf8_lossy(&bytes)) {
-                match s.create_card(None, c) {
-                    Ok(_) => added += 1,
-                    Err(e @ CmdError::Disabled(_)) => return Err(e),
-                    Err(_) => skipped += 1,
-                }
-            }
-            Ok(json!({"kind": kind, "name": name, "added": added, "skipped": skipped}))
+            let cards = s.file_cards(&String::from_utf8_lossy(&bytes))?;
+            let names: Vec<String> = cards.items.iter().map(quatrelle_model::vcard::Card::display).collect();
+            let titles = titles(names.iter().map(String::as_str));
+            Ok(held(kind, &name, path, &cards, titles, s))
         }
         // An Outlook message file is made a standard message by the network layer, and shown
         // when it comes ([`Session::message_file_read`]).
@@ -159,6 +160,33 @@ fn open_mail_file(s: &mut Session, v: &Value) -> CmdResult {
             };
             message_preview(s, &name, &bytes)
         }
+    }
+}
+
+/// Add a calendar file's events or a contacts file's people to the account on screen: what
+/// `file.open` said the file holds, read again. Nobody is invited and nothing there is replaced.
+fn add_pim_file(s: &mut Session, v: &Value) -> CmdResult {
+    let (path, name) = named(v)?;
+    let bytes = read_capped(path, MAX_PIM)?;
+    let text = String::from_utf8_lossy(&bytes);
+    match kind(path, &bytes) {
+        kind @ "calendar" => {
+            let events = s.file_events(&text)?;
+            let (skipped, already, more) = (events.unreadable, events.already, events.more);
+            let (added, first) = s.add_file_events(events);
+            // The calendar goes to the first one's day, to show it.
+            if let Some(start) = first {
+                s.cal_day = Some(start.saturating_add(i64::from(s.clock.offset)).div_euclid(86_400));
+            }
+            Ok(json!({"kind": kind, "name": name, "added": added, "skipped": skipped, "already": already, "more": more, "start": first}))
+        }
+        kind @ "contacts" => {
+            let cards = s.file_cards(&text)?;
+            let (skipped, already, more) = (cards.unreadable, cards.already, cards.more);
+            let added = s.add_file_cards(cards);
+            Ok(json!({"kind": kind, "name": name, "added": added, "skipped": skipped, "already": already, "more": more}))
+        }
+        _ => Err(CmdError::Params(format!("{name} is neither a calendar nor a contacts file"))),
     }
 }
 

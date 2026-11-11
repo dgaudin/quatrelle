@@ -2178,3 +2178,12 @@ folder	Online Archive	Archivio online
 	{title} – Note	{title} – Nota
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Questi server sono stati trovati tramite i record DNS del dominio, che nulla garantisce: {incoming} (posta in arrivo) e {smtp} (posta in uscita). La tua password verrà inviata a loro. Controlla che siano quelli del tuo provider di posta.
 	These are my mail provider's servers	Sono i server del mio provider di posta
+	Add these events to your calendar?	Aggiungere questi eventi al calendario?
+	Add these people to your contacts?	Aggiungere queste persone ai contatti?
+	Events in {file}: {n}	Eventi in {file}: {n}
+	People in {file}: {n}	Persone in {file}: {n}
+	They go to {place} ({account}).	Andranno in {place} ({account}).
+	Already there, left as they are: {n}	Già presenti, lasciati come sono: {n}
+	Left out because one file adds {max} at most: {n}	Esclusi perché un file ne aggiunge al massimo {max}: {n}
+	Nobody is invited: the guests the file names are left out.	Nessuno viene invitato: gli invitati indicati nel file sono esclusi.
+	Add a file only when you know where it comes from.	Aggiungi un file solo se sai da dove proviene.

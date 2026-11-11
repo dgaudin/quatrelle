@@ -5,6 +5,87 @@
 
 use super::*;
 
+/// What a calendar or contacts file opened with Quatrelle holds, as `file.open` answers.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileHolds {
+    /// Where the file is, and its own name.
+    pub path: String,
+    pub name: String,
+    /// A calendar file (its events), else a contacts file (its people).
+    pub calendar: bool,
+    /// How many would be added, and the first few's titles or names.
+    pub count: u64,
+    pub titles: Vec<String>,
+    /// Those left out: already there, not readable, past the most one file adds.
+    pub already: u64,
+    pub unreadable: u64,
+    pub more: u64,
+    /// The calendar or address book they would go to, and its account.
+    pub into: String,
+    pub account: String,
+}
+
+impl FileHolds {
+    /// From `file.open`'s answer for a calendar or a contacts file.
+    pub fn from_answer(v: &serde_json::Value) -> FileHolds {
+        let text = |k: &str| v.get(k).and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+        let count = |k: &str| v.get(k).and_then(serde_json::Value::as_u64).unwrap_or(0);
+        let titles = v.get("titles").and_then(serde_json::Value::as_array).map(|l| l.iter().filter_map(|t| t.as_str().map(str::to_string)).take(5).collect());
+        FileHolds {
+            path: text("path"),
+            name: text("name"),
+            calendar: text("kind") == "calendar",
+            count: count("count"),
+            titles: titles.unwrap_or_default(),
+            already: count("already"),
+            unreadable: count("unreadable"),
+            more: count("more"),
+            into: text("into"),
+            account: text("account"),
+        }
+    }
+}
+
+/// A calendar or contacts file: what it holds, where it would go, and what is left out.
+fn add_from_file(ui: &mut Ui, f: &FileHolds, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+    ui.set_width(460.0);
+    let (most, held) = if f.calendar {
+        title(ui, t, "Add these events to your calendar?");
+        (quatrelle_engine::MAX_FILE_EVENTS, tf!("Events in {file}: {n}", file = f.name, n = f.count))
+    } else {
+        title(ui, t, "Add these people to your contacts?");
+        (quatrelle_engine::MAX_FILE_CARDS, tf!("People in {file}: {n}", file = f.name, n = f.count))
+    };
+    ui.label(RichText::new(held).color(t.text));
+    for line in &f.titles {
+        ui.label(RichText::new(format!("• {}", widgets::shorten(line, 60))).color(t.dim).small());
+    }
+    ui.add_space(4.0);
+    if f.count > 0 {
+        ui.label(RichText::new(tf!("They go to {place} ({account}).", place = f.into, account = f.account)).color(t.text));
+    }
+    if f.already > 0 {
+        ui.label(RichText::new(tf!("Already there, left as they are: {n}", n = f.already)).color(t.dim).small());
+    }
+    if f.unreadable > 0 {
+        ui.label(RichText::new(tf!("Left out because they couldn't be read: {n}", n = f.unreadable)).color(t.dim).small());
+    }
+    if f.more > 0 {
+        ui.label(RichText::new(tf!("Left out because one file adds {max} at most: {n}", max = most, n = f.more)).color(t.dim).small());
+    }
+    ui.add_space(4.0);
+    if f.calendar {
+        ui.label(RichText::new(tl!("Nobody is invited: the guests the file names are left out.")).color(t.dim).small());
+    }
+    ui.label(RichText::new(tl!("Add a file only when you know where it comes from.")).color(t.dim).small());
+    let (ok, cancel) = buttons(ui, t, "Add", f.count > 0);
+    if ok {
+        acts.push(Action::AddFile(f.path.clone()));
+        return false;
+    }
+    !cancel
+}
+
 pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, pics: &mut crate::reading::Pictures, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
         Dialog::ConfirmDeleteContact { uid, name } => {
@@ -65,6 +146,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, pics: &mut crate::r
             }
             !cancel
         }
+        Dialog::AddFromFile(f) => add_from_file(ui, f, t, acts),
         Dialog::PicturePreview { key, index, name } => {
             let w = (ui.ctx().content_rect().width() * 0.75).clamp(360.0, 1200.0);
             let h = (ui.ctx().content_rect().height() * 0.7).max(240.0);

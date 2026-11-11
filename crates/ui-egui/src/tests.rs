@@ -288,6 +288,18 @@ pub(crate) fn tour() {
                 d
             },
             Dialog::SubscribeCalendar { url: "webcal://holidays.example/de.ics".into(), name: String::new(), error: Some("HTTP 404".into()) },
+            Dialog::AddFromFile(Box::new(crate::dialogs::FileHolds {
+                path: "/tmp/harvest.ics".into(),
+                name: "harvest.ics".into(),
+                calendar: true,
+                count: 2,
+                titles: vec!["Harvest day".into(), "Seed order".into()],
+                already: 1,
+                unreadable: 1,
+                more: 3,
+                into: "Calendar".into(),
+                account: "riley@studio.example".into(),
+            })),
             Dialog::OpenSharedMailbox {
                 account: "a1".into(),
                 email: "support@contoso.example".into(),

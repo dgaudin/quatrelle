@@ -40,6 +40,7 @@ pub use mailbox::*;
 pub use moving::MoveForm;
 pub use names::{AddressSearch, NamesForm};
 pub use organize::*;
+pub use other::FileHolds;
 pub use writing::*;
 
 #[derive(Clone, Debug)]
@@ -104,6 +105,9 @@ pub enum Dialog {
         path: String,
         always: bool,
     },
+    /// A calendar or contacts file opened with Quatrelle: what it holds and where it would go,
+    /// added once the user says so.
+    AddFromFile(Box<FileHolds>),
     MoveTo {
         filter: String,
     },
@@ -745,6 +749,7 @@ fn body(
         Dialog::ConfirmDeleteContact { .. }
         | Dialog::DeleteOccurrence { .. }
         | Dialog::OpenShare { .. }
+        | Dialog::AddFromFile(_)
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }
         | Dialog::SubscribeCalendar { .. }

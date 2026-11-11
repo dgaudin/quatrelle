@@ -2176,3 +2176,12 @@ folder	Online Archive	Online-archief
 	{title} – Note	{title} – Notitie
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Deze servers zijn gevonden via de DNS-records van het domein, waar niemand voor instaat: {incoming} (inkomende e-mail) en {smtp} (uitgaande e-mail). Uw wachtwoord wordt naar deze servers gestuurd. Controleer of ze van uw e-mailprovider zijn.
 	These are my mail provider's servers	Dit zijn de servers van mijn e-mailprovider
+	Add these events to your calendar?	Deze afspraken aan uw agenda toevoegen?
+	Add these people to your contacts?	Deze personen aan uw contacten toevoegen?
+	Events in {file}: {n}	Afspraken in {file}: {n}
+	People in {file}: {n}	Personen in {file}: {n}
+	They go to {place} ({account}).	Ze komen in {place} ({account}).
+	Already there, left as they are: {n}	Al aanwezig, ongewijzigd gelaten: {n}
+	Left out because one file adds {max} at most: {n}	Weggelaten omdat één bestand er hoogstens {max} toevoegt: {n}
+	Nobody is invited: the guests the file names are left out.	Er wordt niemand uitgenodigd: de gasten die het bestand noemt, worden weggelaten.
+	Add a file only when you know where it comes from.	Voeg een bestand alleen toe als u weet waar het vandaan komt.

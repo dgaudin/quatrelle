@@ -189,7 +189,7 @@ impl Session {
     }
 }
 
-fn check_card(c: &Card) -> Result<(), CmdError> {
+pub(super) fn check_card(c: &Card) -> Result<(), CmdError> {
     if c.display().trim().is_empty() {
         return Err(CmdError::Params("give the contact a name or an address".into()));
     }

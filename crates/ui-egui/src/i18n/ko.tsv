@@ -2178,3 +2178,12 @@ folder	Online Archive	온라인 보관함
 	{title} – Note	{title} – 메모
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	이 서버들은 도메인의 DNS 레코드를 통해 찾았으며, 그 내용은 아무것도 보증하지 않습니다: {incoming}(받는 메일) 및 {smtp}(보내는 메일). 암호가 이 서버들로 전송됩니다. 사용 중인 메일 공급자의 서버가 맞는지 확인하세요.
 	These are my mail provider's servers	내 메일 공급자의 서버가 맞습니다
+	Add these events to your calendar?	이 일정을 캘린더에 추가할까요?
+	Add these people to your contacts?	이 사람들을 연락처에 추가할까요?
+	Events in {file}: {n}	{file}의 일정: {n}
+	People in {file}: {n}	{file}의 사람: {n}
+	They go to {place} ({account}).	추가되는 곳: {place} ({account}).
+	Already there, left as they are: {n}	이미 있어 그대로 두는 항목: {n}
+	Left out because one file adds {max} at most: {n}	파일 하나로 최대 {max}개까지만 추가되어 제외됨: {n}
+	Nobody is invited: the guests the file names are left out.	아무도 초대되지 않습니다. 파일에 적힌 참석자는 제외됩니다.
+	Add a file only when you know where it comes from.	출처를 아는 파일만 추가하세요.

@@ -2175,3 +2175,12 @@ folder	Online Archive	ארכיון מקוון
 	{title} – Note	{title} – פתק
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	השרתים האלה נמצאו דרך רשומות ה-DNS של הדומיין, שאין להן שום ערובה: {incoming} (דואר נכנס) ו-{smtp} (דואר יוצא). הסיסמה שלך תישלח אליהם. יש לוודא שאלה השרתים של ספק הדואר שלך.
 	These are my mail provider's servers	אלה השרתים של ספק הדואר שלי
+	Add these events to your calendar?	להוסיף את האירועים האלה ליומן שלך?
+	Add these people to your contacts?	להוסיף את האנשים האלה לאנשי הקשר שלך?
+	Events in {file}: {n}	אירועים ב-{file}: {n}
+	People in {file}: {n}	אנשים ב-{file}: {n}
+	They go to {place} ({account}).	הם יתווספו אל {place} ({account}).
+	Already there, left as they are: {n}	כבר קיימים ונשארים כפי שהם: {n}
+	Left out because one file adds {max} at most: {n}	הושמטו כי קובץ אחד מוסיף {max} לכל היותר: {n}
+	Nobody is invited: the guests the file names are left out.	אף אחד לא מוזמן: המוזמנים שהקובץ מציין מושמטים.
+	Add a file only when you know where it comes from.	הוסיפו קובץ רק אם ידוע לכם מהיכן הגיע.

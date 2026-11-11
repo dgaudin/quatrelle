@@ -748,3 +748,29 @@ fn the_calendar_search_draws_and_opens_hostile_appointments() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A calendar file opened with Quatrelle asks before anything is added, saying what it holds;
+/// its events go in only once the user says so.
+#[test]
+fn a_calendar_file_opened_asks_before_it_adds() {
+    let (mut a, dir) = app("file-asks");
+    let path = dir.join("harvest.ics");
+    let ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:harvest@farm.example\r\nSUMMARY:Harvest day\r\nDTSTART:20261112T120000Z\r\nDTEND:20261112T150000Z\r\nATTENDEE:mailto:lee@greenhouse.example\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    std::fs::write(&path, ics).unwrap();
+    let handed = path.display().to_string();
+    a.open_handed(&handed);
+    match a.ui.dialog.as_ref() {
+        Some(Dialog::AddFromFile(f)) => {
+            assert_eq!((f.calendar, f.count, f.titles.as_slice()), (true, 1, ["Harvest day".to_string()].as_slice()));
+            assert_eq!(f.path, handed);
+        }
+        other => panic!("asked nothing: {other:?}"),
+    }
+    assert!(a.session.find_event("harvest@farm.example").is_none(), "nothing is added before the answer");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::AddFile(handed));
+    let added = a.session.find_event("harvest@farm.example").expect("added once agreed to").1.event.clone();
+    assert!(added.attendees.is_empty(), "and nobody is invited");
+    let _ = std::fs::remove_dir_all(dir);
+}

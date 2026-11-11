@@ -2180,3 +2180,12 @@ folder	Online Archive	Online-Archiv
 	{title} – Note	{title} – Notiz
 	These servers were found through the domain's DNS records, which nothing vouches for: {incoming} (incoming mail) and {smtp} (outgoing mail). Your password will be sent to them. Check that they are your mail provider's.	Diese Server wurden über die DNS-Einträge der Domain gefunden, für die niemand bürgt: {incoming} (eingehende E-Mails) und {smtp} (ausgehende E-Mails). Ihr Kennwort wird an sie gesendet. Prüfen Sie, ob es die Server Ihres E-Mail-Anbieters sind.
 	These are my mail provider's servers	Das sind die Server meines E-Mail-Anbieters
+	Add these events to your calendar?	Diese Termine in Ihren Kalender aufnehmen?
+	Add these people to your contacts?	Diese Personen in Ihre Kontakte aufnehmen?
+	Events in {file}: {n}	Termine in {file}: {n}
+	People in {file}: {n}	Personen in {file}: {n}
+	They go to {place} ({account}).	Sie kommen in {place} ({account}).
+	Already there, left as they are: {n}	Schon vorhanden, unverändert gelassen: {n}
+	Left out because one file adds {max} at most: {n}	Ausgelassen, weil eine Datei höchstens {max} hinzufügt: {n}
+	Nobody is invited: the guests the file names are left out.	Niemand wird eingeladen: Die in der Datei genannten Gäste werden weggelassen.
+	Add a file only when you know where it comes from.	Fügen Sie eine Datei nur hinzu, wenn Sie wissen, woher sie stammt.

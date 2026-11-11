@@ -45,7 +45,7 @@ pub use session::{
     junk::{JunkList, junk_entry},
     newer_release, parse_key,
     pim::{
-        ACCOUNT_COLOR, AgendaItem, CONFLICTS, CalMode, ConflictWords, DueReminder, EVENT_HITS_MAX, EventHit, EventWhen, Module, NoteRef, Person,
+        ACCOUNT_COLOR, AgendaItem, CONFLICTS, CalMode, ConflictWords, DueReminder, EVENT_HITS_MAX, EventHit, EventWhen, MAX_FILE_CARDS, MAX_FILE_EVENTS, Module, NoteRef, Person,
         SYNC_ISSUES, TaskChange, TaskRef, WebexAsk, WebexState, parse_local,
     },
     quick_steps::{QuickStep, StepWrite},

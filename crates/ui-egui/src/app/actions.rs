@@ -418,6 +418,7 @@ impl MailApp {
             Action::SaveItemFile(f) => self.item_file(f, false),
             Action::MakeMeetingProfile => self.make_meeting_profile(),
             Action::OpenShare(link) => self.open_share(&link),
+            Action::AddFile(path) => self.add_file(&path),
             Action::SignInAgain(id) => self.sign_in_again(&id),
             Action::OpenInCraft(i, cmd) => {
                 let Some(app) = self.ui.craft_apps.iter().find(|(c, _)| *c == cmd).map(|(_, p)| p.clone()) else { return };
