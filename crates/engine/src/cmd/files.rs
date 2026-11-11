@@ -25,8 +25,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"url": "mailto:…" (RFC 6068: to, cc, bcc, subject and body; nothing is attached)}"#),
         CommandSpec::new("file.open", "Open a mail file", "Another app › Open with Quatrelle", open_mail_file)
             .params(r#"{"path": string (.eml and .msg show the message; .ics and .vcf answer what the file holds, and add nothing)}"#),
-        CommandSpec::new("file.add", "Add a calendar or contacts file", "Another app › Open with Quatrelle (once agreed to)", add_pim_file)
-            .params(r#"{"path": string (.ics adds its events to the calendar, .vcf its people to the contacts; nobody is invited, nothing is replaced)}"#),
+        CommandSpec::new("file.add", "Add a calendar or contacts file", "Another app › Open with Quatrelle (once agreed to)", add_pim_file).params(
+            r#"{"path": string (.ics adds its events to the calendar, .vcf its people to the contacts; nobody is invited, nothing is replaced)}"#,
+        ),
         CommandSpec::new("file.addToFolder", "Add message files to a folder", "Folder pane (files dropped on a folder)", add_to_folder)
             .params(r#"{"paths": [string] (.eml and Outlook .msg files), "folder"?: string (the folder open), "account"?: string}"#),
     ]

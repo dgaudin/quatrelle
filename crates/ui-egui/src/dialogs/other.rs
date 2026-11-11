@@ -30,7 +30,8 @@ impl FileHolds {
     pub fn from_answer(v: &serde_json::Value) -> FileHolds {
         let text = |k: &str| v.get(k).and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
         let count = |k: &str| v.get(k).and_then(serde_json::Value::as_u64).unwrap_or(0);
-        let titles = v.get("titles").and_then(serde_json::Value::as_array).map(|l| l.iter().filter_map(|t| t.as_str().map(str::to_string)).take(5).collect());
+        let titles =
+            v.get("titles").and_then(serde_json::Value::as_array).map(|l| l.iter().filter_map(|t| t.as_str().map(str::to_string)).take(5).collect());
         FileHolds {
             path: text("path"),
             name: text("name"),

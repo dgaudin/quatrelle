@@ -319,7 +319,8 @@ fn data_files_are_the_owners_alone() {
     open(&file, 0o644);
     let s = Store::open_packed(t.join("app"), &files).unwrap();
     s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": [1]})).unwrap();
-    let aside = std::fs::read_dir(&files).unwrap().flatten().map(|e| e.path()).find(|p| p.to_string_lossy().ends_with(".damaged")).expect("set aside");
+    let aside =
+        std::fs::read_dir(&files).unwrap().flatten().map(|e| e.path()).find(|p| p.to_string_lossy().ends_with(".damaged")).expect("set aside");
     assert_eq!((mode(&file), mode(&aside)), (0o600, 0o600));
     drop(s);
 

@@ -137,7 +137,8 @@ fn a_video_or_a_pdf_is_decoded_only_once_asked_for() {
     assert_eq!(asked, 0, "the message shown: nothing of its video or its PDF is read");
     assert!(a.ui.video_files.is_empty() && a.ui.video_frames.is_empty());
     // The user asks for each (a click on its chip).
-    let indices: Vec<usize> = a.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.attachments.iter().map(|f| f.index).collect()).unwrap();
+    let indices: Vec<usize> =
+        a.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.attachments.iter().map(|f| f.index).collect()).unwrap();
     for i in indices {
         a.ui.ask_thumbnail(&k, i);
     }
