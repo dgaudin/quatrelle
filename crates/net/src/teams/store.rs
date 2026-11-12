@@ -5,6 +5,7 @@
 //!
 //! * `identity.json`: whose copy it is (organisation and user ids). A file of another identity is
 //!   set aside (`Teams-<short hash>.quatrelle.old`), none of its records read;
+//! * `listed.json`: the copy's first listing is over (a chat new after it is news);
 //! * `chats/<hash>.json`: a chat and how far its copy has come ([`ChatRecord`]);
 //! * `msgs/<hash>/<n>.json`: its messages, in pages of at most [`PAGE`] in creation order
 //!   (`pages.rs`);
@@ -36,6 +37,8 @@ const MAX_LINK: usize = 8 << 10;
 const MAX_PAGE_KEY: u32 = 1 << 24;
 /// The most unread messages kept of a chat (the list shows "99+" past 99 in all).
 pub(crate) const MAX_UNREAD: usize = 1_000;
+/// The record that says the copy's first listing is over.
+const LISTED: &str = "listed.json";
 
 /// Whose copy it is: the organisation's id and the user's object id, as Graph gives them.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +78,10 @@ pub(crate) struct ChatRecord {
     /// The server's time when the chat's copy began (`S`): history is read from before it.
     #[serde(default)]
     pub(crate) history_from: Option<i64>,
+    /// The oldest `lastModifiedDateTime` the history has copied: a read started again without its
+    /// link goes on from there.
+    #[serde(default)]
+    pub(crate) history_oldest: Option<i64>,
     /// The first creation time of each page of messages, oldest page first. Only
     /// [`Copy::upsert`] changes them (and `page_keys`): [`Copy::put_chat`] keeps those stored.
     #[serde(default)]
@@ -113,6 +120,7 @@ impl ChatRecord {
             watermark: None,
             next_link: None,
             history_from: None,
+            history_oldest: None,
             pages: Vec::new(),
             page_keys: Vec::new(),
             done: false,
@@ -160,6 +168,7 @@ impl ChatRecord {
             self.watermark = None;
             self.next_link = None;
             self.history_from = None;
+            self.history_oldest = None;
             self.done = false;
             self.unread.clear();
         }
@@ -280,6 +289,17 @@ impl Copy {
         let bytes = serde_json::to_vec(who).map_err(|source| StoreError::Json { path: "identity.json".into(), source })?;
         copy.store.write_account_files(TEAMS_ACCOUNT, &[("identity.json".to_string(), bytes)])?;
         Ok((copy, opened))
+    }
+
+    /// Whether the copy's first listing is over: a chat that comes after it is new, its first
+    /// message news.
+    pub(crate) fn listed(&self) -> bool {
+        self.read(LISTED).is_some_and(|b| b == b"true")
+    }
+
+    /// The copy's first listing is over.
+    pub(crate) fn set_listed(&self) -> Result<()> {
+        self.store.write_account_files(TEAMS_ACCOUNT, &[(LISTED.to_string(), b"true".to_vec())])
     }
 
     /// A record's bytes, when there are some and not too many.

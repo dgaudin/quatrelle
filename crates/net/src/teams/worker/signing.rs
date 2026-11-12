@@ -384,6 +384,8 @@ impl Worker {
             }
         }
         self.settings = TeamsSettings { client_id, tenant, object_id: who.object_id, tenant_id: who.tenant_id, ..settings };
+        // The list as the copy has it, at once, online or not.
+        crate::teams::backfill::from_copy(self);
         // No sign-in kept (no keychain last time, or its entry gone): the copy is there to read.
         let Some(refresh) = self.creds.get_secret(&keyring(), REFRESH_KEY).filter(|r| !r.is_empty()) else {
             log::info!("teams: no sign-in is kept to go on from");

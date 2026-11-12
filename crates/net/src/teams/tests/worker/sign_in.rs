@@ -273,7 +273,7 @@ fn a_busy_graph_is_never_sat_out_in_the_loop() {
     assert!(teams_of(&seen).is_empty(), "{:?}", teams_of(&seen));
     server.data.lock().unwrap().teams.as_mut().unwrap().throttle_every = None;
     w.turn(t0 + Duration::from_secs(11));
-    assert!(said(&teams_of(&seen), &Status::UpToDate), "{:?}", teams_of(&seen));
+    assert!(listed(&teams_of(&seen)), "{:?}", teams_of(&seen));
 }
 
 #[test]

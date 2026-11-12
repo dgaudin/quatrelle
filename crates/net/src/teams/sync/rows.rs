@@ -14,7 +14,7 @@ use quatrelle_model::pim::teams::{ChatKind, ChatMessage, ChatRow, EVENT_ITEMS, E
 use sha2::{Digest, Sha256};
 
 /// A chat whose row may have changed: sent at the end of the pass, or once [`EVENT_ITEMS`] wait.
-pub(super) fn dirty(w: &mut Worker, chat: &str) {
+pub(crate) fn dirty(w: &mut Worker, chat: &str) {
     if !id_ok(chat) {
         return;
     }
@@ -28,7 +28,7 @@ pub(super) fn dirty(w: &mut Worker, chat: &str) {
 
 /// The rows waiting that changed since last sent, in events of at most [`EVENT_ITEMS`]. Nothing
 /// until the user's own id is known.
-pub(super) fn flush(w: &mut Worker) {
+pub(crate) fn flush(w: &mut Worker) {
     let (me, tenant) = (w.settings.object_id.clone(), w.settings.tenant_id.clone());
     if me.is_empty() || w.sync.dirty.is_empty() {
         return;
@@ -56,7 +56,7 @@ pub(super) fn flush(w: &mut Worker) {
 
 /// A chat's messages sent, in creation order as given: `fresh`, news to announce; `older`, a page
 /// before the window.
-pub(super) fn say_messages(w: &Worker, chat: &str, messages: &[ChatMessage], fresh: bool, older: bool) {
+pub(crate) fn say_messages(w: &Worker, chat: &str, messages: &[ChatMessage], fresh: bool, older: bool) {
     for part in messages.chunks(EVENT_ITEMS) {
         w.say(Event::Messages { chat: chat.to_string(), messages: part.to_vec(), fresh, older });
     }

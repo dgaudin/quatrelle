@@ -82,13 +82,24 @@ pub(super) fn read_step(w: &mut Worker, chat: &str, now: Instant) -> Result<Read
 }
 
 /// A read begun, from the chat's watermark, or from the copy's start (`S`, the server's time
-/// when it began) for its first. Nothing without Graph's clock to hold times to.
+/// when it began) for its first. A chat new since the copy's first listing is read from its last
+/// message (the one that made it, say: a day back at most), and what that brings is news. Nothing
+/// without Graph's clock to hold times to.
 fn begin(w: &Worker, chat: &str) -> Option<Read> {
     let server = server_ms(w)?;
     let cap = server.saturating_add(CLOCK_TOLERANCE_MS);
-    let r = w.copy.as_ref()?.chat(chat)?;
-    let start = r.watermark.or(r.history_from).unwrap_or(server).min(cap);
-    Some(Read { first: r.watermark.is_none(), start, ..Read::default() })
+    let copy = w.copy.as_ref()?;
+    let r = copy.chat(chat)?;
+    let news = r.watermark.is_none() && r.history_from.is_none() && copy.listed();
+    let start = match r.watermark.or(r.history_from) {
+        Some(at) => at,
+        None if news => {
+            let last = r.chat.preview.as_ref().map(|p| p.at).or(r.chat.last_activity).unwrap_or(server);
+            last.max(server.saturating_sub(DAY_MS)).min(server)
+        }
+        None => server,
+    };
+    Some(Read { first: r.watermark.is_none() && !news, start: start.min(cap), ..Read::default() })
 }
 
 /// The next page of a read.
@@ -175,9 +186,8 @@ fn end(w: &mut Worker, chat: &str) -> Result<()> {
     let Some(copy) = &w.copy else { return Ok(()) };
     let Some(mut r) = copy.chat(chat) else { return Ok(()) };
     r.watermark = Some(read.newest.map_or(read.start, |n| n.max(read.start)).min(cap));
-    if read.first {
-        r.history_from.get_or_insert(read.start);
-    }
+    // Its history is what came before the read began.
+    r.history_from.get_or_insert(read.start);
     r.read_at = Some(server);
     let back = r.chat.unreadable.is_some() || r.chat.left;
     r.chat.unreadable = None;
@@ -191,12 +201,12 @@ fn end(w: &mut Worker, chat: &str) -> Result<()> {
 }
 
 /// Whether a failure is Graph refusing the chat itself: 403 or 404.
-fn refusal(e: &NetError) -> bool {
+pub(crate) fn refusal(e: &NetError) -> bool {
     matches!(http_code(e), Some(403 | 404))
 }
 
 /// The HTTP status of a refusal as the client writes it (`HTTP 403 Forbidden`).
-pub(super) fn http_code(e: &NetError) -> Option<u16> {
+pub(crate) fn http_code(e: &NetError) -> Option<u16> {
     let NetError::Protocol(m) = e else { return None };
     let rest = m.strip_prefix("HTTP ")?;
     let code = rest.get(..3)?;
@@ -207,7 +217,7 @@ pub(super) fn http_code(e: &NetError) -> Option<u16> {
 /// A read refused. Never read before: Graph doesn't serve this chat here; it is listed all the
 /// same and tried again a day later (server time). Read before: the user is no longer in it; it
 /// is kept, read-only, and said.
-fn refused(w: &mut Worker, chat: &str, e: &NetError) {
+pub(crate) fn refused(w: &mut Worker, chat: &str, e: &NetError) {
     let server = server_ms(w);
     let Some(copy) = &w.copy else { return };
     let Some(mut r) = copy.chat(chat) else { return };
@@ -279,7 +289,7 @@ fn strangers(w: &Worker, chat: &str, messages: &[ChatMessage]) -> Vec<String> {
 
 /// A chat's unread messages as `changed` come: one from someone else, made after the user last
 /// read the chat and not deleted, counts (once, edited or not); one deleted no longer does.
-fn count_unread(w: &Worker, chat: &str, changed: &[ChatMessage]) {
+pub(crate) fn count_unread(w: &Worker, chat: &str, changed: &[ChatMessage]) {
     if changed.is_empty() {
         return;
     }
@@ -313,7 +323,7 @@ pub(super) fn theirs(s: &Sender, me: &str) -> bool {
 
 /// Milliseconds since 1970 as a range's RFC 3339 time (`2026-10-30T09:12:34.567Z`), held to
 /// the years 1970 to 9999.
-fn rfc3339(ms: i64) -> String {
+pub(crate) fn rfc3339(ms: i64) -> String {
     let ms = ms.clamp(0, MAX_MS);
     let day = crate::graph::utc(ms.div_euclid(1000));
     format!("{}.{:03}Z", day.trim_end_matches('Z'), ms.rem_euclid(1000))

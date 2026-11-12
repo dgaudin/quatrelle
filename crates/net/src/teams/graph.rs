@@ -394,8 +394,9 @@ impl TeamsClient {
         format!("{}{path}", self.base)
     }
 
-    /// A next page's address, when it is under this client's own API address.
-    fn own(&self, next: &str) -> Result<String> {
+    /// A next page's address, when it is under this client's own API address: the only one the
+    /// token goes to (a link kept in the copy is checked by it before use).
+    pub(crate) fn own(&self, next: &str) -> Result<String> {
         let inside = next.starts_with(&format!("{}/", self.base)) && !next.chars().any(|c| c.is_whitespace() || c.is_control());
         if inside && Url::parse(next).is_ok() {
             Ok(next.to_string())

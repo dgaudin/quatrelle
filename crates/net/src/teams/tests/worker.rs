@@ -43,7 +43,7 @@ pub(super) struct Desk {
     /// Renewals are refused (the sign-in was revoked).
     refuse: AtomicBool,
     /// Nothing answers (no network).
-    offline: AtomicBool,
+    pub(super) offline: AtomicBool,
     /// Renewed tokens have run out as they come.
     short: AtomicBool,
     authorized: AtomicU32,
@@ -212,6 +212,11 @@ pub(super) fn said(seen: &[model::Event], s: &Status) -> bool {
     seen.iter().any(|e| matches!(e, model::Event::Status { status } if status == s))
 }
 
+/// The first list is read: up to date, or the first copy under way (said in its place).
+pub(super) fn listed(seen: &[model::Event]) -> bool {
+    said(seen, &Status::UpToDate) || seen.iter().any(|e| matches!(e, model::Event::Status { status: Status::Copying { .. } }))
+}
+
 fn failed(seen: &[model::Event]) -> bool {
     seen.iter().any(|e| matches!(e, model::Event::Status { status: Status::Failed { .. } }))
 }
@@ -233,7 +238,7 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 /// What the Options hold once `object` has signed in.
-fn settings(object: &str) -> TeamsSettings {
+pub(super) fn settings(object: &str) -> TeamsSettings {
     TeamsSettings {
         on: true,
         client_id: CLIENT.into(),

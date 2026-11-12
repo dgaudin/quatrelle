@@ -30,6 +30,7 @@ use quatrelle_model::pim::teams::{self, ChatMessage, Job, Status, TeamsSettings}
 use quatrelle_store::Store;
 use sha2::{Digest, Sha256};
 
+use super::backfill::{self, Backfill};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
 use super::store::Copy;
@@ -70,6 +71,8 @@ pub(crate) struct Hooks {
     pub(crate) trip_open: Arc<std::sync::atomic::AtomicU32>,
     /// The next sign-ins panic once the browser has answered, this many of them.
     pub(crate) trip_sign_in: Arc<std::sync::atomic::AtomicU32>,
+    /// The history reads of this chat panic once their page has come.
+    pub(crate) trip_history: Option<String>,
 }
 
 #[cfg(test)]
@@ -192,8 +195,10 @@ pub(crate) struct Worker {
     creds: Arc<dyn Credentials>,
     graph: String,
     authority: Arc<dyn Authority>,
+    /// Where the history stands (`backfill.rs`).
+    pub(crate) backfill: Backfill,
     #[cfg(test)]
-    hooks: Hooks,
+    pub(crate) hooks: Hooks,
 }
 
 impl Worker {
@@ -223,6 +228,7 @@ impl Worker {
             not_before: None,
             said: None,
             sync: SyncState::default(),
+            backfill: Backfill::default(),
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -337,15 +343,24 @@ impl Worker {
         }
     }
 
-    /// One step of whatever cadence is due (`sync.rs`): a request at most.
+    /// One step of whatever cadence is due (`sync.rs`), else of the history (`backfill.rs`): a
+    /// request at most.
     pub(crate) fn tick(&mut self, now: Instant) {
-        sync::tick(self, now);
+        if !sync::tick(self, now) {
+            backfill::step(self, now);
+        }
     }
 
-    /// The list is read: up to date, or connected without a keychain (which the card goes on
-    /// saying). Neither hides "Offline" or "sign in again" when they come.
+    /// The list is read: the first copy's progress while it runs, then up to date; or connected
+    /// without a keychain, which the card goes on saying, the copy running or not (Review Focus
+    /// 3). None hides "Offline" or "sign in again" when they come.
     pub(crate) fn up_to_date(&mut self) {
-        self.status(if self.no_keychain { Status::NoKeychain } else { Status::UpToDate });
+        let copying = backfill::progress(self);
+        self.status(match copying {
+            _ if self.no_keychain => Status::NoKeychain,
+            Some(copying) => copying,
+            None => Status::UpToDate,
+        });
     }
 
     /// A test's panic in the list pass, when it asked for one.
@@ -411,7 +426,7 @@ impl Worker {
     }
 
     /// Nothing is asked for a while after `e`; "Offline" when it's the network.
-    fn pause(&mut self, e: &NetError, now: Instant) {
+    pub(crate) fn pause(&mut self, e: &NetError, now: Instant) {
         if of_the_network(e) {
             self.status(Status::Offline);
         }
@@ -438,6 +453,7 @@ impl Worker {
         self.refresh = None;
         self.renewed = None;
         self.sync = SyncState::default();
+        self.backfill.reset();
         self.signing = None;
         self.held = None;
         self.not_before = None;

@@ -18,7 +18,10 @@
 //!   synchronisation runs in.
 //! * `sync`: the synchronisation: the approved cadences, each chat's incremental read, read
 //!   state, and the chats Graph refuses or the user left.
+//! * `backfill`: the first copy and the history: each chat's older messages read backwards once
+//!   the cadences are served, resumed where they stopped, under a disk guard.
 
+pub(crate) mod backfill;
 pub mod check;
 pub mod graph;
 // The worker asks it for the chat list; the rest of it is the synchronisation's (next).

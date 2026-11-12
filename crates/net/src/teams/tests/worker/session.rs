@@ -51,7 +51,7 @@ fn a_stale_token_is_renewed_once_after_a_sleep() {
     w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
     // The first pass over: the list, then its chat's members and messages.
     turn_until(&mut w, t0, "the first pass", |_| teams_of(&seen).iter().any(|e| matches!(e, model::Event::Chats { .. })));
-    assert!(said(&teams_of(&seen), &Status::UpToDate));
+    assert!(listed(&teams_of(&seen)));
     assert_eq!((desk.renewed.load(Ordering::SeqCst), hits(&server, "chats")), (0, 1));
 
     // The computer slept the night: the wall clock went on, so the token has run out, and every
@@ -103,10 +103,30 @@ fn switching_off_stops_within_a_second() {
     assert!(pages < 6, "switched off in the middle of the list: {pages} pages");
     // The worker stays for what comes next, and ends with its channel (the pool's), at once.
     r.handle.submit(Job::Start { settings: settings(ME) });
-    r.wait("the list again, once switched on", |e| said(e, &Status::UpToDate) || said(e, &Status::SignInAgain) || failed(e));
+    r.wait("the list again, once switched on", |e| listed(e) || said(e, &Status::SignInAgain) || failed(e));
     assert!(r.all_hits() > all, "switched on again, the same worker goes on");
     let Rig { handle, .. } = r;
     assert!(handle.ends_within(Duration::from_secs(1)), "still running a second after its channel closed");
+}
+
+#[test]
+fn switching_off_stops_within_a_second_during_history() {
+    // Eight pages of history, read a second apart (one read of a chat a second): the switch comes
+    // during the wait for the next one.
+    let r = rig(teams_with(vec![chat(CHAT, T0, 400)]), grant(Some(TENANT)));
+    r.sign_in("organizations");
+    let history = || {
+        let data = r.server.data.lock().unwrap();
+        data.teams.as_ref().unwrap().message_reads.iter().filter(|(_, f)| f.starts_with("lastModifiedDateTime lt ")).count()
+    };
+    let seen = r.wait("the second page of history", |e| failed(e) || history() >= 2);
+    assert!(!failed(&seen), "{seen:?}");
+    std::thread::sleep(Duration::from_millis(300));
+    let (pages, all) = (history(), r.all_hits());
+    r.handle.submit(Job::Stop);
+    std::thread::sleep(Duration::from_millis(1500));
+    assert_eq!(r.all_hits(), all, "no request after the switch: it was heard before the next page");
+    assert!(pages < 8, "switched off in the middle of the history: {pages} pages");
 }
 
 /// A keychain that notes, each time the refresh token is deleted, whether the copy's file was
@@ -247,7 +267,7 @@ fn start_again_for_the_account_going_only_takes_the_options() {
     let t0 = Instant::now();
     w.job(Job::Start { settings: settings(ME) });
     w.turn(t0);
-    assert!(said(&teams_of(&seen), &Status::UpToDate), "{:?}", teams_of(&seen));
+    assert!(listed(&teams_of(&seen)), "{:?}", teams_of(&seen));
     let before = (desk.renewed.load(Ordering::SeqCst), hits(&server, "me"), teams_of(&seen).len());
     w.job(Job::Start { settings: TeamsSettings { notify: false, object_id: ME.to_uppercase(), ..settings(ME) } });
     w.turn(t0 + Duration::from_millis(100));
@@ -289,7 +309,7 @@ fn offline_at_start_is_said_and_tried_again_without_haste() {
         w.turn(t0 + Duration::from_secs(secs));
     }
     assert_eq!(desk.renewed.load(Ordering::SeqCst), 1);
-    assert!(said(&teams_of(&seen), &Status::UpToDate), "{:?}", teams_of(&seen));
+    assert!(listed(&teams_of(&seen)), "{:?}", teams_of(&seen));
     assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY).as_deref(), Some(REFRESH), "the sign-in is still kept");
 }
 
@@ -509,7 +529,7 @@ fn the_loop_has_a_deadline_only_while_there_is_something_to_look_at() {
     // A sign-in on its way: its answer is looked for.
     w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
     assert!(w.wake(t0).is_some_and(|at| at <= t0 + Duration::from_millis(200)));
-    turn_until(&mut w, t0, "the first list", |_| said(&teams_of(&seen), &Status::UpToDate));
+    turn_until(&mut w, t0, "the first list", |_| listed(&teams_of(&seen)));
     assert!(w.wake(t0).is_some_and(|at| at > t0 && at <= t0 + Duration::from_secs(1)), "going: the next cadence");
     // Switched off, then on again with the sign-in kept, then signed out.
     w.job(Job::Stop);

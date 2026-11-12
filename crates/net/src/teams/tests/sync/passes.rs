@@ -71,12 +71,16 @@ fn one_chat_failing_slows_only_itself() {
     let mut r = run(teams);
     assert!(r.record(OTHER).watermark.is_some(), "read though its members failed");
     r.w.job(Job::Open { chat: Some(GROUP.into()) });
-    let (open, week, failing) = (r.reads(GROUP), r.reads(OTHER), r.reads(CHAT));
+    // The failing chat's incremental reads: its history waits on its own too.
+    let incremental = |r: &Run| r.fake(|t| t.message_reads.iter().filter(|(c, f)| c == CHAT && f.contains(" gt ")).count());
+    let (open, week, failing) = (r.reads(GROUP), r.reads(OTHER), incremental(&r));
     r.turns(Duration::from_secs(125));
     let open = r.reads(GROUP) - open;
     assert!(open >= 38, "the open chat every three seconds: {open} reads in 125 s");
     assert!(r.reads(OTHER) - week >= 2, "the week's pass every minute");
-    assert!(r.reads(CHAT) - failing <= 3, "the failing chat waits on its own: {} reads", r.reads(CHAT) - failing);
+    assert!(incremental(&r) - failing <= 3, "the failing chat waits on its own: {} reads", incremental(&r) - failing);
+    let history = r.fake(|t| t.message_reads.iter().filter(|(c, f)| c == CHAT && f.contains(" lt ")).count());
+    assert!(history <= 3, "and so does its history: {history} reads in 125 s");
     assert!(!r.events().contains(&model::Event::Status { status: model::Status::Offline }));
 }
 

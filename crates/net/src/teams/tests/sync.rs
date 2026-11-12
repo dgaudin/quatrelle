@@ -428,7 +428,8 @@ fn hidden_chats_are_synced_not_listed() {
     assert_eq!(ids(&r.messages(CHAT, from)), [at.to_string()]);
     assert!(r.w.copy.as_ref().unwrap().last_pages(CHAT, 2).iter().any(|m| m.id == at.to_string()), "copied");
     let row = r.row(CHAT);
-    assert!(row.hidden && row.unread == 1, "{row:?}");
+    // Ana's first message, copied by the history (the chat was last read in January), and the new one.
+    assert!(row.hidden && row.unread == 2, "{row:?}");
 }
 
 #[test]
@@ -513,5 +514,6 @@ fn incremental_reads_a_chat_a_page_a_step_to_its_end() {
     assert_eq!(ids(&r.messages(CHAT, from)).len(), 120);
     assert!(r.messages(CHAT, from).iter().all(|(m, fresh, _)| m.len() <= 50 && *fresh));
     assert_eq!(r.record(CHAT).watermark, Some(NOW + 119 * 1000));
-    assert_eq!(r.record(CHAT).unread.len(), 120);
+    // The 120, and Ana's first message, copied by the history (the chat was last read in January).
+    assert_eq!(r.record(CHAT).unread.len(), 121);
 }

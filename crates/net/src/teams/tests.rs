@@ -9,6 +9,8 @@ use super::*;
 use crate::NetError;
 use crate::fake_graph::{Data, FakeChat, FakeMessage, FakeTeams, FakeUser, Server, TOKEN, rfc3339, serve};
 
+/// The first copy and the history: resumed, refused links, the disk guard, panics.
+mod backfill;
 /// The step 0 check.
 mod check;
 /// The limiter, the cadences and the slow-down after a 429.

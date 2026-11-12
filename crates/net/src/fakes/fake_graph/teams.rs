@@ -167,6 +167,9 @@ pub(crate) struct FakeTeams {
     /// The listing of this route answers its first page whatever its link asks, each time with
     /// a link it never gave before: a server that brings nothing new.
     pub(crate) repeat_page: Option<&'static str>,
+    /// The next n reads of messages that follow a link (`$skiptoken`) are answered 400: Graph no
+    /// longer takes the link (it was kept too long).
+    pub(crate) refuse_links: u32,
 }
 
 impl FakeTeams {
@@ -532,6 +535,10 @@ impl FakeTeams {
                 }
                 if self.forbid_reads.contains(&chat.id) {
                     return Reply::error(403, "Forbidden", "Reading this chat is not allowed.");
+                }
+                if self.refuse_links > 0 && q.contains_key("$skiptoken") {
+                    self.refuse_links -= 1;
+                    return Reply::error(400, "BadRequest", "The skip token is no longer valid.");
                 }
                 let Some(chat) = self.chats.get(ci).cloned() else { return not_found() };
                 self.messages(&chat, &q, raw_path, query, base)

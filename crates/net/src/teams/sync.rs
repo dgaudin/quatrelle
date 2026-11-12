@@ -37,11 +37,12 @@ use crate::NetError;
 mod reads;
 mod rows;
 
-// The history (next) and the outbox read a chat on with it; the cadences go through `read_step`.
+// The outbox reads a chat on with `incremental`; the cadences go through `read_step`. The history
+// (`backfill.rs`) keeps what it reads as the reads do.
+use reads::{Read, ReadStep, read_members, read_step};
 #[cfg_attr(not(test), allow(unused_imports))]
-pub(crate) use reads::incremental;
-use reads::{Read, ReadStep, http_code, read_members, read_step};
-use rows::{dirty, flush, say_messages};
+pub(crate) use reads::{count_unread, http_code, incremental, refusal, refused, rfc3339};
+pub(crate) use rows::{dirty, flush, say_messages};
 
 const DAY_MS: i64 = 86_400_000;
 /// The chats read every minute: active in the last 7 days.
@@ -194,18 +195,17 @@ enum Progress {
 }
 
 /// One step of whatever cadence is due, in their order: the open chat, the list (all of it when
-/// the hour has come), the week's chats, then the hour's refresh. One request at most.
-pub(crate) fn tick(w: &mut Worker, now: Instant) {
+/// the hour has come), the week's chats, then the hour's refresh. One request at most; whether the
+/// turn is used (else the history may go).
+pub(crate) fn tick(w: &mut Worker, now: Instant) -> bool {
     // Presence comes with the pictures (next): passed until then.
     if w.limiter.due(Cadence::Presence, now) {
         w.limiter.ran(Cadence::Presence, now);
     }
     if open_step(w, now) || list_step(w, now) || active_step(w, now) {
-        return;
+        return true;
     }
-    if w.sync.hourly.is_some() {
-        run_round(w, Which::Hourly, now);
-    }
+    w.sync.hourly.is_some() && run_round(w, Which::Hourly, now)
 }
 
 /// [`Job::Open`](quatrelle_model::pim::teams::Job::Open): the chat now on screen, none for the
