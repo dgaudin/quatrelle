@@ -2216,3 +2216,14 @@ module	Conversations	交談
 	Teams: sign in again to go on	Teams：請重新登入以繼續
 	Delete that copy	刪除那份副本
 	{module}, unread: {n}	{module}，未讀：{n}
+	No conversations yet	還沒有對話
+	Search conversations	搜尋對話
+	Signing in…	正在登入…
+	Only the {n} most recent conversations are copied	只複製最近的 {n} 個對話
+	Indexing…	正在建立索引…
+	Recent conversations only	僅限最近的對話
+	No conversation found	找不到對話
+	Members: {n}	成員：{n}
+	Someone in this conversation is outside your organisation	此對話中有組織外部的人員
+	Can't be read here	無法在此閱讀
+	You're no longer in this conversation	你已不在此對話中

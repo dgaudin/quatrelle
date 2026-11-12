@@ -2213,3 +2213,14 @@ module	Conversations	对话
 	Teams: sign in again to go on	Teams：请重新登录以继续
 	Delete that copy	删除那份副本
 	{module}, unread: {n}	{module}，未读：{n}
+	No conversations yet	还没有会话
+	Search conversations	搜索会话
+	Signing in…	正在登录…
+	Only the {n} most recent conversations are copied	只复制最近的 {n} 个会话
+	Indexing…	正在建立索引…
+	Recent conversations only	仅限最近的会话
+	No conversation found	未找到会话
+	Members: {n}	成员：{n}
+	Someone in this conversation is outside your organisation	此会话中有组织外部的人员
+	Can't be read here	无法在此阅读
+	You're no longer in this conversation	你已不在此会话中

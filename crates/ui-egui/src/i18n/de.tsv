@@ -2216,3 +2216,14 @@ module	Conversations	Unterhaltungen
 	Teams: sign in again to go on	Teams: Melden Sie sich erneut an, um fortzufahren
 	Delete that copy	Diese Kopie löschen
 	{module}, unread: {n}	{module}, ungelesen: {n}
+	No conversations yet	Noch keine Unterhaltungen
+	Search conversations	Unterhaltungen durchsuchen
+	Signing in…	Anmeldung…
+	Only the {n} most recent conversations are copied	Nur die {n} neuesten Unterhaltungen werden kopiert
+	Indexing…	Indizierung…
+	Recent conversations only	Nur neuere Unterhaltungen
+	No conversation found	Keine Unterhaltung gefunden
+	Members: {n}	Mitglieder: {n}
+	Someone in this conversation is outside your organisation	Jemand in dieser Unterhaltung gehört nicht zu Ihrer Organisation
+	Can't be read here	Hier nicht lesbar
+	You're no longer in this conversation	Sie gehören dieser Unterhaltung nicht mehr an

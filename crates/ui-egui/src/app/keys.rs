@@ -114,8 +114,13 @@ impl MailApp {
                 self.new_item();
                 continue;
             }
+            // Ctrl+E: the shown module's search; in Conversations, the box over its list.
             if combo == "Mod+E" {
-                self.ui.focus_search = true;
+                if self.session.module == Module::Conversations {
+                    self.ui.conversations.focus_search = true;
+                } else {
+                    self.ui.focus_search = true;
+                }
                 continue;
             }
             // Ctrl+P prints the message read in Mail, not while one is written here. Taken, so a
@@ -147,6 +152,13 @@ impl MailApp {
                     self.ui.cal_search.query.clear();
                     continue;
                 }
+                // In Conversations, it empties its search: the list comes back.
+                if self.session.module == Module::Conversations && !self.ui.conversations.query.is_empty() {
+                    self.ui.conversations.query.clear();
+                    self.ui.conversations.search_due = None;
+                    self.run("teams.search", json!({"query": ""}));
+                    continue;
+                }
                 if self.session.search.is_some() {
                     self.ui.search_text.clear();
                     self.run("search.clear", json!({}));
@@ -175,6 +187,10 @@ impl MailApp {
                 // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
                 // messages still selected in Mail don't (Delete in the Calendar is the grid's).
                 if self.session.module != Module::Mail && acts_on_mail(id) {
+                    continue;
+                }
+                // Alt+↑/↓ go through the conversations only where they're shown.
+                if id.starts_with("teams.") && self.session.module != Module::Conversations {
                     continue;
                 }
                 if id == "search.run" {
@@ -218,6 +234,9 @@ impl MailApp {
                 self.run(id, params);
                 if moves_focus(id) {
                     self.ui.scroll_to_focus = true;
+                }
+                if matches!(id, "teams.next" | "teams.previous") {
+                    self.ui.conversations.scroll_to_open = true;
                 }
             }
         }

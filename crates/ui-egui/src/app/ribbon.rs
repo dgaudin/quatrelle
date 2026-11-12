@@ -163,6 +163,8 @@ impl MailApp {
                         }
                     });
                     groups.last(ui, &t, "Arrange");
+                } else if s.module == Module::Conversations {
+                    // Nothing to do from the ribbon yet: no new conversation from Quatrelle.
                 } else {
                     if widgets::big_accent(ui, Icon::Person, "New contact", &t, !s.accounts.is_empty()).clicked() {
                         acts.push(Action::Dialog(Dialog::new_contact()));

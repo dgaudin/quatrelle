@@ -2211,3 +2211,14 @@ module	Conversations	المحادثات
 	Teams: sign in again to go on	Teams: سجّل الدخول مجدداً للمتابعة
 	Delete that copy	حذف تلك النسخة
 	{module}, unread: {n}	{module}، غير مقروءة: {n}
+	No conversations yet	لا توجد محادثات بعد
+	Search conversations	البحث في المحادثات
+	Signing in…	جارٍ تسجيل الدخول…
+	Only the {n} most recent conversations are copied	تُنسخ أحدث {n} محادثة فقط
+	Indexing…	جارٍ الفهرسة…
+	Recent conversations only	المحادثات الحديثة فقط
+	No conversation found	لم يُعثر على أي محادثة
+	Members: {n}	الأعضاء: {n}
+	Someone in this conversation is outside your organisation	يوجد في هذه المحادثة شخص من خارج مؤسستك
+	Can't be read here	لا يمكن قراءتها هنا
+	You're no longer in this conversation	لم تعد مشاركًا في هذه المحادثة

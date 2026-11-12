@@ -100,6 +100,11 @@ impl TeamsState {
         self.index.contains_key(chat)
     }
 
+    /// A chat's row, by its id.
+    pub fn row(&self, chat: &str) -> Option<&ChatRow> {
+        self.index.get(chat).and_then(|&i| self.rows.get(i))
+    }
+
     /// The listed rows (not hidden), in the list's order.
     pub fn listed(&self) -> impl Iterator<Item = &ChatRow> {
         self.rows.iter().filter(|r| !r.hidden)

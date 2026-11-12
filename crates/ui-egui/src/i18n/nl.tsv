@@ -2212,3 +2212,14 @@ module	Conversations	Gesprekken
 	Teams: sign in again to go on	Teams: meld je opnieuw aan om verder te gaan
 	Delete that copy	Die kopie verwijderen
 	{module}, unread: {n}	{module}, ongelezen: {n}
+	No conversations yet	Nog geen gesprekken
+	Search conversations	Gesprekken doorzoeken
+	Signing in…	Aanmelden…
+	Only the {n} most recent conversations are copied	Alleen de {n} meest recente gesprekken worden gekopieerd
+	Indexing…	Indexeren…
+	Recent conversations only	Alleen recente gesprekken
+	No conversation found	Geen gesprek gevonden
+	Members: {n}	Leden: {n}
+	Someone in this conversation is outside your organisation	Iemand in dit gesprek hoort niet bij je organisatie
+	Can't be read here	Hier niet leesbaar
+	You're no longer in this conversation	Je neemt niet meer deel aan dit gesprek

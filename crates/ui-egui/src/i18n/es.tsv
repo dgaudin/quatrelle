@@ -2216,3 +2216,14 @@ module	Conversations	Conversaciones
 	Teams: sign in again to go on	Teams: vuelva a iniciar sesión para continuar
 	Delete that copy	Eliminar esa copia
 	{module}, unread: {n}	{module}, sin leer: {n}
+	No conversations yet	Aún no hay conversaciones
+	Search conversations	Buscar en las conversaciones
+	Signing in…	Iniciando sesión…
+	Only the {n} most recent conversations are copied	Solo se copian las {n} conversaciones más recientes
+	Indexing…	Indexando…
+	Recent conversations only	Solo conversaciones recientes
+	No conversation found	No se encontró ninguna conversación
+	Members: {n}	Miembros: {n}
+	Someone in this conversation is outside your organisation	Alguien de esta conversación no pertenece a tu organización
+	Can't be read here	No se puede leer aquí
+	You're no longer in this conversation	Ya no formas parte de esta conversación

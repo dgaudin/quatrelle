@@ -478,8 +478,8 @@ impl MailApp {
                     Module::People => people::nav(&self.session, &mut self.ui, ui, &mut acts),
                     Module::Notes => notes::nav(&self.session, &mut self.ui, ui, &mut acts),
                     Module::Tasks => tasks::nav(&self.session, &mut self.ui, ui, &mut acts),
-                    // Its list is drawn with the module's panes.
-                    Module::Conversations => {}
+                    // The conversations, where the folders are in Mail.
+                    Module::Conversations => conversations::list(&self.session, &mut self.ui, ui, &mut acts),
                 }
             });
             // Dragged narrower than it goes: minimized, as the button does.

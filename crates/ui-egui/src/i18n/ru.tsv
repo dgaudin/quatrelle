@@ -2215,3 +2215,14 @@ module	Conversations	Беседы
 	Teams: sign in again to go on	Teams: войдите снова, чтобы продолжить
 	Delete that copy	Удалить эту копию
 	{module}, unread: {n}	{module}, непрочитанных: {n}
+	No conversations yet	Бесед пока нет
+	Search conversations	Поиск по беседам
+	Signing in…	Вход…
+	Only the {n} most recent conversations are copied	Копируются только {n} самых последних бесед
+	Indexing…	Индексирование…
+	Recent conversations only	Только недавние беседы
+	No conversation found	Беседа не найдена
+	Members: {n}	Участники: {n}
+	Someone in this conversation is outside your organisation	Кто-то в этой беседе не из вашей организации
+	Can't be read here	Здесь не прочитать
+	You're no longer in this conversation	Вы больше не участвуете в этой беседе

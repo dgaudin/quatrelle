@@ -2214,3 +2214,14 @@ module	Conversations	대화
 	Teams: sign in again to go on	Teams: 계속하려면 다시 로그인하세요
 	Delete that copy	그 사본 삭제
 	{module}, unread: {n}	{module}, 읽지 않음: {n}
+	No conversations yet	아직 대화가 없습니다
+	Search conversations	대화 검색
+	Signing in…	로그인 중…
+	Only the {n} most recent conversations are copied	최근 대화 {n}개만 복사됩니다
+	Indexing…	색인 생성 중…
+	Recent conversations only	최근 대화만
+	No conversation found	대화를 찾을 수 없음
+	Members: {n}	멤버: {n}
+	Someone in this conversation is outside your organisation	이 대화에 조직 외부 사람이 있습니다
+	Can't be read here	여기서 읽을 수 없음
+	You're no longer in this conversation	더 이상 이 대화에 참여하고 있지 않습니다

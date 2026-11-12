@@ -38,41 +38,44 @@ impl MailApp {
                 .stroke(egui::Stroke::new(1.0, t.border))
                 .corner_radius(4)
                 .inner_margin(Margin::symmetric(8, 3));
-            frame.show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
-                    icons::paint(ui.painter(), r, Icon::Search, t.dim);
-                    // In the Calendar, People, Tasks and Notes it searches those (as Outlook's box
-                    // searches where you are).
-                    let module = self.session.module;
-                    if matches!(module, Module::Calendar | Module::People | Module::Tasks | Module::Notes) {
-                        let focus = std::mem::take(&mut self.ui.focus_search);
-                        let (query, hint) = match module {
-                            Module::Calendar => (&mut self.ui.cal_search.query, tl!("Search calendar (location:, organizer:, after:…)")),
-                            Module::People => (&mut self.ui.people_query, tl!("Search people")),
-                            Module::Tasks => (&mut self.ui.tasks.query, tl!("Search tasks")),
-                            _ => (&mut self.ui.notes_query, tl!("Search notes")),
-                        };
-                        let resp = ui.add(
-                            egui::TextEdit::singleline(query)
-                                .hint_text(hint)
-                                .frame(egui::Frame::NONE)
-                                .align(egui::Align2::LEFT_CENTER)
-                                .desired_width(search_w - 60.0)
-                                .text_color(t.text),
-                        );
-                        if focus {
-                            resp.request_focus();
+            // Conversations has its own box, over its list.
+            if self.session.module != Module::Conversations {
+                frame.show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+                        icons::paint(ui.painter(), r, Icon::Search, t.dim);
+                        // In the Calendar, People, Tasks and Notes it searches those (as Outlook's box
+                        // searches where you are).
+                        let module = self.session.module;
+                        if matches!(module, Module::Calendar | Module::People | Module::Tasks | Module::Notes) {
+                            let focus = std::mem::take(&mut self.ui.focus_search);
+                            let (query, hint) = match module {
+                                Module::Calendar => (&mut self.ui.cal_search.query, tl!("Search calendar (location:, organizer:, after:…)")),
+                                Module::People => (&mut self.ui.people_query, tl!("Search people")),
+                                Module::Tasks => (&mut self.ui.tasks.query, tl!("Search tasks")),
+                                _ => (&mut self.ui.notes_query, tl!("Search notes")),
+                            };
+                            let resp = ui.add(
+                                egui::TextEdit::singleline(query)
+                                    .hint_text(hint)
+                                    .frame(egui::Frame::NONE)
+                                    .align(egui::Align2::LEFT_CENTER)
+                                    .desired_width(search_w - 60.0)
+                                    .text_color(t.text),
+                            );
+                            if focus {
+                                resp.request_focus();
+                            }
+                            // Escape empties the calendar's (the shortcuts' Escape, wherever the focus is).
+                            if !query.is_empty() && widgets::tiny_icon_button(ui, Icon::Close, "Clear search", &t).clicked() {
+                                query.clear();
+                            }
+                            return;
                         }
-                        // Escape empties the calendar's (the shortcuts' Escape, wherever the focus is).
-                        if !query.is_empty() && widgets::tiny_icon_button(ui, Icon::Close, "Clear search", &t).clicked() {
-                            query.clear();
-                        }
-                        return;
-                    }
-                    self.search_box(ui, search_w, acts);
+                        self.search_box(ui, search_w, acts);
+                    });
                 });
-            });
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let dark = t.dark;
                 let (icon, tip) = if dark { (Icon::Sun, tl!("Switch to light mode")) } else { (Icon::Moon, tl!("Switch to dark mode")) };
@@ -387,7 +390,12 @@ pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<A
             badge(ui, t, r, n);
         }
         if resp.on_hover_text(shown).clicked() {
-            acts.push(Action::Run("view.module", json!({"name": code})));
+            // Signed out, Conversations can't be shown: File › Options, where Teams is signed in.
+            if m == Module::Conversations && !s.prefs.teams.signed_in {
+                acts.push(Action::Backstage(backstage::Page::Options));
+            } else {
+                acts.push(Action::Run("view.module", json!({"name": code})));
+            }
         }
     }
 }
