@@ -24,14 +24,14 @@
 //! computer's.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use quatrelle_model::pim::teams::{CHAT_PAGES, CLOCK_TOLERANCE_MS, Chat, MAX_CHATS, Sender};
+use quatrelle_model::pim::teams::{CHAT_PAGES, CLOCK_TOLERANCE_MS, Chat, MAX_CHATS, Sender, Status};
 
 use super::graph::{Page, chat_of};
 use super::limits::{Cadence, Route};
 use super::store::{ChatRecord, chat_hash, id_ok};
-use super::worker::{Worker, kind};
+use super::worker::{Worker, busy, kind, of_the_network};
 use crate::NetError;
 
 mod reads;
@@ -40,7 +40,7 @@ mod rows;
 // The history (next) and the outbox read a chat on with it; the cadences go through `read_step`.
 #[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use reads::incremental;
-use reads::{Read, ReadStep, read_members, read_step};
+use reads::{Read, ReadStep, http_code, read_members, read_step};
 use rows::{dirty, flush, say_messages};
 
 const DAY_MS: i64 = 86_400_000;
@@ -56,6 +56,13 @@ const MAX_LINK: usize = 8 << 10;
 const MAX_PAGE_ITEMS: usize = 200;
 /// The most (chat, sender) pairs remembered as looked for among the members.
 const MAX_LOOKED: usize = 10_000;
+/// A chat's members or messages failing (not refused): not asked again for this long, doubled at
+/// each failure up to [`BACK_OFF_MAX`]; the other chats go on meanwhile.
+const BACK_OFF: Duration = Duration::from_secs(30);
+const BACK_OFF_MAX: Duration = Duration::from_secs(3600);
+/// The chat list refused (403, an account without Teams): asked again an hour later.
+const LIST_RETRY: Duration = Duration::from_secs(3600);
+const NO_CHATS: &str = "Teams didn't give this account's chats (403): sign in with the account you use Teams with";
 
 /// What the synchronisation holds between two steps, in memory only: what has to last is in the
 /// copy. Every collection is bounded (by [`MAX_CHATS`], [`MAX_LOOKED`], or a few reads).
@@ -67,6 +74,13 @@ pub(crate) struct SyncState {
     active: Option<Round>,
     /// The chat on screen's read under way.
     open: Option<Round>,
+    /// The hourly refresh under way: the month's chats, and older ones once a week, their members
+    /// and messages read again; after the other cadences, never holding them.
+    hourly: Option<Round>,
+    /// Chats' members or messages that failed, waiting on their own (keyed hashes).
+    backoff: HashMap<u64, Backoff>,
+    /// The chat list was refused: not asked again before then.
+    list_refused: Option<Instant>,
     /// A chat was just opened: an older one's members are read again with its first read.
     opening: bool,
     /// The chats' reads under way, by chat.
@@ -90,7 +104,31 @@ impl SyncState {
         self.pass = None;
         self.active = None;
         self.open = None;
+        self.hourly = None;
         self.reads.clear();
+    }
+}
+
+/// A chat's work that failed: not asked again before `until`; `fails` in a row.
+#[derive(Clone, Copy)]
+struct Backoff {
+    until: Instant,
+    fails: u32,
+}
+
+/// What of a chat failed.
+#[derive(Clone, Copy)]
+enum Work {
+    Members,
+    Messages,
+}
+
+impl Work {
+    fn what(self) -> &'static str {
+        match self {
+            Work::Members => "its members",
+            Work::Messages => "its messages",
+        }
     }
 }
 
@@ -114,6 +152,8 @@ struct Pass {
     /// user's.
     ended: bool,
     round: Round,
+    /// The hourly refresh found by the whole list's pages.
+    refresh: VecDeque<Task>,
 }
 
 /// A cadence's chats to go through, in order.
@@ -142,6 +182,7 @@ enum Which {
     Open,
     List,
     Active,
+    Hourly,
 }
 
 /// What a step of a chat's work did.
@@ -152,17 +193,19 @@ enum Progress {
     Next,
 }
 
-/// One step of whatever cadence is due, in their order: the open chat, the list (the hourly pass
-/// when that's due), the week's chats. One request at most.
+/// One step of whatever cadence is due, in their order: the open chat, the list (all of it when
+/// the hour has come), the week's chats, then the hour's refresh. One request at most.
 pub(crate) fn tick(w: &mut Worker, now: Instant) {
     // Presence comes with the pictures (next): passed until then.
     if w.limiter.due(Cadence::Presence, now) {
         w.limiter.ran(Cadence::Presence, now);
     }
-    if open_step(w, now) || list_step(w, now) {
+    if open_step(w, now) || list_step(w, now) || active_step(w, now) {
         return;
     }
-    active_step(w, now);
+    if w.sync.hourly.is_some() {
+        run_round(w, Which::Hourly, now);
+    }
 }
 
 /// [`Job::Open`](quatrelle_model::pim::teams::Job::Open): the chat now on screen, none for the
@@ -219,8 +262,21 @@ fn open_step(w: &mut Worker, now: Instant) -> bool {
     run_round(w, Which::Open, now)
 }
 
-/// The list: a page a step, then the chats it found that need reading.
+/// The list: a page a step, then the chats it found that need reading. Refused (403: an account
+/// without Teams), it is said, and asked again an hour later.
 fn list_step(w: &mut Worker, now: Instant) -> bool {
+    if let Some(until) = w.sync.list_refused {
+        if now < until {
+            // Passed meanwhile, so that they don't hold the loop's deadline.
+            for c in [Cadence::List, Cadence::Hourly] {
+                if w.limiter.due(c, now) {
+                    w.limiter.ran(c, now);
+                }
+            }
+            return false;
+        }
+        w.sync.list_refused = None;
+    }
     if w.sync.pass.is_none() {
         let hourly = w.limiter.due(Cadence::Hourly, now);
         if !hourly && !w.limiter.due(Cadence::List, now) {
@@ -237,6 +293,7 @@ fn list_step(w: &mut Worker, now: Instant) -> bool {
             hashes: HashSet::new(),
             ended: false,
             round: Round::default(),
+            refresh: VecDeque::new(),
         });
     }
     if w.sync.pass.as_ref().is_some_and(|p| p.listed) {
@@ -249,7 +306,15 @@ fn list_step(w: &mut Worker, now: Instant) -> bool {
     w.trip_list();
     let next = w.sync.pass.as_ref().and_then(|p| p.next.clone());
     match w.request(Route::ChatList, now, |c| c.chats(next.as_deref())) {
-        Ok(page) => listed(w, page),
+        Ok(page) => listed(w, page, now),
+        Err(e) if http_code(&e) == Some(403) => {
+            log::warn!("teams: the list of conversations was refused ({}); asked again in an hour", kind(&e));
+            w.sync.pass = None;
+            w.sync.list_refused = now.checked_add(LIST_RETRY);
+            w.limiter.ran(Cadence::List, now);
+            w.limiter.ran(Cadence::Hourly, now);
+            w.status(Status::Failed { why: NO_CHATS.into() });
+        }
         Err(e) => w.failed(Cadence::List, "the list of conversations", &e, now),
     }
     true
@@ -283,6 +348,7 @@ fn cadence_of(which: Which) -> Cadence {
         Which::Open => Cadence::Open,
         Which::List => Cadence::List,
         Which::Active => Cadence::Active,
+        Which::Hourly => Cadence::Hourly,
     }
 }
 
@@ -291,6 +357,7 @@ fn round(w: &mut Worker, which: Which) -> Option<&mut Round> {
         Which::Open => w.sync.open.as_mut(),
         Which::List => w.sync.pass.as_mut().map(|p| &mut p.round),
         Which::Active => w.sync.active.as_mut(),
+        Which::Hourly => w.sync.hourly.as_mut(),
     }
 }
 
@@ -321,13 +388,13 @@ fn finish(w: &mut Worker, which: Which, now: Instant) {
     match which {
         Which::Open => w.sync.open = None,
         Which::Active => w.sync.active = None,
-        Which::List => {
-            if w.sync.pass.take().is_some_and(|p| p.whole) {
-                w.limiter.ran(Cadence::Hourly, now);
-            }
-        }
+        Which::List => w.sync.pass = None,
+        // The hour's cadence ran when its list was read.
+        Which::Hourly => w.sync.hourly = None,
     }
-    w.limiter.ran(cadence_of(which), now);
+    if !matches!(which, Which::Hourly) {
+        w.limiter.ran(cadence_of(which), now);
+    }
     flush(w);
 }
 
@@ -339,9 +406,10 @@ fn done(w: &mut Worker, which: Which, chat: &str) {
     dirty(w, chat);
 }
 
-/// One step of a chat's work: its members, then its messages.
+/// One step of a chat's work: its members, then its messages. A part that failed (not refused)
+/// waits on its own ([`BACK_OFF`]) and the rest goes on: its messages are read though its members
+/// failed, and the other chats aren't held for it.
 fn task_step(w: &mut Worker, which: Which, task: &Task, now: Instant) -> Progress {
-    let cadence = cadence_of(which);
     if task.guarded {
         let closed = w.copy.as_ref().and_then(|c| c.chat(&task.chat)).is_none_or(|r| r.chat.left || r.chat.unreadable.is_some());
         if closed {
@@ -350,42 +418,98 @@ fn task_step(w: &mut Worker, which: Which, task: &Task, now: Instant) -> Progres
         }
     }
     if task.members {
-        if !w.may(Route::Members, now) {
+        if !backed_off(w, Work::Members, &task.chat, now) {
+            if !w.may(Route::Members, now) {
+                return Progress::Asked;
+            }
+            let goes_on = match read_members(w, &task.chat, task.updated, now) {
+                Ok(()) => {
+                    forgive(w, Work::Members, &task.chat);
+                    true
+                }
+                Err(e) => failed(w, which, Work::Members, &task.chat, &e, now),
+            };
+            match round(w, which).and_then(|r| r.todo.front_mut()) {
+                Some(t) if task.read && goes_on => t.members = false,
+                _ => done(w, which, &task.chat),
+            }
             return Progress::Asked;
         }
-        match read_members(w, &task.chat, task.updated, now) {
-            Ok(()) => match round(w, which).and_then(|r| r.todo.front_mut()) {
-                Some(t) if task.read => t.members = false,
-                _ => done(w, which, &task.chat),
-            },
-            Err(e) => {
-                w.failed(cadence, "the members of a conversation", &e, now);
-                done(w, which, &task.chat);
-            }
+        if let Some(t) = round(w, which).and_then(|r| r.todo.front_mut()) {
+            t.members = false;
         }
-        return Progress::Asked;
     }
-    if !task.read {
+    if !task.read || backed_off(w, Work::Messages, &task.chat, now) {
         done(w, which, &task.chat);
         return Progress::Next;
     }
     match read_step(w, &task.chat, now) {
         Ok(ReadStep::Asked) => Progress::Asked,
         Ok(ReadStep::Over { asked }) => {
+            forgive(w, Work::Messages, &task.chat);
             done(w, which, &task.chat);
             if asked { Progress::Asked } else { Progress::Next }
         }
         Err(e) => {
-            w.failed(cadence, "the messages of a conversation", &e, now);
+            failed(w, which, Work::Messages, &task.chat, &e, now);
             done(w, which, &task.chat);
             Progress::Asked
         }
     }
 }
 
+/// A chat's members or messages failed (not refused). The network's failure holds everything (it
+/// is said, and tried again in a while); Graph asking to wait holds everything for its
+/// `Retry-After` and slows the cadence; anything else is that chat's alone. The chat's part waits
+/// on its own, but for the network's. Whether its work goes on (the messages after the members).
+fn failed(w: &mut Worker, which: Which, work: Work, chat: &str, e: &NetError, now: Instant) -> bool {
+    let what = format!("{} of a conversation", work.what().trim_start_matches("its "));
+    if of_the_network(e) || matches!(e, NetError::Auth(_)) {
+        w.failed(cadence_of(which), &what, e, now);
+        return false;
+    }
+    if busy(e) {
+        w.failed(cadence_of(which), &what, e, now);
+    }
+    let wait = back_off(w, work, chat, now);
+    log::warn!("teams: conversation {}: {} failed ({}); asked again in {} s", w.hashed(chat), work.what(), kind(e), wait.as_secs());
+    true
+}
+
+fn backoff_key(w: &Worker, work: Work, chat: &str) -> u64 {
+    w.key_of(&format!("{}\0{chat}", work.what()))
+}
+
+/// Whether a chat's part waits after failing.
+fn backed_off(w: &Worker, work: Work, chat: &str, now: Instant) -> bool {
+    w.sync.backoff.get(&backoff_key(w, work, chat)).is_some_and(|b| now < b.until)
+}
+
+/// A chat's part failed once more: how long it waits.
+fn back_off(w: &mut Worker, work: Work, chat: &str, now: Instant) -> Duration {
+    let key = backoff_key(w, work, chat);
+    let s = &mut w.sync.backoff;
+    let fails = s.get(&key).map_or(0, |b| b.fails).saturating_add(1);
+    let wait = BACK_OFF.saturating_mul(1u32.checked_shl(fails.saturating_sub(1)).unwrap_or(u32::MAX)).min(BACK_OFF_MAX);
+    if !s.contains_key(&key) && s.len() >= MAX_CHATS {
+        s.retain(|_, b| now < b.until);
+        if s.len() >= MAX_CHATS {
+            s.clear();
+        }
+    }
+    s.insert(key, Backoff { until: now.checked_add(wait).unwrap_or(now), fails });
+    wait
+}
+
+/// A chat's part went through: no more waiting for it.
+fn forgive(w: &mut Worker, work: Work, chat: &str) {
+    let key = backoff_key(w, work, chat);
+    w.sync.backoff.remove(&key);
+}
+
 /// A page of the list read: each chat kept, what it needs noted; the next page, or the listing's
 /// end (the list is up to date, and at the hourly pass the chats it lacks are left).
-fn listed(w: &mut Worker, page: Page) {
+fn listed(w: &mut Worker, page: Page, now: Instant) {
     let chats: Vec<Chat> = page.items.iter().take(MAX_PAGE_ITEMS).filter_map(chat_of).filter(|c| id_ok(&c.id)).collect();
     let (had_next, next_key) = (page.next.is_some(), page.next.as_deref().map(|n| w.key_of(n)));
     let (mut fresh, mut reached, mut capped) = (false, false, false);
@@ -411,11 +535,24 @@ fn listed(w: &mut Worker, page: Page) {
             s.activity.insert(chat.id.clone(), chat.last_activity);
         }
         s.newest = s.newest.max(chat.last_activity);
-        let (id, write, task) = take_chat(w, chat, whole);
+        let (id, write, task, refresh) = take_chat(w, chat, whole);
         writes.extend(write);
         match (task, w.sync.pass.as_mut()) {
-            (Some(task), Some(pass)) => pass.round.todo.push_back(task),
-            _ => rows.push(id),
+            // New activity: read now, refreshed with it when the hour asks.
+            (Some(mut task), Some(pass)) => {
+                if refresh {
+                    task.members = true;
+                    task.read = true;
+                }
+                pass.round.todo.push_back(task);
+            }
+            (None, Some(pass)) => {
+                if refresh {
+                    pass.refresh.push_back(Task { chat: id.clone(), members: true, updated: None, read: true, guarded: true });
+                }
+                rows.push(id);
+            }
+            (_, None) => rows.push(id),
         }
     }
     // The page's chats kept in one go; then their rows (read back from the copy).
@@ -437,19 +574,30 @@ fn listed(w: &mut Worker, page: Page) {
     pass.listed = true;
     pass.ended = !had_next && !capped && !pass.seen.is_empty();
     let (whole, ended, count, pages) = (pass.whole, pass.ended, pass.seen.len(), pass.pages);
+    let refresh = std::mem::take(&mut pass.refresh);
     log::info!("teams: {count} conversations listed in {pages} pages");
     w.up_to_date();
-    if whole && ended {
-        left_behind(w);
+    if whole {
+        // The hour's pass: its refresh goes after the other cadences, a request a step.
+        w.limiter.ran(Cadence::Hourly, now);
+        match &mut w.sync.hourly {
+            Some(_) => log::info!("teams: the last hour's refresh isn't over; {} conversations wait for the next", refresh.len()),
+            None if !refresh.is_empty() => w.sync.hourly = Some(Round { todo: refresh }),
+            None => {}
+        }
+        if ended {
+            left_behind(w);
+        }
     }
     flush(w);
 }
 
 /// A chat as the list gives it: the list's fields (read state, hidden, topic, preview) over what
 /// the copy has, whose members, `lastUpdatedDateTime` (until the members are read again) and
-/// refused or left marks stay. Its id, its record when that changed (to be written), and what it
-/// needs (members, a read; none: only its row).
-fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecord>, Option<Task>) {
+/// refused or left marks stay. Its id, its record when that changed (to be written), what it
+/// needs now (members, a read; none: only its row), and whether the hour's refresh is its (the
+/// month's chats, older ones once a week).
+fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecord>, Option<Task>, bool) {
     let server = server_ms(w);
     let stored = w.copy.as_ref().and_then(|c| c.chat(&listed.id));
     let updated = listed.updated;
@@ -470,19 +618,16 @@ fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecor
         Some(Sender::User { id, .. }) => !r.chat.members.iter().any(|m| m.user_id == *id) && !looked(w, &r.chat.id, id),
         _ => false,
     };
-    let mut members = moved || stranger;
-    let mut read = wants_read(&r, before, server);
-    if whole && !r.chat.left && r.chat.unreadable.is_none() && server.is_some() {
-        let month = recent(r.chat.last_activity, server, MONTH_MS);
-        let week = r.read_at.is_none_or(|t| !recent(Some(t), server, WEEK_MS));
-        if month || week {
-            members = true;
-            read = true;
-        }
-    }
+    let members = moved || stranger;
+    let read = wants_read(&r, before, server);
+    let refresh = whole
+        && !r.chat.left
+        && r.chat.unreadable.is_none()
+        && server.is_some()
+        && (recent(r.chat.last_activity, server, MONTH_MS) || r.read_at.is_none_or(|t| !recent(Some(t), server, WEEK_MS)));
     let task = (members || read).then(|| Task { chat: r.chat.id.clone(), members, updated: moved.then_some(updated), read, guarded: false });
     let write = (stored.as_ref() != Some(&r)).then(|| r.clone());
-    (r.chat.id, write, task)
+    (r.chat.id, write, task, refresh)
 }
 
 /// A listed chat over the copy's: the copy's members, refused or left marks and

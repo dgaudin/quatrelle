@@ -125,6 +125,8 @@ pub(crate) struct FakeTeams {
     pub(crate) forbid_reads: Vec<String>,
     /// Chats (their ids) whose members' read is refused with 403.
     pub(crate) forbid_members: Vec<String>,
+    /// The chat list itself is refused with 403 (an account without Teams).
+    pub(crate) forbid_list: bool,
     /// People's photos by user id; anyone else has none (404).
     pub(crate) photos: HashMap<String, Vec<u8>>,
     /// People's availability (`Available`, `Busy`, …) by user id; anyone else's is
@@ -686,6 +688,9 @@ impl FakeTeams {
         if self.throttle_once == Some(name) {
             self.throttle_once = None;
             return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
+        }
+        if self.forbid_list && name == "chats" && authorized {
+            return Some(Reply::error(403, "Forbidden", "This account has no Teams chats."));
         }
         let counted: u32 = self.hits.iter().filter(|(k, _)| *k != "download").map(|(_, n)| *n).sum();
         if counted > self.throttle_from && self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {

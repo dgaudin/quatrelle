@@ -399,7 +399,7 @@ impl Worker {
             return;
         }
         log::warn!("teams: {what} failed: {}", kind(e));
-        if matches!(e, NetError::Closed(m) if m.starts_with("HTTP 429") || m.starts_with("HTTP 503")) {
+        if busy(e) {
             let wait = self.client.as_ref().and_then(TeamsClient::retry_after);
             self.limiter.throttled(cadence, wait, now);
             if let Some(until) = now.checked_add(retry_wait(wait)) {
@@ -412,7 +412,7 @@ impl Worker {
 
     /// Nothing is asked for a while after `e`; "Offline" when it's the network.
     fn pause(&mut self, e: &NetError, now: Instant) {
-        if matches!(e, NetError::Io(_) | NetError::Tls(_)) || matches!(e, NetError::Closed(m) if !http_status(m)) {
+        if of_the_network(e) {
             self.status(Status::Offline);
         }
         self.not_before = now.checked_add(RETRY);
@@ -488,6 +488,17 @@ pub(super) fn kind(e: &NetError) -> String {
         NetError::Store(_) => "the local copy".into(),
         _ => "refused".into(),
     }
+}
+
+/// Whether a failure is Graph asking to wait: a 429 or a 503.
+pub(super) fn busy(e: &NetError) -> bool {
+    matches!(e, NetError::Closed(m) if m.starts_with("HTTP 429") || m.starts_with("HTTP 503"))
+}
+
+/// Whether a failure is the network's (no connection, the secure connection, a connection that
+/// closed): nothing of Teams can be asked, whatever is asked.
+pub(super) fn of_the_network(e: &NetError) -> bool {
+    matches!(e, NetError::Io(_) | NetError::Tls(_)) || matches!(e, NetError::Closed(m) if !http_status(m))
 }
 
 /// Whether an error's text is only `HTTP <status>` and an error code, as the client writes them.

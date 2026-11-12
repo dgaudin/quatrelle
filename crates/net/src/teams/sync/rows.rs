@@ -64,7 +64,8 @@ pub(super) fn say_messages(w: &Worker, chat: &str, messages: &[ChatMessage], fre
 
 /// What the list shows of a chat, `me` being the user and `tenant` their organisation. Its unread
 /// count is the copy's; when the copy has none of them, its preview says whether it's unread (a
-/// chat Graph doesn't serve has only that).
+/// chat Graph doesn't serve has only that). It is External while its members are unknown
+/// (refused): nobody in it is proven of the organisation.
 fn row_of(r: &ChatRecord, me: &str, tenant: &str) -> ChatRow {
     let c = &r.chat;
     let others = || c.members.iter().filter(|m| !m.user_id.eq_ignore_ascii_case(me));
@@ -81,7 +82,7 @@ fn row_of(r: &ChatRecord, me: &str, tenant: &str) -> ChatRow {
         hidden: c.hidden,
         left: c.left,
         unreadable: c.unreadable.is_some(),
-        external: others().any(|m| !is_internal(m, tenant)),
+        external: c.members.is_empty() || others().any(|m| !is_internal(m, tenant)),
         members: u32::try_from(c.members.len()).unwrap_or(u32::MAX),
         person: if c.kind == ChatKind::OneOnOne { others().next().map(|m| m.user_id.clone()) } else { None },
     }

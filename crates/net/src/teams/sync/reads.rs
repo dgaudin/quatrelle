@@ -192,8 +192,16 @@ fn end(w: &mut Worker, chat: &str) -> Result<()> {
 
 /// Whether a failure is Graph refusing the chat itself: 403 or 404.
 fn refusal(e: &NetError) -> bool {
-    let NetError::Protocol(m) = e else { return false };
-    ["HTTP 403", "HTTP 404"].iter().any(|s| m == s || m.strip_prefix(s).is_some_and(|rest| rest.starts_with(' ')))
+    matches!(http_code(e), Some(403 | 404))
+}
+
+/// The HTTP status of a refusal as the client writes it (`HTTP 403 Forbidden`).
+pub(super) fn http_code(e: &NetError) -> Option<u16> {
+    let NetError::Protocol(m) = e else { return None };
+    let rest = m.strip_prefix("HTTP ")?;
+    let code = rest.get(..3)?;
+    let after = rest.get(3..)?;
+    (code.bytes().all(|b| b.is_ascii_digit()) && (after.is_empty() || after.starts_with(' '))).then(|| code.parse().ok()).flatten()
 }
 
 /// A read refused. Never read before: Graph doesn't serve this chat here; it is listed all the

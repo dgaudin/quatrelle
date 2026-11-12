@@ -287,6 +287,8 @@ fn members_refused_name_falls_back() {
     assert_eq!(r.row(GROUP).name, NO_NAME, "an untitled group, its members refused");
     assert_eq!(r.row(OTHER).name, "Roadmap", "its topic");
     assert_eq!(r.row(CHAT).name, NO_NAME, "a one-to-one chat whose members are refused");
+    // Nobody proven of the organisation: External, until the members say otherwise.
+    assert!([GROUP, OTHER, CHAT].iter().all(|c| r.row(c).external), "{:?}", r.rows());
     assert_eq!(r.hits("members"), 3, "each asked once");
     // Read all the same.
     assert!(r.record(GROUP).watermark.is_some());
