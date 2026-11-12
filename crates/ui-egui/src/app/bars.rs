@@ -356,7 +356,9 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
 pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<Action>) {
     ui.spacing_mut().item_spacing.y = 4.0;
     let module = s.module;
-    let teams = s.prefs.teams.on.then_some((Module::Conversations, Icon::Conversations, "Conversations", "conversations"));
+    // The web app doesn't offer Teams (signing in needs a browser on this computer).
+    let teams =
+        (s.prefs.teams.on && !cfg!(target_arch = "wasm32")).then_some((Module::Conversations, Icon::Conversations, "Conversations", "conversations"));
     for (m, icon, label, code) in [
         (Module::Mail, Icon::Unread, "Mail", "mail"),
         (Module::Calendar, Icon::Calendar, "Calendar", "calendar"),

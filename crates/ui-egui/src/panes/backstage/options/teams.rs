@@ -43,13 +43,25 @@ fn status_line(status: &Status) -> Option<(String, bool)> {
             ),
             true,
         ),
-        Status::Failed { why } => (tf!("Teams stopped: {why}", why = one_line(why)), true),
+        Status::Failed { why } => (crate::conversations::why_stopped(why), true),
     })
 }
 
 /// The id of the question Sign out asks (whether the local copy goes too).
 fn asking() -> egui::Id {
     egui::Id::unique("options-teams-sign-out")
+}
+
+/// Whether Sign out's question is asked (Escape answers it, not the File page).
+pub(crate) fn sign_out_asked(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(asking())).unwrap_or(false)
+}
+
+/// The File page closed: its question isn't asked any more (it would come back with the page).
+pub(crate) fn forget_sign_out(ctx: &egui::Context) {
+    if sign_out_asked(ctx) {
+        ctx.data_mut(|d| d.remove::<bool>(asking()));
+    }
 }
 
 pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
@@ -123,8 +135,12 @@ fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             if ui.button(tl!("Sign out")).clicked() {
                 ui.ctx().data_mut(|d| d.insert_temp(asking(), true));
             }
-            // The sign-in no longer holds: it's asked again, the copy kept.
-            if *status == Status::SignInAgain && p.on && ui.button(tl!("Sign in")).clicked() {
+            // The sign-in no longer holds, lacks a permission, or failed: it's tried again, the
+            // copy kept.
+            if p.on && *status == Status::SigningIn {
+                ui.label(RichText::new(tl!("Waiting for the browser…")).color(t.dim));
+                ui.spinner();
+            } else if p.on && crate::conversations::sign_in_again(status) && ui.button(tl!("Sign in")).clicked() {
                 acts.push(Action::Run("teams.signIn", json!({})));
             }
         });
@@ -152,7 +168,7 @@ fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
 
 /// Sign out's question: keep the copy of the conversations on this computer, or delete it too.
 fn sign_out_question(ctx: &egui::Context, t: &Tokens, acts: &mut Vec<Action>) {
-    if !ctx.data(|d| d.get_temp::<bool>(asking())).unwrap_or(false) {
+    if !sign_out_asked(ctx) {
         return;
     }
     let mut answer: Option<Option<bool>> = None;

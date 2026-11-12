@@ -11,6 +11,7 @@ impl MailApp {
         let text_keys = std::mem::take(&mut self.ui.text_selection.keys);
         if self.ui.backstage.is_none() {
             self.ui.backstage_typing = false;
+            crate::backstage::forget_teams_sign_out(ctx);
         }
         if self.ui.dialog.is_some() {
             if ctx.input(|i| i.key_pressed(Key::Escape)) {
@@ -32,8 +33,12 @@ impl MailApp {
             return;
         }
         if self.ui.backstage.is_some() {
-            // Esc in one of its fields leaves the field; from outside one, the page.
-            if ctx.input(|i| i.key_pressed(Key::Escape)) && !std::mem::take(&mut self.ui.backstage_typing) {
+            // Esc in one of its fields leaves the field; on Teams' Sign out question, it's the
+            // question's (Cancel); from elsewhere, the page.
+            if ctx.input(|i| i.key_pressed(Key::Escape))
+                && !std::mem::take(&mut self.ui.backstage_typing)
+                && !crate::backstage::teams_sign_out_asked(ctx)
+            {
                 self.ui.backstage = None;
             }
             return;

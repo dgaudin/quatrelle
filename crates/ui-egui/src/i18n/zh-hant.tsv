@@ -2211,7 +2211,14 @@ folder	Online Archive	線上封存
 	Copying your conversations… {done} of {of} conversations	正在複製你的交談… 第 {done} 個，共 {of} 個
 	Your conversations are up to date	你的交談已是最新
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle 需要權限 {scope}：請重新登入以接受，或請系統管理員在 Microsoft Entra 中授與系統管理員同意
-	Teams stopped: {why}	Teams 已停止：{why}
+	Teams stopped: sign in again	Teams 已停止：請重新登入
+	Teams couldn't tell which organisation this account belongs to	Teams 無法判斷此帳戶屬於哪個組織
+	Teams didn't say who signed in	Teams 沒有說明是誰登入的
+	Microsoft gave no lasting sign-in; try again	Microsoft 沒有提供持久的登入；請再試一次
+	The local copy of the conversations couldn't be opened	無法開啟對話的本機副本
+	The application or directory ID in the Options can't be one	選項中的應用程式識別碼或目錄 ID 不可能是有效的識別碼
+	The sign-in stopped unexpectedly; try again	登入意外停止；請再試一次
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams 沒有提供此帳戶的對話 (403)：請用您在 Teams 中使用的帳戶登入
 module	Conversations	交談
 	Teams: sign in again to go on	Teams：請重新登入以繼續
 	Delete that copy	刪除那份副本

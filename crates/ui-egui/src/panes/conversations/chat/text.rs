@@ -13,8 +13,9 @@
 
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Color32, Sense, Stroke, Ui, vec2};
+use quatrelle_engine::ChatMembers;
 use quatrelle_engine::model::ical::launchable_link;
-use quatrelle_engine::model::pim::teams::{Block, BlockKind, ChatMessage, Member, Run, is_bidi, one_line};
+use quatrelle_engine::model::pim::teams::{Block, BlockKind, ChatMessage, Run, is_bidi, one_line};
 
 use crate::Action;
 use crate::theme::{self, Tokens};
@@ -26,7 +27,7 @@ const SIZE: f32 = 14.0;
 /// for text.
 pub(super) struct Context<'a> {
     pub me: &'a str,
-    pub members: &'a [Member],
+    pub members: &'a ChatMembers,
     pub color: Color32,
 }
 
@@ -41,7 +42,7 @@ fn mention_of(run: &Run, m: &ChatMessage, cx: &Context) -> (String, bool) {
     let mention = run.mention.and_then(|id| m.mentions.iter().find(|x| x.id == id));
     let user = mention.and_then(|x| x.user_id.as_deref());
     let mine = user.is_some_and(|u| !cx.me.is_empty() && u.eq_ignore_ascii_case(cx.me));
-    let member = user.and_then(|u| cx.members.iter().find(|x| x.user_id == u)).map(|x| one_line(&x.name)).filter(|n| !n.is_empty());
+    let member = user.and_then(|u| cx.members.get(u)).map(|x| one_line(&x.name)).filter(|n| !n.is_empty());
     (member.unwrap_or_else(|| one_line(&run.text)), mine)
 }
 
@@ -166,7 +167,7 @@ fn draw(ui: &mut Ui, t: &Tokens, job: LayoutJob, links: &[(std::ops::Range<usize
     };
     if let Some(url) = resp.hover_pos().and_then(under) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        resp.clone().on_hover_text_at_pointer(url);
+        resp.clone().on_hover_text_at_pointer(super::parts::shown(&url));
     }
     if resp.clicked()
         && let Some(url) = resp.interact_pointer_pos().and_then(under)
@@ -209,6 +210,8 @@ pub(super) fn system_line(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use quatrelle_engine::model::pim::teams::Member;
+
     use super::*;
 
     /// What a system line quotes is cut to 80 characters, so it can't pass for another line.
@@ -235,7 +238,8 @@ mod tests {
     #[test]
     fn a_link_too_long_to_hand_over_is_plain_text() {
         let t = Tokens::light();
-        let cx = Context { me: "", members: &[], color: t.text };
+        let none = ChatMembers::default();
+        let cx = Context { me: "", members: &none, color: t.text };
         let link = |url: String| Run { text: "the plan".into(), link: Some(url), ..Default::default() };
         let short = message(vec![Run { text: "one\ntwo ".into(), ..Default::default() }, link("https://contoso.example/plan".into())]);
         let block = &short.body.blocks[0];
@@ -250,11 +254,12 @@ mod tests {
         assert!(layout(&t, &script, &cx, &script.body.blocks[0], 0, 400.0).unwrap().1.is_empty(), "not http(s)");
     }
 
-    /// A mention shows the member's own name, whatever the message wrote over it.
+    /// A mention shows the member's own name, whatever the message wrote over it (and whatever
+    /// capitals Graph wrote the member's id in).
     #[test]
     fn a_mention_shows_the_members_own_name() {
         let t = Tokens::light();
-        let members = vec![Member { user_id: "u-ana".into(), name: "Ana Lima".into(), ..Default::default() }];
+        let members: ChatMembers = [Member { user_id: "U-Ana".into(), name: "Ana Lima".into(), ..Default::default() }].into_iter().collect();
         let cx = Context { me: "u-me", members: &members, color: t.text };
         let mut m = message(vec![Run { text: "The boss".into(), mention: Some(3), ..Default::default() }]);
         m.mentions = vec![quatrelle_engine::model::pim::teams::Mention { id: 3, text: "The boss".into(), user_id: Some("u-ana".into()) }];

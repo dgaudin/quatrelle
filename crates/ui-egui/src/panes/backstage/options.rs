@@ -14,6 +14,8 @@ mod teams;
 mod webex;
 mod webex_rooms;
 
+pub(crate) use teams::{forget_sign_out, sign_out_asked};
+
 pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     heading(ui, &t, "Options");

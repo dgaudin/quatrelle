@@ -14,9 +14,10 @@ use quatrelle_engine::model::pim::teams::{self, ChatKind, ChatRow, Picture, Stat
 use super::super::list::follow_up::{Textures, frame_with_size};
 use super::*;
 
-/// The conversation pane, and its pictures.
+/// The conversation pane, its pictures, and where a sign-in stands.
 mod chat;
 mod pictures;
+mod signing;
 
 /// The File page drawn whole.
 const PAGE: (usize, usize) = (1280, 6000);
@@ -214,6 +215,38 @@ fn the_teams_queue_is_bounded_and_keeps_a_status() {
     assert!(q.holds(|e| matches!(e, teams::Event::Status { status: Status::UpToDate })), "the status is kept");
     assert!(q.holds(|e| matches!(e, teams::Event::Chats { rows } if rows[0].id == "19:q11999@thread.v2")), "the newest kept");
     assert!(!q.holds(|e| matches!(e, teams::Event::Chats { rows } if rows[0].id == "19:q0@thread.v2")), "the oldest gone");
+}
+
+/// Past 10,000 waiting, who signed in, a copy set aside, the open chat's members and a chat left
+/// are never dropped: the worker doesn't say them again.
+#[test]
+fn the_teams_queue_never_drops_what_isnt_said_again() {
+    let mut q = crate::conversations::TeamsQueue::default();
+    let account = teams::Event::Account {
+        name: "Riley Moreno".into(),
+        address: "riley@contoso.example".into(),
+        object_id: "00000000-0000-0000-0000-00000000000b".into(),
+        tenant_id: "contoso.example".into(),
+        drive_host: None,
+    };
+    let mut events: Vec<MailEvent> = [
+        account,
+        teams::Event::SetAside { path: "/data/Teams-0a.quatrelle.old".into() },
+        teams::Event::Members { chat: "19:g@thread.v2".into(), members: vec![], web_url: None, first: true },
+        teams::Event::Removed { chat: "19:g@thread.v2".into() },
+    ]
+    .into_iter()
+    .map(|event| MailEvent::Teams { event })
+    .collect();
+    events.extend(
+        (0..12_000).map(|i| MailEvent::Teams { event: teams::Event::Presence { presences: vec![(format!("u-{i}"), teams::Presence::Busy)] } }),
+    );
+    q.take(&mut events);
+    assert!(q.len() <= 10_004, "{}", q.len());
+    assert!(q.holds(|e| matches!(e, teams::Event::Account { .. })), "who signed in");
+    assert!(q.holds(|e| matches!(e, teams::Event::SetAside { .. })), "the copy set aside");
+    assert!(q.holds(|e| matches!(e, teams::Event::Members { .. })), "the members");
+    assert!(q.holds(|e| matches!(e, teams::Event::Removed { .. })), "the chat left");
 }
 
 /// Restored settings with Teams on and signed in start the Teams worker (the settings come after

@@ -202,8 +202,11 @@ pub(crate) struct TeamsPictures {
     sources: HashMap<Picture, Arc<[u8]>>,
     sources_order: VecDeque<Picture>,
     sources_held: usize,
-    /// Images let go for room, for the pane to ask for again once they're on screen.
-    let_go: Vec<Picture>,
+    /// Images let go for room, for the pane to ask for again once they're on screen, oldest
+    /// first, at most [`LET_GO_MAX`]; whether some were forgotten past it (the pane then asks
+    /// again for every message's pictures that aren't there).
+    let_go: VecDeque<Picture>,
+    let_go_lost: bool,
     /// The picture the viewer shows, and its whole texture once decoded; whether its decoding
     /// was asked for, and whether it was asked of the worker again (its file let go).
     whole: Option<(Picture, Option<TextureHandle>)>,
@@ -247,8 +250,15 @@ impl TeamsPictures {
             };
             self.waiting.push_back(Work { picture, bytes, side, whole: false });
         }
+        self.bound_waiting();
+    }
+
+    /// Past [`WAITING_MAX`] waiting, the oldest thumbnails are given up (placeholders); the
+    /// picture opened big is never one of them (its thumbnail stays as it is).
+    fn bound_waiting(&mut self) {
         while self.waiting.len() > WAITING_MAX {
-            if let Some(w) = self.waiting.pop_front() {
+            let Some(i) = self.waiting.iter().position(|w| !w.whole) else { break };
+            if let Some(w) = self.waiting.remove(i) {
                 self.keep(w.picture, Shown::Failed, 0);
             }
         }
@@ -380,16 +390,24 @@ impl TeamsPictures {
                 self.sources_held = self.sources_held.saturating_sub(b.len());
                 self.sources_order.retain(|p| *p != old);
             }
-            if self.let_go.len() >= LET_GO_MAX {
-                self.let_go.clear();
-            }
-            self.let_go.push(old);
+            self.let_go_push(old);
         }
     }
 
-    /// The images let go for room since last asked: the pane asks for them again once on screen.
-    pub(crate) fn take_let_go(&mut self) -> Vec<Picture> {
-        std::mem::take(&mut self.let_go)
+    /// An image let go for room, remembered for the pane (the oldest forgotten past
+    /// [`LET_GO_MAX`]).
+    fn let_go_push(&mut self, picture: Picture) {
+        while self.let_go.len() >= LET_GO_MAX {
+            self.let_go.pop_front();
+            self.let_go_lost = true;
+        }
+        self.let_go.push_back(picture);
+    }
+
+    /// The images let go for room since last asked, and whether some were forgotten: the pane
+    /// asks for them again once on screen.
+    pub(crate) fn take_let_go(&mut self) -> (Vec<Picture>, bool) {
+        (self.let_go.drain(..).collect(), std::mem::take(&mut self.let_go_lost))
     }
 
     /// The picture the viewer shows (none: closed). Whether it has to be asked of the worker
@@ -434,5 +452,53 @@ impl TeamsPictures {
     #[cfg(test)]
     pub(crate) fn busy(&self) -> bool {
         !self.waiting.is_empty() || self.decoder.out > 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hosted(i: usize) -> Picture {
+        Picture::Hosted { chat: "19:pane@thread.v2".into(), message: format!("m{i}"), hosted: "h1".into() }
+    }
+
+    /// Past the most waiting, the oldest thumbnails are given up, never the picture opened big:
+    /// its thumbnail stays shown and it's still decoded whole.
+    #[test]
+    fn the_picture_opened_big_is_never_given_up_for_room() {
+        let ctx = egui::Context::default();
+        let mut pics = TeamsPictures::default();
+        let big = hosted(0);
+        let tex = ctx.load_texture("t", ColorImage::from_rgba_unmultiplied([2, 2], &[255; 16]), TextureOptions::NEAREST);
+        pics.keep(big.clone(), Shown::Ready(tex), 16);
+        pics.keep_source(&big, Arc::from(vec![1u8, 2, 3]));
+        assert!(!pics.view(Some(&big)));
+        pics.ask_whole();
+        assert!(pics.waiting.front().is_some_and(|w| w.whole), "the whole one first");
+        for i in 1..=WAITING_MAX + 5 {
+            pics.waiting.push_back(Work { picture: hosted(i), bytes: Arc::from(vec![0u8]), side: THUMB_SIDE, whole: false });
+        }
+        pics.bound_waiting();
+        assert_eq!(pics.waiting.len(), WAITING_MAX);
+        assert!(pics.waiting.iter().any(|w| w.whole && w.picture == big), "still to be decoded whole");
+        assert!(matches!(pics.images.get(&big).map(|i| &i.shown), Some(Shown::Ready(_))), "its thumbnail stays");
+        assert!(matches!(pics.images.get(&hosted(1)).map(|i| &i.shown), Some(Shown::Failed)), "the oldest thumbnail given up");
+    }
+
+    /// Past the most let go remembered, the oldest are forgotten, and the pane is told some were
+    /// (it asks again for every message's missing pictures).
+    #[test]
+    fn past_the_most_let_go_the_oldest_are_forgotten_and_said_so() {
+        let mut pics = TeamsPictures::default();
+        for i in 0..LET_GO_MAX + 3 {
+            pics.let_go_push(hosted(i));
+        }
+        let (gone, lost) = pics.take_let_go();
+        assert_eq!(gone.len(), LET_GO_MAX);
+        assert_eq!(gone.first(), Some(&hosted(3)), "the oldest forgotten, the newest kept");
+        assert!(lost);
+        let (gone, lost) = pics.take_let_go();
+        assert!(gone.is_empty() && !lost);
     }
 }

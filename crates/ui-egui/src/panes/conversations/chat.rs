@@ -17,9 +17,7 @@ use egui::{Align, Color32, Layout, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
 use quatrelle_engine::model::ical::is_teams_chat_link;
-use quatrelle_engine::model::pim::teams::{
-    ChatKind, ChatMessage, ChatRow, MessageKind, Picture, Presence, Sender, is_internal, one_line, sender_internal,
-};
+use quatrelle_engine::model::pim::teams::{ChatKind, ChatMessage, ChatRow, MessageKind, Picture, Presence, Sender, is_internal, one_line};
 use serde_json::json;
 
 use super::ConversationsUi;
@@ -60,7 +58,7 @@ impl Pane<'_> {
     fn sender_name(&self, sender: &Sender) -> String {
         match sender {
             Sender::User { id, name, .. } => {
-                let member = self.s.teams.members.iter().find(|m| m.user_id == *id).map(|m| one_line(&m.name)).filter(|n| !n.is_empty());
+                let member = self.s.teams.member(id).map(|m| one_line(&m.name)).filter(|n| !n.is_empty());
                 member.unwrap_or_else(|| one_line(name))
             }
             Sender::App { name, .. } => one_line(name),
@@ -87,8 +85,13 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         c.chat_scroll_to = None;
         c.viewing = None;
     }
-    // Pictures let go for room: their messages ask for them again once on screen.
-    for gone in teams_queue.pictures.take_let_go() {
+    // Pictures let go for room: their messages ask for them again once on screen (all of them,
+    // when some let go were too many to remember).
+    let (let_go, lost) = teams_queue.pictures.take_let_go();
+    if lost {
+        c.hosted_asked.clear();
+    }
+    for gone in let_go {
         if let Picture::Hosted { message, .. } = gone {
             c.hosted_asked.remove(&message);
         }
@@ -151,7 +154,8 @@ fn presence(p: Presence, t: &Tokens) -> Option<(&'static str, Color32)> {
 }
 
 /// The header: "External" first when someone is from outside, the name, a one-to-one chat's
-/// other person's presence, and the members (their list on a click).
+/// other person's presence, and the members (their list on a click); a chat the user is no
+/// longer in says so under it.
 fn header(p: &Pane, ui: &mut Ui, row: &ChatRow) {
     let t = &p.t;
     ui.horizontal(|ui| {
@@ -172,12 +176,15 @@ fn header(p: &Pane, ui: &mut Ui, row: &ChatRow) {
             ui.label(RichText::new(word).size(12.5).color(t.dim));
         });
     }
+    if row.left {
+        ui.label(RichText::new(tl!("You're no longer in this conversation")).size(12.5).color(t.dim));
+    }
 }
 
 /// "Members: n", and on a click their list, each from outside marked "External".
 fn members(p: &Pane, ui: &mut Ui, row: &ChatRow) {
     let t = &p.t;
-    let list = &p.s.teams.members;
+    let list = p.s.teams.members().as_slice();
     let n = if list.is_empty() { row.members as usize } else { list.len() };
     ui.menu_button(tf!("Members: {n}", n = n), |ui| {
         ui.set_min_width(240.0);
@@ -404,7 +411,7 @@ fn name_line(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
     let t = &p.t;
     ui.horizontal(|ui| {
         let user = matches!(m.sender, Sender::User { .. });
-        if user && !sender_internal(&m.sender, &p.s.teams.members, p.tenant) {
+        if user && !p.s.teams.members().sender_internal(&m.sender, p.tenant) {
             tag(ui, t, tl!("External")).on_hover_text(tl!("This sender is outside your organisation."));
         }
         let name = p.sender_name(&m.sender);
@@ -437,7 +444,7 @@ fn bubble(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, fill:
                 ui.label(RichText::new(said).italics().color(t.dim));
                 return;
             }
-            let cx = text::Context { me: p.me, members: &p.s.teams.members, color: t.text };
+            let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text };
             text::body(ui, t, m, &cx, width - 20.0, acts);
             parts::pictures(p, c, ui, m, acts);
             parts::files(p, ui, m, width - 20.0, acts);

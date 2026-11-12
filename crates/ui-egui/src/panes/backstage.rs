@@ -28,6 +28,7 @@ use about::about;
 use info::info;
 use open::open;
 use options::options;
+pub(crate) use options::{forget_sign_out as forget_teams_sign_out, sign_out_asked as teams_sign_out_asked};
 pub use pgp::PgpAsk;
 
 /// Quatrelle's repository: its source code, issues and guides.

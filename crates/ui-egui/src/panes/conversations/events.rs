@@ -5,8 +5,9 @@
 //! applied at once, as before.
 //!
 //! What is hostile here: how many events the worker sends (it reports what Graph gave). The queue
-//! holds at most [`PENDING_MAX`]; past it the oldest rows and messages go (the worker sends them
-//! again on its next pass), and what says where the connection stands stays.
+//! holds at most [`PENDING_MAX`] (and what is said once); past it the oldest rows and messages go
+//! (the worker sends them again on its next pass), and what says where the connection stands
+//! stays.
 
 use std::collections::VecDeque;
 
@@ -44,6 +45,15 @@ fn is_status(e: &Event) -> bool {
     matches!(teams_event(e), Some(teams::Event::Status { .. }))
 }
 
+/// Who signed in, a copy set aside, the open chat's members, a chat left: the worker doesn't
+/// say them again, so they're never dropped.
+fn said_once(e: &Event) -> bool {
+    matches!(
+        teams_event(e),
+        Some(teams::Event::Account { .. } | teams::Event::SetAside { .. } | teams::Event::Members { .. } | teams::Event::Removed { .. })
+    )
+}
+
 impl TeamsQueue {
     /// Every Teams event of `events` moved to the queue; the others stay, in their order.
     pub(crate) fn take(&mut self, events: &mut Vec<Event>) {
@@ -70,7 +80,7 @@ impl TeamsQueue {
     }
 
     /// Past [`PENDING_MAX`]: the oldest rows and messages go first, then statuses a later one says
-    /// again, then the oldest of the rest; the last status always stays.
+    /// again, then the oldest of the rest; the last status, and what is said once, always stay.
     fn bound(&mut self) {
         let mut over = self.pending.len().saturating_sub(PENDING_MAX);
         if over == 0 {
@@ -91,8 +101,8 @@ impl TeamsQueue {
         });
         let mut i = 0usize;
         let last_status = self.pending.iter().rposition(is_status);
-        self.pending.retain(|_| {
-            let drop = over > 0 && Some(i) != last_status;
+        self.pending.retain(|e| {
+            let drop = over > 0 && Some(i) != last_status && !said_once(e);
             over = over.saturating_sub(usize::from(drop));
             i = i.saturating_add(1);
             !drop

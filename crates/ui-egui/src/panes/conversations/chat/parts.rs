@@ -38,7 +38,7 @@ const ASKED_MAX: usize = 5_000;
 
 /// An address as it's shown (on a card, on hover): without bidi characters, which could turn
 /// what's read around.
-fn shown(url: &str) -> String {
+pub(super) fn shown(url: &str) -> String {
     url.chars().filter(|&c| !is_bidi(c)).collect()
 }
 
@@ -234,7 +234,7 @@ pub(super) fn cards(p: &Pane, ui: &mut Ui, m: &ChatMessage, acts: &mut Vec<Actio
 }
 
 /// The message's reactions, as chips (the emoji and how many); hovered, who reacted (the chat's
-/// members, by name).
+/// members, by name: looked up only while a chip is hovered, as the chips are drawn every frame).
 pub(super) fn reactions(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
     if m.reactions.is_empty() {
         return;
@@ -254,16 +254,12 @@ pub(super) fn reactions(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
                 .inner_margin(egui::Margin::symmetric(7, 1))
                 .show(ui, |ui| ui.label(RichText::new(format!("{emoji} {}", r.users.len())).size(12.0).color(t.text)))
                 .response;
-            let names: Vec<String> = r
-                .users
-                .iter()
-                .filter_map(|u| p.s.teams.members.iter().find(|x| x.user_id == *u))
-                .map(|x| one_line(&x.name))
-                .filter(|n| !n.is_empty())
-                .take(NAMES_MAX)
-                .collect();
-            if !names.is_empty() {
-                chip.on_hover_text(names.join(", "));
+            if chip.hovered() {
+                let names: Vec<String> =
+                    r.users.iter().filter_map(|u| p.s.teams.member(u)).map(|x| one_line(&x.name)).filter(|n| !n.is_empty()).take(NAMES_MAX).collect();
+                if !names.is_empty() {
+                    chip.on_hover_text(names.join(", "));
+                }
             }
         }
     });

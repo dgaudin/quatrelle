@@ -550,28 +550,28 @@ fn the_open_chats_members_and_link_are_kept() {
     let mut s = signed_in(vec![row(1, 10), row(2, 20)]);
     let (one, two) = ("19:chat1@thread.v2", "19:chat2@thread.v2");
     s.apply(members_event(one, vec![member(0)], true));
-    assert!(s.teams.members.is_empty() && s.teams.web_url.is_none(), "not the open chat");
+    assert!(s.teams.members().is_empty() && s.teams.web_url.is_none(), "not the open chat");
     open(&mut s, one);
     s.apply(members_event(one, (0..50).map(member).collect(), true));
     s.apply(members_event(one, (50..60).map(member).collect(), false));
-    assert_eq!(s.teams.members.len(), 60, "in parts");
+    assert_eq!(s.teams.members().len(), 60, "in parts");
     assert!(s.teams.web_url.as_deref().is_some_and(|u| u.starts_with("https://teams.microsoft.com/")));
     s.apply(members_event(two, vec![member(99)], true));
-    assert_eq!(s.teams.members.len(), 60, "another chat's members aren't taken");
+    assert_eq!(s.teams.members().len(), 60, "another chat's members aren't taken");
     // Said again: the earlier list is replaced.
     s.apply(members_event(one, vec![member(7)], true));
-    assert_eq!(s.teams.members.iter().map(|m| m.user_id.as_str()).collect::<Vec<_>>(), ["u-7"]);
+    assert_eq!(s.teams.members().iter().map(|m| m.user_id.as_str()).collect::<Vec<_>>(), ["u-7"]);
     // A member without a usable id, and past the cap: left out.
     let mut odd = member(8);
     odd.user_id = "x".repeat(teams::MAX_ID + 1);
     s.apply(members_event(one, vec![odd], false));
-    assert_eq!(s.teams.members.len(), 1);
+    assert_eq!(s.teams.members().len(), 1);
     for start in (0..teams::MAX_MEMBERS + 100).step_by(teams::EVENT_ITEMS) {
         s.apply(members_event(one, (start..start + teams::EVENT_ITEMS).map(member).collect(), start == 0));
     }
-    assert_eq!(s.teams.members.len(), teams::MAX_MEMBERS);
+    assert_eq!(s.teams.members().len(), teams::MAX_MEMBERS);
     open(&mut s, two);
-    assert!(s.teams.members.is_empty() && s.teams.web_url.is_none(), "forgotten with the chat");
+    assert!(s.teams.members().is_empty() && s.teams.web_url.is_none(), "forgotten with the chat");
 }
 
 /// A picture kept with a message, once the window took it, may be asked for again (the window
@@ -595,4 +595,91 @@ fn a_hosted_picture_taken_by_the_window_can_be_asked_again() {
     assert!(s.teams.pictures.is_empty());
     assert_eq!(asked(&mut s, &hosted), Some(true), "taken: it may be asked again");
     assert_eq!(asked(&mut s, &photo), Some(false), "a photo isn't");
+}
+
+fn account(object_id: &str, tenant_id: &str) -> Event {
+    teams_event(teams::Event::Account {
+        name: "Riley Moreno".into(),
+        address: "riley@contoso.example".into(),
+        object_id: object_id.into(),
+        tenant_id: tenant_id.into(),
+        drive_host: None,
+    })
+}
+
+/// Signed in again as another account (another user, or the same id in another organisation):
+/// nothing of the last one's chats stays on screen (rows, the open chat, its members, presence,
+/// search hits), and what was asked for it is asked again; the same account (its id in other
+/// capitals) keeps them, and a copy set aside stays offered.
+#[test]
+fn another_account_signed_in_keeps_nothing_of_the_last_ones_chats() {
+    const A: &str = "00000000-0000-0000-0000-00000000000a";
+    const B: &str = "00000000-0000-0000-0000-00000000000b";
+    const ORG: &str = "11111111-2222-3333-4444-000000000001";
+    let mut s = signed_in(vec![]);
+    s.apply(account(A, ORG));
+    s.apply(teams_event(teams::Event::Chats { rows: vec![row(1, 10), row(2, 20)] }));
+    open(&mut s, "19:chat1@thread.v2");
+    messages(&mut s, "19:chat1@thread.v2", 0..3);
+    s.apply(members_event("19:chat1@thread.v2", vec![member(1)], true));
+    s.apply(teams_event(teams::Event::Presence { presences: vec![("u-1".into(), Presence::Busy)] }));
+    s.run("teams.search", &json!({"query": "plan"})).unwrap();
+    s.apply(teams_event(teams::Event::Found {
+        query: "plan".into(),
+        hits: vec![("19:chat1@thread.v2".into(), "m1".into())],
+        indexing: false,
+        partial: false,
+    }));
+    s.run("teams.picture", &json!({"kind": "photo", "user": "u-1"})).unwrap();
+    s.run("teams.visible", &json!({"users": ["u-1"]})).unwrap();
+    s.apply(teams_event(teams::Event::Status { status: Status::UpToDate }));
+    s.take_jobs();
+    // The same account, its id written in capitals: everything stays.
+    s.apply(account(&A.to_ascii_uppercase(), ORG));
+    assert_eq!(s.teams.rows.len(), 2);
+    assert_eq!(s.teams.window.len(), 3);
+    // Another account: nothing of the last one's.
+    s.apply(teams_event(teams::Event::SetAside { path: "/data/Teams-0a.quatrelle.old".into() }));
+    s.apply(account(B, ORG));
+    assert!(s.teams.rows.is_empty(), "{:?}", s.teams.rows);
+    assert!(!s.teams.has_chat("19:chat1@thread.v2"));
+    assert!(s.teams.open.is_none() && s.teams.window.is_empty() && s.teams.members().is_empty() && s.teams.web_url.is_none());
+    assert!(s.teams.presence.is_empty() && s.teams.found.is_none());
+    assert_eq!(s.teams.set_aside.as_deref(), Some("/data/Teams-0a.quatrelle.old"), "still offered for deletion");
+    assert_eq!(s.teams.status, Status::UpToDate);
+    assert_eq!(s.prefs.teams.object_id, B);
+    s.run("teams.picture", &json!({"kind": "photo", "user": "u-1"})).unwrap();
+    s.run("teams.visible", &json!({"users": ["u-1"]})).unwrap();
+    assert_eq!(
+        teams_jobs(&mut s),
+        [teams::Job::Picture { picture: Picture::Photo { user: "u-1".into() } }, teams::Job::Visible { users: vec!["u-1".into()] }],
+        "asked again for the new account"
+    );
+    // The same user id in another organisation is another account too.
+    s.apply(teams_event(teams::Event::Chats { rows: vec![row(3, 30)] }));
+    s.apply(account(B, "11111111-2222-3333-4444-000000000002"));
+    assert!(s.teams.rows.is_empty());
+}
+
+/// A member is found by their id whatever its capitals, from the chat's 5,000 members at once.
+#[test]
+fn a_member_is_found_by_id_in_any_case() {
+    let mut s = signed_in(vec![row(1, 10)]);
+    open(&mut s, "19:chat1@thread.v2");
+    for start in (0..teams::MAX_MEMBERS).step_by(teams::EVENT_ITEMS) {
+        let part: Vec<teams::Member> = (start..start + teams::EVENT_ITEMS)
+            .map(|i| teams::Member { user_id: format!("U-{i}"), name: format!("Member {i}"), ..Default::default() })
+            .collect();
+        s.apply(members_event("19:chat1@thread.v2", part, start == 0));
+    }
+    assert_eq!(s.teams.members().len(), teams::MAX_MEMBERS);
+    assert_eq!(s.teams.member("u-4999").map(|m| m.name.as_str()), Some("Member 4999"));
+    assert_eq!(s.teams.member("U-7").map(|m| m.name.as_str()), Some("Member 7"));
+    assert!(s.teams.member("u-5000").is_none());
+    // Said again: the earlier list is gone from the index too.
+    s.apply(members_event("19:chat1@thread.v2", vec![member(9)], true));
+    assert!(s.teams.member("u-7").is_none());
+    assert_eq!(s.teams.member("U-9").map(|m| m.user_id.as_str()), Some("u-9"));
+    open(&mut s, "19:chat1@thread.v2");
+    assert!(s.teams.member("u-9").is_none(), "forgotten with the chat");
 }

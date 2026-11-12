@@ -2206,7 +2206,14 @@ folder	Online Archive	ארכיון מקוון
 	Copying your conversations… {done} of {of} conversations	מעתיק את השיחות שלכם… {done} מתוך {of} שיחות
 	Your conversations are up to date	השיחות שלכם מעודכנות
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle צריך את ההרשאה {scope}: היכנסו שוב כדי לאשר אותה, או בקשו ממנהל המערכת להעניק הסכמת מנהל ב-Microsoft Entra
-	Teams stopped: {why}	Teams נעצר: {why}
+	Teams stopped: sign in again	Teams נעצר: היכנסו שוב
+	Teams couldn't tell which organisation this account belongs to	Teams לא הצליח לקבוע לאיזה ארגון שייך החשבון הזה
+	Teams didn't say who signed in	Teams לא מסר מי נכנס
+	Microsoft gave no lasting sign-in; try again	Microsoft לא נתנה כניסה מתמשכת; נסו שוב
+	The local copy of the conversations couldn't be opened	לא ניתן היה לפתוח את העותק המקומי של השיחות
+	The application or directory ID in the Options can't be one	מזהה האפליקציה או מזהה הספרייה באפשרויות אינו יכול להיות מזהה
+	The sign-in stopped unexpectedly; try again	הכניסה נעצרה באופן בלתי צפוי; נסו שוב
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams לא מסר את השיחות של החשבון הזה (403): היכנסו עם החשבון שבו אתם משתמשים ב-Teams
 module	Conversations	שיחות
 	Teams: sign in again to go on	Teams: היכנסו שוב כדי להמשיך
 	Delete that copy	מחיקת העותק הזה

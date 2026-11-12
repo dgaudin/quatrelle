@@ -2211,7 +2211,14 @@ folder	Online Archive	Online-Archiv
 	Copying your conversations… {done} of {of} conversations	Ihre Unterhaltungen werden kopiert… {done} von {of} Unterhaltungen
 	Your conversations are up to date	Ihre Unterhaltungen sind auf dem neuesten Stand
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle benötigt die Berechtigung {scope}: Melden Sie sich erneut an, um sie zu erteilen, oder bitten Sie Ihren Administrator, in Microsoft Entra die Administratorzustimmung zu erteilen
-	Teams stopped: {why}	Teams wurde angehalten: {why}
+	Teams stopped: sign in again	Teams wurde angehalten: Melden Sie sich erneut an
+	Teams couldn't tell which organisation this account belongs to	Teams konnte nicht feststellen, zu welcher Organisation dieses Konto gehört
+	Teams didn't say who signed in	Teams hat nicht mitgeteilt, wer sich angemeldet hat
+	Microsoft gave no lasting sign-in; try again	Microsoft hat keine dauerhafte Anmeldung erteilt; versuchen Sie es erneut
+	The local copy of the conversations couldn't be opened	Die lokale Kopie der Unterhaltungen konnte nicht geöffnet werden
+	The application or directory ID in the Options can't be one	Die Anwendungs- oder Verzeichnis-ID in den Optionen kann keine ID sein
+	The sign-in stopped unexpectedly; try again	Die Anmeldung wurde unerwartet abgebrochen; versuchen Sie es erneut
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams hat die Unterhaltungen dieses Kontos nicht geliefert (403): Melden Sie sich mit dem Konto an, das Sie für Teams verwenden
 module	Conversations	Unterhaltungen
 	Teams: sign in again to go on	Teams: Melden Sie sich erneut an, um fortzufahren
 	Delete that copy	Diese Kopie löschen

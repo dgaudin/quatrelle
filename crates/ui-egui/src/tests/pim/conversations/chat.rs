@@ -541,3 +541,68 @@ fn the_header_says_the_other_persons_presence() {
     assert!(has_text(&texts, "Do not disturb"), "{texts:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A chat of 5,000 members whose messages each carry 100 reactions of 200 people (none of them
+/// a member: each looked for in vain) and 50 mentions: a frame of the pane never goes through
+/// the whole list of members for a person.
+#[test]
+fn a_chat_of_5000_members_and_full_reactions_draws_in_time() {
+    let id = |i: usize| format!("u-{i:04}");
+    let busy = |n: usize| {
+        let runs: Vec<Run> = (0..50).map(|k| Run { text: "someone".into(), mention: Some(k), ..Default::default() }).collect();
+        let mut m = said(&format!("m{n}"), user(&id(4999 - n), "Sender"), NOW - 600 + n as i64, para(runs));
+        m.mentions = (0..50).map(|k| Mention { id: k, text: "someone".into(), user_id: Some(id(4950 + k as usize)) }).collect();
+        m.reactions = (0..teams::MAX_REACTIONS)
+            .map(|r| Reaction {
+                emoji: char::from_u32(0x1F600 + r as u32).unwrap_or('x').to_string(),
+                users: (0..200).map(|k| format!("x-{k:04}")).collect(),
+            })
+            .collect();
+        m
+    };
+    let (mut a, dir, _) = chat_app("teams-chat-crowd", group_row(), TEAMS_LINK, (0..4).map(busy).collect());
+    for start in (0..teams::MAX_MEMBERS).step_by(teams::EVENT_ITEMS) {
+        let part: Vec<Member> = (start..start + teams::EVENT_ITEMS).map(|i| member(&id(i), &format!("Person {i}"), TENANT_ID)).collect();
+        a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: part, web_url: Some(TEAMS_LINK.into()), first: start == 0 });
+    }
+    let ctx = egui::Context::default();
+    settled_at(&ctx, &mut a, TALL);
+    let started = std::time::Instant::now();
+    let (_, texts) = pane(&ctx, &mut a, vec![], TALL);
+    let took = started.elapsed();
+    assert!(has_text(&texts, "Person 4996"), "the sender by the member's name: {texts:?}");
+    assert!(texts.iter().any(|(t, _)| t.contains("Person 4950")), "a mention by the member's name");
+    assert!(took < std::time::Duration::from_millis(500), "a frame took {took:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A member is known by their id whatever its capitals: a sender whose id Graph wrote in other
+/// capitals is shown by the member's name, and as of the organisation, not as an outsider.
+#[test]
+fn a_sender_is_the_member_whatever_the_ids_capitals() {
+    let m = said("m1", user("U-ANA", "Someone Else"), NOW, para(vec![words("Hello")]));
+    let m = ChatMessage { sender: Sender::User { id: "U-ANA".into(), name: "Someone Else".into(), identity_type: None, tenant_id: None }, ..m };
+    let (mut a, dir, _) = chat_app("teams-chat-capitals", group_row(), TEAMS_LINK, vec![m]);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, TALL);
+    assert!(has_text(&texts, "Ana Lima"), "{texts:?}");
+    assert!(!has_text(&texts, "Someone Else"), "{texts:?}");
+    assert!(!has_text(&texts, "External"), "a member of the organisation: {texts:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A chat the user is no longer in says so under its header, not only in the list's tooltip.
+#[test]
+fn a_left_chat_says_so_under_its_header() {
+    let left = ChatRow { left: true, ..group_row() };
+    let (mut a, dir, _) = chat_app("teams-chat-left", left, TEAMS_LINK, vec![said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Bye")]))]);
+    let ctx = egui::Context::default();
+    let (_, texts) = {
+        settled_at(&ctx, &mut a, TALL);
+        pane(&ctx, &mut a, vec![], TALL)
+    };
+    let header = rect_of(&texts, |t| t == "Support team").expect("the header");
+    let said = rect_of(&texts, |t| t == "You're no longer in this conversation").expect("said under the header");
+    assert!(said.top() >= header.bottom(), "{said:?} under {header:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

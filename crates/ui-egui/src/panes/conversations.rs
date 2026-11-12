@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 
-use quatrelle_engine::model::pim::teams::Picture;
+use quatrelle_engine::model::pim::teams::{Picture, Status};
 
 mod chat;
 mod events;
@@ -66,4 +66,39 @@ pub(crate) enum RowPicture {
     Initials(String),
     Group,
     Meeting,
+}
+
+/// Whether the sign-in is to be tried again from where the copy stands: it no longer holds, a
+/// permission is missing, or the last try failed (cancelled in the browser, say).
+pub(crate) fn sign_in_again(status: &Status) -> bool {
+    matches!(status, Status::SignInAgain | Status::PermissionMissing { .. } | Status::Failed { .. })
+}
+
+/// Why Teams stopped, as it's drawn: the worker's sentence in the interface's language, with the
+/// code it may end with (" (AADSTS50058)", " (HTTP 400)") kept as it is. Any other words are
+/// never drawn (they could be Microsoft's, an address in them): "Teams stopped: sign in again"
+/// instead.
+pub(crate) fn why_stopped(why: &str) -> String {
+    let code = |tail: &str| {
+        let Some(inner) = tail.strip_prefix(" (").and_then(|t| t.strip_suffix(')')) else { return false };
+        let digits = |d: &str, most: usize| !d.is_empty() && d.len() <= most && d.bytes().all(|b| b.is_ascii_digit());
+        inner.strip_prefix("AADSTS").is_some_and(|d| digits(d, 10)) || inner.strip_prefix("HTTP ").is_some_and(|d| d.len() == 3 && digits(d, 3))
+    };
+    let (sentence, suffix) = match why.rfind(" (").and_then(|i| Some((why.get(..i)?, why.get(i..)?))) {
+        Some((sentence, tail)) if code(tail) => (sentence, tail),
+        _ => (why, ""),
+    };
+    let said = match sentence {
+        "Teams couldn't tell which organisation this account belongs to" => tl!("Teams couldn't tell which organisation this account belongs to"),
+        "Teams didn't say who signed in" => tl!("Teams didn't say who signed in"),
+        "Microsoft gave no lasting sign-in; try again" => tl!("Microsoft gave no lasting sign-in; try again"),
+        "The local copy of the conversations couldn't be opened" => tl!("The local copy of the conversations couldn't be opened"),
+        "The application or directory ID in the Options can't be one" => tl!("The application or directory ID in the Options can't be one"),
+        "The sign-in stopped unexpectedly; try again" => tl!("The sign-in stopped unexpectedly; try again"),
+        "Teams didn't give this account's chats (403): sign in with the account you use Teams with" => {
+            tl!("Teams didn't give this account's chats (403): sign in with the account you use Teams with")
+        }
+        _ => return tl!("Teams stopped: sign in again").to_string(),
+    };
+    format!("{said}{suffix}")
 }

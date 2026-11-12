@@ -48,7 +48,7 @@ pub use tasks::{TaskChange, TaskRef};
 pub(crate) use teams::default_settings as default_teams_settings;
 #[cfg(test)]
 pub(crate) use teams::row_scans as teams_row_scans;
-pub use teams::{PICTURE_BYTES_MAX, PICTURES_MAX, PRESENCE_MAX, TEAMS_HITS_MAX, TeamsFound, TeamsState};
+pub use teams::{ChatMembers, PICTURE_BYTES_MAX, PICTURES_MAX, PRESENCE_MAX, TEAMS_HITS_MAX, TeamsFound, TeamsState};
 pub use webex::{WebexAsk, WebexState};
 
 /// The part of the app on screen.

@@ -2209,7 +2209,14 @@ folder	Online Archive	온라인 보관함
 	Copying your conversations… {done} of {of} conversations	대화를 복사하는 중… {of}개 중 {done}개
 	Your conversations are up to date	대화가 최신 상태입니다
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle에 {scope} 권한이 필요합니다: 다시 로그인해 수락하거나, 관리자에게 Microsoft Entra에서 관리자 동의를 부여해 달라고 요청하세요
-	Teams stopped: {why}	Teams가 중지됨: {why}
+	Teams stopped: sign in again	Teams가 중지됨: 다시 로그인하세요
+	Teams couldn't tell which organisation this account belongs to	Teams가 이 계정이 속한 조직을 알아내지 못했습니다
+	Teams didn't say who signed in	Teams가 누가 로그인했는지 알려 주지 않았습니다
+	Microsoft gave no lasting sign-in; try again	Microsoft가 지속되는 로그인을 주지 않았습니다. 다시 시도하세요
+	The local copy of the conversations couldn't be opened	대화의 로컬 사본을 열 수 없습니다
+	The application or directory ID in the Options can't be one	옵션의 애플리케이션 ID 또는 디렉터리 ID는 ID가 될 수 없습니다
+	The sign-in stopped unexpectedly; try again	로그인이 예기치 않게 중지되었습니다. 다시 시도하세요
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams가 이 계정의 대화를 주지 않았습니다(403): Teams에서 쓰는 계정으로 로그인하세요
 module	Conversations	대화
 	Teams: sign in again to go on	Teams: 계속하려면 다시 로그인하세요
 	Delete that copy	그 사본 삭제

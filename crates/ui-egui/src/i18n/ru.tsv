@@ -2210,7 +2210,14 @@ folder	Online Archive	Онлайн-архив
 	Copying your conversations… {done} of {of} conversations	Копирование бесед… {done} из {of}
 	Your conversations are up to date	Ваши беседы обновлены
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle нужно разрешение {scope}: войдите снова, чтобы принять его, или попросите администратора дать согласие администратора в Microsoft Entra
-	Teams stopped: {why}	Teams остановлен: {why}
+	Teams stopped: sign in again	Teams остановлен: войдите снова
+	Teams couldn't tell which organisation this account belongs to	Teams не смог определить, к какой организации относится эта учётная запись
+	Teams didn't say who signed in	Teams не сообщил, кто вошёл
+	Microsoft gave no lasting sign-in; try again	Microsoft не дала постоянного входа; попробуйте снова
+	The local copy of the conversations couldn't be opened	Не удалось открыть локальную копию бесед
+	The application or directory ID in the Options can't be one	Идентификатор приложения или каталога в параметрах не может быть идентификатором
+	The sign-in stopped unexpectedly; try again	Вход неожиданно прервался; попробуйте снова
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams не выдал беседы этой учётной записи (403): войдите с той учётной записью, с которой вы работаете в Teams
 module	Conversations	Беседы
 	Teams: sign in again to go on	Teams: войдите снова, чтобы продолжить
 	Delete that copy	Удалить эту копию

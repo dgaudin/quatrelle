@@ -12,12 +12,15 @@
 
 use std::collections::VecDeque;
 
-use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, MAX_MEMBERS, Member, Picture, Presence, Status, TeamsSettings, one_line};
+use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, Member, Picture, Presence, Status, TeamsSettings, one_line};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
 
+mod members;
 mod window;
+
+pub use members::ChatMembers;
 
 #[cfg(test)]
 pub(crate) use window::row_scans;
@@ -64,9 +67,9 @@ pub struct TeamsState {
     /// The newest end was dropped: messages newer than the window's last aren't taken (they'd
     /// follow a gap); opening the chat again shows them.
     pub newer_left_out: bool,
-    /// The open chat's members (at most [`MAX_MEMBERS`]) and its link (`webUrl`, kept as Graph
-    /// gave it: checked where it's used), as the worker last said them.
-    pub members: Vec<Member>,
+    /// The open chat's members (at most [`teams::MAX_MEMBERS`], found by id) and its link
+    /// (`webUrl`, kept as Graph gave it: checked where it's used), as the worker last said them.
+    members: ChatMembers,
     pub web_url: Option<String>,
     /// The page last asked for (its `before`): asked once.
     asked_before: Option<i64>,
@@ -109,6 +112,16 @@ impl TeamsState {
         self.index.get(chat).and_then(|&i| self.rows.get(i))
     }
 
+    /// The open chat's members.
+    pub fn members(&self) -> &ChatMembers {
+        &self.members
+    }
+
+    /// The open chat's member with this id, whatever its capitals.
+    pub fn member(&self, id: &str) -> Option<&Member> {
+        self.members.get(id)
+    }
+
     /// The listed rows (not hidden), in the list's order.
     pub fn listed(&self) -> impl Iterator<Item = &ChatRow> {
         self.rows.iter().filter(|r| !r.hidden)
@@ -128,7 +141,8 @@ impl TeamsState {
     }
 
     /// The open chat's members, in parts (`first`: they begin here), and its link; another chat's
-    /// aren't taken. A member without a usable id is left out, and past [`MAX_MEMBERS`] the rest.
+    /// aren't taken. A member without a usable id is left out, and past [`teams::MAX_MEMBERS`]
+    /// the rest.
     fn take_members(&mut self, chat: &str, members: Vec<Member>, web_url: Option<String>, first: bool) {
         if self.open.as_deref() != Some(chat) {
             return;
@@ -138,8 +152,7 @@ impl TeamsState {
             // Longer than a browser is handed: no link (it's checked again where it's used).
             self.web_url = web_url.filter(|u| u.len() <= 2048);
         }
-        let room = MAX_MEMBERS.saturating_sub(self.members.len());
-        self.members.extend(members.into_iter().filter(|m| !m.user_id.is_empty() && m.user_id.len() <= MAX_ID).take(room));
+        self.members.extend(members.into_iter().filter(|m| !m.user_id.is_empty() && m.user_id.len() <= MAX_ID));
     }
 
     /// The page before the window to ask for, unless it was asked already.
@@ -310,6 +323,7 @@ impl Session {
                     return log::warn!("teams: an account without a usable id was passed over");
                 }
                 let drive_host = drive_host.filter(|h| h.len() <= 253 && h.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.')));
+                self.teams_account_changed(&object_id, &tenant_id);
                 let t = &mut self.prefs.teams;
                 t.signed_in = true;
                 t.name = one_line(&name);
@@ -329,6 +343,24 @@ impl Session {
             teams::Event::Removed { chat } => self.teams.left(&chat),
             teams::Event::Members { chat, members, web_url, first } => self.teams.take_members(&chat, members, web_url, first),
         }
+    }
+
+    /// Another account signed in (another user, or the same id in another organisation): nothing
+    /// of the last one's chats stays on screen, and what was asked for it is asked again. Where
+    /// the connection stands, a sign-in not remembered and a copy set aside stay (the worker says
+    /// that copy was set aside after it says who signed in).
+    fn teams_account_changed(&mut self, object_id: &str, tenant_id: &str) {
+        let was = &self.prefs.teams;
+        let same_user = was.object_id.is_empty() || was.object_id.eq_ignore_ascii_case(object_id);
+        // An organisation not known before (settings of an earlier version) doesn't tell.
+        let same_tenant = was.tenant_id.is_empty() || tenant_id.is_empty() || was.tenant_id.eq_ignore_ascii_case(tenant_id);
+        if same_user && same_tenant {
+            return;
+        }
+        let set_aside = self.teams.set_aside.take();
+        let status = std::mem::take(&mut self.teams.status);
+        let not_remembered = self.teams.not_remembered;
+        self.teams = TeamsState { set_aside, status, not_remembered, ..TeamsState::default() };
     }
 
     fn teams_status(&mut self, status: Status) {

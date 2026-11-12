@@ -145,7 +145,7 @@ fn search_box(ui: &mut Ui, t: &Tokens, c: &mut ConversationsUi, acts: &mut Vec<A
 }
 
 /// Where the copy stands, above the rows: signing in, the first copy, offline, a sign-in or a
-/// permission needed, or Teams stopped.
+/// permission needed, or Teams stopped (and Sign in, for those three).
 fn states(s: &Session, ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
     let line = |ui: &mut Ui, text: &str, color: Color32| {
         ui.add(egui::Label::new(egui::RichText::new(text).color(color).size(12.5)).wrap());
@@ -159,12 +159,7 @@ fn states(s: &Session, ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
             }
         }
         Status::Offline => line(ui, tl!("Offline"), t.dim),
-        Status::SignInAgain => {
-            line(ui, tl!("Teams: sign in again to go on"), t.danger);
-            if ui.button(tl!("Sign in")).clicked() {
-                acts.push(Action::Run("teams.signIn", json!({})));
-            }
-        }
+        Status::SignInAgain => line(ui, tl!("Teams: sign in again to go on"), t.danger),
         Status::PermissionMissing { scope } => line(
             ui,
             &tf!(
@@ -173,8 +168,12 @@ fn states(s: &Session, ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
             ),
             t.danger,
         ),
-        Status::Failed { why } => line(ui, &tf!("Teams stopped: {why}", why = one_line(why)), t.danger),
+        Status::Failed { why } => line(ui, &super::why_stopped(why), t.danger),
         Status::SignedOut | Status::UpToDate | Status::NoKeychain => return,
+    }
+    // The sign-in no longer holds, lacks a permission, or failed: it's tried again, the copy kept.
+    if super::sign_in_again(&s.teams.status) && s.prefs.teams.on && ui.button(tl!("Sign in")).clicked() {
+        acts.push(Action::Run("teams.signIn", json!({})));
     }
     ui.add_space(4.0);
 }

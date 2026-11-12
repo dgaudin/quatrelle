@@ -228,7 +228,8 @@ Open File › Options › Teams.
   switch on and both ids filled in. Once signed in, the page shows who you are, and where the copy
   stands: copying ("Copying your conversations… 12 of 340 conversations"), up to date, offline, or
   what to do (sign in again; a permission your administrator must grant, with the permission's
-  name).
+  name). When signing in again fails or lacks a permission, **Sign in** stays there to try again,
+  here and above the list.
 - **Sign out** asks whether the copy of your conversations on this computer goes too: **Keep the
   copy**, **Delete the copy**, or Cancel. Kept, it is used again when the same account signs back in.
 - The sign-in is remembered in the system keychain. Without one, Quatrelle says "Your sign-in won't
@@ -244,14 +245,17 @@ Signing in needs a browser on the same computer: the web app does not offer Team
 With Teams on and signed in, **Conversations** appears in the module rail. If you sign out or
 switch Teams off while it is open, Quatrelle returns to Mail.
 
-- **The list** shows your chats, the most recently active first, with their unread count. Chats
-  with someone outside your organization carry an **External** tag; group chats show how many
-  members they have. At most 20,000 conversations are kept; the search box finds a chat by its
+- **The list** shows your chats, the most recently active first; a chat with unread messages is
+  in bold (only the rail's **Conversations** shows a count). Chats with someone outside your
+  organization carry an **External** tag, as does a chat whose members Teams hasn't given yet;
+  group chats show how many members they have. At most 20,000 conversations are kept; the search box finds a chat by its
   name and, once the copy is indexed, by the words of its messages. Conversations you are no
-  longer in say so.
-- **The chats Graph won't serve.** Microsoft does not let an application read some chats (meeting
-  chats are the usual case). They stay in the list marked **Can't be read here**; opening one says
-  so and offers **Open in Teams**, which opens that chat in Teams itself.
+  longer in say so, in the list and under the conversation's name.
+- **The chats Graph won't serve.** Microsoft does not let an application read some chats: those
+  it lists without a name and as of a kind it doesn't say (most likely chats around meetings;
+  the chats of meetings themselves are read as any other). They stay in the list marked **Can't
+  be read here**; opening one says so and offers **Open in Teams**, which opens that chat in Teams
+  itself.
 - **Reading a conversation.** Messages are grouped by day (Today, Yesterday, then the date), edited
   ones say "(edited)", deleted ones say so, and an app's messages carry an **App** tag. A sender
   outside your organization is tagged **External** on each message. **Members** lists who is in

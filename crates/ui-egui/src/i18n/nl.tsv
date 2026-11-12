@@ -2207,7 +2207,14 @@ folder	Online Archive	Online-archief
 	Copying your conversations… {done} of {of} conversations	Je gesprekken worden gekopieerd… {done} van {of} gesprekken
 	Your conversations are up to date	Je gesprekken zijn bijgewerkt
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle heeft de machtiging {scope} nodig: meld je opnieuw aan om ze te aanvaarden, of vraag je beheerder om beheerderstoestemming te geven in Microsoft Entra
-	Teams stopped: {why}	Teams is gestopt: {why}
+	Teams stopped: sign in again	Teams is gestopt: meld je opnieuw aan
+	Teams couldn't tell which organisation this account belongs to	Teams kon niet bepalen bij welke organisatie dit account hoort
+	Teams didn't say who signed in	Teams heeft niet gezegd wie zich heeft aangemeld
+	Microsoft gave no lasting sign-in; try again	Microsoft gaf geen blijvende aanmelding; probeer het opnieuw
+	The local copy of the conversations couldn't be opened	De lokale kopie van de gesprekken kon niet worden geopend
+	The application or directory ID in the Options can't be one	De toepassings- of map-ID in de Opties kan geen ID zijn
+	The sign-in stopped unexpectedly; try again	De aanmelding stopte onverwacht; probeer het opnieuw
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams gaf de gesprekken van dit account niet (403): meld je aan met het account dat je voor Teams gebruikt
 module	Conversations	Gesprekken
 	Teams: sign in again to go on	Teams: meld je opnieuw aan om verder te gaan
 	Delete that copy	Die kopie verwijderen

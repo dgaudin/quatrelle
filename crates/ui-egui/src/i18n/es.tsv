@@ -2211,7 +2211,14 @@ folder	Online Archive	Archivo en línea
 	Copying your conversations… {done} of {of} conversations	Copiando sus conversaciones… {done} de {of} conversaciones
 	Your conversations are up to date	Sus conversaciones están al día
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle necesita el permiso {scope}: vuelva a iniciar sesión para aceptarlo, o pida a su administrador que conceda el consentimiento de administrador en Microsoft Entra
-	Teams stopped: {why}	Teams se detuvo: {why}
+	Teams stopped: sign in again	Teams se detuvo: vuelva a iniciar sesión
+	Teams couldn't tell which organisation this account belongs to	Teams no pudo saber a qué organización pertenece esta cuenta
+	Teams didn't say who signed in	Teams no dijo quién inició sesión
+	Microsoft gave no lasting sign-in; try again	Microsoft no dio un inicio de sesión duradero; vuelva a intentarlo
+	The local copy of the conversations couldn't be opened	No se pudo abrir la copia local de las conversaciones
+	The application or directory ID in the Options can't be one	El Id. de aplicación o de directorio de las Opciones no puede ser uno
+	The sign-in stopped unexpectedly; try again	El inicio de sesión se detuvo de forma inesperada; vuelva a intentarlo
+	Teams didn't give this account's chats (403): sign in with the account you use Teams with	Teams no dio las conversaciones de esta cuenta (403): inicie sesión con la cuenta que usa en Teams
 module	Conversations	Conversaciones
 	Teams: sign in again to go on	Teams: vuelva a iniciar sesión para continuar
 	Delete that copy	Eliminar esa copia
