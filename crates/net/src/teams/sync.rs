@@ -198,10 +198,6 @@ enum Progress {
 /// the hour has come), the week's chats, then the hour's refresh. One request at most; whether the
 /// turn is used (else the history may go).
 pub(crate) fn tick(w: &mut Worker, now: Instant) -> bool {
-    // Presence comes with the pictures (next): passed until then.
-    if w.limiter.due(Cadence::Presence, now) {
-        w.limiter.ran(Cadence::Presence, now);
-    }
     if open_step(w, now) || list_step(w, now) || active_step(w, now) {
         return true;
     }

@@ -285,6 +285,20 @@ impl Copy {
         r.page_keys.get(from..).unwrap_or_default().iter().flat_map(|k| self.page(chat, &hash, *k)).collect()
     }
 
+    /// A message of a chat by its id, with the number of the page it's in: page `hint` looked at
+    /// first (where one of the chat's was last found), then the newest pages back, `pages` of them
+    /// at most.
+    pub(crate) fn message(&self, chat: &str, id: &str, hint: Option<u32>, pages: usize) -> Option<(ChatMessage, u32)> {
+        if !id_ok(id) {
+            return None;
+        }
+        let r = self.chat(chat)?;
+        let hash = chat_hash(chat);
+        let hint = hint.filter(|h| r.page_keys.contains(h));
+        let newest = r.page_keys.iter().rev().copied().filter(|k| Some(*k) != hint).take(pages);
+        hint.into_iter().chain(newest).find_map(|key| self.page(chat, &hash, key).into_iter().find(|m| m.id == id).map(|m| (m, key)))
+    }
+
     /// The page before the messages from `created` on: the messages of the newest page that
     /// begins before it, those created before it, in creation order.
     pub(crate) fn before(&self, chat: &str, created: i64) -> Vec<ChatMessage> {

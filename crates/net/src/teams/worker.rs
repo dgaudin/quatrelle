@@ -33,6 +33,7 @@ use sha2::{Digest, Sha256};
 use super::backfill::{self, Backfill};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
+use super::pictures::{self, Pictures};
 use super::store::Copy;
 use super::sync::{self, SyncState};
 use crate::oauth::{self, Tokens};
@@ -73,6 +74,8 @@ pub(crate) struct Hooks {
     pub(crate) trip_sign_in: Arc<std::sync::atomic::AtomicU32>,
     /// The history reads of this chat panic once their page has come.
     pub(crate) trip_history: Option<String>,
+    /// What fetches an outside picture, in place of `http::get_public`.
+    pub(crate) outside: Option<fn(&str, usize) -> Result<crate::http::Response>>,
 }
 
 #[cfg(test)]
@@ -197,6 +200,8 @@ pub(crate) struct Worker {
     authority: Arc<dyn Authority>,
     /// Where the history stands (`backfill.rs`).
     pub(crate) backfill: Backfill,
+    /// The pictures asked for and the people shown (`pictures.rs`).
+    pub(crate) pictures: Pictures,
     #[cfg(test)]
     pub(crate) hooks: Hooks,
 }
@@ -229,6 +234,7 @@ impl Worker {
             said: None,
             sync: SyncState::default(),
             backfill: Backfill::default(),
+            pictures: Pictures::default(),
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -274,15 +280,18 @@ impl Worker {
         log::info!("teams: the worker ended");
     }
 
-    /// When the loop looks again, a job apart: the next cadence due, the time a held step may
-    /// go, the end of a wait after a failure; never at once ([`TURN`] at least). `None` when
-    /// there is nothing to look at until a job comes: switched off, signed out, or waiting to be
-    /// signed in again, and no sign-in on its way from the browser.
+    /// When the loop looks again, a job apart: the next cadence due or a picture waiting, the
+    /// time a held step may go, the end of a wait after a failure; never at once ([`TURN`] at
+    /// least). `None` when there is nothing to look at until a job comes: switched off, signed
+    /// out, or waiting to be signed in again, and no sign-in on its way from the browser.
     pub(crate) fn wake(&self, now: Instant) -> Option<Instant> {
         let after = |wait: Duration| now.checked_add(wait).unwrap_or(now);
         let mut wake = None;
         if self.polling {
             let mut at = self.limiter.next_deadline(now);
+            if pictures::waiting(self, now) {
+                at = now;
+            }
             for later in [self.held, self.not_before].into_iter().flatten() {
                 at = at.max(later);
             }
@@ -324,8 +333,10 @@ impl Worker {
             }
             Job::Open { chat } => sync::open(self, chat),
             Job::Page { chat, before } => sync::page(self, &chat, before),
-            // Presence, the search and pictures: with the modules that read them.
-            Job::Visible { .. } | Job::Search { .. } | Job::Picture { .. } => {}
+            Job::Visible { users } => pictures::visible(self, users),
+            Job::Picture { picture } => pictures::picture(self, picture),
+            // The search: with the module that reads it.
+            Job::Search { .. } => {}
         }
     }
 
@@ -343,9 +354,13 @@ impl Worker {
         }
     }
 
-    /// One step of whatever cadence is due (`sync.rs`), else of the history (`backfill.rs`): a
-    /// request at most.
+    /// One step, a request at most: the presence's minute, then a picture for the screen (unless
+    /// the open chat's read is due), then whatever cadence is due (`sync.rs`), else the history
+    /// (`backfill.rs`).
     pub(crate) fn tick(&mut self, now: Instant) {
+        if pictures::presence(self, now) || (!self.limiter.due(Cadence::Open, now) && pictures::step(self, now)) {
+            return;
+        }
         if !sync::tick(self, now) {
             backfill::step(self, now);
         }
@@ -451,6 +466,7 @@ impl Worker {
         self.renewed = None;
         self.sync = SyncState::default();
         self.backfill.reset();
+        self.pictures.halt();
         self.signing = None;
         self.held = None;
         self.not_before = None;

@@ -20,6 +20,8 @@
 //!   state, and the chats Graph refuses or the user left.
 //! * `backfill`: the first copy and the history: each chat's older messages read backwards once
 //!   the cadences are served, resumed where they stopped, under a disk guard.
+//! * `pictures`: hosted images, photos and outside images (on the user's click only), and
+//!   presence, fetched for what is on screen; the copy keeps the pictures by their bytes' hash.
 
 pub(crate) mod backfill;
 pub mod check;
@@ -27,6 +29,7 @@ pub mod graph;
 // The worker asks it for the chat list; the rest of it is the synchronisation's (next).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod limits;
+pub(crate) mod pictures;
 // The worker opens and deletes it; its chats and messages are read and written by the
 // synchronisation (next), and until then by its tests and fuzz target.
 #[cfg_attr(not(test), allow(dead_code))]

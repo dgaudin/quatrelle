@@ -15,6 +15,8 @@ mod backfill;
 mod check;
 /// The limiter, the cadences and the slow-down after a 429.
 mod limits;
+/// Hosted images, photos, outside images and presence, fetched for what is on screen.
+mod pictures;
 /// Graph's JSON read into the model, and the client's calls for pictures and presence.
 mod read;
 /// The local copy: pages, identity, deleted messages, damaged records.

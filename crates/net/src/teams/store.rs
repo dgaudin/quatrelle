@@ -9,8 +9,9 @@
 //! * `chats/<hash>.json`: a chat and how far its copy has come ([`ChatRecord`]);
 //! * `msgs/<hash>/<n>.json`: its messages, in pages of at most [`PAGE`] in creation order
 //!   (`pages.rs`);
-//! * `img/<sha256>`: a picture, by its bytes' hash; `imgref/<hash>`: which picture a message's
-//!   hosted image is;
+//! * `img/<sha256>`: a picture, by its bytes' hash, and `imguse/<sha256>` its size and last use;
+//!   `imgref/<hash>`: which picture a message's hosted image is; `photos/<hash>.json`: someone's
+//!   photo, or that they have none (`images.rs`);
 //! * `index/<hash>.json`: the chat's words, for the search.
 //!
 //! `<hash>` is the first 32 hex digits of the SHA-256 of the chat's id. The file is hostile input
@@ -24,6 +25,7 @@ use quatrelle_store::{DATA_FILE_EXTENSION, Result, Store, StoreError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod images;
 mod pages;
 
 pub(crate) use pages::PAGE;
@@ -179,6 +181,8 @@ impl ChatRecord {
 /// The copy of the user's chats.
 pub(crate) struct Copy {
     store: Store,
+    /// Its image cache's account (`images.rs`).
+    images: std::cell::RefCell<images::Images>,
 }
 
 /// The first 32 hex digits of the SHA-256 of `bytes`.
@@ -255,7 +259,7 @@ impl Copy {
         if !id_ok(&who.tenant_id) || !id_ok(&who.object_id) {
             return Err(refused("no identity to keep the copy for"));
         }
-        let copy = Copy { store };
+        let copy = Copy { store, images: images::images() };
         let kept = copy.store.account_file(TEAMS_ACCOUNT, "identity.json")?;
         let whose = match &kept {
             Some(bytes) => match serde_json::from_slice::<Identity>(bytes) {
@@ -410,42 +414,6 @@ impl Copy {
             .collect()
     }
 
-    /// A message's hosted image kept: the picture under its bytes' hash, and where to find it.
-    pub(crate) fn put_hosted(&self, chat: &str, message: &str, hosted: &str, bytes: &[u8]) -> Result<()> {
-        if bytes.len() > MAX_PICTURE || ![chat, message, hosted].into_iter().all(id_ok) {
-            return Err(refused("a picture too big, or without usable ids"));
-        }
-        let sum = hex(&Sha256::digest(bytes));
-        self.store
-            .write_account_files(TEAMS_ACCOUNT, &[(format!("img/{sum}"), bytes.to_vec()), (imgref_key(chat, message, hosted), sum.into_bytes())])
-    }
-
-    /// A message's hosted image, when it's kept: only bytes that are the ones it was kept as.
-    pub(crate) fn hosted(&self, chat: &str, message: &str, hosted: &str) -> Option<Vec<u8>> {
-        if ![chat, message, hosted].into_iter().all(id_ok) {
-            return None;
-        }
-        let sum = self.store.account_file(TEAMS_ACCOUNT, &imgref_key(chat, message, hosted)).ok()??;
-        let sum = String::from_utf8(sum).ok().filter(|s| s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))?;
-        let bytes = self.store.account_file(TEAMS_ACCOUNT, &format!("img/{sum}")).ok()??;
-        (bytes.len() <= MAX_PICTURE && hex(&Sha256::digest(&bytes)) == sum).then_some(bytes)
-    }
-
-    /// A message's hosted image gone from the copy: where it was said to be, and the picture. One
-    /// kept for another message with the same bytes goes too (it's fetched again if wanted): what
-    /// a deleted message showed doesn't stay.
-    fn forget_hosted(&self, chat: &str, message: &str, hosted: &str) -> Result<()> {
-        let at = imgref_key(chat, message, hosted);
-        if let Some(sum) = self.store.account_file(TEAMS_ACCOUNT, &at)?
-            && let Ok(sum) = String::from_utf8(sum)
-            && sum.len() == 64
-            && sum.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
-        {
-            self.store.remove_account_files(TEAMS_ACCOUNT, &format!("img/{sum}"))?;
-        }
-        self.store.remove_account_files(TEAMS_ACCOUNT, &at)
-    }
-
     /// The copy deleted: its data file, and every copy of it set aside as damaged.
     pub(crate) fn delete(self) -> Result<()> {
         Copy::delete_in(&self.store)
@@ -497,7 +465,8 @@ fn damaged_copies(store: &Store) -> Vec<PathBuf> {
 }
 
 /// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened
-/// for `t-1`/`u-1`, listed, read in pages and written to. `data` is a chat id, then pairs of a
+/// for `t-1`/`u-1`, listed, read in pages and written to, its pictures too (the chat id taken as
+/// a user's for a photo). `data` is a chat id, then pairs of a
 /// key under `Teams/` and its bytes, then (when they're odd) a message's JSON, split at NUL bytes;
 /// a `=` in a key is the chat's hash (`chats/=.json`, `msgs/=/0.json`). `Err` names a cap that
 /// what was read back breaks.
@@ -546,5 +515,14 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     let changed = copy.upsert(&chat, std::slice::from_ref(&m)).unwrap_or_default();
     check("what changed", &changed, 1)?;
     check("the last pages, once written", &copy.last_pages(&chat, 2), 2 * PAGE)?;
+    // The image cache read back (its uses, a photo's record), then a picture kept past them.
+    let (photo, _) = copy.photo(&chat);
+    if photo.is_some_and(|b| b.len() > MAX_PICTURE) {
+        return Err("a photo read back past its cap".into());
+    }
+    let _ = copy.put_hosted(&chat, &m.id, "h", b"a picture");
+    if copy.hosted(&chat, &m.id, "h").is_some_and(|b| b != b"a picture") {
+        return Err("a picture read back isn't the one kept".into());
+    }
     Ok(())
 }
