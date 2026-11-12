@@ -34,6 +34,8 @@ const MAX_RECORD: usize = 64 << 20;
 const MAX_LINK: usize = 8 << 10;
 /// The highest page number read back: a page past it is a damaged record.
 const MAX_PAGE_KEY: u32 = 1 << 24;
+/// The most unread messages kept of a chat (the list shows "99+" past 99 in all).
+pub(crate) const MAX_UNREAD: usize = 1_000;
 
 /// Whose copy it is: the organisation's id and the user's object id, as Graph gives them.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +95,14 @@ pub(crate) struct ChatRecord {
     /// A photo Graph said isn't there: not asked again until then.
     #[serde(default)]
     pub(crate) photo_missing_until: Option<i64>,
+    /// Its unread messages in the copy (id, creation time): from someone else, after the user
+    /// last read it; kept as messages come and as the read state moves, never by reading the
+    /// pages again. At most [`MAX_UNREAD`].
+    #[serde(default)]
+    pub(crate) unread: Vec<(String, i64)>,
+    /// The server's time when its messages were last read (an incremental read that ended).
+    #[serde(default)]
+    pub(crate) read_at: Option<i64>,
 }
 
 impl ChatRecord {
@@ -109,6 +119,8 @@ impl ChatRecord {
             panics: 0,
             set_aside_until: None,
             photo_missing_until: None,
+            unread: Vec::new(),
+            read_at: None,
         }
     }
 
@@ -133,6 +145,8 @@ impl ChatRecord {
         if self.next_link.as_ref().is_some_and(|l| l.len() > MAX_LINK) {
             self.next_link = None;
         }
+        self.unread.retain(|(id, _)| id_ok(id));
+        self.unread.truncate(MAX_UNREAD);
         let mut keys = self.page_keys.clone();
         keys.sort_unstable();
         let sound = self.pages.len() == self.page_keys.len()
@@ -147,6 +161,7 @@ impl ChatRecord {
             self.next_link = None;
             self.history_from = None;
             self.done = false;
+            self.unread.clear();
         }
         self
     }
@@ -305,20 +320,27 @@ impl Copy {
     /// A chat's record written. Its pages are the copy's own: those stored are kept, whatever
     /// `r` holds (a record read before [`Copy::upsert`] wrote doesn't take them back).
     pub(crate) fn put_chat(&self, r: &ChatRecord) -> Result<()> {
-        if !id_ok(&r.chat.id) {
-            return Err(refused("a chat without a usable id"));
-        }
-        let mut r = r.clone();
-        r.chat.members.truncate(MAX_MEMBERS);
-        let (pages, keys) = self.chat(&r.chat.id).map(|old| (old.pages, old.page_keys)).unwrap_or_default();
-        r.pages = pages;
-        r.page_keys = keys;
-        self.write_chat(&r)
+        self.put_chats(std::slice::from_ref(r))
     }
 
-    /// A chat's record written as it is.
-    fn write_chat(&self, r: &ChatRecord) -> Result<()> {
-        self.store.write_account_files(TEAMS_ACCOUNT, &[self.chat_file(r)?])
+    /// Chats' records written as [`Copy::put_chat`] does, in one go (a page of the list).
+    pub(crate) fn put_chats(&self, records: &[ChatRecord]) -> Result<()> {
+        let mut files = Vec::with_capacity(records.len());
+        for r in records {
+            if !id_ok(&r.chat.id) {
+                return Err(refused("a chat without a usable id"));
+            }
+            let mut r = r.clone();
+            r.chat.members.truncate(MAX_MEMBERS);
+            let (pages, keys) = self.chat(&r.chat.id).map(|old| (old.pages, old.page_keys)).unwrap_or_default();
+            r.pages = pages;
+            r.page_keys = keys;
+            files.push(self.chat_file(&r)?);
+        }
+        if files.is_empty() {
+            return Ok(());
+        }
+        self.store.write_account_files(TEAMS_ACCOUNT, &files)
     }
 
     fn chat_file(&self, r: &ChatRecord) -> Result<(String, Vec<u8>)> {
@@ -344,6 +366,27 @@ impl Copy {
                 (id_ok(&r.chat.id) && chat_hash(&r.chat.id) == h).then(|| r.held())
             })
             .take(quatrelle_model::pim::teams::MAX_CHATS)
+            .collect()
+    }
+
+    /// The chats in the copy whose hash ([`chat_hash`]) isn't among `listed`: those the server's
+    /// list no longer has. At most [`quatrelle_model::pim::teams::MAX_CHATS`] are looked at.
+    pub(crate) fn absent(&self, listed: &std::collections::HashSet<String>) -> Vec<ChatRecord> {
+        let names = match self.store.account_files(TEAMS_ACCOUNT, "chats") {
+            Ok(names) => names,
+            Err(_) => {
+                log::warn!("Teams copy: its chats couldn't be listed");
+                return Vec::new();
+            }
+        };
+        names
+            .iter()
+            .take(quatrelle_model::pim::teams::MAX_CHATS)
+            .filter_map(|n| n.strip_suffix(".json").filter(|h| h.len() == 32 && !listed.contains(*h)))
+            .filter_map(|h| {
+                let r: ChatRecord = serde_json::from_slice(&self.read(&format!("chats/{h}.json"))?).ok()?;
+                (id_ok(&r.chat.id) && chat_hash(&r.chat.id) == h).then(|| r.held())
+            })
             .collect()
     }
 
@@ -459,7 +502,8 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
         let lines = c.topic.as_deref().is_none_or(|t| one_line(t) == t)
             && c.members.iter().all(|m| id_ok(&m.user_id) && one_line(&m.name) == m.name)
             && c.preview.as_ref().is_none_or(|p| sender_ok(&p.sender) && one_line(&p.text) == p.text);
-        let fits = id_ok(&c.id) && c.members.len() <= MAX_MEMBERS && r.pages.len() == r.page_keys.len() && lines;
+        let unread = r.unread.len() <= MAX_UNREAD && r.unread.iter().all(|(id, _)| id_ok(id));
+        let fits = id_ok(&c.id) && c.members.len() <= MAX_MEMBERS && r.pages.len() == r.page_keys.len() && lines && unread;
         if !fits {
             return Err(format!("a chat read back past its caps: {} members, {} pages", r.chat.members.len(), r.pages.len()));
         }

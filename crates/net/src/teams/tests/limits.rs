@@ -177,3 +177,38 @@ fn the_deadline_is_never_more_than_a_second_away() {
     // Overdue is now, never in the past.
     assert_eq!(l.next_deadline(t0 + Duration::from_secs(4000)), t0 + Duration::from_secs(4000));
 }
+
+#[test]
+fn a_retry_after_holds_every_request_and_slows_only_its_cadence() {
+    let t0 = Instant::now();
+    let mut l = Limiter::new(t0);
+    // A 429 on the list, its Retry-After five seconds: nothing at all is asked meanwhile.
+    l.throttled(Cadence::List, Some(5), t0);
+    l.pause_all(t0 + Duration::from_secs(5));
+    for r in [Route::ChatList, Route::Messages(1), Route::Hosted(1), Route::Members, Route::Presence, Route::Photo, Route::Drive, Route::Me] {
+        assert_eq!(l.wait(r, t0 + SECOND), Duration::from_secs(4), "{r:?}");
+        assert_eq!(l.wait(r, t0 + Duration::from_secs(5)), Duration::ZERO, "{r:?}");
+    }
+    // An earlier end said after doesn't shorten it.
+    l.pause_all(t0 + SECOND);
+    assert_eq!(l.wait(Route::Members, t0), Duration::from_secs(5));
+    // The slow-down stays the list's: the open chat keeps its pace.
+    assert_eq!((l.interval(Cadence::List), l.interval(Cadence::Open)), (Duration::from_secs(20), Duration::from_secs(3)));
+    assert_eq!(crate::teams::limits::retry_wait(None), Duration::from_secs(10));
+    assert_eq!(crate::teams::limits::retry_wait(Some(u64::MAX)), Duration::from_secs(3600));
+}
+
+#[test]
+fn a_cadence_prompted_is_due_at_once() {
+    let t0 = Instant::now();
+    let mut l = Limiter::new(t0);
+    l.ran(Cadence::Open, t0);
+    assert!(!l.due(Cadence::Open, t0 + SECOND));
+    l.prompt(Cadence::Open);
+    assert!(l.due(Cadence::Open, t0 + SECOND));
+    // A 429's wait stays.
+    l.throttled(Cadence::Open, Some(5), t0 + SECOND);
+    l.prompt(Cadence::Open);
+    assert!(!l.due(Cadence::Open, t0 + Duration::from_secs(2)));
+    assert!(l.due(Cadence::Open, t0 + Duration::from_secs(6)));
+}

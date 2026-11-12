@@ -49,7 +49,9 @@ fn a_stale_token_is_renewed_once_after_a_sleep() {
     let (mut w, desk, seen, _) = by_hand(&server, grant(Some(TENANT)));
     let t0 = Instant::now();
     w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
-    turn_until(&mut w, t0, "the first list", |_| said(&teams_of(&seen), &Status::UpToDate));
+    // The first pass over: the list, then its chat's members and messages.
+    turn_until(&mut w, t0, "the first pass", |_| teams_of(&seen).iter().any(|e| matches!(e, model::Event::Chats { .. })));
+    assert!(said(&teams_of(&seen), &Status::UpToDate));
     assert_eq!((desk.renewed.load(Ordering::SeqCst), hits(&server, "chats")), (0, 1));
 
     // The computer slept the night: the wall clock went on, so the token has run out, and every
@@ -328,6 +330,10 @@ fn logs_carry_no_id() {
         .collect();
     let mut teams = FakeTeams { chats, ..FakeTeams::new(zebra, ORG) };
     teams.drive = Some("https://wombat-my.sharepoint.com/personal/zebra".into());
+    teams.clock = Some(T0 + 40 * 24 * 60 * MINUTE);
+    // One chat's messages refused from the first read, another's members.
+    teams.forbid_reads.push("19:okapi3@thread.v2".into());
+    teams.forbid_members.push("19:okapi5@thread.v2".into());
     let server = serve_teams(teams);
     let fake = |change: &dyn Fn(&mut FakeTeams)| change(server.data.lock().unwrap().teams.as_mut().unwrap());
 
@@ -342,20 +348,44 @@ fn logs_carry_no_id() {
     w.job(Job::SignIn { client_id: CLIENT.into(), tenant: OPTIONS_TENANT.into() });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some() || failed(&teams_of(&seen)));
     assert_eq!(tenant_of(&teams_of(&seen)), Some(ORG), "{:?}", teams_of(&seen));
-    // The list fails once, is refused for its token the next time, then is read.
+    let mut at = Duration::ZERO;
+    let mut turns = |w: &mut Worker, span: Duration| {
+        let end = at + span;
+        while at < end {
+            at += Duration::from_millis(100);
+            w.turn(t0 + at);
+        }
+    };
+    // A sync pass: the list, each chat's members and messages, the refusals among them.
+    turns(&mut w, Duration::from_secs(5));
+    let rows = teams_of(&seen).iter().filter_map(|e| if let model::Event::Chats { rows } = e { Some(rows.len()) } else { None }).sum::<usize>();
+    assert_eq!(rows, 13, "{:?}", teams_of(&seen));
+    // A new message, read in the next pass; then the list fails once, is refused for its token
+    // the next time, and is read; a chat is opened.
+    fake(&|t| {
+        let at = T0 + 40 * 24 * 60 * MINUTE + MINUTE;
+        t.clock = Some(at + 1000);
+        let c = t.chat_mut("19:okapi7@thread.v2").unwrap();
+        c.messages.push(FakeMessage::new(&at.to_string(), Some("u-numbat-oid-2204"), &rfc3339(at), "<p>Aardvark totals</p>"));
+    });
+    turns(&mut w, Duration::from_secs(11));
     fake(&|t| {
         t.fail_next.insert("chats".into(), 1);
     });
-    w.turn(t0 + Duration::from_secs(2));
+    turns(&mut w, Duration::from_secs(11));
     fake(&|t| t.refuse_once = Some("chats"));
-    w.turn(t0 + Duration::from_secs(13));
+    turns(&mut w, Duration::from_secs(11));
+    w.job(Job::Open { chat: Some("19:okapi7@thread.v2".into()) });
+    turns(&mut w, Duration::from_secs(4));
     assert!(said(&teams_of(&seen), &Status::UpToDate), "{:?}", teams_of(&seen));
+    assert!(teams_of(&seen).iter().any(|e| matches!(e, model::Event::Messages { fresh: true, .. })), "{:?}", teams_of(&seen));
     w.job(Job::SignOut { delete_copy: true });
     assert!(said(&teams_of(&seen), &Status::SignedOut));
 
     let lines = tap.lines();
     assert!(lines.iter().any(|l| l.starts_with("teams: ") && l.contains("13 conversations")), "the worker's lines are heard: {lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("teams: ") && l.contains("HTTP 500")), "a failure is said by its status: {lines:?}");
+    assert!(lines.iter().any(|l| l.starts_with("teams: ") && l.contains("HTTP 403")), "and a refusal: {lines:?}");
     let private = [
         OID,
         ORG,
@@ -368,6 +398,7 @@ fn logs_carry_no_id() {
         "okapi",
         "wombat",
         "armadillo",
+        "aardvark",
         "tenant-of-its-maker",
         "contoso",
         "@thread.v2",
@@ -491,4 +522,35 @@ fn the_loop_has_a_deadline_only_while_there_is_something_to_look_at() {
     w.job(Job::Start { settings: settings(ME) });
     assert!(said(&teams_of(&seen), &Status::SignInAgain) && creds.get_secret(&keyring(), REFRESH_KEY).is_none());
     assert!(w.wake(t0).is_none(), "sign in again: nothing to look at until the user does");
+}
+
+/// "No keychain" says the session is going (without a lasting sign-in): it never stands in for
+/// "Offline" or "sign in again" when those come, and comes back with the connection.
+#[test]
+fn no_keychain_never_hides_offline_or_sign_in_again() {
+    let server = serve_teams(one_chat());
+    let (desk, seen) = (desk(grant(Some(TENANT))), Seen::default());
+    let mut w =
+        Worker::new(Store::memory(), Arc::new(MemoryCredentials::default()), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk.clone())))
+            .unwrap();
+    let t0 = Instant::now();
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    turn_until(&mut w, t0, "the first list", |_| account(&teams_of(&seen)).is_some());
+    assert_eq!(teams_of(&seen).last(), Some(&status(Status::NoKeychain)), "{:?}", teams_of(&seen));
+    // The network gone at a renewal: said.
+    desk.offline.store(true, Ordering::SeqCst);
+    w.tokens.as_mut().unwrap().expires_at = now_unix() - 1;
+    w.turn(t0 + Duration::from_secs(40));
+    assert_eq!(teams_of(&seen).last(), Some(&status(Status::Offline)));
+    // Back: going again (said at the next list), still without a keychain.
+    desk.offline.store(false, Ordering::SeqCst);
+    for s in 51..75 {
+        w.turn(t0 + Duration::from_secs(s));
+    }
+    assert_eq!(teams_of(&seen).iter().rev().find(|e| matches!(e, model::Event::Status { .. })), Some(&status(Status::NoKeychain)));
+    // The sign-in refused: said, whatever the keychain.
+    desk.refuse.store(true, Ordering::SeqCst);
+    w.tokens.as_mut().unwrap().expires_at = now_unix() - 1;
+    w.turn(t0 + Duration::from_secs(100));
+    assert_eq!(teams_of(&seen).iter().rev().find(|e| matches!(e, model::Event::Status { .. })), Some(&status(Status::SignInAgain)));
 }

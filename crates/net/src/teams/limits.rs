@@ -12,7 +12,9 @@
 //!   interval has passed since it last ran, however long ago that was: a computer waking after a
 //!   night gives one request per cadence, never the missed ones.
 //! * A 429 or 503 on a cadence: nothing of it before `Retry-After` has passed, then its interval
-//!   doubled, up to [`MAX_SLOWDOWN`] times; an hour without one brings it back to its base.
+//!   doubled, up to [`MAX_SLOWDOWN`] times; an hour without one brings it back to its base. And
+//!   while that `Retry-After` runs, no Teams request at all ([`Limiter::pause_all`]): Teams'
+//!   limits are per application and organisation, and asking on meanwhile can make them last.
 
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -151,6 +153,13 @@ impl Pace {
     }
 }
 
+/// How long a 429 or a 503 asks to wait: its `Retry-After` in seconds, 10 s when it says none,
+/// an hour at most.
+pub(crate) fn retry_wait(retry_after: Option<u64>) -> Duration {
+    // Not `backoff_secs(Some(hint))`: it holds a hint to 20 s, and Graph's Retry-After is obeyed whole.
+    Duration::from_secs(retry_after.unwrap_or_else(|| backoff_secs(None, DEFAULT_ROUND)).min(MAX_RETRY_AFTER))
+}
+
 /// The limiter and the cadences' clock, owned by the Teams worker.
 #[derive(Debug)]
 pub(crate) struct Limiter {
@@ -159,13 +168,15 @@ pub(crate) struct Limiter {
     /// The last request of each spaced route, at most [`MAX_CHATS`] of them.
     last: HashMap<Route, Instant>,
     paces: [Pace; 5],
+    /// No request of any route before then (a `Retry-After`).
+    paused: Option<Instant>,
 }
 
 impl Limiter {
     /// A limiter with no request made yet: every cadence is due at once, so the worker's first
     /// pass runs as soon as it starts.
     pub(crate) fn new(_now: Instant) -> Limiter {
-        Limiter { window: VecDeque::with_capacity(CEILING), last: HashMap::new(), paces: [Pace::default(); 5] }
+        Limiter { window: VecDeque::with_capacity(CEILING), last: HashMap::new(), paces: [Pace::default(); 5], paused: None }
     }
 
     /// How long to wait before a request of `route` (zero when it may go now).
@@ -178,7 +189,14 @@ impl Limiter {
             Some(t) if self.window.len() >= CEILING => until(*t, now),
             _ => Duration::ZERO,
         };
-        own.max(all)
+        let paused = self.paused.map_or(Duration::ZERO, |p| p.saturating_duration_since(now));
+        own.max(all).max(paused)
+    }
+
+    /// No request of any route before `until` (a 429's or a 503's `Retry-After`, whichever
+    /// cadence heard it); a later pause already set stays.
+    pub(crate) fn pause_all(&mut self, until: Instant) {
+        self.paused = Some(self.paused.map_or(until, |p| p.max(until)));
     }
 
     /// A request of `route` was made at `now`.
@@ -219,14 +237,21 @@ impl Limiter {
     /// when none, an hour at most): nothing of it before that has passed, then its interval
     /// doubled, up to [`MAX_SLOWDOWN`] times its base.
     pub(crate) fn throttled(&mut self, c: Cadence, retry_after: Option<u64>, now: Instant) {
-        // Not `backoff_secs(Some(hint))`: it holds a hint to 20 s, and Graph's Retry-After is obeyed whole.
-        let secs = retry_after.unwrap_or_else(|| backoff_secs(None, DEFAULT_ROUND)).min(MAX_RETRY_AFTER);
+        let wait = retry_wait(retry_after);
         if let Some(p) = self.paces.get_mut(c.index()) {
             p.settle(now);
             p.slowdown = p.slowdown.max(1).saturating_mul(2).min(MAX_SLOWDOWN);
             p.throttled = Some(now);
             p.ran = None;
-            p.not_before = now.checked_add(Duration::from_secs(secs)).or(Some(now));
+            p.not_before = now.checked_add(wait).or(Some(now));
+        }
+    }
+
+    /// Cadence `c` is due at once (a chat just opened): its last run forgotten, a 429's wait and
+    /// its slow-down kept.
+    pub(crate) fn prompt(&mut self, c: Cadence) {
+        if let Some(p) = self.paces.get_mut(c.index()) {
+            p.ran = None;
         }
     }
 

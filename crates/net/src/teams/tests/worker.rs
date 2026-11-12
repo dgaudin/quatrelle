@@ -26,7 +26,7 @@ use crate::{NetError, Result};
 
 /// How long a test waits for the worker to say something.
 const WAIT: Duration = Duration::from_secs(10);
-const CLIENT: &str = "11111111-2222-3333-4444-555555555555";
+pub(super) const CLIENT: &str = "11111111-2222-3333-4444-555555555555";
 const REFRESH: &str = "kept-in-the-keychain-only-0001";
 const SIGN_IN_PAGE: &str = "https://login.contoso.example/authorize";
 const NO_ORGANISATION: &str = "Teams couldn't tell which organisation this account belongs to";
@@ -38,7 +38,7 @@ mod sign_in;
 
 /// The sign-in service of the tests: what a sign-in in the browser hands out, and what it was
 /// asked.
-struct Desk {
+pub(super) struct Desk {
     grant: Mutex<Tokens>,
     /// Renewals are refused (the sign-in was revoked).
     refuse: AtomicBool,
@@ -52,7 +52,7 @@ struct Desk {
     presented: Mutex<Vec<String>>,
 }
 
-struct AtDesk(Arc<Desk>);
+pub(super) struct AtDesk(pub(super) Arc<Desk>);
 
 impl Authority for AtDesk {
     fn authorize(&self, _client_id: &str, _tenant: &str, open: &mut dyn FnMut(&str) -> std::result::Result<(), String>) -> Result<Tokens> {
@@ -77,7 +77,7 @@ impl Authority for AtDesk {
 
 /// What a sign-in hands out: the fake Graph's token, a refresh token, good for an hour, the
 /// permissions not said, and the organisation the ID token names (`tid`).
-fn grant(tenant: Option<&str>) -> Tokens {
+pub(super) fn grant(tenant: Option<&str>) -> Tokens {
     Tokens {
         access: TOKEN.into(),
         refresh: Some(REFRESH.into()),
@@ -88,7 +88,7 @@ fn grant(tenant: Option<&str>) -> Tokens {
     }
 }
 
-fn desk(tokens: Tokens) -> Arc<Desk> {
+pub(super) fn desk(tokens: Tokens) -> Arc<Desk> {
     Arc::new(Desk {
         grant: Mutex::new(tokens),
         refuse: AtomicBool::new(false),
@@ -103,7 +103,7 @@ fn desk(tokens: Tokens) -> Arc<Desk> {
 /// A keychain of the tests' own: what it is given stays (credentials held in memory alone, the
 /// portable app's, say they keep nothing).
 #[derive(Default)]
-struct Kept(MemoryCredentials);
+pub(super) struct Kept(MemoryCredentials);
 
 impl Credentials for Kept {
     fn get(&self, a: &AccountConfig) -> Option<String> {
@@ -135,15 +135,15 @@ impl Credentials for Kept {
     }
 }
 
-type Seen = Arc<Mutex<Vec<Event>>>;
+pub(super) type Seen = Arc<Mutex<Vec<Event>>>;
 
-fn emit_into(seen: &Seen) -> Emit {
+pub(super) fn emit_into(seen: &Seen) -> Emit {
     let seen = seen.clone();
     Arc::new(move |e| seen.lock().unwrap().push(e))
 }
 
 /// What the worker reported of Teams, in order.
-fn teams_of(seen: &Seen) -> Vec<model::Event> {
+pub(super) fn teams_of(seen: &Seen) -> Vec<model::Event> {
     seen.lock().unwrap().iter().filter_map(|e| if let Event::Teams { event } = e { Some(event.clone()) } else { None }).collect()
 }
 
@@ -208,7 +208,7 @@ fn status(s: Status) -> model::Event {
     model::Event::Status { status: s }
 }
 
-fn said(seen: &[model::Event], s: &Status) -> bool {
+pub(super) fn said(seen: &[model::Event], s: &Status) -> bool {
     seen.iter().any(|e| matches!(e, model::Event::Status { status } if status == s))
 }
 
@@ -216,7 +216,7 @@ fn failed(seen: &[model::Event]) -> bool {
     seen.iter().any(|e| matches!(e, model::Event::Status { status: Status::Failed { .. } }))
 }
 
-fn account(seen: &[model::Event]) -> Option<&model::Event> {
+pub(super) fn account(seen: &[model::Event]) -> Option<&model::Event> {
     seen.iter().find(|e| matches!(e, model::Event::Account { .. }))
 }
 
@@ -248,7 +248,7 @@ fn settings(object: &str) -> TeamsSettings {
 }
 
 /// A worker driven by hand, a turn at a time, at the times the test makes.
-fn by_hand(server: &Server, tokens: Tokens) -> (Worker, Arc<Desk>, Seen, Arc<Kept>) {
+pub(super) fn by_hand(server: &Server, tokens: Tokens) -> (Worker, Arc<Desk>, Seen, Arc<Kept>) {
     let (desk, seen, creds) = (desk(tokens), Seen::default(), Arc::new(Kept::default()));
     let w = Worker::new(Store::memory(), creds.clone(), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk.clone()))).unwrap();
     (w, desk, seen, creds)
@@ -256,7 +256,7 @@ fn by_hand(server: &Server, tokens: Tokens) -> (Worker, Arc<Desk>, Seen, Arc<Kep
 
 /// Turn a worker driven by hand, at `now`, until `done` (the browser's answer comes from a thread
 /// of its own, so the first turns may find nothing yet).
-fn turn_until(w: &mut Worker, now: Instant, what: &str, done: impl Fn(&Worker) -> bool) {
+pub(super) fn turn_until(w: &mut Worker, now: Instant, what: &str, done: impl Fn(&Worker) -> bool) {
     let until = Instant::now() + WAIT;
     while !done(w) {
         assert!(Instant::now() < until, "{what} never came");

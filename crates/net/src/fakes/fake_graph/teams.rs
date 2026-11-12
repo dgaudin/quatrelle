@@ -46,6 +46,11 @@ pub(crate) struct FakeChat {
     /// When the signed-in user last read it (`viewpoint.lastMessageReadDateTime`).
     pub(crate) read_time: String,
     pub(crate) messages: Vec<FakeMessage>,
+    /// When it was last renamed or its members changed (`lastUpdatedDateTime`); `None`: when it
+    /// was made. A message doesn't move it.
+    pub(crate) updated: Option<String>,
+    /// Hidden by the user (`viewpoint.isHidden`).
+    pub(crate) hidden: bool,
 }
 
 impl FakeChat {
@@ -58,6 +63,8 @@ impl FakeChat {
             tenant: None,
             read_time: "2026-01-01T00:00:00.000Z".into(),
             messages: Vec::new(),
+            updated: None,
+            hidden: false,
         }
     }
 }
@@ -145,6 +152,19 @@ pub(crate) struct FakeTeams {
     pub(crate) hold: Option<(&'static str, std::time::Duration)>,
     /// Set for the server by the request being answered: how long its answer is held back.
     pub(crate) holding: Option<std::time::Duration>,
+    /// The fake's clock (milliseconds since 1970), when a test sets it: what its `Date` says,
+    /// and what a change made now is dated from. `None`: this computer's clock.
+    pub(crate) clock: Option<i64>,
+    /// The next request of this route (by route name) is answered 429, once.
+    pub(crate) throttle_once: Option<&'static str>,
+    /// Users who are guests (by user id): as members, their roles say `guest`.
+    pub(crate) guests: Vec<String>,
+    /// The listing of this route (`chats` or `messages`) points every page's `@odata.nextLink`
+    /// at its second page: a server going round in circles.
+    pub(crate) loop_next: Option<&'static str>,
+    /// The listing of this route answers its first page whatever its link asks, each time with
+    /// a link it never gave before: a server that brings nothing new.
+    pub(crate) repeat_page: Option<&'static str>,
 }
 
 impl FakeTeams {
@@ -154,6 +174,19 @@ impl FakeTeams {
 
     pub(crate) fn chat(&self, id: &str) -> Option<&FakeChat> {
         self.chats.iter().find(|c| c.id == id)
+    }
+
+    pub(crate) fn chat_mut(&mut self, id: &str) -> Option<&mut FakeChat> {
+        self.chats.iter_mut().find(|c| c.id == id)
+    }
+
+    /// A chat renamed now: its topic, and its `lastUpdatedDateTime` moved.
+    pub(crate) fn rename(&mut self, id: &str, topic: &str) {
+        let now = rfc3339(self.now());
+        if let Some(c) = self.chat_mut(id) {
+            c.topic = Some(topic.to_string());
+            c.updated = Some(now);
+        }
     }
 }
 
@@ -261,17 +294,44 @@ fn top(q: &HashMap<String, String>, default: usize) -> Result<usize, Reply> {
     }
 }
 
+/// How a listing's pages follow one another.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Paging {
+    /// As Graph's do.
+    Plain,
+    /// Every page's link points at the second page.
+    Second,
+    /// Every link brings the first page again, under a link never given before (this number).
+    Same(u32),
+}
+
 /// One page of a listing at `$skiptoken`, with `@odata.nextLink` for the rest.
-fn page(list: Vec<Value>, top: usize, q: &HashMap<String, String>, path: &str, query: &str, base: &str) -> Reply {
-    let skip: usize = q.get("$skiptoken").and_then(|s| s.parse().ok()).unwrap_or(0);
+fn page(list: Vec<Value>, top: usize, q: &HashMap<String, String>, path: &str, query: &str, base: &str, paging: Paging) -> Reply {
+    let skip: usize = if matches!(paging, Paging::Same(_)) { 0 } else { q.get("$skiptoken").and_then(|s| s.parse().ok()).unwrap_or(0) };
     let mut v = json!({ "value": list.iter().skip(skip).take(top).cloned().collect::<Vec<_>>() });
-    if skip.saturating_add(top) < list.len() {
+    let token = match paging {
+        Paging::Plain => (skip.saturating_add(top) < list.len()).then(|| (skip + top).to_string()),
+        Paging::Second => Some(top.to_string()),
+        Paging::Same(n) => Some(format!("again{n}")),
+    };
+    if let Some(token) = token {
         let rest: Vec<&str> =
             query.split('&').filter(|kv| !kv.is_empty() && !kv.starts_with("$skiptoken=") && !kv.starts_with("%24skiptoken=")).collect();
         let sep = if rest.is_empty() { "" } else { "&" };
-        v["@odata.nextLink"] = json!(format!("{base}{path}?{}{sep}$skiptoken={}", rest.join("&"), skip + top));
+        v["@odata.nextLink"] = json!(format!("{base}{path}?{}{sep}$skiptoken={token}", rest.join("&")));
     }
     Reply::json(200, &v)
+}
+
+impl FakeTeams {
+    /// How the listing of `route` pages.
+    fn paging(&self, route: &str) -> Paging {
+        match () {
+            _ if self.loop_next == Some(route) => Paging::Second,
+            _ if self.repeat_page == Some(route) => Paging::Same(self.hits.get(route).copied().unwrap_or(0)),
+            _ => Paging::Plain,
+        }
+    }
 }
 
 /// A shared file's key in `shares`: the URL a `u!` share id encodes (base64url, unpadded), or
@@ -298,7 +358,9 @@ impl FakeTeams {
     /// A time later than every time the fake holds and not before the clock: what is changed
     /// now is always seen as newer.
     fn now(&self) -> i64 {
-        let clock = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0));
+        let clock = self.clock.unwrap_or_else(|| {
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(0))
+        });
         let held = self.chats.iter().flat_map(|c| {
             c.messages
                 .iter()
@@ -306,6 +368,11 @@ impl FakeTeams {
                 .chain(std::iter::once(&c.read_time))
         });
         held.filter_map(|t| ms_of(t)).map(|t| t + 1).fold(clock, i64::max)
+    }
+
+    /// What its `Date` says: the clock a test set, else [`Self::now`].
+    fn date(&self) -> i64 {
+        self.clock.unwrap_or_else(|| self.now())
     }
 
     fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
@@ -334,11 +401,11 @@ impl FakeTeams {
 
     fn chat_json(&self, c: &FakeChat, preview: bool) -> Value {
         let created = c.messages.iter().map(|m| m.created.as_str()).min_by_key(|t| ms_of(t)).unwrap_or("2026-01-01T00:00:00.000Z");
-        let updated = c.messages.iter().map(|m| m.modified.as_str()).max_by_key(|t| ms_of(t)).unwrap_or(created);
+        let updated = c.updated.as_deref().unwrap_or(created);
         let mut v = json!({
             "id": c.id, "topic": c.topic, "createdDateTime": created, "lastUpdatedDateTime": updated, "chatType": c.kind,
             "webUrl": format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={}", c.id, self.tenant), "tenantId": c.tenant.as_deref().unwrap_or(&self.tenant),
-            "onlineMeetingInfo": null, "viewpoint": {"isHidden": false, "lastMessageReadDateTime": c.read_time},
+            "onlineMeetingInfo": null, "viewpoint": {"isHidden": c.hidden, "lastMessageReadDateTime": c.read_time},
         });
         if preview {
             v["lastMessagePreview"] = Self::newest(c).map_or(Value::Null, |m| {
@@ -361,7 +428,7 @@ impl FakeTeams {
         if q.get("$orderby").is_some_and(|o| o.starts_with("lastMessagePreview/createdDateTime")) {
             chats.sort_by_key(|c| std::cmp::Reverse(Self::newest(c).and_then(|m| ms_of(&m.created))));
         }
-        page(chats.into_iter().map(|c| self.chat_json(c, preview)).collect(), top, q, path, query, base)
+        page(chats.into_iter().map(|c| self.chat_json(c, preview)).collect(), top, q, path, query, base, self.paging("chats"))
     }
 
     /// A chat's messages in a `lastModifiedDateTime` range (`gt` and/or `lt`, joined by `and`).
@@ -390,7 +457,7 @@ impl FakeTeams {
             .filter(|m| ms_of(&m.modified).is_some_and(|t| range.iter().all(|(gt, at)| if *gt { t > *at } else { t < *at })))
             .collect();
         list.sort_by_key(|m| std::cmp::Reverse(key(m)));
-        page(list.into_iter().map(|m| self.message_json(chat, m)).collect(), top, q, path, query, base)
+        page(list.into_iter().map(|m| self.message_json(chat, m)).collect(), top, q, path, query, base, self.paging("messages"))
     }
 
     /// One Teams request, by route name, on paths already decoded and normalized.
@@ -429,6 +496,7 @@ impl FakeTeams {
         let tenant = self.tenant.clone();
         let forbidden = self.forbid_post.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
         let members_refused = self.forbid_members.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
+        let guests = self.guests.clone();
         let Some(chat) = self.chats.get_mut(ci) else { return not_found() };
         match name {
             "members" if members_refused => Reply::error(403, "Forbidden", "Reading this chat's members is not allowed."),
@@ -444,8 +512,9 @@ impl FakeTeams {
                     .members
                     .iter()
                     .map(|u| {
+                        let roles = if guests.contains(&u.id) { json!(["guest"]) } else { json!(["owner"]) };
                         json!({
-                            "@odata.type": "#microsoft.graph.aadUserConversationMember", "id": format!("{}#{}", chat.id, u.id), "roles": ["owner"],
+                            "@odata.type": "#microsoft.graph.aadUserConversationMember", "id": format!("{}#{}", chat.id, u.id), "roles": roles,
                             "displayName": u.display_name, "userId": u.id, "email": u.mail, "tenantId": tenant,
                             "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
                         })
@@ -602,7 +671,7 @@ impl Data {
                 }
             }
         };
-        reply.date = Some(t.now().div_euclid(1000));
+        reply.date = Some(t.date().div_euclid(1000));
         Some(reply)
     }
 }
@@ -613,6 +682,10 @@ impl FakeTeams {
     fn refusal(&mut self, name: &str, authorized: bool, someone_else: bool) -> Option<Reply> {
         if name == "download" {
             return None;
+        }
+        if self.throttle_once == Some(name) {
+            self.throttle_once = None;
+            return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
         }
         let counted: u32 = self.hits.iter().filter(|(k, _)| *k != "download").map(|(_, n)| *n).sum();
         if counted > self.throttle_from && self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {

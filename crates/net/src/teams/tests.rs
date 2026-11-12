@@ -17,6 +17,8 @@ mod limits;
 mod read;
 /// The local copy: pages, identity, deleted messages, damaged records.
 mod store;
+/// The synchronisation: the cadences, incremental reads, read state, refused and left chats.
+mod sync;
 /// The worker: sign-in, whose organisation it is, the tokens, switching off, signing out.
 mod worker;
 

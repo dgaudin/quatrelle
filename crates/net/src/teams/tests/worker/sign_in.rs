@@ -54,7 +54,9 @@ fn the_tenant_is_never_a_chats_own() {
     r.sign_in("organizations");
     let seen = r.wait("the account", |e| account(e).is_some() || failed(e));
     assert_eq!(tenant_of(&seen), Some(TENANT), "{seen:?}");
-    assert_eq!(r.hits("members"), 1);
+    // Once to find the organisation, once more for the copy (its first pass over).
+    r.wait("the first pass", |e| e.iter().any(|e| matches!(e, model::Event::Chats { .. })));
+    assert_eq!(r.hits("members"), 2);
 
     // No entry of the user's own: nothing says the organisation, and the chat's isn't taken.
     let r = rig(foreign(vec![ana, bruno]), grant(None));
@@ -177,10 +179,10 @@ fn without_a_keychain_the_sign_in_lasts_the_session() {
 fn a_copy_made_for_another_account_is_set_aside_and_said() {
     let t = temp("set-aside");
     let store = Store::open_packed(t.join("app"), t.join("files")).unwrap();
-    // Someone else's copy, holding a chat.
+    // Someone else's copy, holding a chat (not one this account has: the sync copies those).
     let other = Identity { tenant_id: TENANT.into(), object_id: "u-someone-else".into() };
     let (copy, _) = Copy::open(store.clone(), &other).unwrap();
-    copy.put_chat(&ChatRecord::new(chat_of(&json!({"id": CHAT, "chatType": "group"})).unwrap())).unwrap();
+    copy.put_chat(&ChatRecord::new(chat_of(&json!({"id": "19:theirs@thread.v2", "chatType": "group"})).unwrap())).unwrap();
     drop(copy);
 
     let r = rig_with(one_chat(), grant(Some(TENANT)), store.clone(), Arc::new(Kept::default()), Hooks::default());
@@ -193,7 +195,7 @@ fn a_copy_made_for_another_account_is_set_aside_and_said() {
     // The copy is this account's now, with nothing of the other's.
     let (copy, opened) = Copy::open(store, &Identity { tenant_id: TENANT.into(), object_id: ME.into() }).unwrap();
     assert_eq!(opened, Opened::Same);
-    assert!(copy.chat(CHAT).is_none());
+    assert!(copy.chat("19:theirs@thread.v2").is_none());
     let _ = std::fs::remove_dir_all(&t);
 }
 
@@ -298,4 +300,43 @@ fn credentials_that_keep_nothing_say_so() {
     // What says it keeps: the system's keychain (the trait's own answer), not memory.
     assert!(!MemoryCredentials::default().persists());
     assert!(Kept::default().persists() && NoKeychain.persists());
+}
+
+#[test]
+fn a_panic_while_signing_in_says_it_failed() {
+    let hooks = Hooks { trip_sign_in: Arc::new(AtomicU32::new(1)), ..Hooks::default() };
+    let r = rig_with(one_chat(), grant(Some(TENANT)), Store::memory(), Arc::new(Kept::default()), hooks);
+    r.sign_in("organizations");
+    let seen = r.wait("the failure", |e| failed(e) || account(e).is_some());
+    assert!(failed(&seen) && account(&seen).is_none(), "not signing in for good: {seen:?}");
+    assert_eq!(r.kept(), None, "nothing kept of it");
+    // The next sign-in goes through.
+    r.sign_in("organizations");
+    r.wait("the account", |e| account(e).is_some());
+}
+
+#[test]
+fn a_copy_that_panics_on_opening_is_set_aside_and_made_again() {
+    let t = temp("panic-open");
+    let files = t.join("files");
+    let store = Store::open_packed(t.join("app"), &files).unwrap();
+    // This account's copy, holding a chat.
+    let who = Identity { tenant_id: TENANT.into(), object_id: ME.into() };
+    let (copy, _) = Copy::open(store.clone(), &who).unwrap();
+    copy.put_chat(&ChatRecord::new(chat_of(&json!({"id": "19:kept@thread.v2", "chatType": "group"})).unwrap())).unwrap();
+    drop(copy);
+
+    // Reading it panics (a parser's bug, a file's damage).
+    let hooks = Hooks { trip_open: Arc::new(AtomicU32::new(1)), ..Hooks::default() };
+    let r = rig_with(one_chat(), grant(Some(TENANT)), store.clone(), Arc::new(Kept::default()), hooks);
+    r.sign_in("organizations");
+    let seen = r.wait("the first list", |e| said(e, &Status::UpToDate) || failed(e));
+    assert!(said(&seen, &Status::UpToDate), "signed in all the same: {seen:?}");
+    assert!(files.join("Teams.quatrelle.damaged").exists(), "the copy set aside as damaged");
+    r.wait("the first pass", |e| e.iter().any(|e| matches!(e, model::Event::Chats { .. })));
+    let (copy, opened) = Copy::open(store, &who).unwrap();
+    assert_eq!(opened, Opened::Same);
+    assert!(copy.chat("19:kept@thread.v2").is_none() && copy.chat(CHAT).is_some(), "made again from the server");
+    drop(r);
+    let _ = std::fs::remove_dir_all(&t);
 }

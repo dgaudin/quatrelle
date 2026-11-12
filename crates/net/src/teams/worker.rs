@@ -20,20 +20,20 @@
 //! * The log says counts, HTTP statuses with Graph's error codes and keyed hashes
 //!   ([`Worker::hashed`]): never a name, an address, a topic or an id.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use quatrelle_model::Event;
 use quatrelle_model::job::Secret;
-use quatrelle_model::pim::teams::{self, CHAT_PAGES, ChatMessage, Job, MAX_CHATS, Status, TeamsSettings};
+use quatrelle_model::pim::teams::{self, ChatMessage, Job, Status, TeamsSettings};
 use quatrelle_store::Store;
 use sha2::{Digest, Sha256};
 
-use super::graph::{TeamsClient, chat_of};
-use super::limits::{Cadence, Limiter, Route};
-use super::store::{Copy, id_ok};
+use super::graph::TeamsClient;
+use super::limits::{Cadence, Limiter, Route, retry_wait};
+use super::store::Copy;
+use super::sync::{self, SyncState};
 use crate::oauth::{self, Tokens};
 use crate::worker::Credentials;
 use crate::worker::connect::{Panics, fenced};
@@ -55,8 +55,6 @@ const TURN: Duration = Duration::from_millis(20);
 const AWAITING: Duration = Duration::from_millis(200);
 /// After a failure (no network, a server's error): tried again then.
 const RETRY: Duration = Duration::from_secs(10);
-/// The longest link to a listing's next page followed.
-const MAX_LINK: usize = 8 << 10;
 
 /// What a test changes of a worker: a step that panics, and a shorter wait after it.
 #[cfg(test)]
@@ -68,13 +66,21 @@ pub(crate) struct Hooks {
     pub(crate) panic_wait: Option<Duration>,
     /// How many times the loop woke, for a job or for a deadline.
     pub(crate) turns: Arc<std::sync::atomic::AtomicU32>,
+    /// The next openings of the copy panic, this many of them: a damaged file, a parser's bug.
+    pub(crate) trip_open: Arc<std::sync::atomic::AtomicU32>,
+    /// The next sign-ins panic once the browser has answered, this many of them.
+    pub(crate) trip_sign_in: Arc<std::sync::atomic::AtomicU32>,
 }
 
 #[cfg(test)]
 impl Hooks {
     fn trip(&self) {
+        Hooks::trip_on(&self.trip_list);
+    }
+
+    fn trip_on(count: &std::sync::atomic::AtomicU32) {
         use std::sync::atomic::Ordering::SeqCst;
-        if self.trip_list.fetch_update(SeqCst, SeqCst, |n| n.checked_sub(1)).is_ok() {
+        if count.fetch_update(SeqCst, SeqCst, |n| n.checked_sub(1)).is_ok() {
             panic!("a panic the test asked for");
         }
     }
@@ -140,17 +146,6 @@ fn spawn(w: Worker) -> std::io::Result<Handle> {
     })
 }
 
-/// A read of the whole chat list, a page a step.
-#[derive(Default)]
-struct Listing {
-    next: Option<String>,
-    pages: usize,
-    /// The pages' links followed and the chats seen, by their keyed hashes: a link met twice or
-    /// a page with nobody new ends the read.
-    links: HashSet<u64>,
-    chats: HashSet<u64>,
-}
-
 /// What the worker's thread owns. The synchronisation, the history, the pictures and the search
 /// are functions on it (`sync.rs`, `backfill.rs`, `pictures.rs`, `search.rs`).
 pub(crate) struct Worker {
@@ -184,7 +179,8 @@ pub(crate) struct Worker {
     not_before: Option<Instant>,
     /// The status last reported.
     said: Option<Status>,
-    listing: Option<Listing>,
+    /// Where the synchronisation stands between two steps (`sync.rs`).
+    pub(crate) sync: SyncState,
     /// The sign-in awaited from the browser (its number), and where its thread answers.
     signing: Option<u64>,
     sign_ins: u64,
@@ -226,7 +222,7 @@ impl Worker {
             polling: false,
             not_before: None,
             said: None,
-            listing: None,
+            sync: SyncState::default(),
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -300,7 +296,7 @@ impl Worker {
         #[cfg(test)]
         let wait = self.hooks.panic_wait.unwrap_or(wait);
         log::error!("teams: internal error: the step in hand was given up; going on in {} s", wait.as_secs());
-        self.listing = None;
+        self.sync.give_up();
         self.held = None;
         self.not_before = now.checked_add(wait);
     }
@@ -320,9 +316,10 @@ impl Worker {
                 self.said = None;
                 log::info!("teams: switched off");
             }
-            Job::Open { chat } => self.open = chat.filter(|c| id_ok(c)),
-            // The copy's pages, presence, the search and pictures: with the modules that read them.
-            Job::Page { .. } | Job::Visible { .. } | Job::Search { .. } | Job::Picture { .. } => {}
+            Job::Open { chat } => sync::open(self, chat),
+            Job::Page { chat, before } => sync::page(self, &chat, before),
+            // Presence, the search and pictures: with the modules that read them.
+            Job::Visible { .. } | Job::Search { .. } | Job::Picture { .. } => {}
         }
     }
 
@@ -340,48 +337,21 @@ impl Worker {
         }
     }
 
-    /// One step of whatever cadence is due. The hook the synchronisation takes over (`sync.rs`);
-    /// until it does, the worker reads the chat list to its end every ten seconds, a page a step,
-    /// counting its chats and keeping nothing; the cadences nothing runs yet are passed.
+    /// One step of whatever cadence is due (`sync.rs`): a request at most.
     pub(crate) fn tick(&mut self, now: Instant) {
-        for later in [Cadence::Open, Cadence::Active, Cadence::Hourly, Cadence::Presence] {
-            if self.limiter.due(later, now) {
-                self.limiter.ran(later, now);
-            }
-        }
-        if self.listing.is_none() && self.limiter.due(Cadence::List, now) {
-            self.listing = Some(Listing::default());
-        }
-        let Some(mut list) = self.listing.take() else { return };
-        if !self.may(Route::ChatList, now) {
-            self.listing = Some(list);
-            return;
-        }
-        #[cfg(test)]
+        sync::tick(self, now);
+    }
+
+    /// The list is read: up to date, or connected without a keychain (which the card goes on
+    /// saying). Neither hides "Offline" or "sign in again" when they come.
+    pub(crate) fn up_to_date(&mut self) {
+        self.status(if self.no_keychain { Status::NoKeychain } else { Status::UpToDate });
+    }
+
+    /// A test's panic in the list pass, when it asked for one.
+    #[cfg(test)]
+    pub(crate) fn trip_list(&self) {
         self.hooks.trip();
-        let page = match self.request(Route::ChatList, now, |c| c.chats(list.next.as_deref())) {
-            Ok(page) => page,
-            Err(e) => return self.failed(Cadence::List, "the list of conversations", &e, now),
-        };
-        list.pages = list.pages.saturating_add(1);
-        let before = list.chats.len();
-        for chat in page.items.iter().filter_map(chat_of) {
-            if list.chats.len() < MAX_CHATS {
-                list.chats.insert(self.key_of(&chat.id));
-            }
-        }
-        let more = list.chats.len() > before && list.chats.len() < MAX_CHATS && list.pages < CHAT_PAGES;
-        match page.next.filter(|next| more && next.len() <= MAX_LINK && list.links.insert(self.key_of(next))) {
-            Some(next) => {
-                list.next = Some(next);
-                self.listing = Some(list);
-            }
-            None => {
-                self.limiter.ran(Cadence::List, now);
-                log::info!("teams: {} conversations listed in {} pages", list.chats.len(), list.pages);
-                self.status(if self.no_keychain { Status::NoKeychain } else { Status::UpToDate });
-            }
-        }
     }
 
     /// Whether a request of `route` may go at `now`, by the limiter. When it may not, the loop is
@@ -420,9 +390,10 @@ impl Worker {
         }
     }
 
-    /// A step of `cadence` failed. Busy (429, 503): the cadence waits as told and slows down.
-    /// Anything else: said by its kind, "Offline" when it's the network, and tried again in a
-    /// while. A refused token was dealt with where it was met.
+    /// A step of `cadence` failed. Busy (429, 503): nothing at all is asked of Teams while its
+    /// `Retry-After` runs, then that cadence goes at a slower pace. Anything else: said by its
+    /// kind, "Offline" when it's the network, and tried again in a while. A refused token was
+    /// dealt with where it was met.
     pub(crate) fn failed(&mut self, cadence: Cadence, what: &str, e: &NetError, now: Instant) {
         if !self.polling {
             return;
@@ -430,7 +401,11 @@ impl Worker {
         log::warn!("teams: {what} failed: {}", kind(e));
         if matches!(e, NetError::Closed(m) if m.starts_with("HTTP 429") || m.starts_with("HTTP 503")) {
             let wait = self.client.as_ref().and_then(TeamsClient::retry_after);
-            return self.limiter.throttled(cadence, wait, now);
+            self.limiter.throttled(cadence, wait, now);
+            if let Some(until) = now.checked_add(retry_wait(wait)) {
+                self.limiter.pause_all(until);
+            }
+            return;
         }
         self.pause(e, now);
     }
@@ -462,7 +437,7 @@ impl Worker {
         self.tokens = None;
         self.refresh = None;
         self.renewed = None;
-        self.listing = None;
+        self.sync = SyncState::default();
         self.signing = None;
         self.held = None;
         self.not_before = None;
@@ -489,8 +464,6 @@ impl Worker {
 /// couldn't be read comes from the reader with an empty one (and can't be shown): nothing is
 /// ever kept, listed or indexed under an empty id. Counted in the log, with those that have
 /// their id but can't be shown.
-// The reads of messages (the synchronisation, the history) are what calls it.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn with_ids(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
     let read = messages.len();
     let kept: Vec<ChatMessage> = messages.into_iter().filter(|m| !m.id.is_empty()).collect();

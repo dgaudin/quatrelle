@@ -16,6 +16,8 @@
 //! * `worker`: the Teams worker, the one thread that talks to Teams: sign-in, the tokens (the
 //!   refresh token in the keychain only, [`keyring`]), the account's identity, and the loop the
 //!   synchronisation runs in.
+//! * `sync`: the synchronisation: the approved cadences, each chat's incremental read, read
+//!   state, and the chats Graph refuses or the user left.
 
 pub mod check;
 pub mod graph;
@@ -26,6 +28,7 @@ pub(crate) mod limits;
 // synchronisation (next), and until then by its tests and fuzz target.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod store;
+pub(crate) mod sync;
 pub(crate) mod worker;
 
 pub use check::{CheckOptions, run_check};

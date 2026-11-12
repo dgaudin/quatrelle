@@ -10,10 +10,10 @@
 //! the one account Microsoft says signed in.
 
 use quatrelle_model::AccountConfig;
-use quatrelle_model::pim::teams::{is_bidi, one_line};
-use quatrelle_store::StoreError;
+use quatrelle_model::pim::teams::{TEAMS_ACCOUNT, is_bidi, one_line};
+use quatrelle_store::{DATA_FILE_EXTENSION, StoreError};
 
-use super::super::graph::member_of;
+use super::super::graph::{chat_of, member_of};
 use super::super::store::{Identity, Opened};
 use super::*;
 use crate::oauth::TEAMS_SCOPE;
@@ -43,6 +43,7 @@ const NO_ACCOUNT: &str = "Teams didn't say who signed in";
 const NO_LASTING: &str = "Microsoft gave no lasting sign-in; try again";
 const NO_COPY: &str = "The local copy of the conversations couldn't be opened";
 const BAD_IDS: &str = "The application or directory ID in the Options can't be one";
+const INTERRUPTED: &str = "The sign-in stopped unexpectedly; try again";
 
 /// Who signs the account in and renews its tokens: Microsoft, or the tests' own.
 pub(crate) trait Authority: Send + Sync {
@@ -138,8 +139,7 @@ impl Worker {
                 emit(Event::OpenUrl { url: url.to_string() });
                 Ok(())
             };
-            let tokens = fenced(|| authority.authorize(&client_id, &tenant, &mut open))
-                .unwrap_or_else(|| Err(NetError::Refused("The sign-in stopped unexpectedly; try again".into())));
+            let tokens = fenced(|| authority.authorize(&client_id, &tenant, &mut open)).unwrap_or_else(|| Err(NetError::Refused(INTERRUPTED.into())));
             let _ = answer.send(Authorized { sign_in, client_id, tenant, tokens });
         });
         match spawned {
@@ -159,7 +159,15 @@ impl Worker {
         while let Ok(answer) = self.answers.1.try_recv() {
             if self.signing == Some(answer.sign_in) {
                 self.signing = None;
-                self.signed(answer, now);
+                // A bug met on the way (a panic) ends this sign-in, said as failed: never "signing
+                // in" for good, and nothing of it kept.
+                if fenced(|| self.signed(answer, now)).is_none() {
+                    log::error!("teams: internal error: the sign-in was given up");
+                    self.creds.delete_secret(&keyring(), REFRESH_KEY);
+                    self.halt();
+                    self.copy = None;
+                    self.refuse(INTERRUPTED);
+                }
             } else {
                 log::info!("teams: a sign-in nobody waits for any more was dropped");
             }
@@ -170,6 +178,8 @@ impl Worker {
     /// organisation is told, the copy is opened for that identity; only then is the refresh token
     /// kept. A refusal at any step keeps nothing.
     fn signed(&mut self, answer: Authorized, now: Instant) {
+        #[cfg(test)]
+        Hooks::trip_on(&self.hooks.trip_sign_in);
         let Authorized { client_id, tenant, tokens, .. } = answer;
         let tokens = match tokens {
             Ok(tokens) => tokens,
@@ -216,7 +226,7 @@ impl Worker {
             None
         });
         let who = Identity { tenant_id: tenant_id.clone(), object_id: me.id.clone() };
-        let (copy, opened) = match Copy::open(self.store.clone(), &who) {
+        let (copy, opened) = match self.open_copy(&who) {
             Ok(open) => open,
             Err(e) => {
                 log::error!("teams: the local copy couldn't be opened: {}", store_kind(&e));
@@ -295,6 +305,28 @@ impl Worker {
         None
     }
 
+    /// The copy for `who`, opened behind a guard: reading a file can panic (a parser's bug, damage
+    /// nothing checked for). One that does is set aside as damaged — deleted, in a cache that
+    /// keeps no data files — and an empty one begun, rebuilt from the server: never the same file
+    /// opened again, nor the worker stopped over it.
+    fn open_copy(&self, who: &Identity) -> std::result::Result<(Copy, Opened), StoreError> {
+        let open = || {
+            #[cfg(test)]
+            Hooks::trip_on(&self.hooks.trip_open);
+            Copy::open(self.store.clone(), who)
+        };
+        if let Some(opened) = fenced(open) {
+            return opened;
+        }
+        log::error!("teams: internal error reading the local copy; it is set aside as damaged and begun again");
+        let damaged = format!("{TEAMS_ACCOUNT}.{DATA_FILE_EXTENSION}.damaged");
+        if self.store.set_aside_data_file(TEAMS_ACCOUNT, &damaged)?.is_none() {
+            self.store.delete_account(TEAMS_ACCOUNT)?;
+        }
+        fenced(|| Copy::open(self.store.clone(), who))
+            .unwrap_or_else(|| Err(StoreError::Io { path: TEAMS_ACCOUNT.into(), source: std::io::Error::other("the local copy can't be read") }))
+    }
+
     /// A copy that was in the way was set aside: said, for the Options to offer its deletion.
     fn set_aside(&mut self, opened: Opened) {
         if let Opened::SetAside(path) = opened {
@@ -341,7 +373,7 @@ impl Worker {
             log::warn!("teams: the Options don't say who signed in");
             return self.status(Status::SignInAgain);
         }
-        match Copy::open(self.store.clone(), &who) {
+        match self.open_copy(&who) {
             Ok((copy, opened)) => {
                 self.copy = Some(copy);
                 self.set_aside(opened);
