@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Engine tests: Exchange's archive policy of a message and of a folder.
 
-use quatrelle_model::ArchiveTag;
+use quatrelle_model::{ArchiveTag, PolicyKind};
 
 use super::*;
 use crate::ARCHIVE_READ_ONLY;
@@ -12,8 +12,8 @@ const NEVER: &str = "44444444-aaaa-4bbb-8ccc-000000000004";
 
 fn tags() -> Vec<ArchiveTag> {
     vec![
-        ArchiveTag { id: YEAR.into(), name: "1 Year Move to Archive".into(), days: Some(365), never: false },
-        ArchiveTag { id: NEVER.into(), name: "Never Move to Archive".into(), days: None, never: true },
+        ArchiveTag { id: YEAR.into(), name: "1 Year Move to Archive".into(), days: Some(365), never: false, kind: PolicyKind::Archive },
+        ArchiveTag { id: NEVER.into(), name: "Never Move to Archive".into(), days: None, never: true, kind: PolicyKind::Archive },
     ]
 }
 
@@ -40,25 +40,31 @@ fn a_tag_set_offline_is_sent_on_reconnect() {
     s.open_message(&key);
     let jobs = s.take_jobs();
     assert!(jobs.iter().any(|j| matches!(j, Job::ReadArchiveTag { key: k } if *k == key)), "{jobs:?}");
-    assert_eq!(s.message_policy(&key), None);
-    s.apply(Event::ArchiveTagRead { key: key.clone(), tag: Some(NEVER.into()), date: None });
-    assert_eq!(s.message_policy(&key).map(|p| p.name), Some("Never Move to Archive".into()));
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive), None);
+    s.apply(Event::ArchiveTagRead { key: key.clone(), tag: Some(NEVER.into()), date: None, retention_tag: None, retention_date: None });
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive).map(|p| p.name), Some("Never Move to Archive".into()));
 
     s.run("mail.archivePolicy", &json!({"tag": YEAR})).unwrap();
     let jobs = s.take_jobs();
     let ops = tag_ops(&jobs);
     assert_eq!(ops.len(), 1, "{jobs:?}");
-    assert_eq!(*ops[0], Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: Some(YEAR.into()) });
-    assert_eq!(s.message_policy(&key).map(|p| p.name), Some("1 Year Move to Archive".into()));
+    assert_eq!(*ops[0], Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: Some(YEAR.into()), kind: PolicyKind::Archive });
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive).map(|p| p.name), Some("1 Year Move to Archive".into()));
 
     s.run("mail.archivePolicy", &json!({"tag": null})).unwrap();
     let jobs = s.take_jobs();
-    assert_eq!(*tag_ops(&jobs)[0], Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: None });
-    assert_eq!(s.message_policy(&key), None);
+    assert_eq!(*tag_ops(&jobs)[0], Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: None, kind: PolicyKind::Archive });
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive), None);
 
     // The day the server plans comes with what it reads afterwards.
-    s.apply(Event::ArchiveTagRead { key: key.clone(), tag: Some(YEAR.into()), date: Some("2027-11-10".into()) });
-    assert_eq!(s.message_policy(&key).and_then(|p| p.day), Some("2027-11-10".into()));
+    s.apply(Event::ArchiveTagRead {
+        key: key.clone(),
+        tag: Some(YEAR.into()),
+        date: Some("2027-11-10".into()),
+        retention_tag: None,
+        retention_date: None,
+    });
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive).and_then(|p| p.day), Some("2027-11-10".into()));
     let _ = std::fs::remove_dir_all(store.root());
     let _ = id;
 }
@@ -68,13 +74,13 @@ fn a_tag_set_offline_is_sent_on_reconnect() {
 #[test]
 fn a_tag_the_server_refuses_is_put_back() {
     let (mut s, store, id, key) = offered("policy-refused");
-    s.apply(Event::ArchiveTagRead { key: key.clone(), tag: Some(NEVER.into()), date: None });
+    s.apply(Event::ArchiveTagRead { key: key.clone(), tag: Some(NEVER.into()), date: None, retention_tag: None, retention_date: None });
     s.run("mail.archivePolicy", &json!({"tag": YEAR})).unwrap();
     let op = tag_ops(&s.take_jobs())[0].clone();
-    assert_eq!(s.message_policy(&key).map(|p| p.name), Some("1 Year Move to Archive".into()));
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive).map(|p| p.name), Some("1 Year Move to Archive".into()));
     let before = s.notices.len();
     s.apply(Event::OpFailed { account: id.clone(), op, error: "not on the server any more".into() });
-    assert_eq!(s.message_policy(&key).map(|p| p.name), Some("Never Move to Archive".into()), "put back");
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive).map(|p| p.name), Some("Never Move to Archive".into()), "put back");
     assert!(s.notices.len() > before && s.notices.last().is_some_and(|n| n.error), "{:?}", s.notices.last());
     let _ = std::fs::remove_dir_all(store.root());
 }
@@ -88,7 +94,7 @@ fn a_tag_on_mail_gone_to_the_archive_is_dropped() {
     s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
     let op = tag_ops(&s.take_jobs())[0].clone();
     s.apply(Event::OpFailed { account: id.clone(), op, error: "a message is no longer in the mailbox under that name: the server moved it".into() });
-    assert_eq!(s.message_policy(&key), None);
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive), None);
     assert!(s.take_jobs().iter().all(|j| !matches!(j, Job::Apply { .. })), "nothing is sent again");
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("server moved it")));
     let _ = std::fs::remove_dir_all(store.root());
@@ -125,13 +131,13 @@ fn a_folders_tag_is_set_and_put_back() {
     s.run("folder.archivePolicy", &json!({"folder": "INBOX", "tag": YEAR})).unwrap();
     let jobs = s.take_jobs();
     let op = tag_ops(&jobs)[0].clone();
-    assert_eq!(op, Op::SetArchiveTag { keys: Vec::new(), folder: Some("INBOX".into()), tag: Some(YEAR.into()) });
-    assert_eq!(s.folder_archive_tag(&id, "INBOX"), Some(YEAR));
+    assert_eq!(op, Op::SetArchiveTag { keys: Vec::new(), folder: Some("INBOX".into()), tag: Some(YEAR.into()), kind: PolicyKind::Archive });
+    assert_eq!(s.folder_tag(&id, "INBOX", PolicyKind::Archive), Some(YEAR));
     s.apply(Event::OpFailed { account: id.clone(), op, error: "refused".into() });
-    assert_eq!(s.folder_archive_tag(&id, "INBOX"), None);
+    assert_eq!(s.folder_tag(&id, "INBOX", PolicyKind::Archive), None);
     s.run("folder.archivePolicy", &json!({"folder": "INBOX", "tag": YEAR})).unwrap();
     s.run("folder.archivePolicy", &json!({"folder": "INBOX", "tag": null})).unwrap();
-    assert_eq!(s.folder_archive_tag(&id, "INBOX"), None);
+    assert_eq!(s.folder_tag(&id, "INBOX", PolicyKind::Archive), None);
     let _ = std::fs::remove_dir_all(store.root());
 }
 
@@ -154,6 +160,6 @@ fn the_archive_policy_isnt_offered_in_the_archive() {
         assert!(matches!(&r, Err(CmdError::Disabled(why)) if why == ARCHIVE_READ_ONLY), "{folder}: {r:?}");
     }
     assert!(tag_ops(&s.take_jobs()).is_empty());
-    assert!(!s.offers_archive_policy(&id, PROJECTS) && s.offers_archive_policy(&id, "INBOX"));
+    assert!(!s.offers_policy(&id, PROJECTS) && s.offers_policy(&id, "INBOX"));
     let _ = std::fs::remove_dir_all(store.root());
 }

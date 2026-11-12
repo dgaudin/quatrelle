@@ -2151,11 +2151,15 @@ folder	Online Archive	ארכיון מקוון
 	Online archive of {email}, read-only in this version	הארכיון המקוון של {email}, לקריאה בלבד בגרסה זו
 	the online archive is read-only in this version: use Outlook to move or delete its mail	הארכיון המקוון הוא לקריאה בלבד בגרסה זו: השתמשו ב-Outlook כדי להעביר או למחוק את הדואר שלו
 	Archive policy	מדיניות ארכוב
+	Policy	מדיניות
+	Retention policy	מדיניות שמירה
 	As its folder	כמו התיקייה
-	Archive policy: {name}.	מדיניות ארכוב: {name}.
-	Planned for {date}.	מתוכנן ל-{date}.
+	Archive: {name}	ארכוב: {name}
+	Archive: {name} ({date})	ארכוב: {name} ({date})
+	Deletion: {name}	מחיקה: {name}
+	Deletion: {name} ({date})	מחיקה: {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	הודעה כבר אינה בתיבת הדואר בשם זה: השרת העביר אותה
-	that isn't one of the server's archive policy tags	זו אינה אחת ממדיניות הארכוב של השרת
+	that isn't one of the server's policy tags	זו אינה אחת ממדיניות השרת
 	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} מתוך {total} הודעות
 	{name}: {done} of {total} messages	{name}: {done} מתוך {total} הודעות
 	{name}: {folder} — {done} messages	{name}: {folder} — {done} הודעות

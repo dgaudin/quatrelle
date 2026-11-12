@@ -2151,11 +2151,15 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Online archive of {email}, read-only in this version	الأرشيف عبر الإنترنت لـ {email}، للقراءة فقط في هذا الإصدار
 	the online archive is read-only in this version: use Outlook to move or delete its mail	الأرشيف عبر الإنترنت للقراءة فقط في هذا الإصدار: استخدم Outlook لنقل بريده أو حذفه
 	Archive policy	سياسة الأرشفة
+	Policy	سياسة
+	Retention policy	سياسة الاحتفاظ
 	As its folder	مثل المجلد
-	Archive policy: {name}.	سياسة الأرشفة: {name}.
-	Planned for {date}.	مخطط له في {date}.
+	Archive: {name}	الأرشفة: {name}
+	Archive: {name} ({date})	الأرشفة: {name} ({date})
+	Deletion: {name}	الحذف: {name}
+	Deletion: {name} ({date})	الحذف: {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	لم تعد رسالة في صندوق البريد بهذا الاسم: نقلها الخادم
-	that isn't one of the server's archive policy tags	هذه ليست إحدى سياسات الأرشفة في الخادم
+	that isn't one of the server's policy tags	هذه ليست إحدى سياسات الخادم
 	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} من {total} رسالة
 	{name}: {done} of {total} messages	{name}: {done} من {total} رسالة
 	{name}: {folder} — {done} messages	{name}: {folder} — {done} رسالة

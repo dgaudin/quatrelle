@@ -768,7 +768,7 @@ fn row_input(
         );
         ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| crate::organize::follow_up_menu(ui, s, t, acts));
         ui.menu_button((widgets::menu_icon(Some(Icon::Steps)), tl!("Quick steps")), |ui| crate::quick_steps_menu(ui, s, acts));
-        super::policy::archive_policy_menu(ui, s, acts, super::policy::PolicyFor::Mail(&key));
+        super::policy::policy_menu(ui, s, acts, super::policy::PolicyFor::Mail(&key));
         ui.separator();
         // Mail of the online archive (or a selection with some in it) is only read: what moves or
         // deletes it is greyed, as in the ribbon.

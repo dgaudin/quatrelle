@@ -46,6 +46,7 @@ pub use accounts::{AccountState, ImportState, UnfinishedImport, UpdateCheck, Vac
 pub use changing::MarkWork;
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, arranged, flag_rank, person, size_group};
+pub(crate) use mailboxes::none_offered;
 pub use mailboxes::{
     ARCHIVE_READ_ONLY, CompactPhase, Compacted, DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS,
     MAX_SUGGESTIONS, MAX_TOTAL, MessagePolicy, RecoverBlock, Recovered, Recovering, Sizes, Source, Suggestion, directory_people, fill_name,

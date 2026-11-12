@@ -132,10 +132,10 @@ const ARCHIVE_REFUSALS: [&str; 2] = [
 /// shown in a notice.
 const ONLINE_ARCHIVE_REFUSALS: [&str; 1] = [quatrelle_engine::ARCHIVE_READ_ONLY];
 
-/// What the network layer says when an archive policy tag can't be set (`net/src/exchange/ews/changes.rs`),
+/// What the network layer says when a policy tag can't be set (`net/src/exchange/ews/changes.rs`),
 /// shown in the notice of a change that wasn't kept through `i18n::error`.
 const POLICY_REFUSALS: [&str; 2] =
-    ["a message is no longer in the mailbox under that name: the server moved it", "that isn't one of the server's archive policy tags"];
+    ["a message is no longer in the mailbox under that name: the server moved it", "that isn't one of the server's policy tags"];
 
 /// The reasons the network layer gives for mail that stayed where it was when it was archived or
 /// put back (`net/src/worker/changes/archive.rs`); the notice says them through `i18n::error`.

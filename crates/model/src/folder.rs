@@ -160,6 +160,9 @@ pub struct Folder {
     /// The id of the archive policy tag the folder carries itself (Exchange), when it does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archive_tag: Option<String>,
+    /// The id of the retention policy tag the folder carries itself (Exchange), when it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_tag: Option<String>,
 }
 
 fn is_false(b: &bool) -> bool {

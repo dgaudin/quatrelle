@@ -221,7 +221,7 @@ impl Worker {
                 }
                 self.folders = list;
                 self.publish_folders();
-                // The archive policy tags the server offers (asked once a session).
+                // The archive and retention policy tags the server offers (asked once a session).
                 if let Some(Conn::Ews(c)) = &self.conn
                     && let Ok(tags) = c.archive_tags()
                 {
@@ -666,13 +666,19 @@ impl Worker {
         }
     }
 
-    /// The archive policy tag a message carries and the day the server plans to move it, asked
-    /// when it is opened (Exchange); told with [`Event::ArchiveTagRead`]. Nothing is asked of an
+    /// The archive and retention policy tags a message carries and the days the server plans to
+    /// move and to delete it, asked when it is opened (Exchange); told with [`Event::ArchiveTagRead`]. Nothing is asked of an
     /// account that is offline, and a message the server no longer has says nothing.
     pub(super) fn read_archive_tag(&mut self, key: MessageKey) {
         let Some(Conn::Ews(c)) = &self.conn else { return };
         match crate::ews::read_archive_tag(c, &mut self.jstate, &self.store, &key) {
-            Ok((tag, date)) => self.sink.emit(Event::ArchiveTagRead { key, tag, date }),
+            Ok(p) => self.sink.emit(Event::ArchiveTagRead {
+                key,
+                tag: p.archive,
+                date: p.archive_day,
+                retention_tag: p.retention,
+                retention_date: p.retention_day,
+            }),
             Err(e) if matches!(e, NetError::Auth(_)) || e.is_fatal() => self.failed(e),
             Err(e) => log::info!("{}: the message's archive policy wasn't read: {e}", key.account),
         }

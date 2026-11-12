@@ -8,6 +8,7 @@ use super::*;
 
 mod policy;
 mod read_only;
+mod retention;
 
 const TOP: &str = "Online Archive - Riley";
 const OLD_INBOX: &str = "Online Archive - Riley/Inbox";

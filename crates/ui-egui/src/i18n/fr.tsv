@@ -2156,11 +2156,15 @@ folder	Online Archive	Archive en ligne
 	Online archive of {email}, read-only in this version	Archive en ligne du compte {email}, en lecture seule dans cette version
 	the online archive is read-only in this version: use Outlook to move or delete its mail	l’archive en ligne est en lecture seule dans cette version : utilisez Outlook pour déplacer ou supprimer son courrier
 	Archive policy	Stratégie d’archivage
+	Policy	Stratégie
+	Retention policy	Stratégie de rétention
 	As its folder	Comme le dossier
-	Archive policy: {name}.	Stratégie d’archivage : {name}.
-	Planned for {date}.	Prévu le {date}.
+	Archive: {name}	Archivage : {name}
+	Archive: {name} ({date})	Archivage : {name} ({date})
+	Deletion: {name}	Suppression : {name}
+	Deletion: {name} ({date})	Suppression : {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	un message n’est plus dans la boîte sous ce nom : le serveur l’a déplacé
-	that isn't one of the server's archive policy tags	ce n’est pas l’une des stratégies d’archivage du serveur
+	that isn't one of the server's policy tags	ce n’est pas l’une des stratégies du serveur
 	{name}: {folder} — {done} of {total} messages	{name} : {folder} — {done} sur {total} messages
 	{name}: {done} of {total} messages	{name} : {done} sur {total} messages
 	{name}: {folder} — {done} messages	{name} : {folder} — {done} messages

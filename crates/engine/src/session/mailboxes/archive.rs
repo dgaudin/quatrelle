@@ -14,7 +14,7 @@ mod policy;
 mod read_only;
 pub(crate) use age::AgeState;
 pub use policy::MessagePolicy;
-pub(crate) use policy::PolicyState;
+pub(crate) use policy::{PolicyState, none_offered};
 pub use read_only::ARCHIVE_READ_ONLY;
 
 /// *Archive* on an IMAP account not set to archive here, whose server has no Archive folder.

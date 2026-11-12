@@ -5,7 +5,7 @@
 
 use std::sync::atomic::Ordering;
 
-use quatrelle_model::{ArchiveTag, MessageKey};
+use quatrelle_model::{ArchiveTag, MessageKey, PolicyKind};
 
 use super::*;
 
@@ -15,7 +15,7 @@ fn client(server: &crate::fakes::fake_ews::server::Server) -> crate::ews::Client
 
 /// Riley's mailbox with one message in the Inbox and the server's default policy tags: the data,
 /// the Inbox's id and the message's.
-fn tagged() -> (Data, String, String) {
+pub(super) fn tagged() -> (Data, String, String) {
     let mut d = Data::default();
     let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Projects", None, None, "IPF.Note");
@@ -25,7 +25,7 @@ fn tagged() -> (Data, String, String) {
 }
 
 /// A started account (online, synced) over this data: the server, the pool and the store.
-fn started(d: Data, name: &str) -> (crate::fakes::fake_ews::server::Server, crate::worker::Pool, Store) {
+pub(super) fn started(d: Data, name: &str) -> (crate::fakes::fake_ews::server::Server, crate::worker::Pool, Store) {
     let server = serve(d);
     let store = crate::fake::tests_store(name);
     let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -35,40 +35,70 @@ fn started(d: Data, name: &str) -> (crate::fakes::fake_ews::server::Server, crat
     (server, pool, store)
 }
 
-fn inbox_key(store: &Store) -> MessageKey {
+pub(super) fn inbox_key(store: &Store) -> MessageKey {
     store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone()
 }
 
-fn set(pool: &mut crate::worker::Pool, key: &MessageKey, tag: Option<&str>) {
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: tag.map(str::to_string) } });
+pub(super) fn set_kind(pool: &mut crate::worker::Pool, key: &MessageKey, kind: PolicyKind, tag: Option<&str>) {
+    let op = Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: tag.map(str::to_string), kind };
+    pool.submit(Job::Apply { account: "a1".into(), op });
 }
 
-fn read(pool: &mut crate::worker::Pool, key: &MessageKey) -> (Option<String>, Option<String>) {
+fn set(pool: &mut crate::worker::Pool, key: &MessageKey, tag: Option<&str>) {
+    set_kind(pool, key, PolicyKind::Archive, tag);
+}
+
+/// What the worker tells of a message's tags: the archive tag and day, the retention tag and day.
+pub(super) fn read_all(pool: &mut crate::worker::Pool, key: &MessageKey) -> [Option<String>; 4] {
     pool.submit(Job::ReadArchiveTag { key: key.clone() });
     let seen = until(pool, "the tag read", |e| matches!(e, Event::ArchiveTagRead { key: k, .. } if k == key));
     match seen.into_iter().last() {
-        Some(Event::ArchiveTagRead { tag, date, .. }) => (tag, date),
+        Some(Event::ArchiveTagRead { tag, date, retention_tag, retention_date, .. }) => [tag, date, retention_tag, retention_date],
         other => panic!("{other:?}"),
     }
 }
 
+fn read(pool: &mut crate::worker::Pool, key: &MessageKey) -> (Option<String>, Option<String>) {
+    let [tag, date, ..] = read_all(pool, key);
+    (tag, date)
+}
+
 /// Of the tags the server lists (a default one, two personal ones that move to the archive, the
-/// personal "never" and a personal delete tag), the personal archive ones come, in the server's
-/// order, with their names as the server gives them, their days, and the "never" told apart.
+/// personal "never", two personal delete tags, a hidden one and one that only marks mail), the
+/// personal archive and delete ones come, in the server's order, with their names as the server
+/// gives them, their days, their kind, and the "never" told apart.
 #[test]
-fn the_tags_offered_are_the_servers_personal_archive_tags() {
+fn the_tags_offered_are_the_servers_personal_archive_and_delete_tags() {
     let (d, ..) = tagged();
     let server = serve(d);
     let c = client(&server);
     let tags = c.archive_tags().unwrap();
+    let archive = |id: &str, name: &str, days: Option<u32>| ArchiveTag {
+        id: id.into(),
+        name: name.into(),
+        days,
+        never: days.is_none(),
+        kind: PolicyKind::Archive,
+    };
+    let retention = |id: &str, name: &str, days: u32| ArchiveTag {
+        id: id.into(),
+        name: name.into(),
+        days: Some(days),
+        never: false,
+        kind: PolicyKind::Retention,
+    };
     assert_eq!(
         tags,
         [
-            ArchiveTag { id: TAG_YEAR.into(), name: "1 Year Move to Archive".into(), days: Some(365), never: false },
-            ArchiveTag { id: TAG_FIVE.into(), name: "5 Year Move to Archive".into(), days: Some(1825), never: false },
-            ArchiveTag { id: TAG_NEVER.into(), name: "Never Move to Archive".into(), days: None, never: true },
-        ]
+            archive(TAG_YEAR, "1 Year Move to Archive", Some(365)),
+            archive(TAG_FIVE, "5 Year Move to Archive", Some(1825)),
+            archive(TAG_NEVER, "Never Move to Archive", None),
+            retention(TAG_DELETE, "3 Year Delete", 1095),
+            retention(TAG_WEEK, "1 Week Delete", 7),
+        ],
+        "not the default one, the hidden one, nor the one that only marks mail"
     );
+    assert!(!tags.iter().any(|t| ["11111111-aaaa-4bbb-8ccc-000000000001", TAG_HIDDEN, TAG_MARK].contains(&t.id.as_str())));
     // Asked once per session.
     c.archive_tags().unwrap();
     c.archive_tags().unwrap();
@@ -150,7 +180,7 @@ fn a_messages_tag_is_read_set_and_taken_off() {
 
     set(&mut pool, &key, Some(TAG_YEAR));
     eventually("the tag on the server", || data.lock().unwrap().policy.items.values().any(|(t, _)| t == TAG_YEAR));
-    assert_eq!(read(&mut pool, &key), (Some(TAG_YEAR.into()), Some("2027-11-10".into())));
+    assert_eq!(read(&mut pool, &key), (Some(TAG_YEAR.into()), Some(ARCHIVE_DAY[..10].into())));
     // The journal is empty once it is sent.
     eventually("the change sent", || store.load_ops("a1").unwrap().is_empty());
 
@@ -177,7 +207,12 @@ fn a_folders_tag_is_read_set_and_taken_off() {
     assert_eq!(tag_of(&store), Some(TAG_FIVE.into()), "listed with the folder");
     assert_eq!(tag_of_inbox(&store), None);
 
-    let op = |tag: Option<&str>| Op::SetArchiveTag { keys: Vec::new(), folder: Some("Projects".into()), tag: tag.map(str::to_string) };
+    let op = |tag: Option<&str>| Op::SetArchiveTag {
+        keys: Vec::new(),
+        folder: Some("Projects".into()),
+        tag: tag.map(str::to_string),
+        kind: PolicyKind::Archive,
+    };
     pool.submit(Job::Apply { account: "a1".into(), op: op(Some(TAG_YEAR)) });
     eventually("the folder's tag set", || data.lock().unwrap().policy.folders.get(&projects).is_some_and(|t| t == TAG_YEAR));
     pool.submit(Job::Apply { account: "a1".into(), op: op(None) });
@@ -201,7 +236,7 @@ fn the_tags_are_told_with_the_folder_list() {
     pool.submit(Job::Start { account: super::reading::account(&server), password: Some(Secret(PASSWORD.into())) });
     let seen = until(&pool, "the tags", |e| matches!(e, Event::ArchiveTags { .. }));
     let Some(Event::ArchiveTags { tags, .. }) = seen.last() else { panic!("{seen:?}") };
-    assert_eq!(tags.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), [TAG_YEAR, TAG_FIVE, TAG_NEVER]);
+    assert_eq!(tags.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(), [TAG_YEAR, TAG_FIVE, TAG_NEVER, TAG_DELETE, TAG_WEEK]);
 }
 
 /// A tag set while the message was moved to the archive by the server (it has another id there,

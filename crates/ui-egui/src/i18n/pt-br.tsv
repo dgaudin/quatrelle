@@ -2155,11 +2155,15 @@ folder	Online Archive	Arquivo online
 	Online archive of {email}, read-only in this version	Arquivo online de {email}, somente leitura nesta versão
 	the online archive is read-only in this version: use Outlook to move or delete its mail	o arquivo online é somente leitura nesta versão: use o Outlook para mover ou excluir seus e-mails
 	Archive policy	Política de arquivamento
+	Policy	Política
+	Retention policy	Política de retenção
 	As its folder	Como a pasta
-	Archive policy: {name}.	Política de arquivamento: {name}.
-	Planned for {date}.	Previsto para {date}.
+	Archive: {name}	Arquivamento: {name}
+	Archive: {name} ({date})	Arquivamento: {name} ({date})
+	Deletion: {name}	Exclusão: {name}
+	Deletion: {name} ({date})	Exclusão: {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	uma mensagem não está mais na caixa com esse nome: o servidor a moveu
-	that isn't one of the server's archive policy tags	essa não é uma das políticas de arquivamento do servidor
+	that isn't one of the server's policy tags	essa não é uma das políticas do servidor
 	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} de {total} mensagens
 	{name}: {done} of {total} messages	{name}: {done} de {total} mensagens
 	{name}: {folder} — {done} messages	{name}: {folder} — {done} mensagens

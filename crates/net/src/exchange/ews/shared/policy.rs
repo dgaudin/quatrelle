@@ -1,23 +1,30 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! EWS: the archive policy tags. The server offers its personal retention tags
-//! (`GetUserRetentionPolicyTags`); a message carries one in `item:ArchiveTag` (with the day the
-//! server plans to move it in `item:RetentionDate`), a folder in `folder:ArchiveTag`. All of it
-//! is read as hostile: ids are GUIDs, names are bounded, the list is capped.
+//! EWS: the archive and retention policy tags. The server offers its personal retention tags
+//! (`GetUserRetentionPolicyTags`), some of which move mail to the archive and some delete it. A
+//! message carries an archive tag in `item:ArchiveTag` (the day the server plans to move it in
+//! `PidTagArchiveDate`) and a retention tag in `item:PolicyTag` (the day the server plans to
+//! delete it in `item:RetentionDate`); a folder in `folder:ArchiveTag` and `folder:PolicyTag`.
+//! All of it is read as hostile: ids are GUIDs, names are bounded and on one line, the list is
+//! capped.
 
 use quatrelle_model::job::is_day;
-use quatrelle_model::{ArchiveTag, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, is_tag_id};
+use quatrelle_model::{ArchiveTag, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, PolicyKind, is_tag_id};
 
 use super::*;
 
 /// How many elements of a tag list are looked at, kept or not.
 const SCANNED: usize = 5_000;
 
-/// The personal archive tags a `GetUserRetentionPolicyTags` answer lists: those of type
-/// `Personal` whose action is `MoveToArchive`, the one that keeps mail out of the archive among
-/// them (no period). Others (the mailbox's default tags, delete tags) are left out, as are tags
-/// without a GUID for an id or without a name, hidden ones, and what goes past
-/// [`MAX_ARCHIVE_TAGS`].
+/// `PidTagArchiveDate`: the day the server plans to move a message to the archive.
+const ARCHIVE_DATE: &str = "<t:ExtendedFieldURI PropertyTag=\"0x301F\" PropertyType=\"SystemTime\"/>";
+
+/// The personal tags a `GetUserRetentionPolicyTags` answer lists: those of type `Personal` whose
+/// action is `MoveToArchive` (archive tags, the one that keeps mail out of the archive among
+/// them: no period) or deletes the mail, `DeleteAndAllowRecovery` or `PermanentlyDelete`
+/// (retention tags). Others (the mailbox's default tags, those that only mark mail past its
+/// limit) are left out, as are tags without a GUID for an id or without a name, hidden ones, an
+/// id seen before, and what goes past [`MAX_ARCHIVE_TAGS`].
 pub fn tags_listed(root: &El) -> Vec<ArchiveTag> {
     let mut all = Vec::new();
     root.all("RetentionPolicyTag", &mut all);
@@ -27,15 +34,23 @@ pub fn tags_listed(root: &El) -> Vec<ArchiveTag> {
             break;
         }
         let is = |name: &str, want: &str| t.text_of(name).is_some_and(|v| v.trim().eq_ignore_ascii_case(want));
-        if !is("Type", "Personal") || !is("RetentionAction", "MoveToArchive") || is("IsVisible", "false") {
+        let kind = if is("RetentionAction", "MoveToArchive") {
+            PolicyKind::Archive
+        } else if is("RetentionAction", "DeleteAndAllowRecovery") || is("RetentionAction", "PermanentlyDelete") {
+            PolicyKind::Retention
+        } else {
+            continue;
+        };
+        if !is("Type", "Personal") || is("IsVisible", "false") {
             continue;
         }
         let id = t.text_of("RetentionId").map(|i| i.trim().to_ascii_lowercase()).unwrap_or_default();
-        let name = clean_name(t.text_of("DisplayName").unwrap_or_default());
+        let name = tag_name(t.text_of("DisplayName").unwrap_or_default());
         if !is_tag_id(&id) || name.is_empty() || out.iter().any(|o| o.id == id) {
             continue;
         }
-        // No period, or none that counts: the tag that keeps mail where it is.
+        // No period, or none that counts: the tag that keeps mail where it is (out of the
+        // archive, or never deleted).
         let period = match t.text_of("RetentionPeriod").map(str::trim).filter(|p| !p.is_empty()) {
             None => None,
             Some(p) => match p.parse::<u32>() {
@@ -44,15 +59,32 @@ pub fn tags_listed(root: &El) -> Vec<ArchiveTag> {
             },
         };
         let never = period.is_none_or(|d| d == 0);
-        out.push(ArchiveTag { id, name, days: period.filter(|d| *d > 0), never });
+        out.push(ArchiveTag { id, name, days: period.filter(|d| *d > 0), never, kind });
     }
     out
 }
 
-/// The archive tag a message or a folder carries of its own (`t:ArchiveTag`): its id, when it is
-/// a GUID and was set explicitly rather than inherited.
-pub(in super::super) fn own_tag(item: &El) -> Option<String> {
-    let tag = item.child("ArchiveTag")?;
+/// A tag's name as it's shown: on one line (each run of whitespace one space), without control
+/// or bidi characters, at most [`quatrelle_model::MAX_TAG_NAME`] characters.
+fn tag_name(raw: &str) -> String {
+    let words =
+        raw.split_whitespace().map(|w| w.chars().filter(|c| !c.is_control() && !quatrelle_model::pim::teams::is_bidi(*c)).collect::<String>());
+    let line = words.filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
+    line.chars().take(quatrelle_model::MAX_TAG_NAME).collect::<String>().trim_end().to_string()
+}
+
+/// The element a message or a folder carries a tag of this kind in.
+fn element(kind: PolicyKind) -> &'static str {
+    match kind {
+        PolicyKind::Archive => "ArchiveTag",
+        PolicyKind::Retention => "PolicyTag",
+    }
+}
+
+/// The tag of this kind a message or a folder carries of its own (`t:ArchiveTag`,
+/// `t:PolicyTag`): its id, when it is a GUID and was set explicitly rather than inherited.
+pub(in super::super) fn own_tag(item: &El, kind: PolicyKind) -> Option<String> {
+    let tag = item.child(element(kind))?;
     if tag.attr("IsExplicit").is_some_and(|v| v.trim().eq_ignore_ascii_case("false")) {
         return None;
     }
@@ -60,16 +92,36 @@ pub(in super::super) fn own_tag(item: &El) -> Option<String> {
     is_tag_id(&id).then_some(id)
 }
 
-/// The day (`YYYY-MM-DD`) in a `RetentionDate` value, when it is a real one.
-fn planned_day(item: &El) -> Option<String> {
-    let day: String = item.text_of("RetentionDate")?.trim().chars().take(10).collect();
+/// The day (`YYYY-MM-DD`) in a date the server gives, when it is a real one.
+fn day_of(text: &str) -> Option<String> {
+    let day: String = text.trim().chars().take(10).collect();
     is_day(&day).then_some(day)
 }
 
+/// The day the server plans to move a message to the archive (`PidTagArchiveDate`).
+fn archive_day(item: &El) -> Option<String> {
+    let prop = item
+        .kids
+        .iter()
+        .filter(|p| p.name == "ExtendedProperty")
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, "0x301F")))?;
+    day_of(prop.text_of("Value")?)
+}
+
+/// What a message carries of its own: its archive tag and the day the server plans to move it,
+/// its retention tag and the day the server plans to delete it (`YYYY-MM-DD`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ItemPolicy {
+    pub archive: Option<String>,
+    pub archive_day: Option<String>,
+    pub retention: Option<String>,
+    pub retention_day: Option<String>,
+}
+
 impl Client {
-    /// The server's personal archive tags, asked once per session: none from a server that has
-    /// none or won't say (Exchange 2010 doesn't know the operation); a connection that fails is
-    /// an error, and asked again.
+    /// The server's personal archive and retention tags, asked once per session: none from a
+    /// server that has none or won't say (Exchange 2010 doesn't know the operation); a
+    /// connection that fails is an error, and asked again.
     pub fn archive_tags(&self) -> Result<Vec<ArchiveTag>> {
         if let Some(known) = self.tags.borrow().clone() {
             return Ok(known);
@@ -86,23 +138,26 @@ impl Client {
         Ok(tags)
     }
 
-    /// A message's own archive tag and the day the server plans to move it, as `YYYY-MM-DD`.
-    pub fn item_archive_tag(&self, id: &str) -> Result<(Option<String>, Option<String>)> {
+    /// A message's own archive and retention tags and the days the server plans to move and to
+    /// delete it.
+    pub fn item_policy(&self, id: &str) -> Result<ItemPolicy> {
         let m = self.call_one(&format!(
             "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties><t:FieldURI FieldURI=\"item:ArchiveTag\"/>\
-             <t:FieldURI FieldURI=\"item:RetentionDate\"/></t:AdditionalProperties></m:ItemShape>\
+             <t:FieldURI FieldURI=\"item:PolicyTag\"/><t:FieldURI FieldURI=\"item:RetentionDate\"/>{ARCHIVE_DATE}</t:AdditionalProperties></m:ItemShape>\
              <m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
             esc(id)
         ))?;
-        let item = m.find("Items").and_then(|i| i.kids.first());
-        Ok(match item {
-            Some(it) => (own_tag(it), planned_day(it)),
-            None => (None, None),
+        let Some(it) = m.find("Items").and_then(|i| i.kids.first()) else { return Ok(ItemPolicy::default()) };
+        Ok(ItemPolicy {
+            archive: own_tag(it, PolicyKind::Archive),
+            archive_day: archive_day(it),
+            retention: own_tag(it, PolicyKind::Retention),
+            retention_day: it.text_of("RetentionDate").and_then(day_of),
         })
     }
 
-    /// Whether the account's folder listing should ask each folder's tag: only a server that
-    /// offers tags (Exchange 2013 and later) knows the field.
+    /// Whether the account's folder listing should ask each folder's tags: only a server that
+    /// offers tags (Exchange 2013 and later) knows the fields.
     pub(in super::super) fn folder_tags_asked(&self) -> bool {
         self.archive_tags().is_ok_and(|t| !t.is_empty())
     }

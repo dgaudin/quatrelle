@@ -2152,11 +2152,15 @@ folder	Online Archive	オンライン アーカイブ
 	Online archive of {email}, read-only in this version	{email} のオンライン アーカイブ (このバージョンでは読み取り専用)
 	the online archive is read-only in this version: use Outlook to move or delete its mail	オンライン アーカイブはこのバージョンでは読み取り専用です。メールの移動や削除は Outlook で行ってください
 	Archive policy	アーカイブ ポリシー
+	Policy	ポリシー
+	Retention policy	保持ポリシー
 	As its folder	フォルダーと同じ
-	Archive policy: {name}.	アーカイブ ポリシー: {name}。
-	Planned for {date}.	予定日: {date}。
+	Archive: {name}	アーカイブ: {name}
+	Archive: {name} ({date})	アーカイブ: {name} ({date})
+	Deletion: {name}	削除: {name}
+	Deletion: {name} ({date})	削除: {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	この名前のメッセージはメールボックスにありません。サーバーが移動しました
-	that isn't one of the server's archive policy tags	サーバーのアーカイブ ポリシーにありません
+	that isn't one of the server's policy tags	サーバーのポリシーにありません
 	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {total} 件中 {done} 件
 	{name}: {done} of {total} messages	{name}: {total} 件中 {done} 件
 	{name}: {folder} — {done} messages	{name}: {folder} — {done} 件

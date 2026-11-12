@@ -38,9 +38,10 @@ impl Client {
 
         let mut out: Vec<Mailbox> = Vec::new();
         let mut offset = 0;
-        // Each folder's archive tag comes with its counts, from a server that offers tags (the
-        // others don't know the field).
-        let tag = if self.folder_tags_asked() { "<t:FieldURI FieldURI=\"folder:ArchiveTag\"/>" } else { "" };
+        // Each folder's archive and retention tags come with its counts, from a server that
+        // offers tags (the others don't know the fields).
+        let tag =
+            if self.folder_tags_asked() { "<t:FieldURI FieldURI=\"folder:ArchiveTag\"/><t:FieldURI FieldURI=\"folder:PolicyTag\"/>" } else { "" };
         self.folder_tags.borrow_mut().clear();
         loop {
             let doc = self.call(&format!(
@@ -73,7 +74,8 @@ impl Client {
                 }
                 let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).filter(|p| Some(p) != root.as_ref());
                 let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
-                if let Some(own) = shared::own_tag(f) {
+                let own = (shared::own_tag(f, quatrelle_model::PolicyKind::Archive), shared::own_tag(f, quatrelle_model::PolicyKind::Retention));
+                if own.0.is_some() || own.1.is_some() {
                     self.folder_tags.borrow_mut().insert(id.clone(), own);
                 }
                 out.push(Mailbox {

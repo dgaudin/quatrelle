@@ -108,18 +108,23 @@ pub enum Event {
         op: Op,
         error: String,
     },
-    /// The archive policy tags the account's server offers (Exchange), read once a session; none
+    /// The archive and retention policy tags the account's server offers (Exchange), read once a session; none
     /// when it has none or refuses.
     ArchiveTags {
         account: String,
         tags: Vec<crate::ArchiveTag>,
     },
     /// The archive policy tag a message carries (`None`: it follows its folder's) and the day the
-    /// server plans to move it, as `YYYY-MM-DD`, read when it was opened.
+    /// server plans to move it, its retention policy tag and the day the server plans to delete
+    /// it, as `YYYY-MM-DD`, read when it was opened.
     ArchiveTagRead {
         key: MessageKey,
         tag: Option<String>,
         date: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retention_tag: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retention_date: Option<String>,
     },
     /// Quatrelle's recent releases (newest first), or why they couldn't be had.
     Releases {

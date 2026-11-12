@@ -94,8 +94,9 @@ pub enum Op {
     EmptyFolder {
         path: String,
     },
-    /// Give messages (`keys`) or a folder's mail (`folder`) one of the server's archive policy
-    /// tags, or take theirs off (`tag` none: the folder's applies again). Exchange only.
+    /// Give messages (`keys`) or a folder's mail (`folder`) one of the server's policy tags of
+    /// `kind` (archive or retention), or take theirs off (`tag` none: the folder's applies
+    /// again). Exchange only. A change kept without `kind` is an archive one.
     SetArchiveTag {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         keys: Vec<MessageKey>,
@@ -103,6 +104,8 @@ pub enum Op {
         folder: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tag: Option<String>,
+        #[serde(default, skip_serializing_if = "PolicyKind::is_archive")]
+        kind: PolicyKind,
     },
 }
 
@@ -216,8 +219,7 @@ impl Op {
             Op::RenameFolder { from, .. } => ("RenameFolder", Some(from.as_str())),
             Op::DeleteFolder { path } => ("DeleteFolder", Some(path.as_str())),
             Op::EmptyFolder { path } => ("EmptyFolder", Some(path.as_str())),
-            Op::SetArchiveTag { folder: Some(path), .. } => ("SetArchiveTag", Some(path.as_str())),
-            Op::SetArchiveTag { .. } => ("SetArchiveTag", None),
+            Op::SetArchiveTag { folder, kind, .. } => (if kind.is_archive() { "SetArchiveTag" } else { "SetRetentionTag" }, folder.as_deref()),
         };
         if let Some(folder) = folder {
             return format!("{kind} of {folder}");
@@ -517,8 +519,8 @@ pub enum Job {
     /// OpenPGP work with the account's own keys, whose secret parts the network layer keeps in
     /// the system's keychain (issue #36).
     Pgp { account: AccountConfig, work: PgpWork },
-    /// Read the archive policy tag a message carries and the day the server plans to move it
-    /// (Exchange), asked when it is opened: not part of a list's sync.
+    /// Read the archive and retention policy tags a message carries and the days the server
+    /// plans to move and delete it (Exchange), asked when it is opened: not part of a list's sync.
     ReadArchiveTag { key: MessageKey },
     /// Work for the Teams worker, which keeps the Teams copy apart from the accounts. Its key in
     /// JSON is `teams`: `job` is this enum's tag.
@@ -682,7 +684,7 @@ mod pgp;
 mod policy;
 mod recover;
 pub use pgp::{NO_KEYCHAIN, NOT_FOR_YOU, NOT_IN_BROWSER, PgpChange, PgpSignature, PgpWork, Unavailable};
-pub use policy::{ArchiveTag, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, MAX_TAG_NAME, is_tag_id};
+pub use policy::{ArchiveTag, MAX_ARCHIVE_TAGS, MAX_TAG_DAYS, MAX_TAG_NAME, PolicyKind, is_tag_id};
 pub use recover::{RECOVERABLE_MAX, RECOVERABLE_PAGE, Recoverable, RecoverableKind};
 
 mod webex;

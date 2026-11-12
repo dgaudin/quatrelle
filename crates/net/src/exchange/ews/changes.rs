@@ -195,23 +195,25 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             }
             Ok(())
         }
-        // An archive policy tag: set on messages or on a folder, or taken off. A message the
-        // server no longer has under that id (it moved it into the archive meanwhile) is an
-        // error, not a change made here only: the engine says so and puts the old tag back.
-        Op::SetArchiveTag { keys, folder, tag } => {
+        // An archive or retention policy tag: set on messages or on a folder, or taken off. A
+        // message the server no longer has under that id (it moved it into the archive
+        // meanwhile) is an error, not a change made here only: the engine says so and puts the
+        // old tag back.
+        Op::SetArchiveTag { keys, folder, tag, kind } => {
             if tag.as_deref().is_some_and(|t| !quatrelle_model::is_tag_id(t)) {
-                return Err(NetError::No("that isn't one of the server's archive policy tags".into()));
+                return Err(NetError::No("that isn't one of the server's policy tags".into()));
             }
             let tag = tag.as_deref().map(esc);
+            let el = if kind.is_archive() { "ArchiveTag" } else { "PolicyTag" };
             match folder {
                 Some(path) => {
                     let id = st.mailbox(path)?.to_string();
                     let change = match &tag {
                         Some(t) => format!(
-                            "<t:SetFolderField><t:FieldURI FieldURI=\"folder:ArchiveTag\"/><t:Folder><t:ArchiveTag IsExplicit=\"true\">{t}</t:ArchiveTag>\
+                            "<t:SetFolderField><t:FieldURI FieldURI=\"folder:{el}\"/><t:Folder><t:{el} IsExplicit=\"true\">{t}</t:{el}>\
                              </t:Folder></t:SetFolderField>"
                         ),
-                        None => "<t:DeleteFolderField><t:FieldURI FieldURI=\"folder:ArchiveTag\"/></t:DeleteFolderField>".into(),
+                        None => format!("<t:DeleteFolderField><t:FieldURI FieldURI=\"folder:{el}\"/></t:DeleteFolderField>"),
                     };
                     c.call_one(&format!(
                         "<m:UpdateFolder><m:FolderChanges><t:FolderChange><t:FolderId Id=\"{}\"/><t:Updates>{change}</t:Updates></t:FolderChange>\
@@ -226,10 +228,10 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                     }
                     let change = match &tag {
                         Some(t) => format!(
-                            "<t:SetItemField><t:FieldURI FieldURI=\"item:ArchiveTag\"/><t:Message><t:ArchiveTag IsExplicit=\"true\">{t}</t:ArchiveTag>\
+                            "<t:SetItemField><t:FieldURI FieldURI=\"item:{el}\"/><t:Message><t:{el} IsExplicit=\"true\">{t}</t:{el}>\
                              </t:Message></t:SetItemField>"
                         ),
-                        None => "<t:DeleteItemField><t:FieldURI FieldURI=\"item:ArchiveTag\"/></t:DeleteItemField>".into(),
+                        None => format!("<t:DeleteItemField><t:FieldURI FieldURI=\"item:{el}\"/></t:DeleteItemField>"),
                     };
                     update(keys, &change)
                 }

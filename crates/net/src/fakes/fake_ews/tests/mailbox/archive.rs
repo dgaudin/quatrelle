@@ -8,6 +8,7 @@ use super::*;
 
 mod policy;
 pub(super) mod reading;
+mod retention;
 
 fn connect(server: &super::super::super::server::Server) -> crate::ews::Client {
     crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap()

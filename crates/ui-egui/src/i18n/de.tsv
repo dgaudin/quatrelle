@@ -2156,11 +2156,15 @@ folder	Online Archive	Online-Archiv
 	Online archive of {email}, read-only in this version	Online-Archiv von {email}, in dieser Version schreibgeschützt
 	the online archive is read-only in this version: use Outlook to move or delete its mail	das Online-Archiv ist in dieser Version schreibgeschützt: Verwenden Sie Outlook, um seine E-Mails zu verschieben oder zu löschen
 	Archive policy	Archivierungsrichtlinie
+	Policy	Richtlinie
+	Retention policy	Aufbewahrungsrichtlinie
 	As its folder	Wie der Ordner
-	Archive policy: {name}.	Archivierungsrichtlinie: {name}.
-	Planned for {date}.	Geplant für {date}.
+	Archive: {name}	Archivierung: {name}
+	Archive: {name} ({date})	Archivierung: {name} ({date})
+	Deletion: {name}	Löschung: {name}
+	Deletion: {name} ({date})	Löschung: {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	eine Nachricht ist unter diesem Namen nicht mehr im Postfach: der Server hat sie verschoben
-	that isn't one of the server's archive policy tags	das ist keine der Archivierungsrichtlinien des Servers
+	that isn't one of the server's policy tags	das ist keine der Richtlinien des Servers
 	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} von {total} Nachrichten
 	{name}: {done} of {total} messages	{name}: {done} von {total} Nachrichten
 	{name}: {folder} — {done} messages	{name}: {folder} — {done} Nachrichten

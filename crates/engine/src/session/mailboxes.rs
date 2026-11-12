@@ -12,7 +12,7 @@ pub(crate) use contacts::Contacts;
 mod archive;
 pub use archive::ARCHIVE_READ_ONLY;
 pub use archive::MessagePolicy;
-pub(crate) use archive::{AgeState, Leaving, PolicyState};
+pub(crate) use archive::{AgeState, Leaving, PolicyState, none_offered};
 mod echo;
 pub(crate) use echo::{Echo, Echoes};
 mod directory;

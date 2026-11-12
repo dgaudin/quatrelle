@@ -800,7 +800,7 @@ mod tasks;
 pub use archive::ArchiveBox;
 pub use fields::Verb;
 use fields::{MICROSOFT_FIELDS, fields_named, flag_xml, take_flag_update, text_fields};
-pub use policy::{Policy, TAG_DELETE, TAG_FIVE, TAG_NEVER, TAG_YEAR};
+pub use policy::{ARCHIVE_DAY, DELETE_DAY, Policy, TAG_DELETE, TAG_FIVE, TAG_HIDDEN, TAG_MARK, TAG_NEVER, TAG_WEEK, TAG_YEAR};
 pub use server::serve;
 
 #[cfg(test)]

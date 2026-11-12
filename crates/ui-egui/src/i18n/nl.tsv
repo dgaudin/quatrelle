@@ -2152,11 +2152,15 @@ folder	Online Archive	Online-archief
 	Online archive of {email}, read-only in this version	Online-archief van {email}, alleen-lezen in deze versie
 	the online archive is read-only in this version: use Outlook to move or delete its mail	het online-archief is in deze versie alleen-lezen: gebruik Outlook om de berichten te verplaatsen of te verwijderen
 	Archive policy	Archiefbeleid
+	Policy	Beleid
+	Retention policy	Bewaarbeleid
 	As its folder	Zoals de map
-	Archive policy: {name}.	Archiefbeleid: {name}.
-	Planned for {date}.	Gepland voor {date}.
+	Archive: {name}	Archivering: {name}
+	Archive: {name} ({date})	Archivering: {name} ({date})
+	Deletion: {name}	Verwijdering: {name}
+	Deletion: {name} ({date})	Verwijdering: {name} ({date})
 	a message is no longer in the mailbox under that name: the server moved it	een bericht staat onder die naam niet meer in de mailbox: de server heeft het verplaatst
-	that isn't one of the server's archive policy tags	dat is niet een van de archiefbeleidsregels van de server
+	that isn't one of the server's policy tags	dat is niet een van de beleidsregels van de server
 	{name}: {folder} — {done} of {total} messages	{name}: {folder} — {done} van {total} berichten
 	{name}: {done} of {total} messages	{name}: {done} van {total} berichten
 	{name}: {folder} — {done} messages	{name}: {folder} — {done} berichten

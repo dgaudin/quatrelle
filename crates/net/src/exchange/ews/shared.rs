@@ -7,7 +7,7 @@ use super::*;
 
 mod policy;
 pub(super) use policy::own_tag;
-pub use policy::tags_listed;
+pub use policy::{ItemPolicy, tags_listed};
 
 /// The folder an online archive is listed under when the server gives it no name.
 pub use quatrelle_model::ONLINE_ARCHIVE;
