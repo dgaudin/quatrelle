@@ -276,6 +276,66 @@ fn sign_out_asks_the_worker_to_delete_the_copy_when_told() {
 }
 
 #[test]
+fn signed_out_the_module_falls_back_to_mail() {
+    let mut s = signed_in(vec![row(1, 10)]);
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.run("teams.signOut", &json!({})).unwrap();
+    assert_eq!(s.module, Module::Mail, "signed out by the user");
+    let mut s = signed_in(vec![row(1, 10)]);
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.apply(teams_event(teams::Event::Status { status: Status::SignedOut }));
+    assert_eq!(s.module, Module::Mail, "signed out, as the worker says");
+}
+
+#[test]
+fn a_picture_dropped_unseen_can_be_asked_again() {
+    let mut s = signed_in(vec![]);
+    for i in 0..70 {
+        let user = format!("u-{i}");
+        s.run("teams.picture", &json!({"kind": "photo", "user": user})).unwrap();
+        s.apply(teams_event(teams::Event::Picture { picture: Picture::Photo { user }, bytes: vec![1] }));
+    }
+    assert_eq!(s.teams.pictures.len(), 64);
+    teams_jobs(&mut s);
+    s.run("teams.picture", &json!({"kind": "photo", "user": "u-0"})).unwrap();
+    assert_eq!(teams_jobs(&mut s), [teams::Job::Picture { picture: Picture::Photo { user: "u-0".into() } }], "dropped before the window took it");
+    s.run("teams.picture", &json!({"kind": "photo", "user": "u-69"})).unwrap();
+    assert!(teams_jobs(&mut s).is_empty(), "still waiting for the window");
+}
+
+#[test]
+fn erased_teams_ids_stay_erased() {
+    let mut p = crate::Prefs::default();
+    assert!(serde_json::to_value(&p).unwrap().get("teams").is_some_and(|t| t.is_object()), "saved even as it was at first");
+    p.teams.client_id.clear();
+    p.teams.tenant.clear();
+    let back: crate::Prefs = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
+    assert!(back.teams.client_id.is_empty() && back.teams.tenant.is_empty());
+    assert_eq!(back.teams, p.teams);
+}
+
+#[test]
+fn search_hits_without_usable_ids_are_left_out() {
+    let mut s = signed_in(vec![row(1, 10)]);
+    s.run("teams.search", &json!({"query": "plan"})).unwrap();
+    let long = "x".repeat(teams::MAX_ID + 1);
+    let hits = vec![
+        ("19:chat1@thread.v2".to_string(), "m1".to_string()),
+        ("19:chat1@thread.v2".to_string(), String::new()),
+        (String::new(), "m2".to_string()),
+        (long.clone(), "m3".to_string()),
+        ("19:chat1@thread.v2".to_string(), long),
+    ];
+    s.apply(teams_event(teams::Event::Found { query: "plan".into(), hits, indexing: false, partial: false }));
+    let f = s.teams.found.as_ref().unwrap();
+    assert_eq!(
+        f.hits,
+        [("19:chat1@thread.v2".to_string(), "m1".to_string()), ("19:chat1@thread.v2".to_string(), String::new())],
+        "a chat's name is a hit with no message"
+    );
+}
+
+#[test]
 fn teams_open_refuses_an_unknown_chat() {
     let mut s = signed_in(vec![row(1, 10)]);
     assert!(matches!(s.run("teams.open", &json!({"chat": "19:nope@thread.v2"})), Err(CmdError::Params(_))));
@@ -423,6 +483,12 @@ fn a_copy_set_aside_can_be_deleted() {
     s.run("teams.deleteSetAside", &json!({})).unwrap();
     assert_eq!(teams_jobs(&mut s), [teams::Job::DeleteSetAside { path: path.into() }]);
     assert_eq!(s.teams.set_aside, None);
+    // Teams switched off: the copy set aside is still offered for deletion.
+    s.apply(teams_event(teams::Event::SetAside { path: path.into() }));
+    s.run("teams.settings", &json!({"on": false})).unwrap();
+    assert_eq!(s.teams.set_aside.as_deref(), Some(path));
+    s.run("teams.deleteSetAside", &json!({})).unwrap();
+    assert!(teams_jobs(&mut s).contains(&teams::Job::DeleteSetAside { path: path.into() }));
 }
 
 #[test]

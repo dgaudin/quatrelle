@@ -253,8 +253,7 @@ pub struct Prefs {
     pub scam_accounts: BTreeSet<String>,
     pub scam_daily_cap: u32,
     /// File › Options › Teams. Read from the settings as saved; at first (none saved), off with
-    /// the ids of a local build.
-    #[serde(skip_serializing_if = "quatrelle_model::pim::teams::TeamsSettings::is_default")]
+    /// the ids of a local build. Always saved: ids the user erased stay erased.
     pub teams: quatrelle_model::pim::teams::TeamsSettings,
 }
 

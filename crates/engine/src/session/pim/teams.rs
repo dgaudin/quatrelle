@@ -156,6 +156,8 @@ impl TeamsState {
         if self.searching.as_deref() != Some(query.as_str()) {
             return;
         }
+        // A chat's id, and a message's (empty for the chat's name).
+        hits.retain(|(chat, message)| !chat.is_empty() && chat.len() <= MAX_ID && message.len() <= MAX_ID);
         hits.truncate(TEAMS_HITS_MAX);
         self.found = Some(TeamsFound { query, hits, indexing, partial });
     }
@@ -187,8 +189,10 @@ impl TeamsState {
         self.pictures.push_back((picture, bytes));
         let mut held: usize = self.pictures.iter().map(|(_, b)| b.len()).sum();
         while self.pictures.len() > PICTURES_MAX || held > PICTURE_BYTES_MAX {
-            let Some((_, b)) = self.pictures.pop_front() else { break };
+            let Some((dropped, b)) = self.pictures.pop_front() else { break };
             held = held.saturating_sub(b.len());
+            // Never seen by the window: it may be asked again.
+            self.asked.remove(&dropped);
         }
     }
 }
@@ -229,12 +233,15 @@ impl Session {
     /// Teams switched off: the worker stops, nothing of the copy is kept in memory.
     pub(crate) fn teams_off(&mut self) {
         self.prefs.teams.on = false;
-        self.teams = TeamsState::default();
+        // The copy set aside stays offered for deletion (the worker deletes it, on or off).
+        let set_aside = self.teams.set_aside.take();
+        self.teams = TeamsState { set_aside, ..TeamsState::default() };
         self.jobs.push(Job::Teams { job: teams::Job::Stop });
         self.teams_fallback();
     }
 
-    /// Signed out (asked, or said by the worker): who it was forgotten, nothing of the copy kept.
+    /// Signed out (asked, or said by the worker): who it was forgotten, nothing of the copy kept
+    /// (a copy set aside stays offered for deletion), and Mail shown instead of Conversations.
     pub(crate) fn teams_signed_out(&mut self) {
         let t = &mut self.prefs.teams;
         *t = TeamsSettings {
@@ -245,7 +252,9 @@ impl Session {
             notify_only_direct: t.notify_only_direct,
             ..TeamsSettings::default()
         };
-        self.teams = TeamsState::default();
+        let set_aside = self.teams.set_aside.take();
+        self.teams = TeamsState { set_aside, ..TeamsState::default() };
+        self.teams_fallback();
     }
 
     /// What the Teams worker reports. Off, nothing is taken (what was on its way when it was
