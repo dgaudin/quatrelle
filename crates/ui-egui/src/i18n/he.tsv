@@ -2222,3 +2222,20 @@ module	Conversations	שיחות
 	Someone in this conversation is outside your organisation	מישהו בשיחה הזו אינו מהארגון שלך
 	Can't be read here	לא ניתן לקרוא כאן
 	You're no longer in this conversation	אינך משתתף עוד בשיחה הזו
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	פתח ב-Teams
+	(edited)	(נערך)
+	This message was deleted	הודעה זו נמחקה
+	This message can't be shown	לא ניתן להציג הודעה זו
+	App	אפליקציה
+	Show picture	הצג את התמונה
+	Link to another site	קישור לאתר אחר
+	Open in browser	פתח בדפדפן
+	This content can be seen in Teams	אפשר לראות תוכן זה ב-Teams
+	Teams doesn't let this conversation be read here	Teams לא מאפשר לקרוא כאן את השיחה הזו
+# A person’s presence in Teams.
+presence	Available	זמין
+presence	Busy	עסוק
+presence	Away	לא ליד המחשב
+presence	Do not disturb	נא לא להפריע
+presence	Offline	לא מחובר

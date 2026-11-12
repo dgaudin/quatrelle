@@ -2223,3 +2223,20 @@ module	Conversations	Gesprekken
 	Someone in this conversation is outside your organisation	Iemand in dit gesprek hoort niet bij je organisatie
 	Can't be read here	Hier niet leesbaar
 	You're no longer in this conversation	Je neemt niet meer deel aan dit gesprek
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Openen in Teams
+	(edited)	(bewerkt)
+	This message was deleted	Dit bericht is verwijderd
+	This message can't be shown	Dit bericht kan niet worden weergegeven
+	App	App
+	Show picture	Afbeelding tonen
+	Link to another site	Link naar een andere site
+	Open in browser	Openen in browser
+	This content can be seen in Teams	Deze inhoud is te zien in Teams
+	Teams doesn't let this conversation be read here	Teams laat dit gesprek hier niet lezen
+# A person’s presence in Teams.
+presence	Available	Beschikbaar
+presence	Busy	Bezet
+presence	Away	Afwezig
+presence	Do not disturb	Niet storen
+presence	Offline	Offline

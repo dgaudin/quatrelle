@@ -130,3 +130,46 @@ fn a_list_refused_says_so_and_is_tried_again_hourly() {
         Some(&model::Event::Status { status: model::Status::UpToDate })
     );
 }
+
+/// The members and link `Members` events said for `chat` from event `from` on: each event's
+/// members, link and whether the list begins there.
+fn members_said(r: &Run, chat: &str, from: usize) -> Vec<(Vec<model::Member>, Option<String>, bool)> {
+    r.events()
+        .into_iter()
+        .skip(from)
+        .filter_map(|e| match e {
+            model::Event::Members { chat: c, members, web_url, first } if c == chat => Some((members, web_url, first)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The chat opened: its members and link said at once from the copy, in events of at most 50
+/// members; not again with each read, but again when its members change while it's open.
+#[test]
+fn the_chat_opened_says_its_members_and_link() {
+    let people: Vec<FakeUser> = std::iter::once(me()).chain((0..60).map(|i| FakeUser::new(&format!("u-{i}"), &format!("Person {i}")))).collect();
+    let mut big = FakeChat::new(GROUP, "group", Some("Everyone"), people);
+    big.messages.push(FakeMessage::new(&T0.to_string(), Some("u-0"), &rfc3339(T0), "<p>Hello</p>"));
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 2), big]));
+    let from = r.events().len();
+    r.w.job(Job::Open { chat: Some(GROUP.into()) });
+    let said = members_said(&r, GROUP, from);
+    assert_eq!(said.iter().map(|(m, _, first)| (m.len(), *first)).collect::<Vec<_>>(), [(50, true), (11, false)]);
+    assert!(said.iter().all(|(_, url, _)| url.as_deref().is_some_and(|u| u.starts_with("https://teams.microsoft.com/l/chat/"))), "{said:?}");
+    let from = r.events().len();
+    r.turns(Duration::from_secs(10));
+    assert!(members_said(&r, GROUP, from).is_empty(), "not again with each read");
+    r.fake(|t| {
+        if let Some(c) = t.chats.iter_mut().find(|c| c.id == GROUP) {
+            c.members.push(FakeUser::new("u-new", "New Person"));
+            c.updated = Some(rfc3339(NOW));
+        }
+    });
+    let from = r.events().len();
+    r.turns(Duration::from_secs(25));
+    let said = members_said(&r, GROUP, from);
+    assert_eq!(said.iter().map(|(m, _, first)| (m.len(), *first)).collect::<Vec<_>>(), [(50, true), (12, false)], "said again");
+    // Another chat's members aren't said while this one is open.
+    assert!(members_said(&r, CHAT, 0).is_empty());
+}

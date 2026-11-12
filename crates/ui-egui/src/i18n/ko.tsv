@@ -2225,3 +2225,20 @@ module	Conversations	대화
 	Someone in this conversation is outside your organisation	이 대화에 조직 외부 사람이 있습니다
 	Can't be read here	여기서 읽을 수 없음
 	You're no longer in this conversation	더 이상 이 대화에 참여하고 있지 않습니다
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Teams에서 열기
+	(edited)	(편집됨)
+	This message was deleted	이 메시지는 삭제되었습니다
+	This message can't be shown	이 메시지를 표시할 수 없습니다
+	App	앱
+	Show picture	그림 표시
+	Link to another site	다른 사이트로 연결되는 링크
+	Open in browser	브라우저에서 열기
+	This content can be seen in Teams	이 콘텐츠는 Teams에서 볼 수 있습니다
+	Teams doesn't let this conversation be read here	Teams에서 이 대화를 여기서 읽도록 허용하지 않습니다
+# A person’s presence in Teams.
+presence	Available	연락 가능
+presence	Busy	바쁨
+presence	Away	자리 비움
+presence	Do not disturb	방해 금지
+presence	Offline	오프라인

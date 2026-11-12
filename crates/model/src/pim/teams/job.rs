@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ChatMessage, ChatRow, Picture, Presence, Status, TeamsSettings};
+use super::{ChatMessage, ChatRow, Member, Picture, Presence, Status, TeamsSettings};
 
 /// A job for the Teams worker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +60,15 @@ pub enum Event {
         messages: Vec<ChatMessage>,
         fresh: bool,
         older: bool,
+    },
+    /// The open chat's members and its link (`webUrl`), from the copy: when it's opened, and
+    /// again when they change. A chat of more than [`super::EVENT_ITEMS`] members comes in
+    /// several events; `first`: its members begin here (those said before are replaced).
+    Members {
+        chat: String,
+        members: Vec<Member>,
+        web_url: Option<String>,
+        first: bool,
     },
     /// People's presence, by user id.
     Presence {

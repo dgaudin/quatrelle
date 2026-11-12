@@ -2227,3 +2227,20 @@ module	Conversations	交談
 	Someone in this conversation is outside your organisation	此對話中有組織外部的人員
 	Can't be read here	無法在此閱讀
 	You're no longer in this conversation	你已不在此對話中
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	在 Teams 中開啟
+	(edited)	(已編輯)
+	This message was deleted	此訊息已刪除
+	This message can't be shown	無法顯示此訊息
+	App	應用程式
+	Show picture	顯示圖片
+	Link to another site	指向其他網站的連結
+	Open in browser	在瀏覽器中開啟
+	This content can be seen in Teams	此內容可在 Teams 中檢視
+	Teams doesn't let this conversation be read here	Teams 不允許在此閱讀此對話
+# A person’s presence in Teams.
+presence	Available	空閒
+presence	Busy	忙碌
+presence	Away	離開
+presence	Do not disturb	請勿打擾
+presence	Offline	離線

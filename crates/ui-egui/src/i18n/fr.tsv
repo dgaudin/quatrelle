@@ -2225,5 +2225,22 @@ module	Conversations	Conversations
 	No conversation found	Aucune conversation trouvée
 	Members: {n}	Membres : {n}
 	Someone in this conversation is outside your organisation	Une personne de cette conversation est extérieure à votre organisation
-	Can't be read here	Illisible ici
+	Can't be read here	Lecture impossible ici
 	You're no longer in this conversation	Vous ne faites plus partie de cette conversation
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Ouvrir dans Teams
+	(edited)	(modifié)
+	This message was deleted	Ce message a été supprimé
+	This message can't be shown	Ce message ne peut pas être affiché
+	App	Application
+	Show picture	Afficher l’image
+	Link to another site	Lien vers un autre site
+	Open in browser	Ouvrir dans le navigateur
+	This content can be seen in Teams	Ce contenu peut être consulté dans Teams
+	Teams doesn't let this conversation be read here	Teams ne permet pas de lire cette conversation ici
+# A person’s presence in Teams.
+presence	Available	Disponible
+presence	Busy	Occupé
+presence	Away	Absent
+presence	Do not disturb	Ne pas déranger
+presence	Offline	Hors ligne

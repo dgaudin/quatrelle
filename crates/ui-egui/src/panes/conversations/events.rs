@@ -14,15 +14,18 @@ use quatrelle_engine::Session;
 use quatrelle_engine::model::Event;
 use quatrelle_engine::model::pim::teams;
 
+use super::pictures::TeamsPictures;
+
 /// The most Teams events applied in a frame.
 pub(crate) const TEAMS_EVENTS_A_FRAME: usize = 4;
 /// The most Teams events waiting.
 const PENDING_MAX: usize = 10_000;
 
-/// The Teams events waiting to be applied, oldest first.
+/// The Teams events waiting to be applied, oldest first, and the pictures they brought.
 #[derive(Default)]
 pub(crate) struct TeamsQueue {
     pending: VecDeque<Event>,
+    pub(crate) pictures: TeamsPictures,
 }
 
 fn teams_event(e: &Event) -> Option<&teams::Event> {
@@ -60,9 +63,9 @@ impl TeamsQueue {
             let Some(e) = self.pending.pop_front() else { break };
             s.apply(e);
         }
-        // Pictures answered aren't drawn yet: taken every frame, so the engine's queue of them
+        // Pictures answered: taken to be decoded every frame, so the engine's queue of them
         // never fills.
-        s.teams.pictures.clear();
+        self.pictures.take(s);
         !self.pending.is_empty()
     }
 

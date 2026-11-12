@@ -2223,3 +2223,20 @@ module	Conversations	会話
 	Someone in this conversation is outside your organisation	この会話には組織外の人がいます
 	Can't be read here	ここでは読めません
 	You're no longer in this conversation	この会話には参加していません
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Teams で開く
+	(edited)	(編集済み)
+	This message was deleted	このメッセージは削除されました
+	This message can't be shown	このメッセージは表示できません
+	App	アプリ
+	Show picture	画像を表示
+	Link to another site	別のサイトへのリンク
+	Open in browser	ブラウザーで開く
+	This content can be seen in Teams	この内容は Teams で見られます
+	Teams doesn't let this conversation be read here	Teams ではこの会話をここで読むことができません
+# A person’s presence in Teams.
+presence	Available	在席中
+presence	Busy	取り込み中
+presence	Away	退席中
+presence	Do not disturb	邪魔しないで
+presence	Offline	オフライン

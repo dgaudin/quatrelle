@@ -2226,3 +2226,20 @@ module	Conversations	Беседы
 	Someone in this conversation is outside your organisation	Кто-то в этой беседе не из вашей организации
 	Can't be read here	Здесь не прочитать
 	You're no longer in this conversation	Вы больше не участвуете в этой беседе
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Открыть в Teams
+	(edited)	(изменено)
+	This message was deleted	Это сообщение удалено
+	This message can't be shown	Это сообщение нельзя показать
+	App	Приложение
+	Show picture	Показать изображение
+	Link to another site	Ссылка на другой сайт
+	Open in browser	Открыть в браузере
+	This content can be seen in Teams	Это содержимое можно посмотреть в Teams
+	Teams doesn't let this conversation be read here	Teams не позволяет читать эту беседу здесь
+# A person’s presence in Teams.
+presence	Available	На месте
+presence	Busy	Занят
+presence	Away	Нет на месте
+presence	Do not disturb	Не беспокоить
+presence	Offline	Не в сети

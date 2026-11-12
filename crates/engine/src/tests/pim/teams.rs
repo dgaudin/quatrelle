@@ -533,3 +533,43 @@ fn teams_commands_survive_junk_params_while_on() {
     }
     assert!(s.prefs.teams.on, "no junk switches Teams off");
 }
+
+fn member(i: usize) -> teams::Member {
+    teams::Member { user_id: format!("u-{i}"), name: format!("Person {i}"), kind: "aadUserConversationMember".into(), ..Default::default() }
+}
+
+fn members_event(chat: &str, members: Vec<teams::Member>, first: bool) -> Event {
+    let web_url = Some("https://teams.microsoft.com/l/chat/19%3Achat1%40thread.v2/0".to_string());
+    teams_event(teams::Event::Members { chat: chat.into(), members, web_url, first })
+}
+
+/// The open chat's members and link are kept, in parts, at most `MAX_MEMBERS`; another chat's
+/// aren't; opening another chat forgets them.
+#[test]
+fn the_open_chats_members_and_link_are_kept() {
+    let mut s = signed_in(vec![row(1, 10), row(2, 20)]);
+    let (one, two) = ("19:chat1@thread.v2", "19:chat2@thread.v2");
+    s.apply(members_event(one, vec![member(0)], true));
+    assert!(s.teams.members.is_empty() && s.teams.web_url.is_none(), "not the open chat");
+    open(&mut s, one);
+    s.apply(members_event(one, (0..50).map(member).collect(), true));
+    s.apply(members_event(one, (50..60).map(member).collect(), false));
+    assert_eq!(s.teams.members.len(), 60, "in parts");
+    assert!(s.teams.web_url.as_deref().is_some_and(|u| u.starts_with("https://teams.microsoft.com/")));
+    s.apply(members_event(two, vec![member(99)], true));
+    assert_eq!(s.teams.members.len(), 60, "another chat's members aren't taken");
+    // Said again: the earlier list is replaced.
+    s.apply(members_event(one, vec![member(7)], true));
+    assert_eq!(s.teams.members.iter().map(|m| m.user_id.as_str()).collect::<Vec<_>>(), ["u-7"]);
+    // A member without a usable id, and past the cap: left out.
+    let mut odd = member(8);
+    odd.user_id = "x".repeat(teams::MAX_ID + 1);
+    s.apply(members_event(one, vec![odd], false));
+    assert_eq!(s.teams.members.len(), 1);
+    for start in (0..teams::MAX_MEMBERS + 100).step_by(teams::EVENT_ITEMS) {
+        s.apply(members_event(one, (start..start + teams::EVENT_ITEMS).map(member).collect(), start == 0));
+    }
+    assert_eq!(s.teams.members.len(), teams::MAX_MEMBERS);
+    open(&mut s, two);
+    assert!(s.teams.members.is_empty() && s.teams.web_url.is_none(), "forgotten with the chat");
+}

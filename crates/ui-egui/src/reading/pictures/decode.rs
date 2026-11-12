@@ -52,6 +52,29 @@ fn decoded(data: &[u8]) -> Option<image::DynamicImage> {
     reader.decode().ok()
 }
 
+/// A picture from a stranger read within `max_pixels` pixels and `max_alloc` bytes: its header
+/// says its size before anything is decoded, and one bigger is refused unread. Behind
+/// `catch_unwind`: a picture that makes the decoder panic is no picture. Pure, so it runs off the
+/// window's thread.
+pub(crate) fn decode_bounded(data: &[u8], max_pixels: u64, max_alloc: u64) -> Option<image::DynamicImage> {
+    std::panic::catch_unwind(|| {
+        let reader = || image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format().ok();
+        let (w, h) = reader()?.into_dimensions().ok()?;
+        if w == 0 || h == 0 || u64::from(w).saturating_mul(u64::from(h)) > max_pixels {
+            return None;
+        }
+        let mut limits = image::Limits::default();
+        limits.max_image_width = Some(w);
+        limits.max_image_height = Some(h);
+        limits.max_alloc = Some(max_alloc);
+        let mut reader = reader()?;
+        reader.limits(limits);
+        reader.decode().ok()
+    })
+    .ok()
+    .flatten()
+}
+
 /// A picture's pixels, whole (to copy it).
 pub(crate) fn color_image(data: &[u8]) -> Option<egui::ColorImage> {
     let img = decoded(data)?.to_rgba8();

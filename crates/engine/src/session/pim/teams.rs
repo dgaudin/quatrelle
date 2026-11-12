@@ -12,7 +12,7 @@
 
 use std::collections::VecDeque;
 
-use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, Picture, Presence, Status, TeamsSettings, one_line};
+use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, MAX_MEMBERS, Member, Picture, Presence, Status, TeamsSettings, one_line};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
@@ -64,6 +64,10 @@ pub struct TeamsState {
     /// The newest end was dropped: messages newer than the window's last aren't taken (they'd
     /// follow a gap); opening the chat again shows them.
     pub newer_left_out: bool,
+    /// The open chat's members (at most [`MAX_MEMBERS`]) and its link (`webUrl`, kept as Graph
+    /// gave it: checked where it's used), as the worker last said them.
+    pub members: Vec<Member>,
+    pub web_url: Option<String>,
     /// The page last asked for (its `before`): asked once.
     asked_before: Option<i64>,
     /// People's presence, by user id, at most [`PRESENCE_MAX`].
@@ -114,11 +118,28 @@ impl TeamsState {
     pub(crate) fn open_chat(&mut self, chat: Option<String>) {
         self.open = chat;
         self.window.clear();
+        self.members.clear();
+        self.web_url = None;
         self.scrolled_back = false;
         self.newer_left_out = false;
         self.asked_before = None;
         // The images of the chat left aren't waited for any more.
         self.asked.retain(|p| !matches!(p, Picture::Hosted { .. }));
+    }
+
+    /// The open chat's members, in parts (`first`: they begin here), and its link; another chat's
+    /// aren't taken. A member without a usable id is left out, and past [`MAX_MEMBERS`] the rest.
+    fn take_members(&mut self, chat: &str, members: Vec<Member>, web_url: Option<String>, first: bool) {
+        if self.open.as_deref() != Some(chat) {
+            return;
+        }
+        if first {
+            self.members.clear();
+            // Longer than a browser is handed: no link (it's checked again where it's used).
+            self.web_url = web_url.filter(|u| u.len() <= 2048);
+        }
+        let room = MAX_MEMBERS.saturating_sub(self.members.len());
+        self.members.extend(members.into_iter().filter(|m| !m.user_id.is_empty() && m.user_id.len() <= MAX_ID).take(room));
     }
 
     /// The page before the window to ask for, unless it was asked already.
@@ -293,6 +314,7 @@ impl Session {
             teams::Event::Found { query, hits, indexing, partial } => self.teams.found(query, hits, indexing, partial),
             teams::Event::Picture { picture, bytes } => self.teams.take_picture(picture, bytes),
             teams::Event::Removed { chat } => self.teams.left(&chat),
+            teams::Event::Members { chat, members, web_url, first } => self.teams.take_members(&chat, members, web_url, first),
         }
     }
 

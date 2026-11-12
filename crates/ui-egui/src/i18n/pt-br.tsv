@@ -2226,3 +2226,20 @@ module	Conversations	Conversas
 	Someone in this conversation is outside your organisation	Alguém nesta conversa é de fora da sua organização
 	Can't be read here	Não pode ser lida aqui
 	You're no longer in this conversation	Você não faz mais parte desta conversa
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Abrir no Teams
+	(edited)	(editada)
+	This message was deleted	Esta mensagem foi excluída
+	This message can't be shown	Esta mensagem não pode ser exibida
+	App	Aplicativo
+	Show picture	Mostrar imagem
+	Link to another site	Link para outro site
+	Open in browser	Abrir no navegador
+	This content can be seen in Teams	Este conteúdo pode ser visto no Teams
+	Teams doesn't let this conversation be read here	O Teams não permite ler esta conversa aqui
+# A person’s presence in Teams.
+presence	Available	Disponível
+presence	Busy	Ocupado
+presence	Away	Ausente
+presence	Do not disturb	Não incomodar
+presence	Offline	Offline

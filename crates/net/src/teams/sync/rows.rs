@@ -7,10 +7,12 @@
 //! A row says who as the chat's members do: its name ([`row_name`]), "External" when a member
 //! isn't proven of the organisation, and its last line's sender judged by
 //! [`sender_internal`] (a sender the members don't have was looked for among them before).
+//! The open chat's members and link go too, for its header, its mentions and "Open in Teams":
+//! when it's opened, and again when they change.
 
 use super::reads::theirs;
 use super::*;
-use quatrelle_model::pim::teams::{ChatKind, ChatMessage, ChatRow, EVENT_ITEMS, Event, is_internal, one_line, row_name, sender_internal};
+use quatrelle_model::pim::teams::{ChatKind, ChatMessage, ChatRow, EVENT_ITEMS, Event, Member, is_internal, one_line, row_name, sender_internal};
 use sha2::{Digest, Sha256};
 
 /// A chat whose row may have changed: sent at the end of the pass, or once [`EVENT_ITEMS`] wait.
@@ -35,6 +37,9 @@ pub(crate) fn flush(w: &mut Worker) {
     }
     let chats = std::mem::take(&mut w.sync.dirty);
     w.sync.dirtied.clear();
+    if w.open.as_ref().is_some_and(|o| chats.contains(o)) {
+        say_members(w);
+    }
     let mut rows = Vec::new();
     for chat in chats {
         let Some(r) = w.copy.as_ref().and_then(|c| c.chat(&chat)) else { continue };
@@ -52,6 +57,32 @@ pub(crate) fn flush(w: &mut Worker) {
     for part in rows.chunks(EVENT_ITEMS) {
         w.say(Event::Chats { rows: part.to_vec() });
     }
+}
+
+/// The open chat's members and link, from the copy, in events of at most [`EVENT_ITEMS`]
+/// members, unless the engine was last sent them as they are.
+pub(crate) fn say_members(w: &mut Worker) {
+    let Some(chat) = w.open.clone() else { return };
+    let Some(r) = w.copy.as_ref().and_then(|c| c.chat(&chat)) else { return };
+    let (members, web_url) = (&r.chat.members, &r.chat.web_url);
+    let sum = members_hash(members, web_url.as_deref());
+    if w.sync.members_said == Some(sum) {
+        return;
+    }
+    w.sync.members_said = Some(sum);
+    let mut parts = members.chunks(EVENT_ITEMS).peekable();
+    if parts.peek().is_none() {
+        return w.say(Event::Members { chat, members: Vec::new(), web_url: web_url.clone(), first: true });
+    }
+    for (i, part) in parts.enumerate() {
+        w.say(Event::Members { chat: chat.clone(), members: part.to_vec(), web_url: web_url.clone(), first: i == 0 });
+    }
+}
+
+/// A chat's members and link's fingerprint: what tells the engine has them already.
+fn members_hash(members: &[Member], web_url: Option<&str>) -> u64 {
+    let sum = Sha256::digest(serde_json::to_vec(&(members, web_url)).unwrap_or_default());
+    sum.iter().take(8).fold(0, |n, b| (n << 8) | u64::from(*b))
 }
 
 /// A chat's messages sent, in creation order as given: `fresh`, news to announce; `older`, a page

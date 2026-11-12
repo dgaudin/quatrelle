@@ -2225,3 +2225,20 @@ module	Conversations	Conversazioni
 	Someone in this conversation is outside your organisation	Qualcuno in questa conversazione è esterno alla tua organizzazione
 	Can't be read here	Non leggibile qui
 	You're no longer in this conversation	Non fai più parte di questa conversazione
+# Teams: reading a conversation (its messages, pictures, files and cards).
+	Open in Teams	Apri in Teams
+	(edited)	(modificato)
+	This message was deleted	Questo messaggio è stato eliminato
+	This message can't be shown	Questo messaggio non può essere mostrato
+	App	App
+	Show picture	Mostra immagine
+	Link to another site	Link a un altro sito
+	Open in browser	Apri nel browser
+	This content can be seen in Teams	Questo contenuto è visibile in Teams
+	Teams doesn't let this conversation be read here	Teams non consente di leggere qui questa conversazione
+# A person’s presence in Teams.
+presence	Available	Disponibile
+presence	Busy	Occupato
+presence	Away	Assente
+presence	Do not disturb	Non disturbare
+presence	Offline	Offline

@@ -25,6 +25,8 @@ impl MailApp {
         if self.pump() {
             ctx.request_repaint();
         }
+        // Teams' pictures decoded become textures, whatever the module.
+        self.ui.teams_queue.pictures.made(ctx);
         // The open message's body, back from the reading lane.
         self.take_body();
         // A send held for names being resolved goes once they are, or says why it can't.
@@ -521,7 +523,9 @@ impl MailApp {
                     });
                 }
                 (Module::Conversations, _) => {
-                    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |_| {});
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
+                        conversations::chat(&self.session, &mut self.ui, ui, &mut acts);
+                    });
                 }
                 (Module::Mail, pane) => match pane {
                     ReadingPane::Right => {
@@ -639,6 +643,8 @@ impl MailApp {
             *frame = self.services.video_frame(path);
         }
         self.pictures_drawn(&ctx);
+        // The conversations' list not drawn: no one on it is shown.
+        conversations::list_not_drawn(&self.session, &mut self.ui.conversations, &mut acts);
 
         for a in acts {
             self.act(a);

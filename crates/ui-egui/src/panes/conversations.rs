@@ -4,17 +4,25 @@
 //! the copy; the engine holds bounded windows of it (`Session::teams`), and the window takes the
 //! worker's events a few a frame ([`TeamsQueue`]) so a burst of them never holds a frame up.
 //! The module is shown with Teams on and signed in (File › Options › Teams); its list
-//! ([`list`]) is where the folders are in Mail.
+//! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are.
+//! Pictures are decoded on a thread of their own (`pictures.rs`).
 
 use std::collections::HashSet;
 
+use quatrelle_engine::model::pim::teams::Picture;
+
+mod chat;
 mod events;
 mod list;
+mod pictures;
 
+pub(crate) use chat::chat;
 pub(crate) use events::{TEAMS_EVENTS_A_FRAME, TeamsQueue};
-pub(crate) use list::list;
 #[cfg(test)]
 pub(crate) use list::picture_of;
+pub(crate) use list::{list, list_not_drawn};
+#[cfg(test)]
+pub(crate) use pictures::{Decoder, MAX_PIXELS, Shown, TeamsPictures, pixels};
 
 /// What Conversations keeps between frames.
 #[derive(Clone, Debug, Default)]
@@ -35,6 +43,19 @@ pub struct ConversationsUi {
     pub scroll_to_open: bool,
     /// Where the list was scrolled to and how tall it was, at the last frame.
     pub view: (f32, f32),
+    /// The list was drawn this frame (else the people it showed aren't shown any more).
+    pub list_drawn: bool,
+    /// The chat the following are for: its messages whose pictures were asked for (each once),
+    /// and the page before last asked for (by its first message's time).
+    pub hosted_for: Option<String>,
+    pub hosted_asked: HashSet<String>,
+    pub older_asked: Option<i64>,
+    /// The chat's scroll at the last frame: (chat, its first message, how tall, where scrolled).
+    pub chat_view: Option<(String, String, f32, f32)>,
+    /// Where the chat is to be scrolled to (older messages came in above).
+    pub chat_scroll_to: Option<f32>,
+    /// The picture shown big.
+    pub viewing: Option<Picture>,
 }
 
 /// What a row's picture is: a person's (their photo once it came, else their initials), a

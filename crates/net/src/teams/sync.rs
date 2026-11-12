@@ -42,7 +42,7 @@ mod rows;
 use reads::{Read, ReadStep, read_members, read_step};
 #[cfg_attr(not(test), allow(unused_imports))]
 pub(crate) use reads::{count_unread, http_code, incremental, refusal, refused, rfc3339};
-pub(crate) use rows::{dirty, flush, say_messages};
+pub(crate) use rows::{dirty, flush, say_members, say_messages};
 
 const DAY_MS: i64 = 86_400_000;
 /// The chats read every minute: active in the last 7 days.
@@ -97,6 +97,8 @@ pub(crate) struct SyncState {
     dirtied: HashSet<String>,
     /// The (chat, sender) pairs already looked for among the chat's members (keyed hashes).
     looked: HashSet<u64>,
+    /// The open chat's members and link as last said to the engine (their hash).
+    members_said: Option<u64>,
 }
 
 impl SyncState {
@@ -216,6 +218,8 @@ pub(crate) fn open(w: &mut Worker, chat: Option<String>) {
     let Some(chat) = w.open.clone() else { return };
     let messages = w.copy.as_ref().map(|c| c.last_pages(&chat, 2)).unwrap_or_default();
     say_messages(w, &chat, &messages, false, false);
+    w.sync.members_said = None;
+    say_members(w);
     w.limiter.prompt(Cadence::Open);
 }
 

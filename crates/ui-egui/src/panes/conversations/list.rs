@@ -10,7 +10,9 @@
 //! line ([`one_line`]), cut to the pane, never able to push "External" or "Can't be read here"
 //! off the row, which are drawn first and whole. A group is always drawn as a group, whatever it
 //! is named. What the list asks of the worker (presence, photos) is bounded by the rows on
-//! screen, and each photo is asked once.
+//! screen, and each photo is asked once; when the list isn't drawn (another module, the pane
+//! minimized, nothing listed), the worker is told no one is shown, so presence isn't asked for
+//! from Mail.
 
 use egui::{Color32, Rect, Sense, Ui, pos2, vec2};
 use quatrelle_engine::Session;
@@ -18,6 +20,7 @@ use quatrelle_engine::model::dates;
 use quatrelle_engine::model::pim::teams::{ChatKind, ChatRow, MAX_CHATS, Presence, Status, one_line};
 use serde_json::json;
 
+use super::pictures::TeamsPictures;
 use super::{ConversationsUi, RowPicture};
 use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
@@ -54,7 +57,9 @@ fn initials(name: &str) -> String {
 /// The list: the search box, where the copy stands, and the rows (or the search's hits).
 pub(crate) fn list(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = ui_state.tokens;
+    let pics = &ui_state.teams_queue.pictures;
     let c = &mut ui_state.conversations;
+    c.list_drawn = true;
     // Another account signed in: what was asked for the last one doesn't hold.
     if c.asked_for != s.prefs.teams.object_id {
         c.asked_for.clone_from(&s.prefs.teams.object_id);
@@ -64,15 +69,35 @@ pub(crate) fn list(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
     search_box(ui, &t, c, acts);
     states(s, ui, &t, acts);
     let searching = !c.query.trim().is_empty();
-    let rows: Vec<&ChatRow> = if searching { hits(s, c, ui, &t) } else { s.teams.listed().collect() };
+    let rows: Vec<&ChatRow> = if searching { hits(s, ui, &t) } else { s.teams.listed().collect() };
     if rows.is_empty() {
         if !searching && matches!(s.teams.status, Status::UpToDate | Status::NoKeychain | Status::Offline) {
             ui.add_space(24.0);
             ui.vertical_centered(|ui| ui.label(egui::RichText::new(tl!("No conversations yet")).color(t.dim)));
         }
+        no_one_shown(s, c, acts);
         return;
     }
-    rows_pane(s, c, ui, &t, &rows, acts);
+    rows_pane(s, c, pics, ui, &t, &rows, acts);
+}
+
+/// The worker told no one is shown any more (it stops asking for their presence), once.
+fn no_one_shown(s: &Session, c: &mut ConversationsUi, acts: &mut Vec<Action>) {
+    if c.seen_users.is_empty() {
+        return;
+    }
+    c.seen_users.clear();
+    if s.prefs.teams.on && s.prefs.teams.signed_in {
+        acts.push(Action::Run("teams.visible", json!({"users": []})));
+    }
+}
+
+/// After the panes were drawn: the list wasn't (another module, the pane minimized), so no one
+/// on it is shown.
+pub(crate) fn list_not_drawn(s: &Session, c: &mut ConversationsUi, acts: &mut Vec<Action>) {
+    if !std::mem::take(&mut c.list_drawn) {
+        no_one_shown(s, c, acts);
+    }
 }
 
 /// The search box at the top: the search goes [`SEARCH_PAUSE`] after the last key (Enter: at
@@ -154,16 +179,14 @@ fn states(s: &Session, ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
     ui.add_space(4.0);
 }
 
-/// The search's hits, one row per chat in the order found (a chat's messages found are one row):
-/// none until the worker answers this query.
-fn hits<'a>(s: &'a Session, c: &ConversationsUi, ui: &mut Ui, t: &Tokens) -> Vec<&'a ChatRow> {
+/// The search's hits, one row per chat in the order found (a chat's messages found are one row).
+/// While the worker hasn't answered the query typed, the last answer stays (the list neither
+/// empties nor flickers at each key); before any, the list as it is.
+fn hits<'a>(s: &'a Session, ui: &mut Ui, t: &Tokens) -> Vec<&'a ChatRow> {
     let note = |ui: &mut Ui, text: &str| {
         ui.label(egui::RichText::new(text).color(t.dim).size(12.5));
     };
-    let Some(found) = s.teams.found.as_ref().filter(|f| f.query == c.query.trim()) else {
-        note(ui, tl!("Searching…"));
-        return Vec::new();
-    };
+    let Some(found) = s.teams.found.as_ref() else { return s.teams.listed().collect() };
     if found.indexing {
         note(ui, tl!("Indexing…"));
     }
@@ -181,7 +204,7 @@ fn hits<'a>(s: &'a Session, c: &ConversationsUi, ui: &mut Ui, t: &Tokens) -> Vec
 
 /// The rows, only those on screen drawn; the people on them told to the worker (presence) and
 /// their photos asked once.
-fn rows_pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens, rows: &[&ChatRow], acts: &mut Vec<Action>) {
+fn rows_pane(s: &Session, c: &mut ConversationsUi, pics: &TeamsPictures, ui: &mut Ui, t: &Tokens, rows: &[&ChatRow], acts: &mut Vec<Action>) {
     let open_at = s.teams.open.as_deref().and_then(|o| rows.iter().position(|r| r.id == o));
     let mut area = egui::ScrollArea::vertical().id_salt("conversations-list").auto_shrink([false, false]);
     // Alt+↑/↓ opened one off screen: it's brought into view.
@@ -204,7 +227,7 @@ fn rows_pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens, rows
             if let Some(p) = r.person.as_ref().filter(|_| r.kind == ChatKind::OneOnOne) {
                 people.push(p.clone());
             }
-            if row(s, ui, t, r, open_at == Some(i)).clicked() {
+            if row(s, pics, ui, t, r, open_at == Some(i)).clicked() {
                 acts.push(Action::Run("teams.open", json!({"chat": r.id})));
             }
         }
@@ -248,7 +271,7 @@ fn presence_color(p: Presence, t: &Tokens) -> Option<Color32> {
 }
 
 /// One row.
-fn row(s: &Session, ui: &mut Ui, t: &Tokens, r: &ChatRow, open: bool) -> egui::Response {
+fn row(s: &Session, pics: &TeamsPictures, ui: &mut Ui, t: &Tokens, r: &ChatRow, open: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
     let p = ui.painter_at(rect);
     let fill = if open {
@@ -267,7 +290,10 @@ fn row(s: &Session, ui: &mut Ui, t: &Tokens, r: &ChatRow, open: bool) -> egui::R
     let c = pos2(rect.left() + 24.0, rect.center().y);
     match picture_of(r) {
         RowPicture::Person { user, initials } => {
-            widgets::avatar(ui, c, 18.0, &initials, theme::avatar_color(&user, t.dark));
+            match pics.photo(&user) {
+                Some(tex) => egui::Image::new(tex).corner_radius(18.0).paint_at(ui, Rect::from_center_size(c, vec2(36.0, 36.0))),
+                None => widgets::avatar(ui, c, 18.0, &initials, theme::avatar_color(&user, t.dark)),
+            }
             let presence = s.teams.presence.get(&user).copied().unwrap_or_default();
             if let Some(color) = presence_color(presence, t) {
                 let dot = c + vec2(13.0, 13.0);
@@ -295,7 +321,8 @@ fn row(s: &Session, ui: &mut Ui, t: &Tokens, r: &ChatRow, open: bool) -> egui::R
     // First line: External, the name, a group's member count, the time.
     let mut end = right;
     if let Some(at) = r.at {
-        let time = crate::i18n::date(&dates::list_time(at, &s.clock));
+        // The row's time is in milliseconds.
+        let time = crate::i18n::date(&dates::list_time(at.div_euclid(1000), &s.clock));
         let g = p.layout_no_wrap(time.clone(), if unread { theme::bold(12.0) } else { theme::regular(12.0) }, if unread { t.accent } else { dim });
         end -= g.size().x;
         p.galley(pos2(end, line1 + 1.0), g, dim);
