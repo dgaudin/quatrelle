@@ -11,20 +11,19 @@ use quatrelle_engine::model::pim::teams::{Attachment, Block, BlockKind, ChatMess
 
 use super::*;
 use crate::Action;
-use crate::panes::conversations::{Decoder, MAX_PIXELS, Shown, TeamsPictures};
 
-const ME: &str = "00000000-0000-0000-0000-00000000000a";
-const TENANT_ID: &str = "11111111-2222-3333-4444-000000000001";
-const CHAT: &str = "19:pane@thread.v2";
-const TEAMS_LINK: &str = "https://teams.microsoft.com/l/chat/19%3Apane%40thread.v2/0?tenantId=11111111-2222-3333-4444-000000000001";
+pub(super) const ME: &str = "00000000-0000-0000-0000-00000000000a";
+pub(super) const TENANT_ID: &str = "11111111-2222-3333-4444-000000000001";
+pub(super) const CHAT: &str = "19:pane@thread.v2";
+pub(super) const TEAMS_LINK: &str = "https://teams.microsoft.com/l/chat/19%3Apane%40thread.v2/0?tenantId=11111111-2222-3333-4444-000000000001";
 /// A tall window: the whole chat fits, nothing scrolled away.
-const TALL: (usize, usize) = (1400, 2000);
+pub(super) const TALL: (usize, usize) = (1400, 2000);
 
-fn member(id: &str, name: &str, tenant: &str) -> Member {
+pub(super) fn member(id: &str, name: &str, tenant: &str) -> Member {
     Member { user_id: id.into(), name: name.into(), kind: "aadUserConversationMember".into(), tenant_id: Some(tenant.into()), ..Default::default() }
 }
 
-fn members() -> Vec<Member> {
+pub(super) fn members() -> Vec<Member> {
     vec![
         member(ME, "Riley Moreno", TENANT_ID),
         member("u-ana", "Ana Lima", TENANT_ID),
@@ -33,30 +32,30 @@ fn members() -> Vec<Member> {
     ]
 }
 
-fn user(id: &str, name: &str) -> Sender {
+pub(super) fn user(id: &str, name: &str) -> Sender {
     Sender::User { id: id.into(), name: name.into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT_ID.into()) }
 }
 
-fn words(text: &str) -> Run {
+pub(super) fn words(text: &str) -> Run {
     Run { text: text.into(), ..Default::default() }
 }
 
-fn para(runs: Vec<Run>) -> ChatText {
+pub(super) fn para(runs: Vec<Run>) -> ChatText {
     ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] }
 }
 
 /// A message `id` from `sender`, `secs` seconds since 1970, saying `body`.
-fn said(id: &str, sender: Sender, secs: i64, body: ChatText) -> ChatMessage {
+pub(super) fn said(id: &str, sender: Sender, secs: i64, body: ChatText) -> ChatMessage {
     ChatMessage { id: id.into(), chat: CHAT.into(), sender, created: secs * 1000, modified: secs * 1000, body, ..Default::default() }
 }
 
-fn group_row() -> ChatRow {
+pub(super) fn group_row() -> ChatRow {
     ChatRow { name: "Support team".into(), members: 4, ..row(CHAT, 0) }
 }
 
 /// The app in Conversations with `row` open, its members, its link and `messages`; the drive's
 /// host `contoso-my.sharepoint.com`.
-fn chat_app(name: &str, row: ChatRow, web_url: &str, messages: Vec<ChatMessage>) -> (MailApp, std::path::PathBuf, Shared<Job>) {
+pub(super) fn chat_app(name: &str, row: ChatRow, web_url: &str, messages: Vec<ChatMessage>) -> (MailApp, std::path::PathBuf, Shared<Job>) {
     let (mut a, dir, jobs) = module_app(name, vec![row.clone()]);
     a.session.teams_apply(teams::Event::Account {
         name: "Riley Moreno".into(),
@@ -74,7 +73,7 @@ fn chat_app(name: &str, row: ChatRow, web_url: &str, messages: Vec<ChatMessage>)
 }
 
 /// A few frames of `size` for the pane to settle, then the texts of the last.
-fn settled_at(ctx: &egui::Context, a: &mut MailApp, size: (usize, usize)) -> Vec<(String, egui::Rect)> {
+pub(super) fn settled_at(ctx: &egui::Context, a: &mut MailApp, size: (usize, usize)) -> Vec<(String, egui::Rect)> {
     let size = egui::vec2(size.0 as f32, size.1 as f32);
     for _ in 0..6 {
         frame_sized(ctx, a, vec![], size);
@@ -84,7 +83,7 @@ fn settled_at(ctx: &egui::Context, a: &mut MailApp, size: (usize, usize)) -> Vec
 
 /// The pane alone, drawn in a frame of `size` with `events`: what it asked for, and what it drew.
 /// (The fonts come from a frame of the whole window first.)
-fn pane(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, size: (usize, usize)) -> (Vec<Action>, Vec<(String, egui::Rect)>) {
+pub(super) fn pane(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, size: (usize, usize)) -> (Vec<Action>, Vec<(String, egui::Rect)>) {
     let input = RawInput {
         screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(size.0 as f32, size.1 as f32))),
         events,
@@ -110,7 +109,7 @@ fn pane(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, size: (usize, 
 }
 
 /// A click on the pane alone at `at`: what it asked for.
-fn click_pane(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, size: (usize, usize)) -> Vec<Action> {
+pub(super) fn click_pane(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, size: (usize, usize)) -> Vec<Action> {
     let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     let mut acts = Vec::new();
     for events in [vec![Event::PointerMoved(at)], vec![press(true)], vec![press(false)], vec![]] {
@@ -119,11 +118,11 @@ fn click_pane(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, size: (usize
     acts
 }
 
-fn texts_with(texts: &[(String, egui::Rect)], part: &str) -> Vec<egui::Rect> {
+pub(super) fn texts_with(texts: &[(String, egui::Rect)], part: &str) -> Vec<egui::Rect> {
     texts.iter().filter(|(t, _)| t.contains(part)).map(|(_, r)| *r).collect()
 }
 
-fn picture_jobs(jobs: &Shared<Job>, f: impl Fn(&Picture) -> bool) -> usize {
+pub(super) fn picture_jobs(jobs: &Shared<Job>, f: impl Fn(&Picture) -> bool) -> usize {
     jobs.borrow().iter().filter(|j| matches!(j, Job::Teams { job: teams::Job::Picture { picture } } if f(picture))).count()
 }
 
@@ -339,114 +338,6 @@ fn a_file_card_names_its_host_and_says_another_site() {
     }
 }
 
-/// A PNG's header saying `w` × `h`, and nothing else.
-fn png_header(w: u32, h: u32) -> Vec<u8> {
-    fn crc(data: &[u8]) -> u32 {
-        let mut c = 0xFFFF_FFFFu32;
-        for &b in data {
-            c ^= u32::from(b);
-            for _ in 0..8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
-            }
-        }
-        !c
-    }
-    let mut ihdr = b"IHDR".to_vec();
-    ihdr.extend(w.to_be_bytes());
-    ihdr.extend(h.to_be_bytes());
-    ihdr.extend([8, 6, 0, 0, 0]);
-    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
-    png.extend(13u32.to_be_bytes());
-    png.extend(&ihdr);
-    png.extend(crc(&ihdr).to_be_bytes());
-    png
-}
-
-/// A small real PNG.
-fn png(w: u32, h: u32) -> Vec<u8> {
-    let img = image::RgbaImage::from_pixel(w, h, image::Rgba([40, 120, 200, 255]));
-    let mut out = Vec::new();
-    image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
-    out
-}
-
-/// Frames until the pictures are decoded (at most five seconds).
-fn decoded(ctx: &egui::Context, a: &mut MailApp) {
-    let started = std::time::Instant::now();
-    loop {
-        frame(ctx, a, vec![]);
-        if !a.ui.teams_queue.pictures.busy() || started.elapsed() > std::time::Duration::from_secs(5) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    frame(ctx, a, vec![]);
-}
-
-/// A picture past 40 megapixels (its header says 10,000 × 5,000) is a placeholder: no texture,
-/// and the decoder goes on with the next.
-#[test]
-fn a_picture_bigger_than_40_megapixels_is_a_placeholder() {
-    assert!(u64::from(10_000u32 * 5_000) > MAX_PIXELS);
-    let m = said(
-        "m1",
-        user("u-ana", "Ana Lima"),
-        NOW,
-        para(vec![
-            words("Two"),
-            Run { hosted: Some("big".into()), ..Default::default() },
-            Run { hosted: Some("small".into()), ..Default::default() },
-        ]),
-    );
-    let (mut a, dir, jobs) = chat_app("teams-chat-big", group_row(), TEAMS_LINK, vec![m]);
-    let ctx = egui::Context::default();
-    settled_at(&ctx, &mut a, (1280, 800));
-    assert_eq!(picture_jobs(&jobs, |p| matches!(p, Picture::Hosted { .. })), 2, "both asked for");
-    let hosted = |id: &str| Picture::Hosted { chat: CHAT.into(), message: "m1".into(), hosted: id.into() };
-    let started = std::time::Instant::now();
-    a.session.teams_apply(teams::Event::Picture { picture: hosted("big"), bytes: png_header(10_000, 5_000) });
-    decoded(&ctx, &mut a);
-    assert!(started.elapsed() < std::time::Duration::from_secs(2), "refused by its header, not decoded: {:?}", started.elapsed());
-    let pics = &a.ui.teams_queue.pictures;
-    assert!(matches!(pics.image(&hosted("big")), Some(Shown::Failed)), "a placeholder, no texture");
-    assert!(pics.decoder.alive(), "the decoder goes on");
-    let texts = settled_at(&ctx, &mut a, (1280, 800));
-    assert!(has_text(&texts, "This picture can't be shown."), "{texts:?}");
-    a.session.teams_apply(teams::Event::Picture { picture: hosted("small"), bytes: png(40, 30) });
-    decoded(&ctx, &mut a);
-    assert!(matches!(a.ui.teams_queue.pictures.image(&hosted("small")), Some(Shown::Ready(_))), "the next one is shown");
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-/// A picture that makes the decoder panic is a placeholder, and the thread decodes the next.
-#[test]
-fn a_picture_that_panics_the_decoder_is_a_placeholder() {
-    fn boom(data: &[u8], side: u32) -> Option<egui::ColorImage> {
-        assert!(data.first() != Some(&0), "a hostile picture");
-        crate::panes::conversations::pixels(data, side)
-    }
-    let (mut a, dir, _, _) = teams_app("teams-chat-panic", true);
-    let ctx = egui::Context::default();
-    let mut pics = TeamsPictures::default();
-    pics.decoder = Decoder::new(boom);
-    let photo = |u: &str| Picture::Photo { user: u.into() };
-    for (u, bytes) in [("u-bad", vec![0u8, 1, 2]), ("u-good", png(48, 48))] {
-        a.run("teams.picture", json!({"kind": "photo", "user": u}));
-        a.session.teams_apply(teams::Event::Picture { picture: photo(u), bytes });
-    }
-    pics.take(&mut a.session);
-    let started = std::time::Instant::now();
-    while pics.busy() && started.elapsed() < std::time::Duration::from_secs(5) {
-        pics.made(&ctx);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    pics.made(&ctx);
-    assert!(pics.photo("u-bad").is_none(), "no photo: the initials stay");
-    assert!(pics.photo("u-good").is_some(), "the thread went on");
-    assert!(pics.decoder.alive());
-    let _ = std::fs::remove_dir_all(dir);
-}
-
 /// A chat Graph won't serve: the sentence, the last line the list gave (its sender External),
 /// and "Open in Teams", light and dark.
 #[test]
@@ -543,34 +434,6 @@ fn scrolling_up_asks_for_the_older_page_once() {
     let texts = to_the_top(&mut a);
     assert!(on_screen(&texts, "Line 40").is_some(), "at the new top");
     assert_eq!(pages(&jobs), 2, "the next page, at the top again");
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-/// A person's photo, once it came, is drawn on their row (until then their initials).
-#[test]
-fn a_photo_is_drawn_on_its_row() {
-    let rows = vec![one_to_one("19:p@thread.v2", "Paul Durand", "u-paul", NOW)];
-    let (mut a, dir, _) = module_app("teams-list-photo", rows);
-    let ctx = egui::Context::default();
-    let textured = |shapes: &[egui::Shape], id: egui::TextureId| {
-        shapes.iter().any(|s| match s {
-            egui::Shape::Mesh(m) => m.texture_id == id,
-            egui::Shape::Rect(r) => r.fill_texture_id() == id,
-            _ => false,
-        })
-    };
-    let size = egui::vec2(1280.0, 800.0);
-    for _ in 0..4 {
-        frame_sized(&ctx, &mut a, vec![], size);
-    }
-    let before = frame_shapes(&ctx, &mut a, vec![], size);
-    assert!(has_text(&texts_of(&before), "PD"), "the initials first");
-    a.session.teams_apply(teams::Event::Picture { picture: Picture::Photo { user: "u-paul".into() }, bytes: png(48, 48) });
-    decoded(&ctx, &mut a);
-    let id = a.ui.teams_queue.pictures.photo("u-paul").map(egui::TextureHandle::id).expect("decoded");
-    let after = frame_shapes(&ctx, &mut a, vec![], size);
-    assert!(textured(&after, id), "the photo drawn");
-    assert!(!has_text(&texts_of(&after), "PD"), "instead of the initials");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -676,61 +539,5 @@ fn the_header_says_the_other_persons_presence() {
     let ctx = egui::Context::default();
     let texts = settled_at(&ctx, &mut a, (1280, 800));
     assert!(has_text(&texts, "Do not disturb"), "{texts:?}");
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-/// A picture kept with a message, once it came, is a thumbnail that opens big on a click; Close
-/// puts it away.
-#[test]
-fn a_thumbnail_opens_the_picture_big() {
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
-    let (mut a, dir, _) = chat_app("teams-chat-viewer", group_row(), TEAMS_LINK, vec![m]);
-    let ctx = egui::Context::default();
-    settled_at(&ctx, &mut a, (1280, 800));
-    let picture = Picture::Hosted { chat: CHAT.into(), message: "m1".into(), hosted: "h1".into() };
-    a.session.teams_apply(teams::Event::Picture { picture: picture.clone(), bytes: png(120, 80) });
-    decoded(&ctx, &mut a);
-    let Some(Shown::Ready(tex)) = a.ui.teams_queue.pictures.image(&picture) else { panic!("decoded") };
-    let id = tex.id();
-    let size = egui::vec2(1280.0, 800.0);
-    let at = frame_shapes(&ctx, &mut a, vec![], size).iter().find_map(|s| match s {
-        egui::Shape::Mesh(m) if m.texture_id == id => Some(m.calc_bounds()),
-        egui::Shape::Rect(r) if r.fill_texture_id() == id => Some(r.rect),
-        _ => None,
-    });
-    let at = at.expect("the thumbnail drawn");
-    assert!(at.width() <= 240.0 && at.height() <= 180.0, "{at:?}");
-    click_at(&ctx, &mut a, at.center(), 1, size);
-    assert_eq!(a.ui.conversations.viewing.as_ref(), Some(&picture), "opened big");
-    let texts = texts_of(&frame_shapes(&ctx, &mut a, vec![], size));
-    let close = rect_of(&texts, |t| t == "Close").expect("the viewer's Close");
-    click_at(&ctx, &mut a, close.center(), 1, size);
-    assert!(a.ui.conversations.viewing.is_none(), "put away");
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-/// The pictures kept with messages are asked for as those messages come on screen: opening a
-/// chat of many asks for the newest ones only, each once.
-#[test]
-fn pictures_are_asked_for_as_their_messages_come_on_screen() {
-    let messages: Vec<ChatMessage> = (0..80)
-        .map(|i| {
-            said(
-                &format!("m{i:02}"),
-                user("u-ana", "Ana Lima"),
-                NOW - 7200 + i * 30,
-                para(vec![words("A picture"), Run { hosted: Some(format!("h{i}")), ..Default::default() }]),
-            )
-        })
-        .collect();
-    let (mut a, dir, jobs) = chat_app("teams-chat-on-screen", group_row(), TEAMS_LINK, messages);
-    let ctx = egui::Context::default();
-    settled_at(&ctx, &mut a, (1280, 800));
-    settled_at(&ctx, &mut a, (1280, 800));
-    let asked = |jobs: &Shared<Job>, id: &str| picture_jobs(jobs, |p| matches!(p, Picture::Hosted { hosted, .. } if hosted == id));
-    let all = picture_jobs(&jobs, |p| matches!(p, Picture::Hosted { .. }));
-    assert!(all > 0 && all < 20, "the ones on screen: {all}");
-    assert_eq!(asked(&jobs, "h79"), 1, "the newest, once");
-    assert_eq!(asked(&jobs, "h0"), 0, "not the oldest, scrolled away");
     let _ = std::fs::remove_dir_all(dir);
 }

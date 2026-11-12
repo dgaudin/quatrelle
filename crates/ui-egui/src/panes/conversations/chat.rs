@@ -17,7 +17,9 @@ use egui::{Align, Color32, Layout, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
 use quatrelle_engine::model::ical::is_teams_chat_link;
-use quatrelle_engine::model::pim::teams::{ChatKind, ChatMessage, ChatRow, MessageKind, Presence, Sender, is_internal, one_line, sender_internal};
+use quatrelle_engine::model::pim::teams::{
+    ChatKind, ChatMessage, ChatRow, MessageKind, Picture, Presence, Sender, is_internal, one_line, sender_internal,
+};
 use serde_json::json;
 
 use super::ConversationsUi;
@@ -76,8 +78,6 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
     let Some(open) = s.teams.open.as_deref() else { return };
     let Some(row) = s.teams.row(open) else { return };
     let UiState { conversations: c, teams_queue, tokens, .. } = ui_state;
-    let teams_link = s.teams.web_url.as_deref().filter(|u| is_teams_chat_link(u));
-    let pane = Pane { s, t: *tokens, pics: &teams_queue.pictures, me: &s.prefs.teams.object_id, tenant: &s.prefs.teams.tenant_id, teams_link };
     // Another chat: what was asked for the last one doesn't hold.
     if c.hosted_for.as_deref() != Some(open) {
         c.hosted_for = Some(open.to_string());
@@ -87,6 +87,20 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         c.chat_scroll_to = None;
         c.viewing = None;
     }
+    // Pictures let go for room: their messages ask for them again once on screen.
+    for gone in teams_queue.pictures.take_let_go() {
+        if let Picture::Hosted { message, .. } = gone {
+            c.hosted_asked.remove(&message);
+        }
+    }
+    // The picture opened big, decoded whole; its file let go, it's asked for again.
+    if teams_queue.pictures.view(c.viewing.as_ref())
+        && let Some(picture) = &c.viewing
+    {
+        acts.push(Action::Run("teams.picture", picture_params(picture)));
+    }
+    let teams_link = s.teams.web_url.as_deref().filter(|u| is_teams_chat_link(u));
+    let pane = Pane { s, t: *tokens, pics: &teams_queue.pictures, me: &s.prefs.teams.object_id, tenant: &s.prefs.teams.tenant_id, teams_link };
     egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| header(&pane, ui, row));
     let line = ui.available_rect_before_wrap();
     ui.painter().hline(line.x_range(), line.top(), egui::Stroke::new(1.0, pane.t.border));
@@ -96,6 +110,15 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         messages(&pane, c, ui, open, acts);
     }
     viewer(&pane, c, ui.ctx());
+}
+
+/// `teams.picture`'s params for a picture.
+fn picture_params(p: &Picture) -> serde_json::Value {
+    match p {
+        Picture::Hosted { chat, message, hosted } => json!({"kind": "hosted", "chat": chat, "message": message, "hosted": hosted}),
+        Picture::Photo { user } => json!({"kind": "photo", "user": user}),
+        Picture::Outside { url } => json!({"kind": "outside", "url": url}),
+    }
 }
 
 /// A framed tag ("External", "App") in the line: drawn whole.
@@ -426,10 +449,12 @@ fn bubble(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, fill:
 /// The picture clicked, big, over the window: Escape, a click outside or Close puts it away.
 fn viewer(p: &Pane, c: &mut ConversationsUi, ctx: &egui::Context) {
     let Some(picture) = c.viewing.clone() else { return };
-    let Some(Shown::Ready(tex)) = p.pics.image(&picture) else {
+    let Some(Shown::Ready(thumb)) = p.pics.image(&picture) else {
         c.viewing = None;
         return;
     };
+    // Whole once decoded; until then the thumbnail.
+    let tex = p.pics.whole(&picture).unwrap_or(thumb);
     let t = &p.t;
     let modal = egui::Modal::new(egui::Id::unique("teams-picture")).frame(crate::dialogs::dialog_frame(t)).show(ctx, |ui| {
         let w = (ctx.content_rect().width() * 0.75).clamp(320.0, 1200.0);

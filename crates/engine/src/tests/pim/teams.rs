@@ -573,3 +573,26 @@ fn the_open_chats_members_and_link_are_kept() {
     open(&mut s, two);
     assert!(s.teams.members.is_empty() && s.teams.web_url.is_none(), "forgotten with the chat");
 }
+
+/// A picture kept with a message, once the window took it, may be asked for again (the window
+/// lets pictures go past its room); a photo isn't asked twice.
+#[test]
+fn a_hosted_picture_taken_by_the_window_can_be_asked_again() {
+    let mut s = signed_in(vec![row(1, 10)]);
+    open(&mut s, "19:chat1@thread.v2");
+    s.take_jobs();
+    let hosted = json!({"kind": "hosted", "chat": "19:chat1@thread.v2", "message": "m1", "hosted": "h1"});
+    let picture = Picture::Hosted { chat: "19:chat1@thread.v2".into(), message: "m1".into(), hosted: "h1".into() };
+    let asked = |s: &mut Session, v: &Value| s.run("teams.picture", v).unwrap()["asked"].as_bool();
+    assert_eq!(asked(&mut s, &hosted), Some(true));
+    assert_eq!(asked(&mut s, &hosted), Some(false), "not twice while it's on its way");
+    s.apply(teams_event(teams::Event::Picture { picture: picture.clone(), bytes: vec![1, 2, 3] }));
+    let photo = json!({"kind": "photo", "user": "u-1"});
+    asked(&mut s, &photo);
+    s.apply(teams_event(teams::Event::Picture { picture: Picture::Photo { user: "u-1".into() }, bytes: vec![4] }));
+    let taken = s.teams.take_pictures();
+    assert_eq!(taken.len(), 2);
+    assert!(s.teams.pictures.is_empty());
+    assert_eq!(asked(&mut s, &hosted), Some(true), "taken: it may be asked again");
+    assert_eq!(asked(&mut s, &photo), Some(false), "a photo isn't");
+}

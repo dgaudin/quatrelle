@@ -2,18 +2,23 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The pictures the Teams worker sends (images kept with a message, people's photos, images from
 //! elsewhere the user clicked), decoded on a thread of their own ([`Decoder`]) and kept as
-//! textures: photos by user for the session, images by picture, a bounded few. The engine's
+//! textures: photos by user for the session, images by picture at a thumbnail's size within a
+//! budget of bytes (the least recently shown let go, asked for again once back on screen), and
+//! the one opened big decoded whole only then. The engine's
 //! queue of them is emptied every frame, whatever the module (`TeamsQueue::apply`), and what's
 //! decoded becomes textures every frame (`MailApp::logic`).
 //!
 //! What is hostile here: the bytes (a sender chose them, or their server did). They're decoded
 //! off the window's thread, behind `catch_unwind`, within [`MAX_PIXELS`] pixels and
 //! [`MAX_ALLOC`] bytes ([`decode_bounded`]); one past those, or one that panics the decoder, is a
-//! placeholder ([`Shown::Failed`]) and the thread goes on. How many: at most [`WAITING_MAX`]
-//! wait, [`CHANNEL`] are with the thread, [`IMAGES_MAX`] images and [`PHOTOS_MAX`] photos are
-//! kept.
+//! placeholder ([`Shown::Failed`]) and the thread goes on. How much: at most [`WAITING_MAX`]
+//! wait, [`CHANNEL`] are with the thread, [`IMAGES_BYTES`] of images' textures (each at most
+//! [`THUMB_SIDE`] on a side) and [`SOURCES_BYTES`] of their files are kept, [`PHOTOS_MAX`]
+//! photos, and one picture whole ([`WHOLE_SIDE`]) while the viewer shows it.
 
+use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel};
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
@@ -27,14 +32,20 @@ pub(crate) const MAX_PIXELS: u64 = 40_000_000;
 pub(crate) const MAX_ALLOC: u64 = 64 << 20;
 /// The pictures handed to the thread at once, and its answers waiting.
 pub(crate) const CHANNEL: usize = 32;
-/// The longest side an image is kept at (its thumbnail, and the viewer), and a photo.
-const IMAGE_SIDE: u32 = 1600;
+/// The longest side an image is kept at (its thumbnail, sharp at twice its size), one opened in
+/// the viewer, and a photo.
+const THUMB_SIDE: u32 = 480;
+const WHOLE_SIDE: u32 = 1600;
 const PHOTO_SIDE: u32 = 96;
 /// The most pictures waiting for the thread: past it the oldest is given up (a placeholder).
 const WAITING_MAX: usize = 64;
-/// The most images and photos kept as textures: past it the oldest go.
-const IMAGES_MAX: usize = 64;
+/// The most bytes of images' textures kept, and of their files (to open them big): past it the
+/// least recently shown go (never one shown in the last two frames). The most photos.
+pub(crate) const IMAGES_BYTES: usize = 48 << 20;
+const SOURCES_BYTES: usize = 32 << 20;
 const PHOTOS_MAX: usize = 2_000;
+/// The most pictures remembered as let go, until the pane asks for them again.
+const LET_GO_MAX: usize = 1_000;
 /// The most textures made in a frame.
 const MADE_A_FRAME: usize = 8;
 
@@ -55,8 +66,15 @@ pub(crate) enum Shown {
     Failed,
 }
 
-type Work = (Picture, Vec<u8>, u32);
-type Done = (Picture, Option<ColorImage>);
+/// A picture for the thread: its bytes, its longest side, and whether it's the one opened big.
+struct Work {
+    picture: Picture,
+    bytes: Arc<[u8]>,
+    side: u32,
+    whole: bool,
+}
+
+type Done = (Picture, bool, Option<ColorImage>);
 
 /// One thread that decodes pictures, started on the first, fed through a channel of
 /// [`CHANNEL`]. A decoding that panics answers `None`; the thread goes on.
@@ -93,9 +111,9 @@ impl Decoder {
         let (done, from) = sync_channel::<Done>(CHANNEL);
         let (decode, ctx) = (self.decode, ctx.clone());
         let started = std::thread::Builder::new().name("teams-pictures".into()).spawn(move || {
-            for (picture, bytes, side) in work {
-                let pixels = std::panic::catch_unwind(|| decode(&bytes, side)).ok().flatten();
-                if done.send((picture, pixels)).is_err() {
+            for w in work {
+                let pixels = std::panic::catch_unwind(|| decode(&w.bytes, w.side)).ok().flatten();
+                if done.send((w.picture, w.whole, pixels)).is_err() {
                     break;
                 }
                 ctx.request_repaint();
@@ -165,17 +183,37 @@ impl Decoder {
     }
 }
 
+/// An image kept: what became of it, its texture's bytes, and the frame it was last shown in.
+struct Image {
+    shown: Shown,
+    bytes: usize,
+    seen: Cell<u64>,
+}
+
 /// The Teams pictures: those waiting, and those decoded, as textures.
 #[derive(Default)]
 pub(crate) struct TeamsPictures {
     pub(crate) decoder: Decoder,
     waiting: VecDeque<Work>,
-    /// Images (kept with a message, or from elsewhere), oldest first in `order`.
-    images: HashMap<Picture, Shown>,
-    order: VecDeque<Picture>,
+    /// Images (kept with a message, or from elsewhere), and their textures' bytes together.
+    images: HashMap<Picture, Image>,
+    held: usize,
+    /// Their files, to open them big, oldest first, and their bytes together.
+    sources: HashMap<Picture, Arc<[u8]>>,
+    sources_order: VecDeque<Picture>,
+    sources_held: usize,
+    /// Images let go for room, for the pane to ask for again once they're on screen.
+    let_go: Vec<Picture>,
+    /// The picture the viewer shows, and its whole texture once decoded; whether its decoding
+    /// was asked for, and whether it was asked of the worker again (its file let go).
+    whole: Option<(Picture, Option<TextureHandle>)>,
+    whole_sent: bool,
+    whole_asked: bool,
     /// Photos by user, for the session; a photo that couldn't be shown isn't kept (the initials
     /// stay).
     photos: HashMap<String, TextureHandle>,
+    /// The frames made so far.
+    frame: u64,
     /// The account and the chat they were for.
     account: String,
     open: Option<String>,
@@ -189,25 +227,58 @@ impl TeamsPictures {
         if self.account != s.prefs.teams.object_id {
             self.account.clone_from(&s.prefs.teams.object_id);
             self.waiting.clear();
-            self.images.clear();
-            self.order.clear();
+            self.forget(|_| true);
             self.photos.clear();
         }
         if self.open != s.teams.open {
             self.open.clone_from(&s.teams.open);
-            let open = self.open.as_deref();
-            let other = |p: &Picture| matches!(p, Picture::Hosted { chat, .. } if Some(chat.as_str()) != open);
-            self.waiting.retain(|(p, _, _)| !other(p));
-            self.images.retain(|p, _| !other(p));
-            self.order.retain(|p| !other(p));
+            let open = self.open.clone();
+            let other = move |p: &Picture| matches!(p, Picture::Hosted { chat, .. } if Some(chat) != open.as_ref());
+            self.waiting.retain(|w| !other(&w.picture));
+            self.forget(other);
         }
-        for (picture, bytes) in s.teams.pictures.drain(..) {
-            let side = if matches!(picture, Picture::Photo { .. }) { PHOTO_SIDE } else { IMAGE_SIDE };
-            self.waiting.push_back((picture, bytes, side));
+        for (picture, bytes) in s.teams.take_pictures() {
+            let bytes: Arc<[u8]> = bytes.into();
+            let side = if matches!(picture, Picture::Photo { .. }) {
+                PHOTO_SIDE
+            } else {
+                self.keep_source(&picture, bytes.clone());
+                THUMB_SIDE
+            };
+            self.waiting.push_back(Work { picture, bytes, side, whole: false });
         }
         while self.waiting.len() > WAITING_MAX {
-            if let Some((p, _, _)) = self.waiting.pop_front() {
-                self.keep(p, Shown::Failed);
+            if let Some(w) = self.waiting.pop_front() {
+                self.keep(w.picture, Shown::Failed, 0);
+            }
+        }
+    }
+
+    /// The images `gone` takes let go, with their files and the whole one.
+    fn forget(&mut self, gone: impl Fn(&Picture) -> bool) {
+        self.images.retain(|p, _| !gone(p));
+        self.held = self.images.values().map(|i| i.bytes).sum();
+        self.sources.retain(|p, _| !gone(p));
+        self.sources_order.retain(|p| !gone(p));
+        self.sources_held = self.sources.values().map(|b| b.len()).sum();
+        self.let_go.retain(|p| !gone(p));
+        if self.whole.as_ref().is_some_and(|(p, _)| gone(p)) {
+            self.whole = None;
+        }
+    }
+
+    /// An image's file kept (to open it big), the oldest let go past [`SOURCES_BYTES`].
+    fn keep_source(&mut self, picture: &Picture, bytes: Arc<[u8]>) {
+        if let Some(old) = self.sources.insert(picture.clone(), bytes.clone()) {
+            self.sources_held = self.sources_held.saturating_sub(old.len());
+        } else {
+            self.sources_order.push_back(picture.clone());
+        }
+        self.sources_held = self.sources_held.saturating_add(bytes.len());
+        while self.sources_held > SOURCES_BYTES {
+            let Some(old) = self.sources_order.pop_front() else { break };
+            if let Some(b) = self.sources.remove(&old) {
+                self.sources_held = self.sources_held.saturating_sub(b.len());
             }
         }
     }
@@ -215,6 +286,8 @@ impl TeamsPictures {
     /// The pictures waiting handed to the thread, and what it decoded made into textures (a few
     /// a frame). Every frame.
     pub(crate) fn made(&mut self, ctx: &egui::Context) {
+        self.frame = self.frame.saturating_add(1);
+        self.ask_whole();
         while let Some(work) = self.waiting.pop_front() {
             match self.decoder.send(ctx, work) {
                 Ok(()) => {}
@@ -224,32 +297,52 @@ impl TeamsPictures {
                 }
                 Err(None) => {
                     // No thread: none can be shown.
-                    let failed: Vec<Picture> = self.waiting.drain(..).map(|(p, _, _)| p).collect();
+                    let failed: Vec<Picture> = self.waiting.drain(..).filter(|w| !w.whole).map(|w| w.picture).collect();
                     for p in failed {
-                        self.keep(p, Shown::Failed);
+                        self.keep(p, Shown::Failed, 0);
                     }
                     break;
                 }
             }
         }
         for _ in 0..MADE_A_FRAME {
-            let Some((picture, pixels)) = self.decoder.answer() else { break };
+            let Some((picture, whole, pixels)) = self.decoder.answer() else { break };
             // Another account's, or another chat's: the thread was still at it.
             if !self.wanted(&picture) {
                 continue;
             }
-            let shown = match pixels {
-                Some(ci) => {
-                    let filter = if ci.size[0].max(ci.size[1]) < 96 { TextureOptions::NEAREST } else { TextureOptions::LINEAR };
-                    Shown::Ready(ctx.load_texture("teams-picture", ci, filter))
+            let texture = pixels.map(|ci| {
+                let bytes = ci.size[0].saturating_mul(ci.size[1]).saturating_mul(4);
+                let filter = if ci.size[0].max(ci.size[1]) < 96 { TextureOptions::NEAREST } else { TextureOptions::LINEAR };
+                (ctx.load_texture("teams-picture", ci, filter), bytes)
+            });
+            if whole {
+                if let Some((p, tex)) = &mut self.whole
+                    && *p == picture
+                {
+                    *tex = texture.map(|(t, _)| t);
                 }
-                None => Shown::Failed,
-            };
-            self.keep(picture, shown);
+                continue;
+            }
+            match texture {
+                Some((tex, bytes)) => self.keep(picture, Shown::Ready(tex), bytes),
+                None => self.keep(picture, Shown::Failed, 0),
+            }
         }
         if !self.waiting.is_empty() || self.decoder.out > 0 {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
         }
+    }
+
+    /// The picture the viewer shows decoded whole, from its file, once.
+    fn ask_whole(&mut self) {
+        let Some((picture, None)) = &self.whole else { return };
+        if self.whole_sent {
+            return;
+        }
+        let Some(bytes) = self.sources.get(picture).cloned() else { return };
+        self.whole_sent = true;
+        self.waiting.push_front(Work { picture: picture.clone(), bytes, side: WHOLE_SIDE, whole: true });
     }
 
     /// Whether a picture decoded is still wanted: a photo of this account's, an image of the open
@@ -261,31 +354,75 @@ impl TeamsPictures {
         }
     }
 
-    fn keep(&mut self, picture: Picture, shown: Shown) {
-        match picture {
-            Picture::Photo { user } => {
-                // Past the most kept, a new one's person keeps their initials.
-                let Shown::Ready(tex) = shown else { return };
-                if self.photos.len() < PHOTOS_MAX || self.photos.contains_key(&user) {
-                    self.photos.insert(user, tex);
-                }
+    fn keep(&mut self, picture: Picture, shown: Shown, bytes: usize) {
+        if let Picture::Photo { user } = picture {
+            // Past the most kept, a new one's person keeps their initials.
+            let Shown::Ready(tex) = shown else { return };
+            if self.photos.len() < PHOTOS_MAX || self.photos.contains_key(&user) {
+                self.photos.insert(user, tex);
             }
-            other => {
-                if self.images.insert(other.clone(), shown).is_none() {
-                    self.order.push_back(other);
-                }
-                while self.order.len() > IMAGES_MAX {
-                    if let Some(old) = self.order.pop_front() {
-                        self.images.remove(&old);
-                    }
-                }
+            return;
+        }
+        let image = Image { shown, bytes, seen: Cell::new(self.frame) };
+        if let Some(old) = self.images.insert(picture, image) {
+            self.held = self.held.saturating_sub(old.bytes);
+        }
+        self.held = self.held.saturating_add(bytes);
+        // Past the budget, the least recently shown go; those on screen stay.
+        while self.held > IMAGES_BYTES {
+            let recent = self.frame.saturating_sub(2);
+            let oldest = self.images.iter().filter(|(_, i)| i.seen.get() < recent).min_by_key(|(_, i)| i.seen.get()).map(|(p, _)| p.clone());
+            let Some(old) = oldest else { break };
+            if let Some(i) = self.images.remove(&old) {
+                self.held = self.held.saturating_sub(i.bytes);
             }
+            if let Some(b) = self.sources.remove(&old) {
+                self.sources_held = self.sources_held.saturating_sub(b.len());
+                self.sources_order.retain(|p| *p != old);
+            }
+            if self.let_go.len() >= LET_GO_MAX {
+                self.let_go.clear();
+            }
+            self.let_go.push(old);
         }
     }
 
-    /// An image as it stands: none while it's waited for.
+    /// The images let go for room since last asked: the pane asks for them again once on screen.
+    pub(crate) fn take_let_go(&mut self) -> Vec<Picture> {
+        std::mem::take(&mut self.let_go)
+    }
+
+    /// The picture the viewer shows (none: closed). Whether it has to be asked of the worker
+    /// again (its file was let go), once.
+    pub(crate) fn view(&mut self, picture: Option<&Picture>) -> bool {
+        if self.whole.as_ref().map(|(p, _)| p) != picture {
+            self.whole = picture.map(|p| (p.clone(), None));
+            self.whole_sent = false;
+            self.whole_asked = false;
+        }
+        let missing = picture.is_some_and(|p| !self.sources.contains_key(p));
+        if missing && !self.whole_asked {
+            self.whole_asked = true;
+            return true;
+        }
+        if !missing {
+            // Asked again and come back: it can be decoded whole now.
+            self.whole_asked = false;
+        }
+        false
+    }
+
+    /// The picture the viewer shows, whole, once decoded.
+    pub(crate) fn whole(&self, picture: &Picture) -> Option<&TextureHandle> {
+        self.whole.as_ref().filter(|(p, _)| p == picture).and_then(|(_, t)| t.as_ref())
+    }
+
+    /// An image as it stands (none while it's waited for, or once let go); it counts as shown in
+    /// this frame.
     pub(crate) fn image(&self, p: &Picture) -> Option<&Shown> {
-        self.images.get(p)
+        let image = self.images.get(p)?;
+        image.seen.set(self.frame);
+        Some(&image.shown)
     }
 
     /// A person's photo, once it came.

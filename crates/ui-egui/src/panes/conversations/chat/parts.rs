@@ -15,7 +15,7 @@ use egui::{RichText, Sense, Ui, Vec2, vec2};
 use quatrelle_engine::mime::{self, AttachmentKind};
 use quatrelle_engine::model::addr::trust::url_host;
 use quatrelle_engine::model::ical::launchable_link;
-use quatrelle_engine::model::pim::teams::{Attachment, HOSTED_PER_MESSAGE, MAX_REACTIONS, Picture, is_bidi, one_line};
+use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, HOSTED_PER_MESSAGE, MAX_REACTIONS, Picture, is_bidi, one_line};
 use serde_json::json;
 
 use super::{ConversationsUi, Pane, Shown};
@@ -43,67 +43,61 @@ fn shown(url: &str) -> String {
 }
 
 /// A message's pictures in the order they come: kept with it (their ids, from its text and its
-/// attachments, each once), and from elsewhere (their addresses, each once).
-fn pictures_of(m: &quatrelle_engine::model::pim::teams::ChatMessage) -> (Vec<&str>, Vec<&str>) {
+/// attachments, each once), at most [`HOSTED_PER_MESSAGE`], and from elsewhere (their
+/// addresses, each once), at most [`OUTSIDE_MAX`]. The rest aren't gathered: a message can carry
+/// 20,000 pictures, and this runs every frame.
+fn pictures_of(m: &ChatMessage) -> (Vec<&str>, Vec<&str>) {
     let mut hosted: Vec<&str> = Vec::new();
     let mut outside: Vec<&str> = Vec::new();
-    for run in m.body.blocks.iter().flat_map(|b| &b.runs) {
-        if let Some(id) = run.hosted.as_deref()
-            && !hosted.contains(&id)
-        {
-            hosted.push(id);
+    fn add<'a>(list: &mut Vec<&'a str>, most: usize, item: &'a str) {
+        if list.len() < most && !list.contains(&item) {
+            list.push(item);
         }
-        if let Some(url) = run.outside.as_deref()
-            && !outside.contains(&url)
-        {
-            outside.push(url);
+    }
+    for run in m.body.blocks.iter().flat_map(|b| &b.runs) {
+        if hosted.len() >= HOSTED_PER_MESSAGE && outside.len() >= OUTSIDE_MAX {
+            break;
+        }
+        if let Some(id) = run.hosted.as_deref() {
+            add(&mut hosted, HOSTED_PER_MESSAGE, id);
+        }
+        if let Some(url) = run.outside.as_deref() {
+            add(&mut outside, OUTSIDE_MAX, url);
         }
     }
     for a in &m.attachments {
-        if let Attachment::Hosted { id } = a
-            && !hosted.contains(&id.as_str())
-        {
-            hosted.push(id);
+        if let Attachment::Hosted { id } = a {
+            add(&mut hosted, HOSTED_PER_MESSAGE, id.as_str());
         }
     }
     (hosted, outside)
 }
 
 /// The message's pictures: those kept with it asked for the first time it's on screen (the
-/// window's other messages, laid out but scrolled away, wait), then drawn as thumbnails that open
-/// big on a click; those from elsewhere as "Show picture".
-pub(super) fn pictures(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &quatrelle_engine::model::pim::teams::ChatMessage, acts: &mut Vec<Action>) {
+/// window's other messages, laid out but scrolled away, wait), and again once let go for room,
+/// then drawn as thumbnails that open big on a click; those from elsewhere as "Show picture".
+/// A picture not there yet is a still placeholder: nothing keeps the window drawing for it.
+pub(super) fn pictures(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, acts: &mut Vec<Action>) {
     let (hosted, outside) = pictures_of(m);
     if hosted.is_empty() && outside.is_empty() {
         return;
     }
-    // Not at the chat's first frame: it isn't scrolled to its newest yet.
-    let settled = c.chat_view.as_ref().is_some_and(|v| v.0 == m.chat);
-    let here = egui::Rect::from_min_size(ui.cursor().min, HELD);
-    if !hosted.is_empty() && settled && ui.is_rect_visible(here) && !c.hosted_asked.contains(&m.id) {
-        if c.hosted_asked.len() >= ASKED_MAX {
-            c.hosted_asked.clear();
-        }
-        c.hosted_asked.insert(m.id.clone());
-        for id in hosted.iter().take(HOSTED_PER_MESSAGE) {
-            acts.push(Action::Run("teams.picture", json!({"kind": "hosted", "chat": m.chat, "message": m.id, "hosted": id})));
-        }
-    }
+    let picture = |id: &str| Picture::Hosted { chat: m.chat.clone(), message: m.id.clone(), hosted: id.to_string() };
     ui.add_space(4.0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, id) in hosted.iter().enumerate() {
-            let picture = Picture::Hosted { chat: m.chat.clone(), message: m.id.clone(), hosted: (*id).to_string() };
+    let drawn = ui.horizontal_wrapped(|ui| {
+        for id in &hosted {
+            let picture = picture(id);
             match p.pics.image(&picture) {
                 Some(Shown::Ready(tex)) => {
                     if thumbnail(ui, tex).clicked() {
                         c.viewing = Some(picture);
                     }
                 }
-                Some(Shown::Failed) => held(p, ui, tl!("This picture can't be shown."), false),
-                None => held(p, ui, tl!("Picture"), i < HOSTED_PER_MESSAGE),
+                Some(Shown::Failed) => held(p, ui, tl!("This picture can't be shown.")),
+                None => held(p, ui, tl!("Picture")),
             }
         }
-        for url in outside.iter().take(OUTSIDE_MAX) {
+        for url in &outside {
             let picture = Picture::Outside { url: (*url).to_string() };
             match p.pics.image(&picture) {
                 Some(Shown::Ready(tex)) => {
@@ -111,11 +105,23 @@ pub(super) fn pictures(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &quatr
                         c.viewing = Some(picture);
                     }
                 }
-                Some(Shown::Failed) => held(p, ui, tl!("This picture can't be shown."), false),
+                Some(Shown::Failed) => held(p, ui, tl!("This picture can't be shown.")),
                 None => elsewhere(p, ui, url, acts),
             }
         }
     });
+    // Asked for once some of them are on screen (not at the chat's first frame: it isn't
+    // scrolled to its newest yet); those still kept aren't asked again.
+    let settled = c.chat_view.as_ref().is_some_and(|v| v.0 == m.chat);
+    if !hosted.is_empty() && settled && ui.is_rect_visible(drawn.response.rect) && !c.hosted_asked.contains(&m.id) {
+        if c.hosted_asked.len() >= ASKED_MAX {
+            c.hosted_asked.clear();
+        }
+        c.hosted_asked.insert(m.id.clone());
+        for id in hosted.iter().filter(|id| p.pics.image(&picture(id)).is_none()) {
+            acts.push(Action::Run("teams.picture", json!({"kind": "hosted", "chat": m.chat, "message": m.id, "hosted": id})));
+        }
+    }
 }
 
 /// A picture drawn at most [`THUMB`], its shape kept.
@@ -140,16 +146,13 @@ fn place(p: &Pane, ui: &mut Ui) -> egui::Rect {
     egui::Rect::from_min_max(egui::pos2(r.left() + 6.0, r.top() + 48.0), egui::pos2(r.right() - 6.0, r.bottom() - 6.0))
 }
 
-/// A picture's place while it's waited for (`waiting`), or when it can't be shown.
-fn held(p: &Pane, ui: &mut Ui, said: &str, waiting: bool) {
+/// A picture's place while it's waited for, or when it can't be shown: still (a spinner would
+/// draw the window again and again).
+fn held(p: &Pane, ui: &mut Ui, said: &str) {
     let under = place(p, ui);
     let g = ui.painter().layout(said.to_string(), theme::regular(11.5), p.t.dim, under.width());
     let at = egui::pos2(under.center().x - g.size().x / 2.0, under.top());
-    let below = at.y + g.size().y + 4.0;
     ui.painter().galley(at, g, p.t.dim);
-    if waiting {
-        egui::Spinner::new().size(14.0).paint_at(ui, egui::Rect::from_center_size(egui::pos2(under.center().x, below + 8.0), vec2(14.0, 14.0)));
-    }
 }
 
 /// A picture from elsewhere: nothing fetched until "Show picture" is clicked (an `https` address
@@ -157,7 +160,7 @@ fn held(p: &Pane, ui: &mut Ui, said: &str, waiting: bool) {
 fn elsewhere(p: &Pane, ui: &mut Ui, url: &str, acts: &mut Vec<Action>) {
     let https = url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://")) && launchable_link(url);
     if !https {
-        return held(p, ui, tl!("Picture"), false);
+        return held(p, ui, tl!("Picture"));
     }
     let under = place(p, ui);
     let button = egui::Rect::from_center_size(egui::pos2(under.center().x, under.top() + 12.0), vec2(under.width(), 24.0));
@@ -176,7 +179,7 @@ fn own_host(p: &Pane, host: &str) -> bool {
 
 /// The message's files, each a card: its icon by type, its name, its size when known and the host
 /// its link goes to; "Link to another site" when that isn't the user's own; "Open in browser".
-pub(super) fn files(p: &Pane, ui: &mut Ui, m: &quatrelle_engine::model::pim::teams::ChatMessage, width: f32, acts: &mut Vec<Action>) {
+pub(super) fn files(p: &Pane, ui: &mut Ui, m: &ChatMessage, width: f32, acts: &mut Vec<Action>) {
     let t = &p.t;
     for a in &m.attachments {
         let Attachment::File { name, url, size, .. } = a else { continue };
@@ -218,7 +221,7 @@ pub(super) fn files(p: &Pane, ui: &mut Ui, m: &quatrelle_engine::model::pim::tea
 }
 
 /// What Quatrelle doesn't draw (cards, polls): said so, with "Open in Teams".
-pub(super) fn cards(p: &Pane, ui: &mut Ui, m: &quatrelle_engine::model::pim::teams::ChatMessage, acts: &mut Vec<Action>) {
+pub(super) fn cards(p: &Pane, ui: &mut Ui, m: &ChatMessage, acts: &mut Vec<Action>) {
     if !m.attachments.iter().any(|a| matches!(a, Attachment::Card)) {
         return;
     }
@@ -232,7 +235,7 @@ pub(super) fn cards(p: &Pane, ui: &mut Ui, m: &quatrelle_engine::model::pim::tea
 
 /// The message's reactions, as chips (the emoji and how many); hovered, who reacted (the chat's
 /// members, by name).
-pub(super) fn reactions(p: &Pane, ui: &mut Ui, m: &quatrelle_engine::model::pim::teams::ChatMessage) {
+pub(super) fn reactions(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
     if m.reactions.is_empty() {
         return;
     }

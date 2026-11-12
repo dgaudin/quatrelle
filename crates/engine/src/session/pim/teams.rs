@@ -171,6 +171,19 @@ impl TeamsState {
         self.asked.insert(picture.clone()) || matches!(picture, Picture::Outside { .. })
     }
 
+    /// The pictures answered, for the window to take. An image kept with a message, once taken,
+    /// may be asked for again: the window lets images go past its room and asks for them again
+    /// when they're back on screen (a photo isn't: the window keeps photos for the session).
+    pub fn take_pictures(&mut self) -> Vec<(Picture, Vec<u8>)> {
+        let taken: Vec<(Picture, Vec<u8>)> = self.pictures.drain(..).collect();
+        for (p, _) in &taken {
+            if matches!(p, Picture::Hosted { .. }) {
+                self.asked.remove(p);
+            }
+        }
+        taken
+    }
+
     pub(crate) fn search(&mut self, query: Option<String>) {
         if query.is_none() {
             self.found = None;

@@ -22,7 +22,7 @@ pub(crate) use events::{TEAMS_EVENTS_A_FRAME, TeamsQueue};
 pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};
 #[cfg(test)]
-pub(crate) use pictures::{Decoder, MAX_PIXELS, Shown, TeamsPictures, pixels};
+pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
 
 /// What Conversations keeps between frames.
 #[derive(Clone, Debug, Default)]

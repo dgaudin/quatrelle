@@ -14,8 +14,9 @@ use quatrelle_engine::model::pim::teams::{self, ChatKind, ChatRow, Picture, Stat
 use super::super::list::follow_up::{Textures, frame_with_size};
 use super::*;
 
-/// The conversation pane.
+/// The conversation pane, and its pictures.
 mod chat;
+mod pictures;
 
 /// The File page drawn whole.
 const PAGE: (usize, usize) = (1280, 6000);
