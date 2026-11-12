@@ -2,12 +2,14 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The fake Graph server's Teams: the signed-in user, chats, their members and messages (listed
 //! in a `lastModifiedDateTime` range, posted, edited, reacted to, soft-deleted), marking a chat
-//! read and shared files, as Graph v1.0 answers them.
+//! read, shared files, messages' hosted images, people's photos and presence, and the user's
+//! OneDrive, as Graph v1.0 answers them.
 //!
 //! Each request is counted in [`FakeTeams::hits`] and its headers kept in
 //! [`FakeTeams::last_headers`] under its route name: `me`, `chats`, `members`, `messages`,
 //! `post`, `edit`, `setReaction`, `unsetReaction`, `softDelete`, `markChatReadForUser`,
-//! `shares`, `download`, and `unknown` for a Teams path no route answers (404).
+//! `shares`, `download`, `hosted`, `photo`, `presence`, `drive`, and `unknown` for a Teams path
+//! no route answers (404).
 
 use std::collections::HashMap;
 
@@ -76,6 +78,8 @@ pub(crate) struct FakeMessage {
     pub(crate) reactions: Vec<(String, String)>,
     /// (contentType, contentUrl).
     pub(crate) attachments: Vec<(String, String)>,
+    /// Its hosted images: (hosted content id, bytes).
+    pub(crate) hosted: Vec<(String, Vec<u8>)>,
 }
 
 impl FakeMessage {
@@ -112,6 +116,15 @@ pub(crate) struct FakeTeams {
     pub(crate) fail_reads: Vec<String>,
     /// Chats (their ids) whose message reads are refused with 403.
     pub(crate) forbid_reads: Vec<String>,
+    /// Chats (their ids) whose members' read is refused with 403.
+    pub(crate) forbid_members: Vec<String>,
+    /// People's photos by user id; anyone else has none (404).
+    pub(crate) photos: HashMap<String, Vec<u8>>,
+    /// People's availability (`Available`, `Busy`, …) by user id; anyone else's is
+    /// `PresenceUnknown`.
+    pub(crate) presences: HashMap<String, String>,
+    /// The user's OneDrive address (`webUrl`); `None`: they have none (404).
+    pub(crate) drive: Option<String>,
     /// Every read of a chat's messages: (chat id, its `$filter` as sent, empty when none).
     pub(crate) message_reads: Vec<(String, String)>,
     /// Shared files' bytes, by the `contentUrl` an attachment carries.
@@ -186,7 +199,11 @@ fn route_name(method: &str, p: &[&str]) -> Option<&'static str> {
         ("POST", ["chats", _, "markChatReadForUser"]) => "markChatReadForUser",
         ("GET", ["shares", _, "driveItem", "content"]) => "shares",
         ("GET", ["download", _]) => "download",
-        (_, ["chats", ..] | ["shares", ..] | ["download", ..]) => "unknown",
+        ("GET", ["chats", _, "messages", _, "hostedContents", _, "$value"]) => "hosted",
+        ("GET", ["users", _, "photos", "48x48", "$value"]) => "photo",
+        ("POST", ["communications", "getPresencesByUserId"]) => "presence",
+        ("GET", ["me", "drive"]) => "drive",
+        (_, ["chats", ..] | ["shares", ..] | ["download", ..] | ["communications", ..] | ["users", _, "photos", ..]) => "unknown",
         _ => return None,
     })
 }
@@ -386,6 +403,9 @@ impl FakeTeams {
         if name == "chats" {
             return self.chats(&q, raw_path, query, base);
         }
+        if let Some(r) = self.people(name, p, &q, input) {
+            return r;
+        }
         if name == "shares" || name == "download" {
             let Some(key) = p.get(1).and_then(|id| share_key(self, id)) else { return not_found() };
             if name == "shares" {
@@ -400,8 +420,17 @@ impl FakeTeams {
         let mine = self.me.id.clone();
         let tenant = self.tenant.clone();
         let forbidden = self.forbid_post.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
+        let members_refused = self.forbid_members.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
         let Some(chat) = self.chats.get_mut(ci) else { return not_found() };
         match name {
+            "members" if members_refused => Reply::error(403, "Forbidden", "Reading this chat's members is not allowed."),
+            "hosted" => {
+                let Some(m) = p.get(3).and_then(|mid| chat.messages.iter().find(|m| m.id == *mid)) else { return not_found() };
+                match p.get(5).and_then(|h| m.hosted.iter().find(|(id, _)| id == h)) {
+                    Some((_, bytes)) => Reply { status: 200, body: bytes.clone(), kind: "image/png", location: None, date: None },
+                    None => not_found(),
+                }
+            }
             "members" => {
                 let members: Vec<Value> = chat
                     .members
@@ -470,6 +499,40 @@ impl FakeTeams {
                 Reply::empty(204)
             }
         }
+    }
+}
+
+impl FakeTeams {
+    /// The routes about people and the user's drive rather than a chat: photos, presence,
+    /// OneDrive; `None` for the others.
+    fn people(&self, name: &str, p: &[&str], q: &HashMap<String, String>, input: &Value) -> Option<Reply> {
+        Some(match name {
+            "photo" => match p.get(1).and_then(|u| self.photos.get(*u)) {
+                Some(bytes) => Reply { status: 200, body: bytes.clone(), kind: "image/jpeg", location: None, date: None },
+                None => Reply::error(404, "ImageNotFound", "The photo wasn't found."),
+            },
+            "presence" => {
+                let Some(ids) = input.get("ids").and_then(Value::as_array) else { return Some(Reply::error(400, "BadRequest", "ids are wanted.")) };
+                if ids.len() > 650 {
+                    return Some(Reply::error(400, "BadRequest", "At most 650 ids."));
+                }
+                let value: Vec<Value> = ids
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|id| {
+                        let availability = self.presences.get(id).map_or("PresenceUnknown", String::as_str);
+                        json!({"id": id, "availability": availability, "activity": availability})
+                    })
+                    .collect();
+                Reply::json(200, &json!({ "value": value }))
+            }
+            "drive" => match &self.drive {
+                Some(url) if q.get("$select").is_some_and(|s| s == "webUrl") => Reply::json(200, &json!({ "webUrl": url })),
+                Some(url) => Reply::json(200, &json!({ "id": "drive-1", "driveType": "business", "webUrl": url })),
+                None => Reply::error(404, "itemNotFound", "The user has no drive."),
+            },
+            _ => return None,
+        })
     }
 }
 

@@ -11,6 +11,8 @@ use crate::fake_graph::{Data, FakeChat, FakeMessage, FakeTeams, FakeUser, Server
 
 /// The step 0 check.
 mod check;
+/// Graph's JSON read into the model, and the client's calls for pictures and presence.
+mod read;
 
 /// 2026-10-01T00:00:00Z in milliseconds.
 const T0: i64 = 1_790_812_800_000;

@@ -4,7 +4,9 @@
 //! Teams worker.
 //!
 //! * [`graph`]: the client for Graph's chat API — the signed-in user, chats, their members and
-//!   messages, reactions, soft deletes, marking a chat read, and files shared in a chat.
+//!   messages, reactions, soft deletes, marking a chat read, files shared in a chat, hosted
+//!   images, photos, presence — and its answers read into the model (`chat_of`, `message_of`…),
+//!   each message behind a guard of its own.
 //! * [`check`]: the step 0 check a user runs on their own account (`quatrelle-cli teams
 //!   check`): counts and yes/no answers only, its test messages deleted on the way out.
 
@@ -12,7 +14,7 @@ pub mod check;
 pub mod graph;
 
 pub use check::{CheckOptions, run_check};
-pub use graph::{Me, Page, Range, Stats, TeamsClient};
+pub use graph::{Me, Page, Range, Stats, TeamsClient, chat_of, member_of, message_of, presence_of};
 
 #[cfg(test)]
 mod tests;

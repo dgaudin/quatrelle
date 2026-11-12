@@ -2,26 +2,35 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! A client for Graph's chat API (v1.0): the signed-in user, chats, their members and
-//! messages, posting and editing text, reactions, soft deletes, marking a chat read, and
-//! counting the bytes of a file shared in a chat.
+//! messages, posting and editing text, reactions, soft deletes, marking a chat read, counting
+//! the bytes of a file shared in a chat, a message's hosted images, people's photos and
+//! presence, and the host of the user's OneDrive; its answers are read into the model here too.
 //!
 //! Every request carries the bearer token and goes on a connection of its own. No redirect is
 //! followed with the token: a Graph answer that redirects is an error, except a shared file's
 //! content, whose one redirect (to SharePoint's pre-signed download address) is followed by
 //! hand without it. A 429 or a 503 is waited out ([`BUSY_ROUNDS`] rounds at most, `Retry-After`
 //! capped at 20 s; a post of a message only on a 429, as a 503 may come after it was made) and
-//! every 429 counted in [`Stats`]. Errors say the HTTP status and Graph's
+//! every 429 counted in [`Stats`]; the Teams worker turns the waits off
+//! ([`TeamsClient::set_waiting`]) and keeps to its own limiter, which reads the last
+//! `Retry-After` ([`TeamsClient::retry_after`]). Errors say the HTTP status and Graph's
 //! error code, never its message, which can quote a chat's content.
 
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::io::Write;
 
+use quatrelle_model::pim::teams::{MAX_ID, MAX_MEMBERS, PRESENCE_IDS};
 use serde_json::{Value, json};
 
 use crate::graph::{BUSY_ROUNDS, backoff_secs, seg, utc};
 use crate::http::{self, Request, Response, Url};
 use crate::stream::{self, Stream};
 use crate::{NetError, Result};
+
+mod read;
+
+pub use read::*;
 
 /// Largest JSON answer accepted.
 const MAX_JSON: usize = 8 << 20;
@@ -31,8 +40,14 @@ const MAX_JSON: usize = 8 << 20;
 const PREFER_ENUMS: &str = "include-unknown-enum-members";
 /// Chats and messages asked for per page (the most Graph gives).
 const TOP: u32 = 50;
-/// Pages of a chat's members followed at most.
+/// Pages of a chat's members followed at most ([`TeamsClient::members`]), and by
+/// [`TeamsClient::members_all`] (5,000 members at 25 a page).
 const MEMBER_PAGES: usize = 20;
+const MEMBER_PAGES_ALL: usize = 200;
+/// The longest wait a `Retry-After` is taken for (an hour).
+const MAX_RETRY_AFTER: u64 = 3600;
+/// The longest host name taken (DNS's).
+const MAX_HOST: usize = 253;
 /// Longest shared file address taken.
 const MAX_SHARE_URL: usize = 8 << 10;
 /// What is kept of an error's body (for its code).
@@ -88,6 +103,10 @@ pub struct TeamsClient {
     stats: Cell<Stats>,
     /// The server's clock at its last answer that said it (Unix seconds).
     date: Cell<Option<i64>>,
+    /// Whether a 429 or a 503 is waited out (else returned at once).
+    waiting: Cell<bool>,
+    /// The last 429's or 503's `Retry-After`, in seconds.
+    retry: Cell<Option<u64>>,
 }
 
 impl TeamsClient {
@@ -98,7 +117,14 @@ impl TeamsClient {
         if !url.https && !loopback(&url) {
             return Err(NetError::Tls("the Graph address isn't https".into()));
         }
-        let c = TeamsClient { base, auth: Cell::new(format!("Bearer {token}")), stats: Cell::new(Stats::default()), date: Cell::new(None) };
+        let c = TeamsClient {
+            base,
+            auth: Cell::new(format!("Bearer {token}")),
+            stats: Cell::new(Stats::default()),
+            date: Cell::new(None),
+            waiting: Cell::new(true),
+            retry: Cell::new(None),
+        };
         let v = c.json("GET", &c.at("/me?$select=id,displayName,mail,userPrincipalName"), None, false)?;
         let text = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().chars().take(320).collect::<String>();
         let me = Me { id: text("id"), display_name: text("displayName"), mail: text("mail"), upn: text("userPrincipalName") };
@@ -131,6 +157,19 @@ impl TeamsClient {
         self.date.get()
     }
 
+    /// Whether a 429 or a 503 is waited out (`true`, the default) or returned at once as
+    /// [`NetError::Closed`] (`false`: the worker's limiter waits, and is told how long by
+    /// [`Self::retry_after`]).
+    pub fn set_waiting(&self, on: bool) {
+        self.waiting.set(on);
+    }
+
+    /// The last 429's or 503's `Retry-After` in seconds (at most an hour); `None` when it said
+    /// none, or not in seconds.
+    pub fn retry_after(&self) -> Option<u64> {
+        self.retry.get()
+    }
+
     /// A page of the signed-in user's chats, the most recently active first, each with a
     /// preview of its last message; `next` is the previous page's [`Page::next`].
     pub fn chats(&self, next: Option<&str>) -> Result<Page> {
@@ -154,6 +193,76 @@ impl TeamsClient {
             }
         }
         Ok(out)
+    }
+
+    /// A chat's members, every page up to [`MAX_MEMBERS`] of them; the pages stop at one already
+    /// followed or one that brings nobody.
+    pub fn members_all(&self, chat: &str) -> Result<Vec<Value>> {
+        let mut url = self.at(&format!("/chats/{}/members", seg(chat)));
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        for _ in 0..MEMBER_PAGES_ALL {
+            let p = page(self.json("GET", &url, None, false)?)?;
+            let brought = p.items.len();
+            out.extend(p.items.into_iter().take(MAX_MEMBERS.saturating_sub(out.len())));
+            match p.next {
+                Some(n) if brought > 0 && out.len() < MAX_MEMBERS && seen.insert(n.clone()) => url = self.own(&n)?,
+                _ => break,
+            }
+        }
+        Ok(out)
+    }
+
+    /// An image kept with a message (its hosted content), at most `max` bytes: the address is
+    /// built here from the message's own chat, its id and the image's id, never taken from the
+    /// message. Asked with `ConsistencyLevel: eventual`, which an edited or deleted message needs.
+    pub fn hosted(&self, chat: &str, message: &str, id: &str, max: usize) -> Result<Vec<u8>> {
+        if ![chat, message, id].iter().all(|p| path_id(p)) {
+            return Err(NetError::Refused("not a hosted image's id".into()));
+        }
+        let url = self.at(&format!("/chats/{}/messages/{}/hostedContents/{}/$value", seg(chat), seg(message), seg(id)));
+        let req = Request::get(&url, max).header("Authorization", &self.bearer()).header("ConsistencyLevel", "eventual");
+        let resp = self.send(&req, true)?;
+        status_error(resp.status, &resp.body)?;
+        Ok(resp.body)
+    }
+
+    /// Someone's photo (48 by 48), at most `max` bytes; `None` when they have none (404).
+    pub fn photo(&self, user: &str, max: usize) -> Result<Option<Vec<u8>>> {
+        if !path_id(user) {
+            return Err(NetError::Refused("not a user's id".into()));
+        }
+        let url = self.at(&format!("/users/{}/photos/48x48/$value", seg(user)));
+        let resp = self.send(&Request::get(&url, max).header("Authorization", &self.bearer()), true)?;
+        if resp.status == 404 {
+            return Ok(None);
+        }
+        status_error(resp.status, &resp.body)?;
+        Ok(Some(resp.body))
+    }
+
+    /// The presence of these people (Graph's `presence` objects), for the first [`PRESENCE_IDS`]
+    /// of them.
+    pub fn presences(&self, ids: &[String]) -> Result<Vec<Value>> {
+        let ids: Vec<&String> = ids.iter().take(PRESENCE_IDS).collect();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let v = self.json("POST", &self.at("/communications/getPresencesByUserId"), Some(&json!({ "ids": ids })), false)?;
+        Ok(page(v)?.items.into_iter().take(PRESENCE_IDS).collect())
+    }
+
+    /// The host of the user's OneDrive (`contoso-my.sharepoint.com`): `None` when they have none
+    /// (404), or its address isn't an `https` one.
+    pub fn drive_host(&self) -> Result<Option<String>> {
+        let v = match self.json("GET", &self.at("/me/drive?$select=webUrl"), None, false) {
+            Err(NetError::Protocol(m)) if m.starts_with("HTTP 404") => return Ok(None),
+            r => r?,
+        };
+        let Some(url) = v.get("webUrl").and_then(Value::as_str).and_then(|u| Url::parse(u).ok()) else { return Ok(None) };
+        let host = url.host.to_ascii_lowercase();
+        let named = !host.is_empty() && host.len() <= MAX_HOST && host.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.'));
+        Ok((url.https && named).then_some(host))
     }
 
     /// A page of a chat's messages changed in `range`, the last changed first; `next` is the
@@ -230,7 +339,7 @@ impl TeamsClient {
         let (head, tally) = loop {
             round += 1;
             let (head, tally) = self.download(&req, true)?;
-            if !busy(head.status) || round >= BUSY_ROUNDS {
+            if !busy(head.status) || !self.waiting.get() || round >= BUSY_ROUNDS {
                 break (head, tally);
             }
             pause(backoff_secs(head.header("Retry-After"), round));
@@ -296,20 +405,26 @@ impl TeamsClient {
         if prefer {
             req = req.header("Prefer", PREFER_ENUMS);
         }
-        let mut round = 0;
-        let resp = loop {
-            round += 1;
-            let resp = self.once(&req)?;
-            if !busy(resp.status) || (resp.status == 503 && !again) || round >= BUSY_ROUNDS {
-                break resp;
-            }
-            pause(backoff_secs(resp.header("Retry-After"), round));
-        };
+        let resp = self.send(&req, again)?;
         status_error(resp.status, &resp.body)?;
         if resp.body.iter().all(u8::is_ascii_whitespace) {
             return Ok(Value::Null);
         }
         serde_json::from_slice(&resp.body).map_err(|e| NetError::Protocol(format!("Graph: {e}")))
+    }
+
+    /// A request, waited out while busy when [waiting](Self::set_waiting) (a 503 only when
+    /// `again`: the request can be repeated): the last answer as it came.
+    fn send(&self, req: &Request, again: bool) -> Result<Response> {
+        let mut round = 0;
+        loop {
+            round += 1;
+            let resp = self.once(req)?;
+            if !busy(resp.status) || !self.waiting.get() || (resp.status == 503 && !again) || round >= BUSY_ROUNDS {
+                return Ok(resp);
+            }
+            pause(backoff_secs(resp.header("Retry-After"), round));
+        }
     }
 
     /// One request on a connection of its own, its answer as it came (a redirect isn't followed).
@@ -358,12 +473,15 @@ impl TeamsClient {
         self.stats.set(s);
     }
 
-    /// An answer in: a 429 counted, and Graph's clock noted.
+    /// An answer in: a 429 counted, a 429's or 503's `Retry-After` kept, and Graph's clock noted.
     fn heard(&self, resp: &Response, graph: bool) {
         if resp.status == 429 {
             let mut s = self.stats.get();
             s.throttled = s.throttled.saturating_add(1);
             self.stats.set(s);
+        }
+        if busy(resp.status) {
+            self.retry.set(resp.header("Retry-After").and_then(|h| h.trim().parse::<u64>().ok()).map(|s| s.min(MAX_RETRY_AFTER)));
         }
         if graph && let Some(t) = resp.date() {
             self.date.set(Some(t));
@@ -414,6 +532,12 @@ pub(super) fn hop_allowed(base: &str, to: &Url) -> bool {
 /// This computer: the only place plain HTTP is spoken to (the tests' servers).
 fn loopback(url: &Url) -> bool {
     matches!(url.host.as_str(), "127.0.0.1" | "localhost" | "::1")
+}
+
+/// Whether an id can be one segment of an address: not empty, at most [`MAX_ID`] characters, no
+/// control character, and not only dots (which would climb the path, encoded or not).
+fn path_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().nth(MAX_ID).is_none() && !id.chars().any(char::is_control) && !id.chars().all(|c| c == '.')
 }
 
 /// Whether an answer asks to try again later.

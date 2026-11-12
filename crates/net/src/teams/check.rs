@@ -26,6 +26,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use super::graph::ms_of;
 use super::{Me, Range, TeamsClient};
 use crate::graph::utc;
 use crate::{NetError, Result};
@@ -631,15 +632,6 @@ fn id_of(v: &Value) -> Option<String> {
 /// A short, non-empty text field.
 fn text_of(v: &Value, key: &str) -> Option<String> {
     v.get(key).and_then(Value::as_str).filter(|s| !s.is_empty() && s.len() <= MAX_ID).map(str::to_string)
-}
-
-/// An RFC 3339 time in milliseconds since 1970.
-fn ms_of(t: &str) -> Option<i64> {
-    let secs = crate::jmap::utc_date(t)?;
-    let frac =
-        t.trim().get(19..).and_then(|r| r.strip_prefix('.')).map_or("", |r| r.get(..r.bytes().take_while(u8::is_ascii_digit).count()).unwrap_or(""));
-    let ms = format!("{:0<3}", frac.get(..frac.len().min(3)).unwrap_or("")).parse::<i64>().ok()?;
-    secs.checked_mul(1000)?.checked_add(ms)
 }
 
 /// Milliseconds since 1970 as an RFC 3339 UTC time, to the millisecond.
