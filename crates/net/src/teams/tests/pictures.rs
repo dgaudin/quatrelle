@@ -6,11 +6,12 @@
 //! deleted; photos, a missing one asked again only a day later; outside images on `https` to the
 //! internet only, never kept; the image cache's bound; presence every minute for the people shown.
 
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use quatrelle_model::pim::teams::{
-    self as model, ChatMessage, EVENT_ITEMS, Job, MAX_PICTURE, PRESENCE_IDS, Picture, Presence, Status, TEAMS_ACCOUNT,
+    self as model, ChatMessage, ChatText, EVENT_ITEMS, Job, MAX_PICTURE, PRESENCE_IDS, Picture, Presence, Status, TEAMS_ACCOUNT,
 };
 use quatrelle_store::Store;
 use sha2::{Digest, Sha256};
@@ -134,6 +135,15 @@ fn hosted(r: &Run, id: &str) -> Picture {
     Picture::Hosted { chat: CHAT.into(), message: first(r), hosted: id.into() }
 }
 
+/// Waits, on the clock, until `done` (what a thread of the worker's own does comes in its time).
+fn eventually(what: &str, done: impl Fn() -> bool) {
+    let until = Instant::now() + Duration::from_secs(10);
+    while !done() {
+        assert!(Instant::now() < until, "{what} never came");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -223,8 +233,9 @@ fn an_outside_image_is_https_and_public_only() {
 
     // On the internet, over https: fetched at each click, never kept.
     let url = "https://images.contoso.example/a.gif";
-    for _ in 0..2 {
+    for i in 1..=2 {
         r.ask(Picture::Outside { url: url.into() });
+        eventually("the outside picture", || r.pictures().len() == i);
     }
     assert_eq!(*OUTSIDE.lock().unwrap(), [url, url]);
     assert_eq!(r.pictures(), [0, 1].map(|_| (Picture::Outside { url: url.into() }, b"GIF89a".to_vec())));
@@ -238,6 +249,7 @@ fn an_outside_image_is_https_and_public_only() {
     for url in [format!("https://127.0.0.1:{port}/a.gif"), format!("http://127.0.0.1:{port}/a.gif"), format!("https://localhost:{port}/a.gif")] {
         r.ask(Picture::Outside { url });
     }
+    std::thread::sleep(Duration::from_millis(300));
     assert!(listener.accept().is_err(), "nothing connected");
     assert_eq!(r.pictures().len(), 2);
 }
@@ -418,4 +430,132 @@ fn the_image_cache_lets_the_least_recently_used_go() {
     c.put_hosted(CHAT, "5", "e", &[5]).unwrap();
     assert_eq!(kept(&s), 2);
     assert_eq!(c.hosted(CHAT, "3", "c"), None);
+}
+
+/// Fix round 1: an edit that takes a picture away takes it from the copy, and a deletion after it
+/// leaves none (the deletion's old version no longer showed it).
+#[test]
+fn an_edited_then_deleted_message_keeps_no_picture() {
+    let mut r = run(teams_with(vec![with_hosted(vec![("aDE=", b"one".to_vec())])]));
+    let p = hosted(&r, "aDE=");
+    r.ask(p.clone());
+    r.until("the picture", Duration::from_secs(10), |r| r.pictures().len() == 1);
+    let m: ChatMessage = r.copy().last_pages(CHAT, 1).into_iter().find(|m| m.id == first(&r)).unwrap();
+    let edited = ChatMessage { body: ChatText::default(), edited: Some(NOW), modified: NOW, ..m };
+    r.copy().upsert(CHAT, std::slice::from_ref(&edited)).unwrap();
+    assert!(r.kept("img").is_empty() && r.kept("imgref").is_empty(), "the edit took the picture away: {:?}", r.kept("img"));
+    let gone = ChatMessage { deleted: Some(NOW + 1000), modified: NOW + 1000, ..edited };
+    r.copy().upsert(CHAT, &[gone]).unwrap();
+    assert!(r.kept("img").is_empty() && r.kept("imgref").is_empty());
+    r.ask(p);
+    r.turns(Duration::from_secs(3));
+    assert_eq!((r.pictures().len(), hits(&r.server, "hosted")), (1, 1), "nothing said, nothing asked");
+}
+
+/// Fix round 1: what the copy keeps is said only for a hosted image its message shows.
+#[test]
+fn a_kept_picture_is_said_only_for_its_messages_own() {
+    let mut r = run(teams_with(vec![with_hosted(vec![("aDE=", b"one".to_vec())])]));
+    let m = first(&r);
+    // A picture kept under an id the message doesn't show (a copy damaged, or one left behind).
+    r.copy().put_hosted(CHAT, &m, "b3RoZXI=", b"planted").unwrap();
+    r.ask(Picture::Hosted { chat: CHAT.into(), message: m, hosted: "b3RoZXI=".into() });
+    r.turns(Duration::from_secs(3));
+    assert!(r.pictures().is_empty(), "{:?}", r.pictures());
+    assert_eq!(hits(&r.server, "hosted"), 0);
+}
+
+/// An outside fetch that stalls: until the test lets it go, or three seconds.
+static STALL: AtomicBool = AtomicBool::new(true);
+static STALLED: AtomicU32 = AtomicU32::new(0);
+
+fn stalls(_url: &str, _max: usize) -> crate::Result<Response> {
+    STALLED.fetch_add(1, Ordering::SeqCst);
+    let until = Instant::now() + Duration::from_secs(3);
+    while STALL.load(Ordering::SeqCst) && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(Response { status: 200, body: b"GIF89a slow".to_vec(), ..Response::default() })
+}
+
+/// Fix round 1: an outside picture's server never holds the worker: the click is handed over, a
+/// hosted picture and a Stop are heard meanwhile; once Teams is off, a click asks nothing.
+#[test]
+fn an_outside_fetch_never_holds_the_worker() {
+    let mut r = run(teams_with(vec![with_hosted(vec![("aDE=", b"one".to_vec())])]));
+    r.w.hooks.outside = Some(stalls);
+    let clicked = Instant::now();
+    r.ask(Picture::Outside { url: "https://images.contoso.example/slow.gif".into() });
+    assert!(clicked.elapsed() < Duration::from_secs(1), "the click waited {:?}", clicked.elapsed());
+    let p = hosted(&r, "aDE=");
+    r.ask(p.clone());
+    r.until("the hosted picture", Duration::from_secs(10), |r| r.pictures().iter().any(|(q, _)| *q == p));
+    assert!(clicked.elapsed() < Duration::from_secs(2), "served while the outside one stalls");
+    STALL.store(false, Ordering::SeqCst);
+    eventually("the outside picture", || r.pictures().iter().any(|(q, _)| matches!(q, Picture::Outside { .. })));
+    let asked = STALLED.load(Ordering::SeqCst);
+    r.w.job(Job::Stop);
+    r.ask(Picture::Outside { url: "https://images.contoso.example/after.gif".into() });
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(STALLED.load(Ordering::SeqCst), asked, "nothing asked once Teams is off");
+}
+
+static HANG: AtomicBool = AtomicBool::new(true);
+static HUNG: AtomicU32 = AtomicU32::new(0);
+
+fn hangs(_url: &str, _max: usize) -> crate::Result<Response> {
+    HUNG.fetch_add(1, Ordering::SeqCst);
+    let until = Instant::now() + Duration::from_secs(3);
+    while HANG.load(Ordering::SeqCst) && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(Response { status: 200, body: b"too late".to_vec(), ..Response::default() })
+}
+
+/// Fix round 1: a fetch past its deadline says nothing, even when it ends after; and only so many
+/// fetches may be stalled at once (the next click is refused).
+#[test]
+fn an_outside_fetch_past_its_deadline_says_nothing() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 1)]));
+    r.w.hooks.outside = Some(hangs);
+    r.w.hooks.outside_deadline = Some(Duration::from_millis(200));
+    for i in 0..3 {
+        let clicked = Instant::now();
+        r.ask(Picture::Outside { url: format!("https://images.contoso.example/{i}.gif") });
+        assert!(clicked.elapsed() < Duration::from_secs(1));
+        std::thread::sleep(Duration::from_millis(400));
+    }
+    assert_eq!(HUNG.load(Ordering::SeqCst), 2, "two stalled at most; the third refused");
+    HANG.store(false, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(r.pictures().is_empty(), "{:?}", r.pictures());
+}
+
+/// Fix round 1: a picture that keeps failing is tried three times, at the back of the queue, and
+/// the cadences go on between.
+#[test]
+fn a_picture_that_keeps_failing_lets_the_cadences_go() {
+    let mut r = run(teams_with(vec![with_hosted(vec![("aDE=", b"one".to_vec())])]));
+    r.fake(|t| t.answer_lost.insert("hosted".into(), 1_000));
+    let lists = hits(&r.server, "chats");
+    let p = hosted(&r, "aDE=");
+    r.ask(p);
+    r.turns(Duration::from_secs(120));
+    assert_eq!(hits(&r.server, "hosted"), 3, "three tries, then not asked again in this run");
+    assert!(hits(&r.server, "chats") >= lists + 5, "the list read on meanwhile: {} then {}", lists, hits(&r.server, "chats"));
+    assert!(r.pictures().is_empty());
+}
+
+/// R17 for pictures: while a picture's Retry-After runs, nothing at all is asked of Teams.
+#[test]
+fn nothing_is_asked_during_a_pictures_retry_after() {
+    let mut r = run(teams_with(vec![with_hosted(vec![("aDE=", b"one".to_vec())])]));
+    r.fake(|t| t.throttle_once = Some("hosted"));
+    let p = hosted(&r, "aDE=");
+    r.ask(p.clone());
+    r.until("the 429", Duration::from_secs(10), |r| hits(&r.server, "hosted") == 1);
+    let all = r.fake(|t| t.hits.values().sum::<u32>());
+    r.turns(Duration::from_millis(900));
+    assert_eq!(r.fake(|t| t.hits.values().sum::<u32>()), all, "Retry-After: 1");
+    r.until("the picture, after", Duration::from_secs(30), |r| r.pictures().iter().any(|(q, _)| *q == p));
 }

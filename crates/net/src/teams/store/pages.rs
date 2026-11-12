@@ -311,8 +311,9 @@ impl Copy {
     }
 
     /// Messages of a chat put in the copy, by (chat, message id): a new one where its creation
-    /// time puts it, a known one replaced (an edit replaces the body, a deletion leaves only its
-    /// id, times and sender, and its hosted images go). Messages of another chat, or without a
+    /// time puts it, a known one replaced (an edit replaces the body and the hosted images it no
+    /// longer shows go, a deletion leaves only its id, times and sender, and all its hosted images
+    /// go). Messages of another chat, or without a
     /// usable id, are passed over; of an id twice, the last counts. Only the pages that change are
     /// written, with the chat's record when its pages do, in one go. Returns what changed, as
     /// kept. A chat not in the copy keeps nothing.
@@ -360,9 +361,10 @@ impl Copy {
                     if *old == m {
                         continue;
                     }
-                    if m.deleted.is_some() {
-                        forget.extend(hosted_ids(old).into_iter().map(|h| (m.id.clone(), h)));
-                    }
+                    // What the old version showed and this one doesn't goes: all of it for a
+                    // deletion, a picture an edit took away.
+                    let still = if m.deleted.is_some() { Vec::new() } else { hosted_ids(&m) };
+                    forget.extend(hosted_ids(old).into_iter().filter(|h| !still.contains(h)).map(|h| (m.id.clone(), h)));
                     slot.dirty = true;
                     if old.created == m.created {
                         if let Some(o) = msgs.get_mut(i) {

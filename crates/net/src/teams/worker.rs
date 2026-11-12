@@ -76,6 +76,8 @@ pub(crate) struct Hooks {
     pub(crate) trip_history: Option<String>,
     /// What fetches an outside picture, in place of `http::get_public`.
     pub(crate) outside: Option<fn(&str, usize) -> Result<crate::http::Response>>,
+    /// How long an outside picture is waited for, in place of the minute.
+    pub(crate) outside_deadline: Option<Duration>,
 }
 
 #[cfg(test)]
@@ -373,6 +375,11 @@ impl Worker {
     pub(crate) fn up_to_date(&mut self) {
         let status = backfill::progress(self).unwrap_or(Status::UpToDate);
         self.status(status);
+    }
+
+    /// Whether Teams is asked anything: signed in and going.
+    pub(crate) fn polling(&self) -> bool {
+        self.polling
     }
 
     /// A test's panic in the list pass, when it asked for one.
