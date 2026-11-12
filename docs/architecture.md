@@ -28,7 +28,7 @@
 | L1 | `quatrelle-smime` | — | S/MIME (RFC 8551) on RustCrypto; wasm-safe |
 | L1 | `quatrelle-pgp` | — | OpenPGP on rPGP: keys read and checked by their self-signatures, made (v4, Ed25519 and Curve25519, three years), extended and backed up as GnuPG reads them; signing, verifying, encrypting (AES-256, SEIPDv1), decrypting with what it decompresses to bounded; Autocrypt headers; PGP blocks in a text. Never reads the clock (it's given the time); rPGP runs behind a guard that turns a panic into an error; wasm-safe |
 | L2 | `quatrelle-jmap` | model, mime, store | The JMAP transport, written once as async code over a two-method `Http` trait: the desktop runs it over `net`'s client (answers are ready at once, so a no-op `block_on` drives it), the browser over `fetch`. Portable, wasm-safe |
-| L3 | `quatrelle-net` | model, mime, store, jmap | Native only. IMAP (`imap-proto`), POP3, SMTP (`lettre`), JMAP push, Microsoft Graph, Exchange Web Services with NTLM, CalDAV/CardDAV (`quick-xml`), ManageSieve, a small HTTP/1.1 client, DNS for autoconfiguration, OAuth, Outlook data files (`outlook-pst-rw` to read and write, a fixed copy pinned in `[patch.crates-io]`); TLS through `rustls` |
+| L3 | `quatrelle-net` | model, mime, store, jmap | Native only. IMAP (`imap-proto`), POP3, SMTP (`lettre`), JMAP push, Microsoft Graph, Exchange Web Services with NTLM, CalDAV/CardDAV (`quick-xml`), ManageSieve, a small HTTP/1.1 client, DNS for autoconfiguration, OAuth, the Teams worker (chats through Graph, one thread, `net/src/teams/`), Outlook data files (`outlook-pst-rw` to read and write, a fixed copy pinned in `[patch.crates-io]`); TLS through `rustls` |
 | L4 | `quatrelle-engine` | model, mime, store | Sans-I/O, wasm-safe |
 | L6 | `quatrelle-ui-egui` | engine | egui only; platform services behind traits; interface languages (`i18n/*.tsv`) |
 
@@ -63,6 +63,18 @@ file at most 1000 lines and every folder at most 16 Rust files (`cargo xtask siz
 | `ui-egui/src/app.rs` + `app/` | `MailApp`, the window: `frame`, `ribbon`, `bars`, `search_box`, `keys`, `actions`, `windows` |
 | `ui-egui/src/panes/`, `dialogs/`, `reading/`, `rich_edit/`, `look/` | the panes, the dialogs by group, the reading pane and compose window, the editor, and theme/icons/motion/widgets |
 | `net/src/protocols/`, `exchange/`, `data_files/`, `fakes/`, `worker/` | IMAP/SMTP/POP/JMAP/DAV/Sieve; Graph/EWS/NTLM; `.pst`; the in-memory test servers; the worker pool |
+
+## Teams
+
+Conversations reads Teams chats through Microsoft Graph. `net/src/teams/` holds a single worker
+thread, the only code that talks to Teams: it signs in (the refresh token only in the keychain),
+runs the polling cadences under a limiter that backs off on a 429, makes the first copy and the
+history, and fetches pictures and presence for what is on screen. Its results reach the engine as
+`Event`s, applied a few a frame, and the engine keeps only bounded windows of the chats
+(`engine/src/session/pim/teams/`). The copy is its own data file, `Teams.quatrelle`, written
+through the same store under a pseudo-account and bound to the identity it was made for (another
+identity's file is set aside, unread). Switching Teams off or signing out stops the worker's
+requests. The user's side is in `docs/teams.md`.
 
 ## Transports
 

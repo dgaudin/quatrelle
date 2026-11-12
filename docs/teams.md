@@ -209,7 +209,98 @@ It reads the chat's members and opens Teams' call link (`https://teams.microsoft
 with everyone in it but you: Teams (the app or the web) then offers to start the call. Nothing is
 called until you confirm there. It prints `call: opened`, or why not; it never prints the members.
 
-## 7. Sending the result back
+## 7. Using Teams in Quatrelle
+
+Once your organization has registered the application (section 1), Quatrelle reads your Teams
+chats from a copy kept on your computer, as Outlook's Cached Exchange Mode keeps mail. This
+version reads; it does not write.
+
+### Options › Teams
+
+Open File › Options › Teams.
+
+- **Use Teams in Quatrelle** is the switch. Off, nothing is asked of Teams and the Conversations
+  module is not shown.
+- **Application (client) ID** and **Directory (tenant) ID** are the two ids from the registration
+  (the tenant may also be written as the organization's domain). Each is saved when you leave its
+  box.
+- **Sign in** opens your browser; Quatrelle waits for it ("Waiting for the browser…"). It needs the
+  switch on and both ids filled in. Once signed in, the page shows who you are, and where the copy
+  stands: copying ("Copying your conversations… 12 of 340 conversations"), up to date, offline, or
+  what to do (sign in again; a permission your administrator must grant, with the permission's
+  name).
+- **Sign out** asks whether the copy of your conversations on this computer goes too: **Keep the
+  copy**, **Delete the copy**, or Cancel. Kept, it is used again when the same account signs back in.
+- The sign-in is remembered in the system keychain. Without one, Quatrelle says "Your sign-in won't
+  be remembered: no keychain is available", and signing in is asked again at each start.
+- A copy made for another account is never read: it is set aside, and the page offers **Delete that
+  copy**.
+- The announcement switches are there already but do nothing yet (see the end of this section).
+
+Signing in needs a browser on the same computer: the web app does not offer Teams.
+
+### The Conversations module
+
+With Teams on and signed in, **Conversations** appears in the module rail. If you sign out or
+switch Teams off while it is open, Quatrelle returns to Mail.
+
+- **The list** shows your chats, the most recently active first, with their unread count. Chats
+  with someone outside your organization carry an **External** tag; group chats show how many
+  members they have. At most 20,000 conversations are kept; the search box finds a chat by its
+  name and, once the copy is indexed, by the words of its messages. Conversations you are no
+  longer in say so.
+- **The chats Graph won't serve.** Microsoft does not let an application read some chats (meeting
+  chats are the usual case). They stay in the list marked **Can't be read here**; opening one says
+  so and offers **Open in Teams**, which opens that chat in Teams itself.
+- **Reading a conversation.** Messages are grouped by day (Today, Yesterday, then the date), edited
+  ones say "(edited)", deleted ones say so, and an app's messages carry an **App** tag. A sender
+  outside your organization is tagged **External** on each message. **Members** lists who is in
+  the chat. Reactions are shown, read only.
+- **Pictures** kept with a message are fetched when the message is first drawn, a few per message,
+  and shown in place; a click shows one big. A picture from elsewhere on the web is never fetched
+  by itself: its place says **Show picture**, and only that click loads it (an `https` address, a
+  size limit, a time limit).
+- **Files** shared in a chat appear as cards with the file's name and the host of its link. A
+  link to your own OneDrive or your organization's SharePoint is shown as such; any other host is
+  written on the card, "Link to another site". Nothing opens until you click it.
+
+### The local copy
+
+The copy is one data file, `Teams.quatrelle`, in the same folder as your accounts' data files
+(see `docs/architecture.md`). It holds the chats, their messages and the pictures the screen has
+asked for, and is readable by you only. A file that is damaged is set aside beside it and a new
+one begun; a copy of another account is set aside as `Teams-<8 letters>.quatrelle.old`.
+
+To delete it: Sign out › Delete the copy, or Delete that copy for one set aside. Closing
+Quatrelle and removing the file by hand does the same; the next sign-in copies again.
+
+The first copy reads the chat list, then each chat's history backwards, newest chats first,
+a page at a time. It stops while the disk is nearly full and goes on when there is room again.
+
+### How often Quatrelle asks Teams
+
+Quatrelle keeps well under Microsoft's limits, with one worker that makes one request at a time:
+
+| What | How often |
+|---|---|
+| The chat open on the screen | every 3 seconds |
+| The list of chats | every 10 seconds |
+| Chats active in the last 7 days | every minute |
+| Presence of the people on the screen | every minute |
+| Chats active in the last 30 days (the others weekly) | every hour |
+| History of older messages | in the gaps, when nothing above is due |
+
+After a "too many requests" answer (429 or 503), nothing is asked until Microsoft's wait is over,
+then Quatrelle goes slower, and returns to its pace after an hour without one. Switching Teams off
+or signing out stops all of it at once.
+
+### Not yet
+
+Replying and writing, sending files, reacting, marking chats read in Teams, announcements of new
+messages (their switches in Options do nothing yet), and starting calls or meetings are not
+there yet: they come in later versions of Quatrelle. For those, use Open in Teams.
+
+## 8. Sending the result back
 
 Everything printed on the standard output is numbers, kinds of chat, yes or no, HTTP statuses with
 Graph's error codes, and durations: copy it as it is and paste it back. The sign-in address printed on the error output (`Open this address
