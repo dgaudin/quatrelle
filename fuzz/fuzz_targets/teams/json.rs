@@ -53,6 +53,15 @@ fn check_message(m: &ChatMessage) {
     assert!(m.id.is_empty() || id_ok(&m.id));
     assert!(m.attachments.len() <= MAX_ATTACHMENTS && m.mentions.len() <= MAX_MENTIONS && m.reactions.len() <= MAX_REACTIONS);
     assert!(m.reactions.iter().all(|r| r.users.len() <= MAX_REACTION_USERS && r.users.iter().all(|u| id_ok(u))));
+    // A quick reaction is kept as its emoji, never by its name, and one kind of reaction is one
+    // (an emoji with or without its presentation selector included).
+    let bare: Vec<String> = m.reactions.iter().map(|r| r.emoji.chars().filter(|&c| c != '\u{FE0F}').collect()).collect();
+    for (i, b) in bare.iter().enumerate() {
+        assert!(!bare.iter().skip(i + 1).any(|o| o == b), "{:?}", m.reactions);
+    }
+    for r in &m.reactions {
+        assert!(!["like", "heart", "laugh", "surprised", "sad", "angry"].iter().any(|n| r.emoji.eq_ignore_ascii_case(n)), "{:?}", r.emoji);
+    }
     assert!(m.mentions.iter().all(|x| line_ok(&x.text) && x.user_id.as_deref().is_none_or(id_ok)));
     assert!(m.body.plain().len() <= MAX_BODY);
     for a in &m.attachments {

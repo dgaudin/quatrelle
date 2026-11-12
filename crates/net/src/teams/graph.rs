@@ -195,18 +195,31 @@ impl TeamsClient {
         Ok(out)
     }
 
-    /// A chat's members, every page up to [`MAX_MEMBERS`] of them; the pages stop at one already
-    /// followed or one that brings nobody.
+    /// A chat's members, every page up to [`MAX_MEMBERS`] of them, each once (by its id; one
+    /// without an id is left out); the pages stop at one already followed or one that brings
+    /// nobody new.
     pub fn members_all(&self, chat: &str) -> Result<Vec<Value>> {
         let mut url = self.at(&format!("/chats/{}/members", seg(chat)));
         let mut out = Vec::new();
-        let mut seen = HashSet::new();
+        let (mut links, mut ids) = (HashSet::new(), HashSet::new());
         for _ in 0..MEMBER_PAGES_ALL {
             let p = page(self.json("GET", &url, None, false)?)?;
-            let brought = p.items.len();
-            out.extend(p.items.into_iter().take(MAX_MEMBERS.saturating_sub(out.len())));
+            let before = out.len();
+            for m in p.items {
+                if out.len() >= MAX_MEMBERS {
+                    break;
+                }
+                let id = ["userId", "anonymousGuestId", "skypeId", "azureCommunicationServicesId", "id"]
+                    .iter()
+                    .find_map(|k| m.get(*k).and_then(Value::as_str).filter(|i| !i.is_empty()));
+                if let Some(id) = id
+                    && ids.insert(id.to_string())
+                {
+                    out.push(m);
+                }
+            }
             match p.next {
-                Some(n) if brought > 0 && out.len() < MAX_MEMBERS && seen.insert(n.clone()) => url = self.own(&n)?,
+                Some(n) if out.len() > before && out.len() < MAX_MEMBERS && links.insert(n.clone()) => url = self.own(&n)?,
                 _ => break,
             }
         }
@@ -217,7 +230,7 @@ impl TeamsClient {
     /// built here from the message's own chat, its id and the image's id, never taken from the
     /// message. Asked with `ConsistencyLevel: eventual`, which an edited or deleted message needs.
     pub fn hosted(&self, chat: &str, message: &str, id: &str, max: usize) -> Result<Vec<u8>> {
-        if ![chat, message, id].iter().all(|p| path_id(p)) {
+        if ![chat, message].iter().all(|p| path_id(p)) || !own_segment(id) {
             return Err(NetError::Refused("not a hosted image's id".into()));
         }
         let url = self.at(&format!("/chats/{}/messages/{}/hostedContents/{}/$value", seg(chat), seg(message), seg(id)));
@@ -229,7 +242,7 @@ impl TeamsClient {
 
     /// Someone's photo (48 by 48), at most `max` bytes; `None` when they have none (404).
     pub fn photo(&self, user: &str, max: usize) -> Result<Option<Vec<u8>>> {
-        if !path_id(user) {
+        if !own_segment(user) {
             return Err(NetError::Refused("not a user's id".into()));
         }
         let url = self.at(&format!("/users/{}/photos/48x48/$value", seg(user)));
@@ -480,9 +493,9 @@ impl TeamsClient {
             s.throttled = s.throttled.saturating_add(1);
             self.stats.set(s);
         }
-        if busy(resp.status) {
-            self.retry.set(resp.header("Retry-After").and_then(|h| h.trim().parse::<u64>().ok()).map(|s| s.min(MAX_RETRY_AFTER)));
-        }
+        // Only the last answer counts: once one isn't busy, an older wait is forgotten.
+        let wait = if busy(resp.status) { resp.header("Retry-After").and_then(|h| h.trim().parse::<u64>().ok()) } else { None };
+        self.retry.set(wait.map(|s| s.min(MAX_RETRY_AFTER)));
         if graph && let Some(t) = resp.date() {
             self.date.set(Some(t));
         }
@@ -538,6 +551,12 @@ fn loopback(url: &Url) -> bool {
 /// control character, and not only dots (which would climb the path, encoded or not).
 fn path_id(id: &str) -> bool {
     !id.is_empty() && id.chars().nth(MAX_ID).is_none() && !id.chars().any(char::is_control) && !id.chars().all(|c| c == '.')
+}
+
+/// [`path_id`], with nothing a server might take for a path or a query of its own (`/`, `\`,
+/// `?`, `#`), even encoded: some servers decode `%2F`.
+fn own_segment(id: &str) -> bool {
+    path_id(id) && !id.contains(['/', '\\', '?', '#'])
 }
 
 /// Whether an answer asks to try again later.

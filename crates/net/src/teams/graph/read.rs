@@ -215,18 +215,47 @@ fn mention_of(v: &Value) -> Option<Mention> {
     })
 }
 
-/// Reactions (one `chatMessageReaction` per person and kind) grouped by kind, as they came: at
-/// most [`MAX_REACTIONS`] kinds of [`MAX_REACTION_USERS`] people each. One without a person is
-/// left out.
+/// The six quick reactions, by the name Graph may give them and as an emoji.
+const QUICK: [(&str, &str); 6] = [
+    ("like", "\u{1F44D}"),
+    ("heart", "\u{2764}\u{FE0F}"),
+    ("laugh", "\u{1F606}"),
+    ("surprised", "\u{1F62E}"),
+    ("sad", "\u{1F622}"),
+    ("angry", "\u{1F621}"),
+];
+
+/// A reaction's kind as it's kept: one of the six quick reactions, whether Graph names it (in any
+/// case) or gives its emoji (with or without the emoji presentation selector); any other as it
+/// came.
+pub fn reaction_emoji(kind: &str) -> String {
+    let kind = clean(kind.trim(), MAX_EMOJI);
+    let bare = without_selector(&kind);
+    QUICK
+        .iter()
+        .find(|(name, emoji)| kind.eq_ignore_ascii_case(name) || without_selector(emoji) == bare)
+        .map_or(kind.clone(), |(_, emoji)| (*emoji).to_string())
+}
+
+/// An emoji without its presentation selector (U+FE0F): what tells two spellings of one apart.
+fn without_selector(s: &str) -> String {
+    s.chars().filter(|&c| c != '\u{FE0F}').collect()
+}
+
+/// Reactions (one `chatMessageReaction` per person and kind) grouped by kind, the six quick ones
+/// whether named or given as emoji ([`reaction_emoji`]), and an emoji with or without its
+/// presentation selector one: at most [`MAX_REACTIONS`] kinds of [`MAX_REACTION_USERS`] people
+/// each. One without a person is left out.
 fn reactions_of(v: Option<&Value>) -> Vec<Reaction> {
     let mut out: Vec<Reaction> = Vec::new();
     for r in items(v) {
-        let emoji = clean(str_at(r, "reactionType").unwrap_or_default(), MAX_EMOJI);
+        let emoji = reaction_emoji(str_at(r, "reactionType").unwrap_or_default());
         let Some(user) = r.pointer("/user/user").and_then(|u| id_at(u, "id")) else { continue };
         if emoji.trim().is_empty() {
             continue;
         }
-        let at = match out.iter().position(|x| x.emoji == emoji) {
+        let bare = without_selector(&emoji);
+        let at = match out.iter().position(|x| without_selector(&x.emoji) == bare) {
             Some(i) => i,
             None if out.len() < MAX_REACTIONS => {
                 out.push(Reaction { emoji, users: Vec::new() });

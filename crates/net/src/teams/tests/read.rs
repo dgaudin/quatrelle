@@ -215,7 +215,10 @@ fn hosted_content_address_is_built_from_the_message() {
     assert!(matches!(client(&server).hosted(CHAT, &msg, "other", 1 << 20), Err(NetError::Protocol(m)) if m.contains("404")));
     // An id that would climb the path is refused before any request.
     let c = client(&server);
-    for (chat, message, id) in [(CHAT, msg.as_str(), ".."), (CHAT, ".", "x"), ("", msg.as_str(), "x")] {
+    let hostile = [(CHAT, msg.as_str(), ".."), (CHAT, ".", "x"), ("", msg.as_str(), "x")];
+    // Nor may the image's id carry a path or query of its own (some servers decode `%2F`).
+    let marks = ["a/b", "a\\b", "a?b", "a#b"].map(|id| (CHAT, msg.as_str(), id));
+    for (chat, message, id) in hostile.into_iter().chain(marks) {
         assert!(matches!(c.hosted(chat, message, id, 1 << 20), Err(NetError::Refused(_))));
     }
     assert_eq!(hits(&server, "hosted"), 2);
@@ -262,7 +265,9 @@ fn a_photo_404_is_none() {
     let c = client(&server);
     assert_eq!(c.photo("u-ana", 1 << 20).unwrap().as_deref(), Some(b"JPEG".as_slice()));
     assert_eq!(c.photo("u-nobody", 1 << 20).unwrap(), None);
-    assert!(matches!(c.photo("..", 1 << 20), Err(NetError::Refused(_))));
+    for user in ["..", "u/x", "u?x", "u#x", "u\\x"] {
+        assert!(matches!(c.photo(user, 1 << 20), Err(NetError::Refused(_))), "{user}");
+    }
     assert_eq!(hits(&server, "photo"), 2);
 }
 
@@ -307,8 +312,91 @@ fn members_all_stops_at_a_page_already_followed_and_members_refused_is_403() {
     // Answers for me, the first page and the next one: a fourth request would find no server.
     let h = crate::http::tests::serve_on(l, vec![answer(200, ME_JSON), looping.clone(), looping]);
     let (c, _) = TeamsClient::connect(&base, "t").unwrap();
-    assert_eq!(c.members_all("x").unwrap().len(), 2);
+    assert_eq!(c.members_all("x").unwrap().len(), 1, "the same member once");
     assert_eq!(h.join().unwrap().len(), 3);
+}
+
+#[test]
+fn members_all_stops_at_a_page_bringing_nobody_new() {
+    // Pages that repeat the same members under new links: the second brings nobody new.
+    let (l, base) = crate::http::tests::bind();
+    let page = |n: u32| {
+        answer(
+            200,
+            &format!(
+                r#"{{"value": [{{"userId": "u-1"}}, {{"userId": "u-2"}}, {{"id": "x"}}], "@odata.nextLink": "{base}/chats/x/members?$skiptoken={n}"}}"#
+            ),
+        )
+    };
+    // Answers for me and two pages: a fourth request would find no server.
+    let h = crate::http::tests::serve_on(l, vec![answer(200, ME_JSON), page(1), page(2)]);
+    let (c, _) = TeamsClient::connect(&base, "t").unwrap();
+    let ids: Vec<String> = c.members_all("x").unwrap().iter().map(|m| m["userId"].as_str().or(m["id"].as_str()).unwrap().to_string()).collect();
+    assert_eq!(ids, ["u-1", "u-2", "x"]);
+    assert_eq!(h.join().unwrap().len(), 3);
+}
+
+#[test]
+fn retry_after_is_forgotten_after_an_answer_that_isnt_busy() {
+    let status = |code: u16, extra: &str| format!("HTTP/1.1 {code} X\r\n{extra}Content-Length: 0\r\n\r\n").into_bytes();
+    let (base, h) = crate::http::tests::serve(vec![
+        answer(200, ME_JSON),
+        status(429, "Retry-After: 3600\r\n"),
+        status(500, ""),
+        status(503, "Retry-After: 7\r\n"),
+        answer(200, r#"{"value": []}"#),
+    ]);
+    let (c, _) = TeamsClient::connect(&base, "t").unwrap();
+    c.set_waiting(false);
+    assert!(c.chats(None).is_err());
+    assert_eq!(c.retry_after(), Some(3600));
+    assert!(matches!(c.chats(None), Err(NetError::Closed(m)) if m == "HTTP 500"));
+    assert_eq!(c.retry_after(), None, "a 500 after the 429 isn't told to wait an hour");
+    assert!(c.chats(None).is_err());
+    assert_eq!(c.retry_after(), Some(7));
+    c.chats(None).unwrap();
+    assert_eq!(c.retry_after(), None);
+    h.join().unwrap();
+}
+
+#[test]
+fn reactions_by_name_and_by_emoji_are_one() {
+    let mut v = message_json("1");
+    let r = |kind: &str, user: &str| json!({"reactionType": kind, "user": {"user": {"id": user}}});
+    v["reactions"] = json!([
+        r("like", "u-ana"),
+        r("\u{1F44D}", "u-paul"),
+        r("LIKE", "u-ana"),
+        r("\u{2764}", "u-ana"),
+        r("heart", "u-paul"),
+        r("\u{2764}\u{FE0F}", "u-paul"),
+        r("laugh", "u-1"),
+        r("surprised", "u-1"),
+        r("sad", "u-1"),
+        r("angry", "u-1"),
+        r("\u{1F389}", "u-1"),
+        r("\u{1F389}\u{FE0F}", "u-2"),
+        r("party", "u-3"),
+    ]);
+    let m = message_of(CHAT, &v);
+    let got: Vec<(&str, Vec<&str>)> = m.reactions.iter().map(|x| (x.emoji.as_str(), x.users.iter().map(String::as_str).collect())).collect();
+    assert_eq!(
+        got,
+        [
+            ("\u{1F44D}", vec!["u-ana", "u-paul"]),
+            ("\u{2764}\u{FE0F}", vec!["u-ana", "u-paul"]),
+            ("\u{1F606}", vec!["u-1"]),
+            ("\u{1F62E}", vec!["u-1"]),
+            ("\u{1F622}", vec!["u-1"]),
+            ("\u{1F621}", vec!["u-1"]),
+            ("\u{1F389}", vec!["u-1", "u-2"]),
+            ("party", vec!["u-3"]),
+        ]
+    );
+    // The cap on people holds across a name and its emoji.
+    v["reactions"] = (0..300).map(|u| r(if u % 2 == 0 { "like" } else { "\u{1F44D}" }, &format!("u{u}"))).collect();
+    let m = message_of(CHAT, &v);
+    assert_eq!((m.reactions.len(), m.reactions[0].users.len()), (1, 200));
 }
 
 /// Every field of a chat, a member, a message and a presence, at every depth, replaced by values
