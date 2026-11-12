@@ -556,18 +556,20 @@ fn no_keychain_never_hides_offline_or_sign_in_again() {
     let t0 = Instant::now();
     w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
     turn_until(&mut w, t0, "the first list", |_| account(&teams_of(&seen)).is_some());
-    assert_eq!(teams_of(&seen).last(), Some(&status(Status::NoKeychain)), "{:?}", teams_of(&seen));
+    assert!(said(&teams_of(&seen), &Status::NoKeychain), "{:?}", teams_of(&seen));
     // The network gone at a renewal: said.
     desk.offline.store(true, Ordering::SeqCst);
     w.tokens.as_mut().unwrap().expires_at = now_unix() - 1;
     w.turn(t0 + Duration::from_secs(40));
     assert_eq!(teams_of(&seen).last(), Some(&status(Status::Offline)));
-    // Back: going again (said at the next list), still without a keychain.
+    // Back: going again (said at the next list), as for anyone (it was said it won't be
+    // remembered; the engine keeps that).
     desk.offline.store(false, Ordering::SeqCst);
     for s in 51..75 {
         w.turn(t0 + Duration::from_secs(s));
     }
-    assert_eq!(teams_of(&seen).iter().rev().find(|e| matches!(e, model::Event::Status { .. })), Some(&status(Status::NoKeychain)));
+    let last = teams_of(&seen).into_iter().rev().find(|e| matches!(e, model::Event::Status { .. }));
+    assert!(last.as_ref().is_some_and(|e| listed(std::slice::from_ref(e))), "{last:?}");
     // The sign-in refused: said, whatever the keychain.
     desk.refuse.store(true, Ordering::SeqCst);
     w.tokens.as_mut().unwrap().expires_at = now_unix() - 1;

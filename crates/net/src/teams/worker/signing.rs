@@ -393,6 +393,10 @@ impl Worker {
         };
         self.refresh = Some(Secret(refresh));
         self.no_keychain = !self.creds.persists();
+        // Said once, as at a sign-in; the status goes on from there.
+        if self.no_keychain {
+            self.status(Status::NoKeychain);
+        }
         self.limiter = Limiter::new(Instant::now());
         self.polling = true;
         log::info!("teams: going on from the sign-in kept");

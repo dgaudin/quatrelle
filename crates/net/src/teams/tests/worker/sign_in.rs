@@ -296,6 +296,12 @@ fn credentials_that_keep_nothing_say_so() {
     assert!(!said(&seen, &Status::SignInAgain) && !said(&seen, &Status::UpToDate), "{seen:?}");
     assert_eq!(seen.iter().filter(|e| **e == status(Status::NoKeychain)).count(), 2, "{seen:?}");
     assert_eq!(r.desk.authorized.load(Ordering::SeqCst), 1);
+    // Said once at each start, then the status goes on as for anyone: the copy, up to date.
+    let goes_on = |e: &[model::Event]| {
+        let last = e.iter().rposition(|e| *e == status(Status::NoKeychain));
+        last.is_some_and(|i| listed(&e[i..]))
+    };
+    r.wait("the status after it won't be remembered", goes_on);
 
     // What says it keeps: the system's keychain (the trait's own answer), not memory.
     assert!(!MemoryCredentials::default().persists());

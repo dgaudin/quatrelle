@@ -12,8 +12,9 @@
 //!   the oldest change already copied (`history_oldest`).
 //! * At most [`MESSAGE_PAGES`] pages of a chat in a row, then the others' turn; a link met twice
 //!   in the read, or a page that brings nothing new, ends its history.
-//! * While the first copy runs, its progress is said ([`Status::Copying`]) after each chat (but
-//!   without a keychain: that is what goes on being said).
+//! * While the first copy runs, its progress is said ([`Status::Copying`]) after each chat. A
+//!   chat whose history keeps failing doesn't hold it: once every chat left waits after failing,
+//!   the first copy is over, and they go on in the background.
 //! * Short of disk ([`enough_room`] on the data folder), the history pauses, told once and the disk
 //!   looked at again ten minutes on; pictures and photos ask [`room`] too. Incremental reads go on.
 //! * A 429 or a 503: nothing at all is asked during its `Retry-After`, then the history goes at
@@ -177,7 +178,20 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
             }
         }
     }
+    all_waiting(w, now);
     false
+}
+
+/// Every chat whose history is left waits after failing: the first copy is over all the same
+/// (said up to date); their history goes on in the background as they can be read.
+fn all_waiting(w: &mut Worker, now: Instant) {
+    let b = &w.backfill;
+    if !b.first || b.todo.is_empty() || !b.todo.iter().all(|c| b.waits.get(c).is_some_and(|x| now < x.until)) {
+        return;
+    }
+    log::info!("teams: the first copy is over; the history of {} conversations goes on once they can be read", b.todo.len());
+    w.backfill.first = false;
+    w.up_to_date();
 }
 
 /// The first copy's progress, said at the end of each listing: `Copying` while it runs (`None`

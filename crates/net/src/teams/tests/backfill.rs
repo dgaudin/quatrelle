@@ -426,3 +426,19 @@ fn a_history_going_round_or_bringing_nothing_new_ends() {
         assert!(r.record(CHAT).done && r.record(CHAT).next_link.is_none(), "{what}: its history ends");
     }
 }
+
+#[test]
+fn a_chat_whose_history_keeps_failing_doesnt_hold_the_first_copy() {
+    // One chat's messages answer 500, whatever is asked: the first copy ends all the same, and
+    // its history goes on in the background, once the server serves it.
+    let mut teams = teams_with(vec![chat(CHAT, T0 + DAY, 2), chat(OTHER, T0, 2)]);
+    teams.fail_reads.push(CHAT.into());
+    let mut r = run(teams);
+    r.until("the first copy's end", Duration::from_secs(300), Run::up_to_date);
+    assert!(r.record(OTHER).done && !r.record(CHAT).done, "the failing chat still to read");
+    r.fake(|t| t.fail_reads.clear());
+    r.turns_every(Duration::from_secs(1200), Duration::from_secs(1));
+    assert!(r.record(CHAT).done, "read in the background");
+    let copying_again = r.statuses().into_iter().rev().take_while(|s| *s != Status::UpToDate).any(|s| matches!(s, Status::Copying { .. }));
+    assert!(!copying_again, "the first copy isn't said again: {:?}", r.statuses());
+}

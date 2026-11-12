@@ -351,16 +351,13 @@ impl Worker {
         }
     }
 
-    /// The list is read: the first copy's progress while it runs, then up to date; or connected
-    /// without a keychain, which the card goes on saying, the copy running or not (Review Focus
-    /// 3). None hides "Offline" or "sign in again" when they come.
+    /// The list is read: the first copy's progress while it runs, then up to date. Without a
+    /// keychain, that the sign-in won't be remembered was said at the sign-in or the start (the
+    /// engine keeps it), and the status goes on from there as for anyone. Neither hides "Offline"
+    /// or "sign in again" when they come.
     pub(crate) fn up_to_date(&mut self) {
-        let copying = backfill::progress(self);
-        self.status(match copying {
-            _ if self.no_keychain => Status::NoKeychain,
-            Some(copying) => copying,
-            None => Status::UpToDate,
-        });
+        let status = backfill::progress(self).unwrap_or(Status::UpToDate);
+        self.status(status);
     }
 
     /// A test's panic in the list pass, when it asked for one.
