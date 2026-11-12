@@ -12,8 +12,10 @@ pub(crate) use footers::footers_last;
 pub(crate) mod links;
 mod pairs;
 mod rules;
+mod teams;
 pub use pairs::html_link_pairs;
 use rules::{RULE_MARK, mark_rules};
+pub use teams::{TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, teams_html, teams_text};
 
 /// Most lines kept of a rich rendering (the rest is shown as text).
 pub(super) const RICH_MAX_LINES: usize = 20_000;

@@ -337,8 +337,9 @@ pub enum Status {
     },
 }
 
-/// Whether a bidi control drops out of a name: embeddings, overrides and isolates, and the marks.
-fn is_bidi(c: char) -> bool {
+/// Whether a bidi control drops out of a name or a link's text: embeddings, overrides and
+/// isolates, and the marks.
+pub fn is_bidi(c: char) -> bool {
     matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}')
 }
 
