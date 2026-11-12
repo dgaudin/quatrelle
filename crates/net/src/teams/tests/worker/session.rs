@@ -541,6 +541,12 @@ fn the_loop_has_a_deadline_only_while_there_is_something_to_look_at() {
     // Waiting to be signed in again.
     w.job(Job::Start { settings: settings(ME) });
     assert!(said(&teams_of(&seen), &Status::SignInAgain) && creds.get_secret(&keyring(), REFRESH_KEY).is_none());
+    // The copy is there to read: its search index is read back first (a slice a turn, nothing
+    // asked of Teams).
+    assert!(w.wake(t0).is_some_and(|at| at <= t0 + Duration::from_millis(20)), "the index read back");
+    for _ in 0..4 {
+        w.turn(t0);
+    }
     assert!(w.wake(t0).is_none(), "sign in again: nothing to look at until the user does");
 }
 

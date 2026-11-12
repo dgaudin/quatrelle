@@ -313,7 +313,8 @@ impl Copy {
     /// Messages of a chat put in the copy, by (chat, message id): a new one where its creation
     /// time puts it, a known one replaced (an edit replaces the body and the hosted images it no
     /// longer shows go, a deletion leaves only its id, times and sender, and all its hosted images
-    /// go). Messages of another chat, or without a
+    /// go). The search's index follows (`search.rs`): an edit replaces the message's words, a
+    /// deletion takes them out. Messages of another chat, or without a
     /// usable id, are passed over; of an id twice, the last counts. Only the pages that change are
     /// written, with the chat's record when its pages do, in one go. Returns what changed, as
     /// kept. A chat not in the copy keeps nothing.
@@ -400,7 +401,13 @@ impl Copy {
         for (message, hosted) in forget {
             self.forget_hosted(chat, &message, &hosted)?;
         }
-        self.store.write_account_files(TEAMS_ACCOUNT, &writes)?;
+        // The words of what changed, written with the pages, in the same transaction: an edit's
+        // replace the old ones, a deletion's leave.
+        let mut staged = self.stage_index(chat, &changed)?;
+        writes.extend(staged.as_mut().and_then(|s| s.take_file()));
+        let written = self.store.write_account_files(TEAMS_ACCOUNT, &writes);
+        self.settle_index(staged, written.is_ok());
+        written?;
         for key in gone {
             self.store.remove_account_files(TEAMS_ACCOUNT, &format!("msgs/{hash}/{key}.json"))?;
         }

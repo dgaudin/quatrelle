@@ -34,6 +34,7 @@ use super::backfill::{self, Backfill};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
 use super::pictures::{self, Pictures};
+use super::search;
 use super::store::Copy;
 use super::sync::{self, SyncState};
 use crate::oauth::{self, Tokens};
@@ -302,7 +303,7 @@ impl Worker {
         if self.signing.is_some() {
             wake = Some(wake.map_or(after(AWAITING), |at| at.min(after(AWAITING))));
         }
-        wake
+        search::wake(self, now, wake)
     }
 
     /// A step panicked: what it was doing is given up, and nothing is asked for a wait that
@@ -337,15 +338,15 @@ impl Worker {
             Job::Page { chat, before } => sync::page(self, &chat, before),
             Job::Visible { users } => pictures::visible(self, users),
             Job::Picture { picture } => pictures::picture(self, picture),
-            // The search: with the module that reads it.
-            Job::Search { .. } => {}
+            Job::Search { query } => search::search(self, query),
         }
     }
 
-    /// One turn of the loop at `now`: a sign-in's answer taken, then, when Teams may be asked,
-    /// one step of what is due.
+    /// One turn of the loop at `now`: a sign-in's answer taken, a slice of the search's index read
+    /// back, then, when Teams may be asked, one step of what is due.
     pub(crate) fn turn(&mut self, now: Instant) {
         self.authorized(now);
+        search::load(self);
         if !self.polling || self.not_before.is_some_and(|at| now < at) {
             return;
         }

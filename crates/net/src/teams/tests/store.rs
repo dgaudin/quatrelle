@@ -217,9 +217,12 @@ fn an_edit_finds_its_page_by_creation_time() {
     edited.edited = Some(T0 + 300 * MINUTE);
     edited.modified = T0 + 300 * MINUTE;
     assert_eq!(c.upsert(A, std::slice::from_ref(&edited)).unwrap(), [edited.clone()]);
-    let changes: Vec<String> = s.take_changes().into_iter().map(|(k, _)| k).collect();
-    assert_eq!(changes.len(), 1, "{changes:?}");
-    assert!(changes[0].starts_with(&format!("{TEAMS_ACCOUNT}/msgs/{}/", chat_hash(A))), "{changes:?}");
+    // Its page alone, and the chat's words for the search, in the same transaction.
+    let mut changes: Vec<String> = s.take_changes().into_iter().map(|(k, _)| k).collect();
+    changes.sort();
+    assert_eq!(changes.len(), 2, "{changes:?}");
+    assert_eq!(changes[0], format!("{TEAMS_ACCOUNT}/index/{}.json", chat_hash(A)), "{changes:?}");
+    assert!(changes[1].starts_with(&format!("{TEAMS_ACCOUNT}/msgs/{}/", chat_hash(A))), "{changes:?}");
     let page = c.before(A, msg(A, 6).created);
     assert_eq!(page.last(), Some(&edited));
     assert_eq!(numbers(&page), (0..6).collect::<Vec<_>>());

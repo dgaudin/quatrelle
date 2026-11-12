@@ -12,7 +12,8 @@
 //! * `img/<sha256>`: a picture, by its bytes' hash, and `imguse/<sha256>` its size and last use;
 //!   `imgref/<hash>`: which picture a message's hosted image is; `photos/<hash>.json`: someone's
 //!   photo, or that they have none (`images.rs`);
-//! * `index/<hash>.json`: the chat's words, for the search.
+//! * `index/<hash>.json`: the chat's words, for the search, kept with its pages; `index/partial`:
+//!   the oldest chats' words left the index (`search.rs`).
 //!
 //! `<hash>` is the first 32 hex digits of the SHA-256 of the chat's id. The file is hostile input
 //! as much as a server is: every record carries the id it's for (one under another's key is
@@ -180,9 +181,11 @@ impl ChatRecord {
 
 /// The copy of the user's chats.
 pub(crate) struct Copy {
-    store: Store,
+    pub(super) store: Store,
     /// Its image cache's account (`images.rs`).
     images: std::cell::RefCell<images::Images>,
+    /// The search's index of it (`search.rs`).
+    pub(super) index: std::cell::RefCell<super::search::Index>,
 }
 
 /// The first 32 hex digits of the SHA-256 of `bytes`.
@@ -259,7 +262,7 @@ impl Copy {
         if !id_ok(&who.tenant_id) || !id_ok(&who.object_id) {
             return Err(refused("no identity to keep the copy for"));
         }
-        let copy = Copy { store, images: images::images() };
+        let copy = Copy { store, images: images::images(), index: std::cell::RefCell::new(super::search::Index::new(&who.object_id)) };
         let kept = copy.store.account_file(TEAMS_ACCOUNT, "identity.json")?;
         let whose = match &kept {
             Some(bytes) => match serde_json::from_slice::<Identity>(bytes) {
@@ -307,7 +310,7 @@ impl Copy {
     }
 
     /// A record's bytes, when there are some and not too many.
-    fn read(&self, key: &str) -> Option<Vec<u8>> {
+    pub(super) fn read(&self, key: &str) -> Option<Vec<u8>> {
         match self.store.account_file(TEAMS_ACCOUNT, key) {
             Ok(Some(bytes)) if bytes.len() <= MAX_RECORD => Some(bytes),
             Ok(Some(_)) => {
@@ -364,7 +367,11 @@ impl Copy {
         if files.is_empty() {
             return Ok(());
         }
-        self.store.write_account_files(TEAMS_ACCOUNT, &files)
+        self.store.write_account_files(TEAMS_ACCOUNT, &files)?;
+        // Their names, as the search finds them.
+        let mut index = self.index.borrow_mut();
+        records.iter().for_each(|r| index.name(&r.chat));
+        Ok(())
     }
 
     fn chat_file(&self, r: &ChatRecord) -> Result<(String, Vec<u8>)> {
@@ -465,8 +472,8 @@ fn damaged_copies(store: &Store) -> Vec<PathBuf> {
 }
 
 /// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened
-/// for `t-1`/`u-1`, listed, read in pages and written to, its pictures too (the chat id taken as
-/// a user's for a photo). `data` is a chat id, then pairs of a
+/// for `t-1`/`u-1`, listed, read in pages and written to, its index read back and searched, its
+/// pictures too (the chat id taken as a user's for a photo). `data` is a chat id, then pairs of a
 /// key under `Teams/` and its bytes, then (when they're odd) a message's JSON, split at NUL bytes;
 /// a `=` in a key is the chat's hash (`chats/=.json`, `msgs/=/0.json`). `Err` names a cap that
 /// what was read back breaks.
@@ -514,6 +521,17 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     m.chat = chat.clone();
     let changed = copy.upsert(&chat, std::slice::from_ref(&m)).unwrap_or_default();
     check("what changed", &changed, 1)?;
+    // The search's index read back (a chat a slice) and searched: no hit past the bound, none
+    // under an id the copy wouldn't keep.
+    for _ in 0..=quatrelle_model::pim::teams::MAX_CHATS {
+        if !copy.index_step() {
+            break;
+        }
+    }
+    let found = copy.found("message");
+    if found.indexing || found.hits.len() > super::search::MAX_HITS || found.hits.iter().any(|(c, m)| !id_ok(c) || !(m.is_empty() || id_ok(m))) {
+        return Err(format!("a search of the copy read back: {} hits, indexing {}", found.hits.len(), found.indexing));
+    }
     check("the last pages, once written", &copy.last_pages(&chat, 2), 2 * PAGE)?;
     // The image cache read back (its uses, a photo's record), then a picture kept past them.
     let (photo, _) = copy.photo(&chat);

@@ -22,6 +22,8 @@
 //!   the cadences are served, resumed where they stopped, under a disk guard.
 //! * `pictures`: hosted images, photos and outside images (on the user's click only), and
 //!   presence, fetched for what is on screen; the copy keeps the pictures by their bytes' hash.
+//! * `search`: the search of the local copy: an index of its messages' words, kept as the copy
+//!   is written and read back in slices, and the chats by their names.
 
 pub(crate) mod backfill;
 pub mod check;
@@ -30,6 +32,7 @@ pub mod graph;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod limits;
 pub(crate) mod pictures;
+pub(crate) mod search;
 // The worker opens and deletes it; its chats and messages are read and written by the
 // synchronisation (next), and until then by its tests and fuzz target.
 #[cfg_attr(not(test), allow(dead_code))]

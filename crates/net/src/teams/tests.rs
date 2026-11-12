@@ -19,6 +19,8 @@ mod limits;
 mod pictures;
 /// Graph's JSON read into the model, and the client's calls for pictures and presence.
 mod read;
+/// The search of the local copy: its index kept as the copy is written, read back, its queries.
+mod search;
 /// The local copy: pages, identity, deleted messages, damaged records.
 mod store;
 /// The synchronisation: the cadences, incremental reads, read state, refused and left chats.
