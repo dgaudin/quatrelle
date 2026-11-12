@@ -74,6 +74,8 @@ fn held(m: &mut ChatMessage) -> bool {
     if !id_ok(&m.id) {
         return false;
     }
+    // The sender stays even of a deleted message: held the same.
+    hold_sender(&mut m.sender);
     if m.deleted.is_some() {
         *m = ChatMessage {
             id: std::mem::take(&mut m.id),
@@ -87,7 +89,6 @@ fn held(m: &mut ChatMessage) -> bool {
         };
         return true;
     }
-    hold_sender(&mut m.sender);
     // As Graph's reader keeps them: ids usable, texts on one line.
     m.attachments.retain(|a| match a {
         Attachment::File { id, .. } | Attachment::Hosted { id } => id_ok(id),

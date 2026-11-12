@@ -385,6 +385,15 @@ fn the_fuzz_entry_reaches_the_pages() {
     let message = serde_json::to_string(&msg(A, 2)).unwrap();
     let parts = [A, "identity.json", r#"{"tenant_id":"t-1","object_id":"u-1"}"#, "chats/=.json", &record, "msgs/=/0.json", &page, &message];
     assert_eq!(crate::teams::fuzz_teams_copy(parts.join("\0").as_bytes()), Ok(()));
+    // A deleted message planted with a sender the reader would never give: held, not a crash.
+    let ghost = ChatMessage {
+        deleted: Some(T0),
+        sender: Sender::User { id: String::new(), name: "a\nb".into(), identity_type: None, tenant_id: None },
+        ..msg(A, 0)
+    };
+    let planted = serde_json::to_string(&serde_json::json!({ "chat": A, "messages": [ghost] })).unwrap();
+    let parts = [A, "identity.json", r#"{"tenant_id":"t-1","object_id":"u-1"}"#, "chats/=.json", &record, "msgs/=/0.json", &planted];
+    assert_eq!(crate::teams::fuzz_teams_copy(parts.join("\0").as_bytes()), Ok(()));
     for junk in [&b""[..], b"\0\0\0", b"19:x\0chats/=.json\0{\"chat\":1}", b"\0..\0x\0/abs\0y"] {
         assert_eq!(crate::teams::fuzz_teams_copy(junk), Ok(()));
     }
@@ -444,7 +453,10 @@ fn what_is_read_back_keeps_the_readers_rules() {
     ];
     m.body.blocks[0].runs.push(Run { text: String::new(), hosted: Some(long.clone()), ..Default::default() });
     let nobody = ChatMessage { sender: user("", "Ghost"), ..msg(A, 1) };
-    let page = serde_json::json!({ "chat": A, "messages": [m, nobody] });
+    // Deleted ones too: only their id, times and sender stay, and the sender is held the same.
+    let deleted = |i: i64, sender: Sender| ChatMessage { sender, deleted: Some(T0 + i * MINUTE), body: ChatText::default(), ..msg(A, i) };
+    let page =
+        serde_json::json!({ "chat": A, "messages": [m, nobody, deleted(2, user("u-ok", "Ana\u{202E}\nLima")), deleted(3, user(&long, "Long"))] });
     s.write_account_files(
         TEAMS_ACCOUNT,
         &[
@@ -460,7 +472,9 @@ fn what_is_read_back_keeps_the_readers_rules() {
         assert_eq!((p.sender, p.text), (user("u-ok", "Ana"), "hi there".to_string()));
     }
     let read = c.last_pages(A, 2);
-    let [m, nobody] = read.as_slice() else { panic!("{read:?}") };
+    let [m, nobody, deleted_named, deleted_long] = read.as_slice() else { panic!("{read:?}") };
+    assert_eq!(deleted_named.sender, user("u-ok", "Ana Lima"));
+    assert_eq!(deleted_long.sender, Sender::Nobody);
     assert_eq!(m.sender, user("u-ok", "Ana Lima"));
     assert_eq!(m.mentions, [Mention { id: 0, text: "Paul x".into(), user_id: None }]);
     assert_eq!(m.reactions[0].users, ["u-ok"]);
