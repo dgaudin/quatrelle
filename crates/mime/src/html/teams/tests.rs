@@ -102,6 +102,10 @@ fn a_hosted_img_is_compared_percent_decoded_and_kept_safe() {
         "https://graph.microsoft.com/v1.0/chats/19:a@thread.v2/messages/1/hostedContents/aGk=/$value?x",
         "https://graph.microsoft.com.evil.example/v1.0/chats/19:a@thread.v2/messages/1/hostedContents/aGk=/$value",
         "https://graph.microsoft.com/v1.0/chats/19:a@thread.v2/messages/1/hostedContents//$value",
+        // Only dots: the address the worker builds would climb out of the message.
+        "https://graph.microsoft.com/v1.0/chats/19:a@thread.v2/messages/1/hostedContents/./$value",
+        "https://graph.microsoft.com/v1.0/chats/19:a@thread.v2/messages/1/hostedContents/../$value",
+        "https://graph.microsoft.com/v1.0/chats/19:a@thread.v2/messages/1/hostedContents/%2E%2E/$value",
     ] {
         let r = teams_html(&format!("<img src=\"{src}\">"), C, "1").blocks[0].runs[0].clone();
         assert_eq!(r.hosted, None, "{src}");
@@ -157,6 +161,25 @@ fn input_and_depth_and_output_are_capped() {
     let lists = teams_html(&("<ul><li>".repeat(300) + "z"), C, "1");
     assert_eq!(lists.plain(), "z");
     assert!(matches!(lists.blocks[0].kind, BlockKind::Item { depth, .. } if usize::from(depth) <= TEAMS_DEPTH));
+}
+
+#[test]
+fn the_addresses_runs_carry_are_within_the_budget() {
+    // One long link around runs of alternating styles: each run carries the address.
+    let html = format!("<a href=\"https://x.example/{}\">{}</a>", "A".repeat(4000), "<b>a</b><i>b</i>".repeat(20_000));
+    let t = teams_html(&html, C, "1");
+    let carried: usize =
+        runs(&t).iter().map(|r| [&r.link, &r.hosted, &r.outside, &r.attachment].into_iter().flatten().map(String::len).sum::<usize>()).sum();
+    assert!(carried > 0 && carried <= TEAMS_HTML_MAX, "{carried}");
+}
+
+#[test]
+fn an_address_with_bidi_characters_is_no_link() {
+    for c in ['\u{202E}', '\u{2066}', '\u{200F}'] {
+        let t = teams_html(&format!("<a href=\"https://x.example/{c}gpj.exe\">t</a><img src=\"https://x.example/{c}p.png\">"), C, "1");
+        assert_eq!(run(&t, "t").link, None, "{c:?}");
+        assert!(runs(&t).iter().all(|r| r.outside.is_none()), "{c:?}");
+    }
 }
 
 #[test]

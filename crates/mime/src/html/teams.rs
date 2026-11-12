@@ -33,14 +33,16 @@ const EMOJI_CHARS: usize = 32;
 const HOSTED: &str = "https://graph.microsoft.com/v1.0/chats/";
 
 /// A message's HTML body (`contentType: html`) as its text, `chat` and `message` its own ids.
+///
+/// The caller guards it: it reads with html5ever, a third-party parser, so the caller calls it
+/// behind `catch_unwind` at the message's boundary (the network layer reading a message or a
+/// chat's preview), which stores a message that panics as one that can't be shown.
 pub fn teams_html(html: &str, chat: &str, message: &str) -> ChatText {
-    let html = cut(html, TEAMS_HTML_MAX);
-    // html5ever is a third-party parser: a panic in it leaves the text empty, never the app down.
-    std::panic::catch_unwind(|| read(html, chat, message)).unwrap_or_default()
+    read(cut(html, TEAMS_HTML_MAX), chat, message)
 }
 
 /// A message's plain-text body (`contentType: text`): one paragraph, its lines as they came,
-/// control characters out but line breaks and tabs.
+/// control characters out but line breaks and tabs. The caller guards it, as [`teams_html`].
 pub fn teams_text(text: &str) -> ChatText {
     let text: String = cut(text, MAX_BODY).chars().filter(|&c| c == '\n' || c == '\t' || !c.is_control()).collect();
     if text.trim().is_empty() {
@@ -446,7 +448,8 @@ impl Reader<'_> {
 /// The id of this message's hosted image `src` is, when it is exactly
 /// `https://graph.microsoft.com/v1.0/chats/{chat}/messages/{message}/hostedContents/{id}/$value`
 /// with this message's own chat and id (compared %-decoded): at most [`MAX_ID`] characters of
-/// the base64 alphabet and URL-safe marks, so the address the worker builds from it is this one.
+/// the base64 alphabet and URL-safe marks, and not only dots (`.`, `..`: a path step), so the
+/// address the worker builds from it is this one.
 fn hosted_id(src: &str, chat: &str, message: &str) -> Option<String> {
     let rest = src.strip_prefix(HOSTED)?;
     let parts: Vec<&str> = rest.splitn(7, '/').collect();
@@ -456,7 +459,8 @@ fn hosted_id(src: &str, chat: &str, message: &str) -> Option<String> {
     }
     let id = percent_decoded(id)?;
     let safe = |c: char| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '=' | '+' | '~');
-    (!id.is_empty() && id.len() <= MAX_ID && id.chars().all(safe)).then_some(id)
+    let only_dots = id.chars().all(|c| c == '.');
+    (!id.is_empty() && !only_dots && id.len() <= MAX_ID && id.chars().all(safe)).then_some(id)
 }
 
 /// `s` with its %-escapes read; `None` when one is broken or the bytes aren't UTF-8.
@@ -478,10 +482,11 @@ fn percent_decoded(s: &str) -> Option<String> {
 }
 
 /// A link or picture address on the web: `http` or `https` (the scheme written in lower case),
-/// with no space or control character, at most [`ADDRESS_MAX`] bytes.
+/// with no space, control or bidi character (one would turn round what the address shows), at
+/// most [`ADDRESS_MAX`] bytes.
 fn web_address(v: &str) -> Option<String> {
     let v = v.trim_matches(|c: char| c.is_ascii_whitespace());
-    if v.len() > ADDRESS_MAX || v.contains(|c: char| c.is_whitespace() || c.is_control()) {
+    if v.len() > ADDRESS_MAX || v.contains(|c: char| c.is_whitespace() || c.is_control() || is_bidi(c)) {
         return None;
     }
     let (scheme, rest) = v.split_once("://")?;
