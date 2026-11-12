@@ -5,8 +5,10 @@
 //! events.
 //!
 //! * Nothing runs unasked. The browser opens only for [`Job::SignIn`], through the window
-//!   (`Event::OpenUrl`); a kept sign-in is gone on with only on [`Job::Start`]; the thread ends
-//!   on [`Job::Stop`] or when its channel closes.
+//!   (`Event::OpenUrl`); a kept sign-in is gone on with only on [`Job::Start`].
+//! * One worker for the pool's life: the copy has one writer and the token one keeper. Switched
+//!   off ([`Job::Stop`]) or signed out it asks nothing, holds no file and no token, and waits on
+//!   its channel for the jobs after, taken in their order; the thread ends with the channel.
 //! * The refresh token lives in the system keychain only ([`keyring`], [`REFRESH_KEY`]), the
 //!   access token in memory. Both are renewed here and nowhere else, so two renewals never race;
 //!   every request to Teams goes from this thread, so two reads of a chat are never in flight.
@@ -49,9 +51,7 @@ pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
 
 /// The least between two turns of the loop: whatever a step leaves due, the loop never spins.
 const TURN: Duration = Duration::from_millis(20);
-/// How often the loop looks while nothing is polled.
-const IDLE: Duration = Duration::from_secs(1);
-/// And while a sign-in in the browser is awaited.
+/// How often the loop looks while a sign-in in the browser is awaited.
 const AWAITING: Duration = Duration::from_millis(200);
 /// After a failure (no network, a server's error): tried again then.
 const RETRY: Duration = Duration::from_secs(10);
@@ -66,6 +66,8 @@ pub(crate) struct Hooks {
     pub(crate) trip_list: Arc<std::sync::atomic::AtomicU32>,
     /// The wait after a panic, in place of [`Panics::wait`]'s half minute.
     pub(crate) panic_wait: Option<Duration>,
+    /// How many times the loop woke, for a job or for a deadline.
+    pub(crate) turns: Arc<std::sync::atomic::AtomicU32>,
 }
 
 #[cfg(test)]
@@ -78,7 +80,8 @@ impl Hooks {
     }
 }
 
-/// The pool's hold on the worker: jobs go in, in order; dropped, the worker ends.
+/// The pool's hold on the worker, for the pool's life: jobs go in, in order; dropped, the worker
+/// ends.
 pub(crate) struct Handle {
     tx: Sender<Job>,
     #[cfg(test)]
@@ -90,14 +93,16 @@ impl Handle {
         let _ = self.tx.send(job);
     }
 
-    /// Whether the worker's thread ends within `wait`.
+    /// Whether the worker's thread ends within `wait` of its channel closing.
     #[cfg(test)]
-    pub(crate) fn finished_within(&mut self, wait: Duration) -> bool {
+    pub(crate) fn ends_within(self, wait: Duration) -> bool {
+        let Handle { tx, thread } = self;
+        drop(tx);
         let until = Instant::now() + wait;
-        while Instant::now() < until && self.thread.as_ref().is_some_and(|t| !t.is_finished()) {
+        while Instant::now() < until && thread.as_ref().is_some_and(|t| !t.is_finished()) {
             std::thread::sleep(Duration::from_millis(5));
         }
-        self.thread.as_ref().is_none_or(std::thread::JoinHandle::is_finished)
+        thread.as_ref().is_none_or(std::thread::JoinHandle::is_finished)
     }
 }
 
@@ -235,27 +240,31 @@ impl Worker {
         })
     }
 
-    /// The thread: a job as soon as one comes, else a turn at the next deadline; until
-    /// [`Job::Stop`] or the channel's end.
+    /// The thread: a job as soon as one comes, else a turn at the next deadline, or nothing until
+    /// a job when there's nothing to ask; until the channel's end (the pool's).
     fn run(mut self, rx: &Receiver<Job>) {
         let mut panics = Panics::default();
         loop {
             let now = Instant::now();
-            let job = match rx.recv_timeout(self.wake(now).saturating_duration_since(now)) {
-                Ok(job) => Some(job),
-                Err(RecvTimeoutError::Timeout) => None,
-                Err(RecvTimeoutError::Disconnected) => break,
+            let job = match self.wake(now) {
+                Some(at) => match rx.recv_timeout(at.saturating_duration_since(now)) {
+                    Ok(job) => Some(job),
+                    Err(RecvTimeoutError::Timeout) => None,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                },
+                None => match rx.recv() {
+                    Ok(job) => Some(job),
+                    Err(_) => break,
+                },
             };
-            let stop = matches!(job, Some(Job::Stop));
+            #[cfg(test)]
+            self.hooks.turns.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let done = fenced(|| {
                 if let Some(job) = job {
                     self.job(job);
                 }
                 self.turn(Instant::now());
             });
-            if stop {
-                break;
-            }
             if done.is_none() {
                 self.after_panic(&mut panics);
             }
@@ -264,18 +273,23 @@ impl Worker {
     }
 
     /// When the loop looks again, a job apart: the next cadence due, the time a held step may
-    /// go, the end of a wait after a failure. Never at once: [`TURN`] at least.
-    fn wake(&self, now: Instant) -> Instant {
+    /// go, the end of a wait after a failure; never at once ([`TURN`] at least). `None` when
+    /// there is nothing to look at until a job comes: switched off, signed out, or waiting to be
+    /// signed in again, and no sign-in on its way from the browser.
+    pub(crate) fn wake(&self, now: Instant) -> Option<Instant> {
         let after = |wait: Duration| now.checked_add(wait).unwrap_or(now);
-        let mut wake = after(IDLE);
+        let mut wake = None;
         if self.polling {
-            wake = self.limiter.next_deadline(now);
+            let mut at = self.limiter.next_deadline(now);
             for later in [self.held, self.not_before].into_iter().flatten() {
-                wake = wake.max(later);
+                at = at.max(later);
             }
-            wake = wake.max(after(TURN));
+            wake = Some(at.max(after(TURN)));
         }
-        if self.signing.is_some() { wake.min(after(AWAITING)) } else { wake }
+        if self.signing.is_some() {
+            wake = Some(wake.map_or(after(AWAITING), |at| at.min(after(AWAITING))));
+        }
+        wake
     }
 
     /// A step panicked: what it was doing is given up, and nothing is asked for a wait that
@@ -297,9 +311,13 @@ impl Worker {
             Job::Start { settings } => self.start(settings),
             Job::SignIn { client_id, tenant } => self.sign_in(&client_id, &tenant),
             Job::SignOut { delete_copy } => self.sign_out(delete_copy),
+            // Switched off: nothing asked, no file, no token; the thread stays for what comes
+            // next. No status stands (what a start says after is said again).
             Job::Stop => {
                 self.halt();
                 self.copy = None;
+                self.open = None;
+                self.said = None;
                 log::info!("teams: switched off");
             }
             Job::Open { chat } => self.open = chat.filter(|c| id_ok(c)),

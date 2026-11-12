@@ -223,12 +223,16 @@ impl Worker {
                 return self.refuse(NO_COPY);
             }
         };
-        // Kept only now: in the keychain, or for want of one in memory until Quatrelle closes.
-        self.no_keychain = self.creds.set_secret(&keyring(), REFRESH_KEY, &refresh).is_err();
-        if self.no_keychain {
+        // Kept only now: in the keychain, or for want of one in memory until Quatrelle closes
+        // (credentials that take it but keep nothing past this run are no keychain either).
+        let taken = self.creds.set_secret(&keyring(), REFRESH_KEY, &refresh).is_ok();
+        self.no_keychain = !(taken && self.creds.persists());
+        if !taken {
             // One kept before isn't this sign-in's.
             self.creds.delete_secret(&keyring(), REFRESH_KEY);
-            log::warn!("teams: no keychain took the sign-in: it lasts until Quatrelle closes");
+        }
+        if self.no_keychain {
+            log::warn!("teams: no keychain keeps the sign-in: it lasts until Quatrelle closes");
         }
         let address = if me.mail.trim().is_empty() { me.upn.trim() } else { me.mail.trim() };
         self.settings = TeamsSettings {
@@ -354,7 +358,7 @@ impl Worker {
             return self.status(Status::SignInAgain);
         };
         self.refresh = Some(Secret(refresh));
-        self.no_keychain = false;
+        self.no_keychain = !self.creds.persists();
         self.limiter = Limiter::new(Instant::now());
         self.polling = true;
         log::info!("teams: going on from the sign-in kept");
@@ -439,8 +443,9 @@ impl Worker {
             Err(e) => return Err(e),
         };
         if let Some(newer) = tokens.refresh.as_deref().filter(|r| !r.is_empty() && *r != refresh.0) {
-            // Where the one before is: a keychain that refuses now still holds that one.
-            if !self.no_keychain && self.creds.set_secret(&keyring(), REFRESH_KEY, newer).is_err() {
+            // Where the one before is held: a keychain that refuses now still holds that one.
+            let held = self.creds.get_secret(&keyring(), REFRESH_KEY).is_some();
+            if held && self.creds.set_secret(&keyring(), REFRESH_KEY, newer).is_err() {
                 log::warn!("teams: the keychain didn't take the newer sign-in");
             }
             self.refresh = Some(Secret(newer.to_string()));
@@ -475,6 +480,8 @@ impl Worker {
             (self.emit)(Event::Notice { account: String::new(), message: "Teams: the local copy of the conversations couldn't be deleted".into() });
         }
         log::info!("teams: signed out{}", if delete_copy { ", the local copy deleted" } else { "" });
+        // Said each time it's asked, signed in or not.
+        self.said = None;
         self.status(Status::SignedOut);
     }
 }

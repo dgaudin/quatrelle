@@ -100,6 +100,41 @@ fn desk(tokens: Tokens) -> Arc<Desk> {
     })
 }
 
+/// A keychain of the tests' own: what it is given stays (credentials held in memory alone, the
+/// portable app's, say they keep nothing).
+#[derive(Default)]
+struct Kept(MemoryCredentials);
+
+impl Credentials for Kept {
+    fn get(&self, a: &AccountConfig) -> Option<String> {
+        self.0.get(a)
+    }
+    fn set(&self, a: &AccountConfig, p: &str) -> std::result::Result<(), String> {
+        self.0.set(a, p)
+    }
+    fn delete(&self, a: &AccountConfig) {
+        self.0.delete(a)
+    }
+    fn get_smtp(&self, a: &AccountConfig) -> Option<String> {
+        self.0.get_smtp(a)
+    }
+    fn set_smtp(&self, a: &AccountConfig, p: &str) -> std::result::Result<(), String> {
+        self.0.set_smtp(a, p)
+    }
+    fn delete_smtp(&self, a: &AccountConfig) {
+        self.0.delete_smtp(a)
+    }
+    fn get_secret(&self, a: &AccountConfig, what: &str) -> Option<String> {
+        self.0.get_secret(a, what)
+    }
+    fn set_secret(&self, a: &AccountConfig, what: &str, secret: &str) -> std::result::Result<(), String> {
+        self.0.set_secret(a, what, secret)
+    }
+    fn delete_secret(&self, a: &AccountConfig, what: &str) {
+        self.0.delete_secret(a, what)
+    }
+}
+
 type Seen = Arc<Mutex<Vec<Event>>>;
 
 fn emit_into(seen: &Seen) -> Emit {
@@ -123,7 +158,7 @@ struct Rig {
 }
 
 fn rig(teams: FakeTeams, tokens: Tokens) -> Rig {
-    rig_with(teams, tokens, Store::memory(), Arc::new(MemoryCredentials::default()), Hooks::default())
+    rig_with(teams, tokens, Store::memory(), Arc::new(Kept::default()), Hooks::default())
 }
 
 fn rig_with(teams: FakeTeams, tokens: Tokens, store: Store, creds: Arc<dyn Credentials>, hooks: Hooks) -> Rig {
@@ -213,8 +248,8 @@ fn settings(object: &str) -> TeamsSettings {
 }
 
 /// A worker driven by hand, a turn at a time, at the times the test makes.
-fn by_hand(server: &Server, tokens: Tokens) -> (Worker, Arc<Desk>, Seen, Arc<MemoryCredentials>) {
-    let (desk, seen, creds) = (desk(tokens), Seen::default(), Arc::new(MemoryCredentials::default()));
+fn by_hand(server: &Server, tokens: Tokens) -> (Worker, Arc<Desk>, Seen, Arc<Kept>) {
+    let (desk, seen, creds) = (desk(tokens), Seen::default(), Arc::new(Kept::default()));
     let w = Worker::new(Store::memory(), creds.clone(), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk.clone()))).unwrap();
     (w, desk, seen, creds)
 }

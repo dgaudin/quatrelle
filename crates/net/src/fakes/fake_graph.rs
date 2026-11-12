@@ -423,7 +423,15 @@ pub fn serve(data: Data) -> Server {
             // Teams first: its client asks for no immutable ids, and a download carries no token.
             let teams = shared.lock().unwrap().teams_request(&method, &target, &headers, authorized, &body, &b);
             if let Some(r) = teams {
-                respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date);
+                // An answer held back goes from a thread of its own: the others aren't kept waiting.
+                let hold = shared.lock().unwrap().teams.as_mut().and_then(|t| t.holding.take());
+                match hold {
+                    Some(wait) => drop(std::thread::spawn(move || {
+                        std::thread::sleep(wait);
+                        respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date);
+                    })),
+                    None => respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date),
+                }
                 continue;
             }
             if !authorized {

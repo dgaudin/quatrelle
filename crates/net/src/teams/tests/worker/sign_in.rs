@@ -183,7 +183,7 @@ fn a_copy_made_for_another_account_is_set_aside_and_said() {
     copy.put_chat(&ChatRecord::new(chat_of(&json!({"id": CHAT, "chatType": "group"})).unwrap())).unwrap();
     drop(copy);
 
-    let r = rig_with(one_chat(), grant(Some(TENANT)), store.clone(), Arc::new(MemoryCredentials::default()), Hooks::default());
+    let r = rig_with(one_chat(), grant(Some(TENANT)), store.clone(), Arc::new(Kept::default()), Hooks::default());
     r.sign_in("organizations");
     let seen = r.wait("the first list", |e| said(e, &Status::UpToDate));
     let aside = seen.iter().find_map(|e| if let model::Event::SetAside { path } = e { Some(PathBuf::from(path)) } else { None });
@@ -272,4 +272,30 @@ fn a_busy_graph_is_never_sat_out_in_the_loop() {
     server.data.lock().unwrap().teams.as_mut().unwrap().throttle_every = None;
     w.turn(t0 + Duration::from_secs(11));
     assert!(said(&teams_of(&seen), &Status::UpToDate), "{:?}", teams_of(&seen));
+}
+
+#[test]
+fn credentials_that_keep_nothing_say_so() {
+    // The portable app's credentials: held in memory, so taking the token isn't keeping it.
+    let r = rig_with(one_chat(), grant(Some(TENANT)), Store::memory(), Arc::new(MemoryCredentials::default()), Hooks::default());
+    r.sign_in("organizations");
+    let seen = r.wait("the first list", |e| failed(e) || r.hits("chats") >= 1);
+    assert!(account(&seen).is_some(), "signed in: {seen:?}");
+    assert!(said(&seen, &Status::NoKeychain), "and told it won't be remembered: {seen:?}");
+    assert!(!said(&seen, &Status::SignInAgain) && !failed(&seen), "{seen:?}");
+    // Taken for the run all the same: switched off and on, it goes on without a new sign-in, and
+    // still says it won't be remembered.
+    assert_eq!(r.kept().as_deref(), Some(REFRESH));
+    r.handle.submit(Job::Stop);
+    r.handle.submit(Job::Start { settings: settings(ME) });
+    let pages = r.hits("chats");
+    r.wait("the list again", |e| failed(e) || said(e, &Status::SignInAgain) || r.hits("chats") > pages);
+    let seen = teams_of(&r.seen);
+    assert!(!said(&seen, &Status::SignInAgain) && !said(&seen, &Status::UpToDate), "{seen:?}");
+    assert_eq!(seen.iter().filter(|e| **e == status(Status::NoKeychain)).count(), 2, "{seen:?}");
+    assert_eq!(r.desk.authorized.load(Ordering::SeqCst), 1);
+
+    // What says it keeps: the system's keychain (the trait's own answer), not memory.
+    assert!(!MemoryCredentials::default().persists());
+    assert!(Kept::default().persists() && NoKeychain.persists());
 }

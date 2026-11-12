@@ -140,6 +140,11 @@ pub(crate) struct FakeTeams {
     /// The next request of this route (by route name) is refused with 401, whatever its token:
     /// once, then the route works again.
     pub(crate) refuse_once: Option<&'static str>,
+    /// The next request of this route (by route name) is answered only after this long, once: a
+    /// request stalled on its way. The server goes on answering the others meanwhile.
+    pub(crate) hold: Option<(&'static str, std::time::Duration)>,
+    /// Set for the server by the request being answered: how long its answer is held back.
+    pub(crate) holding: Option<std::time::Duration>,
 }
 
 impl FakeTeams {
@@ -582,6 +587,7 @@ impl Data {
             t.refuse_once = None;
             authorized = false;
         }
+        t.holding = t.hold.take_if(|(route, _)| *route == name).map(|(_, wait)| wait);
         let mut reply = match t.refusal(name, authorized, someone_else) {
             Some(r) => r,
             None => {

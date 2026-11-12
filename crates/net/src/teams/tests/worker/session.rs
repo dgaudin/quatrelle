@@ -87,20 +87,24 @@ fn a_stale_token_is_renewed_once_after_a_sleep() {
 fn switching_off_stops_within_a_second() {
     // 300 chats: six pages of the list, a second apart.
     let chats = (0..300).map(|i| chat(&format!("19:c{i}@thread.v2"), T0 + i * MINUTE, 1)).collect();
-    let mut r = rig(teams_with(chats), grant(Some(TENANT)));
+    let r = rig(teams_with(chats), grant(Some(TENANT)));
     r.sign_in("organizations");
-    r.wait("the second page of the list", |e| failed(e) || r.hits("chats") >= 2);
-    // The third page waits for its second (one list read a second): the switch comes during
-    // that wait, which a sleep wouldn't hear.
+    let seen = r.wait("the second page of the list", |e| failed(e) || r.hits("chats") >= 2);
+    assert!(account(&seen).is_some() && !failed(&seen), "{seen:?}");
+    // The third page waits for its second (one list read a second), 700 ms from now: the switch
+    // comes during that wait, which a sleep wouldn't hear.
     std::thread::sleep(Duration::from_millis(300));
-    let asked = Instant::now();
-    r.handle.submit(Job::Stop);
-    assert!(r.handle.finished_within(Duration::from_secs(1)), "still running a second after the switch");
-    assert!(asked.elapsed() < Duration::from_secs(1));
     let (pages, all) = (r.hits("chats"), r.all_hits());
-    assert!(pages < 6, "stopped in the middle of the list: {pages} pages");
+    r.handle.submit(Job::Stop);
     std::thread::sleep(Duration::from_millis(1500));
-    assert_eq!(r.all_hits(), all, "no request after the switch");
+    assert_eq!(r.all_hits(), all, "no request after the switch: it was heard before the third page");
+    assert!(pages < 6, "switched off in the middle of the list: {pages} pages");
+    // The worker stays for what comes next, and ends with its channel (the pool's), at once.
+    r.handle.submit(Job::Start { settings: settings(ME) });
+    r.wait("the list again, once switched on", |e| said(e, &Status::UpToDate) || said(e, &Status::SignInAgain) || failed(e));
+    assert!(r.all_hits() > all, "switched on again, the same worker goes on");
+    let Rig { handle, .. } = r;
+    assert!(handle.ends_within(Duration::from_secs(1)), "still running a second after its channel closed");
 }
 
 /// A keychain that notes, each time the refresh token is deleted, whether the copy's file was
@@ -289,8 +293,8 @@ fn offline_at_start_is_said_and_tried_again_without_haste() {
 
 #[test]
 fn a_panic_in_a_step_waits_and_goes_on() {
-    let hooks = Hooks { trip_list: Arc::new(AtomicU32::new(1)), panic_wait: Some(Duration::from_secs(3)) };
-    let r = rig_with(one_chat(), grant(Some(TENANT)), Store::memory(), Arc::new(MemoryCredentials::default()), hooks);
+    let hooks = Hooks { trip_list: Arc::new(AtomicU32::new(1)), panic_wait: Some(Duration::from_secs(3)), ..Hooks::default() };
+    let r = rig_with(one_chat(), grant(Some(TENANT)), Store::memory(), Arc::new(Kept::default()), hooks);
     r.sign_in("organizations");
     let signed_in = r.wait("the account", |e| account(e).is_some() || failed(e));
     let at = Instant::now();
@@ -327,7 +331,11 @@ fn logs_carry_no_id() {
     let server = serve_teams(teams);
     let fake = |change: &dyn Fn(&mut FakeTeams)| change(server.data.lock().unwrap().teams.as_mut().unwrap());
 
-    let tap = crate::fakes::logs::tap(|_| true);
+    // The worker's lines and the copy's: tests run side by side, and others' lines aren't theirs
+    // to answer for.
+    let tap = crate::fakes::logs::tap(|l| l.starts_with("teams: ") || l.starts_with("Teams copy: "));
+    // Such a line of another test's.
+    log::info!("a1: riley@contoso.example moved to 19:elsewhere@thread.v2");
     // No `tid`: the organisation is found by reading chats and their members.
     let (mut w, _, seen, _) = by_hand(&server, grant(None));
     let t0 = Instant::now();
@@ -401,4 +409,86 @@ fn a_message_without_an_id_is_never_kept() {
         ["1", "2"],
         "one that can't be shown is kept by its id; none under an empty one"
     );
+}
+
+/// One worker for the pool's life (the copy has one writer, the token one keeper): switched off
+/// or signed out it stays, asking nothing, and takes the jobs after in their order. A worker let
+/// go while a request of its was stalled would run its sign-out late, over the sign-in made since.
+#[test]
+fn a_sign_out_stalled_behind_a_request_never_undoes_the_sign_in_after_it() {
+    use quatrelle_model::Job as Any;
+    let mut teams = one_chat();
+    teams.hold = Some(("chats", Duration::from_secs(2)));
+    let server = serve_teams(teams);
+    let (desk, creds, store) = (desk(grant(Some(TENANT))), Arc::new(Kept::default()), Store::memory());
+    let mut pool = crate::worker::Pool::new(store.clone(), creds.clone());
+    pool.teams_test.at = Some((server.base.clone(), Box::new(move || Box::new(AtDesk(desk.clone())))));
+    let sign_in = || Any::Teams { job: Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() } };
+    let mut seen: Vec<model::Event> = Vec::new();
+    let hear = |pool: &crate::worker::Pool, seen: &mut Vec<model::Event>| {
+        seen.extend(pool.wait(Duration::from_millis(20)).into_iter().filter_map(|e| if let Event::Teams { event } = e { Some(event) } else { None }));
+    };
+    pool.submit(sign_in());
+    // The first read of the list is with Graph, which holds its answer.
+    let until = Instant::now() + WAIT;
+    while hits(&server, "chats") == 0 {
+        assert!(Instant::now() < until, "the list was never asked for: {seen:?}");
+        hear(&pool, &mut seen);
+    }
+    let held = Instant::now();
+    pool.submit(Any::Teams { job: Job::SignOut { delete_copy: true } });
+    pool.submit(sign_in());
+    // Past the held answer, and whatever a worker stalled behind it would do then.
+    let accounts = |seen: &[model::Event]| seen.iter().filter(|e| matches!(e, model::Event::Account { .. })).count();
+    while held.elapsed() < Duration::from_secs(4) || (accounts(&seen) < 2 && Instant::now() < until) {
+        hear(&pool, &mut seen);
+    }
+    assert_eq!(accounts(&seen), 2, "{seen:?}");
+    let out = seen.iter().position(|e| *e == status(Status::SignedOut)).unwrap_or_else(|| panic!("never signed out: {seen:?}"));
+    let again = seen.iter().rposition(|e| matches!(e, model::Event::Account { .. })).unwrap();
+    assert!(out < again, "signed out, then signed in: {seen:?}");
+    assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY).as_deref(), Some(REFRESH), "the sign-in made after the sign-out is kept");
+    assert!(store.snapshot(|_| true).iter().any(|(path, _)| path.ends_with("identity.json")), "and so is its copy");
+    assert_eq!(pool.teams_test.started, 1, "one worker");
+}
+
+#[test]
+fn a_worker_with_nothing_to_ask_waits_on_its_channel() {
+    let turns = Arc::new(AtomicU32::new(0));
+    let r = rig_with(one_chat(), grant(Some(TENANT)), Store::memory(), Arc::new(Kept::default()), Hooks { turns: turns.clone(), ..Hooks::default() });
+    // Nobody signed in.
+    std::thread::sleep(Duration::from_millis(2300));
+    assert_eq!(turns.load(Ordering::SeqCst), 0, "it woke with nothing to do");
+    // Signed in, then switched off.
+    r.sign_in("organizations");
+    r.wait("the first list", |e| said(e, &Status::UpToDate) || failed(e));
+    r.handle.submit(Job::Stop);
+    std::thread::sleep(Duration::from_millis(300));
+    let off = turns.load(Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(2300));
+    assert_eq!(turns.load(Ordering::SeqCst), off, "switched off, it woke with nothing to do");
+}
+
+#[test]
+fn the_loop_has_a_deadline_only_while_there_is_something_to_look_at() {
+    let server = serve_teams(one_chat());
+    let (mut w, _, seen, creds) = by_hand(&server, grant(Some(TENANT)));
+    let t0 = Instant::now();
+    assert!(w.wake(t0).is_none(), "nobody signed in");
+    // A sign-in on its way: its answer is looked for.
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    assert!(w.wake(t0).is_some_and(|at| at <= t0 + Duration::from_millis(200)));
+    turn_until(&mut w, t0, "the first list", |_| said(&teams_of(&seen), &Status::UpToDate));
+    assert!(w.wake(t0).is_some_and(|at| at > t0 && at <= t0 + Duration::from_secs(1)), "going: the next cadence");
+    // Switched off, then on again with the sign-in kept, then signed out.
+    w.job(Job::Stop);
+    assert!(w.wake(t0).is_none() && w.client.is_none() && w.copy.is_none() && w.tokens.is_none(), "switched off");
+    w.job(Job::Start { settings: settings(ME) });
+    assert!(w.wake(t0).is_some());
+    w.job(Job::SignOut { delete_copy: false });
+    assert!(w.wake(t0).is_none() && w.copy.is_none(), "signed out");
+    // Waiting to be signed in again.
+    w.job(Job::Start { settings: settings(ME) });
+    assert!(said(&teams_of(&seen), &Status::SignInAgain) && creds.get_secret(&keyring(), REFRESH_KEY).is_none());
+    assert!(w.wake(t0).is_none(), "sign in again: nothing to look at until the user does");
 }

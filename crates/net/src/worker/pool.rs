@@ -9,7 +9,7 @@ use super::*;
 
 mod importing;
 mod llm;
-mod teams;
+pub(super) mod teams;
 
 /// What the edit writer's thread is handed, in order.
 pub(super) enum Edit {
@@ -103,6 +103,8 @@ impl Pool {
             search: Arc::new(AtomicU64::new(0)),
             imports: Arc::default(),
             teams: None,
+            #[cfg(test)]
+            teams_test: teams::Test::default(),
         }
     }
 

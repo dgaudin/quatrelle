@@ -48,6 +48,12 @@ pub trait Credentials: Send + Sync {
         Err("there's no keychain to keep it in".into())
     }
     fn delete_secret(&self, _account: &AccountConfig, _what: &str) {}
+    /// Whether what is kept here is still there the next time Quatrelle starts (the system's
+    /// keychain). Credentials held in memory say no: a sign-in they take lasts this run only,
+    /// and whoever signs in is told so.
+    fn persists(&self) -> bool {
+        true
+    }
 }
 
 /// Passwords held in memory only (tests, the CLI, and when no keychain is available).
@@ -90,6 +96,9 @@ impl Credentials for MemoryCredentials {
         if let Ok(mut m) = self.0.lock() {
             m.remove(&format!("{}|{what}", account.id));
         }
+    }
+    fn persists(&self) -> bool {
+        false
     }
 }
 
@@ -228,9 +237,12 @@ pub struct Pool {
     /// thousand messages, at every message opened. `None` once the pool shuts down.
     edits: Option<Sender<pool::Edit>>,
     edits_thread: Option<JoinHandle<()>>,
-    /// The Teams worker, started with the first of its jobs and let go when Teams is switched off
-    /// or signed out (`pool/teams.rs`).
+    /// The Teams worker, started with the first of its jobs and kept for the pool's life: one
+    /// worker, whatever is switched off or signed out meanwhile (`pool/teams.rs`).
     teams: Option<crate::teams::worker::Handle>,
+    /// Tests: where the Teams worker is sent, and how many were started.
+    #[cfg(test)]
+    pub(crate) teams_test: pool::teams::Test,
 }
 
 /// Write an edit to the cache and journal it (`Store::add_op`), report what changed, then hand it to
