@@ -15,8 +15,11 @@
 //!   all begin words of a message (or of the chat's name).
 //! * Bounded: a segment is at most [`SEGMENT_MAX`] bytes (past it, the chat's oldest messages
 //!   leave it); the whole index at most a quarter of the copy's file, between [`FLOOR`] and
-//!   [`INDEX_MAX`], the chats with the oldest messages leaving first. After that, every search
-//!   says it covers recent conversations only (`partial`, remembered in [`PARTIAL`]).
+//!   [`INDEX_MAX`], and in memory at most [`RESIDENT_MAX`] as estimated (held compact: sorted
+//!   arrays, nothing twice), the chats with the oldest messages leaving first, while the index
+//!   is read back as after a write. After that, every search says it covers recent
+//!   conversations only (`partial`, remembered in [`PARTIAL`]). A query reads the chats newest
+//!   first and stops once it has its hits and the next chat is older than the last of them.
 //! * Read back at start in slices, one chat a loop turn ([`load`]): the window never waits for
 //!   it, and until it's read whole a search answers "indexing" with no hits. What is read back
 //!   is hostile input: a segment under another chat's key is passed over, the caps applied again.
@@ -40,6 +43,8 @@ use super::worker::Worker;
 pub(crate) const MAX_HITS: usize = 200;
 /// The most bytes of a chat's segment, as written and as read back.
 const SEGMENT_MAX: usize = 16 << 20;
+/// The most memory the index may take, as estimated (its words, ids and places as held).
+const RESIDENT_MAX: u64 = 256 << 20;
 /// The least the index may take, whatever the copy's size: a small copy's index isn't cut.
 const FLOOR: u64 = 16 << 20;
 /// The record that says the oldest chats' words left the index.
@@ -77,6 +82,12 @@ pub(crate) struct Index {
     /// The bound a test sets, in place of the copy's quarter.
     #[cfg(test)]
     pub(crate) cap: Option<u64>,
+    /// The resident bound a test sets, in place of [`RESIDENT_MAX`].
+    #[cfg(test)]
+    pub(crate) resident_cap: Option<u64>,
+    /// How many chats' words the last query looked at.
+    #[cfg(test)]
+    pub(crate) visited: std::cell::Cell<usize>,
 }
 
 /// A chat's name as searched: its words, and its time (its last activity).
@@ -86,9 +97,26 @@ struct Named {
     at: i64,
 }
 
-/// A chat's words: its messages by place, and each word with the places of those that have it.
-#[derive(Default)]
+/// A chat's words as memory holds them, compact: its messages by place, and each word, in
+/// order, with the places of those that have it, in order (found by halving). Nothing is held
+/// twice: what a change needs besides (each message's place) is made for the change alone
+/// ([`Draft`]).
 struct Segment {
+    chat: Box<str>,
+    /// (message id, creation time) by place; a free place has an empty id.
+    messages: Box<[(Box<str>, i64)]>,
+    words: Box<[(Box<str>, Box<[u32]>)]>,
+    /// The creation time of its newest message.
+    newest: i64,
+    /// The bytes it takes in the file, and in memory (as estimated).
+    bytes: u64,
+    resident: u64,
+}
+
+/// A chat's words while they're read back or changed: the form one write or one read works on,
+/// for the time it takes.
+#[derive(Default)]
+struct Draft {
     chat: String,
     /// (message id, creation time) by place; a free place has an empty id.
     messages: Vec<(String, i64)>,
@@ -97,8 +125,6 @@ struct Segment {
     free: Vec<u32>,
     /// Each word and the places that have it, in order.
     words: BTreeMap<String, Vec<u32>>,
-    /// The bytes it takes in the file.
-    bytes: u64,
 }
 
 /// A segment as it's kept.
@@ -188,13 +214,56 @@ fn query_words(query: &str) -> Vec<String> {
     words_of_texts(std::iter::once(query.as_str()), QUERY_WORDS)
 }
 
-impl Segment {
-    fn empty(chat: &str) -> Segment {
-        Segment { chat: chat.to_string(), ..Segment::default() }
+impl Draft {
+    fn empty(chat: &str) -> Draft {
+        Draft { chat: chat.to_string(), ..Draft::default() }
+    }
+
+    /// A segment to be changed.
+    fn of(seg: &Segment) -> Draft {
+        let mut d = Draft::empty(&seg.chat);
+        d.messages = seg.messages.iter().map(|(id, at)| (id.to_string(), *at)).collect();
+        for (p, (id, _)) in d.messages.iter().enumerate() {
+            let Ok(p) = u32::try_from(p) else { break };
+            if id.is_empty() {
+                d.free.push(p);
+            } else {
+                d.places.insert(id.clone(), p);
+            }
+        }
+        d.words = seg.words.iter().map(|(w, list)| (w.to_string(), list.to_vec())).collect();
+        d
+    }
+
+    /// As memory holds it, `bytes` the size of its file.
+    fn settle(self, bytes: usize) -> Segment {
+        use std::mem::size_of;
+        let n = |x: usize| u64::try_from(x).unwrap_or(u64::MAX);
+        // The segment, its key in the index's map (a hash), each message's id and time, each
+        // word and its places.
+        let mut resident = n(size_of::<Segment>() + 96 + self.chat.len());
+        let newest = self.messages.iter().filter(|(id, _)| !id.is_empty()).map(|(_, at)| *at).max().unwrap_or(i64::MIN);
+        let messages: Box<[(Box<str>, i64)]> = self
+            .messages
+            .into_iter()
+            .map(|(id, at)| {
+                resident = resident.saturating_add(n(size_of::<(Box<str>, i64)>() + id.len()));
+                (id.into_boxed_str(), at)
+            })
+            .collect();
+        let words: Box<[(Box<str>, Box<[u32]>)]> = self
+            .words
+            .into_iter()
+            .map(|(w, list)| {
+                resident = resident.saturating_add(n(size_of::<(Box<str>, Box<[u32]>)>() + w.len()).saturating_add(n(list.len()).saturating_mul(4)));
+                (w.into_boxed_str(), list.into_boxed_slice())
+            })
+            .collect();
+        Segment { chat: self.chat.into_boxed_str(), messages, words, newest, bytes: n(bytes), resident }
     }
 
     /// A segment read back, when it's `hash`'s and can be read: held to the caps.
-    fn read(bytes: &[u8], hash: &str) -> Option<Segment> {
+    fn read(bytes: &[u8], hash: &str) -> Option<Draft> {
         if bytes.len() > SEGMENT_MAX {
             log::warn!("Teams search: a chat's words past {SEGMENT_MAX} bytes passed over");
             return None;
@@ -206,7 +275,7 @@ impl Segment {
         if !id_ok(&kept.chat) || chat_hash(&kept.chat) != hash {
             return None;
         }
-        let mut seg = Segment::empty(&kept.chat);
+        let mut seg = Draft::empty(&kept.chat);
         seg.messages = kept.messages;
         for (p, (id, created)) in seg.messages.iter_mut().enumerate() {
             let p = u32::try_from(p).ok()?;
@@ -241,7 +310,6 @@ impl Segment {
                 seg.words.insert(w, list);
             }
         }
-        seg.bytes = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         Some(seg)
     }
 
@@ -303,22 +371,16 @@ impl Segment {
         let gone: BTreeSet<u32> = held.into_iter().take(n).map(|(_, p)| p).collect();
         self.clear(&gone);
     }
+}
 
-    /// The creation time of its newest message.
-    fn newest(&self) -> i64 {
-        self.messages.iter().filter(|(id, _)| !id.is_empty()).map(|(_, at)| *at).max().unwrap_or(i64::MIN)
-    }
-
+impl Segment {
     /// The places of the messages with a word beginning with each of `terms`.
     fn find(&self, terms: &[String]) -> BTreeSet<u32> {
         let mut found: Option<BTreeSet<u32>> = None;
         for t in terms {
+            let from = self.words.partition_point(|(w, _)| &**w < t.as_str());
             let mut with: BTreeSet<u32> = BTreeSet::new();
-            for (_, list) in self
-                .words
-                .range::<str, _>((std::ops::Bound::Included(t.as_str()), std::ops::Bound::Unbounded))
-                .take_while(|(w, _)| w.starts_with(t.as_str()))
-            {
+            for (_, list) in self.words.get(from..).unwrap_or_default().iter().take_while(|(w, _)| w.starts_with(t.as_str())) {
                 with.extend(list.iter().copied());
             }
             let now = match found {
@@ -367,6 +429,27 @@ impl Index {
         self.names.insert(hash, Named { chat: chat.id.clone(), words, at });
     }
 
+    /// The bytes its segments take in the file.
+    #[cfg(test)]
+    pub(crate) fn bytes(&self) -> u64 {
+        self.segments.values().map(|s| s.bytes).sum()
+    }
+
+    /// What it takes in memory, as estimated.
+    #[cfg(test)]
+    pub(crate) fn resident(&self) -> u64 {
+        self.segments.values().map(|s| s.resident).sum()
+    }
+
+    /// The most memory its segments may take, as estimated.
+    fn resident_cap(&self) -> u64 {
+        #[cfg(test)]
+        if let Some(cap) = self.resident_cap {
+            return cap;
+        }
+        RESIDENT_MAX
+    }
+
     /// A chat's segment to be read back again from the file (its write failed).
     fn reload(&mut self, hash: String) {
         if let Some(todo) = self.todo.as_mut() {
@@ -384,23 +467,37 @@ impl Index {
             return Found { hits: Vec::new(), indexing: false, partial: self.partial };
         }
         let mut hits: Vec<(i64, &str, &str)> = Vec::new();
-        for seg in self.segments.values() {
-            for p in seg.find(&terms) {
-                if let Some((id, at)) = usize::try_from(p).ok().and_then(|at| seg.messages.get(at))
-                    && !id.is_empty()
-                {
-                    hits.push((*at, seg.chat.as_str(), id.as_str()));
-                    if hits.len() >= 4 * MAX_HITS {
-                        keep_newest(&mut hits);
-                    }
-                }
-            }
-        }
         for n in self.names.values() {
             if terms.iter().all(|t| n.words.iter().any(|w| w.starts_with(t.as_str()))) {
                 hits.push((n.at, n.chat.as_str(), ""));
                 if hits.len() >= 4 * MAX_HITS {
                     keep_newest(&mut hits);
+                }
+            }
+        }
+        // The chats with the newest messages first: once there are enough hits, a chat whose
+        // newest message is older than the last of them can't give one, nor can those after it.
+        let mut newest_first: Vec<&Segment> = self.segments.values().collect();
+        newest_first.sort_unstable_by_key(|s| std::cmp::Reverse(s.newest));
+        #[cfg(test)]
+        self.visited.set(0);
+        for seg in newest_first {
+            if hits.len() >= MAX_HITS {
+                keep_newest(&mut hits);
+                if hits.last().is_some_and(|last| last.0 > seg.newest) {
+                    break;
+                }
+            }
+            #[cfg(test)]
+            self.visited.set(self.visited.get() + 1);
+            for p in seg.find(&terms) {
+                if let Some((id, at)) = usize::try_from(p).ok().and_then(|at| seg.messages.get(at))
+                    && !id.is_empty()
+                {
+                    hits.push((*at, &*seg.chat, &**id));
+                    if hits.len() >= 4 * MAX_HITS {
+                        keep_newest(&mut hits);
+                    }
                 }
             }
         }
@@ -445,9 +542,9 @@ impl Copy {
                 {
                     ix.segments.insert(hash, seg);
                 }
-                if ix.loaded() {
-                    self.bound(&mut ix, None);
-                }
+                // Held to the bounds as it's read, not once it's whole: a planted file can't
+                // make it hold more meanwhile.
+                self.bound(&mut ix, None);
                 true
             }
         }
@@ -465,7 +562,8 @@ impl Copy {
     }
 
     fn segment_from_file(&self, hash: &str) -> Option<Segment> {
-        Segment::read(&self.read(&segment_key(hash))?, hash)
+        let bytes = self.read(&segment_key(hash))?;
+        Some(Draft::read(&bytes, hash)?.settle(bytes.len()))
     }
 
     /// The words of messages [`Copy::upsert`] changed put in their chat's segment (an edit's
@@ -477,9 +575,10 @@ impl Copy {
         }
         let hash = chat_hash(chat);
         let mut ix = self.index.borrow_mut();
+        // The chat's words in the form a change works on, for this change only.
         let mut seg = match ix.segments.remove(&hash) {
-            Some(seg) => seg,
-            None => self.segment_from_file(&hash).unwrap_or_else(|| Segment::empty(chat)),
+            Some(seg) => Draft::of(&seg),
+            None => self.read(&segment_key(&hash)).and_then(|b| Draft::read(&b, &hash)).unwrap_or_else(|| Draft::empty(chat)),
         };
         let ids: HashSet<&str> = changed.iter().map(|m| m.id.as_str()).collect();
         seg.remove(&ids);
@@ -508,9 +607,9 @@ impl Copy {
                 }
             };
         }
-        seg.bytes = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        let segment = seg.settle(bytes.len());
         let key = segment_key(&hash);
-        Ok(Some(Staged { hash, segment: seg, file: Some((key, bytes)), trimmed }))
+        Ok(Some(Staged { hash, segment, file: Some((key, bytes)), trimmed }))
     }
 
     /// A staged segment back in the index once the pages' write is over: kept when it was
@@ -527,34 +626,36 @@ impl Copy {
         if s.trimmed {
             self.mark_partial(&mut ix);
         }
-        if ix.loaded() {
-            self.bound(&mut ix, Some(&hash));
-        }
+        self.bound(&mut ix, Some(&hash));
     }
 
-    /// The index held to its bound: the chats with the oldest messages leave it first (`keep`
-    /// apart, the chat just written).
+    /// The index held to its bounds, in the file ([`Copy::index_cap`]) and in memory
+    /// ([`RESIDENT_MAX`]): the chats with the oldest messages leave it first (`keep` apart, the
+    /// chat just written).
     fn bound(&self, ix: &mut Index, keep: Option<&str>) {
         let cap = self.index_cap(ix);
+        let held = ix.resident_cap();
         let mut total: u64 = ix.segments.values().map(|s| s.bytes).fold(0, u64::saturating_add);
-        if total <= cap {
+        let mut resident: u64 = ix.segments.values().map(|s| s.resident).fold(0, u64::saturating_add);
+        if total <= cap && resident <= held {
             return;
         }
         let mut oldest: Vec<(i64, String)> =
-            ix.segments.iter().filter(|(h, _)| Some(h.as_str()) != keep).map(|(h, s)| (s.newest(), h.clone())).collect();
+            ix.segments.iter().filter(|(h, _)| Some(h.as_str()) != keep).map(|(h, s)| (s.newest, h.clone())).collect();
         oldest.sort_unstable();
         for (_, hash) in oldest {
-            if total <= cap {
+            if total <= cap && resident <= held {
                 break;
             }
             if let Some(seg) = ix.segments.remove(&hash) {
                 total = total.saturating_sub(seg.bytes);
+                resident = resident.saturating_sub(seg.resident);
                 if self.store.remove_account_files(TEAMS_ACCOUNT, &segment_key(&hash)).is_err() {
                     log::warn!("Teams search: an old chat's words couldn't leave the file");
                 }
             }
         }
-        log::info!("Teams search: the oldest chats' words left the index ({total} bytes kept of {cap})");
+        log::info!("Teams search: the oldest chats' words left the index ({total} bytes kept of {cap}, about {resident} in memory)");
         self.mark_partial(ix);
     }
 

@@ -308,3 +308,65 @@ fn the_oldest_chats_leave_first_past_the_cap() {
     assert!(copy.found("plan").partial);
     assert_eq!(copy.found("plan").hits, one(B, &id(100)));
 }
+
+#[test]
+fn the_resident_index_stays_within_its_bound() {
+    let (copy, store) = copy();
+    let words: Vec<String> = (0..300).map(|i| format!("old{i}")).collect();
+    copy.upsert(A, &[msg(A, 1, &words.join(" "))]).unwrap();
+    let one_chat = copy.index.borrow().resident();
+    // Room in memory for about one chat's words; the file's bound far off.
+    let bound = one_chat.saturating_add(one_chat / 2);
+    copy.index.borrow_mut().resident_cap = Some(bound);
+    let words: Vec<String> = (0..300).map(|i| format!("new{i}")).collect();
+    copy.upsert(B, &[msg(B, 100, &words.join(" "))]).unwrap();
+
+    assert!(copy.index.borrow().resident() <= bound, "{} past its bound", copy.index.borrow().resident());
+    assert_eq!(copy.found("new1"), Found { hits: one(B, &id(100)), indexing: false, partial: true });
+    assert_eq!(hits(&copy, "old1"), Vec::<(String, String)>::new());
+    assert!(segment(&store, A).is_none(), "the old chat's words left the file too");
+}
+
+#[test]
+fn the_cap_holds_while_the_index_loads() {
+    let store = Store::memory();
+    let chats: Vec<String> = (0..4).map(|i| format!("19:load{i}@thread.v2")).collect();
+    {
+        let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
+        for (i, c) in chats.iter().enumerate() {
+            copy.put_chat(&ChatRecord::new(chat(c, None))).unwrap();
+            copy.upsert(c, &[msg(c, 10 * i64::try_from(i).unwrap(), "the same plan for each chat")]).unwrap();
+        }
+    }
+    let each = segment(&store, &chats[0]).unwrap().len() as u64;
+    let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
+    // Room for two chats' words: never more held while the index is read back.
+    copy.index.borrow_mut().cap = Some(2 * each + each / 2);
+    let mut slices = 0;
+    while copy.index_step() {
+        assert!(copy.index.borrow().bytes() <= 2 * each + each / 2, "{} bytes held after {slices} slices", copy.index.borrow().bytes());
+        slices += 1;
+        assert!(slices < 100);
+    }
+    let found = copy.found("plan");
+    assert!(found.partial);
+    assert_eq!(found.hits, vec![(chats[3].clone(), id(30)), (chats[2].clone(), id(20))], "the newest chats kept");
+}
+
+#[test]
+fn a_query_reads_only_the_newest_chats_it_needs() {
+    let (copy, _store) = copy();
+    // 30 chats of 10 messages each, chat i's after chat i - 1's: 300 messages with a word in "p".
+    let chats: Vec<String> = (0..30).map(|i| format!("19:many{i:02}@thread.v2")).collect();
+    for (c, n) in chats.iter().zip(0i64..) {
+        copy.put_chat(&ChatRecord::new(chat(c, None))).unwrap();
+        let msgs: Vec<ChatMessage> = (0..10).map(|k| msg(c, 1_000 + n * 10 + k, &format!("plan {k}"))).collect();
+        copy.upsert(c, &msgs).unwrap();
+    }
+    let found = hits(&copy, "p");
+    assert_eq!(found.len(), MAX_HITS);
+    let want: Vec<(String, String)> = (100..300).rev().map(|j: i64| (chats[usize::try_from(j / 10).unwrap()].clone(), id(1_000 + j))).collect();
+    assert_eq!(found, want);
+    // The 20 newest chats give the 200 hits; the next one is older than the last of them.
+    assert_eq!(copy.index.borrow().visited.get(), 20);
+}
