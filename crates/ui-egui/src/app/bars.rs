@@ -366,11 +366,13 @@ pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<A
     {
         let (r, resp) = ui.allocate_exact_size(vec2(38.0, 38.0), Sense::click());
         let on = m == module;
+        // Conversations is the module here, not the mail's grouping by thread.
+        let shown = if m == Module::Conversations { i18n::tc("module", label) } else { tl!(label) };
         let count = if m == Module::Conversations { s.teams.unread_badge() } else { None };
         // To a screen reader, the badge is said with the name.
         let said = match &count {
-            Some(n) => format!("{}, {}", tl!(label), tf!("Unread: {n}", n = n)),
-            None => tl!(label).to_string(),
+            Some(n) => tf!("{module}, unread: {n}", module = shown, n = n),
+            None => shown.to_string(),
         };
         widgets::named(ui, &resp, &said, true, Some(on));
         if on || resp.hovered() {
@@ -384,7 +386,7 @@ pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<A
         if let Some(n) = &count {
             badge(ui, t, r, n);
         }
-        if resp.on_hover_text(tl!(label)).clicked() {
+        if resp.on_hover_text(shown).clicked() {
             acts.push(Action::Run("view.module", json!({"name": code})));
         }
     }

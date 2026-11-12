@@ -2201,7 +2201,6 @@ folder	Online Archive	線上封存
 	Announcements begin with a later version	提醒將在之後的版本中提供
 	Only messages sent to me alone or naming me	僅限只寄給我或提到我的訊息
 	A copy made for another account was set aside	為另一個帳戶製作的副本已被放在一旁
-	Delete it	刪除它
 	Signed in as {name} ({address})	已登入為 {name} ({address})
 	Switch Teams on and fill in both IDs first	請先開啟 Teams 並填寫兩個 ID
 	Your sign-in won't be remembered: no keychain is available	你的登入不會被記住：沒有可用的鑰匙圈
@@ -2213,3 +2212,7 @@ folder	Online Archive	線上封存
 	Your conversations are up to date	你的交談已是最新
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle 需要權限 {scope}：請重新登入以接受，或請系統管理員在 Microsoft Entra 中授與系統管理員同意
 	Teams stopped: {why}	Teams 已停止：{why}
+module	Conversations	交談
+	Teams: sign in again to go on	Teams：請重新登入以繼續
+	Delete that copy	刪除那份副本
+	{module}, unread: {n}	{module}，未讀：{n}

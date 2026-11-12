@@ -247,7 +247,7 @@ fn pictures_are_taken_every_frame() {
 
 /// The card, light and dark: its switch, the two ids, the guide, the sign-in, the
 /// announcements; signed in, who and Sign out; the sign-in not remembered; a copy set aside with
-/// Delete it.
+/// Delete that copy.
 #[test]
 fn the_options_card_shows_its_fields_in_light_and_dark() {
     let (mut a, dir, jobs, _) = teams_app("teams-card", false);
@@ -284,14 +284,14 @@ fn the_options_card_shows_its_fields_in_light_and_dark() {
         "Your sign-in won't be remembered: no keychain is available",
         "Copying your conversations… 12 of 40 conversations",
         "A copy made for another account was set aside",
-        "Delete it",
+        "Delete that copy",
     ] {
         assert!(has(&t, wanted), "{wanted}: {t:?}");
     }
     assert!(!t.iter().any(|x| x.contains("Teams-0a1b2c3d")), "no path shown: {t:?}");
-    // Delete it: the worker is asked to delete that copy, and the notice goes.
+    // Delete that copy: the worker is asked to delete that copy, and the notice goes.
     let size = egui::vec2(PAGE.0 as f32, PAGE.1 as f32);
-    let at = settled_text_at(&ctx, &mut a, "Delete it", size).expect("Delete it");
+    let at = settled_text_at(&ctx, &mut a, "Delete that copy", size).expect("Delete that copy");
     click_at(&ctx, &mut a, at, 1, size);
     assert!(jobs.borrow().iter().any(|j| matches!(j, Job::Teams { job: teams::Job::DeleteSetAside { .. } })), "{:?}", jobs.borrow());
     assert!(a.session.teams.set_aside.is_none());
@@ -318,4 +318,20 @@ fn signing_out_asks_whether_to_delete_the_copy() {
         assert!(asked, "{choice}: {:?}", jobs.borrow());
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+/// In Japanese the rail says 会話 (conversations), not the mail's grouping by thread (スレッド).
+#[test]
+fn the_rail_names_conversations_as_the_module_in_japanese() {
+    let (mut a, dir, _, _) = teams_app("teams-rail-ja", true);
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    a.ui.language = "ja".into();
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let seen = labelled(&ctx, &mut a);
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    assert!(seen.iter().any(|(l, x)| l == "会話" && *x < 48.0), "{seen:?}");
+    let _ = std::fs::remove_dir_all(dir);
 }

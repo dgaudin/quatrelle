@@ -2200,7 +2200,6 @@ folder	Online Archive	Онлайн-архив
 	Announcements begin with a later version	Оповещения появятся в следующей версии
 	Only messages sent to me alone or naming me	Только сообщения лично мне или с упоминанием меня
 	A copy made for another account was set aside	Копия для другой учётной записи отложена
-	Delete it	Удалить её
 	Signed in as {name} ({address})	Вход выполнен: {name} ({address})
 	Switch Teams on and fill in both IDs first	Сначала включите Teams и заполните оба идентификатора
 	Your sign-in won't be remembered: no keychain is available	Вход не будет запомнен: связка ключей недоступна
@@ -2212,3 +2211,7 @@ folder	Online Archive	Онлайн-архив
 	Your conversations are up to date	Ваши беседы обновлены
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle нужно разрешение {scope}: войдите снова, чтобы принять его, или попросите администратора дать согласие администратора в Microsoft Entra
 	Teams stopped: {why}	Teams остановлен: {why}
+module	Conversations	Беседы
+	Teams: sign in again to go on	Teams: войдите снова, чтобы продолжить
+	Delete that copy	Удалить эту копию
+	{module}, unread: {n}	{module}, непрочитанных: {n}

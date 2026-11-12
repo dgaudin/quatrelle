@@ -2197,7 +2197,6 @@ folder	Online Archive	オンライン アーカイブ
 	Announcements begin with a later version	通知は今後のバージョンで始まります
 	Only messages sent to me alone or naming me	自分だけに送られた、または自分の名前が入ったメッセージのみ
 	A copy made for another account was set aside	別のアカウント用のコピーを別に保管しました
-	Delete it	削除する
 	Signed in as {name} ({address})	{name} ({address}) としてサインイン中
 	Switch Teams on and fill in both IDs first	先に Teams をオンにして、両方の ID を入力してください
 	Your sign-in won't be remembered: no keychain is available	サインインは記憶されません: キーチェーンがありません
@@ -2209,3 +2208,7 @@ folder	Online Archive	オンライン アーカイブ
 	Your conversations are up to date	会話は最新の状態です
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle には権限 {scope} が必要です: サインインし直して承諾するか、Microsoft Entra で管理者の同意を与えるよう管理者に依頼してください
 	Teams stopped: {why}	Teams が停止しました: {why}
+module	Conversations	会話
+	Teams: sign in again to go on	Teams: 続けるにはサインインし直してください
+	Delete that copy	そのコピーを削除
+	{module}, unread: {n}	{module}、未読: {n}

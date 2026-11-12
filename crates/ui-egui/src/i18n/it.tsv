@@ -2199,7 +2199,6 @@ folder	Online Archive	Archivio online
 	Announcements begin with a later version	Gli annunci arrivano con una versione successiva
 	Only messages sent to me alone or naming me	Solo i messaggi inviati soltanto a me o che mi nominano
 	A copy made for another account was set aside	Una copia fatta per un altro account è stata messa da parte
-	Delete it	Eliminala
 	Signed in as {name} ({address})	Accesso effettuato come {name} ({address})
 	Switch Teams on and fill in both IDs first	Prima attiva Teams e compila entrambi gli ID
 	Your sign-in won't be remembered: no keychain is available	Il tuo accesso non verrà ricordato: nessun portachiavi disponibile
@@ -2211,3 +2210,7 @@ folder	Online Archive	Archivio online
 	Your conversations are up to date	Le tue conversazioni sono aggiornate
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle ha bisogno dell'autorizzazione {scope}: accedi di nuovo per accettarla, o chiedi all'amministratore di concedere il consenso amministratore in Microsoft Entra
 	Teams stopped: {why}	Teams si è fermato: {why}
+module	Conversations	Conversazioni
+	Teams: sign in again to go on	Teams: accedi di nuovo per continuare
+	Delete that copy	Elimina quella copia
+	{module}, unread: {n}	{module}, da leggere: {n}

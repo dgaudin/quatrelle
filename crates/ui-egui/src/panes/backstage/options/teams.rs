@@ -35,7 +35,7 @@ fn status_line(status: &Status) -> Option<(String, bool)> {
         Status::Copying { done, of } => (tf!("Copying your conversations… {done} of {of} conversations", done = done, of = of), false),
         Status::UpToDate => (tl!("Your conversations are up to date").to_string(), false),
         Status::Offline => (tl!("Offline").to_string(), false),
-        Status::SignInAgain => (tl!("Sign in again").to_string(), true),
+        Status::SignInAgain => (tl!("Teams: sign in again to go on").to_string(), true),
         Status::PermissionMissing { scope } => (
             tf!(
                 "Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra",
@@ -96,7 +96,7 @@ pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>
             });
             if s.teams.set_aside.is_some() {
                 setting_row(ui, t, false, name(t, tl!("A copy made for another account was set aside")), None, |ui| {
-                    if ui.button(tl!("Delete it")).clicked() {
+                    if ui.button(tl!("Delete that copy")).clicked() {
                         acts.push(Action::Run("teams.deleteSetAside", json!({})));
                     }
                 });

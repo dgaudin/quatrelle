@@ -2197,7 +2197,6 @@ folder	Online Archive	Online-archief
 	Announcements begin with a later version	Meldingen komen met een latere versie
 	Only messages sent to me alone or naming me	Alleen berichten aan mij alleen of die mij noemen
 	A copy made for another account was set aside	Een kopie voor een ander account is apart gezet
-	Delete it	Verwijderen
 	Signed in as {name} ({address})	Aangemeld als {name} ({address})
 	Switch Teams on and fill in both IDs first	Zet eerst Teams aan en vul beide ID's in
 	Your sign-in won't be remembered: no keychain is available	Je aanmelding wordt niet onthouden: er is geen sleutelhanger beschikbaar
@@ -2209,3 +2208,7 @@ folder	Online Archive	Online-archief
 	Your conversations are up to date	Je gesprekken zijn bijgewerkt
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle heeft de machtiging {scope} nodig: meld je opnieuw aan om ze te aanvaarden, of vraag je beheerder om beheerderstoestemming te geven in Microsoft Entra
 	Teams stopped: {why}	Teams is gestopt: {why}
+module	Conversations	Gesprekken
+	Teams: sign in again to go on	Teams: meld je opnieuw aan om verder te gaan
+	Delete that copy	Die kopie verwijderen
+	{module}, unread: {n}	{module}, ongelezen: {n}

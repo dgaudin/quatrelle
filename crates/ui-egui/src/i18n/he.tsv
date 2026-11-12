@@ -2196,7 +2196,6 @@ folder	Online Archive	ארכיון מקוון
 	Announcements begin with a later version	ההודעות יתחילו בגרסה מאוחרת יותר
 	Only messages sent to me alone or naming me	רק הודעות שנשלחו אליי בלבד או שמזכירות אותי
 	A copy made for another account was set aside	עותק שנעשה עבור חשבון אחר הונח בצד
-	Delete it	מחיקה
 	Signed in as {name} ({address})	מחובר בתור {name} ({address})
 	Switch Teams on and fill in both IDs first	הפעילו קודם את Teams ומלאו את שני המזהים
 	Your sign-in won't be remembered: no keychain is available	הכניסה שלכם לא תיזכר: אין מחזיק מפתחות זמין
@@ -2208,3 +2207,7 @@ folder	Online Archive	ארכיון מקוון
 	Your conversations are up to date	השיחות שלכם מעודכנות
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle צריך את ההרשאה {scope}: היכנסו שוב כדי לאשר אותה, או בקשו ממנהל המערכת להעניק הסכמת מנהל ב-Microsoft Entra
 	Teams stopped: {why}	Teams נעצר: {why}
+module	Conversations	שיחות
+	Teams: sign in again to go on	Teams: היכנסו שוב כדי להמשיך
+	Delete that copy	מחיקת העותק הזה
+	{module}, unread: {n}	{module}, לא נקראו: {n}

@@ -2196,7 +2196,6 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Announcements begin with a later version	تبدأ الإعلامات في إصدار لاحق
 	Only messages sent to me alone or naming me	الرسائل المرسلة إليّ وحدي أو التي تذكرني فقط
 	A copy made for another account was set aside	وُضعت جانباً نسخة مصنوعة لحساب آخر
-	Delete it	حذفها
 	Signed in as {name} ({address})	تم تسجيل الدخول باسم {name} ({address})
 	Switch Teams on and fill in both IDs first	شغّل Teams أولاً واملأ المعرّفين
 	Your sign-in won't be remembered: no keychain is available	لن يُحفظ تسجيل دخولك: لا تتوفر سلسلة مفاتيح
@@ -2208,3 +2207,7 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Your conversations are up to date	محادثاتك محدّثة
 	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	يحتاج Quatrelle إلى الإذن {scope}: سجّل الدخول مجدداً لقبوله، أو اطلب من المسؤول منح موافقة المسؤول في Microsoft Entra
 	Teams stopped: {why}	توقف Teams: {why}
+module	Conversations	المحادثات
+	Teams: sign in again to go on	Teams: سجّل الدخول مجدداً للمتابعة
+	Delete that copy	حذف تلك النسخة
+	{module}, unread: {n}	{module}، غير مقروءة: {n}
