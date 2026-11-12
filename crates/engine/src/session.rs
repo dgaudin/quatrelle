@@ -480,6 +480,7 @@ pub struct Session {
     pub(crate) docs_unread: HashSet<&'static str>,
     /// Webex's sign-in and the meetings on their way.
     pub webex: pim::WebexState,
+    pub teams: pim::TeamsState,
     /// The rooms each account offers for meetings, once asked for (Outlook's Room Finder).
     pub rooms: HashMap<String, scheduling::Fetched<scheduling::RoomFinder>>,
     /// When people and rooms are busy, by (account, address, from, to), once asked for (the
@@ -649,6 +650,7 @@ impl Session {
             rooms: HashMap::new(),
             free_busy: HashMap::new(),
             webex: pim::WebexState::default(),
+            teams: pim::TeamsState::default(),
             module: pim::Module::Mail,
             cal_mode: pim::CalMode::Week,
             cal_day: None,
@@ -708,6 +710,7 @@ impl Session {
                 s.jobs.push(Job::Start { account: a.config.clone(), password: None });
             }
         }
+        s.teams_start();
         // Counted again on opening, unless big: a big data file's counts were kept as it came in
         // and with every change since (counting meant reading its every folder's list).
         for id in &local {

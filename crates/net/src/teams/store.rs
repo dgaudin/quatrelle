@@ -441,6 +441,39 @@ impl Copy {
         }
         failed.map_or(Ok(()), Err)
     }
+
+    /// [`Job::DeleteSetAside`](quatrelle_model::pim::teams::Job::DeleteSetAside): the copy set
+    /// aside for the user at `path` deleted, as they chose. Only a file of the data files' folder
+    /// named as [`Copy::open`] names one ([`set_aside_name`]): any other path (another folder, a
+    /// `..`, another name) is refused. `false`: refused, or already gone.
+    pub(crate) fn delete_set_aside(store: &Store, path: &str) -> Result<bool> {
+        let path = std::path::Path::new(path);
+        let Some(dir) = store.data_files_dir() else { return Ok(false) };
+        let named = path.file_name().and_then(|n| n.to_str()).is_some_and(set_aside_name);
+        if !named || path.parent() != Some(dir.as_path()) {
+            return Ok(false);
+        }
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(StoreError::Io { path: path.display().to_string(), source: e }),
+        }
+    }
+}
+
+/// Whether `name` is one [`Copy::open`] sets a copy aside under: `Teams-<8 hex digits>.quatrelle.old`,
+/// or with ` (2)` … ` (99)` after the digits when that name was taken.
+fn set_aside_name(name: &str) -> bool {
+    let tail = format!(".{DATA_FILE_EXTENSION}.old");
+    let Some(rest) = name.strip_prefix(TEAMS_ACCOUNT).and_then(|n| n.strip_prefix('-')).and_then(|n| n.strip_suffix(tail.as_str())) else {
+        return false;
+    };
+    let (Some(hash), Some(n)) = (rest.get(..8), rest.get(8..)) else { return false };
+    hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        && (n.is_empty()
+            || n.strip_prefix(" (")
+                .and_then(|n| n.strip_suffix(')'))
+                .is_some_and(|n| (1..=2).contains(&n.len()) && n.bytes().all(|b| b.is_ascii_digit())))
 }
 
 /// The most entries looked at in the folder of the data files.

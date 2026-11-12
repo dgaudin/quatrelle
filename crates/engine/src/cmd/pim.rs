@@ -10,18 +10,22 @@ pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
         // Accounts
         // Calendar and People
-        CommandSpec::new("view.module", "Mail, Calendar, People, Tasks or Notes", "Navigation", |s, v| {
+        CommandSpec::new("view.module", "Mail, Calendar, People, Tasks, Notes or Conversations", "Navigation", |s, v| {
             s.module = match p::req_str(v, "name")? {
                 "mail" => crate::Module::Mail,
                 "calendar" => crate::Module::Calendar,
                 "people" => crate::Module::People,
                 "notes" => crate::Module::Notes,
                 "tasks" => crate::Module::Tasks,
+                "conversations" if !(s.prefs.teams.on && s.prefs.teams.signed_in) => {
+                    return Err(CmdError::Disabled("switch Teams on and sign in, in File › Options › Teams, first".into()));
+                }
+                "conversations" => crate::Module::Conversations,
                 other => return Err(CmdError::Params(format!("unknown module `{other}`"))),
             };
             Ok(json!({"module": s.module}))
         })
-        .params(r#"{"name": "mail"|"calendar"|"people"|"tasks"|"notes"}"#),
+        .params(r#"{"name": "mail"|"calendar"|"people"|"tasks"|"notes"|"conversations" (Teams on and signed in)}"#),
         // Outlook's keys for its modules: Ctrl+1 Mail, Ctrl+2 Calendar, Ctrl+3 People, Ctrl+4
         // Tasks, Ctrl+5 Notes.
         CommandSpec::new("view.mail", "Mail", "Navigation", |s, _| {

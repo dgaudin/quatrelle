@@ -550,3 +550,34 @@ fn a_copy_whose_chats_cant_be_listed_isnt_deleted() {
     s.fail(None, None);
     assert_eq!(s.account_files(TEAMS_ACCOUNT, "chats").unwrap().len(), 1, "still there");
 }
+
+#[test]
+fn only_a_copy_set_aside_is_deleted_by_its_path() {
+    let t = temp("delete-aside");
+    let s = Store::open_packed(t.join("app"), t.join("files")).unwrap();
+    let (c, _) = Copy::open(s.clone(), &who("u-1")).unwrap();
+    c.put_chat(&ChatRecord::new(chat(A))).unwrap();
+    drop(c);
+    let (c, opened) = Copy::open(s.clone(), &who("u-2")).unwrap();
+    let Opened::SetAside(aside) = opened else { panic!("{opened:?}") };
+    let file = s.data_file(TEAMS_ACCOUNT).unwrap();
+    // What isn't a copy set aside stays: the copy in use, another name, another folder, a way out.
+    let elsewhere = t.join("Teams-0123abcd.quatrelle.old");
+    std::fs::write(&elsewhere, b"x").unwrap();
+    let other = t.join("files").join("Notes-0123abcd.quatrelle.old");
+    std::fs::write(&other, b"x").unwrap();
+    let name = aside.file_name().unwrap().to_string_lossy().into_owned();
+    let around = t.join("files").join("..").join("files").join(&name);
+    for p in [file.clone(), elsewhere.clone(), other.clone(), around, t.join("files").join("Teams-0123ABCD.quatrelle.old")] {
+        assert!(!Copy::delete_set_aside(&s, &p.display().to_string()).unwrap(), "{}", p.display());
+    }
+    assert!(file.exists() && elsewhere.exists() && other.exists() && aside.exists());
+    assert!(Copy::delete_set_aside(&s, &aside.display().to_string()).unwrap());
+    assert!(!aside.exists());
+    assert!(!Copy::delete_set_aside(&s, &aside.display().to_string()).unwrap(), "gone already");
+    let numbered = t.join("files").join("Teams-0123abcd (2).quatrelle.old");
+    std::fs::write(&numbered, b"x").unwrap();
+    assert!(Copy::delete_set_aside(&s, &numbered.display().to_string()).unwrap());
+    assert!(c.chats().is_empty());
+    let _ = std::fs::remove_dir_all(&t);
+}

@@ -339,6 +339,7 @@ impl Worker {
             Job::Visible { users } => pictures::visible(self, users),
             Job::Picture { picture } => pictures::picture(self, picture),
             Job::Search { query } => search::search(self, query),
+            Job::DeleteSetAside { path } => self.delete_set_aside(&path),
         }
     }
 

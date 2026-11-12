@@ -335,6 +335,18 @@ impl Worker {
         }
     }
 
+    /// [`Job::DeleteSetAside`]: a copy set aside deleted, as the user chose; a failure is said.
+    pub(super) fn delete_set_aside(&mut self, path: &str) {
+        match Copy::delete_set_aside(&self.store, path) {
+            Ok(true) => log::info!("teams: a copy set aside was deleted"),
+            Ok(false) => log::warn!("teams: no copy set aside there to delete"),
+            Err(e) => {
+                log::error!("teams: a copy set aside couldn't be deleted: {}", store_kind(&e));
+                (self.emit)(Event::Notice { account: String::new(), message: "Teams: the copy set aside couldn't be deleted".into() });
+            }
+        }
+    }
+
     /// [`Job::Start`]: go on from the sign-in kept (Quatrelle starting, signed in before). The
     /// copy is opened at once, to be read with or without a network; Graph is asked at the first
     /// turn ([`Worker::ready`]). No sign-in kept: "sign in again", with the copy open to read;

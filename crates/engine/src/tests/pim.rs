@@ -6,6 +6,7 @@
 use super::*;
 
 mod notes;
+mod teams;
 
 #[test]
 fn calendar_events_on_this_computer() {

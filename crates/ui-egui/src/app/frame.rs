@@ -478,6 +478,8 @@ impl MailApp {
                     Module::People => people::nav(&self.session, &mut self.ui, ui, &mut acts),
                     Module::Notes => notes::nav(&self.session, &mut self.ui, ui, &mut acts),
                     Module::Tasks => tasks::nav(&self.session, &mut self.ui, ui, &mut acts),
+                    // Its list is drawn with the module's panes.
+                    Module::Conversations => {}
                 }
             });
             // Dragged narrower than it goes: minimized, as the button does.
@@ -517,6 +519,9 @@ impl MailApp {
                     egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
                         tasks::show(&self.session, &mut self.ui, ui, &mut acts);
                     });
+                }
+                (Module::Conversations, _) => {
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |_| {});
                 }
                 (Module::Mail, pane) => match pane {
                     ReadingPane::Right => {

@@ -252,6 +252,10 @@ pub struct Prefs {
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub scam_accounts: BTreeSet<String>,
     pub scam_daily_cap: u32,
+    /// File › Options › Teams. Read from the settings as saved; at first (none saved), off with
+    /// the ids of a local build.
+    #[serde(skip_serializing_if = "quatrelle_model::pim::teams::TeamsSettings::is_default")]
+    pub teams: quatrelle_model::pim::teams::TeamsSettings,
 }
 
 impl Default for Prefs {
@@ -324,6 +328,7 @@ impl Default for Prefs {
             scam_check: false,
             scam_accounts: BTreeSet::new(),
             scam_daily_cap: crate::session::DEFAULT_CAP,
+            teams: super::pim::default_teams_settings(),
             quick_steps: Vec::new(),
             quick_steps_seeded: false,
             folder_pane_minimized: false,

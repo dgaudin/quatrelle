@@ -259,6 +259,7 @@ fn every_payload_round_trips_through_json() {
         teams::Job::Search { query: "plan".into() },
         teams::Job::Picture { picture: Picture::Photo { user: "u2".into() } },
         teams::Job::Picture { picture: Picture::Outside { url: "https://contoso.example/a.png".into() } },
+        teams::Job::DeleteSetAside { path: "/data/Teams-0123abcd.quatrelle.old".into() },
     ];
     for job in jobs {
         let j = Job::Teams { job };

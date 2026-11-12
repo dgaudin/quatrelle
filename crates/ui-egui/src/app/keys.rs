@@ -240,6 +240,8 @@ impl MailApp {
             }
             Module::People => self.ui.dialog = Some(Dialog::new_contact()),
             Module::Tasks => self.ui.tasks.focus_new = true,
+            // No new conversation from Quatrelle yet.
+            Module::Conversations => {}
             Module::Notes => {
                 let mut acts = Vec::new();
                 notes::new_note(&mut acts);

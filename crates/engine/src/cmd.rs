@@ -68,6 +68,8 @@ pub(crate) fn leaves_body_waiting(id: &str) -> bool {
             | "view.folderPane"
             | "compose.update"
     ) || id.starts_with("list.extend")
+        // Teams is the worker's: nothing of the mail is read or changed.
+        || id.starts_with("teams.")
 }
 
 /// Commands that don't finish the local accounts' marks still being written on another thread
@@ -129,6 +131,7 @@ mod policy;
 mod scheduling;
 mod security;
 mod tasks;
+mod teams;
 mod view;
 mod webex;
 
@@ -153,6 +156,7 @@ pub fn registry() -> Registry {
     all.extend(tasks::commands());
     all.extend(accounts::commands());
     all.extend(webex::commands());
+    all.extend(teams::commands());
     Registry::new(all)
 }
 

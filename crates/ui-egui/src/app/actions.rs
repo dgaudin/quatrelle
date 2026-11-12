@@ -75,6 +75,8 @@ impl MailApp {
             Module::People => tl!("People").to_string(),
             Module::Notes => tl!("Notes").to_string(),
             Module::Tasks => tl!("Tasks").to_string(),
+            // Drawn with the module's panes.
+            Module::Conversations => String::new(),
         };
         let base = tl!(&self.ui.title_base).to_string();
         let title = if self.session.view == quatrelle_engine::View::Empty {

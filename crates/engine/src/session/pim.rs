@@ -26,6 +26,7 @@ mod people;
 mod reminders;
 mod syncing;
 mod tasks;
+mod teams;
 pub(crate) mod web;
 mod webex;
 
@@ -44,6 +45,10 @@ pub use opened::{MAX_FILE_CARDS, MAX_FILE_EVENTS};
 pub use people::Person;
 pub use reminders::DueReminder;
 pub use tasks::{TaskChange, TaskRef};
+pub(crate) use teams::default_settings as default_teams_settings;
+#[cfg(test)]
+pub(crate) use teams::row_scans as teams_row_scans;
+pub use teams::{PICTURE_BYTES_MAX, PICTURES_MAX, PRESENCE_MAX, TEAMS_HITS_MAX, TeamsFound, TeamsState};
 pub use webex::{WebexAsk, WebexState};
 
 /// The part of the app on screen.
@@ -58,6 +63,8 @@ pub enum Module {
     Notes,
     /// Outlook's Tasks.
     Tasks,
+    /// Teams chats: shown only while Teams is on and signed in (else Mail is).
+    Conversations,
 }
 
 /// How much of the calendar is shown.

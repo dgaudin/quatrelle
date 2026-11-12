@@ -29,6 +29,9 @@ pub enum Job {
     Search { query: String },
     /// Read a picture; answered by [`Event::Picture`].
     Picture { picture: Picture },
+    /// Delete the copy [`Event::SetAside`] said was set aside at `path` (the user's choice); a
+    /// path that isn't one the worker sets a copy aside under is refused.
+    DeleteSetAside { path: String },
 }
 
 /// What the Teams worker reports.
