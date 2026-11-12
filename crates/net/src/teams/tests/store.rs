@@ -262,7 +262,7 @@ fn a_deleted_message_keeps_only_its_id_times_and_sender() {
     assert_eq!(c.last_pages(A, 2), [bare, msg(A, 2)]);
     assert_eq!(c.hosted(A, &m.id, "h1"), None);
     assert_eq!(s.account_file(TEAMS_ACCOUNT, &imgref_key(A, &m.id, "h1")).unwrap(), None);
-    assert!(s.account_files(TEAMS_ACCOUNT, "img").is_empty(), "the picture's bytes go too");
+    assert!(s.account_files(TEAMS_ACCOUNT, "img").unwrap().is_empty(), "the picture's bytes go too");
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn pages_that_dont_hold_together_start_the_chat_again() {
     // What it had goes as the first message comes in again.
     c.upsert(A, &[msg(A, 7)]).unwrap();
     assert_eq!(all_back(&c, A), [7]);
-    assert_eq!(s.account_files(TEAMS_ACCOUNT, &format!("msgs/{}", chat_hash(A))).len(), 1);
+    assert_eq!(s.account_files(TEAMS_ACCOUNT, &format!("msgs/{}", chat_hash(A))).unwrap().len(), 1);
 }
 
 #[test]
@@ -330,7 +330,7 @@ fn a_message_without_a_usable_id_is_never_stored() {
     let bad: Vec<ChatMessage> = ids.iter().map(|id| ChatMessage { id: id.clone(), ..unreadable.clone() }).collect();
     assert!(c.upsert(A, &bad).unwrap().is_empty());
     assert!(c.last_pages(A, 2).is_empty());
-    assert!(s.account_files(TEAMS_ACCOUNT, &format!("msgs/{}", chat_hash(A))).is_empty());
+    assert!(s.account_files(TEAMS_ACCOUNT, &format!("msgs/{}", chat_hash(A))).unwrap().is_empty());
     // Nor a chat, nor a picture.
     assert!(c.put_chat(&ChatRecord::new(chat(""))).is_err());
     assert!(c.put_hosted(A, "", "h1", b"x").is_err());
@@ -388,4 +388,148 @@ fn the_fuzz_entry_reaches_the_pages() {
     for junk in [&b""[..], b"\0\0\0", b"19:x\0chats/=.json\0{\"chat\":1}", b"\0..\0x\0/abs\0y"] {
         assert_eq!(crate::teams::fuzz_teams_copy(junk), Ok(()));
     }
+}
+
+/// Fix round 1: messages made in the same millisecond are never parted by a page's edge, so the
+/// page before a window holds every one made before the window's first.
+#[test]
+fn equal_creation_times_never_straddle_a_page() {
+    let (c, _) = copy();
+    // 199 a minute apart, three in the same millisecond at 199 (where a full page would end),
+    // then 100 more: 302 in one go.
+    let mut all: Vec<ChatMessage> = (0..199).map(|i| msg(A, i)).collect();
+    for id in ["199a", "199b", "199c"] {
+        all.push(ChatMessage { id: id.into(), ..msg(A, 199) });
+    }
+    all.extend((200..300).map(|i| msg(A, i)));
+    c.upsert(A, &all).unwrap();
+    let mut want: Vec<i64> = (0..199).collect();
+    want.extend([199, 199, 199]);
+    want.extend(200..300);
+    assert_eq!(all_back(&c, A), want, "each once, none hidden by the page's edge");
+    // And when the history comes backwards, one at a time.
+    let (c, _) = copy();
+    for m in all.iter().rev() {
+        c.upsert(A, std::slice::from_ref(m)).unwrap();
+    }
+    assert_eq!(all_back(&c, A), want);
+}
+
+/// Fix round 1: what's read back from the file is held to the rules Graph's reader holds what
+/// comes in to: names on one line, every id usable.
+#[test]
+fn what_is_read_back_keeps_the_readers_rules() {
+    use quatrelle_model::pim::teams::{Member, Preview, one_line};
+    let (c, s) = copy();
+    let long = "x".repeat(MAX_ID + 1);
+    let member =
+        |id: &str, name: &str| Member { user_id: id.into(), name: name.into(), kind: "aadUserConversationMember".into(), ..Member::default() };
+    let topic = format!("Plan\n\u{202E}lacitirc {}", "y".repeat(200));
+    let user = |id: &str, name: &str| Sender::User { id: id.into(), name: name.into(), identity_type: None, tenant_id: None };
+    let mut r = ChatRecord::new(chat(A));
+    r.chat.topic = Some(topic.clone());
+    r.chat.members = vec![member("", "Nobody"), member("u-ok", "Ana\u{202E}\nLima"), member(&long, "Long")];
+    r.chat.preview = Some(Preview { sender: user("u-ok", "Ana\u{7}"), text: "hi\n\tthere".into(), at: T0 });
+    r.pages = vec![T0];
+    r.page_keys = vec![0];
+    let mut m = msg(A, 0);
+    m.sender = user("u-ok", "Ana\u{202E} Lima");
+    m.mentions = vec![Mention { id: 0, text: "Paul\nx".into(), user_id: Some(long.clone()) }];
+    m.reactions = vec![Reaction { emoji: "👍".into(), users: vec!["u-ok".into(), String::new(), long.clone()] }];
+    m.attachments = vec![
+        Attachment::File { id: String::new(), name: "a".into(), url: "https://contoso.example/a".into(), size: None },
+        Attachment::Hosted { id: long.clone() },
+        Attachment::Hosted { id: "h1".into() },
+        Attachment::Card,
+    ];
+    m.body.blocks[0].runs.push(Run { text: String::new(), hosted: Some(long.clone()), ..Default::default() });
+    let nobody = ChatMessage { sender: user("", "Ghost"), ..msg(A, 1) };
+    let page = serde_json::json!({ "chat": A, "messages": [m, nobody] });
+    s.write_account_files(
+        TEAMS_ACCOUNT,
+        &[
+            (format!("chats/{}.json", chat_hash(A)), serde_json::to_vec(&r).unwrap()),
+            (format!("msgs/{}/0.json", chat_hash(A)), serde_json::to_vec(&page).unwrap()),
+        ],
+    )
+    .unwrap();
+    for back in [c.chat(A).unwrap(), c.chats().remove(0)] {
+        assert_eq!(back.chat.topic, Some(one_line(&topic)));
+        assert_eq!(back.chat.members, [member("u-ok", "Ana Lima")]);
+        let p = back.chat.preview.unwrap();
+        assert_eq!((p.sender, p.text), (user("u-ok", "Ana"), "hi there".to_string()));
+    }
+    let read = c.last_pages(A, 2);
+    let [m, nobody] = read.as_slice() else { panic!("{read:?}") };
+    assert_eq!(m.sender, user("u-ok", "Ana Lima"));
+    assert_eq!(m.mentions, [Mention { id: 0, text: "Paul x".into(), user_id: None }]);
+    assert_eq!(m.reactions[0].users, ["u-ok"]);
+    assert_eq!(m.attachments, [Attachment::Hosted { id: "h1".into() }, Attachment::Card]);
+    assert_eq!(m.body.blocks[0].runs[1].hosted, None);
+    assert_eq!(nobody.sender, Sender::Nobody, "a sender without a usable id is no one");
+}
+
+/// Fix round 1: a run planted in the file far past the cap is cut without an index of each of
+/// its characters (the reading's peak memory stays near the file's size). Linux only, and run
+/// alone (`-- --ignored`): it reads the process's peak memory.
+#[test]
+#[ignore = "reads the process's peak memory: run alone with --ignored"]
+#[cfg(target_os = "linux")]
+fn a_huge_run_in_the_file_is_cut_without_a_copy_per_character() {
+    let peak = || {
+        let status = std::fs::read_to_string("/proc/self/status").unwrap();
+        let line = status.lines().find(|l| l.starts_with("VmHWM:")).unwrap();
+        line.split_whitespace().nth(1).unwrap().parse::<u64>().unwrap() << 10
+    };
+    let (c, s) = copy();
+    let mut r = c.chat(A).unwrap();
+    r.pages = vec![T0];
+    r.page_keys = vec![0];
+    let mut m = msg(A, 0);
+    m.body = ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "é".repeat(8 << 20), ..Default::default() }] }] };
+    let page = serde_json::to_vec(&serde_json::json!({ "chat": A, "messages": [m] })).unwrap();
+    s.write_account_files(
+        TEAMS_ACCOUNT,
+        &[(format!("chats/{}.json", chat_hash(A)), serde_json::to_vec(&r).unwrap()), (format!("msgs/{}/0.json", chat_hash(A)), page)],
+    )
+    .unwrap();
+    drop(m);
+    std::fs::write("/proc/self/clear_refs", "5").unwrap();
+    let before = peak();
+    let read = c.last_pages(A, 2);
+    let grown = peak().saturating_sub(before);
+    assert!(serde_json::to_vec(&read[0].body).unwrap().len() <= MAX_BODY);
+    // 8 Mi characters, 16 MiB: an index of them would be 64 MiB more.
+    assert!(grown < 56 << 20, "the read grew by {} MiB", grown >> 20);
+}
+
+/// Fix round 1: what a deleted message showed goes before its page is written: a write that
+/// fails leaves no picture of it behind (the next read of the deletion writes the page).
+#[test]
+fn a_deleted_messages_picture_goes_even_when_its_page_cant_be_written() {
+    let s = Store::failing();
+    let (c, _) = Copy::open(s.clone(), &who("u-1")).unwrap();
+    c.put_chat(&ChatRecord::new(chat(A))).unwrap();
+    let mut m = msg(A, 1);
+    m.attachments = vec![Attachment::Hosted { id: "h1".into() }];
+    c.upsert(A, std::slice::from_ref(&m)).unwrap();
+    c.put_hosted(A, &m.id, "h1", b"the picture").unwrap();
+    s.fail(None, Some(".json"));
+    let gone = ChatMessage { deleted: Some(T0 + 5 * MINUTE), ..m.clone() };
+    assert!(c.upsert(A, &[gone]).is_err());
+    assert_eq!(c.hosted(A, &m.id, "h1"), None);
+    s.fail(None, None);
+    assert!(s.account_files(TEAMS_ACCOUNT, "img").unwrap().is_empty());
+}
+
+/// Fix round 1: a copy whose chats can't be listed is neither read nor deleted: opening it fails.
+#[test]
+fn a_copy_whose_chats_cant_be_listed_isnt_deleted() {
+    let s = Store::failing();
+    let record = serde_json::to_vec(&ChatRecord::new(chat(A))).unwrap();
+    s.write_account_files(TEAMS_ACCOUNT, &[(format!("chats/{}.json", chat_hash(A)), record)]).unwrap();
+    s.fail(Some("chats"), None);
+    assert!(Copy::open(s.clone(), &who("u-1")).is_err());
+    s.fail(None, None);
+    assert_eq!(s.account_files(TEAMS_ACCOUNT, "chats").unwrap().len(), 1, "still there");
 }

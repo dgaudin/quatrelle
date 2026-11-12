@@ -567,21 +567,25 @@ impl Packs {
         }
     }
 
-    /// The files directly in a folder, by name.
-    pub(crate) fn list(&self, dir: &Path) -> Vec<(String, PathBuf)> {
+    /// The files directly in a folder, by name; an error when its data file can't be read.
+    pub(crate) fn try_list(&self, dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
         let (a, k) = match self.place(dir) {
             Place::In(a, k) => (a, k),
             Place::Account(a) => (a, String::new()),
             Place::Disk => {
-                let Ok(rd) = fs::read_dir(dir) else { return Vec::new() };
-                return rd
+                let rd = match fs::read_dir(dir) {
+                    Ok(rd) => rd,
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+                    Err(e) => return Err(e),
+                };
+                return Ok(rd
                     .filter_map(|e| e.ok())
                     .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
                     .filter_map(|e| Some((e.file_name().to_str()?.to_string(), e.path())))
-                    .collect();
+                    .collect());
             }
         };
-        self.children(&a, &k).map(|(names, _)| names).unwrap_or_default().into_iter().map(|name| (name.clone(), dir.join(name))).collect()
+        Ok(self.children(&a, &k)?.0.into_iter().map(|name| (name.clone(), dir.join(name))).collect())
     }
 
     /// Every file under a folder (an account's: all of its data file), at any depth.

@@ -18,7 +18,7 @@
 
 use std::path::PathBuf;
 
-use quatrelle_model::pim::teams::{Attachment, Chat, ChatMessage, MAX_ID, MAX_MEMBERS, MAX_PICTURE, TEAMS_ACCOUNT};
+use quatrelle_model::pim::teams::{Attachment, Chat, ChatMessage, MAX_ID, MAX_MEMBERS, MAX_PICTURE, Sender, TEAMS_ACCOUNT, one_line};
 use quatrelle_store::{DATA_FILE_EXTENSION, Result, Store, StoreError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -116,7 +116,20 @@ impl ChatRecord {
     /// numbers as times, out of order, a number twice or past [`MAX_PAGE_KEY`]) can't be found
     /// again: the chat's copy starts again from the server.
     fn held(mut self) -> ChatRecord {
-        self.chat.members.truncate(MAX_MEMBERS);
+        // As Graph's reader keeps them: ids usable, names and topic on one line.
+        let c = &mut self.chat;
+        c.topic = c.topic.take().map(|t| one_line(&t)).filter(|t| !t.is_empty());
+        c.members.retain(|m| id_ok(&m.user_id));
+        c.members.truncate(MAX_MEMBERS);
+        for m in &mut c.members {
+            m.name = one_line(&m.name);
+            m.tenant_id = m.tenant_id.take().filter(|t| id_ok(t));
+        }
+        if let Some(p) = c.preview.as_mut() {
+            hold_sender(&mut p.sender);
+            p.text = one_line(&p.text);
+        }
+        c.tenant_id = c.tenant_id.take().filter(|t| id_ok(t));
         if self.next_link.as_ref().is_some_and(|l| l.len() > MAX_LINK) {
             self.next_link = None;
         }
@@ -179,6 +192,28 @@ fn refused(what: &str) -> StoreError {
     StoreError::Io { path: TEAMS_ACCOUNT.to_string(), source: std::io::Error::new(std::io::ErrorKind::InvalidInput, what.to_string()) }
 }
 
+/// A sender as Graph's reader keeps one: a usable id (else no one), the name on one line.
+fn hold_sender(s: &mut Sender) {
+    match s {
+        Sender::User { id, name, identity_type, tenant_id } if id_ok(id) => {
+            *name = one_line(name);
+            *identity_type = identity_type.take().filter(|t| id_ok(t));
+            *tenant_id = tenant_id.take().filter(|t| id_ok(t));
+        }
+        Sender::App { id, name } if id_ok(id) => *name = one_line(name),
+        Sender::Nobody => {}
+        _ => *s = Sender::Nobody,
+    }
+}
+
+/// Whether a sender is as [`hold_sender`] keeps one.
+fn sender_ok(s: &Sender) -> bool {
+    match s {
+        Sender::User { id, name, .. } | Sender::App { id, name } => id_ok(id) && one_line(name) == *name,
+        Sender::Nobody => true,
+    }
+}
+
 /// The hosted images a message shows or carries.
 fn hosted_ids(m: &ChatMessage) -> Vec<String> {
     let mut ids: Vec<String> = m.attachments.iter().filter_map(|a| if let Attachment::Hosted { id } = a { Some(id.clone()) } else { None }).collect();
@@ -206,7 +241,7 @@ impl Copy {
                 Err(_) => Some(hash32(bytes)),
             },
             // Nothing says whose it is: kept aside only when it holds chats.
-            None if !copy.store.account_files(TEAMS_ACCOUNT, "chats").is_empty() => Some(hash32(b"")),
+            None if !copy.store.account_files(TEAMS_ACCOUNT, "chats")?.is_empty() => Some(hash32(b"")),
             None => None,
         };
         let opened = match whose {
@@ -293,7 +328,13 @@ impl Copy {
 
     /// Every chat in the copy, at most [`quatrelle_model::pim::teams::MAX_CHATS`].
     pub(crate) fn chats(&self) -> Vec<ChatRecord> {
-        let mut names = self.store.account_files(TEAMS_ACCOUNT, "chats");
+        let mut names = match self.store.account_files(TEAMS_ACCOUNT, "chats") {
+            Ok(names) => names,
+            Err(_) => {
+                log::warn!("Teams copy: its chats couldn't be listed");
+                return Vec::new();
+            }
+        };
         names.sort();
         names
             .iter()
@@ -380,7 +421,11 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     let who = Identity { tenant_id: "t-1".into(), object_id: "u-1".into() };
     let Ok((copy, _)) = Copy::open(Store::memory_from(files), &who) else { return Ok(()) };
     for r in copy.chats().iter().chain(copy.chat(&chat).as_ref()) {
-        let fits = id_ok(&r.chat.id) && r.chat.members.len() <= MAX_MEMBERS && r.pages.len() == r.page_keys.len();
+        let c = &r.chat;
+        let lines = c.topic.as_deref().is_none_or(|t| one_line(t) == t)
+            && c.members.iter().all(|m| id_ok(&m.user_id) && one_line(&m.name) == m.name)
+            && c.preview.as_ref().is_none_or(|p| sender_ok(&p.sender) && one_line(&p.text) == p.text);
+        let fits = id_ok(&c.id) && c.members.len() <= MAX_MEMBERS && r.pages.len() == r.page_keys.len() && lines;
         if !fits {
             return Err(format!("a chat read back past its caps: {} members, {} pages", r.chat.members.len(), r.pages.len()));
         }

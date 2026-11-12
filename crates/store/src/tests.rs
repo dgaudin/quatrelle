@@ -733,7 +733,9 @@ fn set_aside_closes_and_renames_the_data_file() {
     drop(s);
     let s = Store::open_packed(t.join("app"), t.join("files")).unwrap();
     assert!(s.load_account_doc::<Vec<i32>>("a1", "doc.json").unwrap().is_empty());
-    for bad in ["", "..", "../x.old", "a/b.old", "c:x", "a\u{0}b"] {
+    // Nor a name Windows keeps for a device, whatever follows its first dot, nor one ending in a
+    // dot or a space (Windows drops them).
+    for bad in ["", "..", "../x.old", "a/b.old", "c:x", "a\u{0}b", "CON", "nul.quatrelle.old", "Com1.x", "LPT9", "lpt¹.old", "a.old.", "a.old "] {
         assert!(s.set_aside_data_file("a1", bad).is_err(), "{bad:?}");
     }
     assert_eq!(Store::memory().set_aside_data_file("a1", "a1.old").unwrap(), None, "a cache without data files");
@@ -753,17 +755,32 @@ fn an_accounts_files_by_their_place() {
         s.write_account_files("T", &files.map(|(k, v)| (k.to_string(), v.as_bytes().to_vec()))).unwrap();
         assert_eq!(s.account_file("T", "chats/b.json").unwrap().as_deref(), Some(&b"3"[..]));
         assert_eq!(s.account_file("T", "chats/c.json").unwrap(), None);
-        let mut chats = s.account_files("T", "chats");
+        let mut chats = s.account_files("T", "chats").unwrap();
         chats.sort();
         assert_eq!(chats, ["a.json", "b.json"]);
-        assert_eq!(s.account_files("T", ""), ["top.json"], "files only, not the folders");
+        assert_eq!(s.account_files("T", "").unwrap(), ["top.json"], "files only, not the folders");
         s.remove_account_files("T", "msgs/a").unwrap();
         s.remove_account_files("T", "chats/a.json").unwrap();
         s.remove_account_files("T", "nothing/here").unwrap();
-        assert!(s.account_files("T", "msgs/a").is_empty() && s.account_files("T", "chats") == ["b.json"]);
+        assert!(s.account_files("T", "msgs/a").unwrap().is_empty() && s.account_files("T", "chats").unwrap() == ["b.json"]);
         for bad in ["", "../x", "a//b", "/abs", "a/./b", "a b"] {
             assert!(s.account_file("T", bad).is_err() && s.write_account_files("T", &[(bad.to_string(), vec![])]).is_err(), "{bad:?}");
         }
     }
     let _ = fs::remove_dir_all(&t);
+}
+
+/// A listing that fails says so: an account's folder that can't be listed isn't taken for empty.
+#[test]
+fn a_listing_that_fails_is_an_error() {
+    let s = Store::failing();
+    s.write_account_files("T", &[("chats/a.json".into(), b"1".to_vec())]).unwrap();
+    s.fail(Some("chats"), None);
+    assert!(s.account_files("T", "chats").is_err());
+    s.fail(None, None);
+    assert_eq!(s.account_files("T", "chats").unwrap(), ["a.json"]);
+    // Names that are fine still go aside under them.
+    for fine in ["CONSOLE.old", "COM10.old", "Teams-1a2b3c4d.quatrelle.old"] {
+        assert!(Store::memory().set_aside_data_file("a1", fine).is_ok(), "{fine}");
+    }
 }

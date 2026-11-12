@@ -20,7 +20,8 @@ impl Store {
         }
     }
 
-    /// An account's data file closed and renamed, in its folder, to `new_name` (a plain file name;
+    /// An account's data file closed and renamed, in its folder, to `new_name` (a plain file name,
+    /// not one Windows keeps for a device nor ending in a dot or a space;
     /// one taken already gets ` (2)`, ` (3)`… before its first dot): kept for the user, never
     /// opened again as the account's, which starts a file of its own when next written. Where it
     /// went; `None` when the account has none (online only, a cache that keeps no data files, or
@@ -28,7 +29,8 @@ impl Store {
     pub fn set_aside_data_file(&self, account: &str, new_name: &str) -> Result<Option<PathBuf>> {
         let plain = !new_name.is_empty()
             && new_name.len() <= 200
-            && !matches!(new_name, "." | "..")
+            && !new_name.ends_with(['.', ' '])
+            && !reserved_by_windows(new_name)
             && !new_name.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*'));
         if !plain {
             return Err(StoreError::Io { path: new_name.to_string(), source: io::Error::new(io::ErrorKind::InvalidInput, "not a plain file name") });
@@ -100,9 +102,10 @@ impl Store {
     }
 
     /// The names of the files directly in a folder of an account (its place, `""` for its own).
-    pub fn account_files(&self, account: &str, folder: &str) -> Vec<String> {
-        let dir = if folder.is_empty() { Ok(self.account_dir(account)) } else { self.inner(account, folder) };
-        dir.map(|d| self.files.list(&d).into_iter().map(|(name, _)| name).collect()).unwrap_or_default()
+    pub fn account_files(&self, account: &str, folder: &str) -> Result<Vec<String>> {
+        let dir = if folder.is_empty() { self.account_dir(account) } else { self.inner(account, folder)? };
+        let listed = self.files.try_list(&dir).map_err(io_err(&dir))?;
+        Ok(listed.into_iter().map(|(name, _)| name).collect())
     }
 
     /// A place inside an account, when it's made of plain names.
@@ -433,6 +436,18 @@ impl Store {
         *n = n.saturating_add(1);
         removals
     }
+}
+
+/// Whether Windows keeps a file name for a device (`CON`, `nul.txt`, `COM1.log`, `LPT¹`…): only
+/// the part before the first dot counts. As `quatrelle_mime::files` makes names safe.
+fn reserved_by_windows(name: &str) -> bool {
+    let base = name.split('.').next().unwrap_or_default().trim_end().to_uppercase();
+    if ["AUX", "CON", "CONIN$", "CONOUT$", "NUL", "PRN"].contains(&base.as_str()) {
+        return true;
+    }
+    let port = base.strip_prefix("COM").or_else(|| base.strip_prefix("LPT"));
+    let mut digit = port.unwrap_or_default().chars();
+    port.is_some() && matches!((digit.next(), digit.next()), (Some('0'..='9' | '¹' | '²' | '³'), None))
 }
 
 /// How far compressing a data file again has come ([`Store::recompress_data_file`]): files

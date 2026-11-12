@@ -15,7 +15,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 
 use quatrelle_model::pim::teams::{
-    Block, ChatMessage, ChatText, MAX_ATTACHMENTS, MAX_BODY, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, WINDOW_MAX,
+    Attachment, Block, ChatMessage, ChatText, MAX_ATTACHMENTS, MAX_BODY, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, WINDOW_MAX, one_line,
 };
 use serde::de::{IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserializer, Serialize};
@@ -87,11 +87,25 @@ fn held(m: &mut ChatMessage) -> bool {
         };
         return true;
     }
+    hold_sender(&mut m.sender);
+    // As Graph's reader keeps them: ids usable, texts on one line.
+    m.attachments.retain(|a| match a {
+        Attachment::File { id, .. } | Attachment::Hosted { id } => id_ok(id),
+        Attachment::Card => true,
+    });
     m.attachments.truncate(MAX_ATTACHMENTS);
     m.mentions.truncate(MAX_MENTIONS);
+    for x in &mut m.mentions {
+        x.text = one_line(&x.text);
+        x.user_id = x.user_id.take().filter(|u| id_ok(u));
+    }
     m.reactions.truncate(MAX_REACTIONS);
     for r in &mut m.reactions {
+        r.users.retain(|u| id_ok(u));
         r.users.truncate(MAX_REACTION_USERS);
+    }
+    for run in m.body.blocks.iter_mut().flat_map(|b| &mut b.runs) {
+        run.hosted = run.hosted.take().filter(|h| id_ok(h));
     }
     fit_body(&mut m.body, MAX_BODY);
     true
@@ -103,12 +117,19 @@ pub(super) fn within_caps(m: &ChatMessage, chat: &str) -> std::result::Result<()
     let lists = m.attachments.len() <= MAX_ATTACHMENTS
         && m.mentions.len() <= MAX_MENTIONS
         && m.reactions.len() <= MAX_REACTIONS
-        && m.reactions.iter().all(|r| r.users.len() <= MAX_REACTION_USERS);
+        && m.reactions.iter().all(|r| r.users.len() <= MAX_REACTION_USERS && r.users.iter().all(|u| id_ok(u)));
+    let ids = m.attachments.iter().all(|a| match a {
+        Attachment::File { id, .. } | Attachment::Hosted { id } => id_ok(id),
+        Attachment::Card => true,
+    }) && m.mentions.iter().all(|x| x.user_id.as_deref().is_none_or(id_ok) && one_line(&x.text) == x.text)
+        && m.body.blocks.iter().flat_map(|b| &b.runs).all(|r| r.hosted.as_deref().is_none_or(id_ok))
+        && sender_ok(&m.sender);
     let bare = m.deleted.is_none() || (m.body.blocks.is_empty() && m.attachments.is_empty() && m.mentions.is_empty() && m.reactions.is_empty());
     match () {
         _ if !id_ok(&m.id) => Err("a message without a usable id".into()),
         _ if m.chat != chat => Err("a message of another chat".into()),
         _ if !lists => Err("a message's lists past their caps".into()),
+        _ if !ids => Err("a message with an unusable id or a name not on one line".into()),
         _ if json_len(&m.body) > MAX_BODY => Err(format!("a body of {} bytes", json_len(&m.body))),
         _ if !bare => Err("a deleted message keeps more than its id, times and sender".into()),
         _ => Ok(()),
@@ -160,19 +181,13 @@ fn fit_body(body: &mut ChatText, max: usize) {
                 into.runs.push(run);
                 continue;
             }
-            // As much of its text as fits (escapes make a character cost up to six bytes).
-            let room = max.saturating_sub(used).saturating_sub(comma);
+            // As much of its text as fits, counted in one pass as JSON writes it.
             let mut cut = run;
             let text = std::mem::take(&mut cut.text);
-            let ends: Vec<usize> = text.char_indices().map(|(i, _)| i).skip(1).chain([text.len()]).collect();
-            let (mut lo, mut hi) = (0usize, ends.len());
-            while lo < hi {
-                let mid = lo + (hi - lo).div_ceil(2);
-                cut.text = text.get(..ends.get(mid.saturating_sub(1)).copied().unwrap_or(0)).unwrap_or_default().to_string();
-                if json_len(&cut) <= room { lo = mid } else { hi = mid - 1 }
-            }
-            if lo > 0 {
-                cut.text = text.get(..ends.get(lo - 1).copied().unwrap_or(0)).unwrap_or_default().to_string();
+            let room = max.saturating_sub(used).saturating_sub(comma).saturating_sub(json_len(&cut));
+            let end = fitting_prefix(&text, room);
+            if end > 0 {
+                cut.text = text.get(..end).unwrap_or_default().to_string();
                 into.runs.push(cut);
             }
             break 'blocks;
@@ -187,6 +202,25 @@ fn fit_body(body: &mut ChatText, max: usize) {
             None => break,
         }
     }
+}
+
+/// How many bytes of `text` (ending where a character does) fit in `room` bytes once written in
+/// a JSON string, as serde_json escapes it: a quote, a backslash and the five short escapes two bytes, any
+/// other control six, the rest as in UTF-8.
+fn fitting_prefix(text: &str, room: usize) -> usize {
+    let mut cost = 0usize;
+    for (i, c) in text.char_indices() {
+        let one = match c {
+            '"' | '\\' | '\u{8}' | '\u{c}' | '\n' | '\r' | '\t' => 2,
+            '\0'..='\u{1f}' => 6,
+            c => c.len_utf8(),
+        };
+        cost = cost.saturating_add(one);
+        if cost > room {
+            return i;
+        }
+    }
+    text.len()
 }
 
 /// A page of the copy while messages go in: its first creation time, its number, its messages
@@ -344,12 +378,14 @@ impl Copy {
             r.page_keys = keys;
             writes.push(self.chat_file(&r)?);
         }
+        // What a deleted message showed goes first: should its page fail to be written, the
+        // deletion comes again with the next read, and nothing of it is left meanwhile.
+        for (message, hosted) in forget {
+            self.forget_hosted(chat, &message, &hosted)?;
+        }
         self.store.write_account_files(TEAMS_ACCOUNT, &writes)?;
         for key in gone {
             self.store.remove_account_files(TEAMS_ACCOUNT, &format!("msgs/{hash}/{key}.json"))?;
-        }
-        for (message, hosted) in forget {
-            self.forget_hosted(chat, &message, &hosted)?;
         }
         Ok(changed)
     }
@@ -457,28 +493,36 @@ enum Side {
     Halves,
 }
 
-/// A page's messages as the pages they make, each with its bytes.
+/// A page's messages as the pages they make, each with its bytes. No page's edge falls between
+/// two messages made in the same millisecond (only a run of them longer than a page is parted):
+/// the page before a window is found by creation time alone.
 fn pieces(msgs: Vec<ChatMessage>, side: Side, chat: &str) -> Result<Vec<(Vec<ChatMessage>, Vec<u8>)>> {
     let mut parts: Vec<Vec<ChatMessage>> = Vec::new();
+    let mut rest = msgs;
     match side {
-        Side::Front => parts.extend(msgs.chunks(PAGE).map(<[ChatMessage]>::to_vec)),
-        Side::Back => {
-            let mut rest = msgs;
+        Side::Front => {
             while rest.len() > PAGE {
-                let tail = rest.split_off(rest.len() - PAGE);
+                let tail = rest.split_off(edge_down(&rest, PAGE));
+                parts.push(std::mem::replace(&mut rest, tail));
+            }
+            parts.push(rest);
+        }
+        Side::Back => {
+            while rest.len() > PAGE {
+                let tail = rest.split_off(edge_up(&rest, rest.len() - PAGE));
                 parts.push(tail);
             }
             parts.push(rest);
             parts.reverse();
         }
-        Side::Halves => parts.push(msgs),
+        Side::Halves => parts.push(rest),
     }
     let mut out = Vec::new();
     let mut todo: Vec<Vec<ChatMessage>> = parts.into_iter().rev().collect();
     while let Some(mut part) = todo.pop() {
         let bytes = serde_json::to_vec(&PageOut { chat, messages: &part }).map_err(|source| StoreError::Json { path: "msgs".into(), source })?;
         if part.len() > 1 && (part.len() > PAGE || bytes.len() > PAGE_BYTES) {
-            let half = part.split_off(part.len() / 2);
+            let half = part.split_off(edge_near(&part, part.len() / 2));
             todo.push(half);
             todo.push(part);
             continue;
@@ -486,4 +530,43 @@ fn pieces(msgs: Vec<ChatMessage>, side: Side, chat: &str) -> Result<Vec<(Vec<Cha
         out.push((part, bytes));
     }
     Ok(out)
+}
+
+/// Whether an edge at `k` parts two messages made in the same millisecond.
+fn parts_a_run(msgs: &[ChatMessage], k: usize) -> bool {
+    match (k.checked_sub(1).and_then(|j| msgs.get(j)), msgs.get(k)) {
+        (Some(a), Some(b)) => a.created == b.created,
+        _ => false,
+    }
+}
+
+/// An edge at `k` (inside `msgs`, `0 < k < len`) moved back to where the run of equal creation
+/// times it falls in begins; `k` itself when that run begins the page.
+fn edge_down(msgs: &[ChatMessage], k: usize) -> usize {
+    let mut j = k;
+    while j > 0 && parts_a_run(msgs, j) {
+        j -= 1;
+    }
+    if j == 0 { k } else { j }
+}
+
+/// An edge at `k` moved on to where its run ends; `k` itself when that run ends the page.
+fn edge_up(msgs: &[ChatMessage], k: usize) -> usize {
+    let mut j = k;
+    while j < msgs.len() && parts_a_run(msgs, j) {
+        j += 1;
+    }
+    if j >= msgs.len() { k } else { j }
+}
+
+/// The edge nearest `k` that parts no run; `k` itself when there's none.
+fn edge_near(msgs: &[ChatMessage], k: usize) -> usize {
+    let (down, up) = (edge_down(msgs, k), edge_up(msgs, k));
+    match (!parts_a_run(msgs, down), !parts_a_run(msgs, up)) {
+        (true, true) if k.saturating_sub(down) <= up.saturating_sub(k) => down,
+        (true, true) => up,
+        (true, false) => down,
+        (false, true) => up,
+        (false, false) => k,
+    }
 }

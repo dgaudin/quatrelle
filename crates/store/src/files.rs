@@ -214,20 +214,34 @@ impl Files {
 
     /// The files directly in a folder, by name.
     pub(super) fn list(&self, dir: &Path) -> Vec<(String, PathBuf)> {
+        self.try_list(dir).unwrap_or_default()
+    }
+
+    /// [`Files::list`], saying when the folder couldn't be listed (a folder that isn't there is
+    /// empty).
+    pub(super) fn try_list(&self, dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
         match self {
             #[cfg(not(target_arch = "wasm32"))]
-            Files::Packed(x) => x.list(dir),
+            Files::Packed(x) => x.try_list(dir),
             Files::Disk => {
-                let Ok(rd) = fs::read_dir(dir) else { return Vec::new() };
-                rd.filter_map(|e| e.ok())
+                let rd = match fs::read_dir(dir) {
+                    Ok(rd) => rd,
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+                    Err(e) => return Err(e),
+                };
+                Ok(rd
+                    .filter_map(|e| e.ok())
                     .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
                     .filter_map(|e| Some((e.file_name().to_str()?.to_string(), e.path())))
-                    .collect()
+                    .collect())
             }
-            Files::Memory(m, _) => Files::with(m, |m| {
+            Files::Memory(m, _) => Ok(Files::with(m, |m| {
                 under(m, dir).filter(|k| k.parent() == Some(dir)).filter_map(|k| Some((k.file_name()?.to_str()?.to_string(), k.clone()))).collect()
-            }),
-            Files::Failing(f) => f.files.list(dir),
+            })),
+            Files::Failing(f) => {
+                Faults::check(&f.reads, dir)?;
+                f.files.try_list(dir)
+            }
         }
     }
 
@@ -373,6 +387,10 @@ impl Routed {
 
     pub(super) fn list(&self, dir: &Path) -> Vec<(String, PathBuf)> {
         self.at(dir).list(dir)
+    }
+
+    pub(super) fn try_list(&self, dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
+        self.at(dir).try_list(dir)
     }
 
     pub(super) fn size(&self, dir: &Path) -> u64 {
