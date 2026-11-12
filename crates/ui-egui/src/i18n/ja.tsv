@@ -2186,3 +2186,26 @@ folder	Online Archive	オンライン アーカイブ
 	Nobody is invited: the guests the file names are left out.	誰も招待されません。ファイルに書かれた出席者は取り込まれません。
 	Add a file only when you know where it comes from.	出どころが分かっているファイルだけを追加してください。
 	This file could run a program: it is shown in its folder, not opened.	このファイルはプログラムを実行する可能性があります。開かずに、フォルダー内で表示します。
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	このコンピューターに保存したコピーから、Teams の会話を Quatrelle で読みます。先に組織がそのためのアプリケーションを登録します。
+	Use Teams in Quatrelle	Quatrelle で Teams を使う
+	Directory (tenant) ID	ディレクトリ (テナント) ID
+	Your organization's ID, or its domain	組織の ID、またはそのドメイン
+	Registering the application	アプリケーションの登録
+	How to register the application	アプリケーションの登録方法
+	Announce new messages	新着メッセージを知らせる
+	Announcements begin with a later version	通知は今後のバージョンで始まります
+	Only messages sent to me alone or naming me	自分だけに送られた、または自分の名前が入ったメッセージのみ
+	A copy made for another account was set aside	別のアカウント用のコピーを別に保管しました
+	Delete it	削除する
+	Signed in as {name} ({address})	{name} ({address}) としてサインイン中
+	Switch Teams on and fill in both IDs first	先に Teams をオンにして、両方の ID を入力してください
+	Your sign-in won't be remembered: no keychain is available	サインインは記憶されません: キーチェーンがありません
+	Sign out of Teams	Teams からサインアウト
+	Delete the copy of your conversations kept on this computer too?	このコンピューターに保存した会話のコピーも削除しますか?
+	Keep the copy	コピーを残す
+	Delete the copy	コピーを削除
+	Copying your conversations… {done} of {of} conversations	会話をコピー中… {of} 件中 {done} 件
+	Your conversations are up to date	会話は最新の状態です
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle には権限 {scope} が必要です: サインインし直して承諾するか、Microsoft Entra で管理者の同意を与えるよう管理者に依頼してください
+	Teams stopped: {why}	Teams が停止しました: {why}

@@ -2185,3 +2185,26 @@ folder	Online Archive	ארכיון מקוון
 	Nobody is invited: the guests the file names are left out.	אף אחד לא מוזמן: המוזמנים שהקובץ מציין מושמטים.
 	Add a file only when you know where it comes from.	הוסיפו קובץ רק אם ידוע לכם מהיכן הגיע.
 	This file could run a program: it is shown in its folder, not opened.	הקובץ הזה עלול להפעיל תוכנית: הוא מוצג בתיקייה שלו ולא נפתח.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	קראו את שיחות Teams שלכם ב-Quatrelle, מעותק שנשמר במחשב הזה. הארגון שלכם רושם לשם כך יישום תחילה.
+	Use Teams in Quatrelle	שימוש ב-Teams ב-Quatrelle
+	Directory (tenant) ID	מזהה ספרייה (דייר)
+	Your organization's ID, or its domain	המזהה של הארגון שלכם, או הדומיין שלו
+	Registering the application	רישום היישום
+	How to register the application	איך לרשום את היישום
+	Announce new messages	הודעה על הודעות חדשות
+	Announcements begin with a later version	ההודעות יתחילו בגרסה מאוחרת יותר
+	Only messages sent to me alone or naming me	רק הודעות שנשלחו אליי בלבד או שמזכירות אותי
+	A copy made for another account was set aside	עותק שנעשה עבור חשבון אחר הונח בצד
+	Delete it	מחיקה
+	Signed in as {name} ({address})	מחובר בתור {name} ({address})
+	Switch Teams on and fill in both IDs first	הפעילו קודם את Teams ומלאו את שני המזהים
+	Your sign-in won't be remembered: no keychain is available	הכניסה שלכם לא תיזכר: אין מחזיק מפתחות זמין
+	Sign out of Teams	התנתקות מ-Teams
+	Delete the copy of your conversations kept on this computer too?	למחוק גם את עותק השיחות שלכם שנשמר במחשב הזה?
+	Keep the copy	שמירת העותק
+	Delete the copy	מחיקת העותק
+	Copying your conversations… {done} of {of} conversations	מעתיק את השיחות שלכם… {done} מתוך {of} שיחות
+	Your conversations are up to date	השיחות שלכם מעודכנות
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle צריך את ההרשאה {scope}: היכנסו שוב כדי לאשר אותה, או בקשו ממנהל המערכת להעניק הסכמת מנהל ב-Microsoft Entra
+	Teams stopped: {why}	Teams נעצר: {why}

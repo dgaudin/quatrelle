@@ -2186,3 +2186,26 @@ folder	Online Archive	Online-archief
 	Nobody is invited: the guests the file names are left out.	Er wordt niemand uitgenodigd: de gasten die het bestand noemt, worden weggelaten.
 	Add a file only when you know where it comes from.	Voeg een bestand alleen toe als u weet waar het vandaan komt.
 	This file could run a program: it is shown in its folder, not opened.	Dit bestand kan een programma starten: het wordt in zijn map getoond, niet geopend.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	Lees je Teams-gesprekken in Quatrelle, vanuit een kopie op deze computer. Je organisatie registreert er eerst een toepassing voor.
+	Use Teams in Quatrelle	Teams gebruiken in Quatrelle
+	Directory (tenant) ID	Map-ID (tenant)
+	Your organization's ID, or its domain	De ID van je organisatie, of haar domein
+	Registering the application	De toepassing registreren
+	How to register the application	Zo registreer je de toepassing
+	Announce new messages	Nieuwe berichten melden
+	Announcements begin with a later version	Meldingen komen met een latere versie
+	Only messages sent to me alone or naming me	Alleen berichten aan mij alleen of die mij noemen
+	A copy made for another account was set aside	Een kopie voor een ander account is apart gezet
+	Delete it	Verwijderen
+	Signed in as {name} ({address})	Aangemeld als {name} ({address})
+	Switch Teams on and fill in both IDs first	Zet eerst Teams aan en vul beide ID's in
+	Your sign-in won't be remembered: no keychain is available	Je aanmelding wordt niet onthouden: er is geen sleutelhanger beschikbaar
+	Sign out of Teams	Afmelden bij Teams
+	Delete the copy of your conversations kept on this computer too?	Ook de kopie van je gesprekken op deze computer verwijderen?
+	Keep the copy	Kopie houden
+	Delete the copy	Kopie verwijderen
+	Copying your conversations… {done} of {of} conversations	Je gesprekken worden gekopieerd… {done} van {of} gesprekken
+	Your conversations are up to date	Je gesprekken zijn bijgewerkt
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle heeft de machtiging {scope} nodig: meld je opnieuw aan om ze te aanvaarden, of vraag je beheerder om beheerderstoestemming te geven in Microsoft Entra
+	Teams stopped: {why}	Teams is gestopt: {why}

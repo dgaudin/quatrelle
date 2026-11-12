@@ -10,6 +10,7 @@ use crate::BrowserProfile;
 
 mod assistant;
 mod scam;
+mod teams;
 mod webex;
 mod webex_rooms;
 
@@ -601,4 +602,5 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
             },
         );
     }
+    teams::teams(s, &t, ui, acts);
 }

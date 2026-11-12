@@ -143,6 +143,8 @@ pub enum Icon {
     MailRules,
     /// The assistant (the language model set in Options).
     Sparkle,
+    /// A speech bubble (Conversations: Teams' chats).
+    Conversations,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -258,6 +260,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Ignore => f!("mail_dismiss"),
         Icon::MailRules => f!("mail_settings"),
         Icon::Sparkle => f!("sparkle"),
+        Icon::Conversations => f!("chat"),
     }
 }
 
@@ -418,6 +421,7 @@ mod tests {
             Ignore,
             MailRules,
             Sparkle,
+            Conversations,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

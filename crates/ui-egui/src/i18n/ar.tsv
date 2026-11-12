@@ -2185,3 +2185,26 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Nobody is invited: the guests the file names are left out.	لا يُدعى أحد: المدعوون المذكورون في الملف يُستبعدون.
 	Add a file only when you know where it comes from.	أضف ملفًا فقط إذا كنت تعرف مصدره.
 	This file could run a program: it is shown in its folder, not opened.	قد يشغّل هذا الملف برنامجًا: يُعرض في مجلده ولا يُفتح.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	اقرأ محادثات Teams في Quatrelle، من نسخة محفوظة على هذا الكمبيوتر. تسجّل مؤسستك أولاً تطبيقاً لذلك.
+	Use Teams in Quatrelle	استخدام Teams في Quatrelle
+	Directory (tenant) ID	معرّف الدليل (المستأجر)
+	Your organization's ID, or its domain	معرّف مؤسستك، أو نطاقها
+	Registering the application	تسجيل التطبيق
+	How to register the application	كيفية تسجيل التطبيق
+	Announce new messages	الإعلام بالرسائل الجديدة
+	Announcements begin with a later version	تبدأ الإعلامات في إصدار لاحق
+	Only messages sent to me alone or naming me	الرسائل المرسلة إليّ وحدي أو التي تذكرني فقط
+	A copy made for another account was set aside	وُضعت جانباً نسخة مصنوعة لحساب آخر
+	Delete it	حذفها
+	Signed in as {name} ({address})	تم تسجيل الدخول باسم {name} ({address})
+	Switch Teams on and fill in both IDs first	شغّل Teams أولاً واملأ المعرّفين
+	Your sign-in won't be remembered: no keychain is available	لن يُحفظ تسجيل دخولك: لا تتوفر سلسلة مفاتيح
+	Sign out of Teams	تسجيل الخروج من Teams
+	Delete the copy of your conversations kept on this computer too?	هل تريد حذف نسخة محادثاتك المحفوظة على هذا الكمبيوتر أيضاً؟
+	Keep the copy	الاحتفاظ بالنسخة
+	Delete the copy	حذف النسخة
+	Copying your conversations… {done} of {of} conversations	جارٍ نسخ محادثاتك… {done} من {of} محادثة
+	Your conversations are up to date	محادثاتك محدّثة
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	يحتاج Quatrelle إلى الإذن {scope}: سجّل الدخول مجدداً لقبوله، أو اطلب من المسؤول منح موافقة المسؤول في Microsoft Entra
+	Teams stopped: {why}	توقف Teams: {why}

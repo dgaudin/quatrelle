@@ -89,7 +89,7 @@ pub(super) fn about(s: &Session, t: &Tokens, update: &crate::UpdateState, ui: &m
     }
     ui.add_space(8.0);
     if ui.link(tl!("Source code and issues")).clicked() {
-        acts.push(Action::OpenUrl("https://github.com/dgaudin/quatrelle".into()));
+        acts.push(Action::OpenUrl(super::REPOSITORY.into()));
     }
     // Fonts built in from craft-fonts travel with their licences.
     if !crate::craft_fonts::CRAFT_FONTS.is_empty() {

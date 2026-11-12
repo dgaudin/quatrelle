@@ -348,19 +348,31 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
 }
 
 /// Mail, Calendar, People, Tasks and Notes down the window's edge, as Outlook's: the module shown
-/// lit, with a bar at its edge.
-pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) {
+/// lit, with a bar at its edge. Conversations too with Teams on, its unread messages in a badge
+/// over its icon.
+pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<Action>) {
     ui.spacing_mut().item_spacing.y = 4.0;
+    let module = s.module;
+    let teams = s.prefs.teams.on.then_some((Module::Conversations, Icon::Conversations, "Conversations", "conversations"));
     for (m, icon, label, code) in [
         (Module::Mail, Icon::Unread, "Mail", "mail"),
         (Module::Calendar, Icon::Calendar, "Calendar", "calendar"),
         (Module::People, Icon::People, "People", "people"),
         (Module::Tasks, Icon::Tasks, "Tasks", "tasks"),
         (Module::Notes, Icon::Note, "Notes", "notes"),
-    ] {
+    ]
+    .into_iter()
+    .chain(teams)
+    {
         let (r, resp) = ui.allocate_exact_size(vec2(38.0, 38.0), Sense::click());
         let on = m == module;
-        widgets::named(ui, &resp, tl!(label), true, Some(on));
+        let count = if m == Module::Conversations { s.teams.unread_badge() } else { None };
+        // To a screen reader, the badge is said with the name.
+        let said = match &count {
+            Some(n) => format!("{}, {}", tl!(label), tf!("Unread: {n}", n = n)),
+            None => tl!(label).to_string(),
+        };
+        widgets::named(ui, &resp, &said, true, Some(on));
         if on || resp.hovered() {
             ui.painter().rect_filled(r, 4.0, if on { t.accent_soft } else { t.hover });
         }
@@ -369,10 +381,30 @@ pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Ve
             ui.painter().rect_filled(egui::Rect::from_min_size(egui::pos2(edge, r.top() + 8.0), vec2(3.0, r.height() - 16.0)), 1.5, t.accent);
         }
         icons::paint(ui.painter(), icons::centered(r, 22.0), icon, if on { t.accent } else { t.dim });
+        if let Some(n) = &count {
+            badge(ui, t, r, n);
+        }
         if resp.on_hover_text(tl!(label)).clicked() {
             acts.push(Action::Run("view.module", json!({"name": code})));
         }
     }
+}
+
+/// A count over a rail icon's top corner (the far one from the window's edge): in the app colour
+/// and bold, as the folder pane's unread counts, on a pill of the rail's colour so it reads over
+/// the icon.
+fn badge(ui: &Ui, t: &Tokens, cell: egui::Rect, n: &str) {
+    let font = theme::bold(10.5);
+    let galley = ui.painter().layout_no_wrap(n.to_string(), font, t.accent);
+    let size = vec2((galley.size().x + 6.0).max(14.0), 14.0);
+    let corner = if i18n::current().rtl() {
+        egui::pos2(cell.left() + size.x / 2.0, cell.top() + 7.0)
+    } else {
+        egui::pos2(cell.right() - size.x / 2.0, cell.top() + 7.0)
+    };
+    let pill = egui::Rect::from_center_size(corner, size);
+    ui.painter().rect(pill, 7.0, t.chrome, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+    ui.painter().galley(pill.center() - galley.size() / 2.0, galley, t.accent);
 }
 
 /// The status bar's zoom of the message read (drawn right to left: +, the percent, −); what it

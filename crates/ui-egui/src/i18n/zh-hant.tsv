@@ -2190,3 +2190,26 @@ folder	Online Archive	線上封存
 	Nobody is invited: the guests the file names are left out.	不會邀請任何人:檔案中列出的與會者會被略過。
 	Add a file only when you know where it comes from.	只有在知道檔案來源時才加入。
 	This file could run a program: it is shown in its folder, not opened.	此檔案可能會執行程式:只在其資料夾中顯示,不會開啟。
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	在 Quatrelle 中閱讀你的 Teams 交談，內容來自保存在這部電腦上的副本。你的組織需要先為此註冊一個應用程式。
+	Use Teams in Quatrelle	在 Quatrelle 中使用 Teams
+	Directory (tenant) ID	目錄(租用戶) ID
+	Your organization's ID, or its domain	你所屬組織的 ID 或其網域
+	Registering the application	註冊應用程式
+	How to register the application	如何註冊應用程式
+	Announce new messages	提醒新訊息
+	Announcements begin with a later version	提醒將在之後的版本中提供
+	Only messages sent to me alone or naming me	僅限只寄給我或提到我的訊息
+	A copy made for another account was set aside	為另一個帳戶製作的副本已被放在一旁
+	Delete it	刪除它
+	Signed in as {name} ({address})	已登入為 {name} ({address})
+	Switch Teams on and fill in both IDs first	請先開啟 Teams 並填寫兩個 ID
+	Your sign-in won't be remembered: no keychain is available	你的登入不會被記住：沒有可用的鑰匙圈
+	Sign out of Teams	登出 Teams
+	Delete the copy of your conversations kept on this computer too?	同時刪除保存在這部電腦上的交談副本嗎？
+	Keep the copy	保留副本
+	Delete the copy	刪除副本
+	Copying your conversations… {done} of {of} conversations	正在複製你的交談… 第 {done} 個，共 {of} 個
+	Your conversations are up to date	你的交談已是最新
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle 需要權限 {scope}：請重新登入以接受，或請系統管理員在 Microsoft Entra 中授與系統管理員同意
+	Teams stopped: {why}	Teams 已停止：{why}

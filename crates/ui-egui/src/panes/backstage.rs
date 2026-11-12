@@ -30,6 +30,9 @@ use open::open;
 use options::options;
 pub use pgp::PgpAsk;
 
+/// Quatrelle's repository: its source code, issues and guides.
+pub(crate) const REPOSITORY: &str = "https://github.com/dgaudin/quatrelle";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
     Info,

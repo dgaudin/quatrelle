@@ -2189,3 +2189,26 @@ folder	Online Archive	Онлайн-архив
 	Nobody is invited: the guests the file names are left out.	Никто не приглашается: гости, указанные в файле, не добавляются.
 	Add a file only when you know where it comes from.	Добавляйте файл, только если знаете, откуда он.
 	This file could run a program: it is shown in its folder, not opened.	Этот файл может запустить программу: он будет показан в своей папке, но не открыт.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	Читайте беседы Teams в Quatrelle — из копии на этом компьютере. Сначала ваша организация регистрирует для этого приложение.
+	Use Teams in Quatrelle	Использовать Teams в Quatrelle
+	Directory (tenant) ID	Идентификатор каталога (клиента Entra)
+	Your organization's ID, or its domain	Идентификатор вашей организации или её домен
+	Registering the application	Регистрация приложения
+	How to register the application	Как зарегистрировать приложение
+	Announce new messages	Сообщать о новых сообщениях
+	Announcements begin with a later version	Оповещения появятся в следующей версии
+	Only messages sent to me alone or naming me	Только сообщения лично мне или с упоминанием меня
+	A copy made for another account was set aside	Копия для другой учётной записи отложена
+	Delete it	Удалить её
+	Signed in as {name} ({address})	Вход выполнен: {name} ({address})
+	Switch Teams on and fill in both IDs first	Сначала включите Teams и заполните оба идентификатора
+	Your sign-in won't be remembered: no keychain is available	Вход не будет запомнен: связка ключей недоступна
+	Sign out of Teams	Выйти из Teams
+	Delete the copy of your conversations kept on this computer too?	Удалить также копию ваших бесед на этом компьютере?
+	Keep the copy	Оставить копию
+	Delete the copy	Удалить копию
+	Copying your conversations… {done} of {of} conversations	Копирование бесед… {done} из {of}
+	Your conversations are up to date	Ваши беседы обновлены
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle нужно разрешение {scope}: войдите снова, чтобы принять его, или попросите администратора дать согласие администратора в Microsoft Entra
+	Teams stopped: {why}	Teams остановлен: {why}

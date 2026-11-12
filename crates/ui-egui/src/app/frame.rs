@@ -363,7 +363,7 @@ impl MailApp {
                 .exact_size(48.0)
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
-                    ui.vertical_centered(|ui| super::bars::module_rail(ui, &t, self.session.module, &mut acts));
+                    ui.vertical_centered(|ui| super::bars::module_rail(ui, &t, &self.session, &mut acts));
                 });
         }
         if self.ui.backstage.is_none() {

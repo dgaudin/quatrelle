@@ -9,6 +9,7 @@ mod calendar_clicks;
 mod calendar_delete;
 mod calendar_look;
 mod calendar_menu;
+mod conversations;
 mod item_files;
 mod new_item_keys;
 mod notes;

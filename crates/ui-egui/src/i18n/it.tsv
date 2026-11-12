@@ -2188,3 +2188,26 @@ folder	Online Archive	Archivio online
 	Nobody is invited: the guests the file names are left out.	Nessuno viene invitato: gli invitati indicati nel file sono esclusi.
 	Add a file only when you know where it comes from.	Aggiungi un file solo se sai da dove proviene.
 	This file could run a program: it is shown in its folder, not opened.	Questo file potrebbe avviare un programma: viene mostrato nella sua cartella, non aperto.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	Leggi le tue conversazioni di Teams in Quatrelle, da una copia tenuta su questo computer. Prima la tua organizzazione registra un'applicazione apposita.
+	Use Teams in Quatrelle	Usa Teams in Quatrelle
+	Directory (tenant) ID	ID directory (tenant)
+	Your organization's ID, or its domain	L'ID della tua organizzazione, o il suo dominio
+	Registering the application	Registrazione dell'applicazione
+	How to register the application	Come registrare l'applicazione
+	Announce new messages	Annuncia i nuovi messaggi
+	Announcements begin with a later version	Gli annunci arrivano con una versione successiva
+	Only messages sent to me alone or naming me	Solo i messaggi inviati soltanto a me o che mi nominano
+	A copy made for another account was set aside	Una copia fatta per un altro account è stata messa da parte
+	Delete it	Eliminala
+	Signed in as {name} ({address})	Accesso effettuato come {name} ({address})
+	Switch Teams on and fill in both IDs first	Prima attiva Teams e compila entrambi gli ID
+	Your sign-in won't be remembered: no keychain is available	Il tuo accesso non verrà ricordato: nessun portachiavi disponibile
+	Sign out of Teams	Esci da Teams
+	Delete the copy of your conversations kept on this computer too?	Eliminare anche la copia delle tue conversazioni tenuta su questo computer?
+	Keep the copy	Tieni la copia
+	Delete the copy	Elimina la copia
+	Copying your conversations… {done} of {of} conversations	Copia delle tue conversazioni… {done} di {of} conversazioni
+	Your conversations are up to date	Le tue conversazioni sono aggiornate
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle ha bisogno dell'autorizzazione {scope}: accedi di nuovo per accettarla, o chiedi all'amministratore di concedere il consenso amministratore in Microsoft Entra
+	Teams stopped: {why}	Teams si è fermato: {why}

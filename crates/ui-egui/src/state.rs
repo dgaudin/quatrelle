@@ -243,4 +243,8 @@ pub struct UiState {
     pub(crate) can_drag_out: bool,
     /// Typefaces a message being written asked for, read from the system at the next frame.
     pub(crate) load_typefaces: Vec<String>,
+    /// Conversations: the search and the people last told as shown.
+    pub conversations: conversations::ConversationsUi,
+    /// The Teams worker's events, applied a few a frame (a first copy sends thousands).
+    pub(crate) teams_queue: conversations::TeamsQueue,
 }

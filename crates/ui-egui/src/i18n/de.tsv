@@ -2190,3 +2190,26 @@ folder	Online Archive	Online-Archiv
 	Nobody is invited: the guests the file names are left out.	Niemand wird eingeladen: Die in der Datei genannten Gäste werden weggelassen.
 	Add a file only when you know where it comes from.	Fügen Sie eine Datei nur hinzu, wenn Sie wissen, woher sie stammt.
 	This file could run a program: it is shown in its folder, not opened.	Diese Datei könnte ein Programm starten: Sie wird in ihrem Ordner angezeigt, nicht geöffnet.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	Lesen Sie Ihre Teams-Unterhaltungen in Quatrelle, aus einer Kopie auf diesem Computer. Ihre Organisation registriert dafür zuerst eine Anwendung.
+	Use Teams in Quatrelle	Teams in Quatrelle verwenden
+	Directory (tenant) ID	Verzeichnis-ID (Mandant)
+	Your organization's ID, or its domain	Die ID Ihrer Organisation oder ihre Domäne
+	Registering the application	Anwendung registrieren
+	How to register the application	So registrieren Sie die Anwendung
+	Announce new messages	Neue Nachrichten melden
+	Announcements begin with a later version	Meldungen kommen mit einer späteren Version
+	Only messages sent to me alone or naming me	Nur Nachrichten an mich allein oder mit meinem Namen
+	A copy made for another account was set aside	Eine Kopie für ein anderes Konto wurde beiseitegelegt
+	Delete it	Löschen
+	Signed in as {name} ({address})	Angemeldet als {name} ({address})
+	Switch Teams on and fill in both IDs first	Schalten Sie Teams zuerst ein und füllen Sie beide IDs aus
+	Your sign-in won't be remembered: no keychain is available	Ihre Anmeldung wird nicht gespeichert: Kein Schlüsselbund verfügbar
+	Sign out of Teams	Von Teams abmelden
+	Delete the copy of your conversations kept on this computer too?	Auch die Kopie Ihrer Unterhaltungen auf diesem Computer löschen?
+	Keep the copy	Kopie behalten
+	Delete the copy	Kopie löschen
+	Copying your conversations… {done} of {of} conversations	Ihre Unterhaltungen werden kopiert… {done} von {of} Unterhaltungen
+	Your conversations are up to date	Ihre Unterhaltungen sind auf dem neuesten Stand
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	Quatrelle benötigt die Berechtigung {scope}: Melden Sie sich erneut an, um sie zu erteilen, oder bitten Sie Ihren Administrator, in Microsoft Entra die Administratorzustimmung zu erteilen
+	Teams stopped: {why}	Teams wurde angehalten: {why}

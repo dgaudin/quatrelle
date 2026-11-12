@@ -605,5 +605,12 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(12.5, 1.5), (12.5, 4.5)]);
             pen.line(&[(11.0, 3.0), (14.0, 3.0)]);
         }
+        Icon::Conversations => {
+            // A round bubble with its tail at the bottom left, two lines of text in it.
+            pen.arc(8.0, 7.5, 6.0, PI * 0.75, PI * 2.75);
+            pen.line(&[(3.8, 11.7), (2.0, 14.5), (5.6, 13.4)]);
+            pen.line(&[(5.5, 6.5), (10.5, 6.5)]);
+            pen.line(&[(5.5, 9.0), (8.5, 9.0)]);
+        }
     }
 }

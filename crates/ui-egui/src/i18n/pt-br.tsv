@@ -2189,3 +2189,26 @@ folder	Online Archive	Arquivo online
 	Nobody is invited: the guests the file names are left out.	Ninguém é convidado: os convidados que o arquivo indica ficam de fora.
 	Add a file only when you know where it comes from.	Adicione um arquivo somente se souber de onde ele vem.
 	This file could run a program: it is shown in its folder, not opened.	Este arquivo pode executar um programa: ele é mostrado na pasta dele, não aberto.
+	Teams	Teams
+	Read your Teams conversations in Quatrelle, from a copy kept on this computer. Your organization registers an application for it first.	Leia suas conversas do Teams no Quatrelle, a partir de uma cópia guardada neste computador. Sua organização registra antes um aplicativo para isso.
+	Use Teams in Quatrelle	Usar o Teams no Quatrelle
+	Directory (tenant) ID	ID do diretório (locatário)
+	Your organization's ID, or its domain	O ID da sua organização, ou o domínio dela
+	Registering the application	Registro do aplicativo
+	How to register the application	Como registrar o aplicativo
+	Announce new messages	Avisar sobre novas mensagens
+	Announcements begin with a later version	Os avisos chegam numa versão futura
+	Only messages sent to me alone or naming me	Só mensagens enviadas só para mim ou que me mencionam
+	A copy made for another account was set aside	Uma cópia feita para outra conta foi deixada de lado
+	Delete it	Excluir
+	Signed in as {name} ({address})	Conectado como {name} ({address})
+	Switch Teams on and fill in both IDs first	Ative o Teams e preencha os dois IDs primeiro
+	Your sign-in won't be remembered: no keychain is available	Sua entrada não será lembrada: nenhum chaveiro está disponível
+	Sign out of Teams	Sair do Teams
+	Delete the copy of your conversations kept on this computer too?	Excluir também a cópia das suas conversas guardada neste computador?
+	Keep the copy	Manter a cópia
+	Delete the copy	Excluir a cópia
+	Copying your conversations… {done} of {of} conversations	Copiando suas conversas… {done} de {of} conversas
+	Your conversations are up to date	Suas conversas estão em dia
+	Quatrelle needs the permission {scope}: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra	O Quatrelle precisa da permissão {scope}: entre de novo para aceitá-la, ou peça ao seu administrador para conceder o consentimento do administrador no Microsoft Entra
+	Teams stopped: {why}	O Teams parou: {why}

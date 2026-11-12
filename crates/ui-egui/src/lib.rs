@@ -45,7 +45,7 @@ pub use look::thumbs::VideoFrame;
 pub use look::{bidi, craft_fonts, icons, motion, theme};
 use look::{thumbs, widgets};
 pub use panes::backstage;
-use panes::{calendar, list, nav, notes, organize, people, reminders, tasks};
+use panes::{calendar, conversations, list, nav, notes, organize, people, reminders, tasks};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -467,6 +467,8 @@ impl MailApp {
                 drag_out: None,
                 can_drag_out: false,
                 load_typefaces: Vec::new(),
+                conversations: Default::default(),
+                teams_queue: Default::default(),
             },
         };
         app.ui.craft_apps = craft_apps;
@@ -660,7 +662,7 @@ impl MailApp {
     }
 
     /// Take in what the workers sent; `true` when a server-side search was answered (the list
-    /// changed, so the frame is drawn again at once rather than at the next idle tick).
+    /// changed, so the frame is drawn again at once rather than at the next idle tick), or Teams'.
     fn pump(&mut self) -> bool {
         let (now, offset) = self.services.clock();
         let before = self.session.clock.offset;
@@ -670,7 +672,8 @@ impl MailApp {
             self.session.set_zone(self.services.zone().as_deref());
         }
         let mut answered = false;
-        let events = self.backend.poll();
+        let mut events = self.backend.poll();
+        self.ui.teams_queue.take(&mut events);
         // A folder changed several times since the last look (a sync saves a folder more than
         // once, Download all after each message) is read again once, for its last change: each
         // was a reload of the whole folder on the window's thread.
@@ -702,6 +705,7 @@ impl MailApp {
                 m.done();
             }
         }
+        answered |= self.ui.teams_queue.apply(&mut self.session, conversations::TEAMS_EVENTS_A_FRAME);
         self.files_filed();
         // Sign-in pages go to the browser.
         for url in std::mem::take(&mut self.session.open_urls) {
@@ -749,6 +753,8 @@ impl MailApp {
             self.session.refresh_list();
             // How much mail to keep, before any account connects.
             self.session.apply_sync_prefs();
+            // Teams goes on with the sign-in kept (the session opened before the settings came).
+            self.session.teams_start();
             // Still working offline from last time: before any account connects.
             if offline {
                 self.session.set_work_offline(true);
