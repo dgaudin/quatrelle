@@ -316,6 +316,20 @@ fn members_all_stops_at_a_page_already_followed_and_members_refused_is_403() {
     assert_eq!(h.join().unwrap().len(), 3);
 }
 
+/// Final review M6: a chat's members and messages are asked for only by an id that can be one,
+/// as its hosted images are.
+#[test]
+fn members_and_messages_refuse_an_id_that_cant_be_one_before_any_request() {
+    let server = serve_teams(teams_with(vec![chat(CHAT, T0, 1)]));
+    let c = client(&server);
+    let at = rfc3339(T0);
+    for junk in ["", "..", "a\u{0}b", &"x".repeat(MAX_ID + 1)] {
+        assert!(c.members_all(junk).is_err(), "{junk:?}");
+        assert!(c.messages(junk, Range::After(&at), None).is_err(), "{junk:?}");
+    }
+    assert_eq!((hits(&server, "members"), hits(&server, "messages")), (0, 0));
+}
+
 #[test]
 fn members_all_stops_at_a_page_bringing_nobody_new() {
     // Pages that repeat the same members under new links: the second brings nobody new.

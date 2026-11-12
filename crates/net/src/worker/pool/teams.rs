@@ -41,11 +41,17 @@ impl Pool {
                 self.teams_test.started += 1;
             }
             match worker::start(self.store.clone(), self.creds.clone(), emit, graph, authority) {
-                Ok(handle) => self.teams = Some(handle),
+                Ok(handle) => {
+                    // Started while working offline: it asks nothing until that's turned off.
+                    if self.offline {
+                        handle.work_offline(true);
+                    }
+                    self.teams = Some(handle);
+                }
                 Err(e) => {
                     // Said, so that nothing waits for an answer that won't come.
                     log::warn!("teams: the worker didn't start: {e}");
-                    let status = teams::Status::Failed { why: "Teams couldn't be started".into() };
+                    let status = teams::Status::Failed { why: "The sign-in stopped unexpectedly; try again".into() };
                     return self.sink.emit(Event::Teams { event: teams::Event::Status { status } });
                 }
             }

@@ -33,8 +33,6 @@ const RENEWALS_APART: Duration = Duration::from_secs(30);
 /// The first chats whose members are read to find the user's own entry, when the sign-in named
 /// no organisation.
 const OWN_ENTRY_CHATS: usize = 10;
-/// The most characters shown of why a sign-in failed.
-const MAX_WHY: usize = 300;
 /// The kind of member an organisation's account is.
 const ORGANISATION_MEMBER: &str = "aadUserConversationMember";
 
@@ -107,6 +105,37 @@ pub(crate) fn missing_scope(granted: &str) -> Option<String> {
     TEAMS_SCOPE.split(' ').filter(|scope| *scope != "offline_access").find(|scope| !has(scope)).map(str::to_string)
 }
 
+/// Why a sign-in in the browser didn't end, as the status says it: the worker's own sentence, with
+/// Microsoft's AADSTS code or the HTTP status at most. Never Microsoft's words: they can name the
+/// account or its organisation.
+fn why_not(e: &NetError) -> String {
+    let sentence = match e {
+        NetError::Refused(m) if m == BAD_IDS => BAD_IDS,
+        _ => INTERRUPTED,
+    };
+    with_code(sentence, e)
+}
+
+/// `sentence`, followed by the AADSTS code or the HTTP status `e` carries, if any.
+fn with_code(sentence: &str, e: &NetError) -> String {
+    match code_of(&e.to_string()) {
+        Some(code) => format!("{sentence} ({code})"),
+        None => sentence.to_string(),
+    }
+}
+
+/// The first AADSTS code in an error's words (`AADSTS50020`), else the first HTTP status it says
+/// (`HTTP 401`).
+fn code_of(text: &str) -> Option<String> {
+    oauth::aadsts_code(text).or_else(|| {
+        text.match_indices("HTTP ").find_map(|(i, _)| {
+            let digits = text.get(i.saturating_add(5)..i.saturating_add(8))?;
+            let after = text.get(i.saturating_add(8)..)?;
+            (digits.bytes().all(|b| b.is_ascii_digit()) && !after.starts_with(|c: char| c.is_ascii_digit())).then(|| format!("HTTP {digits}"))
+        })
+    })
+}
+
 /// A text to show, from an error: on one line, without control or bidi characters, cut.
 fn shown(text: &str, max: usize) -> String {
     text.chars().map(|c| if c.is_whitespace() { ' ' } else { c }).filter(|c| !c.is_control() && !is_bidi(*c)).take(max).collect()
@@ -129,6 +158,10 @@ impl Worker {
         if !quatrelle_model::valid_oauth_client_id(&client_id) || !quatrelle_model::valid_oauth_tenant(&tenant) {
             return self.refuse(BAD_IDS);
         }
+        if self.offline() {
+            log::info!("teams: no sign-in while working offline");
+            return self.status(Status::Offline);
+        }
         self.halt();
         self.sign_ins = self.sign_ins.saturating_add(1);
         let sign_in = self.sign_ins;
@@ -144,7 +177,7 @@ impl Worker {
         });
         match spawned {
             Ok(_) => self.signing = Some(sign_in),
-            Err(_) => self.refuse("The sign-in couldn't be started; try again"),
+            Err(_) => self.refuse(INTERRUPTED),
         }
     }
 
@@ -185,7 +218,7 @@ impl Worker {
             Ok(tokens) => tokens,
             Err(e) => {
                 log::warn!("teams: the sign-in didn't end: {}", kind(&e));
-                return self.refuse(&shown(&e.to_string(), MAX_WHY));
+                return self.refuse(&why_not(&e));
             }
         };
         let Some(refresh) = tokens.refresh.clone().filter(|r| !r.is_empty()) else { return self.refuse(NO_LASTING) };
@@ -208,7 +241,7 @@ impl Worker {
             Ok(connected) => connected,
             Err(e) => {
                 log::warn!("teams: Graph didn't say who signed in: {}", kind(&e));
-                return self.refuse(&format!("{NO_ACCOUNT} ({})", kind(&e)));
+                return self.refuse(&with_code(NO_ACCOUNT, &e));
             }
         };
         if !plain_id(&me.id) {
@@ -226,6 +259,10 @@ impl Worker {
             None
         });
         let who = Identity { tenant_id: tenant_id.clone(), object_id: me.id.clone() };
+        if !self.is(&who) {
+            // Never the people shown for another account asked about under this one's token.
+            self.pictures.forget_people();
+        }
         let (copy, opened) = match self.open_copy(&who) {
             Ok(open) => open,
             Err(e) => {
@@ -395,6 +432,9 @@ impl Worker {
                 return self.refuse(NO_COPY);
             }
         }
+        if !self.is(&who) {
+            self.pictures.forget_people();
+        }
         self.settings = TeamsSettings { client_id, tenant, object_id: who.object_id, tenant_id: who.tenant_id, ..settings };
         // The list as the copy has it, at once, online or not.
         crate::teams::backfill::from_copy(self);
@@ -493,9 +533,9 @@ impl Worker {
             Err(e) => return Err(e),
         };
         if let Some(newer) = tokens.refresh.as_deref().filter(|r| !r.is_empty() && *r != refresh.0) {
-            // Where the one before is held: a keychain that refuses now still holds that one.
-            let held = self.creds.get_secret(&keyring(), REFRESH_KEY).is_some();
-            if held && self.creds.set_secret(&keyring(), REFRESH_KEY, newer).is_err() {
+            // Kept where the one before was: in the keychain, unless there is none (a keychain
+            // that refuses now still holds that one).
+            if !self.no_keychain && self.creds.set_secret(&keyring(), REFRESH_KEY, newer).is_err() {
                 log::warn!("teams: the keychain didn't take the newer sign-in");
             }
             self.refresh = Some(Secret(newer.to_string()));
@@ -507,6 +547,11 @@ impl Worker {
         self.renewed = Some(now);
         log::info!("teams: the access token was renewed");
         Ok(())
+    }
+
+    /// Whether `who` is the identity signed in until now (ignoring case).
+    fn is(&self, who: &Identity) -> bool {
+        self.settings.object_id.eq_ignore_ascii_case(&who.object_id) && self.settings.tenant_id.eq_ignore_ascii_case(&who.tenant_id)
     }
 
     /// The sign-in no longer holds (revoked, run out, or not this account's): nothing more is
@@ -522,6 +567,7 @@ impl Worker {
     pub(super) fn sign_out(&mut self, delete_copy: bool) {
         self.creds.delete_secret(&keyring(), REFRESH_KEY);
         self.halt();
+        self.pictures.forget_people();
         self.copy = None;
         self.open = None;
         self.settings = TeamsSettings::default();

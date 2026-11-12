@@ -21,6 +21,8 @@ use quatrelle_model::pim::teams::{ChatMessage, Event, MAX_MEMBERS, MESSAGE_PAGES
 
 /// The overlap of a read with the one before.
 const OVERLAP_MS: i64 = 2_000;
+/// How old the time a chat was read may be before a read that changed nothing writes it again.
+const HOUR_MS: i64 = 3_600_000;
 /// The latest time a range is asked from (the end of the year 9999).
 const MAX_MS: i64 = 253_402_300_799_999;
 /// The most reads held under way at once (a few, one per cadence, in practice).
@@ -60,7 +62,7 @@ pub(super) enum ReadStep {
 /// (the watermark moved, what changed sent), `Ok(false)` while a page is left (or the limiter
 /// holds it: called again at a later turn). A refusal is dealt with here (the chat marked as
 /// Graph doesn't serve it, or as left) and ends the read; any other failure is the caller's.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn incremental(w: &mut Worker, chat: &str, now: Instant) -> Result<bool> {
     Ok(matches!(read_step(w, chat, now)?, ReadStep::Over { .. }))
 }
@@ -121,6 +123,10 @@ fn page_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
         }
         Err(e) => return Err(e),
     };
+    #[cfg(test)]
+    if w.hooks.trip_read.as_deref() == Some(chat) {
+        panic!("a panic the test asked for");
+    }
     let messages = with_ids(page.items.iter().take(MAX_PAGE_ITEMS).map(|v| message_of(chat, v)).collect());
     let keys: Vec<u64> = messages.iter().map(|m| w.key_of(&m.id)).collect();
     let next_key = page.next.as_deref().map(|n| w.key_of(n));
@@ -178,21 +184,28 @@ fn strangers_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> 
 }
 
 /// A read's pages are read: the watermark to the newest change read (never past Graph's clock and
-/// an hour, nor back), the time it was read, and a chat that was refused or left is served again.
+/// an hour, nor back), the time it was read, and a chat that was refused or left is served again;
+/// its panics running are over. Written only when that changes something, or the time it was read
+/// is an hour old: a chat read every three seconds isn't written every three seconds.
 fn end(w: &mut Worker, chat: &str) -> Result<()> {
     let Some(read) = w.sync.reads.remove(chat) else { return Ok(()) };
     let Some(server) = server_ms(w) else { return Ok(()) };
     let cap = server.saturating_add(CLOCK_TOLERANCE_MS);
     let Some(copy) = &w.copy else { return Ok(()) };
     let Some(mut r) = copy.chat(chat) else { return Ok(()) };
-    r.watermark = Some(read.newest.map_or(read.start, |n| n.max(read.start)).min(cap));
-    // Its history is what came before the read began.
-    r.history_from.get_or_insert(read.start);
-    r.read_at = Some(server);
+    let watermark = Some(read.newest.map_or(read.start, |n| n.max(read.start)).min(cap));
     let back = r.chat.unreadable.is_some() || r.chat.left;
-    r.chat.unreadable = None;
-    r.chat.left = false;
-    copy.put_chat(&r)?;
+    let lately = r.read_at.is_some_and(|t| (0..HOUR_MS).contains(&server.saturating_sub(t)));
+    if r.watermark != watermark || r.history_from.is_none() || back || r.panics != 0 || !lately {
+        r.watermark = watermark;
+        // Its history is what came before the read began.
+        r.history_from.get_or_insert(read.start);
+        r.read_at = Some(server);
+        r.chat.unreadable = None;
+        r.chat.left = false;
+        r.panics = 0;
+        copy.put_chat(&r)?;
+    }
     if read.changed > 0 || read.pages > 1 || back {
         let again = if back { "; served again" } else { "" };
         log::info!("teams: conversation {}: {} messages changed, {} pages read{again}", w.hashed(chat), read.changed, read.pages);
@@ -263,7 +276,7 @@ pub(super) fn read_members(w: &mut Worker, chat: &str, updated: Option<Option<i6
     }
     copy.put_chat(&r)?;
     if let Some(Sender::User { id, .. }) = r.chat.preview.as_ref().map(|p| &p.sender)
-        && !r.chat.members.iter().any(|m| m.user_id == *id)
+        && !r.chat.members.iter().any(|m| m.user_id.eq_ignore_ascii_case(id))
     {
         let id = id.clone();
         look(w, chat, &[id]);
@@ -277,7 +290,7 @@ fn strangers(w: &Worker, chat: &str, messages: &[ChatMessage]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for m in messages {
         if let Sender::User { id, .. } = &m.sender
-            && !r.chat.members.iter().any(|x| x.user_id == *id)
+            && !r.chat.members.iter().any(|x| x.user_id.eq_ignore_ascii_case(id))
             && !out.contains(id)
             && !looked(w, chat, id)
         {

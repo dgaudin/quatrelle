@@ -50,6 +50,10 @@ pub(super) struct Desk {
     renewed: AtomicU32,
     /// The refresh tokens presented for a renewal.
     presented: Mutex<Vec<String>>,
+    /// The sign-in in the browser fails with these words (as Microsoft's).
+    pub(super) authorize_fails: Mutex<Option<String>>,
+    /// Renewals hand out this newer refresh token.
+    pub(super) rotate: Mutex<Option<String>>,
 }
 
 pub(super) struct AtDesk(pub(super) Arc<Desk>);
@@ -58,6 +62,9 @@ impl Authority for AtDesk {
     fn authorize(&self, _client_id: &str, _tenant: &str, open: &mut dyn FnMut(&str) -> std::result::Result<(), String>) -> Result<Tokens> {
         self.0.authorized.fetch_add(1, Ordering::SeqCst);
         open(SIGN_IN_PAGE).map_err(NetError::Refused)?;
+        if let Some(words) = self.0.authorize_fails.lock().unwrap().clone() {
+            return Err(NetError::Auth(words));
+        }
         Ok(self.0.grant.lock().unwrap().clone())
     }
 
@@ -71,7 +78,8 @@ impl Authority for AtDesk {
             return Err(NetError::Auth("Microsoft Teams: the sign-in was revoked".into()));
         }
         let lasts = if self.0.short.load(Ordering::SeqCst) { 0 } else { 3600 };
-        Ok(Tokens { refresh: Some(refresh.to_string()), expires_at: now_unix() + lasts, ..grant(None) })
+        let newer = self.0.rotate.lock().unwrap().clone();
+        Ok(Tokens { refresh: Some(newer.unwrap_or_else(|| refresh.to_string())), expires_at: now_unix() + lasts, ..grant(None) })
     }
 }
 
@@ -97,6 +105,8 @@ pub(super) fn desk(tokens: Tokens) -> Arc<Desk> {
         authorized: AtomicU32::new(0),
         renewed: AtomicU32::new(0),
         presented: Mutex::new(Vec::new()),
+        authorize_fails: Mutex::new(None),
+        rotate: Mutex::new(None),
     })
 }
 

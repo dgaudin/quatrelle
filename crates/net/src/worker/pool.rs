@@ -424,6 +424,10 @@ impl Pool {
             }
             Job::WorkOffline { on } => {
                 self.offline = on;
+                // Teams too: its worker asks nothing while it's on.
+                if let Some(teams) = &self.teams {
+                    teams.work_offline(on);
+                }
                 if on {
                     let ids: Vec<String> = self.workers.keys().cloned().collect();
                     for id in ids {

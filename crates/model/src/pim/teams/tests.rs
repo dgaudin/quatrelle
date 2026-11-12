@@ -75,6 +75,11 @@ fn a_member_is_judged_by_its_membership_not_by_what_the_message_says() {
     assert!(!sender_internal(&says_internal, &[guest], "t-1"));
     let says_nothing = Sender::User { id: "x".into(), name: "X".into(), identity_type: None, tenant_id: None };
     assert!(sender_internal(&says_nothing, &[member("x", "X")], "t-1"));
+    // Final review M1: an id is matched to the members ignoring case, as everywhere else.
+    let upper = Sender::User { id: "X".into(), name: "X".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) };
+    let mut guest = member("x", "X");
+    guest.roles = vec!["guest".into()];
+    assert!(!sender_internal(&upper, &[guest], "t-1"));
 }
 
 #[test]
@@ -85,6 +90,8 @@ fn names_are_one_line_without_bidi_cut_at_80() {
     assert_eq!(one_line(&"é".repeat(80)), "é".repeat(80), "80 characters fit");
     assert_eq!(one_line("  a\u{200E}\u{200F}\u{2066}\u{2069}\u{0}b  \r\n c "), "ab c");
     assert_eq!(one_line("\u{202A}\u{202B}\u{202C}\u{202D}\n\t"), "");
+    // Final review M3: the Arabic letter mark too.
+    assert_eq!(one_line("a\u{061C}b"), "ab");
 }
 
 #[test]

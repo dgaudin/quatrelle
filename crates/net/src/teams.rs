@@ -28,14 +28,9 @@
 pub(crate) mod backfill;
 pub mod check;
 pub mod graph;
-// The worker asks it for the chat list; the rest of it is the synchronisation's (next).
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod limits;
 pub(crate) mod pictures;
 pub(crate) mod search;
-// The worker opens and deletes it; its chats and messages are read and written by the
-// synchronisation (next), and until then by its tests and fuzz target.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod store;
 pub(crate) mod sync;
 pub(crate) mod worker;

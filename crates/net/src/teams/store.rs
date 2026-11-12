@@ -422,11 +422,12 @@ impl Copy {
     }
 
     /// The copy deleted: its data file, and every copy of it set aside as damaged.
+    #[cfg(test)]
     pub(crate) fn delete(self) -> Result<()> {
         Copy::delete_in(&self.store)
     }
 
-    /// [`Copy::delete`] of the copy in `store`, open or not (signing out before anything was
+    /// The copy in `store` deleted, open or not (signing out before anything was
     /// read): the data file, then every copy of it the store set aside as damaged, whichever
     /// name the file had then. A copy set aside for the user (`.old`) stays.
     pub(crate) fn delete_in(store: &Store) -> Result<()> {

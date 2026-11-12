@@ -582,3 +582,47 @@ fn no_keychain_never_hides_offline_or_sign_in_again() {
     w.turn(t0 + Duration::from_secs(100));
     assert_eq!(teams_of(&seen).iter().rev().find(|e| matches!(e, model::Event::Status { .. })), Some(&status(Status::SignInAgain)));
 }
+
+/// Final review I5: "Work offline" reaches the Teams worker through the pool.
+#[test]
+fn work_offline_reaches_the_teams_worker() {
+    use quatrelle_model::Job as Any;
+    let server = serve_teams(one_chat());
+    let (desk, creds, store) = (desk(grant(Some(TENANT))), Arc::new(Kept::default()), Store::memory());
+    let mut pool = crate::worker::Pool::new(store, creds);
+    pool.teams_test.at = Some((server.base.clone(), Box::new(move || Box::new(AtDesk(desk.clone())))));
+    let mut seen: Vec<model::Event> = Vec::new();
+    let mut hear_until = |pool: &crate::worker::Pool, what: &str, done: &dyn Fn(&[model::Event]) -> bool| {
+        let until = Instant::now() + WAIT;
+        while !done(&seen) {
+            assert!(Instant::now() < until, "{what} never came: {seen:?}");
+            seen.extend(
+                pool.wait(Duration::from_millis(20)).into_iter().filter_map(|e| if let Event::Teams { event } = e { Some(event) } else { None }),
+            );
+        }
+    };
+    pool.submit(Any::Teams { job: Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() } });
+    hear_until(&pool, "the first list", &|e| said(e, &Status::UpToDate));
+    pool.submit(Any::WorkOffline { on: true });
+    hear_until(&pool, "offline", &|e| said(e, &Status::Offline));
+}
+
+/// Final review M4: a newer refresh token handed with a renewal is kept in the keychain, whatever
+/// the keychain held at that moment.
+#[test]
+fn a_rotated_sign_in_is_kept_in_the_keychain() {
+    let server = serve_teams(one_chat());
+    let (mut w, desk, seen, creds) = by_hand(&server, grant(Some(TENANT)));
+    let t0 = Instant::now();
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());
+    // The keychain lost its entry meanwhile; the next request's token is refused, and renewed.
+    creds.delete_secret(&keyring(), REFRESH_KEY);
+    *desk.rotate.lock().unwrap() = Some("rotated-0002".into());
+    server.data.lock().unwrap().teams.as_mut().unwrap().refuse_once = Some("chats");
+    for i in 1..=300 {
+        w.turn(t0 + Duration::from_millis(100 * i));
+    }
+    assert_eq!(desk.renewed.load(Ordering::SeqCst), 1);
+    assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY).as_deref(), Some("rotated-0002"));
+}

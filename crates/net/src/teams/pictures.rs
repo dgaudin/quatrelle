@@ -102,6 +102,13 @@ impl Pictures {
     pub(crate) fn halt(&mut self) {
         *self = Pictures { visible: std::mem::take(&mut self.visible), outside: self.outside.take(), ..Pictures::default() };
     }
+
+    /// Nobody signed in any more, or someone else: the people shown and the pictures asked for
+    /// are forgotten, never asked about under another account's token.
+    pub(crate) fn forget_people(&mut self) {
+        self.visible.clear();
+        self.pending.clear();
+    }
 }
 
 /// [`Job::Picture`](quatrelle_model::pim::teams::Job::Picture): answered from the copy at once
@@ -396,8 +403,8 @@ fn graph_ms(w: &Worker) -> i64 {
 /// site on the internet, handed to the thread outside pictures are fetched on (never this one:
 /// a server that answers slowly holds that thread only), at most [`OUTSIDE_QUEUE`] waiting.
 fn outside(w: &mut Worker, url: &str) {
-    if !w.polling() {
-        return log::info!("teams: an outside picture refused: Teams isn't on");
+    if !w.polling() || w.offline() {
+        return log::info!("teams: an outside picture refused: Teams isn't on, or works offline");
     }
     if !public_https(url) {
         return log::info!("teams: an outside picture refused: not an https address on the internet");

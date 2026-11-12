@@ -24,10 +24,78 @@ fn a_chat_gone_from_the_hourly_list_is_left() {
     assert!(!r.row(OTHER).left);
     let from = r.events().len();
     r.turns_every(Duration::from_secs(120), Duration::from_secs(1));
+    // Absent from one whole list: it may have moved in the list while it was read.
+    assert!(!r.row(OTHER).left);
+    r.w.limiter.prompt(Cadence::Hourly);
+    r.turns_every(Duration::from_secs(20), Duration::from_secs(1));
     let removed: Vec<model::Event> = r.events().into_iter().skip(from).filter(|e| matches!(e, model::Event::Removed { .. })).collect();
     assert_eq!(removed, [model::Event::Removed { chat: OTHER.into() }]);
     assert!(r.row(OTHER).left && !r.row(CHAT).left);
     assert!(r.record(OTHER).chat.left, "kept, to be read");
+}
+
+/// 120 chats of the month: the whole list is three pages; and one of the week, the newest.
+fn three_pages() -> FakeTeams {
+    let mut chats: Vec<FakeChat> = (0..120).map(|i| chat(&format!("19:m{i}@thread.v2"), NOW - 10 * DAY - i * MINUTE, 1)).collect();
+    chats.push(chat(CHAT, NOW - DAY, 2));
+    teams_with(chats)
+}
+
+fn removed_from(r: &Run, from: usize) -> usize {
+    r.events().into_iter().skip(from).filter(|e| matches!(e, model::Event::Removed { .. })).count()
+}
+
+/// Final review I1: a link of the list Graph no longer takes (a 400 on a stale `$skiptoken`)
+/// ends that listing where it is, once: never asked again every ten seconds, holding every other
+/// cadence; and a listing cut short leaves no chat.
+#[test]
+fn a_list_link_refused_ends_that_listing_and_the_passes_go_on() {
+    let mut r = run(three_pages());
+    r.turns(Duration::from_secs(30));
+    r.fake(|t| t.refuse_list_links = 1000);
+    let from = r.events().len();
+    r.w.limiter.prompt(Cadence::Hourly);
+    r.turns(Duration::from_secs(30));
+    assert_eq!(r.fake(|t| 1000 - t.refuse_list_links), 1, "the link refused isn't asked again");
+    let news = r.events().len();
+    r.post(CHAT, "u-ana", NOW + MINUTE, "Still there?");
+    r.turns(Duration::from_secs(30));
+    assert_eq!(ids(&r.messages(CHAT, news)), [(NOW + MINUTE).to_string()], "the ten-second passes go on");
+    assert_eq!(r.fake(|t| 1000 - t.refuse_list_links), 1);
+    assert_eq!(removed_from(&r, from), 0, "a listing cut short leaves no chat");
+}
+
+/// Final review I1: a list page whose next link is on another site: nothing asked there, the
+/// listing ends at that page, and the passes after it go on.
+#[test]
+fn a_list_link_to_another_site_ends_the_listing() {
+    let mut teams = three_pages();
+    teams.list_next_elsewhere = true;
+    let mut r = run(teams);
+    r.turns(Duration::from_secs(30));
+    let pages = r.hits("chats");
+    let news = r.events().len();
+    r.post(CHAT, "u-ana", NOW + MINUTE, "Still there?");
+    r.turns(Duration::from_secs(30));
+    assert!(r.hits("chats") >= pages + 2, "a list pass every ten seconds: {} pages", r.hits("chats") - pages);
+    assert_eq!(ids(&r.messages(CHAT, news)), [(NOW + MINUTE).to_string()]);
+    r.w.limiter.prompt(Cadence::Hourly);
+    r.turns(Duration::from_secs(30));
+    assert_eq!(removed_from(&r, 0), 0, "a listing that didn't end by itself leaves no chat");
+}
+
+/// Final review I6: a chat whose incremental read panics is that chat's alone: the others go on
+/// being read, and at the third panic its row says it couldn't be read.
+#[test]
+fn a_chat_whose_read_panics_is_set_aside_and_the_others_go_on() {
+    let teams = teams_with(vec![chat(CHAT, NOW - DAY, 2), chat(OTHER, NOW - DAY + MINUTE, 2)]);
+    let mut r = run_with(teams, |w| w.hooks.trip_read = Some(CHAT.into()));
+    let other = r.reads(OTHER);
+    r.turns_every(Duration::from_secs(600), Duration::from_millis(200));
+    let kept = r.record(CHAT);
+    assert!(kept.set_aside_until.is_some() && kept.chat.unreadable.is_some(), "set aside at the third panic");
+    assert!(r.row(CHAT).unreadable, "and said it couldn't be read");
+    assert!(r.reads(OTHER) - other >= 5, "the other chat read every minute: {} reads", r.reads(OTHER) - other);
 }
 
 #[test]
@@ -125,6 +193,8 @@ fn a_list_refused_says_so_and_is_tried_again_hourly() {
     r.fake(|t| t.forbid_list = false);
     r.turns_every(Duration::from_secs(120), Duration::from_secs(10));
     assert_eq!(r.hits("chats"), 2, "an hour later");
+    // Nothing was read meanwhile, its history neither: the first copy goes, then up to date.
+    r.turns(Duration::from_secs(20));
     assert_eq!(
         r.events().iter().rev().find(|e| matches!(e, model::Event::Status { .. })),
         Some(&model::Event::Status { status: model::Status::UpToDate })

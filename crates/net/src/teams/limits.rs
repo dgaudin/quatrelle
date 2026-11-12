@@ -256,6 +256,7 @@ impl Limiter {
     }
 
     /// Cadence `c`'s interval now: its base, times its slow-down.
+    #[cfg(test)]
     pub(crate) fn interval(&self, c: Cadence) -> Duration {
         c.base().saturating_mul(self.pace(c).slowdown.max(1))
     }

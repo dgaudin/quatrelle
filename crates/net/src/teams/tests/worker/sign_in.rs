@@ -346,3 +346,28 @@ fn a_copy_that_panics_on_opening_is_set_aside_and_made_again() {
     drop(r);
     let _ = std::fs::remove_dir_all(&t);
 }
+
+/// Final review R42: why a sign-in failed is one of the worker's own sentences, with Microsoft's
+/// AADSTS code or the HTTP status at most: never Microsoft's words, which can name the account.
+#[test]
+fn a_sign_in_refused_says_a_sentence_of_its_own_and_a_code_only() {
+    let why = |seen: &[model::Event]| {
+        seen.iter().rev().find_map(|e| match e {
+            model::Event::Status { status: Status::Failed { why } } => Some(why.clone()),
+            _ => None,
+        })
+    };
+    let r = rig(one_chat(), grant(Some(TENANT)));
+    *r.desk.authorize_fails.lock().unwrap() = Some(
+        "Microsoft Teams: AADSTS50020: User account 'zoe@contoso.example' from identity provider 'live.com' does not exist in tenant 'Contoso Ltd'. Trace ID: 0f1e2d3c".into(),
+    );
+    r.sign_in("organizations");
+    let seen = r.wait("the refusal", failed);
+    assert_eq!(why(&seen).as_deref(), Some("The sign-in stopped unexpectedly; try again (AADSTS50020)"), "{seen:?}");
+
+    // Graph refusing the token at once: the HTTP status, not the error's words.
+    let r = rig(one_chat(), Tokens { access: "not-the-fakes".into(), ..grant(Some(TENANT)) });
+    r.sign_in("organizations");
+    let seen = r.wait("the refusal", failed);
+    assert_eq!(why(&seen).as_deref(), Some("Teams didn't say who signed in (HTTP 401)"), "{seen:?}");
+}

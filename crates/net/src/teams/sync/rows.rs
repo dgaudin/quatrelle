@@ -126,7 +126,7 @@ fn last_line(c: &Chat, me: &str) -> String {
     let who = match &p.sender {
         _ if c.kind == ChatKind::OneOnOne => None,
         Sender::User { id, name, .. } if !id.eq_ignore_ascii_case(me) => {
-            Some(c.members.iter().find(|m| m.user_id == *id).map_or(name.as_str(), |m| m.name.as_str()))
+            Some(c.members.iter().find(|m| m.user_id.eq_ignore_ascii_case(id)).map_or(name.as_str(), |m| m.name.as_str()))
         }
         Sender::App { name, .. } => Some(name.as_str()),
         _ => None,

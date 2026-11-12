@@ -18,6 +18,10 @@ use crate::teams::limits::Cadence;
 use crate::teams::store::ChatRecord;
 use crate::teams::worker::Worker;
 
+/// The chats the user left, and those back in the list.
+mod left;
+/// "Work offline".
+mod offline;
 /// The chats, their reads and the Active pass.
 mod passes;
 
@@ -52,10 +56,16 @@ struct Run {
 }
 
 /// [`Run`], signed in and its first pass over (five seconds of turns).
-fn run(mut teams: FakeTeams) -> Run {
+fn run(teams: FakeTeams) -> Run {
+    run_with(teams, |_| {})
+}
+
+/// [`run`], the worker made ready by `ready` (a test's hooks) before it signs in.
+fn run_with(mut teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run {
     teams.clock.get_or_insert(NOW);
     let server = serve_teams(teams);
     let (mut w, _, seen, creds) = by_hand(&server, grant(Some(TENANT)));
+    ready(&mut w);
     let t0 = Instant::now();
     w.job(Job::SignIn { client_id: super::worker::CLIENT.into(), tenant: "organizations".into() });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());

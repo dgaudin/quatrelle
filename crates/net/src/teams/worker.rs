@@ -75,6 +75,8 @@ pub(crate) struct Hooks {
     pub(crate) trip_sign_in: Arc<std::sync::atomic::AtomicU32>,
     /// The history reads of this chat panic once their page has come.
     pub(crate) trip_history: Option<String>,
+    /// The incremental reads of this chat panic once their page has come.
+    pub(crate) trip_read: Option<String>,
     /// What fetches an outside picture, in place of `http::get_public`.
     pub(crate) outside: Option<fn(&str, usize) -> Result<crate::http::Response>>,
     /// How long an outside picture is waited for, in place of the minute.
@@ -95,17 +97,28 @@ impl Hooks {
     }
 }
 
+/// What the worker's channel carries: the engine's jobs, and "Work offline" from the pool.
+enum Order {
+    Job(Job),
+    Offline(bool),
+}
+
 /// The pool's hold on the worker, for the pool's life: jobs go in, in order; dropped, the worker
 /// ends.
 pub(crate) struct Handle {
-    tx: Sender<Job>,
+    tx: Sender<Order>,
     #[cfg(test)]
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Handle {
     pub(crate) fn submit(&self, job: Job) {
-        let _ = self.tx.send(job);
+        let _ = self.tx.send(Order::Job(job));
+    }
+
+    /// "Work offline" turned on or off: nothing asked of Teams while it's on.
+    pub(crate) fn work_offline(&self, on: bool) {
+        let _ = self.tx.send(Order::Offline(on));
     }
 
     /// Whether the worker's thread ends within `wait` of its channel closing.
@@ -184,6 +197,8 @@ pub(crate) struct Worker {
     renewed: Option<Instant>,
     /// Whether Teams is asked anything: signed in and going.
     polling: bool,
+    /// "Work offline" is on: nothing is asked of Teams, the copy still answers.
+    offline: bool,
     /// Nothing is asked before then: after a failure, or a panic.
     not_before: Option<Instant>,
     /// The status last reported.
@@ -233,6 +248,7 @@ impl Worker {
             no_keychain: false,
             renewed: None,
             polling: false,
+            offline: false,
             not_before: None,
             said: None,
             sync: SyncState::default(),
@@ -253,7 +269,7 @@ impl Worker {
 
     /// The thread: a job as soon as one comes, else a turn at the next deadline, or nothing until
     /// a job when there's nothing to ask; until the channel's end (the pool's).
-    fn run(mut self, rx: &Receiver<Job>) {
+    fn run(mut self, rx: &Receiver<Order>) {
         let mut panics = Panics::default();
         loop {
             let now = Instant::now();
@@ -271,8 +287,10 @@ impl Worker {
             #[cfg(test)]
             self.hooks.turns.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let done = fenced(|| {
-                if let Some(job) = job {
-                    self.job(job);
+                match job {
+                    Some(Order::Job(job)) => self.job(job),
+                    Some(Order::Offline(on)) => self.work_offline(on),
+                    None => {}
                 }
                 self.turn(Instant::now());
             });
@@ -290,7 +308,7 @@ impl Worker {
     pub(crate) fn wake(&self, now: Instant) -> Option<Instant> {
         let after = |wait: Duration| now.checked_add(wait).unwrap_or(now);
         let mut wake = None;
-        if self.polling {
+        if self.polling && !self.offline {
             let mut at = self.limiter.next_deadline(now);
             if pictures::waiting(self, now) {
                 at = now;
@@ -344,10 +362,17 @@ impl Worker {
     }
 
     /// One turn of the loop at `now`: a sign-in's answer taken, a slice of the search's index read
-    /// back, then, when Teams may be asked, one step of what is due.
+    /// back, then, when Teams may be asked, one step of what is due. Working offline, nothing is
+    /// asked: the copy still answers the jobs.
     pub(crate) fn turn(&mut self, now: Instant) {
         self.authorized(now);
         search::load(self);
+        if self.offline {
+            if self.polling {
+                self.status(Status::Offline);
+            }
+            return;
+        }
         if !self.polling || self.not_before.is_some_and(|at| now < at) {
             return;
         }
@@ -377,6 +402,34 @@ impl Worker {
     pub(crate) fn up_to_date(&mut self) {
         let status = backfill::progress(self).unwrap_or(Status::UpToDate);
         self.status(status);
+    }
+
+    /// "Work offline" turned on or off. On: nothing more is asked of Teams (a sign-in awaited from
+    /// the browser is let go), what was under way is given up, and "Offline" is said; the copy
+    /// stays open to answer. Off: the cadences go on afresh.
+    pub(crate) fn work_offline(&mut self, on: bool) {
+        if self.offline == on {
+            return;
+        }
+        self.offline = on;
+        if on {
+            log::info!("teams: working offline");
+            let signing = self.signing.take().is_some();
+            self.sync.give_up();
+            self.held = None;
+            if self.polling || signing {
+                self.status(Status::Offline);
+            }
+        } else {
+            log::info!("teams: working online again");
+            self.limiter = Limiter::new(Instant::now());
+            self.not_before = None;
+        }
+    }
+
+    /// Whether "Work offline" is on.
+    pub(crate) fn offline(&self) -> bool {
+        self.offline
     }
 
     /// Whether Teams is asked anything: signed in and going.

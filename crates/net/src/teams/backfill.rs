@@ -466,13 +466,28 @@ fn pace(w: &mut Worker, now: Instant) {
     }
 }
 
-/// A history read failed. Refused (403, 404): the chat is marked as the reads do (Graph doesn't
-/// serve it, or the user left) and done with. Busy (429, 503): nothing at all is asked during its
-/// `Retry-After`, and the history slows. The network's failure or the sign-in's: everything waits
-/// ("Offline"). A followed link refused (another 4xx): dropped, the read goes on from the oldest
-/// change copied. Anything else is that chat's alone: it waits, the others go on.
+/// A history read failed. A followed link refused (any 4xx, a 404 too: it says nothing of the
+/// chat): dropped, the read goes on from the oldest change copied. Else refused (403, 404): the
+/// chat is marked as the reads do (Graph doesn't serve it, or the user left) and done with. Busy
+/// (429, 503): nothing at all is asked during its `Retry-After`, and the history slows. The
+/// network's failure or the sign-in's: everything waits ("Offline"). Anything else is that chat's
+/// alone: it waits, the others go on.
 fn failed(w: &mut Worker, chat: &str, followed: bool, e: &NetError, now: Instant) -> Step {
     let id = w.hashed(chat);
+    // A link refused (a 404 too) says nothing of the chat: the link may be one kept too long.
+    if followed && http_code(e).is_some_and(|c| (400..500).contains(&c)) {
+        log::info!("teams: conversation {id}: Graph refused the history's link ({}); read again from the oldest change copied", kind(e));
+        if let Some(read) = w.backfill.read.as_mut() {
+            read.link = None;
+        }
+        if let Some(copy) = &w.copy
+            && let Some(r) = copy.chat(chat)
+            && let Err(e) = copy.put_chat(&ChatRecord { next_link: None, ..r })
+        {
+            log::warn!("teams: a conversation couldn't be kept: {}", kind(&NetError::Store(e)));
+        }
+        return Step::Asked;
+    }
     if refusal(e) {
         refused(w, chat, e);
         finish(w, chat);
@@ -493,19 +508,6 @@ fn failed(w: &mut Worker, chat: &str, followed: bool, e: &NetError, now: Instant
     if of_the_network(e) || matches!(e, NetError::Auth(_)) {
         log::warn!("teams: the history of a conversation failed: {}", kind(e));
         w.pause(e, now);
-        return Step::Asked;
-    }
-    if followed && http_code(e).is_some_and(|c| (400..500).contains(&c)) {
-        log::info!("teams: conversation {id}: Graph refused the history's link ({}); read again from the oldest change copied", kind(e));
-        if let Some(read) = w.backfill.read.as_mut() {
-            read.link = None;
-        }
-        if let Some(copy) = &w.copy
-            && let Some(r) = copy.chat(chat)
-            && let Err(e) = copy.put_chat(&ChatRecord { next_link: None, ..r })
-        {
-            log::warn!("teams: a conversation couldn't be kept: {}", kind(&NetError::Store(e)));
-        }
         return Step::Asked;
     }
     let wait = back_off(w, chat, now);
@@ -529,16 +531,12 @@ fn back_off(w: &mut Worker, chat: &str, now: Instant) -> Duration {
     wait
 }
 
-/// A chat's history read panicked: counted in its record; the third running, it is set aside for a
-/// day (server time) and its row says it couldn't be read; before that it waits, as after a
-/// failure. The others go on.
-fn panicked(w: &mut Worker, chat: &str, now: Instant) {
-    let (id, server) = (w.hashed(chat), server_ms(w));
-    w.backfill.read = None;
-    let Some(mut r) = w.copy.as_ref().and_then(|c| c.chat(chat)) else {
-        finish(w, chat);
-        return;
-    };
+/// A panic reading `chat` (its history, or its news): counted in its record; the third running,
+/// it is set aside for a day (server time) and its row says it couldn't be read. Whether it was
+/// set aside; `None` when the copy has no record of it.
+pub(crate) fn count_panic(w: &mut Worker, chat: &str) -> Option<bool> {
+    let server = server_ms(w);
+    let mut r = w.copy.as_ref().and_then(|c| c.chat(chat))?;
     r.panics = r.panics.saturating_add(1);
     let aside = r.panics >= PANICS && server.is_some();
     if let (true, Some(server)) = (aside, server) {
@@ -549,6 +547,18 @@ fn panicked(w: &mut Worker, chat: &str, now: Instant) {
     if let Some(Err(e)) = w.copy.as_ref().map(|c| c.put_chat(&r)) {
         log::warn!("teams: a conversation couldn't be kept: {}", kind(&NetError::Store(e)));
     }
+    Some(aside)
+}
+
+/// A chat's history read panicked: counted ([`count_panic`]); set aside, its history is over for
+/// now; before that it waits, as after a failure. The others go on.
+fn panicked(w: &mut Worker, chat: &str, now: Instant) {
+    let id = w.hashed(chat);
+    w.backfill.read = None;
+    let Some(aside) = count_panic(w, chat) else {
+        finish(w, chat);
+        return;
+    };
     if aside {
         log::error!("teams: conversation {id}: its history couldn't be read ({PANICS} internal errors running); set aside for a day");
         finish(w, chat);

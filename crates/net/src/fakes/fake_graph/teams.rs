@@ -170,6 +170,14 @@ pub(crate) struct FakeTeams {
     /// The next n reads of messages that follow a link (`$skiptoken`) are answered 400: Graph no
     /// longer takes the link (it was kept too long).
     pub(crate) refuse_links: u32,
+    /// The links `refuse_links` refuses are answered 404 rather than 400.
+    pub(crate) links_not_found: bool,
+    /// The next n pages of the chat list that follow a link (`$skiptoken`) are answered 400.
+    pub(crate) refuse_list_links: u32,
+    /// The chat list's `@odata.nextLink` points at another site than Graph's.
+    pub(crate) list_next_elsewhere: bool,
+    /// The chat list's pages are this long, whatever `$top` asks (and the last says no more).
+    pub(crate) list_page: Option<usize>,
 }
 
 impl FakeTeams {
@@ -433,7 +441,16 @@ impl FakeTeams {
         if q.get("$orderby").is_some_and(|o| o.starts_with("lastMessagePreview/createdDateTime")) {
             chats.sort_by_key(|c| std::cmp::Reverse(Self::newest(c).and_then(|m| ms_of(&m.created))));
         }
-        page(chats.into_iter().map(|c| self.chat_json(c, preview)).collect(), top, q, path, query, base, self.paging("chats"))
+        let top = self.list_page.unwrap_or(top);
+        let mut reply = page(chats.into_iter().map(|c| self.chat_json(c, preview)).collect(), top, q, path, query, base, self.paging("chats"));
+        if self.list_next_elsewhere
+            && let Ok(mut v) = serde_json::from_slice::<Value>(&reply.body)
+            && let Some(next) = v.get("@odata.nextLink").and_then(Value::as_str).map(|n| n.replacen(base, "https://elsewhere.example", 1))
+        {
+            v["@odata.nextLink"] = json!(next);
+            reply = Reply::json(200, &v);
+        }
+        reply
     }
 
     /// A chat's messages in a `lastModifiedDateTime` range (`gt` and/or `lt`, joined by `and`).
@@ -481,6 +498,10 @@ impl FakeTeams {
             return Reply::json(200, &Value::Object(v));
         }
         if name == "chats" {
+            if self.refuse_list_links > 0 && q.contains_key("$skiptoken") {
+                self.refuse_list_links -= 1;
+                return Reply::error(400, "BadRequest", "The skip token is no longer valid.");
+            }
             return self.chats(&q, raw_path, query, base);
         }
         if let Some(r) = self.people(name, p, &q, input) {
@@ -538,6 +559,9 @@ impl FakeTeams {
                 }
                 if self.refuse_links > 0 && q.contains_key("$skiptoken") {
                     self.refuse_links -= 1;
+                    if self.links_not_found {
+                        return Reply::error(404, "NotFound", "The skip token was not found.");
+                    }
                     return Reply::error(400, "BadRequest", "The skip token is no longer valid.");
                 }
                 let Some(chat) = self.chats.get(ci).cloned() else { return not_found() };

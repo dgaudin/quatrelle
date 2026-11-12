@@ -319,6 +319,20 @@ fn a_refused_next_link_restarts_from_the_oldest_copied() {
     assert_eq!(r.copied(CHAT), r.served(CHAT));
 }
 
+/// Final review I2 (d): a kept or followed link answering 404 says nothing of the chat: dropped,
+/// the read going on from the oldest change copied, never the chat taken for left.
+#[test]
+fn a_history_link_answering_404_is_dropped_not_taken_for_left() {
+    let mut teams = teams_with(vec![chat(CHAT, T0, 120)]);
+    teams.refuse_links = 1;
+    teams.links_not_found = true;
+    let mut r = run(teams);
+    r.until("the history's end", Duration::from_secs(60), |r| r.record(CHAT).done);
+    assert!(!r.record(CHAT).chat.left && !r.row(CHAT).left, "{:?}", r.row(CHAT));
+    assert!(!r.events().iter().any(|e| matches!(e, model::Event::Removed { .. })));
+    assert_eq!(r.copied(CHAT), r.served(CHAT));
+}
+
 #[test]
 fn short_of_disk_history_pauses_and_new_messages_still_come() {
     let tap = crate::fakes::logs::tap(|l| l.starts_with("teams: the disk"));

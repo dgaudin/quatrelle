@@ -338,9 +338,9 @@ pub enum Status {
 }
 
 /// Whether a bidi control drops out of a name or a link's text: embeddings, overrides and
-/// isolates, and the marks.
+/// isolates, and the marks (the Arabic letter mark too).
 pub fn is_bidi(c: char) -> bool {
-    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}')
+    matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}' | '\u{061C}')
 }
 
 /// A name or topic as it's shown: on one line (each run of whitespace one space), without control
@@ -392,7 +392,7 @@ pub fn is_internal(m: &Member, tenant: &str) -> bool {
 /// application or no one isn't.
 pub fn sender_internal(s: &Sender, members: &[Member], tenant: &str) -> bool {
     let Sender::User { id, identity_type, tenant_id, .. } = s else { return false };
-    if let Some(m) = members.iter().find(|m| m.user_id == *id) {
+    if let Some(m) = members.iter().find(|m| m.user_id.eq_ignore_ascii_case(id)) {
         return is_internal(m, tenant);
     }
     identity_type.as_deref() == Some("aadUser") && !tenant.is_empty() && tenant_id.as_deref().is_some_and(|t| t.eq_ignore_ascii_case(tenant))

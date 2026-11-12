@@ -250,8 +250,17 @@ fn token_request(p: &Provider, mut fields: Vec<(&str, String)>, extra_scope: &st
     let r = crate::http::send(
         &Request::post(&p.token_url, "application/x-www-form-urlencoded", form(&pairs), 1 << 20).header("Accept", "application/json"),
     )?;
+    // The service busy or failing (429, 5xx, said in its JSON or not): the connection's failure,
+    // tried again; never taken for a refusal that asks to sign in again.
+    let busy = |status: u16| NetError::Closed(format!("HTTP {status}"));
+    if r.status == 429 || (500..600).contains(&r.status) {
+        return Err(busy(r.status));
+    }
     let v: Value =
         serde_json::from_slice(&r.body).map_err(|_| NetError::Protocol(format!("the sign-in service answered HTTP {} without JSON", r.status)))?;
+    if matches!(v.get("error").and_then(Value::as_str), Some("temporarily_unavailable" | "server_error")) {
+        return Err(busy(r.status));
+    }
     if !r.ok() || v.get("error").is_some() {
         let what = v.get("error_description").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
         // A revoked or expired grant means signing in again.
@@ -417,7 +426,7 @@ pub fn authorize_on(
 }
 
 /// The first `AADSTS<digits>` code in Microsoft's words, if any.
-fn aadsts_code(text: &str) -> Option<String> {
+pub(crate) fn aadsts_code(text: &str) -> Option<String> {
     text.split(|c: char| !c.is_ascii_alphanumeric())
         .find(|w| w.len() > 6 && w.len() <= 12 && w.strip_prefix("AADSTS").is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())))
         .map(str::to_string)
@@ -604,6 +613,33 @@ pub(crate) mod tests {
             Ok(())
         };
         assert!(matches!(authorize(&p, "", &mut deny, Duration::from_secs(10)), Err(NetError::Auth(m)) if m.contains("access_denied")));
+    }
+
+    /// Final review I3: the sign-in service busy or failing (429, 5xx, `temporarily_unavailable`,
+    /// `server_error`) is the connection's failure, tried again: never a refusal that asks to sign
+    /// in again.
+    #[test]
+    fn a_sign_in_service_busy_or_failing_is_not_a_refusal() {
+        let json = |status: &str, kind: &str, body: &str| {
+            format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+        };
+        let (base, seen) = crate::http::tests::serve(vec![
+            json("503 Service Unavailable", "application/json", r#"{"error":"temporarily_unavailable","error_description":"AADSTS90033: busy"}"#),
+            json("500 Internal Server Error", "application/json", r#"{"error":"server_error"}"#),
+            json("429 Too Many Requests", "application/json", r#"{"error":"invalid_request"}"#),
+            json("400 Bad Request", "application/json", r#"{"error":"temporarily_unavailable"}"#),
+            json("502 Bad Gateway", "text/html", "<html>down</html>"),
+            json("200 OK", "application/json", r#"{"access_token":"fresh","expires_in":3600}"#),
+        ]);
+        let p = local(&format!("{base}/token"));
+        for want in ["HTTP 503", "HTTP 500", "HTTP 429", "HTTP 400", "HTTP 502"] {
+            match refresh(&p, "r1") {
+                Err(NetError::Closed(m)) => assert_eq!(m, want),
+                other => panic!("{want}: {other:?}"),
+            }
+        }
+        assert_eq!(refresh(&p, "r1").unwrap().access, "fresh", "then renewed");
+        seen.join().unwrap();
     }
 
     /// The address a sign-in's redirect listens on, from the URL the browser is sent to.

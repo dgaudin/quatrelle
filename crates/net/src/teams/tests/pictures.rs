@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 
 use super::worker::{AtDesk, CLIENT, Kept, Seen, account, desk, emit_into, grant, said, teams_of, turn_until};
 use super::{CHAT, MINUTE, T0, TENANT, chat, hits, serve_teams, teams_with};
-use crate::fake_graph::{FakeChat, FakeTeams, Server};
+use crate::fake_graph::{FakeChat, FakeTeams, FakeUser, Server};
 use crate::http::Response;
 use crate::teams::store::{Copy, Identity};
 use crate::teams::worker::Worker;
@@ -558,4 +558,40 @@ fn nothing_is_asked_during_a_pictures_retry_after() {
     r.turns(Duration::from_millis(900));
     assert_eq!(r.fake(|t| t.hits.values().sum::<u32>()), all, "Retry-After: 1");
     r.until("the picture, after", Duration::from_secs(30), |r| r.pictures().iter().any(|(q, _)| *q == p));
+}
+
+/// Final review I4: the people shown for one account are never asked about under the next
+/// account's token, whether the first signed out or not.
+#[test]
+fn the_people_shown_are_forgotten_when_someone_else_signs_in() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 1)]));
+    let accounts = |r: &Run| r.events().iter().filter(|e| matches!(e, model::Event::Account { .. })).count();
+    let asked = |r: &Run, from: usize| r.presences()[from..].concat().into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+    let sign_in_as = |r: &mut Run, id: &str, name: &str| {
+        let before = accounts(r);
+        r.fake(|t| t.me = FakeUser::new(id, name));
+        r.w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+        let seen = r.seen.clone();
+        let more = move |_: &Worker| teams_of(&seen).iter().filter(|e| matches!(e, model::Event::Account { .. })).count() > before;
+        turn_until(&mut r.w, r.t0 + r.at, "the next account", more);
+    };
+    r.w.job(Job::Visible { users: vec!["u-ana".into()] });
+    r.turn();
+    assert_eq!(asked(&r, 0), ["u-ana"]);
+
+    // Signed out, then someone else signs in.
+    r.w.job(Job::SignOut { delete_copy: false });
+    let from = r.presences().len();
+    sign_in_as(&mut r, "u-zed", "Zed Moss");
+    r.turns(Duration::from_secs(70));
+    assert!(!asked(&r, from).contains(&"u-ana".to_string()), "{:?}", asked(&r, from));
+
+    // Someone else signs in over a sign-in that stopped holding, without a sign-out.
+    r.w.job(Job::Visible { users: vec!["u-bo".into()] });
+    r.turns(Duration::from_secs(61));
+    assert!(asked(&r, from).contains(&"u-bo".to_string()));
+    let from = r.presences().len();
+    sign_in_as(&mut r, "u-yan", "Yan Ortiz");
+    r.turns(Duration::from_secs(70));
+    assert!(!asked(&r, from).contains(&"u-bo".to_string()), "{:?}", asked(&r, from));
 }

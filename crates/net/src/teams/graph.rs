@@ -205,6 +205,9 @@ impl TeamsClient {
     /// without an id is left out); the pages stop at one already followed or one that brings
     /// nobody new.
     pub fn members_all(&self, chat: &str) -> Result<Vec<Value>> {
+        if !path_id(chat) {
+            return Err(NetError::Refused("not a chat's id".into()));
+        }
         let mut url = self.at(&format!("/chats/{}/members", seg(chat)));
         let mut out = Vec::new();
         let (mut links, mut ids) = (HashSet::new(), HashSet::new());
@@ -287,6 +290,9 @@ impl TeamsClient {
     /// A page of a chat's messages changed in `range`, the last changed first; `next` is the
     /// previous page's [`Page::next`] (it carries the range).
     pub fn messages(&self, chat: &str, range: Range<'_>, next: Option<&str>) -> Result<Page> {
+        if !path_id(chat) {
+            return Err(NetError::Refused("not a chat's id".into()));
+        }
         let url = match next {
             Some(n) => self.own(n)?,
             None => {
