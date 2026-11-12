@@ -228,6 +228,9 @@ pub struct Pool {
     /// thousand messages, at every message opened. `None` once the pool shuts down.
     edits: Option<Sender<pool::Edit>>,
     edits_thread: Option<JoinHandle<()>>,
+    /// The Teams worker, started with the first of its jobs and let go when Teams is switched off
+    /// or signed out (`pool/teams.rs`).
+    teams: Option<crate::teams::worker::Handle>,
 }
 
 /// Write an edit to the cache and journal it (`Store::add_op`), report what changed, then hand it to
@@ -333,9 +336,9 @@ pub(crate) fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX)).unwrap_or(0)
 }
 
-mod ahead;
+pub(crate) mod ahead;
 mod changes;
-mod connect;
+pub(crate) mod connect;
 mod dav;
 mod listening;
 mod opening;

@@ -266,33 +266,11 @@ fn the_text_comes_before_the_whole_message() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
-/// The log lines a test build is read by, as this test binary logs them (the rest is dropped).
-static LINES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-
-struct Lines;
-
-impl log::Log for Lines {
-    fn enabled(&self, _: &log::Metadata) -> bool {
-        true
-    }
-    fn log(&self, record: &log::Record) {
-        let line = record.args().to_string();
-        if line.contains("text came first") || line.contains("the rest of it came") {
-            LINES.lock().unwrap().push(line);
-        }
-    }
-    fn flush(&self) {}
-}
-
 /// With two big messages on their way, a line of each kind says which message it's about, so
 /// the text's and the rest's can be paired.
 #[test]
 fn the_log_lines_name_their_message() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
-        let _ = log::set_logger(&Lines);
-        log::set_max_level(log::LevelFilter::Info);
-    });
+    let tap = crate::fakes::logs::tap(|line| line.contains("text came first") || line.contains("the rest of it came"));
     let (d, _) = inbox_of(2);
     let server = serve(d);
     let store = crate::fake::tests_store("ews-text-first-log");
@@ -302,7 +280,7 @@ fn the_log_lines_name_their_message() {
         open(&mut pool, key);
     }
     until_each(&pool, "both messages", &keys, is_body);
-    let lines = LINES.lock().unwrap().clone();
+    let lines = tap.lines();
     for key in &keys {
         let named = format!("a1: INBOX #{}: ", key.uid);
         for kind in ["text came first", "the rest of it came"] {

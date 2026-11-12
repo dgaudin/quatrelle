@@ -112,6 +112,12 @@ pub struct TeamsClient {
 impl TeamsClient {
     /// Check the token by reading the signed-in user.
     pub fn connect(base: &str, token: &str) -> Result<(TeamsClient, Me)> {
+        TeamsClient::connect_waiting(base, token, true)
+    }
+
+    /// [`Self::connect`], a 429 or a 503 waited out or not from its first request on
+    /// ([`Self::set_waiting`]): the worker never waits in a request.
+    pub(crate) fn connect_waiting(base: &str, token: &str, waiting: bool) -> Result<(TeamsClient, Me)> {
         let base = base.trim().trim_end_matches('/').to_string();
         let url = Url::parse(&base)?;
         if !url.https && !loopback(&url) {
@@ -122,7 +128,7 @@ impl TeamsClient {
             auth: Cell::new(format!("Bearer {token}")),
             stats: Cell::new(Stats::default()),
             date: Cell::new(None),
-            waiting: Cell::new(true),
+            waiting: Cell::new(waiting),
             retry: Cell::new(None),
         };
         let v = c.json("GET", &c.at("/me?$select=id,displayName,mail,userPrincipalName"), None, false)?;

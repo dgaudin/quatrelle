@@ -137,6 +137,9 @@ pub(crate) struct FakeTeams {
     pub(crate) token_expires: Option<(&'static str, u32, String)>,
     /// Whether it has run out.
     pub(crate) expired: bool,
+    /// The next request of this route (by route name) is refused with 401, whatever its token:
+    /// once, then the route works again.
+    pub(crate) refuse_once: Option<&'static str>,
 }
 
 impl FakeTeams {
@@ -574,6 +577,10 @@ impl Data {
                 let bearer = format!("Bearer {renewed}");
                 authorized = headers.iter().any(|(k, v)| k == "authorization" && *v == bearer);
             }
+        }
+        if t.refuse_once == Some(name) {
+            t.refuse_once = None;
+            authorized = false;
         }
         let mut reply = match t.refusal(name, authorized, someone_else) {
             Some(r) => r,

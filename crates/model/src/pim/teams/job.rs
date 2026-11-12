@@ -79,4 +79,9 @@ pub enum Event {
     Removed {
         chat: String,
     },
+    /// A copy made for another account (or one that didn't say whose it was) was in the way: it
+    /// was set aside unread, at `path`, and is the user's to keep or to delete.
+    SetAside {
+        path: String,
+    },
 }

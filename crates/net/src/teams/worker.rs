@@ -1,0 +1,506 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
+//! The Teams worker: the one thread that talks to Teams. It owns the Graph client, the access
+//! token, the limiter and the local copy, takes the engine's jobs in order and answers with
+//! events.
+//!
+//! * Nothing runs unasked. The browser opens only for [`Job::SignIn`], through the window
+//!   (`Event::OpenUrl`); a kept sign-in is gone on with only on [`Job::Start`]; the thread ends
+//!   on [`Job::Stop`] or when its channel closes.
+//! * The refresh token lives in the system keychain only ([`keyring`], [`REFRESH_KEY`]), the
+//!   access token in memory. Both are renewed here and nowhere else, so two renewals never race;
+//!   every request to Teams goes from this thread, so two reads of a chat are never in flight.
+//! * The account is what Microsoft says it is (`signing.rs`): who by `GET /me`, of which
+//!   organisation by the sign-in's own `tid`, else by the user's own entry among a chat's
+//!   members, never by a chat's `tenantId`. The copy is opened for that identity only.
+//! * Waits are deadlines the loop looks at, never a sleep: a job is heard at once. Each turn
+//!   runs behind `fenced`: a panic costs the step in hand, and the next one waits.
+//! * The log says counts, HTTP statuses with Graph's error codes and keyed hashes
+//!   ([`Worker::hashed`]): never a name, an address, a topic or an id.
+
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::time::{Duration, Instant};
+
+use quatrelle_model::Event;
+use quatrelle_model::job::Secret;
+use quatrelle_model::pim::teams::{self, CHAT_PAGES, ChatMessage, Job, MAX_CHATS, Status, TeamsSettings};
+use quatrelle_store::Store;
+use sha2::{Digest, Sha256};
+
+use super::graph::{TeamsClient, chat_of};
+use super::limits::{Cadence, Limiter, Route};
+use super::store::{Copy, id_ok};
+use crate::oauth::{self, Tokens};
+use crate::worker::Credentials;
+use crate::worker::connect::{Panics, fenced};
+use crate::{NetError, Result};
+
+mod signing;
+
+pub(crate) use signing::{Authority, Microsoft};
+pub use signing::{REFRESH_KEY, keyring};
+#[cfg(test)]
+pub(crate) use signing::{is_guid, missing_scope};
+
+/// How the worker reports: the pool's sink in the app, a list in the tests.
+pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
+
+/// The least between two turns of the loop: whatever a step leaves due, the loop never spins.
+const TURN: Duration = Duration::from_millis(20);
+/// How often the loop looks while nothing is polled.
+const IDLE: Duration = Duration::from_secs(1);
+/// And while a sign-in in the browser is awaited.
+const AWAITING: Duration = Duration::from_millis(200);
+/// After a failure (no network, a server's error): tried again then.
+const RETRY: Duration = Duration::from_secs(10);
+/// The longest link to a listing's next page followed.
+const MAX_LINK: usize = 8 << 10;
+
+/// What a test changes of a worker: a step that panics, and a shorter wait after it.
+#[cfg(test)]
+#[derive(Clone, Default)]
+pub(crate) struct Hooks {
+    /// The next reads of the chat list panic, this many of them: a bug met in a step.
+    pub(crate) trip_list: Arc<std::sync::atomic::AtomicU32>,
+    /// The wait after a panic, in place of [`Panics::wait`]'s half minute.
+    pub(crate) panic_wait: Option<Duration>,
+}
+
+#[cfg(test)]
+impl Hooks {
+    fn trip(&self) {
+        use std::sync::atomic::Ordering::SeqCst;
+        if self.trip_list.fetch_update(SeqCst, SeqCst, |n| n.checked_sub(1)).is_ok() {
+            panic!("a panic the test asked for");
+        }
+    }
+}
+
+/// The pool's hold on the worker: jobs go in, in order; dropped, the worker ends.
+pub(crate) struct Handle {
+    tx: Sender<Job>,
+    #[cfg(test)]
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Handle {
+    pub(crate) fn submit(&self, job: Job) {
+        let _ = self.tx.send(job);
+    }
+
+    /// Whether the worker's thread ends within `wait`.
+    #[cfg(test)]
+    pub(crate) fn finished_within(&mut self, wait: Duration) -> bool {
+        let until = Instant::now() + wait;
+        while Instant::now() < until && self.thread.as_ref().is_some_and(|t| !t.is_finished()) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        self.thread.as_ref().is_none_or(std::thread::JoinHandle::is_finished)
+    }
+}
+
+/// Start the worker on a thread named `teams`. `graph` is Graph's address
+/// (`https://graph.microsoft.com/v1.0`; a fake's in tests), `authority` who signs in and renews.
+/// Nothing is asked of anyone until a job says so.
+pub(crate) fn start(store: Store, creds: Arc<dyn Credentials>, emit: Emit, graph: String, authority: Box<dyn Authority>) -> std::io::Result<Handle> {
+    spawn(Worker::new(store, creds, emit, graph, authority)?)
+}
+
+/// [`start`], with a test's hooks.
+#[cfg(test)]
+pub(crate) fn start_with(
+    store: Store,
+    creds: Arc<dyn Credentials>,
+    emit: Emit,
+    graph: String,
+    authority: Box<dyn Authority>,
+    hooks: Hooks,
+) -> std::io::Result<Handle> {
+    let mut w = Worker::new(store, creds, emit, graph, authority)?;
+    w.hooks = hooks;
+    spawn(w)
+}
+
+fn spawn(w: Worker) -> std::io::Result<Handle> {
+    let (tx, rx) = mpsc::channel();
+    let thread = std::thread::Builder::new().name("teams".into()).spawn(move || w.run(&rx))?;
+    #[cfg(not(test))]
+    drop(thread);
+    Ok(Handle {
+        tx,
+        #[cfg(test)]
+        thread: Some(thread),
+    })
+}
+
+/// A read of the whole chat list, a page a step.
+#[derive(Default)]
+struct Listing {
+    next: Option<String>,
+    pages: usize,
+    /// The pages' links followed and the chats seen, by their keyed hashes: a link met twice or
+    /// a page with nobody new ends the read.
+    links: HashSet<u64>,
+    chats: HashSet<u64>,
+}
+
+/// What the worker's thread owns. The synchronisation, the history, the pictures and the search
+/// are functions on it (`sync.rs`, `backfill.rs`, `pictures.rs`, `search.rs`).
+pub(crate) struct Worker {
+    /// The Graph client, once signed in and Graph has said whose token it is; `None` while
+    /// signed out, after "sign in again", or before the network is there at a start.
+    pub(crate) client: Option<TeamsClient>,
+    /// The local copy, opened for the account signed in (and left open to read after "sign in
+    /// again").
+    pub(crate) copy: Option<Copy>,
+    pub(crate) limiter: Limiter,
+    /// The access token and when it runs out: in memory only.
+    pub(crate) tokens: Option<Tokens>,
+    /// The Options: the application and directory signed in with, and who signed in. Its
+    /// `object_id` and `tenant_id` are the identity the copy is bound to.
+    pub(crate) settings: TeamsSettings,
+    pub(crate) emit: Emit,
+    /// The chat on screen.
+    pub(crate) open: Option<String>,
+    /// Set by a step whose route must wait ([`Worker::may`]): when it may go. The loop doesn't
+    /// turn again before, however due the step's cadence is.
+    pub(crate) held: Option<Instant>,
+    /// The refresh token, for the renewals: the keychain's, or the session's only when there's
+    /// no keychain (`no_keychain`).
+    refresh: Option<Secret>,
+    no_keychain: bool,
+    /// When the access token was last renewed.
+    renewed: Option<Instant>,
+    /// Whether Teams is asked anything: signed in and going.
+    polling: bool,
+    /// Nothing is asked before then: after a failure, or a panic.
+    not_before: Option<Instant>,
+    /// The status last reported.
+    said: Option<Status>,
+    listing: Option<Listing>,
+    /// The sign-in awaited from the browser (its number), and where its thread answers.
+    signing: Option<u64>,
+    sign_ins: u64,
+    answers: (Sender<signing::Authorized>, Receiver<signing::Authorized>),
+    /// What the log's hashes are keyed with: made at start, never written.
+    key: Vec<u8>,
+    /// The cache the copy is in (its drive is what the history looks at before it downloads).
+    pub(crate) store: Store,
+    creds: Arc<dyn Credentials>,
+    graph: String,
+    authority: Arc<dyn Authority>,
+    #[cfg(test)]
+    hooks: Hooks,
+}
+
+impl Worker {
+    /// A worker signed out, asking nothing. Fails only when the system gives no randomness for
+    /// the log's key.
+    pub(crate) fn new(
+        store: Store,
+        creds: Arc<dyn Credentials>,
+        emit: Emit,
+        graph: String,
+        authority: Box<dyn Authority>,
+    ) -> std::io::Result<Worker> {
+        let key = oauth::secret_token().map_err(|_| std::io::Error::other("no randomness to key the log's hashes with"))?.into_bytes();
+        Ok(Worker {
+            client: None,
+            copy: None,
+            limiter: Limiter::new(Instant::now()),
+            tokens: None,
+            settings: TeamsSettings::default(),
+            emit,
+            open: None,
+            held: None,
+            refresh: None,
+            no_keychain: false,
+            renewed: None,
+            polling: false,
+            not_before: None,
+            said: None,
+            listing: None,
+            signing: None,
+            sign_ins: 0,
+            answers: mpsc::channel(),
+            key,
+            store,
+            creds,
+            graph: graph.trim().trim_end_matches('/').to_string(),
+            authority: Arc::from(authority),
+            #[cfg(test)]
+            hooks: Hooks::default(),
+        })
+    }
+
+    /// The thread: a job as soon as one comes, else a turn at the next deadline; until
+    /// [`Job::Stop`] or the channel's end.
+    fn run(mut self, rx: &Receiver<Job>) {
+        let mut panics = Panics::default();
+        loop {
+            let now = Instant::now();
+            let job = match rx.recv_timeout(self.wake(now).saturating_duration_since(now)) {
+                Ok(job) => Some(job),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => break,
+            };
+            let stop = matches!(job, Some(Job::Stop));
+            let done = fenced(|| {
+                if let Some(job) = job {
+                    self.job(job);
+                }
+                self.turn(Instant::now());
+            });
+            if stop {
+                break;
+            }
+            if done.is_none() {
+                self.after_panic(&mut panics);
+            }
+        }
+        log::info!("teams: the worker ended");
+    }
+
+    /// When the loop looks again, a job apart: the next cadence due, the time a held step may
+    /// go, the end of a wait after a failure. Never at once: [`TURN`] at least.
+    fn wake(&self, now: Instant) -> Instant {
+        let after = |wait: Duration| now.checked_add(wait).unwrap_or(now);
+        let mut wake = after(IDLE);
+        if self.polling {
+            wake = self.limiter.next_deadline(now);
+            for later in [self.held, self.not_before].into_iter().flatten() {
+                wake = wake.max(later);
+            }
+            wake = wake.max(after(TURN));
+        }
+        if self.signing.is_some() { wake.min(after(AWAITING)) } else { wake }
+    }
+
+    /// A step panicked: what it was doing is given up, and nothing is asked for a wait that
+    /// grows while panics keep coming (jobs are still heard).
+    fn after_panic(&mut self, panics: &mut Panics) {
+        let now = Instant::now();
+        let wait = panics.wait(now);
+        #[cfg(test)]
+        let wait = self.hooks.panic_wait.unwrap_or(wait);
+        log::error!("teams: internal error: the step in hand was given up; going on in {} s", wait.as_secs());
+        self.listing = None;
+        self.held = None;
+        self.not_before = now.checked_add(wait);
+    }
+
+    /// One job of the engine's.
+    pub(crate) fn job(&mut self, job: Job) {
+        match job {
+            Job::Start { settings } => self.start(settings),
+            Job::SignIn { client_id, tenant } => self.sign_in(&client_id, &tenant),
+            Job::SignOut { delete_copy } => self.sign_out(delete_copy),
+            Job::Stop => {
+                self.halt();
+                self.copy = None;
+                log::info!("teams: switched off");
+            }
+            Job::Open { chat } => self.open = chat.filter(|c| id_ok(c)),
+            // The copy's pages, presence, the search and pictures: with the modules that read them.
+            Job::Page { .. } | Job::Visible { .. } | Job::Search { .. } | Job::Picture { .. } => {}
+        }
+    }
+
+    /// One turn of the loop at `now`: a sign-in's answer taken, then, when Teams may be asked,
+    /// one step of what is due.
+    pub(crate) fn turn(&mut self, now: Instant) {
+        self.authorized(now);
+        if !self.polling || self.not_before.is_some_and(|at| now < at) {
+            return;
+        }
+        self.not_before = None;
+        self.held = None;
+        if self.ready(now) {
+            self.tick(now);
+        }
+    }
+
+    /// One step of whatever cadence is due. The hook the synchronisation takes over (`sync.rs`);
+    /// until it does, the worker reads the chat list to its end every ten seconds, a page a step,
+    /// counting its chats and keeping nothing; the cadences nothing runs yet are passed.
+    pub(crate) fn tick(&mut self, now: Instant) {
+        for later in [Cadence::Open, Cadence::Active, Cadence::Hourly, Cadence::Presence] {
+            if self.limiter.due(later, now) {
+                self.limiter.ran(later, now);
+            }
+        }
+        if self.listing.is_none() && self.limiter.due(Cadence::List, now) {
+            self.listing = Some(Listing::default());
+        }
+        let Some(mut list) = self.listing.take() else { return };
+        if !self.may(Route::ChatList, now) {
+            self.listing = Some(list);
+            return;
+        }
+        #[cfg(test)]
+        self.hooks.trip();
+        let page = match self.request(Route::ChatList, now, |c| c.chats(list.next.as_deref())) {
+            Ok(page) => page,
+            Err(e) => return self.failed(Cadence::List, "the list of conversations", &e, now),
+        };
+        list.pages = list.pages.saturating_add(1);
+        let before = list.chats.len();
+        for chat in page.items.iter().filter_map(chat_of) {
+            if list.chats.len() < MAX_CHATS {
+                list.chats.insert(self.key_of(&chat.id));
+            }
+        }
+        let more = list.chats.len() > before && list.chats.len() < MAX_CHATS && list.pages < CHAT_PAGES;
+        match page.next.filter(|next| more && next.len() <= MAX_LINK && list.links.insert(self.key_of(next))) {
+            Some(next) => {
+                list.next = Some(next);
+                self.listing = Some(list);
+            }
+            None => {
+                self.limiter.ran(Cadence::List, now);
+                log::info!("teams: {} conversations listed in {} pages", list.chats.len(), list.pages);
+                self.status(if self.no_keychain { Status::NoKeychain } else { Status::UpToDate });
+            }
+        }
+    }
+
+    /// Whether a request of `route` may go at `now`, by the limiter. When it may not, the loop is
+    /// told when ([`Worker::held`]) and the step is left for a later turn: nothing here sleeps.
+    pub(crate) fn may(&mut self, route: Route, now: Instant) -> bool {
+        let wait = self.limiter.wait(route, now);
+        if wait.is_zero() {
+            return true;
+        }
+        let at = now.checked_add(wait).unwrap_or(now);
+        self.held = Some(self.held.map_or(at, |held| held.min(at)));
+        false
+    }
+
+    /// A request to Graph on `route`, counted by the limiter. Refused for its token (401), the
+    /// token is renewed and the request made once more; refused again, or the renewal refused,
+    /// it is "sign in again" and nothing more is asked.
+    pub(crate) fn request<T>(&mut self, route: Route, now: Instant, call: impl Fn(&TeamsClient) -> Result<T>) -> Result<T> {
+        let first = self.ask(route, now, &call);
+        let Err(NetError::Auth(_)) = first else { return first };
+        log::info!("teams: the access token was refused; renewing it");
+        self.renew(now)?;
+        let again = self.ask(route, now, &call);
+        if let Err(NetError::Auth(_)) = again {
+            log::warn!("teams: the renewed token was refused too");
+            self.sign_in_again();
+        }
+        again
+    }
+
+    fn ask<T>(&mut self, route: Route, now: Instant, call: &impl Fn(&TeamsClient) -> Result<T>) -> Result<T> {
+        self.limiter.took(route, now);
+        match &self.client {
+            Some(client) => call(client),
+            None => Err(NetError::Refused("Teams isn't signed in".into())),
+        }
+    }
+
+    /// A step of `cadence` failed. Busy (429, 503): the cadence waits as told and slows down.
+    /// Anything else: said by its kind, "Offline" when it's the network, and tried again in a
+    /// while. A refused token was dealt with where it was met.
+    pub(crate) fn failed(&mut self, cadence: Cadence, what: &str, e: &NetError, now: Instant) {
+        if !self.polling {
+            return;
+        }
+        log::warn!("teams: {what} failed: {}", kind(e));
+        if matches!(e, NetError::Closed(m) if m.starts_with("HTTP 429") || m.starts_with("HTTP 503")) {
+            let wait = self.client.as_ref().and_then(TeamsClient::retry_after);
+            return self.limiter.throttled(cadence, wait, now);
+        }
+        self.pause(e, now);
+    }
+
+    /// Nothing is asked for a while after `e`; "Offline" when it's the network.
+    fn pause(&mut self, e: &NetError, now: Instant) {
+        if matches!(e, NetError::Io(_) | NetError::Tls(_)) || matches!(e, NetError::Closed(m) if !http_status(m)) {
+            self.status(Status::Offline);
+        }
+        self.not_before = now.checked_add(RETRY);
+    }
+
+    /// Report where the connection stands, when that changed.
+    pub(crate) fn status(&mut self, status: Status) {
+        if self.said.as_ref() != Some(&status) {
+            self.said = Some(status.clone());
+            self.say(teams::Event::Status { status });
+        }
+    }
+
+    pub(crate) fn say(&self, event: teams::Event) {
+        (self.emit)(Event::Teams { event });
+    }
+
+    /// Nothing more is asked of Teams: the tokens leave memory, the copy stays as it is.
+    fn halt(&mut self) {
+        self.polling = false;
+        self.client = None;
+        self.tokens = None;
+        self.refresh = None;
+        self.renewed = None;
+        self.listing = None;
+        self.signing = None;
+        self.held = None;
+        self.not_before = None;
+    }
+
+    /// An id as the log may say it: 8 hex digits of the SHA-256 of this run's key and the id.
+    /// The key is random, made at start and never written, so a hash says nothing to who
+    /// doesn't have it, nor from one run to the next.
+    pub(crate) fn hashed(&self, id: &str) -> String {
+        self.digest(id).iter().take(4).map(|b| format!("{b:02x}")).collect()
+    }
+
+    /// The same hash as a number: what the limiter knows a chat by ([`Route::Messages`]).
+    pub(crate) fn key_of(&self, id: &str) -> u64 {
+        self.digest(id).iter().take(8).fold(0, |n, b| (n << 8) | u64::from(*b))
+    }
+
+    fn digest(&self, id: &str) -> [u8; 32] {
+        Sha256::new().chain_update(&self.key).chain_update(id.as_bytes()).finalize().into()
+    }
+}
+
+/// The messages of a read that may be kept, shown and indexed: those with an id. One whose id
+/// couldn't be read comes from the reader with an empty one (and can't be shown): nothing is
+/// ever kept, listed or indexed under an empty id. Counted in the log, with those that have
+/// their id but can't be shown.
+// The reads of messages (the synchronisation, the history) are what calls it.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn with_ids(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    let read = messages.len();
+    let kept: Vec<ChatMessage> = messages.into_iter().filter(|m| !m.id.is_empty()).collect();
+    let (nameless, unshowable) = (read.saturating_sub(kept.len()), kept.iter().filter(|m| m.unshowable).count());
+    if nameless > 0 || unshowable > 0 {
+        log::warn!("teams: of {read} messages read, {nameless} had no id and were left out, {unshowable} can't be shown");
+    }
+    kept
+}
+
+/// A failure as the log may say it: the HTTP status and Graph's error code when that is all it
+/// is, else its kind alone. Never an error's own words: they can carry an address, or what a
+/// server wrote.
+pub(super) fn kind(e: &NetError) -> String {
+    match e {
+        NetError::Protocol(m) | NetError::Closed(m) if http_status(m) => m.clone(),
+        NetError::Io(e) => format!("the network ({:?})", e.kind()),
+        NetError::Tls(_) => "the secure connection".into(),
+        NetError::Auth(_) => "the sign-in refused".into(),
+        NetError::Closed(_) => "the connection closed".into(),
+        NetError::Protocol(_) => "an answer that couldn't be read".into(),
+        NetError::Store(_) => "the local copy".into(),
+        _ => "refused".into(),
+    }
+}
+
+/// Whether an error's text is only `HTTP <status>` and an error code, as the client writes them.
+fn http_status(m: &str) -> bool {
+    m.len() <= 80
+        && m.strip_prefix("HTTP ").is_some_and(|rest| rest.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'_' | b'-' | b'.')))
+}

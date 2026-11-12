@@ -383,20 +383,54 @@ impl Copy {
         self.store.remove_account_files(TEAMS_ACCOUNT, &at)
     }
 
-    /// The copy deleted: its data file, and one set aside as damaged.
+    /// The copy deleted: its data file, and every copy of it set aside as damaged.
     pub(crate) fn delete(self) -> Result<()> {
-        let damaged = self.store.data_file(TEAMS_ACCOUNT).map(|f| f.with_extension(format!("{DATA_FILE_EXTENSION}.damaged")));
-        self.store.delete_account(TEAMS_ACCOUNT)?;
-        if let Some(d) = damaged {
+        Copy::delete_in(&self.store)
+    }
+
+    /// [`Copy::delete`] of the copy in `store`, open or not (signing out before anything was
+    /// read): the data file, then every copy of it the store set aside as damaged, whichever
+    /// name the file had then. A copy set aside for the user (`.old`) stays.
+    pub(crate) fn delete_in(store: &Store) -> Result<()> {
+        let beside = store.data_file(TEAMS_ACCOUNT).map(|f| f.with_extension(format!("{DATA_FILE_EXTENSION}.damaged")));
+        store.delete_account(TEAMS_ACCOUNT)?;
+        let mut failed = None;
+        for d in beside.into_iter().chain(damaged_copies(store)) {
             match std::fs::remove_file(&d) {
-                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(StoreError::Io { path: d.display().to_string(), source: e });
-                }
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => failed = Some(StoreError::Io { path: d.display().to_string(), source: e }),
                 _ => {}
             }
         }
-        Ok(())
+        failed.map_or(Ok(()), Err)
     }
+}
+
+/// The most entries looked at in the folder of the data files.
+const MAX_DIR_ENTRIES: usize = 10_000;
+
+/// The copies of the Teams file set aside as damaged in the folder of the data files: the file
+/// is `Teams.quatrelle`, or `Teams (2).quatrelle`… when that name was taken, and a damaged one
+/// gets `.damaged` after its name. One whose data file is still there isn't the copy's (the copy's
+/// own is deleted by now): it's of an account that has that name.
+fn damaged_copies(store: &Store) -> Vec<PathBuf> {
+    let Some(dir) = store.data_files_dir() else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(&dir) else { return Vec::new() };
+    let tail = format!(".{DATA_FILE_EXTENSION}.damaged");
+    let numbered = |stem: &str| {
+        stem.strip_prefix(TEAMS_ACCOUNT).is_some_and(|n| {
+            n.is_empty()
+                || n.strip_prefix(" (")
+                    .and_then(|n| n.strip_suffix(')'))
+                    .is_some_and(|n| !n.is_empty() && n.len() <= 9 && n.bytes().all(|b| b.is_ascii_digit()))
+        })
+    };
+    entries
+        .take(MAX_DIR_ENTRIES)
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|name| name.strip_suffix(&tail).is_some_and(numbered))
+        .filter(|name| !dir.join(name.strip_suffix(".damaged").unwrap_or(name)).exists())
+        .map(|name| dir.join(name))
+        .collect()
 }
 
 /// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened

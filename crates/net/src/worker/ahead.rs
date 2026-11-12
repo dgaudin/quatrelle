@@ -98,6 +98,6 @@ impl Worker {
 
 /// Whether a disk with `available` of `total` bytes free has room for more mail: the larger of
 /// 5 GB and a fiftieth of it is left.
-pub(super) fn enough_room(available: u64, total: u64) -> bool {
+pub(crate) fn enough_room(available: u64, total: u64) -> bool {
     available >= LEAVE_FREE.max(total / LEAVE_FREE_SHARE)
 }

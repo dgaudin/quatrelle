@@ -281,6 +281,7 @@ fn every_payload_round_trips_through_json() {
         teams::Event::Found { query: "plan".into(), hits: vec![("19:a@thread.v2".into(), "1".into())], indexing: true, partial: false },
         teams::Event::Picture { picture: Picture::Photo { user: "u2".into() }, bytes: vec![1, 2, 3] },
         teams::Event::Removed { chat: "19:a@thread.v2".into() },
+        teams::Event::SetAside { path: "/data/Teams-1a2b3c4d.quatrelle.old".into() },
     ];
     for event in events {
         let e = Event::Teams { event };

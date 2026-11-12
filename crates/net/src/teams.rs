@@ -13,20 +13,26 @@
 //!   for, its messages in pages.
 //! * `limits`: the limiter (Microsoft's per-second limits), the approved cadences and the
 //!   slow-down after a 429.
+//! * `worker`: the Teams worker, the one thread that talks to Teams: sign-in, the tokens (the
+//!   refresh token in the keychain only, [`keyring`]), the account's identity, and the loop the
+//!   synchronisation runs in.
 
 pub mod check;
 pub mod graph;
-// The Teams worker (next) is what asks it; until then only its tests.
+// The worker asks it for the chat list; the rest of it is the synchronisation's (next).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod limits;
-// The Teams worker (next) is what reads and writes it; until then only its tests and fuzz target.
+// The worker opens and deletes it; its chats and messages are read and written by the
+// synchronisation (next), and until then by its tests and fuzz target.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod store;
+pub(crate) mod worker;
 
 pub use check::{CheckOptions, run_check};
 pub use graph::{Me, Page, Range, Stats, TeamsClient, chat_of, member_of, message_of, presence_of};
 #[doc(hidden)]
 pub use store::fuzz_teams_copy;
+pub use worker::{REFRESH_KEY, keyring};
 
 #[cfg(test)]
 mod tests;

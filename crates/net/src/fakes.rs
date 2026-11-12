@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Servers of the tests' own, in memory: IMAP, CalDAV/CardDAV, EWS, Graph, JMAP and Webex.
+//! Servers of the tests' own, in memory: IMAP, CalDAV/CardDAV, EWS, Graph, JMAP and Webex; and
+//! the log as the tests read it (`logs`).
 //!
 //! The fake Graph server is also built for other crates' tests with the `fakes` feature (a
 //! dev-dependency only, never in a build that ships): [`teams_sample`] starts it with a Teams
@@ -20,6 +21,8 @@ pub(crate) mod fake_jmap;
 pub(crate) mod fake_llm;
 #[cfg(test)]
 pub(crate) mod fake_webex;
+#[cfg(test)]
+pub(crate) mod logs;
 #[cfg(test)]
 mod real_layout;
 #[cfg(test)]

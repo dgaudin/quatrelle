@@ -49,20 +49,20 @@ const PANIC_FORGOTTEN: Duration = Duration::from_secs(3600);
 /// this: a panic that got past every other guard (a server's answer or a file nobody thought
 /// of) costs the work in hand, where it used to end the thread, and the account with it until
 /// Quatrelle started again. The panic itself is in the log already (the app's panic hook).
-pub(super) fn fenced<T>(work: impl FnOnce() -> T) -> Option<T> {
+pub(crate) fn fenced<T>(work: impl FnOnce() -> T) -> Option<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).ok()
 }
 
 /// The panics an account's thread has caught: how long it waits after the next.
 #[derive(Default)]
-pub(super) struct Panics {
+pub(crate) struct Panics {
     run: u32,
     last: Option<Instant>,
 }
 
 impl Panics {
     /// One more, at `now`: the wait before the account's work goes on.
-    pub(super) fn wait(&mut self, now: Instant) -> Duration {
+    pub(crate) fn wait(&mut self, now: Instant) -> Duration {
         if self.last.is_some_and(|l| now.saturating_duration_since(l) >= PANIC_FORGOTTEN) {
             self.run = 0;
         }

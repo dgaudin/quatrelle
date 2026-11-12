@@ -641,3 +641,34 @@ fn the_wait_after_a_panic_grows_then_starts_over() {
     }
     assert_eq!(p.wait(t + Duration::from_secs(3600)).as_secs(), 30);
 }
+
+/// Teams' jobs go to a worker of their own, started with the first of them and let go once
+/// Teams is switched off or signed out: nothing of Teams runs until asked, nor after.
+#[test]
+fn the_pool_starts_the_teams_worker_at_its_first_job_and_lets_it_go() {
+    use quatrelle_model::pim::teams::{self, Status, TeamsSettings};
+    let mut p = Pool::new(Store::memory(), Arc::new(MemoryCredentials::default()));
+    p.submit(Job::Teams { job: teams::Job::Stop });
+    assert!(p.teams.is_none(), "nothing of Teams runs unasked, and a stop starts nothing");
+    // No sign-in is kept: the worker says so (and asks nothing of the network).
+    let settings = TeamsSettings { on: true, signed_in: true, object_id: "u-1".into(), tenant_id: "t-1".into(), ..TeamsSettings::default() };
+    p.submit(Job::Teams { job: teams::Job::Start { settings } });
+    assert!(p.teams.is_some());
+    let until = Instant::now() + Duration::from_secs(10);
+    let mut seen = Vec::new();
+    let again = |e: &Event| matches!(e, Event::Teams { event: teams::Event::Status { status: Status::SignInAgain } });
+    while Instant::now() < until && !seen.iter().any(again) {
+        seen.extend(p.wait(Duration::from_millis(50)));
+    }
+    assert!(seen.iter().any(again), "{seen:?}");
+    p.submit(Job::Teams { job: teams::Job::Stop });
+    assert!(p.teams.is_none(), "switched off: the worker is let go");
+    p.submit(Job::Teams { job: teams::Job::SignOut { delete_copy: false } });
+    assert!(p.teams.is_none(), "and signing out leaves none behind");
+    let until = Instant::now() + Duration::from_secs(10);
+    let out = |e: &Event| matches!(e, Event::Teams { event: teams::Event::Status { status: Status::SignedOut } });
+    while Instant::now() < until && !seen.iter().any(out) {
+        seen.extend(p.wait(Duration::from_millis(50)));
+    }
+    assert!(seen.iter().any(out), "{seen:?}");
+}

@@ -9,6 +9,7 @@ use super::*;
 
 mod importing;
 mod llm;
+mod teams;
 
 /// What the edit writer's thread is handed, in order.
 pub(super) enum Edit {
@@ -101,6 +102,7 @@ impl Pool {
             offline: false,
             search: Arc::new(AtomicU64::new(0)),
             imports: Arc::default(),
+            teams: None,
         }
     }
 
@@ -399,7 +401,7 @@ impl Pool {
             | Job::WebexCreate { .. }
             | Job::WebexUpdate { .. }
             | Job::WebexDelete { .. }) => self.webex(j),
-            Job::Teams { .. } => log::debug!("teams: not running"),
+            Job::Teams { job } => self.teams_job(job),
             Job::SealDraft { account, raw, folder, replaces, keep } => {
                 let raw = self.seal(&account, raw.0);
                 let account = account.id;

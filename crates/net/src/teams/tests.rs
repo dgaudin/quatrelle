@@ -17,6 +17,8 @@ mod limits;
 mod read;
 /// The local copy: pages, identity, deleted messages, damaged records.
 mod store;
+/// The worker: sign-in, whose organisation it is, the tokens, switching off, signing out.
+mod worker;
 
 /// 2026-10-01T00:00:00Z in milliseconds.
 const T0: i64 = 1_790_812_800_000;

@@ -52,8 +52,10 @@ pub(crate) enum Route {
     Presence,
     /// A user's photo.
     Photo,
-    /// A file shared in a chat.
+    /// A file shared in a chat, and the user's own OneDrive.
     Drive,
+    /// The signed-in user (`GET /me`).
+    Me,
 }
 
 impl Route {
