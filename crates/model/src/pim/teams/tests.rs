@@ -153,6 +153,34 @@ fn plain_text_joins_runs_and_blocks() {
 }
 
 #[test]
+fn a_run_is_written_without_its_defaults_and_read_back_whole() {
+    let plain = Run { text: "a".into(), ..Default::default() };
+    assert_eq!(serde_json::to_string(&plain).unwrap(), r#"{"text":"a"}"#);
+    let styled = Run {
+        text: "b".into(),
+        bold: true,
+        italic: true,
+        underline: true,
+        strike: true,
+        code: true,
+        link: Some("https://contoso.example/".into()),
+        mention: Some(0),
+        hosted: Some("h".into()),
+        outside: Some("https://contoso.example/a.png".into()),
+        attachment: Some("a".into()),
+    };
+    for run in [plain, styled, Run::default()] {
+        assert_eq!(serde_json::from_str::<Run>(&serde_json::to_string(&run).unwrap()).unwrap(), run);
+    }
+    // As written before the defaults were left out, too.
+    let full = r#"{"text":"c","bold":false,"italic":true,"underline":false,"strike":false,"code":false,"link":null,"mention":null,"hosted":null,"outside":null,"attachment":null}"#;
+    assert_eq!(serde_json::from_str::<Run>(full).unwrap(), Run { text: "c".into(), italic: true, ..Default::default() });
+    // Twenty thousand one-letter runs are kept in well under the cap on a body.
+    let many = ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "x".into(), ..Default::default() }; 20_000] }] };
+    assert!(serde_json::to_vec(&many).unwrap().len() < MAX_BODY, "{}", serde_json::to_vec(&many).unwrap().len());
+}
+
+#[test]
 fn settings_default_announce_and_are_default() {
     let s = TeamsSettings::default();
     assert!(s.notify && !s.on && !s.notify_only_direct);

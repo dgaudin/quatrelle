@@ -242,7 +242,6 @@ pub(crate) fn safe_segment(s: &str) -> String {
 
 /// A path inside an account (`a/b/c`) from a data file, when every part of it is a plain name:
 /// nothing that climbs out (`..`), no drive or root, no odd characters.
-#[cfg(not(target_arch = "wasm32"))]
 fn inner_path(key: &str) -> Option<PathBuf> {
     if key.is_empty() || key.len() > 512 {
         return None;

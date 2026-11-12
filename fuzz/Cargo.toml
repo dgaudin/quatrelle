@@ -35,6 +35,7 @@ bin = [
     { name = "markdown", bench = false, test = false, doc = false, path = "fuzz_targets/notes/markdown.rs" }, # a note's Markdown, and the edits its window makes
     { name = "teams_html", bench = false, test = false, doc = false, path = "fuzz_targets/teams/html.rs" }, # a Teams message's HTML, read into its text
     { name = "teams_json", bench = false, test = false, doc = false, path = "fuzz_targets/teams/json.rs" }, # Graph's answers about chats, members, messages and presence, read into the model
+    { name = "teams_store", bench = false, test = false, doc = false, path = "fuzz_targets/teams/store.rs" }, # the local copy of the Teams chats, read back as a hostile file
     { name = "trust", bench = false, test = false, doc = false, path = "fuzz_targets/trust.rs" }, # the URLs and hosts servers hand out
     { name = "vcard", bench = false, test = false, doc = false, path = "fuzz_targets/vcard.rs" }, # contact cards
 ]

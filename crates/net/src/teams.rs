@@ -9,12 +9,19 @@
 //!   each message behind a guard of its own.
 //! * [`check`]: the step 0 check a user runs on their own account (`quatrelle-cli teams
 //!   check`): counts and yes/no answers only, its test messages deleted on the way out.
+//! * `store`: the local copy of the chats (`Teams.quatrelle`), bound to the identity it was made
+//!   for, its messages in pages.
 
 pub mod check;
 pub mod graph;
+// The Teams worker (next) is what reads and writes it; until then only its tests and fuzz target.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) mod store;
 
 pub use check::{CheckOptions, run_check};
 pub use graph::{Me, Page, Range, Stats, TeamsClient, chat_of, member_of, message_of, presence_of};
+#[doc(hidden)]
+pub use store::fuzz_teams_copy;
 
 #[cfg(test)]
 mod tests;

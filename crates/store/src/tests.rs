@@ -709,3 +709,61 @@ fn the_page_a_message_is_in_is_read_alone() {
     assert!(small.iter().all(|m| m.key.folder == "Small"), "keys rebuilt");
     assert!(s.load_page_of("a1", "Nowhere", 1).unwrap_or_default().is_empty());
 }
+
+/// A data file set aside is closed, renamed beside the others and never opened again as the
+/// account's: the account starts a file of its own, and a name taken already isn't written over.
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn set_aside_closes_and_renames_the_data_file() {
+    let t = std::env::temp_dir().join(format!("quatrelle-store-set-aside-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&t);
+    let s = Store::open_packed(t.join("app"), t.join("files")).unwrap();
+    assert_eq!(s.set_aside_data_file("a1", "a1.old").unwrap(), None, "no file yet");
+    s.save_account_doc("a1", "doc.json", &vec![1]).unwrap();
+    let file = s.data_file("a1").unwrap();
+    let aside = s.set_aside_data_file("a1", "a1-x.quatrelle.old").unwrap().unwrap();
+    assert_eq!(aside, t.join("files").join("a1-x.quatrelle.old"));
+    assert!(aside.exists() && !file.exists());
+    assert!(s.load_account_doc::<Vec<i32>>("a1", "doc.json").unwrap().is_empty(), "the old file isn't read");
+    s.save_account_doc("a1", "doc.json", &vec![2]).unwrap();
+    assert_eq!(s.load_account_doc::<Vec<i32>>("a1", "doc.json").unwrap(), [2]);
+    let again = s.set_aside_data_file("a1", "a1-x.quatrelle.old").unwrap().unwrap();
+    assert_eq!(again, t.join("files").join("a1-x (2).quatrelle.old"));
+    // A new store over the same folders doesn't know the files set aside.
+    drop(s);
+    let s = Store::open_packed(t.join("app"), t.join("files")).unwrap();
+    assert!(s.load_account_doc::<Vec<i32>>("a1", "doc.json").unwrap().is_empty());
+    for bad in ["", "..", "../x.old", "a/b.old", "c:x", "a\u{0}b"] {
+        assert!(s.set_aside_data_file("a1", bad).is_err(), "{bad:?}");
+    }
+    assert_eq!(Store::memory().set_aside_data_file("a1", "a1.old").unwrap(), None, "a cache without data files");
+    let _ = fs::remove_dir_all(&t);
+}
+
+/// Files kept with an account by their place in it: written together, read, listed by folder and
+/// removed with what's under them, the same in memory and in a data file; a place that climbs out
+/// is refused.
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn an_accounts_files_by_their_place() {
+    let t = std::env::temp_dir().join(format!("quatrelle-store-account-files-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&t);
+    for s in [Store::memory(), Store::open_packed(t.join("app"), t.join("files")).unwrap()] {
+        let files = [("top.json", "1"), ("chats/a.json", "2"), ("chats/b.json", "3"), ("msgs/a/0.json", "4"), ("msgs/a/1.json", "5")];
+        s.write_account_files("T", &files.map(|(k, v)| (k.to_string(), v.as_bytes().to_vec()))).unwrap();
+        assert_eq!(s.account_file("T", "chats/b.json").unwrap().as_deref(), Some(&b"3"[..]));
+        assert_eq!(s.account_file("T", "chats/c.json").unwrap(), None);
+        let mut chats = s.account_files("T", "chats");
+        chats.sort();
+        assert_eq!(chats, ["a.json", "b.json"]);
+        assert_eq!(s.account_files("T", ""), ["top.json"], "files only, not the folders");
+        s.remove_account_files("T", "msgs/a").unwrap();
+        s.remove_account_files("T", "chats/a.json").unwrap();
+        s.remove_account_files("T", "nothing/here").unwrap();
+        assert!(s.account_files("T", "msgs/a").is_empty() && s.account_files("T", "chats") == ["b.json"]);
+        for bad in ["", "../x", "a//b", "/abs", "a/./b", "a b"] {
+            assert!(s.account_file("T", bad).is_err() && s.write_account_files("T", &[(bad.to_string(), vec![])]).is_err(), "{bad:?}");
+        }
+    }
+    let _ = fs::remove_dir_all(&t);
+}

@@ -13,6 +13,8 @@ use crate::fake_graph::{Data, FakeChat, FakeMessage, FakeTeams, FakeUser, Server
 mod check;
 /// Graph's JSON read into the model, and the client's calls for pictures and presence.
 mod read;
+/// The local copy: pages, identity, deleted messages, damaged records.
+mod store;
 
 /// 2026-10-01T00:00:00Z in milliseconds.
 const T0: i64 = 1_790_812_800_000;

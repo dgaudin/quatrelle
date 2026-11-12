@@ -20,6 +20,101 @@ impl Store {
         }
     }
 
+    /// An account's data file closed and renamed, in its folder, to `new_name` (a plain file name;
+    /// one taken already gets ` (2)`, ` (3)`… before its first dot): kept for the user, never
+    /// opened again as the account's, which starts a file of its own when next written. Where it
+    /// went; `None` when the account has none (online only, a cache that keeps no data files, or
+    /// nothing written yet).
+    pub fn set_aside_data_file(&self, account: &str, new_name: &str) -> Result<Option<PathBuf>> {
+        let plain = !new_name.is_empty()
+            && new_name.len() <= 200
+            && !matches!(new_name, "." | "..")
+            && !new_name.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':' | '<' | '>' | '"' | '|' | '?' | '*'));
+        if !plain {
+            return Err(StoreError::Io { path: new_name.to_string(), source: io::Error::new(io::ErrorKind::InvalidInput, "not a plain file name") });
+        }
+        if self.is_online_only(account) {
+            return Ok(None);
+        }
+        match &self.files.main {
+            #[cfg(not(target_arch = "wasm32"))]
+            Files::Packed(x) => {
+                // Closed and forgotten first: an open from now on makes a file of its own, under a
+                // name of its own while this one is still there.
+                let Some(file) = x.let_go(&safe_segment(account)) else { return Ok(None) };
+                let dir = file.parent().map(Path::to_path_buf).unwrap_or_else(|| x.dir().to_path_buf());
+                let (stem, rest) = new_name.split_once('.').map_or((new_name, String::new()), |(s, r)| (s, format!(".{r}")));
+                let to = (1..100)
+                    .map(|i| if i == 1 { dir.join(new_name) } else { dir.join(format!("{stem} ({i}){rest}")) })
+                    .find(|p| !p.exists())
+                    .ok_or_else(|| StoreError::Io { path: new_name.to_string(), source: io::Error::from(io::ErrorKind::AlreadyExists) })?;
+                crate::atomic::rename(&file, &to).map_err(io_err(&file))?;
+                Ok(Some(to))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// A file kept with an account, by its place in it (`chats/1f0c.json`): its bytes; `None` when
+    /// there's none. The place is plain names joined by `/` ([`inner_path`]); another is refused.
+    pub fn account_file(&self, account: &str, rel: &str) -> Result<Option<Vec<u8>>> {
+        let path = self.inner(account, rel)?;
+        match self.files.read(&path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(io_err(&path)(e)),
+        }
+    }
+
+    /// Files kept with an account written together, by their places in it ([`Store::account_file`]):
+    /// in one transaction of its data file, when it has one.
+    pub fn write_account_files(&self, account: &str, files: &[(String, Vec<u8>)]) -> Result<()> {
+        let mut items: Vec<(PathBuf, Vec<u8>)> = Vec::with_capacity(files.len());
+        for (rel, bytes) in files {
+            items.push((self.inner(account, rel)?, bytes.clone()));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        self.files.write_many(&items)?;
+        #[cfg(target_arch = "wasm32")]
+        for (p, bytes) in &items {
+            self.files.write(p, bytes)?;
+        }
+        Ok(())
+    }
+
+    /// The file at a place of an account, and everything under it as a folder, gone; none there is
+    /// no error.
+    pub fn remove_account_files(&self, account: &str, rel: &str) -> Result<()> {
+        let path = self.inner(account, rel)?;
+        let gone = |r: io::Result<()>| match r {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(io_err(&path)(e)),
+            _ => Ok(()),
+        };
+        if self.files.is_file(&path) {
+            gone(self.files.remove_file(&path))?;
+        }
+        if self.files.exists(&path) {
+            gone(self.files.remove_dir_all(&path))?;
+        }
+        Ok(())
+    }
+
+    /// The names of the files directly in a folder of an account (its place, `""` for its own).
+    pub fn account_files(&self, account: &str, folder: &str) -> Vec<String> {
+        let dir = if folder.is_empty() { Ok(self.account_dir(account)) } else { self.inner(account, folder) };
+        dir.map(|d| self.files.list(&d).into_iter().map(|(name, _)| name).collect()).unwrap_or_default()
+    }
+
+    /// A place inside an account, when it's made of plain names.
+    fn inner(&self, account: &str, rel: &str) -> Result<PathBuf> {
+        match inner_path(rel) {
+            Some(p) => Ok(self.account_dir(account).join(p)),
+            None => {
+                Err(StoreError::Io { path: rel.chars().take(80).collect(), source: io::Error::new(io::ErrorKind::InvalidInput, "not a plain path") })
+            }
+        }
+    }
+
     /// The folder the data files are in, when the cache keeps them so.
     pub fn data_files_dir(&self) -> Option<PathBuf> {
         match &self.files.main {

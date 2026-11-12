@@ -30,6 +30,9 @@ rustls = { workspace = true }
 webpki-roots = { workspace = true }
 # SHA-256 and randomness for OAuth's PKCE (already rustls's crypto provider).
 ring = "0.17"
+# SHA-256 for the Teams copy's keys: chats by their id's hash, pictures by their bytes'
+# (RustCrypto, MIT / Apache-2.0; already here for the engine and S/MIME).
+sha2 = "0.10"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # WebDAV answers (CalDAV, CardDAV).

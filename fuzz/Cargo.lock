@@ -2239,6 +2239,7 @@ dependencies = [
  "schannel",
  "serde",
  "serde_json",
+ "sha2",
  "socket2",
  "thiserror",
  "webpki-roots",
