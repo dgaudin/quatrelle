@@ -11,9 +11,14 @@
 //!   check`): counts and yes/no answers only, its test messages deleted on the way out.
 //! * `store`: the local copy of the chats (`Teams.quatrelle`), bound to the identity it was made
 //!   for, its messages in pages.
+//! * `limits`: the limiter (Microsoft's per-second limits), the approved cadences and the
+//!   slow-down after a 429.
 
 pub mod check;
 pub mod graph;
+// The Teams worker (next) is what asks it; until then only its tests.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) mod limits;
 // The Teams worker (next) is what reads and writes it; until then only its tests and fuzz target.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod store;

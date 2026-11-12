@@ -11,6 +11,8 @@ use crate::fake_graph::{Data, FakeChat, FakeMessage, FakeTeams, FakeUser, Server
 
 /// The step 0 check.
 mod check;
+/// The limiter, the cadences and the slow-down after a 429.
+mod limits;
 /// Graph's JSON read into the model, and the client's calls for pictures and presence.
 mod read;
 /// The local copy: pages, identity, deleted messages, damaged records.
