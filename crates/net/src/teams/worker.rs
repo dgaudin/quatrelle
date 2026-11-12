@@ -91,8 +91,14 @@ impl Hooks {
 
     fn trip_on(count: &std::sync::atomic::AtomicU32) {
         use std::sync::atomic::Ordering::SeqCst;
-        if count.fetch_update(SeqCst, SeqCst, |n| n.checked_sub(1)).is_ok() {
-            panic!("a panic the test asked for");
+        // A compare-and-swap loop: `fetch_update` is deprecated in newer toolchains (renamed
+        // `try_update`, which older ones don't have).
+        let mut n = count.load(SeqCst);
+        while let Some(less) = n.checked_sub(1) {
+            match count.compare_exchange_weak(n, less, SeqCst, SeqCst) {
+                Ok(_) => panic!("a panic the test asked for"),
+                Err(now) => n = now,
+            }
         }
     }
 }
