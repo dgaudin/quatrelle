@@ -108,6 +108,9 @@ pub(crate) struct SyncState {
     absent: HashSet<String>,
     /// The kind and link of each chat listed, for the log's figures.
     links: links::Links,
+    /// A listing's count (conversations, pages) as the log last said it: said again only once
+    /// it changes (the list is read every ten seconds).
+    listed_said: Option<(usize, usize)>,
 }
 
 impl SyncState {
@@ -642,7 +645,10 @@ fn list_over(w: &mut Worker, now: Instant) {
     pass.listed = true;
     let (whole, ended, count, pages) = (pass.whole, pass.ended, pass.seen.len(), pass.pages);
     let refresh = std::mem::take(&mut pass.refresh);
-    log::info!("teams: {count} conversations listed in {pages} pages");
+    if w.sync.listed_said != Some((count, pages)) {
+        w.sync.listed_said = Some((count, pages));
+        log::info!("teams: {count} conversations listed in {pages} pages");
+    }
     if let Some(line) = w.sync.links.changed() {
         log::info!("{line}");
     }

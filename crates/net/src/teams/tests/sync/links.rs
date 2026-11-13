@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Tests: what the log says of the chats' links, so it tells why a chat's "open in Teams" isn't
 //! offered: a chat opened, its kind, whether it's unreadable and its link as the window judges
-//! it; a listing over, the figures of each kind and the hosts, said again only when they change.
-//! Never an id, a name or a message's text.
+//! it; a listing over, the figures of each kind and the hosts, and how many conversations in how
+//! many pages, each said again only when it changes. Never an id, a name or a message's text.
 
 use super::*;
 
@@ -60,4 +60,22 @@ fn the_log_tells_the_chats_links_and_never_an_id() {
             assert!(!lower.contains(private), "{private:?} in the log: {line}");
         }
     }
+}
+
+/// A listing's count (conversations, pages): said once while the list, read every ten seconds,
+/// doesn't change; said again when it does.
+#[test]
+fn the_listings_count_is_said_when_it_changes() {
+    // Eleven chats, then twelve: counts no other test lists.
+    let chats: Vec<FakeChat> = (0..11).map(|i| chat(&format!("19:lynx{i}@thread.v2"), T0 + i * MINUTE, 1)).collect();
+    let tap = crate::fakes::logs::tap(|l| l.starts_with("teams: ") && l.contains(" conversations listed in "));
+    let mut r = run(teams_with(chats));
+    let pages = r.hits("chats");
+    r.turns(Duration::from_secs(35));
+    assert!(r.hits("chats") >= pages + 2, "listed again: {} pages", r.hits("chats") - pages);
+    let said = |n: usize| tap.lines().iter().filter(|l| l.starts_with(&format!("teams: {n} conversations listed in "))).count();
+    assert_eq!(said(11), 1, "said once while nothing changes: {:?}", tap.lines());
+    r.fake(|t| t.chats.push(chat("19:lynx11@thread.v2", T0 + 11 * MINUTE, 1)));
+    r.turns(Duration::from_secs(11));
+    assert_eq!(said(12), 1, "said again once it changed: {:?}", tap.lines());
 }
