@@ -29,7 +29,7 @@ mod own;
 
 pub(super) use lists::{notes_read, tasks_read};
 pub(super) use others::{Public, public_calendar, public_contacts, shared_calendar};
-pub(super) use own::{read_contacts, read_own_calendar};
+pub(super) use own::{read_contacts, read_own_calendar, read_own_folder};
 
 /// Changes asked for at a time (Exchange answers 512 at most), and pages read at most: past
 /// that, the folder is read whole.

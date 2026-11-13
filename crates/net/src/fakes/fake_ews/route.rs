@@ -29,6 +29,9 @@ impl Data {
         if let Some(done) = self.policy_route(op) {
             return done;
         }
+        if let Some(done) = self.calendar_folders(op) {
+            return (format!("{}Response", op.name), done);
+        }
         match op.name.as_str() {
             "GetAttachment" => out.extend(self.get_attachment(op)),
             "GetUserPhoto" => {

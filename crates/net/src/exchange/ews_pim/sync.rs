@@ -74,6 +74,8 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
         finish(c, pim, &refused, &mut out, calendars_only);
         return Ok(out);
     }
+    // The mailbox's own other calendars, each read by its changes as its Calendar is.
+    super::own_calendars::read_all(c, pim, now, &refused, &mut calendars, &mut out)?;
     // Opened here by their address, then the calendars of the shared mailboxes the account opens
     // (Outlook lists a shared mailbox's calendar with its mail), then those Outlook keeps in the
     // groups of its Calendar pane, under the group's name. `asked` says which were opened by hand:
@@ -211,7 +213,7 @@ fn finish(c: &Client, pim: &Pim, refused: &[Tombstone], out: &mut DavSync, calen
 
 /// The deletions the server refused in calendar `id` (the account's own: those of no other
 /// calendar), to read again: they come back.
-fn again_in(refused: &[Tombstone], id: &str) -> Vec<String> {
+pub(super) fn again_in(refused: &[Tombstone], id: &str) -> Vec<String> {
     refused
         .iter()
         .filter(|t| !["contact:", "note:", "task:"].iter().any(|p| t.href.starts_with(p)))
@@ -372,7 +374,7 @@ fn push_cards(c: &Client, pim: &Pim, out: &mut DavSync) {
 pub(super) fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: i64, out: &mut DavSync) {
     let mut files = Vec::new();
     read_appointments(c, list, calendar, owner, since, out, &mut files);
-    super::files::fill(c, out, files, calendar == CALENDAR);
+    super::files::fill(c, out, files, own_mailbox_calendar(calendar));
 }
 
 /// [`read_calendar`] without the files: those of each event read noted in `files`, by its place

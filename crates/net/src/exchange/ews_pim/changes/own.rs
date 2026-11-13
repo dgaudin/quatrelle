@@ -8,23 +8,39 @@ use super::*;
 /// appointments to read again whatever the server says (a deletion it refused: they come back).
 /// The state to keep with it (empty: none, read whole next time too).
 pub(in crate::exchange::ews_pim) fn read_own_calendar(c: &Client, pim: &Pim, now: i64, again: &[String], out: &mut DavSync) -> Result<String> {
+    read_own_folder(c, pim, now, again, &distinguished("calendar"), CALENDAR, "the calendar", out)
+}
+
+/// One of the account's own calendars (`folder`, its element; kept here as `id`; `label` names it
+/// in the log) into `out`, as [`read_own_calendar`] reads the Calendar: by its changes when a
+/// state is kept, else whole. The state to keep with it.
+#[allow(clippy::too_many_arguments)]
+pub(in crate::exchange::ews_pim) fn read_own_folder(
+    c: &Client,
+    pim: &Pim,
+    now: i64,
+    again: &[String],
+    folder: &str,
+    id: &str,
+    label: &str,
+    out: &mut DavSync,
+) -> Result<String> {
     let since = now - CALENDAR_BACK;
-    let folder = distinguished("calendar");
-    let kept = calendar_state(pim.calendars.iter().find(|k| k.id == CALENDAR).map(|k| k.ctag.as_str()).unwrap_or(""));
-    if let Some(read) = read_changes(c, &folder, "the calendar", kept, again, Shape::Appointment)? {
+    let kept = calendar_state(pim.calendars.iter().find(|k| k.id == id).map(|k| k.ctag.as_str()).unwrap_or(""));
+    if let Some(read) = read_changes(c, folder, label, kept, again, Shape::Appointment)? {
         let (began, changed, deleted, given) = (read.began, read.changed, read.deleted, read.found.len());
         let state = read.state.clone();
-        let kept = calendar_changes(c, pim, read, CALENDAR, c.email(), since, false, out);
+        let kept = calendar_changes(c, pim, read, id, c.email(), since, false, out);
         log::info!(
-            "the calendar read by its changes in {:.1} s: {changed} made or changed ({given} given), {deleted} deleted, {kept} kept as they were",
+            "{label} read by its changes in {:.1} s: {changed} made or changed ({given} given), {deleted} deleted, {kept} kept as they were",
             began.elapsed().as_secs_f32(),
         );
         return Ok(keep_calendar_state(state));
     }
     // Its state first: what changes while it's read comes next time.
-    let state = state_now(c, &folder, "the calendar")?.unwrap_or_default();
-    read_calendar(c, items(c, "calendar", Some(since))?, CALENDAR, c.email(), since, out);
-    out.synced_calendars.push(CALENDAR.into());
+    let state = state_now(c, folder, label)?.unwrap_or_default();
+    read_calendar(c, items_in(c, folder, "", Some(since))?, id, c.email(), since, out);
+    out.synced_calendars.push(id.into());
     Ok(keep_calendar_state(state))
 }
 

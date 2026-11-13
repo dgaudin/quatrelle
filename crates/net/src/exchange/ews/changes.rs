@@ -286,10 +286,46 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             ))
             .map(drop)
         }
-        // Exchange's other calendars of the account's own aren't read yet, so one made here
-        // wouldn't show (the engine doesn't ask yet): refused, the change goes.
-        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => Err(NetError::No(crate::CALENDARS_NOT_HERE.into())),
+        // The account's other calendars: folders of appointments under its Calendar, by the ids
+        // the server gave them; the Calendar itself is never renamed or deleted from here.
+        Op::CreateCalendar { name } => c
+            .call_one(&format!(
+                "<m:CreateFolder><m:ParentFolderId><t:DistinguishedFolderId Id=\"calendar\"/></m:ParentFolderId><m:Folders><t:CalendarFolder>\
+                 <t:FolderClass>IPF.Appointment</t:FolderClass><t:DisplayName>{}</t:DisplayName></t:CalendarFolder></m:Folders></m:CreateFolder>",
+                esc(name)
+            ))
+            .map(drop),
+        Op::RenameCalendar { calendar, name } => {
+            let id = own_calendar(calendar)?;
+            c.call_one(&format!(
+                "<m:UpdateFolder><m:FolderChanges><t:FolderChange><t:FolderId Id=\"{}\"/><t:Updates><t:SetFolderField>\
+                 <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:CalendarFolder><t:DisplayName>{}</t:DisplayName></t:CalendarFolder>\
+                 </t:SetFolderField></t:Updates></t:FolderChange></m:FolderChanges></m:UpdateFolder>",
+                esc(id),
+                esc(name)
+            ))
+            .map(drop)
+        }
+        // Into Deleted Items with its appointments, as Outlook deletes one. Gone already (deleted
+        // in Outlook meanwhile): what was asked is done.
+        Op::DeleteCalendar { calendar } => {
+            let id = own_calendar(calendar)?;
+            let asked = c.call_one(&format!(
+                "<m:DeleteFolder DeleteType=\"MoveToDeletedItems\"><m:FolderIds><t:FolderId Id=\"{}\"/></m:FolderIds></m:DeleteFolder>",
+                esc(id)
+            ));
+            match asked {
+                Err(NetError::No(why)) if why.starts_with("not on the server") => Ok(()),
+                r => r.map(drop),
+            }
+        }
     }
+}
+
+/// The folder of one of the account's other calendars (`ews:folder:<id>`); any other (its
+/// Calendar, someone else's, a public folder's) refused without asking the server.
+fn own_calendar(calendar: &str) -> Result<&str> {
+    crate::ews_pim::own_folder(calendar).ok_or_else(|| NetError::No("only the account's other calendars are changed from here".into()))
 }
 
 /// The parent folder id (`None` at the top) and the leaf name of a folder path.

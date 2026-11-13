@@ -8,7 +8,6 @@ use super::rules::{inbox_rule_xml, server_rule};
 use super::sync::aqs_of;
 use super::*;
 
-mod calendars;
 mod follow_up;
 mod refusals;
 mod replied;

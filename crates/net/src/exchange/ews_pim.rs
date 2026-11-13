@@ -30,6 +30,20 @@ use crate::{NetError, Result};
 /// The calendar and address book Exchange's folders go into.
 pub const CALENDAR: &str = "ews:calendar";
 pub const CONTACTS: &str = "ews:contacts";
+/// The account's own other calendars (folders of appointments under its Calendar, as Outlook
+/// makes them) are kept here as `ews:folder:<the server's FolderId>`.
+pub const FOLDER: &str = "ews:folder:";
+
+/// The folder id of one of the account's own other calendars (`ews:folder:<id>`), as the server
+/// gave it.
+pub fn own_folder(calendar: &str) -> Option<&str> {
+    calendar.strip_prefix(FOLDER).filter(|id| !id.is_empty())
+}
+
+/// Whether a calendar is the account's own: its Calendar, or another of its own folders.
+fn own_mailbox_calendar(calendar: &str) -> bool {
+    calendar == CALENDAR || own_folder(calendar).is_some()
+}
 /// Items read from a folder at most, and per `GetItem`.
 const MAX_ITEMS: usize = 5000;
 const BATCH: usize = 50;
@@ -577,6 +591,7 @@ mod changes;
 mod contacts;
 pub(crate) mod events;
 mod files;
+mod own_calendars;
 mod push;
 mod reminders;
 pub mod scheduling;

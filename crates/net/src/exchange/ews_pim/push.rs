@@ -30,6 +30,8 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
             continue;
         }
         let owner = quatrelle_model::pim::shared_calendar_owner(&e.calendar);
+        // One of the account's other calendars: made in its folder, and kept there.
+        let own = own_folder(&e.calendar);
         // The server is asked to tell the guests only when the appointment goes with some: asked
         // to send to no one (the user alone, as Exchange lists the organizer), it refuses.
         let guests = guests_written(&e.event, c.email());
@@ -46,7 +48,7 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
                 }
                 None => Err(NetError::No("the series isn't on the server yet".into())),
             },
-            None if e.href.is_empty() => create_item(c, owner, &e.event, notify),
+            None if e.href.is_empty() => create_item(c, owner, own, &e.event, notify),
             None => update_item(c, &e.href, &e.etag, &e.event, notify),
         };
         match r {
@@ -65,7 +67,7 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
                     out.errors.push(format!("{}: saved, but the server wouldn't tell the guests ({}): {why}", e.event.summary, some_names(&guests)));
                 }
                 out.pushed_events.push(StoredEvent {
-                    calendar: if owner.is_some() { e.calendar.clone() } else { CALENDAR.into() },
+                    calendar: if owner.is_some() || own.is_some() { e.calendar.clone() } else { CALENDAR.into() },
                     href,
                     etag,
                     event: e.event.clone(),
@@ -230,12 +232,16 @@ fn or_untold(
     }
 }
 
-/// A new appointment, in this mailbox's calendar or someone else's; the guests invited by the
-/// server when asked (`notify`, as Outlook's Send), else told nothing. One the server won't
-/// send for its recipients is made all the same, telling no one.
-fn create_item(c: &Client, owner: Option<&str>, e: &CalEvent, notify: bool) -> Result<Saved> {
+/// A new appointment, in this mailbox's calendar (or `own`, another of its calendar folders) or
+/// someone else's; the guests invited by the server when asked (`notify`, as Outlook's Send),
+/// else told nothing. One the server won't send for its recipients is made all the same, telling
+/// no one.
+fn create_item(c: &Client, owner: Option<&str>, own: Option<&str>, e: &CalEvent, notify: bool) -> Result<Saved> {
     let body: String = event_fields(e, c.email()).iter().map(|(_, x)| x.as_str()).collect();
-    let folder = calendar_folder(owner.map(|o| c.address_of(o)).as_deref());
+    let folder = match own {
+        Some(id) => format!("<t:FolderId Id=\"{}\"/>", esc(id)),
+        None => calendar_folder(owner.map(|o| c.address_of(o)).as_deref()),
+    };
     let call = |send: &str| {
         call_sending(
             c,
