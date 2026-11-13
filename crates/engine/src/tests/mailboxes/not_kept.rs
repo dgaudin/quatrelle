@@ -182,7 +182,45 @@ fn a_source_past_the_cap_is_not_held() {
     assert!(s.reading.as_ref().is_some_and(|r| r.held.is_none()), "past the cap");
     let e = s.run("message.headers", &json!({})).unwrap_err().to_string();
     assert_eq!(e, crate::NOT_DOWNLOADED);
+    let e = s.run("mail.forwardAsAttachment", &json!({})).unwrap_err().to_string();
+    assert_eq!(e, crate::NOT_DOWNLOADED, "it won't come: not \"still downloading\"");
     s.hold_if_not_kept(&key, RAW);
     assert!(s.reading.as_ref().is_some_and(|r| r.held.is_some()), "within it");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// Every open message's source together stays within a total (the reading pane's and the
+/// windows'): past it, the copy held longest is let go, and what needs that message says it isn't
+/// downloaded; one copy shown in the pane and a window counts once.
+#[test]
+fn the_sources_held_stay_within_a_total() {
+    let (mut s, store, id) = exchange("held-total");
+    let list: Vec<Summary> = (1..=3).map(|uid| summary(&id, ARCHIVE, uid, &format!("Plan {uid}"), 2_000)).collect();
+    store.save_folder(&id, ARCHIVE, &quatrelle_store::FolderState { validity: 1, messages: list.clone(), ..Default::default() }).unwrap();
+    s.apply(Event::FolderChanged { account: id.clone(), folder: ARCHIVE.into() });
+    s.run("folder.open", &json!({"account": id, "folder": ARCHIVE})).unwrap();
+    let keys: Vec<MessageKey> = list.iter().map(|m| m.key.clone()).collect();
+    s.open_message(&keys[0]);
+    s.pop_out(&keys[1]).unwrap();
+    s.pop_out(&keys[2]).unwrap();
+    s.take_jobs();
+    let (per, total) = (RAW.len(), RAW.len() * 2 + 10);
+    let held = |s: &Session, k: &MessageKey| s.reading.iter().chain(&s.windows).filter(|r| &r.key == k).all(|r| r.held.is_some());
+    // The pane's comes (read, and held), then the windows'.
+    s.apply(Event::Body { key: keys[0].clone(), raw: RAW.to_vec() });
+    assert!(held(&s, &keys[0]));
+    for k in &keys[1..] {
+        s.hold_within(k, RAW, per, total);
+    }
+    assert!(!held(&s, &keys[0]), "the pane's, held first, let go");
+    assert!(held(&s, &keys[1]) && held(&s, &keys[2]));
+    assert_eq!(s.run("message.headers", &json!({})).unwrap_err().to_string(), crate::NOT_DOWNLOADED);
+    // Held again: the window's held longest goes.
+    s.hold_within(&keys[0], RAW, per, total);
+    assert!(held(&s, &keys[0]) && !held(&s, &keys[1]) && held(&s, &keys[2]));
+    // The pane's shown in a window too: one copy, counted once.
+    s.pop_out(&keys[0]).unwrap();
+    s.hold_within(&keys[1], RAW, per, total);
+    assert!(held(&s, &keys[0]) && held(&s, &keys[1]) && !held(&s, &keys[2]), "only the oldest let go");
     let _ = std::fs::remove_dir_all(store.root());
 }

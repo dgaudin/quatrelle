@@ -291,7 +291,8 @@ impl Session {
     pub fn forward_as_attachment(&mut self) -> CmdResult {
         self.whole_here()?;
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        let raw = self.kept_or_held(&r.key).ok_or_else(|| CmdError::Disabled(crate::STILL_DOWNLOADING.into()))?;
+        // Shown (the command's `when`), but neither kept nor held (past the cap): it won't come.
+        let raw = self.kept_or_held(&r.key).ok_or_else(|| CmdError::Failed(crate::NOT_DOWNLOADED.into()))?;
         let out = self.reply_compose(ReplyMode::Forward)?;
         // The signature of the account it goes from (not the data file it's in).
         let from = self.compose.as_ref().map_or(r.key.account.clone(), |c| c.account.clone());
