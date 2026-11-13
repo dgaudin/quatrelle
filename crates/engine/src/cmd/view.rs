@@ -270,6 +270,14 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("calendar.delete", "Delete calendar", "Calendar › Calendars", |s, v| s.delete_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?))
             .params(r#"{"account": string, "calendar": string} (one of the account's own, not its main one; its events go with it, into Deleted Items)"#)
             .when(calendars_made),
+        CommandSpec::new("calendar.remove", "Remove from the list", "Calendar › Calendars", |s, v| {
+            s.remove_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?)
+        })
+        .params(r#"{"account": string, "calendar": string} (on this computer only, never on the server: out of the side pane and the calendar, no longer read; not the account's main one, nor one opened by its owner's address or subscribed to by its link)"#),
+        CommandSpec::new("calendar.restore", "Bring back to the list", "Calendar › Calendars", |s, v| {
+            s.restore_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?)
+        })
+        .params(r#"{"account": string, "calendar": string} → {"restored": bool} (a calendar removed from the list: listed, and read again)"#),
         CommandSpec::new("account.keepMail", "Mail kept on this computer", "File › Options › Mail", |s, v| {
             let days = p::u64(v, "days").ok_or_else(|| CmdError::Params("`days` is required (0: all)".into()))?;
             s.prefs.keep_days = u32::try_from(days.min(36_500)).unwrap_or(0);

@@ -51,6 +51,10 @@ pub struct Prefs {
     /// one not in it comes after, as the server lists it.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub calendar_order: std::collections::BTreeMap<String, Vec<String>>,
+    /// Calendars removed from the list on this computer (`account/calendar id`), never on the
+    /// server: not in the side pane, not drawn, not offered, and no longer read.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub removed_calendars: BTreeSet<String>,
     /// Day and week show each calendar in a column of its own (Outlook's side-by-side view)
     /// rather than all of them together.
     pub calendars_side_by_side: bool,
@@ -277,6 +281,7 @@ impl Default for Prefs {
             known_calendars: BTreeSet::new(),
             calendar_colors: std::collections::BTreeMap::new(),
             calendar_order: std::collections::BTreeMap::new(),
+            removed_calendars: BTreeSet::new(),
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),

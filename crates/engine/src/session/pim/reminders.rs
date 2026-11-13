@@ -53,7 +53,8 @@ impl Session {
             let own = |c: &&quatrelle_model::pim::CalendarInfo| {
                 quatrelle_model::pim::shared_calendar_owner(&c.id).is_none() && !quatrelle_model::pim::is_web_calendar(&c.id)
             };
-            for cal in p.calendars.iter().filter(own) {
+            // Nor ones removed from the list: no longer read, what's kept of them may be gone.
+            for cal in p.calendars.iter().filter(own).filter(|c| !self.calendar_removed(account, &c.id)) {
                 // Only the series with a reminder somewhere (an exception may have its own).
                 let with: std::collections::BTreeSet<&str> =
                     p.events.iter().filter(|e| e.calendar == cal.id && reminder_of(&e.event).is_some()).map(|e| e.event.uid.as_str()).collect();

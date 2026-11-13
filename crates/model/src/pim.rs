@@ -41,6 +41,9 @@ pub struct PimReading {
     pub own_only: bool,
     #[serde(default)]
     pub not_read: Vec<String>,
+    /// Calendars removed from the list on this computer ([`Pim::removed`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed: Vec<String>,
 }
 
 /// A calendar.
@@ -361,6 +364,11 @@ pub struct Pim {
     /// Calendars left unticked: listed, not read (what this computer has of them stays).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_read: Vec<String>,
+    /// Calendars removed from the list on this computer (never on the server): listed as the
+    /// server has them, never read, in the calendar or away from it (what this computer has of
+    /// them stays, as it was).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed: Vec<String>,
     /// Reminders dismissed or snoozed here, for an Exchange server to learn (issue #40): Outlook
     /// shows them again otherwise. Kept, so one answered offline goes at the next sync. A
     /// single appointment's dismissal isn't among them: its reminder is turned off on the item.
@@ -495,7 +503,7 @@ pub struct DavSync {
 impl Pim {
     /// What the next sync reads.
     pub fn reading(&self) -> PimReading {
-        PimReading { own_only: self.own_only, not_read: self.not_read.clone() }
+        PimReading { own_only: self.own_only, not_read: self.not_read.clone(), removed: self.removed.clone() }
     }
 
     /// Reading as `r` says, when there's one ([`PIM_READING_DOC`]): it's newer than what the
@@ -504,6 +512,7 @@ impl Pim {
         if let Some(r) = r {
             self.own_only = r.own_only;
             self.not_read = r.not_read;
+            self.removed = r.removed;
         }
     }
 

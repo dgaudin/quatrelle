@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! A calendar's own menu in the side pane: its colour and its place kept on this computer, one
-//! calendar shown alone, and, where the account's server allows it, a calendar made, renamed or
-//! deleted there (through the account's journal, the calendars read again after).
+//! calendar shown alone, one removed from the list here (never on the server) and brought back,
+//! and, where the account's server allows it, a calendar made, renamed or deleted there (through
+//! the account's journal, the calendars read again after).
 
 use quatrelle_model::pim::{CalendarInfo, MAX_CALENDAR_NAME, plain_name};
 use serde_json::json;
@@ -43,6 +44,35 @@ impl CalendarRefusal {
     }
 }
 
+/// Why a calendar can't be removed from the list on this computer ([`Session::calendar_removable`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RemovalRefusal {
+    /// The account's main calendar, or the one kept here for an account without calendars.
+    Main,
+    /// The last calendar listed under the account's heading, where removed ones are brought back
+    /// from: the heading would go with it.
+    Last,
+    /// Opened by its owner's address, or subscribed to by its link: its own Remove takes it away.
+    OwnRemove,
+}
+
+impl RemovalRefusal {
+    /// Why, for a command that's refused.
+    pub fn reason(self) -> &'static str {
+        match self {
+            RemovalRefusal::Main => "the account's main calendar stays in the list",
+            RemovalRefusal::Last => "the last calendar under the account stays in the list",
+            RemovalRefusal::OwnRemove => "one opened by its owner's address or subscribed to by its link goes by its own Remove",
+        }
+    }
+}
+
+/// Whether a calendar is listed under its account's heading in the side pane: in no group, and
+/// not someone else's (by address).
+fn under_account(c: &CalendarInfo) -> bool {
+    c.group.is_empty() && quatrelle_model::pim::shared_calendar_owner(&c.id).is_none()
+}
+
 /// Whether two of an account's calendars are listed together in the side pane, so one moves past
 /// the other: in the same group, and both someone else's (by address) or neither.
 fn listed_together(a: &CalendarInfo, b: &CalendarInfo) -> bool {
@@ -63,11 +93,64 @@ fn typed_name(name: &str) -> Result<String, CmdError> {
 }
 
 impl Session {
+    /// Whether a calendar can be removed from the list on this computer: not the account's main
+    /// one (nor the one kept here for an account without calendars), nor the last one under the
+    /// account's heading (where removed ones come back from); one opened by its owner's address or
+    /// subscribed to by its link goes by its own Remove. Decided here alone: the menu greys what
+    /// this refuses.
+    pub fn calendar_removable(&self, account: &str, calendar: &str) -> Result<(), RemovalRefusal> {
+        let p = self.pim.get(account);
+        let c = p.and_then(|p| p.calendars.iter().find(|c| c.id == calendar));
+        if calendar == LOCAL || c.is_some_and(|c| c.main) {
+            return Err(RemovalRefusal::Main);
+        }
+        let opened = quatrelle_model::pim::shared_calendar_owner(calendar)
+            .is_some_and(|owner| p.is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(owner))));
+        if opened || quatrelle_model::pim::is_web_calendar(calendar) {
+            return Err(RemovalRefusal::OwnRemove);
+        }
+        if c.is_some_and(under_account) && !self.ordered_calendars(account).iter().any(|x| x.id != calendar && under_account(x)) {
+            return Err(RemovalRefusal::Last);
+        }
+        Ok(())
+    }
+
+    /// Remove a calendar from the list on this computer, never on the server: out of the side
+    /// pane, the calendar, the search, the reminders and the calendars an appointment is put in,
+    /// and no longer read by the sync. What this computer has of it stays as it was, so it's
+    /// brought back ([`Session::restore_calendar`]) going on from there.
+    pub fn remove_calendar(&mut self, account: &str, calendar: &str) -> CmdResult {
+        self.calendar_named(account, calendar)?;
+        self.calendar_removable(account, calendar).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        self.prefs.removed_calendars.insert(Session::calendar_key(account, calendar));
+        self.pim_revision = self.pim_revision.wrapping_add(1);
+        Ok(json!({"account": account, "calendar": calendar, "removed": true}))
+    }
+
+    /// Bring a calendar removed from the list back: listed, shown or hidden as it was, and read
+    /// again (at once in the calendar, else at the next sync).
+    pub fn restore_calendar(&mut self, account: &str, calendar: &str) -> CmdResult {
+        if self.account(account).is_none() {
+            return Err(CmdError::Params(format!("no account `{account}`")));
+        }
+        let restored = self.prefs.removed_calendars.remove(&Session::calendar_key(account, calendar));
+        if restored {
+            self.pim_revision = self.pim_revision.wrapping_add(1);
+        }
+        Ok(json!({"account": account, "calendar": calendar, "restored": restored}))
+    }
+
+    /// An account's calendars removed from the list, as the server lists them.
+    pub fn removed_calendars(&self, account: &str) -> Vec<&CalendarInfo> {
+        let Some(p) = self.pim.get(account) else { return Vec::new() };
+        p.calendars.iter().filter(|c| self.calendar_removed(account, &c.id)).collect()
+    }
+
     /// An account's calendars in the order the side pane lists them: as the user placed them on
-    /// this computer, then those not placed, as the server lists them.
+    /// this computer, then those not placed, as the server lists them; none removed from the list.
     pub fn ordered_calendars(&self, account: &str) -> Vec<&CalendarInfo> {
         let Some(p) = self.pim.get(account) else { return Vec::new() };
-        let mut list: Vec<&CalendarInfo> = p.calendars.iter().collect();
+        let mut list: Vec<&CalendarInfo> = p.calendars.iter().filter(|c| !self.calendar_removed(account, &c.id)).collect();
         if let Some(order) = self.prefs.calendar_order.get(account) {
             let at: HashMap<&str, usize> = order.iter().enumerate().map(|(i, id)| (id.as_str(), i)).collect();
             list.sort_by_key(|c| at.get(c.id.as_str()).copied().unwrap_or(usize::MAX));
@@ -235,6 +318,7 @@ impl Session {
         self.prefs.hidden_calendars.remove(&key);
         self.prefs.known_calendars.remove(&key);
         self.prefs.calendar_colors.remove(&key);
+        self.prefs.removed_calendars.remove(&key);
         if let Some(order) = self.prefs.calendar_order.get_mut(account) {
             order.retain(|c| c != calendar);
         }

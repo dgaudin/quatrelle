@@ -97,10 +97,12 @@ impl Session {
             }
             let Some(p) = self.pim.get(id) else { continue };
             for cal in &p.calendars {
-                let wanted = match calendar {
-                    Some(c) => cal.id == c || cal.name.eq_ignore_ascii_case(c),
-                    None => self.calendar_shown(id, &cal.id),
-                };
+                // Never one removed from the list, even asked for by name.
+                let wanted = !self.calendar_removed(id, &cal.id)
+                    && match calendar {
+                        Some(c) => cal.id == c || cal.name.eq_ignore_ascii_case(c),
+                        None => self.calendar_shown(id, &cal.id),
+                    };
                 if !wanted {
                     continue;
                 }

@@ -10,20 +10,20 @@ use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
 use super::*;
 use crate::{ACCOUNT_COLOR, CalendarRefusal, PALETTE_COLOR};
 
-const MAIN: &str = "AAMkMain=";
-const TRIPS: &str = "AAMkTrips=";
-const BIRTHDAYS: &str = "AAMkBirthdays=";
-const TEAM: &str = "AAMkTeam=";
-const HOLIDAYS: &str = "AAMkHolidays=";
+pub(super) const MAIN: &str = "AAMkMain=";
+pub(super) const TRIPS: &str = "AAMkTrips=";
+pub(super) const BIRTHDAYS: &str = "AAMkBirthdays=";
+pub(super) const TEAM: &str = "AAMkTeam=";
+pub(super) const HOLIDAYS: &str = "AAMkHolidays=";
 
-fn cal(id: &str, name: &str, color: u8) -> CalendarInfo {
+pub(super) fn cal(id: &str, name: &str, color: u8) -> CalendarInfo {
     CalendarInfo { id: id.into(), name: name.into(), color, ..Default::default() }
 }
 
 /// The sample made a Microsoft 365 account (`graph`), its calendars as the server lists them: the
 /// main one, two of its own, a team's in a group, a read-only one and a colleague's; an
 /// appointment in Trips.
-fn graph_session(name: &str, graph: bool) -> Session {
+pub(super) fn graph_session(name: &str, graph: bool) -> Session {
     let mut s = sample_session(name);
     if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
         a.config.graph = graph.then(|| "https://graph.microsoft.com/v1.0".into());
@@ -54,7 +54,7 @@ fn graph_session(name: &str, graph: bool) -> Session {
     s
 }
 
-fn shown_ids(s: &Session) -> Vec<String> {
+pub(super) fn shown_ids(s: &Session) -> Vec<String> {
     s.shown_calendars().into_iter().map(|c| c.1).collect()
 }
 
@@ -250,7 +250,7 @@ fn settings_from_before_read_with_no_colour_or_order() {
 }
 
 /// The sample made an on-premises Exchange account.
-fn ews_session(name: &str) -> Session {
+pub(super) fn ews_session(name: &str) -> Session {
     let mut s = sample_session(name);
     if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
         a.config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
@@ -259,12 +259,12 @@ fn ews_session(name: &str) -> Session {
 }
 
 /// Exchange's main calendar, as its sync lists it.
-fn ews_main() -> CalendarInfo {
+pub(super) fn ews_main() -> CalendarInfo {
     CalendarInfo { main: true, ..cal("ews:calendar", "Calendar", 0) }
 }
 
 /// An appointment the server has (`uid`, in `calendar`).
-fn sent(uid: &str, calendar: &str) -> StoredEvent {
+pub(super) fn sent(uid: &str, calendar: &str) -> StoredEvent {
     StoredEvent {
         calendar: calendar.into(),
         href: format!("AAMk{uid}="),
@@ -275,7 +275,7 @@ fn sent(uid: &str, calendar: &str) -> StoredEvent {
 
 /// A calendar sync of the sample's Exchange account listing `calendars` (each read whole), or
 /// (`partial`) only some of them.
-fn ews_synced(s: &mut Session, calendars: Vec<CalendarInfo>, events: Vec<StoredEvent>, partial: bool) {
+pub(super) fn ews_synced(s: &mut Session, calendars: Vec<CalendarInfo>, events: Vec<StoredEvent>, partial: bool) {
     let synced_calendars = calendars.iter().map(|c| c.id.clone()).collect();
     let sync = DavSync {
         caldav_home: Some("ews".into()),
@@ -347,7 +347,7 @@ fn an_unsent_appointment_outlives_its_calendar_deleted_elsewhere() {
     assert_eq!(s.notices.len(), said + 1, "{:?}", s.notices);
 }
 
-/// The seven commands of a calendar's menu with junk params, on a Microsoft 365 account and an
+/// The nine commands of a calendar's menu with junk params, on a Microsoft 365 account and an
 /// Exchange one (where New, Rename and Delete get past their `when` to their bodies): each answers
 /// an error or a result, none fails unexpectedly.
 #[test]
@@ -361,8 +361,17 @@ fn the_calendar_commands_survive_junk_params_on_exchange_and_microsoft_365() {
         json!({"account": "sample", "calendar": "\u{202E}", "name": "\u{0}\u{7}", "color": 16}),
         json!({"account": "nobody", "calendar": "ews:calendar", "name": "x".repeat(10_000), "color": null}),
     ];
-    let commands =
-        ["calendar.showOnly", "calendar.color", "calendar.moveUp", "calendar.moveDown", "calendar.create", "calendar.rename", "calendar.delete"];
+    let commands = [
+        "calendar.showOnly",
+        "calendar.color",
+        "calendar.moveUp",
+        "calendar.moveDown",
+        "calendar.create",
+        "calendar.rename",
+        "calendar.delete",
+        "calendar.remove",
+        "calendar.restore",
+    ];
     for mut s in [graph_session("arranging-junk-graph", true), {
         let mut s = ews_session("arranging-junk-ews");
         ews_synced(&mut s, vec![ews_main(), cal("ews:folder:AAMkTrips=", "Trips", 2)], Vec::new(), false);

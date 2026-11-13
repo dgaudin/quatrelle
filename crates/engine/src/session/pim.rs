@@ -37,7 +37,7 @@ mod webex;
 pub(super) fn own_calendar(id: &str) -> bool {
     quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:") && !quatrelle_model::pim::is_web_calendar(id)
 }
-pub use calendars::{CalendarRefusal, PALETTE_COLOR, PALETTE_COLORS};
+pub use calendars::{CalendarRefusal, PALETTE_COLOR, PALETTE_COLORS, RemovalRefusal};
 pub use conflicts::{CONFLICTS, ConflictWords, SYNC_ISSUES};
 pub use files::FilesComing;
 pub use find::{EVENT_HITS_MAX, EventHit, EventWhen};
@@ -261,9 +261,14 @@ impl Session {
         format!("{account}/{calendar}")
     }
 
-    /// Whether a calendar is shown (ticked) in the calendar.
+    /// Whether a calendar is shown (ticked) in the calendar: not hidden, nor removed from the list.
     pub fn calendar_shown(&self, account: &str, calendar: &str) -> bool {
-        !self.prefs.hidden_calendars.contains(&Session::calendar_key(account, calendar))
+        !self.prefs.hidden_calendars.contains(&Session::calendar_key(account, calendar)) && !self.calendar_removed(account, calendar)
+    }
+
+    /// Whether a calendar was removed from the list on this computer ([`Session::remove_calendar`]).
+    pub fn calendar_removed(&self, account: &str, calendar: &str) -> bool {
+        !self.prefs.removed_calendars.is_empty() && self.prefs.removed_calendars.contains(&Session::calendar_key(account, calendar))
     }
 
     /// Calendars come ticked when they're an account's own or opened here by address; others'
@@ -295,7 +300,9 @@ impl Session {
         for a in accounts {
             let Some(p) = self.pim.get(&a) else { continue };
             let not_read: Vec<String> = p.calendars.iter().filter(|c| !self.calendar_shown(&a, &c.id)).map(|c| c.id.clone()).collect();
-            if p.own_only == own_only && p.not_read == not_read {
+            // Removed from the list: never read, in the calendar or away from it.
+            let removed: Vec<String> = p.calendars.iter().filter(|c| self.calendar_removed(&a, &c.id)).map(|c| c.id.clone()).collect();
+            if p.own_only == own_only && p.not_read == not_read && p.removed == removed {
                 continue;
             }
             // Opening the calendar reads every calendar ticked; one just ticked is read alone (a
@@ -310,6 +317,7 @@ impl Session {
             let p = self.pim_mut(&a);
             p.own_only = own_only;
             p.not_read = not_read;
+            p.removed = removed;
             // In a document of its own: the calendar isn't written again for it (nor the address
             // book worked out again), at each switch between the calendar and the mail.
             let reading = p.reading();

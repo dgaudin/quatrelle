@@ -14,6 +14,7 @@ mod gone;
 mod guests;
 mod kept_files;
 mod reminders;
+mod removing;
 mod showing;
 mod web;
 mod webex;
