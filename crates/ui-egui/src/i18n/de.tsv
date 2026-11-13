@@ -2255,3 +2255,18 @@ presence	Busy	Beschäftigt
 presence	Away	Abwesend
 presence	Do not disturb	Nicht stören
 presence	Offline	Offline
+	Show this calendar	Diesen Kalender anzeigen
+	Show only this calendar	Nur diesen Kalender anzeigen
+	Overlay	Überlagern
+	New calendar…	Neuer Kalender…
+	Rename…	Umbenennen…
+	Delete calendar…	Kalender löschen…
+	This account's server doesn't allow it	Der Server dieses Kontos erlaubt es nicht
+	The account's main calendar stays as it is	Der Hauptkalender des Kontos bleibt, wie er ist
+	Only the account's own calendars can be changed	Nur die eigenen Kalender des Kontos lassen sich ändern
+	Waiting for the server's list of calendars	Warten auf die Kalenderliste des Servers
+	New calendar	Neuer Kalender
+	Rename calendar	Kalender umbenennen
+	Delete calendar	Kalender löschen
+	Calendar name	Kalendername
+	Delete the calendar {name} and its events? It goes to Deleted Items.	Den Kalender {name} und seine Termine löschen? Er kommt in „Gelöschte Elemente“.

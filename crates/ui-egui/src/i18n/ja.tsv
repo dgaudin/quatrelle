@@ -2251,3 +2251,18 @@ presence	Busy	取り込み中
 presence	Away	退席中
 presence	Do not disturb	邪魔しないで
 presence	Offline	オフライン
+	Show this calendar	この予定表を表示
+	Show only this calendar	この予定表だけを表示
+	Overlay	重ねて表示
+	New calendar…	新しい予定表…
+	Rename…	名前の変更…
+	Delete calendar…	予定表の削除…
+	This account's server doesn't allow it	このアカウントのサーバーでは許可されていません
+	The account's main calendar stays as it is	アカウントのメインの予定表はそのままです
+	Only the account's own calendars can be changed	変更できるのはアカウント自身の予定表だけです
+	Waiting for the server's list of calendars	サーバーの予定表一覧を待っています
+	New calendar	新しい予定表
+	Rename calendar	予定表の名前の変更
+	Delete calendar	予定表の削除
+	Calendar name	予定表の名前
+	Delete the calendar {name} and its events? It goes to Deleted Items.	予定表「{name}」とその予定を削除しますか? 削除済みアイテムに移動します。

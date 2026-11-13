@@ -612,5 +612,21 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(5.5, 6.5), (10.5, 6.5)]);
             pen.line(&[(5.5, 9.0), (8.5, 9.0)]);
         }
+        Icon::Rename => {
+            // A text cursor, its serifs, between a box's two halves.
+            pen.line(&[(6.5, 1.5), (9.5, 1.5)]);
+            pen.line(&[(8.0, 1.5), (8.0, 14.5)]);
+            pen.line(&[(6.5, 14.5), (9.5, 14.5)]);
+            pen.line(&[(6.0, 4.0), (2.5, 4.0), (1.5, 5.0), (1.5, 11.0), (2.5, 12.0), (6.0, 12.0)]);
+            pen.line(&[(10.0, 4.0), (13.5, 4.0), (14.5, 5.0), (14.5, 11.0), (13.5, 12.0), (10.0, 12.0)]);
+        }
+        Icon::Color => {
+            // A palette with its thumb hole, and three dabs of paint.
+            pen.arc(8.0, 8.0, 6.5, PI * 0.35, PI * 2.05);
+            pen.line(&[(13.6, 11.2), (11.0, 10.5), (10.0, 12.0), (10.5, 14.2)]);
+            pen.circle(5.0, 6.5, 0.9);
+            pen.circle(8.0, 4.5, 0.9);
+            pen.circle(11.0, 6.5, 0.9);
+        }
     }
 }

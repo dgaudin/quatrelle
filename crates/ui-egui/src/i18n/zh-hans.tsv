@@ -2252,3 +2252,18 @@ presence	Busy	忙碌
 presence	Away	离开
 presence	Do not disturb	请勿打扰
 presence	Offline	离线
+	Show this calendar	显示此日历
+	Show only this calendar	仅显示此日历
+	Overlay	叠加
+	New calendar…	新建日历…
+	Rename…	重命名…
+	Delete calendar…	删除日历…
+	This account's server doesn't allow it	此帐户的服务器不允许此操作
+	The account's main calendar stays as it is	帐户的主日历保持不变
+	Only the account's own calendars can be changed	只能更改帐户自己的日历
+	Waiting for the server's list of calendars	正在等待服务器的日历列表
+	New calendar	新建日历
+	Rename calendar	重命名日历
+	Delete calendar	删除日历
+	Calendar name	日历名称
+	Delete the calendar {name} and its events? It goes to Deleted Items.	删除日历“{name}”及其事件吗?它会移到“已删除邮件”。

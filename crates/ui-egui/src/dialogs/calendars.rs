@@ -5,6 +5,9 @@
 //! "Calendar ->" row, a contacts field taking several people. Open waits for the names still being
 //! checked (`app/sending.rs`, `dialog_ok`), then opens each person's calendar: one that opened
 //! leaves the field, one that couldn't stays, red, with why.
+//!
+//! And a calendar's menu in the side pane asks here for a new calendar's name, another name for
+//! one, or whether to delete one ([`CalendarForm`]).
 
 use quatrelle_engine::model::Addressee;
 
@@ -61,6 +64,110 @@ pub(super) fn draw(ui: &mut Ui, f: &mut CalendarsForm, s: &Session, people: &mut
     let (ok, cancel) = buttons(ui, t, "Open", ready);
     if (ok || enter) && ready {
         acts.push(Action::DialogOk);
+    }
+    !cancel
+}
+
+/// What's asked of a calendar from its menu in the side pane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CalendarAsk {
+    /// A new calendar in the account.
+    New,
+    /// This calendar's new name.
+    Rename { calendar: String },
+    /// Whether to delete this calendar.
+    Delete { calendar: String },
+}
+
+/// A calendar made, renamed or deleted: the account, what's asked, the name typed (the
+/// calendar's own when it's deleted) and what the server or the engine said against it.
+#[derive(Clone, Debug)]
+pub struct CalendarForm {
+    pub account: String,
+    pub ask: CalendarAsk,
+    pub name: String,
+    pub error: Option<String>,
+}
+
+impl CalendarForm {
+    /// A question to answer before going on (read as an alert).
+    pub fn deleting(&self) -> bool {
+        matches!(self.ask, CalendarAsk::Delete { .. })
+    }
+}
+
+impl Dialog {
+    pub fn new_calendar(account: &str) -> Dialog {
+        Dialog::CalendarChange(Box::new(CalendarForm { account: account.to_string(), ask: CalendarAsk::New, name: String::new(), error: None }))
+    }
+
+    /// Rename `c`, its name as the server gave it made plain to start from.
+    pub fn rename_calendar(account: &str, c: &quatrelle_engine::model::pim::CalendarInfo) -> Dialog {
+        let mut name = quatrelle_engine::model::pim::plain_name(&c.name);
+        if let Some((cut, _)) = name.char_indices().nth(quatrelle_engine::model::pim::MAX_CALENDAR_NAME) {
+            name.truncate(cut);
+        }
+        let ask = CalendarAsk::Rename { calendar: c.id.clone() };
+        Dialog::CalendarChange(Box::new(CalendarForm { account: account.to_string(), ask, name, error: None }))
+    }
+
+    /// Whether to delete `c`, named on one line as the side pane shows it.
+    pub fn delete_calendar(account: &str, c: &quatrelle_engine::model::pim::CalendarInfo) -> Dialog {
+        let name = quatrelle_engine::model::pim::teams::one_line(&c.name);
+        let ask = CalendarAsk::Delete { calendar: c.id.clone() };
+        Dialog::CalendarChange(Box::new(CalendarForm { account: account.to_string(), ask, name, error: None }))
+    }
+}
+
+/// New calendar or Rename calendar (its name, one line), or Delete calendar (a question).
+pub(super) fn draw_change(ui: &mut Ui, f: &mut CalendarForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+    if let CalendarAsk::Delete { calendar } = &f.ask {
+        ui.set_width(380.0);
+        title(ui, t, "Delete calendar");
+        let text = tf!("Delete the calendar {name} and its events? It goes to Deleted Items.", name = f.name);
+        ui.add(egui::Label::new(RichText::new(text).color(t.dim)).wrap());
+        if let Some(e) = &f.error {
+            ui.label(RichText::new(e.as_str()).color(t.danger).small());
+        }
+        let (ok, cancel) = buttons(ui, t, "Delete", true);
+        if ok {
+            f.error = None;
+            acts.push(Action::Submit("calendar.delete", json!({"account": f.account, "calendar": calendar})));
+        }
+        return !cancel;
+    }
+    let renaming = matches!(f.ask, CalendarAsk::Rename { .. });
+    ui.set_width(360.0);
+    title(ui, t, if renaming { "Rename calendar" } else { "New calendar" });
+    if !renaming {
+        let who = s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default();
+        ui.label(RichText::new(tf!("In {account}", account = who)).color(t.dim).small());
+        ui.add_space(4.0);
+    }
+    let edit = egui::TextEdit::singleline(&mut f.name)
+        .hint_text(tl!("Calendar name"))
+        .char_limit(quatrelle_engine::model::pim::MAX_CALENDAR_NAME)
+        .desired_width(f32::INFINITY);
+    let r = ui.add(edit);
+    if ui.memory(|m| m.focused().is_none()) {
+        r.request_focus();
+    }
+    // One field: Enter means OK wherever the focus is.
+    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    if let Some(e) = &f.error {
+        ui.label(RichText::new(e.as_str()).color(t.danger).small());
+    }
+    let ready = !f.name.trim().is_empty();
+    let (ok, cancel) = buttons(ui, t, if renaming { "Rename" } else { "Create" }, ready);
+    if (ok || enter) && ready {
+        f.error = None;
+        let name = f.name.trim();
+        match &f.ask {
+            CalendarAsk::Rename { calendar } => {
+                acts.push(Action::Submit("calendar.rename", json!({"account": f.account, "calendar": calendar, "name": name})));
+            }
+            _ => acts.push(Action::Submit("calendar.create", json!({"account": f.account, "name": name}))),
+        }
     }
     !cancel
 }

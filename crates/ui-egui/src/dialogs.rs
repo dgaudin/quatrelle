@@ -34,7 +34,9 @@ pub(crate) mod pim_dialogs;
 mod writing;
 
 pub use accounts::*;
-pub use calendars::CalendarsForm;
+#[cfg(test)]
+pub(crate) use calendars::CalendarAsk;
+pub use calendars::{CalendarForm, CalendarsForm};
 pub use folder_sizes::SizeSort;
 pub use mailbox::*;
 pub use moving::MoveForm;
@@ -151,6 +153,8 @@ pub enum Dialog {
     },
     /// Open other people's calendars, from the address book or typed (Outlook's Open Calendar).
     OpenSharedCalendar(Box<CalendarsForm>),
+    /// A calendar made, renamed or deleted, from its menu in the side pane.
+    CalendarChange(Box<CalendarForm>),
     /// Subscribe to a calendar by its link (Outlook's Add Calendar › From Internet, issue #7).
     SubscribeCalendar {
         url: String,
@@ -336,6 +340,7 @@ impl Dialog {
     /// A question that must be answered before going on, or a warning: read as an alert.
     pub fn is_alert(&self) -> bool {
         self.about_closing()
+            || matches!(self, Dialog::CalendarChange(f) if f.deleting())
             || matches!(
                 self,
                 Dialog::ConfirmDelete { .. }
@@ -533,6 +538,7 @@ impl Dialog {
             Dialog::MoveEvent(f) => f.error = Some(e),
             Dialog::Vacation(f) => f.error = Some(e),
             Dialog::OpenSharedCalendar(f) => f.error = Some(e),
+            Dialog::CalendarChange(f) => f.error = Some(e),
             Dialog::SubscribeCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
             _ => {}
         }
@@ -759,6 +765,7 @@ fn body(
         | Dialog::Contact(..) => other::draw(ui, d, s, pics, t, acts),
         Dialog::PgpKey { .. } | Dialog::PgpBackup { .. } | Dialog::PgpForget { .. } => pgp::draw(ui, d, t, acts),
         Dialog::OpenSharedCalendar(f) => calendars::draw(ui, f, s, people, t, acts),
+        Dialog::CalendarChange(f) => calendars::draw_change(ui, f, s, t, acts),
         Dialog::MoveEvent(f) => moving::draw(ui, f, t, acts),
     }
 }

@@ -12,8 +12,9 @@ use super::*;
 /// The colours a calendar can be given on this computer, the palette's.
 pub const PALETTE_COLORS: u8 = 16;
 /// A calendar colour from this one on is the palette's (`PALETTE_COLOR + i`, `i` below
-/// [`PALETTE_COLORS`]), as [`Session::calendar_color`] gives it.
-pub const PALETTE_COLOR: u8 = 32;
+/// [`PALETTE_COLORS`]), as [`Session::calendar_color`] gives it: past every colour a server's
+/// calendar or an account's has.
+pub const PALETTE_COLOR: u8 = 64;
 
 /// Why a calendar can't be made, renamed or deleted from here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

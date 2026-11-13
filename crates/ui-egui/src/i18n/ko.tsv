@@ -2253,3 +2253,18 @@ presence	Busy	바쁨
 presence	Away	자리 비움
 presence	Do not disturb	방해 금지
 presence	Offline	오프라인
+	Show this calendar	이 일정표 표시
+	Show only this calendar	이 일정표만 표시
+	Overlay	겹쳐 보기
+	New calendar…	새 일정표…
+	Rename…	이름 바꾸기…
+	Delete calendar…	일정표 삭제…
+	This account's server doesn't allow it	이 계정의 서버에서 허용하지 않습니다
+	The account's main calendar stays as it is	계정의 기본 일정표는 그대로 유지됩니다
+	Only the account's own calendars can be changed	계정 자체의 일정표만 변경할 수 있습니다
+	Waiting for the server's list of calendars	서버의 일정표 목록을 기다리는 중
+	New calendar	새 일정표
+	Rename calendar	일정표 이름 바꾸기
+	Delete calendar	일정표 삭제
+	Calendar name	일정표 이름
+	Delete the calendar {name} and its events? It goes to Deleted Items.	일정표 {name}과(와) 그 안의 일정을 삭제할까요? 지운 편지함으로 이동합니다.

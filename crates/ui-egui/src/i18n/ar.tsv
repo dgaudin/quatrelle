@@ -2250,3 +2250,18 @@ presence	Busy	مشغول
 presence	Away	بعيد
 presence	Do not disturb	عدم الإزعاج
 presence	Offline	غير متصل
+	Show this calendar	إظهار هذا التقويم
+	Show only this calendar	إظهار هذا التقويم فقط
+	Overlay	تراكب
+	New calendar…	تقويم جديد…
+	Rename…	إعادة تسمية…
+	Delete calendar…	حذف التقويم…
+	This account's server doesn't allow it	لا يسمح خادم هذا الحساب بذلك
+	The account's main calendar stays as it is	يبقى التقويم الرئيسي للحساب كما هو
+	Only the account's own calendars can be changed	لا يمكن تغيير سوى تقويمات الحساب نفسه
+	Waiting for the server's list of calendars	في انتظار قائمة التقويمات من الخادم
+	New calendar	تقويم جديد
+	Rename calendar	إعادة تسمية التقويم
+	Delete calendar	حذف التقويم
+	Calendar name	اسم التقويم
+	Delete the calendar {name} and its events? It goes to Deleted Items.	هل تريد حذف التقويم {name} وأحداثه؟ سينتقل إلى العناصر المحذوفة.

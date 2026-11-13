@@ -2251,3 +2251,18 @@ presence	Busy	Bezet
 presence	Away	Afwezig
 presence	Do not disturb	Niet storen
 presence	Offline	Offline
+	Show this calendar	Deze agenda weergeven
+	Show only this calendar	Alleen deze agenda weergeven
+	Overlay	Over elkaar
+	New calendar…	Nieuwe agenda…
+	Rename…	Naam wijzigen…
+	Delete calendar…	Agenda verwijderen…
+	This account's server doesn't allow it	De server van dit account staat het niet toe
+	The account's main calendar stays as it is	De hoofdagenda van het account blijft zoals hij is
+	Only the account's own calendars can be changed	Alleen de eigen agenda's van het account kunnen worden gewijzigd
+	Waiting for the server's list of calendars	Wachten op de lijst met agenda's van de server
+	New calendar	Nieuwe agenda
+	Rename calendar	Agenda hernoemen
+	Delete calendar	Agenda verwijderen
+	Calendar name	Agendanaam
+	Delete the calendar {name} and its events? It goes to Deleted Items.	De agenda {name} en de afspraken erin verwijderen? Hij gaat naar Verwijderde items.

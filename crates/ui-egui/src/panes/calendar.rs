@@ -36,9 +36,15 @@ pub(crate) const MONTHS: [&str; 12] =
     ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 pub(crate) const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/// A calendar's colour (the first one is the app's; then Quatrelle's eight categories' in turn).
+/// A calendar's colour (`Session::calendar_color`): the first one is the app's; then Quatrelle's
+/// eight categories' in turn; one chosen on this computer, the palette's.
 pub fn color(i: u8, t: &Tokens) -> Color32 {
-    if i == 0 { t.accent } else { theme::category_color(i.saturating_sub(1) % 8, t.dark) }
+    use quatrelle_engine::{PALETTE_COLOR, PALETTE_COLORS};
+    match i {
+        0 => t.accent,
+        _ if (PALETTE_COLOR..PALETTE_COLOR.saturating_add(PALETTE_COLORS)).contains(&i) => theme::category_color(i - PALETTE_COLOR, t.dark),
+        _ => theme::category_color(i.saturating_sub(1) % 8, t.dark),
+    }
 }
 
 fn today(s: &Session) -> i64 {

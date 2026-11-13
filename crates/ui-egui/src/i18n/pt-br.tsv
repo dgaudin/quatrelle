@@ -2254,3 +2254,18 @@ presence	Busy	Ocupado
 presence	Away	Ausente
 presence	Do not disturb	Não incomodar
 presence	Offline	Offline
+	Show this calendar	Mostrar este calendário
+	Show only this calendar	Mostrar somente este calendário
+	Overlay	Sobrepor
+	New calendar…	Novo calendário…
+	Rename…	Renomear…
+	Delete calendar…	Excluir calendário…
+	This account's server doesn't allow it	O servidor desta conta não permite
+	The account's main calendar stays as it is	O calendário principal da conta fica como está
+	Only the account's own calendars can be changed	Só os calendários próprios da conta podem ser alterados
+	Waiting for the server's list of calendars	Aguardando a lista de calendários do servidor
+	New calendar	Novo calendário
+	Rename calendar	Renomear calendário
+	Delete calendar	Excluir calendário
+	Calendar name	Nome do calendário
+	Delete the calendar {name} and its events? It goes to Deleted Items.	Excluir o calendário {name} e seus eventos? Ele vai para Itens excluídos.

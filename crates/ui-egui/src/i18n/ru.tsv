@@ -2254,3 +2254,18 @@ presence	Busy	Занят
 presence	Away	Нет на месте
 presence	Do not disturb	Не беспокоить
 presence	Offline	Не в сети
+	Show this calendar	Показывать этот календарь
+	Show only this calendar	Показывать только этот календарь
+	Overlay	Наложение
+	New calendar…	Новый календарь…
+	Rename…	Переименовать…
+	Delete calendar…	Удалить календарь…
+	This account's server doesn't allow it	Сервер этой учетной записи этого не позволяет
+	The account's main calendar stays as it is	Основной календарь учетной записи остается как есть
+	Only the account's own calendars can be changed	Изменять можно только собственные календари учетной записи
+	Waiting for the server's list of calendars	Ожидание списка календарей с сервера
+	New calendar	Новый календарь
+	Rename calendar	Переименовать календарь
+	Delete calendar	Удалить календарь
+	Calendar name	Имя календаря
+	Delete the calendar {name} and its events? It goes to Deleted Items.	Удалить календарь {name} вместе с событиями? Он попадет в папку «Удалённые».

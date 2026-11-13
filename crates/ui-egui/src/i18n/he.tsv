@@ -2250,3 +2250,18 @@ presence	Busy	עסוק
 presence	Away	לא ליד המחשב
 presence	Do not disturb	נא לא להפריע
 presence	Offline	לא מחובר
+	Show this calendar	הצג לוח שנה זה
+	Show only this calendar	הצג רק את לוח השנה הזה
+	Overlay	הצגה בשכבות
+	New calendar…	לוח שנה חדש…
+	Rename…	שנה שם…
+	Delete calendar…	מחק לוח שנה…
+	This account's server doesn't allow it	השרת של חשבון זה אינו מאפשר זאת
+	The account's main calendar stays as it is	לוח השנה הראשי של החשבון נשאר כפי שהוא
+	Only the account's own calendars can be changed	ניתן לשנות רק את לוחות השנה של החשבון עצמו
+	Waiting for the server's list of calendars	ממתין לרשימת לוחות השנה מהשרת
+	New calendar	לוח שנה חדש
+	Rename calendar	שנה שם לוח שנה
+	Delete calendar	מחק לוח שנה
+	Calendar name	שם לוח השנה
+	Delete the calendar {name} and its events? It goes to Deleted Items.	למחוק את לוח השנה {name} ואת האירועים שבו? הוא יעבור לפריטים שנמחקו.

@@ -6,6 +6,8 @@
 
 use super::*;
 
+mod menu;
+
 /// The side pane: a month to jump around in, then the calendars.
 pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
@@ -19,9 +21,9 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         let sections = s.pane_sections();
         let mut groups: Vec<(String, Vec<_>)> = vec![(tl!("My calendars").to_string(), Vec::new())];
         let mut shared = Vec::new();
+        // Each account's in the order the user gave them (the server's for the others).
         for a in &s.accounts {
-            let Some(p) = s.pim.get(&a.config.id) else { continue };
-            for c in &p.calendars {
+            for c in s.ordered_calendars(&a.config.id) {
                 if c.id.starts_with("shared:") {
                     if section_key(&sections, a, c).is_some() {
                         if let Some((_, list)) = groups.first_mut() {
@@ -120,8 +122,9 @@ pub(super) fn section_heading(s: &Session, t: &Tokens, ui: &mut Ui, key: &str) {
 }
 
 /// A calendar in the side pane: ticked (in its colour) when shown, a click on the box hides or
-/// shows it; someone else's closes from its right-click menu, one subscribed to by its link
-/// (issue #7) is read again or removed from it.
+/// shows it; its right-click menu ([`menu`]) shows it alone, colours, makes, renames, deletes
+/// and moves it, closes someone else's and reads again or removes one subscribed to by its link
+/// (issue #7).
 pub(super) fn calendar_row(
     s: &Session,
     t: &Tokens,
@@ -136,7 +139,9 @@ pub(super) fn calendar_row(
     let web = s.pim.get(&a.config.id).and_then(|p| p.subscribed.iter().find(|w| w.id == c.id));
     let row = ui.horizontal(|ui| {
         let (r, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
-        let c32 = color(c.color, t);
+        // In the colour chosen on this computer, when there's one; else as the server has it.
+        let chosen = s.prefs.calendar_colors.contains_key(&Session::calendar_key(&a.config.id, &c.id));
+        let c32 = color(if chosen { s.calendar_color(a, c) } else { c.color }, t);
         if shown {
             ui.painter().rect_filled(r, 3.0, c32);
             let p = |x: f32, y: f32| pos2(r.min.x + r.width() * x, r.min.y + r.height() * y);
@@ -149,7 +154,12 @@ pub(super) fn calendar_row(
         if resp.on_hover_text(tip).clicked() {
             acts.push(Action::Run("calendar.show", json!({"account": a.config.id, "calendar": c.id, "shown": !shown})));
         }
-        let name = if c.id == quatrelle_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
+        // The server's name on one line, without control or bidi characters.
+        let name = if c.id == quatrelle_engine::model::pim::LOCAL {
+            tl!("Calendar").to_string()
+        } else {
+            quatrelle_engine::model::pim::teams::one_line(&c.name)
+        };
         let tip = match (&shared, s.pim.get(&a.config.id)) {
             // A shared mailbox's calendar comes with the mailbox; only one opened by hand closes.
             (Some(owner), Some(p)) if !p.shared.iter().any(|x| x.eq_ignore_ascii_case(owner)) => {
@@ -183,36 +193,17 @@ pub(super) fn calendar_row(
         });
         ui.scope(|ui| {
             ui.set_max_width((ui.available_width() - room).max(24.0));
-            ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate()).on_hover_text(tip);
+            // Not selectable: a right click on the name opens the calendar's menu.
+            ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate().selectable(false)).on_hover_text(tip);
         });
         if let Some((text, color)) = after {
             ui.label(RichText::new(text).color(color).small());
         }
     });
-    // Subscribed to: right-click reads it again, or removes it.
-    if web.is_some() {
-        let id = c.id.clone();
-        row.response.interact(Sense::click()).context_menu(|ui| {
-            if ui.button((widgets::menu_icon(Some(Icon::Sync)), tl!("Refresh"))).clicked() {
-                acts.push(Action::Run("calendar.refreshSubscribed", json!({"calendar": id})));
-                ui.close();
-            }
-            if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Remove this calendar"))).clicked() {
-                acts.push(Action::Run("calendar.unsubscribe", json!({"calendar": id})));
-                ui.close();
-            }
-        });
-    }
-    if let Some(email) = shared
-        && s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(&email)))
-    {
-        row.response.interact(Sense::click()).context_menu(|ui| {
-            if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Remove this calendar"))).clicked() {
-                acts.push(Action::Run("calendar.closeShared", json!({"email": email})));
-                ui.close();
-            }
-        });
-    }
+    // Opened by hand from its owner's address (a shared mailbox's comes with the mailbox).
+    let opened = shared.filter(|email| s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(email))));
+    let extra = menu::Extra { web: web.is_some(), opened };
+    row.response.interact(Sense::click()).context_menu(|ui| menu::calendar_menu(ui, s, a, c, &extra, acts));
 }
 
 /// The months of the side pane, one under another (Outlook's date navigator, pulled down for

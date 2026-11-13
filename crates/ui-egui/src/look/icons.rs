@@ -145,6 +145,10 @@ pub enum Icon {
     Sparkle,
     /// A speech bubble (Conversations: Teams' chats).
     Conversations,
+    /// A text cursor between two boxes: rename.
+    Rename,
+    /// A painter's palette: a colour to choose.
+    Color,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -261,6 +265,8 @@ fn svg(icon: Icon) -> &'static str {
         Icon::MailRules => f!("mail_settings"),
         Icon::Sparkle => f!("sparkle"),
         Icon::Conversations => f!("chat"),
+        Icon::Rename => f!("rename"),
+        Icon::Color => f!("color"),
     }
 }
 
@@ -422,6 +428,8 @@ mod tests {
             MailRules,
             Sparkle,
             Conversations,
+            Rename,
+            Color,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

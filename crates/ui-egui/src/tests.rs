@@ -288,6 +288,23 @@ pub(crate) fn tour() {
                 d
             },
             Dialog::SubscribeCalendar { url: "webcal://holidays.example/de.ics".into(), name: String::new(), error: Some("HTTP 404".into()) },
+            Dialog::new_calendar("sample"),
+            Dialog::rename_calendar(
+                "sample",
+                &quatrelle_engine::model::pim::CalendarInfo {
+                    id: "AAMkTrips=".into(),
+                    name: "Trips\u{202E} and\nvisits".into(),
+                    ..Default::default()
+                },
+            ),
+            Dialog::delete_calendar(
+                "sample",
+                &quatrelle_engine::model::pim::CalendarInfo {
+                    id: "AAMkTrips=".into(),
+                    name: "Trips\u{202E} and\nvisits".into(),
+                    ..Default::default()
+                },
+            ),
             Dialog::AddFromFile(Box::new(crate::dialogs::FileHolds {
                 path: "/tmp/harvest.ics".into(),
                 name: "harvest.ics".into(),
