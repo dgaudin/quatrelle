@@ -391,3 +391,28 @@ fn a_pasted_table_is_sent_in_its_columns() {
     assert!(html.contains("<b><code>Server</code></b>"), "{html}");
     assert!(html.contains("<span style=\"background-color:#eeeeee\"><code>imap.gmail.com</code></span>"), "{html}");
 }
+
+/// This repository's page on Gmail as a terminal gives it once printed (`cat`) and copied: each
+/// line's trailing spaces gone, tabs and indents as spaces, one or two line ends after it, the
+/// shell's prompt lines before and after. Each is pasted formatted, its lists and table kept.
+#[test]
+fn a_page_copied_from_a_terminal_is_pasted_formatted() {
+    let md = include_str!("../../../../../docs/gmail.md");
+    let trimmed: String = md.lines().map(|l| format!("{}\n", l.trim_end())).collect();
+    let prompt = "ann@desk:~/quatrelle$";
+    for (what, text) in [
+        ("trailing spaces trimmed", trimmed.clone()),
+        ("two line ends after it", format!("{trimmed}\n")),
+        ("no line end after it", trimmed.trim_end().to_string()),
+        ("indents as a tab shows", trimmed.replace("\n  ", "\n        ")),
+        ("tabs as spaces", trimmed.replace("\n  ", "\n\t").replace('\t', "        ")),
+        ("the prompt around it", format!("{prompt} cat docs/gmail.md\n{trimmed}{prompt} ")),
+    ] {
+        let (got, styles) = pasted_markdown(&text).unwrap_or_else(|| panic!("{what}: not pasted formatted"));
+        let listed = |list: List| (0..got.split('\n').count()).filter(|n| styles.para(*n).list == list).count();
+        assert_eq!((listed(List::Bullet), listed(List::Number)), (8, 2), "{what}: {got:?}");
+        let (n, _) = line_of(&got, GMAIL_TABLE[0]);
+        assert_eq!(got.split('\n').nth(n + 2), Some(GMAIL_TABLE[2]), "{what}: {got:?}");
+        assert!(!got.chars().any(|c| ('\u{E000}'..='\u{F8FF}').contains(&c)), "{what}: no marks left");
+    }
+}

@@ -6,6 +6,7 @@
 use super::*;
 
 mod across;
+mod clipboard;
 mod file_dialogs;
 mod lost_gpu;
 mod markdown;

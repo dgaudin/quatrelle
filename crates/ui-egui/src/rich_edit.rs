@@ -38,6 +38,8 @@ use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
 use menu::*;
+#[cfg(test)]
+pub(crate) use paste::or_as_pasted;
 use paste::*;
 #[cfg(test)]
 pub(crate) use pictures::FIT_WIDTH;
@@ -134,6 +136,8 @@ pub(crate) struct Editor {
     /// Its text as last drawn: a selection that goes on into other blocks is worked out and lit
     /// from it (`reading/compose/across.rs`).
     pub(crate) drawn: Option<Drawn>,
+    /// What it keeps of pastes ([`paste::Pastes`]).
+    pub(crate) pastes: Pastes,
 }
 
 /// A text box's text as drawn: laid out, where, and the box's own place.
@@ -176,6 +180,7 @@ impl Editor {
             emoji: emoji::Picker::default(),
             in_quote: false,
             drawn: None,
+            pastes: Pastes::default(),
         }
     }
 
@@ -425,7 +430,7 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
     let mut ops = Vec::new();
     let (mut undo_k, mut redo_k, mut link_k, mut book_k) = (false, false, false, false);
     // Copy and Cut are the editor's own: the clipboard gets the look as HTML, not the text alone.
-    let (mut copy_k, mut cut_k) = (false, false);
+    let (mut copy_k, mut cut_k, mut paste_k) = (false, false, false);
     // Lists: Enter on an empty item ends the list, Backspace at an item's start takes its bullet
     // away, Tab and Shift+Tab move it in and out.
     let line = rich::lines_of(&c.body, ed.sel.start..ed.sel.start).0;
@@ -479,6 +484,12 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
         undo_k = i.consume_key(cmd, Key::Z);
         redo_k |= i.consume_key(cmd, Key::Y);
         link_k = i.consume_key(cmd, Key::K);
+        // Ctrl+Insert copies and Shift+Insert pastes, as egui has them on Windows alone (there
+        // they come as Ctrl+C and Ctrl+V do); the browser has them itself.
+        if !cfg!(target_arch = "wasm32") {
+            copy_k |= !c.sending && i.consume_key(Modifiers::CTRL, Key::Insert);
+            paste_k = !c.sending && i.consume_key(Modifiers::SHIFT, Key::Insert);
+        }
         if listed && line_empty && ed.sel.is_empty() && i.consume_key(Modifiers::NONE, Key::Enter) {
             ops.push(if para.list == List::Bullet { Op::Bullets } else { Op::Numbers });
         }
@@ -504,6 +515,11 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
         set_selection(&ctx, id, ed.sel.clone());
     } else if copy_k && !sel.is_empty() {
         copy_selection(ui, c, &sel);
+    }
+    // The system is asked for the clipboard, which comes as Ctrl+V's paste does.
+    if paste_k {
+        ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+        ed.pastes.ask(&ctx, "Shift+Insert");
     }
     if link_k {
         ed.link = Some(LinkForm::open(c, ed.sel.clone()));
@@ -531,14 +547,13 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
             // that it has the keyboard.
             if std::mem::take(&mut ed.paste) {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                ed.pastes.ask(ui.ctx(), "the menu's Paste");
             }
         }
     }
     if ui.memory(|m| m.has_focus(id)) {
         keys(ui, ed, c, acts);
-        if !c.plain && ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))) {
-            paste_formatted(ui, ed, c, id);
-        }
+        pasted(ui, ed, c, id);
     }
     // A middle click on the text pastes the X11/Wayland selection there, keyboard or not.
     if !c.plain {

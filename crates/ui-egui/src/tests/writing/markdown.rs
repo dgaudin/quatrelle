@@ -10,7 +10,7 @@ use quatrelle_engine::mime::rich::List;
 const MD: &str = "# Plan\n\n**Bold** and *it*\n\n- one\n- two\n";
 
 /// A new message being written in the reading pane, its text with the keyboard.
-fn writing(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
+pub(super) fn writing(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
     let (mut a, dir) = app(name);
     a.session.prefs.new_mail_window = false;
     let ctx = egui::Context::default();
@@ -24,7 +24,7 @@ fn writing(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
     (a, dir, ctx)
 }
 
-fn compose(a: &MailApp) -> quatrelle_engine::Compose {
+pub(super) fn compose(a: &MailApp) -> quatrelle_engine::Compose {
     a.session.compose.clone().unwrap()
 }
 
@@ -91,10 +91,10 @@ fn markdown_stays_text_where_it_should() {
 
 thread_local! {
     /// The HTML this test thread's clipboard holds.
-    static CLIPBOARD_HTML: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    pub(super) static CLIPBOARD_HTML: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
 }
 
-fn clipboard_html() -> Option<String> {
+pub(super) fn clipboard_html() -> Option<String> {
     CLIPBOARD_HTML.with(|c| c.borrow().clone())
 }
 
@@ -290,6 +290,29 @@ fn a_whole_page_pasted_is_laid_out_as_written_in_either_look() {
         } else {
             assert_eq!(bg, egui::Color32::from_rgb(CODE_SHADE[0], CODE_SHADE[1], CODE_SHADE[2]));
             assert!(lum(fg) < 80.0, "dark text on it: {fg:?}");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// This repository's page on Gmail as a terminal gives it (printed with `cat`, copied: trailing
+/// spaces gone, the shell's prompt around it), pasted with Ctrl+V into a formatted message: it
+/// goes in formatted and stays there, the frame after too.
+#[test]
+fn a_page_copied_from_a_terminal_is_pasted_and_stays() {
+    let md = include_str!("../../../../../docs/gmail.md");
+    let trimmed: String = md.lines().map(|l| format!("{}\n", l.trim_end())).collect();
+    let prompt = "ann@desk:~/quatrelle$";
+    for text in [trimmed.clone(), format!("{prompt} cat docs/gmail.md\n{trimmed}{prompt} ")] {
+        let (mut a, dir, ctx) = writing("md-paste-terminal");
+        frame(&ctx, &mut a, vec![Event::Paste(text)]);
+        for _ in 0..2 {
+            let c = compose(&a);
+            assert!(c.body.starts_with("Gmail in Quatrelle") || c.body.contains("\nGmail in Quatrelle\n"), "pasted: {:?}", c.body);
+            assert!(c.body.contains("Incoming (IMAP) │ imap.gmail.com"), "{:?}", c.body);
+            let n = c.body.split('\n').position(|l| l == "What to know about Gmail").expect("the last heading");
+            assert_eq!(c.styles.para(n + 2).list, List::Bullet, "{:?}", c.body);
+            frame(&ctx, &mut a, vec![]);
         }
         let _ = std::fs::remove_dir_all(dir);
     }

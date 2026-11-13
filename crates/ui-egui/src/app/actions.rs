@@ -562,6 +562,12 @@ impl MailApp {
                 if !text && let Some(png) = self.services.clipboard_picture() {
                     let size = rich_edit::own_size(&png);
                     self.insert_picture(json!({"name": "pasted.png", "data": png}), size);
+                    if let Some(ed) = self.ui.editor.as_mut() {
+                        ed.pastes.unpasted = None;
+                    }
+                } else if self.ui.editor.as_ref().is_some_and(|ed| ed.pastes.unpasted.is_some()) {
+                    // The text pasted with it goes in instead (next frame), as text.
+                    log::info!("paste into the message: no picture to read off the clipboard: the text pasted goes in instead");
                 }
             }
             Action::PasteImage(png) => {

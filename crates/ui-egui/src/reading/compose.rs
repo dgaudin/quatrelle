@@ -573,7 +573,14 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             // copied from a web page, which comes with its HTML alone (a picture, no text). Into
             // the block of the original with the cursor, when one has it.
             let in_quote = quote_cell.is_some_and(|n| ui.memory(|m| m.has_focus(quote::cell_box(c.id, n))));
+            let paste = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
             if ui.memory(|m| m.has_focus(body_id)) || in_quote {
+                // A paste taken for a picture that couldn't be read: its text, pasted as text.
+                let unpasted = ed.pastes.unpasted.take();
+                let again = unpasted.is_some();
+                if let Some(text) = unpasted {
+                    ui.input_mut(|i| i.events.push(egui::Event::Paste(text)));
+                }
                 let shots: Vec<Vec<u8>> = ui.input(|i| {
                     i.events
                         .iter()
@@ -584,12 +591,21 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                         .collect()
                 });
                 acts.extend(shots.into_iter().map(Action::PasteImage));
-                if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))))
-                    && crate::clipboard_html().is_some_and(|h| picture_alone(&h))
-                {
+                if paste && !again && crate::clipboard_html().is_some_and(|h| picture_alone(&h)) {
+                    // Kept until the picture is read off the clipboard: put in if none is.
+                    ed.pastes.unpasted = ui.input(|i| {
+                        i.events.iter().find_map(|e| match e {
+                            egui::Event::Paste(s) => Some(s.replace("\r\n", "\n")),
+                            _ => None,
+                        })
+                    });
+                    log::info!("paste into the message: the clipboard's HTML is a picture alone: the picture is read off the clipboard");
+                    ui.ctx().request_repaint();
                     ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
                     acts.push(Action::PastePicture);
                 }
+            } else if paste {
+                log::info!("paste while a message is written, its text without the keyboard: left to what has it");
             }
             egui::ScrollArea::vertical().auto_shrink(false).id_salt("compose-body").show(ui, |ui| {
                 // Replies start above the quoted text.
