@@ -166,3 +166,35 @@ fn ids_graph_never_gives_are_refused_without_asking() {
     assert!(asked.is_empty(), "{asked:?}");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Calendars removed from the list on this computer (`Pim::removed`), one of the account's own
+/// and a colleague's kept in a group: listed, their events never asked for, nothing of them read;
+/// the others read as before.
+#[test]
+fn a_removed_calendar_is_listed_and_its_events_never_asked_for() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.calendars.push(("CAL2".into(), "Trips".into()));
+    d.groups.push(("G1".into(), "My Calendars".into(), vec!["CAL1".into(), "CAL2".into()]));
+    d.groups.push(("G2".into(), "Team".into(), vec!["SC1".into()]));
+    d.group_calendars.push(("SC1".into(), "Calendar".into(), "Zoe".into(), false));
+    for (id, cal, subject) in [("E1", "CAL1", "Stand-up"), ("E2", "CAL2", "Train to Lyon"), ("E3", "SC1", "Planning")] {
+        d.events.push(json!({"id": id, "calendar": cal, "iCalUId": id, "subject": subject,
+            "start": {"dateTime": "2026-11-20T09:00:00.0000000"}, "end": {"dateTime": "2026-11-20T10:00:00.0000000"}}));
+    }
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let pim = quatrelle_model::pim::Pim { removed: vec!["CAL2".into(), "SC1".into()], ..Default::default() };
+    let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    let listed = sync.calendars.clone().unwrap_or_default();
+    assert!(["CAL1", "CAL2", "SC1"].iter().all(|id| listed.iter().any(|x| x.id == *id)), "each listed: {listed:?}");
+    for id in ["CAL2", "SC1"] {
+        assert!(!sync.synced_calendars.iter().any(|c| c == id) && sync.events.iter().all(|e| e.calendar != id), "{id} not read");
+    }
+    assert!(sync.events.iter().any(|e| e.calendar == "CAL1" && e.event.summary == "Stand-up"), "the main one read");
+    let asked: Vec<String> = server.data.lock().unwrap().calls.iter().filter(|c| c.contains("/events")).cloned().collect();
+    assert!(asked.iter().all(|c| !c.contains("CAL2") && !c.contains("SC1")), "{asked:?}");
+    assert!(asked.iter().any(|c| c.contains("CAL1")), "{asked:?}");
+}

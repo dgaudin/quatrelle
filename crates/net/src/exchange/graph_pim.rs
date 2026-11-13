@@ -500,6 +500,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     if !groups_read {
         calendars.iter_mut().filter(|x| !x.main).for_each(|x| x.not_own = true);
     }
+    // Removed from the list on this computer: listed, its events never asked for (what's kept
+    // of them stays as it was). Unticked ones are still read, as before.
+    events_at.retain(|(id, _)| !pim.removed.contains(id));
     // What changed here goes first.
     for t in &pim.deleted {
         let path = if t.href.starts_with("contact:") {

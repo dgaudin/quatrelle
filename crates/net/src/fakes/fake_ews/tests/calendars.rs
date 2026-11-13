@@ -7,6 +7,7 @@ use super::*;
 
 mod files;
 mod notes;
+mod removed;
 mod secondary;
 
 /// Three plain appointments carrying one UID: the sync hands the engine three distinct

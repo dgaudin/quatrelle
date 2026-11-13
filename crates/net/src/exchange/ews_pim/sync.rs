@@ -116,7 +116,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
     // listed, none read. Outlook leaves them unticked, and ticking is what reads one; the engine
     // records the ticks as soon as it sees the list, so the next sync reads the ones ticked.
     let known = pim.calendars.iter().any(|c| quatrelle_model::pim::shared_calendar_owner(&c.id).is_some());
-    let ticked = others.iter().filter(|(e, _, _, _)| !known || !pim.not_read.contains(&quatrelle_model::pim::shared_calendar_id(e))).count();
+    let ticked = others.iter().filter(|(e, _, _, _)| !known || !pim.leaves_unread(&quatrelle_model::pim::shared_calendar_id(e))).count();
     if !others.is_empty() {
         log::info!("{} other people's calendars, {ticked} ticked{}", others.len(), if known { " and read" } else { " (listed, none read yet)" });
     }
@@ -138,10 +138,10 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
             calendars.push(entry);
             continue;
         }
-        // Unticked: listed as it was, not read (the fork keeps Outlook's ticks), whether this
-        // account may change it as known from before: asked of the server only the first time
-        // (each of fifty colleagues' was, at every sync, 28/10).
-        if pim.not_read.contains(&entry.id) {
+        // Unticked, or removed from the list: listed as it was, not read (the fork keeps
+        // Outlook's ticks), whether this account may change it as known from before: asked of
+        // the server only the first time (each of fifty colleagues' was, at every sync, 28/10).
+        if pim.leaves_unread(&entry.id) {
             let read_only = match pim.calendars.iter().find(|k| k.id == entry.id) {
                 Some(k) => k.read_only,
                 None => !matches!(may_edit(c, &calendar_folder(Some(&c.address_of(email)))), Ok(true)),
@@ -170,8 +170,9 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                 }
                 let key = format!("public:{id}");
                 let color = u8::try_from((n + 3) % 8).unwrap_or(0);
-                // An unticked public calendar: listed, not read (its state kept with what's kept of it).
-                if !class.starts_with("IPF.Contact") && pim.not_read.contains(&key) {
+                // A public calendar unticked or removed from the list: listed, not read (its state
+                // kept with what's kept of it).
+                if !class.starts_with("IPF.Contact") && pim.leaves_unread(&key) {
                     let ctag = pim.calendars.iter().find(|k| k.id == key).map(|k| k.ctag.clone()).unwrap_or_default();
                     if let Some(cals) = out.calendars.as_mut() {
                         cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new(), main: false, not_own: false });

@@ -501,6 +501,12 @@ pub struct DavSync {
 }
 
 impl Pim {
+    /// Whether the next sync leaves a calendar unread, listed as it was: unticked
+    /// ([`Pim::not_read`]), or removed from the list ([`Pim::removed`]).
+    pub fn leaves_unread(&self, calendar: &str) -> bool {
+        self.not_read.iter().chain(&self.removed).any(|c| c == calendar)
+    }
+
     /// What the next sync reads.
     pub fn reading(&self) -> PimReading {
         PimReading { own_only: self.own_only, not_read: self.not_read.clone(), removed: self.removed.clone() }

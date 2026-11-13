@@ -72,7 +72,8 @@ pub(super) fn list(c: &Client) -> Result<Vec<OwnFolder>> {
 }
 
 /// The account's other calendars into `calendars` (their entries) and `out` (their appointments):
-/// each read by its changes, one unticked (`Pim::not_read`) listed as it was; one the server
+/// each read by its changes, one unticked or removed from the list (`Pim::leaves_unread`) listed
+/// as it was, never asked for; one the server
 /// refuses passed over, listed as it was. A listing that fails keeps them all as they were: none
 /// goes for it. Only what stops the whole sync (the sign-in refused) is returned.
 pub(super) fn read_all(c: &Client, pim: &Pim, now: i64, refused: &[Tombstone], calendars: &mut Vec<CalendarInfo>, out: &mut DavSync) -> Result<()> {
@@ -98,7 +99,7 @@ pub(super) fn read_all(c: &Client, pim: &Pim, now: i64, refused: &[Tombstone], c
             main: false,
             not_own: false,
         };
-        if pim.not_read.contains(&id) {
+        if pim.leaves_unread(&id) {
             calendars.push(entry);
             continue;
         }
