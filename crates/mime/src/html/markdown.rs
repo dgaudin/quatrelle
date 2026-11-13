@@ -36,6 +36,11 @@ const TABLE_CELLS_MAX: usize = 1 << 16;
 const MARK_FIRST: u32 = 0xE040;
 const MARK_LAST: u32 = 0xE06F;
 
+/// Where a code block's line starts, after the line's own mark: its first line, the others. A
+/// block's lines are laid out together ([`lay_out`]).
+const CODE_FIRST: char = '\u{E038}';
+const CODE_LINE: char = '\u{E039}';
+
 /// The marks Quatrelle's conversions put in text (`html.rs`, `fonts.rs`, `rules.rs` and the line
 /// marks here): taken out of the clipboard's text, so none can be forged.
 fn is_own_mark(c: char) -> bool {
@@ -146,7 +151,7 @@ pub fn markdown_html(md: &str) -> String {
 /// Markdown pasted into a message, as text and styles: `None` when it isn't plainly Markdown
 /// ([`looks_like_markdown`]), it is longer than [`MARKDOWN_MAX`] or it holds no text, to be
 /// pasted as it is. Its lists are the editor's lists and its quotes indented and grey, as the
-/// editor writes them.
+/// editor writes them; its code is in the monospace font on [`rich::CODE_SHADE`].
 pub fn pasted_markdown(text: &str) -> Option<(String, rich::Styles)> {
     if text.len() > MARKDOWN_MAX || !looks_like_markdown(text) {
         return None;
@@ -273,6 +278,13 @@ impl Writer {
         self.mark(0, depth);
     }
 
+    /// A code block's line starts here (`mark`: [`CODE_FIRST`] or [`CODE_LINE`]), when pasting.
+    fn code_mark(&mut self, mark: char) {
+        if self.marks {
+            self.out.push(mark);
+        }
+    }
+
     fn text(&mut self, t: &str) {
         for c in t.chars().filter(|c| !is_own_mark(*c)) {
             match c {
@@ -283,6 +295,7 @@ impl Writer {
                 '\n' if self.in_code => {
                     self.out.push('\n');
                     self.line_mark();
+                    self.code_mark(CODE_LINE);
                 }
                 c => self.out.push(c),
             }
@@ -338,6 +351,7 @@ impl Writer {
             Tag::CodeBlock(_) => {
                 self.out.push_str("<pre><code>");
                 self.line_mark();
+                self.code_mark(CODE_FIRST);
                 self.in_code = true;
                 Open::Code
             }
@@ -433,8 +447,8 @@ impl Writer {
             }
             Some(Open::Code) => {
                 self.in_code = false;
-                // The block's last line break (and the mark after it) would start an empty line.
-                if self.out.ends_with(|c: char| (MARK_FIRST..=MARK_LAST).contains(&u32::from(c))) {
+                // The block's last line break (and the marks after it) would start an empty line.
+                while self.out.ends_with(is_own_mark) {
                     self.out.pop();
                 }
                 if self.out.ends_with('\n') {
@@ -512,68 +526,8 @@ fn written(md: &str, marks: bool) -> Option<String> {
     done.ok().flatten()
 }
 
-/// The text and styles html2text's reading of the marked HTML gave, laid out as its line marks
-/// say: what is before a mark on its line (html2text's bullets, numbers and indents) taken away
-/// with it, the line's paragraph made a list item or indented, a quote's text grey. One pass,
-/// whatever the text's length.
-fn lay_out(text: &str, styles: &rich::Styles) -> (String, rich::Styles) {
-    const QUOTE_GREY: [u8; 3] = [0x55, 0x55, 0x55];
-    let mut st = styles.clone();
-    st.fit(text);
-    let mut palette = st.palette.clone();
-    let mut grey: HashMap<u16, u16> = HashMap::new();
-    let mut out = String::with_capacity(text.len());
-    let mut chars: Vec<u16> = Vec::with_capacity(st.chars.len());
-    let mut paras = Vec::with_capacity(st.paras.len());
-    let mut at = 0usize;
-    for (n, line) in text.split('\n').enumerate() {
-        if n > 0 {
-            out.push('\n');
-            chars.push(st.chars.get(at.saturating_sub(1)).copied().unwrap_or(0));
-        }
-        let line_chars: Vec<char> = line.chars().collect();
-        let mut para = st.para(n);
-        let mark = line_chars.iter().position(|c| (MARK_FIRST..=MARK_LAST).contains(&u32::from(*c)));
-        let mut quote = false;
-        if let Some(code) = mark.and_then(|p| line_chars.get(p)).map(|c| u32::from(*c) - MARK_FIRST) {
-            para.list = match code / 16 {
-                1 => rich::List::Bullet,
-                2 => rich::List::Number,
-                _ => rich::List::None,
-            };
-            quote = code % 16 >= 8;
-            para.indent = u8::try_from(code % 8).unwrap_or(0);
-        }
-        let skip = mark.map_or(0, |p| p + 1);
-        for (k, c) in line_chars.iter().enumerate().skip(skip) {
-            if is_own_mark(*c) {
-                continue;
-            }
-            let mut id = st.chars.get(at + k).copied().unwrap_or(0);
-            if quote {
-                id = *grey.entry(id).or_insert_with(|| {
-                    let mut s = palette.get(usize::from(id)).cloned().unwrap_or_default();
-                    s.color = s.color.or(Some(QUOTE_GREY));
-                    match palette.iter().position(|p| *p == s) {
-                        Some(i) => u16::try_from(i).unwrap_or(0),
-                        None if palette.len() < usize::from(u16::MAX) => {
-                            palette.push(s);
-                            u16::try_from(palette.len() - 1).unwrap_or(0)
-                        }
-                        None => id,
-                    }
-                });
-            }
-            out.push(*c);
-            chars.push(id);
-        }
-        paras.push(para);
-        at += line_chars.len() + 1;
-    }
-    let mut laid = rich::Styles { chars, palette, paras };
-    laid.fit(&out);
-    (out, laid)
-}
+mod lines;
+use lines::lay_out;
 
 #[cfg(test)]
 mod tests;

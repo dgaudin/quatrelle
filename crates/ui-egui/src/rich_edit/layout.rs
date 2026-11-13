@@ -7,6 +7,9 @@ use std::collections::{BTreeSet, HashMap};
 
 use super::*;
 
+/// What code's grey ([`rich::CODE_SHADE`]) is drawn as on the dark theme's page.
+const DARK_CODE_SHADE: [u8; 3] = [0x37, 0x3A, 0x40];
+
 /// A look as text formatting (the person's colours adjusted to stay readable on the page), in
 /// its typeface when that's loaded (`typefaces`), the usual font otherwise.
 pub(super) fn format(s: &Style, t: &Tokens, typefaces: &BTreeSet<String>) -> TextFormat {
@@ -20,7 +23,15 @@ pub(super) fn format(s: &Style, t: &Tokens, typefaces: &BTreeSet<String>) -> Tex
     } else {
         theme::regular(px)
     };
-    let (mut color, background) = theme::mail_colors(s.color, s.highlight, t, t.text);
+    let (mut color, background) = match s.highlight {
+        // Code's light grey would go on the dark page (as a grey box behind a message's text
+        // does): a dark grey there, under text that reads on it.
+        Some(h) if t.dark && h == rich::CODE_SHADE => (
+            theme::mail_colors_on(s.color, None, DARK_CODE_SHADE, t, t.text).0,
+            Some(Color32::from_rgb(DARK_CODE_SHADE[0], DARK_CODE_SHADE[1], DARK_CODE_SHADE[2])),
+        ),
+        _ => theme::mail_colors(s.color, s.highlight, t, t.text),
+    };
     if s.link.is_some() && s.color.is_none() {
         color = t.accent;
     }

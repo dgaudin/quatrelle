@@ -236,3 +236,52 @@ fn a_whole_page_keeps_its_items_and_their_words() {
         assert_eq!(styles.para(n).list, list, "{item}");
     }
 }
+
+/// Whether the character at `at` is code as pasted: in the monospace font, on the code grey.
+fn shaded(styles: &rich::Styles, at: usize) -> bool {
+    let s = styles.style(at);
+    s.mono && s.highlight == Some(rich::CODE_SHADE)
+}
+
+/// Code pasted from Markdown is in the monospace font on a light grey, a highlight of the
+/// editor's (sent as one is, so every mail program shows it): a span of it inline, a block of it
+/// line by line. A block keeps its lines as written (an empty one, an indent) and each is made as
+/// wide as the widest, so that it reads as one grey box.
+#[test]
+fn code_is_mono_on_a_light_grey_and_a_block_reads_as_one_box() {
+    let md = "Run `git status` and **then**:\n\n```\nfn main() {\n\n    go();\n}\n```\n\nDone.";
+    let (text, styles) = pasted_markdown(md).expect("Markdown");
+    let (_, at) = line_of(&text, "Run git status and then:");
+    assert!((at + 4..at + 14).all(|i| shaded(&styles, i)), "the span: {:?}", styles.style(at + 4));
+    assert!(!shaded(&styles, at) && !shaded(&styles, at + 3) && !shaded(&styles, at + 14), "around the span");
+    let (n, at) = line_of(&text, "fn main() {");
+    let lines: Vec<&str> = text.split('\n').collect();
+    assert_eq!(lines.get(n..n + 4), Some(&["fn main() {", "           ", "    go();  ", "}          "][..]), "{text:?}");
+    let block = lines.get(n..n + 4).map_or(0, |l| l.iter().map(|l| l.chars().count() + 1).sum::<usize>()) - 1;
+    assert!((at..at + block).filter(|i| text.chars().nth(*i) != Some('\n')).all(|i| shaded(&styles, i)), "the whole block");
+    for k in n..n + 4 {
+        assert_eq!(styles.para(k).list, List::None);
+    }
+    let (_, at) = line_of(&text, "Done.");
+    assert!(!shaded(&styles, at));
+    // A block of many empty lines under a wide one isn't made many times bigger.
+    let md = format!("# T\n\n```\n{}\n{}```\n", "x".repeat(80), "\n".repeat(50_000));
+    let (text, _) = pasted_markdown(&md).expect("Markdown");
+    assert!(text.len() <= 2 * md.len(), "{} from {}", text.len(), md.len());
+}
+
+/// Sent, pasted code keeps its look: in `<code>`, on the grey, the padding of a block's lines
+/// kept as spaces that don't collapse.
+#[test]
+fn pasted_code_is_sent_on_its_grey() {
+    let (text, styles) = pasted_markdown("Run `git status` now, **then**\n\n```\nlet x = 1;\nx\n```\n").expect("Markdown");
+    let html = rich::to_html(&text, &styles);
+    assert!(html.contains("<span style=\"background-color:#eeeeee\"><code>git status</code></span>"), "{html}");
+    let first = html.lines().find(|l| l.contains("let x = 1;")).expect("the block's first line");
+    assert!(first.contains("<span style=\"background-color:#eeeeee\"><code>let x = 1;</code></span>"), "{first}");
+    let second = html.lines().find(|l| l.contains("<code>x ")).expect("the block's second line");
+    assert!(
+        second.contains("<code>x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</code>") && second.contains("background-color:#eeeeee"),
+        "{second}"
+    );
+}

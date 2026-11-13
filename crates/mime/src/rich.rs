@@ -26,6 +26,9 @@ pub const SIZES: [u8; 12] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36];
 pub const DEFAULT_SIZE: u8 = 11;
 /// Most indent steps.
 const MAX_INDENT: u8 = 8;
+/// The light grey code is on, pasted from Markdown (inline and in blocks): a highlight, sent as
+/// one is, so every mail program shows it. The editor draws it in a dark grey on the dark theme.
+pub const CODE_SHADE: [u8; 3] = [0xEE, 0xEE, 0xEE];
 
 /// How a run of characters looks.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]

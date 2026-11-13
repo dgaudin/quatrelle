@@ -236,3 +236,44 @@ fn a_whole_page_pasted_keeps_its_lists_in_either_look() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+/// The character index in `text` of `needle`'s first character.
+fn char_at(text: &str, needle: &str) -> usize {
+    let byte = text.find(needle).unwrap_or_else(|| panic!("{needle:?} isn't in {text:?}"));
+    text.get(..byte).map_or(0, |b| b.chars().count())
+}
+
+/// This repository's page on Gmail pasted, in the light and the dark look: its code (the
+/// program's name in an item, the servers' names) is in the monospace font on the code grey, and
+/// drawn on a grey box the text reads on in either look.
+#[test]
+fn a_whole_page_pasted_shows_its_code_on_grey_in_either_look() {
+    use quatrelle_engine::mime::rich::CODE_SHADE;
+    let md = include_str!("../../../../../docs/gmail.md");
+    for dark in [false, true] {
+        let (mut a, dir, ctx) = writing("md-paste-look");
+        a.ui.dark = Some(dark);
+        frame(&ctx, &mut a, vec![Event::Paste(md.into())]);
+        frame(&ctx, &mut a, vec![]);
+        let c = compose(&a);
+        for code in ["Quatrelle)", "imap.gmail.com", "smtp.gmail.com"] {
+            let at = char_at(&c.body, code);
+            let st = c.styles.style(at);
+            assert!(st.mono && st.highlight == Some(CODE_SHADE), "{code}: {st:?}");
+        }
+        frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 2400.0));
+        let galley = a.ui.editor.as_ref().and_then(|e| e.drawn.as_ref()).map(|d| d.galley.clone()).expect("drawn");
+        let byte = c.body.find("Quatrelle)").expect("the code");
+        let section = galley.job.sections.iter().find(|s| (s.byte_range.start.0..s.byte_range.end.0).contains(&byte)).expect("its section");
+        let (bg, fg) = (section.format.background, section.format.color);
+        let lum = |c: egui::Color32| 0.2126 * f32::from(c.r()) + 0.7152 * f32::from(c.g()) + 0.0722 * f32::from(c.b());
+        if dark {
+            assert!(bg != egui::Color32::TRANSPARENT && lum(bg) < 90.0 && lum(bg) > 40.0, "a dark grey box: {bg:?}");
+            assert!(lum(fg) > 180.0, "light text on it: {fg:?}");
+        } else {
+            assert_eq!(bg, egui::Color32::from_rgb(CODE_SHADE[0], CODE_SHADE[1], CODE_SHADE[2]));
+            assert!(lum(fg) < 80.0, "dark text on it: {fg:?}");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
