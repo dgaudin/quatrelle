@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The archive and retention policies on screen: the submenu of a message and of a folder, in
-//! two parts, and the header line.
+//! two parts, each tag by its period (the server's name on hover, or shown when two read alike),
+//! and the header line.
 
 use quatrelle_engine::model::{ArchiveTag, PolicyKind, dates};
 
@@ -12,19 +13,21 @@ const NEVER: &str = "44444444-aaaa-4bbb-8ccc-000000000004";
 const DELETE: &str = "55555555-aaaa-4bbb-8ccc-000000000005";
 const WEEK: &str = "66666666-aaaa-4bbb-8ccc-000000000006";
 
-/// Every tag's name, and the entry that takes a tag off.
-const ENTRIES: [&str; 5] = ["1 Year Move to Archive", "Never Move to Archive", "3 Year Delete", "1 Week Delete", "As its folder"];
+/// Every tag by its period, and the entry that takes a tag off.
+const ENTRIES: [&str; 5] = ["1 year", "Never", "3 years", "1 week", "As its folder"];
+
+/// The tags the server offers: two archive tags, two retention tags.
+fn tags() -> Vec<ArchiveTag> {
+    vec![
+        ArchiveTag { id: YEAR.into(), name: "1 Year Move to Archive".into(), days: Some(365), never: false, kind: PolicyKind::Archive },
+        ArchiveTag { id: NEVER.into(), name: "Never Move to Archive".into(), days: None, never: true, kind: PolicyKind::Archive },
+        ArchiveTag { id: DELETE.into(), name: "3 Year Delete".into(), days: Some(1095), never: false, kind: PolicyKind::Retention },
+        ArchiveTag { id: WEEK.into(), name: "1 Week Delete".into(), days: Some(7), never: false, kind: PolicyKind::Retention },
+    ]
+}
 
 fn offer(a: &mut MailApp) {
-    a.session.apply(MailEvent::ArchiveTags {
-        account: "a1".into(),
-        tags: vec![
-            ArchiveTag { id: YEAR.into(), name: "1 Year Move to Archive".into(), days: Some(365), never: false, kind: PolicyKind::Archive },
-            ArchiveTag { id: NEVER.into(), name: "Never Move to Archive".into(), days: None, never: true, kind: PolicyKind::Archive },
-            ArchiveTag { id: DELETE.into(), name: "3 Year Delete".into(), days: Some(1095), never: false, kind: PolicyKind::Retention },
-            ArchiveTag { id: WEEK.into(), name: "1 Week Delete".into(), days: Some(7), never: false, kind: PolicyKind::Retention },
-        ],
-    });
+    a.session.apply(MailEvent::ArchiveTags { account: "a1".into(), tags: tags() });
 }
 
 /// Where the checkmarks are drawn, as the text they sit beside: the line of text nearest to
@@ -74,9 +77,9 @@ fn y_of(shapes: &[egui::Shape], text: &str) -> f32 {
 fn the_submenu_lists_the_servers_tags_in_two_parts_with_the_ones_in_place_ticked() {
     let ctx = egui::Context::default();
     let cases = [
-        (Some(NEVER), Some(WEEK), ["Never Move to Archive", "1 Week Delete"]),
+        (Some(NEVER), Some(WEEK), ["Never", "1 week"]),
         (None, None, ["As its folder", "As its folder"]),
-        (Some(YEAR), None, ["1 Year Move to Archive", "As its folder"]),
+        (Some(YEAR), None, ["1 year", "As its folder"]),
     ];
     for dark in [Some(false), Some(true)] {
         for (archive, retention, want) in cases {
@@ -98,7 +101,7 @@ fn the_submenu_lists_the_servers_tags_in_two_parts_with_the_ones_in_place_ticked
                 assert!(all.iter().any(|x| x == t), "{t} in {all:?}");
             }
             assert_eq!(all.iter().filter(|t| *t == "As its folder").count(), 2, "one in each part: {all:?}");
-            let order = ["Archive policy", "1 Year Move to Archive", "Never Move to Archive", "Retention policy", "3 Year Delete", "1 Week Delete"];
+            let order = ["Archive policy", "1 year", "Never", "Retention policy", "3 years", "1 week"];
             let ys: Vec<f32> = order.iter().map(|t| y_of(&shapes, t)).collect();
             assert!(ys.windows(2).all(|w| w[0] < w[1]), "{order:?} drawn in this order: {ys:?}");
             assert_eq!(ticked(&shapes), want, "{dark:?} {all:?}");
@@ -116,7 +119,7 @@ fn choosing_a_tag_sets_it() {
     let key = message("a1", "INBOX", 1, "").key;
     a.session.run("list.select", &json!({"key": key.to_id()})).unwrap();
     let _ = open_submenu(&ctx, &mut a, "Plans");
-    let at = settled_text_at(&ctx, &mut a, "1 Year Move to Archive", SIZE).expect("the tag");
+    let at = settled_text_at(&ctx, &mut a, "1 year", SIZE).expect("the tag");
     click_at(&ctx, &mut a, at, 1, SIZE);
     settle(&ctx, &mut a);
     let sent = handed.borrow().iter().any(|j| {
@@ -125,7 +128,7 @@ fn choosing_a_tag_sets_it() {
     assert!(sent, "{:?}", handed.borrow());
     // A retention tag: the retention command, with its id.
     let _ = open_submenu(&ctx, &mut a, "Plans");
-    let at = settled_text_at(&ctx, &mut a, "1 Week Delete", SIZE).expect("the retention tag");
+    let at = settled_text_at(&ctx, &mut a, "1 week", SIZE).expect("the retention tag");
     click_at(&ctx, &mut a, at, 1, SIZE);
     settle(&ctx, &mut a);
     let sent = handed.borrow().iter().any(|j| {
@@ -144,11 +147,7 @@ fn the_submenu_is_absent_without_tags_and_in_the_archive() {
     let (mut a, dir, _) = exchange_app("oa-policy-folder");
     offer(&mut a);
     let shapes = open_submenu(&ctx, &mut a, "Sent Items");
-    assert!(
-        texts(&shapes).iter().any(|t| t == "1 Year Move to Archive") && texts(&shapes).iter().any(|t| t == "1 Week Delete"),
-        "{:?}",
-        texts(&shapes)
-    );
+    assert!(texts(&shapes).iter().any(|t| t == "1 year") && texts(&shapes).iter().any(|t| t == "1 week"), "{:?}", texts(&shapes));
     let _ = std::fs::remove_dir_all(dir);
     // No tags: no submenu, on a message and on a folder.
     for row in ["Plans", "Sent Items"] {
@@ -178,8 +177,9 @@ fn shown(y: i64, m: u32, d: u32) -> String {
     crate::i18n::date(&dates::day_label(dates::days_from_civil(y, m, d)))
 }
 
-/// A message that carries tags says so in its header: each tag's name and the day the server
-/// plans, the archive one then the retention one; only the one it carries when it carries one.
+/// A message that carries tags says so in its header: each tag as the submenu shows it and the
+/// day the server plans, the archive one then the retention one; only the one it carries when it
+/// carries one.
 #[test]
 fn the_header_names_the_tags_and_the_days() {
     let ctx = egui::Context::default();
@@ -207,11 +207,77 @@ fn the_header_names_the_tags_and_the_days() {
         texts(&settle(&ctx, a)).into_iter().find(|t| t.contains("Archive:") || t.contains("Deletion:"))
     };
     let both = read(&mut a, Some(YEAR), Some("2027-11-10"), Some(WEEK), Some("2026-11-19")).expect("the header line");
-    let want = format!("Archive: 1 Year Move to Archive ({}) · Deletion: 1 Week Delete ({})", shown(2027, 11, 10), shown(2026, 11, 19));
+    let want = format!("Archive: 1 year ({}) · Deletion: 1 week ({})", shown(2027, 11, 10), shown(2026, 11, 19));
     assert_eq!(both, want);
     let deletion = read(&mut a, None, None, Some(DELETE), None).expect("the header line");
-    assert_eq!(deletion, "Deletion: 3 Year Delete");
+    assert_eq!(deletion, "Deletion: 3 years");
     let archive = read(&mut a, Some(NEVER), None, None, None).expect("the header line");
-    assert_eq!(archive, "Archive: Never Move to Archive");
+    assert_eq!(archive, "Archive: Never");
+    // Two archive tags of one year: each by the server's name, in the header too.
+    a.session.apply(MailEvent::ArchiveTags { account: "a1".into(), tags: with_twin() });
+    let twin = read(&mut a, Some(YEAR), None, None, None).expect("the header line");
+    assert_eq!(twin, "Archive: 1 Year Move to Archive");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The tags offered, and a second archive tag of one year (its period reads as the first's).
+fn with_twin() -> Vec<ArchiveTag> {
+    let mut tags = tags();
+    tags.push(ArchiveTag {
+        id: "77777777-aaaa-4bbb-8ccc-000000000007".into(),
+        name: "Yearly Archive".into(),
+        days: Some(365),
+        never: false,
+        kind: PolicyKind::Archive,
+    });
+    tags
+}
+
+/// Each tag says the server's name for it when pointed at; two tags of one kind whose periods
+/// read alike show the server's names instead, the others their period; light and dark.
+#[test]
+fn a_tags_server_name_is_on_its_hover_and_two_alike_show_theirs() {
+    let ctx = egui::Context::default();
+    for dark in [Some(false), Some(true)] {
+        let (mut a, dir, _) = exchange_app("oa-policy-names");
+        a.ui.dark = dark;
+        offer(&mut a);
+        let key = message("a1", "INBOX", 1, "").key;
+        a.session.run("list.select", &json!({"key": key.to_id()})).unwrap();
+        let _ = open_submenu(&ctx, &mut a, "Plans");
+        let at = settled_text_at(&ctx, &mut a, "1 week", SIZE).expect("the retention tag");
+        frame_sized(&ctx, &mut a, vec![egui::Event::PointerMoved(at)], SIZE);
+        let mut hover = Vec::new();
+        for _ in 0..60 {
+            hover = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+        }
+        assert!(hover.iter().any(|t| t == "1 Week Delete"), "the server's name on hover: {hover:?}");
+        let _ = std::fs::remove_dir_all(dir);
+
+        let (mut a, dir, _) = exchange_app("oa-policy-twins");
+        a.ui.dark = dark;
+        a.session.apply(MailEvent::ArchiveTags { account: "a1".into(), tags: with_twin() });
+        let key = message("a1", "INBOX", 1, "").key;
+        a.session.run("list.select", &json!({"key": key.to_id()})).unwrap();
+        let all = texts(&open_submenu(&ctx, &mut a, "Plans"));
+        for t in ["1 Year Move to Archive", "Yearly Archive", "Never", "3 years", "1 week"] {
+            assert!(all.iter().any(|x| x == t), "{t} in {all:?}");
+        }
+        assert!(!all.iter().any(|x| x == "1 year"), "{all:?}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// The rule: Never; else whole years, whole months (of thirty days), whole weeks, or days; two
+/// tags read alike show the server's names.
+#[test]
+fn a_tags_period_reads_in_years_months_weeks_or_days() {
+    let t = |days: Option<u32>, never: bool, name: &str| ArchiveTag { id: String::new(), name: name.into(), days, never, kind: PolicyKind::Archive };
+    let labels = |tags: &[ArchiveTag]| crate::panes::policy::tag_labels(&tags.iter().collect::<Vec<_>>());
+    let periods = [365, 730, 180, 7, 10, 14, 60, 1, 1095].map(|d| t(Some(d), false, &format!("{d} days of the server")));
+    assert_eq!(labels(&periods), ["1 year", "2 years", "6 months", "1 week", "10 days", "2 weeks", "2 months", "1 day", "3 years"]);
+    assert_eq!(labels(&[t(None, true, "Never Move")]), ["Never"]);
+    assert_eq!(labels(&[t(Some(0), false, "Zero")]), ["Never"]);
+    let twins = [t(Some(365), false, "1 Year Move to Archive"), t(Some(365), false, "Yearly"), t(Some(30), false, "Monthly")];
+    assert_eq!(labels(&twins), ["1 Year Move to Archive", "Yearly", "1 month"]);
 }

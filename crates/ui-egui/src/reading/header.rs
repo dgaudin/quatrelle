@@ -154,7 +154,7 @@ pub(super) fn header(
     let policy = {
         use quatrelle_engine::model::PolicyKind;
         let (archive, retention) = (s.message_policy(&r.key, PolicyKind::Archive), s.message_policy(&r.key, PolicyKind::Retention));
-        crate::panes::policy::policy_line(archive.as_ref(), retention.as_ref())
+        crate::panes::policy::policy_line(s, &r.key.account, archive.as_ref(), retention.as_ref())
     };
     if flagged || complete || importance != 0 || acted.is_some() || policy.is_some() {
         ui.horizontal_wrapped(|ui| {

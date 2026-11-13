@@ -57,6 +57,8 @@ pub(crate) fn none_offered(kind: PolicyKind) -> &'static str {
 /// What a message's header says of one of its policies.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessagePolicy {
+    /// The tag's id (a GUID): how the header finds it among those offered.
+    pub id: String,
     /// The tag's name, as the server gives it.
     pub name: String,
     /// The day the server plans to move it (archive) or to delete it (retention), when it says.
@@ -81,7 +83,7 @@ impl Session {
         let (tag, day) = self.policy.messages.get(key)?.get(slot(kind))?;
         let id = tag.as_deref()?;
         let name = self.policy_tags(&key.account, kind).find(|t| t.id == id)?.name.clone();
-        Some(MessagePolicy { name, day: day.clone() })
+        Some(MessagePolicy { id: id.to_string(), name, day: day.clone() })
     }
 
     /// The id of the tag of this kind a message carries of its own, as last read.
