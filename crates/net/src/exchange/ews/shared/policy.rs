@@ -19,49 +19,126 @@ const SCANNED: usize = 5_000;
 /// `PidTagArchiveDate`: the day the server plans to move a message to the archive.
 const ARCHIVE_DATE: &str = "<t:ExtendedFieldURI PropertyTag=\"0x301F\" PropertyType=\"SystemTime\"/>";
 
-/// The personal tags a `GetUserRetentionPolicyTags` answer lists: those of type `Personal` whose
-/// action is `MoveToArchive` (archive tags, the one that keeps mail out of the archive among
-/// them: no period) or deletes the mail, `DeleteAndAllowRecovery` or `PermanentlyDelete`
-/// (retention tags). Others (the mailbox's default tags, those that only mark mail past its
-/// limit) are left out, as are tags without a GUID for an id or without a name, hidden ones, an
-/// id seen before, and what goes past [`MAX_ARCHIVE_TAGS`].
+/// The personal tags a `GetUserRetentionPolicyTags` answer lists, those of type `Personal`:
+/// archive tags, which `IsArchive` says whatever their action, or whose action is
+/// `MoveToArchive`; retention tags, whose action deletes the mail (`DeleteAndAllowRecovery`,
+/// `PermanentlyDelete`); and the disabled ones (action `None`), which never act: Exchange's
+/// "never" tags, an archive one when `IsArchive` says so, a retention one when it says not.
+/// "Never" is also a tag with no period, or a period of 0; a disabled one has no other. Others
+/// (the mailbox's default tags, those that only mark mail past its limit) are left out, as are
+/// tags without a GUID for an id or without a name, hidden ones, an id seen before, an enabled
+/// one whose period isn't a number of days up to [`MAX_TAG_DAYS`], and what goes past
+/// [`MAX_ARCHIVE_TAGS`].
 pub fn tags_listed(root: &El) -> Vec<ArchiveTag> {
+    tags_read(root).0
+}
+
+/// How many of the personal tags left out are told in the log, each with its reason; the rest
+/// are counted.
+const LEFT_OUT_TOLD: usize = 20;
+
+/// A personal tag left out of the list, and why: what the server says of it, cleaned as names
+/// are and bounded (nothing else of it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LeftOut {
+    pub(crate) reason: &'static str,
+    pub(crate) name: String,
+    pub(crate) action: String,
+    pub(crate) period: String,
+    pub(crate) is_archive: String,
+    pub(crate) visible: String,
+}
+
+impl std::fmt::Display for LeftOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "archive policy: the personal tag {:?} is left out ({}): RetentionAction {:?}, RetentionPeriod {:?}, IsArchive {:?}, IsVisible {:?}",
+            self.name, self.reason, self.action, self.period, self.is_archive, self.visible
+        )
+    }
+}
+
+/// [`tags_listed`], with the personal tags left out and why (the first [`LEFT_OUT_TOLD`]) and
+/// how many more were.
+pub(crate) fn tags_read(root: &El) -> (Vec<ArchiveTag>, Vec<LeftOut>, usize) {
     let mut all = Vec::new();
     root.all("RetentionPolicyTag", &mut all);
-    let mut out: Vec<ArchiveTag> = Vec::new();
+    let (mut out, mut left, mut more) = (Vec::new(), Vec::new(), 0usize);
     for t in all.into_iter().take(SCANNED) {
-        if out.len() >= MAX_ARCHIVE_TAGS {
-            break;
-        }
-        let is = |name: &str, want: &str| t.text_of(name).is_some_and(|v| v.trim().eq_ignore_ascii_case(want));
-        let kind = if is("RetentionAction", "MoveToArchive") {
-            PolicyKind::Archive
-        } else if is("RetentionAction", "DeleteAndAllowRecovery") || is("RetentionAction", "PermanentlyDelete") {
-            PolicyKind::Retention
-        } else {
-            continue;
-        };
-        if !is("Type", "Personal") || is("IsVisible", "false") {
+        // The mailbox's default tags aren't the user's to choose: not told.
+        if !t.text_of("Type").is_some_and(|v| v.trim().eq_ignore_ascii_case("Personal")) {
             continue;
         }
-        let id = t.text_of("RetentionId").map(|i| i.trim().to_ascii_lowercase()).unwrap_or_default();
-        let name = tag_name(t.text_of("DisplayName").unwrap_or_default());
-        if !is_tag_id(&id) || name.is_empty() || out.iter().any(|o| o.id == id) {
-            continue;
+        match personal_tag(t, &out) {
+            Ok(tag) => out.push(tag),
+            Err(reason) if left.len() < LEFT_OUT_TOLD => left.push(LeftOut {
+                reason,
+                name: tag_name(t.text_of("DisplayName").unwrap_or_default()),
+                action: told(t, "RetentionAction"),
+                period: told(t, "RetentionPeriod"),
+                is_archive: told(t, "IsArchive"),
+                visible: told(t, "IsVisible"),
+            }),
+            Err(_) => more += 1,
         }
-        // No period, or none that counts: the tag that keeps mail where it is (out of the
-        // archive, or never deleted).
-        let period = match t.text_of("RetentionPeriod").map(str::trim).filter(|p| !p.is_empty()) {
-            None => None,
-            Some(p) => match p.parse::<u32>() {
-                Ok(days) if days <= MAX_TAG_DAYS => Some(days),
-                _ => continue,
-            },
-        };
-        let never = period.is_none_or(|d| d == 0);
-        out.push(ArchiveTag { id, name, days: period.filter(|d| *d > 0), never, kind });
     }
-    out
+    (out, left, more)
+}
+
+/// A field of a tag as the log tells it: cleaned as names are, a few characters at most.
+fn told(t: &El, name: &str) -> String {
+    match t.text_of(name) {
+        Some(v) => tag_name(v).chars().take(40).collect(),
+        None => "(none)".into(),
+    }
+}
+
+/// A personal tag as it's listed, or why it isn't (`listed`: the ones kept before it).
+fn personal_tag(t: &El, listed: &[ArchiveTag]) -> std::result::Result<ArchiveTag, &'static str> {
+    let is = |name: &str, want: &str| t.text_of(name).is_some_and(|v| v.trim().eq_ignore_ascii_case(want));
+    if listed.len() >= MAX_ARCHIVE_TAGS {
+        return Err("past the most tags listed");
+    }
+    if is("RetentionAction", "MarkAsPastRetentionLimit") {
+        return Err("it only marks mail past its limit");
+    }
+    let disabled = is("RetentionAction", "None");
+    let kind = if is("IsArchive", "true") || is("RetentionAction", "MoveToArchive") {
+        PolicyKind::Archive
+    } else if is("RetentionAction", "DeleteAndAllowRecovery") || is("RetentionAction", "PermanentlyDelete") || (disabled && is("IsArchive", "false"))
+    {
+        PolicyKind::Retention
+    } else if disabled {
+        return Err("disabled, and IsArchive doesn't say whether it archives");
+    } else {
+        return Err("its action neither archives nor deletes");
+    };
+    if is("IsVisible", "false") {
+        return Err("hidden from the user");
+    }
+    let id = t.text_of("RetentionId").map(|i| i.trim().to_ascii_lowercase()).unwrap_or_default();
+    if !is_tag_id(&id) {
+        return Err("its id isn't a GUID");
+    }
+    let name = tag_name(t.text_of("DisplayName").unwrap_or_default());
+    if name.is_empty() {
+        return Err("it has no name");
+    }
+    if listed.iter().any(|o| o.id == id) {
+        return Err("its id is listed already");
+    }
+    // A disabled tag never acts, whatever period it says. Otherwise no period, or none that
+    // counts: the tag that keeps mail where it is (out of the archive, or never deleted).
+    let period = match t.text_of("RetentionPeriod").map(str::trim).filter(|p| !p.is_empty() && !disabled) {
+        None => None,
+        Some(p) => match p.parse::<u32>() {
+            Ok(days) if days <= MAX_TAG_DAYS => Some(days),
+            _ => return Err("its period isn't a number of days the list takes"),
+        },
+    };
+    let never = period.is_none_or(|d| d == 0);
+    Ok(ArchiveTag { id, name, days: period.filter(|d| *d > 0), never, kind })
 }
 
 /// A tag's name as it's shown: on one line (each run of whitespace one space), without control
@@ -127,7 +204,17 @@ impl Client {
             return Ok(known);
         }
         let tags = match self.call("<m:GetUserRetentionPolicyTags/>") {
-            Ok(doc) => tags_listed(&doc),
+            // What's left out is told once a session, so the log says why a tag doesn't show.
+            Ok(doc) => {
+                let (tags, left, more) = tags_read(&doc);
+                for l in &left {
+                    log::info!("{l}");
+                }
+                if more > 0 {
+                    log::info!("archive policy: {more} more personal tags left out");
+                }
+                tags
+            }
             Err(NetError::No(e) | NetError::Protocol(e)) => {
                 log::info!("no archive policy tags: {e}");
                 Vec::new()

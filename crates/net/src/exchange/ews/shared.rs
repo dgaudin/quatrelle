@@ -7,6 +7,8 @@ use super::*;
 
 mod policy;
 pub(super) use policy::own_tag;
+#[cfg(test)]
+pub(crate) use policy::tags_read;
 pub use policy::{ItemPolicy, tags_listed};
 
 /// The folder an online archive is listed under when the server gives it no name.

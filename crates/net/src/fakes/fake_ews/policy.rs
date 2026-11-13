@@ -27,6 +27,10 @@ pub const TAG_WEEK: &str = "66666666-aaaa-4bbb-8ccc-000000000006";
 pub const TAG_HIDDEN: &str = "77777777-aaaa-4bbb-8ccc-000000000007";
 /// Personal: only marks mail past its limit (neither archives nor deletes).
 pub const TAG_MARK: &str = "88888888-aaaa-4bbb-8ccc-000000000008";
+/// Personal, disabled (action `None`), an archive tag: never moves mail to the archive.
+pub const TAG_OFF_ARCHIVE: &str = "99999999-aaaa-4bbb-8ccc-000000000009";
+/// Personal, disabled, a retention tag (`IsArchive` false): never deletes mail.
+pub const TAG_OFF_DELETE: &str = "aaaaaaaa-aaaa-4bbb-8ccc-00000000000a";
 
 /// The day the server plans to move a message given an archive tag with days.
 pub const ARCHIVE_DAY: &str = "2027-11-10T00:00:00Z";
@@ -48,11 +52,22 @@ pub struct TagDef {
     /// `RetentionPeriod` in days (none: unlimited).
     pub period: Option<u32>,
     pub visible: bool,
+    /// `IsArchive`: an archive tag (one that moves mail to the archive, or a disabled one of
+    /// that kind) rather than a retention tag.
+    pub archive: bool,
 }
 
 impl TagDef {
     pub fn new(id: &str, name: &str, kind: &str, action: &str, period: Option<u32>) -> TagDef {
-        TagDef { id: id.into(), name: name.into(), kind: kind.into(), action: action.into(), period, visible: true }
+        TagDef {
+            id: id.into(),
+            name: name.into(),
+            kind: kind.into(),
+            action: action.into(),
+            period,
+            visible: true,
+            archive: action == "MoveToArchive",
+        }
     }
 }
 
@@ -101,6 +116,16 @@ impl Data {
             hidden,
             TagDef::new(TAG_MARK, "1 Year Mark", "Personal", "MarkAsPastRetentionLimit", Some(365)),
         ]);
+    }
+
+    /// The server offers, besides, the disabled personal tags (action `None`) that Exchange makes
+    /// "never" of: one archive tag (no period), one retention tag (a period of 0).
+    pub fn offer_disabled_tags(&mut self) {
+        let mut archive = TagDef::new(TAG_OFF_ARCHIVE, "Never Archive", "Personal", "None", None);
+        archive.archive = true;
+        let list = self.policy.offered.get_or_insert_with(Vec::new);
+        list.push(archive);
+        list.push(TagDef::new(TAG_OFF_DELETE, "Never Delete", "Personal", "None", Some(0)));
     }
 
     /// A message carrying an archive tag of its own, with the day the server plans to move it.
@@ -152,7 +177,7 @@ impl Data {
                                     esc(&t.kind),
                                     esc(&t.action),
                                     t.visible,
-                                    t.action == "MoveToArchive"
+                                    t.archive
                                 )
                             })
                             .collect();
@@ -202,13 +227,14 @@ impl Data {
                 // The tag must be one the server offers, of the field's kind, written as an
                 // explicit one.
                 let def = self.policy.offered.as_ref().and_then(|t| t.iter().find(|t| t.id == wanted)).cloned();
-                let fits = def.as_ref().is_some_and(|d| (d.action == "MoveToArchive") != retention);
+                let fits = def.as_ref().is_some_and(|d| d.archive != retention);
                 if tag.attr("IsExplicit") != Some("true") || !fits {
                     out.push(err("ErrorInvalidRequest"));
                     continue;
                 }
                 let day = if retention { DELETE_DAY } else { ARCHIVE_DAY };
-                let date = def.and_then(|d| d.period).map(|_| day.to_string());
+                // A tag that acts plans a day; a disabled one never does.
+                let date = def.filter(|d| d.action != "None").and_then(|d| d.period).filter(|p| *p > 0).map(|_| day.to_string());
                 match (folder, retention) {
                     (true, false) => drop(self.policy.folders.insert(id.clone(), wanted)),
                     (true, true) => drop(self.policy.retained_folders.insert(id.clone(), wanted)),

@@ -276,3 +276,112 @@ fn a_tag_the_server_refuses_is_a_failure() {
     until(&pool, "the failure", |e| matches!(e, Event::OpFailed { op: Op::SetArchiveTag { .. }, .. }));
     assert!(store.load_ops("a1").unwrap().is_empty());
 }
+
+/// Exchange makes its "never" tags by disabling them: a personal tag whose action is `None` is
+/// an archive tag when `IsArchive` says so (here with no period), a retention tag when it says
+/// not (here a period of 0), both "never", after the others in the server's order; the disabled
+/// archive tag is set on a message as an archive tag, and has no day.
+#[test]
+fn disabled_personal_tags_are_the_never_ones() {
+    let (mut d, ..) = tagged();
+    d.offer_disabled_tags();
+    let (server, mut pool, store) = started(d, "ews-policy-disabled");
+    let tags = client(&server).archive_tags().unwrap();
+    let never = |id: &str, name: &str, kind| ArchiveTag { id: id.into(), name: name.into(), days: None, never: true, kind };
+    assert_eq!(tags.len(), 7, "{tags:?}");
+    assert_eq!(
+        tags[5..],
+        [never(TAG_OFF_ARCHIVE, "Never Archive", PolicyKind::Archive), never(TAG_OFF_DELETE, "Never Delete", PolicyKind::Retention)]
+    );
+    let key = inbox_key(&store);
+    let data = server.data.clone();
+    set(&mut pool, &key, Some(TAG_OFF_ARCHIVE));
+    eventually("the tag on the server", || data.lock().unwrap().policy.items.values().any(|(t, _)| t == TAG_OFF_ARCHIVE));
+    assert_eq!(read(&mut pool, &key), (Some(TAG_OFF_ARCHIVE.into()), None), "a tag that never acts plans no day");
+}
+
+/// One personal tag as a server may write it: its name, action, period and `IsArchive` (none:
+/// the element left out).
+fn written(n: u32, name: &str, action: &str, period: Option<&str>, archive: Option<&str>) -> String {
+    format!(
+        "<t:RetentionPolicyTag><t:DisplayName>{name}</t:DisplayName><t:RetentionId>00000000-0000-4000-8000-{n:012x}</t:RetentionId>{}\
+         <t:Type>Personal</t:Type><t:RetentionAction>{action}</t:RetentionAction><t:IsVisible>true</t:IsVisible>{}</t:RetentionPolicyTag>",
+        period.map(|p| format!("<t:RetentionPeriod>{p}</t:RetentionPeriod>")).unwrap_or_default(),
+        archive.map(|a| format!("<t:IsArchive>{a}</t:IsArchive>")).unwrap_or_default()
+    )
+}
+
+/// Microsoft's documents don't show how a disabled tag is answered: each plausible form is read.
+/// `IsArchive` true makes an archive tag whether the action is `MoveToArchive` or `None`; a
+/// disabled one (`None`) with a period of 0, none or one that isn't a number is "never", an
+/// archive or a retention tag as `IsArchive` says. On a tag that acts, a period that isn't a
+/// number, or too long, still leaves it out; so does a disabled one whose kind isn't said, and
+/// one that only marks mail.
+#[test]
+fn every_plausible_form_of_a_never_tag_is_read() {
+    let (mut d, ..) = tagged();
+    let list = [
+        written(1, "Archive, said twice", "MoveToArchive", Some("365"), Some("true")),
+        written(2, "Never archive, 0", "None", Some("0"), Some("true")),
+        written(3, "Never archive, none", "None", None, Some("true")),
+        written(4, "Never archive, not a number", "None", Some("unlimited"), Some("true")),
+        written(5, "Never delete, 0", "None", Some("0"), Some("false")),
+        written(6, "Never delete, none", "None", None, Some("false")),
+        written(7, "Never delete, not a number", "None", Some("unlimited"), Some("false")),
+        written(8, "Acts, not a number", "MoveToArchive", Some("unlimited"), Some("true")),
+        written(9, "Acts, far too long", "DeleteAndAllowRecovery", Some("4294967295"), Some("false")),
+        written(10, "Disabled, kind unsaid", "None", Some("0"), None),
+        written(11, "Marks only", "MarkAsPastRetentionLimit", Some("365"), Some("true")),
+    ]
+    .concat();
+    d.policy.raw = Some(format!("<m:ResponseCode>NoError</m:ResponseCode><m:RetentionPolicyTags>{list}</m:RetentionPolicyTags>"));
+    let tags = client(&serve(d)).archive_tags().unwrap();
+    let seen: Vec<(&str, Option<u32>, bool, PolicyKind)> = tags.iter().map(|t| (t.name.as_str(), t.days, t.never, t.kind)).collect();
+    use PolicyKind::{Archive, Retention};
+    assert_eq!(
+        seen,
+        [
+            ("Archive, said twice", Some(365), false, Archive),
+            ("Never archive, 0", None, true, Archive),
+            ("Never archive, none", None, true, Archive),
+            ("Never archive, not a number", None, true, Archive),
+            ("Never delete, 0", None, true, Retention),
+            ("Never delete, none", None, true, Retention),
+            ("Never delete, not a number", None, true, Retention),
+        ]
+    );
+}
+
+/// A personal tag left out is told in the log with why, as the server says it (its name, action,
+/// period, `IsArchive`, `IsVisible`: cleaned and bounded, nothing else of it), so the log says
+/// why a tag doesn't show; the mailbox's default tags aren't told; past twenty, they're counted.
+#[test]
+fn the_personal_tags_left_out_are_told_with_why() {
+    let hidden = "<t:RetentionPolicyTag><t:DisplayName>1 Month\u{7}\n Delete</t:DisplayName><t:RetentionId>77777777-aaaa-4bbb-8ccc-000000000007</t:RetentionId>\
+                  <t:RetentionPeriod>30</t:RetentionPeriod><t:Type>Personal</t:Type><t:RetentionAction>DeleteAndAllowRecovery</t:RetentionAction>\
+                  <t:IsVisible>false</t:IsVisible><t:IsArchive>false</t:IsArchive></t:RetentionPolicyTag>";
+    let default = "<t:RetentionPolicyTag><t:DisplayName>Default 2 years</t:DisplayName><t:RetentionId>11111111-aaaa-4bbb-8ccc-000000000001</t:RetentionId>\
+                   <t:Type>DefaultFolder</t:Type><t:RetentionAction>Bogus</t:RetentionAction></t:RetentionPolicyTag>";
+    let odd = written(1, "Odd", &format!("Never\nMind{}", "x".repeat(5_000)), Some("soon"), None);
+    let marks: String = (2..32).map(|n| written(n, &format!("Mark {n}"), "MarkAsPastRetentionLimit", Some("365"), Some("false"))).collect();
+    let xml = format!("<m:RetentionPolicyTags>{hidden}{default}{odd}{marks}</m:RetentionPolicyTags>");
+    let (tags, left, more) = crate::ews::tags_read(&crate::ews::parse(&xml));
+    assert!(tags.is_empty(), "{tags:?}");
+    let first = &left[0];
+    assert_eq!(
+        (first.name.as_str(), first.reason, first.action.as_str(), first.period.as_str(), first.is_archive.as_str(), first.visible.as_str()),
+        ("1 Month Delete", "hidden from the user", "DeleteAndAllowRecovery", "30", "false", "false")
+    );
+    let line = first.to_string();
+    assert!(line.contains("\"1 Month Delete\"") && line.contains("hidden from the user") && !line.contains("77777777"), "{line}");
+    assert!(!left.iter().any(|l| l.name.starts_with("Default")), "the mailbox's default tags aren't the user's");
+    let odd = &left[1];
+    assert_eq!((odd.name.as_str(), odd.reason, odd.is_archive.as_str()), ("Odd", "its action neither archives nor deletes", "(none)"));
+    assert!(
+        odd.action.starts_with("Never Mind") && odd.action.chars().count() <= 40 && !odd.action.chars().any(char::is_control),
+        "{:?}",
+        odd.action
+    );
+    assert_eq!(left[2].reason, "it only marks mail past its limit");
+    assert_eq!((left.len(), more), (20, 12), "twenty told, the rest counted");
+}

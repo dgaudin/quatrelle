@@ -786,6 +786,8 @@ pub use autodiscover::{archive_named, autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};
+#[cfg(test)]
+pub(crate) use shared::tags_read;
 pub use shared::{ItemPolicy, tags_listed};
 use sync::restriction;
 pub use sync::{
