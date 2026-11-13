@@ -468,6 +468,8 @@ impl Worker {
     pub(super) fn replay(&mut self) {
         let mut destinations: Vec<String> = Vec::new();
         let mut relist = false;
+        // A calendar made, renamed or deleted (or refused): the calendars are read again after.
+        let mut calendars = false;
         let trash = self.folders.iter().find(|f| f.role == FolderRole::Trash).map(|f| f.path.clone());
         // A change refused once is tried again after the folders are listed anew (see below).
         let mut retried = false;
@@ -515,7 +517,7 @@ impl Worker {
                         Op::CreateFolder { .. } | Op::DeleteFolder { .. } => relist = true,
                         Op::EmptyFolder { path } => destinations.push(path.clone()),
                         Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
-                        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {}
+                        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => calendars = true,
                     }
                     if let Err(e) = self.store.remove_op(&self.acc.id, &op) {
                         self.notice(e.to_string());
@@ -563,6 +565,7 @@ impl Worker {
                         }
                     }
                     relist |= op.is_folder_op();
+                    calendars |= op.is_calendar_op();
                     self.sink.emit(Event::OpFailed { account: self.id(), op, error: e.to_string() });
                     destinations.extend(folders);
                 }
@@ -570,6 +573,9 @@ impl Worker {
         }
         if relist {
             self.relist();
+        }
+        if calendars && self.conn.is_some() {
+            self.sync_dav();
         }
         destinations.sort();
         destinations.dedup();

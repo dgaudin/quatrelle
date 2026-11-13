@@ -381,7 +381,18 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         Op::EmptyFolder { path } => c.empty(st.mailbox(path)?, st.owner(path)),
         // An archive policy is on-premises Exchange's (EWS).
         Op::SetArchiveTag { .. } => Ok(()),
-        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => Err(NetError::No(crate::CALENDARS_NOT_HERE.into())),
+        // The account's own calendars, by the ids the server gave them; the calendars are read
+        // again after (the worker's journal does it).
+        Op::CreateCalendar { name } => c.post("/me/calendars", &json!({"name": name})).map(drop),
+        Op::RenameCalendar { calendar, name } => {
+            let body = serde_json::to_vec(&json!({"name": name})).map_err(|e| NetError::Protocol(e.to_string()))?;
+            c.send_raw("PATCH", &format!("/me/calendars/{}", seg(calendar)), "application/json", body).map(drop)
+        }
+        // Gone already (deleted in Outlook meanwhile): what was asked is done.
+        Op::DeleteCalendar { calendar } => match c.send_raw("DELETE", &format!("/me/calendars/{}", seg(calendar)), "application/json", Vec::new()) {
+            Err(NetError::No(why)) if why.starts_with("HTTP 404") => Ok(()),
+            r => r.map(drop),
+        },
     }
 }
 

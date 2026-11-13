@@ -12,6 +12,7 @@ use quatrelle_store::Store;
 use super::*;
 
 mod cached_mode;
+mod calendars;
 mod events;
 mod filing;
 mod follow_up;

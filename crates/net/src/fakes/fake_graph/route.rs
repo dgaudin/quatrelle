@@ -387,6 +387,37 @@ impl Data {
                     .collect();
                 ok(json!({ "value": list }))
             }
+            // A calendar made, renamed or deleted, as Graph has it: a name taken refused, the
+            // default calendar never deleted, one deleted going with its events.
+            ("POST", ["me", "calendars"]) => {
+                let name = input["name"].as_str().unwrap_or("").to_string();
+                if name.trim().is_empty() || self.calendars.iter().any(|(_, n)| n.eq_ignore_ascii_case(&name)) {
+                    let error = json!({"error": {"code": "ErrorFolderExists", "message": "A folder with the specified name already exists."}});
+                    return (409, error.to_string().into_bytes(), "application/json");
+                }
+                let id = self.id("AAMkMade");
+                self.calendars.push((id.clone(), name.clone()));
+                let made = json!({"id": id, "name": name, "canEdit": true, "isDefaultCalendar": false});
+                (201, made.to_string().into_bytes(), "application/json")
+            }
+            ("PATCH", ["me", "calendars", cal]) => {
+                let Some(name) = input["name"].as_str() else { return (400, Vec::new(), "application/json") };
+                let Some(entry) = self.calendars.iter_mut().find(|(c, _)| c == cal) else { return not_found() };
+                entry.1 = name.to_string();
+                ok(json!({"id": cal, "name": name}))
+            }
+            ("DELETE", ["me", "calendars", cal]) => match self.calendars.iter().position(|(c, _)| c == cal) {
+                None => not_found(),
+                Some(0) => {
+                    let error = json!({"error": {"code": "ErrorCannotDeleteObject", "message": "The default calendar can't be deleted."}});
+                    (400, error.to_string().into_bytes(), "application/json")
+                }
+                Some(i) => {
+                    self.calendars.remove(i);
+                    self.events.retain(|e| e["calendar"] != *cal);
+                    (204, Vec::new(), "application/json")
+                }
+            },
             ("GET", ["me", "calendarGroups"]) => {
                 let list: Vec<Value> = self.groups.iter().map(|(id, name, _)| json!({"id": id, "name": name})).collect();
                 ok(json!({ "value": list }))
