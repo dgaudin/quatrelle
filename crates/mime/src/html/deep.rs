@@ -12,8 +12,9 @@ const MAX_BOXES: usize = 2048;
 
 /// The tags of `html` in order, outside comments and the text of `script`, `style`, `textarea`
 /// and `title`, each as (its name, lowercase; whether it ends an element; where it is): the one
-/// pass both [`too_deep`] and [`flattened`] make, linear in `html`.
-fn tags(html: &str, mut each: impl FnMut(&str, bool, std::ops::Range<usize>) -> bool) {
+/// pass both [`too_deep`] and [`flattened`] make (and the look for a code block of Markdown on
+/// the clipboard, `markdown.rs`), linear in `html`.
+pub(super) fn tags(html: &str, mut each: impl FnMut(&str, bool, std::ops::Range<usize>) -> bool) {
     let bytes = html.as_bytes();
     let mut at = 0;
     let mut raw: Option<&'static str> = None;

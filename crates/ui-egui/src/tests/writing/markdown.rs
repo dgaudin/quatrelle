@@ -112,3 +112,36 @@ fn an_html_clipboard_is_pasted_as_before() {
     assert!(c.styles.style(0).bold && !c.styles.style(5).bold);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Markdown copied from where it shows as a code block comes with HTML that is only that block
+/// (a web page's `<pre><code>`, an editor's coloured lines): it is pasted formatted, from the
+/// clipboard's text. A code block that isn't Markdown keeps the HTML's look, as before (HTML
+/// with formatting of its own too: above).
+#[test]
+fn markdown_copied_as_a_code_block_is_pasted_formatted() {
+    crate::set_clipboard_html(clipboard_html);
+    let text = "# Titre\n- **a**\n> b";
+    let browser = "<meta charset='utf-8'><pre><code># Titre\n- **a**\n&gt; b</code></pre>";
+    let editor = "<meta charset='utf-8'><div style=\"color: #d4d4d4;white-space: pre;\"><div><span style=\"color: #569cd6;\"># Titre</span></div><div><span style=\"color: #6796e6;\">-</span> <span style=\"color: #569cd6;\">**a**</span></div><div><span>&gt; b</span></div></div>";
+    for html in [browser, editor] {
+        let (mut a, dir, ctx) = writing("md-paste-code");
+        CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some(html.into()));
+        frame(&ctx, &mut a, vec![Event::Paste(text.into())]);
+        CLIPBOARD_HTML.with(|c| *c.borrow_mut() = None);
+        let c = compose(&a);
+        let (_, at) = line_of(&c.body, "Titre");
+        assert!(c.styles.style(at).bold && c.styles.style(at).size == Some(20), "a heading from {html}: {:?}", c.body);
+        let (n, at) = line_of(&c.body, "a");
+        assert!(c.styles.para(n).list == List::Bullet && c.styles.style(at).bold, "a bold item");
+        let (n, _) = line_of(&c.body, "b");
+        assert_eq!(c.styles.para(n).indent, 1, "a quote");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    let (mut a, dir, ctx) = writing("md-paste-code-plain");
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some("<pre><code>let x = 1;</code></pre>".into()));
+    frame(&ctx, &mut a, vec![Event::Paste("let x = 1;".into())]);
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = None);
+    let c = compose(&a);
+    assert!(c.body == "let x = 1;" && c.styles.style(0).mono, "the code block as before: {:?}", c.body);
+    let _ = std::fs::remove_dir_all(dir);
+}

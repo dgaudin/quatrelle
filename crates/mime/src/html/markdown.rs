@@ -184,6 +184,44 @@ fn table_cells(md: &str) -> usize {
     cells
 }
 
+/// The tags a clipboard's HTML may hold and still carry no formatting of its own: a code block
+/// as a web page or an editor puts it there (`<pre><code>`, lines as `<div>`s or `<p>`s,
+/// coloured `<span>`s, `<br>`), and the document around it. Any other tag is formatting.
+const CODE_BLOCK_TAGS: &[&str] =
+    &["pre", "code", "tt", "kbd", "samp", "div", "span", "p", "br", "font", "html", "head", "body", "meta", "style", "title", "link"];
+
+/// The most clipboard HTML looked through for a code block of Markdown, in bytes: past it, the
+/// HTML is pasted with its look.
+const CODE_BLOCK_HTML_MAX: usize = 8 * MARKDOWN_MAX;
+
+/// The Markdown a clipboard holds as a code block (copied from a web page or an editor that
+/// showed it as code): its text (`text`, or the HTML's own when that is empty) when it is
+/// plainly Markdown and the HTML carries no formatting of its own, only the tags of
+/// [`CODE_BLOCK_TAGS`] (whatever their `style` and `class`: syntax highlighting). `None`
+/// otherwise, for the HTML to be pasted with its look, as before. One pass over the HTML's
+/// tags, at most [`CODE_BLOCK_HTML_MAX`] bytes of it.
+pub fn code_block_markdown(html: &str, text: &str) -> Option<String> {
+    if html.len() > CODE_BLOCK_HTML_MAX {
+        return None;
+    }
+    let mut code_only = true;
+    super::deep::tags(html, |name, _, _| {
+        code_only = CODE_BLOCK_TAGS.contains(&name);
+        code_only
+    });
+    if !code_only {
+        return None;
+    }
+    let text = if text.trim().is_empty() {
+        let read = std::panic::catch_unwind(|| html2text::config::plain_no_decorate().string_from_read(html.as_bytes(), 2000));
+        let Ok(Ok(own)) = read else { return None };
+        own.trim_end().to_string()
+    } else {
+        text.to_string()
+    };
+    (text.len() <= MARKDOWN_MAX && looks_like_markdown(&text)).then_some(text)
+}
+
 /// What the writer closes at an element's end.
 enum Open {
     /// Its closing tag (empty: nothing).

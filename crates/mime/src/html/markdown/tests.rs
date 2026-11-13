@@ -175,3 +175,34 @@ fn a_table_cell_bomb_stays_bounded() {
     let real = format!("# T\n\n{}{}{}", row("H"), row("---"), row("1").repeat(100));
     assert!(markdown_html(&real).contains("1 · 1 · 1"), "a real table");
 }
+
+/// Markdown copied from where it is shown as a code block (a web page's `<pre><code>`, an
+/// editor's coloured lines) comes with HTML that carries no formatting of its own: its text is
+/// the Markdown to paste. HTML with formatting of its own, or text that isn't Markdown, isn't.
+#[test]
+fn markdown_in_a_code_block_is_told_from_formatted_html() {
+    let text = "# Titre\n- **a**\n> b";
+    let browser =
+        "<meta charset='utf-8'><html><body><!--StartFragment--><pre><code># Titre\n- **a**\n&gt; b</code></pre><!--EndFragment--></body></html>";
+    assert_eq!(code_block_markdown(browser, text).as_deref(), Some(text));
+    let editor = "<meta charset='utf-8'><div style=\"color: #d4d4d4;background-color: #1e1e1e;white-space: pre;\"><div><span style=\"color: #569cd6;font-weight: bold;\">#</span><span style=\"color: #569cd6;\"> Titre</span></div><div><span style=\"color: #6796e6;\">-</span> <span style=\"color: #569cd6;\">**a**</span></div><br><div><span class=\"q\">&gt; b</span></div></div>";
+    assert_eq!(code_block_markdown(editor, text).as_deref(), Some(text));
+    // No text with it: the HTML's own.
+    let own = code_block_markdown(browser, "").expect("its text");
+    assert!(own.contains("# Titre") && own.contains("- **a**") && own.contains("> b"), "{own:?}");
+    // Formatting of its own: the HTML, as before.
+    for formatted in [
+        "<p><strong>Titre</strong></p>",
+        "<ul><li>a</li></ul>",
+        "<pre>x</pre><a href=\"https://contoso.example\">y</a>",
+        "<p class=MsoNormal>a<o:p></o:p></p>",
+        "<h1>T</h1>",
+        "<table><tr><td>a</td></tr></table>",
+    ] {
+        assert_eq!(code_block_markdown(formatted, text), None, "{formatted}");
+    }
+    // A code block of text that isn't Markdown, and one past the cap.
+    assert_eq!(code_block_markdown("<pre><code>let x = 1;</code></pre>", "let x = 1;"), None);
+    let huge = format!("<pre><code>{}</code></pre>", "a".repeat(8 * MARKDOWN_MAX));
+    assert_eq!(code_block_markdown(&huge, text), None);
+}

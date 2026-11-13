@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Text pasted into a message, read as Markdown: told from ordinary text, written as HTML within
 //! its caps (no raw HTML, no picture, a link only to the web or to mail), and pasted as the
-//! editor's text and styles with none of the line marks left in them, then sent.
+//! editor's text and styles with none of the line marks left in them, then sent; the same bytes
+//! as a clipboard's HTML, looked through for a code block of Markdown.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -18,6 +19,12 @@ fuzz_target!(|input: &[u8]| {
     for (i, _) in lower.match_indices("href=\"") {
         let to = lower.get(i + 6..).unwrap_or("");
         assert!(to.starts_with("http://") || to.starts_with("https://") || to.starts_with("mailto:"), "{html}");
+    }
+    // The same bytes as the clipboard's HTML: a code block of Markdown, with its text or without.
+    for given in [text.as_ref(), ""] {
+        if let Some(md) = mime::code_block_markdown(&text, given) {
+            assert!(md.len() <= mime::MARKDOWN_MAX && mime::looks_like_markdown(&md));
+        }
     }
     if let Some((pasted, styles)) = mime::pasted_markdown(&text) {
         assert!(!pasted.chars().any(|c| ('\u{E040}'..='\u{E06F}').contains(&c)), "a line mark left in {pasted:?}");
