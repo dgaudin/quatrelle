@@ -212,13 +212,23 @@ impl Session {
     }
 }
 
-/// The appointments made here and never sent (no item on the server) filed in a calendar `list`
-/// no longer has, moved to the account's main calendar there (else the first it can write to),
-/// still to send. How many.
+/// The appointments made here and never sent (no item on the server) filed in one of the
+/// account's own calendars that `list` no longer has, moved to the account's main calendar there
+/// (else the first it can write to), still to send. How many. One filed in someone else's
+/// calendar (opened by address, in a group, not the account's) stays as it is: made the
+/// account's own, it would invite from the account.
 fn refile_unsent(p: &mut Pim, list: &[quatrelle_model::pim::CalendarInfo]) -> usize {
     let Some(main) = list.iter().find(|c| c.main).or_else(|| list.iter().find(|c| !c.read_only)).map(|c| c.id.clone()) else { return 0 };
+    // The account's own calendars as they were listed before this sync, gone from it now.
+    let gone: HashSet<String> = p
+        .calendars
+        .iter()
+        .filter(|c| c.id != LOCAL && own_calendar(&c.id) && !c.not_own && c.group.is_empty())
+        .filter(|c| !list.iter().any(|x| x.id == c.id))
+        .map(|c| c.id.clone())
+        .collect();
     let mut moved = 0;
-    for e in p.events.iter_mut().filter(|e| e.dirty && e.href.is_empty() && e.calendar != LOCAL && !list.iter().any(|c| c.id == e.calendar)) {
+    for e in p.events.iter_mut().filter(|e| e.dirty && e.href.is_empty() && gone.contains(&e.calendar)) {
         e.calendar.clone_from(&main);
         moved += 1;
     }

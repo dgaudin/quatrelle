@@ -378,3 +378,26 @@ fn the_calendar_commands_survive_junk_params_on_exchange_and_microsoft_365() {
         done(s);
     }
 }
+
+/// Someone else's calendar gone from the listing (opened by address, or kept in a group of
+/// Outlook's): an appointment made in it and not yet sent never becomes the account's own (it would
+/// invite from the account); it stays as it was, unmoved and unsaid.
+#[test]
+fn an_unsent_appointment_in_someone_elses_calendar_isnt_made_the_accounts() {
+    let mut s = ews_session("arranging-orphans-theirs");
+    let ana = "shared:ana@contoso.example";
+    let team = CalendarInfo { group: "Team".into(), ..cal("shared:zoe@contoso.example", "Zoe Park", 3) };
+    ews_synced(&mut s, vec![ews_main(), cal(ana, "Ana Lima", 2), team], Vec::new(), false);
+    for (uid, calendar) in [("lunch", ana), ("review", "shared:zoe@contoso.example")] {
+        let event = CalEvent { uid: uid.into(), summary: uid.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
+        s.pim_mut("sample").events.push(StoredEvent { calendar: calendar.into(), event, dirty: true, ..Default::default() });
+    }
+    let said = s.notices.len();
+    ews_synced(&mut s, vec![ews_main()], Vec::new(), false);
+    let p = s.pim.get("sample").unwrap();
+    for (uid, calendar) in [("lunch", ana), ("review", "shared:zoe@contoso.example")] {
+        let kept = p.events.iter().find(|e| e.event.uid == uid).map(|e| e.calendar.as_str());
+        assert_eq!(kept, Some(calendar), "{uid} stays where it was made");
+    }
+    assert_eq!(s.notices.len(), said, "nothing said: {:?}", s.notices);
+}
