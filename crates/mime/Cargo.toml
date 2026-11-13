@@ -24,6 +24,9 @@ serde = { workspace = true }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 # Finding MIME boundaries for search without parsing (and decoding) every part: wasm too.
 memchr = "2"
+# Markdown pasted into a message (CommonMark with tables and strikethrough), read into HTML by
+# Quatrelle's own writer: no HTML renderer, no command-line options. Pure Rust, wasm too.
+pulldown-cmark = { version = "0.13", default-features = false }
 
 [dev-dependencies]
 # Property tests of what a server says (attachments/text_first.rs).
