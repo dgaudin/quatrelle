@@ -591,7 +591,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                         .collect()
                 });
                 acts.extend(shots.into_iter().map(Action::PasteImage));
-                if paste && !again && crate::clipboard_html().is_some_and(|h| picture_alone(&h)) {
+                if paste && !again && rich_edit::clipboard_html_once().0.is_some_and(|h| picture_alone(&h)) {
                     // Kept until the picture is read off the clipboard: put in if none is.
                     ed.pastes.unpasted = ui.input(|i| {
                         i.events.iter().find_map(|e| match e {

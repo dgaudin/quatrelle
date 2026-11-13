@@ -5,7 +5,7 @@
 //! as Ctrl+V and Ctrl+C do, on every system (egui maps them on Windows alone); a Ctrl+V that
 //! brings nothing is noticed (and told in the log).
 
-use super::markdown::{CLIPBOARD_HTML, clipboard_html, compose, writing};
+use super::markdown::{CLIPBOARD_HTML, HTML_READS, clipboard_html, compose, writing};
 use super::*;
 use quatrelle_engine::mime::rich::List;
 
@@ -118,4 +118,25 @@ fn a_ctrl_v_that_brings_no_paste_is_noticed() {
     frame(&ctx, &mut a, vec![]);
     assert_eq!(editor(&a).pastes.missed, 1, "a v typed: {:?}", compose(&a).body);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The clipboard's HTML is read once a paste (a read can wait on the app that copied), whoever
+/// asks for it: the check for a picture alone, the paste, the reading of the picture after the
+/// frame and the text that goes in instead the frame after. The next paste reads it again.
+#[test]
+fn a_paste_reads_the_clipboards_html_once() {
+    crate::set_clipboard_html(clipboard_html);
+    for html in ["<p><b>From</b> the page</p>", "<div><img src=\"https://contoso.example/a.png\"></div>"] {
+        let (mut a, dir, ctx) = writing("paste-html-once");
+        CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some(html.into()));
+        HTML_READS.with(|n| n.set(0));
+        for paste in ["Call me", "Again"] {
+            frame(&ctx, &mut a, vec![Event::Paste(paste.into())]);
+            frame(&ctx, &mut a, vec![]);
+            frame(&ctx, &mut a, vec![]);
+        }
+        CLIPBOARD_HTML.with(|c| *c.borrow_mut() = None);
+        assert_eq!(HTML_READS.with(std::cell::Cell::get), 2, "once a paste: {html}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

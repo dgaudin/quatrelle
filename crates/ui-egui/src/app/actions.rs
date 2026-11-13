@@ -558,7 +558,7 @@ impl MailApp {
             Action::PastePicture => {
                 // Formatted text that came with a picture (from Word or a web page) was pasted
                 // as text.
-                let text = clipboard_html().is_some_and(|h| !quatrelle_engine::mime::pasted_html(&h).0.trim().is_empty());
+                let text = rich_edit::clipboard_html_once().0.is_some_and(|h| !quatrelle_engine::mime::pasted_html(&h).0.trim().is_empty());
                 if !text && let Some(png) = self.services.clipboard_picture() {
                     let size = rich_edit::own_size(&png);
                     self.insert_picture(json!({"name": "pasted.png", "data": png}), size);

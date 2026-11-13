@@ -41,6 +41,7 @@ use menu::*;
 #[cfg(test)]
 pub(crate) use paste::or_as_pasted;
 use paste::*;
+pub(crate) use paste::{clipboard_html_once, forget_clipboard_html};
 #[cfg(test)]
 pub(crate) use pictures::FIT_WIDTH;
 pub(crate) use pictures::{own_size, own_size_of, placement};

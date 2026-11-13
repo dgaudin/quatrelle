@@ -20,6 +20,34 @@ fn snap(ed: &mut Editor, text: String, styles: Styles, cursor: usize) {
 /// paste when the key goes down, and only the key's release).
 const SHORTCUT_HELD: std::time::Duration = std::time::Duration::from_secs(3);
 
+thread_local! {
+    /// The clipboard's HTML read for this paste, and how long the read took (ms).
+    static PASTE_HTML: std::cell::RefCell<Option<(Option<String>, u128)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The clipboard's HTML for this paste and how long reading it took (ms): read once a paste,
+/// whoever asks (the check for a picture alone, the paste, the picture's reading after the
+/// frame), as a read can wait on the app that copied; read again after
+/// [`forget_clipboard_html`].
+pub(crate) fn clipboard_html_once() -> (Option<String>, u128) {
+    PASTE_HTML.with(|kept| {
+        let known = kept.borrow().clone();
+        if let Some(read) = known {
+            return read;
+        }
+        let began = web_time::Instant::now();
+        let html = crate::clipboard_html();
+        let read = (html, began.elapsed().as_millis());
+        *kept.borrow_mut() = Some(read.clone());
+        read
+    })
+}
+
+/// A frame starts with no paste: the clipboard's HTML is read again when the next asks for it.
+pub(crate) fn forget_clipboard_html() {
+    PASTE_HTML.with(|kept| *kept.borrow_mut() = None);
+}
+
 /// What the editor keeps of pastes, for none to be lost and the log to say where each went.
 #[derive(Default)]
 pub(crate) struct Pastes {
@@ -118,9 +146,7 @@ fn paste_formatted(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id, 
         tell("not read", "as text, by the text box (Keep text only)");
         return;
     }
-    let began = web_time::Instant::now();
-    let html = crate::clipboard_html();
-    let ms = began.elapsed().as_millis();
+    let (html, ms) = clipboard_html_once();
     let read = html.as_ref().map_or_else(|| format!("none, asked in {ms} ms"), |h| format!("{} bytes, read in {ms} ms", h.len()));
     let went = match html {
         None => {

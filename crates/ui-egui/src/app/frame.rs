@@ -266,6 +266,11 @@ impl MailApp {
 
     /// The whole window.
     pub fn ui(&mut self, ui: &mut Ui) {
+        // The clipboard's HTML is read once a paste: again for the next, unless the text of the
+        // last is still to go in (a picture alone that couldn't be read).
+        if !self.ui.editor.as_ref().is_some_and(|e| e.pastes.unpasted.is_some()) {
+            rich_edit::forget_clipboard_html();
+        }
         // The switch in Options, wherever it was changed from (a command, another window).
         spellcheck::set_on(self.session.prefs.spell_check);
         let ctx = ui.ctx().clone();

@@ -92,9 +92,12 @@ fn markdown_stays_text_where_it_should() {
 thread_local! {
     /// The HTML this test thread's clipboard holds.
     pub(super) static CLIPBOARD_HTML: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    /// How many times this test thread's clipboard HTML was read.
+    pub(super) static HTML_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 pub(super) fn clipboard_html() -> Option<String> {
+    HTML_READS.with(|n| n.set(n.get() + 1));
     CLIPBOARD_HTML.with(|c| c.borrow().clone())
 }
 
