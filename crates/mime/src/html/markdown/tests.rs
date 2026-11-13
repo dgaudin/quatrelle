@@ -206,3 +206,33 @@ fn markdown_in_a_code_block_is_told_from_formatted_html() {
     let huge = format!("<pre><code>{}</code></pre>", "a".repeat(8 * MARKDOWN_MAX));
     assert_eq!(code_block_markdown(&huge, text), None);
 }
+
+/// This repository's own page on Gmail, pasted whole: every item keeps its bullet or number, the
+/// lines an item is written over join with one space, and no mark is left.
+#[test]
+fn a_whole_page_keeps_its_items_and_their_words() {
+    let md = include_str!("../../../../../docs/gmail.md");
+    let (text, styles) = pasted_markdown(md).expect("Markdown");
+    assert!(!text.chars().any(|c| ('\u{E000}'..='\u{F8FF}').contains(&c)), "no marks left: {text:?}");
+    assert!(!text.contains("  "), "no run of spaces: {text:?}");
+    let listed = |list: List| (0..text.split('\n').count()).filter(|n| styles.para(*n).list == list).count();
+    assert_eq!((listed(List::Bullet), listed(List::Number)), (8, 2), "{text:?}");
+    for (item, list) in [
+        (
+            "Sign in with Google, through the browser (OAuth 2.0), in a copy of Quatrelle built with a Google client (oauth.md). The published builds carry none, so they don't offer it.",
+            List::Bullet,
+        ),
+        (
+            "Turn on 2-Step Verification for the Google account (Google Account › Security). Google offers app passwords only once it is on.",
+            List::Number,
+        ),
+        (
+            "Open https://myaccount.google.com/apppasswords, give the password a name (Quatrelle), and create it. Google shows sixteen letters, once: copy them.",
+            List::Number,
+        ),
+        ("Gmail's labels are folders here; a message with several labels is in each of them.", List::Bullet),
+    ] {
+        let (n, _) = line_of(&text, item);
+        assert_eq!(styles.para(n).list, list, "{item}");
+    }
+}

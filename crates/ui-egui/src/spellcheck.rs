@@ -338,18 +338,27 @@ pub fn underline_with(job: &mut egui::text::LayoutJob, text: &str, colour: egui:
     for sec in std::mem::take(&mut job.sections) {
         let (from, to): (usize, usize) = (sec.byte_range.start.0, sec.byte_range.end.0);
         let mut at = from;
+        // The section's leading space (a list item's or an indented paragraph's indent) goes
+        // before its first piece alone: given to the piece before each misspelt word, it opened
+        // a gap there; not given to a misspelt word that starts it, the paragraph lost its
+        // indent and its text covered its bullet.
+        let mut lead = sec.leading_space;
         for (r, _) in bad.iter().filter(|(r, _)| r.start < to && r.end > from) {
             let (s, e) = (r.start.max(from), r.end.min(to));
             if s > at {
-                out.push(egui::text::LayoutSection { leading_space: sec.leading_space, byte_range: at.into()..s.into(), format: sec.format.clone() });
+                out.push(egui::text::LayoutSection {
+                    leading_space: std::mem::take(&mut lead),
+                    byte_range: at.into()..s.into(),
+                    format: sec.format.clone(),
+                });
             }
             let mut f = sec.format.clone();
             f.underline = egui::Stroke::new(1.0, colour);
-            out.push(egui::text::LayoutSection { leading_space: 0.0, byte_range: s.into()..e.into(), format: f });
+            out.push(egui::text::LayoutSection { leading_space: std::mem::take(&mut lead), byte_range: s.into()..e.into(), format: f });
             at = e;
         }
         if at < to {
-            out.push(egui::text::LayoutSection { leading_space: 0.0, byte_range: at.into()..to.into(), format: sec.format.clone() });
+            out.push(egui::text::LayoutSection { leading_space: lead, byte_range: at.into()..to.into(), format: sec.format.clone() });
         }
     }
     job.sections = out;
@@ -377,6 +386,21 @@ mod tests {
             .filter_map(|s| job.text.get(s.byte_range.start.0..s.byte_range.end.0))
             .collect();
         assert_eq!(marked, ["quatrelle"], "only the word that isn't in the dictionaries");
+    }
+
+    /// A section's leading space (a list item's indent) stays before its first piece alone,
+    /// whether that piece is a misspelt word or not.
+    #[test]
+    fn a_sections_indent_stays_at_its_start() {
+        assert!(load_for_test());
+        for text in ["quatrelle et servver ici", "Le servver et quatrelle"] {
+            let mut job = egui::text::LayoutJob::default();
+            job.append(text, 28.0, egui::TextFormat::default());
+            underline(&mut job, text, egui::Color32::RED);
+            assert!(job.sections.len() > 2, "split at its misspelt words");
+            let leads: Vec<(usize, f32)> = job.sections.iter().map(|s| (s.byte_range.start.0, s.leading_space)).filter(|(_, l)| *l > 0.0).collect();
+            assert_eq!(leads, [(0, 28.0)], "{text}");
+        }
     }
 
     /// What a check goes by: the message's language, the stretches left alone (the signature,
