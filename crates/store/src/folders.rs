@@ -332,8 +332,9 @@ impl Store {
         if op.is_folder_op() {
             return self.apply_folder_op(account, op);
         }
-        // An archive policy tag lives on the server: nothing of it is kept here.
-        if let Op::SetArchiveTag { .. } = op {
+        // An archive policy tag lives on the server: nothing of it is kept here; nor does a
+        // calendar change touch the mail kept here.
+        if matches!(op, Op::SetArchiveTag { .. }) || op.is_calendar_op() {
             return Ok(Vec::new());
         }
         if let Op::EmptyFolder { path } = op {
@@ -397,7 +398,14 @@ impl Store {
                     let uids: HashSet<u32> = sources_gone.iter().map(|k| k.uid).collect();
                     st.messages.retain(|m| !uids.contains(&m.key.uid));
                 }
-                Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } | Op::SetArchiveTag { .. } => {}
+                Op::CreateFolder { .. }
+                | Op::RenameFolder { .. }
+                | Op::DeleteFolder { .. }
+                | Op::EmptyFolder { .. }
+                | Op::SetArchiveTag { .. }
+                | Op::CreateCalendar { .. }
+                | Op::RenameCalendar { .. }
+                | Op::DeleteCalendar { .. } => {}
             }
             // The list just read has every edit waiting already: none is made again on it (a
             // burst of moves made offline made them all again at each one, over the whole list).
@@ -457,9 +465,15 @@ impl Store {
                 list.retain(|f| !gone.contains(&f.path));
                 Vec::new()
             }
-            Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } | Op::SetArchiveTag { .. } => {
-                Vec::new()
-            }
+            Op::SetFlag { .. }
+            | Op::SetKeyword { .. }
+            | Op::Move { .. }
+            | Op::Expunge { .. }
+            | Op::EmptyFolder { .. }
+            | Op::SetArchiveTag { .. }
+            | Op::CreateCalendar { .. }
+            | Op::RenameCalendar { .. }
+            | Op::DeleteCalendar { .. } => Vec::new(),
         };
         quatrelle_model::sort_folders(&mut list);
         self.save_folders(account, &list)?;

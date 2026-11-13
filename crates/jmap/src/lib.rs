@@ -528,6 +528,10 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
         Op::EmptyFolder { path } => c.empty(st.mailbox(path)?).await,
         // An archive policy is Exchange's: JMAP has no such thing.
         Op::SetArchiveTag { .. } => Ok(()),
+        // Its calendars aren't changed from here (the engine never asks): refused, the change goes.
+        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {
+            Err(Error::No("this server's calendars aren't made or changed from here".into()))
+        }
     }
 }
 

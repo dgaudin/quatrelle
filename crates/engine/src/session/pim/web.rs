@@ -48,6 +48,7 @@ impl Session {
             read_only: true,
             ctag: String::new(),
             group: String::new(),
+            main: false,
         });
         p.subscribed.push(WebCalendar { id: id.clone(), url: link, named: !name.is_empty(), ..Default::default() });
         // Asked for: shown (ticked), as a calendar opened by address is.

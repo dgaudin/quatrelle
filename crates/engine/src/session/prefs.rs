@@ -43,6 +43,14 @@ pub struct Prefs {
     /// Calendars this computer has seen (`account/calendar id`): one seen for the first time
     /// that is someone else's in a group, or a public folder's, comes unticked.
     pub known_calendars: BTreeSet<String>,
+    /// The colour chosen on this computer for a calendar (`account/calendar id`), before the
+    /// server's: one of the 16 of the palette (0 to 15), or [`crate::ACCOUNT_COLOR`], the account's.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub calendar_colors: std::collections::BTreeMap<String, u8>,
+    /// The order the user gave an account's calendars on this computer (their ids, by account);
+    /// one not in it comes after, as the server lists it.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub calendar_order: std::collections::BTreeMap<String, Vec<String>>,
     /// Day and week show each calendar in a column of its own (Outlook's side-by-side view)
     /// rather than all of them together.
     pub calendars_side_by_side: bool,
@@ -267,6 +275,8 @@ impl Default for Prefs {
             notes_order: NotesOrder::Modified,
             hidden_calendars: BTreeSet::new(),
             known_calendars: BTreeSet::new(),
+            calendar_colors: std::collections::BTreeMap::new(),
+            calendar_order: std::collections::BTreeMap::new(),
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),

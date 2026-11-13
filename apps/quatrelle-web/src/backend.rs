@@ -368,6 +368,8 @@ async fn remote(sh: &Rcs, id: &str, op: Op) {
                     relist(sh, id).await;
                 }
                 Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
+                // Refused by JMAP: never here.
+                Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {}
             }
             touched.sort();
             touched.dedup();

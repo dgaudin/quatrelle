@@ -31,7 +31,15 @@ fn put_event(s: &mut Session, read_only: bool, event: CalEvent) {
     let cal = "https://dav.example.org/cal/work/".to_string();
     let sync = DavSync {
         caldav_home: Some("https://dav.example.org/cal/".into()),
-        calendars: Some(vec![CalendarInfo { id: cal.clone(), name: "Work".into(), color: 1, read_only, ctag: "a".into(), group: String::new() }]),
+        calendars: Some(vec![CalendarInfo {
+            id: cal.clone(),
+            name: "Work".into(),
+            color: 1,
+            read_only,
+            ctag: "a".into(),
+            group: String::new(),
+            main: false,
+        }]),
         events: vec![StoredEvent { calendar: cal.clone(), href: format!("{cal}x.ics"), etag: "\"1\"".into(), event, ..Default::default() }],
         synced_calendars: vec![cal],
         checked: NOW,
@@ -192,7 +200,15 @@ fn a_silent_edit_keeps_a_notification_still_to_go() {
 /// Put an event in a calendar of the sample's account by its id (a colleague's: `shared:…`).
 fn put_in(s: &mut Session, cal: &str, read_only: bool, event: CalEvent) {
     let sync = DavSync {
-        calendars: Some(vec![CalendarInfo { id: cal.into(), name: "Ana".into(), color: 1, read_only, ctag: "a".into(), group: String::new() }]),
+        calendars: Some(vec![CalendarInfo {
+            id: cal.into(),
+            name: "Ana".into(),
+            color: 1,
+            read_only,
+            ctag: "a".into(),
+            group: String::new(),
+            main: false,
+        }]),
         events: vec![StoredEvent { calendar: cal.into(), href: format!("{cal}/x"), etag: "\"1\"".into(), event, ..Default::default() }],
         synced_calendars: vec![cal.into()],
         checked: NOW,

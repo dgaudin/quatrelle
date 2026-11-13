@@ -61,6 +61,30 @@ pub struct CalendarInfo {
     /// Calendars, a team's, People's Calendars); empty: the account's own.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub group: String,
+    /// The account's main calendar (Exchange's Calendar folder, Microsoft 365's default one):
+    /// never renamed or deleted from here. Kept from before it was recorded: none is.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub main: bool,
+}
+
+/// The longest name a calendar made or renamed here takes, in characters.
+pub const MAX_CALENDAR_NAME: usize = 255;
+
+/// A name on one line (each run of whitespace one space, none at either end), without control or
+/// bidi characters; cut nowhere (see [`teams::one_line`] for a name to show).
+pub fn plain_name(text: &str) -> String {
+    let mut out = String::new();
+    for word in text.split_whitespace() {
+        let word: String = word.chars().filter(|c| !c.is_control() && !teams::is_bidi(*c)).collect();
+        if word.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&word);
+    }
+    out
 }
 
 /// Whether two UIDs name the same meeting: as an invitation names it, or as Exchange's single
@@ -489,6 +513,7 @@ impl Pim {
                 read_only: false,
                 ctag: String::new(),
                 group: String::new(),
+                main: false,
             });
         }
         if self.books.is_empty() {

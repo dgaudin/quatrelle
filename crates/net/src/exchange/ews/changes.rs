@@ -286,6 +286,9 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             ))
             .map(drop)
         }
+        // Exchange's other calendars of the account's own aren't read yet, so one made here
+        // wouldn't show (the engine doesn't ask yet): refused, the change goes.
+        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => Err(NetError::No(crate::CALENDARS_NOT_HERE.into())),
     }
 }
 

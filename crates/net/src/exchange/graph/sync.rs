@@ -381,6 +381,7 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         Op::EmptyFolder { path } => c.empty(st.mailbox(path)?, st.owner(path)),
         // An archive policy is on-premises Exchange's (EWS).
         Op::SetArchiveTag { .. } => Ok(()),
+        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => Err(NetError::No(crate::CALENDARS_NOT_HERE.into())),
     }
 }
 

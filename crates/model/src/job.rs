@@ -107,6 +107,21 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "PolicyKind::is_archive")]
         kind: PolicyKind,
     },
+    /// Make a calendar called `name` in the account's own mailbox; the calendars are read again
+    /// after, which brings it in.
+    CreateCalendar {
+        name: String,
+    },
+    /// Rename one of the account's calendars (`calendar`: its id, as the server gave it).
+    RenameCalendar {
+        calendar: String,
+        name: String,
+    },
+    /// Delete one of the account's calendars and its events (into Deleted Items, where the
+    /// server keeps one).
+    DeleteCalendar {
+        calendar: String,
+    },
 }
 
 /// Automatic replies (out of office): sent once per sender while on, between the dates when
@@ -204,6 +219,7 @@ impl Op {
             | Op::Expunge { keys, .. }
             | Op::SetArchiveTag { keys, .. } => keys,
             Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => &[],
+            Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => &[],
         }
     }
 
@@ -220,6 +236,10 @@ impl Op {
             Op::DeleteFolder { path } => ("DeleteFolder", Some(path.as_str())),
             Op::EmptyFolder { path } => ("EmptyFolder", Some(path.as_str())),
             Op::SetArchiveTag { folder, kind, .. } => (if kind.is_archive() { "SetArchiveTag" } else { "SetRetentionTag" }, folder.as_deref()),
+            // A calendar's name is the user's own words: never in the log.
+            Op::CreateCalendar { .. } => return "CreateCalendar".into(),
+            Op::RenameCalendar { .. } => return "RenameCalendar".into(),
+            Op::DeleteCalendar { .. } => return "DeleteCalendar".into(),
         };
         if let Some(folder) = folder {
             return format!("{kind} of {folder}");
@@ -235,6 +255,11 @@ impl Op {
     /// Whether this changes the folder list rather than messages.
     pub fn is_folder_op(&self) -> bool {
         matches!(self, Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. })
+    }
+
+    /// Whether this changes the account's calendars (their list is read again after).
+    pub fn is_calendar_op(&self) -> bool {
+        matches!(self, Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. })
     }
 }
 
@@ -691,85 +716,4 @@ mod webex;
 pub use webex::{WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_change_is_summed_up_without_a_subject_or_an_address() {
-        let key = |folder: &str, uid: u32| MessageKey { account: "me@studio.example".into(), folder: folder.into(), validity: 1, uid };
-        let mv = Op::Move { keys: vec![key("INBOX", 1), key("INBOX", 2), key("Sent", 3)], to: "Archive".into() };
-        assert_eq!(mv.summary(), "Move of 3 messages in INBOX, Sent");
-        let flag = Op::SetFlag { keys: vec![key("INBOX", 1)], flag: Flag::Seen, on: true };
-        assert_eq!(flag.summary(), "SetFlag of 1 message in INBOX");
-        assert_eq!(Op::EmptyFolder { path: "Trash".into() }.summary(), "EmptyFolder of Trash");
-        assert!(!mv.summary().contains("studio.example"));
-    }
-
-    #[test]
-    fn secrets_never_print() {
-        let j = Job::Start { account: AccountConfig::default(), password: Some(Secret("hunter2".into())) };
-        assert!(!format!("{j:?}").contains("hunter2"));
-        let e = Event::Decrypted { key: MessageKey::default(), content: Some(Private(b"the plan".to_vec())), authenticated: true, error: None };
-        assert!(!format!("{e:?}").contains("the plan"), "what decrypted mail says never prints");
-        let j = Job::Pgp {
-            account: AccountConfig::default(),
-            work: PgpWork::Import { file: Private(b"-----BEGIN PGP PRIVATE KEY BLOCK-----".to_vec()), passphrase: Secret("hunter2".into()) },
-        };
-        let shown = format!("{j:?}");
-        assert!(!shown.contains("hunter2") && !shown.contains("45, 45"), "neither the passphrase nor the key file: {shown}");
-        let j = Job::Pgp {
-            account: AccountConfig::default(),
-            work: PgpWork::Backup { fingerprint: "AB".into(), passphrase: Secret("correct horse".into()), path: "/tmp/k.asc".into() },
-        };
-        assert!(!format!("{j:?}").contains("correct horse") && !serde_json::to_string(&j).unwrap().contains("correct horse"));
-    }
-
-    /// What is written of a job or an event holds no secret either: a log or a file made of one
-    /// says that there was one, and no more.
-    #[test]
-    fn secrets_never_serialize() {
-        let meeting = WebexMeeting {
-            id: "m1".into(),
-            web_link: "https://acme.webex.com/acme/j.php?MTID=m1".into(),
-            meeting_number: "2623456701".into(),
-            password: Secret("Xy7qT2".into()),
-            sip_address: String::new(),
-        };
-        let j = serde_json::to_string(&Job::SetWebexSecret { secret: Secret("hunter2".into()) }).unwrap();
-        let e = serde_json::to_string(&Event::WebexCreated { ask: 1, meeting: Some(meeting), error: None }).unwrap();
-        for (written, secret) in [(j, "hunter2"), (e, "Xy7qT2")] {
-            assert!(!written.contains(secret), "{written}");
-            assert!(written.contains("<redacted>"), "the field is there, masked: {written}");
-        }
-        assert_eq!(serde_json::to_string(&Secret::default()).unwrap(), "\"\"", "none to hide");
-    }
-
-    #[test]
-    fn days() {
-        for ok in ["2026-10-15", "2024-02-29", "2000-02-29"] {
-            assert!(is_day(ok), "{ok}");
-        }
-        for bad in ["2026-02-29", "1900-02-29", "2026-13-01", "2026-1-01", "26-10-15", "2026-10-15T00", "", "2026-10-00", "abcd-ef-gh"] {
-            assert!(!is_day(bad), "{bad}");
-        }
-    }
-
-    /// Waiting for the user's answer about another server is no more online than waiting for a
-    /// password.
-    #[test]
-    fn waiting_for_trust_is_not_online() {
-        let s = SyncStatus::NeedsTrust { site: "office365.com".into() };
-        assert_eq!(s.is_online(), SyncStatus::NeedsPassword { error: String::new() }.is_online());
-        assert!(!s.is_online());
-        assert_eq!(serde_json::to_value(&s).unwrap()["state"], "needsTrust");
-    }
-
-    #[test]
-    fn jobs_serialize_tagged() {
-        let j = Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() };
-        let v = serde_json::to_value(&j).unwrap();
-        assert_eq!(v["job"], "syncFolder");
-        assert_eq!(serde_json::from_value::<Job>(v).unwrap(), j);
-        assert_eq!(j.account(), "a1");
-    }
-}
+mod tests;

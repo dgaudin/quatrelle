@@ -14,6 +14,7 @@ use super::*;
 
 pub use quatrelle_model::pim::PIM_DOC;
 
+mod calendars;
 mod conflicts;
 mod deleting;
 mod files;
@@ -36,6 +37,7 @@ mod webex;
 pub(super) fn own_calendar(id: &str) -> bool {
     quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:") && !quatrelle_model::pim::is_web_calendar(id)
 }
+pub use calendars::{CalendarRefusal, PALETTE_COLOR, PALETTE_COLORS};
 pub use conflicts::{CONFLICTS, ConflictWords, SYNC_ISSUES};
 pub use files::FilesComing;
 pub use find::{EVENT_HITS_MAX, EventHit, EventWhen};
@@ -330,18 +332,13 @@ impl Session {
     pub fn shown_calendars(&self) -> Vec<(String, String, String, u8)> {
         self.accounts
             .iter()
-            .filter_map(|a| self.pim.get(&a.config.id).map(|p| (a, p)))
-            .flat_map(|(a, p)| p.calendars.iter().map(move |c| (a.config.id.clone(), c.id.clone(), c.name.clone(), Session::calendar_color(a, c))))
+            .flat_map(|a| {
+                self.ordered_calendars(&a.config.id)
+                    .into_iter()
+                    .map(move |c| (a.config.id.clone(), c.id.clone(), c.name.clone(), self.calendar_color(a, c)))
+            })
             .filter(|(a, c, _, _)| self.calendar_shown(a, c))
             .collect()
-    }
-
-    /// The colour a calendar is drawn in (with its events): an account's own calendar in the
-    /// account's colour, as its mail shows it, so each account's calendar can be told apart
-    /// (they used to share one); its others in theirs. [`ACCOUNT_COLOR`] and above stand for
-    /// an account's colour (`ACCOUNT_COLOR + AccountConfig::color`).
-    pub fn calendar_color(a: &AccountState, c: &quatrelle_model::pim::CalendarInfo) -> u8 {
-        if c.color == 0 { ACCOUNT_COLOR.saturating_add(a.config.color) } else { c.color }
     }
 
     /// The occurrences overlapping `[from, to)`, by start, from every calendar that's shown.
@@ -385,7 +382,7 @@ impl Session {
                         start,
                         end,
                         all_day: e.all_day,
-                        color: Session::calendar_color(acc, cal),
+                        color: self.calendar_color(acc, cal),
                         category: e.categories.first().map(|c| self.category_color_of(c)),
                         status: e.status.clone(),
                         needs_reply,

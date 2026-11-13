@@ -122,7 +122,14 @@ impl Session {
                     *unread_delta.entry(f.clone()).or_default() -= i64::try_from(unread).unwrap_or(0);
                     st.messages.retain(|m| !mine.contains(&m.key.uid));
                 }
-                Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } | Op::SetArchiveTag { .. } => {}
+                Op::CreateFolder { .. }
+                | Op::RenameFolder { .. }
+                | Op::DeleteFolder { .. }
+                | Op::EmptyFolder { .. }
+                | Op::SetArchiveTag { .. }
+                | Op::CreateCalendar { .. }
+                | Op::RenameCalendar { .. }
+                | Op::DeleteCalendar { .. } => {}
             }
         }
         if let Some(a) = self.account_mut(account) {
@@ -275,7 +282,10 @@ impl Session {
                 | Op::Move { .. }
                 | Op::Expunge { .. }
                 | Op::EmptyFolder { .. }
-                | Op::SetArchiveTag { .. } => {}
+                | Op::SetArchiveTag { .. }
+                | Op::CreateCalendar { .. }
+                | Op::RenameCalendar { .. }
+                | Op::DeleteCalendar { .. } => {}
             }
             sort_folders(&mut a.folders);
         }
@@ -310,8 +320,15 @@ impl Session {
                     self.focus = None;
                 }
             }
-            Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } | Op::SetArchiveTag { .. } => {
-            }
+            Op::SetFlag { .. }
+            | Op::SetKeyword { .. }
+            | Op::Move { .. }
+            | Op::Expunge { .. }
+            | Op::EmptyFolder { .. }
+            | Op::SetArchiveTag { .. }
+            | Op::CreateCalendar { .. }
+            | Op::RenameCalendar { .. }
+            | Op::DeleteCalendar { .. } => {}
         }
         // A Favorite public folder renamed or deleted: its sync follows.
         if matches!(op, Op::RenameFolder { .. } | Op::DeleteFolder { .. }) {

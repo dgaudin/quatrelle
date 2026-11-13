@@ -429,6 +429,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 read_only: !v.get("canEdit").and_then(Value::as_bool).unwrap_or(true),
                 ctag: String::new(),
                 group: String::new(),
+                main: v.get("isDefaultCalendar").and_then(Value::as_bool) == Some(true),
             })
         })
         .collect();
@@ -472,6 +473,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                         read_only: !v.get("canEdit").and_then(Value::as_bool).unwrap_or(false),
                         ctag: String::new(),
                         group: group.clone(),
+                        main: false,
                     });
                     events_at.push((id.clone(), format!("/me/calendarGroups/{}/calendars/{}/events", seg(&gid), seg(&id))));
                 }
@@ -633,6 +635,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             read_only: can_edit != Some(true),
             ctag: String::new(),
             group: String::new(),
+            main: false,
         });
     }
     out.calendars = Some(calendars);

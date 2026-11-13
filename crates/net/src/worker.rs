@@ -679,6 +679,8 @@ pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, o
         Op::EmptyFolder { path } => c.empty(path),
         // An archive policy is Exchange's.
         Op::SetArchiveTag { .. } => Ok(()),
+        // IMAP keeps no calendars (the engine never asks): refused, the change goes.
+        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => Err(NetError::No(crate::CALENDARS_NOT_HERE.into())),
     }
 }
 

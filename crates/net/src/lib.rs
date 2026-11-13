@@ -45,6 +45,10 @@ pub mod worker;
 /// Largest directory picture kept (bytes): a contact photo, not a photograph album.
 pub(crate) const MAX_PICTURE: usize = 512 * 1024;
 
+/// Why a server refuses a calendar made, renamed or deleted from here: Quatrelle doesn't change
+/// that server's calendars (the engine doesn't ask it to).
+pub(crate) const CALENDARS_NOT_HERE: &str = "this server's calendars aren't made or changed from here";
+
 /// A picture's media type, read from its first bytes: a directory photo arrives without a name.
 pub(crate) fn picture_media(data: &[u8]) -> &'static str {
     match data {

@@ -515,6 +515,7 @@ impl Worker {
                         Op::CreateFolder { .. } | Op::DeleteFolder { .. } => relist = true,
                         Op::EmptyFolder { path } => destinations.push(path.clone()),
                         Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
+                        Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {}
                     }
                     if let Err(e) = self.store.remove_op(&self.acc.id, &op) {
                         self.notice(e.to_string());

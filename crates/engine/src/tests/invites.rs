@@ -122,6 +122,7 @@ fn weekly_series(s: &mut Session) -> CalEvent {
             read_only: false,
             ctag: "a".into(),
             group: String::new(),
+            main: false,
         }]),
         events: vec![
             stored(master.clone(), &format!("{cal}weekly.ics")),

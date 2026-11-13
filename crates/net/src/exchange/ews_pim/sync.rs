@@ -30,7 +30,7 @@ pub fn sync_changes(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let own = pim.calendars.iter().find(|k| k.id == CALENDAR).cloned();
     let name =
         own.as_ref().map(|k| k.name.clone()).filter(|n| !n.is_empty()).or_else(|| folder_name(c, "calendar")).unwrap_or_else(|| "Calendar".into());
-    out.calendars = Some(vec![CalendarInfo { id: CALENDAR.into(), name, ctag: state, ..own.unwrap_or_default() }]);
+    out.calendars = Some(vec![CalendarInfo { id: CALENDAR.into(), name, ctag: state, main: true, ..own.unwrap_or_default() }]);
     let book = pim.books.iter().find(|b| b.id == CONTACTS).map(|b| b.name.clone()).filter(|n| !n.is_empty());
     let book = book.or_else(|| folder_name(c, "contacts")).unwrap_or_else(|| "Contacts".into());
     read_contacts(c, pim, book, &hrefs(&refused), &mut out)?;
@@ -56,7 +56,8 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
     reminders::answer_all(c, pim, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
-    let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: state, group: String::new() }];
+    let mut calendars =
+        vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: state, group: String::new(), main: true }];
     // Other people's calendars: those opened here by their address, and those Outlook keeps in
     // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
     // is read where the permissions they gave allow, and changed where they let this account.
@@ -120,6 +121,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
             ctag: before.map(|k| k.ctag.clone()).unwrap_or_default(),
             group: group.clone(),
             id,
+            main: false,
         };
         if !*asked && !known {
             calendars.push(entry);
@@ -161,7 +163,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                 if !class.starts_with("IPF.Contact") && pim.not_read.contains(&key) {
                     let ctag = pim.calendars.iter().find(|k| k.id == key).map(|k| k.ctag.clone()).unwrap_or_default();
                     if let Some(cals) = out.calendars.as_mut() {
-                        cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new() });
+                        cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new(), main: false });
                     }
                     continue;
                 }
@@ -178,7 +180,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                 match public_calendar(c, pim, &p, &key, now - CALENDAR_BACK, &mut out) {
                     Ok(ctag) => {
                         if let Some(cals) = out.calendars.as_mut() {
-                            cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new() });
+                            cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new(), main: false });
                         }
                     }
                     Err(e) => out.errors.push(format!("{name}: {e}")),

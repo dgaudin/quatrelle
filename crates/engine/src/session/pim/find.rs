@@ -146,7 +146,7 @@ impl Session {
                             recurring: e.rrule.is_some() || e.recurrence_id.is_some(),
                             upcoming: end > now,
                             categories: e.categories.clone(),
-                            color: Session::calendar_color(a, cal),
+                            color: self.calendar_color(a, cal),
                             category: e.categories.first().map(|c| self.category_color_of(c)),
                             private: e.private,
                             show_as: e.show_as,

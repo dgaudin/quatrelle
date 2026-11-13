@@ -240,6 +240,36 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"count": s.prefs.calendar_months}))
         })
         .params(r#"{"count": number (1 to 6)}"#),
+        CommandSpec::new("calendar.showOnly", "Show only this calendar", "Calendar › Calendars", |s, v| {
+            s.show_only_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?)
+        })
+        .params(r#"{"account": string, "calendar": string} (every other calendar, of every account, hidden)"#),
+        CommandSpec::new("calendar.color", "Calendar color", "Calendar › Calendars", |s, v| {
+            let color = match v.get("color") {
+                None => return Err(CmdError::Params("`color` is required (0 to 15, 16, or null)".into())),
+                Some(Value::Null) => None,
+                Some(c) => Some(c.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| CmdError::Params("`color` is 0 to 15, 16, or null".into()))?),
+            };
+            s.set_calendar_color(p::req_str(v, "account")?, p::req_str(v, "calendar")?, color)
+        })
+        .params(r#"{"account": string, "calendar": string, "color": 0..15 (one of the palette's 16) | 16 (the account's) | null (automatic: the server's)} (kept on this computer)"#),
+        CommandSpec::new("calendar.moveUp", "Move up", "Calendar › Calendars", |s, v| s.move_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?, true))
+            .params(r#"{"account": string, "calendar": string} (before the one above it in its group, kept on this computer)"#),
+        CommandSpec::new("calendar.moveDown", "Move down", "Calendar › Calendars", |s, v| {
+            s.move_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?, false)
+        })
+        .params(r#"{"account": string, "calendar": string} (after the one below it in its group, kept on this computer)"#),
+        CommandSpec::new("calendar.create", "New calendar", "Calendar › Calendars", |s, v| s.create_calendar(p::req_str(v, "account")?, p::req_str(v, "name")?))
+            .params(r#"{"account": string, "name": string (up to 255 characters)} (made on the account's server, Microsoft 365's; it shows once the calendars are read again)"#)
+            .when(calendars_made),
+        CommandSpec::new("calendar.rename", "Rename calendar", "Calendar › Calendars", |s, v| {
+            s.rename_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?, p::req_str(v, "name")?)
+        })
+        .params(r#"{"account": string, "calendar": string, "name": string (up to 255 characters)} (one of the account's own, not its main one)"#)
+        .when(calendars_made),
+        CommandSpec::new("calendar.delete", "Delete calendar", "Calendar › Calendars", |s, v| s.delete_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?))
+            .params(r#"{"account": string, "calendar": string} (one of the account's own, not its main one; its events go with it, into Deleted Items)"#)
+            .when(calendars_made),
         CommandSpec::new("account.keepMail", "Mail kept on this computer", "File › Options › Mail", |s, v| {
             let days = p::u64(v, "days").ok_or_else(|| CmdError::Params("`days` is required (0: all)".into()))?;
             s.prefs.keep_days = u32::try_from(days.min(36_500)).unwrap_or(0);
@@ -377,6 +407,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"address": string, "on"?: bool}"#),
     ]
+}
+
+/// Calendars are made, renamed and deleted where an account's server allows it (each calendar
+/// says more: `Session::calendar_change`).
+fn calendars_made(s: &Session) -> Option<&'static str> {
+    if s.accounts.iter().any(|a| a.config.makes_calendars()) { None } else { Some("add a Microsoft 365 account first") }
 }
 
 /// A Webex room's lines given (`details`): a string, `\n` between them, or a list of strings; the

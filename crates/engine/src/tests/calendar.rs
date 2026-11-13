@@ -6,6 +6,7 @@
 use super::*;
 
 mod answering;
+mod arranging;
 mod changes;
 mod conflicts;
 mod find;
