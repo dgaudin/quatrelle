@@ -194,6 +194,7 @@ pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &P
                 ctag: ctag.clone(),
                 group: String::new(),
                 main: false,
+                not_own: false,
             };
             let pushed_here = out.pushed_events.iter().any(|e| e.calendar == c.href);
             if !ctag.is_empty() && known.is_some_and(|k| k.ctag == ctag) && !pushed_here {

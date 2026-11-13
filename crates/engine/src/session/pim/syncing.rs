@@ -115,6 +115,7 @@ impl Session {
                 c.dirty &= c.card != x.card;
             }
         }
+        let mut refiled = 0;
         if let Some(server) = &sync.calendars {
             // The calendar on this computer goes once the server has calendars, unless it holds
             // events (they stay there).
@@ -142,12 +143,21 @@ impl Session {
             // Calendars subscribed to by their links aren't the server's: they stay (issue #7).
             let web: Vec<_> = p.calendars.iter().filter(|c| is_web_calendar(&c.id) && !list.iter().any(|x| x.id == c.id)).cloned().collect();
             list.extend(web);
+            // A calendar the server lists no more (deleted elsewhere): what was made here in it
+            // and never sent goes to the account's main calendar, to be made there.
+            if !sync.partial {
+                refiled = refile_unsent(p, &list);
+            }
             let listed: HashSet<&str> = list.iter().map(|c| c.id.as_str()).collect();
             p.events.retain(|e| e.calendar == LOCAL || listed.contains(e.calendar.as_str()) || e.dirty);
             merge_events(p, sync);
             p.calendars = list;
         }
         self.note_new_calendars();
+        if refiled > 0 {
+            log::info!("{account}: {refiled} appointments not yet sent moved to the main calendar, theirs gone from the server");
+            self.notice("Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere", false);
+        }
         let p = self.pim_mut(account);
         if let Some(server) = &sync.books {
             let keep_local = server.is_empty() || p.cards.iter().any(|c| c.book == LOCAL);
@@ -200,6 +210,19 @@ impl Session {
             self.write_pim(account);
         }
     }
+}
+
+/// The appointments made here and never sent (no item on the server) filed in a calendar `list`
+/// no longer has, moved to the account's main calendar there (else the first it can write to),
+/// still to send. How many.
+fn refile_unsent(p: &mut Pim, list: &[quatrelle_model::pim::CalendarInfo]) -> usize {
+    let Some(main) = list.iter().find(|c| c.main).or_else(|| list.iter().find(|c| !c.read_only)).map(|c| c.id.clone()) else { return 0 };
+    let mut moved = 0;
+    for e in p.events.iter_mut().filter(|e| e.dirty && e.href.is_empty() && e.calendar != LOCAL && !list.iter().any(|c| c.id == e.calendar)) {
+        e.calendar.clone_from(&main);
+        moved += 1;
+    }
+    moved
 }
 
 /// A digest of an account's appointments as kept, whatever their order: what a sync changes in

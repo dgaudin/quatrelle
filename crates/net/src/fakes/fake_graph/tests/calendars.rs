@@ -121,3 +121,29 @@ fn what_the_server_refuses_is_said_and_its_list_read_again() {
     drop(d);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A calendar someone else owns, shared with the account and listed among its own (canEdit as
+/// theirs gave it), is never the account's own; nor is any but the main one when the calendar
+/// groups couldn't be read (whose each is can't be told then).
+#[test]
+fn a_calendar_someone_else_owns_is_never_the_accounts_own() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.calendars.push(("CAL2".into(), "Trips".into()));
+    d.calendars.push(("CAL3".into(), "Ana Lima".into()));
+    d.calendar_owners.push(("CAL3".into(), "ana@contoso.example".into()));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let not_own =
+        |sync: &quatrelle_model::pim::DavSync, id: &str| sync.calendars.as_ref().and_then(|l| l.iter().find(|c| c.id == id)).map(|c| c.not_own);
+    let sync = crate::graph_pim::sync(&c, &quatrelle_model::pim::Pim::default(), 1_792_000_000).unwrap();
+    assert_eq!((not_own(&sync, "CAL1"), not_own(&sync, "CAL2"), not_own(&sync, "CAL3")), (Some(false), Some(false), Some(true)));
+    server.data.lock().unwrap().groups_refused = true;
+    let sync = crate::graph_pim::sync(&c, &quatrelle_model::pim::Pim::default(), 1_792_000_000).unwrap();
+    assert_eq!(
+        (not_own(&sync, "CAL1"), not_own(&sync, "CAL2")),
+        (Some(false), Some(true)),
+        "the groups unread: none counted as own but the main one"
+    );
+}

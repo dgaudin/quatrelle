@@ -2266,3 +2266,4 @@ presence	Offline	Offline
 	Delete calendar	Agenda verwijderen
 	Calendar name	Agendanaam
 	Delete the calendar {name} and its events? It goes to Deleted Items.	De agenda {name} en de afspraken erin verwijderen? Hij gaat naar Verwijderde items.
+	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	Nog niet verzonden afspraken staan nu in de hoofdagenda: de agenda waarin ze stonden is elders verwijderd

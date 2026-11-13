@@ -61,6 +61,11 @@ pub struct Data {
     pub replies: Value,
     /// Calendars (id, name), events (with a `calendar` field) and contacts, as Graph has them.
     pub calendars: Vec<(String, String)>,
+    /// Calendars of `calendars` someone else owns, shared with the account: (id, owner's address).
+    /// The others are the account's (`me@contoso.example`).
+    pub calendar_owners: Vec<(String, String)>,
+    /// `/me/calendarGroups` fails (HTTP 500).
+    pub groups_refused: bool,
     pub events: Vec<Value>,
     pub contacts: Vec<Value>,
     /// Contacts that carry a picture (their id), as Outlook's do.

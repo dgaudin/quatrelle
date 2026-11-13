@@ -2265,3 +2265,4 @@ presence	Offline	לא מחובר
 	Delete calendar	מחק לוח שנה
 	Calendar name	שם לוח השנה
 	Delete the calendar {name} and its events? It goes to Deleted Items.	למחוק את לוח השנה {name} ואת האירועים שבו? הוא יעבור לפריטים שנמחקו.
+	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	אירועים שעדיין לא נשלחו עברו ללוח השנה הראשי: לוח השנה שבו היו נמחק במקום אחר

@@ -2270,3 +2270,4 @@ presence	Offline	Offline
 	Delete calendar	Kalender löschen
 	Calendar name	Kalendername
 	Delete the calendar {name} and its events? It goes to Deleted Items.	Den Kalender {name} und seine Termine löschen? Er kommt in „Gelöschte Elemente“.
+	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	Noch nicht gesendete Termine kamen in den Hauptkalender: Ihr Kalender wurde anderswo gelöscht

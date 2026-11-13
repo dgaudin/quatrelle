@@ -2269,3 +2269,4 @@ presence	Offline	Offline
 	Delete calendar	Excluir calendário
 	Calendar name	Nome do calendário
 	Delete the calendar {name} and its events? It goes to Deleted Items.	Excluir o calendário {name} e seus eventos? Ele vai para Itens excluídos.
+	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	Eventos ainda não enviados foram para o calendário principal: o calendário em que estavam foi excluído em outro lugar

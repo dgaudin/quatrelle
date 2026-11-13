@@ -416,7 +416,12 @@ fn owner_path(calendar: &str) -> String {
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("graph".into()), carddav_home: Some("graph".into()), checked: now, ..Default::default() };
     // The calendars.
-    let cals = c.all("/me/calendars?$top=100&$select=id,name,canEdit,hexColor,isDefaultCalendar", 200)?;
+    let cals = c.all("/me/calendars?$top=100&$select=id,name,canEdit,hexColor,isDefaultCalendar,owner", 200)?;
+    // Whose each is: the account's own are owned as its default calendar is; one someone else
+    // owns, shared with it (listed among its own, editable as they let it), or one whose owner
+    // isn't said, is never renamed or deleted from here.
+    let owner = |v: &Value| v.get("owner").map(|o| s(o, "address").to_ascii_lowercase()).filter(|a| !a.is_empty());
+    let me = cals.iter().find(|v| v.get("isDefaultCalendar").and_then(Value::as_bool) == Some(true)).and_then(owner);
     let calendars: Vec<CalendarInfo> = cals
         .iter()
         .enumerate()
@@ -430,6 +435,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 ctag: String::new(),
                 group: String::new(),
                 main: v.get("isDefaultCalendar").and_then(Value::as_bool) == Some(true),
+                not_own: v.get("isDefaultCalendar").and_then(Value::as_bool) != Some(true) && (me.is_none() || owner(v) != me),
             })
         })
         .collect();
@@ -441,7 +447,15 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // events are read: `/me/calendars/…`, or inside its group.
     let mut calendars = calendars;
     let mut events_at: Vec<(String, String)> = calendars.iter().map(|x| (x.id.clone(), format!("/me/calendars/{}/events", seg(&x.id)))).collect();
-    for g in c.all("/me/calendarGroups?$top=50&$select=id,name", 50).unwrap_or_default() {
+    // The groups not all read: which calendars are the account's own can't be told (a colleague's
+    // kept only in a group would pass for one), so none but the main one counts as such.
+    let mut groups_read = true;
+    let groups = c.all("/me/calendarGroups?$top=50&$select=id,name", 50).unwrap_or_else(|e| {
+        log::info!("the calendar groups weren't read: {e}");
+        groups_read = false;
+        Vec::new()
+    });
+    for g in groups {
         let (gid, gname) = (s(&g, "id"), s(&g, "name"));
         if gid.is_empty() {
             continue;
@@ -450,6 +464,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             Ok(list) => list,
             Err(e) => {
                 out.errors.push(format!("{gname}: {e}"));
+                groups_read = false;
                 continue;
             }
         };
@@ -474,12 +489,16 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                         ctag: String::new(),
                         group: group.clone(),
                         main: false,
+                        not_own: true,
                     });
                     events_at.push((id.clone(), format!("/me/calendarGroups/{}/calendars/{}/events", seg(&gid), seg(&id))));
                 }
                 None => {}
             }
         }
+    }
+    if !groups_read {
+        calendars.iter_mut().filter(|x| !x.main).for_each(|x| x.not_own = true);
     }
     // What changed here goes first.
     for t in &pim.deleted {
@@ -636,6 +655,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             ctag: String::new(),
             group: String::new(),
             main: false,
+            not_own: true,
         });
     }
     out.calendars = Some(calendars);

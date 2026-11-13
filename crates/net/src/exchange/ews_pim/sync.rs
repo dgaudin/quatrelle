@@ -56,8 +56,16 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
     reminders::answer_all(c, pim, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
-    let mut calendars =
-        vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: state, group: String::new(), main: true }];
+    let mut calendars = vec![CalendarInfo {
+        id: CALENDAR.into(),
+        name: own,
+        color: 0,
+        read_only: false,
+        ctag: state,
+        group: String::new(),
+        main: true,
+        not_own: false,
+    }];
     // Other people's calendars: those opened here by their address, and those Outlook keeps in
     // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
     // is read where the permissions they gave allow, and changed where they let this account.
@@ -124,6 +132,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
             group: group.clone(),
             id,
             main: false,
+            not_own: false,
         };
         if !*asked && !known {
             calendars.push(entry);
@@ -165,7 +174,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                 if !class.starts_with("IPF.Contact") && pim.not_read.contains(&key) {
                     let ctag = pim.calendars.iter().find(|k| k.id == key).map(|k| k.ctag.clone()).unwrap_or_default();
                     if let Some(cals) = out.calendars.as_mut() {
-                        cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new(), main: false });
+                        cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new(), main: false, not_own: false });
                     }
                     continue;
                 }
@@ -182,7 +191,16 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                 match public_calendar(c, pim, &p, &key, now - CALENDAR_BACK, &mut out) {
                     Ok(ctag) => {
                         if let Some(cals) = out.calendars.as_mut() {
-                            cals.push(CalendarInfo { id: key, name, color, read_only: true, ctag, group: String::new(), main: false });
+                            cals.push(CalendarInfo {
+                                id: key,
+                                name,
+                                color,
+                                read_only: true,
+                                ctag,
+                                group: String::new(),
+                                main: false,
+                                not_own: false,
+                            });
                         }
                     }
                     Err(e) => out.errors.push(format!("{name}: {e}")),

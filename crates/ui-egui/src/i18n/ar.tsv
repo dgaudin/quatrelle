@@ -2265,3 +2265,4 @@ presence	Offline	غير متصل
 	Delete calendar	حذف التقويم
 	Calendar name	اسم التقويم
 	Delete the calendar {name} and its events? It goes to Deleted Items.	هل تريد حذف التقويم {name} وأحداثه؟ سينتقل إلى العناصر المحذوفة.
+	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	انتقلت الأحداث التي لم تُرسل بعد إلى التقويم الرئيسي: حُذف التقويم الذي كانت فيه في مكان آخر

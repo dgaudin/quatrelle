@@ -65,6 +65,10 @@ pub struct CalendarInfo {
     /// never renamed or deleted from here. Kept from before it was recorded: none is.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub main: bool,
+    /// Someone else's, shared with the account and listed among its own (Microsoft 365 says whose
+    /// each is), or one whose owner couldn't be told: never renamed or deleted from here.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub not_own: bool,
 }
 
 /// The longest name a calendar made or renamed here takes, in characters.
@@ -514,6 +518,7 @@ impl Pim {
                 ctag: String::new(),
                 group: String::new(),
                 main: false,
+                not_own: false,
             });
         }
         if self.books.is_empty() {

@@ -172,7 +172,7 @@ impl Session {
         if c.main {
             return Err(CalendarRefusal::Main);
         }
-        if c.read_only || !c.group.is_empty() || c.id == LOCAL || !own_calendar(&c.id) {
+        if c.read_only || c.not_own || !c.group.is_empty() || c.id == LOCAL || !own_calendar(&c.id) {
             return Err(CalendarRefusal::NotOwn);
         }
         // Which is the main one isn't known yet: none is touched.

@@ -35,6 +35,7 @@ fn graph_session(name: &str, graph: bool) -> Session {
         CalendarInfo { group: "Team".into(), ..cal(TEAM, "Team", 4) },
         CalendarInfo { read_only: true, ..cal(HOLIDAYS, "Holidays", 5) },
         CalendarInfo { read_only: true, ..cal("shared:ana@contoso.example", "Ana", 6) },
+        CalendarInfo { not_own: true, ..cal("AAMkZoe=", "Zoe Park", 7) },
     ];
     let trip = CalEvent { uid: "trip-1".into(), summary: "Train to Lyon".into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
     let sync = DavSync {
@@ -175,6 +176,7 @@ fn the_main_and_other_peoples_calendars_are_neither_renamed_nor_deleted() {
         (TEAM, CalendarRefusal::NotOwn),
         ("shared:ana@contoso.example", CalendarRefusal::NotOwn),
         ("local", CalendarRefusal::NotOwn),
+        ("AAMkZoe=", CalendarRefusal::NotOwn),
     ] {
         assert_eq!(s.calendar_change("sample", Some(id)), Err(why), "{id}");
         assert!(
@@ -247,35 +249,53 @@ fn settings_from_before_read_with_no_colour_or_order() {
     assert_eq!(back, p);
 }
 
+/// The sample made an on-premises Exchange account.
+fn ews_session(name: &str) -> Session {
+    let mut s = sample_session(name);
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    }
+    s
+}
+
+/// Exchange's main calendar, as its sync lists it.
+fn ews_main() -> CalendarInfo {
+    CalendarInfo { main: true, ..cal("ews:calendar", "Calendar", 0) }
+}
+
+/// An appointment the server has (`uid`, in `calendar`).
+fn sent(uid: &str, calendar: &str) -> StoredEvent {
+    StoredEvent {
+        calendar: calendar.into(),
+        href: format!("AAMk{uid}="),
+        event: CalEvent { uid: uid.into(), summary: uid.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() },
+        ..Default::default()
+    }
+}
+
+/// A calendar sync of the sample's Exchange account listing `calendars` (each read whole), or
+/// (`partial`) only some of them.
+fn ews_synced(s: &mut Session, calendars: Vec<CalendarInfo>, events: Vec<StoredEvent>, partial: bool) {
+    let synced_calendars = calendars.iter().map(|c| c.id.clone()).collect();
+    let sync = DavSync {
+        caldav_home: Some("ews".into()),
+        calendars: Some(calendars),
+        events,
+        synced_calendars,
+        partial,
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(sync) });
+}
+
 /// An Exchange account's own other calendars (`ews:folder:…`): made, renamed and deleted through
 /// the journal, each change then read back from the server as Exchange lists them; one the server
 /// no longer lists goes with its appointments, but not on a sync that read only the main one.
 #[test]
 fn an_exchange_accounts_other_calendars_round_trip() {
-    let mut s = sample_session("arranging-ews");
-    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
-        a.config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
-    }
-    let main = || CalendarInfo { main: true, ..cal("ews:calendar", "Calendar", 0) };
-    let event = |uid: &str, calendar: &str| StoredEvent {
-        calendar: calendar.into(),
-        href: format!("AAMk{uid}="),
-        event: CalEvent { uid: uid.into(), summary: uid.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() },
-        ..Default::default()
-    };
-    let synced = |s: &mut Session, calendars: Vec<CalendarInfo>, events: Vec<StoredEvent>, partial: bool| {
-        let synced_calendars = calendars.iter().map(|c| c.id.clone()).collect();
-        let sync = DavSync {
-            caldav_home: Some("ews".into()),
-            calendars: Some(calendars),
-            events,
-            synced_calendars,
-            partial,
-            checked: NOW,
-            ..Default::default()
-        };
-        s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(sync) });
-    };
+    let mut s = ews_session("arranging-ews");
+    let (main, event, synced) = (ews_main, sent, ews_synced);
     let trips = "ews:folder:AAMkTrips=";
     synced(&mut s, vec![main(), cal(trips, "Trips", 2)], vec![event("train", trips)], false);
     applied(&mut s);
@@ -302,4 +322,27 @@ fn an_exchange_accounts_other_calendars_round_trip() {
     synced(&mut s, vec![main()], Vec::new(), false);
     assert!(!shown_ids(&s).contains(&garden.to_string()));
     assert!(s.pim.get("sample").is_some_and(|p| p.events.iter().all(|e| e.calendar != garden)), "its appointments with it");
+}
+
+/// A calendar deleted elsewhere: an appointment made here and never sent that was filed in it
+/// goes to the account's main calendar, still to send, said once; one the server has already goes
+/// with its calendar.
+#[test]
+fn an_unsent_appointment_outlives_its_calendar_deleted_elsewhere() {
+    let mut s = ews_session("arranging-orphans");
+    let trips = "ews:folder:AAMkTrips=";
+    ews_synced(&mut s, vec![ews_main(), cal(trips, "Trips", 2)], vec![sent("train", trips)], false);
+    let museum = CalEvent { uid: "museum".into(), summary: "Museum".into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
+    s.pim_mut("sample").events.push(StoredEvent { calendar: trips.into(), event: museum, dirty: true, ..Default::default() });
+    let said = s.notices.len();
+    ews_synced(&mut s, vec![ews_main()], Vec::new(), false);
+    let p = s.pim.get("sample").unwrap();
+    let moved = p.events.iter().find(|e| e.event.uid == "museum").map(|e| (e.calendar.clone(), e.dirty, e.href.clone()));
+    assert_eq!(moved, Some(("ews:calendar".to_string(), true, String::new())), "in the main calendar, still to send");
+    assert!(p.events.iter().all(|e| e.event.uid != "train"), "the one the server had goes with its calendar");
+    assert!(s.agenda(NOW - 86_400, NOW + 86_400).iter().any(|i| i.summary == "Museum"), "shown");
+    assert_eq!(s.notices.len(), said + 1, "said once: {:?}", s.notices);
+    // Read again before it's sent: nothing more is said.
+    ews_synced(&mut s, vec![ews_main()], Vec::new(), false);
+    assert_eq!(s.notices.len(), said + 1, "{:?}", s.notices);
 }

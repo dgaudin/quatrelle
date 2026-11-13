@@ -82,6 +82,7 @@ pub(super) fn read_all(c: &Client, pim: &Pim, now: i64, refused: &[Tombstone], c
             ctag: before.map(|k| k.ctag.clone()).unwrap_or_default(),
             group: String::new(),
             main: false,
+            not_own: false,
         };
         if pim.not_read.contains(&id) {
             calendars.push(entry);

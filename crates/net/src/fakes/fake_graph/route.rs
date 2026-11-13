@@ -383,10 +383,14 @@ impl Data {
                     .calendars
                     .iter()
                     .enumerate()
-                    .map(|(i, (id, name))| json!({"id": id, "name": name, "canEdit": true, "isDefaultCalendar": i == 0}))
+                    .map(|(i, (id, name))| {
+                        let owner = self.calendar_owners.iter().find(|(c, _)| c == id).map_or("me@contoso.example", |(_, o)| o.as_str());
+                        json!({"id": id, "name": name, "canEdit": true, "isDefaultCalendar": i == 0, "owner": {"name": owner, "address": owner}})
+                    })
                     .collect();
                 ok(json!({ "value": list }))
             }
+            ("GET", ["me", "calendarGroups"]) if self.groups_refused => (500, Vec::new(), "application/json"),
             // A calendar made, renamed or deleted, as Graph has it: a name taken refused, the
             // default calendar never deleted, one deleted going with its events.
             ("POST", ["me", "calendars"]) => {
