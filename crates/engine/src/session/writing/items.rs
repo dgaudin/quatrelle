@@ -116,9 +116,7 @@ impl Session {
             ItemKind::Message => {
                 let key = MessageKey::from_id(id).ok_or_else(|| CmdError::Params(format!("no message `{id}`")))?;
                 let raw = self
-                    .store
-                    .as_ref()
-                    .and_then(|s| s.read_body(&key))
+                    .kept_or_held(&key)
                     .ok_or_else(|| CmdError::Failed("this message isn't on this computer yet: open it, then attach it".into()))?;
                 let subject = self.summary(&key).map(|m| m.subject.clone()).unwrap_or_default();
                 Ok(OutAttachment { name: file(&subject, "message", "eml"), mime: "message/rfc822".into(), data: raw, ..Default::default() })

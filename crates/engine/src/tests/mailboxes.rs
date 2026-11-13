@@ -8,6 +8,7 @@ use super::*;
 
 mod age;
 mod archive;
+mod not_kept;
 mod online_archive;
 
 /// Outlook's "Download all" brings every message not on this computer yet, a batch at a time:

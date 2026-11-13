@@ -2270,3 +2270,5 @@ presence	Offline	Offline
 	Delete the calendar {name} and its events? It goes to Deleted Items.	Eliminare il calendario {name} e i suoi eventi? Finisce in Posta eliminata.
 	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	Gli eventi non ancora inviati sono passati al calendario principale: il loro calendario è stato eliminato altrove
 	Made in {account}	Creato in {account}
+	the message isn't downloaded	il messaggio non è scaricato
+	the message is still downloading	il messaggio è ancora in download

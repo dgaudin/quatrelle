@@ -2270,3 +2270,5 @@ presence	Offline	오프라인
 	Delete the calendar {name} and its events? It goes to Deleted Items.	일정표 {name}과(와) 그 안의 일정을 삭제할까요? 지운 편지함으로 이동합니다.
 	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	아직 보내지 않은 일정이 기본 일정표로 옮겨졌습니다: 원래 일정표가 다른 곳에서 삭제되었습니다
 	Made in {account}	{account}에 만들어집니다
+	the message isn't downloaded	메시지가 다운로드되지 않았습니다
+	the message is still downloading	메시지를 아직 다운로드하는 중입니다

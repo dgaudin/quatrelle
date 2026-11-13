@@ -162,12 +162,14 @@ impl Session {
         } else {
             (self.store.clone(), None)
         };
+        // Not kept here, its source held already: that's what's read.
+        let raw = self.held_source(key).map(HeldSource::shared);
         self.wait_for_body(BodyWork {
             key: key.clone(),
             generation: 0,
             store,
             outbox,
-            raw: None,
+            raw,
             #[cfg(test)]
             breaks: false,
         });

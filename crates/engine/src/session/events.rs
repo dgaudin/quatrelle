@@ -312,6 +312,7 @@ impl Session {
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),
             // Older mail read on the server is shown, not kept (nor indexed).
             Event::Body { key, raw } if self.is_older(&key) => {
+                self.hold_if_not_kept(&key, &raw);
                 self.source_arrived(&key, &raw);
                 // The open message's: parsed on another thread, where the window has one.
                 if !self.defer_arrived(&key, &raw) {
@@ -319,6 +320,7 @@ impl Session {
                 }
             }
             Event::Body { key, raw } => {
+                self.hold_if_not_kept(&key, &raw);
                 self.source_arrived(&key, &raw);
                 if !self.defer_arrived(&key, &raw) {
                     self.show_body(&key, &raw);

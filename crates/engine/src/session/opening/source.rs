@@ -171,12 +171,13 @@ fn shown_text(line: &str) -> String {
 }
 
 impl Session {
-    /// The source of a message, if it's here: cached on disk, or waiting in the Outbox.
+    /// The source of a message, if it's here: cached on disk, waiting in the Outbox, or held
+    /// with it while it's open ([`Session::kept_or_held`]).
     pub(super) fn cached_source(&self, key: &MessageKey) -> Option<Vec<u8>> {
         if key.folder == OUTBOX {
             self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
         } else {
-            self.store.as_ref().and_then(|s| s.read_body(key))
+            self.kept_or_held(key)
         }
     }
 

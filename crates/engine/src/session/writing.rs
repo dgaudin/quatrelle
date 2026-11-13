@@ -214,7 +214,7 @@ impl Session {
         let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && can;
         // The reply's own copy (the quote's pictures are put in it), the one shown left as it is.
         let shown = r.parsed.clone();
-        let mut parsed = Arc::unwrap_or_clone(r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?);
+        let mut parsed = Arc::unwrap_or_clone(r.parsed.ok_or_else(|| CmdError::Disabled(crate::STILL_DOWNLOADING.into()))?);
         if r.text_first && !answerable_from_text(&parsed, mode) {
             self.whole_here()?;
         }
@@ -291,8 +291,7 @@ impl Session {
     pub fn forward_as_attachment(&mut self) -> CmdResult {
         self.whole_here()?;
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        let raw =
-            self.store.as_ref().and_then(|s| s.read_body(&r.key)).ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
+        let raw = self.kept_or_held(&r.key).ok_or_else(|| CmdError::Disabled(crate::STILL_DOWNLOADING.into()))?;
         let out = self.reply_compose(ReplyMode::Forward)?;
         // The signature of the account it goes from (not the data file it's in).
         let from = self.compose.as_ref().map_or(r.key.account.clone(), |c| c.account.clone());

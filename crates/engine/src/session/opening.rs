@@ -8,9 +8,11 @@ use super::*;
 mod senders;
 pub use senders::SenderMarks;
 pub(crate) use senders::Senders;
+mod held;
 mod prepare;
 mod selecting;
 mod source;
+pub use held::{HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, STILL_DOWNLOADING};
 pub(crate) use prepare::BodyLane;
 pub use prepare::{BodyWork, PreparedBody};
 pub use selecting::Toward;
@@ -121,18 +123,15 @@ impl Session {
         self.focus = Some(key.clone());
         self.anchor = Some(key.clone());
         let thread = self.thread_of(key);
-        self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None, text_first: false });
+        // Not kept here and open already (shown again, or in a window): its source stays held.
+        let held = self.held_source(key).cloned();
+        self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None, text_first: false, held });
         self.ask_archive_tag(key);
         if self.body.defer {
             // Read and parsed on another thread: the pane waits for it.
             self.defer_read(key);
         } else {
-            let cached = if key.folder == OUTBOX {
-                self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
-            } else {
-                self.store.as_ref().and_then(|s| s.read_body(key))
-            };
-            match cached {
+            match self.cached_source(key) {
                 Some(raw) => self.show_body(key, &raw),
                 None => self.jobs.push(self.fetch_job(key)),
             }
@@ -159,12 +158,11 @@ impl Session {
             if self.windows.len() >= MAX_WINDOWS {
                 self.windows.remove(0);
             }
-            let cached = if key.folder == OUTBOX {
-                self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
-            } else {
-                self.store.as_ref().and_then(|s| s.read_body(key))
-            };
-            let mut w = Reading { key: key.clone(), parsed: None, error: None, thread: Vec::new(), warning: None, security: None, text_first: false };
+            let cached = self.cached_source(key);
+            // Not kept here and shown in the reading pane: the window holds its source too.
+            let held = self.held_source(key).cloned();
+            let mut w =
+                Reading { key: key.clone(), parsed: None, error: None, thread: Vec::new(), warning: None, security: None, text_first: false, held };
             match cached {
                 Some(raw) => {
                     let (shown, security) = self.unwrap(key, &raw);

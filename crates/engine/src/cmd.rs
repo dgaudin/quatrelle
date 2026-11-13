@@ -33,7 +33,7 @@ fn has_reading(s: &Session) -> Option<&'static str> {
     match &s.reading {
         // (One being got ready is, once the command runs: `Session::run` finishes it first.)
         Some(r) if r.parsed.is_some() || s.body_waiting(&r.key) => None,
-        Some(_) => Some("the message is still downloading"),
+        Some(_) => Some(crate::STILL_DOWNLOADING),
         None => Some("open a message first"),
     }
 }

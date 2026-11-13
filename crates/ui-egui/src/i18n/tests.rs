@@ -186,6 +186,8 @@ fn notice_wordings() -> BTreeSet<String> {
     out.extend(POLICY_REFUSALS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
     out.insert(quatrelle_engine::STILL_COMING.to_string());
+    out.insert(quatrelle_engine::NOT_DOWNLOADED.to_string());
+    out.insert(quatrelle_engine::STILL_DOWNLOADING.to_string());
     // The keychain's refusal, as the network layer puts it before what the system said.
     out.insert(format!("{}: {{error}}", quatrelle_engine::model::job::NO_KEYCHAIN));
     out
@@ -765,6 +767,12 @@ fn a_notice_is_said_in_the_interfaces_language() {
     s.notice_with("The OpenPGP key couldn't be kept: {error}", &[("error", &locked)], true);
     let said = s.notices.last().map(notice).unwrap_or_default();
     assert_eq!(said, "La clé OpenPGP n’a pas pu être conservée : le trousseau du système n’est pas disponible : the collection is locked");
+    // What needs the open message's source, given whole as the command's error (`Message
+    // headers` on mail read on the server showed in English).
+    s.notice(quatrelle_engine::CmdError::Failed(quatrelle_engine::NOT_DOWNLOADED.into()).to_string(), true);
+    assert_eq!(s.notices.last().map(notice).as_deref(), Some("le message n’est pas téléchargé"));
+    s.notice(quatrelle_engine::CmdError::Disabled(quatrelle_engine::STILL_DOWNLOADING.into()).to_string(), true);
+    assert_eq!(s.notices.last().map(notice).as_deref(), Some("indisponible : le message est encore en cours de téléchargement"));
     s.notice_with("{name}: {messages} messages imported", &[("name", "Didier"), ("messages", "12")], false);
     assert!(s.notices.last().map(notice).is_some_and(|n| n.contains("Didier") && n.contains("12") && !n.contains("imported")));
     set_current(Lang::EN);

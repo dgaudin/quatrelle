@@ -2268,3 +2268,5 @@ presence	Offline	オフライン
 	Delete the calendar {name} and its events? It goes to Deleted Items.	予定表「{name}」とその予定を削除しますか? 削除済みアイテムに移動します。
 	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	まだ送信していない予定はメインの予定表に移りました: 元の予定表が別の場所で削除されました
 	Made in {account}	{account} に作成されます
+	the message isn't downloaded	メッセージはダウンロードされていません
+	the message is still downloading	メッセージはまだダウンロード中です

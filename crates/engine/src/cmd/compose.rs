@@ -504,7 +504,7 @@ impl Session {
         self.whole_here()?;
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         // A signed or encrypted message's attachments are the ones inside it.
-        let raw = self.readable_raw(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
+        let raw = self.readable_raw(&r.key).ok_or_else(|| CmdError::Failed(crate::NOT_DOWNLOADED.into()))?;
         quatrelle_mime::attachment_data(&raw, index).ok_or_else(|| CmdError::Params(format!("no attachment {index}")))
     }
 
@@ -512,15 +512,16 @@ impl Session {
     pub fn message_source(&self) -> Result<Vec<u8>, CmdError> {
         self.whole_here()?;
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        self.source_of(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))
+        self.source_of(&r.key).ok_or_else(|| CmdError::Failed(crate::NOT_DOWNLOADED.into()))
     }
 
-    /// A message's source, when it's on this computer (an Outbox one's as it will go).
+    /// A message's source, when it's on this computer (an Outbox one's as it will go, one not
+    /// kept here as it came while it's open).
     pub fn source_of(&self, key: &MessageKey) -> Option<Vec<u8>> {
         if key.folder == crate::session::OUTBOX {
             self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|st| st.outbox_raw(&a, i.id)))
         } else {
-            self.store.as_ref().and_then(|st| st.read_body(key))
+            self.kept_or_held(key)
         }
     }
 
@@ -535,7 +536,7 @@ impl Session {
     pub fn message_pdf(&self) -> Result<Vec<u8>, CmdError> {
         self.whole_here()?;
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        let m = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
+        let m = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled(crate::STILL_DOWNLOADING.into()))?;
         let mut header = vec![("From".to_string(), m.from.to_string())];
         if !m.to.is_empty() {
             header.push(("To".into(), quatrelle_model::addr::format_list(&m.to)));
@@ -598,8 +599,8 @@ pub(super) fn save_all_attachments(s: &mut Session, v: &Value) -> CmdResult {
     }
     s.whole_here()?;
     let r = s.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-    let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
-    let raw = s.readable_raw(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
+    let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled(crate::STILL_DOWNLOADING.into()))?;
+    let raw = s.readable_raw(&r.key).ok_or_else(|| CmdError::Failed(crate::NOT_DOWNLOADED.into()))?;
     // Only some of them, when asked (the ones selected).
     let only: Option<Vec<u64>> = v.get("indices").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).take(10_000).collect());
     let mut saved = Vec::new();
@@ -625,10 +626,10 @@ pub(super) fn preview_attachment(s: &mut Session, v: &Value) -> CmdResult {
     let index = p::u64(v, "index").and_then(|i| usize::try_from(i).ok()).ok_or_else(|| CmdError::Params("`index` is required".into()))?;
     s.whole_here()?;
     let r = s.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-    let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
+    let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled(crate::STILL_DOWNLOADING.into()))?;
     let a = parsed.attachments.iter().find(|a| a.index == index).ok_or_else(|| CmdError::Params(format!("no attachment {index}")))?;
     let kind = quatrelle_mime::text_preview_kind(&a.mime, &a.name).ok_or_else(|| CmdError::Failed(format!("{} can't be shown as text", a.name)))?;
-    let raw = s.readable_raw(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
+    let raw = s.readable_raw(&r.key).ok_or_else(|| CmdError::Failed(crate::NOT_DOWNLOADED.into()))?;
     let unreadable = || CmdError::Failed("the attachment can't be read".into());
     if kind == "message" {
         let data = quatrelle_mime::attachment_data(&raw, index).ok_or_else(unreadable)?;
@@ -687,7 +688,7 @@ pub(super) fn save_messages(s: &mut Session, v: &Value) -> CmdResult {
     let write = |path: &std::path::Path, raw: &[u8]| std::fs::write(path, raw).map_err(|e| CmdError::Failed(format!("{}: {e}", path.display())));
     if let Some(path) = p::str(v, "path") {
         let [key] = keys.as_slice() else { return Err(CmdError::Params("`path` is for one message; `dir` for several".into())) };
-        let raw = s.source_of(key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
+        let raw = s.source_of(key).ok_or_else(|| CmdError::Failed(crate::NOT_DOWNLOADED.into()))?;
         write(std::path::Path::new(path), &raw)?;
         return Ok(json!({"saved": [path], "missing": 0}));
     }

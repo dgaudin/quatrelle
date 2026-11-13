@@ -2272,3 +2272,5 @@ presence	Offline	離線
 	Delete the calendar {name} and its events? It goes to Deleted Items.	要刪除行事曆「{name}」及其活動嗎?它會移到「刪除的郵件」。
 	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	尚未傳送的活動已移到主要行事曆:它們所在的行事曆已在別處刪除
 	Made in {account}	將在 {account} 中建立
+	the message isn't downloaded	該郵件尚未下載
+	the message is still downloading	該郵件仍在下載

@@ -55,7 +55,7 @@ use mailboxes::{Contacts, bare_name, directory_key};
 pub use opening::SenderMarks;
 #[cfg(test)]
 pub(crate) use opening::source_lines;
-pub use opening::{BodyWork, PreparedBody, SOURCE_SHOWN, SourceView, Toward};
+pub use opening::{BodyWork, HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, PreparedBody, SOURCE_SHOWN, STILL_DOWNLOADING, SourceView, Toward};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
@@ -162,6 +162,9 @@ pub struct Reading {
     pub security: Option<Security>,
     /// Only its text is here so far: `parsed` holds that, and the whole message is on its way.
     pub text_first: bool,
+    /// Its source as it came, when it isn't kept on this computer (read on the server): held
+    /// while it's open, for what needs the whole message ([`HeldSource`]).
+    pub held: Option<HeldSource>,
 }
 
 /// Outlook's "Download all": the messages still to bring onto this computer, the ones asked for
