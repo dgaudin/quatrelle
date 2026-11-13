@@ -11,7 +11,7 @@ mod footers;
 pub(crate) use footers::footers_last;
 pub(crate) mod links;
 mod markdown;
-pub use markdown::{MARKDOWN_MAX, looks_like_markdown, markdown_html, pasted_markdown};
+pub use markdown::{MARKDOWN_HTML_MAX, MARKDOWN_MAX, looks_like_markdown, markdown_html, pasted_markdown};
 mod pairs;
 mod rules;
 mod teams;

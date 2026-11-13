@@ -1,0 +1,6 @@
+<html><body><h1>Title</h1><p>Some <b>bold</b>, <i>it</i>, <s>gone</s>, <code>x()</code> and <a href="https://shop.contoso.example/sale?utm_source=news&amp;id=7">a sale</a>.</p>
+<ul><li>one<ul><li>under</li></ul></li></ul><ol start="3"><li>three</li></ol>
+<blockquote><p>said</p></blockquote>
+<table border=1><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2 | 3</td></tr></table>
+<pre>let x = 1;</pre><p><img src="cid:logo@contoso.example" alt="the logo"><img src="cid:banner@contoso.example"></p>
+<hr><p style="display:none">hidden words</p><p>a * star and _under_ score</p></body></html>

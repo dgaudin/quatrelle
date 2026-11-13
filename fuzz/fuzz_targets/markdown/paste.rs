@@ -12,8 +12,7 @@ fuzz_target!(|input: &[u8]| {
     let text = String::from_utf8_lossy(input);
     let _ = mime::looks_like_markdown(&text);
     let html = mime::markdown_html(&text);
-    let read = text.len().min(mime::MARKDOWN_MAX);
-    assert!(html.len() <= read * 64 + 1024, "{} bytes of HTML from {read}", html.len());
+    assert!(html.len() <= mime::MARKDOWN_HTML_MAX, "{} bytes of HTML", html.len());
     let lower = html.to_ascii_lowercase();
     assert!(!lower.contains("<script") && !lower.contains("<img") && !lower.contains("<iframe"), "{html}");
     for (i, _) in lower.match_indices("href=\"") {

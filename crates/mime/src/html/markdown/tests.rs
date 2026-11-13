@@ -145,3 +145,33 @@ fn only_markdown_within_the_cap_is_pasted_formatted() {
     assert_eq!(styles.para(n).list, List::Bullet);
     assert_eq!(styles.style(at + 4).link.as_deref(), Some("https://contoso.example/plan"));
 }
+
+/// Tables whose missing cells pulldown-cmark fills in (each row padded to its header's width, up
+/// to a quarter of a million cells a table): a paste of them stays bounded in time and in what
+/// it writes. Past the budget its tables are read as the text they are written as; a real table
+/// is still one.
+#[test]
+fn a_table_cell_bomb_stays_bounded() {
+    let began = std::time::Instant::now();
+    // The review's: 90 tables of 363 columns over 724 rows of one cell.
+    let t = format!("{}a\n{}-\n{}", "a|".repeat(362), "-|".repeat(362), "a\n".repeat(724));
+    let md = format!("# T\n\n{}", vec![t.clone(); 90].join("\n"));
+    assert!(md.len() <= MARKDOWN_MAX, "{}", md.len());
+    let h = markdown_html(&md);
+    assert!(h.len() <= MARKDOWN_HTML_MAX, "{}", h.len());
+    assert!(pasted_markdown(&md).is_none_or(|(text, _)| text.len() <= MARKDOWN_HTML_MAX));
+    // As many of them as the cap lets in.
+    let mut full = String::from("# T\n\n");
+    while full.len() + t.len() < MARKDOWN_MAX {
+        full.push_str(&t);
+        full.push('\n');
+    }
+    let h = markdown_html(&full);
+    assert!(h.len() <= MARKDOWN_HTML_MAX, "{}", h.len());
+    assert!(pasted_markdown(&full).is_none_or(|(text, _)| text.len() <= MARKDOWN_HTML_MAX));
+    assert!(began.elapsed() < std::time::Duration::from_secs(20), "{:?}", began.elapsed());
+    // Real tables, a hundred rows of twenty columns, are read as tables.
+    let row = |c: &str| format!("|{}\n", format!(" {c} |").repeat(20));
+    let real = format!("# T\n\n{}{}{}", row("H"), row("---"), row("1").repeat(100));
+    assert!(markdown_html(&real).contains("1 · 1 · 1"), "a real table");
+}

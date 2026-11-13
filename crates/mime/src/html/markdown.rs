@@ -17,9 +17,18 @@ use pulldown_cmark::{Event, Options, Parser, Tag};
 /// The most clipboard text read as Markdown, in bytes: past it, text is pasted as it is.
 pub const MARKDOWN_MAX: usize = 256 * 1024;
 
+/// The most HTML written of pasted Markdown, in bytes: past it, the text is pasted as it is.
+pub const MARKDOWN_HTML_MAX: usize = 4 * MARKDOWN_MAX;
+
 /// Lists, quotes and other boxes open one in another past which Markdown is read flat (their
 /// text kept, their boxes not).
 const NESTING_MAX: usize = 24;
+
+/// The most table cells read as tables in one text, counting those pulldown-cmark fills in
+/// (it pads every row to its header's width, up to a quarter of a million cells a table, all
+/// built before the first is read): past it, tables are read as the text they are written as.
+/// Real tables are far below it (a hundred rows of twenty columns are 2,100 cells).
+const TABLE_CELLS_MAX: usize = 1 << 16;
 
 /// Where a line starts in the HTML written for pasting, and how the editor lays it out: a list's
 /// bullet or number, its indent, a quote. html2text keeps the character in the line, after its
@@ -146,6 +155,33 @@ pub fn pasted_markdown(text: &str) -> Option<(String, rich::Styles)> {
     let (text, styles) = pasted_html(&html);
     let (text, styles) = lay_out(&text, &styles);
     (!text.trim().is_empty()).then_some((text, styles))
+}
+
+/// How many table cells pulldown-cmark could make of `md`, counted generously (past
+/// [`TABLE_CELLS_MAX`] the count stops): each table rule's columns (its `|` and one) for its
+/// header, its rule and every line after it up to a blank one, quote marks and indents before
+/// them aside.
+fn table_cells(md: &str) -> usize {
+    let mut cells = 0usize;
+    // The columns of the table the lines are in, none outside one.
+    let mut columns = 0usize;
+    for line in md.lines() {
+        let t = line.trim_start_matches(|c: char| c == '>' || c.is_whitespace()).trim_end();
+        if t.is_empty() {
+            columns = 0;
+            continue;
+        }
+        if columns > 0 {
+            cells = cells.saturating_add(columns);
+        } else if t.contains('|') && t.contains('-') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ' | '\t')) {
+            columns = t.matches('|').count().saturating_add(1);
+            cells = cells.saturating_add(columns.saturating_mul(2));
+        }
+        if cells > TABLE_CELLS_MAX {
+            break;
+        }
+    }
+    cells
 }
 
 /// What the writer closes at an element's end.
@@ -383,9 +419,15 @@ fn safe_link(url: &str) -> bool {
     l.starts_with("https://") || l.starts_with("http://") || l.starts_with("mailto:")
 }
 
-/// [`markdown_html`], with line marks for pasting (`marks`). `None` when the reader failed.
+/// [`markdown_html`], with line marks for pasting (`marks`). `None` when the reader failed, or
+/// what it wrote went past [`MARKDOWN_HTML_MAX`].
 fn written(md: &str, marks: bool) -> Option<String> {
     let md = cut(md, MARKDOWN_MAX);
+    // Tables only while the cells they would make are within the budget.
+    let mut options = Options::ENABLE_STRIKETHROUGH;
+    if table_cells(md) <= TABLE_CELLS_MAX {
+        options |= Options::ENABLE_TABLES;
+    }
     let done = std::panic::catch_unwind(|| {
         let mut w = Writer {
             out: String::with_capacity(md.len() + md.len() / 2),
@@ -399,7 +441,10 @@ fn written(md: &str, marks: bool) -> Option<String> {
             in_link: false,
             cells: 0,
         };
-        for event in Parser::new_ext(md, Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH) {
+        for event in Parser::new_ext(md, options) {
+            if w.out.len() > MARKDOWN_HTML_MAX {
+                return None;
+            }
             match event {
                 Event::Start(tag) => w.start(tag),
                 Event::End(_) => w.end(),
@@ -424,9 +469,9 @@ fn written(md: &str, marks: bool) -> Option<String> {
                 | Event::DisplayMath(_) => {}
             }
         }
-        w.out
+        (w.out.len() <= MARKDOWN_HTML_MAX).then_some(w.out)
     });
-    done.ok()
+    done.ok().flatten()
 }
 
 /// The text and styles html2text's reading of the marked HTML gave, laid out as its line marks

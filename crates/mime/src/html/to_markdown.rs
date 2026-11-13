@@ -50,6 +50,10 @@ fn kind_of(line: &[Span]) -> Kind {
         }
         return Kind::Row;
     }
+    // A picture alone on its line, without a description (its text empty): one all the same.
+    if line.iter().any(|s| s.image.is_some()) {
+        return Kind::Text;
+    }
     if whole.chars().all(|c| is_box(c) || c == ' ') {
         return Kind::Border;
     }

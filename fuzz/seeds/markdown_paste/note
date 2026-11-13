@@ -1,0 +1,22 @@
+# Plan for the week
+
+**Bold**, *italic*, ~~gone~~ and `code`, see [the site](https://contoso.example/plan) or [mail](mailto:ann@contoso.example).
+
+- one
+- two
+  - under
+1. first
+2. second
+
+> said before
+> - in the quote
+
+| A | B |
+|---|:-:|
+| 1 | **2** |
+
+```
+let x = 1;
+```
+
+![the logo](https://contoso.example/logo.png) <b>raw</b> [no](javascript:x)

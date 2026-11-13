@@ -110,3 +110,11 @@ fn hostile_html_is_bounded() {
     assert!(md.len() <= MARKDOWN_WRITTEN_MAX, "{}", md.len());
     assert!(!md.is_empty());
 }
+
+/// A picture without a description, alone on its line (a logo, a banner), is still written,
+/// as text: `![](address)`, nothing fetched.
+#[test]
+fn a_picture_without_a_description_is_written() {
+    let md = html_markdown("<p><img src=\"cid:logo@contoso.example\"></p><p>text</p>");
+    assert!(md.contains("![](cid:logo@contoso.example)"), "{md:?}");
+}
