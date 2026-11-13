@@ -260,7 +260,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"account": string, "calendar": string} (after the one below it in its group, kept on this computer)"#),
         CommandSpec::new("calendar.create", "New calendar", "Calendar › Calendars", |s, v| s.create_calendar(p::req_str(v, "account")?, p::req_str(v, "name")?))
-            .params(r#"{"account": string, "name": string (up to 255 characters)} (made on the account's server, Microsoft 365's; it shows once the calendars are read again)"#)
+            .params(r#"{"account": string, "name": string (up to 255 characters)} (made on the account's server, Microsoft 365's or Exchange's; it shows once the calendars are read again)"#)
             .when(calendars_made),
         CommandSpec::new("calendar.rename", "Rename calendar", "Calendar › Calendars", |s, v| {
             s.rename_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?, p::req_str(v, "name")?)
@@ -412,7 +412,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
 /// Calendars are made, renamed and deleted where an account's server allows it (each calendar
 /// says more: `Session::calendar_change`).
 fn calendars_made(s: &Session) -> Option<&'static str> {
-    if s.accounts.iter().any(|a| a.config.makes_calendars()) { None } else { Some("add a Microsoft 365 account first") }
+    if s.accounts.iter().any(|a| a.config.makes_calendars()) { None } else { Some("add a Microsoft 365 or Exchange account first") }
 }
 
 /// A Webex room's lines given (`details`): a string, `\n` between them, or a list of strings; the

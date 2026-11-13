@@ -197,10 +197,10 @@ impl AccountConfig {
     }
 
     /// Whether calendars are made, renamed and deleted on the account's server from here:
-    /// Microsoft 365's (Graph). Exchange's own other calendars aren't read yet, so one made there
-    /// wouldn't show; the other servers keep no such thing for Quatrelle to change.
+    /// Microsoft 365's (Graph) and Exchange's (EWS, folders under its Calendar); the other servers
+    /// keep no such thing for Quatrelle to change.
     pub fn makes_calendars(&self) -> bool {
-        self.graph.is_some()
+        self.graph.is_some() || self.ews.is_some()
     }
 }
 

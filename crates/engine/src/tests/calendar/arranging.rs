@@ -200,11 +200,11 @@ fn the_main_and_other_peoples_calendars_are_neither_renamed_nor_deleted() {
 
 #[test]
 fn servers_that_dont_allow_it_refuse_every_one() {
-    // The sample (on this computer only), then an on-premises Exchange account.
-    for ews in [false, true] {
-        let mut s = graph_session(if ews { "arranging-ews" } else { "arranging-local" }, false);
-        if ews && let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
-            a.config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    // The sample (on this computer only), then an IMAP account with a CalDAV server.
+    for imap in [false, true] {
+        let mut s = graph_session(if imap { "arranging-imap" } else { "arranging-local" }, false);
+        if imap && let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+            a.config.imap.host = "imap.contoso.example".into();
         }
         applied(&mut s);
         assert_eq!(s.calendar_change("sample", None), Err(CalendarRefusal::Server));
@@ -245,4 +245,61 @@ fn settings_from_before_read_with_no_colour_or_order() {
     p.calendar_order.insert("a".into(), vec!["b".into(), "c".into()]);
     let back: crate::Prefs = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
     assert_eq!(back, p);
+}
+
+/// An Exchange account's own other calendars (`ews:folder:…`): made, renamed and deleted through
+/// the journal, each change then read back from the server as Exchange lists them; one the server
+/// no longer lists goes with its appointments, but not on a sync that read only the main one.
+#[test]
+fn an_exchange_accounts_other_calendars_round_trip() {
+    let mut s = sample_session("arranging-ews");
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    }
+    let main = || CalendarInfo { main: true, ..cal("ews:calendar", "Calendar", 0) };
+    let event = |uid: &str, calendar: &str| StoredEvent {
+        calendar: calendar.into(),
+        href: format!("AAMk{uid}="),
+        event: CalEvent { uid: uid.into(), summary: uid.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() },
+        ..Default::default()
+    };
+    let synced = |s: &mut Session, calendars: Vec<CalendarInfo>, events: Vec<StoredEvent>, partial: bool| {
+        let synced_calendars = calendars.iter().map(|c| c.id.clone()).collect();
+        let sync = DavSync {
+            caldav_home: Some("ews".into()),
+            calendars: Some(calendars),
+            events,
+            synced_calendars,
+            partial,
+            checked: NOW,
+            ..Default::default()
+        };
+        s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(sync) });
+    };
+    let trips = "ews:folder:AAMkTrips=";
+    synced(&mut s, vec![main(), cal(trips, "Trips", 2)], vec![event("train", trips)], false);
+    applied(&mut s);
+    assert_eq!(s.calendar_change("sample", Some("ews:calendar")), Err(CalendarRefusal::Main));
+    assert_eq!(s.calendar_change("sample", Some(trips)), Ok(()));
+
+    s.run("calendar.create", &json!({"account": "sample", "name": "Garden club"})).unwrap();
+    assert_eq!(applied(&mut s), [Op::CreateCalendar { name: "Garden club".into() }]);
+    let garden = "ews:folder:AAMkGarden=";
+    synced(&mut s, vec![main(), cal(trips, "Trips", 2), cal(garden, "Garden club", 3)], vec![event("train", trips), event("seeds", garden)], false);
+    assert!(shown_ids(&s).contains(&garden.to_string()), "made, read back, shown");
+
+    s.run("calendar.rename", &json!({"account": "sample", "calendar": trips, "name": "Travel"})).unwrap();
+    assert_eq!(applied(&mut s), [Op::RenameCalendar { calendar: trips.into(), name: "Travel".into() }]);
+    s.run("calendar.delete", &json!({"account": "sample", "calendar": trips})).unwrap();
+    assert_eq!(applied(&mut s), [Op::DeleteCalendar { calendar: trips.into() }]);
+    synced(&mut s, vec![main(), cal(garden, "Garden club", 3)], vec![event("seeds", garden)], false);
+    assert!(!shown_ids(&s).contains(&trips.to_string()));
+
+    // Away from the calendar the sync reads the main one alone: Garden club stays.
+    synced(&mut s, vec![main()], Vec::new(), true);
+    assert!(s.pim.get("sample").is_some_and(|p| p.events.iter().any(|e| e.calendar == garden)), "kept on a partial sync");
+    // Deleted in Outlook: the server lists it no more, and its appointments go with it.
+    synced(&mut s, vec![main()], Vec::new(), false);
+    assert!(!shown_ids(&s).contains(&garden.to_string()));
+    assert!(s.pim.get("sample").is_some_and(|p| p.events.iter().all(|e| e.calendar != garden)), "its appointments with it");
 }
