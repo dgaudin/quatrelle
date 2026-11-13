@@ -17,7 +17,7 @@ pub(super) const MAX_NESTING: usize = 64;
 /// How deep a response's parenthesised lists nest, outside quoted strings and literals.
 pub(super) fn nesting(raw: &[u8]) -> usize {
     let (mut depth, mut deepest) = (0usize, 0usize);
-    outside(raw, |b| match b {
+    as_read(raw, |b| match b {
         b'(' => {
             depth += 1;
             deepest = deepest.max(depth);
@@ -28,20 +28,37 @@ pub(super) fn nesting(raw: &[u8]) -> usize {
     deepest
 }
 
+/// Each byte of a response the parser reads as itself: outside quoted strings and literals, or
+/// every byte when a quoted string is one the parser wouldn't take. It then reads on past the
+/// string in ways the quotes no longer tell (a `NIL` date after an unclosed `"` got through).
+fn as_read(raw: &[u8], mut each: impl FnMut(u8)) {
+    if outside(raw, |_| {}) {
+        outside(raw, each);
+    } else {
+        raw.iter().for_each(|&b| each(b));
+    }
+}
+
 /// Each byte of a response outside its quoted strings and literals (the quotes themselves and
-/// the line ends are given).
-fn outside(raw: &[u8], mut each: impl FnMut(u8)) {
+/// the line ends are given). False when a quoted string isn't one the parser takes: a NUL or a
+/// line end in it, a `\` before anything but `\` or `"`, or one never closed.
+fn outside(raw: &[u8], mut each: impl FnMut(u8)) -> bool {
     let mut i = 0usize;
     let mut quoted = false;
+    let mut taken = true;
     while let Some(&b) = raw.get(i) {
         i += 1;
         if quoted {
             match b {
-                b'\\' => i += 1,
+                b'\\' => {
+                    taken &= matches!(raw.get(i), Some(b'\\' | b'"'));
+                    i += 1;
+                }
                 b'"' => {
                     quoted = false;
                     each(b);
                 }
+                0 | b'\r' | b'\n' => taken = false,
                 _ => {}
             }
             continue;
@@ -60,6 +77,7 @@ fn outside(raw: &[u8], mut each: impl FnMut(u8)) {
             _ => {}
         }
     }
+    taken && !quoted
 }
 
 /// A response the parser isn't given, known to make imap-proto 0.17 panic: `METADATA` data
@@ -71,9 +89,9 @@ pub(super) fn beyond_the_parser(raw: &[u8]) -> bool {
     if raw.get(..METADATA.len()).is_some_and(|start| start.eq_ignore_ascii_case(METADATA)) {
         return true;
     }
-    // Only outside strings and literals: a message may say anything.
+    // Only outside strings and literals, which may say anything, unless a string is broken.
     let mut bare = Vec::new();
-    outside(raw, |b| bare.push(b));
+    as_read(raw, |b| bare.push(b));
     bare.windows(NIL_DATE.len()).any(|w| w.eq_ignore_ascii_case(NIL_DATE))
 }
 

@@ -281,6 +281,24 @@ fn what_the_parser_isnt_given() {
     assert_eq!(c.uid_fetch("1", "BODY.PEEK[]", "").unwrap().len(), 1);
 }
 
+/// A quoted string the parser wouldn't take (a NUL or a line end in it, a `\` before anything
+/// but `\` or `"`, or never closed) hides nothing: the parser reads on past it, so a `NIL` date
+/// or a deep nesting after it is looked for in every byte (the fuzzer found the first).
+#[test]
+fn a_broken_string_hides_nothing() {
+    use super::conn::{beyond_the_parser, parser_takes};
+    assert!(beyond_the_parser(b"* 1 FETCH (INTERNALDATE 1 +\"FI\x000 FETCH (INTERNALDATE NIL)\r\n"));
+    assert!(beyond_the_parser(b"* 1 FETCH (X \"a INTERNALDATE NIL)\r\n"));
+    assert!(beyond_the_parser(b"* 1 FETCH (X \"a\\b INTERNALDATE NIL\")\r\n"));
+    assert!(beyond_the_parser(b"* 1 FETCH (X \"a\r\nINTERNALDATE NIL\")\r\n"));
+    let deep = [&b"* 1 FETCH (X \"\x00"[..], &[b'('; 100], b"\r\n"].concat();
+    assert!(!parser_takes(&deep));
+    // A well-formed string still holds what it says, escapes included; an odd quote in a status
+    // line's text costs nothing.
+    assert!(!beyond_the_parser(b"* 1 FETCH (ENVELOPE (NIL \"say \\\"INTERNALDATE NIL\\\\\" NIL))\r\n"));
+    assert!(parser_takes(b"* OK [ALERT] say \"hi\r\n"));
+}
+
 /// The fuzz target's seeds (`fuzz/seeds/imap`), each response given to the parser as a
 /// connection gives it, without the fence around it: the fuzzer counts a caught panic too.
 #[test]
@@ -298,5 +316,5 @@ fn the_fuzz_seeds_are_parsed_without_a_panic() {
         }
         seeds += 1;
     }
-    assert!(seeds >= 4, "the session and the three answers the library panicked on");
+    assert!(seeds >= 5, "the session and the four answers the library panicked on");
 }
