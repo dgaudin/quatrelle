@@ -49,9 +49,6 @@ impl CalendarRefusal {
 pub enum RemovalRefusal {
     /// The account's main calendar, or the one kept here for an account without calendars.
     Main,
-    /// The last calendar listed under the account's heading, where removed ones are brought back
-    /// from: the heading would go with it.
-    Last,
     /// Opened by its owner's address, or subscribed to by its link: its own Remove takes it away.
     OwnRemove,
 }
@@ -61,16 +58,9 @@ impl RemovalRefusal {
     pub fn reason(self) -> &'static str {
         match self {
             RemovalRefusal::Main => "the account's main calendar stays in the list",
-            RemovalRefusal::Last => "the last calendar under the account stays in the list",
             RemovalRefusal::OwnRemove => "one opened by its owner's address or subscribed to by its link goes by its own Remove",
         }
     }
-}
-
-/// Whether a calendar is listed under its account's heading in the side pane: in no group, and
-/// not someone else's (by address).
-fn under_account(c: &CalendarInfo) -> bool {
-    c.group.is_empty() && quatrelle_model::pim::shared_calendar_owner(&c.id).is_none()
 }
 
 /// Whether two of an account's calendars are listed together in the side pane, so one moves past
@@ -94,10 +84,10 @@ fn typed_name(name: &str) -> Result<String, CmdError> {
 
 impl Session {
     /// Whether a calendar can be removed from the list on this computer: not the account's main
-    /// one (nor the one kept here for an account without calendars), nor the last one under the
-    /// account's heading (where removed ones come back from); one opened by its owner's address or
-    /// subscribed to by its link goes by its own Remove. Decided here alone: the menu greys what
-    /// this refuses.
+    /// one (nor the one kept here for an account without calendars); one opened by its owner's
+    /// address or subscribed to by its link goes by its own Remove. Decided here alone: the menu
+    /// greys what this refuses. (The side pane keeps the heading of an account with removed
+    /// calendars, whatever is left listed: they're brought back from there.)
     pub fn calendar_removable(&self, account: &str, calendar: &str) -> Result<(), RemovalRefusal> {
         let p = self.pim.get(account);
         let c = p.and_then(|p| p.calendars.iter().find(|c| c.id == calendar));
@@ -108,9 +98,6 @@ impl Session {
             .is_some_and(|owner| p.is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(owner))));
         if opened || quatrelle_model::pim::is_web_calendar(calendar) {
             return Err(RemovalRefusal::OwnRemove);
-        }
-        if c.is_some_and(under_account) && !self.ordered_calendars(account).iter().any(|x| x.id != calendar && under_account(x)) {
-            return Err(RemovalRefusal::Last);
         }
         Ok(())
     }
@@ -166,6 +153,15 @@ impl Session {
             .ok_or_else(|| CmdError::Params(format!("no calendar `{calendar}` in `{account}`")))
     }
 
+    /// A calendar removed from the list is neither moved (it isn't among those it would move
+    /// past) nor shown alone (it isn't shown): refused until it's brought back.
+    fn listed(&self, account: &str, calendar: &str) -> Result<(), CmdError> {
+        if self.calendar_removed(account, calendar) {
+            return Err(CmdError::Disabled("it's removed from the list: bring it back first".into()));
+        }
+        Ok(())
+    }
+
     /// Where a calendar is among those listed with it (`listed_together`), and how many they are.
     fn place_among(&self, account: &str, calendar: &str) -> Option<(usize, usize)> {
         let list = self.ordered_calendars(account);
@@ -183,6 +179,7 @@ impl Session {
     /// the order kept on this computer.
     pub fn move_calendar(&mut self, account: &str, calendar: &str, up: bool) -> CmdResult {
         let c = self.calendar_named(account, calendar)?.clone();
+        self.listed(account, calendar)?;
         let list = self.ordered_calendars(account);
         let peers: Vec<usize> = list.iter().enumerate().filter(|(_, x)| listed_together(x, &c)).map(|(i, _)| i).collect();
         let at = peers.iter().position(|&i| list.get(i).is_some_and(|x| x.id == calendar)).unwrap_or(0);
@@ -200,6 +197,7 @@ impl Session {
     /// Show this calendar, and hide every other (of every account).
     pub fn show_only_calendar(&mut self, account: &str, calendar: &str) -> CmdResult {
         self.calendar_named(account, calendar)?;
+        self.listed(account, calendar)?;
         let this = Session::calendar_key(account, calendar);
         let others: Vec<String> =
             self.pim.iter().flat_map(|(a, p)| p.calendars.iter().map(move |c| Session::calendar_key(a, &c.id))).filter(|k| *k != this).collect();

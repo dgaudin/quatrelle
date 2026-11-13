@@ -45,8 +45,20 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
         }
         groups.push((tl!("Shared calendars").to_string(), shared));
+        // An account with calendars removed from the list and none of its own left in My
+        // calendars keeps its heading there: they're brought back from its menu.
+        let bare: Vec<&quatrelle_engine::AccountState> = s
+            .accounts
+            .iter()
+            .filter(|a| !s.removed_calendars(&a.config.id).is_empty())
+            .filter(|a| {
+                !groups
+                    .first()
+                    .is_some_and(|(_, list)| list.iter().any(|(x, c)| x.config.id == a.config.id && section_key(&sections, a, c).is_none()))
+            })
+            .collect();
         for (n, (title, list)) in groups.iter().enumerate() {
-            if list.is_empty() {
+            if list.is_empty() && (n > 0 || bare.is_empty()) {
                 continue;
             }
             let group = egui::CollapsingHeader::new(RichText::new(title).font(theme::bold(13.0)).color(t.text))
@@ -64,11 +76,16 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         }
                         calendar_row(s, &t, ui, a, c, acts);
                     }
+                    if n == 0 {
+                        for a in &bare {
+                            section_heading(s, &t, ui, &a.config.id, acts);
+                        }
+                    }
                 });
             // One account, no heading of its own: My calendars has its menu.
             if n == 0
                 && sections.len() <= 1
-                && let Some(a) = list.first().map(|(a, _)| *a)
+                && let Some(a) = list.first().map(|(a, _)| *a).or_else(|| bare.first().copied())
             {
                 group.header_response.context_menu(|ui| menu::account_menu(ui, s, a, acts));
             }

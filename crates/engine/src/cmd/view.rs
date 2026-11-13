@@ -273,7 +273,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("calendar.remove", "Remove from the list", "Calendar › Calendars", |s, v| {
             s.remove_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?)
         })
-        .params(r#"{"account": string, "calendar": string} (on this computer only, never on the server: out of the side pane and the calendar, no longer read; not the account's main one, nor one opened by its owner's address or subscribed to by its link)"#),
+        .params(r#"{"account": string, "calendar": string} (on this computer only, never on the server: out of the side pane and the calendar, no longer read on Exchange and Microsoft 365; not the account's main one, nor one opened by its owner's address or subscribed to by its link)"#),
         CommandSpec::new("calendar.restore", "Bring back to the list", "Calendar › Calendars", |s, v| {
             s.restore_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?)
         })

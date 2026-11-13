@@ -104,12 +104,11 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
 
 /// Remove from the list: on this computer only (Delete deletes it on the server). Not offered
 /// for one with a Remove of its own (subscribed to, opened by hand); greyed, with why, for the
-/// account's main calendar and its last one.
+/// account's main calendar.
 fn remove_entry(ui: &mut Ui, s: &Session, account: &str, id: &str, acts: &mut Vec<Action>) {
     let why = match s.calendar_removable(account, id) {
         Err(RemovalRefusal::OwnRemove) => return,
         Err(RemovalRefusal::Main) => Some(tl!("The account's main calendar stays as it is")),
-        Err(RemovalRefusal::Last) => Some(tl!("The last calendar under the account stays in the list")),
         Ok(()) => None,
     };
     let r = ui.add_enabled(why.is_none(), Button::new((widgets::menu_icon(Some(Icon::Close)), tl!("Remove from the list"))));

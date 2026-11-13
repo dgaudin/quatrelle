@@ -95,24 +95,39 @@ fn the_main_calendar_and_those_with_a_remove_of_their_own_stay() {
     done(s);
 }
 
-/// An account whose server names no main calendar (CalDAV): each calendar goes but the last one
-/// listed under it, which keeps its heading (where the removed ones come back from); the one
-/// kept here for an account without calendars stays.
+/// An account whose server names no main calendar (CalDAV): every one of its calendars can go,
+/// the last too (the side pane keeps the account's heading for its removed ones); the one kept
+/// here for an account without calendars stays.
 #[test]
-fn without_a_main_calendar_the_last_one_listed_stays() {
+fn without_a_main_calendar_every_one_can_go() {
     let mut s = sample_session("removing-last");
     let account = "sample".to_string();
     let (home, work) = ("https://dav.contoso.example/cal/home/", "https://dav.contoso.example/cal/work/");
-    s.pim_mut(&account).calendars =
-        vec![cal(home, "Home", 1), cal(work, "Work", 2), CalendarInfo { group: "Team".into(), ..cal("AAMkT=", "Team", 3) }];
-    s.run("calendar.remove", &json!({"account": "sample", "calendar": home})).unwrap();
-    assert_eq!(s.calendar_removable("sample", work), Err(RemovalRefusal::Last));
-    assert!(matches!(s.run("calendar.remove", &json!({"account": "sample", "calendar": work})), Err(CmdError::Disabled(_))));
-    assert_eq!(s.calendar_removable("sample", "AAMkT="), Ok(()), "one in a group isn't under the account's heading");
-    s.run("calendar.restore", &json!({"account": "sample", "calendar": home})).unwrap();
-    assert_eq!(s.calendar_removable("sample", work), Ok(()));
+    s.pim_mut(&account).calendars = vec![cal(home, "Home", 1), cal(work, "Work", 2)];
+    for c in [home, work] {
+        s.run("calendar.remove", &json!({"account": "sample", "calendar": c})).unwrap();
+    }
+    assert_eq!(removed_names(&s, "sample"), ["Home", "Work"]);
+    assert!(s.ordered_calendars("sample").is_empty(), "none listed");
     s.pim_mut(&account).calendars = vec![CalendarInfo { id: LOCAL.into(), name: "Calendar".into(), ..Default::default() }, cal(home, "Home", 1)];
     assert_eq!(s.calendar_removable("sample", LOCAL), Err(RemovalRefusal::Main));
+    done(s);
+}
+
+/// A removed calendar isn't moved (it would move two others) nor shown alone (every other would
+/// be hidden, and it isn't shown): both refused, nothing changed.
+#[test]
+fn a_removed_calendar_isnt_moved_nor_shown_alone() {
+    let mut s = graph_session("removing-moved", true);
+    s.run("calendar.moveDown", &json!({"account": "sample", "calendar": MAIN})).unwrap();
+    s.run("calendar.remove", &json!({"account": "sample", "calendar": TRIPS})).unwrap();
+    let (order, hidden) = (s.prefs.calendar_order.clone(), s.prefs.hidden_calendars.clone());
+    for id in ["calendar.moveDown", "calendar.moveUp", "calendar.showOnly"] {
+        let out = s.run(id, &json!({"account": "sample", "calendar": TRIPS}));
+        assert!(matches!(out, Err(CmdError::Disabled(_))), "{id}: {out:?}");
+    }
+    assert_eq!((&s.prefs.calendar_order, &s.prefs.hidden_calendars), (&order, &hidden), "nothing changed");
+    assert!(!s.can_move_calendar("sample", TRIPS, true) && !s.can_move_calendar("sample", TRIPS, false));
     done(s);
 }
 

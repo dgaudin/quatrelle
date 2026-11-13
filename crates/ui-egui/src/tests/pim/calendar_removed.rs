@@ -142,3 +142,30 @@ fn an_accounts_heading_has_its_menu() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+/// An account with every calendar removed (a CalDAV one: no main calendar stays) keeps its heading
+/// in the side pane, and the heading its menu: Removed calendars lists them, one brought back.
+#[test]
+fn every_calendar_removed_keeps_the_accounts_heading() {
+    for dark in [false, true] {
+        let (mut a, dir, ctx) = calendars(&format!("calendar-removed-all-{dark}"), false, dark);
+        let account = a.session.accounts[0].config.id.clone();
+        let email = a.session.accounts[0].config.email.clone();
+        a.session.pim_mut(&account).calendars.retain(|c| c.id != quatrelle_engine::model::pim::LOCAL);
+        let ids: Vec<String> = a.session.ordered_calendars(&account).iter().map(|c| c.id.clone()).collect();
+        assert!(ids.len() >= 3, "{ids:?}");
+        for id in &ids {
+            a.run("calendar.remove", json!({"account": account, "calendar": id}));
+        }
+        assert!(a.session.ordered_calendars(&account).is_empty(), "none listed");
+        for _ in 0..5 {
+            frame_sized(&ctx, &mut a, vec![], SIZE);
+        }
+        let menu = right_click(&ctx, &mut a, &email);
+        assert!(has(&menu, "Removed calendars"), "{menu:?}");
+        point_at(&ctx, &mut a, "Removed calendars");
+        click_text(&ctx, &mut a, "Work");
+        assert!(!a.session.calendar_removed(&account, "https://dav.contoso.example/cal/work/"), "brought back");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
