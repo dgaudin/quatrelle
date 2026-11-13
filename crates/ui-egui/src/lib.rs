@@ -208,6 +208,8 @@ pub enum Action {
     /// Show one message formatted (`true`) or as plain text, whatever the setting for all mail
     /// says (that stays as it is).
     ShowFormatted(MessageKey, bool),
+    /// Show one message's formatting as Markdown text (`true`), or as before.
+    ShowMarkdown(MessageKey, bool),
     SetSystemAccent(bool),
     /// Print the open message: the system's print window, else a PDF opened in the viewer.
     Print,

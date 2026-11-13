@@ -256,10 +256,12 @@
 	Settings found: {source}	Impostazioni trovate: {source}
 	Show a desktop notification when new mail arrives	Mostra una notifica sul desktop quando arriva nuova posta
 	Show an envelope in the notification area while new mail is unread	Mostra una busta nell'area di notifica finché c'è nuova posta non letta
+	Show as Markdown	Mostra come Markdown
 	Show as plain text	Mostra come testo normale
 	Show formatted	Mostra formattato
 	Show in Favorites	Mostra nei Preferiti
 	Show pictures	Mostra immagini
+	Shown as Markdown.	Mostrato come Markdown.
 	Shown as text.	Mostrato come testo.
 	Shown on mail you send	Mostrato nella posta che invii
 	Sign in	Accedi

@@ -12,10 +12,20 @@ pub(crate) use shown_as::*;
 use table::*;
 pub(crate) use text_selection::TextSelection;
 
-/// Above an HTML message: whether its web pictures are hidden, and, shown as plain text, the way
-/// back to its formatting (for this message; the setting stays). The way to plain text isn't
-/// here, a click from the text: it's in More actions (⋯), View › Plain text and File › Options.
-pub(super) fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, p: &mime::Parsed, formatted: bool, acts: &mut Vec<Action>) {
+/// Above an HTML message: whether its web pictures are hidden, and, shown as plain text (or as
+/// Markdown, `markdown`), the way back to its formatting and to the other text (for this message;
+/// the setting stays). The way to plain text isn't here, a click from the text: it's in More
+/// actions (⋯), View › Plain text and File › Options.
+pub(super) fn html_bar(
+    s: &Session,
+    t: &Tokens,
+    ui: &mut Ui,
+    key: &MessageKey,
+    p: &mime::Parsed,
+    formatted: bool,
+    markdown: bool,
+    acts: &mut Vec<Action>,
+) {
     let web = s.remote_pictures();
     if !web.is_empty() && !s.pictures_allowed() && formatted {
         egui::Frame::new().fill(t.chrome).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(
@@ -66,9 +76,19 @@ pub(super) fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, p
                     acts.push(Action::Run("message.blockPictures", json!({})));
                 }
             } else {
-                ui.label(RichText::new(tl!("Shown as text.")).color(t.faint).small());
-                if !p.rich.is_empty() && ui.link(RichText::new(tl!("Show formatted")).small()).clicked() {
-                    acts.push(Action::ShowFormatted(key.clone(), true));
+                ui.label(RichText::new(if markdown { tl!("Shown as Markdown.") } else { tl!("Shown as text.") }).color(t.faint).small());
+                if !p.rich.is_empty() {
+                    if ui.link(RichText::new(tl!("Show formatted")).small()).clicked() {
+                        acts.push(Action::ShowFormatted(key.clone(), true));
+                    }
+                    ui.label(RichText::new("·").color(t.faint).small());
+                    if markdown {
+                        if ui.link(RichText::new(tl!("Show as plain text")).small()).clicked() {
+                            acts.push(Action::ShowFormatted(key.clone(), false));
+                        }
+                    } else if ui.link(RichText::new(tl!("Show as Markdown")).small()).clicked() {
+                        acts.push(Action::ShowMarkdown(key.clone(), true));
+                    }
                 }
             }
         });

@@ -131,15 +131,25 @@ fn put_back(st: &mut UiState, id: egui::Id, v: LongText) {
 }
 
 /// A long plain text (`LONG`) of the message `key`, in chunks: its addresses links, as
-/// [`plain::plain_body`] shows them, the find bar's finds (`lit`) lit; right-to-left text keeps
+/// [`plain::plain_body`] shows them (or the `markdown` it is shown as, as
+/// [`plain::markdown_body`] shows it), the find bar's finds (`lit`) lit; right-to-left text keeps
 /// its own labels. Where the current find was drawn (its chunk laid out while it's followed).
-pub(super) fn plain(st: &mut UiState, ui: &mut Ui, key: &MessageKey, text: &str, lit: Option<&find::Lit>, acts: &mut Vec<Action>) -> Option<Rect> {
+pub(super) fn plain(
+    st: &mut UiState,
+    ui: &mut Ui,
+    key: &MessageKey,
+    text: &str,
+    markdown: bool,
+    lit: Option<&find::Lit>,
+    acts: &mut Vec<Action>,
+) -> Option<Rect> {
     let id = ui.scope_id().with(("long-text", key.to_id()));
     // Where the addresses laid out start, for the tests to point at.
     #[cfg(test)]
     ui.ctx().data_mut(|d| d.remove::<Vec<Rect>>(egui::Id::unique("long-text-links")));
     let t = st.tokens;
-    let font = theme::regular(14.5);
+    // Markdown in the monospace font, its addresses plain text ([`plain::markdown_body`]).
+    let font = if markdown { plain::markdown_font() } else { theme::regular(14.5) };
     let rtl = crate::bidi::has_rtl(text);
     let ranges = chunks(text, CHUNK);
     let mut v = take(st, id);
@@ -169,7 +179,7 @@ pub(super) fn plain(st: &mut UiState, ui: &mut Ui, key: &MessageKey, text: &str,
                 rtl_copy_menu(&r, None, text);
             } else {
                 let marks = lit.map(|l| l.marks_in(range.clone())).unwrap_or_default();
-                if let Some(h) = plain::linked_run(st, ui, s, &font, lit.map(|l| (l, marks.as_slice())), "long-text-links", acts) {
+                if let Some(h) = plain::linked_run(st, ui, s, &font, !markdown, lit.map(|l| (l, marks.as_slice())), "long-text-links", acts) {
                     hit = Some(h);
                 }
             }

@@ -260,8 +260,10 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     let can = viewing.is_none() && st.dialog.is_none() && r.parsed.is_some() && !locked;
     find::keys(st, ui, in_window, &r.key, can);
     let formatted = r.parsed.as_ref().is_some_and(|p| shown_formatted(s, st, &r.key, p));
+    // Shown as Markdown: the text it is shown as (made once).
+    let markdown = r.parsed.as_ref().and_then(|p| shown_markdown(s, st, &r.key, p));
     let (lit, offset) = match r.parsed.as_ref().filter(|_| can) {
-        Some(p) => find::bar(st, ui, in_window, &r.key, p, formatted),
+        Some(p) => find::bar(st, ui, in_window, &r.key, p, formatted, markdown.as_ref()),
         None => (None, None),
     };
     let mut hit: Option<Rect> = None;
@@ -404,7 +406,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 hidden_bar(&t, ui, &r.key, p);
             }
             if p.had_html {
-                html_bar(s, &t, ui, &r.key, p, formatted, acts);
+                html_bar(s, &t, ui, &r.key, p, formatted, markdown.is_some(), acts);
             }
             if let Some(u) = &p.unsubscribe {
                 unsubscribe_line(&t, ui, u, acts);
@@ -421,9 +423,16 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             text_selection::begin(st, ui, ui.scope_id().with(("message-text", r.key.to_id())), in_window);
             if formatted {
                 hit = rich_body(s, st, ui, &r.key, p, lit.clone(), acts);
+            } else if let Some(md) = &markdown {
+                // As Markdown: plain text in the monospace font, laid out by what's in view when long.
+                hit = if md.len() > long_text::LONG {
+                    long_text::plain(st, ui, &r.key, md, true, lit.as_ref(), acts)
+                } else {
+                    plain::markdown_body(st, ui, md, lit.as_ref(), acts)
+                };
             } else if p.text.len() > long_text::LONG {
                 // Laid out by what's in view: whole, a long one took a frame of its own to lay out.
-                hit = long_text::plain(st, ui, &r.key, &p.text, lit.as_ref(), acts);
+                hit = long_text::plain(st, ui, &r.key, &p.text, false, lit.as_ref(), acts);
             } else if crate::bidi::has_rtl(&p.text) {
                 // Right-to-left text, against the right edge where it starts; selected with the
                 // pointer as it reads, and right-click copies it as written too.
@@ -434,8 +443,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 hit = plain::plain_body(st, ui, &p.text, lit.as_ref(), acts);
             }
             // Laid out by what's in view, a long text's copy of all of it is its text.
-            let long = if formatted { long_text::many_lines(p) } else { p.text.len() > long_text::LONG };
-            text_selection::finish(st, ui, long.then_some(p.text.as_str()));
+            let shown = markdown.as_deref().unwrap_or(p.text.as_str());
+            let long = if formatted { long_text::many_lines(p) } else { shown.len() > long_text::LONG };
+            text_selection::finish(st, ui, long.then_some(shown));
         });
     });
     if can {

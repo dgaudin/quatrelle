@@ -28,6 +28,7 @@ mod emoji;
 mod layout;
 mod links;
 mod menu;
+mod paste;
 mod pictures;
 mod ribbon;
 mod signature;
@@ -37,6 +38,7 @@ use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
 use menu::*;
+use paste::*;
 #[cfg(test)]
 pub(crate) use pictures::FIT_WIDTH;
 pub(crate) use pictures::{own_size, own_size_of, placement};
@@ -183,6 +185,13 @@ impl Editor {
         self.sel = at..at;
         self.typing = None;
         self.last_change = 0.0;
+    }
+
+    /// Paste › Keep text only: the next paste, at `sel`, goes in as text alone.
+    pub(crate) fn paste_text_only(&mut self, sel: Range<usize>) {
+        self.paste = true;
+        self.paste_plain = true;
+        self.refocus = Some(sel);
     }
 
     fn remember(&mut self, c: &Compose, cursor: usize) {
@@ -496,52 +505,6 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
     if book_k && c.id != SIGNATURE_ID {
         acts.push(Action::Dialog(Dialog::select_names(c, "to")));
     }
-}
-
-/// Paste what another program put on the clipboard as HTML (a signature copied from Outlook,
-/// part of a web page) with its look, in place of the selection. `false` when there is none,
-/// or it holds no text (a picture alone is pasted as a picture).
-fn paste_formatted(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id) -> bool {
-    // Keep text only: the text box pastes the text as it is.
-    if std::mem::take(&mut ed.paste_plain) {
-        return false;
-    }
-    let Some(html) = crate::clipboard_html() else { return false };
-    let (mut add, mut add_styles, pictures) = quatrelle_engine::mime::pasted_html_with_pictures(&html);
-    if add.replace(PICTURE, "").trim().is_empty() {
-        return false;
-    }
-    ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
-    c.styles.fit(&c.body);
-    ed.undo.push(Snap { text: c.body.clone(), styles: c.styles.clone(), cursor: ed.sel.start });
-    if ed.undo.len() > UNDO_MAX {
-        ed.undo.remove(0);
-    }
-    ed.redo.clear();
-    // The pictures that came along (embedded in the HTML) become the message's; one named by
-    // `cid:` stays where the message has it already (text copied from the editor), and any
-    // other picture goes.
-    for p in pictures {
-        if !c.inline.iter().any(|x| x.cid == p.cid) {
-            c.inline.push(p);
-        }
-    }
-    let known: Vec<String> = c.inline.iter().map(|p| p.cid.clone()).collect();
-    for _ in 0..10_000 {
-        let unknown =
-            add.chars().enumerate().find(|(i, ch)| *ch == PICTURE && add_styles.style(*i).picture.as_ref().is_none_or(|cid| !known.contains(cid)));
-        let Some((at, _)) = unknown else { break };
-        rich::splice(&mut add, &mut add_styles, at..at + 1, "", &Styles::plain(""));
-    }
-    let n = c.body.chars().count();
-    let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
-    rich::splice(&mut c.body, &mut c.styles, sel.clone(), &add, &add_styles);
-    let end = sel.start + add.chars().count();
-    set_selection(ui.ctx(), id, end..end);
-    ed.sel = end..end;
-    ed.typing = None;
-    ui.ctx().request_repaint();
-    true
 }
 
 /// The message text: the text box, then bullets and numbers, rules and pictures drawn over it.

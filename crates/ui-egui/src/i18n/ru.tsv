@@ -256,10 +256,12 @@
 	Settings found: {source}	Параметры найдены: {source}
 	Show a desktop notification when new mail arrives	Показывать уведомление на рабочем столе при новой почте
 	Show an envelope in the notification area while new mail is unread	Показывать конверт в области уведомлений, пока новая почта не прочитана
+	Show as Markdown	Показать как Markdown
 	Show as plain text	Показать как обычный текст
 	Show formatted	Показать с форматированием
 	Show in Favorites	Показать в избранном
 	Show pictures	Показать изображения
+	Shown as Markdown.	Показано как Markdown.
 	Shown as text.	Показано как текст.
 	Shown on mail you send	Видно в отправляемых письмах
 	Sign in	Войти

@@ -256,10 +256,12 @@
 	Settings found: {source}	נמצאו הגדרות: {source}
 	Show a desktop notification when new mail arrives	הצג התראה בשולחן העבודה כשמגיע דואר חדש
 	Show an envelope in the notification area while new mail is unread	הצג מעטפה באזור ההודעות כל עוד יש דואר חדש שלא נקרא
+	Show as Markdown	הצג כ-Markdown
 	Show as plain text	הצג כטקסט רגיל
 	Show formatted	הצג מעוצב
 	Show in Favorites	הצג במועדפים
 	Show pictures	הצג תמונות
+	Shown as Markdown.	מוצג כ-Markdown.
 	Shown as text.	מוצג כטקסט.
 	Shown on mail you send	מוצג בדואר שאתה שולח
 	Sign in	היכנס

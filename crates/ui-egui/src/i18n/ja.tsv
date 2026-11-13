@@ -256,10 +256,12 @@
 	Settings found: {source}	設定が見つかりました: {source}
 	Show a desktop notification when new mail arrives	新しいメールが届いたらデスクトップ通知を表示する
 	Show an envelope in the notification area while new mail is unread	新しいメールが未読の間、通知領域に封筒を表示する
+	Show as Markdown	Markdown で表示
 	Show as plain text	プレーン テキストで表示
 	Show formatted	書式付きで表示
 	Show in Favorites	お気に入りに表示
 	Show pictures	画像を表示
+	Shown as Markdown.	Markdown として表示しています。
 	Shown as text.	テキストとして表示しています。
 	Shown on mail you send	送信するメールに表示されます
 	Sign in	サインイン

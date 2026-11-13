@@ -230,9 +230,7 @@ fn clipboard(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &mut Compose, sel: &Ran
             ui.close();
         }
         if ui.button(tl!("Keep text only")).on_hover_text(tl!("Paste without the look it has where it was copied")).clicked() {
-            ed.paste = true;
-            ed.paste_plain = true;
-            ed.refocus = Some(sel.clone());
+            ed.paste_text_only(sel.clone());
             ui.close();
         }
     });

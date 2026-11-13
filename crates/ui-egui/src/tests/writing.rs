@@ -8,6 +8,7 @@ use super::*;
 mod across;
 mod file_dialogs;
 mod lost_gpu;
+mod markdown;
 mod people_field;
 mod pgp;
 mod quote;

@@ -8,6 +8,8 @@
 
 use super::*;
 
+mod markdown;
+
 /// A screen tall enough for File › Options' Reading group without scrolling.
 const SCREEN: egui::Vec2 = egui::vec2(1280.0, 1400.0);
 

@@ -15,24 +15,38 @@ pub(super) fn plain_body(st: &mut UiState, ui: &mut Ui, text: &str, lit: Option<
     #[cfg(test)]
     ui.ctx().data_mut(|d| d.remove::<Vec<Rect>>(egui::Id::unique("plain-links")));
     let marks = lit.map(|l| l.marks_in(0..text.len())).unwrap_or_default();
-    linked_run(st, ui, text, &theme::regular(14.5), lit.map(|l| (l, marks.as_slice())), "plain-links", acts)
+    linked_run(st, ui, text, &theme::regular(14.5), true, lit.map(|l| (l, marks.as_slice())), "plain-links", acts)
+}
+
+/// The font a message shown as Markdown is in.
+pub(super) fn markdown_font() -> egui::FontId {
+    egui::FontId::monospace(13.5)
+}
+
+/// A message shown as Markdown: its text in the monospace font, plain (its addresses aren't
+/// links: a link the message wraps in the organisation's check opens through it from the
+/// formatted view, not straight from here), the find bar's finds lit.
+pub(super) fn markdown_body(st: &mut UiState, ui: &mut Ui, text: &str, lit: Option<&find::Lit>, acts: &mut Vec<Action>) -> Option<Rect> {
+    let marks = lit.map(|l| l.marks_in(0..text.len())).unwrap_or_default();
+    linked_run(st, ui, text, &markdown_font(), false, lit.map(|l| (l, marks.as_slice())), "markdown-links", acts)
 }
 
 /// Plain text `s` (a short message's, or a long one's chunk), a run of the message's text, its web
-/// and mail addresses links: a hand and the address under the pointer, opened on a click (a drag
-/// still selects). The find bar's finds in it (`found`) lit; where the current one was drawn.
-/// Where its addresses start is kept for the tests under `links`.
+/// and mail addresses links (`with_links`): a hand and the address under the pointer, opened on a
+/// click (a drag still selects). The find bar's finds in it (`found`) lit; where the current one
+/// was drawn. Where its addresses start is kept for the tests under `links`.
 pub(super) fn linked_run(
     st: &mut UiState,
     ui: &mut Ui,
     s: &str,
     font: &egui::FontId,
+    with_links: bool,
     found: Option<(&find::Lit, &[find::Mark])>,
     #[cfg_attr(not(test), allow(unused_variables))] links_at: &str,
     acts: &mut Vec<Action>,
 ) -> Option<Rect> {
     let t = st.tokens;
-    let links = mime::find_links(s);
+    let links = if with_links { mime::find_links(s) } else { Vec::new() };
     let plain = egui::TextFormat { font_id: font.clone(), color: t.text, ..Default::default() };
     let link = egui::TextFormat { font_id: font.clone(), color: t.accent, underline: egui::Stroke::new(1.0, t.accent), ..Default::default() };
     let mut job = egui::text::LayoutJob::default();

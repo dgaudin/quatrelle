@@ -78,8 +78,9 @@ pub(crate) struct Bar {
     focus: bool,
     /// The current find.
     current: usize,
-    /// What was looked in (the message, its text, and whether formatted), and for what.
-    looked: Option<(MessageKey, Arc<mime::Parsed>, bool)>,
+    /// What was looked in (the message, its text, whether formatted, the Markdown it is shown
+    /// as), and for what.
+    looked: Option<(MessageKey, Arc<mime::Parsed>, bool, Option<Arc<str>>)>,
     searched: Option<String>,
     doc: Option<Arc<Doc>>,
     hits: Arc<Vec<Range<usize>>>,
@@ -126,12 +127,21 @@ impl Bar {
     }
 
     /// The finds in the message `key` shows: looked for again when its text or the words change.
-    fn refresh(&mut self, key: &MessageKey, p: &Arc<mime::Parsed>, formatted: bool) {
-        let same = self.looked.as_ref().is_some_and(|(k, q, f)| k == key && Arc::ptr_eq(q, p) && *f == formatted);
+    fn refresh(&mut self, key: &MessageKey, p: &Arc<mime::Parsed>, formatted: bool, markdown: Option<&Arc<str>>) {
+        let same_md = |m: &Option<Arc<str>>| match (m, markdown) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        let same = self.looked.as_ref().is_some_and(|(k, q, f, m)| k == key && Arc::ptr_eq(q, p) && *f == formatted && same_md(m));
         if !same {
-            let other = self.looked.as_ref().is_none_or(|(k, _, _)| k != key);
-            self.doc = Some(Arc::new(if formatted { Doc::formatted(p) } else { Doc::plain(&p.text) }));
-            self.looked = Some((key.clone(), p.clone(), formatted));
+            let other = self.looked.as_ref().is_none_or(|(k, _, _, _)| k != key);
+            self.doc = Some(Arc::new(match markdown {
+                _ if formatted => Doc::formatted(p),
+                Some(md) => Doc::plain(md),
+                None => Doc::plain(&p.text),
+            }));
+            self.looked = Some((key.clone(), p.clone(), formatted, markdown.cloned()));
             self.searched = None;
             if other {
                 // Another message: from its first find, brought into view.
@@ -300,7 +310,8 @@ pub(super) fn keys(st: &mut UiState, ui: &Ui, in_window: bool, key: &MessageKey,
 }
 
 /// The bar, at the bottom of what `ui` has left, and the finds the message `key` (its text
-/// `p`, `formatted` or not) is drawn with; the scroll its body is to take this frame.
+/// `p`, `formatted` or not, or the `markdown` it is shown as) is drawn with; the scroll its body
+/// is to take this frame.
 pub(super) fn bar(
     st: &mut UiState,
     ui: &mut Ui,
@@ -308,6 +319,7 @@ pub(super) fn bar(
     key: &MessageKey,
     p: &Arc<mime::Parsed>,
     formatted: bool,
+    markdown: Option<&Arc<str>>,
 ) -> (Option<Lit>, Option<f32>) {
     let t = st.tokens;
     let frame_nr = ui.ctx().cumulative_frame_nr();
@@ -363,7 +375,7 @@ pub(super) fn bar(
                     }
                 });
             });
-            bar.refresh(key, p, formatted);
+            bar.refresh(key, p, formatted, markdown);
             if let Some((said, found)) = bar.count() {
                 ui.label(RichText::new(said).color(if found { t.dim } else { t.danger }).small());
             }
