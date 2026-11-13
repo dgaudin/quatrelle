@@ -36,6 +36,7 @@ use super::worker::{Worker, busy, kind, of_the_network};
 use crate::NetError;
 use crate::worker::connect::fenced;
 
+mod links;
 mod reads;
 mod rows;
 
@@ -105,6 +106,8 @@ pub(crate) struct SyncState {
     /// The chats of the copy the last whole list lacked (their hashes in the copy): lacked by the
     /// next one too, they are left.
     absent: HashSet<String>,
+    /// The kind and link of each chat listed, for the log's figures.
+    links: links::Links,
 }
 
 impl SyncState {
@@ -225,6 +228,12 @@ pub(crate) fn open(w: &mut Worker, chat: Option<String>) {
     w.open = chat.filter(|c| id_ok(c));
     w.sync.opening = w.open.is_some();
     let Some(chat) = w.open.clone() else { return };
+    // Its kind, whether it can be read, and its link as the window will judge it.
+    let r = w.copy.as_ref().and_then(|c| c.chat(&chat)).map(|r| r.chat);
+    log::info!(
+        "{}",
+        links::opened(r.as_ref().map(|c| &c.kind), r.as_ref().is_some_and(|c| c.unreadable.is_some()), r.as_ref().and_then(|c| c.web_url.as_deref()))
+    );
     let messages = w.copy.as_ref().map(|c| c.last_pages(&chat, 2)).unwrap_or_default();
     say_messages(w, &chat, &messages, false, false);
     w.sync.members_said = None;
@@ -571,6 +580,10 @@ fn listed(w: &mut Worker, page: Page, now: Instant) {
             continue;
         }
         fresh = true;
+        // Its link as the copy will keep it (the list's, else the one kept before).
+        let url = chat.web_url.clone().or_else(|| w.copy.as_ref().and_then(|c| c.chat(&chat.id)).and_then(|r| r.chat.web_url));
+        w.sync.links.note(key, &chat.kind, url.as_deref());
+        let Some(pass) = w.sync.pass.as_mut() else { return };
         if pass.whole {
             pass.hashes.insert(chat_hash(&chat.id));
         }
@@ -630,6 +643,9 @@ fn list_over(w: &mut Worker, now: Instant) {
     let (whole, ended, count, pages) = (pass.whole, pass.ended, pass.seen.len(), pass.pages);
     let refresh = std::mem::take(&mut pass.refresh);
     log::info!("teams: {count} conversations listed in {pages} pages");
+    if let Some(line) = w.sync.links.changed() {
+        log::info!("{line}");
+    }
     w.up_to_date();
     if whole {
         // The hour's pass: its refresh goes after the other cadences, a request a step.

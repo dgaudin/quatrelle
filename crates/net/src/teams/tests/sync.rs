@@ -20,6 +20,8 @@ use crate::teams::worker::Worker;
 
 /// The chats the user left, and those back in the list.
 mod left;
+/// What the log says of the chats' links.
+mod links;
 /// "Work offline".
 mod offline;
 /// The chats, their reads and the Active pass.

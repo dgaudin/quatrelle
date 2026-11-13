@@ -51,6 +51,8 @@ pub(crate) struct FakeChat {
     pub(crate) updated: Option<String>,
     /// Hidden by the user (`viewpoint.isHidden`).
     pub(crate) hidden: bool,
+    /// Its `webUrl` as the list gives it: `None`, Teams' own link to it; `Some(None)`: none.
+    pub(crate) link: Option<Option<String>>,
 }
 
 impl FakeChat {
@@ -65,6 +67,7 @@ impl FakeChat {
             messages: Vec::new(),
             updated: None,
             hidden: false,
+            link: None,
         }
     }
 }
@@ -417,7 +420,8 @@ impl FakeTeams {
         let updated = c.updated.as_deref().unwrap_or(created);
         let mut v = json!({
             "id": c.id, "topic": c.topic, "createdDateTime": created, "lastUpdatedDateTime": updated, "chatType": c.kind,
-            "webUrl": format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={}", c.id, self.tenant), "tenantId": c.tenant.as_deref().unwrap_or(&self.tenant),
+            "webUrl": c.link.clone().unwrap_or_else(|| Some(format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={}", c.id, self.tenant))),
+            "tenantId": c.tenant.as_deref().unwrap_or(&self.tenant),
             "onlineMeetingInfo": null, "viewpoint": {"isHidden": c.hidden, "lastMessageReadDateTime": c.read_time},
         });
         if preview {
