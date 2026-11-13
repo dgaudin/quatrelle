@@ -141,7 +141,7 @@ pub(super) fn draw_change(ui: &mut Ui, f: &mut CalendarForm, s: &Session, t: &To
     title(ui, t, if renaming { "Rename calendar" } else { "New calendar" });
     if !renaming {
         let who = s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default();
-        ui.label(RichText::new(tf!("In {account}", account = who)).color(t.dim).small());
+        ui.label(RichText::new(tf!("Made in {account}", account = who)).color(t.dim).small());
         ui.add_space(4.0);
     }
     let edit = egui::TextEdit::singleline(&mut f.name)

@@ -180,10 +180,13 @@ fn rename_and_delete_ask_then_change_the_calendar() {
     assert!(a.ui.dialog.is_none());
     assert_eq!(name(&a), None, "deleted");
 
-    // New calendar… asks for a name in the account.
+    // New calendar… asks for a name, saying which account it's made in.
     right_click(&ctx, &mut a, "Main");
     click_text(&ctx, &mut a, "New calendar…");
     assert!(matches!(a.ui.dialog.as_ref(), Some(Dialog::CalendarChange(f)) if f.ask == CalendarAsk::New));
+    let email = a.session.accounts[0].config.email.clone();
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| *t == format!("Made in {email}")), "{shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -204,4 +207,26 @@ fn a_caldav_calendar_greys_new_rename_and_delete_and_says_why() {
         assert!(a.ui.dialog.is_none(), "greyed: nothing opens");
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+/// A colour kept for a calendar that isn't one of the menu's (a settings file from elsewhere): its
+/// box is drawn as an untouched calendar's, as its events are.
+#[test]
+fn a_box_with_a_colour_that_isnt_one_is_drawn_as_the_servers() {
+    let (mut a, dir, ctx) = calendars("calendar-list-junk-colour", true, false);
+    let key = quatrelle_engine::Session::calendar_key(&a.session.accounts[0].config.id, "AAMkMain=");
+    a.session.prefs.calendar_colors.insert(key, 200);
+    for _ in 0..5 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    let at = text_at(&shapes, "Main").expect("Main in the side pane");
+    let fill = shapes.iter().find_map(|s| match s {
+        egui::Shape::Rect(r) if r.rect.width() < 20.0 && r.rect.max.x < at.x && (r.rect.center().y - at.y).abs() < 8.0 && r.fill.a() > 0 => {
+            Some(r.fill)
+        }
+        _ => None,
+    });
+    assert_eq!(fill, Some(crate::theme::Tokens::light().accent), "the server's colour (0: the app's)");
+    let _ = std::fs::remove_dir_all(dir);
 }

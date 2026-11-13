@@ -2268,3 +2268,4 @@ presence	Offline	离线
 	Calendar name	日历名称
 	Delete the calendar {name} and its events? It goes to Deleted Items.	删除日历“{name}”及其事件吗?它会移到“已删除邮件”。
 	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	尚未发送的事件已移到主日历:它们所在的日历已在别处删除
+	Made in {account}	将在 {account} 中创建

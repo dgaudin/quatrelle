@@ -100,7 +100,7 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
 /// The colour submenu: Automatic (the server's, or the account's for its own calendar), then the
 /// palette's 16, four by four, the one chosen ringed.
 fn color_menu(ui: &mut Ui, s: &Session, account: &str, id: &str, acts: &mut Vec<Action>) {
-    let chosen = s.prefs.calendar_colors.get(&Session::calendar_key(account, id)).copied();
+    let chosen = s.chosen_color(account, id);
     if ui.add(Button::new((widgets::menu_icon(None), tl!("Automatic"))).selected(chosen.is_none())).clicked() {
         acts.push(Action::Run("calendar.color", json!({"account": account, "calendar": id, "color": null})));
         ui.close();

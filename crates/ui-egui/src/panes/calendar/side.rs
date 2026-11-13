@@ -140,7 +140,7 @@ pub(super) fn calendar_row(
     let row = ui.horizontal(|ui| {
         let (r, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
         // In the colour chosen on this computer, when there's one; else as the server has it.
-        let chosen = s.prefs.calendar_colors.contains_key(&Session::calendar_key(&a.config.id, &c.id));
+        let chosen = s.chosen_color(&a.config.id, &c.id).is_some();
         let c32 = color(if chosen { s.calendar_color(a, c) } else { c.color }, t);
         if shown {
             ui.painter().rect_filled(r, 3.0, c32);

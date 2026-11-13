@@ -151,12 +151,18 @@ impl Session {
     /// [`ACCOUNT_COLOR`] and above stand for an account's colour (`ACCOUNT_COLOR +
     /// AccountConfig::color`), [`PALETTE_COLOR`] and above for the palette's.
     pub fn calendar_color(&self, a: &AccountState, c: &CalendarInfo) -> u8 {
-        match self.prefs.calendar_colors.get(&Session::calendar_key(&a.config.id, &c.id)) {
-            Some(&ACCOUNT_COLOR) => ACCOUNT_COLOR.saturating_add(a.config.color),
-            Some(&p) if p < PALETTE_COLORS => PALETTE_COLOR + p,
-            _ if c.color == 0 => ACCOUNT_COLOR.saturating_add(a.config.color),
-            _ => c.color,
+        match self.chosen_color(&a.config.id, &c.id) {
+            Some(ACCOUNT_COLOR) => ACCOUNT_COLOR.saturating_add(a.config.color),
+            Some(p) => PALETTE_COLOR.saturating_add(p),
+            None if c.color == 0 => ACCOUNT_COLOR.saturating_add(a.config.color),
+            None => c.color,
         }
+    }
+
+    /// The colour chosen on this computer for a calendar, when there's one that's one of the
+    /// menu's (a value kept that isn't, from a settings file written elsewhere, counts as none).
+    pub fn chosen_color(&self, account: &str, calendar: &str) -> Option<u8> {
+        self.prefs.calendar_colors.get(&Session::calendar_key(account, calendar)).copied().filter(|&v| v < PALETTE_COLORS || v == ACCOUNT_COLOR)
     }
 
     /// Whether a calendar can be made in `account` (`calendar` none), or that one renamed or

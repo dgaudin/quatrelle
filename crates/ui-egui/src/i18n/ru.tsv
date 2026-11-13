@@ -2270,3 +2270,4 @@ presence	Offline	Не в сети
 	Calendar name	Имя календаря
 	Delete the calendar {name} and its events? It goes to Deleted Items.	Удалить календарь {name} вместе с событиями? Он попадет в папку «Удалённые».
 	Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere	Еще не отправленные события перенесены в основной календарь: их календарь был удален в другом месте
+	Made in {account}	Создается в {account}

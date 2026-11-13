@@ -346,3 +346,35 @@ fn an_unsent_appointment_outlives_its_calendar_deleted_elsewhere() {
     ews_synced(&mut s, vec![ews_main()], Vec::new(), false);
     assert_eq!(s.notices.len(), said + 1, "{:?}", s.notices);
 }
+
+/// The seven commands of a calendar's menu with junk params, on a Microsoft 365 account and an
+/// Exchange one (where New, Rename and Delete get past their `when` to their bodies): each answers
+/// an error or a result, none fails unexpectedly.
+#[test]
+fn the_calendar_commands_survive_junk_params_on_exchange_and_microsoft_365() {
+    let junk = [
+        json!(null),
+        json!({}),
+        json!({"account": 5, "calendar": [], "name": {"a": 1}, "color": "red"}),
+        json!({"account": "sample", "calendar": "AAMkTrips=", "name": 42, "color": -3}),
+        json!({"account": "sample", "calendar": null, "name": "", "color": 1e300}),
+        json!({"account": "sample", "calendar": "\u{202E}", "name": "\u{0}\u{7}", "color": 16}),
+        json!({"account": "nobody", "calendar": "ews:calendar", "name": "x".repeat(10_000), "color": null}),
+    ];
+    let commands =
+        ["calendar.showOnly", "calendar.color", "calendar.moveUp", "calendar.moveDown", "calendar.create", "calendar.rename", "calendar.delete"];
+    for mut s in [graph_session("arranging-junk-graph", true), {
+        let mut s = ews_session("arranging-junk-ews");
+        ews_synced(&mut s, vec![ews_main(), cal("ews:folder:AAMkTrips=", "Trips", 2)], Vec::new(), false);
+        s
+    }] {
+        for id in commands {
+            for p in &junk {
+                if let Err(CmdError::Failed(why)) = s.run(id, p) {
+                    panic!("{id} {p}: {why}");
+                }
+            }
+        }
+        done(s);
+    }
+}
