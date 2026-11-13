@@ -11,11 +11,11 @@ use super::*;
 use crate::dialogs::CalendarAsk;
 
 /// Tall enough for the months and the calendars under them.
-const SIZE: egui::Vec2 = egui::vec2(1280.0, 1300.0);
+pub(super) const SIZE: egui::Vec2 = egui::vec2(1280.0, 1300.0);
 
 /// The sample in the calendar, its account a Microsoft 365 one (`graph`) or one with a CalDAV
 /// server, with a main calendar and Trips (and Work, the CalDAV one).
-fn calendars(name: &str, graph: bool, dark: bool) -> (MailApp, std::path::PathBuf, egui::Context) {
+pub(super) fn calendars(name: &str, graph: bool, dark: bool) -> (MailApp, std::path::PathBuf, egui::Context) {
     let (mut a, dir) = app(name);
     a.ui.dark = Some(dark);
     let ctx = egui::Context::default();
@@ -41,7 +41,7 @@ fn calendars(name: &str, graph: bool, dark: bool) -> (MailApp, std::path::PathBu
 
 /// A right click on the calendar named `name` in the side pane: the texts the frame draws then
 /// that it didn't before (the menu's entries).
-fn right_click(ctx: &egui::Context, a: &mut MailApp, name: &str) -> Vec<String> {
+pub(super) fn right_click(ctx: &egui::Context, a: &mut MailApp, name: &str) -> Vec<String> {
     let at = settled_text_at(ctx, a, name, SIZE).unwrap_or_else(|| panic!("{name} isn't in the side pane"));
     frame_sized(ctx, a, vec![Event::PointerMoved(at)], SIZE);
     let mut before = texts(&frame_shapes(ctx, a, vec![], SIZE));
@@ -63,7 +63,7 @@ fn right_click(ctx: &egui::Context, a: &mut MailApp, name: &str) -> Vec<String> 
 }
 
 /// The pointer on `text` (a menu entry), held still a moment: a submenu opens, a tip shows.
-fn point_at(ctx: &egui::Context, a: &mut MailApp, text: &str) {
+pub(super) fn point_at(ctx: &egui::Context, a: &mut MailApp, text: &str) {
     let at = settled_text_at(ctx, a, text, SIZE).unwrap_or_else(|| panic!("no {text} in the menu"));
     frame_sized(ctx, a, vec![Event::PointerMoved(at)], SIZE);
     for _ in 0..60 {
@@ -71,7 +71,7 @@ fn point_at(ctx: &egui::Context, a: &mut MailApp, text: &str) {
     }
 }
 
-fn click_text(ctx: &egui::Context, a: &mut MailApp, text: &str) {
+pub(super) fn click_text(ctx: &egui::Context, a: &mut MailApp, text: &str) {
     let at = settled_text_at(ctx, a, text, SIZE).unwrap_or_else(|| panic!("no {text} drawn"));
     let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     frame_sized(ctx, a, vec![Event::PointerMoved(at)], SIZE);
@@ -82,8 +82,18 @@ fn click_text(ctx: &egui::Context, a: &mut MailApp, text: &str) {
     }
 }
 
-const ENTRIES: [&str; 9] =
-    ["Show this calendar", "Show only this calendar", "Overlay", "Color", "New calendar…", "Rename…", "Delete calendar…", "Move up", "Move down"];
+const ENTRIES: [&str; 10] = [
+    "Hide this calendar",
+    "Show only this calendar",
+    "Overlay",
+    "Color",
+    "New calendar…",
+    "Rename…",
+    "Remove from the list",
+    "Delete calendar…",
+    "Move up",
+    "Move down",
+];
 
 /// Every entry, an icon before each, in light and dark.
 #[test]

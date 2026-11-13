@@ -10,6 +10,7 @@ mod calendar_delete;
 mod calendar_list_menu;
 mod calendar_look;
 mod calendar_menu;
+mod calendar_removed;
 mod conversations;
 mod item_files;
 mod new_item_keys;

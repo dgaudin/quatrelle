@@ -113,7 +113,8 @@ fn searchable(s: &Session) -> Vec<(String, String, String)> {
         } else {
             p.events.iter().map(|e| e.calendar.as_str()).collect()
         };
-        for c in p.calendars.iter().filter(|c| s.calendar_shown(id, &c.id) || kept.contains(c.id.as_str())) {
+        // Never one removed from the list, whatever's kept of it.
+        for c in p.calendars.iter().filter(|c| !s.calendar_removed(id, &c.id) && (s.calendar_shown(id, &c.id) || kept.contains(c.id.as_str()))) {
             out.push((id.clone(), c.id.clone(), format!("{} · {}", calendar_name(c), a.config.email)));
         }
     }

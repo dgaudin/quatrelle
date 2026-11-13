@@ -2273,3 +2273,8 @@ presence	Offline	Не в сети
 	Made in {account}	Создается в {account}
 	the message isn't downloaded	сообщение не загружено
 	the message is still downloading	сообщение ещё загружается
+	Hide this calendar	Скрыть этот календарь
+	Remove from the list	Убрать из списка
+	The last calendar under the account stays in the list	Последний календарь учетной записи остается в списке
+	On this computer only: it stays on the server	Только на этом компьютере: на сервере он остается
+	Removed calendars	Убранные календари

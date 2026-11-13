@@ -14,7 +14,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("calendar-nav").show(ui, |ui| {
         months(s, st, ui, acts);
         ui.add_space(8.0);
-        let several = s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1;
+        let several = s.accounts.iter().map(|a| s.ordered_calendars(&a.config.id).len()).sum::<usize>() > 1;
         // The calendars in groups, as Outlook's: this user's own, the groups kept on the server
         // (a team's…), then those opened by their owner's address; a shared mailbox's own
         // calendar sits under its name, in the folder pane's order (issue #1).
@@ -45,11 +45,11 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
         }
         groups.push((tl!("Shared calendars").to_string(), shared));
-        for (title, list) in &groups {
+        for (n, (title, list)) in groups.iter().enumerate() {
             if list.is_empty() {
                 continue;
             }
-            egui::CollapsingHeader::new(RichText::new(title).font(theme::bold(13.0)).color(t.text))
+            let group = egui::CollapsingHeader::new(RichText::new(title).font(theme::bold(13.0)).color(t.text))
                 .id_salt(("calendar-group", title))
                 .default_open(true)
                 .show(ui, |ui| {
@@ -58,13 +58,20 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         if sections.len() > 1 {
                             let key = section_key(&sections, a, c).unwrap_or_else(|| a.config.id.clone());
                             if last.as_deref() != Some(key.as_str()) {
-                                section_heading(s, &t, ui, &key);
+                                section_heading(s, &t, ui, &key, acts);
                                 last = Some(key);
                             }
                         }
                         calendar_row(s, &t, ui, a, c, acts);
                     }
                 });
+            // One account, no heading of its own: My calendars has its menu.
+            if n == 0
+                && sections.len() <= 1
+                && let Some(a) = list.first().map(|(a, _)| *a)
+            {
+                group.header_response.context_menu(|ui| menu::account_menu(ui, s, a, acts));
+            }
         }
         // Each in a column of its own, or all together (Outlook's side-by-side view).
         if several {
@@ -103,28 +110,33 @@ pub(super) fn section_key(
     sections.iter().any(|x| x.key == key).then_some(key)
 }
 
-/// A mailbox's name above its calendars, with the icon of a shared one.
-pub(super) fn section_heading(s: &Session, t: &Tokens, ui: &mut Ui, key: &str) {
+/// A mailbox's name above its calendars, with the icon of a shared one; an account's has its
+/// right-click menu ([`menu::account_menu`]).
+pub(super) fn section_heading(s: &Session, t: &Tokens, ui: &mut Ui, key: &str, acts: &mut Vec<Action>) {
     let (shared, name) = match key.split_once('|') {
         Some((_, mailbox)) => (true, mailbox.to_string()),
         None => (false, s.account(key).map(|a| a.config.email.clone()).unwrap_or_else(|| key.to_string())),
     };
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
+    let row = ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
         if shared {
             icons::paint(ui.painter(), r.expand(3.0), Icon::People, t.dim);
         } else if let Some(a) = s.account(key) {
             ui.painter().circle_filled(r.center(), 4.0, theme::account_color(a.config.color));
         }
-        ui.add(egui::Label::new(RichText::new(name).font(theme::bold(12.0)).color(t.dim)).truncate());
+        // Not selectable: a right click on the name opens the account's menu.
+        ui.add(egui::Label::new(RichText::new(name).font(theme::bold(12.0)).color(t.dim)).truncate().selectable(false));
     });
+    if !shared && let Some(a) = s.account(key) {
+        row.response.interact(Sense::click()).context_menu(|ui| menu::account_menu(ui, s, a, acts));
+    }
 }
 
 /// A calendar in the side pane: ticked (in its colour) when shown, a click on the box hides or
-/// shows it; its right-click menu ([`menu`]) shows it alone, colours, makes, renames, deletes
-/// and moves it, closes someone else's and reads again or removes one subscribed to by its link
-/// (issue #7).
+/// shows it; its right-click menu ([`menu`]) shows it alone, colours, makes, renames, removes
+/// from the list, deletes and moves it, closes someone else's and reads again or removes one
+/// subscribed to by its link (issue #7).
 pub(super) fn calendar_row(
     s: &Session,
     t: &Tokens,

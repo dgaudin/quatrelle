@@ -91,7 +91,8 @@ pub(super) fn writable_calendars(s: &Session) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     for a in &s.accounts {
         if let Some(p) = s.pim.get(&a.config.id) {
-            for c in p.calendars.iter().filter(|c| !c.read_only) {
+            // Not one removed from the list on this computer.
+            for c in p.calendars.iter().filter(|c| !c.read_only && !s.calendar_removed(&a.config.id, &c.id)) {
                 let name = if c.id == quatrelle_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
                 out.push((a.config.id.clone(), c.id.clone(), format!("{name} · {}", a.config.email)));
             }

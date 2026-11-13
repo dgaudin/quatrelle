@@ -2270,3 +2270,8 @@ presence	Offline	オフライン
 	Made in {account}	{account} に作成されます
 	the message isn't downloaded	メッセージはダウンロードされていません
 	the message is still downloading	メッセージはまだダウンロード中です
+	Hide this calendar	この予定表を非表示
+	Remove from the list	一覧から外す
+	The last calendar under the account stays in the list	アカウントの最後の予定表は一覧に残ります
+	On this computer only: it stays on the server	このコンピューターでのみ: サーバーには残ります
+	Removed calendars	外した予定表

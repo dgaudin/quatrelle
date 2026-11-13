@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! A calendar's right-click menu in the side pane, each entry with its icon: shown, shown alone,
-//! overlaid, its colour; a calendar made, renamed or deleted where the account's server allows
-//! it (greyed, with why, where it doesn't); its place among the others; and for one subscribed
-//! to by its link or opened by hand, what reads it again or removes it.
+//! A calendar's right-click menu in the side pane, each entry with its icon: hidden or shown,
+//! shown alone, overlaid, its colour; a calendar made, renamed or deleted where the account's
+//! server allows it (greyed, with why, where it doesn't), removed from the list on this computer;
+//! its place among the others; and for one subscribed to by its link or opened by hand, what
+//! reads it again or removes it. And an account's heading's: a calendar made in it, and its
+//! calendars removed from the list, brought back.
 
 use egui::Button;
-use quatrelle_engine::model::pim::CalendarInfo;
-use quatrelle_engine::{AccountState, CalendarRefusal, PALETTE_COLORS};
+use quatrelle_engine::model::pim::{CalendarInfo, teams::one_line};
+use quatrelle_engine::{AccountState, CalendarRefusal, PALETTE_COLORS, RemovalRefusal};
 
 use super::*;
 
@@ -47,7 +49,9 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
     let (account, id) = (a.config.id.as_str(), c.id.as_str());
     let which = json!({"account": account, "calendar": id});
     let shown = s.calendar_shown(account, id);
-    if entry(ui, Icon::Calendar, tl!("Show this calendar"), shown, true, None) {
+    // Says what a click does.
+    let show = if shown { tl!("Hide this calendar") } else { tl!("Show this calendar") };
+    if entry(ui, Icon::Calendar, show, false, true, None) {
         acts.push(Action::Run("calendar.show", json!({"account": account, "calendar": id, "shown": !shown})));
     }
     if entry(ui, Icon::Funnel, tl!("Show only this calendar"), false, true, None) {
@@ -68,6 +72,7 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
     if entry(ui, Icon::Rename, tl!("Rename…"), false, change.is_none(), change) {
         acts.push(Action::Dialog(Dialog::rename_calendar(account, c)));
     }
+    remove_entry(ui, s, account, id, acts);
     if entry(ui, Icon::Delete, tl!("Delete calendar…"), false, change.is_none(), change) {
         acts.push(Action::Dialog(Dialog::delete_calendar(account, c)));
     }
@@ -95,6 +100,52 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
             acts.push(Action::Run("calendar.closeShared", json!({"email": email})));
         }
     }
+}
+
+/// Remove from the list: on this computer only (Delete deletes it on the server). Not offered
+/// for one with a Remove of its own (subscribed to, opened by hand); greyed, with why, for the
+/// account's main calendar and its last one.
+fn remove_entry(ui: &mut Ui, s: &Session, account: &str, id: &str, acts: &mut Vec<Action>) {
+    let why = match s.calendar_removable(account, id) {
+        Err(RemovalRefusal::OwnRemove) => return,
+        Err(RemovalRefusal::Main) => Some(tl!("The account's main calendar stays as it is")),
+        Err(RemovalRefusal::Last) => Some(tl!("The last calendar under the account stays in the list")),
+        Ok(()) => None,
+    };
+    let r = ui.add_enabled(why.is_none(), Button::new((widgets::menu_icon(Some(Icon::Close)), tl!("Remove from the list"))));
+    let r = r.on_hover_text(tl!("On this computer only: it stays on the server"));
+    let r = match why {
+        Some(why) => r.on_disabled_hover_text(why),
+        None => r,
+    };
+    if r.clicked() {
+        acts.push(Action::Run("calendar.remove", json!({"account": account, "calendar": id})));
+        ui.close();
+    }
+}
+
+/// An account's heading's right-click menu: New calendar… as the calendars' menu has it, and
+/// the account's calendars removed from the list, by name, a click bringing one back (greyed
+/// when there's none).
+pub(super) fn account_menu(ui: &mut Ui, s: &Session, a: &AccountState, acts: &mut Vec<Action>) {
+    let account = a.config.id.as_str();
+    let new = s.calendar_change(account, None).err().map(refusal_text);
+    if entry(ui, Icon::CalendarAdd, tl!("New calendar…"), false, new.is_none(), new) {
+        acts.push(Action::Dialog(Dialog::new_calendar(account)));
+    }
+    let removed = s.removed_calendars(account);
+    ui.add_enabled_ui(!removed.is_empty(), |ui| {
+        ui.menu_button((widgets::menu_icon(Some(Icon::Undo)), tl!("Removed calendars")), |ui| {
+            // Every colleague's of a large mailbox may be among them.
+            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                for c in &removed {
+                    if entry(ui, Icon::Calendar, &one_line(&c.name), false, true, None) {
+                        acts.push(Action::Run("calendar.restore", json!({"account": account, "calendar": c.id})));
+                    }
+                }
+            });
+        });
+    });
 }
 
 /// The colour submenu: Automatic (the server's, or the account's for its own calendar), then the
