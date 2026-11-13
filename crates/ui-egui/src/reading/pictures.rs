@@ -76,7 +76,7 @@ fn picture_bytes(s: &Session, pics: &Pictures, key: &MessageKey, p: &mime::Parse
         if let Some(data) = pics.source(key, index) {
             return Some(data.to_vec());
         }
-        let raw = s.store.as_ref()?.read_body(key)?;
+        let raw = s.kept_or_held(key)?;
         return mime::attachment_data(&raw, index);
     }
     match s.pictures.get(src) {

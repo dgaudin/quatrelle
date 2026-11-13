@@ -87,6 +87,9 @@ pub(super) struct Batch {
     pub(super) store: Store,
     /// The message's source, read already to show it: the first read takes it.
     pub(super) given: Mutex<Option<Arc<[u8]>>>,
+    /// The source of a message not kept here, held while it's open: read when the cache has
+    /// nothing of it.
+    pub(super) held: Option<Arc<[u8]>>,
     pub(super) queue: Mutex<VecDeque<(usize, Want)>>,
     /// Taken out with the first ones asked: the message's other pictures and PDFs, so a
     /// picture opened big or a PDF's pages later need no other read.
@@ -234,14 +237,17 @@ impl Batch {
         let parts = {
             let given = lock(&self.given).take();
             let read;
-            let raw: &[u8] = match &given {
-                Some(raw) => raw,
-                None => {
-                    let Some(r) = self.store.read_body(&self.key) else { return };
-                    shared.stats.reads.fetch_add(1, Ordering::Relaxed);
-                    read = r;
-                    &read
-                }
+            let raw: &[u8] = match (&given, &self.held) {
+                (Some(raw), _) => raw,
+                (None, held) => match (self.store.read_body(&self.key), held) {
+                    (Some(r), _) => {
+                        shared.stats.reads.fetch_add(1, Ordering::Relaxed);
+                        read = r;
+                        &read
+                    }
+                    (None, Some(raw)) => raw,
+                    (None, None) => return,
+                },
             };
             shared.stats.extractions.fetch_add(1, Ordering::Relaxed);
             mime::attachments_data(raw, &wanted, MAX_EACH, self.sources_max)

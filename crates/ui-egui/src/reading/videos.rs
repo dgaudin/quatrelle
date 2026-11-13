@@ -41,8 +41,16 @@ enum Stage {
 
 /// Work asked for in a frame, not handed to a lane yet.
 enum Job {
-    File { store: Store, name: String },
-    Frame { png: Vec<u8>, limit: u32 },
+    /// `held`: the source of a message not kept here, held while it's open.
+    File {
+        store: Store,
+        name: String,
+        held: Option<Arc<[u8]>>,
+    },
+    Frame {
+        png: Vec<u8>,
+        limit: u32,
+    },
 }
 
 /// What the work made.
@@ -69,8 +77,15 @@ pub(crate) struct Videos {
 impl Videos {
     /// Attachment `index` of the message `key`, written out to a file for the platform's
     /// decoder: `None` while it's being written (asked for now, the first time), `Some(None)`
-    /// when it can't be.
-    pub(crate) fn file(&mut self, key: &MessageKey, index: usize, name: &str, store: Option<&Store>) -> Option<Option<PathBuf>> {
+    /// when it can't be. `held`: its source when the cache hasn't kept it (read on the server).
+    pub(crate) fn file(
+        &mut self,
+        key: &MessageKey,
+        index: usize,
+        name: &str,
+        store: Option<&Store>,
+        held: Option<Arc<[u8]>>,
+    ) -> Option<Option<PathBuf>> {
         let id = ((key.clone(), index), Stage::File);
         if let Some(made) = self.take(&id) {
             return Some(match made {
@@ -79,7 +94,7 @@ impl Videos {
             });
         }
         let Some(store) = store else { return Some(None) };
-        self.ask(id, || Job::File { store: store.clone(), name: name.to_string() });
+        self.ask(id, || Job::File { store: store.clone(), name: name.to_string(), held });
         None
     }
 
@@ -158,9 +173,14 @@ impl Videos {
 /// file taken out of its message at most as big as the cache holds).
 fn make((key, index): &Id, job: Job) -> Made {
     match job {
-        Job::File { store, name } => Made::File((|| {
-            let raw = store.read_body(key)?;
-            let data = mime::attachment_data(&raw, *index)?;
+        Job::File { store, name, held } => Made::File((|| {
+            let kept = store.read_body(key);
+            let raw: &[u8] = match (&kept, &held) {
+                (Some(raw), _) => raw,
+                (None, Some(raw)) => raw,
+                (None, None) => return None,
+            };
+            let data = mime::attachment_data(raw, *index)?;
             let dir = quatrelle_engine::store::scratch_dir("thumbs")?;
             let path = dir.join(format!("{:016x}-{}", quatrelle_engine::store::fnv64(&key.to_id()), mime::sanitize_filename(&name)));
             std::fs::write(&path, &data).ok()?;

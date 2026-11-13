@@ -65,7 +65,7 @@ pub(super) fn video_preview(
         // The platform's decoder reads files: the attachment is put in one, on the pictures
         // lane, its kind's icon meanwhile (the message was read, the video taken out and written
         // in the frame that first showed it: upstream 51d1cd0).
-        None => match st.videos.file(key, a.index, &a.name, s.store.as_ref()) {
+        None => match st.videos.file(key, a.index, &a.name, s.store.as_ref(), s.held_raw(key)) {
             None => return None,
             Some(None) => {
                 keep_preview(st, ctx, id, None);
@@ -411,7 +411,7 @@ pub(super) fn attachment_preview(s: &Session, st: &mut UiState, ui: &mut Ui, key
             // A picture or a PDF is read with the message's others (`Pictures`), not here.
             let data = match a.kind() {
                 AttachmentKind::Image | AttachmentKind::Pdf => None,
-                _ => s.store.as_ref().and_then(|st| st.read_body(key)).and_then(|raw| shown_data(&raw, a)),
+                _ => s.kept_or_held(key).and_then(|raw| shown_data(&raw, a)),
             };
             let x = std::sync::Arc::new(read_shown(a, data.as_deref()));
             ui.ctx().data_mut(|d| d.insert_temp(id, x.clone()));

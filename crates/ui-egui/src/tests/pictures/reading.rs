@@ -286,7 +286,7 @@ fn more_pictures_than_one_read_takes_show() {
         for i in 0..300 {
             let _ = a.ui.pictures.get(&k, i, Want::Body(900));
         }
-        a.ui.pictures.end_frame(&ctx, store.as_ref(), None, &a.ui.fonts, &mut crate::NullServices(NOW));
+        a.ui.pictures.end_frame(&ctx, store.as_ref(), None, &|_| None, &a.ui.fonts, &mut crate::NullServices(NOW));
     }
     assert_eq!(a.ui.pictures.ready(), 300, "all of them");
     assert_eq!(a.ui.pictures.counts(), (2, 300), "two reads, each picture decoded once");
@@ -332,5 +332,35 @@ fn a_picture_too_big_for_the_budget_evicts_nothing() {
     pump(&ctx, &mut a, WINDOW, 10, |_| false);
     assert_eq!(a.ui.pictures.counts().1, 4, "the big one decoded");
     assert_eq!(a.ui.pictures.ready(), 3, "and the three kept");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Older mail read on the server comes for showing and is never kept here: the picture its HTML
+/// shows by `cid:` is taken out of the source held with it while it's open, and drawn, as a
+/// kept message's is (it stayed an empty space: the pictures read the cache only).
+#[test]
+fn the_pictures_of_older_mail_not_kept_are_drawn() {
+    let (mut a, dir) = app("not-kept-pictures");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let inline = vec![InlinePicture { cid: "harbour@x".into(), name: "harbour.png".into(), mime: "image/png".into(), data: png(30, 30) }];
+    let html = "<p>The harbour</p><img src=\"cid:harbour@x\" width=\"30\" height=\"30\">".to_string();
+    let k = with_files_and_html(&mut a, 9300, vec![("notes.txt".into(), "text/plain", b"Quay seven, berth two.".to_vec())], Some(html), inline);
+    // Read on the server: in no folder's list here, its source not kept.
+    let store = a.session.store.clone().unwrap();
+    let raw = store.read_body(&k).unwrap();
+    let mut inbox = store.load_folder("sample", "INBOX").unwrap();
+    let at = inbox.messages.iter().position(|m| m.key == k).unwrap();
+    let older = inbox.messages.remove(at);
+    store.save_folder("sample", "INBOX", &inbox).unwrap();
+    store.remove_body(&k);
+    a.session.apply(MailEvent::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    a.session.apply(MailEvent::Older { account: "sample".into(), folder: "INBOX".into(), items: vec![older], more: false, error: None });
+    a.run("list.open", json!({"key": k.to_id()}));
+    a.session.apply(MailEvent::Body { key: k.clone(), raw });
+    assert!(a.session.reading.as_ref().is_some_and(|r| r.key == k && r.parsed.is_some()), "shown");
+    pump(&ctx, &mut a, WINDOW, 60, |a| a.ui.pictures.of(&k).1 > 0);
+    assert!(a.ui.pictures.of(&k).1 > 0, "its picture is drawn: {:?}", a.ui.pictures.of(&k));
+    assert!(!store.has_body(&k), "nothing of it is written to the cache");
     let _ = std::fs::remove_dir_all(dir);
 }

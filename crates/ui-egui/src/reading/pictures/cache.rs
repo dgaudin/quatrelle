@@ -316,11 +316,14 @@ impl Pictures {
     /// in the reading pane and its attachments: its work goes on while it stays open (whether
     /// or not its pictures were drawn this frame); another message's stops when it isn't shown.
     /// The work goes to the pictures lane where `services` has one, a step a frame here otherwise.
+    /// `held`: the source of an open message not kept here, which its work reads when the
+    /// cache has nothing of it.
     pub(crate) fn end_frame(
         &mut self,
         ctx: &egui::Context,
         store: Option<&Store>,
         open: Option<(&MessageKey, &[AttachmentInfo])>,
+        held: &dyn Fn(&MessageKey) -> Option<Arc<[u8]>>,
         fonts: &Fonts,
         services: &mut dyn Services,
     ) {
@@ -346,7 +349,7 @@ impl Pictures {
         if self.pages.len() > MAX_SLOTS {
             self.pages.retain(|(k, _), _| shown(k, &self.touched));
         }
-        for b in self.start(ctx, store, open, fonts) {
+        for b in self.start(ctx, store, open, held, fonts) {
             let work = Work {
                 run: Box::new({
                     let (b, shared, ctx) = (b.clone(), self.shared.clone(), ctx.clone());
@@ -398,6 +401,7 @@ impl Pictures {
         ctx: &egui::Context,
         store: Option<&Store>,
         open: Option<(&MessageKey, &[AttachmentInfo])>,
+        held: &dyn Fn(&MessageKey) -> Option<Arc<[u8]>>,
         fonts: &Fonts,
     ) -> Vec<Arc<Batch>> {
         let mut new = Vec::new();
@@ -434,10 +438,12 @@ impl Pictures {
                 _ => Vec::new(),
             };
             let given = self.given.take_if(|(k, _)| *k == key).map(|(_, raw)| raw);
+            let held = held(&key);
             let batch = Arc::new(Batch {
                 key,
                 store: store.clone(),
                 given: Mutex::new(given),
+                held,
                 queue: Mutex::new(VecDeque::from([(index, want)])),
                 also,
                 tried: Mutex::new(HashMap::new()),

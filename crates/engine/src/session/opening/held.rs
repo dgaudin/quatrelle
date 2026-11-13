@@ -73,8 +73,14 @@ impl Session {
 
     /// A message's source as it's here: kept in the cache, else held with it while it's open.
     /// The one lookup of what needs a message whole (its headers, files, Save As, the source
-    /// window, a protection checked again).
-    pub(crate) fn kept_or_held(&self, key: &MessageKey) -> Option<Vec<u8>> {
+    /// window, a protection checked again, the pictures and previews the window draws).
+    pub fn kept_or_held(&self, key: &MessageKey) -> Option<Vec<u8>> {
         self.store.as_ref().and_then(|s| s.read_body(key)).or_else(|| self.held_source(key).map(|h| h.bytes().to_vec()))
+    }
+
+    /// The source held with an open message not kept here, shared: what the window's work on
+    /// another thread (its pictures, a video's file) reads when the cache has nothing of it.
+    pub fn held_raw(&self, key: &MessageKey) -> Option<Arc<[u8]>> {
+        self.held_source(key).map(HeldSource::shared)
     }
 }

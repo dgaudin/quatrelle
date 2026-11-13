@@ -257,7 +257,10 @@ impl MailApp {
     /// 321bef2, fe86139 and 51d1cd0).
     fn pictures_drawn(&mut self, ctx: &egui::Context) {
         let open = self.session.reading.as_ref().map(|r| (&r.key, r.parsed.as_ref().map_or(&[][..], |p| &p.attachments[..])));
-        self.ui.pictures.end_frame(ctx, self.session.store.as_ref(), open, &self.ui.fonts, &mut *self.services);
+        // A message not kept here (read on the server): its pictures from the source held with it.
+        let session = &self.session;
+        let held = |k: &MessageKey| session.held_raw(k);
+        self.ui.pictures.end_frame(ctx, session.store.as_ref(), open, &held, &self.ui.fonts, &mut *self.services);
         self.ui.videos.end_frame(ctx, &mut *self.services);
     }
 
