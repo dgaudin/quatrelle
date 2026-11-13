@@ -285,3 +285,30 @@ fn pasted_code_is_sent_on_its_grey() {
         "{second}"
     );
 }
+
+/// A list, a quote and a code block have an empty line before and after them, as paragraphs
+/// have between them, where the text around doesn't leave one already: never two in a row, and
+/// none inside a list (between an item and the list under it).
+#[test]
+fn lists_quotes_and_code_blocks_have_room_around_them() {
+    for (md, want) in [
+        ("Intro:\n- a\n- b\n\nNext **one**", &["Intro:", "", "a", "b", "", "Next one"][..]),
+        ("## Steps\n1. a\n2. b\n\nNext **one**", &["Steps", "", "a", "b", "", "Next one"]),
+        ("Intro **here**\n> said\n\nAfter", &["Intro here", "", "said", "", "After"]),
+        ("Intro **here**\n```\nx\n```\nAfter", &["Intro here", "", "x", "", "After"]),
+        ("Intro:\n\n- a\n\n> q\n\n```\nx\n```\n\nEnd", &["Intro:", "", "a", "", "q", "", "x", "", "End"]),
+        ("- a\n  - b\n- c\n\n**x**", &["a", "b", "c", "", "x"]),
+    ] {
+        let (text, _) = pasted_markdown(md).expect("Markdown");
+        assert_eq!(text.split('\n').collect::<Vec<_>>(), want, "{md:?}");
+    }
+    // This repository's page on Gmail: its first list no longer sticks to the paragraph above.
+    let (text, styles) = pasted_markdown(include_str!("../../../../../docs/gmail.md")).expect("Markdown");
+    assert!(!text.contains("\n\n\n"), "two empty lines in a row: {text:?}");
+    let (n, _) = line_of(&text, "Google no longer accepts");
+    let lines: Vec<&str> = text.split('\n').collect();
+    assert_eq!(lines.get(n + 1), Some(&""), "{text:?}");
+    assert_eq!(styles.para(n + 2).list, List::Bullet);
+    let (n, _) = line_of(&text, "Make an app password");
+    assert_eq!((lines.get(n + 1), styles.para(n + 2).list), (Some(&""), List::Number), "{text:?}");
+}

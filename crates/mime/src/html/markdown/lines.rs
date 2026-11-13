@@ -3,7 +3,7 @@
 //! The lines of pasted Markdown laid out as their marks say: what is before a mark on its line
 //! (html2text's bullets, numbers and indents) taken away with it, the line's paragraph made a
 //! list item or indented, a quote's text grey, code on its grey with a block's lines made as
-//! wide as its widest.
+//! wide as its widest, an empty line before and after a list, a quote and a code block.
 
 use super::*;
 
@@ -66,13 +66,55 @@ impl Looks {
     }
 }
 
-/// A line laid out: its paragraph, its characters and their looks; a code block's line has the
-/// look its filling takes (`code`), and says whether it is the block's first.
+/// What a line is part of, for the room around lists, quotes and code blocks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Block {
+    Text,
+    List,
+    Quote,
+    Code,
+}
+
+/// A line laid out: its paragraph, its characters and their looks, what it is part of, and
+/// whether it starts a block of its own (`first`: a code block's first line). A code block's line
+/// has the look its filling takes (`code`).
 struct Line {
     para: rich::Para,
     chars: Vec<(char, u16)>,
-    code: Option<u16>,
+    block: Block,
     first: bool,
+    code: Option<u16>,
+}
+
+impl Line {
+    /// An empty line between paragraphs.
+    fn blank(&self) -> bool {
+        self.block == Block::Text && self.chars.is_empty()
+    }
+}
+
+/// The text and styles being written out.
+struct Out {
+    text: String,
+    chars: Vec<u16>,
+    paras: Vec<rich::Para>,
+    /// The look of the last line's last character (its line break's).
+    last: u16,
+}
+
+impl Out {
+    fn line(&mut self, chars: &[(char, u16)], para: rich::Para) {
+        if !self.paras.is_empty() {
+            self.text.push('\n');
+            self.chars.push(self.last);
+        }
+        for (c, id) in chars {
+            self.text.push(*c);
+            self.chars.push(*id);
+        }
+        self.last = chars.last().map_or(0, |(_, id)| *id);
+        self.paras.push(para);
+    }
 }
 
 /// The text and styles html2text's reading of the marked HTML gave, laid out as its line marks
@@ -113,29 +155,36 @@ pub(super) fn lay_out(text: &str, styles: &rich::Styles) -> (String, rich::Style
             let shade = if looks.mono(id) { SHADE } else { 0 };
             chars.push((*c, looks.with(id, grey | shade)));
         }
-        lines.push(Line { para, chars, code, first });
+        let block = if quote {
+            Block::Quote
+        } else if code.is_some() {
+            Block::Code
+        } else if para.list != rich::List::None || para.indent > 0 {
+            Block::List
+        } else {
+            Block::Text
+        };
+        lines.push(Line { para, chars, block, first, code });
         at += line_chars.len() + 1;
     }
     fill_code_blocks(&mut lines);
-    let mut out = String::with_capacity(text.len());
-    let mut chars: Vec<u16> = Vec::with_capacity(st.chars.len());
-    let mut paras = Vec::with_capacity(lines.len());
-    let mut last = 0u16;
-    for (n, line) in lines.iter().enumerate() {
-        if n > 0 {
-            out.push('\n');
-            chars.push(last);
+    let mut out = Out { text: String::with_capacity(text.len()), chars: Vec::with_capacity(st.chars.len()), paras: Vec::new(), last: 0 };
+    let mut before: Option<&Line> = None;
+    for line in &lines {
+        // Room between a block and what is around it, unless an empty line is there already.
+        if let Some(b) = before
+            && !b.blank()
+            && !line.blank()
+            && (b.block != line.block || line.first)
+        {
+            out.line(&[], rich::Para::default());
         }
-        for (c, id) in &line.chars {
-            out.push(*c);
-            chars.push(*id);
-        }
-        last = line.chars.last().map_or(0, |(_, id)| *id);
-        paras.push(line.para);
+        out.line(&line.chars, line.para);
+        before = Some(line);
     }
-    let mut laid = rich::Styles { chars, palette: looks.palette, paras };
-    laid.fit(&out);
-    (out, laid)
+    let mut laid = rich::Styles { chars: out.chars, palette: looks.palette, paras: out.paras };
+    laid.fit(&out.text);
+    (out.text, laid)
 }
 
 /// Each code block's lines filled with spaces in its look up to its widest

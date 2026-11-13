@@ -245,9 +245,10 @@ fn char_at(text: &str, needle: &str) -> usize {
 
 /// This repository's page on Gmail pasted, in the light and the dark look: its code (the
 /// program's name in an item, the servers' names) is in the monospace font on the code grey, and
-/// drawn on a grey box the text reads on in either look.
+/// drawn on a grey box the text reads on in either look; its lists have an empty line before
+/// them (never two in a row).
 #[test]
-fn a_whole_page_pasted_shows_its_code_on_grey_in_either_look() {
+fn a_whole_page_pasted_is_laid_out_as_written_in_either_look() {
     use quatrelle_engine::mime::rich::CODE_SHADE;
     let md = include_str!("../../../../../docs/gmail.md");
     for dark in [false, true] {
@@ -261,6 +262,10 @@ fn a_whole_page_pasted_shows_its_code_on_grey_in_either_look() {
             let st = c.styles.style(at);
             assert!(st.mono && st.highlight == Some(CODE_SHADE), "{code}: {st:?}");
         }
+        let lines: Vec<&str> = c.body.split('\n').collect();
+        assert!(!c.body.contains("\n\n\n"), "two empty lines in a row: {:?}", c.body);
+        let (n, _) = line_of(&c.body, lines.iter().find(|l| l.starts_with("Google no longer")).expect("the first paragraph"));
+        assert_eq!((lines.get(n + 1), c.styles.para(n + 2).list), (Some(&""), List::Bullet), "{:?}", c.body);
         frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 2400.0));
         let galley = a.ui.editor.as_ref().and_then(|e| e.drawn.as_ref()).map(|d| d.galley.clone()).expect("drawn");
         let byte = c.body.find("Quatrelle)").expect("the code");
