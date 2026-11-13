@@ -171,3 +171,10 @@ pub(super) fn draw_change(ui: &mut Ui, f: &mut CalendarForm, s: &Session, t: &To
     }
     !cancel
 }
+
+impl Dialog {
+    /// Add calendar › From Address Book: the address book, and the people whose calendars to open.
+    pub fn open_calendars() -> Dialog {
+        Dialog::OpenSharedCalendar(Box::new(CalendarsForm { search: AddressSearch::new(), ..Default::default() }))
+    }
+}

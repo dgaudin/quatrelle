@@ -351,3 +351,30 @@ fn smart_card(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>, acco
     );
     !chosen && close_row(ui)
 }
+
+impl Dialog {
+    /// The preview of an attachment, from `attachment.preview`'s answer; or a message's
+    /// headers, from `message.headers`'.
+    pub fn preview(v: &serde_json::Value, clock: &quatrelle_engine::model::dates::Clock) -> Dialog {
+        let get = |k: &str| v.get(k).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+        let mut header = Vec::new();
+        if get("kind") == "message" {
+            header.push((tl!("From").to_string(), get("from")));
+            header.push((tl!("To").to_string(), get("to")));
+            if let Some(d) = v.get("date").and_then(serde_json::Value::as_i64).filter(|d| *d > 0) {
+                header.push((tl!("Date").to_string(), crate::i18n::date(&quatrelle_engine::model::dates::full_time(d, clock))));
+            }
+        }
+        let mut text = get("text");
+        if v.get("truncated").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+            text.push_str("\n… (the rest isn't shown: open the file to see it all)");
+        }
+        let title = match get("kind").as_str() {
+            "headers" => tl!("Message headers").to_string(),
+            "message" if !get("subject").is_empty() => get("subject"),
+            _ => get("name"),
+        };
+        let warning = v.get("warning").and_then(|w| serde_json::from_value(w.clone()).ok());
+        Dialog::Preview { title, header, text, warning }
+    }
+}

@@ -536,3 +536,80 @@ pub(crate) fn describe(s: &Session, r: &Rule) -> String {
         .join(", ");
     tf!("If it {condition}: {action}", condition = cond, action = act)
 }
+
+/// One test of a rule being written.
+#[derive(Clone, Debug)]
+pub struct RuleCond {
+    pub test: RuleTest,
+    pub text: String,
+}
+
+/// One action of a rule being written.
+#[derive(Clone, Debug)]
+pub struct RuleAct {
+    pub action: RuleDo,
+    /// A folder path (`Move to folder`) or a category name (`Categorize`).
+    pub target: String,
+}
+
+impl RuleCond {
+    fn of(c: &Condition) -> RuleCond {
+        let (test, text) = match c {
+            // As the field writes them: a text with a comma in quotes, so it reads back whole.
+            Condition::From(t) => (RuleTest::From, matched_text(std::slice::from_ref(t))),
+            Condition::To(t) => (RuleTest::To, matched_text(std::slice::from_ref(t))),
+            Condition::Subject(t) => (RuleTest::Subject, t.clone()),
+            Condition::AnyText(t) => (RuleTest::AnyText, t.clone()),
+            Condition::HasAttachment => (RuleTest::HasAttachment, String::new()),
+            Condition::Bulk => (RuleTest::Bulk, String::new()),
+            Condition::FromAny(v) => (RuleTest::FromAny, matched_text(v)),
+            Condition::ToAny(v) => (RuleTest::ToAny, matched_text(v)),
+            // "; " between them, so a subject that has a comma keeps it.
+            Condition::SubjectAny(v) => (RuleTest::SubjectAny, v.join("; ")),
+        };
+        RuleCond { test, text }
+    }
+}
+
+impl RuleAct {
+    fn of(a: &RuleAction) -> RuleAct {
+        let (action, target) = match a {
+            RuleAction::MoveTo(f) => (RuleDo::MoveTo, f.clone()),
+            RuleAction::MoveToRole(FolderRole::Trash) | RuleAction::Delete => (RuleDo::Delete, String::new()),
+            RuleAction::MoveToRole(_) => (RuleDo::Archive, String::new()),
+            RuleAction::Categorize(c) => (RuleDo::Categorize, c.clone()),
+            RuleAction::MarkRead => (RuleDo::MarkRead, String::new()),
+            RuleAction::Flag => (RuleDo::Flag, String::new()),
+            RuleAction::Pin => (RuleDo::Pin, String::new()),
+        };
+        RuleAct { action, target }
+    }
+}
+
+impl Dialog {
+    /// A new rule for mail like this: from its sender, moved to a folder to choose, as Outlook's
+    /// Create Rule. Made from a message, it's that message's account's (whose folders it offers),
+    /// and it runs on the server too when the server keeps rules (`server`): Exchange's rules work
+    /// while Quatrelle is closed. (It used to belong to no account, filed into an Archive folder
+    /// an Exchange mailbox may not have — the rule then did nothing.) Once saved it runs on the
+    /// mail already in `folder` (the message's: made from one in another folder, it ran on the
+    /// Inbox alone, and seemed to do nothing), or the Inbox.
+    pub fn rule_from(sender: &str, account: Option<&str>, server: bool, folder: Option<&str>) -> Dialog {
+        Dialog::EditRule(Box::new(RuleForm {
+            index: None,
+            remote: None,
+            name: if sender.is_empty() { String::new() } else { tf!("Mail from {sender}", sender = sender) },
+            enabled: true,
+            match_all: true,
+            conditions: vec![RuleCond { test: RuleTest::From, text: sender.to_string() }],
+            actions: vec![RuleAct { action: if account.is_some() { RuleDo::MoveTo } else { RuleDo::Archive }, target: String::new() }],
+            account: account.map(str::to_string),
+            stop: false,
+            server: server && account.is_some(),
+            run_now: true,
+            run_in: folder.filter(|_| account.is_some()).map(str::to_string),
+            refused: None,
+            error: None,
+        }))
+    }
+}

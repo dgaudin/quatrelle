@@ -302,3 +302,57 @@ fn attach_item(ui: &mut Ui, f: &mut ItemForm, s: &Session, t: &Tokens, acts: &mu
     }
     chosen.is_empty() && !cancel
 }
+
+// The dialogs of the message being written, as they open.
+/// What the spelling dialog keeps from one word to the next: the places passed over (Ignore
+/// once), and the suggestions and the one picked for the word it shows (none for the next).
+#[derive(Clone, Debug, Default)]
+pub struct SpellForm {
+    /// Words passed over while this dialog is open: the field and where the word starts.
+    passed: Vec<(&'static str, usize)>,
+    /// The suggestion picked, when one is.
+    chosen: Option<String>,
+    /// The word `chosen` was picked for: a new word comes with nothing picked.
+    shown: String,
+    /// What could take `shown`, worked out once for it.
+    suggestions: Vec<String>,
+}
+
+impl Dialog {
+    /// The address book for the message being written; a double-click adds to `field`.
+    pub fn select_names(c: &quatrelle_engine::Compose, field: &'static str) -> Dialog {
+        Dialog::SelectNames(Box::new(NamesForm {
+            search: AddressSearch::new(),
+            compose: c.id,
+            account: c.account.clone(),
+            target: field,
+            to: c.to.clone(),
+            cc: c.cc.clone(),
+            bcc: c.bcc.clone(),
+        }))
+    }
+
+    /// Attach Item, open on a kind of item; messages from the Inbox of the account writing.
+    pub fn attach_item(s: &Session, c: &Compose, kind: quatrelle_engine::ItemKind) -> Dialog {
+        let many = s.accounts.len() > 1;
+        let folders: Vec<(String, String, String)> = s
+            .accounts
+            .iter()
+            .flat_map(|a| {
+                a.folders.iter().filter(|f| f.selectable).map(move |f| {
+                    let name = f.display_name();
+                    let label = if many { format!("{name} ({})", a.config.email) } else { name };
+                    (a.config.id.clone(), f.path.clone(), label)
+                })
+            })
+            .collect();
+        let inbox = s.account(&c.account).and_then(|a| a.folder(FolderRole::Inbox)).map(|f| (c.account.clone(), f.path.clone()));
+        let (account, folder) = inbox.or_else(|| folders.first().map(|(a, f, _)| (a.clone(), f.clone()))).unwrap_or_default();
+        Dialog::AttachItem(Box::new(ItemForm { kind, account, folder, folders, stale: true, ..Default::default() }))
+    }
+
+    /// Outlook's Spelling, over the message being written.
+    pub fn spelling() -> Dialog {
+        Dialog::Spelling(Box::default())
+    }
+}

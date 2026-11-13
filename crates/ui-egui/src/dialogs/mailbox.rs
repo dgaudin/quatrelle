@@ -249,3 +249,23 @@ impl std::fmt::Debug for SignatureEditor {
         f.write_str("SignatureEditor")
     }
 }
+
+impl Dialog {
+    /// Automatic replies; `exchange`: the server keeps a reply for outside the organisation too.
+    pub fn vacation(account: &str, v: &quatrelle_engine::model::job::Vacation, exchange: bool) -> Dialog {
+        Dialog::Vacation(Box::new(VacationForm {
+            account: account.to_string(),
+            enabled: v.enabled,
+            subject: v.subject.clone(),
+            text: v.text.clone(),
+            dated: v.from.is_some() || v.until.is_some(),
+            from: v.from.clone().unwrap_or_default(),
+            until: v.until.clone().unwrap_or_default(),
+            exchange,
+            split: v.external.is_some(),
+            external: v.external.clone().unwrap_or_default(),
+            outside: if v.outside.is_empty() { "all".into() } else { v.outside.clone() },
+            error: None,
+        }))
+    }
+}

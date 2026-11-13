@@ -229,3 +229,52 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
         _ => true,
     }
 }
+
+// The folder dialogs as they open.
+impl Dialog {
+    pub fn move_to() -> Dialog {
+        Dialog::MoveTo { filter: String::new() }
+    }
+
+    /// A folder's Properties, from what this computer keeps of it.
+    pub fn folder_properties(s: &Session, f: &quatrelle_engine::model::Folder) -> Dialog {
+        let kept = s.store.as_ref().and_then(|st| st.load_folder(&f.account, &f.path).ok()).unwrap_or_default();
+        let total = if kept.messages.is_empty() { f.total as usize } else { kept.messages.len() };
+        let unread = if kept.messages.is_empty() { f.unread as usize } else { kept.messages.iter().filter(|m| !m.flags.seen).count() };
+        let email = s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default();
+        Dialog::FolderProperties {
+            name: crate::i18n::folder(f),
+            id: f.account.clone(),
+            location: {
+                let decoded = quatrelle_engine::model::utf7::decode(&f.path);
+                match f.delimiter {
+                    Some(d) => decoded.split(d).collect::<Vec<_>>().join(" › "),
+                    None => decoded,
+                }
+            },
+            account: email,
+            total,
+            unread,
+            size: kept.messages.iter().map(|m| u64::from(m.size)).sum(),
+        }
+    }
+
+    pub fn new_folder(account: &str, parent: Option<&str>) -> Dialog {
+        Dialog::FolderName { account: account.into(), parent: parent.map(str::to_string), rename: None, name: String::new(), error: None }
+    }
+
+    pub fn rename_folder(f: &Folder) -> Dialog {
+        Dialog::FolderName { account: f.account.clone(), parent: None, rename: Some(f.path.clone()), name: f.display_name(), error: None }
+    }
+
+    pub fn move_folder(f: &Folder) -> Dialog {
+        Dialog::MoveFolder { account: f.account.clone(), folder: f.path.clone(), filter: String::new(), error: None }
+    }
+
+    /// Delete a folder: into Deleted Items, or for good when it's already there.
+    pub fn delete_folder(s: &Session, f: &Folder) -> Dialog {
+        let trash = s.account(&f.account).and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash)).map(|t| t.path.clone());
+        let permanent = trash.is_none_or(|t| quatrelle_engine::model::is_within(&f.path, &t, f.delimiter));
+        Dialog::DeleteFolder { account: f.account.clone(), folder: f.path.clone(), name: f.display_name(), permanent, error: None }
+    }
+}

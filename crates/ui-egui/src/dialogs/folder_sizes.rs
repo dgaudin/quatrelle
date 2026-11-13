@@ -280,6 +280,14 @@ fn table(ui: &mut Ui, t: &Tokens, lines: &[Line], sort: &mut SizeSort, server: b
     });
 }
 
+impl Dialog {
+    /// Folder Size for an account, open on its server's side when it has a server.
+    pub fn folder_size(s: &Session, account: &str) -> Dialog {
+        let server = s.account(account).is_some_and(|a| !a.is_local());
+        Dialog::FolderSize { account: account.to_string(), server, sort: SizeSort::Place, kept: s.cache_size(account) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

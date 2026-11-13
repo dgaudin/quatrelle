@@ -414,3 +414,58 @@ impl EditForm {
         v
     }
 }
+
+// The account dialogs as they open.
+impl Dialog {
+    pub fn add_account() -> Dialog {
+        Dialog::AddAccount(Box::default())
+    }
+
+    /// The add-account dialog with the address filled in (servers guessed from it).
+    pub fn add_account_with(email: &str, advanced: bool) -> Dialog {
+        let mut f = AccountForm { email: email.trim().to_string(), advanced, ..Default::default() };
+        if !f.email.is_empty() {
+            f.guess();
+        }
+        Dialog::AddAccount(Box::new(f))
+    }
+
+    pub fn edit_account(a: &AccountConfig) -> Dialog {
+        Dialog::EditAccount(Box::new(EditForm {
+            account: a.id.clone(),
+            email: a.email.clone(),
+            name: a.name.clone(),
+            username: a.username.clone(),
+            jmap: a.jmap.is_some(),
+            jmap_url: a.jmap.clone().unwrap_or_default(),
+            ews: a.ews.clone(),
+            user_agent: a.user_agent.clone().unwrap_or_default(),
+            pop: a.pop.as_ref().map(|p| (p.host.clone(), p.port.to_string(), p.security)),
+            pop_keep: PopKeep::of(a),
+            imap_host: a.imap.host.clone(),
+            imap_port: a.imap.port.to_string(),
+            imap_security: a.imap.security,
+            smtp_host: a.smtp.host.clone(),
+            smtp_port: a.smtp.port.to_string(),
+            smtp_security: a.smtp.security,
+            smtp_sign_in: SmtpSignIn::of(a),
+            online_only: a.online_only,
+            shared_kept: !a.shared_online,
+            public_favorites_kept: a.public_favorites_kept,
+            oauth: a.oauth.clone(),
+            client_id: a.oauth_client_id.clone().unwrap_or_default(),
+            tenant: a.oauth_tenant.clone().unwrap_or_default(),
+            trust_add: String::new(),
+            error: None,
+        }))
+    }
+
+    /// The question a server's proposal of another domain raises (`Session::ask_trust`).
+    pub fn trust_domain(account: &str, site: &str) -> Dialog {
+        Dialog::TrustDomain { account: account.to_string(), site: site.to_string() }
+    }
+
+    pub fn password(a: &AccountConfig) -> Dialog {
+        Dialog::Password { account: a.id.clone(), email: a.email.clone(), password: String::new() }
+    }
+}

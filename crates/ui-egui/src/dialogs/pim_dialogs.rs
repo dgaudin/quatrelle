@@ -11,6 +11,7 @@ use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
 use serde_json::{Value, json};
 
+use super::Dialog;
 use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, widgets};
@@ -265,4 +266,47 @@ pub(super) fn footer_rule(ui: &mut Ui, t: &Tokens) {
     let r = ui.available_rect_before_wrap();
     ui.painter().line_segment([r.left_top(), r.right_top()], egui::Stroke::new(1.0, t.border));
     ui.add_space(10.0);
+}
+
+// The appointment and contact dialogs as they open.
+impl Dialog {
+    /// A new event (at a time, or the next hour).
+    pub fn new_event(s: &Session, at: Option<i64>) -> Dialog {
+        Dialog::Event(Box::new(EventForm::new(s, at)))
+    }
+
+    /// A meeting about a message, as Outlook's Reply with Meeting: its subject, its sender and
+    /// the others it went to as guests (not the user), and its text as the description.
+    pub fn meeting_from(s: &Session, p: &quatrelle_engine::mime::Parsed) -> Dialog {
+        let mut f = EventForm::new(s, None);
+        f.summary = p.subject.clone();
+        let mine = |e: &str| s.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(e.trim()));
+        let mut guests: Vec<quatrelle_engine::model::EmailAddress> = Vec::new();
+        for a in std::iter::once(&p.from).chain(&p.to).chain(&p.cc) {
+            if !a.email.trim().is_empty() && !mine(&a.email) && !guests.iter().any(|g| g.email.eq_ignore_ascii_case(&a.email)) {
+                guests.push(a.clone());
+            }
+        }
+        f.guests = quatrelle_engine::model::addr::format_list(&guests);
+        f.description = p.text.chars().take(4000).collect();
+        Dialog::Event(Box::new(f))
+    }
+
+    /// An event, opened at one of its occurrences.
+    pub fn open_event(s: &Session, uid: &str, occurrence: i64) -> Option<Dialog> {
+        EventForm::open(s, uid, occurrence).map(|f| Dialog::Event(Box::new(f)))
+    }
+
+    pub fn new_contact() -> Dialog {
+        Dialog::Contact(Box::default())
+    }
+
+    pub fn edit_contact(c: &quatrelle_engine::model::vcard::Card) -> Dialog {
+        Dialog::Contact(Box::new(ContactForm::edit(c)))
+    }
+
+    /// A new contact for someone in a message, their name and address filled in.
+    pub fn contact_from(a: &quatrelle_engine::model::EmailAddress) -> Dialog {
+        Dialog::Contact(Box::new(ContactForm::from_address(a)))
+    }
 }
