@@ -5,6 +5,13 @@
 
 use super::*;
 
+mod availability;
+mod folders;
+mod rules;
+mod schema;
+
+pub(super) use schema::in_schema_order;
+
 impl Data {
     /// Answer one operation: (response element name, response messages).
     pub(super) fn route(&mut self, op: &El) -> (String, Vec<String>) {
@@ -32,6 +39,9 @@ impl Data {
         if let Some(done) = self.calendar_folders(op) {
             return (format!("{}Response", op.name), done);
         }
+        if let Some(done) = self.folder_route(op).or_else(|| self.rules_route(op)) {
+            return (format!("{}Response", op.name), done);
+        }
         match op.name.as_str() {
             "GetAttachment" => out.extend(self.get_attachment(op)),
             "GetUserPhoto" => {
@@ -43,99 +53,6 @@ impl Data {
                     out.push(ok("<m:PictureData>/9j/</m:PictureData>".into()));
                 }
             }
-            "GetInboxRules" => {
-                let list: String = self
-                    .rules
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (id, name))| {
-                        format!(
-                            "<t:Rule><t:RuleId Id=\"{}\"/><t:DisplayName>{}</t:DisplayName><t:Priority>{}</t:Priority><t:IsEnabled>true</t:IsEnabled></t:Rule>",
-                            esc(id),
-                            esc(name),
-                            i + 1
-                        )
-                    })
-                    .collect();
-                out.push(ok(format!("<m:OutlookRuleBlobExists>false</m:OutlookRuleBlobExists><m:InboxRules>{list}</m:InboxRules>")));
-            }
-            "UpdateInboxRules" if self.outlook_rules && op.text_of("RemoveOutlookRuleBlob") != Some("true") => {
-                out.push(err("ErrorOutlookRuleBlobExists"));
-            }
-            "UpdateInboxRules" => {
-                self.outlook_rules = false;
-                let mut problem = None;
-                if let Some(ops) = op.child("Operations") {
-                    for o in &ops.kids {
-                        match o.name.as_str() {
-                            "CreateRuleOperation" => {
-                                let Some(rule) = o.child("Rule") else { continue };
-                                let name = rule.text_of("DisplayName").unwrap_or_default().to_string();
-                                let id = self.id("R");
-                                self.rules.push((id, name));
-                            }
-                            "SetRuleOperation" => {
-                                let Some(rule) = o.child("Rule") else { continue };
-                                let id = rule.child("RuleId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
-                                let name = rule.text_of("DisplayName").unwrap_or_default().to_string();
-                                match self.rules.iter_mut().find(|(i, _)| *i == id) {
-                                    Some(r) => r.1 = name,
-                                    None => problem = Some("ErrorRuleNotFound"),
-                                }
-                            }
-                            "DeleteRuleOperation" => {
-                                let id = o.child("RuleId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
-                                self.rules.retain(|(i, _)| *i != id);
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                out.push(match problem {
-                    Some(code) => err(code),
-                    None => ok(String::new()),
-                });
-            }
-            "GetFolder" => {
-                for f in op.child("FolderIds").map(|f| f.kids.clone()).unwrap_or_default() {
-                    // Someone else's calendar: what this account may do there.
-                    if let Some(who) = self.folder_id(&f).and_then(|id| id.strip_prefix("mailbox:").map(str::to_string)) {
-                        let edit = self.editors.contains(&who) && !self.item_rights_only;
-                        out.push(ok(format!(
-                            "<m:Folders><t:CalendarFolder><t:FolderId Id=\"mailbox:{who}\"/><t:EffectiveRights><t:CreateAssociated>false</t:CreateAssociated>\
-                             <t:CreateContents>{edit}</t:CreateContents><t:CreateHierarchy>false</t:CreateHierarchy><t:Delete>{edit}</t:Delete>\
-                             <t:Modify>false</t:Modify><t:Read>true</t:Read></t:EffectiveRights></t:CalendarFolder></m:Folders>"
-                        )));
-                        continue;
-                    }
-                    if matches!(self.shared_of(&f), Some(Err(()))) {
-                        out.push(err("ErrorAccessDenied"));
-                        continue;
-                    }
-                    if let Some(code) = self.archive_error(&f) {
-                        out.push(err(code));
-                        continue;
-                    }
-                    let root = f.attr("Id") == Some("publicfoldersroot");
-                    match self.folder_id(&f).and_then(|id| self.folders.iter().find(|x| x.id == id).cloned()) {
-                        // The root is the hierarchy's; any other public folder, its content's.
-                        Some(fo) if root && self.unrouted_hierarchy(&fo.id) => out.push(err("ErrorFolderNotFound")),
-                        Some(fo) if !root && self.unrouted(&fo.id) => out.push(err("ErrorFolderNotFound")),
-                        Some(fo) => out.push(ok(format!("<m:Folders>{}</m:Folders>", self.folder_xml(&fo)))),
-                        None => out.push(err("ErrorFolderNotFound")),
-                    }
-                }
-            }
-            // The mailbox's own root (above the mail folders): its Common Views folder.
-            "FindFolder"
-                if op.attr("Traversal") == Some("Shallow")
-                    && op.child("ParentFolderIds").and_then(|p| p.kids.first()).is_some_and(|f| f.attr("Id") == Some("root")) =>
-            {
-                out.push(ok("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders><t:Folder><t:FolderId Id=\"COMMON-VIEWS\"/>\
-                     <t:DisplayName>Common Views</t:DisplayName></t:Folder><t:Folder><t:FolderId Id=\"FINDER\"/><t:DisplayName>Finder</t:DisplayName>\
-                     </t:Folder></t:Folders></m:RootFolder>"
-                    .into()));
-            }
             "FindItem" if op.attr("Traversal") == Some("Associated") => {
                 let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 let items = if folder == "COMMON-VIEWS" { self.wlinks.concat() } else { String::new() };
@@ -143,63 +60,6 @@ impl Data {
             }
             "ResolveNames" => return self.resolve_names(op),
             "ExpandDL" => return self.expand_dl(op),
-            // Shallow (public folders): the folders right under the one asked for.
-            "FindFolder" if op.attr("Traversal") == Some("Shallow") => {
-                let parent = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
-                if self.unrouted_hierarchy(&parent) {
-                    out.push(err("ErrorFolderNotFound"));
-                    return ("FindFolderResponse".into(), out);
-                }
-                let kids: Vec<String> = self
-                    .folders
-                    .iter()
-                    .filter(|f| f.parent == parent)
-                    .map(|f| {
-                        let n = self.folders.iter().filter(|x| x.parent == f.id).count();
-                        self.folder_xml(f)
-                            .replace("<t:ChildFolderCount>0</t:ChildFolderCount>", &format!("<t:ChildFolderCount>{n}</t:ChildFolderCount>"))
-                    })
-                    .collect();
-                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", kids.concat())));
-            }
-            "FindFolder" if op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.shared_of(f)).is_some() => {
-                // Deep, in a shared mailbox: refused without access to it.
-                let Some(Ok(owner)) = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.shared_of(f)) else {
-                    out.push(err("ErrorAccessDenied"));
-                    return ("FindFolderResponse".into(), out);
-                };
-                let all: Vec<String> = self
-                    .folders
-                    .iter()
-                    .filter(|f| f.owner == owner && f.known.as_deref() != Some("msgfolderroot"))
-                    .map(|f| self.folder_xml(f))
-                    .collect();
-                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", all.concat())));
-            }
-            // Deep, in the online archive: refused without one, or by one that refuses.
-            "FindFolder"
-                if op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| f.attr("Id")).is_some_and(super::archive::is_archive_id) =>
-            {
-                match op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.archive_error(f)) {
-                    Some(code) => out.push(err(code)),
-                    None => out.push(self.archive_tree(op)),
-                }
-            }
-            "FindFolder" => {
-                // Deep: everything under the root (the mailbox's, not the public folders), in pages.
-                let view = op.child("IndexedPageFolderView");
-                let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
-                let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000).min(3);
-                let public = self.public_ids();
-                let all: Vec<Fo> = self.folders.iter().filter(|f| f.id != "ROOT" && f.owner.is_empty() && !public.contains(&f.id)).cloned().collect();
-                let page: Vec<String> = all.iter().skip(offset).take(max).map(|f| self.with_folder_policy(op, &f.id, self.folder_xml(f))).collect();
-                let last = offset + max >= all.len();
-                out.push(ok(format!(
-                    "<m:RootFolder TotalItemsInView=\"{}\" IncludesLastItemInRange=\"{last}\"><t:Folders>{}</t:Folders></m:RootFolder>",
-                    all.len(),
-                    page.concat()
-                )));
-            }
             // As Exchange: CalendarItemType can't be searched on.
             "FindItem" if op.find("FieldURI").is_some_and(|f| f.attr("FieldURI") == Some("calendar:CalendarItemType")) => {
                 out.push(err("ErrorUnsupportedPathForQuery"));
@@ -714,43 +574,6 @@ impl Data {
                     out.push(ok(String::new()));
                 }
             }
-            "CreateFolder" => {
-                let parent = op.child("ParentFolderId").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_else(|| "ROOT".into());
-                let name = op.find("DisplayName").map(|d| d.text.clone()).unwrap_or_default();
-                let id = self.folder(&name, Some(&parent), None, "IPF.Note");
-                out.push(ok(format!("<m:Folders><t:Folder><t:FolderId Id=\"{id}\"/></t:Folder></m:Folders>")));
-            }
-            "MoveFolder" => {
-                let to = op.child("ToFolderId").and_then(|t| t.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_else(|| "ROOT".into());
-                for id in ids(op.child("FolderIds")) {
-                    if let Some(f) = self.folders.iter_mut().find(|f| f.id == id) {
-                        f.parent = to.clone();
-                    }
-                    out.push(ok(format!("<m:Folders><t:Folder><t:FolderId Id=\"{id}\"/></t:Folder></m:Folders>")));
-                }
-            }
-            "UpdateFolder" => {
-                for ch in op.child("FolderChanges").map(|c| c.kids.clone()).unwrap_or_default() {
-                    let id = ch.child("FolderId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string();
-                    let name = ch.find("DisplayName").map(|d| d.text.clone()).unwrap_or_default();
-                    if let Some(f) = self.folders.iter_mut().find(|f| f.id == id) {
-                        f.name = name;
-                    }
-                    out.push(ok(String::new()));
-                }
-            }
-            "DeleteFolder" => {
-                for id in ids(op.child("FolderIds")) {
-                    self.folders.retain(|f| f.id != id);
-                    out.push(ok(String::new()));
-                }
-            }
-            "EmptyFolder" => {
-                for id in ids(op.child("FolderIds")) {
-                    self.take_items(op, |i| i.folder == id);
-                    out.push(ok(String::new()));
-                }
-            }
             "GetUserConfiguration" => out.push(self.user_configuration(op)),
             "GetRoomLists" => {
                 if self.rooms_refused {
@@ -828,136 +651,4 @@ impl Data {
         }
         (format!("{}Response", op.name), out)
     }
-}
-
-impl Data {
-    /// A `GetUserAvailability` answer: as Exchange checks the request (the schema's order, a
-    /// time zone, a window of a day or more), then each mailbox's calendar between the dates —
-    /// its own calendar items, another's folder here, and the busy stretches given — or its
-    /// refusal.
-    fn availability(&mut self, op: &El) -> String {
-        let names: Vec<&str> = op.kids.iter().map(|k| k.name.as_str()).collect();
-        if names != ["TimeZone", "MailboxDataArray", "FreeBusyViewOptions"] {
-            return "<m:ResponseCode>ErrorSchemaValidation</m:ResponseCode><m:MessageText>The request failed schema validation</m:MessageText>"
-                .into();
-        }
-        let window = op.find("TimeWindow");
-        let (start, end) = (
-            window.and_then(|w| w.text_of("StartTime")).unwrap_or("").trim().to_string(),
-            window.and_then(|w| w.text_of("EndTime")).unwrap_or("").trim().to_string(),
-        );
-        let (Some(from), Some(to)) = (quatrelle_jmap::utc_date(&start), quatrelle_jmap::utc_date(&end)) else {
-            return "<m:ResponseCode>ErrorInvalidTimeInterval</m:ResponseCode><m:MessageText>The time window is invalid</m:MessageText>".into();
-        };
-        if to - from < 86_400 || to - from > 62 * 86_400 || start.ends_with('Z') {
-            return "<m:ResponseCode>ErrorInvalidTimeInterval</m:ResponseCode><m:MessageText>The time window must be a day to two months</m:MessageText>".into();
-        }
-        let emails: Vec<String> = op
-            .find("MailboxDataArray")
-            .map(|a| a.children("MailboxData").filter_map(|m| m.find("Address").map(|x| x.text.trim().to_ascii_lowercase())).collect())
-            .unwrap_or_default();
-        self.availability_asked.push((emails.clone(), start, end));
-        let own_calendar = self.folders.iter().find(|f| f.known.as_deref() == Some("calendar") && f.owner.is_empty()).map(|f| f.id.clone());
-        let mut out = String::new();
-        for email in &emails {
-            if self.no_freebusy.iter().any(|e| e.eq_ignore_ascii_case(email)) {
-                out.push_str(
-                    "<m:FreeBusyResponse><m:ResponseMessage ResponseClass=\"Error\"><m:MessageText>No free/busy access</m:MessageText>\
-                     <m:ResponseCode>ErrorNoFreeBusyAccess</m:ResponseCode></m:ResponseMessage></m:FreeBusyResponse>",
-                );
-                continue;
-            }
-            let folder = if email == "riley@contoso.example" { own_calendar.clone() } else { Some(format!("mailbox:{email}")) };
-            let mut events: Vec<(String, String, String, String)> = self
-                .pim
-                .iter()
-                .filter(|(_, f, el)| Some(f) == folder.as_ref() && el.name == "CalendarItem")
-                .filter_map(|(_, _, el)| {
-                    Some((
-                        el.text_of("Start")?.trim().trim_end_matches('Z').to_string(),
-                        el.text_of("End")?.trim().trim_end_matches('Z').to_string(),
-                        el.text_of("LegacyFreeBusyStatus").unwrap_or("Busy").trim().to_string(),
-                        el.text_of("Subject").unwrap_or("").to_string(),
-                    ))
-                })
-                .collect();
-            events.extend(
-                self.taken.iter().filter(|(e, ..)| e.eq_ignore_ascii_case(email)).map(|(_, s, e, k, subject)| {
-                    (s.trim_end_matches('Z').to_string(), e.trim_end_matches('Z').to_string(), k.clone(), subject.clone())
-                }),
-            );
-            let items: String = events
-                .iter()
-                .filter(|(s, e, _, _)| quatrelle_jmap::utc_date(e).is_some_and(|e| e > from) && quatrelle_jmap::utc_date(s).is_some_and(|s| s < to))
-                .map(|(s, e, kind, subject)| {
-                    format!(
-                        "<t:CalendarEvent><t:StartTime>{s}</t:StartTime><t:EndTime>{e}</t:EndTime><t:BusyType>{kind}</t:BusyType>\
-                         <t:CalendarEventDetails><t:Subject>{}</t:Subject><t:IsMeeting>true</t:IsMeeting></t:CalendarEventDetails></t:CalendarEvent>",
-                        esc(subject)
-                    )
-                })
-                .collect();
-            out.push_str(&format!(
-                "<m:FreeBusyResponse><m:ResponseMessage ResponseClass=\"Success\"><m:ResponseCode>NoError</m:ResponseCode></m:ResponseMessage>\
-                 <m:FreeBusyView><t:FreeBusyViewType>Detailed</t:FreeBusyViewType><t:CalendarEventArray>{items}</t:CalendarEventArray></m:FreeBusyView>\
-                 </m:FreeBusyResponse>"
-            ));
-        }
-        format!("<m:FreeBusyResponseArray>{out}</m:FreeBusyResponseArray>")
-    }
-}
-
-/// An appointment's fields as EWS's schema orders them (those Quatrelle writes): the item's
-/// (`ItemType`), then the appointment's (`CalendarItemType`).
-const CALENDAR_ITEM_ORDER: &[&str] = &[
-    "ItemClass",
-    "Subject",
-    "Sensitivity",
-    "Body",
-    "Categories",
-    "Importance",
-    "ReminderIsSet",
-    "ReminderMinutesBeforeStart",
-    "ExtendedProperty",
-    "UID",
-    "Start",
-    "End",
-    "IsAllDayEvent",
-    "LegacyFreeBusyStatus",
-    "Location",
-    "IsResponseRequested",
-    "RequiredAttendees",
-    "OptionalAttendees",
-    "Resources",
-    "Recurrence",
-    "MeetingTimeZone",
-    "StartTimeZone",
-    "EndTimeZone",
-    "AllowNewTimeProposal",
-];
-
-/// A task's fields as EWS's schema orders them (those Quatrelle writes): the item's, then the
-/// task's (`TaskType`).
-const TASK_ORDER: &[&str] = &[
-    "ItemClass",
-    "Subject",
-    "Sensitivity",
-    "Body",
-    "Categories",
-    "Importance",
-    "ReminderDueBy",
-    "ReminderIsSet",
-    "CompleteDate",
-    "DueDate",
-    "PercentComplete",
-    "StartDate",
-    "Status",
-];
-
-/// Whether a new appointment's or task's fields come in the schema's order (one it doesn't
-/// list is let be).
-pub(super) fn in_schema_order(item: &El) -> bool {
-    let order = if item.name == "Task" { TASK_ORDER } else { CALENDAR_ITEM_ORDER };
-    let places: Vec<usize> = item.kids.iter().filter_map(|k| order.iter().position(|n| *n == k.name)).collect();
-    places.windows(2).all(|w| w.first() <= w.get(1))
 }
