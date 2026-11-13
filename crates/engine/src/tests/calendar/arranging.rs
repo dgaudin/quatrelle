@@ -401,3 +401,30 @@ fn an_unsent_appointment_in_someone_elses_calendar_isnt_made_the_accounts() {
     }
     assert_eq!(s.notices.len(), said, "nothing said: {:?}", s.notices);
 }
+
+/// A server that names no main calendar (CalDAV, JMAP): which calendar is the account's own can't
+/// be told, so an unsent appointment whose calendar went from the listing stays as it was.
+#[test]
+fn without_a_main_calendar_an_unsent_appointment_stays_where_it_was() {
+    let mut s = sample_session("arranging-orphans-caldav");
+    let (work, home) = ("https://dav.contoso.example/cal/work/", "https://dav.contoso.example/cal/home/");
+    let synced = |s: &mut Session, calendars: Vec<CalendarInfo>| {
+        let synced_calendars = calendars.iter().map(|c| c.id.clone()).collect();
+        let sync = DavSync {
+            caldav_home: Some("https://dav.contoso.example/cal/".into()),
+            calendars: Some(calendars),
+            synced_calendars,
+            checked: NOW,
+            ..Default::default()
+        };
+        s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(sync) });
+    };
+    synced(&mut s, vec![cal(work, "Work", 1), cal(home, "Home", 2)]);
+    let event = CalEvent { uid: "dentist".into(), summary: "Dentist".into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
+    s.pim_mut("sample").events.push(StoredEvent { calendar: home.into(), event, dirty: true, ..Default::default() });
+    let said = s.notices.len();
+    synced(&mut s, vec![cal(work, "Work", 1)]);
+    let kept = s.pim.get("sample").and_then(|p| p.events.iter().find(|e| e.event.uid == "dentist")).map(|e| e.calendar.clone());
+    assert_eq!(kept.as_deref(), Some(home), "not moved into another calendar");
+    assert_eq!(s.notices.len(), said, "{:?}", s.notices);
+}

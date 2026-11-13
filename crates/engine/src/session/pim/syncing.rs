@@ -213,12 +213,13 @@ impl Session {
 }
 
 /// The appointments made here and never sent (no item on the server) filed in one of the
-/// account's own calendars that `list` no longer has, moved to the account's main calendar there
-/// (else the first it can write to), still to send. How many. One filed in someone else's
-/// calendar (opened by address, in a group, not the account's) stays as it is: made the
-/// account's own, it would invite from the account.
+/// account's own calendars that `list` no longer has, moved to the account's main calendar there,
+/// still to send. How many. One filed in someone else's calendar (opened by address, in a group,
+/// not the account's) stays as it is: made the account's own, it would invite from the account.
+/// So does every one when the server names no main calendar (CalDAV, JMAP): which are the
+/// account's own can't be told then.
 fn refile_unsent(p: &mut Pim, list: &[quatrelle_model::pim::CalendarInfo]) -> usize {
-    let Some(main) = list.iter().find(|c| c.main).or_else(|| list.iter().find(|c| !c.read_only)).map(|c| c.id.clone()) else { return 0 };
+    let Some(main) = list.iter().find(|c| c.main).map(|c| c.id.clone()) else { return 0 };
     // The account's own calendars as they were listed before this sync, gone from it now.
     let gone: HashSet<String> = p
         .calendars
