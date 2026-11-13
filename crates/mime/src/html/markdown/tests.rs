@@ -107,7 +107,7 @@ fn line_of(text: &str, needle: &str) -> (usize, usize) {
 
 /// Pasted, Markdown takes the editor's own styles: headings bold and larger, emphasis, code in
 /// the monospace font, lists as lists (nested ones indented), quotes indented and grey, a table
-/// one line a row; no marks left in the text.
+/// in columns; no marks left in the text.
 #[test]
 fn pasted_markdown_takes_the_editors_styles() {
     let md = "# Plan\n\n**Bold** and *it*\n\n- one\n- two\n  - under\n\n1. first\n2. second\n\n> said\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n```\nlet x = 1;\n```\n";
@@ -125,9 +125,10 @@ fn pasted_markdown_takes_the_editors_styles() {
     }
     let (n, at) = line_of(&text, "said");
     assert!(styles.para(n).indent == 1 && styles.style(at).color.is_some(), "a quote: {:?}", styles.para(n));
-    let (n, at) = line_of(&text, "A · B");
-    assert!(styles.style(at).bold && styles.para(n).list == List::None);
-    line_of(&text, "1 · 2");
+    let (n, at) = line_of(&text, "A │ B");
+    assert!(styles.style(at).bold && styles.style(at).mono && styles.para(n).list == List::None);
+    line_of(&text, "──┼──");
+    line_of(&text, "1 │ 2");
     let (_, at) = line_of(&text, "let x = 1;");
     assert!(styles.style(at).mono);
 }
@@ -214,7 +215,7 @@ fn a_whole_page_keeps_its_items_and_their_words() {
     let md = include_str!("../../../../../docs/gmail.md");
     let (text, styles) = pasted_markdown(md).expect("Markdown");
     assert!(!text.chars().any(|c| ('\u{E000}'..='\u{F8FF}').contains(&c)), "no marks left: {text:?}");
-    assert!(!text.contains("  "), "no run of spaces: {text:?}");
+    assert!(!text.split('\n').any(|l| l.contains("  ") && !l.contains(['│', '┼'])), "no run of spaces but a table's: {text:?}");
     let listed = |list: List| (0..text.split('\n').count()).filter(|n| styles.para(*n).list == list).count();
     assert_eq!((listed(List::Bullet), listed(List::Number)), (8, 2), "{text:?}");
     for (item, list) in [
@@ -311,4 +312,82 @@ fn lists_quotes_and_code_blocks_have_room_around_them() {
     assert_eq!(styles.para(n + 2).list, List::Bullet);
     let (n, _) = line_of(&text, "Make an app password");
     assert_eq!((lines.get(n + 1), styles.para(n + 2).list), (Some(&""), List::Number), "{text:?}");
+}
+
+/// The rows of the table on this repository's page on Gmail, laid out, and the rule under its
+/// first row.
+const GMAIL_TABLE: [&str; 4] = [
+    "                │ Server         │ Port │ Security                   │ User name",
+    "────────────────┼────────────────┼──────┼────────────────────────────┼──────────────────",
+    "Incoming (IMAP) │ imap.gmail.com │ 993  │ SSL/TLS                    │ the whole address",
+    "Outgoing (SMTP) │ smtp.gmail.com │ 465  │ SSL/TLS (or 587, STARTTLS) │ the whole address",
+];
+
+/// A table is laid out in the monospace font in columns, each as wide as its widest cell, " │ "
+/// between them and a rule under the first row, which is bold; each column is aligned as the
+/// Markdown says (`:---:`, `---:`), and a cell keeps its own look (code on its grey). A table
+/// wider than a message's line is one line a row, its cells between " · ", as before.
+#[test]
+fn tables_are_laid_out_in_aligned_columns() {
+    let (text, styles) = pasted_markdown(include_str!("../../../../../docs/gmail.md")).expect("Markdown");
+    let lines: Vec<&str> = text.split('\n').collect();
+    let (n, at) = line_of(&text, GMAIL_TABLE[0]);
+    assert_eq!(lines.get(n..n + 4), Some(&GMAIL_TABLE[..]), "{text:?}");
+    assert_eq!((lines.get(n - 1), lines.get(n + 4)), (Some(&""), Some(&"")), "room around the table");
+    let block: usize = GMAIL_TABLE.iter().map(|l| l.chars().count() + 1).sum::<usize>() - 1;
+    assert!((at..at + block).filter(|i| text.chars().nth(*i) != Some('\n')).all(|i| styles.style(i).mono), "all of it monospace");
+    let (_, head) = line_of(&text, GMAIL_TABLE[0]);
+    assert!(styles.style(head + 18).bold && !styles.style(head + 24).bold, "the first row's words bold, not their spaces");
+    let (_, row) = line_of(&text, GMAIL_TABLE[2]);
+    assert!(!styles.style(row).bold && styles.style(row).highlight.is_none());
+    assert!(shaded(&styles, row + 18), "a cell's code: {:?}", styles.style(row + 18));
+    for k in n..n + 4 {
+        assert_eq!((styles.para(k).list, styles.para(k).indent), (List::None, 0));
+    }
+    // Aligned as written: left, right, centred.
+    let (text, styles) =
+        pasted_markdown("| Name | Qty | Mid |\n|:---|---:|:---:|\n| apple | 3 | x |\n| kiwi | 12 | yyy |\n\n**done**").expect("Markdown");
+    let (n, _) = line_of(&text, "Name");
+    let lines: Vec<&str> = text.split('\n').collect();
+    assert_eq!(lines.get(n..n + 4), Some(&["Name  │ Qty │ Mid", "──────┼─────┼────", "apple │   3 │  x", "kiwi  │  12 │ yyy"][..]), "{text:?}");
+    assert!(styles.style(0).bold && styles.style(0).mono);
+    // Up to 120 characters wide in columns; past it, as before.
+    let table = |a: usize, b: usize| format!("| H | I |\n|---|---|\n| {} | {} |\n\n**done**", "x".repeat(a), "y".repeat(b));
+    let (text, _) = pasted_markdown(&table(60, 57)).expect("Markdown");
+    assert!(text.contains(&format!("{} │ {}", "x".repeat(60), "y".repeat(57))), "{text:?}");
+    let (text, styles) = pasted_markdown(&table(60, 58)).expect("Markdown");
+    let (_, at) = line_of(&text, "H · I");
+    assert!(styles.style(at).bold && !styles.style(at).mono, "{text:?}");
+    let (_, at) = line_of(&text, &format!("{} · {}", "x".repeat(60), "y".repeat(58)));
+    assert!(!styles.style(at).mono);
+}
+
+/// HTML's text as shown: its tags taken out, the spaces that don't collapse made spaces.
+fn shown(html: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            c if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+}
+
+/// Sent, a pasted table keeps its columns: each row's text in `<code>` (the monospace font), its
+/// spaces ones that don't collapse, its first row bold, a cell's code on the grey.
+#[test]
+fn a_pasted_table_is_sent_in_its_columns() {
+    let (text, styles) = pasted_markdown(include_str!("../../../../../docs/gmail.md")).expect("Markdown");
+    let html = rich::to_html(&text, &styles);
+    for line in GMAIL_TABLE {
+        let row = html.lines().find(|l| shown(l) == line).unwrap_or_else(|| panic!("{line:?} isn't sent: {html}"));
+        let outside: String = row.split("<code>").map(|p| p.split_once("</code>").map_or(p, |(_, after)| after)).collect();
+        assert!(shown(&outside).is_empty(), "outside <code>: {row}");
+    }
+    assert!(html.contains("<b><code>Server</code></b>"), "{html}");
+    assert!(html.contains("<span style=\"background-color:#eeeeee\"><code>imap.gmail.com</code></span>"), "{html}");
 }

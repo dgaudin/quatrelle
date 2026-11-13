@@ -3,9 +3,12 @@
 //! The lines of pasted Markdown laid out as their marks say: what is before a mark on its line
 //! (html2text's bullets, numbers and indents) taken away with it, the line's paragraph made a
 //! list item or indented, a quote's text grey, code on its grey with a block's lines made as
-//! wide as its widest, an empty line before and after a list, a quote and a code block.
+//! wide as its widest, a table in columns ([`tables`]), an empty line before and after a list,
+//! a quote, a code block and a table.
 
 use super::*;
+
+mod tables;
 
 /// The colour of a quote's text.
 const QUOTE_GREY: [u8; 3] = [0x55, 0x55, 0x55];
@@ -61,23 +64,28 @@ impl Looks {
         made
     }
 
-    fn mono(&self, id: u16) -> bool {
-        self.palette.get(usize::from(id)).is_some_and(|s| s.mono)
+    /// The look of the character at `at` in html2text's text (`st`), with `what` added, and
+    /// code (in the monospace font: Markdown's own, nothing else is) on its grey.
+    fn of(&mut self, st: &rich::Styles, at: usize, what: u8) -> u16 {
+        let id = st.chars.get(at).copied().unwrap_or(0);
+        let shade = if self.palette.get(usize::from(id)).is_some_and(|s| s.mono) { SHADE } else { 0 };
+        self.with(id, what | shade)
     }
 }
 
-/// What a line is part of, for the room around lists, quotes and code blocks.
+/// What a line is part of, for the room around lists, quotes, code blocks and tables.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Block {
     Text,
     List,
     Quote,
     Code,
+    Table,
 }
 
 /// A line laid out: its paragraph, its characters and their looks, what it is part of, and
-/// whether it starts a block of its own (`first`: a code block's first line). A code block's line
-/// has the look its filling takes (`code`).
+/// whether it starts a block of its own (`first`: a code block's or a table's first line). A
+/// code block's line has the look its filling takes (`code`).
 struct Line {
     para: rich::Para,
     chars: Vec<(char, u16)>,
@@ -124,9 +132,13 @@ pub(super) fn lay_out(text: &str, styles: &rich::Styles) -> (String, rich::Style
     st.fit(text);
     let mut looks = Looks { palette: std::mem::take(&mut st.palette), made: HashMap::new() };
     let mut lines: Vec<Line> = Vec::with_capacity(st.paras.len());
-    let mut at = 0usize;
+    // The rows of the table being read, laid out once it ends.
+    let mut rows: Vec<tables::Row> = Vec::new();
+    let mut next = 0usize;
     for (n, line) in text.split('\n').enumerate() {
         let line_chars: Vec<char> = line.chars().collect();
+        let at = next;
+        next += line_chars.len() + 1;
         let mut para = st.para(n);
         let mark = line_chars.iter().position(|c| (MARK_FIRST..=MARK_LAST).contains(&u32::from(*c)));
         let mut quote = false;
@@ -142,18 +154,26 @@ pub(super) fn lay_out(text: &str, styles: &rich::Styles) -> (String, rich::Style
         // A code block's line: its text after its own mark (its indent is the code's).
         let code_mark = line_chars.iter().position(|c| *c == CODE_FIRST || *c == CODE_LINE);
         let grey = if quote { GREY } else { 0 };
+        // A table's row: its cells from its first one's mark on.
+        if let Some(p) = line_chars.iter().position(|c| tables::cell_mark(*c).is_some()) {
+            let row = tables::row(&line_chars, p, at, para, quote, &st, &mut looks);
+            if row.head && !rows.is_empty() {
+                lines.extend(tables::lay_out(&std::mem::take(&mut rows), &mut looks));
+            }
+            rows.push(row);
+            continue;
+        }
+        if !rows.is_empty() {
+            lines.extend(tables::lay_out(&std::mem::take(&mut rows), &mut looks));
+        }
         let code = code_mark.map(|p| looks.with(st.chars.get(at + p).copied().unwrap_or(0), grey | SHADE | MONO));
         let first = code_mark.and_then(|p| line_chars.get(p)) == Some(&CODE_FIRST);
         let skip = code_mark.or(mark).map_or(0, |p| p + 1);
         let mut chars = Vec::with_capacity(line_chars.len());
         for (k, c) in line_chars.iter().enumerate().skip(skip) {
-            if is_own_mark(*c) {
-                continue;
+            if !is_own_mark(*c) {
+                chars.push((*c, looks.of(&st, at + k, grey)));
             }
-            let id = st.chars.get(at + k).copied().unwrap_or(0);
-            // Code (in the monospace font: Markdown's own, nothing else is) on its grey.
-            let shade = if looks.mono(id) { SHADE } else { 0 };
-            chars.push((*c, looks.with(id, grey | shade)));
         }
         let block = if quote {
             Block::Quote
@@ -165,8 +185,8 @@ pub(super) fn lay_out(text: &str, styles: &rich::Styles) -> (String, rich::Style
             Block::Text
         };
         lines.push(Line { para, chars, block, first, code });
-        at += line_chars.len() + 1;
     }
+    lines.extend(tables::lay_out(&rows, &mut looks));
     fill_code_blocks(&mut lines);
     let mut out = Out { text: String::with_capacity(text.len()), chars: Vec::with_capacity(st.chars.len()), paras: Vec::new(), last: 0 };
     let mut before: Option<&Line> = None;

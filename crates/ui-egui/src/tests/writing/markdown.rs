@@ -206,7 +206,7 @@ fn a_whole_page_pasted_keeps_its_lists_in_either_look() {
         frame(&ctx, &mut a, vec![]);
         let c = compose(&a);
         assert!(!c.body.chars().any(|ch| ('\u{E000}'..='\u{F8FF}').contains(&ch)), "no marks left: {:?}", c.body);
-        assert!(!c.body.contains("  "), "no run of spaces: {:?}", c.body);
+        assert!(!c.body.split('\n').any(|l| l.contains("  ") && !l.contains(['│', '┼'])), "no run of spaces but a table's: {:?}", c.body);
         let items: Vec<(usize, List)> =
             (0..c.body.split('\n').count()).map(|n| (n, c.styles.para(n).list)).filter(|(_, l)| *l != List::None).collect();
         assert_eq!(items.iter().filter(|(_, l)| *l == List::Bullet).count(), 8, "{:?}", c.body);
@@ -246,7 +246,7 @@ fn char_at(text: &str, needle: &str) -> usize {
 /// This repository's page on Gmail pasted, in the light and the dark look: its code (the
 /// program's name in an item, the servers' names) is in the monospace font on the code grey, and
 /// drawn on a grey box the text reads on in either look; its lists have an empty line before
-/// them (never two in a row).
+/// them (never two in a row); its table is in columns, drawn in the monospace font.
 #[test]
 fn a_whole_page_pasted_is_laid_out_as_written_in_either_look() {
     use quatrelle_engine::mime::rich::CODE_SHADE;
@@ -266,8 +266,20 @@ fn a_whole_page_pasted_is_laid_out_as_written_in_either_look() {
         assert!(!c.body.contains("\n\n\n"), "two empty lines in a row: {:?}", c.body);
         let (n, _) = line_of(&c.body, lines.iter().find(|l| l.starts_with("Google no longer")).expect("the first paragraph"));
         assert_eq!((lines.get(n + 1), c.styles.para(n + 2).list), (Some(&""), List::Bullet), "{:?}", c.body);
+        let table = [
+            "                │ Server         │ Port │ Security                   │ User name",
+            "────────────────┼────────────────┼──────┼────────────────────────────┼──────────────────",
+            "Incoming (IMAP) │ imap.gmail.com │ 993  │ SSL/TLS                    │ the whole address",
+            "Outgoing (SMTP) │ smtp.gmail.com │ 465  │ SSL/TLS (or 587, STARTTLS) │ the whole address",
+        ];
+        let (n, at) = line_of(&c.body, table[0]);
+        assert_eq!(lines.get(n..n + 4), Some(&table[..]), "{:?}", c.body);
+        assert!(c.styles.style(at + 18).bold && c.styles.style(at + 18).mono, "the first row");
         frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 2400.0));
         let galley = a.ui.editor.as_ref().and_then(|e| e.drawn.as_ref()).map(|d| d.galley.clone()).expect("drawn");
+        let byte = c.body.find("Incoming (IMAP)").expect("a row");
+        let row = galley.job.sections.iter().find(|s| (s.byte_range.start.0..s.byte_range.end.0).contains(&byte)).expect("its section");
+        assert_eq!(row.format.font_id.family, egui::FontFamily::Monospace);
         let byte = c.body.find("Quatrelle)").expect("the code");
         let section = galley.job.sections.iter().find(|s| (s.byte_range.start.0..s.byte_range.end.0).contains(&byte)).expect("its section");
         let (bg, fg) = (section.format.background, section.format.color);

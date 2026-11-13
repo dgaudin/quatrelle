@@ -41,6 +41,12 @@ const MARK_LAST: u32 = 0xE06F;
 const CODE_FIRST: char = '\u{E038}';
 const CODE_LINE: char = '\u{E039}';
 
+/// Where a table's cell starts: `CELL_FIRST` plus 4 in its first row, plus its column's
+/// alignment (0 as written, 1 left, 2 centred, 3 right). A table's rows are laid out together in
+/// columns ([`lay_out`]).
+const CELL_FIRST: u32 = 0xE030;
+const CELL_LAST: u32 = 0xE037;
+
 /// The marks Quatrelle's conversions put in text (`html.rs`, `fonts.rs`, `rules.rs` and the line
 /// marks here): taken out of the clipboard's text, so none can be forged.
 fn is_own_mark(c: char) -> bool {
@@ -151,7 +157,8 @@ pub fn markdown_html(md: &str) -> String {
 /// Markdown pasted into a message, as text and styles: `None` when it isn't plainly Markdown
 /// ([`looks_like_markdown`]), it is longer than [`MARKDOWN_MAX`] or it holds no text, to be
 /// pasted as it is. Its lists are the editor's lists and its quotes indented and grey, as the
-/// editor writes them; its code is in the monospace font on [`rich::CODE_SHADE`].
+/// editor writes them; its code is in the monospace font on [`rich::CODE_SHADE`], its tables in
+/// columns in that font.
 pub fn pasted_markdown(text: &str) -> Option<(String, rich::Styles)> {
     if text.len() > MARKDOWN_MAX || !looks_like_markdown(text) {
         return None;
@@ -257,6 +264,8 @@ struct Writer {
     in_head: bool,
     in_link: bool,
     cells: usize,
+    /// The columns' alignments of the table being read.
+    aligns: Vec<pulldown_cmark::Alignment>,
 }
 
 impl Writer {
@@ -379,6 +388,10 @@ impl Writer {
                 self.items.push(0);
                 Open::Item
             }
+            Tag::Table(aligns) => {
+                self.aligns = aligns;
+                Open::Tag("")
+            }
             Tag::TableHead | Tag::TableRow => {
                 self.out.push_str("<div>");
                 self.line_mark();
@@ -387,7 +400,17 @@ impl Writer {
                 Open::Row
             }
             Tag::TableCell => {
-                if self.cells > 0 {
+                if self.marks {
+                    let align = match self.aligns.get(self.cells) {
+                        Some(pulldown_cmark::Alignment::Left) => 1,
+                        Some(pulldown_cmark::Alignment::Center) => 2,
+                        Some(pulldown_cmark::Alignment::Right) => 3,
+                        _ => 0,
+                    };
+                    if let Some(c) = char::from_u32(CELL_FIRST + if self.in_head { 4 } else { 0 } + align) {
+                        self.out.push(c);
+                    }
+                } else if self.cells > 0 {
                     self.out.push_str(" · ");
                 }
                 self.cells += 1;
@@ -418,8 +441,8 @@ impl Writer {
                 Open::Tag("</a>")
             }
             // A picture is its description (the text inside it); raw HTML blocks are dropped
-            // (their HTML comes as events of its own, dropped too); a table, a link to anything
-            // else and what isn't read here (footnotes, definitions) leave their text alone.
+            // (their HTML comes as events of its own, dropped too); a link to anything else and
+            // what isn't read here (footnotes, definitions) leave their text alone.
             _ => Open::Tag(""),
         };
         self.open.push(open);
@@ -492,6 +515,7 @@ fn written(md: &str, marks: bool) -> Option<String> {
             in_head: false,
             in_link: false,
             cells: 0,
+            aligns: Vec::new(),
         };
         for event in Parser::new_ext(md, options) {
             if w.out.len() > MARKDOWN_HTML_MAX {
