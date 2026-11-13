@@ -15,9 +15,11 @@ pub use markdown::{MARKDOWN_MAX, looks_like_markdown, markdown_html, pasted_mark
 mod pairs;
 mod rules;
 mod teams;
+mod to_markdown;
 pub use pairs::html_link_pairs;
 use rules::{RULE_MARK, mark_rules};
 pub use teams::{TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, teams_html, teams_text};
+pub use to_markdown::{MARKDOWN_WRITTEN_MAX, html_markdown, rich_markdown};
 
 /// Most lines kept of a rich rendering (the rest is shown as text).
 pub(super) const RICH_MAX_LINES: usize = 20_000;

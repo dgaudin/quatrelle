@@ -34,6 +34,7 @@ bin = [
     { name = "tnef", bench = false, test = false, doc = false, path = "fuzz_targets/tnef.rs" }, # Outlook's winmail.dat and compressed RTF
     { name = "markdown", bench = false, test = false, doc = false, path = "fuzz_targets/notes/markdown.rs" }, # a note's Markdown, and the edits its window makes
     { name = "markdown_paste", bench = false, test = false, doc = false, path = "fuzz_targets/markdown/paste.rs" }, # text pasted into a message read as Markdown, and the HTML written of it
+    { name = "markdown_from_html", bench = false, test = false, doc = false, path = "fuzz_targets/markdown/from_html.rs" }, # a received HTML body written as Markdown for the reading pane
     { name = "teams_html", bench = false, test = false, doc = false, path = "fuzz_targets/teams/html.rs" }, # a Teams message's HTML, read into its text
     { name = "teams_json", bench = false, test = false, doc = false, path = "fuzz_targets/teams/json.rs" }, # Graph's answers about chats, members, messages and presence, read into the model
     { name = "teams_store", bench = false, test = false, doc = false, path = "fuzz_targets/teams/store.rs" }, # the local copy of the Teams chats, read back as a hostile file

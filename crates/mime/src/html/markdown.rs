@@ -34,7 +34,7 @@ fn is_own_mark(c: char) -> bool {
 }
 
 /// The first `max` bytes of `text`, cut at a character's edge.
-fn cut(text: &str, max: usize) -> &str {
+pub(super) fn cut(text: &str, max: usize) -> &str {
     let mut end = max.min(text.len());
     while !text.is_char_boundary(end) {
         end = end.saturating_sub(1);
