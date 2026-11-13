@@ -219,3 +219,85 @@ fn the_journal_makes_renames_and_deletes_then_reads_the_calendars_again() {
     assert!(!seen.iter().any(|e| matches!(e, Event::OpFailed { .. })), "{seen:?}");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// After a calendar made, renamed or deleted, the calendars alone are read again: not the
+/// contacts, notes, tasks and categories a whole calendar-and-contacts sync reads.
+#[test]
+fn after_a_change_only_the_calendars_are_read_again() {
+    let (d, _, trips, _) = mailbox();
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-calendar-reread");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let categories = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "GetUserConfiguration").count();
+    // The first sync's whole calendar-and-contacts sync asks for the categories after it tells
+    // what it read: once it has, and nothing more comes.
+    eventually("the first sync's categories", || categories() >= 1);
+    let mut before = categories();
+    loop {
+        std::thread::sleep(Duration::from_millis(700));
+        if categories() == before {
+            break;
+        }
+        before = categories();
+    }
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::RenameCalendar { calendar: id(&trips), name: "Travel".into() } });
+    until(
+        &pool,
+        "renamed",
+        |e| matches!(e, Event::DavSynced { sync, .. } if sync.calendars.as_ref().is_some_and(|l| l.iter().any(|c| c.name == "Travel"))),
+    );
+    std::thread::sleep(Duration::from_millis(700));
+    assert_eq!(categories(), before, "the categories (a whole sync's) weren't read again");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// Exchange's own kinds of calendar folder (Birthdays, `IPF.Appointment.Birthday`): listed and
+/// read, but kept read-only, never renamed, deleted or filed into from here.
+#[test]
+fn a_birthdays_calendar_is_read_but_read_only() {
+    let (mut d, cal, trips, team) = mailbox();
+    let birthdays = d.folder("Birthdays", Some(&cal), None, "IPF.Appointment.Birthday");
+    d.pim.push(("B1".into(), birthdays.clone(), appointment("Ana's birthday", 21, "ana-birthday")));
+    let server = serve(d);
+    let sync = crate::ews_pim::sync(&client(&server), &Pim::default(), NOW).unwrap();
+    let b = listed(&sync, &birthdays).cloned().unwrap();
+    assert!(b.read_only, "{b:?}");
+    assert_eq!(summaries(&sync, &id(&birthdays)), ["Ana's birthday"]);
+    assert!(listed(&sync, &team).is_some_and(|c| c.read_only), "any kind but the plain one");
+    assert!(listed(&sync, &trips).is_some_and(|c| !c.read_only));
+}
+
+/// What a listing can't hold is said once in the log: a page that isn't the last (folders past
+/// it unlisted); and a folder id past what's kept of one is passed over.
+#[test]
+fn a_listing_past_its_page_is_said_and_a_huge_id_passed_over() {
+    let (mut d, cal, trips, _) = mailbox();
+    let huge = "A".repeat(600);
+    d.folders.push(Fo {
+        id: huge.clone(),
+        name: "Huge".into(),
+        parent: cal.clone(),
+        class: "IPF.Appointment".into(),
+        known: None,
+        owner: String::new(),
+    });
+    for n in 0..260 {
+        d.folder(&format!("Old {n}"), Some(&cal), None, "IPF.Note");
+    }
+    let server = serve(d);
+    let tap = crate::fakes::logs::tap(|l| l.contains("folders under the calendar"));
+    let sync = crate::ews_pim::sync(&client(&server), &Pim::default(), NOW).unwrap();
+    assert!(listed(&sync, &trips).is_some());
+    assert!(listed(&sync, &huge).is_none(), "an id that long isn't kept");
+    let said = tap.lines();
+    assert_eq!(said.iter().filter(|l| l.contains("one page")).count(), 1, "{said:?}");
+}

@@ -385,15 +385,29 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         // again after (the worker's journal does it).
         Op::CreateCalendar { name } => c.post("/me/calendars", &json!({"name": name})).map(drop),
         Op::RenameCalendar { calendar, name } => {
+            let calendar = graph_calendar(calendar)?;
             let body = serde_json::to_vec(&json!({"name": name})).map_err(|e| NetError::Protocol(e.to_string()))?;
             c.send_raw("PATCH", &format!("/me/calendars/{}", seg(calendar)), "application/json", body).map(drop)
         }
         // Gone already (deleted in Outlook meanwhile): what was asked is done.
-        Op::DeleteCalendar { calendar } => match c.send_raw("DELETE", &format!("/me/calendars/{}", seg(calendar)), "application/json", Vec::new()) {
-            Err(NetError::No(why)) if why.starts_with("HTTP 404") => Ok(()),
-            r => r.map(drop),
-        },
+        Op::DeleteCalendar { calendar } => {
+            match c.send_raw("DELETE", &format!("/me/calendars/{}", seg(graph_calendar(calendar)?)), "application/json", Vec::new()) {
+                Err(NetError::No(why)) if why.starts_with("HTTP 404") => Ok(()),
+                r => r.map(drop),
+            }
+        }
     }
+}
+
+/// A calendar id Graph gave: someone else's by address, a public folder's, one kept on this
+/// computer or one subscribed to by its link refused without asking the server.
+fn graph_calendar(calendar: &str) -> Result<&str> {
+    use quatrelle_model::pim::{LOCAL, is_web_calendar, shared_calendar_owner};
+    let foreign = calendar.is_empty() || calendar == LOCAL || calendar.starts_with("public:") || is_web_calendar(calendar);
+    if foreign || shared_calendar_owner(calendar).is_some() {
+        return Err(NetError::No("that calendar isn't one Microsoft 365 keeps for the account".into()));
+    }
+    Ok(calendar)
 }
 
 /// The parent folder id (`None` at the top) and the leaf name of a folder path.

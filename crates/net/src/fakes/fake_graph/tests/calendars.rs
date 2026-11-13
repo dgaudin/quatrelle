@@ -147,3 +147,22 @@ fn a_calendar_someone_else_owns_is_never_the_accounts_own() {
         "the groups unread: none counted as own but the main one"
     );
 }
+
+/// Ids Graph never gives (someone else's by address, a public folder's, one kept on this
+/// computer, one subscribed to by its link) are refused without a request.
+#[test]
+fn ids_graph_never_gives_are_refused_without_asking() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    let server = serve(d);
+    let store = crate::fake::tests_store("graph-calendar-foreign-ids");
+    let mut pool = start(&server, &store);
+    for calendar in ["shared:ana@contoso.example", "public:AAMkPub=", "local", "web:https://holidays.example/de.ics"] {
+        pool.submit(Job::Apply { account: "a1".into(), op: Op::DeleteCalendar { calendar: calendar.into() } });
+        until(&pool, "the refusal", |e| matches!(e, Event::OpFailed { .. }));
+    }
+    let asked: Vec<String> = server.data.lock().unwrap().calls.iter().filter(|c| c.starts_with("DELETE /me/calendars/")).cloned().collect();
+    assert!(asked.is_empty(), "{asked:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}

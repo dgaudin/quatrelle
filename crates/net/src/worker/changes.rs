@@ -574,8 +574,9 @@ impl Worker {
         if relist {
             self.relist();
         }
+        // The calendars alone, as when the calendar opens: not the contacts, notes and tasks.
         if calendars && self.conn.is_some() {
-            self.sync_dav();
+            self.sync_calendars(&[]);
         }
         destinations.sort();
         destinations.dedup();

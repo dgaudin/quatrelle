@@ -21,10 +21,20 @@ const LISTED: usize = 4 * MAX_OWN_CALENDARS;
 /// The longest calendar name kept, in characters (as the Calendar's own: [`folder_name`]).
 const NAME_CHARS: usize = 120;
 
-/// One of the account's other calendars, as listed: its folder's id and its name made plain.
+/// The longest folder id kept, in bytes (Exchange's are a few hundred at most): it becomes a
+/// calendar's id and a settings key.
+const MAX_FOLDER_ID: usize = 512;
+
+/// The plain kind of calendar folder: the others (`IPF.Appointment.Birthday`…) are Exchange's
+/// own, read but never renamed, deleted or filed into from here.
+const PLAIN: &str = "IPF.Appointment";
+
+/// One of the account's other calendars, as listed: its folder's id, its name made plain, and
+/// whether it's one of Exchange's own kinds (read-only here).
 pub(super) struct OwnFolder {
     pub id: String,
     pub name: String,
+    pub read_only: bool,
 }
 
 /// The folders of appointments under the account's Calendar, at most [`MAX_OWN_CALENDARS`].
@@ -35,13 +45,17 @@ pub(super) fn list(c: &Client) -> Result<Vec<OwnFolder>> {
          <m:IndexedPageFolderView MaxEntriesReturned=\"{LISTED}\" Offset=\"0\" BasePoint=\"Beginning\"/>\
          <m:ParentFolderIds><t:DistinguishedFolderId Id=\"calendar\"/></m:ParentFolderIds></m:FindFolder>"
     ))?;
-    let found = m.child("RootFolder").and_then(|r| r.child("Folders")).map(|f| f.kids.as_slice()).unwrap_or_default();
+    let root = m.child("RootFolder");
+    if root.and_then(|r| r.attr("IncludesLastItemInRange")) == Some("false") {
+        log::info!("more folders under the calendar than one page of {LISTED} holds: those past it aren't listed");
+    }
+    let found = root.and_then(|r| r.child("Folders")).map(|f| f.kids.as_slice()).unwrap_or_default();
     let mut out = Vec::new();
     let mut more = 0usize;
     for f in found {
         let class = f.text_of("FolderClass").unwrap_or("").trim();
-        let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).filter(|id| !id.is_empty()) else { continue };
-        if !class.starts_with("IPF.Appointment") {
+        let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).filter(|id| !id.is_empty() && id.len() <= MAX_FOLDER_ID) else { continue };
+        if !class.starts_with(PLAIN) {
             continue;
         }
         if out.len() >= MAX_OWN_CALENDARS {
@@ -49,7 +63,7 @@ pub(super) fn list(c: &Client) -> Result<Vec<OwnFolder>> {
             continue;
         }
         let name: String = plain_name(f.text_of("DisplayName").unwrap_or("")).chars().take(NAME_CHARS).collect();
-        out.push(OwnFolder { id: id.to_string(), name: if name.is_empty() { "Calendar".into() } else { name } });
+        out.push(OwnFolder { id: id.to_string(), name: if name.is_empty() { "Calendar".into() } else { name }, read_only: class != PLAIN });
     }
     if more > 0 {
         log::info!("{} other calendars under the calendar: the first {MAX_OWN_CALENDARS} read, {more} left out", MAX_OWN_CALENDARS + more);
@@ -78,7 +92,7 @@ pub(super) fn read_all(c: &Client, pim: &Pim, now: i64, refused: &[Tombstone], c
             id: id.clone(),
             name: f.name,
             color: before.map_or_else(|| u8::try_from((n + 2) % 8).unwrap_or(0), |k| k.color),
-            read_only: false,
+            read_only: f.read_only,
             ctag: before.map(|k| k.ctag.clone()).unwrap_or_default(),
             group: String::new(),
             main: false,
