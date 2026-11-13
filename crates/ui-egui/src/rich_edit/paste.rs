@@ -84,7 +84,7 @@ fn pasted_text(ui: &Ui) -> Option<String> {
 /// for the text box to paste it as it is.
 fn paste_markdown(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id, raw: String) -> bool {
     let Some((add, add_styles)) = quatrelle_engine::mime::pasted_markdown(&raw) else { return false };
-    ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
+    ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_) | egui::Event::MiddleClickPaste { .. })));
     c.styles.fit(&c.body);
     let n = c.body.chars().count();
     let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
@@ -102,5 +102,34 @@ fn paste_markdown(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id, r
     ed.sel = end..end;
     ed.typing = None;
     ui.ctx().request_repaint();
+    true
+}
+
+/// A middle click on the text, which pastes the X11/Wayland selection where it lands (egui's
+/// text box puts it there, keyboard or not): text that is plainly Markdown goes in formatted
+/// there instead, as a paste does ([`paste_markdown`]: Undo right after gives back the text as
+/// it was). Anything else is left to the text box.
+pub(super) fn middle_click_markdown(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id) -> bool {
+    let Some(drawn) = ed.drawn.clone() else { return false };
+    // Where the click was, in the text's layer (as the text box reads it).
+    let layer = ui.ctx().layer_transform_from_global(ui.layer_id());
+    let clicked = ui.input(|i| {
+        i.events.iter().find_map(|e| match e {
+            egui::Event::MiddleClickPaste { pos, text } if text.len() <= quatrelle_engine::mime::MARKDOWN_MAX => {
+                let pos = layer.map_or(*pos, |t| t * *pos);
+                drawn.rect.contains(pos).then(|| (pos, text.replace("\r\n", "\n").replace('\r', "\n")))
+            }
+            _ => None,
+        })
+    });
+    let Some((pos, text)) = clicked else { return false };
+    let n = c.body.chars().count();
+    let at = drawn.galley.cursor_from_pos(pos - drawn.pos).index.0.min(n);
+    let before = std::mem::replace(&mut ed.sel, at..at);
+    if !paste_markdown(ui, ed, c, id, text) {
+        ed.sel = before;
+        return false;
+    }
+    ui.memory_mut(|m| m.request_focus(id));
     true
 }

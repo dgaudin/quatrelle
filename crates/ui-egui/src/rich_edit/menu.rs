@@ -79,8 +79,7 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
             ed.refocus = Some(sel.clone());
         }
         if item(ui, "Paste", "Ctrl+V", !c.sending) {
-            ed.paste = true;
-            ed.refocus = Some(sel.clone());
+            ed.paste_here(sel.clone());
         }
         ui.separator();
         if item(ui, "Select all", "Ctrl+A", n > 0) {

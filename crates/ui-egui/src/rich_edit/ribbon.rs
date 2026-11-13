@@ -219,14 +219,12 @@ fn tabs(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &Compose, input: &RibbonInpu
 fn clipboard(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &mut Compose, sel: &Range<usize>) {
     let some = !sel.is_empty();
     if widgets::big_button(ui, Icon::Paste, "Paste", &t, !c.sending).on_hover_text("Ctrl+V").clicked() {
-        ed.paste = true;
-        ed.refocus = Some(sel.clone());
+        ed.paste_here(sel.clone());
     }
     let r = widgets::big_more(ui, "Paste options", &t);
     egui::Popup::menu(&r).show(|ui| {
         if ui.button(tl!("Paste")).clicked() {
-            ed.paste = true;
-            ed.refocus = Some(sel.clone());
+            ed.paste_here(sel.clone());
             ui.close();
         }
         if ui.button(tl!("Keep text only")).on_hover_text(tl!("Paste without the look it has where it was copied")).clicked() {

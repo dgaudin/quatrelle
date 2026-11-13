@@ -187,11 +187,17 @@ impl Editor {
         self.last_change = 0.0;
     }
 
+    /// Paste (the right-click menu's, the ribbon's): at `sel`, once the text has the keyboard
+    /// back, the system is asked for the clipboard; what it sends is pasted as Ctrl+V's is.
+    pub(crate) fn paste_here(&mut self, sel: Range<usize>) {
+        self.paste = true;
+        self.refocus = Some(sel);
+    }
+
     /// Paste › Keep text only: the next paste, at `sel`, goes in as text alone.
     pub(crate) fn paste_text_only(&mut self, sel: Range<usize>) {
-        self.paste = true;
+        self.paste_here(sel);
         self.paste_plain = true;
-        self.refocus = Some(sel);
     }
 
     fn remember(&mut self, c: &Compose, cursor: usize) {
@@ -533,6 +539,10 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
         if !c.plain && ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))) {
             paste_formatted(ui, ed, c, id);
         }
+    }
+    // A middle click on the text pastes the X11/Wayland selection there, keyboard or not.
+    if !c.plain {
+        middle_click_markdown(ui, ed, c, id);
     }
     let before = c.body.clone();
     let styles = c.styles.clone();
