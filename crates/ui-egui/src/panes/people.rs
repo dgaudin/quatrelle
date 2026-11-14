@@ -14,7 +14,7 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog, UiState, widgets};
 
-mod card;
+pub(crate) mod card;
 
 pub use card::show;
 

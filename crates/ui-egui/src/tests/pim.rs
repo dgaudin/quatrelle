@@ -12,6 +12,7 @@ mod calendar_look;
 mod calendar_menu;
 mod calendar_removed;
 mod calendar_selection;
+mod contact_card;
 mod conversations;
 mod item_files;
 mod new_item_keys;
