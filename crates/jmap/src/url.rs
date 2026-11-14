@@ -2,6 +2,8 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! `http(s)://` addresses: parsed, resolved against a base, and percent-encoding.
 
+use std::fmt::Write as _;
+
 use crate::{Error, Result};
 
 /// A parsed `http(s)://host[:port]/path?query` URL.
@@ -20,6 +22,23 @@ pub fn default_port(https: bool) -> u16 {
 
 fn strip_prefix_ci<'a>(s: &'a str, p: &str) -> Option<&'a str> {
     s.get(..p.len()).filter(|h| h.eq_ignore_ascii_case(p)).and_then(|_| s.get(p.len()..))
+}
+
+/// A path with its spaces and control characters percent-encoded rather than sent raw (each
+/// byte of a character's UTF-8: U+0085 is `%C2%85`).
+fn encode_controls(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for c in path.chars() {
+        if c == ' ' || c.is_control() {
+            let mut buf = [0u8; 4];
+            for b in c.encode_utf8(&mut buf).bytes() {
+                let _ = write!(out, "%{b:02X}");
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl Url {
@@ -63,12 +82,7 @@ impl Url {
         } else {
             tail.to_string()
         };
-        // Spaces and controls are percent-encoded rather than sent raw.
-        let path: String = path
-            .chars()
-            .flat_map(|c| if c == ' ' || c.is_control() { format!("%{:02X}", u32::from(c) & 0xff).chars().collect::<Vec<_>>() } else { vec![c] })
-            .collect();
-        Ok(Url { https, host: host.to_ascii_lowercase(), port, path })
+        Ok(Url { https, host: host.to_ascii_lowercase(), port, path: encode_controls(&path) })
     }
 
     /// A `Location` (or any reference) resolved against this URL.
@@ -151,5 +165,11 @@ mod tests {
         assert_eq!(base64(b"me:pw"), "bWU6cHc=");
         assert_eq!(base64(b""), "");
         assert_eq!(base64(b"ab"), "YWI=");
+    }
+
+    #[test]
+    fn a_paths_controls_go_as_their_utf8() {
+        let u = Url::parse("https://h.example/a b\u{1}\u{7f}\u{85}\u{9f}é?q=x\ty").unwrap();
+        assert_eq!(u.path, "/a%20b%01%7F%C2%85%C2%9Fé?q=x%09y");
     }
 }
