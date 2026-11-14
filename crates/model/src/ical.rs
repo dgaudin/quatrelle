@@ -455,17 +455,11 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                         e.recurrence_id = zones.time(x, &e.tzid).map(|(t, _, _)| t);
                         continue;
                     }
+                    // At most 1,000 of each, from all their lines; a period (`RDATE;VALUE=PERIOD`)
+                    // by its start.
                     let list = if x.name == "RDATE" { &mut e.rdates } else { &mut e.exdates };
-                    for v in x.value.split(',') {
-                        // A period (`RDATE;VALUE=PERIOD`) starts the occurrence.
-                        let v = v.split('/').next().unwrap_or(v);
-                        let one = Line { value: v.to_string(), ..x.clone() };
-                        if let Some((t, _, _)) = zones.time(&one, &e.tzid)
-                            && list.len() < 1000
-                        {
-                            list.push(t);
-                        }
-                    }
+                    let room = 1000usize.saturating_sub(list.len());
+                    list.extend(zones.times(x, &e.tzid, room));
                 }
                 if e.end <= e.start {
                     e.end = match dur {
