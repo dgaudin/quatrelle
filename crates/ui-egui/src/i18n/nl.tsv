@@ -1937,6 +1937,7 @@ folder	Conflicts	Conflicten
 	Calendar and contacts couldn't be read: changes to them won't be saved	Agenda en contactpersonen konden niet worden gelezen: wijzigingen daarin worden niet opgeslagen
 	Your rules couldn't be read: changes to them won't be saved	Je regels konden niet worden gelezen: wijzigingen daarin worden niet opgeslagen
 	Snoozed mail couldn't be read: changes to it won't be saved	Uitgestelde mail kon niet worden gelezen: wijzigingen daarin worden niet opgeslagen
+	What replies waiting in the Outbox answer couldn't be read: that mail may not be marked as answered	Waarop de antwoorden in Postvak UIT antwoorden, kon niet worden gelezen: die e-mail wordt mogelijk niet als beantwoord gemarkeerd
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} berichten geïmporteerd, maar het laatste deel kon niet worden opgeslagen: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} berichten geïmporteerd, maar het laatste deel kon niet worden opgeslagen: {error}. Importeer het bestand opnieuw om het te bewaren.
 	Add an account to send mail.	Voeg een account toe om e-mail te verzenden.

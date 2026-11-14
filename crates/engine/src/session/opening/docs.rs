@@ -16,17 +16,24 @@ impl Session {
     /// Reads what the data folder keeps for the session, as it opens.
     pub(in crate::session) fn load_documents(&mut self) {
         let mut why = None;
+        let mut marks_unread = false;
         // The accounts whose folder list is damaged: who, what was said, and whether a server lists.
         let mut damaged: Vec<(String, String, bool)> = Vec::new();
         self.load_rules_and_snoozes();
         if let Some(store) = &self.store {
             self.contacts = Contacts::load(store);
-            self.pending_marks = store
-                .load_doc::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(id, k, f)| (id, (k, f)))
-                .collect();
+            match store.load_doc::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS) {
+                Ok(marks) => self.pending_marks = marks.into_iter().map(|(id, k, f)| (id, (k, f))).collect(),
+                Err(e) => {
+                    // The Replied and Forwarded flags replies in the Outbox owe: ones owed from
+                    // now on are set if they go before Quatrelle closes, but never saved over it.
+                    // Said, as for the rules and the snoozed mail: what they answer may never show
+                    // as answered.
+                    log::warn!("the flags owed by replies in the Outbox couldn't be read: {}", kind_of(&e));
+                    self.docs_unread.insert(PENDING_MARKS);
+                    marks_unread = true;
+                }
+            }
             // Never taken for none: with none shown, the first change saved would write one
             // account over the others, whose data files would then be nobody's.
             let accounts = match store.load_accounts() {
@@ -67,6 +74,9 @@ impl Session {
                 sort_folders(&mut folders);
                 self.accounts.push(AccountState { config, folders, status: SyncStatus::Offline, quota: None, vacation: VacationState::Unknown });
             }
+        }
+        if marks_unread {
+            self.notice("What replies waiting in the Outbox answer couldn't be read: that mail may not be marked as answered", true);
         }
         if let Some(why) = why {
             self.notice_with("the list of accounts couldn't be read, so it isn't saved: {error}", &[("error", &why)], true);

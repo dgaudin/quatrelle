@@ -1940,6 +1940,7 @@ folder	Conflicts	Конфликты
 	Calendar and contacts couldn't be read: changes to them won't be saved	Не удалось прочитать календарь и контакты: изменения в них не будут сохранены
 	Your rules couldn't be read: changes to them won't be saved	Не удалось прочитать ваши правила: изменения в них не будут сохранены
 	Snoozed mail couldn't be read: changes to it won't be saved	Не удалось прочитать отложенную почту: изменения в ней не будут сохранены
+	What replies waiting in the Outbox answer couldn't be read: that mail may not be marked as answered	Не удалось прочитать, на какие письма отвечают ответы, ожидающие в «Исходящих»: эти письма могут не быть помечены как отвеченные
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: импортировано писем: {messages}, но последнюю часть сохранить не удалось: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: импортировано писем: {messages}, но последнюю часть сохранить не удалось: {error}. Импортируйте файл ещё раз, чтобы сохранить её.
 	Add an account to send mail.	Добавьте учётную запись, чтобы отправлять почту.

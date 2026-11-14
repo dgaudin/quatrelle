@@ -1940,6 +1940,7 @@ folder	Conflicts	Conflitti
 	Calendar and contacts couldn't be read: changes to them won't be saved	Non è stato possibile leggere calendario e contatti: le modifiche non verranno salvate
 	Your rules couldn't be read: changes to them won't be saved	Non è stato possibile leggere le tue regole: le modifiche non verranno salvate
 	Snoozed mail couldn't be read: changes to it won't be saved	Non è stato possibile leggere la posta posticipata: le modifiche non verranno salvate
+	What replies waiting in the Outbox answer couldn't be read: that mail may not be marked as answered	Non è stato possibile leggere a quali messaggi rispondono le risposte in attesa in Posta in uscita: potrebbero non essere contrassegnati come risposti
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} messaggi importati, ma non è stato possibile salvare l’ultima parte: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} messaggi importati, ma non è stato possibile salvare l’ultima parte: {error}. Importa di nuovo il file per conservarla.
 	Add an account to send mail.	Aggiungi un account per inviare posta.

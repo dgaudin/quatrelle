@@ -427,8 +427,8 @@ pub struct Session {
     pub pim: HashMap<String, quatrelle_model::pim::Pim>,
     /// The accounts whose calendars and contacts couldn't be read: never saved over.
     pub(crate) pim_unread: HashSet<String>,
-    /// The documents (`rules.json`, `snoozes.json`) that couldn't be read at start: never saved
-    /// over with what's shown in their place.
+    /// The documents (`rules.json`, `snoozes.json`, `pending-marks.json`) that couldn't be read
+    /// at start: never saved over with what's shown or kept in their place.
     pub(crate) docs_unread: HashSet<&'static str>,
     /// Why the list of accounts couldn't be read: while set, it is never saved.
     pub accounts_unread: Option<String>,
