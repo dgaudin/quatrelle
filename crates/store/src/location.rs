@@ -147,7 +147,10 @@ pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
         Err(_) => Vec::new(),
     };
     let created = !to.exists();
-    let copy = || -> Result<(), String> {
+    // The files this move makes, each noted before it's written: on failure only they go, never
+    // one that was there already.
+    let mut made: Vec<PathBuf> = Vec::new();
+    let mut copy = || -> Result<(), String> {
         // A folder made for them, or under Quatrelle's own name, is the owner's alone; one the
         // user had keeps its access. Each file copied is the owner's alone either way.
         if created || to.ends_with(FILES_FOLDER) {
@@ -160,6 +163,7 @@ pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
             if dst.exists() {
                 return Err(format!("{} is already there", dst.display()));
             }
+            made.push(dst.clone());
             fs::copy(src, &dst).map_err(|e| format!("{}: {e}", dst.display()))?;
             if !same(src, &dst) {
                 return Err(format!("{} didn't copy whole", dst.display()));
@@ -170,8 +174,8 @@ pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
     };
     if let Err(e) = copy() {
         // Back as it was: only what this move made goes.
-        for src in &list {
-            let _ = fs::remove_file(to.join(src.file_name().unwrap_or_default()));
+        for dst in &made {
+            let _ = fs::remove_file(dst);
         }
         if created {
             let _ = fs::remove_dir_all(&to);
@@ -262,6 +266,26 @@ mod tests {
         // A damaged pointer is ignored.
         fs::write(base.join(LOCATION), b"{nope").unwrap();
         assert_eq!(files_dir(&base), default_files_dir(&base));
+        let _ = fs::remove_dir_all(t);
+    }
+
+    /// A move that stops at a file already in the target folder (put there after the move was
+    /// asked for, an older copy say) leaves that file alone, and takes back only what it copied.
+    /// The undoing removed every file of the move's names from the target, that one too.
+    #[test]
+    fn a_move_that_stops_keeps_what_was_there() {
+        let t = temp("there");
+        let (base, files, target) = (t.join("app"), t.join("C").join(FILES_FOLDER), t.join("D").join("Mail"));
+        seed(&base, &files);
+        assert_eq!(schedule_move(&base, &target).unwrap(), target);
+        // Meanwhile, an older copy of one of them turns up there.
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("old.quatrelle"), b"an older copy").unwrap();
+        assert!(apply_pending_move(&base).is_err());
+        assert_eq!(fs::read(target.join("old.quatrelle")).unwrap(), b"an older copy", "what was there stays");
+        assert!(!target.join("zoe@studio.example.quatrelle").exists(), "what the move copied goes");
+        assert_eq!(files_dir(&base), files);
+        assert!(files.join("old.quatrelle").exists() && files.join("zoe@studio.example.quatrelle").exists(), "nothing moved");
         let _ = fs::remove_dir_all(t);
     }
 }
