@@ -2201,7 +2201,6 @@ folder	Online Archive	在线存档
 	Registering the application	注册应用程序
 	How to register the application	如何注册应用程序
 	Announce new messages	提醒新消息
-	Announcements begin with a later version	提醒将在以后的版本中提供
 	Only messages sent to me alone or naming me	仅限只发给我或提到我的消息
 	A copy made for another account was set aside	为另一个帐户制作的副本已被放在一边
 	Signed in as {name} ({address})	已登录为 {name} ({address})
@@ -2250,6 +2249,15 @@ module	Conversations	对话
 	Teams doesn't let this conversation be read here	Teams 不允许在此阅读此会话
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	发给 {chat} 的一条消息未发送
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (外部)
+	{name} (App)	{name} (应用)
+	{sender} mentioned you in {chat}	{sender} 在 {chat} 中提到了你
+	{sender} mentioned you	{sender} 提到了你
+	{sender} in {chat}	{sender} ({chat})
+	{n} new messages in {chats} conversations	{chats} 个会话中有 {n} 条新消息
+teams	New message	新消息
+teams	{n} new messages	{n} 条新消息
 # A person’s presence in Teams.
 presence	Available	空闲
 presence	Busy	忙碌

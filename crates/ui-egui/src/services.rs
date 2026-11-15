@@ -203,7 +203,8 @@ pub trait Services {
     }
     /// Leave the waiting version for later: not installed as Quatrelle closes this time.
     fn keep_update_for_later(&mut self) {}
-    /// Show a desktop notification (new mail). The default does nothing.
+    /// Show a desktop notification (new mail, Teams' new messages): `body` is plain text. The
+    /// default does nothing.
     fn notify(&mut self, _title: &str, _body: &str) {}
     /// Tell of a calendar reminder (`key`: the reminder's, for answering it): a notification
     /// that stays until answered, with `snooze` and `dismiss` buttons where the desktop has

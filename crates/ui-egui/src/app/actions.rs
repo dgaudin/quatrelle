@@ -8,7 +8,8 @@ use crate::*;
 mod pictures;
 
 impl MailApp {
-    /// New mail: a desktop notification and the unread count in the window title.
+    /// New mail and Teams' new messages: desktop notifications, and the unread count in the window
+    /// title.
     pub(crate) fn announce(&mut self, ctx: &egui::Context) {
         // An account with no password kept (a portable copy's, at each start) asks for it, one
         // at a time, when nothing else is open.
@@ -68,6 +69,12 @@ impl MailApp {
             // RequestUserAttention: Windows keeps that highlight on the taskbar until focus returns.
             self.services.notify(&title, &body);
         }
+        // Teams' new messages, as the engine decides. A window that gains the focus isn't put away
+        // any more (a second launch shows it again too).
+        if self.ui.put_away && ctx.input(|i| i.events.contains(&egui::Event::WindowFocused(true))) {
+            self.ui.put_away = false;
+        }
+        conversations::announce(&mut self.session, &mut *self.services, ctx, self.ui.put_away);
         let unread = self.session.inbox_unread();
         let view = match self.session.module {
             Module::Mail => view_title(&self.session),

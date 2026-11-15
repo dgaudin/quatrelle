@@ -2203,7 +2203,6 @@ folder	Online Archive	Онлайн-архив
 	Registering the application	Регистрация приложения
 	How to register the application	Как зарегистрировать приложение
 	Announce new messages	Сообщать о новых сообщениях
-	Announcements begin with a later version	Оповещения появятся в следующей версии
 	Only messages sent to me alone or naming me	Только сообщения лично мне или с упоминанием меня
 	A copy made for another account was set aside	Копия для другой учётной записи отложена
 	Signed in as {name} ({address})	Вход выполнен: {name} ({address})
@@ -2252,6 +2251,14 @@ module	Conversations	Беседы
 	Teams doesn't let this conversation be read here	Teams не позволяет читать эту беседу здесь
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Сообщение не отправлено: {chat}
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (Внешнее)
+	{name} (App)	{name} (Приложение)
+	{sender} mentioned you in {chat}	{sender}: вас упомянули в беседе {chat}
+	{sender} mentioned you	{sender}: вас упомянули
+	{sender} in {chat}	{sender} в беседе {chat}
+	{n} new messages in {chats} conversations	Новых сообщений: {n}, бесед: {chats}
+teams	{n} new messages	Новых сообщений: {n}
 # A person’s presence in Teams.
 presence	Available	На месте
 presence	Busy	Занят

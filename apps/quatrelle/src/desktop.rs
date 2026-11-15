@@ -468,7 +468,7 @@ impl Services for Desktop {
         browsers::launch(Path::new(program), profile, url)
     }
     fn notify(&mut self, title: &str, body: &str) {
-        let (title, body) = (title.to_string(), body.to_string());
+        let (title, body) = (title.to_string(), shown_as_text(body));
         #[cfg(windows)]
         let portable = self.portable;
         // Off the UI thread: the notification service can be slow, or missing.
@@ -493,7 +493,8 @@ impl Services for Desktop {
     fn notify_reminder(&mut self, key: &str, title: &str, body: &str, snooze: &str, dismiss: &str) {
         #[cfg(all(unix, not(target_os = "macos")))]
         {
-            let (key, title, body, snooze, dismiss) = (key.to_string(), title.to_string(), body.to_string(), snooze.to_string(), dismiss.to_string());
+            let (key, title, body, snooze, dismiss) =
+                (key.to_string(), title.to_string(), shown_as_text(body), snooze.to_string(), dismiss.to_string());
             let answers = self.reminder_answers.clone();
             let waker = self.waker.clone();
             let notes = self.reminder_notes.0.clone();
@@ -573,6 +574,14 @@ impl Services for Desktop {
             log::warn!("reminder notification: {e}");
         }
     }
+}
+
+/// A notification's text as the desktop is to show it: as it was written. On Linux and the BSDs
+/// the desktop may read the body as markup (the summary never), so a stranger's `<b>` or `<img>`
+/// in a message, a subject or a place is escaped there (mail, reminders and Teams alike); the
+/// other systems show the text as it is.
+fn shown_as_text(body: &str) -> String {
+    if cfg!(all(unix, not(target_os = "macos"))) { quatrelle_engine::mime::html_escape(body) } else { body.to_string() }
 }
 
 /// Open a file or a web address with the system's choice of app, as Explorer would.
@@ -733,5 +742,18 @@ mod tests {
         }
         assert!(other.contains("\"Fichier XYZ\""), "{other}");
         assert!(english.contains("\"Save as\"") && english.contains("\"PDF document\"") && english.contains("\"All files\""), "{english}");
+    }
+
+    /// A stranger's tags in a notification's text: on Linux and the BSDs, where the desktop may
+    /// read the body as markup, they're shown as written; elsewhere the text goes as it is.
+    #[test]
+    fn a_notifications_markup_is_escaped_for_the_desktop() {
+        let text = "<b>x</b> & <img src=\"https://e.example/a.png\"> 'q'";
+        let shown = shown_as_text(text);
+        if cfg!(all(unix, not(target_os = "macos"))) {
+            assert_eq!(shown, "&lt;b&gt;x&lt;/b&gt; &amp; &lt;img src=&quot;https://e.example/a.png&quot;&gt; &#39;q&#39;");
+        } else {
+            assert_eq!(shown, text);
+        }
     }
 }

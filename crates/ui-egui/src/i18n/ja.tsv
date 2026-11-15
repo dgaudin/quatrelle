@@ -2200,7 +2200,6 @@ folder	Online Archive	オンライン アーカイブ
 	Registering the application	アプリケーションの登録
 	How to register the application	アプリケーションの登録方法
 	Announce new messages	新着メッセージを知らせる
-	Announcements begin with a later version	通知は今後のバージョンで始まります
 	Only messages sent to me alone or naming me	自分だけに送られた、または自分の名前が入ったメッセージのみ
 	A copy made for another account was set aside	別のアカウント用のコピーを別に保管しました
 	Signed in as {name} ({address})	{name} ({address}) としてサインイン中
@@ -2249,6 +2248,13 @@ module	Conversations	会話
 	Teams doesn't let this conversation be read here	Teams ではこの会話をここで読むことができません
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	{chat} へのメッセージは送信されませんでした
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (外部)
+	{name} (App)	{name} (アプリ)
+	{sender} mentioned you in {chat}	{sender} が {chat} であなたをメンションしました
+	{sender} mentioned you	{sender} があなたをメンションしました
+	{sender} in {chat}	{sender} ({chat})
+	{n} new messages in {chats} conversations	{chats} 件の会話に {n} 件の新着メッセージ
 # A person’s presence in Teams.
 presence	Available	在席中
 presence	Busy	取り込み中

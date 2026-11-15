@@ -2199,7 +2199,6 @@ folder	Online Archive	ארכיון מקוון
 	Registering the application	רישום היישום
 	How to register the application	איך לרשום את היישום
 	Announce new messages	הודעה על הודעות חדשות
-	Announcements begin with a later version	ההודעות יתחילו בגרסה מאוחרת יותר
 	Only messages sent to me alone or naming me	רק הודעות שנשלחו אליי בלבד או שמזכירות אותי
 	A copy made for another account was set aside	עותק שנעשה עבור חשבון אחר הונח בצד
 	Signed in as {name} ({address})	מחובר בתור {name} ({address})
@@ -2248,6 +2247,13 @@ module	Conversations	שיחות
 	Teams doesn't let this conversation be read here	Teams לא מאפשר לקרוא כאן את השיחה הזו
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	הודעה אל {chat} לא נשלחה
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (חיצוני)
+	{name} (App)	{name} (אפליקציה)
+	{sender} mentioned you in {chat}	{sender} הזכיר/ה אותך ב-{chat}
+	{sender} mentioned you	{sender} הזכיר/ה אותך
+	{sender} in {chat}	{sender} ב-{chat}
+	{n} new messages in {chats} conversations	{n} הודעות חדשות ב-{chats} שיחות
 # A person’s presence in Teams.
 presence	Available	זמין
 presence	Busy	עסוק

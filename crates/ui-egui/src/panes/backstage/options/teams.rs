@@ -94,7 +94,7 @@ pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>
                 }
             });
             account(s, t, ui, acts);
-            setting_row(ui, t, false, name(t, tl!("Announce new messages")), Some(note(t, tl!("Announcements begin with a later version"))), |ui| {
+            setting_row(ui, t, false, name(t, tl!("Announce new messages")), None, |ui| {
                 let mut on = p.notify;
                 if widgets::switch(ui, t, &mut on, tl!("Announce new messages")).changed() {
                     acts.push(Action::Run("teams.settings", json!({"notify": on})));

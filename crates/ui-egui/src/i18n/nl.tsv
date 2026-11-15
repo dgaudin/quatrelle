@@ -2200,7 +2200,6 @@ folder	Online Archive	Online-archief
 	Registering the application	De toepassing registreren
 	How to register the application	Zo registreer je de toepassing
 	Announce new messages	Nieuwe berichten melden
-	Announcements begin with a later version	Meldingen komen met een latere versie
 	Only messages sent to me alone or naming me	Alleen berichten aan mij alleen of die mij noemen
 	A copy made for another account was set aside	Een kopie voor een ander account is apart gezet
 	Signed in as {name} ({address})	Aangemeld als {name} ({address})
@@ -2249,6 +2248,13 @@ module	Conversations	Gesprekken
 	Teams doesn't let this conversation be read here	Teams laat dit gesprek hier niet lezen
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Een bericht aan {chat} is niet verzonden
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (Extern)
+	{name} (App)	{name} (App)
+	{sender} mentioned you in {chat}	{sender} noemde je in {chat}
+	{sender} mentioned you	{sender} noemde je
+	{sender} in {chat}	{sender} in {chat}
+	{n} new messages in {chats} conversations	{n} nieuwe berichten in {chats} gesprekken
 # A person’s presence in Teams.
 presence	Available	Beschikbaar
 presence	Busy	Bezet

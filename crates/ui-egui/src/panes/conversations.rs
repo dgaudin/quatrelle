@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Conversations: Teams' chats, read in Quatrelle. Only the Teams worker talks to Graph and keeps
 //! the copy; the engine holds bounded windows of it (`Session::teams`), and the window takes the
-//! worker's events a few a frame ([`TeamsQueue`]) so a burst of them never holds a frame up.
+//! worker's events a few a frame ([`TeamsQueue`]) so a burst of them never holds a frame up; what
+//! the engine announces of new messages goes to the desktop's notifications ([`announce`]).
 //! The module is shown with Teams on and signed in (File › Options › Teams); its list
 //! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are.
 //! Pictures are decoded on a thread of their own (`pictures.rs`).
@@ -17,7 +18,9 @@ mod list;
 mod pictures;
 
 pub(crate) use chat::chat;
-pub(crate) use events::{TEAMS_EVENTS_A_FRAME, TeamsQueue};
+pub(crate) use events::{TEAMS_EVENTS_A_FRAME, TeamsQueue, announce};
+#[cfg(test)]
+pub(crate) use events::{body_of, repaint_in, title_of};
 #[cfg(test)]
 pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};

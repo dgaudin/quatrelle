@@ -2199,7 +2199,6 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	Registering the application	تسجيل التطبيق
 	How to register the application	كيفية تسجيل التطبيق
 	Announce new messages	الإعلام بالرسائل الجديدة
-	Announcements begin with a later version	تبدأ الإعلامات في إصدار لاحق
 	Only messages sent to me alone or naming me	الرسائل المرسلة إليّ وحدي أو التي تذكرني فقط
 	A copy made for another account was set aside	وُضعت جانباً نسخة مصنوعة لحساب آخر
 	Signed in as {name} ({address})	تم تسجيل الدخول باسم {name} ({address})
@@ -2248,6 +2247,13 @@ module	Conversations	المحادثات
 	Teams doesn't let this conversation be read here	لا يسمح Teams بقراءة هذه المحادثة هنا
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	لم تُرسل رسالة إلى {chat}
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (خارجي)
+	{name} (App)	{name} (تطبيق)
+	{sender} mentioned you in {chat}	ذكرك {sender} في {chat}
+	{sender} mentioned you	ذكرك {sender}
+	{sender} in {chat}	{sender} في {chat}
+	{n} new messages in {chats} conversations	{n} رسائل جديدة في {chats} محادثات
 # A person’s presence in Teams.
 presence	Available	متاح
 presence	Busy	مشغول

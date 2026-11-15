@@ -350,6 +350,16 @@ fn html_escape_writes_the_five_marks_as_entities() {
     );
 }
 
+/// The desktop's notifications on Linux and the BSDs, whose body the desktop may read as markup,
+/// go through `html_escape`: a stranger's tags are shown as they were written, never drawn.
+#[test]
+fn markup_is_escaped_for_the_desktop() {
+    assert_eq!(
+        html_escape("<b>x</b> & <img src=\"https://e.example/a.png\">"),
+        "&lt;b&gt;x&lt;/b&gt; &amp; &lt;img src=&quot;https://e.example/a.png&quot;&gt;"
+    );
+}
+
 #[test]
 // A list of one bold (or italic) range, as the box sends it: not the numbers in that range.
 #[allow(clippy::single_range_in_vec_init)]

@@ -2202,7 +2202,6 @@ folder	Online Archive	온라인 보관함
 	Registering the application	애플리케이션 등록
 	How to register the application	애플리케이션을 등록하는 방법
 	Announce new messages	새 메시지 알리기
-	Announcements begin with a later version	알림은 이후 버전에서 시작됩니다
 	Only messages sent to me alone or naming me	나에게만 보냈거나 내 이름이 들어간 메시지만
 	A copy made for another account was set aside	다른 계정용 사본을 따로 보관했습니다
 	Signed in as {name} ({address})	{name}({address})(으)로 로그인됨
@@ -2251,6 +2250,13 @@ module	Conversations	대화
 	Teams doesn't let this conversation be read here	Teams에서 이 대화를 여기서 읽도록 허용하지 않습니다
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	{chat}에 메시지를 보내지 못했습니다
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (외부)
+	{name} (App)	{name} (앱)
+	{sender} mentioned you in {chat}	{sender}님이 {chat}에서 나를 언급했습니다
+	{sender} mentioned you	{sender}님이 나를 언급했습니다
+	{sender} in {chat}	{sender} ({chat})
+	{n} new messages in {chats} conversations	대화 {chats}개에 새 메시지 {n}개
 # A person’s presence in Teams.
 presence	Available	연락 가능
 presence	Busy	바쁨

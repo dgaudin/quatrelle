@@ -14,8 +14,9 @@ use quatrelle_engine::model::pim::teams::{self, ChatKind, ChatRow, Picture, Stat
 use super::super::list::follow_up::{Textures, frame_with_size};
 use super::*;
 
-/// The conversation pane, its pictures, and where a sign-in stands.
+/// The conversation pane, its pictures, where a sign-in stands, and new messages announced.
 mod chat;
+mod notify;
 mod pictures;
 mod signing;
 

@@ -2202,7 +2202,6 @@ folder	Online Archive	Archivio online
 	Registering the application	Registrazione dell'applicazione
 	How to register the application	Come registrare l'applicazione
 	Announce new messages	Annuncia i nuovi messaggi
-	Announcements begin with a later version	Gli annunci arrivano con una versione successiva
 	Only messages sent to me alone or naming me	Solo i messaggi inviati soltanto a me o che mi nominano
 	A copy made for another account was set aside	Una copia fatta per un altro account è stata messa da parte
 	Signed in as {name} ({address})	Accesso effettuato come {name} ({address})
@@ -2251,6 +2250,13 @@ module	Conversations	Conversazioni
 	Teams doesn't let this conversation be read here	Teams non consente di leggere qui questa conversazione
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Un messaggio a {chat} non è stato inviato
+# Teams: new messages announced on the desktop.
+	{name} (External)	{name} (Esterno)
+	{name} (App)	{name} (App)
+	{sender} mentioned you in {chat}	{sender} ti ha menzionato in {chat}
+	{sender} mentioned you	{sender} ti ha menzionato
+	{sender} in {chat}	{sender} in {chat}
+	{n} new messages in {chats} conversations	{n} nuovi messaggi in {chats} conversazioni
 # A person’s presence in Teams.
 presence	Available	Disponibile
 presence	Busy	Occupato
