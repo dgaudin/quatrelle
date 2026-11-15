@@ -199,3 +199,30 @@ proptest::proptest! {
         proptest::prop_assert_eq!(c.next_seq(), seq + 1);
     }
 }
+
+/// Fix round 1: an outbox that can't be listed (a folder it can't read but can write in) gives
+/// the next message a number `put_op` refuses, never one that writes over a message waiting.
+#[test]
+#[cfg(unix)]
+fn an_outbox_that_cant_be_listed_numbers_nothing_over_a_record() {
+    use std::os::unix::fs::PermissionsExt;
+    let t = temp("outbox-unlisted");
+    let s = Store::open(t.join("app")).unwrap();
+    let (c, _) = Copy::open(s.clone(), &who("u-1")).unwrap();
+    c.put_op(&op(1, A)).unwrap();
+    let dir = s.account_path(TEAMS_ACCOUNT).join("outbox");
+    let mode = |m: u32| std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(m)).unwrap();
+    mode(0o300);
+    if std::fs::read_dir(&dir).is_ok() {
+        // Run as root: nothing is refused to it.
+        mode(0o700);
+        let _ = std::fs::remove_dir_all(&t);
+        return;
+    }
+    let next = OpRecord { seq: c.next_seq(), local: "l-9.0".into(), ..op(1, A) };
+    let written = c.put_op(&next);
+    mode(0o700);
+    assert!(written.is_err(), "numbered {}: refused, not written over", next.seq);
+    assert_eq!(c.ops(), [op(1, A)], "the message waiting is still the user's");
+    let _ = std::fs::remove_dir_all(&t);
+}

@@ -126,7 +126,7 @@ impl Copy {
     /// The messages going out, by number: the first [`OUTBOX_MAX`] records, less those passed
     /// over. None when the outbox can't be listed.
     pub(crate) fn ops(&self) -> Vec<OpRecord> {
-        let names = self.op_names();
+        let names = self.op_names().unwrap_or_default();
         let mut seqs: Vec<u64> = names.iter().filter_map(|n| seq_of(n)).collect();
         let mut passed = names.len().saturating_sub(seqs.len());
         seqs.sort_unstable();
@@ -167,16 +167,23 @@ impl Copy {
 
     /// The number of the next message taken: one past the highest under a record's name (read
     /// back or passed over, so none is written over), from 1. A number comes again once the
-    /// highest is removed, or the outbox emptied; 1 when the outbox can't be listed.
+    /// highest is removed, or the outbox emptied. When the outbox can't be listed, `u64::MAX`: a
+    /// number [`Copy::put_op`] refuses, so a message waiting is never written over.
     pub(crate) fn next_seq(&self) -> u64 {
-        self.op_names().iter().filter_map(|n| seq_of(n)).max().map_or(1, |seq| seq.saturating_add(1))
+        match self.op_names() {
+            Some(names) => names.iter().filter_map(|n| seq_of(n)).max().map_or(1, |seq| seq.saturating_add(1)),
+            None => u64::MAX,
+        }
     }
 
-    /// The names in the outbox's folder.
-    fn op_names(&self) -> Vec<String> {
-        self.store.account_files(TEAMS_ACCOUNT, OUTBOX).unwrap_or_else(|_| {
-            log::warn!("Teams copy: its outbox couldn't be listed");
-            Vec::new()
-        })
+    /// The names in the outbox's folder; `None` when it can't be listed.
+    fn op_names(&self) -> Option<Vec<String>> {
+        match self.store.account_files(TEAMS_ACCOUNT, OUTBOX) {
+            Ok(names) => Some(names),
+            Err(_) => {
+                log::warn!("Teams copy: its outbox couldn't be listed");
+                None
+            }
+        }
     }
 }
