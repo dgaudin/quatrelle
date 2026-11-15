@@ -9,7 +9,8 @@
 //! shows as the worker keeps it; refused, the worker's answer carries it "Not sent" without a
 //! number, and it stays in its conversation, known here alone (in memory: not after a restart),
 //! until it's deleted or sent again. The open chat is on screen only while Conversations is
-//! shown: elsewhere, a message not sent there is said too.
+//! shown in a window with the focus ([`Session::teams_on_screen`]): otherwise, a message not sent
+//! there is said too.
 //!
 //! What is hostile here: the commands' params (a text and its ranges, from the window or a
 //! script), checked before anything changes. What the worker says is bounded: a chat's share
@@ -158,15 +159,15 @@ impl TeamsState {
 impl Session {
     /// [`teams::Event::Outbox`]: the open chat's messages going out shown as the worker says them;
     /// another chat's refusals kept for it. A message newly not sent in a chat not on screen (not
-    /// open, or open while another module is shown) is said by a notice (once for the event,
-    /// whatever their number).
+    /// open, or open while another module is shown or the window is in the background) is said by
+    /// a notice (once for the event, whatever their number).
     pub(super) fn teams_outbox(&mut self, chat: &str, items: Vec<Outgoing>, took: Option<String>) {
         if chat.is_empty() || chat.len() > MAX_ID {
             return;
         }
         let items: Vec<Outgoing> = items.into_iter().filter(|o| o.chat == chat && usable_local(&o.local)).take(OUTBOX_MAX).collect();
         if self.teams.open.as_deref() == Some(chat) {
-            if self.teams.take_outbox(items, took.as_deref()) && self.module != Module::Conversations {
+            if self.teams.take_outbox(items, took.as_deref()) && !self.teams_on_screen(chat) {
                 self.teams_not_sent(chat);
             }
             return;

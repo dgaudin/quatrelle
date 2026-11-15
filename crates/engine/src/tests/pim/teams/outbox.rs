@@ -417,6 +417,21 @@ fn a_message_not_sent_while_mail_is_shown_is_said() {
     assert_eq!(said(&s).len(), 1);
 }
 
+/// Nor is it on screen while the window is in the background (in the tray, another application in
+/// front): a message not sent there is said, as the announcements of its news are.
+#[test]
+fn a_message_not_sent_while_the_window_is_unfocused_is_said() {
+    let mut s = opened(vec![row(1, 10)]);
+    s.teams_focus(false);
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, "100-1", refused())], None));
+    assert_eq!(said(&s), ["A message to Chat 1 wasn't sent"]);
+    assert_eq!(s.teams.outgoing.iter().map(|o| o.seq).collect::<Vec<_>>(), [4], "still shown in its chat");
+    // Focused again: the next one is seen where it is, not said.
+    s.teams_focus(true);
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, "100-1", refused()), item(CHAT, 5, "100-2", refused())], None));
+    assert_eq!(said(&s).len(), 1);
+}
+
 /// Teams doesn't let an unreadable chat be read here: opening it doesn't mark it read there.
 #[test]
 fn an_unreadable_chat_is_not_marked_read_on_opening() {

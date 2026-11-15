@@ -8,6 +8,7 @@ use quatrelle_model::pim::teams::{self, ChatKind, ChatMessage, ChatRow, MAX_CHAT
 use super::*;
 use crate::Module;
 
+mod announce;
 mod outbox;
 
 const CLIENT: &str = "00000000-0000-0000-0000-00000000c11e";

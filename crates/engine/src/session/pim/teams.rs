@@ -2,9 +2,9 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Teams, as the engine keeps it: where the connection stands, the rows of the list, the open
 //! chat's last messages and those going out (`outbox.rs`), presence, search hits and pictures
-//! waiting for the window. Only the Teams worker (`net::teams`) talks to Graph and holds the copy
-//! and the outbox; the engine sends it jobs and applies what it reports, in windows that never
-//! grow with the copy (`window.rs`).
+//! waiting for the window, and what is announced of new messages (`announce.rs`). Only the Teams
+//! worker (`net::teams`) talks to Graph and holds the copy and the outbox; the engine sends it
+//! jobs and applies what it reports, in windows that never grow with the copy (`window.rs`).
 //!
 //! What is hostile here: everything an event carries came from Graph or the copy on disk (the
 //! worker checked it, the engine still bounds it: the rows at [`teams::MAX_CHATS`], the window at
@@ -18,10 +18,12 @@ use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
 
+mod announce;
 mod members;
 mod outbox;
 mod window;
 
+pub use announce::TeamsAnnouncement;
 pub use members::ChatMembers;
 
 #[cfg(test)]
@@ -104,6 +106,12 @@ pub struct TeamsState {
     refused: VecDeque<Outgoing>,
     /// The messages not sent already said by a notice, or seen in their chat.
     said: outbox::Said,
+    /// The window is in the background (another application in front, or in the tray), as it
+    /// last said ([`Session::teams_focus`], each frame; until then, as a window opens, it has the
+    /// focus): the open chat isn't looked at.
+    background: bool,
+    /// What is announced of the new messages: held, given, remembered.
+    announcer: announce::Announcer,
 }
 
 impl TeamsState {
@@ -299,13 +307,12 @@ impl Session {
     /// unread that the user is still in and can read here marked read (its row stays as it is
     /// until the worker says it's read).
     pub(crate) fn teams_show(&mut self, chat: Option<String>) {
-        // A chat Teams doesn't let be read here keeps its unread mark there.
-        let unread = chat.as_deref().and_then(|c| self.teams.row(c)).is_some_and(|r| r.unread > 0 && !r.left && !r.unreadable);
+        let unread = chat.as_deref().is_some_and(|c| self.teams.row(c).is_some_and(|r| r.unread > 0) && self.teams.may_mark_read(c));
         self.teams.open_chat(chat.clone());
         let mark = chat.clone().filter(|_| unread);
         self.push_job(Job::Teams { job: teams::Job::Open { chat } });
         if let Some(chat) = mark {
-            self.push_job(Job::Teams { job: teams::Job::Op { op: Op::MarkRead { chat } } });
+            self.teams_mark_read(chat);
         }
     }
 
@@ -378,8 +385,9 @@ impl Session {
             teams::Event::Members { chat, members, web_url, first } => self.teams.take_members(&chat, members, web_url, first),
             teams::Event::Outbox { chat, items, took } => self.teams_outbox(&chat, items, took),
             teams::Event::Unsent { count } => self.teams.unsent = count,
+            teams::Event::News { news } => self.teams_news(news),
             // Not taken yet.
-            teams::Event::News { .. } | teams::Event::SignInPage { .. } | teams::Event::NoPicture { .. } | teams::Event::Placed { .. } => {}
+            teams::Event::SignInPage { .. } | teams::Event::NoPicture { .. } | teams::Event::Placed { .. } => {}
         }
     }
 
