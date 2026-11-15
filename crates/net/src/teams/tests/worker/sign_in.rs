@@ -270,7 +270,8 @@ fn a_busy_graph_is_never_sat_out_in_the_loop() {
     w.turn(t0);
     w.turn(t0 + Duration::from_secs(1));
     assert_eq!(hits(&server, "me"), 1);
-    assert!(teams_of(&seen).is_empty(), "{:?}", teams_of(&seen));
+    // Nothing said but the outbox's count, from the copy opened.
+    assert!(teams_of(&seen).iter().all(|e| *e == model::Event::Unsent { count: 0 }), "{:?}", teams_of(&seen));
     server.data.lock().unwrap().teams.as_mut().unwrap().throttle_every = None;
     w.turn(t0 + Duration::from_secs(11));
     assert!(listed(&teams_of(&seen)), "{:?}", teams_of(&seen));

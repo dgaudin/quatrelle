@@ -249,6 +249,7 @@ pub(crate) fn refused(w: &mut Worker, chat: &str, e: &NetError) {
         if !said {
             w.say(Event::Removed { chat: chat.to_string() });
         }
+        crate::teams::outbox::left(w, chat);
     } else {
         log::info!("teams: conversation {} isn't served here ({}); tried again in a day", w.hashed(chat), kind(e));
     }

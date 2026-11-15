@@ -29,13 +29,13 @@ mod passes;
 
 const DAY: i64 = 24 * 60 * MINUTE;
 /// The fake's clock: 40 days after the fixtures' messages (none of them recent).
-const NOW: i64 = T0 + 40 * DAY;
-const OTHER: &str = "19:c3d4@thread.v2";
-const GROUP: &str = "19:g5h6@thread.v2";
+pub(super) const NOW: i64 = T0 + 40 * DAY;
+pub(super) const OTHER: &str = "19:c3d4@thread.v2";
+pub(super) const GROUP: &str = "19:g5h6@thread.v2";
 /// The step the test's clock moves by between two turns.
-const STEP: Duration = Duration::from_millis(100);
+pub(super) const STEP: Duration = Duration::from_millis(100);
 
-fn ana() -> FakeUser {
+pub(super) fn ana() -> FakeUser {
     FakeUser::new("u-ana", "Ana Lima")
 }
 
@@ -47,23 +47,23 @@ fn group(id: &str, topic: Option<&str>, at: i64) -> FakeChat {
 }
 
 /// A worker signed in by hand to a fake Graph whose clock stands at [`NOW`], and what it said.
-struct Run {
-    w: Worker,
-    server: Server,
-    seen: Seen,
-    t0: Instant,
+pub(super) struct Run {
+    pub(super) w: Worker,
+    pub(super) server: Server,
+    pub(super) seen: Seen,
+    pub(super) t0: Instant,
     /// How far past `t0` the last turn was.
-    at: Duration,
-    _creds: Arc<Kept>,
+    pub(super) at: Duration,
+    pub(super) creds: Arc<Kept>,
 }
 
 /// [`Run`], signed in and its first pass over (five seconds of turns).
-fn run(teams: FakeTeams) -> Run {
+pub(super) fn run(teams: FakeTeams) -> Run {
     run_with(teams, |_| {})
 }
 
 /// [`run`], the worker made ready by `ready` (a test's hooks) before it signs in.
-fn run_with(mut teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run {
+pub(super) fn run_with(mut teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run {
     teams.clock.get_or_insert(NOW);
     let server = serve_teams(teams);
     let (mut w, _, seen, creds) = by_hand(&server, grant(Some(TENANT)));
@@ -71,18 +71,18 @@ fn run_with(mut teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run {
     let t0 = Instant::now();
     w.job(Job::SignIn { client_id: super::worker::CLIENT.into(), tenant: "organizations".into() });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());
-    let mut r = Run { w, server, seen, t0, at: Duration::ZERO, _creds: creds };
+    let mut r = Run { w, server, seen, t0, at: Duration::ZERO, creds };
     r.turns(Duration::from_secs(5));
     r
 }
 
 impl Run {
     /// Turns, a [`STEP`] apart, for `span` of the test's clock.
-    fn turns(&mut self, span: Duration) {
+    pub(super) fn turns(&mut self, span: Duration) {
         self.turns_every(span, STEP);
     }
 
-    fn turns_every(&mut self, span: Duration, step: Duration) {
+    pub(super) fn turns_every(&mut self, span: Duration, step: Duration) {
         let end = self.at + span;
         while self.at < end {
             self.at += step;
@@ -90,29 +90,29 @@ impl Run {
         }
     }
 
-    fn fake<T>(&self, change: impl FnOnce(&mut FakeTeams) -> T) -> T {
+    pub(super) fn fake<T>(&self, change: impl FnOnce(&mut FakeTeams) -> T) -> T {
         change(self.server.data.lock().unwrap().teams.as_mut().unwrap())
     }
 
     /// The reads of a chat's messages the fake had.
-    fn reads(&self, chat: &str) -> usize {
+    pub(super) fn reads(&self, chat: &str) -> usize {
         self.fake(|t| t.message_reads.iter().filter(|(c, _)| c == chat).count())
     }
 
-    fn hits(&self, route: &str) -> u32 {
+    pub(super) fn hits(&self, route: &str) -> u32 {
         hits(&self.server, route)
     }
 
-    fn all_hits(&self) -> u32 {
+    pub(super) fn all_hits(&self) -> u32 {
         self.fake(|t| t.hits.values().sum())
     }
 
-    fn events(&self) -> Vec<model::Event> {
+    pub(super) fn events(&self) -> Vec<model::Event> {
         teams_of(&self.seen)
     }
 
     /// The last row said of each chat.
-    fn rows(&self) -> HashMap<String, ChatRow> {
+    pub(super) fn rows(&self) -> HashMap<String, ChatRow> {
         let mut rows = HashMap::new();
         for e in self.events() {
             if let model::Event::Chats { rows: said } = e {
@@ -124,12 +124,12 @@ impl Run {
         rows
     }
 
-    fn row(&self, chat: &str) -> ChatRow {
+    pub(super) fn row(&self, chat: &str) -> ChatRow {
         self.rows().remove(chat).unwrap_or_else(|| panic!("no row for {chat}: {:?}", self.events()))
     }
 
     /// The messages said of a chat after event number `from`: (messages, fresh, older).
-    fn messages(&self, chat: &str, from: usize) -> Vec<(Vec<ChatMessage>, bool, bool)> {
+    pub(super) fn messages(&self, chat: &str, from: usize) -> Vec<(Vec<ChatMessage>, bool, bool)> {
         self.events()
             .into_iter()
             .skip(from)
@@ -140,12 +140,12 @@ impl Run {
             .collect()
     }
 
-    fn record(&self, chat: &str) -> ChatRecord {
+    pub(super) fn record(&self, chat: &str) -> ChatRecord {
         self.w.copy.as_ref().unwrap().chat(chat).unwrap()
     }
 
     /// A message of `from` added to a chat of the fake at `at`, the fake's clock moved past it.
-    fn post(&self, chat: &str, from: &str, at: i64, text: &str) {
+    pub(super) fn post(&self, chat: &str, from: &str, at: i64, text: &str) {
         self.fake(|t| {
             t.clock = Some(t.clock.unwrap_or(NOW).max(at + 1000));
             t.chat_mut(chat).unwrap().messages.push(FakeMessage::new(&at.to_string(), Some(from), &rfc3339(at), &format!("<p>{text}</p>")));

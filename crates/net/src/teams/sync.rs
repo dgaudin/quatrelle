@@ -241,6 +241,7 @@ pub(crate) fn open(w: &mut Worker, chat: Option<String>) {
     say_messages(w, &chat, &messages, false, false);
     w.sync.members_said = None;
     say_members(w);
+    super::outbox::say_chat(w, &chat);
     w.limiter.prompt(Cadence::Open);
 }
 
@@ -255,7 +256,7 @@ pub(crate) fn page(w: &mut Worker, chat: &str, before: i64) {
 }
 
 /// The server's time (milliseconds since 1970), by the newest `Date` Graph sent.
-fn server_ms(w: &Worker) -> Option<i64> {
+pub(crate) fn server_ms(w: &Worker) -> Option<i64> {
     w.client.as_ref()?.server_time()?.checked_mul(1000)
 }
 
@@ -781,5 +782,6 @@ fn left_behind(w: &mut Worker) {
         log::info!("teams: conversation {} is no longer in the list; kept to read", w.hashed(&r.chat.id));
         w.say(quatrelle_model::pim::teams::Event::Removed { chat: r.chat.id.clone() });
         dirty(w, &r.chat.id);
+        super::outbox::left(w, &r.chat.id);
     }
 }

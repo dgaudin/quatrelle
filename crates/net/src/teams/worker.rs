@@ -33,6 +33,7 @@ use sha2::{Digest, Sha256};
 use super::backfill::{self, Backfill};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
+use super::outbox::{self, Outbox};
 use super::pictures::{self, Pictures};
 use super::search;
 use super::store::Copy;
@@ -226,6 +227,8 @@ pub(crate) struct Worker {
     pub(crate) backfill: Backfill,
     /// The pictures asked for and the people shown (`pictures.rs`).
     pub(crate) pictures: Pictures,
+    /// What the outbox's steps look at, and the chats to mark read (`outbox.rs`).
+    pub(crate) outbox: Outbox,
     #[cfg(test)]
     pub(crate) hooks: Hooks,
 }
@@ -260,6 +263,7 @@ impl Worker {
             sync: SyncState::default(),
             backfill: Backfill::default(),
             pictures: Pictures::default(),
+            outbox: Outbox::default(),
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -307,10 +311,11 @@ impl Worker {
         log::info!("teams: the worker ended");
     }
 
-    /// When the loop looks again, a job apart: the next cadence due or a picture waiting, the
-    /// time a held step may go, the end of a wait after a failure; never at once ([`TURN`] at
-    /// least). `None` when there is nothing to look at until a job comes: switched off, signed
-    /// out, or waiting to be signed in again, and no sign-in on its way from the browser.
+    /// When the loop looks again, a job apart: the next cadence due, a picture waiting or the next
+    /// message or mark of the outbox, the time a held step may go, the end of a wait after a
+    /// failure; never at once ([`TURN`] at least). `None` when there is nothing to look at until a
+    /// job comes: switched off, signed out, or waiting to be signed in again, and no sign-in on
+    /// its way from the browser.
     pub(crate) fn wake(&self, now: Instant) -> Option<Instant> {
         let after = |wait: Duration| now.checked_add(wait).unwrap_or(now);
         let mut wake = None;
@@ -318,6 +323,9 @@ impl Worker {
             let mut at = self.limiter.next_deadline(now);
             if pictures::waiting(self, now) {
                 at = now;
+            }
+            if let Some(due) = outbox::due(self, now) {
+                at = at.min(due);
             }
             for later in [self.held, self.not_before].into_iter().flatten() {
                 at = at.max(later);
@@ -364,7 +372,10 @@ impl Worker {
             Job::Picture { picture } => pictures::picture(self, picture),
             Job::Search { query } => search::search(self, query),
             Job::DeleteSetAside { path } => self.delete_set_aside(&path),
-            Job::Op { .. } | Job::Retry { .. } | Job::Discard { .. } | Job::Find { .. } => log::debug!("teams: not handled yet"),
+            Job::Op { op } => outbox::queue(self, op),
+            Job::Retry { seq } => outbox::retry(self, seq),
+            Job::Discard { seq } => outbox::discard(self, seq),
+            Job::Find { .. } => log::debug!("teams: not handled yet"),
         }
     }
 
@@ -390,10 +401,13 @@ impl Worker {
         }
     }
 
-    /// One step, a request at most: the presence's minute, then a picture for the screen (unless
-    /// the open chat's read is due), then whatever cadence is due (`sync.rs`), else the history
-    /// (`backfill.rs`).
+    /// One step, a request at most: the outbox (`outbox.rs`), the presence's minute, then a picture
+    /// for the screen (unless the open chat's read is due), then whatever cadence is due
+    /// (`sync.rs`), else the history (`backfill.rs`).
     pub(crate) fn tick(&mut self, now: Instant) {
+        if outbox::step(self, now) {
+            return;
+        }
         if pictures::presence(self, now) || (!self.limiter.due(Cadence::Open, now) && pictures::step(self, now)) {
             return;
         }
@@ -496,14 +510,22 @@ impl Worker {
         }
         log::warn!("teams: {what} failed: {}", kind(e));
         if busy(e) {
-            let wait = self.client.as_ref().and_then(TeamsClient::retry_after);
+            let wait = self.busy_wait(now);
             self.limiter.throttled(cadence, wait, now);
-            if let Some(until) = now.checked_add(retry_wait(wait)) {
-                self.limiter.pause_all(until);
-            }
             return;
         }
         self.pause(e, now);
+    }
+
+    /// Graph asked to wait (a 429 or a 503): nothing at all is asked of Teams while its
+    /// `Retry-After` runs (an hour at most, 10 s when it says none). That `Retry-After`, for the
+    /// cadence that heard it to slow down by.
+    pub(crate) fn busy_wait(&mut self, now: Instant) -> Option<u64> {
+        let wait = self.client.as_ref().and_then(TeamsClient::retry_after);
+        if let Some(until) = now.checked_add(retry_wait(wait)) {
+            self.limiter.pause_all(until);
+        }
+        wait
     }
 
     /// Nothing is asked for a while after `e`; "Offline" when it's the network.

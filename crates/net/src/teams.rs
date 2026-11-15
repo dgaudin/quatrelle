@@ -24,11 +24,14 @@
 //!   presence, fetched for what is on screen; the copy keeps the pictures by their bytes' hash.
 //! * `search`: the search of the local copy: an index of its messages' words, kept as the copy
 //!   is written and read back in slices, and the chats by their names.
+//! * `outbox`: the messages the user sends, kept in the copy and posted in order, a lost answer
+//!   checked rather than posted again, what wasn't sent said; and the chats to mark read.
 
 pub(crate) mod backfill;
 pub mod check;
 pub mod graph;
 pub(crate) mod limits;
+pub(crate) mod outbox;
 pub(crate) mod pictures;
 pub(crate) mod search;
 pub(crate) mod store;

@@ -308,6 +308,7 @@ impl Worker {
         self.tokens = Some(tokens);
         self.refresh = Some(Secret(refresh));
         self.set_aside(opened);
+        outbox::opened(self);
         if self.no_keychain {
             self.status(Status::NoKeychain);
         }
@@ -432,6 +433,7 @@ impl Worker {
                 return self.refuse(NO_COPY);
             }
         }
+        outbox::opened(self);
         if !self.is(&who) {
             self.pictures.forget_people();
         }
@@ -562,12 +564,13 @@ impl Worker {
     }
 
     /// [`Job::SignOut`]: the refresh token is deleted first (whatever fails after, the sign-in is
-    /// gone), then the copy is closed and, when asked, deleted with every copy of it set aside as
-    /// damaged.
+    /// gone), then the outbox is emptied (the copy kept or not, open or not), then the copy is
+    /// closed and, when asked, deleted with every copy of it set aside as damaged.
     pub(super) fn sign_out(&mut self, delete_copy: bool) {
         self.creds.delete_secret(&keyring(), REFRESH_KEY);
         self.halt();
         self.pictures.forget_people();
+        outbox::signed_out(self);
         self.copy = None;
         self.open = None;
         self.settings = TeamsSettings::default();

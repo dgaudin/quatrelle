@@ -58,7 +58,6 @@ pub(crate) enum OpState {
 
 impl OpRecord {
     /// As the conversation shows it: one being checked is shown as being sent.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the worker's outbox says it once wired"))]
     pub(crate) fn outgoing(&self) -> Outgoing {
         let state = match &self.state {
             OpState::Waiting => OutState::Waiting,
@@ -75,9 +74,7 @@ impl OpRecord {
     /// its body at most [`TEAMS_RUNS`] runs (runs that write nothing would cost memory only) and
     /// [`quatrelle_model::pim::teams::SEND_MAX`] bytes once written.
     pub(super) fn broken(&self) -> Option<&'static str> {
-        let local = !self.local.is_empty()
-            && self.local.len() <= LOCAL_MAX
-            && self.local.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'z' | b'.' | b'-'));
+        let local = local_ok(&self.local);
         let code = match &self.state {
             OpState::NotSent { code: Some(c), .. } => {
                 !c.is_empty() && c.len() <= MAX_CODE && c.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'_' | b'.' | b'-'))
@@ -96,6 +93,12 @@ impl OpRecord {
             _ => None,
         }
     }
+}
+
+/// Whether `local` is a local id as [`OpRecord::local`] says: at most [`LOCAL_MAX`] of `0-9`,
+/// `a-z`, `.` and `-`, and not empty.
+pub(crate) fn local_ok(local: &str) -> bool {
+    !local.is_empty() && local.len() <= LOCAL_MAX && local.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'z' | b'.' | b'-'))
 }
 
 /// Where record `seq` is kept.
@@ -146,7 +149,7 @@ impl Copy {
     }
 
     /// Record `seq`, when it's sound and under its own name.
-    fn op_at(&self, seq: u64) -> Option<OpRecord> {
+    pub(crate) fn op_at(&self, seq: u64) -> Option<OpRecord> {
         let bytes = self.store.account_file(TEAMS_ACCOUNT, &op_key(seq)).ok()??;
         if bytes.len() > MAX_OP {
             return None;
@@ -162,7 +165,18 @@ impl Copy {
 
     /// Every record of the outbox gone, whatever it holds; the rest of the copy stays.
     pub(crate) fn clear_ops(&self) -> Result<()> {
-        self.store.remove_account_files(TEAMS_ACCOUNT, OUTBOX)
+        Copy::clear_outbox(&self.store)
+    }
+
+    /// [`Copy::clear_ops`] on the copy in `store`, open or not (signing out while switched off).
+    pub(crate) fn clear_outbox(store: &Store) -> Result<()> {
+        store.remove_account_files(TEAMS_ACCOUNT, OUTBOX)
+    }
+
+    /// How many records the outbox holds, read back or passed over (what its caps count); `None`
+    /// when it can't be listed.
+    pub(crate) fn op_count(&self) -> Option<usize> {
+        self.op_names().map(|names| names.len())
     }
 
     /// The number of the next message taken: one past the highest under a record's name (read

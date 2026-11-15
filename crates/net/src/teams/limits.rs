@@ -48,8 +48,7 @@ pub(crate) enum Route {
     Messages(u64),
     /// A chat's hosted contents (images): once a second per chat.
     Hosted(u64),
-    /// A message sent to a chat: once a second per chat.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the outbox sends through it once wired"))]
+    /// A message sent to a chat, or the chat marked read: once a second per chat.
     Send(u64),
     /// A chat's members.
     Members,
