@@ -173,6 +173,9 @@ impl Services for Desktop {
     fn before_zoom(&mut self) {
         window_frame::before_zoom(self.frame_guard.as_ref());
     }
+    fn pointer_on_screen(&mut self) -> Option<[i32; 2]> {
+        window_frame::cursor_on_screen()
+    }
     fn zone(&self) -> Option<String> {
         iana_time_zone::get_timezone().ok()
     }

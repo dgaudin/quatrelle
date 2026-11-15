@@ -104,6 +104,13 @@ pub(crate) fn before_zoom(guard: Option<&FrameGuard>) {
     }
 }
 
+/// The system's cursor on the screen, in physical pixels (winit makes Quatrelle per-monitor DPI
+/// aware), while a pen or a finger drags the window by its own title bar
+/// ([`quatrelle_ui_egui::Services::pointer_on_screen`]). `None` off Windows, or if it can't be read.
+pub(crate) fn cursor_on_screen() -> Option<[i32; 2]> {
+    platform::cursor_on_screen()
+}
+
 #[cfg(target_os = "windows")]
 mod platform {
     use super::FrameGuard;
@@ -116,6 +123,11 @@ mod platform {
 
     /// A rect in desktop coordinates: `(left, top, right, bottom)`, right and bottom exclusive.
     type Rect = (i32, i32, i32, i32);
+
+    /// The cursor's place on the screen.
+    pub fn cursor_on_screen() -> Option<[i32; 2]> {
+        winsafe::GetCursorPos().ok().map(|p| [p.x, p.y])
+    }
 
     /// How long Windows' zoom animation runs: the caption it needs stays on for this long.
     const ZOOM: Duration = Duration::from_millis(400);
@@ -523,6 +535,10 @@ mod platform {
     use super::FrameGuard;
 
     pub fn service(_cc: &eframe::CreationContext<'_>, _custom_titlebar: bool) -> Option<FrameGuard> {
+        None
+    }
+
+    pub fn cursor_on_screen() -> Option<[i32; 2]> {
         None
     }
 }

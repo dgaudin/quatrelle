@@ -7,12 +7,19 @@
 //! drags the window (a double-click maximizes it), and thin zones along the window's edges that
 //! resize it. Windows keeps the window borderless meanwhile ([`crate::Services::keep_frame`]);
 //! elsewhere it opens so. While a dialog holds the window, the bar's drag and buttons are laid
-//! again above it ([`over_a_modal`], PhotoCraft's `modal_drag_overlay`).
+//! again above it ([`over_a_modal`], PhotoCraft's `modal_drag_overlay`). A pen or a finger moves and
+//! resizes the window itself ([`pen`]).
 
 use egui::{Color32, CursorIcon, Id, LayerId, Order, PointerButton, Rect, ResizeDirection, Sense, Ui, ViewportCommand, pos2, vec2};
 
 use crate::look::theme::Tokens;
 use crate::*;
+
+mod pen;
+#[cfg(test)]
+mod tests;
+
+pub(crate) use pen::note_os_pointer;
 
 /// The top bar's height, and its margins across and down.
 pub(crate) const TOP_BAR_H: f32 = 40.0;
@@ -64,6 +71,8 @@ pub(crate) fn begin_frame(ctx: &egui::Context, services: &mut dyn Services) {
     if services.own_title_bar() {
         services.keep_frame();
         clear_scroll_bars(ctx);
+        // Where a pen dragging the window is, before the title bar reads it.
+        note_os_pointer(ctx, || services.pointer_on_screen());
     }
 }
 
@@ -92,13 +101,14 @@ pub(crate) fn tell_before_zooming(ctx: &egui::Context, services: &mut dyn Servic
 /// controls, the window's buttons), a press there does nothing (a button takes no drag, so the
 /// drag would have gone to the bar behind it). Not in the Tab order, as a system title bar isn't.
 fn drag_area(ui: &mut Ui, rect: Rect, except: &[Rect]) {
+    pen::follow(ui.ctx());
     let resp = ui.interact(rect, ui.scope_id().with("title-bar-drag"), Sense::CLICK | Sense::DRAG);
     // Where the press began, the pointer having moved on since (or where it clicked).
     let at = ui.input(|i| i.pointer.press_origin()).or_else(|| resp.interact_pointer_pos());
     if at.is_some_and(|p| except.iter().any(|r| r.contains(p))) {
         return;
     }
-    if resp.drag_started_by(PointerButton::Primary) {
+    if resp.drag_started_by(PointerButton::Primary) && !pen::start(ui.ctx(), pen::Kind::Move) {
         ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
     }
     if resp.double_clicked() {
@@ -264,9 +274,11 @@ fn clear_scroll_bars(ctx: &egui::Context) {
 }
 
 /// Invisible resize zones along the window's edges, above everything else; a press in one starts
-/// a resize by the system in that direction. None while the window is maximized or full screen.
+/// a resize by the system in that direction (a pen's or a finger's resizes it itself: [`pen`]).
+/// None while the window is maximized or full screen.
 fn resize_zones(ui: &mut Ui) {
     let ctx = ui.ctx().clone();
+    pen::follow(&ctx);
     if maximized(&ctx) || ctx.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
         return;
     }
@@ -275,7 +287,7 @@ fn resize_zones(ui: &mut Ui) {
     let zui = ui.new_child(egui::UiBuilder::new().layer_id(layer).max_rect(w));
     for (i, (r, dir, cursor)) in zones(w).into_iter().enumerate() {
         let resp = zui.interact(r, Id::unique(("title-bar-resize", i)), Sense::DRAG).on_hover_cursor(cursor);
-        if resp.drag_started_by(PointerButton::Primary) {
+        if resp.drag_started_by(PointerButton::Primary) && !pen::start(&ctx, pen::Kind::Resize(dir)) {
             ctx.send_viewport_cmd(ViewportCommand::BeginResize(dir));
         }
     }
