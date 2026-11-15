@@ -8,9 +8,13 @@
 //! The rules, in order: the open chat looked at (Conversations shown in a window with the focus)
 //! is marked read instead, whatever the settings say; then nothing with notifications off, for a
 //! hidden chat, or, when only one-to-one chats and mentions are asked for, for the others; each
-//! message once. One chat's announcements are at least [`GROUP_SECS`] apart, its news meanwhile
-//! given as one ("N new messages"); in all at most [`SHOWN_PER_SPAN`] go per [`GROUP_SECS`], the
-//! rest summed up in one at the start of the next span, among its own.
+//! message once. A chat coming on screen (the window focused again, Conversations shown again,
+//! the chat opened) is marked read when it has messages unread, once each time, and its news
+//! waiting their turn aren't announced: the user has seen them.
+//!
+//! One chat's announcements are at least [`GROUP_SECS`] apart, its news meanwhile given as one
+//! ("N new messages"); in all at most [`SHOWN_PER_SPAN`] go per [`GROUP_SECS`], the rest summed
+//! up in one at the start of the next span, among its own.
 //!
 //! What is hostile here: what the worker says of a message came from Graph (a stranger's name and
 //! text): the ids are checked, names and text put on one line and cut again, and the work is
@@ -203,9 +207,21 @@ impl Announcer {
         }
     }
 
+    /// `chat` looked at: its news waiting aren't announced. When it was last announced stays (the
+    /// next one still waits its turn).
+    fn forget(&mut self, chat: &str) {
+        if let Some(h) = self.held.get_mut(chat) {
+            h.waiting = None;
+        }
+    }
+
     /// What is due at `now`: the summary when a span begins, then the chats whose news waited
-    /// their turn, in the order they came. A chat neither waiting nor announced lately is let go.
-    fn release(&mut self, now: i64) {
+    /// their turn, in the order they came; the news of the chat `looked_at` aren't. A chat neither
+    /// waiting nor announced lately is let go.
+    fn release(&mut self, now: i64, looked_at: Option<&str>) {
+        if let Some(chat) = looked_at {
+            self.forget(chat);
+        }
         if self.span_end(now).is_some_and(|end| now >= end) {
             self.span = None;
         }
@@ -284,6 +300,11 @@ impl TeamsState {
         self.row(chat).is_some_and(|r| !r.left && !r.unreadable)
     }
 
+    /// Whether `chat` has messages unread, as its row says, that may be marked read from here.
+    pub(super) fn to_mark_read(&self, chat: &str) -> bool {
+        self.row(chat).is_some_and(|r| r.unread > 0) && self.may_mark_read(chat)
+    }
+
     /// How many chats the announcements hold.
     #[cfg(test)]
     pub(crate) fn announcements_held(&self) -> usize {
@@ -300,30 +321,45 @@ impl Session {
         self.module == Module::Conversations && !self.teams.background && self.teams.open.as_deref() == Some(chat)
     }
 
-    /// Whether the window has the focus, as it says each frame. Come back to (from another
-    /// application, or the tray) on the open chat with messages unread: marked read, as the user
-    /// now sees them (its row stays as it is until the worker says it's read).
+    /// Whether the window has the focus, as it says each frame. The open chat come on screen since
+    /// the last frame, whichever way (the window focused again, from another application or the
+    /// tray, or Conversations shown again): marked read when it has messages unread, as the user
+    /// now sees them (its row stays as it is until the worker says it's read), and its news
+    /// waiting not announced.
     pub fn teams_focus(&mut self, focused: bool) {
-        let back = focused && self.teams.background;
         self.teams.background = !focused;
-        let Some(chat) = self.teams.open.clone().filter(|c| back && self.teams_on_screen(c)) else { return };
-        if self.teams.row(&chat).is_some_and(|r| r.unread > 0) && self.teams.may_mark_read(&chat) {
+        if let Some(chat) = self.teams_came_on_screen().filter(|c| self.teams.to_mark_read(c)) {
             self.teams_mark_read(chat);
         }
+    }
+
+    /// The chat on screen noted: one come on screen since it was last noted has its news waiting
+    /// forgotten, and is returned (for its caller to mark it read, once for its coming).
+    pub(super) fn teams_came_on_screen(&mut self) -> Option<String> {
+        let on = self.teams.open.as_deref().filter(|c| self.teams_on_screen(c));
+        if on == self.teams.looked.as_deref() {
+            return None;
+        }
+        let on = on.map(str::to_string);
+        self.teams.looked.clone_from(&on);
+        let chat = on?;
+        self.teams.announcer.forget(&chat);
+        Some(chat)
     }
 
     pub(super) fn teams_mark_read(&mut self, chat: String) {
         self.push_job(Job::Teams { job: teams::Job::Op { op: Op::MarkRead { chat } } });
     }
 
-    /// [`teams::Event::News`]: the open chat looked at is marked read (once for the event)
-    /// whatever the settings say, and its news aren't announced; the others' are, as the settings
-    /// say, each message once.
+    /// [`teams::Event::News`]: the open chat looked at is marked read (once for the event, its
+    /// coming on screen included) whatever the settings say, and its news aren't announced; the
+    /// others' are, as the settings say, each message once.
     pub(super) fn teams_news(&mut self, news: Vec<News>) {
         let now = self.clock.now;
         let t = &self.prefs.teams;
         let (notify, only_direct) = (t.notify, t.notify_only_direct);
-        self.teams.announcer.release(now);
+        let came = self.teams_came_on_screen().filter(|c| self.teams.to_mark_read(c));
+        self.teams.announcer.release(now, self.teams.looked.as_deref());
         let mut looked_at = None;
         for n in news.into_iter().take(EVENT_ITEMS) {
             if n.chat.is_empty() || n.chat.len() > MAX_ID || n.message.len() > MAX_ID {
@@ -341,7 +377,7 @@ impl Session {
                 self.teams.announcer.add(TeamsAnnouncement::of(n), now);
             }
         }
-        if let Some(chat) = looked_at.filter(|c| self.teams.may_mark_read(c)) {
+        if let Some(chat) = came.or(looked_at.filter(|c| self.teams.may_mark_read(c))) {
             self.teams_mark_read(chat);
         }
     }
@@ -353,7 +389,11 @@ impl Session {
             self.teams.announcer = Announcer::default();
             return Vec::new();
         }
-        self.teams.announcer.release(self.clock.now);
+        // The chat on screen now, even if the window hasn't said so yet this frame: what waited
+        // there isn't announced.
+        let shown = self.teams.open.as_deref().is_some_and(|c| self.teams_on_screen(c));
+        let looked_at = self.teams.open.as_deref().filter(|_| shown);
+        self.teams.announcer.release(self.clock.now, looked_at);
         self.teams.announcer.queue.drain(..).collect()
     }
 

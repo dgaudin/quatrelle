@@ -234,6 +234,100 @@ fn the_open_chat_is_marked_read_when_the_window_is_focused_again() {
     assert!(teams_jobs(&mut s).is_empty());
 }
 
+/// News waiting their chat's turn aren't announced once the chat has been on screen: the user
+/// came back to the window, or opened the chat, and saw them (even if they looked away again).
+#[test]
+fn news_held_for_a_chat_then_looked_at_are_not_announced() {
+    // Back to the window: announced in the background at T, one more held at T + 1.
+    let mut s = at_t(2);
+    looking_at(&mut s, CHAT);
+    s.teams_focus(false);
+    arrive(&mut s, vec![news(CHAT, "m1")]);
+    assert_eq!(taken_at(&mut s, T).len(), 1);
+    s.set_clock(T + 1, 0);
+    arrive(&mut s, vec![news(CHAT, "m2")]);
+    assert_eq!(s.teams_next_announcement(), Some(T + 5));
+    s.set_clock(T + 2, 0);
+    s.teams_focus(true);
+    assert!(taken_at(&mut s, T + 5).is_empty());
+    assert_eq!(s.teams_next_announcement(), None);
+    // Looked away again before the turn came: still not announced.
+    s.teams_focus(false);
+    s.set_clock(T + 6, 0);
+    arrive(&mut s, vec![news(CHAT, "m3")]);
+    assert_eq!(chats_of(&s.take_teams_announcements()), [CHAT], "a new one is");
+    s.set_clock(T + 7, 0);
+    arrive(&mut s, vec![news(CHAT, "m4")]);
+    s.teams_focus(true);
+    s.teams_focus(false);
+    assert!(taken_at(&mut s, T + 11).is_empty());
+
+    // The chat opened: announced while another was open at T, one more held at T + 1, opened at
+    // T + 2, the other opened again at T + 3.
+    let mut s = at_t(2);
+    looking_at(&mut s, &chat(2));
+    arrive(&mut s, vec![news(CHAT, "m1")]);
+    assert_eq!(taken_at(&mut s, T).len(), 1);
+    s.set_clock(T + 1, 0);
+    arrive(&mut s, vec![news(CHAT, "m2")]);
+    s.set_clock(T + 2, 0);
+    open(&mut s, CHAT);
+    s.set_clock(T + 3, 0);
+    open(&mut s, &chat(2));
+    assert!(taken_at(&mut s, T + 5).is_empty());
+    assert_eq!(s.teams_next_announcement(), None);
+}
+
+/// P10: coming back to Conversations (by the rail, Ctrl+6…) on the open chat with messages
+/// unread marks it read, as coming back to the window does: once each time it comes on screen.
+#[test]
+fn coming_back_to_conversations_marks_the_open_chat_read() {
+    let mut s = at_t(1);
+    looking_at(&mut s, CHAT);
+    s.run("view.module", &json!({"name": "mail"})).unwrap();
+    s.teams_focus(true);
+    arrive(&mut s, vec![news(CHAT, "m1")]);
+    assert_eq!(chats_of(&taken_at(&mut s, T)), [CHAT], "not on screen in Mail: announced");
+    s.set_clock(T + 1, 0);
+    arrive(&mut s, vec![news(CHAT, "m2")]);
+    let mut unread = row(1, 20);
+    unread.unread = 2;
+    s.apply(teams_event(teams::Event::Chats { rows: vec![unread] }));
+    s.teams_focus(true);
+    assert!(teams_jobs(&mut s).is_empty(), "still in Mail");
+    s.set_clock(T + 2, 0);
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.teams_focus(true);
+    assert_eq!(teams_jobs(&mut s), [mark_read(CHAT)]);
+    s.teams_focus(true);
+    assert!(teams_jobs(&mut s).is_empty(), "asked once while it stays on screen");
+    assert!(taken_at(&mut s, T + 5).is_empty(), "what waited was seen");
+    // A new message while it's on screen: marked read for it, once (not also for coming back).
+    arrive(&mut s, vec![news(CHAT, "m3")]);
+    assert_eq!(teams_jobs(&mut s), [mark_read(CHAT)]);
+    // Away and back again, still unread as far as the list knows: asked again, once.
+    s.run("view.module", &json!({"name": "mail"})).unwrap();
+    s.teams_focus(true);
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.teams_focus(true);
+    s.teams_focus(true);
+    assert_eq!(teams_jobs(&mut s), [mark_read(CHAT)]);
+    // Come back to with nothing unread: nothing asked.
+    s.apply(teams_event(teams::Event::Chats { rows: vec![row(1, 20)] }));
+    s.run("view.module", &json!({"name": "mail"})).unwrap();
+    s.teams_focus(true);
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.teams_focus(true);
+    assert!(teams_jobs(&mut s).is_empty());
+    // Opened with messages unread: marked read once, by the opening.
+    let mut unread = row(1, 20);
+    unread.unread = 1;
+    s.apply(teams_event(teams::Event::Chats { rows: vec![unread] }));
+    open(&mut s, CHAT);
+    s.teams_focus(true);
+    assert_eq!(teams_jobs(&mut s), [teams::Job::Open { chat: Some(CHAT.into()) }, mark_read(CHAT)]);
+}
+
 #[test]
 fn only_direct_or_mentions_when_set() {
     let mut s = at_t(3);

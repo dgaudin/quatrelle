@@ -110,6 +110,10 @@ pub struct TeamsState {
     /// last said ([`Session::teams_focus`], each frame; until then, as a window opens, it has the
     /// focus): the open chat isn't looked at.
     background: bool,
+    /// The chat on screen when it was last noted ([`Session::teams_focus`], each frame, and when a
+    /// chat is opened or news come): one coming on screen is marked read and its news waiting
+    /// aren't announced, once for its coming.
+    looked: Option<String>,
     /// What is announced of the new messages: held, given, remembered.
     announcer: announce::Announcer,
 }
@@ -307,8 +311,10 @@ impl Session {
     /// unread that the user is still in and can read here marked read (its row stays as it is
     /// until the worker says it's read).
     pub(crate) fn teams_show(&mut self, chat: Option<String>) {
-        let unread = chat.as_deref().is_some_and(|c| self.teams.row(c).is_some_and(|r| r.unread > 0) && self.teams.may_mark_read(c));
+        let unread = chat.as_deref().is_some_and(|c| self.teams.to_mark_read(c));
         self.teams.open_chat(chat.clone());
+        // On screen now: its news waiting aren't announced, and it's marked read below, once.
+        self.teams_came_on_screen();
         let mark = chat.clone().filter(|_| unread);
         self.push_job(Job::Teams { job: teams::Job::Open { chat } });
         if let Some(chat) = mark {
