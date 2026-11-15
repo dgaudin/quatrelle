@@ -12,9 +12,10 @@
 //!   "Not sent" doesn't hold those after it, and one chat never holds another's. A message is
 //!   written "Sending" before it's posted, so that a run cut off meanwhile ([`opened`]) checks it
 //!   rather than posting it again.
-//! * A post without an answer, or answered 5xx, may have gone ("Unknown"): the chat's messages
-//!   changed since a little before the newest one known when it was taken are read
-//!   ([`Route::Messages`]), for the user's own with the same text made after it. Found, it was
+//! * A post without an answer, or answered 5xx, may have gone ("Unknown"): after a wait (its
+//!   `Retry-After`, else the worker's pause), the chat's messages changed since a little before
+//!   the newest one known when it was taken are read ([`Route::Messages`]), for the user's own
+//!   made after it whose text, as Graph's reader reads it, is the same. Found, it was
 //!   sent; not found, it's posted again, three posts at most, then "Not sent" (couldn't be
 //!   confirmed). Once one goes, the chat's others are judged against what came after it: two
 //!   messages of the same text are two. A message "Not sent" goes again only when the user asks.
@@ -33,7 +34,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
-use quatrelle_mime::{TEAMS_RUNS, teams_write};
+use quatrelle_mime::{TEAMS_RUNS, teams_html, teams_write};
 use quatrelle_model::pim::teams::{ChatMessage, ChatText, Event, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutState, Outgoing, Sender, Unsent};
 
 use super::graph::{Range, message_of};
@@ -42,6 +43,7 @@ use super::store::{Copy, OpRecord, OpState, id_ok, local_ok};
 use super::sync::{dirty, flush, http_code, rfc3339, say_messages, server_ms};
 use super::worker::{Worker, busy, kind, of_the_network};
 use crate::NetError;
+use crate::worker::connect::fenced;
 
 /// The most chats waiting to be marked read.
 const MARKS_MAX: usize = 1_000;
@@ -384,7 +386,7 @@ fn current(w: &mut Worker, head: &Head) -> Option<OpRecord> {
 }
 
 /// A message posted: written "Sending" first; then sent, waiting again (Graph didn't take it),
-/// "Unknown" (it may have gone: checked next), or "Not sent" (refused, too long).
+/// "Unknown" (it may have gone: checked after a wait), or "Not sent" (refused, too long).
 fn post(w: &mut Worker, head: &Head, now: Instant) {
     let Some(mut op) = current(w, head) else { return };
     let Ok(html) = teams_write(&op.body) else {
@@ -406,19 +408,22 @@ fn post(w: &mut Worker, head: &Head, now: Instant) {
         Err(e) => e,
     };
     op.state = after_post(&e);
+    let unknown = op.state == OpState::Unknown;
     let then = match &op.state {
-        OpState::Unknown => {
-            op.tries = op.tries.saturating_add(1);
-            "it is checked"
-        }
+        OpState::Unknown => "it is checked after a wait",
         OpState::Waiting => "it waits",
         _ => "not sent",
     };
+    if unknown {
+        op.tries = op.tries.saturating_add(1);
+    }
     log::warn!("teams: a message to conversation {} failed ({}); {then}", w.hashed(&chat), kind(&e));
     settle(w, &op);
+    // A message that may have been made is checked once Graph had time to list it: after its
+    // `Retry-After` when busy, else after the worker's pause (a 5xx, an answer lost or unread).
     if busy(&e) {
         w.busy_wait(now);
-    } else if of_the_network(&e) {
+    } else if unknown {
         w.pause(&e, now);
     }
 }
@@ -463,7 +468,7 @@ fn check(w: &mut Worker, head: &Head, now: Instant) {
         }
     };
     w.outbox.held.remove(&op.seq);
-    let (me, text) = (w.settings.object_id.clone(), flat(&op.body.plain()));
+    let (me, text) = (w.settings.object_id.clone(), as_read(&op.body, &chat));
     let found = page.items.iter().take(CHECK_ITEMS).map(|v| message_of(&chat, v)).find(|m| {
         let mine = matches!(&m.sender, Sender::User { id, .. } if !me.is_empty() && id.eq_ignore_ascii_case(&me));
         mine && !m.id.is_empty() && m.deleted.is_none() && op.after.is_none_or(|a| m.created > a) && flat(&m.body.plain()) == text
@@ -488,6 +493,14 @@ fn hold(w: &mut Worker, seq: u64, now: Instant) {
 /// A text as a check compares it: its runs of white space one space, trimmed.
 fn flat(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// A message's body as a check compares it with what Graph lists: its HTML as it went, read back
+/// by Graph's own reader (as every message read is: entities, spaces and wrappers as Graph's
+/// rewriting leaves them), then [`flat`]. Should the reader fail, its own text.
+fn as_read(body: &ChatText, chat: &str) -> String {
+    let read = teams_write(body).ok().and_then(|html| fenced(|| teams_html(&html, chat, "")));
+    flat(&read.as_ref().unwrap_or(body).plain())
 }
 
 /// Teams has the message `op` was: `made`, as Graph gave it (the post's answer, or found by a

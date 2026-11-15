@@ -119,6 +119,7 @@ impl FakeTeams {
         let members_refused = self.forbid_members.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
         let mark_refused = self.forbid_mark.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
         let post_limit = self.post_limit.unwrap_or(POST_LIMIT);
+        let rewrite = self.rewrite_posts;
         let guests = self.guests.clone();
         let Some(chat) = self.chats.get_mut(ci) else { return not_found() };
         match name {
@@ -175,7 +176,8 @@ impl FakeTeams {
                 }
                 let after = chat.messages.iter().filter_map(|m| m.id.parse::<i64>().ok()).max().map_or(0, |m| m + 1);
                 let id = ms_of(&now).unwrap_or_default().max(after).to_string();
-                chat.messages.push(FakeMessage::new(&id, Some(&mine), &now, html));
+                let kept = rewrite.map_or_else(|| html.to_string(), |f| f(html));
+                chat.messages.push(FakeMessage::new(&id, Some(&mine), &now, &kept));
                 let chat = chat.clone();
                 let made = chat.messages.last().map(|m| self.message_json(&chat, m)).unwrap_or(Value::Null);
                 Reply::json(201, &made)

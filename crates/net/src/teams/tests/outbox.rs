@@ -208,6 +208,50 @@ fn a_send_whose_answer_is_lost_is_checked_not_sent_twice() {
     assert_eq!(r.held(CHAT, "Lost on the way"), 1);
 }
 
+/// A post answered 5xx (or not answered) may have been made: it is checked only after the
+/// worker's pause, when Graph lists it more surely, not at the next turn.
+#[test]
+fn a_5xx_on_a_send_is_checked_after_a_wait() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
+    r.fake(|t| {
+        t.fail_next.insert("post".into(), 1);
+    });
+    r.send(CHAT, "1-1", "After a wait");
+    assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
+    assert_eq!(r.ops()[0].state, OpState::Unknown);
+    let (reads, asked) = (r.reads(CHAT), r.all_hits());
+    r.turns(Duration::from_millis(9_500));
+    assert_eq!((r.reads(CHAT), r.all_hits()), (reads, asked), "neither checked nor anything asked during the pause");
+    assert!(r.turns_until(Duration::from_secs(3), |r| r.ops().is_empty()), "then checked, and posted again: {:?}", r.ops());
+    assert_eq!((r.reads(CHAT) - reads, r.hits("post")), (1, 2));
+    assert_eq!(r.held(CHAT, "After a wait"), 1);
+}
+
+/// Graph keeps a message's HTML its own way.
+fn rewritten(html: &str) -> String {
+    format!("<div>{}</div>", html.replace(" &amp; ", "&nbsp;&amp; "))
+}
+
+/// A message whose answer was lost is found by its text as Graph's reader reads it, whatever
+/// HTML Graph made of it.
+#[test]
+fn a_check_finds_the_message_as_graph_rewrote_it() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
+    r.fake(|t| {
+        t.answer_lost.insert("post".into(), 1);
+        t.lost_retry_after = Some(1);
+        t.rewrite_posts = Some(rewritten);
+    });
+    r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body: teams_compose("a & b", std::slice::from_ref(&(4..5)), &[]) } });
+    assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
+    assert_eq!(r.fake(|t| t.posts[0].1["body"]["content"].clone()), "<p>a &amp; <b>b</b></p>");
+    let kept = r.fake(|t| t.chat(CHAT).and_then(|c| c.messages.last()).map(|m| m.body_html.clone()));
+    assert_eq!(kept.as_deref(), Some("<div><p>a&nbsp;&amp; <b>b</b></p></div>"), "not the HTML sent");
+    assert!(r.turns_until(Duration::from_secs(5), |r| r.ops().is_empty()), "found sent: {:?}", r.ops());
+    r.turns(Duration::from_secs(10));
+    assert_eq!(r.hits("post"), 1, "never posted again");
+}
+
 #[test]
 fn a_send_not_made_is_sent_again_at_most_three_times() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
@@ -215,7 +259,8 @@ fn a_send_not_made_is_sent_again_at_most_three_times() {
         t.fail_next.insert("post".into(), 5);
     });
     r.send(CHAT, "1-1", "Not made");
-    r.turns(Duration::from_secs(10));
+    // Each post not answered waits out the worker's pause before it's checked.
+    r.turns(Duration::from_secs(40));
     assert_eq!(r.hits("post"), 3);
     let unconfirmed = not_sent(Unsent::Unconfirmed, None);
     assert_eq!(r.ops()[0].state, unconfirmed);
@@ -352,6 +397,7 @@ fn ops_of_a_left_chat_are_not_sent() {
     assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
     // Gone from Teams: its check fails, and the message stays to be checked.
     r.fake(|t| t.chats.retain(|c| c.id != CHAT));
+    let reads = r.reads(CHAT);
     r.turns(Duration::from_secs(3));
     assert_eq!(r.ops()[0].state, OpState::Unknown);
     // Absent from two whole lists running: left.
@@ -360,6 +406,7 @@ fn ops_of_a_left_chat_are_not_sent() {
         r.turns(Duration::from_secs(15));
     }
     assert!(r.row(CHAT).left);
+    assert!(r.reads(CHAT) - reads <= 2, "a check that fails waits longer each time: {} reads", r.reads(CHAT) - reads);
     assert_eq!(r.ops()[0].state, not_sent(Unsent::Left, None));
     assert_eq!(r.outbox_said(CHAT)[0].state, OutState::NotSent { reason: Unsent::Left, code: None });
     assert_eq!(r.hits("post"), 1);
@@ -535,7 +582,7 @@ fn two_of_the_same_text_are_two_messages() {
     r.fake(|t| {
         t.fail_next.insert("post".into(), 1);
     });
-    r.turns(Duration::from_secs(10));
+    r.turns(Duration::from_secs(15));
     assert_eq!(r.hits("post"), 3, "the second posted, failed, checked, and posted again");
     assert!(r.ops().is_empty());
     assert_eq!(r.held(CHAT, "Same again"), 2);
@@ -581,7 +628,7 @@ fn logs_carry_no_text_or_id_of_a_message() {
         t.fail_next.insert("post".into(), 1);
     });
     r.send(HIDDEN, LOCAL, "Wallaby bilby totals");
-    r.turns(Duration::from_secs(5));
+    r.turns(Duration::from_secs(15));
     r.send(HIDDEN, "1790000000-78", &"<".repeat(SEND_MAX));
     r.w.job(Job::Op { op: Op::MarkRead { chat: HIDDEN.into() } });
     r.turns(Duration::from_secs(2));

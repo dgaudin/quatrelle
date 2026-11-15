@@ -128,6 +128,9 @@ pub(crate) struct FakeTeams {
     /// The most bytes a post's `body.content` may have (`None`: 100 KiB); a longer one is
     /// answered 413 `RequestEntityTooLarge`.
     pub(crate) post_limit: Option<usize>,
+    /// How the fake keeps a posted message's HTML, as Graph does its own way (wrapped, entities
+    /// and spaces rewritten): what it answers and lists from then on. `None`: as it came.
+    pub(crate) rewrite_posts: Option<fn(&str) -> String>,
     /// The next n requests of a route (by route name) answered 500, then the route works again.
     pub(crate) fail_next: HashMap<String, u32>,
     /// The next n requests of a route carried out, but answered 503 (the answer lost on the way).
