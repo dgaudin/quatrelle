@@ -276,3 +276,74 @@ fn older_mail_has_its_tags_read_and_set() {
     assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER));
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A tag chosen on a whole folder (256 messages or more, so every message remembered has a change
+/// waiting) stands when another message is read, and a read that carries it ends the wait: the
+/// memory was emptied whole then, and each of them showed « As its folder » whatever the server said.
+#[test]
+fn a_tag_set_on_a_whole_folder_stands_when_another_is_read() {
+    let (mut s, store, id, _key) = offered("policy-select-all");
+    listed(&mut s, &store, &id, "INBOX", (1..=300).map(|uid| message(&id, "INBOX", uid, "")).collect());
+    s.run("list.selectAll", &json!({})).unwrap();
+    assert!(s.selection.len() > 256, "{} selected", s.selection.len());
+    s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
+    s.take_jobs();
+    let last = s.selection.last().cloned().expect("selected");
+    s.apply(read(&MessageKey { uid: 1000, ..last.clone() }, Some(YEAR), None));
+    assert_eq!(s.message_tag(&last, PolicyKind::Archive), Some(NEVER), "still shown");
+    s.apply(read(&last, Some(NEVER), Some("2027-11-12")));
+    let p = s.message_policy(&last, PolicyKind::Archive).expect("the tag");
+    assert_eq!((p.id.as_str(), p.day.as_deref()), (NEVER, Some("2027-11-12")), "the read carries it");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A refusal shows the server's tag as the last read told it, also when that read came after the
+/// change (answered before it): the message only selected, its tags asked by the submenu, the tag
+/// chosen before they came. So with two changes, the first one made and the second refused.
+#[test]
+fn a_refusal_after_a_read_from_before_shows_what_the_read_said() {
+    let (mut s, store, id, key) = offered("policy-refused-read");
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
+    let op = tag_ops(&s.take_jobs())[0].clone();
+    s.apply(read(&key, Some(YEAR), Some("2027-11-12")));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER), "the change still waits");
+    s.apply(Event::OpFailed { account: id.clone(), op, error: "refused".into() });
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(YEAR), "what the server said");
+
+    // Read as « 1 Year », then « As its folder » made and Never refused: the read between them
+    // carried the first change, not the tag the changes were made over.
+    s.apply(read(&key, Some(YEAR), None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(YEAR));
+    s.run("mail.archivePolicy", &json!({"tag": null})).unwrap();
+    s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
+    let ops: Vec<Op> = tag_ops(&s.take_jobs()).into_iter().cloned().collect();
+    s.apply(read(&key, None, None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER), "the second still waits");
+    let Some(second) = ops.last().cloned() else { panic!("{ops:?}") };
+    s.apply(Event::OpFailed { account: id.clone(), op: second, error: "refused".into() });
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), None, "the first one, made");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A read the network couldn't make (offline, or lost to an error) answers nothing: the tags
+/// asked and never answered are asked again once the account's tags are told again (at each pass
+/// over its folders, so after each connection), where they stayed « asked » for the session.
+#[test]
+fn tags_asked_and_never_answered_are_asked_again_after_reconnecting() {
+    let reads = |s: &mut Session| s.take_jobs().iter().filter(|j| matches!(j, Job::ReadArchiveTag { .. })).count();
+    let (mut s, store, id, key) = offered("policy-lost-read");
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 1);
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 0, "asked already");
+    // Another account's tags change nothing here.
+    s.apply(Event::ArchiveTags { account: "elsewhere".into(), tags: tags() });
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 0, "still asked");
+    s.apply(Event::ArchiveTags { account: id.clone(), tags: tags() });
+    assert!(!s.message_tags_known(&key));
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 1, "asked again");
+    let _ = std::fs::remove_dir_all(store.root());
+}

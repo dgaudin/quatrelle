@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The session: Exchange's archive and retention policies. The tags the server offers, of both
-//! kinds, are told once a session ([`Event::ArchiveTags`]); the tags a message carries are asked
-//! when it is opened, or when the « Policy » submenu shows a message whose tags aren't known
-//! ([`Job::ReadArchiveTag`]); a folder's come with the folder list. Setting one is a change
+//! kinds, are told after each connection ([`Event::ArchiveTags`]); the tags a message carries
+//! are asked when it is opened, or when the « Policy » submenu shows a message whose tags aren't
+//! known ([`Job::ReadArchiveTag`]); a folder's come with the folder list. Setting one is a change
 //! through the journal ([`Op::SetArchiveTag`], with its [`PolicyKind`]): made at once here, sent
 //! when the server can be reached, put back with a notice when the server refuses it or no
 //! longer has the message. While it waits, a read that doesn't carry it (one answered before the
@@ -75,8 +75,11 @@ impl Session {
         self.policy.tags.get(account).into_iter().flatten().filter(move |t| t.kind == kind)
     }
 
-    /// The tags were told (`Event::ArchiveTags`).
+    /// The tags were told (`Event::ArchiveTags`, at each pass over the account's folders: after
+    /// each connection). A message's tags asked and never answered (asked offline, or the read
+    /// lost to an error: the network says nothing then) may be asked again.
     pub(crate) fn tags_told(&mut self, account: String, tags: Vec<ArchiveTag>) {
+        self.policy.asked.retain(|k| k.account != account);
         if self.account(&account).is_some() {
             self.policy.tags.insert(account, tags);
         }
@@ -155,21 +158,21 @@ impl Session {
     }
 
     /// Room for one more message's tags: once full, those with a change waiting are kept, the
-    /// others forgotten (they are read again when wanted).
+    /// others forgotten (they are read again when wanted). Those kept are never more than the
+    /// changes waiting (at most `MAX_PENDING`), so one more fits: a change waiting is never
+    /// forgotten, its tag compared with each read.
     fn make_room(&mut self, key: &MessageKey) {
         let PolicyState { messages, before, .. } = &mut self.policy;
         if messages.len() < MAX_REMEMBERED || messages.contains_key(key) {
             return;
         }
         messages.retain(|k, _| before.iter().any(|(t, _)| matches!(t, Target::Message(m, _) if m == k)));
-        if messages.len() >= MAX_REMEMBERED {
-            messages.clear();
-        }
     }
 
     /// A message's tags came from the server. A kind with a change waiting keeps the tag shown
-    /// while the read doesn't carry it (answered before the change reached the server); one that
-    /// carries it ends the wait. Otherwise what the server says is shown.
+    /// while the read doesn't carry it (answered before the change reached the server), and that
+    /// read is what a refusal puts back; one that carries it ends the wait. Otherwise what the
+    /// server says is shown.
     pub(crate) fn tag_read(&mut self, key: MessageKey, archive: Carried, retention: Carried) {
         self.policy.asked.remove(&key);
         let mut carried = [archive, retention];
@@ -186,6 +189,10 @@ impl Session {
             if carries {
                 self.policy.before.remove(at);
             } else {
+                // The server's tag before the change: a refusal shows it, not an older one.
+                if let Some(b) = self.policy.before.get_mut(at) {
+                    b.1 = c.0.clone();
+                }
                 *c = (shown, None);
             }
         }
