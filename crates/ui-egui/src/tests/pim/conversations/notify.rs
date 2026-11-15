@@ -245,6 +245,27 @@ fn a_chats_outbox_snapshots_supersede_each_other() {
     assert!(q.holds(|e| matches!(e, teams::Event::Unsent { count: 2 })) && !q.holds(|e| matches!(e, teams::Event::Unsent { count: 1 })));
 }
 
+/// A message the worker refused (I2) lives only in the outbox it answered with (`seq` 0, "Not
+/// sent"): a later outbox of the chat that doesn't carry it never stands for that one, so the
+/// refusal reaches the engine, and stays in its conversation.
+#[test]
+fn a_refusal_is_never_superseded() {
+    let refused =
+        Outgoing { seq: 0, local: "l2".into(), state: OutState::NotSent { reason: teams::Unsent::TooMany, code: None }, ..outgoing(AGENDA, 0) };
+    let refusal =
+        MailEvent::Teams { event: teams::Event::Outbox { chat: AGENDA.into(), items: vec![outgoing(AGENDA, 1), refused], took: Some("l2".into()) } };
+    let mut events = vec![refusal, outbox(AGENDA, 1, None)];
+    let (mut a, dir, _) = module_app("teams-refusal-kept", vec![row(AGENDA, 0)]);
+    a.run("teams.open", json!({"chat": AGENDA}));
+    let q = &mut a.ui.teams_queue;
+    q.take(&mut events);
+    assert!(q.holds(|e| matches!(e, teams::Event::Outbox { items, .. } if items.iter().any(|o| o.seq == 0 && o.local == "l2"))), "the refusal waits");
+    while a.ui.teams_queue.apply(&mut a.session, crate::conversations::TEAMS_EVENTS_A_FRAME) {}
+    let shown: Vec<(u64, &str)> = a.session.teams.outgoing.iter().map(|o| (o.seq, o.local.as_str())).collect();
+    assert_eq!(shown, [(1, "l1"), (0, "l2")], "the refused message stays in its conversation");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A frame with the window focused or not, minimized or not.
 fn frame_as(ctx: &egui::Context, a: &mut MailApp, focused: bool, minimized: bool) {
     let mut input =

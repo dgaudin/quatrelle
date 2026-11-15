@@ -578,10 +578,11 @@ impl Services for Desktop {
 
 /// A notification's text as the desktop is to show it: as it was written. On Linux and the BSDs
 /// the desktop may read the body as markup (the summary never), so a stranger's `<b>` or `<img>`
-/// in a message, a subject or a place is escaped there (mail, reminders and Teams alike); the
-/// other systems show the text as it is.
+/// in a message, a subject or a place is escaped there (mail, reminders and Teams alike), an
+/// apostrophe as `&apos;`: GNOME reads only the named entities and would show `&#39;` as it is.
+/// The other systems show the text as it is.
 fn shown_as_text(body: &str) -> String {
-    if cfg!(all(unix, not(target_os = "macos"))) { quatrelle_engine::mime::html_escape(body) } else { body.to_string() }
+    if cfg!(all(unix, not(target_os = "macos"))) { quatrelle_engine::mime::html_escape(body).replace("&#39;", "&apos;") } else { body.to_string() }
 }
 
 /// Open a file or a web address with the system's choice of app, as Explorer would.
@@ -745,15 +746,19 @@ mod tests {
     }
 
     /// A stranger's tags in a notification's text: on Linux and the BSDs, where the desktop may
-    /// read the body as markup, they're shown as written; elsewhere the text goes as it is.
+    /// read the body as markup, they're shown as written, and an apostrophe is the entity GNOME
+    /// reads (it shows `&#39;` as it is); elsewhere the text goes as it is.
     #[test]
     fn a_notifications_markup_is_escaped_for_the_desktop() {
         let text = "<b>x</b> & <img src=\"https://e.example/a.png\"> 'q'";
         let shown = shown_as_text(text);
         if cfg!(all(unix, not(target_os = "macos"))) {
-            assert_eq!(shown, "&lt;b&gt;x&lt;/b&gt; &amp; &lt;img src=&quot;https://e.example/a.png&quot;&gt; &#39;q&#39;");
+            assert_eq!(shown, "&lt;b&gt;x&lt;/b&gt; &amp; &lt;img src=&quot;https://e.example/a.png&quot;&gt; &apos;q&apos;");
+            assert_eq!(shown_as_text("l'été"), "l&apos;été");
+            assert_eq!(shown_as_text("&#39; typed"), "&amp;#39; typed", "what was typed stays as it was");
         } else {
             assert_eq!(shown, text);
         }
+        assert!(!shown_as_text("Redémarrez Quatrelle pour l'installer").contains("&#39;"));
     }
 }

@@ -12,9 +12,10 @@
 //! signed in, a copy set aside, members, a chat left, the sign-in page, a picture not to be had,
 //! a message found) and the outbox's last word stay past it, up to [`KEPT_ROOM`] more, where the
 //! oldest of them go too, counted in the log. A chat's outbox said again stands for the one
-//! before it, as the count unsent does. What an announcement says came from Graph: the engine put
-//! it on one line and cut it; here a name is cut again so its mark ("External", "App") always
-//! shows, and the desktop on Linux and the BSDs escapes the markup of the text.
+//! before it (unless that one carries a message refused), as the count unsent does. What an
+//! announcement says came from Graph: the engine put it on one line and cut it; here a name is
+//! cut again so its mark ("External", "App") always shows, and the desktop on Linux and the BSDs
+//! escapes the markup of the text.
 
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
@@ -133,14 +134,16 @@ impl TeamsQueue {
     /// A chat's outbox said again stands for the one before it (each says all of that chat's
     /// messages going out), as the count unsent does for the counts before: the earlier go. An
     /// earlier outbox that answered for a message (`took`) hands that answer to the later one
-    /// when it answers for none; when both answer for one, both stay (the engine needs each).
+    /// when it answers for none; when both answer for one, both stay (the engine needs each). One
+    /// that carries a message the worker refused (`seq` 0, said nowhere else) always stays: one
+    /// for each message the user sent, at most.
     fn supersede(&mut self) {
         // From the newest: the outbox standing for those before it, by chat.
         let mut standing: HashMap<String, usize> = HashMap::new();
         let mut counted = false;
         let mut gone = vec![false; self.pending.len()];
         for i in (0..self.pending.len()).rev() {
-            let (chat, answers) = match self.pending.get(i).and_then(teams_event) {
+            let (chat, answers, refused) = match self.pending.get(i).and_then(teams_event) {
                 Some(teams::Event::Unsent { .. }) => {
                     if let Some(g) = gone.get_mut(i) {
                         *g = counted;
@@ -148,7 +151,7 @@ impl TeamsQueue {
                     counted = true;
                     continue;
                 }
-                Some(teams::Event::Outbox { chat, took, .. }) => (chat.clone(), took.is_some()),
+                Some(teams::Event::Outbox { chat, took, items }) => (chat.clone(), took.is_some(), items.iter().any(|o| o.seq == 0)),
                 _ => continue,
             };
             let Some(&later) = standing.get(&chat) else {
@@ -156,7 +159,7 @@ impl TeamsQueue {
                 continue;
             };
             let later_answers = matches!(self.pending.get(later).and_then(teams_event), Some(teams::Event::Outbox { took: Some(_), .. }));
-            if answers && later_answers {
+            if refused || (answers && later_answers) {
                 standing.insert(chat, i);
                 continue;
             }
