@@ -545,6 +545,50 @@ fn teams_chat_links_are_teams_own() {
     assert!(!is_teams_link("https://teams.microsoft.com/l/chat/19%3Aa/0"), "a chat link is no meeting");
 }
 
+/// The Teams sign-in page opened in the browser: Microsoft's own, over `https`, its authorize
+/// page for an organisation the Options could name, and nothing a browser would take elsewhere.
+#[test]
+fn only_microsofts_sign_in_page_is_one() {
+    assert!(is_microsoft_sign_in("https://login.microsoftonline.com/contoso.example/oauth2/v2.0/authorize?client_id=x"));
+    assert!(is_microsoft_sign_in("https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=b"));
+    assert!(!is_microsoft_sign_in("http://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=b"));
+    assert!(!is_microsoft_sign_in("https://login.microsoftonline.com.evil.example/o/oauth2/v2.0/authorize?a=b"));
+    assert!(!is_microsoft_sign_in("https://evil.example/organizations/oauth2/v2.0/authorize?a=b"));
+    assert!(!is_microsoft_sign_in("https://login.microsoftonline.com/organizations/oauth2/v2.0/logout?a=b"));
+    assert!(!is_microsoft_sign_in("https://login.microsoftonline.com/a b/oauth2/v2.0/authorize?a=b"));
+    // Any organisation the Options take is one (a verified domain may be long), and only those.
+    let long = format!("{}.contoso.example", "a".repeat(84));
+    assert_eq!(long.len(), 100);
+    assert!(crate::valid_oauth_tenant(&long));
+    assert!(is_microsoft_sign_in(&format!("https://login.microsoftonline.com/{long}/oauth2/v2.0/authorize?a=b")));
+    assert!(is_microsoft_sign_in("https://LOGIN.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=b"), "a host's case doesn't matter");
+    for bad in [
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize",
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?",
+        "https://login.microsoftonline.com//oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com/../oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com/a/b/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com/a%2Fb/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com/.a/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize#x?a=b",
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize/x?a=b",
+        "https://login.microsoftonline.com@evil.example/organizations/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com:443@evil.example/organizations/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com\\@evil.example/organizations/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=b\u{202E}",
+        "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=\nb",
+        "https://login.microsoftonline.com/\u{0430}/oauth2/v2.0/authorize?a=b",
+        "login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=b",
+        "",
+    ] {
+        assert!(!is_microsoft_sign_in(bad), "{bad:?}");
+    }
+    let tenant_too_long = format!("https://login.microsoftonline.com/{}/oauth2/v2.0/authorize?a=b", "a".repeat(254));
+    assert!(!is_microsoft_sign_in(&tenant_too_long));
+    let page_too_long = format!("https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a={}", "b".repeat(2048));
+    assert!(!is_microsoft_sign_in(&page_too_long), "past what a browser is handed");
+}
+
 fn webex_event(id: &str) -> CalEvent {
     CalEvent { uid: "w1".into(), start: 1_792_000_000, end: 1_792_003_600, webex_id: Some(id.into()), ..Default::default() }
 }

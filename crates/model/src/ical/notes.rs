@@ -236,6 +236,19 @@ pub fn is_teams_chat_link(url: &str) -> bool {
         && launchable_link(url)
 }
 
+/// Whether a web address is Microsoft's page to sign in to an organisation, as the Teams sign-in
+/// opens it: `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize?<query>`, on that
+/// host exactly, with an organisation the Options could name ([`crate::valid_oauth_tenant`]), a
+/// query, nothing but ASCII (every parameter is percent-encoded), and launchable
+/// ([`launchable_link`]).
+pub fn is_microsoft_sign_in(url: &str) -> bool {
+    let https = url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://"));
+    let Some((host, path)) = web_host_and_path(url) else { return false };
+    let Some((page, query)) = path.split_once('?') else { return false };
+    let tenant = page.strip_suffix("/oauth2/v2.0/authorize").unwrap_or("");
+    https && host == "login.microsoftonline.com" && crate::valid_oauth_tenant(tenant) && !query.is_empty() && url.is_ascii() && launchable_link(url)
+}
+
 /// Whether a web address may be handed to a browser to open: `http` or `https`, no whitespace or
 /// control character, at most 2,048 bytes, and a plain host ([`web_host_and_path`]).
 pub fn launchable_link(url: &str) -> bool {

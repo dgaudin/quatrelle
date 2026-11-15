@@ -364,6 +364,7 @@ impl Worker {
             Job::Picture { picture } => pictures::picture(self, picture),
             Job::Search { query } => search::search(self, query),
             Job::DeleteSetAside { path } => self.delete_set_aside(&path),
+            Job::Op { .. } | Job::Retry { .. } | Job::Discard { .. } | Job::Find { .. } => log::debug!("teams: not handled yet"),
         }
     }
 

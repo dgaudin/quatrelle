@@ -300,3 +300,77 @@ fn every_payload_round_trips_through_json() {
     c.preview = Some(preview);
     assert_eq!(serde_json::from_str::<Chat>(&serde_json::to_string(&c).unwrap()).unwrap(), c);
 }
+
+#[test]
+fn delivery_two_jobs_and_events_round_trip_through_json() {
+    let body = ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "hi".into(), ..Run::default() }] }] };
+    for job in [
+        teams::Job::Op { op: Op::Send { chat: "19:a@thread.v2".into(), local: "1731500000-1".into(), body: body.clone() } },
+        teams::Job::Op { op: Op::MarkRead { chat: "19:a@thread.v2".into() } },
+        teams::Job::Retry { seq: 7 },
+        teams::Job::Discard { seq: 7 },
+        teams::Job::Find { chat: "19:a@thread.v2".into(), message: "1730000000000".into() },
+    ] {
+        let j = Job::Teams { job };
+        assert_eq!(serde_json::from_str::<Job>(&serde_json::to_string(&j).unwrap()).unwrap(), j);
+    }
+    let out = Outgoing {
+        seq: 3,
+        local: "l".into(),
+        chat: "19:a@thread.v2".into(),
+        body,
+        state: OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 403 Forbidden".into()) },
+    };
+    let news = News {
+        chat: "19:a@thread.v2".into(),
+        message: "1730000000000".into(),
+        sender: "Ana Lima".into(),
+        external: true,
+        app: false,
+        mentions_me: true,
+        chat_name: Some("Agenda".into()),
+        direct: false,
+        hidden: false,
+        text: "Lunch?".into(),
+        at: 1_730_000_000_000,
+    };
+    let unread = News { message: String::new(), chat_name: None, direct: true, app: true, ..news.clone() };
+    let mut waiting = out.clone();
+    waiting.state = OutState::Waiting;
+    let mut sending = out.clone();
+    sending.state = OutState::Sending;
+    let states = [Unsent::Refused, Unsent::TooLong, Unsent::TooMany, Unsent::Left, Unsent::Unconfirmed].into_iter().map(|reason| Outgoing {
+        seq: 0,
+        state: OutState::NotSent { reason, code: None },
+        ..out.clone()
+    });
+    let items: Vec<Outgoing> = [waiting, sending].into_iter().chain(states).collect();
+    for event in [
+        teams::Event::Outbox { chat: out.chat.clone(), items: vec![out], took: Some("l".into()) },
+        teams::Event::Outbox { chat: "19:a@thread.v2".into(), items, took: None },
+        teams::Event::Unsent { count: 2 },
+        teams::Event::News { news: vec![news, unread] },
+        teams::Event::SignInPage { url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?x=1".into() },
+        teams::Event::NoPicture { picture: Picture::Photo { user: "u1".into() } },
+        teams::Event::Placed { chat: "c".into(), message: "m".into(), newest: false },
+    ] {
+        let e = Event::Teams { event };
+        assert_eq!(serde_json::from_str::<Event>(&serde_json::to_string(&e).unwrap()).unwrap(), e);
+    }
+}
+
+#[test]
+fn first_line_stops_at_the_line_without_bidi_cut_at_max() {
+    assert_eq!(first_line("Lunch\u{202E} at\tnoon?\nsecond line", 200), "Lunch at noon?");
+    assert_eq!(first_line(&"é".repeat(300), NEWS_CHARS).chars().count(), NEWS_CHARS);
+    assert!(first_line(&"é".repeat(300), NEWS_CHARS).ends_with('…'));
+    assert_eq!(first_line(&"é".repeat(NEWS_CHARS), NEWS_CHARS), "é".repeat(NEWS_CHARS), "max characters fit");
+    assert_eq!(first_line("\nsecond line", 200), "", "an empty first line is empty");
+    assert_eq!(first_line("  a\r\nb", 200), "a");
+    assert_eq!(first_line("a\u{2066}\u{061C}\u{0}b  c", 200), "ab c");
+    assert_eq!(first_line("abc", 1), "…");
+    assert_eq!(first_line("abc", 0), "", "nothing past max, even the ellipsis");
+    assert_eq!(first_line("", 200), "");
+    // A name is still cut at its own length.
+    assert_eq!(one_line(&"é".repeat(300)).chars().count(), NAME_CHARS);
+}

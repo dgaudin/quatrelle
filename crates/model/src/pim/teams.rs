@@ -8,9 +8,11 @@
 use serde::{Deserialize, Serialize};
 
 mod job;
+mod op;
 mod text;
 
 pub use job::{Event, Job};
+pub use op::*;
 pub use text::{Block, BlockKind, ChatText, Run};
 
 /// The store's pseudo-account the Teams copy is kept under: its file is `Teams.quatrelle`.
@@ -346,7 +348,22 @@ pub fn is_bidi(c: char) -> bool {
 /// A name or topic as it's shown: on one line (each run of whitespace one space), without control
 /// or bidi characters, cut to [`NAME_CHARS`] characters ending in `…`.
 pub fn one_line(text: &str) -> String {
+    shown_line(text, NAME_CHARS)
+}
+
+/// A message's first line as an announcement shows it: the text up to its first `\n`, then as
+/// [`one_line`] makes it, but cut to `max` characters ending in `…`.
+pub fn first_line(text: &str, max: usize) -> String {
+    shown_line(text.split_once('\n').map_or(text, |(line, _)| line), max)
+}
+
+/// `text` on one line, without control or bidi characters, cut to `max` characters (the last a
+/// `…` when it's cut).
+fn shown_line(text: &str, max: usize) -> String {
     let mut out = String::new();
+    if max == 0 {
+        return out;
+    }
     let mut chars = 0usize;
     let mut space = false;
     for c in text.chars() {
@@ -364,12 +381,12 @@ pub fn one_line(text: &str) -> String {
         space = false;
         out.push(c);
         chars += 1;
-        if chars > NAME_CHARS {
+        if chars > max {
             break;
         }
     }
-    if chars > NAME_CHARS {
-        let cut = out.char_indices().nth(NAME_CHARS - 1).map_or(out.len(), |(i, _)| i);
+    if chars > max {
+        let cut = out.char_indices().nth(max.saturating_sub(1)).map_or(out.len(), |(i, _)| i);
         out.truncate(cut);
         out.truncate(out.trim_end().len());
         out.push('…');

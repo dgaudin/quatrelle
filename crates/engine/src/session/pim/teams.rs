@@ -342,6 +342,13 @@ impl Session {
             teams::Event::Picture { picture, bytes } => self.teams.take_picture(picture, bytes),
             teams::Event::Removed { chat } => self.teams.left(&chat),
             teams::Event::Members { chat, members, web_url, first } => self.teams.take_members(&chat, members, web_url, first),
+            // Not taken yet.
+            teams::Event::Outbox { .. }
+            | teams::Event::Unsent { .. }
+            | teams::Event::News { .. }
+            | teams::Event::SignInPage { .. }
+            | teams::Event::NoPicture { .. }
+            | teams::Event::Placed { .. } => {}
         }
     }
 
