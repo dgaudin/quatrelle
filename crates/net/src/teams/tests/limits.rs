@@ -58,6 +58,17 @@ fn never_two_reads_of_one_chat_within_a_second() {
 }
 
 #[test]
+fn sends_of_one_chat_are_a_second_apart_and_others_not() {
+    let t = Instant::now();
+    let mut l = Limiter::new(t);
+    l.took(Route::Send(1), t);
+    assert!(l.wait(Route::Send(1), t + ms(10)) > Duration::ZERO, "a second send to the chat within the second");
+    assert_eq!(l.wait(Route::Send(2), t + ms(10)), Duration::ZERO, "another chat's isn't held");
+    assert_eq!(l.wait(Route::Messages(1), t + ms(10)), Duration::ZERO, "nor the chat's reads");
+    assert_eq!(l.wait(Route::Send(1), t + SECOND), Duration::ZERO);
+}
+
+#[test]
 fn more_chats_than_the_cap_keep_the_latest_spaced() {
     let t0 = Instant::now();
     let mut l = Limiter::new(t0);

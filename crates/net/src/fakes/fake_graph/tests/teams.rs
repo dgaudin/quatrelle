@@ -288,6 +288,49 @@ fn teams_post_forbidden_and_throttle() {
 }
 
 #[test]
+fn teams_posts_are_kept_bounded_and_of_a_kind() {
+    let id = "19:a@thread.v2";
+    let mut t = teams_with(vec![chat(id, T0, 2)]);
+    t.post_limit = Some(5);
+    t.forbid_mark.push(id.into());
+    let server = serve_teams(t);
+    let fake = |f: &mut dyn FnMut(&mut FakeTeams)| f(server.data.lock().unwrap().teams.as_mut().unwrap());
+    let path = format!("/chats/{}/messages", enc(id));
+    let body = |kind: &str, content: &str| format!(r#"{{"body": {{"contentType": "{kind}", "content": "{content}"}}}}"#);
+    assert_eq!(post(&server, &path, &body("html", "12345")).status, 201);
+    let long = post(&server, &path, &body("html", "123456"));
+    assert_eq!((long.status, long.json()["error"]["code"].as_str()), (413, Some("RequestEntityTooLarge")));
+    assert_eq!(post(&server, &path, &body("xml", "1")).status, 400);
+    assert_eq!(post(&server, &path, r#"{"body": {"content": "1"}}"#).status, 400, "no kind said");
+    assert_eq!(post(&server, &path, "junk").status, 400);
+    fake(&mut |t| {
+        // Every post kept as it came, whatever its answer; only the first made a message.
+        assert_eq!(t.posts.len(), 5);
+        assert_eq!(t.posts[1], (id.to_string(), json!({"body": {"contentType": "html", "content": "123456"}})));
+        assert_eq!(t.posts[4].1, Value::Null);
+        assert_eq!(t.chat(id).unwrap().messages.len(), 3);
+    });
+    // Marking that chat read is refused, and changes nothing.
+    let read_time = || server.data.lock().unwrap().teams.as_ref().unwrap().chat(id).unwrap().read_time.clone();
+    let before = read_time();
+    let mark = format!(r#"{{"user": {{"id": "{ME}", "tenantId": "{TENANT}"}}}}"#);
+    assert_eq!(post(&server, &format!("/chats/{}/markChatReadForUser", enc(id)), &mark).status, 403);
+    assert_eq!(read_time(), before);
+    // Without a limit set: 100 KiB.
+    fake(&mut |t| t.post_limit = None);
+    assert_eq!(post(&server, &path, &body("text", &"a".repeat(100 << 10))).status, 201);
+    assert_eq!(post(&server, &path, &body("text", &"a".repeat((100 << 10) + 1))).status, 413);
+    // A lost answer's 503 says a Retry-After only when one is set.
+    fake(&mut |t| _ = t.answer_lost.insert("post".into(), 2));
+    let lost = post(&server, &path, &body("html", "1"));
+    assert_eq!((lost.status, lost.header("Retry-After")), (503, None));
+    fake(&mut |t| t.lost_retry_after = Some(7));
+    let lost = post(&server, &path, &body("html", "2"));
+    assert_eq!((lost.status, lost.header("Retry-After")), (503, Some("7")));
+    fake(&mut |t| assert_eq!(t.chat(id).unwrap().messages.len(), 6, "both made"));
+}
+
+#[test]
 fn teams_shares_redirects_then_serves() {
     let url = "https://contoso.sharepoint.com/sites/team/Shared%20Documents/plan.pdf";
     let mut t = teams_with(vec![chat("19:a@thread.v2", T0, 1)]);

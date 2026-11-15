@@ -368,13 +368,16 @@ fn http_date(t: i64) -> String {
     format!("{day}, {d:02} {month} {y:04} {:02}:{:02}:{:02} GMT", s / 3600, s / 60 % 60, s % 60)
 }
 
-fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str, location: Option<&str>, date: Option<i64>) {
+/// An answer: a 429 says `Retry-After: 1` unless `retry_after` says otherwise.
+fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str, location: Option<&str>, date: Option<i64>, retry_after: Option<u64>) {
     let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n", body.len());
     if let Some(t) = date {
         head.push_str(&format!("Date: {}\r\n", http_date(t)));
     }
-    if status == 429 {
-        head.push_str("Retry-After: 1\r\n");
+    match retry_after {
+        Some(secs) => head.push_str(&format!("Retry-After: {secs}\r\n")),
+        None if status == 429 => head.push_str("Retry-After: 1\r\n"),
+        None => {}
     }
     if let Some(to) = location {
         head.push_str(&format!("Location: {to}\r\n"));
@@ -431,16 +434,18 @@ pub fn serve(data: Data) -> Server {
                 // An answer held back goes from a thread of its own: the others aren't kept waiting.
                 let hold = shared.lock().unwrap().teams.as_mut().and_then(|t| t.holding.take());
                 match hold {
+                    // No answer: the connection closes as `s` goes.
+                    _ if r.cut => {}
                     Some(wait) => drop(std::thread::spawn(move || {
                         std::thread::sleep(wait);
-                        respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date);
+                        respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date, r.retry_after);
                     })),
-                    None => respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date),
+                    None => respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date, r.retry_after),
                 }
                 continue;
             }
             if !authorized {
-                respond(&mut s, 401, br#"{"error": {"code": "InvalidAuthenticationToken"}}"#, "application/json", None, None);
+                respond(&mut s, 401, br#"{"error": {"code": "InvalidAuthenticationToken"}}"#, "application/json", None, None, None);
                 continue;
             }
             assert!(immutable, "ids are asked for in their immutable form");
@@ -454,7 +459,7 @@ pub fn serve(data: Data) -> Server {
                     d.route(&method, &target, &body, &b)
                 }
             };
-            respond(&mut s, status, &out, kind, None, None);
+            respond(&mut s, status, &out, kind, None, None, None);
         }
     });
     Server { base, data }

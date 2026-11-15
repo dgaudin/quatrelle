@@ -120,10 +120,23 @@ pub(crate) struct FakeTeams {
     pub(crate) throttle_from: u32,
     /// Chats (their ids) where posting is refused with 403.
     pub(crate) forbid_post: Vec<String>,
+    /// Chats (their ids) where marking read is refused with 403.
+    pub(crate) forbid_mark: Vec<String>,
+    /// Every `POST /chats/{id}/messages` received, whatever its answer: (the chat's id, the JSON
+    /// body as it came; `Null` when it isn't JSON).
+    pub(crate) posts: Vec<(String, Value)>,
+    /// The most bytes a post's `body.content` may have (`None`: 100 KiB); a longer one is
+    /// answered 413 `RequestEntityTooLarge`.
+    pub(crate) post_limit: Option<usize>,
     /// The next n requests of a route (by route name) answered 500, then the route works again.
     pub(crate) fail_next: HashMap<String, u32>,
     /// The next n requests of a route carried out, but answered 503 (the answer lost on the way).
     pub(crate) answer_lost: HashMap<String, u32>,
+    /// The `Retry-After` (seconds) those 503s say; `None`: they say none.
+    pub(crate) lost_retry_after: Option<u64>,
+    /// The next n requests of a route (by route name) carried out, then the connection closed
+    /// with no answer at all.
+    pub(crate) cut_after: HashMap<String, u32>,
     /// Chats (their ids) whose message reads are answered 500.
     pub(crate) fail_reads: Vec<String>,
     /// Chats (their ids) whose message reads are refused with 403.
@@ -216,23 +229,35 @@ pub(crate) fn rfc3339(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{milli:03}Z", s / 3600, s / 60 % 60, s % 60)
 }
 
-/// One answer: status, body, content type, where a redirect points, and the fake's clock when
-/// it answered (Unix seconds, sent as `Date`).
+/// One answer: status, body, content type, where a redirect points, the fake's clock when it
+/// answered (Unix seconds, sent as `Date`) and its `Retry-After` (a 429 always says 1); or, when
+/// `cut`, none at all (the connection closed once the request is read).
 pub(super) struct Reply {
     pub(super) status: u16,
     pub(super) body: Vec<u8>,
     pub(super) kind: &'static str,
     pub(super) location: Option<String>,
     pub(super) date: Option<i64>,
+    pub(super) retry_after: Option<u64>,
+    pub(super) cut: bool,
 }
 
 impl Reply {
+    fn bytes(status: u16, body: Vec<u8>, kind: &'static str) -> Self {
+        Self { status, body, kind, location: None, date: None, retry_after: None, cut: false }
+    }
+
     fn json(status: u16, v: &Value) -> Self {
-        Self { status, body: v.to_string().into_bytes(), kind: "application/json", location: None, date: None }
+        Self::bytes(status, v.to_string().into_bytes(), "application/json")
     }
 
     fn empty(status: u16) -> Self {
-        Self { status, body: Vec::new(), kind: "application/json", location: None, date: None }
+        Self::bytes(status, Vec::new(), "application/json")
+    }
+
+    /// No answer: the connection is closed.
+    fn cut() -> Self {
+        Self { cut: true, ..Self::empty(0) }
     }
 
     fn error(status: u16, code: &str, message: &str) -> Self {
@@ -372,10 +397,10 @@ impl FakeTeams {
             let Some(key) = p.get(1).and_then(|id| share_key(self, id)) else { return not_found() };
             if name == "shares" {
                 let token = p.get(1).copied().unwrap_or_default();
-                return Reply { status: 302, body: Vec::new(), kind: "text/plain", location: Some(format!("{base}/download/{token}")), date: None };
+                return Reply { location: Some(format!("{base}/download/{token}")), ..Reply::bytes(302, Vec::new(), "text/plain") };
             }
             let bytes = self.shares.get(&key).cloned().unwrap_or_default();
-            return Reply { status: 200, body: bytes, kind: "application/octet-stream", location: None, date: None };
+            return Reply::bytes(200, bytes, "application/octet-stream");
         }
         self.chat_route(name, p, query, raw_path, input, base)
     }
@@ -387,7 +412,7 @@ impl FakeTeams {
     fn people(&self, name: &str, p: &[&str], q: &HashMap<String, String>, input: &Value) -> Option<Reply> {
         Some(match name {
             "photo" => match p.get(1).and_then(|u| self.photos.get(*u)) {
-                Some(bytes) => Reply { status: 200, body: bytes.clone(), kind: "image/jpeg", location: None, date: None },
+                Some(bytes) => Reply::bytes(200, bytes.clone(), "image/jpeg"),
                 None => Reply::error(404, "ImageNotFound", "The photo wasn't found."),
             },
             "presence" => {
@@ -459,17 +484,22 @@ impl Data {
             authorized = false;
         }
         t.holding = t.hold.take_if(|(route, _)| *route == name).map(|(_, wait)| wait);
+        let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+        if name == "post" {
+            t.posts.push((p.get(1).copied().unwrap_or_default().to_string(), input.clone()));
+        }
         let mut reply = match t.refusal(name, authorized, someone_else) {
             Some(r) => r,
             None => {
-                let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
                 let done = t.answer(name, &p, query, raw_path, &input, base);
-                match t.answer_lost.get_mut(name).filter(|n| **n > 0) {
-                    Some(n) => {
-                        *n -= 1;
-                        Reply::error(503, "ServiceUnavailable", "Done, but the answer was lost.")
-                    }
-                    None => done,
+                if let Some(n) = t.cut_after.get_mut(name).filter(|n| **n > 0) {
+                    *n -= 1;
+                    Reply::cut()
+                } else if let Some(n) = t.answer_lost.get_mut(name).filter(|n| **n > 0) {
+                    *n -= 1;
+                    Reply { retry_after: t.lost_retry_after, ..Reply::error(503, "ServiceUnavailable", "Done, but the answer was lost.") }
+                } else {
+                    done
                 }
             }
         };

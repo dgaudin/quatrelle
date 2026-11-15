@@ -2,9 +2,13 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The fake Graph server's Teams routes about chats: the chat list, and one chat's members,
 //! messages (listed in a `lastModifiedDateTime` range, posted, edited, reacted to,
-//! soft-deleted), hosted images and read mark.
+//! soft-deleted), hosted images and read mark. A post must say its `body.contentType` (`html` or
+//! `text`, else 400), and its `content` must fit [`FakeTeams::post_limit`] (else 413).
 
 use super::*;
+
+/// The most bytes a post's content may have when the test sets no limit.
+const POST_LIMIT: usize = 100 << 10;
 
 impl FakeTeams {
     fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
@@ -113,6 +117,8 @@ impl FakeTeams {
         let tenant = self.tenant.clone();
         let forbidden = self.forbid_post.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
         let members_refused = self.forbid_members.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
+        let mark_refused = self.forbid_mark.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
+        let post_limit = self.post_limit.unwrap_or(POST_LIMIT);
         let guests = self.guests.clone();
         let Some(chat) = self.chats.get_mut(ci) else { return not_found() };
         match name {
@@ -120,7 +126,7 @@ impl FakeTeams {
             "hosted" => {
                 let Some(m) = p.get(3).and_then(|mid| chat.messages.iter().find(|m| m.id == *mid)) else { return not_found() };
                 match p.get(5).and_then(|h| m.hosted.iter().find(|(id, _)| id == h)) {
-                    Some((_, bytes)) => Reply { status: 200, body: bytes.clone(), kind: "image/png", location: None, date: None },
+                    Some((_, bytes)) => Reply::bytes(200, bytes.clone(), "image/png"),
                     None => not_found(),
                 }
             }
@@ -160,14 +166,21 @@ impl FakeTeams {
             }
             "post" if forbidden => Reply::error(403, "Forbidden", "Posting in this chat is not allowed."),
             "post" => {
+                if !matches!(input.pointer("/body/contentType").and_then(Value::as_str), Some("html" | "text")) {
+                    return Reply::error(400, "BadRequest", "body.contentType must be html or text.");
+                }
+                let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
+                if html.len() > post_limit {
+                    return Reply::error(413, "RequestEntityTooLarge", "The message is too large.");
+                }
                 let after = chat.messages.iter().filter_map(|m| m.id.parse::<i64>().ok()).max().map_or(0, |m| m + 1);
                 let id = ms_of(&now).unwrap_or_default().max(after).to_string();
-                let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
                 chat.messages.push(FakeMessage::new(&id, Some(&mine), &now, html));
                 let chat = chat.clone();
                 let made = chat.messages.last().map(|m| self.message_json(&chat, m)).unwrap_or(Value::Null);
                 Reply::json(201, &made)
             }
+            "markChatReadForUser" if mark_refused => Reply::error(403, "Forbidden", "Marking this chat read is not allowed."),
             "markChatReadForUser" => {
                 let user = &input["user"];
                 if user["id"].as_str() != Some(mine.as_str()) || user["tenantId"].as_str() != Some(tenant.as_str()) {

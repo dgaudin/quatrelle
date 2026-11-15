@@ -21,6 +21,8 @@ mod pictures;
 mod read;
 /// The search of the local copy: its index kept as the copy is written, read back, its queries.
 mod search;
+/// Posting a message's HTML, the chat's id and the size checked first.
+mod send;
 /// The local copy: pages, identity, deleted messages, damaged records.
 mod store;
 /// The synchronisation: the cadences, incremental reads, read state, refused and left chats.
@@ -252,7 +254,8 @@ fn ids_with_colon_and_at_are_encoded() {
     c.set_reaction("19:x/y@thread.v2", "17 9", "👍").unwrap();
     c.soft_delete("19:x/y@thread.v2", "1", Some("u?1")).unwrap();
     c.soft_delete("19:x/y@thread.v2", "1", None).unwrap();
-    c.mark_read("19:x/y@thread.v2", ME, TENANT).unwrap();
+    // A `/` is refused there (tests/send.rs): the read mark goes to an id without one.
+    c.mark_read("19:x@thread.v2", ME, TENANT).unwrap();
     assert_eq!(c.send_text("19:x/y@thread.v2", "a \"b\"").unwrap()["id"], "2");
     c.edit_text("19:x/y@thread.v2", "17 9", "c").unwrap();
     let seen = h.join().unwrap();
@@ -262,7 +265,7 @@ fn ids_with_colon_and_at_are_encoded() {
     assert!(seen[2].ends_with(r#"{"reactionType":"👍"}"#), "{}", seen[2]);
     assert_eq!(line(3), "POST /users/u%3F1/chats/19%3Ax%2Fy%40thread.v2/messages/1/softDelete HTTP/1.1");
     assert_eq!(line(4), "POST /me/chats/19%3Ax%2Fy%40thread.v2/messages/1/softDelete HTTP/1.1");
-    assert_eq!(line(5), "POST /chats/19%3Ax%2Fy%40thread.v2/markChatReadForUser HTTP/1.1");
+    assert_eq!(line(5), "POST /chats/19%3Ax%40thread.v2/markChatReadForUser HTTP/1.1");
     assert!(seen[5].ends_with(r#"{"user":{"id":"u-me","tenantId":"tenant-1"}}"#), "{}", seen[5]);
     assert_eq!(line(6), "POST /chats/19%3Ax%2Fy%40thread.v2/messages HTTP/1.1");
     assert!(seen[6].ends_with(r#"{"body":{"content":"a \"b\"","contentType":"text"}}"#), "{}", seen[6]);

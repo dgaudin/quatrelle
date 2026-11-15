@@ -4,9 +4,9 @@
 //! and the slow-down after a 429. Pure: every call is given the time, nothing here reads a clock
 //! or sleeps.
 //!
-//! * Requests: `GET /me/chats` at most once a second; each chat's message reads, and its hosted
-//!   contents, at most once a second per chat; all Teams requests together at most
-//!   [`CEILING`] in any second.
+//! * Requests: `GET /me/chats` at most once a second; each chat's message reads, its hosted
+//!   contents, and the messages sent to it, at most once a second per chat; all Teams requests
+//!   together at most [`CEILING`] in any second.
 //! * Cadences: the chat list every 10 s, the open chat every 3 s, the chats active in the last
 //!   7 days every minute, the hourly pass, presence every minute. A cadence is due once its
 //!   interval has passed since it last ran, however long ago that was: a computer waking after a
@@ -48,6 +48,9 @@ pub(crate) enum Route {
     Messages(u64),
     /// A chat's hosted contents (images): once a second per chat.
     Hosted(u64),
+    /// A message sent to a chat: once a second per chat.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the outbox sends through it once wired"))]
+    Send(u64),
     /// A chat's members.
     Members,
     /// Presence of the people shown.
@@ -63,7 +66,7 @@ pub(crate) enum Route {
 impl Route {
     /// Whether this route has a limit of its own (one a second), besides the ceiling.
     fn spaced(self) -> bool {
-        matches!(self, Route::ChatList | Route::Messages(_) | Route::Hosted(_))
+        matches!(self, Route::ChatList | Route::Messages(_) | Route::Hosted(_) | Route::Send(_))
     }
 }
 

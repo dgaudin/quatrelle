@@ -2,9 +2,10 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! A client for Graph's chat API (v1.0): the signed-in user, chats, their members and
-//! messages, posting and editing text, reactions, soft deletes, marking a chat read, counting
-//! the bytes of a file shared in a chat, a message's hosted images, people's photos and
-//! presence, and the host of the user's OneDrive; its answers are read into the model here too.
+//! messages, posting text or HTML and editing text, reactions, soft deletes, marking a chat
+//! read, counting the bytes of a file shared in a chat, a message's hosted images, people's
+//! photos and presence, and the host of the user's OneDrive; its answers are read into the
+//! model here too.
 //!
 //! Every request carries the bearer token and goes on a connection of its own. No redirect is
 //! followed with the token: a Graph answer that redirects is an error, except a shared file's
@@ -20,7 +21,7 @@ use std::cell::Cell;
 use std::collections::HashSet;
 use std::io::Write;
 
-use quatrelle_model::pim::teams::{MAX_ID, MAX_MEMBERS, PRESENCE_IDS};
+use quatrelle_model::pim::teams::{MAX_ID, MAX_MEMBERS, PRESENCE_IDS, SEND_MAX};
 use serde_json::{Value, json};
 
 use crate::graph::{BUSY_ROUNDS, backoff_secs, seg, utc};
@@ -315,6 +316,20 @@ impl TeamsClient {
         self.request("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false, false)
     }
 
+    /// Post a message written in HTML in a chat: the message Graph made. The chat's id must be one
+    /// segment of the address ([`own_segment`]) and the HTML at most [`SEND_MAX`] bytes, else it is
+    /// refused before any request. Waited out on a 429 only, as [`Self::send_text`].
+    pub fn send_html(&self, chat: &str, html: &str) -> Result<Value> {
+        if !own_segment(chat) {
+            return Err(NetError::Refused("not a chat's id".into()));
+        }
+        if html.len() > SEND_MAX {
+            return Err(NetError::Refused(format!("a message longer than Teams takes ({SEND_MAX} bytes)")));
+        }
+        let body = json!({"body": {"contentType": "html", "content": html}});
+        self.request("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false, false)
+    }
+
     /// Replace a message's text (one the signed-in user sent).
     pub fn edit_text(&self, chat: &str, msg: &str, text: &str) -> Result<()> {
         let body = json!({"body": {"contentType": "text", "content": text}});
@@ -343,8 +358,12 @@ impl TeamsClient {
         self.json("POST", &self.at(&format!("{who}/chats/{}/messages/{}/softDelete", seg(chat), seg(msg))), None, false).map(drop)
     }
 
-    /// Mark a chat read for the signed-in user (`user`: their object id, in `tenant`).
+    /// Mark a chat read for the signed-in user (`user`: their object id, in `tenant`); a chat id
+    /// that isn't one segment of the address ([`own_segment`]) is refused before any request.
     pub fn mark_read(&self, chat: &str, user: &str, tenant: &str) -> Result<()> {
+        if !own_segment(chat) {
+            return Err(NetError::Refused("not a chat's id".into()));
+        }
         let body = json!({"user": {"id": user, "tenantId": tenant}});
         self.json("POST", &self.at(&format!("/chats/{}/markChatReadForUser", seg(chat))), Some(&body), false).map(drop)
     }
