@@ -18,7 +18,7 @@ mod teams;
 mod to_markdown;
 pub use pairs::html_link_pairs;
 use rules::{RULE_MARK, mark_rules};
-pub use teams::{TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, teams_html, teams_text};
+pub use teams::{TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, html_escape, teams_compose, teams_html, teams_text, teams_write};
 pub use to_markdown::{MARKDOWN_WRITTEN_MAX, html_markdown, rich_markdown};
 
 /// Most lines kept of a rich rendering (the rest is shown as text).

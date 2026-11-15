@@ -10,6 +10,8 @@
 //! bytes as came in). A picture is this message's own hosted image only when its address is
 //! exactly Graph's for this chat and this message; any other picture on the web is an outside
 //! one, which waits for a click. Nothing here fetches anything.
+//!
+//! [`teams_write`] does the reverse for sending: what the user types, as escaped HTML.
 
 use std::cell::RefCell;
 
@@ -18,6 +20,9 @@ use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{BufferQueue, Tag, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
 use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, MAX_BODY, MAX_ID, Run, is_bidi};
+
+mod write;
+pub use write::*;
 
 /// The most bytes of a message's HTML read: the rest is left out (cut where a character starts).
 pub const TEAMS_HTML_MAX: usize = 256 << 10;

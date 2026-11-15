@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! The Teams HTML subset: one test per rule, each with the hostile input it guards against.
+//! The Teams HTML subset, read and written: one test per rule, each with the hostile input it
+//! guards against.
 
 use super::*;
-use quatrelle_model::pim::teams::BlockKind;
+use proptest::strategy::Strategy;
+use quatrelle_model::pim::teams::{BlockKind, SEND_MAX};
 
 const C: &str = "19:a@thread.v2";
 
@@ -267,6 +269,231 @@ proptest::proptest! {
         }
         for b in &t.blocks {
             proptest::prop_assert!(!b.runs.is_empty());
+        }
+    }
+}
+
+// The writer: what the user types in a chat's box, as the HTML sent to Teams.
+
+/// The writer's own markup: its tags and the entities it writes.
+const OWN: &[&str] = &[
+    "<p>", "</p>", "<b>", "</b>", "<i>", "</i>", "<u>", "</u>", "<s>", "</s>", "<code>", "</code>", "<br>", "</a>", "&amp;", "&lt;", "&gt;",
+    "&quot;", "&#39;", "&nbsp;",
+];
+
+/// The first piece of `html` that isn't the writer's own markup, if any: a `<`, `>`, `"`, `'` or
+/// `&` that doesn't begin one of its tags, a link to the web or one of its entities. Escaped text
+/// may say `src=` or `style=`; this sees whether any attribute but a web link's `href` is written.
+fn foreign(html: &str) -> Option<&str> {
+    let mut rest = html;
+    while let Some(i) = rest.find(['<', '>', '"', '\'', '&']) {
+        let at = &rest[i..];
+        let Some(len) = OWN.iter().find(|own| at.starts_with(**own)).map(|own| own.len()).or_else(|| link_tag(at)) else { return Some(at) };
+        rest = &at[len..];
+    }
+    None
+}
+
+/// The length of the tag `at` starts with when it's a link to the web, its address escaped.
+fn link_tag(at: &str) -> Option<usize> {
+    let href = at.strip_prefix("<a href=\"")?;
+    let end = href.find('"')?;
+    let address = &href[..end];
+    let web = address.starts_with("http://") || address.starts_with("https://");
+    (web && !address.contains(['<', '>', '\'']) && href[end..].starts_with("\">")).then(|| "<a href=\"".len() + end + 2)
+}
+
+/// A message of one paragraph of `runs`.
+fn message(runs: Vec<Run>) -> ChatText {
+    ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] }
+}
+
+/// A run of `text` in no style.
+fn plain(text: &str) -> Run {
+    Run { text: text.into(), ..Run::default() }
+}
+
+#[test]
+fn the_check_of_the_writers_markup_sees_any_other() {
+    for other in [
+        "<p><img src=x></p>",
+        "<p style=\"x\">a</p>",
+        "<a href=\"javascript:x\">a</a>",
+        "<a href=\"https://x.example/\" onclick=\"y\">a</a>",
+        "<script>x()</script>",
+        "a > b",
+        "'a'",
+        "&#60;",
+    ] {
+        assert!(foreign(other).is_some(), "{other}");
+    }
+    assert_eq!(foreign("<p><a href=\"https://x.example/?a=1&amp;b\"><b>&lt;img src=&quot;x&quot;&gt;</b></a><br>&nbsp;</p>"), None);
+}
+
+#[test]
+fn the_users_text_is_escaped_and_reads_back_the_same() {
+    let typed = "a < b && c > \"d\" 'e' <img src=\"https://evil.example/x.png\"> <script>x()</script>";
+    let html = teams_write(&teams_compose(typed, &[], &[])).unwrap();
+    for never in ["<img", "<script"] {
+        assert!(!html.contains(never), "{html}");
+    }
+    // `src=` stays in the text, escaped: no tag but the writer's own is written.
+    assert_eq!(foreign(&html), None, "{html}");
+    assert_eq!(teams_html(&html, C, "1").plain(), typed);
+}
+
+#[test]
+fn html_escape_writes_the_five_marks_as_entities() {
+    assert_eq!(
+        html_escape("<b>x</b> & <img src=\"https://e.example/a.png\"> 'q'"),
+        "&lt;b&gt;x&lt;/b&gt; &amp; &lt;img src=&quot;https://e.example/a.png&quot;&gt; &#39;q&#39;"
+    );
+}
+
+#[test]
+// A list of one bold (or italic) range, as the box sends it: not the numbers in that range.
+#[allow(clippy::single_range_in_vec_init)]
+fn bold_and_italic_ranges_make_runs() {
+    let html = teams_write(&teams_compose("one two three", &[4..7], &[8..13])).unwrap();
+    assert_eq!(html, "<p>one <b>two</b> <i>three</i></p>");
+}
+
+#[test]
+fn lines_are_paragraphs_and_a_blank_line_is_kept() {
+    assert_eq!(teams_write(&teams_compose("\na\n\nb\n\n", &[], &[])).unwrap(), "<p>a</p><p>&nbsp;</p><p>b</p>");
+}
+
+#[test]
+fn control_characters_go_and_a_line_of_spaces_is_blank() {
+    assert_eq!(teams_write(&teams_compose(" \r\na\u{7}b\r\n \t \r\nc\n  ", &[], &[])).unwrap(), "<p>ab</p><p>&nbsp;</p><p>c</p>");
+}
+
+#[test]
+fn only_web_links_are_written_as_links() {
+    let linked = |link: &str| message(vec![Run { text: "t".into(), link: Some(link.into()), ..Run::default() }]);
+    for other in ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "https://x.example/ a", "https://x.example/\u{202E}"] {
+        assert_eq!(teams_write(&linked(other)).unwrap(), "<p>t</p>", "{other}");
+    }
+    let html = teams_write(&linked("https://x.example/?q=\"a\"&b=1")).unwrap();
+    assert_eq!(html, "<p><a href=\"https://x.example/?q=&quot;a&quot;&amp;b=1\">t</a></p>");
+    assert_eq!(run(&teams_html(&html, C, "1"), "t").link.as_deref(), Some("https://x.example/?q=\"a\"&b=1"));
+}
+
+#[test]
+fn styles_and_line_breaks_are_tags_and_mentions_and_pictures_their_text() {
+    let all = Run { text: "a\nb".into(), bold: true, italic: true, underline: true, strike: true, code: true, ..Run::default() };
+    assert_eq!(teams_write(&message(vec![all])).unwrap(), "<p><b><i><u><s><code>a<br>b</code></s></u></i></b></p>");
+    let mention = Run { text: "Ana".into(), mention: Some(0), ..Run::default() };
+    let hosted = Run { hosted: Some("aGk=".into()), ..Run::default() };
+    let outside = Run { outside: Some("https://e.example/a.png".into()), bold: true, ..Run::default() };
+    let attachment = Run { text: "f".into(), attachment: Some("a1".into()), ..Run::default() };
+    assert_eq!(teams_write(&message(vec![mention, hosted.clone(), outside, attachment])).unwrap(), "<p>Anaf</p>");
+    assert_eq!(teams_write(&message(vec![hosted])).unwrap(), "<p>&nbsp;</p>");
+}
+
+#[test]
+#[allow(clippy::single_range_in_vec_init)] // a list of one italic range
+fn ranges_off_char_boundaries_or_the_text_are_ignored() {
+    assert_eq!(teams_compose("éa", &[1..2, 0..99], &[]), message(vec![plain("éa")]));
+    assert_eq!(teams_write(&teams_compose("éa", &[], &[0..2])).unwrap(), "<p><i>é</i>a</p>");
+}
+
+#[test]
+fn past_80_kib_is_too_long_counted_after_escaping() {
+    assert!(teams_write(&teams_compose(&"a".repeat(81_000), &[], &[])).is_ok());
+    // 21,000 × "&lt;" = 84,000 bytes.
+    let written = teams_write(&teams_compose(&"<".repeat(21_000), &[], &[]));
+    assert!(matches!(written, Err(TooLong { .. })));
+    assert!(written.is_err_and(|e| e.bytes > SEND_MAX));
+}
+
+#[test]
+fn past_the_runs_cap_what_is_kept_is_still_too_long() {
+    // Every other character bold: a run each.
+    let text = "ab".repeat(TEAMS_RUNS);
+    let bold: Vec<_> = (0..TEAMS_RUNS).map(|k| 2 * k..2 * k + 1).collect();
+    let t = teams_compose(&text, &bold, &[]);
+    assert_eq!(runs(&t).len(), TEAMS_RUNS);
+    assert!(teams_write(&t).is_err());
+    // Blank lines between two words count too; after the last word, or before the first, they go.
+    let gap = "\n".repeat(TEAMS_RUNS + 10);
+    assert!(teams_write(&teams_compose(&format!("a{gap}b"), &[], &[])).is_err());
+    assert_eq!(teams_write(&teams_compose(&format!("a{gap}"), &[], &[])).unwrap(), "<p>a</p>");
+    assert_eq!(teams_write(&teams_compose(&format!("{gap}b"), &[], &[])).unwrap(), "<p>b</p>");
+}
+
+/// Each character of `t` with its styles (bold, italic, underline, strike, code) and its link, a
+/// line break between two blocks.
+fn styled(t: &ChatText) -> Vec<(char, [bool; 5], Option<&str>)> {
+    let mut out = Vec::new();
+    for (i, b) in t.blocks.iter().enumerate() {
+        if i > 0 {
+            out.push(('\n', [false; 5], None));
+        }
+        for r in &b.runs {
+            out.extend(r.text.chars().map(|c| (c, [r.bold, r.italic, r.underline, r.strike, r.code], r.link.as_deref())));
+        }
+    }
+    out
+}
+
+/// A run of words one space apart (letters, the marks HTML escapes, an accented letter, an
+/// emoji), in any styles, a link to the web or none.
+fn any_run() -> impl Strategy<Value = Run> {
+    let words = proptest::string::string_regex("[a-z<>&\"'é😀]{1,4}( [a-z<>&\"'é😀]{1,4}){0,3}").unwrap();
+    (words, proptest::array::uniform5(proptest::bool::ANY), proptest::option::of(0..100u8)).prop_map(
+        |(text, [bold, italic, underline, strike, code], link)| Run {
+            text,
+            bold,
+            italic,
+            underline,
+            strike,
+            code,
+            link: link.map(|n| format!("https://x.example/{n}")),
+            ..Run::default()
+        },
+    )
+}
+
+/// A message of 1 to 20 paragraphs of 1 to 10 runs.
+fn any_message() -> impl Strategy<Value = ChatText> {
+    let paragraph = proptest::collection::vec(any_run(), 1..=10).prop_map(|runs| Block { kind: BlockKind::Paragraph, runs });
+    proptest::collection::vec(paragraph, 1..=20).prop_map(|blocks| ChatText { blocks })
+}
+
+/// Byte ranges, some off the text, some the wrong way round.
+fn any_ranges() -> impl Strategy<Value = Vec<std::ops::Range<usize>>> {
+    proptest::collection::vec((0..400usize, 0..400usize).prop_map(|(a, b)| a..b), 0..8)
+}
+
+proptest::proptest! {
+    #[test]
+    fn written_text_reads_back_the_same(t in any_message()) {
+        let html = teams_write(&t).map_err(|e| proptest::test_runner::TestCaseError::fail(format!("{e:?}")))?;
+        proptest::prop_assert_eq!(foreign(&html), None, "{}", html);
+        let back = teams_html(&html, C, "1");
+        proptest::prop_assert_eq!(styled(&back), styled(&t), "{}", html);
+    }
+
+    #[test]
+    fn any_text_and_ranges_are_written_safely(text in proptest::arbitrary::any::<String>(), bold in any_ranges(), italic in any_ranges()) {
+        let t = teams_compose(&text, &bold, &italic);
+        let all = runs(&t);
+        proptest::prop_assert!(all.len() <= TEAMS_RUNS);
+        for r in all {
+            proptest::prop_assert!(!r.text.is_empty() && !r.text.contains(char::is_control), "{:?}", r.text);
+        }
+        proptest::prop_assert!(t.blocks.first().is_none_or(|b| !b.runs.is_empty()) && t.blocks.last().is_none_or(|b| !b.runs.is_empty()));
+        // Every character is kept but control characters.
+        let words = |s: &str| s.chars().filter(|c| !c.is_whitespace() && !c.is_control()).collect::<String>();
+        proptest::prop_assert_eq!(words(&t.plain()), words(&text));
+        match teams_write(&t) {
+            Ok(html) => {
+                proptest::prop_assert!(html.len() <= SEND_MAX);
+                proptest::prop_assert_eq!(foreign(&html), None, "{}", html);
+                proptest::prop_assert_eq!(words(&teams_html(&html, C, "1").plain()), words(&text));
+            }
+            Err(TooLong { bytes }) => proptest::prop_assert!(bytes > SEND_MAX),
         }
     }
 }
