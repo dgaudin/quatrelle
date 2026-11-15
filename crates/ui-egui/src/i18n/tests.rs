@@ -835,3 +835,71 @@ fn the_online_archive_says_its_words_in_the_interfaces_language() {
     assert_eq!(tc("folder", "Online Archive - Riley"), "Online Archive - Riley", "a name the server gave stays as it is");
     set_current(Lang::EN);
 }
+
+/// `s` as `date` writes it in the language `code`, the language put back after.
+fn dated(code: &str, s: &str) -> String {
+    set_current(Lang::from_code(code).unwrap_or(Lang::EN));
+    let out = date(s);
+    set_current(Lang::EN);
+    out
+}
+
+/// A day written the way each language writes it, one pattern at a time; English keeps ISO.
+#[test]
+fn a_day_is_written_in_the_languages_usual_order() {
+    let iso = "2025-10-03";
+    for (codes, want) in [
+        (&["fr", "es", "it", "pt-br", "ar"][..], "03/10/2025"),
+        (&["de", "ru", "he"][..], "03.10.2025"),
+        (&["nl"][..], "03-10-2025"),
+        (&["ja", "zh-hans", "zh-hant"][..], "2025/10/03"),
+        (&["ko"][..], "2025. 10. 03."),
+        (&["en"][..], "2025-10-03"),
+    ] {
+        for code in codes {
+            assert_eq!(dated(code, iso), want, "{code}");
+        }
+    }
+    assert_eq!(dated("fr", "lun. 2025-03-17 09:41"), "lun. 17/03/2025 09:41");
+    assert_eq!(dated("fr", "Mon 2025-03-17 09:41"), "lun. 17/03/2025 09:41");
+    assert_eq!(dated("de", "Fri 2026-10-16"), format!("{} 16.10.2026", dated("de", "Fri")));
+    assert_eq!(dated("ko", "Wed 2026-10-14 14:05"), format!("{} 2026. 10. 14. 14:05", dated("ko", "Wed")));
+    assert_eq!(dated("en", "Wed 2026-10-14 14:05"), "Wed 2026-10-14 14:05");
+    assert_eq!(dated("fr", "du 2025-10-03 au 2025-10-04."), "du 03/10/2025 au 04/10/2025.");
+}
+
+/// `<Mon> <day>` puts the day first where the language says so; the time is never touched.
+#[test]
+fn a_month_and_day_put_the_day_first_where_the_language_does() {
+    let (fr_nov, de_oct, ja_feb) =
+        (tr(Lang::from_code("fr").unwrap(), "Nov"), tr(Lang::from_code("de").unwrap(), "Oct"), tr(Lang::from_code("ja").unwrap(), "Feb"));
+    assert_eq!(dated("fr", "Nov 3"), format!("3 {fr_nov}"));
+    assert_eq!(dated("de", "Oct 3"), format!("3. {de_oct}"));
+    assert_eq!(dated("ja", "Feb 20"), format!("{ja_feb} 20"));
+    assert_eq!(dated("ko", "Feb 20"), format!("{} 20", tr(Lang::from_code("ko").unwrap(), "Feb")));
+    assert_eq!(dated("en", "Oct 3"), "Oct 3");
+    assert_eq!(dated("fr", "Nov 3 14:05"), format!("3 {fr_nov} 14:05"));
+    assert_eq!(dated("fr", "Nov"), fr_nov, "no day after the month: only translated");
+    assert_eq!(dated("fr", "Nov 2025"), format!("{fr_nov} 2025"), "a year isn't a day");
+}
+
+/// Text with no date, a token that isn't a day, and digits run into it stay as they are.
+#[test]
+fn text_that_is_not_a_date_is_left_alone() {
+    for text in ["14:05", "Hello, world", "2025-13-40", "2025-00-10", "2025-10-32", "12025-10-03", "2025-10-031", "20251003", "é2025-1é-03é", ""] {
+        assert_eq!(dated("fr", text), text);
+    }
+    assert_eq!(dated("fr", "é 2025-10-03 é"), "é 03/10/2025 é");
+}
+
+/// A Hebrew line keeps its date in one piece, in order, between the isolates `fmt` puts round it.
+#[test]
+fn a_hebrew_date_stays_one_run() {
+    set_current(Lang::from_code("he").unwrap_or(Lang::EN));
+    let when = date("2025-10-03");
+    let line = fmt("{date}", &[("date", &when)]);
+    set_current(Lang::EN);
+    assert_eq!(when, "03.10.2025");
+    assert!(when.chars().all(|c| c.is_ascii_digit() || c == '.'), "digits and points are one run: {when}");
+    assert_eq!(line, "03.10.2025");
+}

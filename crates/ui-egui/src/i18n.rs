@@ -186,6 +186,21 @@ impl Lang {
     pub fn rtl(self) -> bool {
         self.0.rtl
     }
+    /// Puts the day before the month's name (`3 oct.`) in `<Mon> <day>`.
+    fn day_first_month_names(self) -> bool {
+        matches!(self.0.code, "fr" | "es" | "it" | "pt-br" | "nl" | "ru" | "he" | "ar" | "de")
+    }
+    /// A numeric date in the order and with the separators the language writes it with.
+    fn write_date(self, y: &str, m: &str, d: &str) -> String {
+        match self.0.code {
+            "fr" | "es" | "it" | "pt-br" | "ar" => format!("{d}/{m}/{y}"),
+            "de" | "ru" | "he" => format!("{d}.{m}.{y}"),
+            "nl" => format!("{d}-{m}-{y}"),
+            "ja" | "zh-hans" | "zh-hant" => format!("{y}/{m}/{d}"),
+            "ko" => format!("{y}. {m}. {d}."),
+            _ => format!("{y}-{m}-{d}"),
+        }
+    }
     /// Writes a decimal comma (`3,4`) rather than a point.
     pub fn decimal_comma(self) -> bool {
         matches!(self.0.code, "es" | "fr" | "de" | "nl" | "pt-br" | "it" | "ru")
@@ -473,10 +488,72 @@ pub fn date(s: &str) -> String {
         "Saturday",
         "Sunday",
     ];
-    if current() == Lang::EN {
+    let lang = current();
+    if lang == Lang::EN {
         return s.to_string();
     }
-    s.split(' ').map(|w| if NAMES.contains(&w) { tr(current(), w) } else { w }).collect::<Vec<_>>().join(" ")
+    let day_first = lang.day_first_month_names();
+    let words: Vec<&str> = s.split(' ').collect();
+    let mut out: Vec<String> = Vec::with_capacity(words.len());
+    let mut i = 0;
+    while let Some(&w) = words.get(i) {
+        i += 1;
+        if day_first
+            && MONTHS.contains(&w)
+            && let Some(&day) = words.get(i)
+            && (1..=2).contains(&day.len())
+            && day.bytes().all(|b| b.is_ascii_digit())
+        {
+            // `Oct 3` reads `3 oct.` (`3. Okt.` in German): the day, then the month's name.
+            i += 1;
+            let dot = if lang.code() == "de" { "." } else { "" };
+            out.push(format!("{day}{dot} {}", tr(lang, w)));
+        } else if NAMES.contains(&w) {
+            out.push(tr(lang, w).to_string());
+        } else {
+            out.push(w.to_string());
+        }
+    }
+    numeric_dates(&out.join(" "), lang)
+}
+
+/// The English month abbreviations `dates` writes.
+const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/// Each `YYYY-MM-DD` in `s` (a real month and day, no digit next to it) in the order and with the
+/// separators `lang` writes a numeric date with; anything else is left as it is.
+fn numeric_dates(s: &str, lang: Lang) -> String {
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < b.len() {
+        if let Some(window) = s.get(i..i + 10)
+            && let Some((y, m, d)) = iso_date(window)
+            && !i.checked_sub(1).and_then(|p| b.get(p)).is_some_and(u8::is_ascii_digit)
+            && !b.get(i + 10).is_some_and(u8::is_ascii_digit)
+        {
+            out.push_str(&lang.write_date(y, m, d));
+            i += 10;
+            continue;
+        }
+        // Copy one whole character (`i` always sits on a boundary).
+        let len = s.get(i..).and_then(|rest| rest.chars().next()).map_or(1, char::len_utf8);
+        if let Some(piece) = s.get(i..i + len) {
+            out.push_str(piece);
+        }
+        i += len;
+    }
+    out
+}
+
+/// `(year, month, day)` of exactly `YYYY-MM-DD` with a month 1-12 and a day 1-31.
+fn iso_date(w: &str) -> Option<(&str, &str, &str)> {
+    let (y, m, d) = (w.get(0..4)?, w.get(5..7)?, w.get(8..10)?);
+    let digits = |x: &str| x.bytes().all(|c| c.is_ascii_digit());
+    let ok = digits(y) && digits(m) && digits(d) && w.get(4..5) == Some("-") && w.get(7..8) == Some("-");
+    let month: u32 = m.parse().ok()?;
+    let day: u32 = d.parse().ok()?;
+    (ok && (1..=12).contains(&month) && (1..=31).contains(&day)).then_some((y, m, d))
 }
 
 #[cfg(test)]

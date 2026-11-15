@@ -305,6 +305,60 @@ fn the_header_names_the_tags_and_the_days() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Whether `t` holds a day written `DD/MM/YYYY`, and none written year first.
+fn day_first(t: &str) -> bool {
+    let b = t.as_bytes();
+    let numbers = |i: usize| {
+        b.get(i..i + 10).is_some_and(|w| w.iter().enumerate().all(|(k, c)| if matches!(k, 2 | 5) { *c == b'/' } else { c.is_ascii_digit() }))
+    };
+    (0..b.len()).any(numbers) && !(0..b.len()).any(|i| b.get(i..i + 5).is_some_and(|w| w[..4].iter().all(u8::is_ascii_digit) && w[4] == b'-'))
+}
+
+/// In a French interface the message list's older date, the reading header's date and the policy
+/// line's planned day are written day first (`DD/MM/YYYY`); the English one keeps `YYYY-MM-DD`.
+#[test]
+fn the_dates_follow_the_interface_languages_order() {
+    let ctx = egui::Context::default();
+    let (mut a, dir, _) = exchange_app("oa-policy-days-french");
+    offer(&mut a);
+    let key = message("a1", "INBOX", 1, "").key;
+    let old = NOW - 800 * 86_400;
+    let store = a.session.store.as_ref().unwrap();
+    store.write_body(&key, b"From: Zoe Park <zoe@contoso.example>\r\nTo: riley@contoso.example\r\nSubject: Plans\r\n\r\nHello.\r\n").unwrap();
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    for m in &mut st.messages {
+        (m.received, m.date) = (old, old);
+    }
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    a.session.apply(MailEvent::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
+    a.session.open_message(&key);
+    a.session.apply(MailEvent::ArchiveTagRead {
+        key: key.clone(),
+        tag: Some(YEAR.into()),
+        date: Some("2027-11-10".into()),
+        retention_tag: None,
+        retention_date: None,
+    });
+    let list_day = dates::list_time(old, &a.session.clock);
+    assert!(list_day.starts_with(|c: char| c.is_ascii_digit()), "an old date is written in full: {list_day}");
+    let header_day = dates::full_time(old, &a.session.clock);
+    a.ui.language = "fr".into();
+    let french = texts(&settle(&ctx, &mut a));
+    a.ui.language = "en".into();
+    let english = texts(&settle(&ctx, &mut a));
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+    let (y, m, d) = (&list_day[..4], &list_day[5..7], &list_day[8..10]);
+    let fr_day = format!("{d}/{m}/{y}");
+    // The list's cell is the date alone; the header's has the weekday and the time around it.
+    assert!(french.contains(&fr_day), "the list's date: {french:?}");
+    assert!(french.iter().any(|t| t.contains(&fr_day) && t.contains(':') && t.len() > fr_day.len()), "the header's date ({header_day}): {french:?}");
+    let line = french.iter().find(|t| t.contains("10/11/2027")).expect("the policy line's day in French");
+    assert!(day_first(line), "{line}");
+    assert!(english.contains(&list_day), "English keeps the order: {english:?}");
+    assert!(english.iter().any(|t| t.contains("2027-11-10")), "{english:?}");
+}
+
 /// The tags offered, and a second archive tag of one year (its period reads as the first's).
 fn with_twin() -> Vec<ArchiveTag> {
     let mut tags = tags();

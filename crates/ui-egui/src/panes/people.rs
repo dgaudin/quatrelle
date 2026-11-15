@@ -764,7 +764,15 @@ fn phone_list(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>
             ui.spacing_mut().item_spacing.y = 0.0;
             for (i, p) in people.iter().enumerate() {
                 let c = &p.card;
-                let cells: Vec<String> = cols.iter().map(|col| col.map_or_else(|| c.display(), |col| col.text(s, p))).collect();
+                let cells: Vec<String> = cols
+                    .iter()
+                    .map(|col| {
+                        col.map_or_else(
+                            || c.display(),
+                            |col| if matches!(col, Column::Birthday) { crate::i18n::date(&col.text(s, p)) } else { col.text(s, p) },
+                        )
+                    })
+                    .collect();
                 let selected = st.person.as_deref() == Some(c.uid.as_str());
                 let id = ui.scope_id().with(("phone-row", i));
                 let hovered = ui.ctx().read_response(id).is_some_and(|r| r.hovered());
