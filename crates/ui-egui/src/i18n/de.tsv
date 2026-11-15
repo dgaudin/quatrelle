@@ -2251,6 +2251,8 @@ module	Conversations	Unterhaltungen
 	Open in browser	Im Browser öffnen
 	This content can be seen in Teams	Dieser Inhalt ist in Teams zu sehen
 	Teams doesn't let this conversation be read here	Teams lässt diese Unterhaltung hier nicht lesen
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	Eine Nachricht an {chat} wurde nicht gesendet
 # A person’s presence in Teams.
 presence	Available	Verfügbar
 presence	Busy	Beschäftigt

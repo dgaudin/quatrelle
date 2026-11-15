@@ -2248,6 +2248,8 @@ module	Conversations	对话
 	Open in browser	在浏览器中打开
 	This content can be seen in Teams	此内容可在 Teams 中查看
 	Teams doesn't let this conversation be read here	Teams 不允许在此阅读此会话
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	发给 {chat} 的一条消息未发送
 # A person’s presence in Teams.
 presence	Available	空闲
 presence	Busy	忙碌

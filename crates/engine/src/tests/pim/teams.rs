@@ -8,10 +8,12 @@ use quatrelle_model::pim::teams::{self, ChatKind, ChatMessage, ChatRow, MAX_CHAT
 use super::*;
 use crate::Module;
 
+mod outbox;
+
 const CLIENT: &str = "00000000-0000-0000-0000-00000000c11e";
 const TENANT: &str = "contoso.example";
 
-fn row(i: usize, at: i64) -> ChatRow {
+pub(super) fn row(i: usize, at: i64) -> ChatRow {
     ChatRow {
         id: format!("19:chat{i}@thread.v2"),
         name: format!("Chat {i}"),
@@ -29,15 +31,15 @@ fn row(i: usize, at: i64) -> ChatRow {
     }
 }
 
-fn msg(chat: &str, i: i64) -> ChatMessage {
+pub(super) fn msg(chat: &str, i: i64) -> ChatMessage {
     ChatMessage { id: format!("m{i}"), chat: chat.into(), created: 1_000_000 + i, modified: 1_000_000 + i, ..Default::default() }
 }
 
-fn teams_event(event: teams::Event) -> Event {
+pub(super) fn teams_event(event: teams::Event) -> Event {
     Event::Teams { event }
 }
 
-fn teams_jobs(s: &mut Session) -> Vec<teams::Job> {
+pub(super) fn teams_jobs(s: &mut Session) -> Vec<teams::Job> {
     s.take_jobs()
         .into_iter()
         .filter_map(|j| match j {
@@ -48,7 +50,7 @@ fn teams_jobs(s: &mut Session) -> Vec<teams::Job> {
 }
 
 /// A session with Teams on and signed in, holding `rows`.
-fn signed_in(rows: Vec<ChatRow>) -> Session {
+pub(super) fn signed_in(rows: Vec<ChatRow>) -> Session {
     let mut s = Session::blank();
     s.prefs.teams.on = true;
     s.prefs.teams.signed_in = true;
@@ -61,7 +63,7 @@ fn signed_in(rows: Vec<ChatRow>) -> Session {
     s
 }
 
-fn open(s: &mut Session, chat: &str) {
+pub(super) fn open(s: &mut Session, chat: &str) {
     s.run("teams.open", &json!({"chat": chat})).unwrap();
 }
 
@@ -505,7 +507,7 @@ fn teams_commands_survive_junk_params_while_on() {
     let mut s = signed_in((0..5).map(|i| row(i, 100 - i as i64)).collect());
     s.module = Module::Conversations;
     let ids: Vec<&str> = s.registry().all().iter().map(|c| c.id).filter(|id| id.starts_with("teams.")).collect();
-    assert_eq!(ids.len(), 11, "{ids:?}");
+    assert_eq!(ids.len(), 14, "{ids:?}");
     let junk = [
         json!(null),
         json!({}),
@@ -514,6 +516,9 @@ fn teams_commands_survive_junk_params_while_on() {
         json!({"users": [null, 1, ""], "kind": "outside", "url": "https://\u{202E}/x\\y"}),
         json!({"query": "\u{0}".repeat(300), "deleteCopy": "yes", "on": 1, "clientId": 7, "tenant": []}),
         json!({"kind": "photo", "user": "\u{FFFF}", "chat": null}),
+        json!({"chat": "19:chat1@thread.v2", "text": "é\u{0}\u{202E}", "bold": [[1, 2], [0, 9e99]], "italic": [[-1, 0]], "seq": 1e300}),
+        json!({"chat": "19:chat1@thread.v2", "text": "<b>", "bold": [[0, 3]], "italic": {"a": 1}, "seq": 0, "local": ["x"]}),
+        json!({"chat": "19:chat1@thread.v2", "text": "x".repeat(100_000), "seq": u64::MAX, "local": "\u{0}"}),
     ];
     for _ in 0..2 {
         for id in &ids {
@@ -526,6 +531,11 @@ fn teams_commands_survive_junk_params_while_on() {
         }
         open(&mut s, "19:chat1@thread.v2");
         messages(&mut s, "19:chat1@thread.v2", 0..3);
+        // Something going out, for the retry and delete commands to be given junk about.
+        let not_sent = teams::OutState::NotSent { reason: teams::Unsent::Refused, code: None };
+        let items =
+            vec![teams::Outgoing { seq: 1, local: "1-1".into(), chat: "19:chat1@thread.v2".into(), body: Default::default(), state: not_sent }];
+        s.apply(teams_event(teams::Event::Outbox { chat: "19:chat1@thread.v2".into(), items, took: None }));
     }
     for p in &junk {
         let _ = s.run("teams.settings", p);

@@ -2246,6 +2246,8 @@ module	Conversations	المحادثات
 	Open in browser	فتح في المتصفح
 	This content can be seen in Teams	يمكن رؤية هذا المحتوى في Teams
 	Teams doesn't let this conversation be read here	لا يسمح Teams بقراءة هذه المحادثة هنا
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	لم تُرسل رسالة إلى {chat}
 # A person’s presence in Teams.
 presence	Available	متاح
 presence	Busy	مشغول

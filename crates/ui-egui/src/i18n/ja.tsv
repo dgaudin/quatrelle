@@ -2247,6 +2247,8 @@ module	Conversations	会話
 	Open in browser	ブラウザーで開く
 	This content can be seen in Teams	この内容は Teams で見られます
 	Teams doesn't let this conversation be read here	Teams ではこの会話をここで読むことができません
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	{chat} へのメッセージは送信されませんでした
 # A person’s presence in Teams.
 presence	Available	在席中
 presence	Busy	取り込み中

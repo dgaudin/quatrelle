@@ -2251,6 +2251,8 @@ module	Conversations	交談
 	Open in browser	在瀏覽器中開啟
 	This content can be seen in Teams	此內容可在 Teams 中檢視
 	Teams doesn't let this conversation be read here	Teams 不允許在此閱讀此對話
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	傳給 {chat} 的一則訊息未傳送
 # A person’s presence in Teams.
 presence	Available	空閒
 presence	Busy	忙碌

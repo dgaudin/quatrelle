@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Teams, as the engine keeps it: where the connection stands, the rows of the list, the open
-//! chat's last messages, presence, search hits and pictures waiting for the window. Only the
-//! Teams worker (`net::teams`) talks to Graph and holds the copy; the engine sends it jobs and
-//! applies what it reports, in windows that never grow with the copy (`window.rs`).
+//! chat's last messages and those going out (`outbox.rs`), presence, search hits and pictures
+//! waiting for the window. Only the Teams worker (`net::teams`) talks to Graph and holds the copy
+//! and the outbox; the engine sends it jobs and applies what it reports, in windows that never
+//! grow with the copy (`window.rs`).
 //!
 //! What is hostile here: everything an event carries came from Graph or the copy on disk (the
 //! worker checked it, the engine still bounds it: the rows at [`teams::MAX_CHATS`], the window at
@@ -12,12 +13,13 @@
 
 use std::collections::VecDeque;
 
-use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, Member, Picture, Presence, Status, TeamsSettings, one_line};
+use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, Member, Op, Outgoing, Picture, Presence, Status, TeamsSettings, one_line};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
 
 mod members;
+mod outbox;
 mod window;
 
 pub use members::ChatMembers;
@@ -89,6 +91,17 @@ pub struct TeamsState {
     pub drive_host: Option<String>,
     /// A copy made for another account, set aside (its path), until the user deletes it.
     pub set_aside: Option<String>,
+    /// The open chat's messages going out: as the worker last said them, then those sent here it
+    /// doesn't number (`seq` 0: not answered for yet, or refused); at most
+    /// [`teams::OUTBOX_CHAT_MAX`].
+    pub outgoing: Vec<Outgoing>,
+    /// How many messages the outbox holds in all (waiting, being sent or not sent), as the worker
+    /// last said.
+    pub unsent: u32,
+    /// The messages sent from here: each one's local id is its own.
+    sent: u64,
+    /// The messages not sent already said by a notice, or seen in their chat.
+    said: outbox::Said,
 }
 
 impl TeamsState {
@@ -128,7 +141,12 @@ impl TeamsState {
     }
 
     /// `chat` (or none) now on screen: its window begins empty, filled by what the worker sends.
+    /// The same chat opened again keeps its messages going out (the worker says them again; one it
+    /// refused is known here alone).
     pub(crate) fn open_chat(&mut self, chat: Option<String>) {
+        if self.open != chat {
+            self.outgoing.clear();
+        }
         self.open = chat;
         self.window.clear();
         self.members.clear();
@@ -275,6 +293,19 @@ impl Session {
         }
     }
 
+    /// `chat` (or none) on screen: its window filled again by the worker, and a chat with messages
+    /// unread that the user is still in marked read (its row stays as it is until the worker says
+    /// it's read).
+    pub(crate) fn teams_show(&mut self, chat: Option<String>) {
+        let unread = chat.as_deref().and_then(|c| self.teams.row(c)).is_some_and(|r| r.unread > 0 && !r.left);
+        self.teams.open_chat(chat.clone());
+        let mark = chat.clone().filter(|_| unread);
+        self.push_job(Job::Teams { job: teams::Job::Open { chat } });
+        if let Some(chat) = mark {
+            self.push_job(Job::Teams { job: teams::Job::Op { op: Op::MarkRead { chat } } });
+        }
+    }
+
     /// The Conversations module left for Mail while Teams is off or signed out.
     pub(crate) fn teams_fallback(&mut self) {
         if self.module == Module::Conversations && !(self.prefs.teams.on && self.prefs.teams.signed_in) {
@@ -287,7 +318,10 @@ impl Session {
         self.prefs.teams.on = false;
         // The copy set aside stays offered for deletion (the worker deletes it, on or off).
         let set_aside = self.teams.set_aside.take();
-        self.teams = TeamsState { set_aside, ..TeamsState::default() };
+        // The outbox is kept (it goes on when Teams is switched on): the local ids go on from
+        // where they were, unique still.
+        let sent = self.teams.sent;
+        self.teams = TeamsState { set_aside, sent, ..TeamsState::default() };
         self.jobs.push(Job::Teams { job: teams::Job::Stop });
         self.teams_fallback();
     }
@@ -342,13 +376,10 @@ impl Session {
             teams::Event::Picture { picture, bytes } => self.teams.take_picture(picture, bytes),
             teams::Event::Removed { chat } => self.teams.left(&chat),
             teams::Event::Members { chat, members, web_url, first } => self.teams.take_members(&chat, members, web_url, first),
+            teams::Event::Outbox { chat, items, took } => self.teams_outbox(&chat, items, took),
+            teams::Event::Unsent { count } => self.teams.unsent = count,
             // Not taken yet.
-            teams::Event::Outbox { .. }
-            | teams::Event::Unsent { .. }
-            | teams::Event::News { .. }
-            | teams::Event::SignInPage { .. }
-            | teams::Event::NoPicture { .. }
-            | teams::Event::Placed { .. } => {}
+            teams::Event::News { .. } | teams::Event::SignInPage { .. } | teams::Event::NoPicture { .. } | teams::Event::Placed { .. } => {}
         }
     }
 

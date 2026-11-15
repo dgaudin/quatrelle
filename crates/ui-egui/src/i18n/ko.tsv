@@ -2249,6 +2249,8 @@ module	Conversations	대화
 	Open in browser	브라우저에서 열기
 	This content can be seen in Teams	이 콘텐츠는 Teams에서 볼 수 있습니다
 	Teams doesn't let this conversation be read here	Teams에서 이 대화를 여기서 읽도록 허용하지 않습니다
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	{chat}에 메시지를 보내지 못했습니다
 # A person’s presence in Teams.
 presence	Available	연락 가능
 presence	Busy	바쁨

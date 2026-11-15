@@ -2250,6 +2250,8 @@ module	Conversations	Беседы
 	Open in browser	Открыть в браузере
 	This content can be seen in Teams	Это содержимое можно посмотреть в Teams
 	Teams doesn't let this conversation be read here	Teams не позволяет читать эту беседу здесь
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	Сообщение не отправлено: {chat}
 # A person’s presence in Teams.
 presence	Available	На месте
 presence	Busy	Занят

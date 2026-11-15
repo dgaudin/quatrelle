@@ -5,10 +5,11 @@
 //! [`Session::teams_apply`]. Every param is checked before anything changes.
 
 use std::collections::HashSet;
+use std::ops::Range;
 
 use quatrelle_model::Job;
 use quatrelle_model::addr::trust::url_host;
-use quatrelle_model::pim::teams::{self, MAX_ID, PRESENCE_IDS, Picture, Status};
+use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, PRESENCE_IDS, Picture, Status};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
@@ -20,6 +21,8 @@ const MODULE: &str = "Conversations";
 const QUERY_CHARS: usize = 200;
 /// The longest address of a picture from elsewhere.
 const PICTURE_URL_MAX: usize = 2048;
+/// The most byte ranges of each style a message sent takes.
+const RANGES_MAX: usize = 1_000;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
@@ -39,6 +42,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("teams.visible", "People shown", MODULE, visible).params(r#"{"users": [string] (at most 650 user ids)}"#).when(ready),
         CommandSpec::new("teams.picture", "Show a picture", MODULE, picture)
             .params(r#"{"kind": "hosted", "chat": string, "message": string, "hosted": string} | {"kind": "photo", "user": string} | {"kind": "outside", "url": string (https)}"#)
+            .when(ready),
+        CommandSpec::new("teams.send", "Send a message", MODULE, send)
+            .params(r#"{"chat": string (a listed conversation's id), "text": string, "bold"?: [[from, to]] (byte ranges of the text, at most 1,000), "italic"?: [[from, to]] (the same)}"#)
+            .when(ready),
+        CommandSpec::new("teams.retry", "Send again", MODULE, retry)
+            .params(r#"{"seq": number (a message of the open conversation that wasn't sent), "local"?: string (its local id, for one numbered 0)}"#)
+            .when(ready),
+        CommandSpec::new("teams.discard", "Delete a message going out", MODULE, discard)
+            .params(r#"{"seq": number (a message going out in the open conversation), "local"?: string (its local id, for one numbered 0)}"#)
             .when(ready),
         CommandSpec::new("teams.next", "Next conversation", MODULE, |s, _| step(s, true)).key("Alt+Down").when(in_module),
         CommandSpec::new("teams.previous", "Previous conversation", MODULE, |s, _| step(s, false)).key("Alt+Up").when(in_module),
@@ -139,12 +151,6 @@ fn delete_set_aside(s: &mut Session, _: &Value) -> CmdResult {
     Ok(json!({}))
 }
 
-/// `chat` (or none) on screen: its window filled again by the worker.
-fn show(s: &mut Session, chat: Option<String>) {
-    s.teams.open_chat(chat.clone());
-    s.push_job(Job::Teams { job: teams::Job::Open { chat } });
-}
-
 fn open(s: &mut Session, v: &Value) -> CmdResult {
     let chat = match v.get("chat") {
         Some(Value::Null) => None,
@@ -152,7 +158,7 @@ fn open(s: &mut Session, v: &Value) -> CmdResult {
         Some(Value::String(_)) => return Err(CmdError::Params("that conversation isn't listed".into())),
         _ => return Err(CmdError::Params("`chat` (a conversation's id, or null) is required".into())),
     };
-    show(s, chat.clone());
+    s.teams_show(chat.clone());
     Ok(json!({"chat": chat}))
 }
 
@@ -204,6 +210,61 @@ fn visible(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"asked": true}))
 }
 
+/// A style's byte ranges of `text` from the params (`[[from, to]]`, absent or null for none): each
+/// on the text's characters, at most [`RANGES_MAX`].
+fn ranges(v: &Value, k: &str, text: &str) -> Result<Vec<Range<usize>>, CmdError> {
+    let bad = || CmdError::Params(format!("`{k}` is at most {RANGES_MAX} byte ranges [from, to] of the text, on its characters"));
+    let given = match v.get(k) {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::Array(given)) if given.len() <= RANGES_MAX => given,
+        Some(_) => return Err(bad()),
+    };
+    given.iter().map(|r| range(r, text).ok_or_else(bad)).collect()
+}
+
+/// `[from, to]`: a range of `text`'s bytes, from one character's start to another's.
+fn range(r: &Value, text: &str) -> Option<Range<usize>> {
+    let [from, to] = r.as_array()?.as_slice() else { return None };
+    let at = |x: &Value| x.as_u64().and_then(|n| usize::try_from(n).ok());
+    let (from, to) = (at(from)?, at(to)?);
+    (from <= to && text.is_char_boundary(from) && text.is_char_boundary(to)).then_some(from..to)
+}
+
+fn send(s: &mut Session, v: &Value) -> CmdResult {
+    let chat = id_param(v, "chat")?;
+    let text = p::req_str(v, "text")?;
+    let (bold, italic) = (ranges(v, "bold", text)?, ranges(v, "italic", text)?);
+    let local = s.teams_send(chat, text, bold, italic)?;
+    Ok(json!({"local": local}))
+}
+
+/// A message going out from the params: its number in the outbox, and its local id, which names
+/// one the worker doesn't number (0).
+fn outgoing_param(v: &Value) -> Result<(u64, Option<&str>), CmdError> {
+    let seq = v
+        .get("seq")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| CmdError::Params("`seq` (a message's number; 0 with its `local` id) is required".into()))?;
+    let local = match v.get("local") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(l)) if !l.is_empty() && l.len() <= LOCAL_MAX => Some(l.as_str()),
+        Some(_) => return Err(CmdError::Params(format!("`local` is a message's local id, at most {LOCAL_MAX} bytes"))),
+    };
+    Ok((seq, local))
+}
+
+fn retry(s: &mut Session, v: &Value) -> CmdResult {
+    let (seq, local) = outgoing_param(v)?;
+    let local = s.teams_retry(seq, local)?;
+    Ok(json!({"local": local}))
+}
+
+fn discard(s: &mut Session, v: &Value) -> CmdResult {
+    let (seq, local) = outgoing_param(v)?;
+    s.teams_discard(seq, local)?;
+    Ok(json!({}))
+}
+
 /// Whether a picture from elsewhere may be asked for: `https`, a host, nothing two readers of an
 /// address could take differently (no space, control or backslash), not too long.
 fn outside_url(url: &str) -> bool {
@@ -245,6 +306,6 @@ fn step(s: &mut Session, forward: bool) -> CmdResult {
         (Some(i), false) => i.checked_sub(1).and_then(|i| listed.get(i)),
     };
     let Some(chat) = to.map(|c| c.to_string()) else { return Ok(json!({"chat": s.teams.open})) };
-    show(s, Some(chat.clone()));
+    s.teams_show(Some(chat.clone()));
     Ok(json!({"chat": chat}))
 }

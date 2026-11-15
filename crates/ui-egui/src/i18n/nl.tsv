@@ -2247,6 +2247,8 @@ module	Conversations	Gesprekken
 	Open in browser	Openen in browser
 	This content can be seen in Teams	Deze inhoud is te zien in Teams
 	Teams doesn't let this conversation be read here	Teams laat dit gesprek hier niet lezen
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	Een bericht aan {chat} is niet verzonden
 # A person’s presence in Teams.
 presence	Available	Beschikbaar
 presence	Busy	Bezet

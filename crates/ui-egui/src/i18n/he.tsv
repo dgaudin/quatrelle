@@ -2246,6 +2246,8 @@ module	Conversations	שיחות
 	Open in browser	פתח בדפדפן
 	This content can be seen in Teams	אפשר לראות תוכן זה ב-Teams
 	Teams doesn't let this conversation be read here	Teams לא מאפשר לקרוא כאן את השיחה הזו
+# Teams: writing in a conversation.
+	A message to {chat} wasn't sent	הודעה אל {chat} לא נשלחה
 # A person’s presence in Teams.
 presence	Available	זמין
 presence	Busy	עסוק
