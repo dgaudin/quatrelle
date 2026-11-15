@@ -891,15 +891,3 @@ fn text_that_is_not_a_date_is_left_alone() {
     }
     assert_eq!(dated("fr", "é 2025-10-03 é"), "é 03/10/2025 é");
 }
-
-/// A Hebrew line keeps its date in one piece, in order, between the isolates `fmt` puts round it.
-#[test]
-fn a_hebrew_date_stays_one_run() {
-    set_current(Lang::from_code("he").unwrap_or(Lang::EN));
-    let when = date("2025-10-03");
-    let line = fmt("{date}", &[("date", &when)]);
-    set_current(Lang::EN);
-    assert_eq!(when, "03.10.2025");
-    assert!(when.chars().all(|c| c.is_ascii_digit() || c == '.'), "digits and points are one run: {when}");
-    assert_eq!(line, "03.10.2025");
-}

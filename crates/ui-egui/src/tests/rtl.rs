@@ -73,3 +73,54 @@ fn right_to_left_text_is_selected_and_copied() {
         assert_eq!(copied, [text.to_string()], "dragged across {text:?}");
     }
 }
+
+/// An all-day invitation's day is cut before it is translated: Korean writes `2026. 10. 14.` with
+/// spaces, and cutting after kept only the weekday and `2026.`.
+#[test]
+fn an_all_day_invitations_day_is_whole_in_every_language() {
+    let clock = Clock::new(NOW, 0);
+    let wed = 1_791_936_000; // 2026-10-14 00:00 UTC
+    let english = quatrelle_engine::model::dates::full_time(wed, &clock);
+    assert!(english.contains("2026-10-14"), "{english}");
+    for (code, day) in [("ko", "2026. 10. 14."), ("fr", "14/10/2026"), ("de", "14.10.2026"), ("en", "2026-10-14")] {
+        crate::i18n::set_current(crate::i18n::Lang::from_code(code).unwrap());
+        let label = crate::reading::all_day_label(&clock, wed);
+        crate::i18n::set_current(crate::i18n::Lang::EN);
+        assert!(label.ends_with(day), "{code}: {label}");
+        assert!(!label.contains(':'), "{code}: no time of day in {label}");
+    }
+}
+
+/// A message's header in Hebrew draws its date as one run, `DD.MM.YYYY`. A galley's text is the
+/// logical order (egui lays right-to-left out when it draws), so the frame can't show the visual
+/// order: it shows the run is whole, in order and with no mark inside it.
+#[test]
+fn a_hebrew_header_draws_its_date_as_one_run() {
+    let (mut a, dir) = app("rtl-date");
+    a.ui.language = "he".into();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let key = a.session.list.first().map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": key.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..4 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+    }
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let texts: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect();
+    let run = |t: &str| {
+        let b = t.as_bytes();
+        (0..b.len()).any(|i| {
+            b.get(i..i + 10).is_some_and(|w| w.iter().enumerate().all(|(k, c)| if matches!(k, 2 | 5) { *c == b'.' } else { c.is_ascii_digit() }))
+        })
+    };
+    let header = texts.iter().find(|t| run(t) && t.contains(':')).unwrap_or_else(|| panic!("a Hebrew header date in {texts:?}"));
+    assert!(header.chars().all(|c| !matches!(c, '\u{2066}'..='\u{2069}')), "no isolate inside the date line: {header}");
+    let _ = std::fs::remove_dir_all(dir);
+}

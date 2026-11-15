@@ -503,6 +503,14 @@ fn zoom_step(ctx: &egui::Context, percent: u16) -> Option<u16> {
 }
 
 /// A meeting invitation (or an answer to one, or a cancellation) carried by the message.
+/// The day an all-day invitation falls on, as the interface writes it. The weekday and the day
+/// are cut out of the English text before it is translated: a translated day can hold spaces
+/// (Korean writes `2026. 10. 14.`).
+pub(crate) fn all_day_label(clock: &dates::Clock, start: i64) -> String {
+    let english = dates::full_time(clock.utc(start), clock);
+    crate::i18n::date(&english.split(' ').take(2).collect::<Vec<_>>().join(" "))
+}
+
 fn invite_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, acts: &mut Vec<Action>) {
     // Only its text is here: the invitation, in the whole message to come, can't be read yet, and
     // a "none" kept now would outlast its coming, until the calendar next changed.
@@ -534,7 +542,7 @@ fn invite_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, act
             ui.vertical(|ui| {
                 ui.label(RichText::new(&e.summary).font(theme::bold(15.0)).color(t.text));
                 let when = if e.all_day {
-                    crate::i18n::date(&dates::full_time(s.clock.utc(e.start), &s.clock)).split(' ').take(2).collect::<Vec<_>>().join(" ")
+                    all_day_label(&s.clock, e.start)
                 } else {
                     format!("{} – {}", crate::i18n::date(&dates::full_time(e.start, &s.clock)), crate::calendar::hm(e.end, s))
                 };
