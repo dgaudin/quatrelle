@@ -34,9 +34,10 @@ fn said(s: &Session) -> Vec<String> {
     s.notices.iter().filter(|n| n.template == NOT_SENT).map(|n| n.text.clone()).collect()
 }
 
-/// The open chat with `rows`, its jobs taken.
+/// The open chat with `rows`, on screen (Conversations shown), its jobs taken.
 fn opened(rows: Vec<ChatRow>) -> Session {
     let mut s = signed_in(rows);
+    s.module = Module::Conversations;
     open(&mut s, CHAT);
     s.take_jobs();
     s
@@ -217,6 +218,7 @@ fn retry_acts_only_on_a_message_not_sent() {
 #[test]
 fn a_message_not_sent_elsewhere_is_said_once() {
     let mut s = signed_in(vec![row(1, 10), row(2, 20)]);
+    s.module = Module::Conversations;
     open(&mut s, OTHER);
     s.apply(outbox(CHAT, vec![item(CHAT, 3, "100-1", refused())], None));
     s.apply(outbox(CHAT, vec![item(CHAT, 3, "100-1", refused()), item(CHAT, 4, "100-2", OutState::Waiting)], None));
@@ -300,4 +302,151 @@ fn sending_from_an_older_view_goes_back_to_the_newest() {
     );
     assert!(!s.teams.newer_left_out);
     assert_eq!(s.teams.outgoing.iter().map(|o| o.local.as_str()).collect::<Vec<_>>(), [local.as_str()]);
+}
+
+/// The worker's refusal of `local` (it kept nothing of it), as its answer to the send.
+fn refusal(chat: &str, local: &str) -> Event {
+    let state = OutState::NotSent { reason: Unsent::Refused, code: None };
+    outbox(chat, vec![item(chat, 0, local, state)], Some(local))
+}
+
+/// The messages going out shown, by local id.
+fn shown(s: &Session) -> Vec<String> {
+    s.teams.outgoing.iter().map(|o| o.local.clone()).collect()
+}
+
+/// Those of `shown` from `from` on, in any order (refusals' order is left for later).
+fn shown_set(s: &Session, from: usize) -> std::collections::BTreeSet<String> {
+    shown(s).into_iter().skip(from).collect()
+}
+
+/// A message the worker refused to take (nothing of it kept on disk) stays in its conversation:
+/// another chat opened, then this one again, it's there, with Retry and Delete.
+#[test]
+fn a_refused_message_survives_another_chat_opened() {
+    let mut s = opened(vec![row(1, 10), row(2, 20)]);
+    let (a, b) = (send(&mut s, CHAT, "first").unwrap(), send(&mut s, CHAT, "second").unwrap());
+    s.apply(refusal(CHAT, &a));
+    s.apply(refusal(CHAT, &b));
+    s.take_jobs();
+    open(&mut s, OTHER);
+    s.apply(outbox(OTHER, vec![], None));
+    assert!(s.teams.outgoing.is_empty());
+    open(&mut s, CHAT);
+    let both: std::collections::BTreeSet<String> = [a.clone(), b.clone()].into();
+    assert_eq!(shown_set(&s, 0), both, "shown again as the chat opens");
+    // The worker says the chat's outbox (it holds nothing of them): they stay.
+    s.apply(outbox(CHAT, vec![item(CHAT, 5, "100-1", OutState::Waiting)], None));
+    assert_eq!((shown(&s).first().cloned(), shown_set(&s, 1)), (Some("100-1".to_string()), both));
+    s.take_jobs();
+    s.run("teams.discard", &json!({"seq": 0, "local": a})).unwrap();
+    assert!(teams_jobs(&mut s).is_empty());
+    let again = s.run("teams.retry", &json!({"seq": 0, "local": b})).unwrap()["local"].as_str().unwrap().to_string();
+    assert!(matches!(&teams_jobs(&mut s)[..], [teams::Job::Op { op: Op::Send { local, .. } }] if *local == again));
+    assert_eq!(shown(&s), ["100-1".to_string(), again]);
+    // Deleted or sent again: not shown again at the next opening.
+    open(&mut s, OTHER);
+    open(&mut s, CHAT);
+    assert!(s.teams.outgoing.is_empty(), "{:?}", shown(&s));
+}
+
+/// A refusal that comes while another chat is open is said, and kept for its chat: shown when
+/// that chat is opened.
+#[test]
+fn a_refusal_for_a_chat_not_open_is_kept_for_it() {
+    let mut s = opened(vec![row(1, 10), row(2, 20)]);
+    let local = send(&mut s, CHAT, "hi").unwrap();
+    open(&mut s, OTHER);
+    s.apply(refusal(CHAT, &local));
+    assert_eq!(said(&s), ["A message to Chat 1 wasn't sent"]);
+    assert!(s.teams.outgoing.is_empty());
+    open(&mut s, CHAT);
+    s.apply(outbox(CHAT, vec![], None));
+    assert_eq!(shown(&s), [local]);
+    assert_eq!(said(&s).len(), 1, "said once");
+}
+
+/// The refusals kept for chats not open: at most a chat's share each, and 1,000 in all, the
+/// oldest going first.
+#[test]
+fn refusals_kept_for_closed_chats_are_bounded() {
+    let rows: Vec<ChatRow> = (1..=22).map(|i| row(i, 100 - i as i64)).collect();
+    let mut s = opened(rows);
+    open(&mut s, "19:chat22@thread.v2");
+    for i in 0..OUTBOX_CHAT_MAX + 10 {
+        s.apply(refusal(CHAT, &format!("1-{i}")));
+    }
+    for chat in 2..=21 {
+        for i in 0..OUTBOX_CHAT_MAX {
+            s.apply(refusal(&format!("19:chat{chat}@thread.v2"), &format!("{chat}-{i}")));
+        }
+    }
+    // 21 chats of 50: the first chat's, the oldest, went for the 1,000 cap.
+    open(&mut s, CHAT);
+    assert!(s.teams.outgoing.is_empty(), "{}", s.teams.outgoing.len());
+    open(&mut s, "19:chat2@thread.v2");
+    assert_eq!(s.teams.outgoing.len(), OUTBOX_CHAT_MAX);
+    // A chat's share: its newest kept.
+    let mut s = opened(vec![row(1, 10), row(2, 20)]);
+    open(&mut s, OTHER);
+    for i in 0..OUTBOX_CHAT_MAX + 10 {
+        s.apply(refusal(CHAT, &format!("1-{i}")));
+    }
+    open(&mut s, CHAT);
+    assert_eq!(s.teams.outgoing.len(), OUTBOX_CHAT_MAX);
+    assert_eq!(s.teams.outgoing.first().map(|o| o.local.as_str()), Some("1-10"));
+}
+
+/// The open chat isn't on screen while another module is shown: a message not sent there is
+/// said, once.
+#[test]
+fn a_message_not_sent_while_mail_is_shown_is_said() {
+    let mut s = opened(vec![row(1, 10)]);
+    let local = send(&mut s, CHAT, "hi").unwrap();
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, &local, OutState::Waiting)], Some(&local)));
+    s.run("view.module", &json!({"name": "mail"})).unwrap();
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, &local, refused())], None));
+    assert_eq!(said(&s), ["A message to Chat 1 wasn't sent"]);
+    assert_eq!(s.teams.outgoing.iter().map(|o| o.seq).collect::<Vec<_>>(), [4], "still shown in its chat");
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, &local, refused())], None));
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, &local, refused())], None));
+    assert_eq!(said(&s).len(), 1, "said once");
+    // On screen: shown, not said.
+    s.apply(outbox(CHAT, vec![item(CHAT, 4, &local, refused()), item(CHAT, 5, "100-9", refused())], None));
+    assert_eq!(said(&s).len(), 1);
+}
+
+/// Teams doesn't let an unreadable chat be read here: opening it doesn't mark it read there.
+#[test]
+fn an_unreadable_chat_is_not_marked_read_on_opening() {
+    let mut unreadable = row(1, 10);
+    unreadable.unread = 1;
+    unreadable.unreadable = true;
+    let mut s = signed_in(vec![unreadable]);
+    open(&mut s, CHAT);
+    assert_eq!(teams_jobs(&mut s), [teams::Job::Open { chat: Some(CHAT.into()) }]);
+}
+
+/// A Session launched at `now`, Teams on and signed in, with chat 1 listed.
+fn launched(now: i64) -> Session {
+    let mut s = Session::open(None, quatrelle_model::dates::Clock::new(now, 0));
+    s.prefs.teams.on = true;
+    s.prefs.teams.signed_in = true;
+    s.apply(teams_event(teams::Event::Chats { rows: vec![row(1, 10)] }));
+    s.take_jobs();
+    s
+}
+
+/// The local ids count on from the launch's second × 1,000, as drafts' ids do: two runs sending
+/// in the same second (the app and the command line, say) never give two messages the same id.
+#[test]
+fn two_launches_never_give_a_message_the_same_local_id() {
+    const T: i64 = 1_763_200_000;
+    let (mut first, mut second) = (launched(T), launched(T + 5));
+    first.clock.now = T + 5;
+    let (a, b) = (send(&mut first, CHAT, "hi").unwrap(), send(&mut second, CHAT, "hi").unwrap());
+    assert_ne!(a, b);
+    let n = |local: &str| local.rsplit('-').next().and_then(|n| n.parse::<u64>().ok()).unwrap_or(0);
+    assert!(n(&a) > T as u64 * 1_000 && n(&b) > (T as u64 + 5) * 1_000, "{a} {b}");
 }

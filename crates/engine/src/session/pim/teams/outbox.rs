@@ -7,12 +7,14 @@
 //! Only the worker keeps the outbox (`net::teams::outbox`). A message sent here shows at once,
 //! without a number (`seq` 0), until the worker answers for it (`took`) or holds it: taken, it
 //! shows as the worker keeps it; refused, the worker's answer carries it "Not sent" without a
-//! number, and it stays shown here (nothing of it is kept anywhere else) until it's deleted or
-//! sent again.
+//! number, and it stays in its conversation, known here alone (in memory: not after a restart),
+//! until it's deleted or sent again. The open chat is on screen only while Conversations is
+//! shown: elsewhere, a message not sent there is said too.
 //!
 //! What is hostile here: the commands' params (a text and its ranges, from the window or a
 //! script), checked before anything changes. What the worker says is bounded: a chat's share
-//! ([`OUTBOX_CHAT_MAX`]), the local ids ([`LOCAL_MAX`]), the notices remembered ([`SAID_MAX`]).
+//! ([`OUTBOX_CHAT_MAX`]), the local ids ([`LOCAL_MAX`]), the notices remembered ([`SAID_MAX`]),
+//! the refusals kept for chats not open ([`REFUSED_MAX`]).
 
 use std::ops::Range;
 
@@ -23,6 +25,8 @@ use super::*;
 
 /// The most messages not sent remembered as said, or as seen in their chat.
 const SAID_MAX: usize = 1_000;
+/// The most messages refused by the outbox kept for the chats not open (each its share at most).
+const REFUSED_MAX: usize = 1_000;
 /// The refusals the window shows as they are.
 const TOO_LONG: &str = "This message is too long for Teams";
 const TOO_MANY: &str = "Too many messages are waiting";
@@ -65,11 +69,49 @@ fn usable_local(local: &str) -> bool {
     !local.is_empty() && local.len() <= LOCAL_MAX
 }
 
+/// A message the worker refused to take: it keeps nothing of it.
+fn refused(o: &Outgoing) -> bool {
+    o.seq == 0 && matches!(o.state, OutState::NotSent { .. })
+}
+
 impl TeamsState {
+    /// Another chat (or none) opened: the refusals of the one left kept for it, and those of the
+    /// one opened shown again.
+    pub(super) fn switch_outgoing(&mut self, to: Option<&str>) {
+        for o in std::mem::take(&mut self.outgoing) {
+            if refused(&o) {
+                self.keep_refused(o);
+            }
+        }
+        if let Some(to) = to {
+            let (mine, others): (VecDeque<Outgoing>, VecDeque<Outgoing>) = std::mem::take(&mut self.refused).into_iter().partition(|o| o.chat == to);
+            self.refused = others;
+            self.outgoing = mine.into();
+        }
+    }
+
+    /// A refusal kept for its chat, not open: once; past its chat's share or [`REFUSED_MAX`] in
+    /// all, the oldest goes.
+    fn keep_refused(&mut self, o: Outgoing) {
+        if self.refused.iter().any(|r| r.local == o.local) {
+            return;
+        }
+        if self.refused.iter().filter(|r| r.chat == o.chat).count() >= OUTBOX_CHAT_MAX
+            && let Some(oldest) = self.refused.iter().position(|r| r.chat == o.chat)
+        {
+            self.refused.remove(oldest);
+        }
+        if self.refused.len() >= REFUSED_MAX {
+            self.refused.pop_front();
+        }
+        self.refused.push_back(o);
+    }
+
     /// The worker's word on the open chat's messages going out (`items`, all of them, in order):
     /// they replace those shown, followed by those sent here it doesn't number, unless it has just
-    /// answered for them (`took`) or holds them. Past [`OUTBOX_CHAT_MAX`] the oldest go.
-    fn take_outbox(&mut self, items: Vec<Outgoing>, took: Option<&str>) {
+    /// answered for them (`took`) or holds them. Past [`OUTBOX_CHAT_MAX`] the oldest go. Whether
+    /// one is newly not sent.
+    fn take_outbox(&mut self, items: Vec<Outgoing>, took: Option<&str>) -> bool {
         let unnumbered: Vec<Outgoing> = std::mem::take(&mut self.outgoing)
             .into_iter()
             .filter(|o| o.seq == 0 && took != Some(o.local.as_str()) && !items.iter().any(|i| i.local == o.local))
@@ -78,10 +120,12 @@ impl TeamsState {
         shown.extend(unnumbered);
         let past = shown.len().saturating_sub(OUTBOX_CHAT_MAX);
         shown.drain(..past);
+        let mut new = false;
         for o in &shown {
-            self.note(o);
+            new |= self.note(o);
         }
         self.outgoing = shown;
+        new
     }
 
     /// Where `o` stands, noted: whether it's newly not sent (neither said nor seen so far).
@@ -113,24 +157,37 @@ impl TeamsState {
 
 impl Session {
     /// [`teams::Event::Outbox`]: the open chat's messages going out shown as the worker says them;
-    /// another chat's newly not sent said by a notice (once for the event, whatever their number).
+    /// another chat's refusals kept for it. A message newly not sent in a chat not on screen (not
+    /// open, or open while another module is shown) is said by a notice (once for the event,
+    /// whatever their number).
     pub(super) fn teams_outbox(&mut self, chat: &str, items: Vec<Outgoing>, took: Option<String>) {
         if chat.is_empty() || chat.len() > MAX_ID {
             return;
         }
         let items: Vec<Outgoing> = items.into_iter().filter(|o| o.chat == chat && usable_local(&o.local)).take(OUTBOX_MAX).collect();
         if self.teams.open.as_deref() == Some(chat) {
-            return self.teams.take_outbox(items, took.as_deref());
+            if self.teams.take_outbox(items, took.as_deref()) && self.module != Module::Conversations {
+                self.teams_not_sent(chat);
+            }
+            return;
         }
         let mut new = false;
         for o in &items {
             new |= self.teams.note(o);
         }
-        if new {
-            // A chat not listed (or without a name) is named as Teams is.
-            let name = self.teams.row(chat).map(|r| one_line(&r.name)).filter(|n| !n.is_empty()).unwrap_or_else(|| "Teams".into());
-            self.notice_with("A message to {chat} wasn't sent", &[("chat", &name)], true);
+        for o in items.into_iter().filter(refused) {
+            self.teams.keep_refused(o);
         }
+        if new {
+            self.teams_not_sent(chat);
+        }
+    }
+
+    /// A message to `chat` not sent, said.
+    fn teams_not_sent(&mut self, chat: &str) {
+        // A chat not listed (or without a name) is named as Teams is.
+        let name = self.teams.row(chat).map(|r| one_line(&r.name)).filter(|n| !n.is_empty()).unwrap_or_else(|| "Teams".into());
+        self.notice_with("A message to {chat} wasn't sent", &[("chat", &name)], true);
     }
 
     /// What the user typed in `chat`'s box (`text`, with the byte ranges of it in bold and in
@@ -169,8 +226,11 @@ impl Session {
         if open && self.teams.newer_left_out {
             self.teams_show(Some(chat.clone()));
         }
-        self.teams.sent = self.teams.sent.wrapping_add(1);
-        let local = format!("{}-{}", self.clock.now, self.teams.sent);
+        // Counted on from the launch's second × 1,000, as drafts' ids are: a run launched in
+        // another second (the command line beside the app) sending in the same second doesn't give
+        // the same id.
+        let n = self.fresh_id();
+        let local = format!("{}-{n}", self.clock.now);
         if open {
             self.teams.outgoing.push(Outgoing { seq: 0, local: local.clone(), chat: chat.clone(), body: body.clone(), state: OutState::Waiting });
         }

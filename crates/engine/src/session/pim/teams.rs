@@ -98,8 +98,10 @@ pub struct TeamsState {
     /// How many messages the outbox holds in all (waiting, being sent or not sent), as the worker
     /// last said.
     pub unsent: u32,
-    /// The messages sent from here: each one's local id is its own.
-    sent: u64,
+    /// The messages the outbox refused to take in chats not open (`seq` 0, known here alone), put
+    /// back in `outgoing` when their chat opens; at most [`teams::OUTBOX_CHAT_MAX`] a chat, 1,000
+    /// in all.
+    refused: VecDeque<Outgoing>,
     /// The messages not sent already said by a notice, or seen in their chat.
     said: outbox::Said,
 }
@@ -141,11 +143,11 @@ impl TeamsState {
     }
 
     /// `chat` (or none) now on screen: its window begins empty, filled by what the worker sends.
-    /// The same chat opened again keeps its messages going out (the worker says them again; one it
-    /// refused is known here alone).
+    /// Its messages going out are said again by the worker; those it refused, known here alone,
+    /// stay with their chat (the same chat opened again keeps them all).
     pub(crate) fn open_chat(&mut self, chat: Option<String>) {
         if self.open != chat {
-            self.outgoing.clear();
+            self.switch_outgoing(chat.as_deref());
         }
         self.open = chat;
         self.window.clear();
@@ -294,10 +296,11 @@ impl Session {
     }
 
     /// `chat` (or none) on screen: its window filled again by the worker, and a chat with messages
-    /// unread that the user is still in marked read (its row stays as it is until the worker says
-    /// it's read).
+    /// unread that the user is still in and can read here marked read (its row stays as it is
+    /// until the worker says it's read).
     pub(crate) fn teams_show(&mut self, chat: Option<String>) {
-        let unread = chat.as_deref().and_then(|c| self.teams.row(c)).is_some_and(|r| r.unread > 0 && !r.left);
+        // A chat Teams doesn't let be read here keeps its unread mark there.
+        let unread = chat.as_deref().and_then(|c| self.teams.row(c)).is_some_and(|r| r.unread > 0 && !r.left && !r.unreadable);
         self.teams.open_chat(chat.clone());
         let mark = chat.clone().filter(|_| unread);
         self.push_job(Job::Teams { job: teams::Job::Open { chat } });
@@ -318,10 +321,7 @@ impl Session {
         self.prefs.teams.on = false;
         // The copy set aside stays offered for deletion (the worker deletes it, on or off).
         let set_aside = self.teams.set_aside.take();
-        // The outbox is kept (it goes on when Teams is switched on): the local ids go on from
-        // where they were, unique still.
-        let sent = self.teams.sent;
-        self.teams = TeamsState { set_aside, sent, ..TeamsState::default() };
+        self.teams = TeamsState { set_aside, ..TeamsState::default() };
         self.jobs.push(Job::Teams { job: teams::Job::Stop });
         self.teams_fallback();
     }
