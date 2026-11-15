@@ -5,23 +5,29 @@
 //! new to the copy, or whose `lastUpdatedDateTime` moved (a rename, a member change), has its
 //! members read; one whose last message is newer than its watermark is read. At the hourly pass
 //! the chats active in the last 30 days have their members and messages read, older ones once a
-//! week, and a chat of the copy the whole list no longer has is left.
+//! week, and a chat of the copy the whole list no longer has is left. A chat Graph won't serve
+//! has its new last message said as news ([`news`]).
 
 use super::reads::looked;
 use super::*;
 use crate::teams::graph::{Page, chat_of};
 use crate::teams::store::chat_hash;
-use quatrelle_model::pim::teams::CHAT_PAGES;
+use quatrelle_model::pim::teams::{CHAT_PAGES, News};
 
 /// The chats older than the month refreshed at the hourly pass: once a week.
 const WEEK_MS: i64 = 7 * DAY_MS;
 
+/// The longest a listing (the list's pages) is waited for: one held longer (a page that keeps
+/// failing, a 5xx or a 429 on its link) is given up and begun again.
+const LISTING_MAX: Duration = Duration::from_secs(600);
 /// The chat list refused (403, an account without Teams): asked again an hour later.
 const LIST_RETRY: Duration = Duration::from_secs(3600);
 const NO_CHATS: &str = "Teams didn't give this account's chats (403): sign in with the account you use Teams with";
 
 /// A list pass: its pages, then the chats it found that need reading.
 pub(super) struct Pass {
+    /// When it began ([`LISTING_MAX`]).
+    begun: Instant,
     /// The hourly pass: the whole list, the month's chats refreshed, the absent ones left.
     whole: bool,
     /// The newest activity known before it: a page that reaches it is the last.
@@ -36,6 +42,9 @@ pub(super) struct Pass {
     seen: HashSet<u64>,
     /// The hash each chat listed is kept under in the copy (the hourly pass only).
     hashes: HashSet<String>,
+    /// What the last whole list that came to its end by itself lacked, taken as this whole one
+    /// begins: what it lacks too is left; cut short, it leaves nothing lacked for the next.
+    lacked: HashSet<String>,
     /// The list came to its end by itself: a chat the copy has and it hasn't is no longer the
     /// user's.
     ended: bool,
@@ -67,14 +76,22 @@ pub(super) fn list_refused(w: &mut Worker, now: Instant) -> bool {
 /// The list: a page a step, then the chats it found that need reading. Refused (403: an account
 /// without Teams), it is said, and asked again an hour later. A page that follows a link refused
 /// otherwise (a 400 on a link Graph no longer takes) ends the listing there, as a link elsewhere
-/// does: what it found is read, and nothing is taken for gone.
+/// does: what it found is read, and nothing is taken for gone. A listing still under way after
+/// [`LISTING_MAX`] is begun again; the chats' work after it isn't held to that (each chat's fails
+/// on its own and the next one goes).
 pub(super) fn list_step(w: &mut Worker, now: Instant) -> bool {
+    if w.sync.pass.as_ref().is_some_and(|p| !p.listed && now.saturating_duration_since(p.begun) > LISTING_MAX) {
+        log::warn!("teams: the list of conversations was still being read after ten minutes; it is read again from its start");
+        w.sync.pass = None;
+    }
     if w.sync.pass.is_none() {
         let hourly = w.limiter.due(Cadence::Hourly, now);
         if !hourly && !w.limiter.due(Cadence::List, now) {
             return false;
         }
+        let lacked = if hourly { std::mem::take(&mut w.sync.absent) } else { HashSet::new() };
         w.sync.pass = Some(Pass {
+            begun: now,
             whole: hourly,
             known: w.sync.newest,
             listed: false,
@@ -83,6 +100,7 @@ pub(super) fn list_step(w: &mut Worker, now: Instant) -> bool {
             links: HashSet::new(),
             seen: HashSet::new(),
             hashes: HashSet::new(),
+            lacked,
             ended: false,
             round: Round::default(),
             refresh: VecDeque::new(),
@@ -128,7 +146,7 @@ fn listed(w: &mut Worker, page: Page, now: Instant) {
     }
     // A page cut at the most items taken: what it had past them isn't known, so not its end.
     let (mut fresh, mut reached, mut capped) = (false, false, page.items.len() > MAX_PAGE_ITEMS);
-    let (mut writes, mut rows) = (Vec::new(), Vec::new());
+    let (mut writes, mut rows, mut announced) = (Vec::new(), Vec::new(), Vec::new());
     for chat in chats {
         let key = w.key_of(&chat.id);
         let Some(pass) = w.sync.pass.as_mut() else { return };
@@ -154,8 +172,9 @@ fn listed(w: &mut Worker, page: Page, now: Instant) {
             s.activity.insert(chat.id.clone(), chat.last_activity);
         }
         s.newest = s.newest.max(chat.last_activity);
-        let (id, write, task, refresh) = take_chat(w, chat, whole);
+        let (id, write, task, refresh, said) = take_chat(w, chat, whole);
         writes.extend(write);
+        announced.extend(said);
         match (task, w.sync.pass.as_mut()) {
             // New activity: read now, refreshed with it when the hour asks.
             (Some(mut task), Some(pass)) => {
@@ -167,7 +186,7 @@ fn listed(w: &mut Worker, page: Page, now: Instant) {
             }
             (None, Some(pass)) => {
                 if refresh {
-                    pass.refresh.push_back(Task { chat: id.clone(), members: true, updated: None, read: true, guarded: true });
+                    pass.refresh.push_back(Task { chat: id.clone(), members: true, updated: None, read: true, guarded: true, preview: false });
                 }
                 rows.push(id);
             }
@@ -180,6 +199,7 @@ fn listed(w: &mut Worker, page: Page, now: Instant) {
     {
         log::warn!("teams: a page of conversations couldn't be kept: {}", kind(&NetError::Store(e)));
     }
+    news::say(w, announced);
     for id in rows {
         dirty(w, &id);
     }
@@ -228,9 +248,10 @@ fn list_over(w: &mut Worker, now: Instant) {
 /// A chat as the list gives it: the list's fields (read state, hidden, topic, preview) over what
 /// the copy has, whose members, `lastUpdatedDateTime` (until the members are read again) and
 /// refused or left marks stay. Its id, its record when that changed (to be written), what it
-/// needs now (members, a read; none: only its row), and whether the hour's refresh is its (the
-/// month's chats, older ones once a week).
-fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecord>, Option<Task>, bool) {
+/// needs now (members, a read; none: only its row), whether the hour's refresh is its (the
+/// month's chats, older ones once a week), and its new last message's news (a chat Graph won't
+/// serve; from a sender the members don't have, said once they're read again).
+fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecord>, Option<Task>, bool, Option<News>) {
     let server = server_ms(w);
     let stored = w.copy.as_ref().and_then(|c| c.chat(&listed.id));
     let updated = listed.updated;
@@ -252,6 +273,7 @@ fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecor
         _ => false,
     };
     let members = moved || stranger;
+    let new = stored.as_ref().is_some_and(|s| news::new_preview(w, s, &r.chat));
     // One marked left that the whole list has again is read: served, it is back.
     let read = wants_read(&r, before, server) || (whole && r.chat.left && server.is_some());
     let refresh = whole
@@ -259,9 +281,17 @@ fn take_chat(w: &Worker, listed: Chat, whole: bool) -> (String, Option<ChatRecor
         && r.chat.unreadable.is_none()
         && server.is_some()
         && (recent(r.chat.last_activity, server, MONTH_MS) || r.read_at.is_none_or(|t| !recent(Some(t), server, WEEK_MS)));
-    let task = (members || read).then(|| Task { chat: r.chat.id.clone(), members, updated: moved.then_some(updated), read, guarded: false });
+    let task = (members || read).then(|| Task {
+        chat: r.chat.id.clone(),
+        members,
+        updated: moved.then_some(updated),
+        read,
+        guarded: false,
+        preview: new && stranger,
+    });
+    let said = if new && !stranger { news::of_preview(w, &r.chat) } else { None };
     let write = (stored.as_ref() != Some(&r)).then(|| r.clone());
-    (r.chat.id, write, task, refresh)
+    (r.chat.id, write, task, refresh, said)
 }
 
 /// A listed chat over the copy's: the copy's members, refused or left marks and
@@ -297,16 +327,17 @@ fn wants_read(r: &ChatRecord, before: Option<&Chat>, server: Option<i64>) -> boo
     at.is_some_and(|at| r.watermark.is_none_or(|w| at > w.min(cap)))
 }
 
-/// The hourly pass, the whole list read to its end: the chats of the copy it lacks, and the one
-/// before lacked too, are no longer the user's (lacked once, one may have moved in the list while
-/// it was read). Kept, read-only, and said.
+/// The hourly pass, the whole list read to its end: the chats of the copy it lacks, and the whole
+/// list before it lacked too (ended by itself as well), are no longer the user's (lacked once, one
+/// may have moved in the list while it was read). Kept, read-only, and said.
 fn left_behind(w: &mut Worker) {
-    let Some(hashes) = w.sync.pass.as_mut().map(|p| std::mem::take(&mut p.hashes)) else { return };
+    let Some((hashes, before)) = w.sync.pass.as_mut().map(|p| (std::mem::take(&mut p.hashes), std::mem::take(&mut p.lacked))) else {
+        return;
+    };
     let gone: Vec<ChatRecord> = match &w.copy {
         Some(c) => c.absent(&hashes).into_iter().filter(|r| !r.chat.left).collect(),
         None => return,
     };
-    let before = std::mem::take(&mut w.sync.absent);
     w.sync.absent = gone.iter().map(|r| chat_hash(&r.chat.id)).take(MAX_CHATS).collect();
     let now_left: Vec<ChatRecord> = gone
         .iter()

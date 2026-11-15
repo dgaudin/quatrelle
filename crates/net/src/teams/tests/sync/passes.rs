@@ -243,3 +243,43 @@ fn the_chat_opened_says_its_members_and_link() {
     // Another chat's members aren't said while this one is open.
     assert!(members_said(&r, CHAT, 0).is_empty());
 }
+
+/// Final review, delivery 2 (b): a chat's work that panics once its task has left the round
+/// takes nothing else with it: the next chat of the round is still read.
+#[test]
+fn a_panic_drops_only_its_own_chats_task() {
+    // Both of the week: the minute's pass reads the newer first, then the other.
+    let mut r = run(teams_with(vec![chat(CHAT, NOW - DAY, 2), chat(OTHER, NOW - DAY + MINUTE, 2)]));
+    let incremental = |r: &Run, c: &str| r.fake(|t| t.message_reads.iter().filter(|(x, f)| x == c && f.contains(" gt ")).count());
+    let (other, mine) = (incremental(&r, OTHER), incremental(&r, CHAT));
+    r.w.hooks.trip_done = Some(OTHER.into());
+    r.turns(Duration::from_secs(65));
+    assert!(r.w.hooks.trip_done.is_none(), "the panic came");
+    assert_eq!(r.record(OTHER).panics, 1);
+    assert_eq!(incremental(&r, OTHER) - other, 1);
+    assert_eq!(incremental(&r, CHAT) - mine, 1, "the next chat's task wasn't dropped with it");
+}
+
+/// Final review, delivery 2 (c): a page of the list that keeps failing (a 500 on its link) holds
+/// the listing ten minutes at most: it is then begun again from its first page.
+#[test]
+fn a_list_pass_stuck_ten_minutes_starts_over() {
+    let mut r = run(three_pages());
+    r.turns(Duration::from_secs(30));
+    const FAILS: u32 = 1_000_000;
+    r.fake(|t| t.fail_list_links = FAILS);
+    r.w.limiter.prompt(Cadence::Hourly);
+    let end = r.at + Duration::from_secs(15);
+    while r.fake(|t| t.fail_list_links) == FAILS {
+        assert!(r.at < end, "the whole list's second page was never asked for");
+        r.turns(STEP);
+    }
+    // The list's pages answered: its first ones (the others failed).
+    let firsts = |r: &Run| r.hits("chats") - (FAILS - r.fake(|t| t.fail_list_links));
+    let before = firsts(&r);
+    r.turns_every(Duration::from_secs(540), Duration::from_secs(1));
+    assert_eq!(firsts(&r), before, "held by its second page for nine minutes");
+    assert!(r.fake(|t| FAILS - t.fail_list_links) >= 50, "its second page asked again all along");
+    r.turns_every(Duration::from_secs(120), Duration::from_secs(1));
+    assert_eq!(firsts(&r), before + 1, "begun again from its first page, once");
+}

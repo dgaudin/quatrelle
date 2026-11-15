@@ -33,6 +33,7 @@ use crate::worker::connect::fenced;
 
 mod links;
 mod list;
+mod news;
 mod reads;
 mod rows;
 
@@ -96,8 +97,8 @@ pub(crate) struct SyncState {
     looked: HashSet<u64>,
     /// The open chat's members and link as last said to the engine (their hash).
     members_said: Option<u64>,
-    /// The chats of the copy the last whole list lacked (their hashes in the copy): lacked by the
-    /// next one too, they are left.
+    /// The chats of the copy the last whole list lacked, when it came to its end by itself (their
+    /// hashes in the copy): the next whole list takes them, and leaves those it lacks too.
     absent: HashSet<String>,
     /// The kind and link of each chat listed, for the log's figures.
     links: links::Links,
@@ -158,6 +159,9 @@ struct Task {
     read: bool,
     /// Passed over when Graph doesn't serve it or the user left it (the open chat, the week's).
     guarded: bool,
+    /// Its new last message as the list gives it, said once its members are read again (a chat
+    /// Graph won't serve, from a sender they didn't have).
+    preview: bool,
 }
 
 /// Which cadence's work.
@@ -248,7 +252,7 @@ fn open_step(w: &mut Worker, now: Instant) -> bool {
         let opening = std::mem::take(&mut w.sync.opening);
         let at = w.copy.as_ref().and_then(|c| c.chat(&chat)).and_then(|r| r.chat.last_activity);
         let members = opening && !recent(at, server_ms(w), MONTH_MS);
-        w.sync.open = Some(Round { todo: VecDeque::from([Task { chat, members, updated: None, read: true, guarded: true }]) });
+        w.sync.open = Some(Round { todo: VecDeque::from([Task { chat, members, updated: None, read: true, guarded: true, preview: false }]) });
     }
     run_round(w, Which::Open, now)
 }
@@ -270,7 +274,8 @@ fn active_step(w: &mut Worker, now: Instant) -> bool {
             .map(|(id, at)| (at.unwrap_or_default(), id.clone()))
             .collect();
         week.sort_by(|a, b| b.cmp(a));
-        let todo = week.into_iter().map(|(_, chat)| Task { chat, members: false, updated: None, read: true, guarded: true }).collect();
+        let todo =
+            week.into_iter().map(|(_, chat)| Task { chat, members: false, updated: None, read: true, guarded: true, preview: false }).collect();
         w.sync.active = Some(Round { todo });
     }
     run_round(w, Which::Active, now)
@@ -348,11 +353,16 @@ fn finish(w: &mut Worker, which: Which, now: Instant) {
     flush(w);
 }
 
-/// The first chat's work is over: the next one's turn; its row may have changed.
+/// The first chat's work is over: the next one's turn; its row may have changed. Only its own
+/// task leaves (by id): never the next one's, when a step that took it off panics after.
 fn done(w: &mut Worker, which: Which, chat: &str) {
-    if let Some(r) = round(w, which) {
+    if let Some(r) = round(w, which)
+        && r.todo.front().is_some_and(|t| t.chat == chat)
+    {
         r.todo.pop_front();
     }
+    #[cfg(test)]
+    w.hooks.done(chat);
     dirty(w, chat);
 }
 
@@ -379,12 +389,14 @@ fn task_step(w: &mut Worker, which: Which, task: &Task, now: Instant) -> Progres
                 }
                 Err(e) => failed(w, which, Work::Members, &task.chat, &e, now),
             };
+            news::after_members(w, task);
             match round(w, which).and_then(|r| r.todo.front_mut()) {
                 Some(t) if task.read && goes_on => t.members = false,
                 _ => done(w, which, &task.chat),
             }
             return Progress::Asked;
         }
+        news::after_members(w, task);
         if let Some(t) = round(w, which).and_then(|r| r.todo.front_mut()) {
             t.members = false;
         }

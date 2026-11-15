@@ -92,6 +92,13 @@ pub(crate) struct FakeMessage {
     pub(crate) attachments: Vec<(String, String)>,
     /// Its hosted images: (hosted content id, bytes).
     pub(crate) hosted: Vec<(String, Vec<u8>)>,
+    /// Graph's `from` as given, in place of the one made from `from`: an application, someone of
+    /// another organisation, or a name the members don't give.
+    pub(crate) from_json: Option<Value>,
+    /// The users it mentions (their ids), in order.
+    pub(crate) mentions: Vec<String>,
+    /// A system message (`systemEventMessage`, with its `eventDetail`).
+    pub(crate) system: bool,
 }
 
 impl FakeMessage {
@@ -195,6 +202,8 @@ pub(crate) struct FakeTeams {
     pub(crate) links_not_found: bool,
     /// The next n pages of the chat list that follow a link (`$skiptoken`) are answered 400.
     pub(crate) refuse_list_links: u32,
+    /// The next n pages of the chat list that follow a link (`$skiptoken`) are answered 500.
+    pub(crate) fail_list_links: u32,
     /// The chat list's `@odata.nextLink` points at another site than Graph's.
     pub(crate) list_next_elsewhere: bool,
     /// The chat list's pages are this long, whatever `$top` asks (and the last says no more).
@@ -343,6 +352,12 @@ impl FakeTeams {
         std::iter::once(&self.me).chain(self.chats.iter().flat_map(|c| &c.members)).find(|u| u.id == id)
     }
 
+    /// A message's `from`: the one it was given, else its sender's identity (none: a system
+    /// message's).
+    fn sender_json(&self, m: &FakeMessage) -> Value {
+        m.from_json.clone().unwrap_or_else(|| m.from.as_deref().map_or(Value::Null, |f| self.identity(f)))
+    }
+
     /// Graph's `identitySet` for a user.
     fn identity(&self, id: &str) -> Value {
         json!({"application": null, "device": null, "user": {
@@ -390,6 +405,10 @@ impl FakeTeams {
             if self.refuse_list_links > 0 && q.contains_key("$skiptoken") {
                 self.refuse_list_links -= 1;
                 return Reply::error(400, "BadRequest", "The skip token is no longer valid.");
+            }
+            if self.fail_list_links > 0 && q.contains_key("$skiptoken") {
+                self.fail_list_links -= 1;
+                return Reply::error(500, "InternalServerError", "Failed, as the test asked.");
             }
             return self.chats(&q, raw_path, query, base);
         }

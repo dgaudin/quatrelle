@@ -78,6 +78,8 @@ pub(crate) struct Hooks {
     pub(crate) trip_history: Option<String>,
     /// The incremental reads of this chat panic once their page has come.
     pub(crate) trip_read: Option<String>,
+    /// This chat's work panics once its task has left the round, once: a bug met after it.
+    pub(crate) trip_done: Option<String>,
     /// What fetches an outside picture, in place of `http::get_public`.
     pub(crate) outside: Option<fn(&str, usize) -> Result<crate::http::Response>>,
     /// How long an outside picture is waited for, in place of the minute.
@@ -88,6 +90,14 @@ pub(crate) struct Hooks {
 impl Hooks {
     fn trip(&self) {
         Hooks::trip_on(&self.trip_list);
+    }
+
+    /// [`Hooks::trip_done`]'s panic, when `chat`'s task has just left the round.
+    pub(crate) fn done(&mut self, chat: &str) {
+        if self.trip_done.as_deref() == Some(chat) {
+            self.trip_done = None;
+            panic!("a panic the test asked for");
+        }
     }
 
     fn trip_on(count: &std::sync::atomic::AtomicU32) {

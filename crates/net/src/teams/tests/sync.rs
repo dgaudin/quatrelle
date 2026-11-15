@@ -22,6 +22,8 @@ use crate::teams::worker::Worker;
 mod left;
 /// What the log says of the chats' links.
 mod links;
+/// The news of new messages: who sent them, and what isn't news.
+mod news;
 /// "Work offline".
 mod offline;
 /// The chats, their reads and the Active pass.

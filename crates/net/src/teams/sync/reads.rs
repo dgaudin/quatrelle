@@ -12,6 +12,7 @@
 //! * Refused (403, 404) from a chat's first read: Graph doesn't serve it here (tried again a day
 //!   later); refused once read: the user is no longer in it.
 
+use super::news::say_news;
 use super::*;
 use crate::Result;
 use crate::teams::graph::{Range, member_of, message_of};
@@ -153,6 +154,9 @@ fn page_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
     }
     let ended = read.ended;
     say_messages(w, chat, &changed, !first, false);
+    if !first {
+        say_news(w, chat, &changed, start.saturating_sub(OVERLAP_MS));
+    }
     if ended {
         end(w, chat)?;
         return Ok(ReadStep::Over { asked: true });
@@ -170,11 +174,14 @@ fn strangers_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> 
     let got = read_members(w, chat, None, now);
     let Some(read) = w.sync.reads.get_mut(chat) else { return got.map(|()| ReadStep::Asked) };
     let Some((messages, senders)) = read.waiting.take() else { return got.map(|()| ReadStep::Asked) };
-    let (first, ended) = (read.first, read.ended);
+    let (first, ended, since) = (read.first, read.ended, read.start.saturating_sub(OVERLAP_MS));
     if got.is_ok() {
         look(w, chat, &senders);
     }
     say_messages(w, chat, &messages, !first, false);
+    if !first {
+        say_news(w, chat, &messages, since);
+    }
     got?;
     if ended {
         end(w, chat)?;
@@ -183,12 +190,23 @@ fn strangers_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> 
     Ok(ReadStep::Asked)
 }
 
-/// A read's pages are read: the watermark to the newest change read (never past Graph's clock and
-/// an hour, nor back), the time it was read, and a chat that was refused or left is served again;
-/// its panics running are over. Written only when that changes something, or the time it was read
-/// is an hour old: a chat read every three seconds isn't written every three seconds.
+/// A read's pages are read: where it leaves the chat is kept ([`moved_on`]), and its row is sent
+/// at once when it changed something (not at its round's end).
 fn end(w: &mut Worker, chat: &str) -> Result<()> {
     let Some(read) = w.sync.reads.remove(chat) else { return Ok(()) };
+    let kept = moved_on(w, chat, &read);
+    if read.changed > 0 {
+        dirty(w, chat);
+        flush(w);
+    }
+    kept
+}
+
+/// Where a read leaves its chat: the watermark to the newest change read (never past Graph's clock
+/// and an hour, nor back), the time it was read, and a chat that was refused or left is served
+/// again; its panics running are over. Written only when that changes something, or the time it
+/// was read is an hour old: a chat read every three seconds isn't written every three seconds.
+fn moved_on(w: &Worker, chat: &str, read: &Read) -> Result<()> {
     let Some(server) = server_ms(w) else { return Ok(()) };
     let cap = server.saturating_add(CLOCK_TOLERANCE_MS);
     let Some(copy) = &w.copy else { return Ok(()) };

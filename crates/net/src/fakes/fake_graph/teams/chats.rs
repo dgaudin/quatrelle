@@ -13,17 +13,21 @@ const POST_LIMIT: usize = 100 << 10;
 impl FakeTeams {
     fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
         json!({
-            "id": m.id, "replyToId": null, "etag": ms_of(&m.modified).unwrap_or_default().to_string(), "messageType": "message",
+            "id": m.id, "replyToId": null, "etag": ms_of(&m.modified).unwrap_or_default().to_string(),
+            "messageType": if m.system { "systemEventMessage" } else { "message" },
             "createdDateTime": m.created, "lastModifiedDateTime": m.modified, "lastEditedDateTime": m.edited, "deletedDateTime": m.deleted,
             "subject": null, "summary": null, "chatId": chat.id, "importance": "normal", "locale": "en-us", "webUrl": null,
-            "channelIdentity": null, "policyViolation": null, "eventDetail": null,
-            "from": m.from.as_deref().map(|f| self.identity(f)),
+            "channelIdentity": null, "policyViolation": null,
+            "eventDetail": if m.system { json!({"@odata.type": "#microsoft.graph.membersAddedEventMessageDetail"}) } else { Value::Null },
+            "from": self.sender_json(m),
             "body": {"contentType": "html", "content": if m.deleted.is_some() { "" } else { m.body_html.as_str() }},
             "attachments": m.attachments.iter().enumerate().map(|(i, (kind, url))| json!({
                 "id": format!("{}-{i}", m.id), "contentType": kind, "contentUrl": url, "content": null,
                 "name": url.rsplit('/').next(), "thumbnailUrl": null, "teamsAppId": null,
             })).collect::<Vec<_>>(),
-            "mentions": [],
+            "mentions": m.mentions.iter().enumerate().map(|(i, user)| json!({
+                "id": i, "mentionText": self.user(user).map(|u| u.display_name.clone()), "mentioned": self.identity(user),
+            })).collect::<Vec<_>>(),
             "reactions": m.reactions.iter().map(|(kind, user)| json!({
                 "reactionType": kind, "displayName": null, "reactionContentUrl": null, "createdDateTime": m.modified, "user": self.identity(user),
             })).collect::<Vec<_>>(),
@@ -48,7 +52,7 @@ impl FakeTeams {
             v["lastMessagePreview"] = Self::newest(c).map_or(Value::Null, |m| {
                 json!({
                     "id": m.id, "createdDateTime": m.created, "isDeleted": false, "messageType": "message", "eventDetail": null,
-                    "body": {"contentType": "html", "content": m.body_html}, "from": m.from.as_deref().map(|f| self.identity(f)),
+                    "body": {"contentType": "html", "content": m.body_html}, "from": self.sender_json(m),
                 })
             });
         }

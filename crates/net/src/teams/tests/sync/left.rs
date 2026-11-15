@@ -93,3 +93,26 @@ fn a_list_page_cut_short_leaves_no_chat() {
     hourly(&mut r);
     assert!(removed(&r, from).is_empty(), "{:?}", removed(&r, from));
 }
+
+/// Final review, delivery 2 (a): "left" takes two whole lists running that came to their end by
+/// themselves; a whole list cut short between them (its second page's link refused) clears what
+/// the first one lacked.
+#[test]
+fn absent_from_two_ended_whole_lists_is_left() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 2), chat(OTHER, T0 + MINUTE, 2), chat(GROUP, T0 + 2 * MINUTE, 2)]));
+    r.turns(Duration::from_secs(20));
+    let from = r.events().len();
+    r.fake(|t| t.chats.retain(|c| c.id != OTHER));
+    hourly(&mut r);
+    r.fake(|t| {
+        t.list_page = Some(1);
+        t.refuse_list_links = 1;
+    });
+    hourly(&mut r);
+    assert_eq!(r.fake(|t| t.refuse_list_links), 0, "the whole list was cut short");
+    r.fake(|t| t.list_page = None);
+    hourly(&mut r);
+    assert!(removed(&r, from).is_empty(), "absent from two whole lists that ended, but not running: {:?}", removed(&r, from));
+    hourly(&mut r);
+    assert_eq!(removed(&r, from), [OTHER]);
+}
