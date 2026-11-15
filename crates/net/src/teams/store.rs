@@ -13,7 +13,9 @@
 //!   `imgref/<hash>`: which picture a message's hosted image is; `photos/<hash>.json`: someone's
 //!   photo, or that they have none (`images.rs`);
 //! * `index/<hash>.json`: the chat's words, for the search, kept with its pages; `index/partial`:
-//!   the oldest chats' words left the index (`search.rs`).
+//!   the oldest chats' words left the index (`search.rs`);
+//! * `outbox/<seq>.json`: a message going out, by its number in 20 digits ([`OpRecord`],
+//!   `outbox.rs`).
 //!
 //! `<hash>` is the first 32 hex digits of the SHA-256 of the chat's id. The file is hostile input
 //! as much as a server is: every record carries the id it's for (one under another's key is
@@ -27,8 +29,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 mod images;
+mod outbox;
 mod pages;
 
+pub(crate) use outbox::*;
 pub(crate) use pages::PAGE;
 
 /// The most bytes of a record read back (a page, a chat): more is a damaged or hostile file. Above
@@ -507,7 +511,8 @@ fn damaged_copies(store: &Store) -> Vec<PathBuf> {
 
 /// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened
 /// for `t-1`/`u-1`, listed, read in pages and written to, its index read back and searched, its
-/// pictures too (the chat id taken as a user's for a photo). `data` is a chat id, then pairs of a
+/// pictures too (the chat id taken as a user's for a photo), its outbox read back, written to and
+/// emptied (the message's body taken as one going out). `data` is a chat id, then pairs of a
 /// key under `Teams/` and its bytes, then (when they're odd) a message's JSON, split at NUL bytes;
 /// a `=` in a key is the chat's hash (`chats/=.json`, `msgs/=/0.json`). `Err` names a cap that
 /// what was read back breaks.
@@ -575,6 +580,30 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     let _ = copy.put_hosted(&chat, &m.id, "h", b"a picture");
     if copy.hosted(&chat, &m.id, "h").is_some_and(|b| b != b"a picture") {
         return Err("a picture read back isn't the one kept".into());
+    }
+    // The outbox read back: by number, each within its caps and short of the next number; a
+    // record removed isn't read back; emptied, it holds nothing, and a record written then is
+    // read back alone.
+    let ops: Vec<OpRecord> = copy.ops();
+    let next = copy.next_seq();
+    let ordered = ops.windows(2).all(|w| w.first().map(|o| o.seq) < w.get(1).map(|o| o.seq));
+    if ops.len() > quatrelle_model::pim::teams::OUTBOX_MAX || !ordered || ops.iter().any(|o| o.seq >= next || o.broken().is_some()) {
+        return Err(format!("the outbox read back: {} records, the next number {next}", ops.len()));
+    }
+    if let Some(first) = ops.first() {
+        let _ = copy.remove_op(first.seq);
+        if copy.ops().iter().any(|o| o.seq == first.seq) {
+            return Err("a record of the outbox removed is read back".into());
+        }
+    }
+    if copy.clear_ops().is_ok() {
+        if !copy.ops().is_empty() || copy.next_seq() != 1 {
+            return Err("the outbox emptied still holds records".into());
+        }
+        let taken = OpRecord { seq: 1, local: "l-1".into(), chat: chat.clone(), body: m.body, state: OpState::Waiting, tries: 0, after: None };
+        if copy.put_op(&taken).is_ok() && copy.ops() != [taken] {
+            return Err("a record of the outbox written isn't read back".into());
+        }
     }
     Ok(())
 }

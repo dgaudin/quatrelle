@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The local copy (`Teams.quatrelle`): bound to the identity it was made for, messages in pages
-//! found again by their creation time, deleted messages emptied, and the file read back as the
-//! hostile input it may be.
+//! found again by their creation time, deleted messages emptied, the outbox kept in it, and the
+//! file read back as the hostile input it may be.
 
 use quatrelle_model::pim::teams::{
     Attachment, Block, BlockKind, Chat, ChatKind, ChatMessage, ChatText, MAX_BODY, MAX_ID, Mention, Reaction, Run, Sender, TEAMS_ACCOUNT,
@@ -10,7 +10,10 @@ use quatrelle_model::pim::teams::{
 use quatrelle_store::Store;
 
 use super::{MINUTE, T0};
-use crate::teams::store::{ChatRecord, Copy, Identity, Opened, PAGE, chat_hash, imgref_key};
+use crate::teams::store::{ChatRecord, Copy, Identity, OpRecord, OpState, Opened, PAGE, chat_hash, imgref_key};
+
+/// The outbox kept in the copy: in order, read back as hostile, emptied, gone with its copy.
+mod outbox;
 
 const A: &str = "19:a1b2@thread.v2";
 const B: &str = "19:c3d4@thread.v2";
@@ -386,7 +389,19 @@ fn the_fuzz_entry_reaches_the_pages() {
     let record = serde_json::to_string(&ChatRecord { pages: vec![T0], page_keys: vec![0], ..ChatRecord::new(chat(A)) }).unwrap();
     let page = serde_json::to_string(&serde_json::json!({ "chat": A, "messages": [msg(A, 0), msg(A, 1)] })).unwrap();
     let message = serde_json::to_string(&msg(A, 2)).unwrap();
-    let parts = [A, "identity.json", r#"{"tenant_id":"t-1","object_id":"u-1"}"#, "chats/=.json", &record, "msgs/=/0.json", &page, &message];
+    let going = serde_json::to_string(&op(1, A)).unwrap();
+    let parts = [
+        A,
+        "identity.json",
+        r#"{"tenant_id":"t-1","object_id":"u-1"}"#,
+        "chats/=.json",
+        &record,
+        "msgs/=/0.json",
+        &page,
+        &op_key(1),
+        &going,
+        &message,
+    ];
     assert_eq!(crate::teams::fuzz_teams_copy(parts.join("\0").as_bytes()), Ok(()));
     // A deleted message planted with a sender the reader would never give: held, not a crash.
     let ghost = ChatMessage {
@@ -397,7 +412,9 @@ fn the_fuzz_entry_reaches_the_pages() {
     let planted = serde_json::to_string(&serde_json::json!({ "chat": A, "messages": [ghost] })).unwrap();
     let parts = [A, "identity.json", r#"{"tenant_id":"t-1","object_id":"u-1"}"#, "chats/=.json", &record, "msgs/=/0.json", &planted];
     assert_eq!(crate::teams::fuzz_teams_copy(parts.join("\0").as_bytes()), Ok(()));
-    for junk in [&b""[..], b"\0\0\0", b"19:x\0chats/=.json\0{\"chat\":1}", b"\0..\0x\0/abs\0y"] {
+    for junk in
+        [&b""[..], b"\0\0\0", b"19:x\0chats/=.json\0{\"chat\":1}", b"\0..\0x\0/abs\0y", b"19:x\0outbox/00000000000000000001.json\0{\"seq\":1}"]
+    {
         assert_eq!(crate::teams::fuzz_teams_copy(junk), Ok(()));
     }
 }
@@ -580,4 +597,22 @@ fn only_a_copy_set_aside_is_deleted_by_its_path() {
     assert!(Copy::delete_set_aside(&s, &numbered.display().to_string()).unwrap());
     assert!(c.chats().is_empty());
     let _ = std::fs::remove_dir_all(&t);
+}
+
+/// Message `seq` going out in `chat`, its turn to come.
+fn op(seq: u64, chat: &str) -> OpRecord {
+    OpRecord {
+        seq,
+        local: format!("l-{seq}.0"),
+        chat: chat.into(),
+        body: text(&format!("Reply {seq}")),
+        state: OpState::Waiting,
+        tries: 0,
+        after: Some(T0),
+    }
+}
+
+/// Where the outbox keeps record `seq`.
+fn op_key(seq: u64) -> String {
+    format!("outbox/{seq:020}.json")
 }
