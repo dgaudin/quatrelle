@@ -285,6 +285,21 @@ pub(super) fn read_members(w: &mut Worker, chat: &str, updated: Option<Option<i6
     Ok(())
 }
 
+/// Whether `sender` was looked for among `chat`'s members already.
+pub(super) fn looked(w: &Worker, chat: &str, sender: &str) -> bool {
+    w.sync.looked.contains(&w.key_of(&format!("{chat}\0{sender}")))
+}
+
+/// Senders looked for among a chat's members: not again for them.
+fn look(w: &mut Worker, chat: &str, senders: &[String]) {
+    let keys: Vec<u64> = senders.iter().map(|s| w.key_of(&format!("{chat}\0{s}"))).collect();
+    let looked = &mut w.sync.looked;
+    if looked.len().saturating_add(keys.len()) > MAX_LOOKED {
+        looked.clear();
+    }
+    looked.extend(keys);
+}
+
 /// The senders of `messages` the chat's members don't have, and not looked for yet.
 fn strangers(w: &Worker, chat: &str, messages: &[ChatMessage]) -> Vec<String> {
     let Some(r) = w.copy.as_ref().and_then(|c| c.chat(chat)) else { return Vec::new() };
