@@ -11,6 +11,7 @@ use quatrelle_model::pim::teams::{News, Op, is_bidi};
 use serde_json::json;
 
 use super::super::ME;
+use super::super::worker::{AtDesk, desk, emit_into, settings};
 use super::*;
 
 /// The news said from event number `from` on.
@@ -282,4 +283,65 @@ fn the_users_own_message_read_back_is_never_news() {
     write(&r, CHAT, "u-ana", NOW + 5 * MINUTE, "<p>Great</p>", |_| {});
     r.turns(Duration::from_secs(11));
     assert_eq!(news(&r, from).iter().map(|n| n.text.as_str()).collect::<Vec<_>>(), ["Great"]);
+}
+
+/// Quatrelle started again on `r`'s cache and keychain, the worker before it gone: whatever the
+/// engine remembered of the news went with it.
+fn restart(r: Run) -> Run {
+    let Run { w, server, creds, .. } = r;
+    let store = w.store.clone();
+    drop(w);
+    let seen = Seen::default();
+    let desk = AtDesk(desk(grant(Some(TENANT))));
+    let mut w = Worker::new(store, creds.clone(), emit_into(&seen), server.base.clone(), Box::new(desk)).unwrap();
+    w.job(Job::Start { settings: settings(ME) });
+    Run { w, server, seen, t0: Instant::now(), at: Duration::ZERO, creds }
+}
+
+/// Review of Task 6: a reaction to, or an edit of, a chat's newest message (the one its watermark
+/// stands on) brings it back in a read. It was news once, and isn't again: in the same run, nor
+/// after a restart.
+#[test]
+fn a_reaction_or_an_edit_to_the_newest_message_is_not_news_again() {
+    let mut r = run(teams_with(vec![group(GROUP, Some("Agenda"), T0)]));
+    let from = r.events().len();
+    r.w.job(Job::Open { chat: Some(GROUP.into()) });
+    // Message `id` reacted to, or edited, at `when`.
+    let change = |r: &Run, id: i64, when: i64, edit: bool| {
+        r.fake(|t| {
+            t.clock = Some(when + 1000);
+            let m = t.chat_mut(GROUP).unwrap().messages.iter_mut().find(|m| m.id == id.to_string()).unwrap();
+            if edit {
+                m.body_html = "<p>Lunch at one?</p>".into();
+                m.edited = Some(rfc3339(when));
+            } else {
+                m.reactions.push(("like".into(), "u-bruno".into()));
+            }
+            m.modified = rfc3339(when);
+        })
+    };
+    // Message `id` as the reads said it, fresh, from event number `from` on.
+    let read = |r: &Run, id: i64, from: usize| -> Vec<ChatMessage> {
+        r.messages(GROUP, from).into_iter().filter(|(_, fresh, _)| *fresh).flat_map(|(m, _, _)| m).filter(|m| m.id == id.to_string()).collect()
+    };
+    let (first, second) = (NOW + MINUTE, NOW + 3 * MINUTE);
+    write(&r, GROUP, "u-ana", first, "<p>Lunch?</p>", |_| {});
+    until_news(&mut r, from, GROUP);
+    let said = r.events().len();
+    change(&r, first, NOW + 2 * MINUTE, false);
+    r.turns(Duration::from_secs(5));
+    assert!(read(&r, first, said).iter().any(|m| !m.reactions.is_empty()), "the reaction read: {:?}", r.events());
+    assert_eq!(news(&r, from).len(), 1, "not news again: {:?}", news(&r, from));
+
+    // Another newest message, said; then Quatrelle started again, and it is edited.
+    write(&r, GROUP, "u-ana", second, "<p>Lunch at noon?</p>", |_| {});
+    r.turns(Duration::from_secs(5));
+    assert_eq!(news(&r, from).iter().map(|n| n.at).collect::<Vec<_>>(), [first, second]);
+    let mut r = restart(r);
+    r.turns(Duration::from_secs(5));
+    r.w.job(Job::Open { chat: Some(GROUP.into()) });
+    change(&r, second, NOW + 4 * MINUTE, true);
+    r.turns(Duration::from_secs(11));
+    assert!(read(&r, second, 0).iter().any(|m| m.edited.is_some() && m.body.plain() == "Lunch at one?"), "the edit read: {:?}", r.events());
+    assert_eq!(news(&r, 0), [], "nor after a restart");
 }

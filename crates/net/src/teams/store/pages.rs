@@ -11,7 +11,7 @@
 //! [`MAX_BODY`] bytes as kept (its runs cut until it fits), and nothing of a deleted message but
 //! its id, times and sender.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 
 use quatrelle_model::pim::teams::{
@@ -319,9 +319,15 @@ impl Copy {
     /// written, with the chat's record when its pages do, in one go. Returns what changed, as
     /// kept. A chat not in the copy keeps nothing.
     pub(crate) fn upsert(&self, chat: &str, messages: &[ChatMessage]) -> Result<Vec<ChatMessage>> {
+        Ok(self.upsert_new(chat, messages)?.0)
+    }
+
+    /// [`Copy::upsert`], saying too which of what changed is new to the copy (by id): a message it
+    /// held before, edited, reacted to or deleted since, isn't.
+    pub(crate) fn upsert_new(&self, chat: &str, messages: &[ChatMessage]) -> Result<(Vec<ChatMessage>, HashSet<String>)> {
         let Some(mut r) = self.chat(chat) else {
             log::warn!("Teams copy: {} messages of a chat not in the copy passed over", messages.len());
-            return Ok(Vec::new());
+            return Ok((Vec::new(), HashSet::new()));
         };
         let hash = chat_hash(chat);
         let mut incoming: Vec<ChatMessage> = Vec::new();
@@ -344,14 +350,14 @@ impl Copy {
             }
         }
         if incoming.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), HashSet::new()));
         }
         if r.pages.is_empty() {
             // Pages left by a record that lost them, or by a write cut short: not this layout's.
             self.store.remove_account_files(TEAMS_ACCOUNT, &format!("msgs/{hash}"))?;
         }
         let mut slots: Vec<Slot> = r.pages.iter().zip(&r.page_keys).map(|(first, key)| Slot::kept(*first, *key)).collect();
-        let mut changed = Vec::new();
+        let (mut changed, mut new) = (Vec::new(), HashSet::new());
         let mut forget: Vec<(String, String)> = Vec::new();
         for m in incoming {
             match self.find(&mut slots, chat, &hash, &m) {
@@ -383,12 +389,13 @@ impl Copy {
                 }
                 None => {
                     self.insert(&mut slots, chat, &hash, m.clone());
+                    new.insert(m.id.clone());
                     changed.push(m);
                 }
             }
         }
         if changed.is_empty() {
-            return Ok(changed);
+            return Ok((changed, new));
         }
         let Settled { firsts, keys, mut writes, gone } = settle(slots, chat, &r.page_keys)?;
         if firsts != r.pages || keys != r.page_keys {
@@ -411,7 +418,7 @@ impl Copy {
         for key in gone {
             self.store.remove_account_files(TEAMS_ACCOUNT, &format!("msgs/{hash}/{key}.json"))?;
         }
-        Ok(changed)
+        Ok((changed, new))
     }
 
     /// Where a known message is: (page, place in it), among the pages its creation time may be in

@@ -46,9 +46,9 @@ pub(super) struct Read {
     changed: usize,
     /// Its pages are read.
     ended: bool,
-    /// Messages from senders the members don't have, and those senders: sent once the members
-    /// are read again.
-    waiting: Option<(Vec<ChatMessage>, Vec<String>)>,
+    /// Messages from senders the members don't have, those senders, and which of the messages
+    /// are news: sent once the members are read again.
+    waiting: Option<(Vec<ChatMessage>, Vec<String>, Vec<ChatMessage>)>,
 }
 
 /// What a step of a read did.
@@ -131,10 +131,13 @@ fn page_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
     let messages = with_ids(page.items.iter().take(MAX_PAGE_ITEMS).map(|v| message_of(chat, v)).collect());
     let keys: Vec<u64> = messages.iter().map(|m| w.key_of(&m.id)).collect();
     let next_key = page.next.as_deref().map(|n| w.key_of(n));
-    let changed = match &w.copy {
-        Some(copy) => copy.upsert(chat, &messages)?,
-        None => Vec::new(),
+    let (changed, new) = match &w.copy {
+        Some(copy) => copy.upsert_new(chat, &messages)?,
+        None => Default::default(),
     };
+    // Only what the copy didn't hold can be news: an edit of, or a reaction to, a message it held
+    // (its newest too, whose time the watermark stands on) isn't, whenever it comes.
+    let fresh: Vec<ChatMessage> = if first { Vec::new() } else { changed.iter().filter(|m| new.contains(&m.id)).cloned().collect() };
     count_unread(w, chat, &changed);
     let strangers = strangers(w, chat, &changed);
     let Some(read) = w.sync.reads.get_mut(chat) else { return Ok(ReadStep::Asked) };
@@ -149,13 +152,13 @@ fn page_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
     read.next = page.next.filter(|n| more && n.len() <= MAX_LINK && next_key.is_some_and(|k| read.links.insert(k)));
     read.ended = read.next.is_none();
     if !strangers.is_empty() {
-        read.waiting = Some((changed, strangers));
+        read.waiting = Some((changed, strangers, fresh));
         return Ok(ReadStep::Asked);
     }
     let ended = read.ended;
     say_messages(w, chat, &changed, !first, false);
     if !first {
-        say_news(w, chat, &changed, start.saturating_sub(OVERLAP_MS));
+        say_news(w, chat, &fresh, start.saturating_sub(OVERLAP_MS));
     }
     if ended {
         end(w, chat)?;
@@ -173,14 +176,14 @@ fn strangers_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> 
     }
     let got = read_members(w, chat, None, now);
     let Some(read) = w.sync.reads.get_mut(chat) else { return got.map(|()| ReadStep::Asked) };
-    let Some((messages, senders)) = read.waiting.take() else { return got.map(|()| ReadStep::Asked) };
+    let Some((messages, senders, fresh)) = read.waiting.take() else { return got.map(|()| ReadStep::Asked) };
     let (first, ended, since) = (read.first, read.ended, read.start.saturating_sub(OVERLAP_MS));
     if got.is_ok() {
         look(w, chat, &senders);
     }
     say_messages(w, chat, &messages, !first, false);
     if !first {
-        say_news(w, chat, &messages, since);
+        say_news(w, chat, &fresh, since);
     }
     got?;
     if ended {

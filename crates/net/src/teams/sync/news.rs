@@ -6,10 +6,11 @@
 //! hidden mark. Whether and how it's announced is the engine's.
 //!
 //! * A message is news when an incremental read past the chat's own start brings it (never the
-//!   first copy nor its history), made after that read began (less the overlap of 2 s: an edit, a
-//!   reaction or a deletion moves an old message's time, not when it was made), someone else's
-//!   (never the user's, whether a read or the outbox's check reads it back), a message rather than
-//!   a system line, and neither deleted nor unshowable.
+//!   first copy nor its history), new to the copy (an edit of, a reaction to or a deletion of one
+//!   it held never is, its newest one too, whose time the watermark stands on), made after that
+//!   read began (less the overlap of 2 s), someone else's (never the user's, whether a read or the
+//!   outbox's check reads it back), a message rather than a system line, and neither deleted nor
+//!   unshowable.
 //! * A chat Graph won't serve: its new last message as the list gives it, once the copy's first
 //!   listing is over and when its time passes the copy's (its id unknown, so empty). A sender the
 //!   members don't have waits for them to be read again, as a read's messages do.
@@ -28,8 +29,8 @@ use quatrelle_model::pim::teams::{
     ChatKind, ChatMessage, EVENT_ITEMS, Event, MessageKind, NEWS_CHARS, News, first_line, one_line, row_name, sender_internal,
 };
 
-/// The messages of `chat` a read brought (`since`: where the read began, less the overlap) that
-/// are news, said in events of at most [`EVENT_ITEMS`].
+/// The messages a read of `chat` brought that are new to the copy (`since`: where the read began,
+/// less the overlap): those that are news said, in events of at most [`EVENT_ITEMS`].
 pub(crate) fn say_news(w: &Worker, chat: &str, messages: &[ChatMessage], since: i64) {
     let me = w.settings.object_id.as_str();
     let mut fresh = messages.iter().filter(|m| is_news(m, me, since)).peekable();
