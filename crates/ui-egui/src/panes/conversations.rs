@@ -5,10 +5,11 @@
 //! worker's events a few a frame ([`TeamsQueue`]) so a burst of them never holds a frame up; what
 //! the engine announces of new messages goes to the desktop's notifications ([`announce`]).
 //! The module is shown with Teams on and signed in (File › Options › Teams); its list
-//! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are.
-//! Pictures are decoded on a thread of their own (`pictures.rs`).
+//! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are,
+//! with the box to write in at its foot (`writing.rs`). Pictures are decoded on a thread of their
+//! own (`pictures.rs`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use quatrelle_engine::model::pim::teams::{Picture, Status};
 
@@ -16,6 +17,7 @@ mod chat;
 mod events;
 mod list;
 mod pictures;
+mod writing;
 
 pub(crate) use chat::chat;
 pub(crate) use events::{TEAMS_EVENTS_A_FRAME, TeamsQueue, announce};
@@ -26,6 +28,7 @@ pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};
 #[cfg(test)]
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
+pub(crate) use writing::{ChatDraft, refused};
 
 /// What Conversations keeps between frames.
 #[derive(Clone, Debug, Default)]
@@ -59,6 +62,10 @@ pub struct ConversationsUi {
     pub chat_scroll_to: Option<f32>,
     /// The picture shown big.
     pub viewing: Option<Picture>,
+    /// What each chat's box holds, by chat id (at most 20 chats, in memory), and how many times
+    /// a box was drawn (the one drawn longest ago goes first).
+    pub(crate) drafts: HashMap<String, ChatDraft>,
+    pub(crate) drafted: u64,
 }
 
 /// What a row's picture is: a person's (their photo once it came, else their initials), a

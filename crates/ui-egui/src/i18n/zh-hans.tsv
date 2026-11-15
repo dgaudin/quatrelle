@@ -2249,6 +2249,17 @@ module	Conversations	对话
 	Teams doesn't let this conversation be read here	Teams 不允许在此阅读此会话
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	发给 {chat} 的一条消息未发送
+	Write a message	输入消息
+	This message is too long for Teams	此消息对 Teams 来说太长
+	Too many messages are waiting	等待发送的消息太多
+	This message may already be in Teams	此消息可能已在 Teams 中
+	This message couldn't be sent	无法发送此消息
+	Not sent	未发送
+	Teams refused this message	Teams 拒绝了此消息
+	Too long for Teams	对 Teams 来说太长
+	Quatrelle couldn't confirm it was sent	Quatrelle 无法确认是否已发送
+	Retry	重试
+	{n} messages not sent yet will be lost	尚未发送的 {n} 条消息将会丢失
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (应用)

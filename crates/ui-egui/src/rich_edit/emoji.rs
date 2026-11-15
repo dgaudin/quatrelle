@@ -33,7 +33,7 @@ const GROUPS: [(Group, &str); 9] = [
 ];
 
 /// The picker's search and tab, kept while the message is written.
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Picker {
     search: String,
     group: usize,
@@ -58,7 +58,7 @@ pub(super) fn found(query: &str) -> Vec<&'static Emoji> {
 }
 
 /// The picker, under its button: the emoji clicked, if one was (it stays open for the next).
-pub(super) fn picker(ui: &mut Ui, t: &Tokens, recent: &[String], st: &mut Picker) -> Option<String> {
+pub(crate) fn picker(ui: &mut Ui, t: &Tokens, recent: &[String], st: &mut Picker) -> Option<String> {
     let width = PER_ROW as f32 * CELL;
     ui.set_width(width);
     let mut chosen = None;

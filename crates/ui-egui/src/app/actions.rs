@@ -218,6 +218,14 @@ impl MailApp {
                 Ok(v) => self.moved_event(&v),
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            // What the conversation's box asked for and the engine refused: a message goes back in
+            // the box, and why is said under it in the interface's language (not in a notice).
+            Action::Run(id @ ("teams.send" | "teams.retry" | "teams.discard"), p) => {
+                if let Err(e) = self.session.run(id, &p) {
+                    log::info!("{id}: {e}");
+                    conversations::refused(&mut self.ui.conversations, self.session.teams.open.as_deref(), id, &p, &e);
+                }
+            }
             Action::Run(id, p) => {
                 // A Search Folder isn't a search typed in: the box is left empty.
                 if matches!(id, "search.clear" | "searchFolder.open") {

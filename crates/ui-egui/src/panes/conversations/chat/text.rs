@@ -15,7 +15,7 @@ use egui::text::{LayoutJob, TextFormat};
 use egui::{Color32, Sense, Stroke, Ui, vec2};
 use quatrelle_engine::ChatMembers;
 use quatrelle_engine::model::ical::launchable_link;
-use quatrelle_engine::model::pim::teams::{Block, BlockKind, ChatMessage, Run, is_bidi, one_line};
+use quatrelle_engine::model::pim::teams::{Block, BlockKind, ChatText, Mention, Run, is_bidi, one_line};
 
 use crate::Action;
 use crate::theme::{self, Tokens};
@@ -36,25 +36,25 @@ fn clean(text: &str) -> String {
     text.chars().filter(|&c| c == '\n' || !(c.is_control() || is_bidi(c))).collect()
 }
 
-/// Whose a mention is, and the name it shows: the member's own name when it names a member,
-/// else the text the message gave; whether it names the user.
-fn mention_of(run: &Run, m: &ChatMessage, cx: &Context) -> (String, bool) {
-    let mention = run.mention.and_then(|id| m.mentions.iter().find(|x| x.id == id));
+/// Whose a mention is (of the message's `mentions`), and the name it shows: the member's own name
+/// when it names a member, else the text the message gave; whether it names the user.
+fn mention_of(run: &Run, mentions: &[Mention], cx: &Context) -> (String, bool) {
+    let mention = run.mention.and_then(|id| mentions.iter().find(|x| x.id == id));
     let user = mention.and_then(|x| x.user_id.as_deref());
     let mine = user.is_some_and(|u| !cx.me.is_empty() && u.eq_ignore_ascii_case(cx.me));
     let member = user.and_then(|u| cx.members.get(u)).map(|x| one_line(&x.name)).filter(|n| !n.is_empty());
     (member.unwrap_or_else(|| one_line(&run.text)), mine)
 }
 
-/// The body's blocks, `width` wide; links open on a click.
-pub(super) fn body(ui: &mut Ui, t: &Tokens, m: &ChatMessage, cx: &Context, width: f32, acts: &mut Vec<Action>) {
+/// A message's text (with its `mentions`) block by block, `width` wide; links open on a click.
+pub(super) fn body(ui: &mut Ui, t: &Tokens, text: &ChatText, mentions: &[Mention], cx: &Context, width: f32, acts: &mut Vec<Action>) {
     let mut number = 0u32;
-    for block in &m.body.blocks {
+    for block in &text.blocks {
         number = match block.kind {
             BlockKind::Item { ordered: true, .. } => number.saturating_add(1),
             _ => 0,
         };
-        let Some((job, links)) = layout(t, m, cx, block, number, width) else { continue };
+        let Some((job, links)) = layout(t, mentions, cx, block, number, width) else { continue };
         match block.kind {
             BlockKind::Quote => {
                 ui.horizontal(|ui| {
@@ -86,7 +86,7 @@ fn code_fill(t: &Tokens) -> Color32 {
 /// by the characters they cover.
 fn layout(
     t: &Tokens,
-    m: &ChatMessage,
+    mentions: &[Mention],
     cx: &Context,
     block: &Block,
     number: u32,
@@ -109,7 +109,7 @@ fn layout(
         }
         let mut f = plain.clone();
         let text = if run.mention.is_some() {
-            let (name, mine) = mention_of(run, m, cx);
+            let (name, mine) = mention_of(run, mentions, cx);
             f.font_id = theme::bold(SIZE);
             (f.color, f.background) = if mine { (t.on_accent, t.accent) } else { (t.accent, t.accent_soft) };
             name
@@ -210,7 +210,7 @@ pub(super) fn system_line(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use quatrelle_engine::model::pim::teams::Member;
+    use quatrelle_engine::model::pim::teams::{ChatMessage, Member};
 
     use super::*;
 
@@ -243,15 +243,15 @@ mod tests {
         let link = |url: String| Run { text: "the plan".into(), link: Some(url), ..Default::default() };
         let short = message(vec![Run { text: "one\ntwo ".into(), ..Default::default() }, link("https://contoso.example/plan".into())]);
         let block = &short.body.blocks[0];
-        let (job, links) = layout(&t, &short, &cx, block, 0, 400.0).unwrap();
+        let (job, links) = layout(&t, &short.mentions, &cx, block, 0, 400.0).unwrap();
         assert_eq!(links, vec![(8..16, "https://contoso.example/plan".to_string())]);
         assert!(job.text.contains("one\ntwo"), "the line break kept: {:?}", job.text);
         let long = message(vec![link(format!("https://contoso.example/{}", "a".repeat(2100)))]);
-        let (job, links) = layout(&t, &long, &cx, &long.body.blocks[0], 0, 400.0).unwrap();
+        let (job, links) = layout(&t, &long.mentions, &cx, &long.body.blocks[0], 0, 400.0).unwrap();
         assert!(links.is_empty(), "too long: plain text");
         assert_eq!(job.text, "the plan");
         let script = message(vec![link("javascript:alert(1)".into())]);
-        assert!(layout(&t, &script, &cx, &script.body.blocks[0], 0, 400.0).unwrap().1.is_empty(), "not http(s)");
+        assert!(layout(&t, &script.mentions, &cx, &script.body.blocks[0], 0, 400.0).unwrap().1.is_empty(), "not http(s)");
     }
 
     /// A mention shows the member's own name, whatever the message wrote over it (and whatever
@@ -263,7 +263,7 @@ mod tests {
         let cx = Context { me: "u-me", members: &members, color: t.text };
         let mut m = message(vec![Run { text: "The boss".into(), mention: Some(3), ..Default::default() }]);
         m.mentions = vec![quatrelle_engine::model::pim::teams::Mention { id: 3, text: "The boss".into(), user_id: Some("u-ana".into()) }];
-        let (job, _) = layout(&t, &m, &cx, &m.body.blocks[0], 0, 400.0).unwrap();
+        let (job, _) = layout(&t, &m.mentions, &cx, &m.body.blocks[0], 0, 400.0).unwrap();
         assert_eq!(job.text, "Ana Lima");
     }
 

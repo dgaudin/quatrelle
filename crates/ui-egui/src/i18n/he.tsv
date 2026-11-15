@@ -2247,6 +2247,17 @@ module	Conversations	שיחות
 	Teams doesn't let this conversation be read here	Teams לא מאפשר לקרוא כאן את השיחה הזו
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	הודעה אל {chat} לא נשלחה
+	Write a message	כתוב הודעה
+	This message is too long for Teams	הודעה זו ארוכה מדי עבור Teams
+	Too many messages are waiting	יותר מדי הודעות ממתינות
+	This message may already be in Teams	ייתכן שהודעה זו כבר נמצאת ב-Teams
+	This message couldn't be sent	לא ניתן היה לשלוח הודעה זו
+	Not sent	לא נשלחה
+	Teams refused this message	Teams דחה הודעה זו
+	Too long for Teams	ארוכה מדי עבור Teams
+	Quatrelle couldn't confirm it was sent	Quatrelle לא הצליח לאשר שההודעה נשלחה
+	Retry	נסה שוב
+	{n} messages not sent yet will be lost	{n} הודעות שעדיין לא נשלחו יאבדו
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (חיצוני)
 	{name} (App)	{name} (אפליקציה)

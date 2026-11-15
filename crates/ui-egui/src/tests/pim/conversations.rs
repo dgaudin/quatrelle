@@ -14,11 +14,13 @@ use quatrelle_engine::model::pim::teams::{self, ChatKind, ChatRow, Picture, Stat
 use super::super::list::follow_up::{Textures, frame_with_size};
 use super::*;
 
-/// The conversation pane, its pictures, where a sign-in stands, and new messages announced.
+/// The conversation pane, its pictures, where a sign-in stands, new messages announced, and
+/// writing.
 mod chat;
 mod notify;
 mod pictures;
 mod signing;
+mod writing;
 
 /// The File page drawn whole.
 const PAGE: (usize, usize) = (1280, 6000);

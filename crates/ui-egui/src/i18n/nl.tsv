@@ -2248,6 +2248,17 @@ module	Conversations	Gesprekken
 	Teams doesn't let this conversation be read here	Teams laat dit gesprek hier niet lezen
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Een bericht aan {chat} is niet verzonden
+	Write a message	Schrijf een bericht
+	This message is too long for Teams	Dit bericht is te lang voor Teams
+	Too many messages are waiting	Er wachten te veel berichten
+	This message may already be in Teams	Dit bericht staat misschien al in Teams
+	This message couldn't be sent	Dit bericht kon niet worden verzonden
+	Not sent	Niet verzonden
+	Teams refused this message	Teams heeft dit bericht geweigerd
+	Too long for Teams	Te lang voor Teams
+	Quatrelle couldn't confirm it was sent	Quatrelle kon niet bevestigen dat het is verzonden
+	Retry	Opnieuw proberen
+	{n} messages not sent yet will be lost	{n} nog niet verzonden berichten gaan verloren
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Extern)
 	{name} (App)	{name} (App)

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The File page: Options › Teams. Teams switched on, the application and directory ids the
-//! organisation registered, the sign-in, the announcements, where the copy stands, and a copy
-//! made for another account that was set aside.
+//! organisation registered, the sign-in (Sign out saying how many messages not sent it lets go),
+//! the announcements, where the copy stands, and a copy made for another account that was set
+//! aside.
 //!
 //! What is hostile here: the name, address and permission the worker reports came from Graph
 //! (each drawn on one line, cut short); the path of a copy set aside is never shown.
@@ -115,7 +116,7 @@ pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>
             }
         },
     );
-    sign_out_question(ui.ctx(), t, acts);
+    sign_out_question(ui.ctx(), t, s.teams.unsent, acts);
 }
 
 /// Who is signed in and Sign out, or Sign in; where the copy stands, and a sign-in that won't be
@@ -166,8 +167,9 @@ fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     }
 }
 
-/// Sign out's question: keep the copy of the conversations on this computer, or delete it too.
-fn sign_out_question(ctx: &egui::Context, t: &Tokens, acts: &mut Vec<Action>) {
+/// Sign out's question: keep the copy of the conversations on this computer, or delete it too;
+/// the messages not sent yet (`unsent`), which signing out lets go whatever the answer, counted.
+fn sign_out_question(ctx: &egui::Context, t: &Tokens, unsent: u32, acts: &mut Vec<Action>) {
     if !sign_out_asked(ctx) {
         return;
     }
@@ -177,6 +179,10 @@ fn sign_out_question(ctx: &egui::Context, t: &Tokens, acts: &mut Vec<Action>) {
         ui.label(RichText::new(tl!("Sign out of Teams")).font(theme::bold(18.0)).color(t.text));
         ui.add_space(4.0);
         ui.label(RichText::new(tl!("Delete the copy of your conversations kept on this computer too?")).color(t.text));
+        if unsent > 0 {
+            ui.add_space(4.0);
+            ui.label(RichText::new(tf!("{n} messages not sent yet will be lost", n = unsent)).color(t.danger));
+        }
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             if ui.button(tl!("Keep the copy")).clicked() {

@@ -34,6 +34,7 @@ mod ribbon;
 mod signature;
 mod spelling;
 mod toolbar;
+pub(crate) use emoji::{Picker, picker};
 use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
@@ -255,7 +256,7 @@ fn set_selection(ctx: &egui::Context, id: egui::Id, r: Range<usize>) {
 /// makes the message's styles follow it: laid out with `before`'s, each run started a character
 /// off and a picture was drawn a character early, for a frame at every key (the quoted message
 /// under a reply flashed while typing, 2026-11-03).
-fn following<'a>(before: &str, text: &str, styles: &'a Styles, typing: &Style, sel: &Range<usize>) -> std::borrow::Cow<'a, Styles> {
+pub(crate) fn following<'a>(before: &str, text: &str, styles: &'a Styles, typing: &Style, sel: &Range<usize>) -> std::borrow::Cow<'a, Styles> {
     if text == before {
         return std::borrow::Cow::Borrowed(styles);
     }
@@ -268,7 +269,7 @@ fn following<'a>(before: &str, text: &str, styles: &'a Styles, typing: &Style, s
     std::borrow::Cow::Owned(st)
 }
 
-fn typing_style(text: &str, styles: &Styles, at: usize) -> Style {
+pub(crate) fn typing_style(text: &str, styles: &Styles, at: usize) -> Style {
     let chars: Vec<char> = text.chars().collect();
     let before = at.checked_sub(1).filter(|i| chars.get(*i).is_some_and(|c| *c != '\n'));
     let i = before.or_else(|| chars.get(at).filter(|c| **c != '\n').map(|_| at));

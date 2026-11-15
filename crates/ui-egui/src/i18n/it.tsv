@@ -2250,6 +2250,17 @@ module	Conversations	Conversazioni
 	Teams doesn't let this conversation be read here	Teams non consente di leggere qui questa conversazione
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Un messaggio a {chat} non è stato inviato
+	Write a message	Scrivi un messaggio
+	This message is too long for Teams	Questo messaggio è troppo lungo per Teams
+	Too many messages are waiting	Troppi messaggi in attesa
+	This message may already be in Teams	Questo messaggio potrebbe essere già in Teams
+	This message couldn't be sent	Impossibile inviare questo messaggio
+	Not sent	Non inviato
+	Teams refused this message	Teams ha rifiutato questo messaggio
+	Too long for Teams	Troppo lungo per Teams
+	Quatrelle couldn't confirm it was sent	Quatrelle non ha potuto confermare che sia stato inviato
+	Retry	Riprova
+	{n} messages not sent yet will be lost	{n} messaggi non ancora inviati andranno persi
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Esterno)
 	{name} (App)	{name} (App)

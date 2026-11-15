@@ -2,9 +2,10 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The conversation pane (the module's right): the open chat's header (its name, the other
 //! person's presence, its members), then its messages by day, one sender's in a row under one name
-//! and picture, the user's own on the right; system lines; and the page before asked for when the
-//! user scrolls to the top. A chat Graph won't let be read shows what the list gave of it and
-//! "Open in Teams".
+//! and picture, the user's own on the right; system lines; the page before asked for when the
+//! user scrolls to the top; after them, what the user sent that Teams doesn't have yet
+//! (`outgoing.rs`); and the box to write in at the foot (`super::writing`). A chat Graph won't let
+//! be read shows what the list gave of it and "Open in Teams".
 //!
 //! What is hostile here: everything drawn came from senders (names, words, links, pictures,
 //! files) or from Graph (the chat's link). "External" is drawn before the name a sender chose and
@@ -26,6 +27,7 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, UiState, widgets};
 
+mod outgoing;
 mod parts;
 mod text;
 
@@ -110,6 +112,8 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
     if row.unreadable {
         unreadable(&pane, ui, row, acts);
     } else {
+        // The box first: it takes the foot of the pane, the messages the rest.
+        super::writing::writing(s, c, ui, &pane.t, open, acts);
         messages(&pane, c, ui, open, acts);
     }
     viewer(&pane, c, ui.ctx());
@@ -295,6 +299,7 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
                     message(p, c, ui, m, first, acts);
                 }
             }
+            outgoing::outgoing(p, ui, chat, acts);
             ui.add_space(8.0);
         });
     });
@@ -445,7 +450,7 @@ fn bubble(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, fill:
                 return;
             }
             let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text };
-            text::body(ui, t, m, &cx, width - 20.0, acts);
+            text::body(ui, t, &m.body, &m.mentions, &cx, width - 20.0, acts);
             parts::pictures(p, c, ui, m, acts);
             parts::files(p, ui, m, width - 20.0, acts);
             parts::cards(p, ui, m, acts);

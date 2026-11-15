@@ -2248,6 +2248,17 @@ module	Conversations	会話
 	Teams doesn't let this conversation be read here	Teams ではこの会話をここで読むことができません
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	{chat} へのメッセージは送信されませんでした
+	Write a message	メッセージを入力
+	This message is too long for Teams	このメッセージは Teams には長すぎます
+	Too many messages are waiting	送信待ちのメッセージが多すぎます
+	This message may already be in Teams	このメッセージはすでに Teams にある可能性があります
+	This message couldn't be sent	このメッセージを送信できませんでした
+	Not sent	未送信
+	Teams refused this message	Teams がこのメッセージを拒否しました
+	Too long for Teams	Teams には長すぎます
+	Quatrelle couldn't confirm it was sent	Quatrelle は送信を確認できませんでした
+	Retry	再試行
+	{n} messages not sent yet will be lost	まだ送信されていない {n} 件のメッセージは失われます
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (アプリ)
