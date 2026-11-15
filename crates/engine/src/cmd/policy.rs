@@ -62,5 +62,10 @@ fn on_folder(s: &mut Session, v: &Value, kind: PolicyKind) -> CmdResult {
 }
 
 pub(super) fn commands() -> Vec<CommandSpec> {
-    PolicyKind::ALL.into_iter().flat_map(pair).collect()
+    let read = CommandSpec::new("mail.readPolicy", "Read a message's policies", "Message list › Policy", |s, v| {
+        let k = key_param(s, v)?;
+        Ok(s.read_policy_of(&k))
+    })
+    .params(r#"{"key": string} (its archive and retention tags asked of the server, once, when they aren't known)"#);
+    PolicyKind::ALL.into_iter().flat_map(pair).chain([read]).collect()
 }

@@ -38,6 +38,14 @@ pub(crate) fn policy_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>, targ
         return;
     }
     ui.menu_button((widgets::menu_icon(Some(Icon::Clock)), tl!("Policy")), |ui| {
+        // A message whose tags aren't known (one of several selected, which a right-click doesn't
+        // open; one opened before the server told its tags) has them asked: once, the engine
+        // remembering it asked.
+        if let PolicyFor::Mail(k) = target
+            && !s.message_tags_known(k)
+        {
+            acts.push(Action::Run("mail.readPolicy", json!({"key": k.to_id()})));
+        }
         let mut first = true;
         for kind in PolicyKind::ALL {
             if s.policy_tags(account, kind).next().is_none() {
@@ -79,7 +87,7 @@ fn policy_part(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>, target: PolicyF
     };
     let tags: Vec<&ArchiveTag> = s.policy_tags(account, kind).collect();
     for (tag, label) in tags.iter().zip(tag_labels(&tags)) {
-        let mut on = current == Some(tag.id.as_str());
+        let mut on = current.is_some_and(|c| c.eq_ignore_ascii_case(&tag.id));
         // Its period; the server's own name for it, as it gives it, on hover.
         if ui.checkbox(&mut on, label).on_hover_text(tag.name.as_str()).clicked() {
             acts.push(run(Some(&tag.id)));
@@ -156,6 +164,6 @@ pub(crate) fn tag_labels(tags: &[&ArchiveTag]) -> Vec<String> {
 /// How the tag `id` of `kind` is shown, as the submenu shows it; none when it isn't offered.
 fn tag_label(s: &Session, account: &str, kind: PolicyKind, id: &str) -> Option<String> {
     let tags: Vec<&ArchiveTag> = s.policy_tags(account, kind).collect();
-    let at = tags.iter().position(|t| t.id == id)?;
+    let at = tags.iter().position(|t| t.id.eq_ignore_ascii_case(id))?;
     tag_labels(&tags).into_iter().nth(at)
 }

@@ -67,6 +67,7 @@ pub(crate) fn leaves_body_waiting(id: &str) -> bool {
             | "view.reverseSort"
             | "view.folderPane"
             | "compose.update"
+            | "mail.readPolicy"
     ) || id.starts_with("list.extend")
         // Teams is the worker's: nothing of the mail is read or changed.
         || id.starts_with("teams.")

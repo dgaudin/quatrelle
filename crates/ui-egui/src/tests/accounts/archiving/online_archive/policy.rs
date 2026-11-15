@@ -172,6 +172,91 @@ fn the_submenu_is_absent_without_tags_and_in_the_archive() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// How many reads of `key`'s tags were handed to the network layer.
+fn reads_of(handed: &Handed, key: &MessageKey) -> usize {
+    handed.borrow().iter().filter(|j| matches!(j, Job::ReadArchiveTag { key: k } if k == key)).count()
+}
+
+/// The server's answer to a read of `key`'s tags.
+fn answer(a: &mut MailApp, key: &MessageKey, archive: Option<&str>, retention: Option<&str>) {
+    a.session.apply(MailEvent::ArchiveTagRead {
+        key: key.clone(),
+        tag: archive.map(str::to_string),
+        date: None,
+        retention_tag: retention.map(str::to_string),
+        retention_date: None,
+    });
+}
+
+/// One of several messages selected isn't opened by its right-click, so it had no tags read
+/// and « As its folder » was ticked whatever it carried: the submenu asks for them, once
+/// however many frames it is drawn; what the server answers is ticked, its ids in capitals too;
+/// a message with no tag of its own ticks « As its folder ».
+#[test]
+fn the_submenu_reads_the_tags_it_doesnt_know() {
+    let ctx = egui::Context::default();
+    let (mut a, dir, handed) = exchange_app("oa-policy-read");
+    offer(&mut a);
+    let store = a.session.store.clone().expect("the cache");
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    st.messages.push(message("a1", "INBOX", 2, "Budget"));
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    a.session.apply(MailEvent::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
+    let (plans, key) = (message("a1", "INBOX", 1, "").key, message("a1", "INBOX", 2, "").key);
+    a.session.run("list.select", &json!({"key": plans.to_id()})).unwrap();
+    a.session.run("list.select", &json!({"key": key.to_id(), "add": true})).unwrap();
+    let _ = open_submenu(&ctx, &mut a, "Budget");
+    for _ in 0..5 {
+        settle(&ctx, &mut a);
+    }
+    assert_eq!(reads_of(&handed, &key), 1, "{:?}", handed.borrow());
+    answer(&mut a, &key, Some(&NEVER.to_ascii_uppercase()), Some(&WEEK.to_ascii_uppercase()));
+    assert_eq!(ticked(&settle(&ctx, &mut a)), ["Never", "1 week"]);
+    answer(&mut a, &key, None, None);
+    assert_eq!(ticked(&settle(&ctx, &mut a)), ["As its folder", "As its folder"]);
+    assert_eq!(reads_of(&handed, &key), 1, "not asked again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A tag chosen is ticked when the submenu opens again: at once, and still once the server
+/// answers the read asked before the change reached it (« As its folder » was ticked then).
+#[test]
+fn a_tag_chosen_is_ticked_when_the_submenu_opens_again() {
+    let ctx = egui::Context::default();
+    let (mut a, dir, handed) = exchange_app("oa-policy-again");
+    offer(&mut a);
+    let key = message("a1", "INBOX", 1, "").key;
+    a.session.run("list.select", &json!({"key": key.to_id()})).unwrap();
+    let _ = open_submenu(&ctx, &mut a, "Plans");
+    let at = settled_text_at(&ctx, &mut a, "Never", SIZE).expect("the tag");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    settle(&ctx, &mut a);
+    assert!(handed.borrow().iter().any(|j| matches!(j, Job::Apply { .. })), "{:?}", handed.borrow());
+    assert_eq!(ticked(&open_submenu(&ctx, &mut a, "Plans")), ["Never", "As its folder"], "at once");
+    answer(&mut a, &key, None, None);
+    assert_eq!(ticked(&settle(&ctx, &mut a)), ["Never", "As its folder"], "after the server's answer from before the change");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Older mail, read on the server and kept nowhere here: its tags are read for the submenu and
+/// the one it carries is ticked.
+#[test]
+fn the_submenu_ticks_the_tag_of_older_mail() {
+    let ctx = egui::Context::default();
+    let (mut a, dir, handed) = exchange_app("oa-policy-older");
+    offer(&mut a);
+    let two_years = NOW - 730 * 86_400;
+    let old = Summary { received: two_years, date: two_years, ..message("a1", "INBOX", 9, "Harbour, two years on") };
+    let key = old.key.clone();
+    a.session.apply(MailEvent::Older { account: "a1".into(), folder: "INBOX".into(), items: vec![old], more: false, error: None });
+    a.session.run("list.select", &json!({"key": key.to_id()})).unwrap();
+    let _ = open_submenu(&ctx, &mut a, "Harbour, two years on");
+    assert_eq!(reads_of(&handed, &key), 1, "{:?}", handed.borrow());
+    answer(&mut a, &key, Some(YEAR), None);
+    assert_eq!(ticked(&settle(&ctx, &mut a)), ["1 year", "As its folder"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A day as the interface writes it.
 fn shown(y: i64, m: u32, d: u32) -> String {
     crate::i18n::date(&dates::day_label(dates::days_from_civil(y, m, d)))

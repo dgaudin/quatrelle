@@ -2,17 +2,19 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The session: Exchange's archive and retention policies. The tags the server offers, of both
 //! kinds, are told once a session ([`Event::ArchiveTags`]); the tags a message carries are asked
-//! when it is opened ([`Job::ReadArchiveTag`]); a folder's come with the folder list. Setting one
-//! is a change through the journal ([`Op::SetArchiveTag`], with its [`PolicyKind`]): made at
-//! once here, sent when the server can be reached, put back with a notice when the server
-//! refuses it or no longer has the message.
+//! when it is opened, or when the « Policy » submenu shows a message whose tags aren't known
+//! ([`Job::ReadArchiveTag`]); a folder's come with the folder list. Setting one is a change
+//! through the journal ([`Op::SetArchiveTag`], with its [`PolicyKind`]): made at once here, sent
+//! when the server can be reached, put back with a notice when the server refuses it or no
+//! longer has the message. While it waits, a read that doesn't carry it (one answered before the
+//! change reached the server: the read goes ahead of the journal) leaves it shown.
 
 use quatrelle_model::{ArchiveTag, Op, PolicyKind};
 use serde_json::json;
 
 use super::*;
 
-/// Most messages whose tags are remembered (the last ones opened).
+/// Most messages whose tags are remembered (the last ones read), and most asked at once.
 const MAX_REMEMBERED: usize = 256;
 /// Most changes waiting to be told their outcome.
 const MAX_PENDING: usize = 256;
@@ -32,8 +34,10 @@ type Carried = (Option<String>, Option<String>);
 pub(crate) struct PolicyState {
     /// The tags each account's server offers, of both kinds.
     tags: HashMap<String, Vec<ArchiveTag>>,
-    /// The archive and the retention tag of the messages opened lately, with their days.
+    /// The archive and the retention tag of the messages read lately, with their days.
     messages: HashMap<MessageKey, [Carried; 2]>,
+    /// The messages whose tags were asked of the server and haven't come.
+    asked: HashSet<MessageKey>,
     /// The tag each target had before a change that isn't known to have reached the server.
     before: Vec<(Target, Option<String>)>,
 }
@@ -91,6 +95,12 @@ impl Session {
         self.policy.messages.get(key)?.get(slot(kind))?.0.as_deref()
     }
 
+    /// Whether a message's tags are known, or asked of the server already: the submenu asks for
+    /// those of a message that isn't ([`Session::read_policy_of`]).
+    pub fn message_tags_known(&self, key: &MessageKey) -> bool {
+        self.policy.messages.contains_key(key) || self.policy.asked.contains(key)
+    }
+
     /// The id of the tag of this kind a folder carries of its own.
     pub fn folder_tag(&self, account: &str, folder: &str, kind: PolicyKind) -> Option<&str> {
         let f = self.account(account)?.folders.iter().find(|f| f.path == folder)?;
@@ -115,20 +125,72 @@ impl Session {
         self.offers_policy(account, folder) && self.policy_tags(account, kind).next().is_some()
     }
 
-    /// A message was opened: ask the server for its tags when the account has some to offer.
+    /// A message was opened, or the submenu wants its tags: ask the server for them when the
+    /// account has some to offer.
     pub(crate) fn ask_archive_tag(&mut self, key: &MessageKey) {
         if self.offers_policy(&key.account, &key.folder) {
+            if self.policy.asked.len() >= MAX_REMEMBERED {
+                self.policy.asked.clear();
+            }
+            self.policy.asked.insert(key.clone());
             self.jobs.push(Job::ReadArchiveTag { key: key.clone() });
         }
     }
 
-    /// A message's tags came from the server: that is the truth, whatever was waiting.
-    pub(crate) fn tag_read(&mut self, key: MessageKey, archive: Carried, retention: Carried) {
-        if self.policy.messages.len() >= MAX_REMEMBERED {
-            self.policy.messages.clear();
+    /// The submenu shows a message's tags: they are asked of the server when they aren't known
+    /// (a message only selected, or opened before the server told its tags), once a message
+    /// however often it is drawn.
+    pub fn read_policy_of(&mut self, key: &MessageKey) -> serde_json::Value {
+        let ask = !self.message_tags_known(key) && self.offers_policy(&key.account, &key.folder);
+        if ask {
+            self.ask_archive_tag(key);
         }
-        self.policy.before.retain(|(t, _)| !matches!(t, Target::Message(k, _) if *k == key));
-        self.policy.messages.insert(key, [archive, retention]);
+        json!({"asked": ask})
+    }
+
+    /// A tag id read from the server as the server offered it (ids are GUIDs, whatever their
+    /// case); one it doesn't offer, as it came.
+    fn offered_id(&self, account: &str, kind: PolicyKind, id: String) -> String {
+        self.policy_tags(account, kind).find(|t| t.id.eq_ignore_ascii_case(&id)).map_or(id, |t| t.id.clone())
+    }
+
+    /// Room for one more message's tags: once full, those with a change waiting are kept, the
+    /// others forgotten (they are read again when wanted).
+    fn make_room(&mut self, key: &MessageKey) {
+        let PolicyState { messages, before, .. } = &mut self.policy;
+        if messages.len() < MAX_REMEMBERED || messages.contains_key(key) {
+            return;
+        }
+        messages.retain(|k, _| before.iter().any(|(t, _)| matches!(t, Target::Message(m, _) if m == k)));
+        if messages.len() >= MAX_REMEMBERED {
+            messages.clear();
+        }
+    }
+
+    /// A message's tags came from the server. A kind with a change waiting keeps the tag shown
+    /// while the read doesn't carry it (answered before the change reached the server); one that
+    /// carries it ends the wait. Otherwise what the server says is shown.
+    pub(crate) fn tag_read(&mut self, key: MessageKey, archive: Carried, retention: Carried) {
+        self.policy.asked.remove(&key);
+        let mut carried = [archive, retention];
+        for kind in PolicyKind::ALL {
+            let Some(c) = carried.get_mut(slot(kind)) else { continue };
+            c.0 = c.0.take().map(|id| self.offered_id(&key.account, kind, id));
+            let waiting = Target::Message(key.clone(), kind);
+            let Some(at) = self.policy.before.iter().position(|(t, _)| *t == waiting) else { continue };
+            let shown = self.message_tag(&key, kind).map(str::to_string);
+            let carries = match (shown.as_deref(), c.0.as_deref()) {
+                (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+                (a, b) => a.is_none() && b.is_none(),
+            };
+            if carries {
+                self.policy.before.remove(at);
+            } else {
+                *c = (shown, None);
+            }
+        }
+        self.make_room(&key);
+        self.policy.messages.insert(key, carried);
     }
 
     /// The tag to set, checked against what the server offers of that kind (its id as the
@@ -155,9 +217,7 @@ impl Session {
 
     /// Set a message's tag of this kind as it is shown, its day unknown until read again.
     fn show_message_tag(&mut self, key: &MessageKey, kind: PolicyKind, tag: Option<String>) {
-        if !self.policy.messages.contains_key(key) && self.policy.messages.len() >= MAX_REMEMBERED {
-            self.policy.messages.clear();
-        }
+        self.make_room(key);
         let carried = self.policy.messages.entry(key.clone()).or_default();
         if let Some(c) = carried.get_mut(slot(kind)) {
             *c = (tag, None);

@@ -56,7 +56,8 @@ fn a_tag_set_offline_is_sent_on_reconnect() {
     assert_eq!(*tag_ops(&jobs)[0], Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: None, kind: PolicyKind::Archive });
     assert_eq!(s.message_policy(&key, PolicyKind::Archive), None);
 
-    // The day the server plans comes with what it reads afterwards.
+    // The day the server plans comes with what it reads afterwards, once it has the change.
+    s.run("mail.archivePolicy", &json!({"tag": YEAR})).unwrap();
     s.apply(Event::ArchiveTagRead {
         key: key.clone(),
         tag: Some(YEAR.into()),
@@ -161,5 +162,117 @@ fn the_archive_policy_isnt_offered_in_the_archive() {
     }
     assert!(tag_ops(&s.take_jobs()).is_empty());
     assert!(!s.offers_policy(&id, PROJECTS) && s.offers_policy(&id, "INBOX"));
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// No tags of the message's own, nor a day: what a read of a message without them answers.
+fn read(key: &MessageKey, archive: Option<&str>, day: Option<&str>) -> Event {
+    Event::ArchiveTagRead {
+        key: key.clone(),
+        tag: archive.map(str::to_string),
+        date: day.map(str::to_string),
+        retention_tag: None,
+        retention_date: None,
+    }
+}
+
+/// A tag set showed « As its folder » once the read asked when the message was opened came
+/// back, answered before the change reached the server (the read goes ahead of the journal). A
+/// change waiting stands over a read that doesn't carry it; a read that carries it (its id in
+/// capitals too) ends the wait, with its day; then what the server says is shown again.
+#[test]
+fn a_tag_set_stands_over_a_read_from_before_it() {
+    let (mut s, store, _id, key) = offered("policy-stale");
+    s.open_message(&key);
+    s.take_jobs();
+    s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER), "at once");
+    s.apply(read(&key, None, None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER), "the change still waits");
+    s.apply(read(&key, Some(&NEVER.to_ascii_uppercase()), Some("2027-11-12")));
+    let p = s.message_policy(&key, PolicyKind::Archive).expect("the tag");
+    assert_eq!((p.id.as_str(), p.day.as_deref()), (NEVER, Some("2027-11-12")));
+    s.apply(read(&key, None, None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), None, "the server's word again");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A tag set stands however many other messages' tags are read meanwhile (the memory of them was
+/// emptied whole once full, the change with it).
+#[test]
+fn a_tag_set_stands_while_many_others_are_read() {
+    let (mut s, store, _id, key) = offered("policy-many");
+    s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
+    for uid in 100..700 {
+        s.apply(read(&MessageKey { uid, ..key.clone() }, Some(YEAR), None));
+    }
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER));
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A message only selected (the right-click menu on one not open), or opened before the server
+/// told its tags, had none read: `mail.readPolicy` asks for them, once a message however often
+/// it runs (the submenu runs it each frame it is drawn until they are known); the answer's id in
+/// capitals names the offered tag; a message with no tag of its own is known to have none.
+#[test]
+fn a_message_not_opened_has_its_tags_read_once() {
+    let reads = |s: &mut Session| s.take_jobs().iter().filter(|j| matches!(j, Job::ReadArchiveTag { .. })).count();
+    let (mut s, store, id, key) = offered("policy-ask");
+    assert!(!s.message_tags_known(&key));
+    for _ in 0..3 {
+        s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    }
+    assert_eq!(reads(&mut s), 1, "one read");
+    assert!(s.message_tags_known(&key), "asked");
+    s.apply(read(&key, Some(&NEVER.to_ascii_uppercase()), None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER));
+    assert_eq!(s.message_policy(&key, PolicyKind::Archive).map(|p| p.name), Some("Never Move to Archive".into()));
+    s.apply(read(&key, None, None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), None, "none of its own: as its folder");
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 0, "known");
+    assert!(s.run("mail.readPolicy", &json!({"key": "junk"})).is_err());
+    let _ = std::fs::remove_dir_all(store.root());
+    let _ = id;
+
+    // Opened before the server told its tags: nothing was asked then.
+    let (mut s, store, id) = with_archive("policy-early");
+    let key = message(&id, "INBOX", 1, "").key;
+    s.open_message(&key);
+    assert_eq!(reads(&mut s), 0);
+    s.apply(Event::ArchiveTags { account: id.clone(), tags: tags() });
+    assert!(!s.message_tags_known(&key));
+    s.run("mail.readPolicy", &json!({"key": key.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 1);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// Older mail, read on the server and never kept, has its tags read when it is opened, as the
+/// submenu asks for them when it is only selected; a tag set on it is sent and ticked at once.
+#[test]
+fn older_mail_has_its_tags_read_and_set() {
+    let reads = |s: &mut Session| s.take_jobs().iter().filter(|j| matches!(j, Job::ReadArchiveTag { .. })).count();
+    let (mut s, store, id, _key) = offered("policy-older");
+    let old = |uid: u32| Summary { subject: format!("Two years ago {uid}"), ..message(&id, "INBOX", uid, "") };
+    s.apply(Event::Older { account: id.clone(), folder: "INBOX".into(), items: vec![old(7), old(8)], more: false, error: None });
+    let key = old(7).key;
+    s.open_message(&key);
+    let jobs = s.take_jobs();
+    assert!(jobs.iter().any(|j| matches!(j, Job::ReadOnline { key: k } if *k == key)), "read on the server: {jobs:?}");
+    assert!(jobs.iter().any(|j| matches!(j, Job::ReadArchiveTag { key: k } if *k == key)), "{jobs:?}");
+    let selected = old(8).key;
+    s.run("list.select", &json!({"key": selected.to_id()})).unwrap();
+    s.run("mail.readPolicy", &json!({"key": selected.to_id()})).unwrap();
+    assert_eq!(reads(&mut s), 1, "only selected: asked for the submenu");
+    s.apply(read(&selected, Some(NEVER), None));
+    assert_eq!(s.message_tag(&selected, PolicyKind::Archive), Some(NEVER));
+    s.open_message(&key);
+    s.take_jobs();
+    s.apply(read(&key, Some(YEAR), None));
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(YEAR));
+    s.run("mail.archivePolicy", &json!({"tag": NEVER})).unwrap();
+    let jobs = s.take_jobs();
+    assert_eq!(*tag_ops(&jobs)[0], Op::SetArchiveTag { keys: vec![key.clone()], folder: None, tag: Some(NEVER.into()), kind: PolicyKind::Archive });
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(NEVER));
     let _ = std::fs::remove_dir_all(store.root());
 }

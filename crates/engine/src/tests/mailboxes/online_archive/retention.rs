@@ -168,3 +168,25 @@ fn the_retention_policy_is_offered_only_by_exchange_with_retention_tags() {
     assert!(tag_ops(&s.take_jobs()).is_empty());
     done(s);
 }
+
+/// A retention tag set stands over a read from before it, as an archive tag does; the archive
+/// tag the same read carries, with no change of its own waiting, is taken as read.
+#[test]
+fn a_retention_tag_set_stands_over_a_read_from_before_it() {
+    let (mut s, store, _id, key) = offered("retention-stale");
+    s.run("mail.retentionPolicy", &json!({"tag": WEEK})).unwrap();
+    assert_eq!(s.message_tag(&key, PolicyKind::Retention), Some(WEEK), "at once");
+    s.apply(Event::ArchiveTagRead { key: key.clone(), tag: Some(YEAR.into()), date: None, retention_tag: None, retention_date: None });
+    assert_eq!(s.message_tag(&key, PolicyKind::Retention), Some(WEEK), "the change still waits");
+    assert_eq!(s.message_tag(&key, PolicyKind::Archive), Some(YEAR));
+    s.apply(Event::ArchiveTagRead {
+        key: key.clone(),
+        tag: Some(YEAR.into()),
+        date: None,
+        retention_tag: Some(WEEK.to_ascii_uppercase()),
+        retention_date: Some("2026-11-19".into()),
+    });
+    let p = s.message_policy(&key, PolicyKind::Retention).expect("the tag");
+    assert_eq!((p.id.as_str(), p.day.as_deref()), (WEEK, Some("2026-11-19")));
+    let _ = std::fs::remove_dir_all(store.root());
+}
