@@ -539,8 +539,8 @@ fn lowest_free(used: &mut BTreeSet<u32>) -> Result<u32> {
 }
 
 /// Which way a full page fills as it splits.
-#[derive(Clone, Copy)]
-enum Side {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Side {
     /// The newest page: full pages from its start, what's left last.
     Front,
     /// The oldest: full pages from its end, what's left first.
@@ -553,19 +553,20 @@ enum Side {
 /// two messages made in the same millisecond (only a run of them longer than a page is parted):
 /// the page before a window is found by creation time alone.
 fn pieces(msgs: Vec<ChatMessage>, side: Side, chat: &str) -> Result<Vec<(Vec<ChatMessage>, Vec<u8>)>> {
+    let created = |m: &ChatMessage| m.created;
     let mut parts: Vec<Vec<ChatMessage>> = Vec::new();
     let mut rest = msgs;
     match side {
         Side::Front => {
             while rest.len() > PAGE {
-                let tail = rest.split_off(edge_down(&rest, PAGE));
+                let tail = rest.split_off(edge_down(&rest, PAGE, created));
                 parts.push(std::mem::replace(&mut rest, tail));
             }
             parts.push(rest);
         }
         Side::Back => {
             while rest.len() > PAGE {
-                let tail = rest.split_off(edge_up(&rest, rest.len() - PAGE));
+                let tail = rest.split_off(edge_up(&rest, rest.len() - PAGE, created));
                 parts.push(tail);
             }
             parts.push(rest);
@@ -578,7 +579,7 @@ fn pieces(msgs: Vec<ChatMessage>, side: Side, chat: &str) -> Result<Vec<(Vec<Cha
     while let Some(mut part) = todo.pop() {
         let bytes = serde_json::to_vec(&PageOut { chat, messages: &part }).map_err(|source| StoreError::Json { path: "msgs".into(), source })?;
         if part.len() > 1 && (part.len() > PAGE || bytes.len() > PAGE_BYTES) {
-            let half = part.split_off(edge_near(&part, part.len() / 2));
+            let half = part.split_off(edge_near(&part, part.len() / 2, created));
             todo.push(half);
             todo.push(part);
             continue;
@@ -588,37 +589,37 @@ fn pieces(msgs: Vec<ChatMessage>, side: Side, chat: &str) -> Result<Vec<(Vec<Cha
     Ok(out)
 }
 
-/// Whether an edge at `k` parts two messages made in the same millisecond.
-fn parts_a_run(msgs: &[ChatMessage], k: usize) -> bool {
-    match (k.checked_sub(1).and_then(|j| msgs.get(j)), msgs.get(k)) {
-        (Some(a), Some(b)) => a.created == b.created,
+/// Whether an edge at `k` parts two items made in the same millisecond (`at` their creation time).
+fn parts_a_run<T>(items: &[T], k: usize, at: impl Fn(&T) -> i64) -> bool {
+    match (k.checked_sub(1).and_then(|j| items.get(j)), items.get(k)) {
+        (Some(a), Some(b)) => at(a) == at(b),
         _ => false,
     }
 }
 
-/// An edge at `k` (inside `msgs`, `0 < k < len`) moved back to where the run of equal creation
-/// times it falls in begins; `k` itself when that run begins the page.
-fn edge_down(msgs: &[ChatMessage], k: usize) -> usize {
+/// An edge at `k` (inside `items`, `0 < k < len`) moved back to where the run of equal creation
+/// times it falls in begins; `k` itself when that run begins them.
+pub(crate) fn edge_down<T>(items: &[T], k: usize, at: impl Fn(&T) -> i64 + std::marker::Copy) -> usize {
     let mut j = k;
-    while j > 0 && parts_a_run(msgs, j) {
+    while j > 0 && parts_a_run(items, j, at) {
         j -= 1;
     }
     if j == 0 { k } else { j }
 }
 
-/// An edge at `k` moved on to where its run ends; `k` itself when that run ends the page.
-fn edge_up(msgs: &[ChatMessage], k: usize) -> usize {
+/// An edge at `k` moved on to where its run ends; `k` itself when that run ends them.
+pub(crate) fn edge_up<T>(items: &[T], k: usize, at: impl Fn(&T) -> i64 + std::marker::Copy) -> usize {
     let mut j = k;
-    while j < msgs.len() && parts_a_run(msgs, j) {
+    while j < items.len() && parts_a_run(items, j, at) {
         j += 1;
     }
-    if j >= msgs.len() { k } else { j }
+    if j >= items.len() { k } else { j }
 }
 
 /// The edge nearest `k` that parts no run; `k` itself when there's none.
-fn edge_near(msgs: &[ChatMessage], k: usize) -> usize {
-    let (down, up) = (edge_down(msgs, k), edge_up(msgs, k));
-    match (!parts_a_run(msgs, down), !parts_a_run(msgs, up)) {
+pub(crate) fn edge_near<T>(items: &[T], k: usize, at: impl Fn(&T) -> i64 + std::marker::Copy) -> usize {
+    let (down, up) = (edge_down(items, k, at), edge_up(items, k, at));
+    match (!parts_a_run(items, down, at), !parts_a_run(items, up, at)) {
         (true, true) if k.saturating_sub(down) <= up.saturating_sub(k) => down,
         (true, true) => up,
         (true, false) => down,
