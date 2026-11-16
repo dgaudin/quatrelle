@@ -193,6 +193,8 @@ fn a_change_record_past_its_rules_is_passed_over() {
         ("an edit with no body", edit(1, ChatText::default(), Vec::new())),
         ("an edit of a body with no words", edit(1, ChatText { blocks: vec![Block::default()] }, Vec::new())),
         ("a message id of none", kind(OutKind::Delete { message: String::new(), created: T0 })),
+        ("a message id with a slash", kind(OutKind::Delete { message: "a/b".into(), created: T0 })),
+        ("a message id of two dots", kind(OutKind::Delete { message: "..".into(), created: T0 })),
         ("a message id with a control character", kind(OutKind::Delete { message: "a\u{7}b".into(), created: T0 })),
         ("a message id past MAX_ID", kind(OutKind::Delete { message: "x".repeat(MAX_ID + 1), created: T0 })),
         ("a deletion created before 1970", kind(at(-1).0)),
@@ -221,9 +223,6 @@ fn a_change_record_past_its_rules_is_passed_over() {
         ("a time to look after of i64::MAX", OpRecord { after: Some(i64::MAX), ..op(1, A) }),
         ("a deletion in a chat without an id", OpRecord { chat: String::new(), ..delete(1) }),
     ];
-    // `id_ok` bars controls and length only: a slash in a message id is the client's to refuse
-    // (`own_segment`), not the outbox's.
-    assert!(crate::teams::store::id_ok("a/b"));
     for (what, o) in &broken {
         assert!(c.put_op(o).is_err(), "{what}: refused when written");
         s.write_account_files(TEAMS_ACCOUNT, &[(op_key(o.seq), serde_json::to_vec(o).unwrap())]).unwrap();

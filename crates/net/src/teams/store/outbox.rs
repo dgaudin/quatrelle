@@ -14,6 +14,7 @@ use quatrelle_model::pim::teams::{
     ChatText, LOCAL_MAX, MAX_MENTIONS, Mention, NAME_CHARS, OUTBOX_MAX, OutKind, OutState, Outgoing, Unsent, one_line, reactable,
 };
 
+use super::super::graph::own_segment;
 use super::*;
 
 /// The folder of the outbox's records.
@@ -110,8 +111,8 @@ impl OpRecord {
         let ms = |t: i64| (0..=MAX_MS).contains(&t);
         let message = match &self.what {
             OutKind::Send => true,
-            OutKind::Edit { message, created } | OutKind::Delete { message, created } => id_ok(message) && ms(*created),
-            OutKind::React { message, created, emoji, .. } => id_ok(message) && ms(*created) && reactable(emoji),
+            OutKind::Edit { message, created } | OutKind::Delete { message, created } => id_ok(message) && own_segment(message) && ms(*created),
+            OutKind::React { message, created, emoji, .. } => id_ok(message) && own_segment(message) && ms(*created) && reactable(emoji),
         };
         let kept = match &self.what {
             OutKind::Send => true,
