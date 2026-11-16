@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! Signing in: the refresh token in the keychain only, whose organisation the account is of (never
-//! a chat's own), the directory the Options name, the permissions granted, a session without a
-//! keychain, a copy made for another account, and a sign-in nobody waits for any more.
+//! Signing in: the page it really opens, the refresh token in the keychain only, whose
+//! organisation the account is of (never a chat's own), the directory the Options name, the
+//! permissions granted, a session without a keychain, a copy made for another account, and a
+//! sign-in nobody waits for any more.
+
+use quatrelle_model::ical::is_microsoft_sign_in;
 
 use super::*;
+use crate::teams::worker::Microsoft;
 
 #[test]
 fn sign_in_keeps_the_refresh_token_in_the_keychain_only() {
@@ -138,6 +142,27 @@ fn ids_that_cant_be_ids_open_no_browser() {
         std::thread::sleep(Duration::from_millis(200));
         assert_eq!(r.desk.authorized.load(Ordering::SeqCst), 0, "nothing is sent anywhere for them");
         assert!(!r.opened_the_browser());
+    }
+}
+
+/// A-m1 (B-m1): the page the Teams sign-in really opens (Microsoft's, at the directory the Options
+/// name, with Teams' permissions and every parameter it sends) is one the engine lets open; else a
+/// permission added or a parameter left unencoded would stop the sign-in from opening, every other
+/// test green. The longest directory name the Options take too.
+#[test]
+fn the_sign_in_page_really_opened_is_one_the_engine_lets_open() {
+    let longest = format!("{}.example", "a".repeat(245));
+    assert!(longest.len() == 253 && quatrelle_model::valid_oauth_tenant(&longest));
+    for tenant in ["organizations", "contoso.onmicrosoft.com", "00000000-0000-0000-0000-000000000001", longest.as_str()] {
+        let mut opened = None;
+        let mut open = |url: &str| {
+            opened = Some(url.to_string());
+            Err("the test opens nothing".to_string())
+        };
+        assert!(Microsoft.authorize(CLIENT, tenant, &mut open).is_err(), "stopped where the browser would open");
+        let url = opened.unwrap_or_else(|| panic!("no page opened for {tenant}"));
+        assert!(is_microsoft_sign_in(&url), "{} bytes: {url}", url.len());
+        assert!(url.contains(&crate::http::pct(TEAMS_SCOPE)), "Teams' permissions asked: {url}");
     }
 }
 
