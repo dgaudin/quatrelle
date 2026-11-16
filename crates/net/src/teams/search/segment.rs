@@ -25,6 +25,8 @@ pub(super) struct Segment {
     pub(super) newest: i64,
     /// How many messages it holds.
     pub(super) held: u32,
+    /// The places it holds, by their messages' ids: a message is found by halving.
+    by_id: Box<[u32]>,
     /// The bytes it takes in the file, and in memory (as estimated).
     pub(super) bytes: u64,
     pub(super) resident: u64,
@@ -178,6 +180,14 @@ impl Draft {
         self.places.len()
     }
 
+    /// Its range and size; `None` when it holds nothing.
+    pub(super) fn span(&self) -> Option<Span> {
+        let mut times = self.messages.iter().filter(|(id, _)| !id.is_empty()).map(|(_, at)| *at);
+        let at = times.next()?;
+        let (first, newest) = times.fold((at, at), |(first, newest), at| (first.min(at), newest.max(at)));
+        Some(Span { first, newest, held: self.held() })
+    }
+
     /// As memory holds it, tranche `key`, `bytes` the size of its file.
     pub(super) fn settle(self, key: u32, bytes: usize) -> Segment {
         use std::mem::size_of;
@@ -204,7 +214,12 @@ impl Draft {
                 (w.into_boxed_str(), list.into_boxed_slice())
             })
             .collect();
-        Segment { chat: self.chat.into_boxed_str(), key, messages, words, first, newest, held, bytes: n(bytes), resident }
+        let id_at = |p: &u32| usize::try_from(*p).ok().and_then(|at| messages.get(at)).map_or("", |(id, _)| &**id);
+        let mut by_id: Vec<u32> = (0u32..).zip(messages.iter()).filter(|(_, (id, _))| !id.is_empty()).map(|(p, _)| p).collect();
+        by_id.sort_unstable_by(|a, b| id_at(a).cmp(id_at(b)));
+        resident = resident.saturating_add(n(by_id.len()).saturating_mul(4));
+        let by_id = by_id.into_boxed_slice();
+        Segment { chat: self.chat.into_boxed_str(), key, messages, words, first, newest, held, by_id, bytes: n(bytes), resident }
     }
 
     /// A file of the index read back, when it's `hash`'s, at most `max` bytes, and can be read:
@@ -320,6 +335,18 @@ impl Draft {
 }
 
 impl Segment {
+    /// The place of the message it holds under `id`.
+    pub(super) fn place_of(&self, id: &str) -> Option<u32> {
+        let id_at = |p: u32| usize::try_from(p).ok().and_then(|at| self.messages.get(at)).map_or("", |(id, _)| &**id);
+        let at = self.by_id.binary_search_by(|&p| id_at(p).cmp(id)).ok()?;
+        self.by_id.get(at).copied()
+    }
+
+    /// Its range and size.
+    pub(super) fn span(&self) -> Span {
+        Span { first: self.first, newest: self.newest, held: usize::try_from(self.held).unwrap_or(usize::MAX) }
+    }
+
     /// The lists of the words beginning with `term`.
     fn lists(&self, term: &str) -> Vec<&[u32]> {
         let from = self.words.partition_point(|(w, _)| &**w < term);

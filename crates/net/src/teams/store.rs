@@ -34,7 +34,7 @@ mod outbox;
 mod pages;
 
 pub(crate) use outbox::*;
-pub(crate) use pages::{PAGE, Side, edge_down, edge_near, edge_up};
+pub(crate) use pages::{PAGE, Side, edge_down, edge_near, edge_up, lowest_free, side};
 
 /// The most bytes of a record read back (a page, a chat): more is a damaged or hostile file. Above
 /// the most a record within the caps takes (5,000 members, or one message's reactions).

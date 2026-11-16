@@ -244,16 +244,22 @@ impl Slot {
         Slot { first, key, msgs: None, dirty: false, at_start: false, at_end: false, inside: false }
     }
 
-    /// Which way it fills as it splits, being page `p` of pages up to `last`: as its new messages
-    /// went (after the others: new ones; before them: history), else by where it is.
+    /// Which way it fills as it splits, being page `p` of pages up to `last`.
     fn side(&self, p: usize, last: usize) -> Side {
-        match (self.at_start, self.at_end, self.inside) {
-            (true, false, false) => Side::Back,
-            (false, true, false) => Side::Front,
-            _ if p == last => Side::Front,
-            _ if p == 0 => Side::Back,
-            _ => Side::Halves,
-        }
+        side(self.at_start, self.at_end, self.inside, p, last)
+    }
+}
+
+/// Which way a page or a tranche fills as it splits, being `p` of those up to `last`: as its new
+/// messages went (`at_start`: before all it held, history; `at_end`: after them, new ones;
+/// `inside`: among them), else by where it is.
+pub(crate) fn side(at_start: bool, at_end: bool, inside: bool, p: usize, last: usize) -> Side {
+    match (at_start, at_end, inside) {
+        (true, false, false) => Side::Back,
+        (false, true, false) => Side::Front,
+        _ if p == last => Side::Front,
+        _ if p == 0 => Side::Back,
+        _ => Side::Halves,
     }
 }
 
@@ -520,7 +526,13 @@ fn settle(slots: Vec<Slot>, chat: &str, old_keys: &[u32]) -> Result<Settled> {
         }
         let side = slot.side(p, last);
         for (i, (part, bytes)) in pieces(msgs, side, chat)?.into_iter().enumerate() {
-            let key = if i == 0 && slot.key != NEW_PAGE { slot.key } else { lowest_free(&mut used)? };
+            let key = if i == 0 && slot.key != NEW_PAGE {
+                slot.key
+            } else {
+                let key = lowest_free(&used, MAX_PAGE_KEY).ok_or_else(|| refused("a chat with too many pages"))?;
+                used.insert(key);
+                key
+            };
             out.firsts.push(part.first().map_or(slot.first, |m| m.created));
             out.keys.push(key);
             out.writes.push((format!("msgs/{hash}/{key}.json"), bytes));
@@ -529,14 +541,9 @@ fn settle(slots: Vec<Slot>, chat: &str, old_keys: &[u32]) -> Result<Settled> {
     Ok(out)
 }
 
-/// The lowest page number not taken, taken.
-fn lowest_free(used: &mut BTreeSet<u32>) -> Result<u32> {
-    let mut k = 0u32;
-    while used.contains(&k) {
-        k = k.checked_add(1).filter(|k| *k < MAX_PAGE_KEY).ok_or_else(|| refused("a chat with too many pages"))?;
-    }
-    used.insert(k);
-    Ok(k)
+/// The lowest number below `max` not in `used` (of a chat's pages, or its tranches).
+pub(crate) fn lowest_free(used: &BTreeSet<u32>, max: u32) -> Option<u32> {
+    (0..max).find(|k| !used.contains(k))
 }
 
 /// Which way a full page fills as it splits.

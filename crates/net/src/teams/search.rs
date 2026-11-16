@@ -8,8 +8,8 @@
 //!   `tranche.rs`), each of at most [`TRANCHE`] messages made one after the other, with their
 //!   ids and creation times and each word with the messages that have it (`segment.rs`). It is
 //!   kept as [`Copy::upsert`] writes, in the same transaction as the pages: a message's words go
-//!   in, an edit replaces them, a deletion takes them out (nothing of a deleted message stays). It
-//!   never rebuilds from scratch.
+//!   in, an edit replaces them, a deletion takes them out (nothing of a deleted message stays). A
+//!   write puts in only the tranches it changes; the index never rebuilds from scratch.
 //! * The old format, one segment a chat at `index/<chat hash>.json`, is read back as it was, cut
 //!   into tranches in memory, and written as tranches at the chat's next write, a stub left in
 //!   its place (an empty segment to the old version, `moved` to this one). A segment without
@@ -47,7 +47,7 @@ use quatrelle_model::search::{fold_word, parts, words};
 use quatrelle_store::{Result, StoreError};
 use serde::{Deserialize, Serialize};
 
-use super::store::{ChatRecord, Copy, Side, chat_hash, edge_down, edge_near, edge_up, id_ok};
+use super::store::{ChatRecord, Copy, Side, chat_hash, edge_down, edge_near, edge_up, id_ok, lowest_free, side};
 use super::worker::Worker;
 
 mod load;
@@ -55,7 +55,8 @@ mod segment;
 mod tranche;
 mod write;
 
-use segment::{Draft, Form, Segment, order, query_words, stub, words_of, words_of_texts};
+use segment::{Draft, Form, Segment, query_words, stub, words_of, words_of_texts};
+pub(crate) use tranche::{Goes, Span, candidates, route};
 use tranche::{Tranches, by_first};
 pub(crate) use write::Staged;
 
@@ -126,6 +127,9 @@ pub(crate) struct Index {
     /// The most messages of a tranche a test sets, in place of [`TRANCHE`].
     #[cfg(test)]
     pub(crate) tranche_cap: Option<usize>,
+    /// The most bytes of a chat's tranches as written a test sets, in place of [`SEGMENT_MAX`].
+    #[cfg(test)]
+    pub(crate) chat_cap: Option<usize>,
     /// How many tranches the last query looked at.
     #[cfg(test)]
     pub(crate) visited: std::cell::Cell<usize>,
@@ -264,6 +268,15 @@ impl Index {
         TRANCHE
     }
 
+    /// The most bytes of a chat's tranches written.
+    fn chat_cap(&self) -> usize {
+        #[cfg(test)]
+        if let Some(cap) = self.chat_cap {
+            return cap;
+        }
+        SEGMENT_MAX
+    }
+
     /// The most memory its tranches may take, as estimated.
     fn resident_cap(&self) -> u64 {
         #[cfg(test)]
@@ -323,9 +336,12 @@ impl Index {
         self.visited.set(0);
         #[cfg(test)]
         self.looked.set(0);
+        // Each chat's tranches by number, made as the query first comes to the chat.
+        let mut by_key: HashMap<&str, HashMap<u32, &Segment>> = HashMap::new();
         let tranches = self.by_newest.iter().filter_map(|(_, hash, key)| {
             let t = self.segments.get(hash)?;
-            Some((t.chat.as_str(), t.list.iter().find(|s| s.key == *key)?))
+            let keys = by_key.entry(hash.as_str()).or_insert_with(|| t.list.iter().map(|s| (s.key, s)).collect());
+            Some((t.chat.as_str(), *keys.get(key)?))
         });
         for (chat, seg) in tranches {
             if hits.len() >= MAX_HITS {

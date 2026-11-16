@@ -8,10 +8,10 @@
 use super::tranches::changes;
 use super::*;
 
-const NONE: Vec<(String, String)> = Vec::new();
+pub(super) const NONE: Vec<(String, String)> = Vec::new();
 
 /// [`copy`], on a store whose files can be made to fail.
-fn failing_copy() -> (Copy, Store) {
+pub(super) fn failing_copy() -> (Copy, Store) {
     let store = Store::failing();
     let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
     copy.put_chat(&ChatRecord::new(chat(A, Some("Budget review")))).unwrap();

@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! A chat's words in tranches ([`Tranches`]): each holds at most [`TRANCHE`] messages, made one
 //! after the other, and is cut as the pages are ([`Side`]): never between two messages of one
-//! millisecond, but for a run of them longer than a tranche.
+//! millisecond, but for a run of them longer than a tranche. A write finds a message, and routes
+//! a new one, by the tranches' creation times ([`candidates`], [`route`]), as the pages do.
 
 use std::ops::Range;
 
@@ -48,6 +49,52 @@ impl Tranches {
         by_first(&mut list);
         Tranches { chat, list, legacy: true, orphans: Vec::new() }
     }
+}
+
+/// What a write routes a chat's messages by, for each tranche: its oldest message's creation
+/// time, its newest's, and how many it holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Span {
+    pub(crate) first: i64,
+    pub(crate) newest: i64,
+    pub(crate) held: usize,
+}
+
+/// Where a message goes among a chat's tranches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Goes {
+    /// Into the tranche at this place in the list.
+    Into(usize),
+    /// Into a new tranche, before them all.
+    Before,
+    /// Into a new tranche, after them all.
+    After,
+}
+
+/// Where a message made at `created` goes among tranches ordered by their first times: into the
+/// newest that begins at or before it (the first, when it's older than them all), but into a new
+/// one, never into a full one (`cap` messages or more), when it's older than them all or newer
+/// than the last. Of the last tranche's newest millisecond, it goes into it (a run of one
+/// millisecond isn't parted by a new tranche), and so of the first's first.
+pub(crate) fn route(spans: &[Span], created: i64, cap: usize) -> Goes {
+    let Some(head) = spans.first() else { return Goes::After };
+    if created < head.first {
+        return if head.held >= cap { Goes::Before } else { Goes::Into(0) };
+    }
+    // The newest that begins at or before it: there's one, the first does.
+    let at = spans.partition_point(|s| s.first <= created).saturating_sub(1);
+    match spans.get(at) {
+        Some(s) if at + 1 == spans.len() && created > s.newest && s.held >= cap => Goes::After,
+        _ => Goes::Into(at),
+    }
+}
+
+/// The tranches a message made at `created` may be held by, as a page is found
+/// (`Copy::find`): the one that begins before it, and those that begin at it.
+pub(crate) fn candidates(spans: &[Span], created: i64) -> Range<usize> {
+    let below = spans.partition_point(|s| s.first < created);
+    let upto = spans.partition_point(|s| s.first <= created);
+    below.saturating_sub(1)..upto
 }
 
 /// Tranches in the order a chat holds them: by their first message's time, then their newest's
@@ -136,35 +183,6 @@ impl Draft {
                 }
             }
         }
-        out
-    }
-
-    /// A chat's tranches as one draft, compact (an id held twice kept once, its first).
-    pub(super) fn merge(list: Vec<Segment>, chat: &str) -> Draft {
-        let mut out = Draft::empty(chat);
-        for seg in &list {
-            let d = Draft::of(seg);
-            // Its places in the merged draft.
-            let mut to: Vec<Option<u32>> = Vec::with_capacity(d.messages.len());
-            for (id, created) in d.messages {
-                let place = u32::try_from(out.messages.len()).ok().filter(|_| !id.is_empty() && !out.places.contains_key(&id));
-                if let Some(p) = place {
-                    out.places.insert(id.clone(), p);
-                    out.messages.push((id, created));
-                }
-                to.push(place);
-            }
-            for (w, places) in d.words {
-                let into = out.words.entry(w).or_default();
-                into.extend(places.iter().filter_map(|p| *to.get(usize::try_from(*p).ok()?)?));
-            }
-        }
-        let Draft { messages, words, .. } = &mut out;
-        words.retain(|_, list| {
-            list.sort_unstable_by_key(|&p| order(messages, p));
-            list.dedup();
-            !list.is_empty()
-        });
         out
     }
 }
