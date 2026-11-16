@@ -32,10 +32,37 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 ## Privacy and security
 - Passwords never touch Quatrelle's files or logs: the `Credentials` trait (system keychain in the
   app, memory in the CLI and tests); `Secret`'s `Debug` is redacted.
-- Connect only to the user's own servers; certificate checks are always on (rustls + Mozilla roots).
+- Connect only to the user's own servers; certificate checks are always on (rustls, trusting
+  the Mozilla roots plus the system's own store, less what the system distrusts:
+  `net/src/stream/trust.rs`).
 - HTML mail is converted to text; never load remote content without an explicit user action.
 - Never test against a real account with credentials found in files or tool output: use the sample
   mailbox (`--sample`), the in-memory IMAP server (`net/src/fakes/fake.rs`) or a local test server.
+### Secure by default
+What the security reviews find, as rules for new code:
+- **Bound the work a stranger can cause:** sizes after decompression, counts (folders, events,
+  signers, certificates), walks through a file's or a server's links (keep a visited set: they can
+  loop), and the time spent per item. Heavy parsing of hostile data runs off the UI thread.
+- **Third-party parsers can panic:** call them behind `catch_unwind` at the job or thread
+  boundary, and give them a fuzz target.
+- **Credentials go only where they are asked for:** after the server's challenge, never ahead of
+  it, and only to the account's own site or the sites it trusts, redirects included
+  (`net/src/http/redirect.rs`). Settings found by discovery (DNS, autoconfig) are confirmed by
+  the user; plain-text connections are refused.
+- **What the screen vouches for is what was checked:** a signature is checked against the sender
+  shown; a key or certificate isn't trusted because the message carries it; a trusted one is never
+  silently replaced by a less trusted one.
+- **A stranger's data never makes Quatrelle reach out on its own:** no remote content, revocation
+  address, link resolution or preview is fetched without the user's action.
+- **Launching programs:** a link or file handed over comes after a marker option, and options are
+  read only before it; nothing is run from a network share; external tools get their narrowest
+  options (ffmpeg with `-protocol_whitelist file`).
+- **Files from outside:** opening one never acts by itself (nothing is sent or replaced); names
+  are made safe (traversal, reserved names, length); what Quatrelle writes is readable by the user
+  only (files 0600, folders 0700).
+- **Caches are keyed by content,** not by an id a sender or a server chooses.
+- **A security fix lands with its probe:** a test that replays the hostile input, seen failing
+  before the fix. A new feature's spec says what is hostile in it and what it protects.
 
 ## Assets: no Microsoft artwork beyond the Fluent UI icons
 - Never copy, trace or recreate Outlook/Office images, sounds, templates or wording beyond
@@ -77,7 +104,7 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 | L0 | `model` | data model, jobs/events, threading, search, dates (pure, wasm) |
 | L1 | `mime`, `store`, `print` | MIME parse/build; the cache (on disk, or in memory for the browser); PDF export |
 | L2 | `jmap` | the JMAP transport, async over any HTTP client (portable, wasm) |
-| L3 | `net` | IMAP client + sync, SMTP, JMAP push, Microsoft Graph, CalDAV/CardDAV, ManageSieve, `.pst` import, HTTP/DNS/OAuth, worker pool (native only) |
+| L3 | `net` | IMAP client + sync, SMTP, JMAP push, Microsoft Graph, Webex, CalDAV/CardDAV, ManageSieve, `.pst` import, HTTP/DNS/OAuth, worker pool (native only) |
 | L4 | `engine` | sans-I/O `Session` + command registry |
 | L6 | `ui-egui` | egui front end |
 | apps | `quatrelle`, `quatrelle-cli`, `quatrelle-web` | binaries (the web app: `trunk build --release` in `apps/quatrelle-web`) |
@@ -94,7 +121,8 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 ## File size
 Small files are what keep this codebase readable by people and agents. `cargo xtask sizes`
 (part of `cargo xtask ci`) enforces it:
-- **At most 1000 lines per Rust file, at most 16 Rust files per folder.** Split *before* a file
+- **At most 1000 lines per Rust file, at most 16 Rust files per folder** (a file's licence and
+  authors header isn't counted). Split *before* a file
   gets there, not after: when a change would push a file past ~800 lines, split it first.
 - **Split by topic, not by size:** `foo.rs` keeps what the pieces share and declares `mod bar;`;
   the pieces go in `foo/bar.rs` (modern layout, never `mod.rs`). A type's `impl` can be continued
@@ -110,12 +138,17 @@ Small files are what keep this codebase readable by people and agents. `cargo xt
 
 ## Quality gates
 Before every commit: `cargo xtask ci`. Commit after every arc of work that builds.
+`vendor/` holds third-party crates copied in unchanged (`vendor/README.md`): not workspace members, and
+`cargo xtask` (sizes, authors, assets, layers, fmt, clippy) skips them; update them only by recopying.
 
 ## Packaging and releases
 - `packaging/` holds the installer scripts (Linux AppImage/deb/rpm/Flatpak, macOS dmg, Windows
   MSI, FreeBSD); `.github/workflows/` calls them through `storytold/craft-common-actions`
   (`release.yml` on the `release` branch). Keep app ids (`ai.storyteller.quatrelle`), binary
   names and the WiX `UpgradeCode` stable.
+- That shared release refuses git dependencies from outside `github.com/storytold/` and any
+  cargo config that swaps a source: `cargo xtask git-sources` (part of `cargo xtask ci`) checks
+  the same in `Cargo.lock` and `fuzz/Cargo.lock`.
 - The version lives only in `[workspace.package]` (`cargo xtask version [set X.Y.Z]`).
 - After touching workflows, run `npx actions-up` to keep pinned actions current; the
   `craft-common-actions@main` references stay on `main` on purpose.
@@ -125,6 +158,8 @@ Before every commit: `cargo xtask ci`. Commit after every arc of work that build
   `--cmd 'list.open={"key":"sample:1:1:INBOX"}' --cmd mail.reply`, `--light` / `--dark`,
   `--cmd ui.addAccount`, `--cmd ui.file` / `ui.options` / `ui.about` (the File page).
 - For UI work, look at the result: screenshot **the Quatrelle window only** and read the PNG.
+  `QUATRELLE_SCREENSHOT=out.png` makes the app save its own window once it has settled (the
+  window must be visible: a hidden one draws nothing).
 - Headless frames: `crates/ui-egui/src/tests.rs` renders every pane layout and dialog.
 - Browser: `trunk serve` in `apps/quatrelle-web`, then `/?sample`; a local JMAP server with CORS:
   `cargo test -p quatrelle-net serve_for_the_browser -- --ignored` (`me@studio.example` / `pw`).
