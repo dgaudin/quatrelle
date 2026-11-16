@@ -103,6 +103,8 @@ impl Copy {
                 (Some((Draft::default(), 0)), String::new())
             }
         };
+        // Its bytes go before an old segment is cut: 16 MB aren't held twice meanwhile.
+        drop(head);
         if let Some((d, len)) = old {
             if !numbers.is_empty() || !orphans.is_empty() {
                 // Tranches beside a segment of the old format: the old version wrote it after
