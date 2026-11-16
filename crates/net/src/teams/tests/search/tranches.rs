@@ -244,6 +244,23 @@ fn a_new_message_opens_a_tranche_past_a_full_one() {
     }
 }
 
+/// Graph sends a chat's messages newest first: past a full tranche, a batch of new ones opens one
+/// tranche, and the full one isn't written again.
+#[test]
+fn a_batch_newest_first_opens_one_tranche_past_a_full_one() {
+    let (copy, store) = copy();
+    copy.index.borrow_mut().tranche_cap = Some(8);
+    let h = chat_hash(A);
+    copy.upsert(A, &(0..8).map(|i| msg(A, i, &format!("plan {i}"))).collect::<Vec<_>>()).unwrap();
+    store.track_changes();
+    copy.upsert(A, &[10, 9, 8].map(|i| msg(A, i, &format!("plan {i}")))).unwrap();
+    assert_eq!(index_keys(&store), [format!("index/{h}/1.json")]);
+    let file = store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/1.json")).unwrap().unwrap();
+    assert_eq!(ids_in(&String::from_utf8(file).unwrap()), [id(8), id(9), id(10)]);
+    let want: Vec<(String, String)> = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map(|i| (A.to_string(), id(i))).to_vec();
+    assert_eq!(hits(&open(&store), "plan"), want);
+}
+
 /// Review Focus 1: a bot's burst at a tranche's edge stays whole, unless it's longer than a
 /// tranche; each of its messages found, edited and deleted wherever it went, after a restart too.
 #[test]
@@ -327,26 +344,41 @@ fn a_message_whose_creation_time_moved_is_held_once() {
     check(&open(&store));
 }
 
-/// Review Focus 3: a chat whose pages start again while its index stays.
+/// Review Focus 3: a chat whose pages start again while its index stays, copied again with new
+/// words: each message held once, by its new words only. A run of one millisecond cut over three
+/// tranches sends its messages, copied again, to the last of them: each is taken out of the one
+/// that held it.
 #[test]
 fn a_chat_copied_again_from_its_start_is_indexed_once() {
     let (copy, store) = copy();
     copy.index.borrow_mut().tranche_cap = Some(8);
-    filled(&copy, A, 30);
+    let t = T0 + 10 * MINUTE;
+    let ring = |k: usize| format!("ring-{k:02}");
+    let ids: Vec<String> = (0..4).map(id).chain((0..20).map(ring)).collect();
+    let made = |says: &str| -> Vec<ChatMessage> {
+        (0..4).map(|i| msg(A, i, &format!("{says} {i}"))).chain((0..20).map(|k| msg_at(A, &ring(k), t, &format!("{says} {k}")))).collect()
+    };
+    copy.upsert(A, &made("ring")).unwrap();
+    let held: Vec<usize> = tranche_files(&store, A).iter().map(|f| ids_in(f).len()).collect();
+    assert_eq!(held, [4, 8, 8, 4]);
     // Its pages don't hold together: its copy starts again.
     let mut r = copy.chat(A).unwrap();
     r.pages = vec![T0];
     r.page_keys = vec![];
     store.write_account_files(TEAMS_ACCOUNT, &[(format!("chats/{}.json", chat_hash(A)), serde_json::to_vec(&r).unwrap())]).unwrap();
-    let msgs: Vec<ChatMessage> = (0..30).map(|i| msg(A, i, &format!("message {i} about the plan"))).collect();
-    let (_, new) = copy.upsert_new(A, &msgs).unwrap();
-    assert_eq!(new.len(), 30, "every message new to the pages");
-    for i in 0..30 {
-        assert_eq!(files_holding(&store, &id(i)), 1, "message {i}");
-    }
-    assert_eq!(hits(&copy, "plan").len(), 30);
+    let (_, new) = copy.upsert_new(A, &made("copied")).unwrap();
+    assert_eq!(new.len(), 24, "every message new to the pages");
+
+    let check = |copy: &Copy| {
+        for m in &ids {
+            assert_eq!(files_holding(&store, m), 1, "{m}");
+        }
+        assert_eq!(hits(copy, "ring"), NONE, "the old words went");
+        assert_eq!(hits(copy, "copied").len(), 24);
+    };
+    check(&copy);
     drop(copy);
-    assert_eq!(hits(&open(&store), "plan").len(), 30);
+    check(&open(&store));
 }
 
 #[test]

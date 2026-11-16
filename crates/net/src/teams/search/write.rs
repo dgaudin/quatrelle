@@ -251,10 +251,10 @@ impl Out {
     }
 }
 
-/// A chat's tranches with what changed: each message taken out of the tranche that holds it and,
-/// unless it's deleted, put in the one its creation time routes it to ([`route`]); only the
-/// tranches that changed cut and written (a chat of the old format's all, and its stub), each
-/// tranche a write empties or drops (past [`TRANCHES_MAX`] or its bytes, the oldest) and each
+/// A chat's tranches with what changed: each message, oldest first, taken out of the tranche that
+/// holds it and, unless it's deleted, put in the one its creation time routes it to ([`route`]);
+/// only the tranches that changed cut and written (a chat of the old format's all, and its stub),
+/// each tranche a write empties or drops (past [`TRANCHES_MAX`] or its bytes, the oldest) and each
 /// orphan written empty, then removed.
 fn staged(chat: &str, hash: &str, had: Tranches, changed: &[ChatMessage], caps: Caps) -> Result<Staged> {
     let Tranches { mut list, legacy, orphans, .. } = had;
@@ -271,7 +271,11 @@ fn staged(chat: &str, hash: &str, had: Tranches, changed: &[ChatMessage], caps: 
         })
         .collect();
     let mut spans: Vec<Span> = parts.iter().map(|p| p.span).collect();
-    for m in changed.iter().filter(|m| m.chat == chat && id_ok(&m.id)) {
+    // Routed oldest first, whatever order they came in (Graph sends the newest first): past a full
+    // tranche, new messages open one tranche, and the full one isn't written again.
+    let mut ordered: Vec<&ChatMessage> = changed.iter().filter(|m| m.chat == chat && id_ok(&m.id)).collect();
+    ordered.sort_by(|a, b| (a.created, a.id.as_str()).cmp(&(b.created, b.id.as_str())));
+    for m in ordered {
         // Where it's held: among the tranches its creation time may be in, else in any (the time
         // moved, or the pages took it for a new one).
         let mut found = candidates(&spans, m.created)
@@ -387,7 +391,7 @@ fn staged(chat: &str, hash: &str, had: Tranches, changed: &[ChatMessage], caps: 
         }
     }
     // Whatever the file may hold that the chat doesn't any more, written empty in the same
-    // transaction, then removed.
+    // transaction, then removed: not a number freed then taken again by a new piece (written over).
     let held: BTreeSet<u32> = list.iter().map(|s| s.key).collect();
     let gone: BTreeSet<u32> = freed.into_iter().chain(orphans).filter(|n| !held.contains(n)).collect();
     let empty = Draft::empty(chat);
