@@ -280,7 +280,8 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   and shown in place; a click shows one big. A picture from elsewhere on the web is never fetched
   by itself: its place says **Show picture**, and only that click loads it (an `https` address, a
   size limit, a time limit). One that can't be had (refused, too big, out of reach) says "Picture
-  not available" and isn't fetched again until Quatrelle starts again.
+  not available"; Quatrelle remembers it (a thousand such pictures at most) and doesn't ask for it
+  again until it starts again.
 - **Files** shared in a chat appear as cards with the file's name and the host of its link. A
   link to your own OneDrive or your organization's SharePoint is shown as such; any other host is
   written on the card, "Link to another site". Nothing opens until you click it.
@@ -304,22 +305,25 @@ longer in, or one Graph won't serve).
 
 **Messages going out.** A message sent shows at once on your side, dimmed, with "Sending…",
 and takes its place among the others once Teams has it. Quatrelle sends them one at a time, in
-the order written in each conversation, a second apart at least; one conversation's messages never
-hold another's. They are kept in the copy until Teams has them: without the network, in Work
-offline, or while Teams asks to wait, they wait (and still show "Sending…" after a restart), then
-go. A message waiting its turn offers **Delete**; one being sent offers nothing, since it may be in
-Teams already.
+the order written in each conversation, a second apart at least; a message waiting in one
+conversation doesn't hold back the others', though everything pauses while Teams asks to wait or
+after it fails. Once the outbox has taken them, they are kept in the copy until Teams has them:
+without the network, in Work offline, or while Teams asks to wait, they wait (and still show
+"Sending…" after a restart), then go. A message waiting its turn offers **Delete**; one being sent
+offers nothing, since it may be in Teams already.
 
-When the network drops during a send, Quatrelle can't tell whether Teams got the message: it looks
-for it in the conversation before sending it again, so it isn't sent twice. One posted three times
+When the network drops during a send, Quatrelle can't tell whether Teams got the message: before
+sending it again, it looks for it in the conversation. That avoids nearly every duplicate, but
+can't rule one out: Teams may list a message only after Quatrelle looked. One posted three times
 that Teams never confirms is marked Not sent.
 
 **Not sent.** A message that couldn't go stays in its conversation marked **Not sent**, with
 why: "Teams refused this message" (with Teams' code), "Too long for Teams", "Too many messages
 are waiting", "You're no longer in this conversation", or "Quatrelle couldn't confirm it was
 sent". **Retry** sends it again; **Delete** removes it. A message not sent is never sent again by
-itself. When its conversation isn't on the screen, a notice says "A message to Support team
-wasn't sent". Switching Teams off keeps the messages waiting: they go when it's on again.
+itself. One the outbox didn't take (too many waiting, a conversation left) is kept only while
+Quatrelle runs. When its conversation isn't on the screen, a notice says "A message to Support
+team wasn't sent". Switching Teams off keeps the messages waiting: they go when it's on again.
 
 ### Marked read
 
@@ -341,8 +345,8 @@ text: what looks like markup in a message is shown as written.
 
 - **Only messages sent to me alone or naming me** keeps the one-to-one chats and the messages
   that mention you.
-- The conversation on the screen isn't announced: it's marked read instead. It is announced when
-  the window isn't in front.
+- The conversation on the screen isn't announced: it's marked read instead (when it can be). It is
+  announced when the window isn't in front.
 - Hidden chats aren't announced, nor your own messages, edits, reactions, or what the first copy
   brings.
 - A conversation's next notification waits five seconds; what comes meanwhile goes as one ("3

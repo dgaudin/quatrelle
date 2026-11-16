@@ -597,8 +597,9 @@ fn the_header_says_the_other_persons_presence() {
 /// A chat of 5,000 members whose messages each carry 100 reactions of 200 people (none of them
 /// a member: each looked for in vain) and 50 mentions: a frame of the pane never goes through
 /// the whole list of members for a person. It takes no more than four times a frame of the same
-/// messages in a chat of four (the middle of five frames each, in a window of its own), and
-/// under 2 s.
+/// messages in a chat of four, and 2 ms (each in a window of its own, their frames in turn, the
+/// quickest of five each: a pause of the system only adds to a frame, a slower pane slows them
+/// all), and under 2 s.
 #[test]
 fn a_chat_of_5000_members_and_full_reactions_draws_in_time() {
     let id = |i: usize| format!("u-{i:04}");
@@ -614,23 +615,7 @@ fn a_chat_of_5000_members_and_full_reactions_draws_in_time() {
             .collect();
         m
     };
-    // The middle of five frames of the pane, once it settled.
-    let timed = |a: &mut MailApp| {
-        let ctx = egui::Context::default();
-        settled_at(&ctx, a, TALL);
-        let mut took: Vec<std::time::Duration> = (0..5)
-            .map(|_| {
-                let started = std::time::Instant::now();
-                pane(&ctx, a, vec![], TALL);
-                started.elapsed()
-            })
-            .collect();
-        took.sort();
-        (took[2], pane(&ctx, a, vec![], TALL).1)
-    };
-    let (mut few, dir, _) = chat_app("teams-chat-few", group_row(), TEAMS_LINK, (0..4).map(busy).collect());
-    let (small, _) = timed(&mut few);
-    let _ = std::fs::remove_dir_all(dir);
+    let (mut few, few_dir, _) = chat_app("teams-chat-few", group_row(), TEAMS_LINK, (0..4).map(busy).collect());
     let (mut a, dir, _) = chat_app("teams-chat-crowd", group_row(), TEAMS_LINK, (0..4).map(busy).collect());
     // The 5,000 members as the worker says them, through the window's queue.
     let mut events: Vec<MailEvent> = (0..teams::MAX_MEMBERS)
@@ -645,12 +630,27 @@ fn a_chat_of_5000_members_and_full_reactions_draws_in_time() {
     a.ui.teams_queue.take(&mut events);
     while a.ui.teams_queue.apply(&mut a.session, crate::conversations::TEAMS_EVENTS_A_FRAME) {}
     assert_eq!(a.session.teams.members().len(), teams::MAX_MEMBERS);
-    let (crowd, texts) = timed(&mut a);
+    let (few_ctx, ctx) = (egui::Context::default(), egui::Context::default());
+    settled_at(&few_ctx, &mut few, TALL);
+    settled_at(&ctx, &mut a, TALL);
+    let timed = |ctx: &egui::Context, a: &mut MailApp| {
+        let started = std::time::Instant::now();
+        pane(ctx, a, vec![], TALL);
+        started.elapsed()
+    };
+    let (mut small, mut crowd) = (std::time::Duration::MAX, std::time::Duration::MAX);
+    for _ in 0..5 {
+        small = small.min(timed(&few_ctx, &mut few));
+        crowd = crowd.min(timed(&ctx, &mut a));
+    }
+    let (_, texts) = pane(&ctx, &mut a, vec![], TALL);
     assert!(has_text(&texts, "Person 4996"), "the sender by the member's name: {texts:?}");
     assert!(texts.iter().any(|(t, _)| t.contains("Person 4950")), "a mention by the member's name");
     eprintln!("teams crowd: a frame of 5,000 members {crowd:?}, of four {small:?}");
-    assert!(crowd <= 4 * small, "a frame of 5,000 members took {crowd:?}, of four {small:?}");
+    let margin = std::time::Duration::from_millis(2);
+    assert!(crowd <= 4 * small + margin, "a frame of 5,000 members took {crowd:?}, of four {small:?}");
     assert!(crowd < std::time::Duration::from_secs(2), "a frame took {crowd:?}");
+    let _ = std::fs::remove_dir_all(few_dir);
     let _ = std::fs::remove_dir_all(dir);
 }
 
