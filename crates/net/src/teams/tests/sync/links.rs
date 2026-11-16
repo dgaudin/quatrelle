@@ -4,8 +4,8 @@
 //! offered: a chat opened, its kind, whether it's unreadable and its link as the window judges
 //! it; a listing over, the figures of each kind and the hosts, and how many conversations in how
 //! many pages, each said again only when it changes. Never an id, a name or a message's text.
-//! And the link built for a chat Graph gives none (decision 21): Teams' own form, only from a Teams
-//! thread's id and the organisation's GUID.
+//! And the link every chat opens by: Teams' own link to a conversation, built only from a Teams
+//! thread's id and the organisation's GUID; Graph's kept for a chat it can't be built for.
 
 use quatrelle_model::ical::is_teams_chat_link;
 use quatrelle_model::pim::teams::MAX_ID;
@@ -89,13 +89,18 @@ fn the_listings_count_is_said_when_it_changes() {
 /// An organisation's id no real one has.
 const GUID: &str = "00000000-0000-0000-0000-000000000000";
 
-/// The link built for a chat Graph gives none: Teams' own form, the id encoded as Graph's
+/// The link built for a chat: Teams' own link to a conversation, the id encoded as Graph's
 /// addresses encode a segment, the organisation's GUID after it; one the window opens. Only from
 /// an id one segment can carry that is a Teams thread's, and a GUID: nothing else is built upon.
 #[test]
 fn a_chats_link_is_built_only_from_a_teams_thread_and_a_guid() {
     let built = built_chat_link("19:quokka1@thread.v2", GUID);
-    assert_eq!(built.as_deref(), Some("https://teams.microsoft.com/l/chat/19%3Aquokka1%40thread.v2/0?tenantId=00000000-0000-0000-0000-000000000000"));
+    assert_eq!(
+        built.as_deref(),
+        Some(
+            "https://teams.microsoft.com/l/chat/19%3Aquokka1%40thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D&tenantId=00000000-0000-0000-0000-000000000000"
+        )
+    );
     for id in
         ["19:quokka1@thread.v2", "19:meeting_Mjdh@thread.v2", "19:a_b@unq.gbl.spaces", "19:a@thread.skype", "19:a@thread.tacv2", "19:a@THREAD.V2"]
     {
@@ -137,17 +142,24 @@ fn a_chats_link_is_built_only_from_a_teams_thread_and_a_guid() {
     }
 }
 
-/// A chat Graph won't serve and gives no link: opened, its link goes to the engine built, and the
-/// log says so; one Graph gives a link keeps Graph's. Signed in to an organisation named by its
-/// GUID (the other tests' isn't one: they get no link built).
+/// Every chat opens by Teams' own link to it, built, whatever Graph gives: the unreadable one Graph
+/// gives no link for, and a readable one Graph gives its `/0` link for (which the new Teams reads
+/// as a message 0). A chat whose id has no Teams thread's shape keeps Graph's link. The log says
+/// which. Signed in to an organisation named by its GUID (the other tests' isn't one: they get no
+/// link built).
 #[test]
-fn a_chat_graph_gives_no_link_gets_one_built() {
+fn every_chat_opens_by_its_conversation_link() {
     const UNREADABLE: &str = "19:quokka1@thread.v2";
     const LINKED: &str = "19:quokka2@thread.v2";
+    // Passes the worker's id check, but isn't a Teams thread's: nothing is built upon it.
+    const ODD: &str = "19:quokka3@chat.example";
     let mut unknown = FakeChat::new(UNREADABLE, "unknownFutureValue", None, vec![me(), ana()]);
     unknown.link = Some(None);
     let linked = chat(LINKED, T0, 2);
-    let mut teams = FakeTeams { chats: vec![unknown, linked], ..FakeTeams::new(me(), GUID) };
+    // A meeting's: no other test opens a readable one, so its log line is this test's.
+    let mut odd = FakeChat::new(ODD, "meeting", Some("Quokka review"), vec![me(), ana()]);
+    odd.messages.push(FakeMessage::new(&(T0 + MINUTE).to_string(), Some("u-ana"), &rfc3339(T0 + MINUTE), "<p>Quokka minutes</p>"));
+    let mut teams = FakeTeams { chats: vec![unknown, linked, odd], ..FakeTeams::new(me(), GUID) };
     teams.forbid_reads.push(UNREADABLE.into());
     let tap = crate::fakes::logs::tap(|l| l.starts_with("teams: a conversation opened: "));
     let mut r = run_as(teams, GUID, |_| {});
@@ -168,10 +180,21 @@ fn a_chat_graph_gives_no_link_gets_one_built() {
         assert_eq!(said.len(), 1, "{chat}: {said:?}");
         said.into_iter().next().flatten()
     };
-    let built = format!("https://teams.microsoft.com/l/chat/19%3Aquokka1%40thread.v2/0?tenantId={GUID}");
-    assert_eq!(link(&mut r, UNREADABLE).as_deref(), Some(built.as_str()));
+    let built =
+        |id: &str| format!("https://teams.microsoft.com/l/chat/{id}/conversations?context=%7B%22contextType%22%3A%22chat%22%7D&tenantId={GUID}");
+    // (a) Graph gives no link: built.
+    assert_eq!(link(&mut r, UNREADABLE).as_deref(), Some(built("19%3Aquokka1%40thread.v2").as_str()));
+    // (b) Graph gives its `/0` link: built all the same, never Graph's.
     let graphs = format!("https://teams.microsoft.com/l/chat/{LINKED}/0?tenantId={GUID}");
-    assert_eq!(link(&mut r, LINKED).as_deref(), Some(graphs.as_str()), "Graph's own link is kept");
+    let sent = link(&mut r, LINKED);
+    assert_eq!(sent.as_deref(), Some(built("19%3Aquokka2%40thread.v2").as_str()));
+    assert_ne!(sent.as_deref(), Some(graphs.as_str()), "Graph's /0 link isn't sent");
+    // (c) No Teams thread's shape: Graph's link is kept.
+    let odds = format!("https://teams.microsoft.com/l/chat/{ODD}/0?tenantId={GUID}");
+    assert_eq!(link(&mut r, ODD).as_deref(), Some(odds.as_str()), "Graph's own link is kept");
     let lines = tap.lines();
-    assert!(lines.iter().any(|l| l == "teams: a conversation opened: unknown, unreadable; its link: built"), "{lines:?}");
+    let said = |what: &str| lines.iter().any(|l| *l == format!("teams: a conversation opened: {what}"));
+    assert!(said("unknown, unreadable; its link: built"), "{lines:?}");
+    assert!(said("oneOnOne; its link: built"), "{lines:?}");
+    assert!(said("meeting; its link: ok"), "{lines:?}");
 }

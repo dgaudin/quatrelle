@@ -233,10 +233,10 @@ fn on_screen(w: &mut Worker, chat: Option<String>) -> Option<String> {
     let chat = w.open.clone()?;
     forgive(w, Work::Members, &chat);
     forgive(w, Work::Messages, &chat);
-    // Its link as the window will judge it (or built, Graph giving none).
+    // Its link: built whenever it can be, else Graph's as the window will judge it.
     let r = w.copy.as_ref().and_then(|c| c.chat(&chat)).map(|r| r.chat);
     let url = r.as_ref().and_then(|c| c.web_url.as_deref());
-    let built = url.is_none() && links::built_chat_link(&chat, &w.settings.tenant_id).is_some();
+    let built = links::built_chat_link(&chat, &w.settings.tenant_id).is_some();
     log::info!("{}", links::opened(r.as_ref().map(|c| &c.kind), r.as_ref().is_some_and(|c| c.unreadable.is_some()), url, built));
     Some(chat)
 }

@@ -340,7 +340,7 @@ fn every_header_has_open_in_teams_when_its_link_is_one() {
     assert!(!has_text(&texts, "Open in Teams"), "{texts:?}");
     let _ = std::fs::remove_dir_all(dir);
     // A chat Graph won't serve, its link built by the worker.
-    let built = "https://teams.microsoft.com/l/chat/19%3Apane%40thread.v2/0?tenantId=11111111-2222-3333-4444-000000000001";
+    let built = "https://teams.microsoft.com/l/chat/19%3Apane%40thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D&tenantId=11111111-2222-3333-4444-000000000001";
     let unknown = ChatRow { kind: ChatKind::Other { name: "unknownFutureValue".into() }, unreadable: true, ..group_row() };
     let (mut a, dir, _) = chat_app("teams-header-built", unknown, built, vec![]);
     settled_at(&ctx, &mut a, size);

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! The chats' links (the window's "open in Teams"): the one built for a chat Graph gives none
-//! ([`built_chat_link`]), and what the log says of them, so that it tells why a chat's link isn't
-//! offered: when a chat is opened, its kind, whether it can't be read, and its link as the window
-//! judges it ([`is_teams_chat_link`]), or that it was built; after a listing, how many chats of
-//! each kind, how many with a link, how many the window takes, and the hosts the links are on,
-//! said again only when that changes. Never an id, a name or a message's text: kinds, counts,
-//! hosts, and a path's first segment when it's a short plain word.
+//! The chats' links (the window's "open in Teams"): the one built for every chat it can be built
+//! for, in Teams' own form for a conversation ([`built_chat_link`]), Graph's `webUrl` kept only
+//! for a chat it can't; and what the log says of them, so that it tells why a chat's link isn't
+//! offered: when a chat is opened, its kind, whether it can't be read, and that its link was
+//! built, or Graph's as the window judges it ([`is_teams_chat_link`]); after a listing, how many
+//! chats of each kind, how many Graph gives a link, how many of those the window takes, and the
+//! hosts they are on, said again only when that changes. Never an id, a name or a message's
+//! text: kinds, counts, hosts, and a path's first segment when it's a short plain word.
 //!
 //! What is hostile here: a chat's id (Graph's, or a copy's on disk) and the organisation's id the
 //! sign-in gave. A link is built only from an id one segment of an address can carry that has a
@@ -31,12 +32,19 @@ const SEGMENT_SAID: usize = 16;
 /// How Teams' threads end: a group's or a meeting's, a one-to-one chat's, and older forms.
 const THREADS: [&str; 4] = ["@thread.v2", "@unq.gbl.spaces", "@thread.skype", "@thread.tacv2"];
 
-/// A chat's link in the form Graph gives the others (`https://teams.microsoft.com/l/chat/<chat
-/// id>/0?tenantId=<organisation>`), for a chat Graph gives none (decision 21: the chats Graph
-/// won't serve come without one). The id is encoded as a segment of Graph's addresses is
-/// ([`seg`]). Only for an id one segment can carry ([`own_segment`]: no `/`, `\`, `?` or `#`)
-/// that is a Teams thread's (`19:`, something, then one of [`THREADS`]), and an organisation
-/// named by its GUID; and only a link the window would open ([`is_teams_chat_link`]).
+/// The `context` of Teams' own link to a chat: `{"contextType":"chat"}`, percent-encoded.
+const CHAT_CONTEXT: &str = "%7B%22contextType%22%3A%22chat%22%7D";
+
+/// A chat's link in Teams' documented form for a conversation
+/// (`https://teams.microsoft.com/l/chat/<chat id>/conversations?context={"contextType":"chat"}&tenantId=<organisation>`,
+/// the context percent-encoded), sent for every chat it can be built for, whatever Graph gives:
+/// Graph's `webUrl` (`…/l/chat/<chat id>/0?tenantId=…`) is a link to a message, and the new Teams
+/// reads it as one, message 0, which no chat has; and the chats Graph won't serve come without
+/// one (decision 21). The organisation's id is kept, so that a guest's Teams picks the chat's.
+/// The id is encoded as a segment of Graph's addresses is ([`seg`]). Only for an id one segment
+/// can carry ([`own_segment`]: no `/`, `\`, `?` or `#`) that is a Teams thread's (`19:`,
+/// something, then one of [`THREADS`]), and an organisation named by its GUID; and only a link
+/// the window would open ([`is_teams_chat_link`]). Else none, and Graph's is kept.
 pub(crate) fn built_chat_link(chat: &str, tenant: &str) -> Option<String> {
     let ends_a_thread = |rest: &str| {
         THREADS.iter().any(|end| {
@@ -48,7 +56,7 @@ pub(crate) fn built_chat_link(chat: &str, tenant: &str) -> Option<String> {
     if !(thread && own_segment(chat) && is_guid(tenant)) {
         return None;
     }
-    let url = format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={tenant}", seg(chat));
+    let url = format!("https://teams.microsoft.com/l/chat/{}/conversations?context={CHAT_CONTEXT}&tenantId={tenant}", seg(chat));
     is_teams_chat_link(&url).then_some(url)
 }
 
@@ -97,10 +105,11 @@ fn host_and_first(url: &str) -> (String, String) {
 }
 
 /// The line said when a chat is opened: its kind (none when the copy hasn't it), whether it's
-/// unreadable, and its link (`built`: Graph gave none, and one was built).
+/// unreadable, and its link: `built` when one was built ([`built_chat_link`]), else Graph's as
+/// the window judges it.
 pub(super) fn opened(kind: Option<&ChatKind>, unreadable: bool, url: Option<&str>, built: bool) -> String {
     let link = match judged(url) {
-        Link::Absent if built => "built".to_string(),
+        _ if built => "built".to_string(),
         Link::Absent => "absent".to_string(),
         Link::Accepted { .. } => "ok".to_string(),
         Link::Refused { host, first } => format!("refused (host {host}, path /{first})"),
@@ -118,7 +127,8 @@ pub(crate) struct Links {
 }
 
 impl Links {
-    /// A chat listed, with its link as the window will have it. At most [`MAX_CHATS`].
+    /// A chat listed, with the link Graph gives it, judged as the window would (what Graph gives,
+    /// not the link built in its place). At most [`MAX_CHATS`].
     pub(super) fn note(&mut self, key: u64, kind: &ChatKind, url: Option<&str>) {
         if self.chats.len() < MAX_CHATS || self.chats.contains_key(&key) {
             self.chats.insert(key, (kind_name(kind), judged(url)));

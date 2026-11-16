@@ -8,8 +8,8 @@
 //! isn't proven of the organisation, and its last line's sender judged by
 //! [`sender_internal`] (a sender the members don't have was looked for among them before).
 //! The open chat's members and link go too, for its header, its mentions and "Open in Teams":
-//! when it's opened, and again when they change. A chat Graph gives no link gets one built in the
-//! form Graph gives the others ([`built_chat_link`]).
+//! when it's opened, and again when they change. The link is Teams' own to the conversation, built
+//! ([`built_chat_link`]); Graph's `webUrl` only for a chat it can't be built for.
 
 use super::links::built_chat_link;
 use super::reads::theirs;
@@ -62,13 +62,13 @@ pub(crate) fn flush(w: &mut Worker) {
 }
 
 /// The open chat's members and link, from the copy, in events of at most [`EVENT_ITEMS`]
-/// members, unless the engine was last sent them as they are. Graph giving no link, it is built
-/// (decision 21), else none.
+/// members, unless the engine was last sent them as they are. The link is built when it can be,
+/// whatever Graph gives; else Graph's, if any.
 pub(crate) fn say_members(w: &mut Worker) {
     let Some(chat) = w.open.clone() else { return };
     let Some(r) = w.copy.as_ref().and_then(|c| c.chat(&chat)) else { return };
     let members = &r.chat.members;
-    let web_url = r.chat.web_url.clone().or_else(|| built_chat_link(&chat, &w.settings.tenant_id));
+    let web_url = built_chat_link(&chat, &w.settings.tenant_id).or_else(|| r.chat.web_url.clone());
     let sum = members_hash(members, web_url.as_deref());
     if w.sync.members_said == Some(sum) {
         return;
