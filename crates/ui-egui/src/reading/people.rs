@@ -25,11 +25,22 @@ pub(super) fn known_contact(ctx: &egui::Context, s: &Session, email: &str) -> Op
     card
 }
 
-/// Someone's name above a message, as a link: lit and underlined under the pointer.
+/// Someone's name above a message, as a link: lit and underlined under the pointer, under its
+/// words on each line it is drawn on. A name cut by the end of a line starts after the names
+/// before it, and its rectangle spans the lines' whole width: underlined along that, it was
+/// underlined under the whole next line.
 pub(super) fn person_link(ui: &mut Ui, t: &Tokens, text: RichText) -> egui::Response {
-    let r = ui.add(egui::Label::new(text).sense(Sense::click()).selectable(false));
-    if r.hovered() {
-        ui.painter().line_segment([r.rect.left_bottom(), r.rect.right_bottom()], egui::Stroke::new(1.0, t.dim));
+    let (pos, galley, r) = egui::Label::new(text).sense(Sense::click()).selectable(false).layout_in_ui(ui);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, ui.is_enabled(), galley.text()));
+    if ui.is_rect_visible(r.rect) {
+        let colour = ui.style().interact(&r).text_color();
+        if r.hovered() {
+            for row in galley.rows.iter().filter(|row| !row.glyphs.is_empty()) {
+                let line = row.rect_without_leading_space().translate(pos.to_vec2());
+                ui.painter().line_segment([line.left_bottom(), line.right_bottom()], egui::Stroke::new(1.0, t.dim));
+            }
+        }
+        ui.painter().galley(pos, galley, colour);
     }
     r.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
