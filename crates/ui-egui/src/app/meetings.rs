@@ -103,17 +103,16 @@ impl MailApp {
                     Some((browser, e))
                 }
             };
-            let line = match (self.services.open_url(url), &failed) {
-                (Ok(()), None) => page_line(&page, &PageOutcome::DefaultBrowser),
-                (Ok(()), Some((browser, e))) => page_line(&page, &PageOutcome::InsteadOf { browser, error: e }),
+            match (self.services.open_url(url), &failed) {
+                (Ok(()), None) => log::info!("{}", page_line(&page, &PageOutcome::DefaultBrowser)),
+                (Ok(()), Some((browser, e))) => log::warn!("{}", page_line(&page, &PageOutcome::InsteadOf { browser, error: e })),
                 (Err(e), _) => {
                     self.session.notice(tf!("The link couldn't be opened: {error}", error = e), true);
                     // Both tries failed: both said.
                     let error = failed.map_or_else(|| e.clone(), |(browser, first)| format!("{browser}: {first}; the default browser: {e}"));
-                    page_line(&page, &PageOutcome::Failed { error: &error })
+                    log::warn!("{}", page_line(&page, &PageOutcome::Failed { error: &error }));
                 }
-            };
-            log::info!("{line}");
+            }
         }
     }
 
@@ -172,7 +171,9 @@ pub(crate) enum PageOutcome<'a> {
 /// The line a Teams page leaves in the log: what it is, where it went, and its link's shape
 /// ([`link_shape`]): never the chat's id, the organisation's, a query's value or a profile's
 /// folder. A browser's name and a launcher's error are kept to one line of at most 200
-/// characters.
+/// characters. A launcher's error is free text from the system and may name the page (macOS'
+/// `open` prints its whole command line, the address with it): one that holds `://`, the
+/// page's address or a `"` is withheld.
 pub(crate) fn page_line(page: &TeamsPage, outcome: &PageOutcome) -> String {
     let (what, url) = match page {
         TeamsPage::SignIn(url) => ("the sign-in page", url),
@@ -180,6 +181,10 @@ pub(crate) fn page_line(page: &TeamsPage, outcome: &PageOutcome) -> String {
     };
     let shape = link_shape(url);
     let plain = |s: &str| s.chars().filter(|c| !c.is_control()).take(200).collect::<String>();
+    let told = |e: &str| {
+        let names_it = e.contains("://") || e.contains('"') || (!url.is_empty() && e.contains(url.as_str()));
+        if names_it { "(withheld: it names the address)".to_string() } else { plain(e) }
+    };
     match outcome {
         PageOutcome::AppWindow { browser, profile } => {
             let profile = match profile {
@@ -191,9 +196,9 @@ pub(crate) fn page_line(page: &TeamsPage, outcome: &PageOutcome) -> String {
         }
         PageOutcome::DefaultBrowser => format!("teams: {what} opened in the default browser: {shape}"),
         PageOutcome::InsteadOf { browser, error } => {
-            format!("teams: {what} couldn't be opened in {} ({}); the default browser instead: {shape}", plain(browser), plain(error))
+            format!("teams: {what} couldn't be opened in {} ({}); the default browser instead: {shape}", plain(browser), told(error))
         }
-        PageOutcome::Failed { error } => format!("teams: {what} couldn't be opened: {}: {shape}", plain(error)),
+        PageOutcome::Failed { error } => format!("teams: {what} couldn't be opened: {}: {shape}", told(error)),
         PageOutcome::Refused => format!("teams: a page that isn't Teams' own was not opened ({what}): {shape}"),
     }
 }

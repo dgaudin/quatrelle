@@ -251,7 +251,10 @@ const SHAPE_PARTS: usize = 8;
 /// short plain word (`[A-Za-z0-9_-]`, at most 16 characters; else `<id>`), the query's keys
 /// alike and never a value, no fragment (`teams.microsoft.com/l/chat/<id>/conversations?context&tenantId`).
 /// `(not a web address)` unless `http` or `https`; `(not a plain host)` for a host a browser
-/// could take elsewhere ([`web_host_and_path`]). Never an id, a name or a value.
+/// could take elsewhere ([`web_host_and_path`]). What it keeps is only short plain words, never a
+/// value: a short id that is one (an all-digit one, an organisation named in one word) would show,
+/// so it's for the links Quatrelle itself opens (a Teams chat's, Microsoft's page to sign in on),
+/// whose ids are longer or punctuated.
 pub fn link_shape(url: &str) -> String {
     let web = ["https://", "http://"].iter().any(|s| url.get(..s.len()).is_some_and(|h| h.eq_ignore_ascii_case(s)));
     if !web {

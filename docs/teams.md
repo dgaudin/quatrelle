@@ -271,11 +271,11 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   the chat. Reactions are shown, read only.
 - **Open in Teams**, beside every conversation's name, opens that conversation in Teams itself, in
   the browser window Teams meetings open in (else the default browser); the chats Graph won't
-  serve and the content Quatrelle can't show (cards) offer it too. It shows when Teams gives the
-  conversation's link. For a chat it gives none for (most of those it won't serve), Quatrelle
-  makes one in the form Teams gives the others, from the chat's id and your organization's; should
-  Teams not know it, Teams opens at its home. Only links to Teams chats open this way, never a
-  link from a message.
+  serve and the content Quatrelle can't show (cards) offer it too. Quatrelle makes the
+  conversation's link itself, in Teams' own form for a conversation, from the chat's id and your
+  organization's; for a chat whose id doesn't have the shape of a Teams chat, it uses the link
+  Microsoft gives, and the button shows only when there is one. Should Teams not know the chat,
+  Teams opens at its home. Only links to Teams chats open this way, never a link from a message.
 - **Pictures** kept with a message are fetched when the message is first drawn, a few per message,
   and shown in place; a click shows one big. A picture from elsewhere on the web is never fetched
   by itself: its place says **Show picture**, and only that click loads it (an `https` address, a

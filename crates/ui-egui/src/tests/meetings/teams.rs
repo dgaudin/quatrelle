@@ -150,3 +150,34 @@ fn each_page_leaves_a_line_with_no_id_in_it() {
     assert_eq!(chosen, format!("teams: a chat opened in Google Chrome, in another profile chosen: {shape}"));
     assert!(!chosen.contains("Profile 3"));
 }
+
+/// A launcher's error that names the page (macOS' `open` prints its whole command line) is never
+/// written in the log: neither the chat's id, the organisation's, nor a query's value. An ordinary
+/// error is written as it is.
+#[test]
+fn a_launchers_error_naming_the_page_is_withheld() {
+    use crate::app::{PageOutcome, page_line};
+    use quatrelle_engine::TeamsPage;
+    let guid = "00000000-0000-0000-0000-000000000000";
+    let chat = format!(
+        "https://teams.microsoft.com/l/chat/19%3Aquokka7%40thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D&tenantId={guid}"
+    );
+    let sign_in = format!("https://login.microsoftonline.com/{guid}/oauth2/v2.0/authorize?client_id=abcd1234-wombat&state=x");
+    for page in [TeamsPage::Chat(chat.clone()), TeamsPage::SignIn(sign_in.clone())] {
+        let url = if matches!(page, TeamsPage::Chat(_)) { &chat } else { &sign_in };
+        let error = format!("Launcher \"/usr/bin/open\" \"--\" \"{url}\" failed with ExitStatus(unix_wait_status(256))");
+        for line in
+            [page_line(&page, &PageOutcome::Failed { error: &error }), page_line(&page, &PageOutcome::InsteadOf { browser: "Safari", error: &error })]
+        {
+            for secret in ["quokka7", "19:", "thread", "0000", "abcd1234", "wombat", "%", "="] {
+                assert!(!line.contains(secret), "{secret} in {line}");
+            }
+            assert!(line.contains("(withheld: it names the address)"), "{line}");
+        }
+    }
+    let ordinary = page_line(&TeamsPage::Chat(chat), &PageOutcome::Failed { error: "No such file or directory (os error 2)" });
+    assert_eq!(
+        ordinary,
+        "teams: a chat couldn't be opened: No such file or directory (os error 2): teams.microsoft.com/l/chat/<id>/conversations?context&tenantId"
+    );
+}

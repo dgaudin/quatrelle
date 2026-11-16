@@ -30,5 +30,7 @@ fuzz_target!(|data: &[u8]| {
     let _ = ical::duration(&text);
     let _ = ical::unescape(&text);
     let _ = ical::split_text_list(&text);
+    // A link's shape for the log (the Teams pages the window opens).
+    let _ = ical::link_shape(&text);
     let _ = dav::multistatus(&text);
 });
