@@ -278,3 +278,32 @@ fn an_edit_needs_its_content_type_and_fits_the_limit() {
     let by_text = c.edit_text(CHAT, OWN_MSG, "ok");
     assert!(by_text.is_ok(), "{by_text:?}");
 }
+
+/// Seeds `ANA_MSG` of a fresh fake with the reaction `kind` of ME.
+fn seeded(kind: &str) -> Server {
+    let mut t = teams_with(vec![chat(CHAT, T0, 2)]);
+    t.chat_mut(CHAT).unwrap().messages[0].reactions.push((kind.into(), ME.into()));
+    serve_teams(t)
+}
+
+#[test]
+fn a_reaction_kept_by_name_is_taken_back_by_its_emoji() {
+    let server = seeded("like");
+    client(&server).unset_reaction(CHAT, ANA_MSG, "\u{1F44D}").unwrap();
+    assert!(message(&server, ANA_MSG).reactions.is_empty());
+}
+
+#[test]
+fn a_reaction_set_by_emoji_is_the_one_kept_by_name() {
+    let server = seeded("like");
+    client(&server).set_reaction(CHAT, ANA_MSG, "\u{1F44D}").unwrap();
+    let mine: Vec<_> = message(&server, ANA_MSG).reactions.into_iter().filter(|(_, u)| u == ME).collect();
+    assert_eq!(mine.len(), 1, "{mine:?}");
+}
+
+#[test]
+fn a_heart_with_or_without_its_selector_is_one_kind() {
+    let server = seeded("\u{2764}");
+    client(&server).unset_reaction(CHAT, ANA_MSG, "\u{2764}\u{FE0F}").unwrap();
+    assert!(message(&server, ANA_MSG).reactions.is_empty());
+}
