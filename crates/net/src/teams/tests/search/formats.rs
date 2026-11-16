@@ -167,35 +167,45 @@ fn a_copy_rolled_back_and_forward_keeps_no_deleted_words() {
     assert!(copy.found("lunch").partial);
     assert!(store.snapshot(|p| p.starts_with(&format!("{TEAMS_ACCOUNT}/index/{ha}/"))).is_empty());
 
-    // The same where A's tranches can't be removed: never read, emptied by A's next write.
-    let (copy, store) = failing_copy();
-    rolled_back(copy, &store);
-    store.fail(None, Some(&format!("index/{ha}")));
-    let copy = open(&store);
-    assert_eq!(hits(&copy, "secret"), NONE);
-    assert!(index_files(&store, A).unwrap().contains("secret"), "the folder stayed");
-    copy.upsert(A, &[msg(A, 4, "dinner")]).unwrap();
-    assert!(!index_files(&store, A).unwrap().contains("secret"));
-    drop(copy);
-    store.fail(None, None);
-    assert_eq!(hits(&open(&store), "secret"), NONE);
+    // The same where A's tranches can't be removed, or their removal answers `Ok` but leaves them
+    // (a data file that couldn't look).
+    for quietly in [false, true] {
+        let fault = |store: &Store, rule: Option<&str>| if quietly { store.fail_quietly(rule) } else { store.fail(None, rule) };
+        // Never read, and emptied by A's next write, even those past the numbers it takes:
+        // message 0 first, the secret is in 1.json.
+        let (copy, store) = failing_copy();
+        copy.index.borrow_mut().tranche_cap = Some(1);
+        copy.upsert(A, &[msg(A, 0, "plan zero")]).unwrap();
+        rolled_back(copy, &store);
+        fault(&store, Some(&format!("index/{ha}")));
+        let copy = open(&store);
+        assert_eq!(hits(&copy, "secret"), NONE);
+        assert!(index_files(&store, A).unwrap().contains("secret"), "the folder stayed");
+        copy.upsert(A, &[msg(A, 4, "dinner")]).unwrap();
+        assert!(!index_files(&store, A).unwrap().contains("secret"), "quietly: {quietly}");
+        drop(copy);
+        fault(&store, None);
+        let copy = open(&store);
+        assert_eq!(hits(&copy, "secret"), NONE, "quietly: {quietly}");
+        assert_eq!(hits(&copy, "dinner"), one(A, &id(4)));
 
-    // A chat of the old format leaving the index whole while its tranches can't be removed keeps
-    // its head: read again, its tranches go once they can.
-    let (copy, store) = failing_copy();
-    rolled_back(copy, &store);
-    store.fail(None, Some(&format!("index/{ha}")));
-    let head = |c: &str| store.account_file(TEAMS_ACCOUNT, &format!("index/{}.json", chat_hash(c))).unwrap().map_or(0, |b| b.len() as u64);
-    let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
-    // Room for B's words and half of A's: A, the oldest, leaves.
-    copy.index.borrow_mut().cap = Some(head(B) + head(A) / 2);
-    while copy.index_step() {}
-    assert!(copy.found("budget").hits.contains(&(B.to_string(), id(5))));
-    assert_eq!(copy.found("lunch").hits, NONE, "A left the index");
-    assert!(head(A) > 0, "A's head stays while its tranches do");
-    drop(copy);
-    store.fail(None, None);
-    assert_eq!(hits(&open(&store), "secret"), NONE);
+        // A chat of the old format leaving the index whole while its tranches stay keeps its
+        // head: read again, its tranches go once they can.
+        let (copy, store) = failing_copy();
+        rolled_back(copy, &store);
+        fault(&store, Some(&format!("index/{ha}")));
+        let head = |c: &str| store.account_file(TEAMS_ACCOUNT, &format!("index/{}.json", chat_hash(c))).unwrap().map_or(0, |b| b.len() as u64);
+        let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
+        // Room for B's words and half of A's: A, the oldest, leaves.
+        copy.index.borrow_mut().cap = Some(head(B) + head(A) / 2);
+        while copy.index_step() {}
+        assert!(copy.found("budget").hits.contains(&(B.to_string(), id(5))));
+        assert_eq!(copy.found("lunch").hits, NONE, "A left the index");
+        assert!(head(A) > 0, "A's head stays while its tranches do (quietly: {quietly})");
+        drop(copy);
+        fault(&store, None);
+        assert_eq!(hits(&open(&store), "secret"), NONE);
+    }
 }
 
 /// A store that can't list a chat's tranches: read back, the chat isn't searched (`partial`);

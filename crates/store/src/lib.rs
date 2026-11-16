@@ -334,7 +334,12 @@ impl Store {
     #[doc(hidden)]
     pub fn failing() -> Store {
         let root = PathBuf::from("memory");
-        let faults = files::Faults { files: Files::Memory(Arc::default(), Arc::default()), reads: Mutex::default(), writes: Mutex::default() };
+        let faults = files::Faults {
+            files: Files::Memory(Arc::default(), Arc::default()),
+            reads: Mutex::default(),
+            writes: Mutex::default(),
+            quiet: Mutex::default(),
+        };
         Store {
             files: Routed::new(&root, Files::Failing(Arc::new(faults))),
             root,
@@ -354,6 +359,16 @@ impl Store {
         if let Files::Failing(f) = &self.files.main {
             *f.reads.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = reads.map(str::to_string);
             *f.writes.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = writes.map(str::to_string);
+        }
+    }
+
+    /// From now on, a [`Store::failing`] cache answers `Ok` to a removal of the files or folders
+    /// whose path ends with `removals`, and removes nothing: what a data file does when it can't
+    /// look whether they're there. `None` lets them go again. Other caches ignore it.
+    #[doc(hidden)]
+    pub fn fail_quietly(&self, removals: Option<&str>) {
+        if let Files::Failing(f) = &self.files.main {
+            *f.quiet.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = removals.map(str::to_string);
         }
     }
 

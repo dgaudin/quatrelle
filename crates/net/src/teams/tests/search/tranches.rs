@@ -454,33 +454,38 @@ fn the_tranches_just_written_are_spared() {
     assert!(copy.found("plan").partial);
 }
 
-/// Review Focus 4: an evicted tranche whose removal failed becomes an orphan, emptied at its
-/// chat's next write: no word of a message deleted since comes back.
+/// Review Focus 4: an evicted tranche whose removal failed, or answered `Ok` but left the file (a
+/// data file that couldn't look), becomes an orphan, emptied at its chat's next write: no word of
+/// a message deleted since comes back.
 #[test]
 fn a_tranche_whose_removal_failed_keeps_no_deleted_words() {
-    let (copy, store) = failing_copy();
-    copy.index.borrow_mut().tranche_cap = Some(8);
-    let h = chat_hash(A);
-    copy.upsert(A, &(0..16).map(|i| msg(A, i, &format!("plan secret{i}"))).collect::<Vec<_>>()).unwrap();
-    drop(copy);
-    let file = |n: u32| store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/{n}.json")).unwrap();
-    // Reopened without loading: room for tranche 1 and a half.
-    let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
-    copy.index.borrow_mut().cap = Some(file(1).unwrap().len() as u64 * 3 / 2);
-    store.fail(None, Some(&format!("index/{h}/0.json")));
-    while copy.index_step() {}
-    assert!(file(0).is_some(), "its removal failed");
-    store.fail(None, None);
-    let kept = index_files(&store, A).unwrap();
-    assert!(kept.contains("secret3") && kept.contains(&format!("\"{}\"", id(3))));
-    copy.upsert(A, &[deleted(msg(A, 3, ""), 99)]).unwrap();
-    let kept = index_files(&store, A).unwrap_or_default();
-    assert!(!kept.contains("secret3") && !kept.contains(&format!("\"{}\"", id(3))), "{kept}");
-    assert!(file(0).is_none_or(|b| ids_in(&String::from_utf8(b).unwrap()).is_empty()));
-    drop(copy);
-    let copy = open(&store);
-    assert_eq!(hits(&copy, "secret3"), NONE);
-    assert!(copy.found("secret3").partial);
+    for quietly in [false, true] {
+        let (copy, store) = failing_copy();
+        let fault = |rule: Option<&str>| if quietly { store.fail_quietly(rule) } else { store.fail(None, rule) };
+        copy.index.borrow_mut().tranche_cap = Some(8);
+        let h = chat_hash(A);
+        copy.upsert(A, &(0..16).map(|i| msg(A, i, &format!("plan secret{i}"))).collect::<Vec<_>>()).unwrap();
+        drop(copy);
+        let file = |n: u32| store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/{n}.json")).unwrap();
+        // Reopened without loading: room for tranche 1 and a half.
+        let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
+        copy.index.borrow_mut().cap = Some(file(1).unwrap().len() as u64 * 3 / 2);
+        fault(Some(&format!("index/{h}/0.json")));
+        while copy.index_step() {}
+        assert!(file(0).is_some(), "its removal failed (quietly: {quietly})");
+        fault(None);
+        let kept = index_files(&store, A).unwrap();
+        assert!(kept.contains("secret3") && kept.contains(&format!("\"{}\"", id(3))));
+        copy.upsert(A, &[deleted(msg(A, 3, ""), 99)]).unwrap();
+        let kept = index_files(&store, A).unwrap_or_default();
+        assert!(!kept.contains("secret3") && !kept.contains(&format!("\"{}\"", id(3))), "quietly: {quietly}\n{kept}");
+        assert!(file(0).is_none_or(|b| ids_in(&String::from_utf8(b).unwrap()).is_empty()));
+        assert_eq!(files_holding(&store, &id(3)), 0);
+        drop(copy);
+        let copy = open(&store);
+        assert_eq!(hits(&copy, "secret3"), NONE, "quietly: {quietly}");
+        assert!(copy.found("secret3").partial);
+    }
 }
 
 /// Review Focus 2: a chat's oldest tranche evicted, then its messages edited and deleted: the

@@ -43,6 +43,13 @@ pub(super) fn fitted(d: Draft, side: Side, cap: usize) -> Result<Vec<Draft>> {
     Ok(out)
 }
 
+/// What a removal from the index takes away: one file, or a folder with everything under it.
+#[derive(Clone, Copy)]
+pub(super) enum Removal {
+    File,
+    Folder,
+}
+
 impl Copy {
     /// The words of messages [`Copy::upsert`] changed put in their chat's tranches (an edit's
     /// replacing the old ones, a deletion's taken out), the files to be written with the pages:
@@ -122,15 +129,13 @@ impl Copy {
                     total = total.saturating_sub(s.bytes);
                     resident = resident.saturating_sub(s.resident);
                 }
-                if self.store.remove_account_files(TEAMS_ACCOUNT, &tranches_key(&hash)).is_err()
-                    || self.store.remove_account_files(TEAMS_ACCOUNT, &segment_key(&hash)).is_err()
-                {
+                if !self.removed(&tranches_key(&hash), Removal::Folder) || !self.removed(&segment_key(&hash), Removal::File) {
                     log::warn!("Teams search: an old chat's words couldn't leave the file");
                 }
             } else if let Some(seg) = ix.take_tranche(&hash, key) {
                 total = total.saturating_sub(seg.bytes);
                 resident = resident.saturating_sub(seg.resident);
-                if self.store.remove_account_files(TEAMS_ACCOUNT, &tranche_key(&hash, key)).is_err() {
+                if !self.removed(&tranche_key(&hash, key), Removal::File) {
                     // An orphan of its chat: emptied at the chat's next write.
                     log::warn!("Teams search: an old tranche couldn't leave the file");
                     ix.segments.entry(hash).or_insert_with(|| Tranches::empty(&seg.chat)).orphans.push(key);
@@ -139,6 +144,23 @@ impl Copy {
         }
         log::info!("Teams search: the oldest tranches left the index ({total} bytes kept of {cap}, about {resident} in memory)");
         self.mark_partial(ix);
+    }
+
+    /// A file or a folder of the index removed, then seen gone: the file not there any more, the
+    /// folder listing no file. The store answers `Ok` to a removal it couldn't look at (a data
+    /// file that can't be read), so its `Ok` alone isn't taken for done: `false` is a failure.
+    pub(super) fn removed(&self, key: &str, what: Removal) -> bool {
+        if self.store.remove_account_files(TEAMS_ACCOUNT, key).is_err() {
+            return false;
+        }
+        match what {
+            Removal::File => matches!(self.store.account_file(TEAMS_ACCOUNT, key), Ok(None)),
+            Removal::Folder => match self.store.account_files(TEAMS_ACCOUNT, key) {
+                Ok(names) => names.is_empty(),
+                Err(StoreError::Io { source, .. }) => source.kind() == std::io::ErrorKind::NotFound,
+                Err(_) => false,
+            },
+        }
     }
 }
 

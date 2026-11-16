@@ -20,15 +20,24 @@ pub(super) enum Files {
     Failing(Arc<Faults>),
 }
 
-/// The files of [`Files::Failing`], and the file-name endings whose reads and writes fail now.
+/// The files of [`Files::Failing`], and the file-name endings whose reads and writes fail now, and
+/// whose removals answer `Ok` but leave them.
 #[derive(Debug)]
 pub(super) struct Faults {
     pub(super) files: Files,
     pub(super) reads: Mutex<Option<String>>,
     pub(super) writes: Mutex<Option<String>>,
+    pub(super) quiet: Mutex<Option<String>>,
 }
 
 impl Faults {
+    /// Whether a removal of `p` answers `Ok` and removes nothing, as a data file does when it
+    /// can't look whether the file is there ([`Store::fail_quietly`]).
+    fn silent(&self, p: &Path) -> bool {
+        let rule = self.quiet.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        rule.as_deref().is_some_and(|end| p.to_string_lossy().replace('\\', "/").ends_with(end))
+    }
+
     /// An error when `rule` names how `p` ends: never "not found", which the store reads as an
     /// empty file. A rule starting with `!` is a damaged file (invalid data), not a failing disk.
     fn check(rule: &Mutex<Option<String>>, p: &Path) -> io::Result<()> {
@@ -161,6 +170,9 @@ impl Files {
             }
             Files::Failing(f) => {
                 Faults::check(&f.writes, p)?;
+                if f.silent(p) {
+                    return Ok(());
+                }
                 f.files.remove_file(p)
             }
         }
@@ -187,6 +199,9 @@ impl Files {
             }
             Files::Failing(f) => {
                 Faults::check(&f.writes, p)?;
+                if f.silent(p) {
+                    return Ok(());
+                }
                 f.files.remove_dir_all(p)
             }
         }

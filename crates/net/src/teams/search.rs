@@ -65,6 +65,7 @@ pub use load::fuzz_teams_index;
 use segment::{Draft, Form, Segment, query_words, stub, words_of, words_of_texts};
 pub(crate) use tranche::{Goes, Span, candidates, route};
 use tranche::{Tranches, by_first};
+use write::Removal;
 pub(crate) use write::Staged;
 
 /// The most hits a search gives.

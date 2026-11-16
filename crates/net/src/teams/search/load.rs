@@ -107,7 +107,7 @@ impl Copy {
             if !numbers.is_empty() || !orphans.is_empty() {
                 // Tranches beside a segment of the old format: the old version wrote it after
                 // them, and they may hold the words of a message it deleted since.
-                if self.store.remove_account_files(TEAMS_ACCOUNT, &tranches_key(hash)).is_ok() {
+                if self.removed(&tranches_key(hash), Removal::Folder) {
                     orphans.clear();
                 } else {
                     log::warn!("Teams search: a chat's tranches from before a rollback couldn't leave the file");
