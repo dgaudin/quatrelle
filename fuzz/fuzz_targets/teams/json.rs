@@ -9,7 +9,7 @@
 use libfuzzer_sys::fuzz_target;
 use quatrelle_model::pim::teams::{
     Attachment, Chat, ChatMessage, MAX_ATTACHMENTS, MAX_BODY, MAX_ID, MAX_MEMBERS, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, Member,
-    NAME_CHARS, Sender,
+    NAME_CHARS, REACTION_CHARS, Sender, is_bidi,
 };
 use quatrelle_net::teams::graph::{MAX_ROLES, chat_of, chat_of_unguarded, member_of, message_of, message_of_unguarded, presence_of};
 use serde_json::Value;
@@ -22,7 +22,7 @@ fn id_ok(id: &str) -> bool {
 }
 
 fn line_ok(s: &str) -> bool {
-    s.chars().count() <= NAME_CHARS && !s.chars().any(|c| c.is_control() || quatrelle_model::pim::teams::is_bidi(c))
+    s.chars().count() <= NAME_CHARS && !s.chars().any(|c| c.is_control() || is_bidi(c))
 }
 
 fn check_member(m: &Member) {
@@ -60,13 +60,16 @@ fn check_message(m: &ChatMessage) {
         assert!(!bare.iter().skip(i + 1).any(|o| o == b), "{:?}", m.reactions);
     }
     for r in &m.reactions {
+        // An emoji with no control or bidi character, at most REACTION_CHARS of them.
+        assert!(r.emoji.chars().count() <= REACTION_CHARS && !r.emoji.chars().any(|c| c.is_control() || is_bidi(c)), "{:?}", r.emoji);
         assert!(!["like", "heart", "laugh", "surprised", "sad", "angry"].iter().any(|n| r.emoji.eq_ignore_ascii_case(n)), "{:?}", r.emoji);
     }
     assert!(m.mentions.iter().all(|x| line_ok(&x.text) && x.user_id.as_deref().is_none_or(id_ok)));
     assert!(m.body.plain().len() <= MAX_BODY);
     for a in &m.attachments {
-        if let Attachment::File { id, .. } = a {
+        if let Attachment::File { id, name, url, .. } = a {
             assert!(id_ok(id));
+            assert!(!name.chars().chain(url.chars()).any(|c| c.is_control() || is_bidi(c)), "{name:?} {url:?}");
         }
     }
     check_sender(&m.sender);

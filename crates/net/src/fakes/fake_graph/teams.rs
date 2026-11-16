@@ -95,7 +95,7 @@ pub(crate) struct FakeMessage {
     /// Graph's `from` as given, in place of the one made from `from`: an application, someone of
     /// another organisation, or a name the members don't give.
     pub(crate) from_json: Option<Value>,
-    /// The users it mentions (their ids), in order.
+    /// The users it mentions (their ids), in the order of its `mentions`.
     pub(crate) mentions: Vec<String>,
     /// A system message (`systemEventMessage`, with its `eventDetail`).
     pub(crate) system: bool,
@@ -132,6 +132,17 @@ pub(crate) struct FakeTeams {
     /// Every `POST /chats/{id}/messages` received, whatever its answer: (the chat's id, the JSON
     /// body as it came; `Null` when it isn't JSON).
     pub(crate) posts: Vec<(String, Value)>,
+    /// Every `post`, `edit`, `setReaction`, `unsetReaction` and `softDelete` received, whatever its
+    /// answer: (route name, the chat's id, the message's id or empty, the JSON body as it came;
+    /// `Null` when it isn't JSON).
+    pub(crate) writes: Vec<(String, String, String, Value)>,
+    /// Chats (their ids) where editing is refused with 403.
+    pub(crate) forbid_edit: Vec<String>,
+    /// Chats (their ids) where reacting and taking a reaction back are refused with 403.
+    pub(crate) forbid_react: Vec<String>,
+    /// A quick reaction kept as its emoji is listed by its name (`like`, `heart`, `laugh`,
+    /// `surprised`, `sad`, `angry`), as Graph may.
+    pub(crate) reactions_by_name: bool,
     /// The most bytes a post's `body.content` may have (`None`: 100 KiB); a longer one is
     /// answered 413 `RequestEntityTooLarge`.
     pub(crate) post_limit: Option<usize>,
@@ -509,6 +520,10 @@ impl Data {
         let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
         if name == "post" {
             t.posts.push((p.get(1).copied().unwrap_or_default().to_string(), input.clone()));
+        }
+        if matches!(name, "post" | "edit" | "setReaction" | "unsetReaction" | "softDelete") {
+            let (chat, msg) = (p.get(1).copied().unwrap_or_default(), p.get(3).copied().unwrap_or_default());
+            t.writes.push((name.to_string(), chat.to_string(), msg.to_string(), input.clone()));
         }
         let mut reply = match t.refusal(name, authorized, someone_else) {
             Some(r) => r,

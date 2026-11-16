@@ -153,6 +153,14 @@ fn a_reference_attachment_keeps_no_thumbnail() {
 }
 
 #[test]
+fn an_attachments_address_with_a_bidi_mark_is_dropped() {
+    let mut v = message_json("1");
+    v["attachments"] = json!([{"id": "f1", "contentType": "reference", "contentUrl": "https://x.example/f\u{202E}cod.docx", "name": "f"}]);
+    let m = message_of(CHAT, &v);
+    assert!(matches!(&m.attachments[0], Attachment::File { url, .. } if url.is_empty()), "{:?}", m.attachments);
+}
+
+#[test]
 fn ids_too_long_are_refused() {
     let long = format!("19:{}@thread.v2", "a".repeat(600));
     assert!(chat_of(&chat_json(&long, "<p>hi</p>")).is_none());

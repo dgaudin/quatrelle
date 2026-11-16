@@ -21,7 +21,7 @@ use std::cell::Cell;
 use std::collections::HashSet;
 use std::io::Write;
 
-use quatrelle_model::pim::teams::{MAX_ID, MAX_MEMBERS, PRESENCE_IDS, SEND_MAX};
+use quatrelle_model::pim::teams::{MAX_ID, MAX_MEMBERS, Mention, PRESENCE_IDS, SEND_MAX, reactable};
 use serde_json::{Value, json};
 
 use crate::graph::{BUSY_ROUNDS, backoff_secs, seg, utc};
@@ -309,51 +309,91 @@ impl TeamsClient {
         page(self.json("GET", &url, None, true)?)
     }
 
-    /// Post a plain-text message in a chat: the message Graph made. Waited out on a 429 only
-    /// (nothing was done); a 503 may come after the message was made, so it isn't posted again.
+    /// Post a plain-text message in a chat: the message Graph made. The chat's id must be one
+    /// segment of the address ([`own_segment`]), else it is refused before any request. Waited out
+    /// on a 429 only (nothing was done); a 503 may come after the message was made, so it isn't
+    /// posted again.
     pub fn send_text(&self, chat: &str, text: &str) -> Result<Value> {
+        if !own_segment(chat) {
+            return Err(NetError::Refused("not a chat's id".into()));
+        }
         let body = json!({"body": {"contentType": "text", "content": text}});
         self.request("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false, false)
     }
 
     /// Post a message written in HTML in a chat: the message Graph made. The chat's id must be one
     /// segment of the address ([`own_segment`]) and the HTML at most [`SEND_MAX`] bytes, else it is
-    /// refused before any request. Waited out on a 429 only, as [`Self::send_text`].
-    pub fn send_html(&self, chat: &str, html: &str) -> Result<Value> {
+    /// refused before any request. `mentions` (those with a user id) go as the message's `mentions`
+    /// array, only when there are some. Waited out on a 429 only, as [`Self::send_text`].
+    pub fn send_html(&self, chat: &str, html: &str, mentions: &[Mention]) -> Result<Value> {
         if !own_segment(chat) {
             return Err(NetError::Refused("not a chat's id".into()));
         }
         if html.len() > SEND_MAX {
             return Err(NetError::Refused(format!("a message longer than Teams takes ({SEND_MAX} bytes)")));
         }
-        let body = json!({"body": {"contentType": "html", "content": html}});
+        let mut body = json!({"body": {"contentType": "html", "content": html}});
+        let mentioned = mentions_json(mentions);
+        if mentioned.as_array().is_some_and(|a| !a.is_empty()) {
+            body["mentions"] = mentioned;
+        }
         self.request("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false, false)
     }
 
-    /// Replace a message's text (one the signed-in user sent).
+    /// Replace the words of a message the signed-in user sent by HTML: the chat's and the
+    /// message's ids must each be one segment of the address ([`own_segment`]) and the HTML at
+    /// most [`SEND_MAX`] bytes, else it is refused before any request. The body always carries
+    /// `mentions` (empty to clear them). The same edit can be sent again.
+    pub fn edit_html(&self, chat: &str, msg: &str, html: &str, mentions: &[Mention]) -> Result<()> {
+        if !own_segment(chat) || !own_segment(msg) {
+            return Err(NetError::Refused("not a chat's or a message's id".into()));
+        }
+        if html.len() > SEND_MAX {
+            return Err(NetError::Refused(format!("a message longer than Teams takes ({SEND_MAX} bytes)")));
+        }
+        let body = json!({"body": {"contentType": "html", "content": html}, "mentions": mentions_json(mentions)});
+        self.json("PATCH", &self.at(&format!("/chats/{}/messages/{}", seg(chat), seg(msg))), Some(&body), false).map(drop)
+    }
+
+    /// Replace a message's text (one the signed-in user sent); the ids are checked as for
+    /// [`Self::edit_html`].
     pub fn edit_text(&self, chat: &str, msg: &str, text: &str) -> Result<()> {
+        if !own_segment(chat) || !own_segment(msg) {
+            return Err(NetError::Refused("not a chat's or a message's id".into()));
+        }
         let body = json!({"body": {"contentType": "text", "content": text}});
         self.json("PATCH", &self.at(&format!("/chats/{}/messages/{}", seg(chat), seg(msg))), Some(&body), false).map(drop)
     }
 
-    /// React to a message (`like`, `heart`… or an emoji).
+    /// React to a message with an emoji ([`reactable`]: a name such as `like` is refused, before
+    /// any request, as is an id that isn't one segment).
     pub fn set_reaction(&self, chat: &str, msg: &str, emoji: &str) -> Result<()> {
         self.react("setReaction", chat, msg, emoji)
     }
 
-    /// Take a reaction back.
+    /// Take a reaction back, checked as [`Self::set_reaction`].
     pub fn unset_reaction(&self, chat: &str, msg: &str, emoji: &str) -> Result<()> {
         self.react("unsetReaction", chat, msg, emoji)
     }
 
     fn react(&self, verb: &str, chat: &str, msg: &str, emoji: &str) -> Result<()> {
+        if !own_segment(chat) || !own_segment(msg) {
+            return Err(NetError::Refused("not a chat's or a message's id".into()));
+        }
+        if !reactable(emoji) {
+            return Err(NetError::Refused("not an emoji a reaction can be".into()));
+        }
         let url = self.at(&format!("/chats/{}/messages/{}/{verb}", seg(chat), seg(msg)));
         self.json("POST", &url, Some(&json!({"reactionType": emoji})), false).map(drop)
     }
 
     /// Delete a message the signed-in user sent (it stays listed, with its deletion time):
-    /// through `/users/{user}` (the signed-in user's object id), or `/me` when `None`.
+    /// through `/users/{user}` (the signed-in user's object id), or `/me` when `None`. Each id
+    /// must be one segment of the address ([`own_segment`]), else it is refused before any request.
     pub fn soft_delete(&self, chat: &str, msg: &str, user: Option<&str>) -> Result<()> {
+        if !own_segment(chat) || !own_segment(msg) || user.is_some_and(|u| !own_segment(u)) {
+            return Err(NetError::Refused("not a chat's, a message's or a user's id".into()));
+        }
         let who = user.map_or_else(|| "/me".to_string(), |u| format!("/users/{}", seg(u)));
         self.json("POST", &self.at(&format!("{who}/chats/{}/messages/{}/softDelete", seg(chat), seg(msg))), None, false).map(drop)
     }
@@ -589,6 +629,23 @@ fn path_id(id: &str) -> bool {
 /// `?`, `#`), even encoded: some servers decode `%2F`.
 pub(crate) fn own_segment(id: &str) -> bool {
     path_id(id) && !id.contains(['/', '\\', '?', '#'])
+}
+
+/// The `mentions` array of a message written: those with a user id, in order, each as Graph
+/// documents a `chatMessageMention` of an Entra user.
+pub(crate) fn mentions_json(mentions: &[Mention]) -> Value {
+    let list: Vec<Value> = mentions
+        .iter()
+        .filter_map(|m| {
+            let user = m.user_id.as_deref()?;
+            Some(json!({
+                "id": m.id,
+                "mentionText": m.text,
+                "mentioned": {"user": {"id": user, "displayName": m.text, "userIdentityType": "aadUser"}},
+            }))
+        })
+        .collect();
+    Value::Array(list)
 }
 
 /// Whether an answer asks to try again later.

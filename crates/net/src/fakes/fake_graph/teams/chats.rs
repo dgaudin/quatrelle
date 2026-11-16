@@ -2,13 +2,71 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The fake Graph server's Teams routes about chats: the chat list, and one chat's members,
 //! messages (listed in a `lastModifiedDateTime` range, posted, edited, reacted to,
-//! soft-deleted), hosted images and read mark. A post must say its `body.contentType` (`html` or
-//! `text`, else 400), and its `content` must fit [`FakeTeams::post_limit`] (else 413).
+//! soft-deleted), hosted images and read mark. A post or an edit must say its `body.contentType`
+//! (`html` or `text`, else 400), and its `content` must fit [`FakeTeams::post_limit`] (else 413);
+//! the `<at id>` of its HTML and the `id`s of its `mentions` must be the same set (else 400).
+//! Only the signed-in user's own messages are edited or soft-deleted (else 403).
+
+use std::collections::BTreeSet;
+
+use quatrelle_model::pim::teams::QUICK_REACTIONS;
 
 use super::*;
 
 /// The most bytes a post's content may have when the test sets no limit.
 const POST_LIMIT: usize = 100 << 10;
+
+/// The names Graph may give the six quick reactions, in the order of [`QUICK_REACTIONS`].
+const QUICK_NAMES: [&str; 6] = ["like", "heart", "laugh", "surprised", "sad", "angry"];
+
+/// A reaction's kind as one of the six: its emoji, whether it came by name or as an emoji (with
+/// or without the variation selector); any other as it came.
+fn reaction_key(kind: &str) -> String {
+    let bare = |s: &str| s.chars().filter(|c| *c != '\u{FE0F}').collect::<String>();
+    let kind = bare(kind);
+    QUICK_NAMES
+        .iter()
+        .zip(QUICK_REACTIONS)
+        .find(|(name, emoji)| kind.eq_ignore_ascii_case(name) || bare(emoji) == kind)
+        .map_or(kind, |(_, emoji)| bare(emoji))
+}
+
+/// The numbers `n` of the `<at id="n">` tags of some HTML.
+fn at_ids(html: &str) -> BTreeSet<String> {
+    html.split("<at id=\"").skip(1).filter_map(|rest| rest.split_once('"').map(|(n, _)| n.to_string())).collect()
+}
+
+/// What a post's or an edit's body says that Graph would refuse: its content type, its size and
+/// the agreement of its `<at>` tags with its `mentions`.
+fn refused_body(input: &Value, limit: usize) -> Option<Reply> {
+    if !matches!(input.pointer("/body/contentType").and_then(Value::as_str), Some("html" | "text")) {
+        return Some(Reply::error(400, "BadRequest", "body.contentType must be html or text."));
+    }
+    let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
+    if html.len() > limit {
+        return Some(Reply::error(413, "RequestEntityTooLarge", "The message is too large."));
+    }
+    let listed: BTreeSet<String> = input
+        .get("mentions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|m| m.get("id").and_then(Value::as_u64))
+        .map(|n| n.to_string())
+        .collect();
+    (at_ids(html) != listed).then(|| Reply::error(400, "BadRequest", "The mentions and the at tags of the body don't match."))
+}
+
+/// The users a body's `mentions` name, in order.
+fn mentioned_users(input: &Value) -> Vec<String> {
+    input
+        .get("mentions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|m| m.pointer("/mentioned/user/id").and_then(Value::as_str).map(str::to_string))
+        .collect()
+}
 
 impl FakeTeams {
     fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
@@ -29,9 +87,15 @@ impl FakeTeams {
                 "id": i, "mentionText": self.user(user).map(|u| u.display_name.clone()), "mentioned": self.identity(user),
             })).collect::<Vec<_>>(),
             "reactions": m.reactions.iter().map(|(kind, user)| json!({
-                "reactionType": kind, "displayName": null, "reactionContentUrl": null, "createdDateTime": m.modified, "user": self.identity(user),
+                "reactionType": if self.reactions_by_name { Self::named(kind) } else { kind.clone() }, "displayName": null, "reactionContentUrl": null, "createdDateTime": m.modified, "user": self.identity(user),
             })).collect::<Vec<_>>(),
         })
+    }
+
+    /// A quick reaction's name, as `reactions_by_name` lists it; any other kind as it is.
+    fn named(kind: &str) -> String {
+        let key = reaction_key(kind);
+        QUICK_REACTIONS.iter().zip(QUICK_NAMES).find(|(emoji, _)| reaction_key(emoji) == key).map_or_else(|| kind.to_string(), |(_, n)| n.to_string())
     }
 
     /// The newest message not deleted.
@@ -125,6 +189,8 @@ impl FakeTeams {
         let post_limit = self.post_limit.unwrap_or(POST_LIMIT);
         let rewrite = self.rewrite_posts;
         let guests = self.guests.clone();
+        let here = |list: &[String]| list.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
+        let (edit_refused, react_refused) = (here(&self.forbid_edit), here(&self.forbid_react));
         let Some(chat) = self.chats.get_mut(ci) else { return not_found() };
         match name {
             "members" if members_refused => Reply::error(403, "Forbidden", "Reading this chat's members is not allowed."),
@@ -171,17 +237,16 @@ impl FakeTeams {
             }
             "post" if forbidden => Reply::error(403, "Forbidden", "Posting in this chat is not allowed."),
             "post" => {
-                if !matches!(input.pointer("/body/contentType").and_then(Value::as_str), Some("html" | "text")) {
-                    return Reply::error(400, "BadRequest", "body.contentType must be html or text.");
+                if let Some(refused) = refused_body(input, post_limit) {
+                    return refused;
                 }
                 let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
-                if html.len() > post_limit {
-                    return Reply::error(413, "RequestEntityTooLarge", "The message is too large.");
-                }
                 let after = chat.messages.iter().filter_map(|m| m.id.parse::<i64>().ok()).max().map_or(0, |m| m + 1);
                 let id = ms_of(&now).unwrap_or_default().max(after).to_string();
                 let kept = rewrite.map_or_else(|| html.to_string(), |f| f(html));
-                chat.messages.push(FakeMessage::new(&id, Some(&mine), &now, &kept));
+                let mut made = FakeMessage::new(&id, Some(&mine), &now, &kept);
+                made.mentions = mentioned_users(input);
+                chat.messages.push(made);
                 let chat = chat.clone();
                 let made = chat.messages.last().map(|m| self.message_json(&chat, m)).unwrap_or(Value::Null);
                 Reply::json(201, &made)
@@ -195,23 +260,34 @@ impl FakeTeams {
                 chat.read_time = now;
                 Reply::empty(204)
             }
+            "edit" if edit_refused => Reply::error(403, "Forbidden", "Editing in this chat is not allowed."),
+            "setReaction" | "unsetReaction" if react_refused => Reply::error(403, "Forbidden", "Reacting in this chat is not allowed."),
             _ => {
                 let Some(m) = p.get(3).and_then(|mid| chat.messages.iter_mut().find(|m| m.id == *mid)) else { return not_found() };
                 let kind = input["reactionType"].as_str().unwrap_or_default().to_string();
+                let own = m.from.as_deref() == Some(mine.as_str());
                 match name {
+                    "edit" | "softDelete" if !own => return Reply::error(403, "Forbidden", "Only the sender changes or deletes a message."),
                     "edit" => {
-                        if let Some(html) = input.pointer("/body/content").and_then(Value::as_str) {
-                            m.body_html = html.to_string();
+                        if let Some(refused) = refused_body(input, post_limit) {
+                            return refused;
                         }
+                        m.body_html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default().to_string();
+                        m.mentions = mentioned_users(input);
                         m.edited = Some(now.clone());
                     }
                     "setReaction" | "unsetReaction" if kind.is_empty() => return Reply::error(400, "BadRequest", "A reactionType is wanted."),
                     "setReaction" => {
-                        if !m.reactions.iter().any(|(k, u)| *k == kind && *u == mine) {
+                        let key = reaction_key(&kind);
+                        if !m.reactions.iter().any(|(k, u)| reaction_key(k) == key && *u == mine) {
                             m.reactions.push((kind, mine));
                         }
                     }
-                    "unsetReaction" => m.reactions.retain(|(k, u)| !(*k == kind && *u == mine)),
+                    "unsetReaction" => {
+                        let key = reaction_key(&kind);
+                        m.reactions.retain(|(k, u)| !(reaction_key(k) == key && *u == mine));
+                    }
+                    "softDelete" if m.deleted.is_some() => return Reply::empty(204),
                     "softDelete" => m.deleted = Some(now.clone()),
                     _ => return not_found(),
                 }

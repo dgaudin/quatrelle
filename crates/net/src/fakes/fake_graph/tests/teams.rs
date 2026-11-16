@@ -193,8 +193,8 @@ fn teams_messages_need_a_range_and_honour_it() {
 #[test]
 fn teams_reaction_moves_modified_and_soft_delete_both_forms() {
     let id = "19:a@thread.v2";
-    let server = serve_teams(teams_with(vec![chat(id, T0, 3)]));
-    let (m0, m1) = (T0.to_string(), (T0 + MINUTE).to_string());
+    let server = serve_teams(teams_with(vec![chat(id, T0, 6)]));
+    let (m0, m1, m3) = (T0.to_string(), (T0 + MINUTE).to_string(), (T0 + 3 * MINUTE).to_string());
     let path = format!("/chats/{}/messages/{m0}", enc(id));
     let modified =
         |m: &str| server.data.lock().unwrap().teams.as_ref().unwrap().chat(id).unwrap().messages.iter().find(|x| x.id == m).unwrap().clone();
@@ -215,27 +215,28 @@ fn teams_reaction_moves_modified_and_soft_delete_both_forms() {
     let unset = modified(&m0);
     assert!(unset.reactions.is_empty() && unset.modified > after.modified);
 
-    let gone = post(&server, &format!("/users/{ME}/chats/{}/messages/{m0}/softDelete", enc(id)), "");
+    let gone = post(&server, &format!("/users/{ME}/chats/{}/messages/{m1}/softDelete", enc(id)), "");
     assert_eq!(gone.status, 204);
-    let d = modified(&m0);
+    let d = modified(&m1);
     assert!(d.deleted.is_some() && d.modified > unset.modified);
-    assert_eq!(post(&server, &format!("/me/chats/{}/messages/{m1}/softDelete", enc(id)), "").status, 204);
-    assert!(modified(&m1).deleted.is_some());
+    assert_eq!(post(&server, &format!("/me/chats/{}/messages/{m3}/softDelete", enc(id)), "").status, 204);
+    assert!(modified(&m3).deleted.is_some());
+    assert_eq!(post(&server, &format!("/me/chats/{}/messages/{m0}/softDelete", enc(id)), "").status, 403, "not another's message");
     assert_eq!(post(&server, &format!("/users/u-ana/chats/{}/messages/{m1}/softDelete", enc(id)), "").status, 403, "not as someone else");
     assert_eq!(post(&server, &format!("/chats/{}/messages/123/softDelete", enc(id)), "").status, 404);
     let listed = get(&server, &format!("/chats/{}/messages?$filter=lastModifiedDateTime%20gt%20{}", enc(id), rfc3339(T0))).json();
-    let deleted = listed["value"].as_array().unwrap().iter().find(|m| m["id"] == m0.as_str()).unwrap().clone();
+    let deleted = listed["value"].as_array().unwrap().iter().find(|m| m["id"] == m1.as_str()).unwrap().clone();
     assert!(deleted["deletedDateTime"].is_string(), "a deleted message is still listed, with its time");
 
     // An edit: edited and modified move together.
     let edit = send(
-        &format!("{}/chats/{}/messages/{}", server.base, enc(id), T0 + 2 * MINUTE),
+        &format!("{}/chats/{}/messages/{}", server.base, enc(id), T0 + 5 * MINUTE),
         "PATCH",
         &[BEARER],
         r#"{"body": {"contentType": "html", "content": "<p>Fixed</p>"}}"#,
     );
     assert_eq!(edit.status, 204);
-    let e = modified(&(T0 + 2 * MINUTE).to_string());
+    let e = modified(&(T0 + 5 * MINUTE).to_string());
     assert_eq!((e.body_html.as_str(), e.edited.as_deref()), ("<p>Fixed</p>", Some(e.modified.as_str())));
 }
 

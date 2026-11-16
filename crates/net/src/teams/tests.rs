@@ -256,25 +256,25 @@ fn ids_with_colon_and_at_are_encoded() {
     ]);
     let (c, _) = TeamsClient::connect(&base, "t").unwrap();
     assert_eq!(c.members("19:x/y@thread.v2").unwrap().len(), 1);
-    c.set_reaction("19:x/y@thread.v2", "17 9", "👍").unwrap();
-    c.soft_delete("19:x/y@thread.v2", "1", Some("u?1")).unwrap();
-    c.soft_delete("19:x/y@thread.v2", "1", None).unwrap();
-    // A `/` is refused there (tests/send.rs): the read mark goes to an id without one.
+    c.set_reaction("19:x@thread.v2", "17 9", "👍").unwrap();
+    c.soft_delete("19:x@thread.v2", "1", Some("u@1")).unwrap();
+    c.soft_delete("19:x@thread.v2", "1", None).unwrap();
+    // A `/` is refused in these calls (tests/send.rs): the ids here have none.
     c.mark_read("19:x@thread.v2", ME, TENANT).unwrap();
-    assert_eq!(c.send_text("19:x/y@thread.v2", "a \"b\"").unwrap()["id"], "2");
-    c.edit_text("19:x/y@thread.v2", "17 9", "c").unwrap();
+    assert_eq!(c.send_text("19:x@thread.v2", "a \"b\"").unwrap()["id"], "2");
+    c.edit_text("19:x@thread.v2", "17 9", "c").unwrap();
     let seen = h.join().unwrap();
     let line = |i: usize| seen[i].lines().next().unwrap().to_string();
     assert_eq!(line(1), "GET /chats/19%3Ax%2Fy%40thread.v2/members HTTP/1.1");
-    assert_eq!(line(2), "POST /chats/19%3Ax%2Fy%40thread.v2/messages/17%209/setReaction HTTP/1.1");
+    assert_eq!(line(2), "POST /chats/19%3Ax%40thread.v2/messages/17%209/setReaction HTTP/1.1");
     assert!(seen[2].ends_with(r#"{"reactionType":"👍"}"#), "{}", seen[2]);
-    assert_eq!(line(3), "POST /users/u%3F1/chats/19%3Ax%2Fy%40thread.v2/messages/1/softDelete HTTP/1.1");
-    assert_eq!(line(4), "POST /me/chats/19%3Ax%2Fy%40thread.v2/messages/1/softDelete HTTP/1.1");
+    assert_eq!(line(3), "POST /users/u%401/chats/19%3Ax%40thread.v2/messages/1/softDelete HTTP/1.1");
+    assert_eq!(line(4), "POST /me/chats/19%3Ax%40thread.v2/messages/1/softDelete HTTP/1.1");
     assert_eq!(line(5), "POST /chats/19%3Ax%40thread.v2/markChatReadForUser HTTP/1.1");
     assert!(seen[5].ends_with(r#"{"user":{"id":"u-me","tenantId":"tenant-1"}}"#), "{}", seen[5]);
-    assert_eq!(line(6), "POST /chats/19%3Ax%2Fy%40thread.v2/messages HTTP/1.1");
+    assert_eq!(line(6), "POST /chats/19%3Ax%40thread.v2/messages HTTP/1.1");
     assert!(seen[6].ends_with(r#"{"body":{"content":"a \"b\"","contentType":"text"}}"#), "{}", seen[6]);
-    assert_eq!(line(7), "PATCH /chats/19%3Ax%2Fy%40thread.v2/messages/17%209 HTTP/1.1");
+    assert_eq!(line(7), "PATCH /chats/19%3Ax%40thread.v2/messages/17%209 HTTP/1.1");
     assert!(seen[7].ends_with(r#"{"body":{"content":"c","contentType":"text"}}"#), "{}", seen[7]);
 
     // And the fake, which decodes them, finds the chat.
@@ -293,16 +293,16 @@ fn writes_reach_the_chat() {
     let id = made["id"].as_str().unwrap().to_string();
     assert_eq!(made["body"]["content"], "Hello <b>");
     c.edit_text(CHAT, &id, "Hello again").unwrap();
-    c.set_reaction(CHAT, &id, "like").unwrap();
-    c.unset_reaction(CHAT, &id, "like").unwrap();
-    c.set_reaction(CHAT, &id, "heart").unwrap();
+    c.set_reaction(CHAT, &id, "👍").unwrap();
+    c.unset_reaction(CHAT, &id, "👍").unwrap();
+    c.set_reaction(CHAT, &id, "❤️").unwrap();
     c.mark_read(CHAT, ME, TENANT).unwrap();
     c.soft_delete(CHAT, &id, Some(ME)).unwrap();
     let d = server.data.lock().unwrap();
     let t = d.teams.as_ref().unwrap();
     let m = t.chat(CHAT).unwrap().messages.iter().find(|m| m.id == id).unwrap();
     assert_eq!(m.body_html, "Hello again");
-    assert_eq!(m.reactions, [("heart".to_string(), ME.to_string())]);
+    assert_eq!(m.reactions, [("❤️".to_string(), ME.to_string())]);
     assert!(m.edited.is_some() && m.deleted.is_some());
     assert_ne!(t.chat(CHAT).unwrap().read_time, "2026-01-01T00:00:00.000Z");
     for route in ["post", "edit", "setReaction", "unsetReaction", "markChatReadForUser", "softDelete"] {
@@ -342,7 +342,7 @@ fn a_post_is_not_retried_on_503() {
     assert!(matches!(c.send_text(CHAT, "hi"), Err(NetError::Closed(m)) if m == "HTTP 503"));
     assert_eq!(c.stats().requests, 2, "sent once");
     // What can be repeated is: a 503 to a reaction is waited out.
-    c.set_reaction(CHAT, "1", "like").unwrap();
+    c.set_reaction(CHAT, "1", "👍").unwrap();
     assert_eq!(c.stats().requests, 4);
     assert_eq!(h.join().unwrap().len(), 4);
 }

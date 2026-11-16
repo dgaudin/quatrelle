@@ -17,7 +17,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use quatrelle_mime::{teams_html, teams_text};
 use quatrelle_model::pim::teams::{
     Attachment, Chat, ChatKind, ChatMessage, ChatText, MAX_ATTACHMENTS, MAX_BODY, MAX_ID, MAX_MEMBERS, MAX_MENTIONS, MAX_REACTION_USERS,
-    MAX_REACTIONS, Member, Mention, MessageKind, Presence, Preview, Reaction, Sender, is_bidi, one_line,
+    MAX_REACTIONS, Member, Mention, MessageKind, Presence, Preview, QUICK_REACTIONS, REACTION_CHARS, Reaction, Sender, is_bidi, one_line,
 };
 use serde_json::Value;
 
@@ -26,7 +26,6 @@ pub const MAX_ROLES: usize = 8;
 /// The longest word kept: a role, an identity type, a member's kind.
 const MAX_WORD: usize = 64;
 /// The most characters of a reaction kept (an emoji sequence or a name such as `like`).
-const MAX_EMOJI: usize = 32;
 /// The longest address kept.
 const MAX_ADDRESS: usize = 320;
 /// The most characters of a shared file's name kept.
@@ -215,26 +214,20 @@ fn mention_of(v: &Value) -> Option<Mention> {
     })
 }
 
-/// The six quick reactions, by the name Graph may give them and as an emoji.
-const QUICK: [(&str, &str); 6] = [
-    ("like", "\u{1F44D}"),
-    ("heart", "\u{2764}\u{FE0F}"),
-    ("laugh", "\u{1F606}"),
-    ("surprised", "\u{1F62E}"),
-    ("sad", "\u{1F622}"),
-    ("angry", "\u{1F621}"),
-];
+/// The names Graph may give the six quick reactions, in the order of [`QUICK_REACTIONS`].
+const QUICK_NAMES: [&str; 6] = ["like", "heart", "laugh", "surprised", "sad", "angry"];
 
 /// A reaction's kind as it's kept: one of the six quick reactions, whether Graph names it (in any
 /// case) or gives its emoji (with or without the emoji presentation selector); any other as it
 /// came.
 pub fn reaction_emoji(kind: &str) -> String {
-    let kind = clean(kind.trim(), MAX_EMOJI);
+    let kind = clean(kind.trim(), REACTION_CHARS);
     let bare = without_selector(&kind);
-    QUICK
+    QUICK_NAMES
         .iter()
+        .zip(QUICK_REACTIONS)
         .find(|(name, emoji)| kind.eq_ignore_ascii_case(name) || without_selector(emoji) == bare)
-        .map_or(kind.clone(), |(_, emoji)| (*emoji).to_string())
+        .map_or(kind.clone(), |(_, emoji)| emoji.to_string())
 }
 
 /// An emoji without its presentation selector (U+FE0F): what tells two spellings of one apart.
@@ -320,7 +313,9 @@ fn id_at(v: &Value, key: &str) -> Option<String> {
 
 /// A web address, as it came: at most [`MAX_URL`] bytes, no space or control character.
 fn url_at(v: &Value, key: &str) -> Option<String> {
-    str_at(v, key).filter(|u| !u.is_empty() && u.len() <= MAX_URL && !u.chars().any(|c| c.is_whitespace() || c.is_control())).map(str::to_string)
+    str_at(v, key)
+        .filter(|u| !u.is_empty() && u.len() <= MAX_URL && !u.chars().any(|c| c.is_whitespace() || c.is_control() || is_bidi(c)))
+        .map(str::to_string)
 }
 
 /// A word made of ASCII letters and digits, at most [`MAX_WORD`] of them.

@@ -428,7 +428,7 @@ fn post(w: &mut Worker, head: &Head, now: Instant) {
         return w.pause(&e, now);
     }
     let chat = head.chat.clone();
-    let e = match w.request(Route::Send(head.key), now, |c| c.send_html(&chat, &html)) {
+    let e = match w.request(Route::Send(head.key), now, |c| c.send_html(&chat, &html, &[])) {
         Ok(v) => return sent(w, &op, message_of(&chat, &v)),
         Err(e) => e,
     };
