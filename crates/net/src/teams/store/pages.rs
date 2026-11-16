@@ -15,7 +15,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 
 use quatrelle_model::pim::teams::{
-    Attachment, Block, ChatMessage, ChatText, MAX_ATTACHMENTS, MAX_BODY, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, WINDOW_MAX, one_line,
+    Attachment, Block, ChatMessage, ChatText, MAX_ATTACHMENTS, MAX_BODY, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, MESSAGE_PAGES, OPEN_WINDOW,
+    WINDOW_MAX, one_line,
 };
 use serde::de::{IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserializer, Serialize};
@@ -297,6 +298,31 @@ impl Copy {
         let hint = hint.filter(|h| r.page_keys.contains(h));
         let newest = r.page_keys.iter().rev().copied().filter(|k| Some(*k) != hint).take(pages);
         hint.into_iter().chain(newest).find_map(|key| self.page(chat, &hash, key).into_iter().find(|m| m.id == id).map(|m| (m, key)))
+    }
+
+    /// A chat opened at its message `id` (a search's hit): the page holding it (looked for in the
+    /// newest [`MESSAGE_PAGES`] pages) and the pages after it, at most [`OPEN_WINDOW`] messages in
+    /// creation order; `true` when they reach the chat's last page. None when those pages don't
+    /// have it.
+    #[allow(clippy::wrong_self_convention)] // the copy's messages from one on: no conversion
+    pub(crate) fn from_message(&self, chat: &str, id: &str) -> Option<(Vec<ChatMessage>, bool)> {
+        let (_, key) = self.message(chat, id, None, MESSAGE_PAGES)?;
+        let r = self.chat(chat)?;
+        let at = r.page_keys.iter().position(|k| *k == key)?;
+        let hash = chat_hash(chat);
+        let (mut out, mut newest) = (Vec::new(), true);
+        for key in r.page_keys.get(at..).unwrap_or_default() {
+            if out.len() >= OPEN_WINDOW {
+                newest = false;
+                break;
+            }
+            out.extend(self.page(chat, &hash, *key));
+        }
+        if out.len() > OPEN_WINDOW {
+            out.truncate(OPEN_WINDOW);
+            newest = false;
+        }
+        Some((out, newest))
     }
 
     /// The page before the messages from `created` on: the messages of the newest page that

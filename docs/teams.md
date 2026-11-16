@@ -249,7 +249,9 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   in bold (only the rail's **Conversations** shows a count). Chats with someone outside your
   organization carry an **External** tag, as does a chat whose members Teams hasn't given yet;
   group chats show how many members they have. At most 20,000 conversations are kept; the search box finds a chat by its
-  name and, once the copy is indexed, by the words of its messages. Conversations you are no
+  name and, once the copy is indexed, by the words of its messages. A chat found by its words
+  opens at the message found, tinted for a moment; when newer messages are left out, **Go to the
+  newest messages** under the last one opens the chat at its newest. Conversations you are no
   longer in say so, in the list and under the conversation's name.
 - **The chats Graph won't serve.** Microsoft does not let an application read some chats: those
   it lists without a name and as of a kind it doesn't say (most likely chats around meetings;

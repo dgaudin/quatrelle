@@ -2303,3 +2303,5 @@ presence	Offline	Offline
 	Reopen the page	Riapri la pagina
 	Copy the address	Copia l'indirizzo
 	{browser} couldn't open the page: {error}	{browser} non è riuscito ad aprire la pagina: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Vai ai messaggi più recenti

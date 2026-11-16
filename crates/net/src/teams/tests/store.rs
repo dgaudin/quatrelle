@@ -294,6 +294,30 @@ fn a_record_under_another_key_is_ignored() {
     assert_eq!(c.last_pages(A, 2).len(), PAGE);
 }
 
+/// R38: a chat opened at a message found: the page holding it and those after it, in creation
+/// order, 200 messages at most; whether they reach the newest; nothing for a message it hasn't.
+#[test]
+fn from_a_message_its_page_and_those_after_it() {
+    let (c, _) = copy();
+    // Pages of 100, 50, 51 and 100: a message put in the middle of a full page splits it.
+    c.upsert(A, &(0..300).map(|i| msg(A, i * 2)).collect::<Vec<_>>()).unwrap();
+    c.upsert(A, &[msg(A, 201)]).unwrap();
+    let all = all_back(&c, A);
+    let from = |n: i64| all.iter().position(|x| *x == n).unwrap();
+    let found = |n: i64| c.from_message(A, &msg(A, n).id).map(|(m, newest)| (numbers(&m), newest));
+    // In the page of 50: it, the 51 and 99 of the last, cut at 200 short of the newest.
+    assert_eq!(found(250), Some((all[from(200)..from(200) + 200].to_vec(), false)));
+    // In the page of 51: it and the last, to the newest.
+    assert_eq!(found(300), Some((all[from(298)..].to_vec(), true)));
+    // In the first: 100, 50, then 50 of the 51.
+    assert_eq!(found(0), Some((all[..200].to_vec(), false)));
+    assert_eq!(found(598), Some((all[from(400)..].to_vec(), true)), "the newest");
+    // A message it hasn't, an id it can't have, another chat: nothing.
+    assert_eq!(found(1), None);
+    assert_eq!(c.from_message(A, ""), None);
+    assert_eq!(c.from_message(B, &msg(A, 250).id), None);
+}
+
 #[test]
 fn pages_that_dont_hold_together_start_the_chat_again() {
     let (c, s) = copy();

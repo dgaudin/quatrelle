@@ -3,7 +3,8 @@
 //! The rows of the list and the open chat's window. A row is found by its id in an index kept
 //! beside the rows, never by going through them: an event of 50 rows touches 50 entries, and the
 //! list is gone through (sorted and indexed again) once for an event whose rows move. The window
-//! holds at most [`WINDOW_MAX`] messages of the open chat; past that its far end goes.
+//! holds at most [`WINDOW_MAX`] messages of the open chat; past that its far end goes. A chat
+//! opened at a search's hit holds what the worker found of it ([`TeamsState::placed`]).
 
 use std::cmp::Reverse;
 
@@ -99,6 +100,24 @@ impl TeamsState {
     pub(super) fn left(&mut self, chat: &str) {
         if let Some(r) = self.index.get(chat).copied().and_then(|i| self.rows.get_mut(i)) {
             r.left = true;
+        }
+    }
+
+    /// What the worker found of the open chat's message `message` it was opened at
+    /// ([`teams::Event::Placed`]), its answer to this opening only: the window holds that
+    /// message's page and those after it. Short of the newest, messages newer than its last aren't
+    /// taken (they'd follow a gap), and past [`WINDOW_MAX`] its newest end goes, as when the user
+    /// goes back through the history. A message the copy didn't have opened the chat as usual:
+    /// there's nothing to go to.
+    pub(super) fn placed(&mut self, chat: &str, message: &str, newest: bool) {
+        if self.open.as_deref() != Some(chat) || self.go_to.as_deref() != Some(message) {
+            return;
+        }
+        self.newer_left_out = !newest;
+        if self.window.iter().any(|m| m.id == message) {
+            self.scrolled_back = true;
+        } else {
+            self.go_to = None;
         }
     }
 

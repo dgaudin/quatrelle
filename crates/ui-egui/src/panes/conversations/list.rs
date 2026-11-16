@@ -4,7 +4,7 @@
 //! stands, then one row per chat, newest activity first, drawn only for the rows on screen
 //! (`ScrollArea::show_rows`: 20,000 chats cost a frame what 10 do). A row: the picture (a photo,
 //! else coloured initials; a group's and a meeting's own icon), the presence dot of a one-to-one
-//! chat, the name, the last line and its time.
+//! chat, the name, the last line and its time. A search's hit opens its chat at the message found.
 //!
 //! What is hostile here: every name and line came from Graph (through the worker): drawn on one
 //! line ([`one_line`]), cut to the pane, never able to push "External" or "Can't be read here"
@@ -79,6 +79,16 @@ pub(crate) fn list(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         return;
     }
     rows_pane(s, c, pics, ui, &t, &rows, acts);
+}
+
+/// What a row opens: its chat, at the message its chat's first hit found while searching (a chat
+/// found by its name opens as listed).
+fn open_params(s: &Session, chat: &str, searching: bool) -> serde_json::Value {
+    let hit = s.teams.found.as_ref().filter(|_| searching).and_then(|f| f.hits.iter().find(|(c, _)| c == chat)).map(|(_, m)| m.as_str());
+    match hit.filter(|m| !m.is_empty()) {
+        Some(message) => json!({"chat": chat, "message": message}),
+        None => json!({"chat": chat}),
+    }
 }
 
 /// The worker told no one is shown any more (it stops asking for their presence), once.
@@ -203,9 +213,10 @@ fn hits<'a>(s: &'a Session, ui: &mut Ui, t: &Tokens) -> Vec<&'a ChatRow> {
     rows
 }
 
-/// The rows, only those on screen drawn; the people on them told to the worker (presence) and
-/// their photos asked once.
+/// The rows (the search's hits while searching), only those on screen drawn; the people on them
+/// told to the worker (presence) and their photos asked once.
 fn rows_pane(s: &Session, c: &mut ConversationsUi, pics: &TeamsPictures, ui: &mut Ui, t: &Tokens, rows: &[&ChatRow], acts: &mut Vec<Action>) {
+    let searching = !c.query.trim().is_empty();
     let open_at = s.teams.open.as_deref().and_then(|o| rows.iter().position(|r| r.id == o));
     let mut area = egui::ScrollArea::vertical().id_salt("conversations-list").auto_shrink([false, false]);
     // Alt+↑/↓ opened one off screen: it's brought into view.
@@ -229,7 +240,9 @@ fn rows_pane(s: &Session, c: &mut ConversationsUi, pics: &TeamsPictures, ui: &mu
                 people.push(p.clone());
             }
             if row(s, pics, ui, t, r, open_at == Some(i)).clicked() {
-                acts.push(Action::Run("teams.open", json!({"chat": r.id})));
+                // The same hit clicked again goes to its message again.
+                c.went_to = None;
+                acts.push(Action::Run("teams.open", open_params(s, &r.id, searching)));
             }
         }
     });

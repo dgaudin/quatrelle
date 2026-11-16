@@ -2305,3 +2305,5 @@ presence	Offline	Offline
 	Reopen the page	Seite erneut öffnen
 	Copy the address	Adresse kopieren
 	{browser} couldn't open the page: {error}	{browser} konnte die Seite nicht öffnen: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Zu den neuesten Nachrichten

@@ -2301,3 +2301,5 @@ presence	Offline	Offline
 	Reopen the page	De pagina opnieuw openen
 	Copy the address	Het adres kopiëren
 	{browser} couldn't open the page: {error}	{browser} kon de pagina niet openen: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Naar de nieuwste berichten

@@ -2307,3 +2307,5 @@ presence	Offline	離線
 	Reopen the page	重新開啟頁面
 	Copy the address	複製地址
 	{browser} couldn't open the page: {error}	{browser} 無法開啟頁面: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	前往最新訊息

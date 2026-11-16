@@ -22,7 +22,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
-use quatrelle_model::pim::teams::{CLOCK_TOLERANCE_MS, Chat, MAX_CHATS, Sender, Status};
+use quatrelle_model::pim::teams::{CLOCK_TOLERANCE_MS, Chat, Event, MAX_CHATS, Sender, Status};
 
 use super::backfill::count_panic;
 use super::limits::{Cadence, Route};
@@ -200,23 +200,53 @@ pub(crate) fn tick(w: &mut Worker, now: Instant) -> bool {
 /// list only. Its last two pages go to the engine at once, from the copy (online or not); then it
 /// is read every three seconds.
 pub(crate) fn open(w: &mut Worker, chat: Option<String>) {
+    let Some(chat) = on_screen(w, chat) else { return };
+    let messages = w.copy.as_ref().map(|c| c.last_pages(&chat, 2)).unwrap_or_default();
+    say_messages(w, &chat, &messages, false, false);
+    say_opened(w, &chat);
+}
+
+/// [`Job::Find`](quatrelle_model::pim::teams::Job::Find): `chat` on screen at its message
+/// `message` (a search's hit), as [`open`] puts it there, but its messages from that message's
+/// page on ([`Copy::from_message`](super::store::Copy::from_message)), then
+/// [`Event::Placed`] saying whether they reach its newest. A message the copy doesn't have opens
+/// it as usual: its last two pages, the newest reached.
+pub(crate) fn find(w: &mut Worker, chat: String, message: String) {
+    let Some(chat) = on_screen(w, Some(chat)) else { return };
+    let copy = w.copy.as_ref();
+    let found = copy.and_then(|c| c.from_message(&chat, &message));
+    let (messages, newest) = found.unwrap_or_else(|| (copy.map(|c| c.last_pages(&chat, 2)).unwrap_or_default(), true));
+    say_messages(w, &chat, &messages, false, false);
+    w.say(Event::Placed { chat: chat.clone(), message, newest });
+    say_opened(w, &chat);
+}
+
+/// `chat` (none: the list only) now the one on screen: the last one's read under way dropped. A
+/// chat with a usable id is returned, what it waits after failing forgiven (the user asks for
+/// it), and its kind, whether it can be read and its link said in the log.
+fn on_screen(w: &mut Worker, chat: Option<String>) -> Option<String> {
     if let Some(t) = w.sync.open.take().and_then(|r| r.todo.front().cloned()) {
         w.sync.reads.remove(&t.chat);
     }
     w.open = chat.filter(|c| id_ok(c));
     w.sync.opening = w.open.is_some();
-    let Some(chat) = w.open.clone() else { return };
-    // Its kind, whether it can be read, and its link as the window will judge it (or built, Graph
-    // giving none).
+    let chat = w.open.clone()?;
+    forgive(w, Work::Members, &chat);
+    forgive(w, Work::Messages, &chat);
+    // Its link as the window will judge it (or built, Graph giving none).
     let r = w.copy.as_ref().and_then(|c| c.chat(&chat)).map(|r| r.chat);
     let url = r.as_ref().and_then(|c| c.web_url.as_deref());
     let built = url.is_none() && links::built_chat_link(&chat, &w.settings.tenant_id).is_some();
     log::info!("{}", links::opened(r.as_ref().map(|c| &c.kind), r.as_ref().is_some_and(|c| c.unreadable.is_some()), url, built));
-    let messages = w.copy.as_ref().map(|c| c.last_pages(&chat, 2)).unwrap_or_default();
-    say_messages(w, &chat, &messages, false, false);
+    Some(chat)
+}
+
+/// The chat just put on screen, once its messages are said: its members and link, then its
+/// messages going out (none as well); then it's read at once, and every three seconds.
+fn say_opened(w: &mut Worker, chat: &str) {
     w.sync.members_said = None;
     say_members(w);
-    super::outbox::say_chat(w, &chat);
+    super::outbox::say_chat(w, chat);
     w.limiter.prompt(Cadence::Open);
 }
 

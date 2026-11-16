@@ -2305,3 +2305,5 @@ presence	Offline	Hors ligne
 	Reopen the page	Rouvrir la page
 	Copy the address	Copier l’adresse
 	{browser} couldn't open the page: {error}	{browser} n’a pas pu ouvrir la page : {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Aller aux messages les plus récents

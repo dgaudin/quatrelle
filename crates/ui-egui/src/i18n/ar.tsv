@@ -2300,3 +2300,5 @@ presence	Offline	غير متصل
 	Reopen the page	إعادة فتح الصفحة
 	Copy the address	نسخ العنوان
 	{browser} couldn't open the page: {error}	تعذّر على {browser} فتح الصفحة: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	الانتقال إلى أحدث الرسائل

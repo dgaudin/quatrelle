@@ -2300,3 +2300,5 @@ presence	Offline	לא מחובר
 	Reopen the page	פתיחת הדף מחדש
 	Copy the address	העתקת הכתובת
 	{browser} couldn't open the page: {error}	{browser} לא הצליח לפתוח את הדף: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	מעבר להודעות האחרונות

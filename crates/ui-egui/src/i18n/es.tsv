@@ -2305,3 +2305,5 @@ presence	Offline	Desconectado
 	Reopen the page	Volver a abrir la página
 	Copy the address	Copiar la dirección
 	{browser} couldn't open the page: {error}	{browser} no pudo abrir la página: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Ir a los mensajes más recientes

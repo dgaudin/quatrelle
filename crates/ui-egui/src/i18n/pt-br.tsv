@@ -2304,3 +2304,5 @@ presence	Offline	Offline
 	Reopen the page	Reabrir a página
 	Copy the address	Copiar o endereço
 	{browser} couldn't open the page: {error}	{browser} não conseguiu abrir a página: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Ir para as mensagens mais recentes

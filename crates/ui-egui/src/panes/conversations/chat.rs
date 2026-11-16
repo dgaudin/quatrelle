@@ -3,9 +3,11 @@
 //! The conversation pane (the module's right): the open chat's header (its name, the other
 //! person's presence, its members, "Open in Teams"), then its messages by day, one sender's in a
 //! row under one name and picture, the user's own on the right; system lines; the page before
-//! asked for when the user scrolls to the top; after them, what the user sent that Teams doesn't
-//! have yet (`outgoing.rs`); and the box to write in at the foot (`super::writing`). A chat Graph
-//! won't let be read shows what the list gave of it and "Open in Teams".
+//! asked for when the user scrolls to the top; opened at a search's hit, scrolled to it once and
+//! the message tinted a moment, and, the newer ones left out, "Go to the newest messages" under
+//! the last; after them, what the user sent that Teams doesn't have yet (`outgoing.rs`); and the
+//! box to write in at the foot (`super::writing`). A chat Graph won't let be read shows what the
+//! list gave of it and "Open in Teams".
 //!
 //! What is hostile here: everything drawn came from senders (names, words, links, pictures,
 //! files) or from Graph (the chat's link). "External" is drawn before the name a sender chose and
@@ -34,6 +36,8 @@ mod text;
 
 /// How near the top (in points) the chat is scrolled for the page before to be asked for.
 const TOP: f32 = 40.0;
+/// How long the message a search found stays tinted once it's scrolled to, in seconds.
+const FOUND_TINT: f64 = 2.0;
 
 /// What every part of the pane reads.
 struct Pane<'a> {
@@ -86,6 +90,7 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         c.chat_view = None;
         c.chat_scroll_to = None;
         c.viewing = None;
+        c.went_to = None;
     }
     // Pictures let go for room: their messages ask for them again once on screen (all of them,
     // when some let go were too many to remember).
@@ -268,18 +273,30 @@ fn sender_key(m: &ChatMessage) -> Option<String> {
     }
 }
 
-/// The messages, scrolled to the newest at first; scrolled to the top, the page before is asked
-/// for (once a page), and when it comes in above the view stays where it was.
+/// The messages, scrolled to the newest at first, or, opened at a search's hit, to its message
+/// once the window holds it (the scroll is the user's after), that message tinted
+/// [`FOUND_TINT`] seconds; scrolled to the top, the page before is asked for (once a page), and
+/// when it comes in above the view stays where it was.
 fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &mut Vec<Action>) {
     let window = &p.s.teams.window;
+    let now = ui.input(|i| i.time);
+    let go_to = p.s.teams.go_to.as_deref();
+    if go_to.is_none() {
+        c.went_to = None;
+    }
+    // The hit's message to scroll to now: once, as soon as it's here.
+    let scroll = go_to.filter(|g| c.went_to.as_ref().is_none_or(|(w, _)| w != g) && window.iter().any(|m| m.id == *g));
+    let tint: Option<String> =
+        scroll.map(str::to_string).or_else(|| c.went_to.as_ref().filter(|(_, at)| now - *at < FOUND_TINT).map(|(id, _)| id.clone()));
     let front = window.front().map(|m| m.id.clone());
-    // Older messages came in above what was on screen.
-    let above = match (&c.chat_view, &front) {
-        (Some((was_chat, was_front, ..)), Some(now)) => was_chat == chat && was_front != now && window.iter().any(|m| m.id == *was_front),
-        _ => false,
-    };
+    // Older messages came in above what was on screen (the view isn't going to the hit).
+    let above = scroll.is_none()
+        && match (&c.chat_view, &front) {
+            (Some((was_chat, was_front, ..)), Some(now)) => was_chat == chat && was_front != now && window.iter().any(|m| m.id == *was_front),
+            _ => false,
+        };
     let mut area = egui::ScrollArea::vertical().id_salt(("teams-chat", chat)).stick_to_bottom(true).auto_shrink([false, false]);
-    if let Some(y) = c.chat_scroll_to.take() {
+    if let Some(y) = c.chat_scroll_to.take().filter(|_| scroll.is_none()) {
         area = area.vertical_scroll_offset(y);
     }
     let out = area.show(ui, |ui| {
@@ -297,17 +314,41 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
                 let key = sender_key(m);
                 let first = group.as_ref() != Some(&key);
                 group = Some(key.clone());
+                // The hit's message: its tint painted behind it once its place is known.
+                let behind = (tint.as_deref() == Some(m.id.as_str())).then(|| (ui.painter().add(egui::Shape::Noop), ui.cursor().top()));
                 if key.is_none() {
                     system(p, ui, m);
                     group = None;
                 } else {
                     message(p, c, ui, m, first, acts);
                 }
+                if let Some((at, top)) = behind {
+                    let r = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=ui.min_rect().bottom()).expand2(vec2(8.0, 3.0));
+                    ui.painter().set(at, egui::Shape::rect_filled(r, 6.0, p.t.hover_row));
+                    if scroll == Some(m.id.as_str()) {
+                        ui.scroll_to_rect_animation(r, Some(Align::Center), egui::style::ScrollAnimation::none());
+                    }
+                }
+            }
+            if p.s.teams.newer_left_out {
+                newest_link(ui, &p.t, chat, acts);
             }
             outgoing::outgoing(p, ui, chat, acts);
             ui.add_space(8.0);
         });
     });
+    if let Some(g) = scroll {
+        c.went_to = Some((g.to_string(), now));
+    }
+    // The tint goes once its time is up.
+    if let Some((_, at)) = &c.went_to {
+        let left = FOUND_TINT - (now - *at);
+        if left > 0.0
+            && let Ok(wait) = std::time::Duration::try_from_secs_f64(left)
+        {
+            ui.ctx().request_repaint_after(wait);
+        }
+    }
     let (height, offset, view) = (out.content_size.y, out.state.clamped_offset().y, out.inner_rect.height());
     if above && let Some((_, _, was_height, was_offset)) = c.chat_view.clone() {
         c.chat_scroll_to = Some(was_offset + (height - was_height).max(0.0));
@@ -322,6 +363,18 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
         acts.push(Action::Run("teams.older", json!({"chat": chat})));
     }
     c.chat_view = front.map(|f| (chat.to_string(), f, height, offset));
+}
+
+/// Newer messages left out (opened at an older one): the way to them, under the last message
+/// received, which opens the chat again at its newest.
+fn newest_link(ui: &mut Ui, t: &Tokens, chat: &str, acts: &mut Vec<Action>) {
+    ui.add_space(12.0);
+    ui.vertical_centered(|ui| {
+        // In the accent: the window's text colour would make it read as a line of the chat.
+        if ui.link(RichText::new(tl!("Go to the newest messages")).size(13.0).color(t.accent)).clicked() {
+            acts.push(Action::Run("teams.open", json!({"chat": chat})));
+        }
+    });
 }
 
 /// A day's heading, centred between two lines.

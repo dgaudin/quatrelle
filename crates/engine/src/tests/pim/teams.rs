@@ -9,6 +9,8 @@ use super::*;
 use crate::Module;
 
 mod announce;
+/// A search's hit opened at its message.
+mod find;
 mod outbox;
 /// The pages the window opens: the sign-in, a chat in Teams.
 mod pages;

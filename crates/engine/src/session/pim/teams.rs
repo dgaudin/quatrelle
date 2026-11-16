@@ -87,6 +87,9 @@ pub struct TeamsState {
     /// The newest end was dropped: messages newer than the window's last aren't taken (they'd
     /// follow a gap); opening the chat again shows them.
     pub newer_left_out: bool,
+    /// The message the open chat was opened at (a search's hit, [`teams::Job::Find`]), until
+    /// another chat or this one is opened again: the window scrolls to it once it holds it.
+    pub go_to: Option<String>,
     /// The open chat's members (at most [`teams::MAX_MEMBERS`], found by id) and its link
     /// (`webUrl`, kept as Graph gave it: checked where it's used), as the worker last said them.
     members: ChatMembers,
@@ -185,9 +188,10 @@ impl TeamsState {
         self.rows.iter().filter(|r| !r.hidden)
     }
 
-    /// `chat` (or none) now on screen: its window begins empty, filled by what the worker sends.
-    /// Its messages going out are said again by the worker; those it refused, known here alone,
-    /// stay with their chat (the same chat opened again keeps them all).
+    /// `chat` (or none) now on screen: its window begins empty, filled by what the worker sends,
+    /// and no message to go to. Its messages going out are said again by the worker; those it
+    /// refused, known here alone, stay with their chat (the same chat opened again keeps them
+    /// all).
     pub(crate) fn open_chat(&mut self, chat: Option<String>) {
         if self.open != chat {
             self.switch_outgoing(chat.as_deref());
@@ -198,6 +202,7 @@ impl TeamsState {
         self.web_url = None;
         self.scrolled_back = false;
         self.newer_left_out = false;
+        self.go_to = None;
         self.asked_before = None;
         // The images of the chat left aren't waited for any more.
         self.asked.retain(|p| !matches!(p, Picture::Hosted { .. }));
@@ -342,12 +347,25 @@ impl Session {
     /// unread that the user is still in and can read here marked read (its row stays as it is
     /// until the worker says it's read).
     pub(crate) fn teams_show(&mut self, chat: Option<String>) {
+        self.teams_show_at(chat, None);
+    }
+
+    /// [`Session::teams_show`], at the chat's message `at` when one is given (a search's hit):
+    /// the worker is asked to find it ([`teams::Job::Find`]) instead of the chat's newest, and the
+    /// window goes to it once it holds it.
+    pub(crate) fn teams_show_at(&mut self, chat: Option<String>, at: Option<String>) {
         let unread = chat.as_deref().is_some_and(|c| self.teams.to_mark_read(c));
         self.teams.open_chat(chat.clone());
+        let at = at.filter(|_| chat.is_some());
+        self.teams.go_to.clone_from(&at);
         // On screen now: its news waiting aren't announced, and it's marked read below, once.
         self.teams_came_on_screen();
         let mark = chat.clone().filter(|_| unread);
-        self.push_job(Job::Teams { job: teams::Job::Open { chat } });
+        let job = match (chat, at) {
+            (Some(chat), Some(message)) => teams::Job::Find { chat, message },
+            (chat, _) => teams::Job::Open { chat },
+        };
+        self.push_job(Job::Teams { job });
         if let Some(chat) = mark {
             self.teams_mark_read(chat);
         }
@@ -443,8 +461,9 @@ impl Session {
             teams::Event::Outbox { chat, items, took } => self.teams_outbox(&chat, items, took),
             teams::Event::Unsent { count } => self.teams.unsent = count,
             teams::Event::News { news } => self.teams_news(news),
+            teams::Event::Placed { chat, message, newest } => self.teams.placed(&chat, &message, newest),
             // Not taken yet.
-            teams::Event::NoPicture { .. } | teams::Event::Placed { .. } => {}
+            teams::Event::NoPicture { .. } => {}
         }
     }
 

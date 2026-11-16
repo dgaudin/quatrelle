@@ -2303,3 +2303,5 @@ presence	Offline	오프라인
 	Reopen the page	페이지 다시 열기
 	Copy the address	주소 복사
 	{browser} couldn't open the page: {error}	{browser}에서 페이지를 열 수 없습니다: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	최신 메시지로 이동

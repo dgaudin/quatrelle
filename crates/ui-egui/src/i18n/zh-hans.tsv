@@ -2304,3 +2304,5 @@ presence	Offline	离线
 	Reopen the page	重新打开页面
 	Copy the address	复制地址
 	{browser} couldn't open the page: {error}	{browser} 无法打开页面: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	转到最新消息

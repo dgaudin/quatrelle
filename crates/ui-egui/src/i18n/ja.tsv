@@ -2301,3 +2301,5 @@ presence	Offline	オフライン
 	Reopen the page	ページを開き直す
 	Copy the address	アドレスをコピー
 	{browser} couldn't open the page: {error}	{browser} でページを開けませんでした: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	最新のメッセージへ移動

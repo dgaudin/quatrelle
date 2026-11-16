@@ -37,7 +37,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params(r#"{"deleteCopy"?: bool (delete the local copy of the conversations too)}"#)
             .when(signed_in),
         CommandSpec::new("teams.deleteSetAside", "Delete the copy set aside", OPTIONS, delete_set_aside).params("()").when(has_set_aside),
-        CommandSpec::new("teams.open", "Open a conversation", MODULE, open).params(r#"{"chat": string (a listed conversation's id) | null (none)}"#).when(ready),
+        CommandSpec::new("teams.open", "Open a conversation", MODULE, open)
+            .params(r#"{"chat": string (a listed conversation's id) | null (none), "message"?: string (one of its messages to open it at: a search's hit)}"#)
+            .when(ready),
         CommandSpec::new("teams.older", "Older messages", MODULE, older).params(r#"{"chat": string (the open conversation)}"#).when(ready),
         CommandSpec::new("teams.search", "Search conversations", MODULE, search)
             .params(r#"{"query": string (at most 200 characters; "" shows the list again)}"#)
@@ -175,6 +177,8 @@ fn delete_set_aside(s: &mut Session, _: &Value) -> CmdResult {
     Ok(json!({}))
 }
 
+/// A conversation opened (none: the list only); at one of its messages, a search's hit, when
+/// `message` is given (an id, as the chat's).
 fn open(s: &mut Session, v: &Value) -> CmdResult {
     let chat = match v.get("chat") {
         Some(Value::Null) => None,
@@ -182,8 +186,13 @@ fn open(s: &mut Session, v: &Value) -> CmdResult {
         Some(Value::String(_)) => return Err(CmdError::Params("that conversation isn't listed".into())),
         _ => return Err(CmdError::Params("`chat` (a conversation's id, or null) is required".into())),
     };
-    s.teams_show(chat.clone());
-    Ok(json!({"chat": chat}))
+    let message = match v.get("message") {
+        None | Some(Value::Null) => None,
+        Some(_) if chat.is_none() => return Err(CmdError::Params("`message` is a message of the conversation opened".into())),
+        Some(_) => Some(id_param(v, "message")?.to_string()),
+    };
+    s.teams_show_at(chat.clone(), message.clone());
+    Ok(json!({"chat": chat, "message": message}))
 }
 
 fn older(s: &mut Session, v: &Value) -> CmdResult {

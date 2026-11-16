@@ -2305,3 +2305,5 @@ presence	Offline	Не в сети
 	Reopen the page	Открыть страницу снова
 	Copy the address	Копировать адрес
 	{browser} couldn't open the page: {error}	Не удалось открыть страницу в {browser}: {error}
+# Teams: a search hit opened at its message.
+	Go to the newest messages	Перейти к последним сообщениям

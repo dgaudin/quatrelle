@@ -18,6 +18,8 @@ use crate::teams::limits::Cadence;
 use crate::teams::store::ChatRecord;
 use crate::teams::worker::Worker;
 
+/// A search's hit opened at its message.
+mod find;
 /// The chats the user left, and those back in the list.
 mod left;
 /// What the log says of the chats' links.
