@@ -411,6 +411,28 @@ fn the_newest_hits_whatever_order_the_messages_came_in() {
     }
 }
 
+/// A-m3: a segment as the index wrote it before the lists were kept by date (delivery 1), each
+/// word's places in the order the places were taken, the newest page first and the history after
+/// it: read back, a search gives the newest hits first, 200 at most, two words alike, and looks at
+/// no more of the chat than it gives.
+#[test]
+fn a_segment_kept_by_place_is_read_back_newest_first() {
+    let (copy, store) = copy();
+    copy.upsert(A, &[msg(A, 1, "plan")]).unwrap();
+    drop(copy);
+    let taken: Vec<i64> = [(900, 100), (700, 200), (500, 200), (300, 200)].into_iter().flat_map(|(from, n)| from..from + n).collect();
+    let messages: Vec<(String, i64)> = taken.iter().map(|&i| (id(i), T0 + i * MINUTE)).collect();
+    let places = |has: fn(i64) -> bool| -> Vec<u32> { (0u32..).zip(&taken).filter(|(_, i)| has(**i)).map(|(p, _)| p).collect() };
+    let words = serde_json::json!({ "plan": places(|_| true), "draft": places(|i| i % 3 == 0) });
+    let old = serde_json::json!({ "chat": A, "messages": messages, "words": words });
+    store.write_account_files(TEAMS_ACCOUNT, &[(format!("index/{}.json", chat_hash(A)), serde_json::to_vec(&old).unwrap())]).unwrap();
+    let copy = open(&store);
+    let want = |i: Vec<i64>| i.into_iter().map(|i| (A.to_string(), id(i))).collect::<Vec<_>>();
+    assert_eq!(hits(&copy, "plan"), want((800..1_000).rev().collect()));
+    assert!(copy.index.borrow().looked.get() <= MAX_HITS, "{} messages looked at", copy.index.borrow().looked.get());
+    assert_eq!(hits(&copy, "draft plan"), want((300..1_000).rev().filter(|i| i % 3 == 0).take(MAX_HITS).collect()));
+}
+
 /// 300 chats of one message each: a search that finds what it may give goes through the newest
 /// chats it needs, by their words, and through the chats whose names have its words, not through
 /// every chat. A chat renamed is found by its new name only.
