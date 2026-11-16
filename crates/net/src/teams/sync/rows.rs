@@ -8,8 +8,10 @@
 //! isn't proven of the organisation, and its last line's sender judged by
 //! [`sender_internal`] (a sender the members don't have was looked for among them before).
 //! The open chat's members and link go too, for its header, its mentions and "Open in Teams":
-//! when it's opened, and again when they change.
+//! when it's opened, and again when they change. A chat Graph gives no link gets one built in the
+//! form Graph gives the others ([`built_chat_link`]).
 
+use super::links::built_chat_link;
 use super::reads::theirs;
 use super::*;
 use quatrelle_model::pim::teams::{ChatKind, ChatMessage, ChatRow, EVENT_ITEMS, Event, Member, is_internal, one_line, row_name, sender_internal};
@@ -60,11 +62,13 @@ pub(crate) fn flush(w: &mut Worker) {
 }
 
 /// The open chat's members and link, from the copy, in events of at most [`EVENT_ITEMS`]
-/// members, unless the engine was last sent them as they are.
+/// members, unless the engine was last sent them as they are. Graph giving no link, it is built
+/// (decision 21), else none.
 pub(crate) fn say_members(w: &mut Worker) {
     let Some(chat) = w.open.clone() else { return };
     let Some(r) = w.copy.as_ref().and_then(|c| c.chat(&chat)) else { return };
-    let (members, web_url) = (&r.chat.members, &r.chat.web_url);
+    let members = &r.chat.members;
+    let web_url = r.chat.web_url.clone().or_else(|| built_chat_link(&chat, &w.settings.tenant_id));
     let sum = members_hash(members, web_url.as_deref());
     if w.sync.members_said == Some(sum) {
         return;
@@ -72,7 +76,7 @@ pub(crate) fn say_members(w: &mut Worker) {
     w.sync.members_said = Some(sum);
     let mut parts = members.chunks(EVENT_ITEMS).peekable();
     if parts.peek().is_none() {
-        return w.say(Event::Members { chat, members: Vec::new(), web_url: web_url.clone(), first: true });
+        return w.say(Event::Members { chat, members: Vec::new(), web_url, first: true });
     }
     for (i, part) in parts.enumerate() {
         w.say(Event::Members { chat: chat.clone(), members: part.to_vec(), web_url: web_url.clone(), first: i == 0 });

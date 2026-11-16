@@ -93,7 +93,7 @@ fn labelled(ctx: &egui::Context, a: &mut MailApp) -> Vec<(String, f64)> {
 }
 
 /// The texts drawn, light and dark, once the page has settled (each painted as `name` when
-/// pictures are asked for); the light ones.
+/// pictures are asked for); the light ones, which the dark pass draws too.
 fn drawn(ctx: &egui::Context, a: &mut MailApp, tex: &mut Textures, name: &str) -> Vec<String> {
     let pictures = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
     let mut light = Vec::new();
@@ -111,7 +111,12 @@ fn drawn(ctx: &egui::Context, a: &mut MailApp, tex: &mut Textures, name: &str) -
                 _ => None,
             })
             .collect();
-        if !dark {
+        if dark {
+            let (mut l, mut d) = (light.clone(), texts);
+            l.sort();
+            d.sort();
+            assert_eq!(d, l, "{name}: the dark pass draws the light one's texts");
+        } else {
             light = texts;
         }
     }
@@ -335,6 +340,12 @@ fn the_options_card_shows_its_fields_in_light_and_dark() {
     click_at(&ctx, &mut a, at, 1, size);
     assert!(jobs.borrow().iter().any(|j| matches!(j, Job::Teams { job: teams::Job::DeleteSetAside { .. } })), "{:?}", jobs.borrow());
     assert!(a.session.teams.set_aside.is_none());
+    // Teams stopped: why, and Sign in to try again.
+    a.session.teams_apply(teams::Event::Status { status: Status::Failed { why: "The sign-in stopped unexpectedly; try again".into() } });
+    let t = drawn(&ctx, &mut a, &mut tex, "failed");
+    for wanted in ["The sign-in stopped unexpectedly; try again", "Sign in", "Your sign-in won't be remembered: no keychain is available"] {
+        assert!(has(&t, wanted), "{wanted}: {t:?}");
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -660,7 +671,7 @@ fn signed_out_the_rail_leads_to_the_options() {
 }
 
 /// The list's states, light and dark: no conversations yet, signing in, copying (and the cap),
-/// offline, sign in again, a permission missing, and the list.
+/// offline, sign in again, a permission missing, Teams stopped, no keychain, and the list.
 #[test]
 fn the_list_states_in_light_and_dark() {
     let pictures = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
@@ -679,6 +690,13 @@ fn the_list_states_in_light_and_dark() {
                 "Quatrelle needs the permission Chat.Read: sign in again to accept it, or ask your administrator to grant admin consent in Microsoft Entra",
             ],
         ),
+        (
+            "failed",
+            Status::Failed { why: "The sign-in stopped unexpectedly; try again".into() },
+            false,
+            vec!["The sign-in stopped unexpectedly; try again", "Sign in"],
+        ),
+        ("no-keychain", Status::NoKeychain, false, vec!["No conversations yet"]),
         ("list", Status::UpToDate, true, vec!["Paul Durand", "Paul: it's fixed", "External", "Can't be read here", "Sam: the files are ready"]),
     ];
     for (name, status, with_rows, wanted) in states {

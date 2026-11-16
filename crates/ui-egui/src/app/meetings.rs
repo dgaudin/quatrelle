@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Joining an online meeting: a Teams one in a browser's app window (File › Options ›
-//! Applications says which browser).
+//! Applications says which browser). Teams' own pages open there too: Microsoft's page to sign in
+//! to Teams on, and a chat in Teams ("Open in Teams").
+//!
+//! What is hostile here: the pages come from the Teams worker (Microsoft's sign-in service) and
+//! from Graph (a chat's link). Each is checked again before it's handed to a browser, as one
+//! argument after the app window's option: only Microsoft's sign-in page
+//! ([`is_microsoft_sign_in`]) and a Teams chat ([`is_teams_chat_link`]) ever open.
 
-use quatrelle_engine::{MEETINGS_PROFILE, is_profile_dir};
+use quatrelle_engine::model::ical::{is_microsoft_sign_in, is_teams_chat_link};
+use quatrelle_engine::{MEETINGS_PROFILE, TeamsPage, is_profile_dir};
 
 use crate::*;
 
@@ -30,11 +37,25 @@ impl MailApp {
             self.session.notice(tl!("This meeting link can't be opened"), true);
             return;
         }
+        match self.in_app_window(u) {
+            Ok(true) => {}
+            Ok(false) => self.open_link(u),
+            Err((browser, e)) => {
+                self.session.notice(tf!("{browser} couldn't open the meeting: {error}", browser = browser, error = e), true);
+                self.open_link(u);
+            }
+        }
+    }
+
+    /// `url` in the meetings browser's app window, in the profile chosen ([`meeting_profile`]):
+    /// opened (`Ok(true)`); no browser found, or the default browser chosen (`Ok(false)`: the
+    /// caller opens it there); or the browser's name and why it couldn't (`Err`). The browser is
+    /// the one chosen in Options while it's installed, else the first found; only a program the
+    /// system lists is launched, the setting alone never names what runs. A profile the browser no
+    /// longer has gives way to the one it used last, and the user is told.
+    fn in_app_window(&mut self, url: &str) -> Result<bool, (String, String)> {
         let browsers = self.services.browsers();
-        let Some((name, program)) = meeting_browser(self.session.prefs.meeting_browser.as_deref(), &browsers) else {
-            self.open_link(u);
-            return;
-        };
+        let Some((name, program)) = meeting_browser(self.session.prefs.meeting_browser.as_deref(), &browsers) else { return Ok(false) };
         // The browser's profiles as they are now: one may have been deleted since Options showed it.
         let profiles = self.services.browser_profiles(program);
         let chosen = self.session.prefs.meeting_profile.clone();
@@ -49,9 +70,33 @@ impl MailApp {
                 tf!("The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used", profile = gone, browser = name);
             self.session.notice(text, false);
         }
-        if let Err(e) = self.services.open_app_window(program, profile, u) {
-            self.session.notice(tf!("{browser} couldn't open the meeting: {error}", browser = name, error = e), true);
-            self.open_link(u);
+        self.services.open_app_window(program, profile, url).map(|()| true).map_err(|e| (name.clone(), e))
+    }
+
+    /// The Teams pages the engine asks for (Microsoft's page to sign in on, a chat in Teams), in
+    /// the meetings browser's app window, else the default browser (none found, the default chosen,
+    /// or the launch failed, which is said). Each is checked again first: a page that isn't
+    /// Microsoft's sign-in or a Teams chat opens nowhere.
+    pub(crate) fn teams_pages(&mut self) {
+        while let Some(page) = self.session.take_teams_page() {
+            let (url, ours) = match &page {
+                TeamsPage::SignIn(url) => (url.as_str(), is_microsoft_sign_in(url)),
+                TeamsPage::Chat(url) => (url.as_str(), is_teams_chat_link(url)),
+            };
+            if !ours {
+                log::warn!("teams: a page that isn't Teams' own was not opened");
+                continue;
+            }
+            let opened = match self.in_app_window(url) {
+                Ok(opened) => opened,
+                Err((browser, e)) => {
+                    self.session.notice(tf!("{browser} couldn't open the page: {error}", browser = browser, error = e), true);
+                    false
+                }
+            };
+            if !opened && let Err(e) = self.services.open_url(url) {
+                self.session.notice(tf!("The link couldn't be opened: {error}", error = e), true);
+            }
         }
     }
 

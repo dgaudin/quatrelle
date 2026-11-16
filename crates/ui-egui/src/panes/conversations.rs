@@ -11,7 +11,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use egui::{RichText, Ui};
+use quatrelle_engine::Session;
 use quatrelle_engine::model::pim::teams::{Picture, Status};
+use serde_json::json;
+
+use crate::Action;
+use crate::theme::Tokens;
 
 mod chat;
 mod events;
@@ -82,6 +88,23 @@ pub(crate) enum RowPicture {
 /// permission is missing, or the last try failed (cancelled in the browser, say).
 pub(crate) fn sign_in_again(status: &Status) -> bool {
     matches!(status, Status::SignInAgain | Status::PermissionMissing { .. } | Status::Failed { .. })
+}
+
+/// Signing in, Microsoft's page known (the engine keeps it only while signing in): the browser's
+/// window may be behind another or closed, so it can be opened again, or its address copied to
+/// paste in a browser by hand. Drawn on the Options card and above the list; nothing otherwise.
+pub(crate) fn sign_in_waiting(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+    let Some(page) = s.teams.sign_in_page.as_deref().filter(|_| s.teams.status == Status::SigningIn) else { return };
+    ui.add(egui::Label::new(RichText::new(tl!("A Microsoft sign-in window has opened")).color(t.dim).size(12.5)).wrap());
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(tl!("Reopen the page")).clicked() {
+            acts.push(Action::Run("teams.reopenSignIn", json!({})));
+        }
+        if ui.button(tl!("Copy the address")).clicked() {
+            ui.ctx().copy_text(page.to_string());
+        }
+    });
+    ui.add_space(4.0);
 }
 
 /// Why Teams stopped, as it's drawn: the worker's sentence in the interface's language, with the

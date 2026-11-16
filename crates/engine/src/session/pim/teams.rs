@@ -2,17 +2,21 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Teams, as the engine keeps it: where the connection stands, the rows of the list, the open
 //! chat's last messages and those going out (`outbox.rs`), presence, search hits and pictures
-//! waiting for the window, and what is announced of new messages (`announce.rs`). Only the Teams
-//! worker (`net::teams`) talks to Graph and holds the copy and the outbox; the engine sends it
-//! jobs and applies what it reports, in windows that never grow with the copy (`window.rs`).
+//! waiting for the window, what is announced of new messages (`announce.rs`), and the Teams pages
+//! the window opens in the meetings browser's window ([`TeamsPage`]). Only the Teams worker
+//! (`net::teams`) talks to Graph and holds the copy and the outbox; the engine sends it jobs and
+//! applies what it reports, in windows that never grow with the copy (`window.rs`).
 //!
 //! What is hostile here: everything an event carries came from Graph or the copy on disk (the
 //! worker checked it, the engine still bounds it: the rows at [`teams::MAX_CHATS`], the window at
 //! [`teams::WINDOW_MAX`], presence, hits and pictures by count and bytes); the commands' params come
-//! from the window or a script, checked before anything changes.
+//! from the window or a script, checked before anything changes. A page is handed to the window
+//! only when it's Microsoft's sign-in ([`is_microsoft_sign_in`]) or a Teams chat
+//! ([`is_teams_chat_link`]); the window checks it again.
 
 use std::collections::VecDeque;
 
+use quatrelle_model::ical::{is_microsoft_sign_in, is_teams_chat_link};
 use quatrelle_model::pim::teams::{self, ChatMessage, ChatRow, MAX_ID, Member, Op, Outgoing, Picture, Presence, Status, TeamsSettings, one_line};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
@@ -49,6 +53,17 @@ pub struct TeamsFound {
     pub hits: Vec<(String, String)>,
     pub indexing: bool,
     pub partial: bool,
+}
+
+/// A Teams page for the window to open in the meetings browser's app window (else the default
+/// browser): Microsoft's page to sign in on, or a chat in Teams. Each was checked here, and is
+/// checked again by the window.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TeamsPage {
+    /// Microsoft's page to sign in on ([`is_microsoft_sign_in`]).
+    SignIn(String),
+    /// A chat in Teams ([`is_teams_chat_link`]).
+    Chat(String),
 }
 
 /// Teams in the engine: bounded windows over the worker's copy.
@@ -117,6 +132,11 @@ pub struct TeamsState {
     looked: Option<String>,
     /// What is announced of the new messages: held, given, remembered.
     announcer: announce::Announcer,
+    /// Microsoft's page to sign in on, while signing in (the worker's, when it's Microsoft's): to
+    /// be opened again or copied while the browser is waited for.
+    pub sign_in_page: Option<String>,
+    /// The page the window is to open, once ([`Session::take_teams_page`]).
+    page: Option<TeamsPage>,
 }
 
 impl TeamsState {
@@ -128,6 +148,16 @@ impl TeamsState {
             1..=99 => Some(n.to_string()),
             _ => Some("99+".into()),
         }
+    }
+
+    /// The open chat's link, when it's a Teams chat link "Open in Teams" may open.
+    pub fn teams_link(&self) -> Option<&str> {
+        self.web_url.as_deref().filter(|u| is_teams_chat_link(u))
+    }
+
+    /// `page` for the window to open: the last asked for, once.
+    pub(crate) fn open_page(&mut self, page: TeamsPage) {
+        self.page = Some(page);
     }
 
     /// Whether this chat is listed.
@@ -357,8 +387,27 @@ impl Session {
         self.teams_fallback();
     }
 
+    /// The Teams page the window is to open, once.
+    pub fn take_teams_page(&mut self) -> Option<TeamsPage> {
+        self.teams.page.take()
+    }
+
+    /// The worker's page to sign in on: kept and opened only while signing in, and only when it's
+    /// Microsoft's own (a page elsewhere is never handed to a browser).
+    fn teams_sign_in_page(&mut self, url: String) {
+        if self.teams.status != Status::SigningIn {
+            return log::info!("teams: a sign-in page that came after the sign-in was passed over");
+        }
+        if !is_microsoft_sign_in(&url) {
+            return log::warn!("teams: a sign-in page that isn't Microsoft's was not opened");
+        }
+        self.teams.open_page(TeamsPage::SignIn(url.clone()));
+        self.teams.sign_in_page = Some(url);
+    }
+
     /// What the Teams worker reports. Off, nothing is taken (what was on its way when it was
-    /// switched off); signed out, only where the connection stands and who signed in.
+    /// switched off); signed out, only where the connection stands, who signed in, and the page to
+    /// sign in on.
     pub fn teams_apply(&mut self, e: teams::Event) {
         if !self.prefs.teams.on {
             return;
@@ -382,6 +431,7 @@ impl Session {
                 self.teams.drive_host = drive_host;
             }
             teams::Event::SetAside { path } => self.teams.set_aside = Some(path),
+            teams::Event::SignInPage { url } => self.teams_sign_in_page(url),
             _ if !signed_in => {}
             teams::Event::Chats { rows } => self.teams.upsert_rows(rows),
             teams::Event::Messages { chat, messages, .. } => self.teams.take_messages(&chat, messages),
@@ -394,7 +444,7 @@ impl Session {
             teams::Event::Unsent { count } => self.teams.unsent = count,
             teams::Event::News { news } => self.teams_news(news),
             // Not taken yet.
-            teams::Event::SignInPage { .. } | teams::Event::NoPicture { .. } | teams::Event::Placed { .. } => {}
+            teams::Event::NoPicture { .. } | teams::Event::Placed { .. } => {}
         }
     }
 
@@ -417,6 +467,13 @@ impl Session {
     }
 
     fn teams_status(&mut self, status: Status) {
+        // The sign-in over (or never begun): its page is forgotten, and not opened if it waits.
+        if status != Status::SigningIn {
+            self.teams.sign_in_page = None;
+            if matches!(self.teams.page, Some(TeamsPage::SignIn(_))) {
+                self.teams.page = None;
+            }
+        }
         match status {
             Status::SignedOut => {
                 self.teams_signed_out();

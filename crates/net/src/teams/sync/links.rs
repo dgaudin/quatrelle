@@ -1,22 +1,56 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! What the log says of the chats' links (the window's "open in Teams"), so that it tells why a
-//! chat's link isn't offered: when a chat is opened, its kind, whether it can't be read, and its
-//! link as the window judges it ([`is_teams_chat_link`]); after a listing, how many chats of each
-//! kind, how many with a link, how many the window takes, and the hosts the links are on, said
-//! again only when that changes. Never an id, a name or a message's text: kinds, counts, hosts,
-//! and a path's first segment when it's a short plain word.
+//! The chats' links (the window's "open in Teams"): the one built for a chat Graph gives none
+//! ([`built_chat_link`]), and what the log says of them, so that it tells why a chat's link isn't
+//! offered: when a chat is opened, its kind, whether it can't be read, and its link as the window
+//! judges it ([`is_teams_chat_link`]), or that it was built; after a listing, how many chats of
+//! each kind, how many with a link, how many the window takes, and the hosts the links are on,
+//! said again only when that changes. Never an id, a name or a message's text: kinds, counts,
+//! hosts, and a path's first segment when it's a short plain word.
+//!
+//! What is hostile here: a chat's id (Graph's, or a copy's on disk) and the organisation's id the
+//! sign-in gave. A link is built only from an id one segment of an address can carry that has a
+//! Teams thread's shape, and a GUID, onto Teams' own host: nothing they hold can take the browser
+//! elsewhere.
 
 use std::collections::{BTreeMap, HashMap};
 
 use quatrelle_model::ical::is_teams_chat_link;
 use quatrelle_model::pim::teams::{ChatKind, MAX_CHATS};
 
+use crate::graph::seg;
+use crate::teams::graph::own_segment;
+use crate::teams::worker::is_guid;
+
 /// The most hosts a line names; the others are counted.
 const HOSTS_SAID: usize = 8;
 
 /// The longest path segment said; a longer one (an id, a token) isn't.
 const SEGMENT_SAID: usize = 16;
+
+/// How Teams' threads end: a group's or a meeting's, a one-to-one chat's, and older forms.
+const THREADS: [&str; 4] = ["@thread.v2", "@unq.gbl.spaces", "@thread.skype", "@thread.tacv2"];
+
+/// A chat's link in the form Graph gives the others (`https://teams.microsoft.com/l/chat/<chat
+/// id>/0?tenantId=<organisation>`), for a chat Graph gives none (decision 21: the chats Graph
+/// won't serve come without one). The id is encoded as a segment of Graph's addresses is
+/// ([`seg`]). Only for an id one segment can carry ([`own_segment`]: no `/`, `\`, `?` or `#`)
+/// that is a Teams thread's (`19:`, something, then one of [`THREADS`]), and an organisation
+/// named by its GUID; and only a link the window would open ([`is_teams_chat_link`]).
+pub(crate) fn built_chat_link(chat: &str, tenant: &str) -> Option<String> {
+    let ends_a_thread = |rest: &str| {
+        THREADS.iter().any(|end| {
+            let at = rest.len().checked_sub(end.len()).filter(|at| *at > 0);
+            at.and_then(|at| rest.get(at..)).is_some_and(|tail| tail.eq_ignore_ascii_case(end))
+        })
+    };
+    let thread = chat.strip_prefix("19:").is_some_and(ends_a_thread);
+    if !(thread && own_segment(chat) && is_guid(tenant)) {
+        return None;
+    }
+    let url = format!("https://teams.microsoft.com/l/chat/{}/0?tenantId={tenant}", seg(chat));
+    is_teams_chat_link(&url).then_some(url)
+}
 
 /// A chat's kind as the log says it.
 fn kind_name(kind: &ChatKind) -> &'static str {
@@ -63,9 +97,10 @@ fn host_and_first(url: &str) -> (String, String) {
 }
 
 /// The line said when a chat is opened: its kind (none when the copy hasn't it), whether it's
-/// unreadable, and its link.
-pub(super) fn opened(kind: Option<&ChatKind>, unreadable: bool, url: Option<&str>) -> String {
+/// unreadable, and its link (`built`: Graph gave none, and one was built).
+pub(super) fn opened(kind: Option<&ChatKind>, unreadable: bool, url: Option<&str>, built: bool) -> String {
     let link = match judged(url) {
+        Link::Absent if built => "built".to_string(),
         Link::Absent => "absent".to_string(),
         Link::Accepted { .. } => "ok".to_string(),
         Link::Refused { host, first } => format!("refused (host {host}, path /{first})"),

@@ -2300,3 +2300,8 @@ presence	Offline	Не в сети
 	On this computer only: it stays on the server	Только на этом компьютере: на сервере он остается
 	Removed calendars	Убранные календари
 	{n} years	Лет: {n}
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	Открылось окно входа Microsoft
+	Reopen the page	Открыть страницу снова
+	Copy the address	Копировать адрес
+	{browser} couldn't open the page: {error}	Не удалось открыть страницу в {browser}: {error}

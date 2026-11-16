@@ -2300,3 +2300,8 @@ presence	Offline	Desconectado
 	On this computer only: it stays on the server	Solo en este equipo: sigue en el servidor
 	Removed calendars	Calendarios quitados
 	{n} years	{n} años
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	Se abrió una ventana de inicio de sesión de Microsoft
+	Reopen the page	Volver a abrir la página
+	Copy the address	Copiar la dirección
+	{browser} couldn't open the page: {error}	{browser} no pudo abrir la página: {error}

@@ -10,6 +10,8 @@ use crate::Module;
 
 mod announce;
 mod outbox;
+/// The pages the window opens: the sign-in, a chat in Teams.
+mod pages;
 
 const CLIENT: &str = "00000000-0000-0000-0000-00000000c11e";
 const TENANT: &str = "contoso.example";
@@ -508,7 +510,7 @@ fn teams_commands_survive_junk_params_while_on() {
     let mut s = signed_in((0..5).map(|i| row(i, 100 - i as i64)).collect());
     s.module = Module::Conversations;
     let ids: Vec<&str> = s.registry().all().iter().map(|c| c.id).filter(|id| id.starts_with("teams.")).collect();
-    assert_eq!(ids.len(), 14, "{ids:?}");
+    assert_eq!(ids.len(), 16, "{ids:?}");
     let junk = [
         json!(null),
         json!({}),

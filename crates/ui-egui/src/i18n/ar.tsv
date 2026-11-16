@@ -2295,3 +2295,8 @@ presence	Offline	غير متصل
 	On this computer only: it stays on the server	على هذا الكمبيوتر فقط: يبقى على الخادم
 	Removed calendars	التقويمات المُخرجة
 	{n} years	{n} سنوات
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	فُتحت نافذة تسجيل الدخول إلى Microsoft
+	Reopen the page	إعادة فتح الصفحة
+	Copy the address	نسخ العنوان
+	{browser} couldn't open the page: {error}	تعذّر على {browser} فتح الصفحة: {error}

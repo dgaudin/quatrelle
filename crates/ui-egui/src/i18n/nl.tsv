@@ -2296,3 +2296,8 @@ presence	Offline	Offline
 	On this computer only: it stays on the server	Alleen op deze computer: hij blijft op de server
 	Removed calendars	Uit de lijst gehaalde agenda's
 	{n} years	{n} jaar
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	Er is een aanmeldvenster van Microsoft geopend
+	Reopen the page	De pagina opnieuw openen
+	Copy the address	Het adres kopiëren
+	{browser} couldn't open the page: {error}	{browser} kon de pagina niet openen: {error}

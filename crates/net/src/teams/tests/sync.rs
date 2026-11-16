@@ -65,10 +65,15 @@ pub(super) fn run(teams: FakeTeams) -> Run {
 }
 
 /// [`run`], the worker made ready by `ready` (a test's hooks) before it signs in.
-pub(super) fn run_with(mut teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run {
+pub(super) fn run_with(teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run {
+    run_as(teams, TENANT, ready)
+}
+
+/// [`run_with`], the sign-in saying the account is of the organisation `tenant`.
+pub(super) fn run_as(mut teams: FakeTeams, tenant: &str, ready: impl FnOnce(&mut Worker)) -> Run {
     teams.clock.get_or_insert(NOW);
     let server = serve_teams(teams);
-    let (mut w, _, seen, creds) = by_hand(&server, grant(Some(TENANT)));
+    let (mut w, _, seen, creds) = by_hand(&server, grant(Some(tenant)));
     ready(&mut w);
     let t0 = Instant::now();
     w.job(Job::SignIn { client_id: super::worker::CLIENT.into(), tenant: "organizations".into() });

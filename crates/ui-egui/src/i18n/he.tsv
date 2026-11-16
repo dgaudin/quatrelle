@@ -2295,3 +2295,8 @@ presence	Offline	לא מחובר
 	On this computer only: it stays on the server	במחשב זה בלבד: הוא נשאר בשרת
 	Removed calendars	לוחות שנה שהוצאו
 	{n} years	{n} שנים
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	נפתח חלון כניסה של Microsoft
+	Reopen the page	פתיחת הדף מחדש
+	Copy the address	העתקת הכתובת
+	{browser} couldn't open the page: {error}	{browser} לא הצליח לפתוח את הדף: {error}

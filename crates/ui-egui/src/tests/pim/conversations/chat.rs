@@ -287,7 +287,8 @@ fn an_outside_image_is_asked_only_on_a_click() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// "Open in Teams" is drawn only for a link to a Teams chat, and opens that link.
+/// "Open in Teams" is drawn only for a link to a Teams chat, and asks for it through
+/// `teams.openInTeams` (which opens it in the meetings browser's window), never as a link.
 #[test]
 fn open_in_teams_needs_a_teams_chat_link() {
     let mut card = said("m1", user("u-ana", "Ana Lima"), NOW, ChatText::default());
@@ -304,10 +305,61 @@ fn open_in_teams_needs_a_teams_chat_link() {
     let (mut a, dir, _) = chat_app("teams-chat-link-teams", group_row(), TEAMS_LINK, vec![card]);
     settled_at(&ctx, &mut a, size);
     let (_, texts) = pane(&ctx, &mut a, vec![], size);
-    let button = rect_of(&texts, |t| t == "Open in Teams").expect("the button for a Teams chat");
-    let acts = click_pane(&ctx, &mut a, button.center(), size);
-    let opened: Vec<&String> = acts.iter().filter_map(|x| if let Action::OpenUrl(u) = x { Some(u) } else { None }).collect();
-    assert_eq!(opened, vec![TEAMS_LINK], "the chat's link, opened");
+    // The card's button, below the header's.
+    let button = texts.iter().filter(|(t, _)| t == "Open in Teams").map(|(_, r)| *r).max_by(|a, b| a.top().total_cmp(&b.top()));
+    let acts = click_pane(&ctx, &mut a, button.expect("the button for a Teams chat").center(), size);
+    assert!(acts.iter().any(|x| matches!(x, Action::Run("teams.openInTeams", _))), "teams.openInTeams asked for");
+    assert!(!acts.iter().any(|x| matches!(x, Action::OpenUrl(_))), "never opened as a link");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Every header has "Open in Teams" when the chat's link is a Teams chat link, a readable group
+/// chat's too, beside the name; a click asks for it through `teams.openInTeams`. A link elsewhere
+/// has none. A chat Graph won't serve whose link the worker built (decision 21) has it in its
+/// header and its pane, and the engine opens that link.
+#[test]
+fn every_header_has_open_in_teams_when_its_link_is_one() {
+    let ctx = egui::Context::default();
+    let size = (1280, 800);
+    let hello = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Hello")]));
+    let (mut a, dir, _) = chat_app("teams-header-link", group_row(), TEAMS_LINK, vec![hello.clone()]);
+    settled_at(&ctx, &mut a, size);
+    let (_, texts) = pane(&ctx, &mut a, vec![], size);
+    let buttons: Vec<egui::Rect> = texts.iter().filter(|(t, _)| t == "Open in Teams").map(|(_, r)| *r).collect();
+    let name = rect_of(&texts, |t| t == "Support team").expect("the name");
+    assert_eq!(buttons.len(), 1, "{texts:?}");
+    assert!((buttons[0].center().y - name.center().y).abs() < 12.0, "beside the name: {buttons:?} {name:?}");
+    let acts = click_pane(&ctx, &mut a, buttons[0].center(), size);
+    assert!(acts.iter().any(|x| matches!(x, Action::Run("teams.openInTeams", _))), "teams.openInTeams asked for");
+    assert!(!acts.iter().any(|x| matches!(x, Action::OpenUrl(_))), "never opened as a link");
+    let _ = std::fs::remove_dir_all(dir);
+    // A link elsewhere: none.
+    let (mut a, dir, _) = chat_app("teams-header-evil", group_row(), "https://evil.example/l/chat/x", vec![hello]);
+    settled_at(&ctx, &mut a, size);
+    let (_, texts) = pane(&ctx, &mut a, vec![], size);
+    assert!(!has_text(&texts, "Open in Teams"), "{texts:?}");
+    let _ = std::fs::remove_dir_all(dir);
+    // A chat Graph won't serve, its link built by the worker.
+    let built = "https://teams.microsoft.com/l/chat/19%3Apane%40thread.v2/0?tenantId=11111111-2222-3333-4444-000000000001";
+    let unknown = ChatRow { kind: ChatKind::Other { name: "unknownFutureValue".into() }, unreadable: true, ..group_row() };
+    let (mut a, dir, _) = chat_app("teams-header-built", unknown, built, vec![]);
+    settled_at(&ctx, &mut a, size);
+    let (_, texts) = pane(&ctx, &mut a, vec![], size);
+    let buttons: Vec<egui::Rect> = texts.iter().filter(|(t, _)| t == "Open in Teams").map(|(_, r)| *r).collect();
+    assert_eq!(buttons.len(), 2, "in the header and the pane: {texts:?}");
+    let acts = click_pane(&ctx, &mut a, buttons[1].center(), size);
+    let asked: Vec<(&str, serde_json::Value)> = acts
+        .into_iter()
+        .filter_map(|x| match x {
+            Action::Run(id @ "teams.openInTeams", p) => Some((id, p)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked.len(), 1);
+    for (id, p) in asked {
+        a.session.run(id, &p).unwrap();
+    }
+    assert_eq!(a.session.take_teams_page(), Some(quatrelle_engine::TeamsPage::Chat(built.into())));
     let _ = std::fs::remove_dir_all(dir);
 }
 

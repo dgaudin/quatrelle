@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! UI tests: joining an online meeting (a Teams one in a browser's app window).
+//! UI tests: joining an online meeting (a Teams one in a browser's app window), and the Teams
+//! pages opened in that window (`teams.rs`).
 
 use super::*;
 
@@ -11,12 +12,15 @@ use std::rc::Rc;
 use crate::BrowserProfile;
 use quatrelle_engine::MEETINGS_PROFILE;
 
+/// The sign-in and "Open in Teams" in the meetings browser's window.
+mod teams;
+
 const TEAMS: &str = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%7d";
 
 /// Services that offer `browsers` for meetings, each with `profiles`, and remember what was
 /// opened: `url <link>` for the default browser, `app <program> <link>` for an app window (which
 /// fails when `fails`), with `--profile-directory=<folder>` before the link when one is given.
-struct Launching {
+pub(super) struct Launching {
     browsers: Vec<(String, String)>,
     profiles: Vec<BrowserProfile>,
     fails: bool,
@@ -58,7 +62,7 @@ fn profile(dir: &str, name: &str, account: &str) -> BrowserProfile {
 }
 
 /// [`launching`], each browser having `profiles`.
-fn launching_with(
+pub(super) fn launching_with(
     name: &str,
     browsers: &[(&str, &str)],
     profiles: &[BrowserProfile],
@@ -75,7 +79,7 @@ fn launching_with(
     (MailApp::new(s, Box::new(NullBackend), Box::new(services)), dir, opened)
 }
 
-fn opened(o: &Rc<RefCell<Vec<String>>>) -> Vec<String> {
+pub(super) fn opened(o: &Rc<RefCell<Vec<String>>>) -> Vec<String> {
     o.borrow().clone()
 }
 

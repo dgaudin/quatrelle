@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The File page: Options › Teams. Teams switched on, the application and directory ids the
-//! organisation registered, the sign-in (Sign out saying how many messages not sent it lets go),
-//! the announcements, where the copy stands, and a copy made for another account that was set
-//! aside.
+//! organisation registered, the sign-in (Microsoft's page, while it's waited for, to open again or
+//! copy; Sign out saying how many messages not sent it lets go), the announcements, where the copy
+//! stands, and a copy made for another account that was set aside.
 //!
 //! What is hostile here: the name, address and permission the worker reports came from Graph
 //! (each drawn on one line, cut short); the path of a copy set aside is never shown.
@@ -119,8 +119,17 @@ pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>
     sign_out_question(ui.ctx(), t, s.teams.unsent, acts);
 }
 
-/// Who is signed in and Sign out, or Sign in; where the copy stands, and a sign-in that won't be
-/// remembered.
+/// Waiting for the browser: a spinner, with the words until Microsoft's page is known (then the
+/// panel under the row says more, [`crate::conversations::sign_in_waiting`]).
+fn waiting(s: &Session, t: &Tokens, ui: &mut Ui) {
+    if s.teams.sign_in_page.is_none() {
+        ui.label(RichText::new(tl!("Waiting for the browser…")).color(t.dim));
+    }
+    ui.spinner();
+}
+
+/// Who is signed in and Sign out, or Sign in; signing in, Microsoft's page to open again or copy;
+/// where the copy stands, and a sign-in that won't be remembered.
 fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     let p = &s.prefs.teams;
     let status = &s.teams.status;
@@ -139,8 +148,7 @@ fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             // The sign-in no longer holds, lacks a permission, or failed: it's tried again, the
             // copy kept.
             if p.on && *status == Status::SigningIn {
-                ui.label(RichText::new(tl!("Waiting for the browser…")).color(t.dim));
-                ui.spinner();
+                waiting(s, t, ui);
             } else if p.on && crate::conversations::sign_in_again(status) && ui.button(tl!("Sign in")).clicked() {
                 acts.push(Action::Run("teams.signIn", json!({})));
             }
@@ -150,13 +158,13 @@ fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
         let about = (!ready).then(|| note(t, tl!("Switch Teams on and fill in both IDs first")));
         setting_row(ui, t, false, name(t, tl!("Account")), about, |ui| {
             if *status == Status::SigningIn {
-                ui.label(RichText::new(tl!("Waiting for the browser…")).color(t.dim));
-                ui.spinner();
+                waiting(s, t, ui);
             } else if ui.add_enabled(ready, egui::Button::new(tl!("Sign in"))).clicked() {
                 acts.push(Action::Run("teams.signIn", json!({})));
             }
         });
     }
+    crate::conversations::sign_in_waiting(s, t, ui, acts);
     if let Some((line, wrong)) = status_line(status) {
         ui.label(RichText::new(line).color(if wrong { t.danger } else { t.dim }).size(12.5));
         ui.add_space(4.0);

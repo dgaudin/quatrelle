@@ -4,8 +4,9 @@
 //! token, the limiter and the local copy, takes the engine's jobs in order and answers with
 //! events.
 //!
-//! * Nothing runs unasked. The browser opens only for [`Job::SignIn`], through the window
-//!   (`Event::OpenUrl`); a kept sign-in is gone on with only on [`Job::Start`].
+//! * Nothing runs unasked. The browser opens only for [`Job::SignIn`], through the engine and
+//!   the window (`teams::Event::SignInPage`: opened only when it's Microsoft's own page); a kept
+//!   sign-in is gone on with only on [`Job::Start`].
 //! * One worker for the pool's life: the copy has one writer and the token one keeper. Switched
 //!   off ([`Job::Stop`]) or signed out it asks nothing, holds no file and no token, and waits on
 //!   its channel for the jobs after, taken in their order; the thread ends with the channel.
@@ -45,10 +46,10 @@ use crate::{NetError, Result};
 
 mod signing;
 
-pub(crate) use signing::{Authority, Microsoft};
-pub use signing::{REFRESH_KEY, keyring};
 #[cfg(test)]
-pub(crate) use signing::{is_guid, missing_scope};
+pub(crate) use signing::missing_scope;
+pub(crate) use signing::{Authority, Microsoft, is_guid};
+pub use signing::{REFRESH_KEY, keyring};
 
 /// How the worker reports: the pool's sink in the app, a list in the tests.
 pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;

@@ -223,14 +223,22 @@ pub fn is_teams_link(url: &str) -> bool {
         || (on("teams.live.com") && path.starts_with("meet"))
 }
 
+/// Whether an `https` address names no port: nothing after its host but the path, query or
+/// fragment. Microsoft's own pages are never given with one, `:443` included.
+fn https_without_port(url: &str) -> bool {
+    let https = url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://"));
+    let rest = url.get(8..).unwrap_or("");
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+    https && !authority.contains(':')
+}
+
 /// Whether a web address opens a Teams chat or one of its messages (`https://teams.microsoft.com/l/chat/…`
 /// or `…/l/message/…`, or the same on `teams.cloud.microsoft`): over `https`, on Teams' own host
-/// exactly (no subdomain), and launchable ([`launchable_link`]).
+/// exactly (no subdomain, no port), and launchable ([`launchable_link`]).
 pub fn is_teams_chat_link(url: &str) -> bool {
-    let https = url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://"));
     let Some((host, path)) = web_host_and_path(url) else { return false };
     let path = path.to_ascii_lowercase();
-    https
+    https_without_port(url)
         && (host == "teams.microsoft.com" || host == "teams.cloud.microsoft")
         && (path.starts_with("l/chat/") || path.starts_with("l/message/"))
         && launchable_link(url)
@@ -238,15 +246,19 @@ pub fn is_teams_chat_link(url: &str) -> bool {
 
 /// Whether a web address is Microsoft's page to sign in to an organisation, as the Teams sign-in
 /// opens it: `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize?<query>`, on that
-/// host exactly, with an organisation the Options could name ([`crate::valid_oauth_tenant`]), a
-/// query, nothing but ASCII (every parameter is percent-encoded), and launchable
-/// ([`launchable_link`]).
+/// host exactly (no port), with an organisation the Options could name
+/// ([`crate::valid_oauth_tenant`]), a query, nothing but ASCII (every parameter is
+/// percent-encoded), and launchable ([`launchable_link`]).
 pub fn is_microsoft_sign_in(url: &str) -> bool {
-    let https = url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://"));
     let Some((host, path)) = web_host_and_path(url) else { return false };
     let Some((page, query)) = path.split_once('?') else { return false };
     let tenant = page.strip_suffix("/oauth2/v2.0/authorize").unwrap_or("");
-    https && host == "login.microsoftonline.com" && crate::valid_oauth_tenant(tenant) && !query.is_empty() && url.is_ascii() && launchable_link(url)
+    https_without_port(url)
+        && host == "login.microsoftonline.com"
+        && crate::valid_oauth_tenant(tenant)
+        && !query.is_empty()
+        && url.is_ascii()
+        && launchable_link(url)
 }
 
 /// Whether a web address may be handed to a browser to open: `http` or `https`, no whitespace or

@@ -2298,3 +2298,8 @@ presence	Offline	오프라인
 	On this computer only: it stays on the server	이 컴퓨터에서만: 서버에는 남아 있습니다
 	Removed calendars	뺀 일정표
 	{n} years	{n}년
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	Microsoft 로그인 창이 열렸습니다
+	Reopen the page	페이지 다시 열기
+	Copy the address	주소 복사
+	{browser} couldn't open the page: {error}	{browser}에서 페이지를 열 수 없습니다: {error}

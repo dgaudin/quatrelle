@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The conversation pane (the module's right): the open chat's header (its name, the other
-//! person's presence, its members), then its messages by day, one sender's in a row under one name
-//! and picture, the user's own on the right; system lines; the page before asked for when the
-//! user scrolls to the top; after them, what the user sent that Teams doesn't have yet
-//! (`outgoing.rs`); and the box to write in at the foot (`super::writing`). A chat Graph won't let
-//! be read shows what the list gave of it and "Open in Teams".
+//! person's presence, its members, "Open in Teams"), then its messages by day, one sender's in a
+//! row under one name and picture, the user's own on the right; system lines; the page before
+//! asked for when the user scrolls to the top; after them, what the user sent that Teams doesn't
+//! have yet (`outgoing.rs`); and the box to write in at the foot (`super::writing`). A chat Graph
+//! won't let be read shows what the list gave of it and "Open in Teams".
 //!
 //! What is hostile here: everything drawn came from senders (names, words, links, pictures,
 //! files) or from Graph (the chat's link). "External" is drawn before the name a sender chose and
 //! never cut; an application's message says "App". Names are on one line ([`one_line`]). A
 //! picture kept with a message is asked for when the message is first drawn (at most
-//! `HOSTED_PER_MESSAGE`); one from elsewhere only on a click (`parts.rs`). "Open in Teams" opens
-//! the chat's link only when [`is_teams_chat_link`] takes it; otherwise it isn't drawn.
+//! `HOSTED_PER_MESSAGE`); one from elsewhere only on a click (`parts.rs`). "Open in Teams" is
+//! drawn only when the chat's link is one `is_teams_chat_link` takes, and asks for it through
+//! `teams.openInTeams`: the engine checks it again, and the window opens it in the meetings
+//! browser's window, never as a link from a message.
 
 use egui::{Align, Color32, Layout, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
-use quatrelle_engine::model::ical::is_teams_chat_link;
 use quatrelle_engine::model::pim::teams::{ChatKind, ChatMessage, ChatRow, MessageKind, Picture, Presence, Sender, is_internal, one_line};
 use serde_json::json;
 
@@ -47,12 +48,11 @@ struct Pane<'a> {
 }
 
 impl Pane<'_> {
-    /// "Open in Teams", when the chat's link is one.
+    /// "Open in Teams", when the chat's link is one: asked of the engine, which hands the window
+    /// the link to open in the meetings browser's window.
     fn open_in_teams(&self, ui: &mut Ui, acts: &mut Vec<Action>) {
-        if let Some(url) = self.teams_link
-            && ui.button(tl!("Open in Teams")).clicked()
-        {
-            acts.push(Action::OpenUrl(url.to_string()));
+        if self.teams_link.is_some() && ui.button(tl!("Open in Teams")).clicked() {
+            acts.push(Action::Run("teams.openInTeams", json!({})));
         }
     }
 
@@ -104,9 +104,9 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
     {
         acts.push(Action::Run("teams.picture", picture_params(picture)));
     }
-    let teams_link = s.teams.web_url.as_deref().filter(|u| is_teams_chat_link(u));
+    let teams_link = s.teams.teams_link();
     let pane = Pane { s, t: *tokens, pics: &teams_queue.pictures, me: &s.prefs.teams.object_id, tenant: &s.prefs.teams.tenant_id, teams_link };
-    egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| header(&pane, ui, row));
+    egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| header(&pane, ui, row, acts));
     let line = ui.available_rect_before_wrap();
     ui.painter().hline(line.x_range(), line.top(), egui::Stroke::new(1.0, pane.t.border));
     if row.unreadable {
@@ -158,18 +158,23 @@ fn presence(p: Presence, t: &Tokens) -> Option<(&'static str, Color32)> {
 }
 
 /// The header: "External" first when someone is from outside, the name, a one-to-one chat's
-/// other person's presence, and the members (their list on a click); a chat the user is no
-/// longer in says so under it.
-fn header(p: &Pane, ui: &mut Ui, row: &ChatRow) {
+/// other person's presence, the members (their list on a click) and "Open in Teams" when the
+/// chat's link is one; a chat the user is no longer in says so under it.
+fn header(p: &Pane, ui: &mut Ui, row: &ChatRow, acts: &mut Vec<Action>) {
     let t = &p.t;
     ui.horizontal(|ui| {
         if row.external {
             tag(ui, t, tl!("External")).on_hover_text(tl!("Someone in this conversation is outside your organisation"));
         }
-        let room = (ui.available_width() - 140.0).max(60.0);
+        // Room for the members' button, and for "Open in Teams" beside it.
+        let buttons = if p.teams_link.is_some() { 260.0 } else { 140.0 };
+        let room = (ui.available_width() - buttons).max(60.0);
         let g = widgets::one_line(ui, &one_line(&row.name), theme::bold(17.0), t.text, room);
         ui.label(g);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| members(p, ui, row));
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            members(p, ui, row);
+            p.open_in_teams(ui, acts);
+        });
     });
     let shown =
         row.person.as_deref().filter(|_| row.kind == ChatKind::OneOnOne).and_then(|u| p.s.teams.presence.get(u)).and_then(|&pr| presence(pr, t));

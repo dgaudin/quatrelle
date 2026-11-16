@@ -144,13 +144,15 @@ fn search_box(ui: &mut Ui, t: &Tokens, c: &mut ConversationsUi, acts: &mut Vec<A
     ui.add_space(6.0);
 }
 
-/// Where the copy stands, above the rows: signing in, the first copy, offline, a sign-in or a
-/// permission needed, or Teams stopped (and Sign in, for those three).
+/// Where the copy stands, above the rows: signing in (Microsoft's page, once known, to open again
+/// or copy), the first copy, offline, a sign-in or a permission needed, or Teams stopped (and Sign
+/// in, for those three).
 fn states(s: &Session, ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
     let line = |ui: &mut Ui, text: &str, color: Color32| {
         ui.add(egui::Label::new(egui::RichText::new(text).color(color).size(12.5)).wrap());
     };
     match &s.teams.status {
+        Status::SigningIn if s.teams.sign_in_page.is_some() => super::sign_in_waiting(s, t, ui, acts),
         Status::SigningIn => line(ui, tl!("Signing in…"), t.dim),
         Status::Copying { done, of } => {
             line(ui, &tf!("Copying your conversations… {done} of {of} conversations", done = done, of = of), t.dim);

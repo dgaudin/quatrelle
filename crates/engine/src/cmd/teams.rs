@@ -13,7 +13,7 @@ use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, PRESENCE_IDS, Picture
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
-use crate::Module;
+use crate::{Module, TeamsPage};
 
 const OPTIONS: &str = "File › Options › Teams";
 const MODULE: &str = "Conversations";
@@ -30,6 +30,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             r#"{"on"?: bool (use Teams in Quatrelle), "clientId"?: string (the application (client) ID; "" for none), "tenant"?: string (the directory (tenant) ID or domain; "" for none), "notify"?: bool, "notifyOnlyDirect"?: bool}"#,
         ),
         CommandSpec::new("teams.signIn", "Sign in to Teams", OPTIONS, sign_in).params("(opens the browser to sign in)").when(on),
+        CommandSpec::new("teams.reopenSignIn", "Reopen the sign-in page", OPTIONS, reopen_sign_in)
+            .params("() (while signing in: Microsoft's page opened again)")
+            .when(has_sign_in_page),
         CommandSpec::new("teams.signOut", "Sign out of Teams", OPTIONS, sign_out)
             .params(r#"{"deleteCopy"?: bool (delete the local copy of the conversations too)}"#)
             .when(signed_in),
@@ -52,6 +55,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("teams.discard", "Delete a message going out", MODULE, discard)
             .params(r#"{"seq": number (a message going out in the open conversation), "local"?: string (its local id, for one numbered 0)}"#)
             .when(ready),
+        CommandSpec::new("teams.openInTeams", "Open in Teams", MODULE, open_in_teams)
+            .params("() (the open conversation in Teams, when its link is a Teams chat link)")
+            .when(has_teams_link),
         CommandSpec::new("teams.next", "Next conversation", MODULE, |s, _| step(s, true)).key("Alt+Down").when(in_module),
         CommandSpec::new("teams.previous", "Previous conversation", MODULE, |s, _| step(s, false)).key("Alt+Up").when(in_module),
     ]
@@ -76,6 +82,16 @@ fn in_module(s: &Session) -> Option<&'static str> {
 
 fn has_set_aside(s: &Session) -> Option<&'static str> {
     if s.teams.set_aside.is_some() { None } else { Some("no copy was set aside") }
+}
+
+/// Signing in, Microsoft's page known.
+fn has_sign_in_page(s: &Session) -> Option<&'static str> {
+    on(s).or(if s.teams.status == Status::SigningIn && s.teams.sign_in_page.is_some() { None } else { Some("no sign-in page is waiting") })
+}
+
+/// A conversation open whose link is a Teams chat link.
+fn has_teams_link(s: &Session) -> Option<&'static str> {
+    ready(s).or(if s.teams.teams_link().is_some() { None } else { Some("this conversation has no link to Teams") })
 }
 
 /// An id from the params: given, a string, 1 to [`MAX_ID`] bytes.
@@ -135,6 +151,14 @@ fn sign_in(s: &mut Session, _: &Value) -> CmdResult {
     let job = teams::Job::SignIn { client_id: t.client_id.clone(), tenant: t.tenant.clone() };
     s.teams.status = Status::SigningIn;
     s.push_job(Job::Teams { job });
+    Ok(json!({}))
+}
+
+/// Microsoft's page to sign in on, opened again (the browser window closed, or behind another).
+fn reopen_sign_in(s: &mut Session, _: &Value) -> CmdResult {
+    let page = s.teams.sign_in_page.clone().filter(|_| s.teams.status == Status::SigningIn);
+    let page = page.ok_or_else(|| CmdError::Disabled("no sign-in page is waiting".into()))?;
+    s.teams.open_page(TeamsPage::SignIn(page));
     Ok(json!({}))
 }
 
@@ -263,6 +287,14 @@ fn discard(s: &mut Session, v: &Value) -> CmdResult {
     let (seq, local) = outgoing_param(v)?;
     s.teams_discard(seq, local)?;
     Ok(json!({}))
+}
+
+/// The open conversation in Teams: its link, only when it's a Teams chat link, for the window to
+/// open in the meetings browser's window.
+fn open_in_teams(s: &mut Session, _: &Value) -> CmdResult {
+    let url = s.teams.teams_link().map(str::to_string).ok_or_else(|| CmdError::Disabled("this conversation has no link to Teams".into()))?;
+    s.teams.open_page(TeamsPage::Chat(url.clone()));
+    Ok(json!({"url": url}))
 }
 
 /// Whether a picture from elsewhere may be asked for: `https`, a host, nothing two readers of an

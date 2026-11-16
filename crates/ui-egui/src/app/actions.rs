@@ -75,6 +75,7 @@ impl MailApp {
             self.ui.put_away = false;
         }
         conversations::announce(&mut self.session, &mut *self.services, ctx, self.ui.put_away);
+        self.teams_pages();
         let unread = self.session.inbox_unread();
         let view = match self.session.module {
             Module::Mail => view_title(&self.session),
@@ -225,6 +226,11 @@ impl MailApp {
                     log::info!("{id}: {e}");
                     conversations::refused(&mut self.ui.conversations, self.session.teams.open.as_deref(), id, &p, &e);
                 }
+            }
+            // A Teams page asked for opens at once (no frame may follow before the next input).
+            Action::Run(id @ ("teams.openInTeams" | "teams.reopenSignIn"), p) => {
+                self.run(id, p);
+                self.teams_pages();
             }
             Action::Run(id, p) => {
                 // A Search Folder isn't a search typed in: the box is left empty.

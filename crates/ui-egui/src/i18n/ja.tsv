@@ -2296,3 +2296,8 @@ presence	Offline	オフライン
 	On this computer only: it stays on the server	このコンピューターでのみ: サーバーには残ります
 	Removed calendars	外した予定表
 	{n} years	{n} 年
+# Teams: the sign-in in the meetings browser's window.
+	A Microsoft sign-in window has opened	Microsoft のサインイン ウィンドウが開きました
+	Reopen the page	ページを開き直す
+	Copy the address	アドレスをコピー
+	{browser} couldn't open the page: {error}	{browser} でページを開けませんでした: {error}

@@ -39,6 +39,8 @@ mod rows;
 
 // The cadences go through `read_step` (the tests through `incremental`). The history
 // (`backfill.rs`) keeps what it reads as the reads do.
+#[cfg(test)]
+pub(crate) use links::built_chat_link;
 use list::{Pass, list_refused, list_step};
 #[cfg(test)]
 pub(crate) use reads::incremental;
@@ -204,12 +206,12 @@ pub(crate) fn open(w: &mut Worker, chat: Option<String>) {
     w.open = chat.filter(|c| id_ok(c));
     w.sync.opening = w.open.is_some();
     let Some(chat) = w.open.clone() else { return };
-    // Its kind, whether it can be read, and its link as the window will judge it.
+    // Its kind, whether it can be read, and its link as the window will judge it (or built, Graph
+    // giving none).
     let r = w.copy.as_ref().and_then(|c| c.chat(&chat)).map(|r| r.chat);
-    log::info!(
-        "{}",
-        links::opened(r.as_ref().map(|c| &c.kind), r.as_ref().is_some_and(|c| c.unreadable.is_some()), r.as_ref().and_then(|c| c.web_url.as_deref()))
-    );
+    let url = r.as_ref().and_then(|c| c.web_url.as_deref());
+    let built = url.is_none() && links::built_chat_link(&chat, &w.settings.tenant_id).is_some();
+    log::info!("{}", links::opened(r.as_ref().map(|c| &c.kind), r.as_ref().is_some_and(|c| c.unreadable.is_some()), url, built));
     let messages = w.copy.as_ref().map(|c| c.last_pages(&chat, 2)).unwrap_or_default();
     say_messages(w, &chat, &messages, false, false);
     w.sync.members_said = None;

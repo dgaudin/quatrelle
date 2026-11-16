@@ -209,8 +209,9 @@ impl Rig {
         self.server.data.lock().unwrap().teams.as_ref().unwrap().hits.values().sum()
     }
 
+    /// Whether a page was said to open, as Teams' own or as the mail's.
     fn opened_the_browser(&self) -> bool {
-        self.seen.lock().unwrap().iter().any(|e| matches!(e, Event::OpenUrl { .. }))
+        self.seen.lock().unwrap().iter().any(|e| matches!(e, Event::OpenUrl { .. } | Event::Teams { event: model::Event::SignInPage { .. } }))
     }
 }
 

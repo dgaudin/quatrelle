@@ -587,7 +587,7 @@ fn path_id(id: &str) -> bool {
 
 /// [`path_id`], with nothing a server might take for a path or a query of its own (`/`, `\`,
 /// `?`, `#`), even encoded: some servers decode `%2F`.
-fn own_segment(id: &str) -> bool {
+pub(crate) fn own_segment(id: &str) -> bool {
     path_id(id) && !id.contains(['/', '\\', '?', '#'])
 }
 

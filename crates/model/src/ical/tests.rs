@@ -542,6 +542,9 @@ fn teams_chat_links_are_teams_own() {
     assert!(!is_teams_chat_link("https://teams.microsoft.com/l/chat/19%3Aa/0 x"));
     assert!(!is_teams_chat_link("https://teams.microsoft.com/l/meetup-join/x"));
     assert!(!is_teams_chat_link("https://teams.microsoft.com/l/chatx/19%3Aa/0"));
+    // A port, even Teams' own, isn't how Teams gives its links.
+    assert!(!is_teams_chat_link("https://teams.microsoft.com:8443/l/chat/19%3Aa/0"));
+    assert!(!is_teams_chat_link("https://teams.microsoft.com:443/l/chat/19%3Aa/0"));
     assert!(!is_teams_link("https://teams.microsoft.com/l/chat/19%3Aa/0"), "a chat link is no meeting");
 }
 
@@ -575,6 +578,8 @@ fn only_microsofts_sign_in_page_is_one() {
         "https://login.microsoftonline.com@evil.example/organizations/oauth2/v2.0/authorize?a=b",
         "https://login.microsoftonline.com:443@evil.example/organizations/oauth2/v2.0/authorize?a=b",
         "https://login.microsoftonline.com\\@evil.example/organizations/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com:8443/organizations/oauth2/v2.0/authorize?a=b",
+        "https://login.microsoftonline.com:443/organizations/oauth2/v2.0/authorize?a=b",
         "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=b\u{202E}",
         "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?a=\nb",
         "https://login.microsoftonline.com/\u{0430}/oauth2/v2.0/authorize?a=b",

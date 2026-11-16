@@ -151,8 +151,10 @@ fn store_kind(e: &StoreError) -> String {
 
 impl Worker {
     /// [`Job::SignIn`]: the browser's page, on a thread of its own (it can wait five minutes for
-    /// the person; the worker goes on hearing its jobs). Whatever was signed in stops being
-    /// polled; its copy stays open to read. The answer is taken by [`Worker::authorized`].
+    /// the person; the worker goes on hearing its jobs). The page goes to the engine as Teams'
+    /// own ([`teams::Event::SignInPage`]), which opens it only when it's Microsoft's, never as the
+    /// mail's `OpenUrl`. Whatever was signed in stops being polled; its copy stays open to read.
+    /// The answer is taken by [`Worker::authorized`].
     pub(super) fn sign_in(&mut self, client_id: &str, tenant: &str) {
         let (client_id, tenant) = (client_id.trim().to_string(), tenant.trim().to_string());
         if !quatrelle_model::valid_oauth_client_id(&client_id) || !quatrelle_model::valid_oauth_tenant(&tenant) {
@@ -169,7 +171,7 @@ impl Worker {
         let (authority, emit, answer) = (self.authority.clone(), self.emit.clone(), self.answers.0.clone());
         let spawned = std::thread::Builder::new().name("teams-sign-in".into()).spawn(move || {
             let mut open = |url: &str| -> std::result::Result<(), String> {
-                emit(Event::OpenUrl { url: url.to_string() });
+                emit(Event::Teams { event: teams::Event::SignInPage { url: url.to_string() } });
                 Ok(())
             };
             let tokens = fenced(|| authority.authorize(&client_id, &tenant, &mut open)).unwrap_or_else(|| Err(NetError::Refused(INTERRUPTED.into())));

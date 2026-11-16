@@ -14,7 +14,7 @@ fn sign_in_keeps_the_refresh_token_in_the_keychain_only() {
     r.sign_in("organizations");
     let seen = r.wait("the first list", |e| said(e, &Status::UpToDate));
     // The page opens through the window (the worker launches nothing itself).
-    assert!(r.seen.lock().unwrap().iter().any(|e| matches!(e, Event::OpenUrl { url } if url == SIGN_IN_PAGE)));
+    assert!(seen.iter().any(|e| matches!(e, model::Event::SignInPage { url } if url == SIGN_IN_PAGE)));
     assert_eq!(seen.first(), Some(&status(Status::SigningIn)));
     assert_eq!(
         account(&seen),
@@ -37,6 +37,26 @@ fn sign_in_keeps_the_refresh_token_in_the_keychain_only() {
             assert!(!contains(bytes, secret.as_bytes()), "{path} holds a token");
         }
     }
+}
+
+/// The page to sign in on goes to the engine as Teams' own, once: the engine opens it only when
+/// it's Microsoft's, in the meetings browser's window. Never as the mail's `OpenUrl`, which the
+/// window would open as it is.
+#[test]
+fn the_sign_in_page_goes_to_the_engine_as_teams_own() {
+    let r = rig(one_chat(), grant(Some(TENANT)));
+    r.sign_in("organizations");
+    r.wait("the first list", |e| said(e, &Status::UpToDate));
+    let seen = r.seen.lock().unwrap();
+    let pages: Vec<&str> = seen
+        .iter()
+        .filter_map(|e| match e {
+            Event::Teams { event: model::Event::SignInPage { url } } => Some(url.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(pages, [SIGN_IN_PAGE]);
+    assert!(!seen.iter().any(|e| matches!(e, Event::OpenUrl { .. })), "{seen:?}");
 }
 
 #[test]
@@ -100,7 +120,8 @@ fn a_missing_scope_is_said() {
     tokens.granted = TEAMS_SCOPE.split(' ').filter(|s| !s.ends_with("/Chat.ReadWrite")).collect::<Vec<_>>().join(" ");
     let r = rig(one_chat(), tokens);
     r.sign_in("organizations");
-    let seen = r.wait("the permission said", |e| e.len() >= 2);
+    // The status after "signing in" (the page to sign in on comes between them).
+    let seen = r.wait("the permission said", |e| e.iter().filter(|x| matches!(x, model::Event::Status { .. })).count() >= 2);
     assert!(said(&seen, &Status::PermissionMissing { scope: "https://graph.microsoft.com/Chat.ReadWrite".into() }), "{seen:?}");
     assert!(account(&seen).is_none(), "{seen:?}");
     assert_eq!(r.kept(), None);
