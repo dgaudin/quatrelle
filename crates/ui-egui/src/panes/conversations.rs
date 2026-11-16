@@ -66,9 +66,10 @@ pub struct ConversationsUi {
     pub chat_view: Option<(String, String, f32, f32)>,
     /// Where the chat is to be scrolled to (older messages came in above).
     pub chat_scroll_to: Option<f32>,
-    /// The message the chat was opened at (a search's hit) once it was scrolled to, and when (the
-    /// window's clock, in seconds): scrolled to once, then tinted a moment.
-    pub went_to: Option<(String, f64)>,
+    /// The opening at a message (a search's hit, numbered by the engine) the chat was scrolled to,
+    /// and when (the window's clock, in seconds): each opening scrolled to once, then its message
+    /// tinted a moment.
+    pub went_to: Option<(u64, f64)>,
     /// The picture shown big.
     pub viewing: Option<Picture>,
     /// What each chat's box holds, by chat id (at most 20 chats, in memory), and how many times

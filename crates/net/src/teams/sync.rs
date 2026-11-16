@@ -208,13 +208,13 @@ pub(crate) fn open(w: &mut Worker, chat: Option<String>) {
 
 /// [`Job::Find`](quatrelle_model::pim::teams::Job::Find): `chat` on screen at its message
 /// `message` (a search's hit), as [`open`] puts it there, but its messages from that message's
-/// page on ([`Copy::from_message`](super::store::Copy::from_message)), then
+/// page on ([`Copy::messages_from`](super::store::Copy::messages_from)), then
 /// [`Event::Placed`] saying whether they reach its newest. A message the copy doesn't have opens
 /// it as usual: its last two pages, the newest reached.
 pub(crate) fn find(w: &mut Worker, chat: String, message: String) {
     let Some(chat) = on_screen(w, Some(chat)) else { return };
     let copy = w.copy.as_ref();
-    let found = copy.and_then(|c| c.from_message(&chat, &message));
+    let found = copy.and_then(|c| c.messages_from(&chat, &message));
     let (messages, newest) = found.unwrap_or_else(|| (copy.map(|c| c.last_pages(&chat, 2)).unwrap_or_default(), true));
     say_messages(w, &chat, &messages, false, false);
     w.say(Event::Placed { chat: chat.clone(), message, newest });

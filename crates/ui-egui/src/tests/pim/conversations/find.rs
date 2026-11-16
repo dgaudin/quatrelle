@@ -109,9 +109,32 @@ fn tinted(a: &MailApp, shapes: &[egui::Shape], text: &str) -> bool {
     shapes.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tint && r.rect.contains(at.center()) && r.rect.left() > 300.0))
 }
 
+/// The `Find` jobs sent.
+fn finds(jobs: &Shared<Job>) -> Vec<Job> {
+    jobs.borrow().iter().filter(|j| matches!(j, Job::Teams { job: teams::Job::Find { .. } })).cloned().collect()
+}
+
+/// The hit's row in the list (the chat's name, left of the chat pane) clicked.
+fn click_the_hit(a: &mut MailApp, w: &mut Window) {
+    let texts = w.settled(a);
+    let row = texts.iter().find(|(t, r)| t == "Support team" && r.left() < 300.0).map(|(_, r)| *r).expect("the hit's row");
+    w.click(a, row.center());
+}
+
+/// The worker's answer to the find: the found message's page and the next (messages 0 to 199 of
+/// many more), the newest left out, and a message of the user's going out.
+fn answer_the_find(a: &mut MailApp) {
+    a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: members(), web_url: None, first: true });
+    for part in lines(0..200).chunks(teams::EVENT_ITEMS) {
+        a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: false });
+    }
+    a.session.teams_apply(teams::Event::Placed { chat: CHAT.into(), message: "m040".into(), newest: false });
+    let going = Outgoing { seq: 3, local: "100-1".into(), chat: CHAT.into(), body: para(vec![words("On its way")]), state: OutState::Waiting };
+    a.session.teams_apply(teams::Event::Outbox { chat: CHAT.into(), items: vec![going], took: None });
+}
+
 /// The app in Conversations, a search for "budget" having found two of the chat's messages, the
-/// hit's row clicked; the worker's answer: the found message's page and the next (messages 0 to
-/// 199 of many more), the newest left out, and a message of the user's going out.
+/// hit's row clicked, and the worker's answer ([`answer_the_find`]).
 fn opened_at_a_hit(name: &str) -> (MailApp, std::path::PathBuf, Shared<Job>, Window) {
     let (mut a, dir, jobs) = module_app(name, vec![group_row()]);
     let account = teams::Event::Account {
@@ -127,18 +150,9 @@ fn opened_at_a_hit(name: &str) -> (MailApp, std::path::PathBuf, Shared<Job>, Win
     let hits = vec![(CHAT.to_string(), "m040".to_string()), (CHAT.to_string(), "m150".to_string())];
     a.session.teams_apply(teams::Event::Found { query: "budget".into(), hits, indexing: false, partial: false });
     let mut w = Window { ctx: egui::Context::default(), tex: Textures::default() };
-    let texts = w.settled(&mut a);
-    let row = rect_of(&texts, |t| t == "Support team").expect("the hit's row");
-    w.click(&mut a, row.center());
-    let finds: Vec<Job> = jobs.borrow().iter().filter(|j| matches!(j, Job::Teams { job: teams::Job::Find { .. } })).cloned().collect();
-    assert_eq!(finds, [Job::Teams { job: teams::Job::Find { chat: CHAT.into(), message: "m040".into() } }], "the chat's first hit");
-    a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: members(), web_url: None, first: true });
-    for part in lines(0..200).chunks(teams::EVENT_ITEMS) {
-        a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: false });
-    }
-    a.session.teams_apply(teams::Event::Placed { chat: CHAT.into(), message: "m040".into(), newest: false });
-    let going = Outgoing { seq: 3, local: "100-1".into(), chat: CHAT.into(), body: para(vec![words("On its way")]), state: OutState::Waiting };
-    a.session.teams_apply(teams::Event::Outbox { chat: CHAT.into(), items: vec![going], took: None });
+    click_the_hit(&mut a, &mut w);
+    assert_eq!(finds(&jobs), [Job::Teams { job: teams::Job::Find { chat: CHAT.into(), message: "m040".into() } }], "the chat's first hit");
+    answer_the_find(&mut a);
     (a, dir, jobs, w)
 }
 
@@ -203,5 +217,34 @@ fn go_to_the_newest_messages_opens_the_chat_again() {
     let texts = w.settled(&mut a);
     assert!(!has_text(&texts, "Go to the newest messages"));
     assert!(in_view(&texts, "Line 299"), "at the newest: {:?}", rect_of(&texts, |t| t == "Line 299"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Review (Task 12, Important 1): the same hit clicked again goes to its message again, in the
+/// window that click loaded: after an older page came in above it, and with a frame drawn while
+/// the window waits for the worker.
+#[test]
+fn a_hit_clicked_again_goes_to_its_message_again() {
+    let (mut a, dir, jobs, mut w) = opened_at_a_hit("teams-find-again");
+    w.settled(&mut a);
+    // The page before comes in above it: the view stays on it.
+    for part in lines(-100..0).chunks(teams::EVENT_ITEMS) {
+        a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: true });
+    }
+    let texts = w.settled(&mut a);
+    assert!(in_view(&texts, "Line 40") && has_text(&texts, "Line -100"), "the older page above it");
+    for again in 2..4 {
+        click_the_hit(&mut a, &mut w);
+        assert_eq!(finds(&jobs).len(), again, "found again");
+        // A frame while the window waits for the worker's answer.
+        w.frame(&mut a, vec![]);
+        answer_the_find(&mut a);
+        w.settled(&mut a);
+        let shapes = w.frame(&mut a, vec![]);
+        let texts = texts_of(&shapes);
+        assert!(in_view(&texts, "Line 40"), "click {again}: at its message: {:?}", rect_of(&texts, |t| t == "Line 40"));
+        assert!(tinted(&a, &shapes, "Line 40"), "click {again}: tinted again");
+        assert!(!has_text(&texts, "Line -100"), "click {again}: the window it loaded");
+    }
     let _ = std::fs::remove_dir_all(dir);
 }

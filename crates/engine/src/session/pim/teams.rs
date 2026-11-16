@@ -90,6 +90,10 @@ pub struct TeamsState {
     /// The message the open chat was opened at (a search's hit, [`teams::Job::Find`]), until
     /// another chat or this one is opened again: the window scrolls to it once it holds it.
     pub go_to: Option<String>,
+    /// The opening `go_to` is for: a number taken afresh at each opening at a message
+    /// (the session's `fresh_id`, never twice in a run, Teams switched off or signed out between):
+    /// the window goes to the message once for each, in the window that opening loaded.
+    pub go_to_opening: u64,
     /// The open chat's members (at most [`teams::MAX_MEMBERS`], found by id) and its link
     /// (`webUrl`, kept as Graph gave it: checked where it's used), as the worker last said them.
     members: ChatMembers,
@@ -357,6 +361,9 @@ impl Session {
         let unread = chat.as_deref().is_some_and(|c| self.teams.to_mark_read(c));
         self.teams.open_chat(chat.clone());
         let at = at.filter(|_| chat.is_some());
+        if at.is_some() {
+            self.teams.go_to_opening = self.fresh_id();
+        }
         self.teams.go_to.clone_from(&at);
         // On screen now: its news waiting aren't announced, and it's marked read below, once.
         self.teams_came_on_screen();

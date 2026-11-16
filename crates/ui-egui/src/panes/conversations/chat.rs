@@ -280,14 +280,16 @@ fn sender_key(m: &ChatMessage) -> Option<String> {
 fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &mut Vec<Action>) {
     let window = &p.s.teams.window;
     let now = ui.input(|i| i.time);
-    let go_to = p.s.teams.go_to.as_deref();
+    let (go_to, opening) = (p.s.teams.go_to.as_deref(), p.s.teams.go_to_opening);
     if go_to.is_none() {
         c.went_to = None;
     }
-    // The hit's message to scroll to now: once, as soon as it's here.
-    let scroll = go_to.filter(|g| c.went_to.as_ref().is_none_or(|(w, _)| w != g) && window.iter().any(|m| m.id == *g));
-    let tint: Option<String> =
-        scroll.map(str::to_string).or_else(|| c.went_to.as_ref().filter(|(_, at)| now - *at < FOUND_TINT).map(|(id, _)| id.clone()));
+    // When this opening was gone to, if it was.
+    let gone = c.went_to.filter(|(n, _)| *n == opening).map(|(_, at)| at);
+    // The hit's message to scroll to now: once for each opening at it, as soon as the window that
+    // opening loaded holds it (a click draws the window it leaves first).
+    let scroll = go_to.filter(|g| gone.is_none() && window.iter().any(|m| m.id == *g));
+    let tint = go_to.filter(|_| scroll.is_some() || gone.is_some_and(|at| now - at < FOUND_TINT));
     let front = window.front().map(|m| m.id.clone());
     // Older messages came in above what was on screen (the view isn't going to the hit).
     let above = scroll.is_none()
@@ -315,7 +317,7 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
                 let first = group.as_ref() != Some(&key);
                 group = Some(key.clone());
                 // The hit's message: its tint painted behind it once its place is known.
-                let behind = (tint.as_deref() == Some(m.id.as_str())).then(|| (ui.painter().add(egui::Shape::Noop), ui.cursor().top()));
+                let behind = (tint == Some(m.id.as_str())).then(|| (ui.painter().add(egui::Shape::Noop), ui.cursor().top()));
                 if key.is_none() {
                     system(p, ui, m);
                     group = None;
@@ -337,8 +339,8 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
             ui.add_space(8.0);
         });
     });
-    if let Some(g) = scroll {
-        c.went_to = Some((g.to_string(), now));
+    if scroll.is_some() {
+        c.went_to = Some((opening, now));
     }
     // The tint goes once its time is up.
     if let Some((_, at)) = &c.went_to {

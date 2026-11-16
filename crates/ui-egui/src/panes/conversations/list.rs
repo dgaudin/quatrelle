@@ -240,8 +240,6 @@ fn rows_pane(s: &Session, c: &mut ConversationsUi, pics: &TeamsPictures, ui: &mu
                 people.push(p.clone());
             }
             if row(s, pics, ui, t, r, open_at == Some(i)).clicked() {
-                // The same hit clicked again goes to its message again.
-                c.went_to = None;
                 acts.push(Action::Run("teams.open", open_params(s, &r.id, searching)));
             }
         }

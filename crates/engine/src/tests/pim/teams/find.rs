@@ -197,3 +197,22 @@ fn a_hits_params_are_checked_first() {
     s.run("teams.open", &json!({"chat": CHAT, "message": null})).unwrap();
     assert_eq!(teams_jobs(&mut s), [teams::Job::Open { chat: Some(CHAT.into()) }]);
 }
+
+/// Review (Task 12, Important 1): each opening at a message has a number of its own, the same hit
+/// opened again included, never given twice in a run (Teams switched off between): the window
+/// goes to the message once for each.
+#[test]
+fn each_opening_at_a_message_is_numbered_afresh() {
+    let mut s = signed_in(vec![row(1, 10)]);
+    let mut seen = Vec::new();
+    for _ in 0..2 {
+        find(&mut s, CHAT, "m340");
+        seen.push(s.teams.go_to_opening);
+    }
+    s.run("teams.settings", &json!({"on": false})).unwrap();
+    s.run("teams.settings", &json!({"on": true})).unwrap();
+    s.apply(teams_event(teams::Event::Chats { rows: vec![row(1, 10)] }));
+    find(&mut s, CHAT, "m340");
+    seen.push(s.teams.go_to_opening);
+    assert!(seen.windows(2).all(|w| w[0] < w[1]), "each afresh: {seen:?}");
+}

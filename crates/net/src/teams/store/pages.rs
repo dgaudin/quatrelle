@@ -304,8 +304,7 @@ impl Copy {
     /// newest [`MESSAGE_PAGES`] pages) and the pages after it, at most [`OPEN_WINDOW`] messages in
     /// creation order; `true` when they reach the chat's last page. None when those pages don't
     /// have it.
-    #[allow(clippy::wrong_self_convention)] // the copy's messages from one on: no conversion
-    pub(crate) fn from_message(&self, chat: &str, id: &str) -> Option<(Vec<ChatMessage>, bool)> {
+    pub(crate) fn messages_from(&self, chat: &str, id: &str) -> Option<(Vec<ChatMessage>, bool)> {
         let (_, key) = self.message(chat, id, None, MESSAGE_PAGES)?;
         let r = self.chat(chat)?;
         let at = r.page_keys.iter().position(|k| *k == key)?;

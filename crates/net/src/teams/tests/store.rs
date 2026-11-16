@@ -304,7 +304,7 @@ fn from_a_message_its_page_and_those_after_it() {
     c.upsert(A, &[msg(A, 201)]).unwrap();
     let all = all_back(&c, A);
     let from = |n: i64| all.iter().position(|x| *x == n).unwrap();
-    let found = |n: i64| c.from_message(A, &msg(A, n).id).map(|(m, newest)| (numbers(&m), newest));
+    let found = |n: i64| c.messages_from(A, &msg(A, n).id).map(|(m, newest)| (numbers(&m), newest));
     // In the page of 50: it, the 51 and 99 of the last, cut at 200 short of the newest.
     assert_eq!(found(250), Some((all[from(200)..from(200) + 200].to_vec(), false)));
     // In the page of 51: it and the last, to the newest.
@@ -314,8 +314,8 @@ fn from_a_message_its_page_and_those_after_it() {
     assert_eq!(found(598), Some((all[from(400)..].to_vec(), true)), "the newest");
     // A message it hasn't, an id it can't have, another chat: nothing.
     assert_eq!(found(1), None);
-    assert_eq!(c.from_message(A, ""), None);
-    assert_eq!(c.from_message(B, &msg(A, 250).id), None);
+    assert_eq!(c.messages_from(A, ""), None);
+    assert_eq!(c.messages_from(B, &msg(A, 250).id), None);
 }
 
 #[test]
