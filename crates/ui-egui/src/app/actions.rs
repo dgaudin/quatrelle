@@ -70,11 +70,15 @@ impl MailApp {
             self.services.notify(&title, &body);
         }
         // Teams' new messages, as the engine decides. A window that gains the focus isn't put away
-        // any more (a second launch shows it again too).
-        if self.ui.put_away && ctx.input(|i| i.events.contains(&egui::Event::WindowFocused(true))) {
+        // any more (a second launch shows it again too), unless the same pass put it away (its
+        // close button clicked while another window had the focus).
+        if self.ui.put_away && ctx.input(|i| i.events.contains(&egui::Event::WindowFocused(true)) && !i.viewport().close_requested()) {
             self.ui.put_away = false;
         }
-        conversations::announce(&mut self.session, &mut *self.services, ctx, self.ui.put_away);
+        // Nobody looks at the open chat while the window is put away or minimized, nor while the
+        // File page is drawn in the module's place.
+        let away = self.ui.put_away || self.ui.backstage.is_some() || ctx.input(|i| i.viewport().minimized == Some(true));
+        conversations::announce(&mut self.session, &mut *self.services, ctx, away);
         self.teams_pages();
         let unread = self.session.inbox_unread();
         let view = match self.session.module {

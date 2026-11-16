@@ -332,11 +332,11 @@ team wasn't sent". Switching Teams off keeps the messages waiting: they go when 
 ### Marked read
 
 A conversation is marked read in Teams when you look at it: when you open it, when a message
-comes into it while it's on the screen, and when you come back to it (to the window, or to
-Conversations). On the screen means open in Conversations, in Quatrelle's window in front: not
-minimized, not hidden in the notification area, not behind another application. Its row stays in
-bold until Teams says it's read, about a second. A conversation you're no longer in, or one Graph
-won't serve, isn't marked.
+comes into it while it's on the screen, and when you come back to it (to the window, to
+Conversations, or from the File page). On the screen means open in Conversations, in Quatrelle's
+window in front: not minimized, not hidden in the notification area, not behind another
+application, and not under the File page. Its row stays in bold until Teams says it's read, about
+a second. A conversation you're no longer in, or one Graph won't serve, isn't marked.
 
 ### Announcements
 

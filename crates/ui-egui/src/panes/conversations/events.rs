@@ -233,9 +233,10 @@ impl TeamsQueue {
 /// Teams' new messages the engine announces, as desktop notifications. Called every wake, the
 /// window shown or not: the engine is told first whether the window is looked at (the open chat
 /// on screen is then marked read instead of announced), and the window wakes again when the next
-/// announcement held is due. `put_away`: the window is hidden in the notification area.
-pub(crate) fn announce(s: &mut Session, services: &mut dyn Services, ctx: &egui::Context, put_away: bool) {
-    s.teams_focus(looked_at(ctx, put_away));
+/// announcement held is due. `away`: nobody looks at the module (the window hidden in the
+/// notification area or minimized, or the File page drawn in the module's place).
+pub(crate) fn announce(s: &mut Session, services: &mut dyn Services, ctx: &egui::Context, away: bool) {
+    s.teams_focus(looked_at(ctx, away));
     for a in s.take_teams_announcements() {
         services.notify(&title_of(&a), &body_of(&a));
     }
@@ -244,10 +245,10 @@ pub(crate) fn announce(s: &mut Session, services: &mut dyn Services, ctx: &egui:
     }
 }
 
-/// Whether the window is looked at: it has the focus, and isn't minimized, covered whole or put
-/// away in the notification area (a desktop may leave the focus to a window it hides).
-fn looked_at(ctx: &egui::Context, put_away: bool) -> bool {
-    !put_away && ctx.input(|i| i.focused && i.viewport().visible() != Some(false))
+/// Whether the window is looked at: it has the focus, and isn't minimized, covered whole or
+/// `away` (a desktop may leave the focus to a window it hides).
+fn looked_at(ctx: &egui::Context, away: bool) -> bool {
+    !away && ctx.input(|i| i.focused && i.viewport().visible() != Some(false))
 }
 
 /// How long to wait at `now` for what is due at `due` (Unix seconds): nothing once it's past, and

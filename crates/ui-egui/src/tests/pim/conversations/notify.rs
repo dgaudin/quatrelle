@@ -301,6 +301,47 @@ fn the_open_chat_is_announced_while_the_window_is_away() {
     }
 }
 
+/// The marks read the app sent.
+fn marks_read(jobs: &Shared<Job>) -> usize {
+    jobs.borrow().iter().filter(|j| matches!(j, Job::Teams { job: teams::Job::Op { op: teams::Op::MarkRead { .. } } })).count()
+}
+
+/// B-I2: the File page drawn over Conversations, or the window minimized, the open chat isn't
+/// looked at: its news is announced and it isn't marked read; back from the page (or the window
+/// shown again), it's marked read once.
+#[test]
+fn the_open_chat_under_the_file_page_or_minimized_is_announced_not_marked_read() {
+    for under in ["the File page", "minimized"] {
+        let (mut a, dir, jobs) = module_app("teams-notify-covered", vec![row(AGENDA, 0)]);
+        let shown = Shown::default();
+        a.services = Box::new(Recorder(shown.clone()));
+        a.run("teams.open", json!({"chat": AGENDA}));
+        let ctx = egui::Context::default();
+        let minimized = under == "minimized";
+        for _ in 0..2 {
+            frame_as(&ctx, &mut a, true, false);
+        }
+        if !minimized {
+            a.ui.backstage = Some(crate::backstage::Backstage::new(crate::backstage::Page::Options));
+        }
+        frame_as(&ctx, &mut a, true, minimized);
+        jobs.borrow_mut().clear();
+        a.session.teams_apply(teams::Event::Chats { rows: vec![row(AGENDA, 1)] });
+        a.session.teams_apply(teams::Event::News { news: vec![news(AGENDA, "m1", Some("Agenda"), "Lunch?")] });
+        for _ in 0..2 {
+            frame_as(&ctx, &mut a, true, minimized);
+        }
+        assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Lima in Agenda".to_string(), "Lunch?".to_string())], "{under}: announced");
+        assert_eq!(marks_read(&jobs), 0, "{under}: not marked read");
+        a.ui.backstage = None;
+        for _ in 0..3 {
+            frame_as(&ctx, &mut a, true, false);
+        }
+        assert_eq!(marks_read(&jobs), 1, "{under}: marked read once looked at again");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
 /// Put away in the notification area, then shown and focused again (a second launch brings it
 /// back too, without the icon): no longer put away, so the open chat is looked at again.
 #[test]

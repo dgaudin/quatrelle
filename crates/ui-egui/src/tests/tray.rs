@@ -127,6 +127,33 @@ fn exit_quits_from_the_icon_and_from_the_file_page() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// B-m1: the window's close button clicked while another window had the focus: the pass that puts
+/// it away brings its focus too, and it stays put away (Teams' open chat not looked at), then
+/// after too.
+#[test]
+fn a_close_that_brings_the_focus_still_puts_the_window_away() {
+    let (mut a, dir) = app("tray-close-focused");
+    let _area = hosting(&mut a, true);
+    let ctx = egui::Context::default();
+    start(&ctx, &mut a);
+    let input = RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+        focused: true,
+        events: vec![egui::Event::WindowFocused(true)],
+        viewports: std::iter::once((egui::ViewportId::ROOT, egui::ViewportInfo { events: vec![egui::ViewportEvent::Close], ..Default::default() }))
+            .collect(),
+        ..Default::default()
+    };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    let told = out.viewport_output.remove(&egui::ViewportId::ROOT).map(|v| v.commands).unwrap_or_default();
+    assert!(told.contains(&ViewportCommand::Visible(false)), "{told:?}");
+    assert!(a.ui.put_away, "put away in the pass that brought the focus");
+    pass(&ctx, &mut a, false);
+    assert!(a.ui.put_away, "and after it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Without a notification area, or with the option off, closing the window closes Quatrelle as
 /// it always did; with the option off, the icon is there only for new mail.
 #[test]
