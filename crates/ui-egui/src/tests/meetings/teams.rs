@@ -113,3 +113,40 @@ fn open_in_teams_opens_the_chat_in_the_app_window() {
     assert_eq!(opened(&o), [format!("app /opt/chrome {CHAT_LINK}")]);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Each Teams page leaves a line in the log: what it is, where it opened (the browser's shown
+/// name and which profile, never a folder's name), and the link's shape, never the chat's id,
+/// the organisation's or a query's value.
+#[test]
+fn each_page_leaves_a_line_with_no_id_in_it() {
+    use crate::app::{PageOutcome, ProfileKind, page_line};
+    use quatrelle_engine::TeamsPage;
+    let built = "https://teams.microsoft.com/l/chat/19%3Ameet%40thread.v2/conversations?context=%7B%22contextType%22%3A%22chat%22%7D&tenantId=00000000-0000-0000-0000-000000000000";
+    let shape = "teams.microsoft.com/l/chat/<id>/conversations?context&tenantId";
+    let chat = TeamsPage::Chat(built.into());
+    let ours = ProfileKind::of(Some(MEETINGS_PROFILE));
+    let lines = [
+        (page_line(&chat, &PageOutcome::AppWindow { browser: "Google Chrome", profile: ours }), format!("teams: a chat opened in Google Chrome, in Quatrelle's own profile: {shape}")),
+        (page_line(&chat, &PageOutcome::DefaultBrowser), format!("teams: a chat opened in the default browser: {shape}")),
+        (
+            page_line(&chat, &PageOutcome::InsteadOf { browser: "Google Chrome", error: "boom" }),
+            format!("teams: a chat couldn't be opened in Google Chrome (boom); the default browser instead: {shape}"),
+        ),
+        (page_line(&chat, &PageOutcome::Failed { error: "boom" }), format!("teams: a chat couldn't be opened: boom: {shape}")),
+        (page_line(&TeamsPage::Chat(CHAT_LINK.into()), &PageOutcome::Refused), "teams: a page that isn't Teams' own was not opened (a chat): teams.microsoft.com/l/chat/<id>/0?tenantId".into()),
+        (
+            page_line(&TeamsPage::SignIn(SIGN_IN.into()), &PageOutcome::AppWindow { browser: "Chromium", profile: ProfileKind::of(None) }),
+            "teams: the sign-in page opened in Chromium, in the profile it used last: login.microsoftonline.com/<id>/oauth2/<id>/authorize?client_id&state".into(),
+        ),
+    ];
+    for (line, want) in &lines {
+        assert_eq!(line, want);
+        for secret in ["meet", "thread", "0000", "%7B", "contextType", "contoso", "=x", "=y"] {
+            assert!(!line.contains(secret), "{secret} in {line}");
+        }
+    }
+    // Another profile chosen: said so, never by its folder's name.
+    let chosen = page_line(&chat, &PageOutcome::AppWindow { browser: "Google Chrome", profile: ProfileKind::of(Some("Profile 3")) });
+    assert_eq!(chosen, format!("teams: a chat opened in Google Chrome, in another profile chosen: {shape}"));
+    assert!(!chosen.contains("Profile 3"));
+}

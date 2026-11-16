@@ -769,4 +769,31 @@ proptest::proptest! {
         let back = parse(&write(std::slice::from_ref(&e), None, at), 0).events.into_iter().next();
         proptest::prop_assert_eq!(back.map(|b| (reminder_minutes(&b), acknowledged(&b))), Some((Some(minutes), Some(at))));
     }
+    /// Any text has a shape for the log ([`link_shape`]), with none of its values in it.
+    #[test]
+    fn any_text_has_a_shape(url in "(https?://)?[a-z.@é:/?&=#%_ -]{0,40}") {
+        proptest::prop_assert!(!link_shape(&url).contains(['=', '%', 'é', '#', '@']));
+    }
+}
+
+/// A link's shape for the log ([`link_shape`]): host, plain path words, query keys; never an id, a value, or a panic.
+#[test]
+fn a_links_shape_carries_no_id_or_value() {
+    let z = "00000000-0000-0000-0000-000000000000";
+    let chat = format!("https://teams.microsoft.com/l/chat/19%3Aa%40thread.v2/conversations?context=%7B%7D&tenantId={z}");
+    assert_eq!(link_shape(&chat), "teams.microsoft.com/l/chat/<id>/conversations?context&tenantId");
+    let graph = format!("https://teams.microsoft.com/l/chat/19%3Aa%40thread.v2/0?tenantId={z}#x=y");
+    assert_eq!(link_shape(&graph), "teams.microsoft.com/l/chat/<id>/0?tenantId");
+    let sign_in = format!("https://login.microsoftonline.com/{z}/oauth2/v2.0/authorize?client_id=x&state=y");
+    assert_eq!(link_shape(&sign_in), "login.microsoftonline.com/<id>/oauth2/<id>/authorize?client_id&state");
+    let long = "https://a.example:8443/1/2/3/4/5/6/7/8/9?a&b&c&d&e&f&g&h&i=j";
+    assert_eq!(link_shape(long), "a.example:8443/1/2/3/4/5/6/7/8/…?a&b&c&d&e&f&g&h&…");
+    assert_eq!(link_shape("HTTP://A.example//x/?19:a@thread=1&=v&%"), "a.example//x/?<id>&&<id>");
+    for bad in ["https://a@b.example/x", "https://a b.example/x", "https://bücher.example/x", "https://"] {
+        assert_eq!(link_shape(bad), "(not a plain host)", "{bad}");
+    }
+    for odd in ["", "httpsé", "https://a.example/é%", "https://a.example/?é&", "https://a.example#/x", "https://a.example/x?y#%"] {
+        assert!(!link_shape(odd).contains(['=', '%', 'é', '#']), "{odd}: {}", link_shape(odd));
+    }
+    assert_eq!(link_shape("ftp://a.example/x"), "(not a web address)");
 }

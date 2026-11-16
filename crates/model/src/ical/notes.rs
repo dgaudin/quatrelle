@@ -244,6 +244,54 @@ pub fn is_teams_chat_link(url: &str) -> bool {
         && launchable_link(url)
 }
 
+/// Most path segments and query keys a link's shape names ([`link_shape`]); the rest is `…`.
+const SHAPE_PARTS: usize = 8;
+
+/// A web address's shape, for the log: its host (and port), each path segment only when it's a
+/// short plain word (`[A-Za-z0-9_-]`, at most 16 characters; else `<id>`), the query's keys
+/// alike and never a value, no fragment (`teams.microsoft.com/l/chat/<id>/conversations?context&tenantId`).
+/// `(not a web address)` unless `http` or `https`; `(not a plain host)` for a host a browser
+/// could take elsewhere ([`web_host_and_path`]). Never an id, a name or a value.
+pub fn link_shape(url: &str) -> String {
+    let web = ["https://", "http://"].iter().any(|s| url.get(..s.len()).is_some_and(|h| h.eq_ignore_ascii_case(s)));
+    if !web {
+        return "(not a web address)".into();
+    }
+    let Some((host, path)) = web_host_and_path(url) else { return "(not a plain host)".into() };
+    // The host as `web_host_and_path` read it, its port (digits only) beside it.
+    let after = url.split_once("://").map_or("", |(_, r)| r);
+    let authority = after.split(['/', '?', '#', '\\']).next().unwrap_or("");
+    let mut out = host.chars().take(64).collect::<String>();
+    if let Some((_, port)) = authority.split_once(':') {
+        out.push(':');
+        out.push_str(port.get(..port.len().min(5)).unwrap_or(""));
+    }
+    let unfragmented = url.split('#').next().unwrap_or("");
+    if after.as_bytes().get(authority.len()) == Some(&b'/') {
+        out.push('/');
+        out.push_str(&shape_names(path.split(['?', '#']).next().unwrap_or("").split('/'), "/"));
+    }
+    if let Some((_, query)) = unfragmented.split_once('?') {
+        out.push('?');
+        out.push_str(&shape_names(query.split('&').map(|p| p.split('=').next().unwrap_or("")), "&"));
+    }
+    out
+}
+
+/// The first [`SHAPE_PARTS`] of a path's segments or a query's keys, each a plain word or `<id>`,
+/// then `…` if there are more.
+fn shape_names<'a>(mut parts: impl Iterator<Item = &'a str>, sep: &str) -> String {
+    let word = |s: &str| {
+        let plain = s.len() <= 16 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+        if plain { s.to_string() } else { "<id>".to_string() }
+    };
+    let mut out: Vec<String> = parts.by_ref().take(SHAPE_PARTS).map(word).collect();
+    if parts.next().is_some() {
+        out.push("…".into());
+    }
+    out.join(sep)
+}
+
 /// Whether a web address is Microsoft's page to sign in to an organisation, as the Teams sign-in
 /// opens it: `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize?<query>`, on that
 /// host exactly (no port), with an organisation the Options could name
