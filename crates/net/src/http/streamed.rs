@@ -96,9 +96,10 @@ fn copy_body<S: Read, W: Write>(body: &mut Ahead<'_, S>, head: &Response, max: u
         }
         return if body.copy(len, out)? == len { Ok(len) } else { Err(ended()) };
     }
-    // No length: the body runs to the end of the connection.
-    let done = body.copy(max.saturating_add(1), out)?;
-    if done > max { Err(too_big()) } else { Ok(done) }
+    // No length: the body runs to the end of the connection. At most `max` bytes are written;
+    // a byte more on the connection refuses it, unwritten.
+    let done = body.copy(max, out)?;
+    if done == max && body.left()? { Err(too_big()) } else { Ok(done) }
 }
 
 /// What came with the head, then the connection.
@@ -119,6 +120,11 @@ impl<S: Read> Ahead<'_, S> {
         let n = self.s.read(&mut tmp)?;
         self.buf.extend_from_slice(tmp.get(..n).unwrap_or_default());
         Ok(n > 0)
+    }
+
+    /// Whether a byte is left, held or on the connection (read, not written).
+    fn left(&mut self) -> Result<bool> {
+        Ok(self.pos < self.buf.len() || self.more()?)
     }
 
     /// Up to `n` bytes (fewer when the connection ends first) into `out`: how many.
@@ -230,5 +236,20 @@ mod tests {
         assert_eq!(credentials_seen(&seen_b[0]), (false, false));
         assert!(seen_a[1].starts_with("GET /three "), "{}", seen_a[1]);
         assert_eq!(credentials_seen(&seen_a[1]), (false, false), "back on the first site, still none: {}", seen_a[1]);
+    }
+
+    /// A body that runs to the end of the connection is refused past the cap, and not a byte
+    /// past the cap reaches the writer (the fuzz target `http` found one written); one at the
+    /// cap is taken whole.
+    #[test]
+    fn a_body_to_the_end_writes_nothing_past_the_cap() {
+        let (base, h) = serve(vec![b"HTTP/1.0 200 OK\r\n\r\n0123456789".to_vec(), b"HTTP/1.0 200 OK\r\n\r\n012345678".to_vec()]);
+        let (r, got) = fetch(&base, 9);
+        assert!(matches!(&r, Err(NetError::Protocol(m)) if m.contains("larger")), "{r:?}");
+        assert!(got.len() <= 9, "{} bytes written for a cap of 9", got.len());
+        let (r, got) = fetch(&base, 9);
+        assert!(r.is_ok(), "{r:?}");
+        assert_eq!(got, b"012345678");
+        h.join().unwrap();
     }
 }
