@@ -42,7 +42,9 @@ use serde::{Deserialize, Serialize};
 use super::store::{ChatRecord, Copy, chat_hash, id_ok};
 use super::worker::Worker;
 
+mod load;
 mod segment;
+mod write;
 
 use segment::{Draft, Segment, query_words, words_of, words_of_texts};
 
@@ -114,22 +116,6 @@ struct Named {
     chat: String,
     words: Vec<String>,
     at: i64,
-}
-
-/// A chat's segment once messages went in, waiting for the pages' write.
-pub(crate) struct Staged {
-    hash: String,
-    segment: Segment,
-    file: Option<(String, Vec<u8>)>,
-    /// The chat's oldest messages left it to keep it within [`SEGMENT_MAX`].
-    trimmed: bool,
-}
-
-impl Staged {
-    /// Its file, to be written with the pages.
-    pub(crate) fn take_file(&mut self) -> Option<(String, Vec<u8>)> {
-        self.file.take()
-    }
 }
 
 fn segment_key(hash: &str) -> String {
@@ -299,154 +285,9 @@ impl Index {
 }
 
 impl Copy {
-    /// One slice of the index read back: the chats listed, or one chat's name and words. `false`
-    /// when it's read whole.
-    pub(crate) fn index_step(&self) -> bool {
-        let mut ix = self.index.borrow_mut();
-        let next = ix.todo.as_mut().map(Vec::pop);
-        match next {
-            None => {
-                let mut hashes = match self.store.account_files(TEAMS_ACCOUNT, "chats") {
-                    Ok(names) => names,
-                    Err(StoreError::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-                    Err(_) => {
-                        log::warn!("Teams search: the copy's chats couldn't be listed; nothing is searched");
-                        Vec::new()
-                    }
-                };
-                hashes
-                    .retain(|n| n.strip_suffix(".json").is_some_and(|h| h.len() == 32 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))));
-                hashes.sort_unstable();
-                hashes.truncate(MAX_CHATS);
-                // Popped from the end: read in the listing's order.
-                let todo: Vec<String> = hashes.iter().rev().filter_map(|n| n.strip_suffix(".json").map(str::to_string)).collect();
-                ix.partial = self.read(PARTIAL).is_some();
-                ix.todo = Some(todo);
-                true
-            }
-            Some(None) => false,
-            Some(Some(hash)) => {
-                if let Some(r) = self.record_by_hash(&hash) {
-                    ix.name(&r.chat);
-                }
-                if !ix.segments.contains_key(&hash)
-                    && let Some(seg) = self.segment_from_file(&hash)
-                {
-                    ix.put_segment(hash, seg);
-                }
-                // Held to the bounds as it's read, not once it's whole: a planted file can't
-                // make it hold more meanwhile.
-                self.bound(&mut ix, None);
-                true
-            }
-        }
-    }
-
     /// What a query finds in the copy.
     pub(crate) fn found(&self, query: &str) -> Found {
         self.index.borrow().found(query)
-    }
-
-    /// A chat's record by its hash, when it's that chat's.
-    fn record_by_hash(&self, hash: &str) -> Option<ChatRecord> {
-        let r: ChatRecord = serde_json::from_slice(&self.read(&format!("chats/{hash}.json"))?).ok()?;
-        (id_ok(&r.chat.id) && chat_hash(&r.chat.id) == hash).then_some(r)
-    }
-
-    fn segment_from_file(&self, hash: &str) -> Option<Segment> {
-        let bytes = self.read(&segment_key(hash))?;
-        Some(Draft::read(&bytes, hash)?.settle(bytes.len()))
-    }
-
-    /// The words of messages [`Copy::upsert`] changed put in their chat's segment (an edit's
-    /// replacing the old ones, a deletion's taken out), the segment's file to be written with
-    /// the pages. [`Copy::settle_index`] takes it back once they are.
-    pub(crate) fn stage_index(&self, chat: &str, changed: &[ChatMessage]) -> Result<Option<Staged>> {
-        if changed.is_empty() || !id_ok(chat) {
-            return Ok(None);
-        }
-        let hash = chat_hash(chat);
-        let mut ix = self.index.borrow_mut();
-        // The chat's words in the form a change works on, for this change only.
-        let mut seg = match ix.take_segment(&hash) {
-            Some(seg) => Draft::of(&seg),
-            None => self.read(&segment_key(&hash)).and_then(|b| Draft::read(&b, &hash)).unwrap_or_else(|| Draft::empty(chat)),
-        };
-        let ids: HashSet<&str> = changed.iter().map(|m| m.id.as_str()).collect();
-        seg.remove(&ids);
-        for m in changed.iter().filter(|m| m.chat == chat && m.deleted.is_none() && id_ok(&m.id)) {
-            seg.add(&m.id, m.created, words_of(m));
-        }
-        let mut trimmed = false;
-        let mut bytes = match seg.to_bytes() {
-            Ok(b) => b,
-            Err(e) => {
-                ix.reload(hash);
-                return Err(e);
-            }
-        };
-        for _ in 0..16 {
-            if bytes.len() <= SEGMENT_MAX || seg.places.is_empty() {
-                break;
-            }
-            seg.trim_oldest();
-            trimmed = true;
-            bytes = match seg.to_bytes() {
-                Ok(b) => b,
-                Err(e) => {
-                    ix.reload(hash);
-                    return Err(e);
-                }
-            };
-        }
-        let segment = seg.settle(bytes.len());
-        let key = segment_key(&hash);
-        Ok(Some(Staged { hash, segment, file: Some((key, bytes)), trimmed }))
-    }
-
-    /// A staged segment back in the index once the pages' write is over: kept when it was
-    /// written (and the index held to its bound), else read again from the file.
-    pub(crate) fn settle_index(&self, staged: Option<Staged>, written: bool) {
-        let Some(s) = staged else { return };
-        let mut ix = self.index.borrow_mut();
-        if !written {
-            ix.reload(s.hash);
-            return;
-        }
-        let hash = s.hash.clone();
-        ix.put_segment(s.hash, s.segment);
-        if s.trimmed {
-            self.mark_partial(&mut ix);
-        }
-        self.bound(&mut ix, Some(&hash));
-    }
-
-    /// The index held to its bounds, in the file ([`Copy::index_cap`]) and in memory
-    /// ([`RESIDENT_MAX`]): the chats with the oldest messages leave it first (`keep` apart, the
-    /// chat just written).
-    fn bound(&self, ix: &mut Index, keep: Option<&str>) {
-        let cap = self.index_cap(ix);
-        let held = ix.resident_cap();
-        let mut total: u64 = ix.segments.values().map(|s| s.bytes).fold(0, u64::saturating_add);
-        let mut resident: u64 = ix.segments.values().map(|s| s.resident).fold(0, u64::saturating_add);
-        if total <= cap && resident <= held {
-            return;
-        }
-        let oldest: Vec<String> = ix.by_newest.iter().rev().map(|(_, h)| h.clone()).filter(|h| Some(h.as_str()) != keep).collect();
-        for hash in oldest {
-            if total <= cap && resident <= held {
-                break;
-            }
-            if let Some(seg) = ix.take_segment(&hash) {
-                total = total.saturating_sub(seg.bytes);
-                resident = resident.saturating_sub(seg.resident);
-                if self.store.remove_account_files(TEAMS_ACCOUNT, &segment_key(&hash)).is_err() {
-                    log::warn!("Teams search: an old chat's words couldn't leave the file");
-                }
-            }
-        }
-        log::info!("Teams search: the oldest chats' words left the index ({total} bytes kept of {cap}, about {resident} in memory)");
-        self.mark_partial(ix);
     }
 
     fn mark_partial(&self, ix: &mut Index) {
