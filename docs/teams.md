@@ -362,9 +362,10 @@ text: what looks like markup in a message is shown as written.
 
 The copy is one data file, `Teams.quatrelle`, in the same folder as your accounts' data files
 (see `docs/architecture.md`). It holds the chats, their messages, the pictures the screen has
-asked for and the messages going out, and is readable by you only. A file that is damaged is set
-aside beside it and a new one begun; a copy of another account is set aside as
-`Teams-<8 letters>.quatrelle.old`.
+asked for and the messages going out, and is readable by you only. It also holds the search's
+index of the messages' words, each conversation's in parts of about a thousand messages, so a new
+message rewrites only the part it goes in. A file that is damaged is set aside beside it and a new
+one begun; a copy of another account is set aside as `Teams-<8 letters>.quatrelle.old`.
 
 To delete it: Sign out › Delete the copy, or Delete that copy for one set aside. Closing
 Quatrelle and removing the file by hand does the same; the next sign-in copies again.

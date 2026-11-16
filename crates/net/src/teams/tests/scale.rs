@@ -3,11 +3,11 @@
 //! The copy at scale, on disk: a copy of 2,000 chats and 300,000 messages (one chat of 30,000)
 //! beside one ten times smaller, the worker signed in to the fake Graph over each. Opening the
 //! long chat and going back through it 50 pages take no more than twice as long as in the smaller
-//! copy, a search no more than twice and 2 ms. A new message put in the long chat, and one sent
-//! there through the fake, are held to a time of their own, not to the smaller copy's: each write
-//! rewrites the chat's index segment whole (`index/<hash>.json`), so they grow with the chat (about
-//! a microsecond a message in a debug build), and twice the smaller copy's would only say how much
-//! of the time the disk's commit takes.
+//! copy, a search no more than twice and 2 ms. So do a new message put in the long chat and one
+//! sent there through the fake: a write puts in only the index tranches it changes
+//! (`index/<hash>/<n>.json`), not the chat's words whole, so writes are held to twice the smaller
+//! copy's like the rest. What a write puts in the index is measured in bytes by the search's own
+//! tests (`search/tranches.rs`); here the disk's commit takes most of a write's time.
 //!
 //! `#[ignore]`: making 300,000 messages in a debug build takes minutes. Run it with
 //! `cargo test -p quatrelle-net --lib teams::tests::scale -- --ignored`.
@@ -227,15 +227,9 @@ fn measure(name: &str, shape: Shape) -> Took {
     Took { open, page, upsert, search, send }
 }
 
-/// The longest a message put in the long chat, or sent there, may take in either copy: the known
-/// growth of the chat's index segment (rewritten whole at each write) stays far under it at
-/// 30,000 messages (about 56 and 82 ms in a debug build); a step that went through every message
-/// or every chat again would not.
-const WRITE_MAX: Duration = Duration::from_secs(1);
-
-/// What the worker does for the screen takes no more than twice as long in a copy ten times
-/// bigger (a search, twice and 2 ms: it takes some 50 µs); what it writes in the long chat, no
-/// more than [`WRITE_MAX`] (spec, Testing › Scale).
+/// What the worker does for the screen, and what it writes in the long chat, takes no more than
+/// twice as long in a copy ten times bigger (a search, twice and 2 ms: it takes some 50 µs)
+/// (spec, Testing › Scale).
 #[test]
 #[ignore = "makes 330,000 messages: minutes in a debug build"]
 fn a_copy_of_2000_chats_and_300000_messages_answers_in_bounded_time() {
@@ -248,10 +242,9 @@ fn a_copy_of_2000_chats_and_300000_messages_answers_in_bounded_time() {
         ("opening the long chat", small.open, big.open, none),
         ("a page before", small.page, big.page, none),
         ("a search", small.search, big.search, Duration::from_millis(2)),
+        ("a new message put in", small.upsert, big.upsert, none),
+        ("a message sent", small.send, big.send, none),
     ];
-    let mut past: Vec<&str> = flat.iter().filter(|(_, a, b, margin)| *b > 2 * *a + *margin).map(|(what, ..)| *what).collect();
-    // Growing with the chat (its index segment rewritten whole): held to a time of their own.
-    let writes = [("a new message put in", small.upsert, big.upsert), ("a message sent", small.send, big.send)];
-    past.extend(writes.iter().filter(|(_, a, b)| *a > WRITE_MAX || *b > WRITE_MAX).map(|(what, ..)| *what));
+    let past: Vec<&str> = flat.iter().filter(|(_, a, b, margin)| *b > 2 * *a + *margin).map(|(what, ..)| *what).collect();
     assert!(past.is_empty(), "past their bounds: {past:?}; {said}");
 }

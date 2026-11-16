@@ -76,6 +76,17 @@ windows of the chats (`engine/src/session/pim/teams/`). The copy is its own data
 it was made for (another identity's file is set aside, unread). Switching Teams off or signing out
 stops the worker's requests. The user's side is in `docs/teams.md`.
 
+The search of the copy is the worker's too (`net/src/teams/search.rs`). Each chat's words are kept
+with its pages, in tranches of at most 1,000 messages by creation time (`index/<hash>/<n>.json`,
+at most 256 KiB once written unless it holds a single message): a write puts in only the tranches
+it changes, in the pages' transaction, and removes those it emptied after it. A chat has at most
+1,024 tranches and 16 MB, its oldest leaving first; the whole index at most a quarter of the file
+and 256 MB in memory, the oldest tranches of all chats leaving first, after which a search says it
+covers recent conversations only. The index is read back a chat a loop turn, as hostile input: a
+tranche that can't be the chat's is passed over and emptied at the chat's next write. The older
+form, one segment a chat (`index/<hash>.json`), is read as it is and converted at the chat's first
+write; that file is then a stub, which an older build reads as a chat with no words.
+
 The outbox is the worker's (`net/src/teams/outbox.rs`): a message the user sends (`teams.send`)
 becomes a record in the copy (`outbox/<n>.json`) before anything goes, so it outlives a
 restart. Each chat's records go in order, one request a step under the same limiter
