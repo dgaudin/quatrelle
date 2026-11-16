@@ -10,7 +10,7 @@
 //! never written.
 
 use quatrelle_mime::{TEAMS_RUNS, teams_write};
-use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, OUTBOX_MAX, OutState, Outgoing, Unsent};
+use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, OUTBOX_MAX, OutKind, OutState, Outgoing, Unsent};
 
 use super::*;
 
@@ -64,7 +64,15 @@ impl OpRecord {
             OpState::Sending | OpState::Unknown => OutState::Sending,
             OpState::NotSent { reason, code } => OutState::NotSent { reason: *reason, code: code.clone() },
         };
-        Outgoing { seq: self.seq, local: self.local.clone(), chat: self.chat.clone(), body: self.body.clone(), state }
+        Outgoing {
+            seq: self.seq,
+            local: self.local.clone(),
+            chat: self.chat.clone(),
+            body: self.body.clone(),
+            mentions: Vec::new(),
+            what: OutKind::Send,
+            state,
+        }
     }
 
     /// The first of the outbox's caps it breaks; `None` for a record the outbox keeps. Its number

@@ -264,7 +264,7 @@ fn the_users_own_message_read_back_is_never_news() {
         t.answer_lost.insert("post".into(), 1);
     });
     for (local, text) in [("1-1", "On my way"), ("1-2", "Coming too")] {
-        r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: local.into(), body: teams_compose(text, &[], &[]) } });
+        r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: local.into(), body: teams_compose(text, &[], &[]), mentions: Vec::new() } });
     }
     r.post(CHAT, ME, NOW + MINUTE, "From my phone");
     let end = r.at + Duration::from_secs(40);

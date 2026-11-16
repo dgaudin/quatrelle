@@ -6,7 +6,7 @@
 //! received (before the user's own going out) opens the chat again. With `QUATRELLE_FRAME_PNG`
 //! set to a folder, the pane is painted there, light and dark.
 
-use quatrelle_engine::model::pim::teams::{ChatMessage, OutState, Outgoing};
+use quatrelle_engine::model::pim::teams::{ChatMessage, OutKind, OutState, Outgoing};
 
 use super::chat::{CHAT, ME, TENANT_ID, group_row, members, para, said, user, words};
 use super::*;
@@ -129,7 +129,15 @@ fn answer_the_find(a: &mut MailApp) {
         a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: false });
     }
     a.session.teams_apply(teams::Event::Placed { chat: CHAT.into(), message: "m040".into(), newest: false });
-    let going = Outgoing { seq: 3, local: "100-1".into(), chat: CHAT.into(), body: para(vec![words("On its way")]), state: OutState::Waiting };
+    let going = Outgoing {
+        seq: 3,
+        local: "100-1".into(),
+        chat: CHAT.into(),
+        body: para(vec![words("On its way")]),
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state: OutState::Waiting,
+    };
     a.session.teams_apply(teams::Event::Outbox { chat: CHAT.into(), items: vec![going], took: None });
 }
 

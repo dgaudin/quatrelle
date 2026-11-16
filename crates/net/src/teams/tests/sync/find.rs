@@ -113,7 +113,9 @@ fn a_hit_opened_says_its_outbox() {
     let mut teams = teams_with(vec![chat(CHAT, T0, 3), chat(OTHER, T0, 3)]);
     teams.forbid_post.push(CHAT.into());
     let mut r = run(teams);
-    r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body: teams_compose("Stays not sent", &[], &[]) } });
+    r.w.job(Job::Op {
+        op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body: teams_compose("Stays not sent", &[], &[]), mentions: Vec::new() },
+    });
     r.turns(Duration::from_secs(3));
     let refused = OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 403 Forbidden".into()) };
     r.w.job(Job::Find { chat: OTHER.into(), message: T0.to_string() });

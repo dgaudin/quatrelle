@@ -114,7 +114,8 @@ pub enum Event {
         items: Vec<Outgoing>,
         took: Option<String>,
     },
-    /// How many messages the outbox holds in all: waiting, being sent or not sent.
+    /// How many messages to send the outbox holds in all (changes to messages already there
+    /// apart): waiting, being sent or not sent.
     Unsent {
         count: u32,
     },

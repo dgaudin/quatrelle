@@ -20,7 +20,7 @@
 use std::ops::Range;
 
 use quatrelle_mime::{teams_compose, teams_write};
-use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutState, Outgoing};
+use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, OutState, Outgoing};
 
 use super::*;
 
@@ -236,9 +236,17 @@ impl Session {
         let n = self.fresh_id();
         let local = format!("{}-{n}", self.clock.now);
         if open {
-            self.teams.outgoing.push(Outgoing { seq: 0, local: local.clone(), chat: chat.clone(), body: body.clone(), state: OutState::Waiting });
+            self.teams.outgoing.push(Outgoing {
+                seq: 0,
+                local: local.clone(),
+                chat: chat.clone(),
+                body: body.clone(),
+                mentions: Vec::new(),
+                what: OutKind::Send,
+                state: OutState::Waiting,
+            });
         }
-        self.push_job(Job::Teams { job: teams::Job::Op { op: Op::Send { chat, local: local.clone(), body } } });
+        self.push_job(Job::Teams { job: teams::Job::Op { op: Op::Send { chat, local: local.clone(), body, mentions: Vec::new() } } });
         Ok(local)
     }
 

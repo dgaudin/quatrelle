@@ -207,8 +207,17 @@ fn measure(name: &str, shape: Shape) -> Took {
     for j in 0..5 {
         r.turns(Duration::from_millis(1_500));
         let posted = r.fake(|t| t.posts.len());
-        let mut took =
-            job(&mut r, Job::Op { op: Op::Send { chat: LONG.into(), local: format!("scale-{j}"), body: teams_compose("Lunch at noon?", &[], &[]) } });
+        let mut took = job(
+            &mut r,
+            Job::Op {
+                op: Op::Send {
+                    chat: LONG.into(),
+                    local: format!("scale-{j}"),
+                    body: teams_compose("Lunch at noon?", &[], &[]),
+                    mentions: Vec::new(),
+                },
+            },
+        );
         let until = r.at + Duration::from_secs(5);
         while r.fake(|t| t.posts.len()) == posted {
             assert!(r.at < until, "{name}: the message never went");

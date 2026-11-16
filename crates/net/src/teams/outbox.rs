@@ -40,7 +40,7 @@ use std::time::{Duration, Instant};
 
 use quatrelle_mime::{TEAMS_RUNS, teams_html, teams_write};
 use quatrelle_model::pim::teams::{
-    CLOCK_TOLERANCE_MS, ChatMessage, ChatText, Event, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutState, Outgoing, Sender, Unsent,
+    CLOCK_TOLERANCE_MS, ChatMessage, ChatText, Event, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, OutState, Outgoing, Sender, Unsent,
 };
 
 use super::graph::{Range, message_of};
@@ -124,7 +124,9 @@ struct Checking {
 /// (or answered "Not sent"), or a chat to mark read.
 pub(crate) fn queue(w: &mut Worker, op: Op) {
     match op {
-        Op::Send { chat, local, body } => take(w, chat, local, body),
+        // Mentions and the changes to messages already there are taken in later tasks.
+        Op::Send { chat, local, body, mentions: _ } => take(w, chat, local, body),
+        Op::Edit { .. } | Op::Delete { .. } | Op::React { .. } => log::debug!("teams: not handled yet"),
         Op::MarkRead { chat } => mark(w, chat),
     }
 }
@@ -167,7 +169,15 @@ fn take(w: &mut Worker, chat: String, local: String, body: ChatText) {
 /// A message not taken: answered as "Not sent" for `why`, after the chat's own.
 fn refuse(w: &mut Worker, ops: &[OpRecord], chat: String, local: String, body: ChatText, why: Unsent) {
     log::warn!("teams: a message to conversation {} wasn't taken: {why:?}", w.hashed(&chat));
-    let item = Outgoing { seq: 0, local: local.clone(), chat: chat.clone(), body, state: OutState::NotSent { reason: why, code: None } };
+    let item = Outgoing {
+        seq: 0,
+        local: local.clone(),
+        chat: chat.clone(),
+        body,
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state: OutState::NotSent { reason: why, code: None },
+    };
     said(w, ops, &chat, Some(local), Some(item));
 }
 

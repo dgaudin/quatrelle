@@ -542,8 +542,15 @@ fn teams_commands_survive_junk_params_while_on() {
         messages(&mut s, "19:chat1@thread.v2", 0..3);
         // Something going out, for the retry and delete commands to be given junk about.
         let not_sent = teams::OutState::NotSent { reason: teams::Unsent::Refused, code: None };
-        let items =
-            vec![teams::Outgoing { seq: 1, local: "1-1".into(), chat: "19:chat1@thread.v2".into(), body: Default::default(), state: not_sent }];
+        let items = vec![teams::Outgoing {
+            seq: 1,
+            local: "1-1".into(),
+            chat: "19:chat1@thread.v2".into(),
+            body: Default::default(),
+            mentions: Vec::new(),
+            what: teams::OutKind::Send,
+            state: not_sent,
+        }];
         s.apply(teams_event(teams::Event::Outbox { chat: "19:chat1@thread.v2".into(), items, took: None }));
     }
     for p in &junk {

@@ -10,7 +10,7 @@
 use std::sync::{Arc, Mutex};
 
 use quatrelle_engine::TeamsAnnouncement;
-use quatrelle_engine::model::pim::teams::{ChatText, News, OutState, Outgoing};
+use quatrelle_engine::model::pim::teams::{ChatText, News, OutKind, OutState, Outgoing};
 
 use super::*;
 
@@ -200,7 +200,15 @@ fn the_queue_stays_bounded_with_what_is_said_once() {
 }
 
 fn outgoing(chat: &str, seq: u64) -> Outgoing {
-    Outgoing { seq, local: format!("l{seq}"), chat: chat.into(), body: ChatText::default(), state: OutState::Waiting }
+    Outgoing {
+        seq,
+        local: format!("l{seq}"),
+        chat: chat.into(),
+        body: ChatText::default(),
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state: OutState::Waiting,
+    }
 }
 
 /// A chat's outbox as the worker says it: `n` messages going out, and the one it answered for.

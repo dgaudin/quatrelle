@@ -404,6 +404,12 @@ pub fn is_internal(m: &Member, tenant: &str) -> bool {
         && !m.roles.iter().any(|r| r.eq_ignore_ascii_case("guest"))
 }
 
+/// Whether a member can be @mentioned from Quatrelle: an organisation account
+/// (`aadUserConversationMember`) of the tenant (ignoring case), guests included.
+pub fn mentionable(m: &Member, tenant: &str) -> bool {
+    m.kind == "aadUserConversationMember" && !tenant.is_empty() && m.tenant_id.as_deref().is_some_and(|t| t.eq_ignore_ascii_case(tenant))
+}
+
 /// Whether a message's sender is of the organisation `tenant`: by their membership of the chat
 /// when they're a member, else by what the message says (an `aadUser` of that tenant). An
 /// application or no one isn't.

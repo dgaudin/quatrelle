@@ -7,7 +7,7 @@
 //! Delete; and Sign out's question counting what wasn't sent. With `QUATRELLE_FRAME_PNG` set to a
 //! folder, the pane is painted there, light and dark.
 
-use quatrelle_engine::model::pim::teams::{ChatMessage, OUTBOX_CHAT_MAX, OUTBOX_MAX, OutState, Outgoing, Unsent};
+use quatrelle_engine::model::pim::teams::{ChatMessage, OUTBOX_CHAT_MAX, OUTBOX_MAX, OutKind, OutState, Outgoing, Unsent};
 use serde_json::Value;
 
 use super::chat::*;
@@ -70,7 +70,7 @@ fn enter() -> Event {
 }
 
 fn outgoing(seq: u64, local: &str, text: &str, state: OutState) -> Outgoing {
-    Outgoing { seq, local: local.into(), chat: CHAT.into(), body: para(vec![words(text)]), state }
+    Outgoing { seq, local: local.into(), chat: CHAT.into(), body: para(vec![words(text)]), mentions: Vec::new(), what: OutKind::Send, state }
 }
 
 fn outbox(items: Vec<Outgoing>) -> teams::Event {

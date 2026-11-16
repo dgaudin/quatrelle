@@ -5,7 +5,7 @@
 //! of the newest; opened as any chat is (marked read, its news waiting not announced, its
 //! messages refused kept); and the params checked first.
 
-use quatrelle_model::pim::teams::{News, Op, OutState, Outgoing, Unsent};
+use quatrelle_model::pim::teams::{News, Op, OutKind, OutState, Outgoing, Unsent};
 
 use super::*;
 use crate::mime::teams_compose;
@@ -164,8 +164,15 @@ fn a_hit_opens_as_any_chat_does() {
 
     // The chat open with a message it refused (known here alone), opened again at a message.
     let body = teams_compose("hi", &[], &[]);
-    let refusal =
-        Outgoing { seq: 0, local: "100-1".into(), chat: CHAT.into(), body, state: OutState::NotSent { reason: Unsent::TooMany, code: None } };
+    let refusal = Outgoing {
+        seq: 0,
+        local: "100-1".into(),
+        chat: CHAT.into(),
+        body,
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state: OutState::NotSent { reason: Unsent::TooMany, code: None },
+    };
     s.apply(teams_event(teams::Event::Outbox { chat: CHAT.into(), items: vec![refusal.clone()], took: Some("100-1".into()) }));
     assert_eq!(s.teams.outgoing, std::slice::from_ref(&refusal));
     find(&mut s, CHAT, "m1");

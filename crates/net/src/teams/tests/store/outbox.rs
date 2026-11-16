@@ -5,7 +5,7 @@
 //! without the rest of the copy, and gone with a copy set aside for another identity.
 
 use quatrelle_mime::TEAMS_RUNS;
-use quatrelle_model::pim::teams::{LOCAL_MAX, OUTBOX_MAX, OutState, Outgoing, SEND_MAX, Unsent};
+use quatrelle_model::pim::teams::{LOCAL_MAX, OUTBOX_MAX, OutKind, OutState, Outgoing, SEND_MAX, Unsent};
 
 use super::*;
 
@@ -31,7 +31,18 @@ fn ops_are_kept_in_order_and_read_back() {
     // As the conversation shows them: one being checked is being sent.
     let shown: Vec<OutState> = c.ops().iter().map(|o| o.outgoing().state).collect();
     assert_eq!(shown, [OutState::Waiting, OutState::Sending, forbidden]);
-    assert_eq!(unknown.outgoing(), Outgoing { seq: 2, local: "l-2.0".into(), chat: B.into(), body: text("Reply 2"), state: OutState::Sending });
+    assert_eq!(
+        unknown.outgoing(),
+        Outgoing {
+            seq: 2,
+            local: "l-2.0".into(),
+            chat: B.into(),
+            body: text("Reply 2"),
+            mentions: Vec::new(),
+            what: OutKind::Send,
+            state: OutState::Sending
+        }
+    );
     // Written again as its state moves: the same record.
     c.put_op(&OpRecord { state: OpState::Sending, ..op(1, A) }).unwrap();
     assert_eq!(seqs(&c), [1, 2, 3]);

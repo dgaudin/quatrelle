@@ -12,7 +12,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use quatrelle_mime::teams_compose;
-use quatrelle_model::pim::teams::{self as model, ChatMessage, ChatText, Job, Op, OutState, Outgoing, SEND_MAX, Unsent};
+use quatrelle_model::pim::teams::{self as model, ChatMessage, ChatText, Job, Op, OutKind, OutState, Outgoing, SEND_MAX, Unsent};
 use serde_json::json;
 
 use super::sync::{NOW, OTHER, Run, STEP, run, run_with};
@@ -38,7 +38,7 @@ fn not_sent(reason: Unsent, code: Option<&str>) -> OpState {
 impl Run {
     /// The user sends `text` to `chat`, the engine calling the message `local`.
     fn send(&mut self, chat: &str, local: &str, text: &str) {
-        self.w.job(Job::Op { op: Op::Send { chat: chat.into(), local: local.into(), body: body(text) } });
+        self.w.job(Job::Op { op: Op::Send { chat: chat.into(), local: local.into(), body: body(text), mentions: Vec::new() } });
     }
 
     /// The outbox as the copy holds it.
@@ -107,7 +107,12 @@ fn restart(r: Run, offline: bool) -> (Run, Arc<Desk>) {
 fn a_message_is_sent_as_escaped_html_once() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
     r.w.job(Job::Op {
-        op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body: teams_compose("<img src=\"https://evil.example/x.png\"> & hi", &[], &[]) },
+        op: Op::Send {
+            chat: CHAT.into(),
+            local: "1-1".into(),
+            body: teams_compose("<img src=\"https://evil.example/x.png\"> & hi", &[], &[]),
+            mentions: Vec::new(),
+        },
     });
     // Taken at once: said waiting, with the engine's id.
     let (items, took) = r.outboxes(CHAT).pop().unwrap();
@@ -244,7 +249,14 @@ fn a_check_finds_the_message_as_graph_rewrote_it() {
         t.lost_retry_after = Some(1);
         t.rewrite_posts = Some(rewritten);
     });
-    r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body: teams_compose("a & b", std::slice::from_ref(&(4..5)), &[]) } });
+    r.w.job(Job::Op {
+        op: Op::Send {
+            chat: CHAT.into(),
+            local: "1-1".into(),
+            body: teams_compose("a & b", std::slice::from_ref(&(4..5)), &[]),
+            mentions: Vec::new(),
+        },
+    });
     assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
     assert_eq!(r.fake(|t| t.posts[0].1["body"]["content"].clone()), "<p>a &amp; <b>b</b></p>");
     let kept = r.fake(|t| t.chat(CHAT).and_then(|c| c.messages.last()).map(|m| m.body_html.clone()));
@@ -543,7 +555,15 @@ fn a_message_that_cant_be_taken_is_answered_not_sent() {
         r.send(chat, local, text);
         let (items, took) = r.outboxes(chat).pop().unwrap();
         assert_eq!(took.as_deref(), Some(local));
-        let item = Outgoing { seq: 0, local: local.into(), chat: chat.into(), body: body(text), state: OutState::NotSent { reason, code: None } };
+        let item = Outgoing {
+            seq: 0,
+            local: local.into(),
+            chat: chat.into(),
+            body: body(text),
+            mentions: Vec::new(),
+            what: OutKind::Send,
+            state: OutState::NotSent { reason, code: None },
+        };
         assert_eq!(items, [item]);
     }
     assert!(r.ops().is_empty());

@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::ChatText;
+use super::{ChatText, Mention};
 
 /// The most messages the outbox holds, and the most of one chat's: past them a message isn't taken
 /// ([`Unsent::TooMany`]).
@@ -14,6 +14,24 @@ pub const OUTBOX_MAX: usize = 500;
 pub const OUTBOX_CHAT_MAX: usize = 50;
 /// The most bytes of HTML one message sent is written in (80 KiB; its pictures apart).
 pub const SEND_MAX: usize = 80 << 10;
+/// The most characters of a reaction's emoji.
+pub const REACTION_CHARS: usize = 32;
+/// The reader's six quick reactions: thumbs up, heart, laughing, surprised, sad, angry.
+pub const QUICK_REACTIONS: [&str; 6] = ["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F606}", "\u{1F62E}", "\u{1F622}", "\u{1F621}"];
+
+/// Whether `emoji` is something a reaction can be sent as: 1 to [`REACTION_CHARS`] characters, none
+/// an ASCII letter (a name such as `like`), a control, a bidi character or white space.
+pub fn reactable(emoji: &str) -> bool {
+    let n = emoji.chars().count();
+    (1..=REACTION_CHARS).contains(&n) && !emoji.chars().any(|c| c.is_ascii_alphabetic() || c.is_control() || super::is_bidi(c) || c.is_whitespace())
+}
+
+/// Whether two reactions are the same emoji, the variation selector U+FE0F apart.
+pub fn same_reaction(a: &str, b: &str) -> bool {
+    let bare = |s: &str| s.chars().filter(|c| *c != '\u{FE0F}').collect::<String>();
+    bare(a) == bare(b)
+}
+
 /// The longest local id of a message going out ([`Op::Send`]).
 pub const LOCAL_MAX: usize = 64;
 /// The most characters of a new message's text an announcement shows ([`super::first_line`]).
@@ -26,7 +44,28 @@ pub const NEWS_CHARS: usize = 200;
 pub enum Op {
     /// Send `body` to `chat`; `local` is the engine's id for it (at most [`LOCAL_MAX`]
     /// characters), which the worker's answers name until Teams gives the message its own.
-    Send { chat: String, local: String, body: ChatText },
+    Send {
+        chat: String,
+        local: String,
+        body: ChatText,
+        #[serde(default)]
+        mentions: Vec<Mention>,
+    },
+    /// Replace the words of the message `message` (created at `created`, in milliseconds, for the
+    /// worker to find its page) of `chat` by `body`.
+    Edit {
+        chat: String,
+        local: String,
+        message: String,
+        created: i64,
+        body: ChatText,
+        #[serde(default)]
+        mentions: Vec<Mention>,
+    },
+    /// Delete the message `message` of `chat`.
+    Delete { chat: String, local: String, message: String, created: i64 },
+    /// Set (`on`) or take back the user's reaction `emoji` on the message `message` of `chat`.
+    React { chat: String, local: String, message: String, created: i64, emoji: String, on: bool },
     /// Mark `chat` read up to now.
     MarkRead { chat: String },
 }
@@ -40,7 +79,38 @@ pub struct Outgoing {
     pub local: String,
     pub chat: String,
     pub body: ChatText,
+    /// The mentions of `body` (a send or an edit).
+    #[serde(default)]
+    pub mentions: Vec<Mention>,
+    /// What it is: a message to send, or a change to one already there.
+    #[serde(default)]
+    pub what: OutKind,
     pub state: OutState,
+}
+
+/// What an item of the outbox does.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "what", rename_all = "camelCase")]
+pub enum OutKind {
+    /// A new message.
+    #[default]
+    Send,
+    /// A new text for a message; `created` is its creation time (ms), for the worker to find its page.
+    Edit { message: String, created: i64 },
+    /// A message deleted.
+    Delete { message: String, created: i64 },
+    /// A reaction set (`on`) or taken back.
+    React { message: String, created: i64, emoji: String, on: bool },
+}
+
+impl OutKind {
+    /// The message it changes; none for a send.
+    pub fn message(&self) -> Option<&str> {
+        match self {
+            OutKind::Send => None,
+            OutKind::Edit { message, .. } | OutKind::Delete { message, .. } | OutKind::React { message, .. } => Some(message),
+        }
+    }
 }
 
 /// Where a message going out stands.

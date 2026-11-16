@@ -4,7 +4,7 @@
 //! send, retry and delete commands and what they refuse; a message not sent elsewhere said once;
 //! a chat marked read when it's opened.
 
-use quatrelle_model::pim::teams::{OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutState, Outgoing, Unsent};
+use quatrelle_model::pim::teams::{OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, OutState, Outgoing, Unsent};
 
 use super::*;
 use crate::mime::teams_compose;
@@ -18,7 +18,7 @@ fn outbox(chat: &str, items: Vec<Outgoing>, took: Option<&str>) -> Event {
 }
 
 fn item(chat: &str, seq: u64, local: &str, state: OutState) -> Outgoing {
-    Outgoing { seq, local: local.into(), chat: chat.into(), body: teams_compose("hi", &[], &[]), state }
+    Outgoing { seq, local: local.into(), chat: chat.into(), body: teams_compose("hi", &[], &[]), mentions: Vec::new(), what: OutKind::Send, state }
 }
 
 fn refused() -> OutState {
@@ -49,10 +49,25 @@ fn a_message_shows_at_once_then_as_the_worker_keeps_it() {
     let local = s.run("teams.send", &json!({"chat": CHAT, "text": "hello world", "bold": [[0, 5]]})).unwrap()["local"].as_str().unwrap().to_string();
     assert!(!local.is_empty() && local.len() <= teams::LOCAL_MAX, "{local}");
     let body = teams_compose("hello world", std::slice::from_ref(&(0..5)), &[]);
-    assert_eq!(s.teams.outgoing, [Outgoing { seq: 0, local: local.clone(), chat: CHAT.into(), body: body.clone(), state: OutState::Waiting }]);
-    assert_eq!(teams_jobs(&mut s), [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: local.clone(), body: body.clone() } }]);
+    assert_eq!(
+        s.teams.outgoing,
+        [Outgoing {
+            seq: 0,
+            local: local.clone(),
+            chat: CHAT.into(),
+            body: body.clone(),
+            mentions: Vec::new(),
+            what: OutKind::Send,
+            state: OutState::Waiting
+        }]
+    );
+    assert_eq!(
+        teams_jobs(&mut s),
+        [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: local.clone(), body: body.clone(), mentions: Vec::new() } }]
+    );
     // The worker took it, as its seventh: shown once, as it keeps it.
-    let kept = Outgoing { seq: 7, local: local.clone(), chat: CHAT.into(), body, state: OutState::Waiting };
+    let kept =
+        Outgoing { seq: 7, local: local.clone(), chat: CHAT.into(), body, mentions: Vec::new(), what: OutKind::Send, state: OutState::Waiting };
     s.apply(outbox(CHAT, vec![kept.clone()], Some(&local)));
     assert_eq!(s.teams.outgoing, [kept]);
     // Teams has it: gone from the messages going out.
@@ -186,7 +201,15 @@ fn a_message_refused_by_the_outbox_stays_until_deleted_or_sent_again() {
     let local = send(&mut s, CHAT, "hi").unwrap();
     let Some(teams::Job::Op { op: Op::Send { body, .. } }) = teams_jobs(&mut s).pop() else { panic!("no send") };
     let too_many = OutState::NotSent { reason: Unsent::TooMany, code: None };
-    let refusal = Outgoing { seq: 0, local: local.clone(), chat: CHAT.into(), body: body.clone(), state: too_many.clone() };
+    let refusal = Outgoing {
+        seq: 0,
+        local: local.clone(),
+        chat: CHAT.into(),
+        body: body.clone(),
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state: too_many.clone(),
+    };
     s.apply(outbox(CHAT, vec![item(CHAT, 3, "100-1", OutState::Waiting), refusal.clone()], Some(&local)));
     assert_eq!(s.teams.outgoing.last(), Some(&refusal));
     s.apply(outbox(CHAT, vec![], None));
@@ -198,8 +221,14 @@ fn a_message_refused_by_the_outbox_stays_until_deleted_or_sent_again() {
     s.apply(outbox(CHAT, vec![refusal.clone()], Some(&local)));
     let again = s.run("teams.retry", &json!({"seq": 0, "local": local})).unwrap()["local"].as_str().unwrap().to_string();
     assert_ne!(again, local);
-    assert_eq!(teams_jobs(&mut s), [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: again.clone(), body: body.clone() } }]);
-    assert_eq!(s.teams.outgoing, [Outgoing { seq: 0, local: again, chat: CHAT.into(), body, state: OutState::Waiting }]);
+    assert_eq!(
+        teams_jobs(&mut s),
+        [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: again.clone(), body: body.clone(), mentions: Vec::new() } }]
+    );
+    assert_eq!(
+        s.teams.outgoing,
+        [Outgoing { seq: 0, local: again, chat: CHAT.into(), body, mentions: Vec::new(), what: OutKind::Send, state: OutState::Waiting }]
+    );
 }
 
 #[test]

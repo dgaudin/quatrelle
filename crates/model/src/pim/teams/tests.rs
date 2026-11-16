@@ -305,7 +305,7 @@ fn every_payload_round_trips_through_json() {
 fn delivery_two_jobs_and_events_round_trip_through_json() {
     let body = ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "hi".into(), ..Run::default() }] }] };
     for job in [
-        teams::Job::Op { op: Op::Send { chat: "19:a@thread.v2".into(), local: "1731500000-1".into(), body: body.clone() } },
+        teams::Job::Op { op: Op::Send { chat: "19:a@thread.v2".into(), local: "1731500000-1".into(), body: body.clone(), mentions: Vec::new() } },
         teams::Job::Op { op: Op::MarkRead { chat: "19:a@thread.v2".into() } },
         teams::Job::Retry { seq: 7 },
         teams::Job::Discard { seq: 7 },
@@ -319,6 +319,8 @@ fn delivery_two_jobs_and_events_round_trip_through_json() {
         local: "l".into(),
         chat: "19:a@thread.v2".into(),
         body,
+        mentions: Vec::new(),
+        what: OutKind::Send,
         state: OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 403 Forbidden".into()) },
     };
     let news = News {
@@ -373,4 +375,82 @@ fn first_line_stops_at_the_line_without_bidi_cut_at_max() {
     assert_eq!(first_line("", 200), "");
     // A name is still cut at its own length.
     assert_eq!(one_line(&"é".repeat(300)).chars().count(), NAME_CHARS);
+}
+
+#[test]
+fn delivery_three_ops_and_outgoing_round_trip_through_json() {
+    let body = ChatText {
+        blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "Ana Lima".into(), mention: Some(0), ..Run::default() }] }],
+    };
+    let mentions = vec![Mention { id: 0, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }];
+    for op in [
+        Op::Send { chat: "19:a@thread.v2".into(), local: "1-1".into(), body: body.clone(), mentions: mentions.clone() },
+        Op::Edit {
+            chat: "19:a@thread.v2".into(),
+            local: "1-2".into(),
+            message: "1730000000000".into(),
+            created: 1_730_000_000_000,
+            body: body.clone(),
+            mentions: mentions.clone(),
+        },
+        Op::Delete { chat: "19:a@thread.v2".into(), local: "1-3".into(), message: "1730000000000".into(), created: 1_730_000_000_000 },
+        Op::React {
+            chat: "19:a@thread.v2".into(),
+            local: "1-4".into(),
+            message: "1730000000000".into(),
+            created: 1_730_000_000_000,
+            emoji: QUICK_REACTIONS[1].into(),
+            on: false,
+        },
+    ] {
+        let j = Job::Teams { job: teams::Job::Op { op } };
+        assert_eq!(serde_json::from_str::<Job>(&serde_json::to_string(&j).unwrap()).unwrap(), j);
+    }
+    let o = Outgoing {
+        seq: 4,
+        local: "1-4".into(),
+        chat: "19:a@thread.v2".into(),
+        body,
+        mentions,
+        what: OutKind::React { message: "m".into(), created: 5, emoji: "\u{1F44D}".into(), on: true },
+        state: OutState::Waiting,
+    };
+    assert_eq!(serde_json::from_str::<Outgoing>(&serde_json::to_string(&o).unwrap()).unwrap(), o);
+}
+
+#[test]
+fn what_delivery_two_wrote_reads_back_as_a_send() {
+    let o: Outgoing =
+        serde_json::from_str(r#"{"seq":3,"local":"1-1","chat":"19:a@thread.v2","body":{"blocks":[]},"state":{"state":"waiting"}}"#).unwrap();
+    assert_eq!((o.what, o.mentions.len()), (OutKind::Send, 0));
+    let op: Op = serde_json::from_str(r#"{"op":"send","chat":"19:a@thread.v2","local":"1-1","body":{"blocks":[]}}"#).unwrap();
+    assert!(matches!(op, Op::Send { mentions, .. } if mentions.is_empty()));
+}
+
+#[test]
+fn a_reaction_is_an_emoji_never_a_name() {
+    for e in QUICK_REACTIONS {
+        assert!(reactable(e), "{e}");
+    }
+    assert!(reactable("\u{1F498}"));
+    for e in ["", "like", "custom", "a\u{1F44D}", "\u{1F44D} ", "\u{1F44D}\u{202E}", "\u{1F44D}\u{7}"] {
+        assert!(!reactable(e), "{e:?}");
+    }
+    assert!(!reactable(&"\u{1F600}".repeat(REACTION_CHARS + 1)));
+    assert!(same_reaction("\u{2764}", "\u{2764}\u{FE0F}") && !same_reaction("\u{1F44D}", "\u{1F44E}"));
+}
+
+#[test]
+fn only_a_member_of_the_organisation_may_be_mentioned() {
+    let m = |kind: &str, tenant: Option<&str>| Member {
+        user_id: "u-ana".into(),
+        kind: kind.into(),
+        tenant_id: tenant.map(str::to_string),
+        ..Member::default()
+    };
+    assert!(mentionable(&m("aadUserConversationMember", Some("TENANT-1")), "tenant-1"));
+    assert!(!mentionable(&m("aadUserConversationMember", Some("tenant-2")), "tenant-1"));
+    assert!(!mentionable(&m("aadUserConversationMember", None), "tenant-1"));
+    assert!(!mentionable(&m("anonymousGuestConversationMember", Some("tenant-1")), "tenant-1"));
+    assert!(!mentionable(&m("aadUserConversationMember", Some("")), ""));
 }
