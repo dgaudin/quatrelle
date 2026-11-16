@@ -21,6 +21,9 @@ mod outbox;
 mod pictures;
 /// Graph's JSON read into the model, and the client's calls for pictures and presence.
 mod read;
+/// The copy at scale: a long chat opened and gone back through, a message put in, a search, a
+/// send, in a copy of 300,000 messages beside one ten times smaller (`#[ignore]`).
+mod scale;
 /// The search of the local copy: its index kept as the copy is written, read back, its queries.
 mod search;
 /// Posting a message's HTML, the chat's id and the size checked first.

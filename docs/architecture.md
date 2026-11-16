@@ -66,15 +66,32 @@ file at most 1000 lines and every folder at most 16 Rust files (`cargo xtask siz
 
 ## Teams
 
-Conversations reads Teams chats through Microsoft Graph. `net/src/teams/` holds a single worker
-thread, the only code that talks to Teams: it signs in (the refresh token only in the keychain),
-runs the polling cadences under a limiter that backs off on a 429, makes the first copy and the
-history, and fetches pictures and presence for what is on screen. Its results reach the engine as
-`Event`s, applied a few a frame, and the engine keeps only bounded windows of the chats
-(`engine/src/session/pim/teams/`). The copy is its own data file, `Teams.quatrelle`, written
-through the same store under a pseudo-account and bound to the identity it was made for (another
-identity's file is set aside, unread). Switching Teams off or signing out stops the worker's
-requests. The user's side is in `docs/teams.md`.
+Conversations reads Teams chats through Microsoft Graph and replies in them. `net/src/teams/`
+holds a single worker thread, the only code that talks to Teams: it signs in (the refresh token
+only in the keychain), runs the polling cadences under a limiter that backs off on a 429, makes
+the first copy and the history, and fetches pictures and presence for what is on screen. Its
+results reach the engine as `Event`s, applied a few a frame, and the engine keeps only bounded
+windows of the chats (`engine/src/session/pim/teams/`). The copy is its own data file,
+`Teams.quatrelle`, written through the same store under a pseudo-account and bound to the identity
+it was made for (another identity's file is set aside, unread). Switching Teams off or signing out
+stops the worker's requests. The user's side is in `docs/teams.md`.
+
+The outbox is the worker's (`net/src/teams/outbox.rs`): a message the user sends (`teams.send`)
+becomes a record in the copy (`outbox/<n>.json`) before anything goes, so it outlives a
+restart. Each chat's records go in order, one request a step under the same limiter
+(at most one send a second per chat); an answer lost on the way leaves the record "unknown", and
+the chat is read to find the message before it is posted again (three posts at most). A record
+refused, or never confirmed, stays "not sent" until the user retries or deletes it. The worker
+reports each chat's records (`Outbox`) and their count (`Unsent`); the engine shows them in the
+chat and keeps what it sent that the worker hasn't answered for yet. Chats are marked read by the
+same worker: one mark waits for a chat, however often it's asked meanwhile.
+
+New messages are announced from the worker's word for each (`News`: who sent it as the chat's
+members name them, External or App, whether it names the user, the chat's name); the engine
+decides what is announced (`session/pim/teams/announce.rs`: the open chat on screen is marked read
+instead, the settings and hidden chats, one announcement a chat every 5 s, at most 4 every 5 s
+then a summary), and the window shows them as desktop notifications, their text plain (markup
+escaped where the desktop reads it).
 
 ## Transports
 

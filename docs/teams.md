@@ -212,8 +212,8 @@ called until you confirm there. It prints `call: opened`, or why not; it never p
 ## 7. Using Teams in Quatrelle
 
 Once your organization has registered the application (section 1), Quatrelle reads your Teams
-chats from a copy kept on your computer, as Outlook's Cached Exchange Mode keeps mail. This
-version reads; it does not write.
+chats from a copy kept on your computer, as Outlook's Cached Exchange Mode keeps mail, and you
+can reply in them.
 
 ### Options › Teams
 
@@ -224,19 +224,27 @@ Open File › Options › Teams.
 - **Application (client) ID** and **Directory (tenant) ID** are the two ids from the registration
   (the tenant may also be written as the organization's domain). Each is saved when you leave its
   box.
-- **Sign in** opens your browser; Quatrelle waits for it ("Waiting for the browser…"). It needs the
-  switch on and both ids filled in. Once signed in, the page shows who you are, and where the copy
-  stands: copying ("Copying your conversations… 12 of 340 conversations"), up to date, offline, or
-  what to do (sign in again; a permission your administrator must grant, with the permission's
-  name). When signing in again fails or lacks a permission, **Sign in** stays there to try again,
-  here and above the list.
+- **Sign in** opens Microsoft's sign-in page in the browser chosen in File › Options ›
+  Applications for Teams meetings, in a window of its own and the profile chosen there (the
+  default browser when that is the choice, or when none is found). It needs the switch on and
+  both ids filled in. While Quatrelle waits, "A Microsoft sign-in window has opened" comes with
+  **Reopen the page** (the window may be behind another one, or closed) and **Copy the address**
+  (to paste it in a browser yourself), here and above the conversations list. Only Microsoft's
+  own sign-in page is ever opened this way.
+- Once signed in, the page shows who you are, and where the copy stands: copying ("Copying your
+  conversations… 12 of 340 conversations"), up to date, offline, or what to do (sign in again; a
+  permission your administrator must grant, with the permission's name). When signing in again
+  fails or lacks a permission, **Sign in** stays there to try again, here and above the list.
 - **Sign out** asks whether the copy of your conversations on this computer goes too: **Keep the
-  copy**, **Delete the copy**, or Cancel. Kept, it is used again when the same account signs back in.
+  copy**, **Delete the copy**, or Cancel. Kept, it is used again when the same account signs back
+  in. Messages you sent that Teams doesn't have yet are deleted either way, and the question says
+  how many.
 - The sign-in is remembered in the system keychain. Without one, Quatrelle says "Your sign-in won't
   be remembered: no keychain is available", and signing in is asked again at each start.
 - A copy made for another account is never read: it is set aside, and the page offers **Delete that
   copy**.
-- The announcement switches are there already but do nothing yet (see the end of this section).
+- **Announce new messages** and **Only messages sent to me alone or naming me** are the two
+  switches of the announcements (see Announcements below).
 
 Signing in needs a browser on the same computer: the web app does not offer Teams.
 
@@ -256,26 +264,99 @@ switch Teams off while it is open, Quatrelle returns to Mail.
 - **The chats Graph won't serve.** Microsoft does not let an application read some chats: those
   it lists without a name and as of a kind it doesn't say (most likely chats around meetings;
   the chats of meetings themselves are read as any other). They stay in the list marked **Can't
-  be read here**; opening one says so and offers **Open in Teams**, which opens that chat in Teams
-  itself.
+  be read here**; opening one says so and offers **Open in Teams**.
 - **Reading a conversation.** Messages are grouped by day (Today, Yesterday, then the date), edited
   ones say "(edited)", deleted ones say so, and an app's messages carry an **App** tag. A sender
   outside your organization is tagged **External** on each message. **Members** lists who is in
   the chat. Reactions are shown, read only.
+- **Open in Teams**, beside every conversation's name, opens that conversation in Teams itself, in
+  the browser window Teams meetings open in (else the default browser); the chats Graph won't
+  serve and the content Quatrelle can't show (cards) offer it too. It shows when Teams gives the
+  conversation's link. For a chat it gives none for (most of those it won't serve), Quatrelle
+  makes one in the form Teams gives the others, from the chat's id and your organization's; should
+  Teams not know it, Teams opens at its home. Only links to Teams chats open this way, never a
+  link from a message.
 - **Pictures** kept with a message are fetched when the message is first drawn, a few per message,
   and shown in place; a click shows one big. A picture from elsewhere on the web is never fetched
   by itself: its place says **Show picture**, and only that click loads it (an `https` address, a
-  size limit, a time limit).
+  size limit, a time limit). One that can't be had (refused, too big, out of reach) says "Picture
+  not available" and isn't fetched again until Quatrelle starts again.
 - **Files** shared in a chat appear as cards with the file's name and the host of its link. A
   link to your own OneDrive or your organization's SharePoint is shown as such; any other host is
   written on the card, "Link to another site". Nothing opens until you click it.
 
+### Replying
+
+The box at the foot of a conversation sends to it (there is none in a conversation you are no
+longer in, or one Graph won't serve).
+
+- **Enter** sends; **Shift+Enter** starts a new line. **Ctrl+B** and **Ctrl+I** make the
+  selection bold or italic, and the emoji button opens the mail editor's emoji picker. While the
+  box has the keyboard, the keys that send the mail being written (Ctrl+Enter, Alt+S) do nothing.
+- What is sent is the text as typed, its lines, bold and italic: what looks like markup goes as
+  it was written, and a web address typed isn't made a link. Mentions and pictures can't be sent
+  yet (a typed "@name" goes as text).
+- A message longer than Teams takes (80 KB once written for Teams) stays in the box, which says
+  "This message is too long for Teams". With 50 messages waiting in the conversation, or 500 in
+  all, it stays there too: "Too many messages are waiting".
+- Each conversation keeps what its box holds while Quatrelle runs (20 conversations at most);
+  it's gone when Quatrelle closes.
+
+**Messages going out.** A message sent shows at once on your side, dimmed, with "Sending…",
+and takes its place among the others once Teams has it. Quatrelle sends them one at a time, in
+the order written in each conversation, a second apart at least; one conversation's messages never
+hold another's. They are kept in the copy until Teams has them: without the network, in Work
+offline, or while Teams asks to wait, they wait (and still show "Sending…" after a restart), then
+go. A message waiting its turn offers **Delete**; one being sent offers nothing, since it may be in
+Teams already.
+
+When the network drops during a send, Quatrelle can't tell whether Teams got the message: it looks
+for it in the conversation before sending it again, so it isn't sent twice. One posted three times
+that Teams never confirms is marked Not sent.
+
+**Not sent.** A message that couldn't go stays in its conversation marked **Not sent**, with
+why: "Teams refused this message" (with Teams' code), "Too long for Teams", "Too many messages
+are waiting", "You're no longer in this conversation", or "Quatrelle couldn't confirm it was
+sent". **Retry** sends it again; **Delete** removes it. A message not sent is never sent again by
+itself. When its conversation isn't on the screen, a notice says "A message to Support team
+wasn't sent". Switching Teams off keeps the messages waiting: they go when it's on again.
+
+### Marked read
+
+A conversation is marked read in Teams when you look at it: when you open it, when a message
+comes into it while it's on the screen, and when you come back to it (to the window, or to
+Conversations). On the screen means open in Conversations, in Quatrelle's window in front: not
+minimized, not hidden in the notification area, not behind another application. Its row stays in
+bold until Teams says it's read, about a second. A conversation you're no longer in, or one Graph
+won't serve, isn't marked.
+
+### Announcements
+
+With **Announce new messages** on, each new message from someone else is a desktop notification.
+Its title says who sent it, as the conversation's members name them: "Ana Lima", "Ana Lima in
+Agenda" for a group or a meeting's chat, "Ana Lima mentioned you in Agenda" when it names you;
+"(External)" follows a sender outside your organization (or not shown to be of it), "(App)" an
+application. Its text is the message's first line ("New message" when it has none), as plain
+text: what looks like markup in a message is shown as written.
+
+- **Only messages sent to me alone or naming me** keeps the one-to-one chats and the messages
+  that mention you.
+- The conversation on the screen isn't announced: it's marked read instead. It is announced when
+  the window isn't in front.
+- Hidden chats aren't announced, nor your own messages, edits, reactions, or what the first copy
+  brings.
+- A conversation's next notification waits five seconds; what comes meanwhile goes as one ("3
+  new messages"). At most four notifications go every five seconds; the rest are summed up in one
+  ("12 new messages in 5 conversations").
+- For a chat Graph won't serve, its new last line, as the list gives it, is announced.
+
 ### The local copy
 
 The copy is one data file, `Teams.quatrelle`, in the same folder as your accounts' data files
-(see `docs/architecture.md`). It holds the chats, their messages and the pictures the screen has
-asked for, and is readable by you only. A file that is damaged is set aside beside it and a new
-one begun; a copy of another account is set aside as `Teams-<8 letters>.quatrelle.old`.
+(see `docs/architecture.md`). It holds the chats, their messages, the pictures the screen has
+asked for and the messages going out, and is readable by you only. A file that is damaged is set
+aside beside it and a new one begun; a copy of another account is set aside as
+`Teams-<8 letters>.quatrelle.old`.
 
 To delete it: Sign out › Delete the copy, or Delete that copy for one set aside. Closing
 Quatrelle and removing the file by hand does the same; the next sign-in copies again.
@@ -289,6 +370,8 @@ Quatrelle keeps well under Microsoft's limits, with one worker that makes one re
 
 | What | How often |
 |---|---|
+| A message you send | as soon as it may: at most one a second in each conversation |
+| Marking a conversation read | when you look at it |
 | The chat open on the screen | every 3 seconds |
 | The list of chats | every 10 seconds |
 | Chats active in the last 7 days | every minute |
@@ -302,9 +385,9 @@ or signing out stops all of it at once.
 
 ### Not yet
 
-Replying and writing, sending files, reacting, marking chats read in Teams, announcements of new
-messages (their switches in Options do nothing yet), and starting calls or meetings are not
-there yet: they come in later versions of Quatrelle. For those, use Open in Teams.
+Sending files and pictures, mentioning someone, reacting, editing or deleting a message sent,
+starting a conversation, and starting calls or meetings are not there yet: they come in later
+versions of Quatrelle. For those, use Open in Teams.
 
 ## 8. Sending the result back
 

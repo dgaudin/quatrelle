@@ -15,11 +15,12 @@ use super::super::list::follow_up::{Textures, frame_with_size};
 use super::*;
 
 /// The conversation pane, its pictures, where a sign-in stands, new messages announced, and
-/// writing; a search's hit opened at its message.
+/// writing; a search's hit opened at its message; the frames at scale.
 mod chat;
 mod find;
 mod notify;
 mod pictures;
+mod scale;
 mod signing;
 mod writing;
 

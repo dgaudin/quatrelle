@@ -2,9 +2,11 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The conversations list (the module's left pane): the search box at its top, where the copy
 //! stands, then one row per chat, newest activity first, drawn only for the rows on screen
-//! (`ScrollArea::show_rows`: 20,000 chats cost a frame what 10 do). A row: the picture (a photo,
-//! else coloured initials; a group's and a meeting's own icon), the presence dot of a one-to-one
-//! chat, the name, the last line and its time. A search's hit opens its chat at the message found.
+//! (`ScrollArea::show_rows`: what is drawn is what the screen holds, however many chats there
+//! are; the rows are only gone through once a frame, to leave the hidden ones out). A row: the
+//! picture (a photo, else coloured initials; a group's and a meeting's own icon), the presence dot
+//! of a one-to-one chat, the name, the last line and its time. A search's hit opens its chat at
+//! the message found.
 //!
 //! What is hostile here: every name and line came from Graph (through the worker): drawn on one
 //! line ([`one_line`]), cut to the pane, never able to push "External" or "Can't be read here"
