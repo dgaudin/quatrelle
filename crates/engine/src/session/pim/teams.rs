@@ -109,8 +109,11 @@ pub struct TeamsState {
     searching: Option<String>,
     /// Pictures answered, oldest first, for the window to take.
     pub pictures: VecDeque<(Picture, Vec<u8>)>,
-    /// The pictures asked for and not given up: only their answers are taken, and a hosted image
-    /// or a photo isn't asked twice.
+    /// Pictures the worker said can't be had, oldest first, for the window to take, at most
+    /// [`PICTURES_MAX`].
+    no_pictures: VecDeque<Picture>,
+    /// The pictures asked for and not given up: only their answers are taken, and a picture isn't
+    /// asked twice (one that can't be had stays here, never asked again in this session).
     asked: HashSet<Picture>,
     /// The host of the user's OneDrive, which their shared files come from.
     pub drive_host: Option<String>,
@@ -210,6 +213,7 @@ impl TeamsState {
         self.asked_before = None;
         // The images of the chat left aren't waited for any more.
         self.asked.retain(|p| !matches!(p, Picture::Hosted { .. }));
+        self.no_pictures.retain(|p| !matches!(p, Picture::Hosted { .. }));
     }
 
     /// The open chat's members, in parts (`first`: they begin here), and its link; another chat's
@@ -247,13 +251,19 @@ impl TeamsState {
         true
     }
 
-    /// A picture to ask for: whether to (a hosted image or a photo is asked once; an image from
-    /// elsewhere is the user's click, asked each time).
+    /// A picture to ask for: whether to (each is asked once; an image from elsewhere, the user's
+    /// click, again once it came, never once it can't be had).
     pub(crate) fn ask_picture(&mut self, picture: &Picture) -> bool {
         if self.asked.len() >= ASKED_MAX {
             self.asked.clear();
         }
-        self.asked.insert(picture.clone()) || matches!(picture, Picture::Outside { .. })
+        self.asked.insert(picture.clone())
+    }
+
+    /// Whether `picture` was asked for and not answered yet, or answered that it can't be had
+    /// (the window doesn't offer it again).
+    pub fn is_asked(&self, picture: &Picture) -> bool {
+        self.asked.contains(picture)
     }
 
     /// The pictures answered, for the window to take. An image kept with a message, once taken,
@@ -267,6 +277,25 @@ impl TeamsState {
             }
         }
         taken
+    }
+
+    /// The pictures the worker said can't be had, for the window to take (shown as not
+    /// available). They stay asked: none is asked again in this session.
+    pub fn take_no_pictures(&mut self) -> Vec<Picture> {
+        self.no_pictures.drain(..).collect()
+    }
+
+    fn take_no_picture(&mut self, picture: Picture) {
+        if !self.asked.contains(&picture) || self.no_pictures.contains(&picture) {
+            return;
+        }
+        self.no_pictures.push_back(picture);
+        while self.no_pictures.len() > PICTURES_MAX {
+            // Never seen by the window: it may be asked again (the worker answers at once).
+            if let Some(dropped) = self.no_pictures.pop_front() {
+                self.asked.remove(&dropped);
+            }
+        }
     }
 
     pub(crate) fn search(&mut self, query: Option<String>) {
@@ -470,7 +499,7 @@ impl Session {
             teams::Event::News { news } => self.teams_news(news),
             teams::Event::Placed { chat, message, newest } => self.teams.placed(&chat, &message, newest),
             // Not taken yet.
-            teams::Event::NoPicture { .. } => {}
+            teams::Event::NoPicture { picture } => self.teams.take_no_picture(picture),
         }
     }
 

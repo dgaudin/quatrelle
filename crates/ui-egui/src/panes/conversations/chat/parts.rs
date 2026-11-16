@@ -94,6 +94,7 @@ pub(super) fn pictures(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatM
                     }
                 }
                 Some(Shown::Failed) => held(p, ui, tl!("This picture can't be shown.")),
+                Some(Shown::Unavailable) => held(p, ui, tl!("Picture not available")),
                 None => held(p, ui, tl!("Picture")),
             }
         }
@@ -106,6 +107,7 @@ pub(super) fn pictures(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatM
                     }
                 }
                 Some(Shown::Failed) => held(p, ui, tl!("This picture can't be shown.")),
+                Some(Shown::Unavailable) => held(p, ui, tl!("Picture not available")),
                 None => elsewhere(p, ui, url, acts),
             }
         }
@@ -164,7 +166,14 @@ fn elsewhere(p: &Pane, ui: &mut Ui, url: &str, acts: &mut Vec<Action>) {
     }
     let under = place(p, ui);
     let button = egui::Rect::from_center_size(egui::pos2(under.center().x, under.top() + 12.0), vec2(under.width(), 24.0));
-    if ui.put(button, egui::Button::new(tl!("Show picture"))).on_hover_text(shown(url)).clicked() {
+    // Waiting for the answer: not clicked again (a double click would fetch twice).
+    let waiting = p.s.teams.is_asked(&Picture::Outside { url: url.to_string() });
+    let r = ui
+        .add_enabled_ui(!waiting, |ui| {
+            ui.put(button, egui::Button::new(tl!("Show picture"))).on_hover_text(shown(url)).on_disabled_hover_text(shown(url))
+        })
+        .inner;
+    if r.clicked() {
         acts.push(Action::Run("teams.picture", json!({"kind": "outside", "url": url})));
     }
 }

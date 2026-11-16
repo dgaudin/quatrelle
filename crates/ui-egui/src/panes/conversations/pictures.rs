@@ -64,6 +64,8 @@ pub(crate) fn pixels(data: &[u8], side: u32) -> Option<ColorImage> {
 pub(crate) enum Shown {
     Ready(TextureHandle),
     Failed,
+    /// The worker said it can't be had: drawn still, never asked again.
+    Unavailable,
 }
 
 /// A picture for the thread: its bytes, its longest side, and whether it's the one opened big.
@@ -250,6 +252,12 @@ impl TeamsPictures {
             };
             self.waiting.push_back(Work { picture, bytes, side, whole: false });
         }
+        for picture in s.teams.take_no_pictures() {
+            if self.wanted(&picture) {
+                self.waiting.retain(|w| w.picture != picture);
+                self.keep(picture, Shown::Unavailable, 0);
+            }
+        }
         self.bound_waiting();
     }
 
@@ -381,7 +389,8 @@ impl TeamsPictures {
         // Past the budget, the least recently shown go; those on screen stay.
         while self.held > IMAGES_BYTES {
             let recent = self.frame.saturating_sub(2);
-            let oldest = self.images.iter().filter(|(_, i)| i.seen.get() < recent).min_by_key(|(_, i)| i.seen.get()).map(|(p, _)| p.clone());
+            let oldest =
+                self.images.iter().filter(|(_, i)| i.bytes > 0 && i.seen.get() < recent).min_by_key(|(_, i)| i.seen.get()).map(|(p, _)| p.clone());
             let Some(old) = oldest else { break };
             if let Some(i) = self.images.remove(&old) {
                 self.held = self.held.saturating_sub(i.bytes);

@@ -14,6 +14,8 @@ mod find;
 mod outbox;
 /// The pages the window opens: the sign-in, a chat in Teams.
 mod pages;
+/// Pictures that can't be had.
+mod pictures;
 
 const CLIENT: &str = "00000000-0000-0000-0000-00000000c11e";
 const TENANT: &str = "contoso.example";
@@ -415,11 +417,12 @@ fn pictures_are_asked_once_and_outside_ones_only_over_https() {
     assert!(s.run("teams.picture", &json!({"kind": "photo", "user": ""})).is_err());
     assert!(s.run("teams.picture", &json!({"kind": "photo", "user": "x".repeat(513)})).is_err());
     assert!(teams_jobs(&mut s).is_empty());
-    // An outside picture is the user's click: asked each time.
+    // An outside picture is the user's click: asked once until it's answered (a double click
+    // fetches once), and again by a later click once it came.
     let url = "https://pictures.example/a.png";
     s.run("teams.picture", &json!({"kind": "outside", "url": url})).unwrap();
     s.run("teams.picture", &json!({"kind": "outside", "url": url})).unwrap();
-    assert_eq!(teams_jobs(&mut s).len(), 2);
+    assert_eq!(teams_jobs(&mut s).len(), 1);
     // Answers wait for the UI, at most 64; one never asked for isn't taken.
     s.apply(teams_event(teams::Event::Picture { picture: Picture::Photo { user: "u-9".into() }, bytes: vec![1] }));
     assert!(s.teams.pictures.is_empty());

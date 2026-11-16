@@ -16,8 +16,9 @@
 //!   in all, on a thread of its own (a slow server never holds the worker); never kept.
 //! * A picture the copy has is answered from it at once, without a request (a hosted one only
 //!   while its message shows it); one that can't be had (refused, too big, not the message's own,
-//!   busy or offline three times) isn't asked again in this run. After a failure, the cadences
-//!   have the next turn.
+//!   busy or offline three times, an outside fetch that failed) is said so, once for each ask
+//!   ([`NoPicture`](teams::Event::NoPicture)), and isn't asked again in this run: asked again,
+//!   it's answered at once, without a request. After a failure, the cadences have the next turn.
 //! * Presence ([`Job::Visible`](quatrelle_model::pim::teams::Job::Visible)): the people shown, at
 //!   most [`PRESENCE_IDS`], asked every minute in one request, said in events of [`EVENT_ITEMS`],
 //!   kept in memory only.
@@ -139,7 +140,10 @@ pub(crate) fn picture(w: &mut Worker, picture: Picture) {
         return say(w, picture, bytes);
     }
     let p = &mut w.pictures;
-    if p.refused.contains(&picture) || p.pending.iter().any(|(q, _)| *q == picture) {
+    if p.refused.contains(&picture) {
+        return w.say(teams::Event::NoPicture { picture });
+    }
+    if p.pending.iter().any(|(q, _)| *q == picture) {
         return;
     }
     if p.pending.len() >= MAX_PENDING {
@@ -359,12 +363,14 @@ fn failed(w: &mut Worker, picture: Picture, tries: u8, e: &NetError, now: Instan
     }
 }
 
-/// `picture` isn't to be had in this run. No request was made: `false`.
+/// `picture` isn't to be had in this run: remembered (at most [`MAX_REFUSED`], then all forgotten:
+/// asked again, it's looked into again) and said. No request was made: `false`.
 fn refuse(w: &mut Worker, picture: Picture) -> bool {
     if w.pictures.refused.len() >= MAX_REFUSED {
         w.pictures.refused.clear();
     }
-    w.pictures.refused.insert(picture);
+    w.pictures.refused.insert(picture.clone());
+    w.say(teams::Event::NoPicture { picture });
     false
 }
 
@@ -403,20 +409,27 @@ fn graph_ms(w: &Worker) -> i64 {
 /// site on the internet, handed to the thread outside pictures are fetched on (never this one:
 /// a server that answers slowly holds that thread only), at most [`OUTSIDE_QUEUE`] waiting.
 fn outside(w: &mut Worker, url: &str) {
+    let none = |w: &Worker| w.say(teams::Event::NoPicture { picture: Picture::Outside { url: url.to_string() } });
     if !w.polling() || w.offline() {
-        return log::info!("teams: an outside picture refused: Teams isn't on, or works offline");
+        log::info!("teams: an outside picture refused: Teams isn't on, or works offline");
+        return none(w);
     }
     if !public_https(url) {
-        return log::info!("teams: an outside picture refused: not an https address on the internet");
+        log::info!("teams: an outside picture refused: not an https address on the internet");
+        return none(w);
     }
     let (fetch, deadline) = fetcher(w);
-    let Some(tx) = outside_thread(w) else { return };
+    let Some(tx) = outside_thread(w) else { return none(w) };
     match tx.try_send((url.to_string(), fetch, deadline)) {
         Ok(()) => {}
-        Err(TrySendError::Full(_)) => log::info!("teams: an outside picture refused: {OUTSIDE_QUEUE} are waiting already"),
+        Err(TrySendError::Full(_)) => {
+            log::info!("teams: an outside picture refused: {OUTSIDE_QUEUE} are waiting already");
+            none(w);
+        }
         Err(TrySendError::Disconnected(_)) => {
             log::warn!("teams: the outside pictures' thread is gone");
             w.pictures.outside = None;
+            none(w);
         }
     }
 }
@@ -445,8 +458,10 @@ fn outside_thread(w: &mut Worker) -> Option<SyncSender<(String, Fetch, Duration)
 /// all, said when it came in time as it came (the window decodes it); never kept. While
 /// [`MAX_STALLED`] fetches still run, it's refused.
 fn fetch_outside(emit: &Emit, stalled: &Arc<AtomicUsize>, url: String, fetch: Fetch, deadline: Duration) {
+    let none = |url: String| emit(quatrelle_model::Event::Teams { event: teams::Event::NoPicture { picture: Picture::Outside { url } } });
     if stalled.load(Ordering::SeqCst) >= MAX_STALLED {
-        return log::warn!("teams: an outside picture refused: earlier ones are still being fetched");
+        log::warn!("teams: an outside picture refused: earlier ones are still being fetched");
+        return none(url);
     }
     stalled.fetch_add(1, Ordering::SeqCst);
     let (done, came) = mpsc::channel();
@@ -458,16 +473,29 @@ fn fetch_outside(emit: &Emit, stalled: &Arc<AtomicUsize>, url: String, fetch: Fe
     });
     if spawned.is_err() {
         stalled.fetch_sub(1, Ordering::SeqCst);
-        return log::warn!("teams: an outside picture couldn't be fetched: no thread for it");
+        log::warn!("teams: an outside picture couldn't be fetched: no thread for it");
+        return none(url);
     }
     match came.recv_timeout(deadline) {
         Ok(Some(Ok(r))) if r.status == 200 && r.body.len() <= MAX_PICTURE => {
             emit(quatrelle_model::Event::Teams { event: teams::Event::Picture { picture: Picture::Outside { url }, bytes: r.body } });
         }
-        Ok(Some(Ok(r))) => log::info!("teams: an outside picture wasn't given (HTTP {})", r.status),
-        Ok(Some(Err(e))) => log::info!("teams: an outside picture couldn't be fetched: {}", kind(&e)),
-        Ok(None) => log::error!("teams: internal error: an outside picture's fetch was given up"),
-        Err(_) => log::info!("teams: an outside picture took longer than {} s: given up", deadline.as_secs()),
+        Ok(Some(Ok(r))) => {
+            log::info!("teams: an outside picture wasn't given (HTTP {})", r.status);
+            none(url);
+        }
+        Ok(Some(Err(e))) => {
+            log::info!("teams: an outside picture couldn't be fetched: {}", kind(&e));
+            none(url);
+        }
+        Ok(None) => {
+            log::error!("teams: internal error: an outside picture's fetch was given up");
+            none(url);
+        }
+        Err(_) => {
+            log::info!("teams: an outside picture took longer than {} s: given up", deadline.as_secs());
+            none(url);
+        }
     }
 }
 

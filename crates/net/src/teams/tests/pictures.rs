@@ -90,6 +90,11 @@ impl Run {
             .collect()
     }
 
+    /// Every picture said not to be had, in order.
+    fn no_pictures(&self) -> Vec<Picture> {
+        self.events().into_iter().filter_map(|e| if let model::Event::NoPicture { picture } = e { Some(picture) } else { None }).collect()
+    }
+
     /// Every presence said: one list an event.
     fn presences(&self) -> Vec<Vec<(String, Presence)>> {
         self.events().into_iter().filter_map(|e| if let model::Event::Presence { presences } = e { Some(presences) } else { None }).collect()
@@ -529,6 +534,7 @@ fn an_outside_fetch_past_its_deadline_says_nothing() {
     HANG.store(false, Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(300));
     assert!(r.pictures().is_empty(), "{:?}", r.pictures());
+    assert_eq!(r.no_pictures().len(), 3, "each said not to be had: two given up, the third refused");
 }
 
 /// Fix round 1: a picture that keeps failing is tried three times, at the back of the queue, and
@@ -594,4 +600,62 @@ fn the_people_shown_are_forgotten_when_someone_else_signs_in() {
     sign_in_as(&mut r, "u-yan", "Yan Ortiz");
     r.turns(Duration::from_secs(70));
     assert!(!asked(&r, from).contains(&"u-bo".to_string()), "{:?}", asked(&r, from));
+}
+
+/// R39: a picture that can't be had is said so, once for each ask; one asked again after that is
+/// answered at once, without a request.
+#[test]
+fn a_picture_not_to_be_had_is_said_once() {
+    let mut chat = with_hosted(vec![("aDE=", b"one".to_vec())]);
+    // Graph has no such image: 404.
+    chat.messages[0].hosted.clear();
+    let mut r = run(teams_with(vec![chat]));
+    let p = hosted(&r, "aDE=");
+    r.ask(p.clone());
+    r.until("the word", Duration::from_secs(30), |r| !r.no_pictures().is_empty());
+    r.turns(Duration::from_secs(3));
+    assert_eq!(r.no_pictures(), vec![p.clone()], "said once");
+    assert_eq!(hits(&r.server, "hosted"), 1);
+    // Asked again: said again, at once, with no request.
+    r.ask(p.clone());
+    assert_eq!(r.no_pictures(), [p.clone(), p.clone()], "answered at once");
+    r.turns(Duration::from_secs(3));
+    assert_eq!(hits(&r.server, "hosted"), 1, "no new request");
+    assert!(r.pictures().is_empty());
+    // One that isn't its message's own is said too, and none is asked.
+    let other = hosted(&r, "bm90bWluZQ==");
+    r.ask(other.clone());
+    assert_eq!(r.no_pictures().last(), Some(&other));
+    assert_eq!(hits(&r.server, "hosted"), 1);
+    // Three failures of the network: said once, after the third.
+    let mut r = run(teams_with(vec![with_hosted(vec![("aDE=", b"one".to_vec())])]));
+    r.fake(|t| t.answer_lost.insert("hosted".into(), 1_000));
+    let p = hosted(&r, "aDE=");
+    r.ask(p.clone());
+    r.turns(Duration::from_secs(120));
+    assert_eq!(hits(&r.server, "hosted"), 3);
+    assert_eq!(r.no_pictures(), [p]);
+}
+
+fn fails(_url: &str, _max: usize) -> crate::Result<Response> {
+    Ok(Response { status: 503, ..Response::default() })
+}
+
+/// R39: an outside picture whose fetch fails (or is refused) is said not to be had, and nothing is
+/// fetched again by itself.
+#[test]
+fn an_outside_picture_that_fails_is_said() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 1)]));
+    r.w.hooks.outside = Some(fails);
+    let url = "https://images.contoso.example/b.gif";
+    r.ask(Picture::Outside { url: url.into() });
+    eventually("the word", || !r.no_pictures().is_empty());
+    assert_eq!(r.no_pictures(), [Picture::Outside { url: url.into() }]);
+    assert!(r.pictures().is_empty());
+    // An address refused without a fetch is said too.
+    let bad = "http://images.contoso.example/c.gif";
+    r.ask(Picture::Outside { url: bad.into() });
+    assert_eq!(r.no_pictures().last(), Some(&Picture::Outside { url: bad.into() }));
+    r.turns(Duration::from_secs(5));
+    assert_eq!(r.no_pictures().len(), 2, "nothing more by itself");
 }

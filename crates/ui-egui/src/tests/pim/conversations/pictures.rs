@@ -317,3 +317,71 @@ fn a_picture_is_decoded_whole_only_in_the_viewer() {
     assert!(!sizes.contains(&[1200, 900]), "let go once closed: {sizes:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// R39: a picture the worker says can't be had is drawn still, "Picture not available": no
+/// spinner, no repaint asked, and no new picture asked for however long it stays on screen.
+#[test]
+fn a_failed_picture_stays_still_and_isnt_asked_again() {
+    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
+    let (mut a, dir, jobs) = chat_app("teams-pictures-failed", group_row(), TEAMS_LINK, vec![m]);
+    let ctx = egui::Context::default();
+    settled_at(&ctx, &mut a, (1280, 800));
+    let asked = |jobs: &Shared<Job>| picture_jobs(jobs, |p| matches!(p, Picture::Hosted { .. }));
+    assert_eq!(asked(&jobs), 1);
+    let picture = Picture::Hosted { chat: CHAT.into(), message: "m1".into(), hosted: "h1".into() };
+    a.session.teams_apply(teams::Event::NoPicture { picture: picture.clone() });
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    assert!(has_text(&texts, "Picture not available"), "{texts:?}");
+    assert!(matches!(a.ui.teams_queue.pictures.image(&picture), Some(Shown::Unavailable)));
+    for _ in 0..10 {
+        let wait = next_frame_in(&ctx, &mut a);
+        assert!(wait >= std::time::Duration::from_secs(1), "the window keeps drawing: next frame in {wait:?}");
+    }
+    assert_eq!(asked(&jobs), 1, "no new picture asked for");
+    // Scrolled away and back, or the picture let go: still not asked (the engine keeps it asked).
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    assert!(has_text(&texts, "Picture not available"), "{texts:?}");
+    assert_eq!(asked(&jobs), 1);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// R39 (T14): "Show picture" isn't clickable again until the worker has answered: a double click
+/// fetches once. Said not to be had, the picture is drawn as such, without the button.
+#[test]
+fn show_picture_twice_asks_once() {
+    let url = "https://images.example/cat.gif";
+    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
+    let (mut a, dir, jobs) = chat_app("teams-pictures-twice", group_row(), TEAMS_LINK, vec![m]);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    let outside = |jobs: &Shared<Job>| picture_jobs(jobs, |p| matches!(p, Picture::Outside { url: u } if u == url));
+    let button = rect_of(&texts, |t| t == "Show picture").expect("the button");
+    click_at(&ctx, &mut a, button.center(), 1, size);
+    assert_eq!(outside(&jobs), 1, "once clicked");
+    click_at(&ctx, &mut a, button.center(), 1, size);
+    click_at(&ctx, &mut a, button.center(), 2, size);
+    assert_eq!(outside(&jobs), 1, "not again before the answer");
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    assert!(has_text(&texts, "Show picture"), "still drawn, waiting: {texts:?}");
+    let frames = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
+    let mut tex = Textures::default();
+    let mut render = |a: &mut MailApp, state: &str| {
+        for (dark, theme) in [(false, "light"), (true, "dark")] {
+            a.ui.dark = Some(dark);
+            for _ in 0..4 {
+                frame_with_size(&ctx, a, &mut tex, vec![], None, (900, 500));
+            }
+            let png = frames.as_ref().map(|d| d.join(format!("teams-picture-{state}-{theme}.png")));
+            frame_with_size(&ctx, a, &mut tex, vec![], png, (900, 500));
+        }
+    };
+    render(&mut a, "waiting");
+    a.session.teams_apply(teams::Event::NoPicture { picture: Picture::Outside { url: url.into() } });
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    assert!(has_text(&texts, "Picture not available"), "{texts:?}");
+    assert!(!has_text(&texts, "Show picture"), "{texts:?}");
+    assert_eq!(outside(&jobs), 1);
+    render(&mut a, "unavailable");
+    let _ = std::fs::remove_dir_all(dir);
+}
