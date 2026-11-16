@@ -370,3 +370,64 @@ fn a_query_reads_only_the_newest_chats_it_needs() {
     // The 20 newest chats give the 200 hits; the next one is older than the last of them.
     assert_eq!(copy.index.borrow().visited.get(), 20);
 }
+
+/// A word in 3,000 messages of one chat: the search looks at the newest 200 it gives, not at every
+/// message that has it (a chat's words never make a search grow with the chat).
+#[test]
+fn a_search_looks_at_no_more_of_a_chat_than_it_gives() {
+    let (copy, _store) = copy();
+    for part in (0..3_000).collect::<Vec<i64>>().chunks(1_000) {
+        let msgs: Vec<ChatMessage> = part.iter().map(|&i| msg(A, i, &format!("plan number {i}"))).collect();
+        copy.upsert(A, &msgs).unwrap();
+    }
+    let found = hits(&copy, "plan");
+    let want: Vec<(String, String)> = (2_800..3_000).rev().map(|i| (A.to_string(), id(i))).collect();
+    assert_eq!(found, want);
+    assert!(copy.index.borrow().looked.get() <= MAX_HITS, "{} messages looked at", copy.index.borrow().looked.get());
+}
+
+/// The history comes after the newest messages, and the place of a message deleted or edited is
+/// taken again: whatever order the messages came in, the hits are the newest, and a query of two
+/// words gives the messages that have both; read back from the file, the same.
+#[test]
+fn the_newest_hits_whatever_order_the_messages_came_in() {
+    let (copy, store) = copy();
+    // The newest first, then the history before them, page after page.
+    for start in [900, 700, 500, 300] {
+        let len = if start == 900 { 100 } else { 200 };
+        copy.upsert(A, &(start..start + len).map(|i| msg(A, i, &format!("plan {i} draft"))).collect::<Vec<_>>()).unwrap();
+    }
+    // An old one deleted, its place taken by a new one; a newer one edited.
+    let mut gone = msg(A, 450, "plan");
+    gone.deleted = Some(T0);
+    copy.upsert(A, &[gone, msg(A, 1_001, "plan 1001 final"), msg(A, 990, "plan 990 final")]).unwrap();
+    let want = |i: &[i64]| i.iter().map(|i| (A.to_string(), id(*i))).collect::<Vec<_>>();
+    let plan: Vec<i64> = std::iter::once(1_001).chain((801..1_000).rev()).collect();
+    let draft: Vec<i64> = (300..1_000).rev().filter(|i| *i != 990 && *i != 450).take(MAX_HITS).collect();
+    for copy in [copy, open(&store)] {
+        assert_eq!(hits(&copy, "plan"), want(&plan));
+        assert_eq!(hits(&copy, "plan final"), want(&[1_001, 990]), "both words");
+        assert_eq!(hits(&copy, "draft plan"), want(&draft));
+    }
+}
+
+/// 300 chats of one message each: a search that finds what it may give goes through the newest
+/// chats it needs, by their words, and through the chats whose names have its words, not through
+/// every chat. A chat renamed is found by its new name only.
+#[test]
+fn a_search_goes_through_only_the_chats_it_needs() {
+    let (copy, _store) = copy();
+    for i in 0..300 {
+        let c = format!("19:one{i:03}@thread.v2");
+        copy.put_chat(&ChatRecord::new(chat(&c, None))).unwrap();
+        copy.upsert(&c, &[msg(&c, 1_000 + i, &format!("plan {i}"))]).unwrap();
+    }
+    assert_eq!(hits(&copy, "plan").len(), MAX_HITS);
+    let through = copy.index.borrow().went_through.get();
+    assert!(through <= MAX_HITS + 1, "{through} chats gone through");
+    // By its name: "Budget review" renamed "Travel plans".
+    assert_eq!(hits(&copy, "budget rev"), one(A, ""));
+    copy.put_chat(&ChatRecord::new(chat(A, Some("Travel plans")))).unwrap();
+    assert_eq!(hits(&copy, "budget"), Vec::<(String, String)>::new());
+    assert_eq!(hits(&copy, "trav pla"), one(A, ""));
+}

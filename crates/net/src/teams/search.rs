@@ -19,13 +19,16 @@
 //!   arrays, nothing twice), the chats with the oldest messages leaving first, while the index
 //!   is read back as after a write. After that, every search says it covers recent
 //!   conversations only (`partial`, remembered in [`PARTIAL`]). A query reads the chats newest
-//!   first and stops once it has its hits and the next chat is older than the last of them.
+//!   first and stops once it has its hits and the next chat is older than the last of them; in a
+//!   chat, each word's messages are held in the order they were made, so a query reads them
+//!   newest first and stops at its hits: a long chat costs it no more than a short one.
 //! * Read back at start in slices, one chat a loop turn ([`load`]): the window never waits for
 //!   it, and until it's read whole a search answers "indexing" with no hits. What is read back
 //!   is hostile input: a segment under another chat's key is passed over, the caps applied again.
 //! * Chats' names are not kept in the index: they come from the chats' records, read as the index
 //!   is, and as they're written.
 
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -71,7 +74,9 @@ pub(crate) struct Found {
 }
 
 /// The search's index of the copy, in memory: the segments read back or written, and the chats'
-/// names.
+/// names. A query goes through the chats whose names have its words (found by those words, never
+/// by going through every name), and through the chats' words newest first until it has what it
+/// may give: through every chat's words (a halving each) only when it finds fewer.
 #[derive(Default)]
 pub(crate) struct Index {
     /// The user's own id: a chat's name is said without them.
@@ -80,8 +85,12 @@ pub(crate) struct Index {
     todo: Option<Vec<String>>,
     /// Each chat's words, by the chat's hash.
     segments: HashMap<String, Segment>,
+    /// The same chats (their hashes), the one with the newest message first.
+    by_newest: BTreeSet<(Reverse<i64>, String)>,
     /// Each chat's name, by its hash.
     names: HashMap<String, Named>,
+    /// Each word of the names, and the chats (hashes) whose name has it.
+    name_words: BTreeMap<String, BTreeSet<String>>,
     partial: bool,
     /// The bound a test sets, in place of the copy's quarter.
     #[cfg(test)]
@@ -92,6 +101,12 @@ pub(crate) struct Index {
     /// How many chats' words the last query looked at.
     #[cfg(test)]
     pub(crate) visited: std::cell::Cell<usize>,
+    /// How many messages the last query looked at in the chats' words.
+    #[cfg(test)]
+    pub(crate) looked: std::cell::Cell<usize>,
+    /// How many chats, by their names and by their words, the last query went through.
+    #[cfg(test)]
+    pub(crate) went_through: std::cell::Cell<usize>,
 }
 
 /// A chat's name as searched: its words, and its time (its last activity).
@@ -151,7 +166,35 @@ impl Index {
         let name = row_name(chat, &self.me);
         let words = if name == NO_NAME { Vec::new() } else { words_of_texts(std::iter::once(name.as_str()), INDEX_WORDS) };
         let at = chat.last_activity.or(chat.updated).unwrap_or(i64::MIN);
+        // The words of the name it had go.
+        for w in self.names.get(&hash).map(|n| n.words.as_slice()).unwrap_or_default() {
+            if let Some(chats) = self.name_words.get_mut(w) {
+                chats.remove(&hash);
+                if chats.is_empty() {
+                    self.name_words.remove(w);
+                }
+            }
+        }
+        for w in &words {
+            self.name_words.entry(w.clone()).or_default().insert(hash.clone());
+        }
         self.names.insert(hash, Named { chat: chat.id.clone(), words, at });
+    }
+
+    /// A chat's words kept, in place of what it had, in their place among the newest.
+    fn put_segment(&mut self, hash: String, seg: Segment) {
+        if let Some(old) = self.segments.get(&hash) {
+            self.by_newest.remove(&(Reverse(old.newest), hash.clone()));
+        }
+        self.by_newest.insert((Reverse(seg.newest), hash.clone()));
+        self.segments.insert(hash, seg);
+    }
+
+    /// A chat's words taken out.
+    fn take_segment(&mut self, hash: &str) -> Option<Segment> {
+        let seg = self.segments.remove(hash)?;
+        self.by_newest.remove(&(Reverse(seg.newest), hash.to_string()));
+        Some(seg)
     }
 
     /// The bytes its segments take in the file.
@@ -192,21 +235,39 @@ impl Index {
             return Found { hits: Vec::new(), indexing: false, partial: self.partial };
         }
         let mut hits: Vec<(i64, &str, &str)> = Vec::new();
-        for n in self.names.values() {
-            if terms.iter().all(|t| n.words.iter().any(|w| w.starts_with(t.as_str()))) {
-                hits.push((n.at, n.chat.as_str(), ""));
-                if hits.len() >= 4 * MAX_HITS {
-                    keep_newest(&mut hits);
-                }
+        #[cfg(test)]
+        self.went_through.set(0);
+        // The chats whose name has a word beginning with each of the terms.
+        let mut named: Option<BTreeSet<&str>> = None;
+        for t in &terms {
+            let from = (std::ops::Bound::Included(t.as_str()), std::ops::Bound::Unbounded);
+            let words = self.name_words.range::<str, _>(from).take_while(|(w, _)| w.starts_with(t.as_str()));
+            let with: BTreeSet<&str> = words.flat_map(|(_, chats)| chats.iter().map(String::as_str)).collect();
+            let both: BTreeSet<&str> = match named {
+                None => with,
+                Some(n) => n.intersection(&with).copied().collect(),
+            };
+            let none = both.is_empty();
+            named = Some(both);
+            if none {
+                break;
+            }
+        }
+        for n in named.unwrap_or_default().into_iter().filter_map(|hash| self.names.get(hash)) {
+            #[cfg(test)]
+            self.went_through.set(self.went_through.get() + 1);
+            hits.push((n.at, n.chat.as_str(), ""));
+            if hits.len() >= 4 * MAX_HITS {
+                keep_newest(&mut hits);
             }
         }
         // The chats with the newest messages first: once there are enough hits, a chat whose
         // newest message is older than the last of them can't give one, nor can those after it.
-        let mut newest_first: Vec<&Segment> = self.segments.values().collect();
-        newest_first.sort_unstable_by_key(|s| std::cmp::Reverse(s.newest));
         #[cfg(test)]
         self.visited.set(0);
-        for seg in newest_first {
+        #[cfg(test)]
+        self.looked.set(0);
+        for seg in self.by_newest.iter().filter_map(|(_, hash)| self.segments.get(hash)) {
             if hits.len() >= MAX_HITS {
                 keep_newest(&mut hits);
                 if hits.last().is_some_and(|last| last.0 > seg.newest) {
@@ -215,7 +276,13 @@ impl Index {
             }
             #[cfg(test)]
             self.visited.set(self.visited.get() + 1);
-            for p in seg.find(&terms) {
+            #[cfg(test)]
+            self.went_through.set(self.went_through.get() + 1);
+            let mut looked = 0usize;
+            let newest = seg.newest(&terms, MAX_HITS, &mut looked);
+            #[cfg(test)]
+            self.looked.set(self.looked.get() + looked);
+            for p in newest {
                 if let Some((id, at)) = usize::try_from(p).ok().and_then(|at| seg.messages.get(at))
                     && !id.is_empty()
                 {
@@ -265,7 +332,7 @@ impl Copy {
                 if !ix.segments.contains_key(&hash)
                     && let Some(seg) = self.segment_from_file(&hash)
                 {
-                    ix.segments.insert(hash, seg);
+                    ix.put_segment(hash, seg);
                 }
                 // Held to the bounds as it's read, not once it's whole: a planted file can't
                 // make it hold more meanwhile.
@@ -301,7 +368,7 @@ impl Copy {
         let hash = chat_hash(chat);
         let mut ix = self.index.borrow_mut();
         // The chat's words in the form a change works on, for this change only.
-        let mut seg = match ix.segments.remove(&hash) {
+        let mut seg = match ix.take_segment(&hash) {
             Some(seg) => Draft::of(&seg),
             None => self.read(&segment_key(&hash)).and_then(|b| Draft::read(&b, &hash)).unwrap_or_else(|| Draft::empty(chat)),
         };
@@ -347,7 +414,7 @@ impl Copy {
             return;
         }
         let hash = s.hash.clone();
-        ix.segments.insert(s.hash, s.segment);
+        ix.put_segment(s.hash, s.segment);
         if s.trimmed {
             self.mark_partial(&mut ix);
         }
@@ -365,14 +432,12 @@ impl Copy {
         if total <= cap && resident <= held {
             return;
         }
-        let mut oldest: Vec<(i64, String)> =
-            ix.segments.iter().filter(|(h, _)| Some(h.as_str()) != keep).map(|(h, s)| (s.newest, h.clone())).collect();
-        oldest.sort_unstable();
-        for (_, hash) in oldest {
+        let oldest: Vec<String> = ix.by_newest.iter().rev().map(|(_, h)| h.clone()).filter(|h| Some(h.as_str()) != keep).collect();
+        for hash in oldest {
             if total <= cap && resident <= held {
                 break;
             }
-            if let Some(seg) = ix.segments.remove(&hash) {
+            if let Some(seg) = ix.take_segment(&hash) {
                 total = total.saturating_sub(seg.bytes);
                 resident = resident.saturating_sub(seg.resident);
                 if self.store.remove_account_files(TEAMS_ACCOUNT, &segment_key(&hash)).is_err() {

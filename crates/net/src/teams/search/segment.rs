@@ -4,12 +4,14 @@
 //! chat's segment as memory holds it ([`Segment`]), as a write or a read works on it ([`Draft`]),
 //! and as the file keeps it. What is read back is hostile input: held to the caps again.
 
+use std::collections::BinaryHeap;
+
 use super::*;
 
 /// A chat's words as memory holds them, compact: its messages by place, and each word, in
-/// order, with the places of those that have it, in order (found by halving). Nothing is held
-/// twice: what a change needs besides (each message's place) is made for the change alone
-/// ([`Draft`]).
+/// order, with the places of those that have it, in the order those were made (then by place:
+/// found by halving, read newest first). Nothing is held twice: what a change needs besides
+/// (each message's place) is made for the change alone ([`Draft`]).
 pub(super) struct Segment {
     pub(super) chat: Box<str>,
     /// (message id, creation time) by place; a free place has an empty id.
@@ -32,8 +34,15 @@ pub(super) struct Draft {
     /// Each message's place, and the places free.
     pub(super) places: HashMap<String, u32>,
     free: Vec<u32>,
-    /// Each word and the places that have it, in order.
+    /// Each word and the places that have it, in the order those were made, then by place.
     words: BTreeMap<String, Vec<u32>>,
+}
+
+/// Where a place goes in a word's list: by when its message was made, then by place (a place out
+/// of `messages`, which a list never holds, first). The file keeps the lists in this order too;
+/// they're put in it again as they're read back.
+fn order<T>(messages: &[(T, i64)], p: u32) -> (i64, u32) {
+    (usize::try_from(p).ok().and_then(|at| messages.get(at)).map_or(i64::MIN, |m| m.1), p)
 }
 
 /// A segment as it's kept.
@@ -128,9 +137,9 @@ impl Draft {
     pub(super) fn settle(self, bytes: usize) -> Segment {
         use std::mem::size_of;
         let n = |x: usize| u64::try_from(x).unwrap_or(u64::MAX);
-        // The segment, its key in the index's map (a hash), each message's id and time, each
-        // word and its places.
-        let mut resident = n(size_of::<Segment>() + 96 + self.chat.len());
+        // The segment, its key in the index's map and its place among the newest (a hash each),
+        // each message's id and time, each word and its places.
+        let mut resident = n(size_of::<Segment>() + 96 + 80 + self.chat.len());
         let newest = self.messages.iter().filter(|(id, _)| !id.is_empty()).map(|(_, at)| *at).max().unwrap_or(i64::MIN);
         let messages: Box<[(Box<str>, i64)]> = self
             .messages
@@ -182,7 +191,7 @@ impl Draft {
             if !word_ok(&w) {
                 continue;
             }
-            list.sort_unstable();
+            list.sort_unstable_by_key(|&p| order(&seg.messages, p));
             list.dedup();
             list.retain(|p| {
                 let Ok(at) = usize::try_from(*p) else { return false };
@@ -244,9 +253,11 @@ impl Draft {
         let Some(slot) = usize::try_from(place).ok().and_then(|at| self.messages.get_mut(at)) else { return };
         *slot = (id.to_string(), created);
         self.places.insert(id.to_string(), place);
+        let Draft { messages, words: lists, .. } = self;
         for w in words {
-            let list = self.words.entry(w).or_default();
-            if let Err(at) = list.binary_search(&place) {
+            let list = lists.entry(w).or_default();
+            let at = list.partition_point(|&q| order(messages, q) < (created, place));
+            if list.get(at) != Some(&place) {
                 list.insert(at, place);
             }
         }
@@ -263,24 +274,46 @@ impl Draft {
 }
 
 impl Segment {
-    /// The places of the messages with a word beginning with each of `terms`.
-    pub(super) fn find(&self, terms: &[String]) -> BTreeSet<u32> {
-        let mut found: Option<BTreeSet<u32>> = None;
-        for t in terms {
-            let from = self.words.partition_point(|(w, _)| &**w < t.as_str());
-            let mut with: BTreeSet<u32> = BTreeSet::new();
-            for (_, list) in self.words.get(from..).unwrap_or_default().iter().take_while(|(w, _)| w.starts_with(t.as_str())) {
-                with.extend(list.iter().copied());
-            }
-            let now = match found {
-                None => with,
-                Some(f) => f.intersection(&with).copied().collect(),
-            };
-            if now.is_empty() {
-                return now;
-            }
-            found = Some(now);
+    /// The lists of the words beginning with `term`.
+    fn lists(&self, term: &str) -> Vec<&[u32]> {
+        let from = self.words.partition_point(|(w, _)| &**w < term);
+        self.words.get(from..).unwrap_or_default().iter().take_while(|(w, _)| w.starts_with(term)).map(|(_, list)| &**list).collect()
+    }
+
+    /// The places of the newest messages (at most `most`, newest first) with a word beginning
+    /// with each of `terms`: the term with the fewest messages read newest first, its words'
+    /// lists merged, each message kept when every other term's lists have it. `looked` counts
+    /// the messages read.
+    pub(super) fn newest(&self, terms: &[String], most: usize, looked: &mut usize) -> Vec<u32> {
+        let mut by_term: Vec<Vec<&[u32]>> = terms.iter().map(|t| self.lists(t)).collect();
+        if by_term.iter().any(Vec::is_empty) {
+            return Vec::new();
         }
-        found.unwrap_or_default()
+        by_term.sort_by_key(|lists| lists.iter().map(|l| l.len()).sum::<usize>());
+        let Some((walked, others)) = by_term.split_first() else { return Vec::new() };
+        let at = |p: u32| order(&self.messages, p);
+        let has = |lists: &Vec<&[u32]>, p: u32| lists.iter().any(|l| l.binary_search_by_key(&at(p), |&q| at(q)).is_ok());
+        // Each list's last place not read yet (its newest), the newest of them on top.
+        let mut heads: BinaryHeap<((i64, u32), usize, usize)> =
+            walked.iter().enumerate().filter_map(|(j, l)| Some((at(*l.last()?), j, l.len().saturating_sub(1)))).collect();
+        let (mut out, mut last) = (Vec::new(), None);
+        while let Some(((_, p), j, i)) = heads.pop() {
+            if let Some(next) = i.checked_sub(1).and_then(|n| Some((at(*walked.get(j)?.get(n)?), j, n))) {
+                heads.push(next);
+            }
+            // The same message under two words of the term.
+            if last == Some(p) {
+                continue;
+            }
+            last = Some(p);
+            *looked = looked.saturating_add(1);
+            if others.iter().all(|lists| has(lists, p)) {
+                out.push(p);
+                if out.len() >= most {
+                    break;
+                }
+            }
+        }
+        out
     }
 }
