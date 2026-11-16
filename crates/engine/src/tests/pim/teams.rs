@@ -432,6 +432,7 @@ fn pictures_are_asked_once_and_outside_ones_only_over_https() {
     }
     assert_eq!(s.teams.pictures.len(), 64);
     assert_eq!(s.teams.pictures.front().map(|p| p.1.clone()), Some(vec![6]), "the oldest dropped");
+    assert_eq!(teams_jobs(&mut s).len(), 70, "one that came is asked again by a later click");
 }
 
 #[test]

@@ -8,6 +8,7 @@ use quatrelle_engine::model::pim::teams::{ChatMessage, Run};
 
 use super::chat::*;
 use super::*;
+use crate::Action;
 use crate::panes::conversations::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures};
 /// A PNG's header saying `w` × `h`, and nothing else.
 fn png_header(w: u32, h: u32) -> Vec<u8> {
@@ -383,5 +384,25 @@ fn show_picture_twice_asks_once() {
     assert!(!has_text(&texts, "Show picture"), "{texts:?}");
     assert_eq!(outside(&jobs), 1);
     render(&mut a, "unavailable");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// "Show picture" is greyed while its picture waits for the answer: a click on it asks nothing
+/// (the engine's own limit isn't what keeps a double click from fetching twice).
+#[test]
+fn show_picture_is_greyed_while_it_waits() {
+    let url = "https://images.example/cat.gif";
+    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
+    let (mut a, dir, _) = chat_app("teams-pictures-greyed", group_row(), TEAMS_LINK, vec![m]);
+    let ctx = egui::Context::default();
+    let size = (1280, 800);
+    settled_at(&ctx, &mut a, size);
+    let (_, texts) = pane(&ctx, &mut a, vec![], size);
+    let at = rect_of(&texts, |t| t == "Show picture").expect("the button").center();
+    let asks = |acts: &[Action]| acts.iter().filter(|x| matches!(x, Action::Run("teams.picture", _))).count();
+    assert_eq!(asks(&click_pane(&ctx, &mut a, at, size)), 1, "clickable before it is asked");
+    a.run("teams.picture", json!({"kind": "outside", "url": url}));
+    let acts = click_pane(&ctx, &mut a, at, size);
+    assert_eq!(asks(&acts), 0, "greyed while waiting: {}", acts.len());
     let _ = std::fs::remove_dir_all(dir);
 }

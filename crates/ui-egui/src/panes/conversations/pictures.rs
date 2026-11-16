@@ -389,8 +389,12 @@ impl TeamsPictures {
         // Past the budget, the least recently shown go; those on screen stay.
         while self.held > IMAGES_BYTES {
             let recent = self.frame.saturating_sub(2);
-            let oldest =
-                self.images.iter().filter(|(_, i)| i.bytes > 0 && i.seen.get() < recent).min_by_key(|(_, i)| i.seen.get()).map(|(p, _)| p.clone());
+            let oldest = self
+                .images
+                .iter()
+                .filter(|(_, i)| !matches!(i.shown, Shown::Unavailable) && i.seen.get() < recent)
+                .min_by_key(|(_, i)| i.seen.get())
+                .map(|(p, _)| p.clone());
             let Some(old) = oldest else { break };
             if let Some(i) = self.images.remove(&old) {
                 self.held = self.held.saturating_sub(i.bytes);
@@ -493,6 +497,41 @@ mod tests {
         assert!(pics.waiting.iter().any(|w| w.whole && w.picture == big), "still to be decoded whole");
         assert!(matches!(pics.images.get(&big).map(|i| &i.shown), Some(Shown::Ready(_))), "its thumbnail stays");
         assert!(matches!(pics.images.get(&hosted(1)).map(|i| &i.shown), Some(Shown::Failed)), "the oldest thumbnail given up");
+    }
+
+    /// Fills the images' budget at frame 20 with `entry` kept since frame 0: the entry's fate.
+    fn fill_the_budget(pics: &mut TeamsPictures, entry: Shown) {
+        let ctx = egui::Context::default();
+        let tex = ctx.load_texture("t", ColorImage::from_rgba_unmultiplied([2, 2], &[255; 16]), TextureOptions::NEAREST);
+        pics.keep(hosted(0), entry, 0);
+        pics.frame = 10;
+        pics.keep(hosted(1), Shown::Ready(tex.clone()), IMAGES_BYTES / 2 + 1);
+        pics.frame = 20;
+        pics.keep(hosted(2), Shown::Ready(tex), IMAGES_BYTES / 2 + 1);
+    }
+
+    /// A picture said not available keeps its entry when the budget fills (the pane would ask for
+    /// an evicted one again, the engine would swallow it, and "Picture" would stay): it is still
+    /// drawn "Picture not available".
+    #[test]
+    fn an_unavailable_picture_survives_a_full_budget() {
+        let mut pics = TeamsPictures::default();
+        fill_the_budget(&mut pics, Shown::Unavailable);
+        assert!(matches!(pics.image(&hosted(0)), Some(Shown::Unavailable)), "still there, still not available");
+        assert!(pics.image(&hosted(1)).is_none(), "an older image was let go instead");
+        let (gone, _) = pics.take_let_go();
+        assert!(!gone.contains(&hosted(0)) && gone.contains(&hosted(1)), "{gone:?}");
+    }
+
+    /// A placeholder given up for want of room (Failed) is let go like any image once old, so the
+    /// pane asks for it again.
+    #[test]
+    fn an_abandoned_picture_can_be_asked_again() {
+        let mut pics = TeamsPictures::default();
+        fill_the_budget(&mut pics, Shown::Failed);
+        assert!(pics.image(&hosted(0)).is_none(), "let go");
+        let (gone, _) = pics.take_let_go();
+        assert!(gone.contains(&hosted(0)), "left to be asked again: {gone:?}");
     }
 
     /// Past the most let go remembered, the oldest are forgotten, and the pane is told some were
