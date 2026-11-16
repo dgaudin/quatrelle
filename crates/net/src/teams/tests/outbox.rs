@@ -655,8 +655,17 @@ fn an_outbox_of_another_identity_is_never_sent() {
         let theirs = chat_of(&json!({"id": CHAT, "chatType": "oneOnOne"})).unwrap();
         copy.put_chat(&ChatRecord::new(theirs)).unwrap();
         for seq in 1..=2 {
-            let op =
-                OpRecord { seq, local: format!("1-{seq}"), chat: CHAT.into(), body: body("Theirs"), state: OpState::Waiting, tries: 0, after: None };
+            let op = OpRecord {
+                seq,
+                local: format!("1-{seq}"),
+                chat: CHAT.into(),
+                body: body("Theirs"),
+                mentions: Vec::new(),
+                what: OutKind::Send,
+                state: OpState::Waiting,
+                tries: 0,
+                after: None,
+            };
             copy.put_op(&op).unwrap();
         }
         assert_eq!(copy.ops().len(), 2);
@@ -741,6 +750,8 @@ fn a_refusals_code_is_kept_short() {
             local: "1-1".into(),
             chat: CHAT.into(),
             body: body("x"),
+            mentions: Vec::new(),
+            what: OutKind::Send,
             state: OpState::NotSent { reason: Unsent::Refused, code },
             tries: 0,
             after: None,

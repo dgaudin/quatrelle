@@ -9,8 +9,10 @@
 //! passed over is logged by count, never by what it holds. A record that wouldn't be read back is
 //! never written.
 
-use quatrelle_mime::{TEAMS_RUNS, teams_write};
-use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, OUTBOX_MAX, OutKind, OutState, Outgoing, Unsent};
+use quatrelle_mime::{TEAMS_RUNS, teams_write_mentions};
+use quatrelle_model::pim::teams::{
+    ChatText, LOCAL_MAX, MAX_MENTIONS, Mention, NAME_CHARS, OUTBOX_MAX, OutKind, OutState, Outgoing, Unsent, one_line, reactable,
+};
 
 use super::*;
 
@@ -22,6 +24,8 @@ const MAX_OP: usize = 1 << 20;
 const MAX_TRIES: u8 = 9;
 /// The longest code of Teams' answer kept ([`OpState::NotSent`]).
 const MAX_CODE: usize = 64;
+/// The last time a record says (milliseconds since 1970): the end of year 9999, what a date can hold.
+const MAX_MS: i64 = 253_402_300_799_999;
 
 /// A message going out, as the outbox keeps it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +37,13 @@ pub(crate) struct OpRecord {
     pub(crate) local: String,
     pub(crate) chat: String,
     pub(crate) body: ChatText,
+    /// The mentions of `body` (a send or an edit). Delivery 2's records have none.
+    #[serde(default)]
+    pub(crate) mentions: Vec<Mention>,
+    /// What it is: a message to send, or a change to one already there. Delivery 2's records are
+    /// all sends.
+    #[serde(default)]
+    pub(crate) what: OutKind,
     pub(crate) state: OpState,
     /// The times it was posted without an answer saying Teams has it ([`OpState::Unknown`]).
     pub(crate) tries: u8,
@@ -69,8 +80,8 @@ impl OpRecord {
             local: self.local.clone(),
             chat: self.chat.clone(),
             body: self.body.clone(),
-            mentions: Vec::new(),
-            what: OutKind::Send,
+            mentions: self.mentions.clone(),
+            what: self.what.clone(),
             state,
         }
     }
@@ -80,7 +91,12 @@ impl OpRecord {
     /// id usable ([`id_ok`]), its local id as [`OpRecord::local`] says, at most [`MAX_TRIES`]
     /// tries, Teams' code of `A-Z`, `a-z`, `0-9`, ` `, `_`, `.` and `-` (1 to [`MAX_CODE`]), and
     /// its body at most [`TEAMS_RUNS`] runs (runs that write nothing would cost memory only) and
-    /// [`quatrelle_model::pim::teams::SEND_MAX`] bytes once written.
+    /// [`quatrelle_model::pim::teams::SEND_MAX`] bytes once written with its mentions. A change
+    /// to a message names one with a usable id and a creation time a date can hold; a reaction's
+    /// emoji is one [`reactable`] takes; a deletion or a reaction has no body and no mentions, an
+    /// edit has a body. Mentions: at most [`MAX_MENTIONS`], each of an id of its own, a user
+    /// with a usable id, a name of one line of 1 to [`NAME_CHARS`] characters, and every run
+    /// that names one names one of the list. `after` is a time a date can hold.
     pub(super) fn broken(&self) -> Option<&'static str> {
         let local = local_ok(&self.local);
         let code = match &self.state {
@@ -90,6 +106,27 @@ impl OpRecord {
             _ => true,
         };
         let runs: usize = self.body.blocks.iter().map(|b| b.runs.len()).sum();
+        let mentioned = |id: u32| self.mentions.iter().any(|m| m.id == id);
+        let ms = |t: i64| (0..=MAX_MS).contains(&t);
+        let message = match &self.what {
+            OutKind::Send => true,
+            OutKind::Edit { message, created } | OutKind::Delete { message, created } => id_ok(message) && ms(*created),
+            OutKind::React { message, created, emoji, .. } => id_ok(message) && ms(*created) && reactable(emoji),
+        };
+        let kept = match &self.what {
+            OutKind::Send => true,
+            OutKind::Edit { .. } => !self.body.plain().is_empty(),
+            OutKind::Delete { .. } | OutKind::React { .. } => self.body.blocks.is_empty() && self.mentions.is_empty(),
+        };
+        let people = self.mentions.len() <= MAX_MENTIONS
+            && self.mentions.iter().enumerate().all(|(i, m)| {
+                self.mentions.iter().take(i).all(|o| o.id != m.id)
+                    && m.user_id.as_deref().is_some_and(id_ok)
+                    && !m.text.is_empty()
+                    && m.text.chars().count() <= NAME_CHARS
+                    && one_line(&m.text) == m.text
+            });
+        let named = self.body.blocks.iter().flat_map(|b| &b.runs).all(|r| r.mention.is_none_or(mentioned));
         match () {
             _ if !(1..u64::MAX).contains(&self.seq) => Some("a number outside the outbox's"),
             _ if !id_ok(&self.chat) => Some("a chat without a usable id"),
@@ -97,7 +134,12 @@ impl OpRecord {
             _ if self.tries > MAX_TRIES => Some("more tries than are made"),
             _ if !code => Some("a code of Teams' answer outside its rules"),
             _ if runs > TEAMS_RUNS => Some("a body of too many runs"),
-            _ if teams_write(&self.body).is_err() => Some("a body longer than Teams takes"),
+            _ if !message => Some("a change to a message outside its rules"),
+            _ if !kept => Some("a body or mentions a change doesn't take, or an edit without a body"),
+            _ if !people => Some("mentions outside their rules"),
+            _ if !named => Some("a run naming a mention not in the list"),
+            _ if teams_write_mentions(&self.body, &self.mentions).is_err() => Some("a body longer than Teams takes"),
+            _ if self.after.is_some_and(|t| !ms(t)) => Some("a time outside what a date holds"),
             _ => None,
         }
     }

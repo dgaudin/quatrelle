@@ -154,7 +154,8 @@ fn take(w: &mut Worker, chat: String, local: String, body: ChatText) {
     // What a check of it looks after: the newest message the copy knows in the chat.
     let newest = copy.last_pages(&chat, 1).iter().map(|m| m.created).max();
     let after = newest.or_else(|| server_ms(w).map(|t| t.saturating_sub(OVERLAP_MS)));
-    let op = OpRecord { seq: copy.next_seq(), local, chat, body, state: OpState::Waiting, tries: 0, after };
+    let op =
+        OpRecord { seq: copy.next_seq(), local, chat, body, mentions: Vec::new(), what: OutKind::Send, state: OpState::Waiting, tries: 0, after };
     if let Err(e) = copy.put_op(&op) {
         log::error!("teams: a message to send couldn't be kept: {}", kind(&NetError::Store(e)));
         let OpRecord { chat, local, body, .. } = op;

@@ -5,7 +5,7 @@
 //! file read back as the hostile input it may be.
 
 use quatrelle_model::pim::teams::{
-    Attachment, Block, BlockKind, Chat, ChatKind, ChatMessage, ChatText, MAX_BODY, MAX_ID, Mention, Reaction, Run, Sender, TEAMS_ACCOUNT,
+    Attachment, Block, BlockKind, Chat, ChatKind, ChatMessage, ChatText, MAX_BODY, MAX_ID, Mention, OutKind, Reaction, Run, Sender, TEAMS_ACCOUNT,
 };
 use quatrelle_store::Store;
 
@@ -414,6 +414,13 @@ fn the_fuzz_entry_reaches_the_pages() {
     let page = serde_json::to_string(&serde_json::json!({ "chat": A, "messages": [msg(A, 0), msg(A, 1)] })).unwrap();
     let message = serde_json::to_string(&msg(A, 2)).unwrap();
     let going = serde_json::to_string(&op(1, A)).unwrap();
+    // A change going out: a reaction on the first message.
+    let change = serde_json::to_string(&OpRecord {
+        body: ChatText::default(),
+        what: OutKind::React { message: msg(A, 0).id, created: T0, emoji: "\u{1F44D}".into(), on: true },
+        ..op(2, A)
+    })
+    .unwrap();
     let parts = [
         A,
         "identity.json",
@@ -424,6 +431,8 @@ fn the_fuzz_entry_reaches_the_pages() {
         &page,
         &op_key(1),
         &going,
+        &op_key(2),
+        &change,
         &message,
     ];
     assert_eq!(crate::teams::fuzz_teams_copy(parts.join("\0").as_bytes()), Ok(()));
@@ -630,6 +639,8 @@ fn op(seq: u64, chat: &str) -> OpRecord {
         local: format!("l-{seq}.0"),
         chat: chat.into(),
         body: text(&format!("Reply {seq}")),
+        mentions: Vec::new(),
+        what: OutKind::Send,
         state: OpState::Waiting,
         tries: 0,
         after: Some(T0),

@@ -5,7 +5,7 @@
 //! without the rest of the copy, and gone with a copy set aside for another identity.
 
 use quatrelle_mime::TEAMS_RUNS;
-use quatrelle_model::pim::teams::{LOCAL_MAX, OUTBOX_MAX, OutKind, OutState, Outgoing, SEND_MAX, Unsent};
+use quatrelle_model::pim::teams::{LOCAL_MAX, MAX_MENTIONS, Mention, NAME_CHARS, OUTBOX_MAX, OutKind, OutState, Outgoing, SEND_MAX, Unsent};
 
 use super::*;
 
@@ -124,6 +124,145 @@ fn an_op_under_another_key_or_past_the_caps_is_passed_over() {
     assert_eq!(c.next_seq(), u64::MAX);
 }
 
+/// Mention `id` of `user`, written as `text`.
+fn mention(id: u32, user: Option<&str>, text: &str) -> Mention {
+    Mention { id, text: text.into(), user_id: user.map(Into::into) }
+}
+
+/// A body of one run, naming mention `id`.
+fn naming(id: u32, words: &str) -> ChatText {
+    ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: words.into(), mention: Some(id), ..Run::default() }] }] }
+}
+
+/// An edit of message `m` (made at `created`) to `body`, its mentions as given.
+fn edit(seq: u64, body: ChatText, mentions: Vec<Mention>) -> OpRecord {
+    OpRecord { body, mentions, what: OutKind::Edit { message: "m-1".into(), created: T0 }, ..op(seq, A) }
+}
+
+fn delete(seq: u64) -> OpRecord {
+    OpRecord { body: ChatText::default(), what: OutKind::Delete { message: "m-1".into(), created: T0 }, ..op(seq, A) }
+}
+
+fn react(seq: u64, emoji: &str) -> OpRecord {
+    OpRecord { body: ChatText::default(), what: OutKind::React { message: "m-1".into(), created: T0, emoji: emoji.into(), on: true }, ..op(seq, A) }
+}
+
+#[test]
+fn records_of_delivery_two_read_back_as_sends() {
+    let (c, s) = copy();
+    // As delivery 2 wrote it: no `what`, no `mentions`.
+    let raw = r#"{"seq":1,"local":"l-1.0","chat":"19:a1b2@thread.v2","body":{"blocks":[{"kind":{"block":"paragraph"},"runs":[{"text":"Old"}]}]},
+        "state":{"state":"waiting"},"tries":0,"after":1790812800000}"#;
+    s.write_account_files(TEAMS_ACCOUNT, &[(op_key(1), raw.as_bytes().to_vec())]).unwrap();
+    let ops = c.ops();
+    assert_eq!(ops.len(), 1, "read back");
+    assert_eq!((&ops[0].what, ops[0].mentions.len()), (&OutKind::Send, 0));
+    assert_eq!(ops[0].body, text("Old"));
+    assert_eq!(ops[0].outgoing().what, OutKind::Send);
+}
+
+#[test]
+fn change_records_are_kept_and_read_back() {
+    let (c, _) = copy();
+    let ana = mention(0, Some("u-ana"), "Ana Lima");
+    let all = [edit(1, naming(0, "Ana Lima"), vec![ana.clone()]), delete(2), react(3, "\u{1F44D}")];
+    for o in &all {
+        c.put_op(o).unwrap();
+    }
+    assert_eq!(c.ops(), all);
+    assert_eq!(c.ops()[0].outgoing().mentions, [ana]);
+    assert_eq!(c.ops()[2].outgoing().what, all[2].what);
+}
+
+#[test]
+fn a_change_record_past_its_rules_is_passed_over() {
+    let (c, s) = copy();
+    let ana = || mention(0, Some("u-ana"), "Ana Lima");
+    let kind = |what: OutKind| OpRecord { what, ..delete(1) };
+    let at = |created: i64| (OutKind::Delete { message: "m-1".into(), created }, created);
+    let many: Vec<Mention> = (0..=MAX_MENTIONS as u32).map(|i| mention(i, Some("u-ana"), "Ana")).collect();
+    let name_line = "Ana\nLima";
+    let broken = [
+        ("a reaction of a name, not an emoji", react(1, "like")),
+        ("a reaction with a bidi mark", react(1, "\u{1F44D}\u{202E}")),
+        ("a reaction of no emoji", react(1, "")),
+        ("a deletion with a body", OpRecord { body: text("x"), ..delete(1) }),
+        ("a deletion with mentions", OpRecord { mentions: vec![ana()], ..delete(1) }),
+        ("a reaction with a body", OpRecord { body: text("x"), ..react(1, "\u{1F44D}") }),
+        ("a reaction with mentions", OpRecord { mentions: vec![ana()], ..react(1, "\u{1F44D}") }),
+        ("an edit with no body", edit(1, ChatText::default(), Vec::new())),
+        ("an edit of a body with no words", edit(1, ChatText { blocks: vec![Block::default()] }, Vec::new())),
+        ("a message id of none", kind(OutKind::Delete { message: String::new(), created: T0 })),
+        ("a message id with a control character", kind(OutKind::Delete { message: "a\u{7}b".into(), created: T0 })),
+        ("a message id past MAX_ID", kind(OutKind::Delete { message: "x".repeat(MAX_ID + 1), created: T0 })),
+        ("a deletion created before 1970", kind(at(-1).0)),
+        ("a deletion created past year 9999", kind(OutKind::Delete { message: "m-1".into(), created: i64::MAX })),
+        (
+            "an edit created past year 9999",
+            OpRecord { what: OutKind::Edit { message: "m-1".into(), created: 253_402_300_800_000 }, ..edit(1, text("x"), Vec::new()) },
+        ),
+        (
+            "a reaction created at i64::MIN",
+            OpRecord { what: OutKind::React { message: "m-1".into(), created: i64::MIN, emoji: "\u{1F44D}".into(), on: true }, ..react(1, "x") },
+        ),
+        ("a mention without a user", edit(1, naming(0, "Ana"), vec![mention(0, None, "Ana")])),
+        ("a mention of a user without a usable id", edit(1, naming(0, "Ana"), vec![mention(0, Some(""), "Ana")])),
+        ("a mention of no text", edit(1, text("x"), vec![mention(0, Some("u-ana"), "")])),
+        ("a mention past NAME_CHARS", edit(1, text("x"), vec![mention(0, Some("u-ana"), &"a".repeat(NAME_CHARS + 1))])),
+        ("a mention on two lines", edit(1, text("x"), vec![mention(0, Some("u-ana"), name_line)])),
+        ("a mention with a bidi mark", edit(1, text("x"), vec![mention(0, Some("u-ana"), "Ana\u{202E}")])),
+        ("two mentions of one id", edit(1, text("x"), vec![ana(), mention(0, Some("u-bo"), "Bo")])),
+        ("a run naming mention 7", edit(1, naming(7, "Ana"), vec![ana()])),
+        ("a send naming a mention of no list", OpRecord { body: naming(0, "Ana"), ..op(1, A) }),
+        ("51 mentions", edit(1, text("x"), many)),
+        ("an edit past SEND_MAX once written", edit(1, text(&"<".repeat(SEND_MAX / 4)), Vec::new())),
+        ("a time to look after before 1970", OpRecord { after: Some(-1), ..op(1, A) }),
+        ("a time to look after past year 9999", OpRecord { after: Some(253_402_300_800_000), ..op(1, A) }),
+        ("a time to look after of i64::MAX", OpRecord { after: Some(i64::MAX), ..op(1, A) }),
+        ("a deletion in a chat without an id", OpRecord { chat: String::new(), ..delete(1) }),
+    ];
+    // `id_ok` bars controls and length only: a slash in a message id is the client's to refuse
+    // (`own_segment`), not the outbox's.
+    assert!(crate::teams::store::id_ok("a/b"));
+    for (what, o) in &broken {
+        assert!(c.put_op(o).is_err(), "{what}: refused when written");
+        s.write_account_files(TEAMS_ACCOUNT, &[(op_key(o.seq), serde_json::to_vec(o).unwrap())]).unwrap();
+        assert!(c.ops().is_empty(), "{what}: passed over");
+        c.clear_ops().unwrap();
+    }
+    // At the caps: kept.
+    let ok = [
+        OpRecord { after: Some(0), ..op(1, A) },
+        OpRecord { after: Some(253_402_300_799_999), ..op(1, A) },
+        edit(1, naming(49, "Ana"), (0..MAX_MENTIONS as u32).map(|i| mention(i, Some("u-ana"), &"a".repeat(NAME_CHARS))).collect()),
+        OpRecord { what: OutKind::Delete { message: "m-1".into(), created: 253_402_300_799_999 }, ..delete(1) },
+        OpRecord { what: OutKind::React { message: "m-1".into(), created: 0, emoji: "\u{2764}\u{FE0F}".into(), on: false }, ..react(1, "x") },
+    ];
+    for o in ok {
+        c.put_op(&o).unwrap();
+        assert_eq!(c.ops(), [o], "kept at its caps");
+    }
+}
+
+#[test]
+fn message_at_finds_a_message_by_its_time() {
+    let (c, _) = copy();
+    let all: Vec<ChatMessage> = (0..1000).map(|i| msg(A, i)).collect();
+    c.upsert(A, &all).unwrap();
+    assert!(c.chat(A).unwrap().pages.len() >= 10, "ten pages at least");
+    let want = &all[299];
+    assert_eq!(c.message_at(A, &want.id, want.created).as_ref(), Some(want));
+    // The first and the last of the chat, and the first of a page.
+    for m in [&all[0], &all[999]].into_iter().chain(c.chat(A).unwrap().pages.get(3).and_then(|p| all.iter().find(|m| m.created == *p))) {
+        assert_eq!(c.message_at(A, &m.id, m.created).as_ref(), Some(m));
+    }
+    // The id of another time, a day off either way, another chat, another id.
+    assert_eq!(c.message_at(A, &want.id, want.created + 24 * 60 * MINUTE), None);
+    assert_eq!(c.message_at(A, &want.id, want.created - 24 * 60 * MINUTE), None);
+    assert_eq!(c.message_at(B, &want.id, want.created), None);
+    assert_eq!(c.message_at(A, "nothing", want.created), None);
+}
+
 #[test]
 fn no_more_than_500_ops_are_read_back() {
     let (c, _) = copy();
@@ -185,6 +324,20 @@ fn any_op_state() -> impl proptest::strategy::Strategy<Value = OpState> {
     ]
 }
 
+/// Any kind of item of the outbox, its message and time within what the outbox keeps.
+fn any_out_kind() -> impl proptest::strategy::Strategy<Value = OutKind> {
+    use proptest::prelude::*;
+    let message = "[a-z0-9-]{1,20}";
+    let created = 0..=253_402_300_799_999i64;
+    prop_oneof![
+        Just(OutKind::Send),
+        (message, created.clone()).prop_map(|(message, created)| OutKind::Edit { message, created }),
+        (message, created.clone()).prop_map(|(message, created)| OutKind::Delete { message, created }),
+        (message, created, proptest::sample::select(vec!["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F602}"]), any::<bool>())
+            .prop_map(|(message, created, emoji, on)| OutKind::React { message, created, emoji: emoji.into(), on }),
+    ]
+}
+
 proptest::proptest! {
     /// Any record reads back from its JSON as it was; one within the caps, from the copy too.
     #[test]
@@ -195,13 +348,23 @@ proptest::proptest! {
         words in proptest::collection::vec(("\\PC{0,20}", proptest::prelude::any::<bool>(), proptest::prelude::any::<bool>()), 0..6),
         state in any_op_state(),
         tries in 0u8..=9,
-        after in proptest::option::of(proptest::prelude::any::<i64>()),
+        after in proptest::option::of(0..=253_402_300_799_999i64),
         anything in proptest::prelude::any::<String>(),
         any_seq in proptest::prelude::any::<u64>(),
         any_tries in proptest::prelude::any::<u8>(),
+        what in any_out_kind(),
+        people in proptest::collection::vec(("[a-z]{1,8}", "[a-z]{1,8}"), 0..4),
     ) {
-        let runs = words.into_iter().map(|(text, bold, italic)| Run { text, bold, italic, ..Run::default() }).collect();
-        let op = OpRecord { seq, local, chat, body: ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] }, state, tries, after };
+        let mentions = people.into_iter().enumerate().map(|(i, (user, name))| Mention { id: i as u32, text: name, user_id: Some(user) }).collect();
+        let mut runs: Vec<Run> = words.into_iter().map(|(text, bold, italic)| Run { text, bold, italic, ..Run::default() }).collect();
+        // A change within the rules: a deletion or a reaction has no words, an edit has some.
+        let (mentions, runs) = match &what {
+            OutKind::Send => (mentions, runs),
+            OutKind::Edit { .. } => (mentions, { runs.push(Run { text: "x".into(), ..Run::default() }); runs }),
+            OutKind::Delete { .. } | OutKind::React { .. } => (Vec::new(), Vec::new()),
+        };
+        let blocks = if runs.is_empty() && !matches!(what, OutKind::Send | OutKind::Edit { .. }) { Vec::new() } else { vec![Block { kind: BlockKind::Paragraph, runs }] };
+        let op = OpRecord { seq, local, chat, body: ChatText { blocks }, mentions, what, state, tries, after };
         let loose = OpRecord { seq: any_seq, local: anything.clone(), chat: anything, tries: any_tries, ..op.clone() };
         proptest::prop_assert_eq!(serde_json::from_slice::<OpRecord>(&serde_json::to_vec(&loose).unwrap()).unwrap(), loose);
         let (c, _) = Copy::open(Store::memory(), &who("u-1")).unwrap();

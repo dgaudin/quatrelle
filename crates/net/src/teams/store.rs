@@ -24,7 +24,7 @@
 
 use std::path::PathBuf;
 
-use quatrelle_model::pim::teams::{Attachment, Chat, ChatMessage, MAX_ID, MAX_MEMBERS, MAX_PICTURE, Sender, TEAMS_ACCOUNT, one_line};
+use quatrelle_model::pim::teams::{Attachment, Chat, ChatMessage, MAX_ID, MAX_MEMBERS, MAX_PICTURE, OutKind, Sender, TEAMS_ACCOUNT, one_line};
 use quatrelle_store::{DATA_FILE_EXTENSION, Result, Store, StoreError};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -569,6 +569,10 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     m.chat = chat.clone();
     let changed = copy.upsert(&chat, std::slice::from_ref(&m)).unwrap_or_default();
     check("what changed", &changed, 1)?;
+    // A message the copy kept is found again by its time.
+    if changed.iter().any(|k| copy.message_at(&chat, &k.id, k.created).is_none_or(|f| f.id != k.id)) {
+        return Err("a message kept isn't found by its time".into());
+    }
     // The search's index read back (a chat a slice) within its caps and searched: no hit past the
     // bound, none under an id the copy wouldn't keep.
     let read_back = |copy: &Copy| -> std::result::Result<(), String> {
@@ -619,7 +623,17 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
         if !copy.ops().is_empty() || copy.next_seq() != 1 {
             return Err("the outbox emptied still holds records".into());
         }
-        let taken = OpRecord { seq: 1, local: "l-1".into(), chat: chat.clone(), body: m.body, state: OpState::Waiting, tries: 0, after: None };
+        let taken = OpRecord {
+            seq: 1,
+            local: "l-1".into(),
+            chat: chat.clone(),
+            body: m.body,
+            mentions: Vec::new(),
+            what: OutKind::Send,
+            state: OpState::Waiting,
+            tries: 0,
+            after: None,
+        };
         if copy.put_op(&taken).is_ok() && copy.ops() != [taken] {
             return Err("a record of the outbox written isn't read back".into());
         }

@@ -342,6 +342,19 @@ impl Copy {
         msgs
     }
 
+    /// The message `id` of `chat` made at `created`, among the pages it may be in (as
+    /// [`Copy::upsert`] looks: the one that begins before `created`, and those that begin at it):
+    /// none when it isn't there, or `created` isn't its time.
+    pub(crate) fn message_at(&self, chat: &str, id: &str, created: i64) -> Option<ChatMessage> {
+        let r = self.chat(chat)?;
+        let hash = chat_hash(chat);
+        let below = r.pages.partition_point(|&p| p < created);
+        let upto = r.pages.partition_point(|&p| p <= created);
+        (below.saturating_sub(1)..upto)
+            .filter_map(|p| r.page_keys.get(p))
+            .find_map(|key| self.page(chat, &hash, *key).into_iter().find(|m| m.id == id && m.created == created))
+    }
+
     /// Messages of a chat put in the copy, by (chat, message id): a new one where its creation
     /// time puts it, a known one replaced (an edit replaces the body and the hosted images it no
     /// longer shows go, a deletion leaves only its id, times and sender, and all its hosted images
