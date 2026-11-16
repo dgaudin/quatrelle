@@ -68,7 +68,8 @@ fn a_teams_message_is_announced_through_the_system() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// A name of 200 characters: cut so " (External)" always shows; an application's says "(App)".
+/// A name of 200 characters: cut to 24 so " (External)" always shows, even where the desktop cuts
+/// a long title; an application's says "(App)".
 #[test]
 fn an_external_sender_is_marked_and_the_mark_never_cut() {
     let (mut a, dir, shown, events) = notified_app("teams-notify-external");
@@ -79,7 +80,7 @@ fn an_external_sender_is_marked_and_the_mark_never_cut() {
     let got = notified(&ctx, &mut a, &shown, &events, vec![news_event(vec![external, app])]);
     let titles: Vec<&str> = got.iter().map(|(t, _)| t.as_str()).collect();
     let Some(name) = titles.first().and_then(|t| t.strip_suffix(" (External)")) else { panic!("{titles:?}") };
-    assert!(name.chars().count() <= 41, "{name}");
+    assert!(name.chars().count() <= 25, "{name}");
     assert!(name.starts_with("WWW") && name.ends_with('…'), "{name}");
     assert_eq!(titles.get(1), Some(&"Planner (App) in Agenda"), "{titles:?}");
     let _ = std::fs::remove_dir_all(dir);

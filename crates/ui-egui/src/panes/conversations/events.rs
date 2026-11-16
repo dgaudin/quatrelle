@@ -34,8 +34,8 @@ const PENDING_MAX: usize = 10_000;
 /// How many more may wait when all of them are what is said once or the outbox's last word.
 const KEPT_ROOM: usize = 1_000;
 /// The most characters of a sender's name in a notification's title: cut there, so the mark after
-/// it always shows.
-const SENDER_CHARS: usize = 40;
+/// it always shows, even where the desktop cuts a long title at the banner's width.
+const SENDER_CHARS: usize = 24;
 /// The longest the window waits for an announcement held, in seconds: the engine's turns are
 /// seconds away, and the system's clock can always take a wait this long.
 const WAIT_MAX: u64 = 60;
