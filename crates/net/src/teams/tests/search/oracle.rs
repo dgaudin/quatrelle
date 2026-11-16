@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The hits against the messages: a chat's messages added in any order, edited, deleted and made
-//! at another millisecond, in tranches of eight with runs of one millisecond among them; after
-//! each write, a search finds what the live messages say, and so does the copy opened again from
-//! the file. Only the messages' hits are compared: A's name ("Budget review") and B's ("Ana")
-//! give their chats too, as `finds_a_word_of_a_message_and_a_chat_name` tests.
+//! at another millisecond, in tranches of eight with runs of one millisecond among them (made
+//! over 40 ms, or over 4: runs longer than a tranche); after each write, a search finds what the
+//! live messages say, and so does the copy opened again from the file. Only the messages' hits
+//! are compared: A's name ("Budget review") and B's ("Ana") give their chats too, as
+//! `finds_a_word_of_a_message_and_a_chat_name` tests. A write never leaves a tranche past the
+//! next one's first, so what is freed as it's read back is tested on planted files
+//! (`formats.rs`).
 
 use std::collections::HashMap;
 
@@ -18,8 +21,10 @@ use super::*;
 const WORDS: [&str; 5] = ["plan", "lunch", "budget", "review", "travel"];
 /// What is looked for.
 const QUERIES: [&str; 6] = ["plan", "pl", "lunch", "budget review", "ana", "travel lunch"];
-/// The milliseconds the messages are made in, after T0.
-const SPREAD: i64 = 40;
+/// The milliseconds the messages are made in, after T0, one or the other for each case: 60
+/// messages over 4 make runs of one millisecond longer than a tranche.
+const WIDEST: i64 = 40;
+const SPREADS: [i64; 2] = [WIDEST, 4];
 
 /// One write of messages of the pool, as they are now.
 #[derive(Clone, Debug)]
@@ -29,7 +34,8 @@ enum Step {
     /// One's text changed to these words.
     Edit(Pick, Vec<usize>),
     Delete(Pick),
-    /// One made this many milliseconds later (round the spread): at another millisecond.
+    /// One made this many milliseconds later, brought within 1 to spread − 1 (round the spread):
+    /// at another millisecond.
     Move(Pick, i64),
 }
 
@@ -43,7 +49,7 @@ fn step() -> impl Strategy<Value = Step> {
         prop::collection::vec(any::<Pick>(), 1..=12).prop_map(Step::Add),
         (any::<Pick>(), words()).prop_map(|(k, w)| Step::Edit(k, w)),
         any::<Pick>().prop_map(Step::Delete),
-        (any::<Pick>(), 1..SPREAD).prop_map(|(k, by)| Step::Move(k, by)),
+        (any::<Pick>(), 1..WIDEST).prop_map(|(k, by)| Step::Move(k, by)),
     ]
 }
 
@@ -86,14 +92,15 @@ proptest! {
 
     #[test]
     fn the_same_hits_as_the_messages_say(
-        pool in prop::collection::vec((0..SPREAD, words()), 1..=60),
+        spread in prop::sample::select(SPREADS.to_vec()),
+        pool in prop::collection::vec((0..WIDEST, words()), 1..=60),
         steps in prop::collection::vec(step(), 1..=40),
     ) {
         let (copy, store) = copy();
         copy.index.borrow_mut().tranche_cap = Some(8);
         // Message k as it is now: `m{k:02}`, from Ana Lima.
         let mut now: Vec<ChatMessage> =
-            pool.iter().enumerate().map(|(k, (ms, w))| msg_at(A, &format!("m{k:02}"), T0 + ms, &says(w))).collect();
+            pool.iter().enumerate().map(|(k, (ms, w))| msg_at(A, &format!("m{k:02}"), T0 + ms % spread, &says(w))).collect();
         // Each message as the copy last took it: what a write says changed.
         let mut taken: HashMap<String, ChatMessage> = HashMap::new();
         for (i, step) in steps.iter().enumerate() {
@@ -103,14 +110,15 @@ proptest! {
                     let k = k.index(now.len());
                     let m = &mut now[k];
                     m.body = text(&says(w));
-                    m.edited = Some(T0 + SPREAD + 1_000);
+                    m.edited = Some(T0 + WIDEST + 1_000);
                     vec![m.clone()]
                 }
-                Step::Delete(k) => vec![ChatMessage { deleted: Some(T0 + SPREAD + 2_000), ..now[k.index(now.len())].clone() }],
+                Step::Delete(k) => vec![ChatMessage { deleted: Some(T0 + WIDEST + 2_000), ..now[k.index(now.len())].clone() }],
                 Step::Move(k, by) => {
                     let k = k.index(now.len());
                     let m = &mut now[k];
-                    m.created = T0 + (m.created - T0 + by) % SPREAD;
+                    let by = 1 + (by - 1) % (spread - 1);
+                    m.created = T0 + (m.created - T0 + by) % spread;
                     m.modified = m.created;
                     vec![m.clone()]
                 }

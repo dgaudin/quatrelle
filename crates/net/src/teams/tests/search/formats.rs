@@ -397,6 +397,39 @@ fn a_run_longer_than_a_tranche_keeps_its_later_messages() {
     }
 }
 
+/// Read back, two tranches that begin in one millisecond, the first holding a newer message too
+/// (planted: a write never leaves one past the next one's first): only what is strictly newer
+/// than the next one's first is freed; the first's message of that millisecond stays, and so
+/// after its rewrite at the chat's next write.
+#[test]
+fn two_tranches_of_one_first_keep_that_millisecond() {
+    let (copy, store) = copy();
+    drop(copy);
+    let h = chat_hash(A);
+    let at = |i: i64, minute: i64| (id(i), T0 + minute * MINUTE);
+    let planted = [
+        stub_of(A),
+        (format!("index/{h}/0.json"), tranche_file(A, 0, &[at(1, 10), at(2, 12)], serde_json::json!({ "same": [0], "past": [1] }))),
+        (format!("index/{h}/1.json"), tranche_file(A, 1, &[at(3, 10), at(4, 15)], serde_json::json!({ "other": [0], "later": [1] }))),
+    ];
+    store.write_account_files(TEAMS_ACCOUNT, &planted).unwrap();
+    let check = |copy: &Copy| {
+        assert_eq!(hits(copy, "same"), one(A, &id(1)), "at the next one's first: kept");
+        assert_eq!(hits(copy, "past"), NONE, "past the next one's first: freed");
+        assert_eq!(hits(copy, "other"), one(A, &id(3)));
+        assert_eq!(hits(copy, "later"), one(A, &id(4)));
+        assert_eq!(copy.index.borrow().within_caps(), Ok(()));
+    };
+    let copy = open(&store);
+    check(&copy);
+    copy.upsert(A, &[msg(A, 30, "lunch")]).unwrap();
+    assert_eq!(ids_in(&String::from_utf8(store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/0.json")).unwrap().unwrap()).unwrap()), [id(1)]);
+    for copy in [copy, open(&store)] {
+        check(&copy);
+        assert_eq!(hits(&copy, "lunch"), one(A, &id(30)));
+    }
+}
+
 /// Review Focus 5: an old copy's head past SEGMENT_MAX, or damaged: passed over and said, the stub
 /// in its place at the chat's first write, and its tranches kept at every later start.
 #[test]
