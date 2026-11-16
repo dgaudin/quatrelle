@@ -498,7 +498,7 @@ impl Session {
             teams::Event::Unsent { count } => self.teams.unsent = count,
             teams::Event::News { news } => self.teams_news(news),
             teams::Event::Placed { chat, message, newest } => self.teams.placed(&chat, &message, newest),
-            // Not taken yet.
+            // A picture not to be had in this run: for the window to show so, and not asked again.
             teams::Event::NoPicture { picture } => self.teams.take_no_picture(picture),
         }
     }
