@@ -12,8 +12,9 @@
 //! * `img/<sha256>`: a picture, by its bytes' hash, and `imguse/<sha256>` its size and last use;
 //!   `imgref/<hash>`: which picture a message's hosted image is; `photos/<hash>.json`: someone's
 //!   photo, or that they have none (`images.rs`);
-//! * `index/<hash>.json`: the chat's words, for the search, kept with its pages; `index/partial`:
-//!   the oldest chats' words left the index (`search.rs`);
+//! * the chat's words, for the search, kept with its pages (`search.rs`): `index/<hash>/<n>.json`,
+//!   a tranche of them; `index/<hash>.json`, the stub its words in the old format left, or those
+//!   words still; `index/partial`, the oldest chats' words left the index;
 //! * `outbox/<seq>.json`: a message going out, by its number in 20 digits ([`OpRecord`],
 //!   `outbox.rs`).
 //!
@@ -33,7 +34,7 @@ mod outbox;
 mod pages;
 
 pub(crate) use outbox::*;
-pub(crate) use pages::PAGE;
+pub(crate) use pages::{PAGE, Side, edge_down, edge_near, edge_up};
 
 /// The most bytes of a record read back (a page, a chat): more is a damaged or hostile file. Above
 /// the most a record within the caps takes (5,000 members, or one message's reactions).

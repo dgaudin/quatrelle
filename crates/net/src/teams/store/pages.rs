@@ -21,6 +21,7 @@ use quatrelle_model::pim::teams::{
 use serde::de::{IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserializer, Serialize};
 
+use super::super::search::Staged;
 use super::*;
 
 /// The most messages in a page.
@@ -436,7 +437,7 @@ impl Copy {
         // The words of what changed, written with the pages, in the same transaction: an edit's
         // replace the old ones, a deletion's leave.
         let mut staged = self.stage_index(chat, &changed)?;
-        writes.extend(staged.as_mut().and_then(|s| s.take_file()));
+        writes.extend(staged.as_mut().map(Staged::take_files).unwrap_or_default());
         let written = self.store.write_account_files(TEAMS_ACCOUNT, &writes);
         self.settle_index(staged, written.is_ok());
         written?;

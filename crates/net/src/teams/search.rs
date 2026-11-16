@@ -4,27 +4,35 @@
 //! answers `Event::Found` with at most [`MAX_HITS`] (chat, message) ids, newest first; a chat
 //! found by its name comes with an empty message id. The UI thread does no search work.
 //!
-//! * The index is the copy's own (`index/<chat hash>.json`, one segment a chat: `segment.rs`):
-//!   the chat's messages (id, creation time) and each word with the messages that have it. It is
+//! * The index is the copy's own: a chat's words in tranches (`index/<chat hash>/<n>.json`,
+//!   `tranche.rs`), each of at most [`TRANCHE`] messages made one after the other, with their
+//!   ids and creation times and each word with the messages that have it (`segment.rs`). It is
 //!   kept as [`Copy::upsert`] writes, in the same transaction as the pages: a message's words go
 //!   in, an edit replaces them, a deletion takes them out (nothing of a deleted message stays). It
 //!   never rebuilds from scratch.
+//! * The old format, one segment a chat at `index/<chat hash>.json`, is read back as it was, cut
+//!   into tranches in memory, and written as tranches at the chat's next write, a stub left in
+//!   its place (an empty segment to the old version, `moved` to this one). A segment without
+//!   `moved` beside tranches is the old version's, written after them: they go (they may hold
+//!   the words of a message it deleted since), and it is taken.
 //! * Words are those of a message's text and its sender's name, [folded](fold_word) as the mail's
 //!   search folds them (case, accents), each with its [parts](parts): at most [`INDEX_WORDS`]
 //!   distinct ones a message, each cut to [`INDEX_WORD_CHARS`] characters. A query's words must
 //!   all begin words of a message (or of the chat's name).
-//! * Bounded: a segment is at most [`SEGMENT_MAX`] bytes (past it, the chat's oldest messages
-//!   leave it); the whole index at most a quarter of the copy's file, between [`FLOOR`] and
-//!   [`INDEX_MAX`], and in memory at most [`RESIDENT_MAX`] as estimated (held compact: sorted
-//!   arrays, nothing twice), the chats with the oldest messages leaving first, while the index
-//!   is read back as after a write. After that, every search says it covers recent
-//!   conversations only (`partial`, remembered in [`PARTIAL`]). A query reads the chats newest
-//!   first and stops once it has its hits and the next chat is older than the last of them; in a
-//!   chat, each word's messages are held in the order they were made, so a query reads them
-//!   newest first and stops at its hits: a long chat costs it no more than a short one.
+//! * Bounded: a chat's tranches are at most [`TRANCHES_MAX`] and [`SEGMENT_MAX`] bytes together
+//!   (past them, its oldest tranches leave it); the whole index at most a quarter of the copy's
+//!   file, between [`FLOOR`] and [`INDEX_MAX`], and in memory at most [`RESIDENT_MAX`] as
+//!   estimated (held compact: sorted arrays, nothing twice), the oldest tranches of every chat
+//!   leaving first (a chat of the old format whole), while the index is read back as after a
+//!   write. After that, every search says it covers recent conversations only (`partial`,
+//!   remembered in [`PARTIAL`]). A query reads the tranches of every chat newest first and stops
+//!   once it has its hits and the next tranche is older than the last of them; in a tranche, each
+//!   word's messages are held in the order they were made, so a query reads them newest first
+//!   and stops at its hits: a long chat costs it no more than a short one.
 //! * Read back at start in slices, one chat a loop turn ([`load`]): the window never waits for
 //!   it, and until it's read whole a search answers "indexing" with no hits. What is read back
-//!   is hostile input: a segment under another chat's key is passed over, the caps applied again.
+//!   is hostile input: a file under another chat's key or another number is passed over, the
+//!   caps applied again.
 //! * Chats' names are not kept in the index: they come from the chats' records, read as the index
 //!   is, and as they're written.
 
@@ -39,19 +47,33 @@ use quatrelle_model::search::{fold_word, parts, words};
 use quatrelle_store::{Result, StoreError};
 use serde::{Deserialize, Serialize};
 
-use super::store::{ChatRecord, Copy, chat_hash, id_ok};
+use super::store::{ChatRecord, Copy, Side, chat_hash, edge_down, edge_near, edge_up, id_ok};
 use super::worker::Worker;
 
 mod load;
 mod segment;
+mod tranche;
 mod write;
 
-use segment::{Draft, Segment, query_words, words_of, words_of_texts};
+use segment::{Draft, Form, Segment, order, query_words, stub, words_of, words_of_texts};
+use tranche::{Tranches, by_first};
+pub(crate) use write::Staged;
 
 /// The most hits a search gives.
 pub(crate) const MAX_HITS: usize = 200;
-/// The most bytes of a chat's segment, as written and as read back.
+/// The most bytes of a chat's words, all its tranches together, as written and as read back; and
+/// of a segment of the old format read back.
 const SEGMENT_MAX: usize = 16 << 20;
+/// The most messages of a tranche as written.
+const TRANCHE: usize = 1_000;
+/// A tranche of more than one message is cut past this many bytes.
+const TRANCHE_BYTES: usize = 256 << 10;
+/// The most bytes of one tranche read back.
+const TRANCHE_READ_MAX: usize = 2 << 20;
+/// The most tranches of a chat.
+const TRANCHES_MAX: u32 = 1_024;
+/// What the stub says in `moved`: the chat's words moved to tranches.
+const MOVED: u32 = 2;
 /// The most memory the index may take, as estimated (its words, ids and places as held).
 const RESIDENT_MAX: u64 = 256 << 20;
 /// The least the index may take, whatever the copy's size: a small copy's index isn't cut.
@@ -75,7 +97,7 @@ pub(crate) struct Found {
     pub(crate) partial: bool,
 }
 
-/// The search's index of the copy, in memory: the segments read back or written, and the chats'
+/// The search's index of the copy, in memory: the tranches read back or written, and the chats'
 /// names. A query goes through the chats whose names have its words (found by those words, never
 /// by going through every name), and through the chats' words newest first until it has what it
 /// may give: through every chat's words (a halving each) only when it finds fewer.
@@ -86,9 +108,10 @@ pub(crate) struct Index {
     /// The chats whose words are still to be read back (hashes); `None` until they're listed.
     todo: Option<Vec<String>>,
     /// Each chat's words, by the chat's hash.
-    segments: HashMap<String, Segment>,
-    /// The same chats (their hashes), the one with the newest message first.
-    by_newest: BTreeSet<(Reverse<i64>, String)>,
+    segments: HashMap<String, Tranches>,
+    /// The tranches of every chat (a tranche's newest message's time, its chat's hash, its
+    /// number), the one with the newest message first.
+    by_newest: BTreeSet<(Reverse<i64>, String, u32)>,
     /// Each chat's name, by its hash.
     names: HashMap<String, Named>,
     /// Each word of the names, and the chats (hashes) whose name has it.
@@ -100,7 +123,10 @@ pub(crate) struct Index {
     /// The resident bound a test sets, in place of [`RESIDENT_MAX`].
     #[cfg(test)]
     pub(crate) resident_cap: Option<u64>,
-    /// How many chats' words the last query looked at.
+    /// The most messages of a tranche a test sets, in place of [`TRANCHE`].
+    #[cfg(test)]
+    pub(crate) tranche_cap: Option<usize>,
+    /// How many tranches the last query looked at.
     #[cfg(test)]
     pub(crate) visited: std::cell::Cell<usize>,
     /// How many messages the last query looked at in the chats' words.
@@ -118,8 +144,19 @@ struct Named {
     at: i64,
 }
 
+/// A chat's stub, or its words in the old format.
 fn segment_key(hash: &str) -> String {
     format!("index/{hash}.json")
+}
+
+/// The folder of a chat's tranches.
+fn tranches_key(hash: &str) -> String {
+    format!("index/{hash}")
+}
+
+/// A chat's tranche `n`.
+fn tranche_key(hash: &str, n: u32) -> String {
+    format!("index/{hash}/{n}.json")
 }
 
 /// Hits kept to the newest [`MAX_HITS`]: by time, newest first, then by chat and message.
@@ -167,35 +204,67 @@ impl Index {
         self.names.insert(hash, Named { chat: chat.id.clone(), words, at });
     }
 
-    /// A chat's words kept, in place of what it had, in their place among the newest.
-    fn put_segment(&mut self, hash: String, seg: Segment) {
-        if let Some(old) = self.segments.get(&hash) {
-            self.by_newest.remove(&(Reverse(old.newest), hash.clone()));
+    /// A chat's words kept, in place of what it had, each tranche in its place among the newest:
+    /// a chat that holds nothing (no tranche, no orphan, not in the old format) isn't kept.
+    fn put_chat(&mut self, hash: String, t: Tranches) {
+        self.take_chat(&hash);
+        if t.list.is_empty() && t.orphans.is_empty() && !t.legacy {
+            return;
         }
-        self.by_newest.insert((Reverse(seg.newest), hash.clone()));
-        self.segments.insert(hash, seg);
+        for s in &t.list {
+            self.by_newest.insert((Reverse(s.newest), hash.clone(), s.key));
+        }
+        self.segments.insert(hash, t);
     }
 
     /// A chat's words taken out.
-    fn take_segment(&mut self, hash: &str) -> Option<Segment> {
-        let seg = self.segments.remove(hash)?;
-        self.by_newest.remove(&(Reverse(seg.newest), hash.to_string()));
+    fn take_chat(&mut self, hash: &str) -> Option<Tranches> {
+        let t = self.segments.remove(hash)?;
+        for s in &t.list {
+            self.by_newest.remove(&(Reverse(s.newest), hash.to_string(), s.key));
+        }
+        Some(t)
+    }
+
+    /// A chat's tranche taken out, by its number: the chat, left holding nothing, too.
+    fn take_tranche(&mut self, hash: &str, key: u32) -> Option<Segment> {
+        let t = self.segments.get_mut(hash)?;
+        let at = t.list.iter().position(|s| s.key == key)?;
+        let seg = t.list.remove(at);
+        if t.list.is_empty() && t.orphans.is_empty() && !t.legacy {
+            self.segments.remove(hash);
+        }
+        self.by_newest.remove(&(Reverse(seg.newest), hash.to_string(), key));
         Some(seg)
     }
 
-    /// The bytes its segments take in the file.
+    /// Every tranche it holds.
+    fn tranches(&self) -> impl Iterator<Item = &Segment> {
+        self.segments.values().flat_map(|t| &t.list)
+    }
+
+    /// The bytes its tranches take in the file.
     #[cfg(test)]
     pub(crate) fn bytes(&self) -> u64 {
-        self.segments.values().map(|s| s.bytes).sum()
+        self.tranches().map(|s| s.bytes).sum()
     }
 
     /// What it takes in memory, as estimated.
     #[cfg(test)]
     pub(crate) fn resident(&self) -> u64 {
-        self.segments.values().map(|s| s.resident).sum()
+        self.tranches().map(|s| s.resident).sum()
     }
 
-    /// The most memory its segments may take, as estimated.
+    /// The most messages of a tranche written.
+    fn tranche_cap(&self) -> usize {
+        #[cfg(test)]
+        if let Some(cap) = self.tranche_cap {
+            return cap;
+        }
+        TRANCHE
+    }
+
+    /// The most memory its tranches may take, as estimated.
     fn resident_cap(&self) -> u64 {
         #[cfg(test)]
         if let Some(cap) = self.resident_cap {
@@ -204,7 +273,7 @@ impl Index {
         RESIDENT_MAX
     }
 
-    /// A chat's segment to be read back again from the file (its write failed).
+    /// A chat's words to be read back again from the file (its write failed).
     fn reload(&mut self, hash: String) {
         if let Some(todo) = self.todo.as_mut() {
             todo.push(hash);
@@ -247,13 +316,18 @@ impl Index {
                 keep_newest(&mut hits);
             }
         }
-        // The chats with the newest messages first: once there are enough hits, a chat whose
-        // newest message is older than the last of them can't give one, nor can those after it.
+        // The tranches with the newest messages first, of every chat: once there are enough hits,
+        // a tranche whose newest message is older than the last of them can't give one, nor can
+        // those after it.
         #[cfg(test)]
         self.visited.set(0);
         #[cfg(test)]
         self.looked.set(0);
-        for seg in self.by_newest.iter().filter_map(|(_, hash)| self.segments.get(hash)) {
+        let tranches = self.by_newest.iter().filter_map(|(_, hash, key)| {
+            let t = self.segments.get(hash)?;
+            Some((t.chat.as_str(), t.list.iter().find(|s| s.key == *key)?))
+        });
+        for (chat, seg) in tranches {
             if hits.len() >= MAX_HITS {
                 keep_newest(&mut hits);
                 if hits.last().is_some_and(|last| last.0 > seg.newest) {
@@ -272,7 +346,7 @@ impl Index {
                 if let Some((id, at)) = usize::try_from(p).ok().and_then(|at| seg.messages.get(at))
                     && !id.is_empty()
                 {
-                    hits.push((*at, &*seg.chat, &**id));
+                    hits.push((*at, chat, &**id));
                     if hits.len() >= 4 * MAX_HITS {
                         keep_newest(&mut hits);
                     }

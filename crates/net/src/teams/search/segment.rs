@@ -1,64 +1,104 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! A chat's words for the search: those of a message and of a query, folded and cut, and the
-//! chat's segment as memory holds it ([`Segment`]), as a write or a read works on it ([`Draft`]),
-//! and as the file keeps it. What is read back is hostile input: held to the caps again.
+//! A chat's words for the search: those of a message and of a query, folded and cut, and a
+//! tranche of them as memory holds it ([`Segment`]), as a write or a read works on it
+//! ([`Draft`]), and as the file keeps it: a tranche, the stub, or a chat's words in the old format
+//! ([`Form`]). What is read back is hostile input: held to the caps again.
 
 use std::collections::BinaryHeap;
 
 use super::*;
 
-/// A chat's words as memory holds them, compact: its messages by place, and each word, in
-/// order, with the places of those that have it, in the order those were made (then by place:
-/// found by halving, read newest first). Nothing is held twice: what a change needs besides
-/// (each message's place) is made for the change alone ([`Draft`]).
+/// A tranche of a chat's words as memory holds it, compact: its messages by place, and each
+/// word, in order, with the places of those that have it, in the order those were made (then by
+/// place: found by halving, read newest first). Nothing is held twice: what a change needs
+/// besides (each message's place) is made for the change alone ([`Draft`]).
 pub(super) struct Segment {
     pub(super) chat: Box<str>,
+    /// Its number among its chat's tranches (`index/<hash>/<key>.json`).
+    pub(super) key: u32,
     /// (message id, creation time) by place; a free place has an empty id.
     pub(super) messages: Box<[(Box<str>, i64)]>,
     words: Box<[(Box<str>, Box<[u32]>)]>,
-    /// The creation time of its newest message.
+    /// The creation time of its oldest message, and of its newest.
+    pub(super) first: i64,
     pub(super) newest: i64,
+    /// How many messages it holds.
+    pub(super) held: u32,
     /// The bytes it takes in the file, and in memory (as estimated).
     pub(super) bytes: u64,
     pub(super) resident: u64,
 }
 
-/// A chat's words while they're read back or changed: the form one write or one read works on,
-/// for the time it takes.
-#[derive(Default)]
+/// A chat's words, or a tranche of them, while they're read back or changed: the form one write
+/// or one read works on, for the time it takes.
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct Draft {
-    chat: String,
+    pub(super) chat: String,
     /// (message id, creation time) by place; a free place has an empty id.
-    messages: Vec<(String, i64)>,
+    pub(super) messages: Vec<(String, i64)>,
     /// Each message's place, and the places free.
     pub(super) places: HashMap<String, u32>,
-    free: Vec<u32>,
+    pub(super) free: Vec<u32>,
     /// Each word and the places that have it, in the order those were made, then by place.
-    words: BTreeMap<String, Vec<u32>>,
+    pub(super) words: BTreeMap<String, Vec<u32>>,
+}
+
+/// What a file of the index holds, as read back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Form {
+    /// A chat's words in the old format: one segment, at `index/<hash>.json`.
+    Old,
+    /// The stub left in the old segment's place once its chat is in tranches: an empty segment
+    /// to the old version.
+    Stub,
+    /// A tranche, by the number it says it is.
+    Tranche(u32),
 }
 
 /// Where a place goes in a word's list: by when its message was made, then by place (a place out
 /// of `messages`, which a list never holds, first). The file keeps the lists in this order too;
 /// they're put in it again as they're read back.
-fn order<T>(messages: &[(T, i64)], p: u32) -> (i64, u32) {
+pub(super) fn order<T>(messages: &[(T, i64)], p: u32) -> (i64, u32) {
     (usize::try_from(p).ok().and_then(|at| messages.get(at)).map_or(i64::MIN, |m| m.1), p)
 }
 
-/// A segment as it's kept.
+/// A tranche as it's kept.
 #[derive(Serialize)]
 struct SegmentOut<'a> {
     chat: &'a str,
+    tranche: u32,
     messages: &'a [(String, i64)],
     words: &'a BTreeMap<String, Vec<u32>>,
 }
 
-/// A segment as it's read back.
+/// The stub as it's kept: the old segment's shape, empty, and `moved`.
+#[derive(Serialize)]
+struct StubOut<'a> {
+    chat: &'a str,
+    messages: &'a [(String, i64)],
+    words: &'a BTreeMap<String, Vec<u32>>,
+    moved: u32,
+}
+
+/// A file of the index as it's read back: a tranche says its number, the stub `moved`, an old
+/// segment neither.
 #[derive(Deserialize)]
 struct SegmentIn {
     chat: String,
     messages: Vec<(String, i64)>,
     words: BTreeMap<String, Vec<u32>>,
+    #[serde(default)]
+    tranche: Option<u32>,
+    #[serde(default)]
+    moved: Option<u32>,
+}
+
+/// The stub kept at `index/<hash>.json` once a chat of the old format is in tranches: the old
+/// version reads it as a chat with no words.
+pub(super) fn stub(chat: &str) -> Result<Vec<u8>> {
+    let out = StubOut { chat, messages: &[], words: &BTreeMap::new(), moved: MOVED };
+    serde_json::to_vec(&out).map_err(|source| StoreError::Json { path: "index".into(), source })
 }
 
 /// A word cut to [`INDEX_WORD_CHARS`] characters.
@@ -133,14 +173,21 @@ impl Draft {
         d
     }
 
-    /// As memory holds it, `bytes` the size of its file.
-    pub(super) fn settle(self, bytes: usize) -> Segment {
+    /// How many messages it holds.
+    pub(super) fn held(&self) -> usize {
+        self.places.len()
+    }
+
+    /// As memory holds it, tranche `key`, `bytes` the size of its file.
+    pub(super) fn settle(self, key: u32, bytes: usize) -> Segment {
         use std::mem::size_of;
         let n = |x: usize| u64::try_from(x).unwrap_or(u64::MAX);
-        // The segment, its key in the index's map and its place among the newest (a hash each),
-        // each message's id and time, each word and its places.
+        // The tranche, its chat's key in the index's map and its place among the newest (a hash
+        // each), each message's id and time, each word and its places.
         let mut resident = n(size_of::<Segment>() + 96 + 80 + self.chat.len());
-        let newest = self.messages.iter().filter(|(id, _)| !id.is_empty()).map(|(_, at)| *at).max().unwrap_or(i64::MIN);
+        let times = || self.messages.iter().filter(|(id, _)| !id.is_empty()).map(|(_, at)| *at);
+        let (first, newest) = (times().min().unwrap_or(i64::MIN), times().max().unwrap_or(i64::MIN));
+        let held = u32::try_from(self.held()).unwrap_or(u32::MAX);
         let messages: Box<[(Box<str>, i64)]> = self
             .messages
             .into_iter()
@@ -157,22 +204,29 @@ impl Draft {
                 (w.into_boxed_str(), list.into_boxed_slice())
             })
             .collect();
-        Segment { chat: self.chat.into_boxed_str(), messages, words, newest, bytes: n(bytes), resident }
+        Segment { chat: self.chat.into_boxed_str(), key, messages, words, first, newest, held, bytes: n(bytes), resident }
     }
 
-    /// A segment read back, when it's `hash`'s and can be read: held to the caps.
-    pub(super) fn read(bytes: &[u8], hash: &str) -> Option<Draft> {
-        if bytes.len() > SEGMENT_MAX {
-            log::warn!("Teams search: a chat's words past {SEGMENT_MAX} bytes passed over");
+    /// A file of the index read back, when it's `hash`'s, at most `max` bytes, and can be read:
+    /// what it holds, held to the caps (a stub holds nothing).
+    pub(super) fn read(bytes: &[u8], hash: &str, max: usize) -> Option<(Draft, Form)> {
+        if bytes.len() > max {
+            log::warn!("Teams search: a file of the index past {max} bytes passed over");
             return None;
         }
         let Ok(kept) = serde_json::from_slice::<SegmentIn>(bytes) else {
-            log::warn!("Teams search: a damaged index segment passed over");
+            log::warn!("Teams search: a damaged file of the index passed over");
             return None;
         };
         if !id_ok(&kept.chat) || chat_hash(&kept.chat) != hash {
             return None;
         }
+        let form = match (kept.tranche, kept.moved) {
+            (Some(_), Some(_)) => return None,
+            (Some(n), None) => Form::Tranche(n),
+            (None, Some(_)) => return Some((Draft::empty(&kept.chat), Form::Stub)),
+            (None, None) => Form::Old,
+        };
         let mut seg = Draft::empty(&kept.chat);
         seg.messages = kept.messages;
         for (p, (id, created)) in seg.messages.iter_mut().enumerate() {
@@ -208,11 +262,12 @@ impl Draft {
                 seg.words.insert(w, list);
             }
         }
-        Some(seg)
+        Some((seg, form))
     }
 
-    pub(super) fn to_bytes(&self) -> Result<Vec<u8>> {
-        let out = SegmentOut { chat: &self.chat, messages: &self.messages, words: &self.words };
+    /// As the file keeps it, tranche `tranche` of its chat.
+    pub(super) fn to_bytes(&self, tranche: u32) -> Result<Vec<u8>> {
+        let out = SegmentOut { chat: &self.chat, tranche, messages: &self.messages, words: &self.words };
         serde_json::to_vec(&out).map_err(|source| StoreError::Json { path: "index".into(), source })
     }
 
@@ -261,15 +316,6 @@ impl Draft {
                 list.insert(at, place);
             }
         }
-    }
-
-    /// The oldest quarter of its messages taken out (at least one).
-    pub(super) fn trim_oldest(&mut self) {
-        let mut held: Vec<(i64, u32)> = self.places.values().filter_map(|p| Some((self.messages.get(usize::try_from(*p).ok()?)?.1, *p))).collect();
-        held.sort_unstable();
-        let n = (held.len() / 4).max(1);
-        let gone: BTreeSet<u32> = held.into_iter().take(n).map(|(_, p)| p).collect();
-        self.clear(&gone);
     }
 }
 

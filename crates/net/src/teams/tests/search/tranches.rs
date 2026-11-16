@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! What a write puts in the index, in bytes: one new message in a long chat and in a short one,
-//! an edit and a deletion, and a history's first copy, page after page.
+//! an edit and a deletion, and a history's first copy, page after page. What a query reads of a
+//! long chat, and the tranches that leave first past the index's bound.
 
 use super::*;
 
@@ -85,4 +86,66 @@ fn an_edit_and_a_deletion_write_their_tranche_only() {
 fn the_first_copy_of_a_history_is_linear() {
     let (w3, w6) = (history(3_000), history(6_000));
     assert!(w6 * 10 <= w3 * 22, "{w3} bytes for 3,000 messages, {w6} for 6,000");
+}
+
+/// A word in every message of a chat of 30,500: the newest tranche gives the hits, the next one
+/// is older than the last of them.
+#[test]
+fn a_query_reads_only_the_newest_tranches() {
+    let (copy, _store) = copy();
+    filled(&copy, A, 30_500);
+    assert_eq!(hits(&copy, "message"), (30_300..30_500).rev().map(|i| (A.to_string(), id(i))).collect::<Vec<_>>());
+    let ix = copy.index.borrow();
+    assert!(ix.visited.get() <= 2, "{} tranches visited", ix.visited.get());
+    assert!(ix.looked.get() <= MAX_HITS, "{} messages looked at", ix.looked.get());
+}
+
+#[test]
+fn the_oldest_tranches_leave_first_across_chats() {
+    let (copy, store) = copy();
+    copy.index.borrow_mut().tranche_cap = Some(8);
+    let (ha, hb) = (chat_hash(A), chat_hash(B));
+    copy.upsert(A, &(0..24).map(|i| msg(A, i, &format!("plan {i:03}"))).collect::<Vec<_>>()).unwrap();
+    copy.upsert(B, &(100..108).map(|i| msg(B, i, &format!("plan {i:03}"))).collect::<Vec<_>>()).unwrap();
+    let file = |h: &str, n: u32| store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/{n}.json")).unwrap().map(|b| b.len() as u64);
+    let all: u64 = [file(&ha, 0), file(&ha, 1), file(&ha, 2), file(&hb, 0)].into_iter().map(Option::unwrap).sum();
+    copy.index.borrow_mut().cap = Some(all - file(&ha, 0).unwrap() / 2);
+    // B's message 100 edited to a text of the same length: B doesn't grow.
+    let mut edited = msg(B, 100, "plan 900");
+    edited.edited = Some(T0 + 200 * MINUTE);
+    copy.upsert(B, &[edited]).unwrap();
+
+    assert_eq!(file(&ha, 0), None, "A's oldest tranche left");
+    assert!(file(&ha, 1).is_some() && file(&ha, 2).is_some());
+    let found = copy.found("plan");
+    let of_a: Vec<String> = found.hits.iter().filter(|(c, _)| c == A).map(|(_, m)| m.clone()).collect();
+    assert_eq!(of_a, (8..24).rev().map(id).collect::<Vec<_>>());
+    assert!(found.partial);
+}
+
+/// A chat of the old format is cut in memory only: it leaves the index whole, its head with it.
+#[test]
+fn a_chat_of_the_old_format_leaves_whole() {
+    let (copy, store) = copy();
+    copy.upsert(B, &(100..108).map(|i| msg(B, i, &format!("new plan {i}"))).collect::<Vec<_>>()).unwrap();
+    drop(copy);
+    let (ha, hb) = (chat_hash(A), chat_hash(B));
+    let messages: Vec<(String, i64)> = (0..24).map(|i| (id(i), T0 + i * MINUTE)).collect();
+    let old = serde_json::json!({ "chat": A, "messages": messages, "words": { "old": (0u32..24).collect::<Vec<_>>() } });
+    store.write_account_files(TEAMS_ACCOUNT, &[(format!("index/{ha}.json"), serde_json::to_vec(&old).unwrap())]).unwrap();
+    let len = |key: String| store.account_file(TEAMS_ACCOUNT, &key).unwrap().unwrap().len() as u64;
+    let (a, b) = (len(format!("index/{ha}.json")), len(format!("index/{hb}/0.json")));
+    let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
+    copy.index.borrow_mut().tranche_cap = Some(8);
+    copy.index.borrow_mut().cap = Some(a + b - b / 2);
+    let mut slices = 0;
+    while copy.index_step() {
+        slices += 1;
+        assert!(slices < 100);
+    }
+
+    assert!(store.account_file(TEAMS_ACCOUNT, &format!("index/{ha}.json")).unwrap().is_none(), "A's head left with it");
+    assert_eq!(hits(&copy, "old"), Vec::<(String, String)>::new());
+    assert_eq!(hits(&copy, "new").len(), 8);
+    assert!(copy.found("new").partial);
 }

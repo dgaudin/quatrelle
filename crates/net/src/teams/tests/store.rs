@@ -224,7 +224,7 @@ fn an_edit_finds_its_page_by_creation_time() {
     let mut changes: Vec<String> = s.take_changes().into_iter().map(|(k, _)| k).collect();
     changes.sort();
     assert_eq!(changes.len(), 2, "{changes:?}");
-    assert_eq!(changes[0], format!("{TEAMS_ACCOUNT}/index/{}.json", chat_hash(A)), "{changes:?}");
+    assert_eq!(changes[0], format!("{TEAMS_ACCOUNT}/index/{}/0.json", chat_hash(A)), "{changes:?}");
     assert!(changes[1].starts_with(&format!("{TEAMS_ACCOUNT}/msgs/{}/", chat_hash(A))), "{changes:?}");
     let page = c.before(A, msg(A, 6).created);
     assert_eq!(page.last(), Some(&edited));

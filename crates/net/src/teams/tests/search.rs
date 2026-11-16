@@ -17,7 +17,11 @@ use crate::teams::search::{Found, MAX_HITS};
 use crate::teams::store::{ChatRecord, Copy, Identity, Opened, chat_hash};
 use crate::teams::worker::Worker;
 
-/// What a write puts in the index, in bytes: an insert, an edit, a deletion, a history's copy.
+/// The index's files: the tranches, the stub, the old format read and converted, a copy rolled
+/// back and forward again.
+mod formats;
+/// What a write puts in the index, in bytes: an insert, an edit, a deletion, a history's copy;
+/// what a query reads, and what leaves first past the bound.
 mod tranches;
 
 const A: &str = "19:a1b2@thread.v2";
@@ -103,9 +107,22 @@ fn one(chat: &str, message: &str) -> Vec<(String, String)> {
     vec![(chat.to_string(), message.to_string())]
 }
 
-/// The index's segment of a chat as the file keeps it.
-fn segment(store: &Store, chat: &str) -> Option<String> {
-    store.account_file(TEAMS_ACCOUNT, &format!("index/{}.json", chat_hash(chat))).unwrap().map(|b| String::from_utf8(b).unwrap())
+/// The index's tranches of a chat as the file keeps them (`index/<hash>/<n>.json`, by number),
+/// joined by new lines; `None` when there's none.
+fn index_files(store: &Store, chat: &str) -> Option<String> {
+    let folder = format!("index/{}", chat_hash(chat));
+    let mut names: Vec<(u32, String)> = store
+        .account_files(TEAMS_ACCOUNT, &folder)
+        .unwrap()
+        .into_iter()
+        .filter_map(|name| Some((name.strip_suffix(".json")?.parse().ok()?, name)))
+        .collect();
+    names.sort_unstable();
+    let files: Vec<String> = names
+        .iter()
+        .map(|(_, name)| String::from_utf8(store.account_file(TEAMS_ACCOUNT, &format!("{folder}/{name}")).unwrap().unwrap()).unwrap())
+        .collect();
+    (!files.is_empty()).then(|| files.join("\n"))
 }
 
 #[test]
@@ -156,7 +173,7 @@ fn an_edit_replaces_the_indexed_words() {
 fn a_deleted_message_leaves_the_index() {
     let (copy, store) = copy();
     copy.upsert(A, &[msg(A, 1, "the secret plan"), msg(A, 2, "plan b")]).unwrap();
-    assert!(segment(&store, A).unwrap().contains("secret"));
+    assert!(index_files(&store, A).unwrap().contains("secret"));
     let mut deleted = msg(A, 1, "");
     deleted.deleted = Some(T0 + 9 * MINUTE);
     copy.upsert(A, &[deleted]).unwrap();
@@ -167,7 +184,7 @@ fn a_deleted_message_leaves_the_index() {
     };
     check(&copy);
     // Nothing of it in the file either: not its words, not its id.
-    let kept = segment(&store, A).unwrap();
+    let kept = index_files(&store, A).unwrap();
     assert!(!kept.contains("secret") && !kept.contains(&id(1)), "{kept}");
     drop(copy);
     check(&open(&store));
@@ -186,7 +203,7 @@ fn words_per_message_and_length_are_capped() {
     // A word is kept to its first 64 characters, and so is a word looked for.
     assert_eq!(hits(&copy, &"x".repeat(64)), one(A, &id(2)));
     assert_eq!(hits(&copy, &long), one(A, &id(2)));
-    let kept: serde_json::Value = serde_json::from_str(&segment(&store, A).unwrap()).unwrap();
+    let kept: serde_json::Value = serde_json::from_str(&index_files(&store, A).unwrap()).unwrap();
     let words = kept["words"].as_object().unwrap();
     assert_eq!(words.len(), 2_000 + 3, "2,000 of the first message, 'a', the long one and 'word' of the second ('ana' and 'lima' shared)");
     assert!(words.keys().all(|w| w.chars().count() <= 64));
@@ -296,14 +313,14 @@ fn at_most_200_hits_newest_first() {
 fn the_oldest_chats_leave_first_past_the_cap() {
     let (copy, store) = copy();
     copy.upsert(A, &[msg(A, 1, "plan for the old chat")]).unwrap();
-    let a_bytes = segment(&store, A).unwrap().len() as u64;
+    let a_bytes = index_files(&store, A).unwrap().len() as u64;
     // Room for about one chat's words.
     copy.index.borrow_mut().cap = Some(a_bytes + a_bytes / 2);
     copy.upsert(B, &[msg(B, 100, "plan for the new chat")]).unwrap();
 
     let found = copy.found("plan");
     assert_eq!(found, Found { hits: one(B, &id(100)), indexing: false, partial: true });
-    assert!(segment(&store, A).is_none(), "the old chat's words left the file");
+    assert!(index_files(&store, A).is_none(), "the old chat's words left the file");
     // Its name is still found; and a search says it covers recent chats only, after a restart too.
     assert_eq!(hits(&copy, "budget"), one(A, ""));
     drop(copy);
@@ -327,7 +344,7 @@ fn the_resident_index_stays_within_its_bound() {
     assert!(copy.index.borrow().resident() <= bound, "{} past its bound", copy.index.borrow().resident());
     assert_eq!(copy.found("new1"), Found { hits: one(B, &id(100)), indexing: false, partial: true });
     assert_eq!(hits(&copy, "old1"), Vec::<(String, String)>::new());
-    assert!(segment(&store, A).is_none(), "the old chat's words left the file too");
+    assert!(index_files(&store, A).is_none(), "the old chat's words left the file too");
 }
 
 #[test]
@@ -341,7 +358,7 @@ fn the_cap_holds_while_the_index_loads() {
             copy.upsert(c, &[msg(c, 10 * i64::try_from(i).unwrap(), "the same plan for each chat")]).unwrap();
         }
     }
-    let each = segment(&store, &chats[0]).unwrap().len() as u64;
+    let each = index_files(&store, &chats[0]).unwrap().len() as u64;
     let (copy, _) = Copy::open(store.clone(), &who()).unwrap();
     // Room for two chats' words: never more held while the index is read back.
     copy.index.borrow_mut().cap = Some(2 * each + each / 2);
