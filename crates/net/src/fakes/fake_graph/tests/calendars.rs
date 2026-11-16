@@ -107,10 +107,12 @@ fn what_the_server_refuses_is_said_and_its_list_read_again() {
         (Op::DeleteCalendar { calendar: "CAL1".into() }, "HTTP 400"),
         (Op::RenameCalendar { calendar: "NOPE".into(), name: "x".into() }, "HTTP 404"),
     ] {
+        // Counted before the change goes: the worker may read the list again before the
+        // refusal is heard here.
+        let before = server.data.lock().unwrap().calls.iter().filter(|c| c.starts_with("GET /me/calendars?")).count();
         pool.submit(Job::Apply { account: "a1".into(), op });
         let said = refused(&until(&pool, "the refusal", |e| matches!(e, Event::OpFailed { .. })));
         assert!(said.iter().any(|e| e.contains(why)), "{why}: {said:?}");
-        let before = server.data.lock().unwrap().calls.iter().filter(|c| c.starts_with("GET /me/calendars?")).count();
         until(&pool, "the calendars read again", |e| lists(e, |c| c.id == "CAL1"));
         let after = server.data.lock().unwrap().calls.iter().filter(|c| c.starts_with("GET /me/calendars?")).count();
         assert!(after > before, "read again after the refusal");
