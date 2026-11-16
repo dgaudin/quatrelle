@@ -25,6 +25,7 @@ mod window;
 
 pub use announce::TeamsAnnouncement;
 pub use members::ChatMembers;
+pub use outbox::{TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
 
 #[cfg(test)]
 pub(crate) use window::row_scans;

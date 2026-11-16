@@ -167,6 +167,58 @@ fn a_blank_message_isnt_sent() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A frame's events in one go, then `more` frames: what the pane asked for.
+fn one_frame(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, more: usize) -> Vec<Action> {
+    let mut acts = pane(ctx, a, events, SIZE).0;
+    for _ in 0..more {
+        acts.extend(pane(ctx, a, vec![], SIZE).0);
+    }
+    acts
+}
+
+/// Enter acts where it comes in the frame's events (P13): what was typed before it in the same
+/// frame goes with the message, what follows it stays in the box.
+#[test]
+fn enter_sends_what_was_typed_before_it_in_the_same_frame() {
+    let (mut a, dir) = writing_app("teams-box-order-enter", vec![]);
+    let ctx = egui::Context::default();
+    focus_box(&ctx, &mut a);
+    let acts = one_frame(&ctx, &mut a, vec![Event::Text("o".into()), Event::Text("k".into()), enter()], 2);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "ok", "bold": [], "italic": []})]);
+    assert_eq!(in_box(&a), "", "nothing left behind");
+    typed(&ctx, &mut a, vec![Event::Text("first".into())]);
+    let acts = one_frame(&ctx, &mut a, vec![enter(), Event::Text("x".into())], 2);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "first", "bold": [], "italic": []})]);
+    assert_eq!(in_box(&a), "x", "typed after Enter: for the box");
+    // A paste and Enter in one frame: the paste goes.
+    let acts = one_frame(&ctx, &mut a, vec![Event::Paste(" and more".into()), enter()], 2);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "x and more", "bold": [], "italic": []})]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Ctrl+B and Ctrl+I act where they come in the frame's events: on the text and the selection as
+/// they stand then.
+#[test]
+fn ctrl_b_and_ctrl_i_act_where_they_come_in_the_frame() {
+    let (mut a, dir) = writing_app("teams-box-order-bold", vec![]);
+    let ctx = egui::Context::default();
+    focus_box(&ctx, &mut a);
+    let acts =
+        one_frame(&ctx, &mut a, vec![Event::Text("hello".into()), key(Key::A, Modifiers::COMMAND), key(Key::B, Modifiers::COMMAND), enter()], 3);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "hello", "bold": [[0, 5]], "italic": []})]);
+    let events = vec![
+        Event::Text("so ".into()),
+        key(Key::I, Modifiers::COMMAND),
+        Event::Text("very".into()),
+        key(Key::I, Modifiers::COMMAND),
+        Event::Text(" ".into()),
+        enter(),
+    ];
+    let acts = one_frame(&ctx, &mut a, events, 5);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "so very ", "bold": [], "italic": [[3, 7]]})]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The outbox full (I3), for this chat or in all: Enter does nothing, the text stays and the box
 /// says why; room again, Enter sends it.
 #[test]
@@ -279,8 +331,9 @@ fn a_not_sent_message_offers_retry_and_delete() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// A message waiting or being sent (Review Focus 5), one sent from here not answered for yet
-/// too, says "Sending…" and offers neither Delete nor Retry: it may be in Teams already.
+/// A message being sent (Review Focus 5), or sent from here and not yet taken by the outbox, says
+/// "Sending…" and offers neither Delete nor Retry: it may be in Teams already. One waiting in the
+/// outbox (P12) can be deleted before it goes: stuck offline, it needn't fail first.
 #[test]
 fn a_message_being_sent_offers_no_delete() {
     let (mut a, dir) = writing_app("teams-out-sending", vec![]);
@@ -293,7 +346,13 @@ fn a_message_being_sent_offers_no_delete() {
         assert!(has_text(&texts, w), "{w}: {texts:?}");
     }
     assert_eq!(texts.iter().filter(|(t, _)| t == "Sending…").count(), 3, "{texts:?}");
-    assert!(!has_text(&texts, "Delete") && !has_text(&texts, "Retry"), "{texts:?}");
+    assert!(!has_text(&texts, "Retry"), "{texts:?}");
+    // Delete once: under the one waiting in the outbox, above the one being sent.
+    let deletes = texts_with(&texts, "Delete");
+    let (first, second) = (rect_of(&texts, |t| t == "First").expect("First"), rect_of(&texts, |t| t == "Second").expect("Second"));
+    assert_eq!(deletes.len(), 1, "{texts:?}");
+    assert!(deletes[0].top() > first.bottom() && deletes[0].bottom() < second.top(), "{deletes:?} {first:?} {second:?}");
+    assert_eq!(asked(&click_pane(&ctx, &mut a, deletes[0].center(), SIZE), "teams.discard"), vec![json!({"seq": 3})]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -338,8 +397,8 @@ fn the_sign_out_question_counts_the_unsent() {
     }
 }
 
-/// The pane with the box written in (bold and italic), a message being sent and one not sent,
-/// light and dark.
+/// The pane with the box written in (bold and italic), a message being sent, one not sent and one
+/// waiting its turn, light and dark.
 #[test]
 fn the_box_and_what_goes_out_in_light_and_dark() {
     let messages = vec![
@@ -348,7 +407,11 @@ fn the_box_and_what_goes_out_in_light_and_dark() {
     ];
     let (mut a, dir) = writing_app("teams-box-frames", messages);
     let refused = OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 403 Forbidden".into()) };
-    a.session.teams_apply(outbox(vec![outgoing(5, "l-5", "Here they are", OutState::Sending), outgoing(6, "l-6", "And the chart", refused)]));
+    a.session.teams_apply(outbox(vec![
+        outgoing(5, "l-5", "Here they are", OutState::Sending),
+        outgoing(6, "l-6", "And the chart", refused),
+        outgoing(7, "l-7", "Then the notes", OutState::Waiting),
+    ]));
     let ctx = egui::Context::default();
     let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);
     let hint = settled_text_at(&ctx, &mut a, "Write a message", size).expect("the box");
@@ -374,7 +437,7 @@ fn the_box_and_what_goes_out_in_light_and_dark() {
         let png = pictures_dir.as_ref().map(|d| d.join(format!("teams-box-{theme}.png")));
         let (_, shapes) = frame_with_size(&ctx, &mut a, &mut tex, vec![], png, SIZE);
         let texts = texts_of(&shapes);
-        for w in ["Here they are", "And the chart", "Sending…", "Not sent", "Retry", "Delete", "Totals by Friday at the latest"] {
+        for w in ["Here they are", "And the chart", "Then the notes", "Sending…", "Not sent", "Retry", "Delete", "Totals by Friday at the latest"] {
             assert!(has_text(&texts, w), "{theme}: {w}: {texts:?}");
         }
         // The box under the messages, what goes out after the chat's own.
@@ -467,4 +530,53 @@ fn drafts_are_kept_for_twenty_chats_an_empty_one_first() {
     assert_eq!(c.drafts.len(), 20);
     assert!(!c.drafts.contains_key(&chat(0)) && c.drafts.contains_key(&chat(1)), "then the oldest");
     assert!(c.drafts.values().all(|d| d.text == "kept"));
+}
+
+/// The box having the keyboard, no key sends the mail being written (P13): Ctrl+Enter and Alt+S
+/// are the mail's Send, and a reply in a conversation is never an e-mail.
+#[test]
+fn ctrl_enter_in_the_box_never_sends_the_mail_being_written() {
+    let (mut a, dir) = writing_app("teams-box-no-mail", vec![]);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"to": "ann@x.example", "subject": "Hi", "body": "Hello"}));
+    a.session.module = quatrelle_engine::Module::Conversations;
+    let hint = settled_text_at(&ctx, &mut a, "Write a message", size).expect("the box");
+    click_at(&ctx, &mut a, hint, 1, size);
+    frame_sized(&ctx, &mut a, vec![Event::Text("draft".into())], size);
+    assert_eq!(in_box(&a), "draft", "the box has the keyboard");
+    for (k, m) in [(Key::Enter, Modifiers::COMMAND), (Key::S, Modifiers::ALT)] {
+        frame_sized(&ctx, &mut a, vec![Event::ModifiersChanged(m), key(k, m)], size);
+        frame_sized(&ctx, &mut a, vec![Event::ModifiersChanged(Modifiers::NONE)], size);
+        assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending), "{k:?}: the mail wasn't sent");
+    }
+    assert_eq!(in_box(&a), "draft", "nor the box's text");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The engine's refusals are known by the constants it exports (P12), each said in the window's
+/// words: too long, too many waiting, the chat left, a Delete while it may be in Teams; any other
+/// in the box's own.
+#[test]
+fn the_engines_refusals_are_said_in_the_windows_words() {
+    let (mut a, dir) = writing_app("teams-box-refusals", vec![]);
+    let said = |a: &MailApp, chat: &str| a.ui.conversations.drafts.get(chat).and_then(|d| d.said());
+    let long = "<&> ".repeat(30 * 1024);
+    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": long})));
+    assert_eq!(said(&a, CHAT), Some("This message is too long for Teams"));
+    a.session.teams_apply(teams::Event::Unsent { count: OUTBOX_MAX as u32 });
+    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "hi"})));
+    assert_eq!(said(&a, CHAT), Some("Too many messages are waiting"));
+    a.session.teams_apply(teams::Event::Unsent { count: 0 });
+    a.run("teams.send", json!({"chat": CHAT, "text": "going"}));
+    let local = a.session.teams.outgoing.last().map(|o| o.local.clone()).expect("shown at once");
+    a.act(Action::Run("teams.discard", json!({"seq": 0, "local": local})));
+    assert_eq!(said(&a, CHAT), Some("This message may already be in Teams"));
+    a.session.teams_apply(teams::Event::Chats { rows: vec![ChatRow { left: true, ..group_row() }] });
+    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "still there?"})));
+    assert_eq!(said(&a, CHAT), Some("You're no longer in this conversation"));
+    a.act(Action::Run("teams.send", json!({"chat": "19:gone@thread.v2", "text": "lost?"})));
+    assert_eq!(said(&a, "19:gone@thread.v2"), Some("This message couldn't be sent"));
+    let _ = std::fs::remove_dir_all(dir);
 }

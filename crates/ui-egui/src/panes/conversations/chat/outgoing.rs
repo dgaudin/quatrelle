@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! What the user sent in the open chat that Teams doesn't have yet, after the chat's messages, on
-//! the user's side and dimmed: "Sending…" while it waits or goes; "Not sent" in the danger colour,
-//! why, and Teams' code after it as Teams gave it, with Retry and Delete. Nothing is offered while
-//! it's going: it may be in Teams already (the engine refuses Delete then, and Retry acts only on a
-//! message not sent).
+//! the user's side and dimmed: "Sending…" while it waits or goes, with Delete while the outbox
+//! holds it waiting its turn (one stuck offline needn't fail first); "Not sent" in the danger
+//! colour, why, and Teams' code after it as Teams gave it, with Retry and Delete. Nothing is
+//! offered while it's being sent, or before the outbox has taken it: it may be in Teams already
+//! (the engine refuses Delete then, and Retry acts only on a message not sent).
 //!
 //! What is hostile here: the code came from Teams' answer (the worker keeps at most 64 characters
 //! of it): drawn on one line, after the window's own sentence, never in its place.
@@ -53,11 +54,20 @@ fn why(reason: Unsent) -> &'static str {
     }
 }
 
-/// Under the message: "Sending…"; or "Not sent", why, and Retry and Delete, which name it by its
-/// number, or by its local id for one the outbox didn't take (numbered 0).
+/// Under the message: "Sending…", and Delete while the outbox holds it waiting its turn; or "Not
+/// sent", why, and Retry and Delete, which name it by its number, or by its local id for one the
+/// outbox didn't take (numbered 0).
 fn state(ui: &mut Ui, t: &Tokens, o: &Outgoing, acts: &mut Vec<Action>) {
     let OutState::NotSent { reason, code } = &o.state else {
         ui.label(RichText::new(tl!("Sending…")).size(11.0).color(t.dim));
+        // Not yet taken (numbered 0), or being sent: it may be in Teams already.
+        if o.seq != 0 && o.state == OutState::Waiting {
+            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                if ui.button(tl!("Delete")).clicked() {
+                    acts.push(Action::Run("teams.discard", json!({"seq": o.seq})));
+                }
+            });
+        }
         return;
     };
     let why = match code.as_deref().map(one_line).filter(|c| !c.is_empty()) {

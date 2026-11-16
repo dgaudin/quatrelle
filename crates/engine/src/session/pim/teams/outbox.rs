@@ -28,10 +28,13 @@ use super::*;
 const SAID_MAX: usize = 1_000;
 /// The most messages refused by the outbox kept for the chats not open (each its share at most).
 const REFUSED_MAX: usize = 1_000;
-/// The refusals the window shows as they are.
-const TOO_LONG: &str = "This message is too long for Teams";
-const TOO_MANY: &str = "Too many messages are waiting";
-const MAY_BE_IN_TEAMS: &str = "This message may already be in Teams";
+/// The refusals of `teams.send`, `teams.retry` and `teams.discard` the window knows (and says in
+/// its own words): the message too long for Teams, too many waiting, the chat left, a message
+/// that may be in Teams already.
+pub const TEAMS_TOO_LONG: &str = "This message is too long for Teams";
+pub const TEAMS_TOO_MANY: &str = "Too many messages are waiting";
+pub const TEAMS_LEFT: &str = "you're no longer in this conversation";
+pub const TEAMS_MAY_BE_IN_TEAMS: &str = "This message may already be in Teams";
 
 /// The messages not sent already said by a notice, or seen in their chat, by local id (unique to
 /// each message sent, where the outbox's numbers come back): at most [`SAID_MAX`], the oldest
@@ -210,18 +213,18 @@ impl Session {
     fn teams_queue(&mut self, chat: &str, body: ChatText) -> Result<String, CmdError> {
         let row = self.teams.row(chat).ok_or_else(|| CmdError::Params("that conversation isn't listed".into()))?;
         if row.left {
-            return Err(CmdError::Disabled("you're no longer in this conversation".into()));
+            return Err(CmdError::Disabled(TEAMS_LEFT.into()));
         }
         if row.unreadable {
             return Err(CmdError::Disabled("Teams doesn't let this conversation be written to here".into()));
         }
         if teams_write(&body).is_err() {
-            return Err(CmdError::Params(TOO_LONG.into()));
+            return Err(CmdError::Params(TEAMS_TOO_LONG.into()));
         }
         let open = self.teams.open.as_deref() == Some(chat);
         let all = usize::try_from(self.teams.unsent).unwrap_or(usize::MAX);
         if (open && self.teams.outgoing.len() >= OUTBOX_CHAT_MAX) || all >= OUTBOX_MAX {
-            return Err(CmdError::Disabled(TOO_MANY.into()));
+            return Err(CmdError::Disabled(TEAMS_TOO_MANY.into()));
         }
         let chat = chat.to_string();
         if open && self.teams.newer_left_out {
@@ -272,7 +275,7 @@ impl Session {
         let i = self.teams.outgoing_at(seq, local)?;
         let going = self.teams.outgoing.get(i).is_some_and(|o| o.state == OutState::Sending || (o.seq == 0 && o.state == OutState::Waiting));
         if going {
-            return Err(CmdError::Disabled(MAY_BE_IN_TEAMS.into()));
+            return Err(CmdError::Disabled(TEAMS_MAY_BE_IN_TEAMS.into()));
         }
         self.teams.take_outgoing(i);
         if seq != 0 {

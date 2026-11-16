@@ -48,6 +48,9 @@ impl MailApp {
             self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
         }
         let typing = ctx.text_edit_focused();
+        // Writing in a conversation: no key there sends the mail being written (a reply in Teams
+        // is never an e-mail).
+        let teams_box = crate::conversations::box_focused(&self.session, ctx);
         // A press anywhere but on an attachment hands the keyboard back from the attachments and
         // clears their selection; not one in a menu over them (Save Selected… is one).
         if ctx.input(|i| i.pointer.primary_pressed()) && !self.ui.attachment_hovered {
@@ -189,6 +192,9 @@ impl MailApp {
             }
             if let Some(spec) = reg.by_shortcut(&combo) {
                 let id = spec.id;
+                if teams_box && id == "compose.send" {
+                    continue;
+                }
                 // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
                 // messages still selected in Mail don't (Delete in the Calendar is the grid's).
                 if self.session.module != Module::Mail && acts_on_mail(id) {
@@ -245,7 +251,7 @@ impl MailApp {
                 }
             }
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) && self.session.compose.is_some() {
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) && self.session.compose.is_some() && !teams_box {
             self.run("compose.send", json!({}));
         }
     }

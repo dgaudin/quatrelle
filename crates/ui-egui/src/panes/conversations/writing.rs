@@ -3,7 +3,10 @@
 //! The box at the foot of a conversation: a draft per chat (in memory, at most [`DRAFTS_MAX`]
 //! chats), bold and italic over the text's [`Styles`] as the mail editor keeps them, the emoji
 //! picker of the mail editor, and Enter to send (`teams.send`, with the byte ranges of the bold
-//! and italic runs); Shift+Enter makes a new line.
+//! and italic runs); Shift+Enter makes a new line. These keys act where they come among the
+//! frame's events, on the text as it stood when they were pressed (what's typed after them in the
+//! same frame waits for the next). While the box has the keyboard, the window's keys never send
+//! the mail being written ([`box_focused`]).
 //!
 //! The text is never lost. A message too long for Teams (its HTML past [`SEND_MAX`] bytes), or
 //! with too many waiting already (the command's own caps, checked first), stays in the box, and
@@ -24,7 +27,7 @@ use egui::{Key, KeyboardShortcut, Modifiers, RichText, Ui};
 use quatrelle_engine::mime::rich::{self, Style, Styles};
 use quatrelle_engine::mime::{teams_compose, teams_write};
 use quatrelle_engine::model::pim::teams::{MAX_ID, OUTBOX_CHAT_MAX, OUTBOX_MAX};
-use quatrelle_engine::{CmdError, Session};
+use quatrelle_engine::{CmdError, Session, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
 use serde_json::{Value, json};
 
 use super::ConversationsUi;
@@ -42,6 +45,9 @@ const RANGES_MAX: usize = 1_000;
 const SIZE: f32 = 14.0;
 /// The tallest the box grows; past it, it scrolls.
 const TALLEST: f32 = 160.0;
+/// The most events kept for the next frame (what came after one of the box's keys): past them,
+/// the rest go to the box at once.
+const PENDING_MAX: usize = 1_000;
 
 /// What a chat's box holds between frames.
 #[derive(Clone, Debug, Default)]
@@ -62,6 +68,9 @@ pub(crate) struct ChatDraft {
     said: Option<Refusal>,
     /// When it was last drawn ([`ConversationsUi::drafted`]).
     used: u64,
+    /// What came after one of the box's keys in a frame (typed, pasted, another key), for the
+    /// next frame: so the key acts on the text as it stood when it was pressed.
+    pending: Vec<egui::Event>,
 }
 
 impl ChatDraft {
@@ -85,6 +94,12 @@ impl ChatDraft {
         self.text = new;
         self.sel = at..at;
         self.changed();
+    }
+
+    /// What's said under the box of the last refusal.
+    #[cfg(test)]
+    pub(crate) fn said(&self) -> Option<&'static str> {
+        self.said.map(Refusal::sentence)
     }
 
     /// What follows a change of the text or of its looks.
@@ -115,10 +130,10 @@ impl Refusal {
             CmdError::Unknown(_) => "",
         };
         match words {
-            "This message is too long for Teams" => Some(Refusal::TooLong),
-            "Too many messages are waiting" => Some(Refusal::TooMany),
-            "This message may already be in Teams" => Some(Refusal::MayBeInTeams),
-            "you're no longer in this conversation" => Some(Refusal::Left),
+            TEAMS_TOO_LONG => Some(Refusal::TooLong),
+            TEAMS_TOO_MANY => Some(Refusal::TooMany),
+            TEAMS_MAY_BE_IN_TEAMS => Some(Refusal::MayBeInTeams),
+            TEAMS_LEFT => Some(Refusal::Left),
             _ if id == "teams.send" => Some(Refusal::NotSent),
             _ => None,
         }
@@ -138,6 +153,37 @@ impl Refusal {
 /// The text box's id, for `chat`.
 fn box_id(chat: &str) -> egui::Id {
     egui::Id::unique(("teams-box", chat))
+}
+
+/// Whether the open chat's box has the keyboard (the window's keys then leave the mail alone).
+pub(crate) fn box_focused(s: &Session, ctx: &egui::Context) -> bool {
+    s.teams.open.as_deref().is_some_and(|chat| ctx.memory(|m| m.has_focus(box_id(chat))))
+}
+
+/// One of the box's own keys: Enter alone (Shift+Enter is the text box's new line), Ctrl+B,
+/// Ctrl+I.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BoxKey {
+    Send,
+    Bold,
+    Italic,
+}
+
+impl BoxKey {
+    fn of(e: &egui::Event) -> Option<BoxKey> {
+        let egui::Event::Key { key, pressed: true, modifiers, .. } = e else { return None };
+        match key {
+            Key::Enter if modifiers.is_none() => Some(BoxKey::Send),
+            Key::B if modifiers.matches_logically(Modifiers::COMMAND) => Some(BoxKey::Bold),
+            Key::I if modifiers.matches_logically(Modifiers::COMMAND) => Some(BoxKey::Italic),
+            _ => None,
+        }
+    }
+}
+
+/// An event for the text box: what's typed, pasted, cut or copied, and keys.
+fn for_the_box(e: &egui::Event) -> bool {
+    matches!(e, egui::Event::Text(_) | egui::Event::Paste(_) | egui::Event::Key { .. } | egui::Event::Ime(_) | egui::Event::Copy | egui::Event::Cut)
 }
 
 /// `chat`'s draft, made when it has none: past [`DRAFTS_MAX`] chats, the one drawn longest ago
@@ -250,9 +296,13 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
     let frame = egui::Frame::new().fill(t.surface).inner_margin(egui::Margin { left: 16, right: 16, top: 6, bottom: 10 });
     egui::Panel::bottom("teams-box").resizable(false).show_separator_line(false).frame(frame).show(ui, |ui| {
         let id = box_id(chat);
-        if ui.memory(|m| m.has_focus(id)) {
-            keys(ui, d, id, chat, full, acts);
-        }
+        let key = if ui.memory(|m| m.has_focus(id)) {
+            keys(ui, d, id)
+        } else {
+            // The keyboard went elsewhere: what was left for the box isn't given to another.
+            d.pending.clear();
+            None
+        };
         let focused = ui.memory(|m| m.has_focus(id));
         let border = egui::Frame::new()
             .fill(if t.dark { t.surface } else { egui::Color32::WHITE })
@@ -271,6 +321,17 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
                 emoji(ui, t, d, id, &s.prefs.recent_emoji, acts);
             });
         });
+        // The key acts on the text as it stood when it was pressed: what came before it in the
+        // frame was given to the text box just now.
+        match key {
+            Some(BoxKey::Send) => send(ui, d, id, chat, full, acts),
+            Some(BoxKey::Bold) => toggle(d, |s| s.bold, |s, on| s.bold = on),
+            Some(BoxKey::Italic) => toggle(d, |s| s.italic, |s, on| s.italic = on),
+            None => {}
+        }
+        if key.is_some() || !d.pending.is_empty() {
+            ui.ctx().request_repaint();
+        }
         let said = if d.too_long {
             Some(tl!("This message is too long for Teams"))
         } else if full {
@@ -285,35 +346,35 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
     });
 }
 
-/// The box's own keys, taken before it sees them: Enter alone sends, Ctrl+B and Ctrl+I make the
-/// selection bold or italic (with nothing selected, what's typed next).
-fn keys(ui: &mut Ui, d: &mut ChatDraft, id: egui::Id, chat: &str, full: bool, acts: &mut Vec<Action>) {
+/// The box's own keys (Enter alone sends, Ctrl+B and Ctrl+I make bold and italic), taken where
+/// they come in the frame's events, after what was left from the last frame: what comes before
+/// the first of them is the text box's now; that key is returned, to act once the text box has
+/// taken it; what follows it for the text box waits for the next frame (`pending`).
+fn keys(ui: &mut Ui, d: &mut ChatDraft, id: egui::Id) -> Option<BoxKey> {
     let n = d.text.chars().count();
     if let Some((a, b)) = rich_edit::caret(ui.ctx(), id) {
         d.sel = a.min(b).min(n)..a.max(b).min(n);
     }
-    let (mut enter, mut bold, mut italic) = (false, false, false);
+    let mut waiting = std::mem::take(&mut d.pending);
     ui.input_mut(|i| {
-        // Enter alone: Shift+Enter is the box's new line (`consume_key` would take it too).
-        i.events.retain(|e| match e {
-            egui::Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if modifiers.is_none() => {
-                enter = true;
-                false
+        waiting.append(&mut i.events);
+        let mut events = waiting;
+        let Some(at) = events.iter().position(|e| BoxKey::of(e).is_some()) else {
+            i.events = events;
+            return None;
+        };
+        let mut after = events.split_off(at).into_iter();
+        let key = after.next().as_ref().and_then(BoxKey::of);
+        for e in after {
+            if for_the_box(&e) && d.pending.len() < PENDING_MAX {
+                d.pending.push(e);
+            } else {
+                events.push(e);
             }
-            _ => true,
-        });
-        bold = i.consume_key(Modifiers::COMMAND, Key::B);
-        italic = i.consume_key(Modifiers::COMMAND, Key::I);
-    });
-    if bold {
-        toggle(d, |s| s.bold, |s, on| s.bold = on);
-    }
-    if italic {
-        toggle(d, |s| s.italic, |s, on| s.italic = on);
-    }
-    if enter {
-        send(ui, d, id, chat, full, acts);
-    }
+        }
+        i.events = events;
+        key
+    })
 }
 
 /// Bold or italic (`get`, `set`) on the selection, off when all of it has it already; with
