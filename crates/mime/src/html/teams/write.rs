@@ -2,12 +2,12 @@
 // Copyright (c) 2026 Didier Gaudin
 //! A message typed in a chat's box written as the HTML sent to Teams: the text a paragraph a line,
 //! its bold and italic runs, escaped. The writer writes only its own tags (`p`, `b`, `i`, `u`,
-//! `s`, `code`, `br`, and `a` to a web address): never a picture, a script, a style or any other
+//! `s`, `code`, `br`, `at` for a mention, and `a` to a web address): never a picture, a script, a style or any other
 //! attribute, whatever the text says. What it writes is capped at [`SEND_MAX`] bytes.
 
 use std::ops::Range;
 
-use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, Run, SEND_MAX};
+use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, Mention, Run, SEND_MAX};
 
 use super::{TEAMS_RUNS, web_address};
 
@@ -28,13 +28,28 @@ pub struct TooLong {
 /// what's kept is too long to send already (each one writes more than 4 bytes on average), unless
 /// what's left is only blank lines at the end.
 pub fn teams_compose(text: &str, bold: &[Range<usize>], italic: &[Range<usize>]) -> ChatText {
+    compose(text, bold, italic, &[])
+}
+
+/// [`teams_compose`] with `marks`: ranges of `text` (sorted, apart, on characters' boundaries, none
+/// holding a line break nor a control character) and their mention ids, each one run in the bold
+/// and italic of its first character.
+pub(super) fn compose(text: &str, bold: &[Range<usize>], italic: &[Range<usize>], marks: &[(Range<usize>, u32)]) -> ChatText {
     let (mut bold, mut italic) = (Spans::of(text, bold), Spans::of(text, italic));
     let mut lines = Lines::default();
+    let mut at = 0;
     for (i, c) in text.char_indices() {
+        while marks.get(at).is_some_and(|(r, _)| r.end <= i) {
+            at += 1;
+        }
+        let mark = marks.get(at).filter(|(r, _)| r.start <= i);
         let room = match c {
             '\n' => lines.end(),
             _ if c.is_control() => true,
-            _ => lines.put(c, bold.covers(i), italic.covers(i)),
+            _ => {
+                let (look, id) = mark.map_or((i, None), |(r, id)| (r.start, Some(*id)));
+                lines.put(c, bold.covers(look), italic.covers(look), id)
+            }
         };
         if !room {
             if text.get(i..).is_some_and(|rest| rest.chars().any(|c| !c.is_whitespace() && !c.is_control())) {
@@ -61,7 +76,15 @@ pub fn teams_compose(text: &str, bold: &[Range<usize>], italic: &[Range<usize>])
 ///
 /// `Err` once past [`SEND_MAX`] bytes, where the writing stops.
 pub fn teams_write(t: &ChatText) -> Result<String, TooLong> {
-    let mut w = Writer::default();
+    teams_write_mentions(t, &[])
+}
+
+/// [`teams_write`], a run that is the mention of one of `mentions` having a user id written
+/// `<at id="n">text</at>` (the text escaped) inside its style tags, never in a link: Graph wants
+/// each `<at id>` with its entry in the message's `mentions`. Any other mention run is written as
+/// its text alone.
+pub fn teams_write_mentions(t: &ChatText, mentions: &[Mention]) -> Result<String, TooLong> {
+    let mut w = Writer { mentions, ..Writer::default() };
     for block in &t.blocks {
         w.push("<p>")?;
         let start = w.out.len();
@@ -145,9 +168,10 @@ struct Lines {
 }
 
 impl Lines {
-    /// Adds `c` to the line in its styles; false when no run is left for it.
-    fn put(&mut self, c: char, bold: bool, italic: bool) -> bool {
-        if let Some(run) = self.line.last_mut().filter(|r| (r.bold, r.italic) == (bold, italic)) {
+    /// Adds `c` to the line in its styles (and as part of a mention); false when no run is left
+    /// for it.
+    fn put(&mut self, c: char, bold: bool, italic: bool, mention: Option<u32>) -> bool {
+        if let Some(run) = self.line.last_mut().filter(|r| (r.bold, r.italic, r.mention) == (bold, italic, mention)) {
             run.text.push(c);
             return true;
         }
@@ -155,7 +179,7 @@ impl Lines {
             return false;
         }
         self.kept += 1;
-        self.line.push(Run { text: c.to_string(), bold, italic, ..Run::default() });
+        self.line.push(Run { text: c.to_string(), bold, italic, mention, ..Run::default() });
         true
     }
 
@@ -182,11 +206,12 @@ impl Lines {
 
 /// The HTML being written, within [`SEND_MAX`].
 #[derive(Default)]
-struct Writer {
+struct Writer<'a> {
     out: String,
+    mentions: &'a [Mention],
 }
 
-impl Writer {
+impl Writer<'_> {
     /// Adds `s`; `Err` once past [`SEND_MAX`].
     fn push(&mut self, s: &str) -> Result<(), TooLong> {
         self.out.push_str(s);
@@ -198,7 +223,8 @@ impl Writer {
         if !run.text.chars().any(|c| c == '\n' || c == '\t' || !c.is_control()) {
             return Ok(());
         }
-        let link = run.link.as_deref().and_then(web_address);
+        let at = run.mention.filter(|n| self.mentions.iter().any(|m| m.id == *n && m.user_id.is_some()));
+        let link = run.link.as_deref().filter(|_| at.is_none()).and_then(web_address);
         let tags = [(run.bold, "b"), (run.italic, "i"), (run.underline, "u"), (run.strike, "s"), (run.code, "code")];
         if let Some(link) = &link {
             // No space nor control character is left in it (`web_address`): it's only escaped.
@@ -211,7 +237,14 @@ impl Writer {
             self.push(tag)?;
             self.push(">")?;
         }
-        self.text(&run.text)?;
+        match at {
+            Some(n) => {
+                self.push(&format!("<at id=\"{n}\">"))?;
+                self.text(&run.text)?;
+                self.push("</at>")?;
+            }
+            None => self.text(&run.text)?,
+        }
         for (_, tag) in tags.iter().rev().filter(|(on, _)| *on) {
             self.push("</")?;
             self.push(tag)?;
@@ -239,4 +272,42 @@ impl Writer {
         }
         Ok(())
     }
+}
+
+/// The writer's own markup: its tags and the entities it writes.
+const OWN: &[&str] = &[
+    "<p>", "</p>", "<b>", "</b>", "<i>", "</i>", "<u>", "</u>", "<s>", "</s>", "<code>", "</code>", "<br>", "</a>", "</at>", "&amp;", "&lt;", "&gt;",
+    "&quot;", "&#39;", "&nbsp;",
+];
+
+/// The first piece of `html` that isn't the writer's own markup, if any: a `<`, `>`, `"`, `'` or
+/// `&` that doesn't begin one of its tags, a link to the web, a mention's `<at id="n">` or one of
+/// its entities. Escaped text may say `src=` or `style=`; this sees whether any attribute but a web
+/// link's `href` or a mention's `id` is written. For the tests and the fuzz targets.
+#[doc(hidden)]
+pub fn teams_foreign_markup(html: &str) -> Option<&str> {
+    let mut rest = html;
+    while let Some(i) = rest.find(['<', '>', '"', '\'', '&']) {
+        let at = &rest[i..];
+        let own = OWN.iter().find(|own| at.starts_with(**own)).map(|own| own.len());
+        let Some(len) = own.or_else(|| link_tag(at)).or_else(|| mention_tag(at)) else { return Some(at) };
+        rest = &at[len..];
+    }
+    None
+}
+
+/// The length of the tag `at` starts with when it's a link to the web, its address escaped.
+fn link_tag(at: &str) -> Option<usize> {
+    let href = at.strip_prefix("<a href=\"")?;
+    let end = href.find('"')?;
+    let address = &href[..end];
+    let web = address.starts_with("http://") || address.starts_with("https://");
+    (web && !address.contains(['<', '>', '\'']) && href[end..].starts_with("\">")).then(|| "<a href=\"".len() + end + 2)
+}
+
+/// The length of the tag `at` starts with when it's a mention's `<at id="digits">`.
+fn mention_tag(at: &str) -> Option<usize> {
+    let id = at.strip_prefix("<at id=\"")?;
+    let digits = id.find(|c: char| !c.is_ascii_digit())?;
+    (digits > 0 && id[digits..].starts_with("\">")).then(|| "<at id=\"".len() + digits + 2)
 }

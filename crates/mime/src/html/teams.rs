@@ -11,7 +11,8 @@
 //! exactly Graph's for this chat and this message; any other picture on the web is an outside
 //! one, which waits for a click. Nothing here fetches anything.
 //!
-//! [`teams_write`] does the reverse for sending: what the user types, as escaped HTML.
+//! [`teams_write`] does the reverse for sending: what the user types, as escaped HTML, with its
+//! mentions as `<at id>` ([`teams_write_mentions`]); [`teams_typed`] reads a message back into the box.
 
 use std::cell::RefCell;
 
@@ -21,7 +22,9 @@ use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{BufferQueue, Tag, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
 use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, MAX_BODY, MAX_ID, Run, is_bidi};
 
+mod typed;
 mod write;
+pub use typed::*;
 pub use write::*;
 
 /// The most bytes of a message's HTML read: the rest is left out (cut where a character starts).

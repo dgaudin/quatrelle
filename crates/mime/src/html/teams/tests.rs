@@ -7,6 +7,8 @@ use super::*;
 use proptest::strategy::Strategy;
 use quatrelle_model::pim::teams::{BlockKind, SEND_MAX};
 
+mod typed;
+
 const C: &str = "19:a@thread.v2";
 
 /// Every run of every block, in order.
@@ -275,34 +277,6 @@ proptest::proptest! {
 
 // The writer: what the user types in a chat's box, as the HTML sent to Teams.
 
-/// The writer's own markup: its tags and the entities it writes.
-const OWN: &[&str] = &[
-    "<p>", "</p>", "<b>", "</b>", "<i>", "</i>", "<u>", "</u>", "<s>", "</s>", "<code>", "</code>", "<br>", "</a>", "&amp;", "&lt;", "&gt;",
-    "&quot;", "&#39;", "&nbsp;",
-];
-
-/// The first piece of `html` that isn't the writer's own markup, if any: a `<`, `>`, `"`, `'` or
-/// `&` that doesn't begin one of its tags, a link to the web or one of its entities. Escaped text
-/// may say `src=` or `style=`; this sees whether any attribute but a web link's `href` is written.
-fn foreign(html: &str) -> Option<&str> {
-    let mut rest = html;
-    while let Some(i) = rest.find(['<', '>', '"', '\'', '&']) {
-        let at = &rest[i..];
-        let Some(len) = OWN.iter().find(|own| at.starts_with(**own)).map(|own| own.len()).or_else(|| link_tag(at)) else { return Some(at) };
-        rest = &at[len..];
-    }
-    None
-}
-
-/// The length of the tag `at` starts with when it's a link to the web, its address escaped.
-fn link_tag(at: &str) -> Option<usize> {
-    let href = at.strip_prefix("<a href=\"")?;
-    let end = href.find('"')?;
-    let address = &href[..end];
-    let web = address.starts_with("http://") || address.starts_with("https://");
-    (web && !address.contains(['<', '>', '\'']) && href[end..].starts_with("\">")).then(|| "<a href=\"".len() + end + 2)
-}
-
 /// A message of one paragraph of `runs`.
 fn message(runs: Vec<Run>) -> ChatText {
     ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] }
@@ -325,9 +299,13 @@ fn the_check_of_the_writers_markup_sees_any_other() {
         "'a'",
         "&#60;",
     ] {
-        assert!(foreign(other).is_some(), "{other}");
+        assert!(teams_foreign_markup(other).is_some(), "{other}");
     }
-    assert_eq!(foreign("<p><a href=\"https://x.example/?a=1&amp;b\"><b>&lt;img src=&quot;x&quot;&gt;</b></a><br>&nbsp;</p>"), None);
+    for refused in ["<at id=\"x\">x</at>", "<at id='0'>x</at>", "<at id=\"0\" style=\"\">x</at>", "<at id=\"\">x</at>", "<at>x</at>"] {
+        assert!(teams_foreign_markup(refused).is_some(), "{refused}");
+    }
+    assert_eq!(teams_foreign_markup("<p>a <at id=\"0\">x</at><b><at id=\"12\">y</at></b></p>"), None);
+    assert_eq!(teams_foreign_markup("<p><a href=\"https://x.example/?a=1&amp;b\"><b>&lt;img src=&quot;x&quot;&gt;</b></a><br>&nbsp;</p>"), None);
 }
 
 #[test]
@@ -338,7 +316,7 @@ fn the_users_text_is_escaped_and_reads_back_the_same() {
         assert!(!html.contains(never), "{html}");
     }
     // `src=` stays in the text, escaped: no tag but the writer's own is written.
-    assert_eq!(foreign(&html), None, "{html}");
+    assert_eq!(teams_foreign_markup(&html), None, "{html}");
     assert_eq!(teams_html(&html, C, "1").plain(), typed);
 }
 
@@ -480,7 +458,7 @@ proptest::proptest! {
     #[test]
     fn written_text_reads_back_the_same(t in any_message()) {
         let html = teams_write(&t).map_err(|e| proptest::test_runner::TestCaseError::fail(format!("{e:?}")))?;
-        proptest::prop_assert_eq!(foreign(&html), None, "{}", html);
+        proptest::prop_assert_eq!(teams_foreign_markup(&html), None, "{}", html);
         let back = teams_html(&html, C, "1");
         proptest::prop_assert_eq!(styled(&back), styled(&t), "{}", html);
     }
@@ -500,7 +478,7 @@ proptest::proptest! {
         match teams_write(&t) {
             Ok(html) => {
                 proptest::prop_assert!(html.len() <= SEND_MAX);
-                proptest::prop_assert_eq!(foreign(&html), None, "{}", html);
+                proptest::prop_assert_eq!(teams_foreign_markup(&html), None, "{}", html);
                 proptest::prop_assert_eq!(words(&teams_html(&html, C, "1").plain()), words(&text));
             }
             Err(TooLong { bytes }) => proptest::prop_assert!(bytes > SEND_MAX),
