@@ -14,28 +14,34 @@
 //!   rather than posting it again.
 //! * A post without an answer, or answered 5xx, may have gone ("Unknown"): after a wait (its
 //!   `Retry-After`, else the worker's pause), the chat's messages changed since a little before
-//!   the newest one known when it was taken are read ([`Route::Messages`]), for the user's own
-//!   made after it whose text, as Graph's reader reads it, is the same. Found, it was
-//!   sent; not found, it's posted again, three posts at most, then "Not sent" (couldn't be
-//!   confirmed). Once one goes, the chat's others are judged against what came after it: two
-//!   messages of the same text are two. A message "Not sent" goes again only when the user asks.
+//!   the newest one known when it was taken (never past Graph's clock and an hour) are read
+//!   ([`Route::Messages`]), a page a step, four pages at most, for the user's own made after it
+//!   whose text, as Graph's reader reads it, is the same. Found, it was sent; the range read to
+//!   its end without it, it's posted again, three posts at most, then "Not sent" (couldn't be
+//!   confirmed). More changed since than four pages, a time past Graph's, or five checks failing
+//!   running (30 s apart, then twice as long each time): "Not sent" at once, never posted again.
+//!   Once one goes, the chat's others are judged against what came after it: two messages of the
+//!   same text are two. A message "Not sent" goes again only when the user asks.
 //! * Graph asking to wait (429, 503) holds every request for its `Retry-After`
 //!   ([`Worker::busy_wait`]): a 429 is a post Graph didn't take, a 503 one it may have.
 //! * Marking a chat read is kept in memory, once a chat, tried three times while Graph is busy or
 //!   the network away; its row goes at once.
 //!
 //! What is hostile here: Graph's answers (whether a message was made, the messages a check reads
-//! back, error codes), and the outbox as read back from the copy. What it protects: the user's
-//! messages (never lost without being said, never posted twice for an answer lost), and Teams'
-//! limits (a request a step, the limiter's pace, a `Retry-After` whole, a failing check slowed
-//! down). The outbox is read from the copy only when it changes. The log says counts, keyed
-//! hashes and HTTP statuses: never a body, a chat's id or a local id.
+//! back and its next pages' links, error codes), and the outbox as read back from the copy (its
+//! times too). What it protects: the user's messages (never lost without being said, never posted
+//! twice for an answer lost), and Teams' limits (a request a step, the limiter's pace, a
+//! `Retry-After` whole, a check's pages bounded, a failing check slowed down then given up). The
+//! outbox is read from the copy only when it changes. The log says counts, keyed hashes and HTTP
+//! statuses: never a body, a chat's id or a local id.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use quatrelle_mime::{TEAMS_RUNS, teams_html, teams_write};
-use quatrelle_model::pim::teams::{ChatMessage, ChatText, Event, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutState, Outgoing, Sender, Unsent};
+use quatrelle_model::pim::teams::{
+    CLOCK_TOLERANCE_MS, ChatMessage, ChatText, Event, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutState, Outgoing, Sender, Unsent,
+};
 
 use super::graph::{Range, message_of};
 use super::limits::Route;
@@ -55,10 +61,15 @@ const POSTS: u8 = 3;
 const OVERLAP_MS: i64 = 2_000;
 /// The most messages of a check's page looked at (Graph sends the 50 asked).
 const CHECK_ITEMS: usize = 200;
-/// A check that failed otherwise than by the network or Graph asking to wait: the next one waits
-/// this long, doubled at each failure, up to [`CHECK_AGAIN_MAX`].
+/// The most pages a check reads, one a step: past them, more changed in the chat since than a
+/// check looks through, and the message is "Not sent" (couldn't be confirmed), not posted again.
+const CHECK_PAGES: u32 = 4;
+/// A check that failed otherwise than by the network, Graph asking to wait or the sign-in: the
+/// next one waits this long, doubled at each failure (an hour at most), and the
+/// [`CHECK_FAILS_MAX`]th failure running makes the message "Not sent" (couldn't be confirmed).
 const CHECK_AGAIN: Duration = Duration::from_secs(30);
 const CHECK_AGAIN_MAX: Duration = Duration::from_secs(3600);
+const CHECK_FAILS_MAX: u32 = 5;
 /// The longest code of Teams' answer a "Not sent" keeps (the model's).
 const CODE_MAX: usize = 64;
 
@@ -70,8 +81,9 @@ pub(crate) struct Outbox {
     heads: Vec<Head>,
     /// The chats to mark read, oldest first, each once, at most [`MARKS_MAX`].
     marks: VecDeque<Mark>,
-    /// The checks that failed, by message number: not tried again before then.
-    held: HashMap<u64, Held>,
+    /// The checks under way or held back, by message number (one a chat's first message, so
+    /// [`OUTBOX_MAX`] at most).
+    checks: HashMap<u64, Checking>,
 }
 
 /// A chat's first message still to go.
@@ -98,11 +110,14 @@ struct Mark {
     tries: u8,
 }
 
-/// A check that failed: not again before `until`; `fails` in a row.
-#[derive(Clone, Copy)]
-struct Held {
-    until: Instant,
+/// A check between two steps: the next page of its read and the pages read so far; the checks
+/// failed in a row, none tried again before `until`.
+#[derive(Clone, Default)]
+struct Checking {
+    next: Option<String>,
+    pages: u32,
     fails: u32,
+    until: Option<Instant>,
 }
 
 /// [`Job::Op`](quatrelle_model::pim::teams::Job::Op): a message to send taken into the outbox
@@ -220,7 +235,7 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
     let mut chosen = None;
     for i in 0..w.outbox.heads.len() {
         let Some((seq, route)) = w.outbox.heads.get(i).map(|h| (h.seq, h.route())) else { break };
-        if w.outbox.held.get(&seq).is_some_and(|h| now < h.until) || !w.may(route, now) {
+        if w.outbox.checks.get(&seq).and_then(|c| c.until).is_some_and(|until| now < until) || !w.may(route, now) {
             continue;
         }
         chosen = w.outbox.heads.get(i).cloned();
@@ -245,7 +260,7 @@ pub(crate) fn due(w: &Worker, now: Instant) -> Option<Instant> {
     let marks = w.outbox.marks.iter().filter_map(|m| at(Route::Send(m.key)));
     let heads = w.outbox.heads.iter().filter_map(|h| {
         let may = at(h.route())?;
-        Some(w.outbox.held.get(&h.seq).map_or(may, |held| may.max(held.until)))
+        Some(w.outbox.checks.get(&h.seq).and_then(|c| c.until).map_or(may, |until| may.max(until)))
     });
     marks.chain(heads).min()
 }
@@ -447,47 +462,77 @@ fn after_post(e: &NetError) -> OpState {
 }
 
 /// A message that may have gone, checked: the chat's messages changed since a little before its
-/// time, for the user's own of the same text made after it. Found, it was sent; not found, posted
-/// again ([`POSTS`] posts at most) or "Not sent". The check failing leaves it to be checked.
+/// time, a page a step ([`CHECK_PAGES`] at most), for the user's own of the same text made after
+/// it. Found, it was sent; the range read to its end without it, posted again ([`POSTS`] posts at
+/// most) or "Not sent". Pages left past the last, or a time past Graph's clock and its tolerance
+/// (nothing sent now can be told from it), it can't be told: "Not sent" (couldn't be confirmed).
 fn check(w: &mut Worker, head: &Head, now: Instant) {
     let Some(mut op) = current(w, head) else { return };
-    let from = rfc3339(op.after.unwrap_or(0).saturating_sub(OVERLAP_MS));
+    // Never past Graph's clock and its tolerance, as a read's watermark: a time read back from the
+    // copy, or chained from one Graph gave, can't put the range ahead.
+    let cap = server_ms(w).map(|t| t.saturating_add(CLOCK_TOLERANCE_MS));
+    let after = op.after.map(|a| cap.map_or(a, |cap| a.min(cap)));
+    let from = rfc3339(after.unwrap_or(0).saturating_sub(OVERLAP_MS));
     let chat = head.chat.clone();
-    let page = match w.request(Route::Messages(head.key), now, |c| c.messages(&chat, Range::After(&from), None)) {
+    let checking = w.outbox.checks.get(&op.seq).cloned().unwrap_or_default();
+    let page = match w.request(Route::Messages(head.key), now, |c| c.messages(&chat, Range::After(&from), checking.next.as_deref())) {
         Ok(page) => page,
-        Err(e) => {
-            log::warn!("teams: a message to conversation {} couldn't be checked ({}); checked again later", w.hashed(&chat), kind(&e));
-            if busy(&e) {
-                w.busy_wait(now);
-            } else if of_the_network(&e) {
-                w.pause(&e, now);
-            } else if !matches!(e, NetError::Auth(_)) {
-                hold(w, op.seq, now);
-            }
-            return;
-        }
+        Err(e) => return check_failed(w, &mut op, &e, now),
     };
-    w.outbox.held.remove(&op.seq);
     let (me, text) = (w.settings.object_id.clone(), as_read(&op.body, &chat));
     let found = page.items.iter().take(CHECK_ITEMS).map(|v| message_of(&chat, v)).find(|m| {
         let mine = matches!(&m.sender, Sender::User { id, .. } if !me.is_empty() && id.eq_ignore_ascii_case(&me));
-        mine && !m.id.is_empty() && m.deleted.is_none() && op.after.is_none_or(|a| m.created > a) && flat(&m.body.plain()) == text
+        mine && !m.id.is_empty() && m.deleted.is_none() && after.is_none_or(|a| m.created > a) && flat(&m.body.plain()) == text
     });
     if let Some(m) = found {
+        w.outbox.checks.remove(&op.seq);
         log::info!("teams: a message to conversation {} was found sent", w.hashed(&chat));
         return sent(w, &op, m);
     }
-    let again = op.tries < POSTS;
-    log::warn!("teams: a message to conversation {} wasn't found sent; {}", w.hashed(&chat), if again { "posted again" } else { "not sent" });
+    let pages = checking.pages.saturating_add(1);
+    let ended = page.next.is_none();
+    if let Some(next) = page.next.filter(|_| pages < CHECK_PAGES) {
+        w.outbox.checks.insert(op.seq, Checking { next: Some(next), pages, ..checking });
+        return;
+    }
+    w.outbox.checks.remove(&op.seq);
+    let again = ended && after == op.after && op.tries < POSTS;
+    let then = match () {
+        _ if again => "posted again",
+        _ if !ended => "more changed since than a check reads: not sent",
+        _ if after != op.after => "its time is past Graph's: not sent",
+        _ => "not sent",
+    };
+    log::warn!("teams: a message to conversation {} wasn't found sent; {then}", w.hashed(&chat));
     op.state = if again { OpState::Waiting } else { OpState::NotSent { reason: Unsent::Unconfirmed, code: None } };
     settle(w, &op);
 }
 
-/// A check failed (not the network, not Graph asking to wait): the next waits, longer each time.
-fn hold(w: &mut Worker, seq: u64, now: Instant) {
-    let fails = w.outbox.held.get(&seq).map_or(0, |h| h.fails).saturating_add(1);
+/// A check that failed. Graph asking to wait, the network away or the sign-in refused: it waits
+/// for them, and goes on from the page it was at. Anything else: the next waits, longer each time,
+/// and reads the range from its start again; the [`CHECK_FAILS_MAX`]th running, the message is
+/// "Not sent" (couldn't be confirmed).
+fn check_failed(w: &mut Worker, op: &mut OpRecord, e: &NetError, now: Instant) {
+    let hash = w.hashed(&op.chat);
+    if busy(e) || of_the_network(e) || matches!(e, NetError::Auth(_)) {
+        log::warn!("teams: a message to conversation {hash} couldn't be checked ({}); checked again later", kind(e));
+        if busy(e) {
+            w.busy_wait(now);
+        } else if of_the_network(e) {
+            w.pause(e, now);
+        }
+        return;
+    }
+    let fails = w.outbox.checks.get(&op.seq).map_or(0, |c| c.fails).saturating_add(1);
+    if fails >= CHECK_FAILS_MAX {
+        log::warn!("teams: a message to conversation {hash} couldn't be checked ({}), {fails} times running; not sent", kind(e));
+        w.outbox.checks.remove(&op.seq);
+        op.state = OpState::NotSent { reason: Unsent::Unconfirmed, code: None };
+        return settle(w, op);
+    }
+    log::warn!("teams: a message to conversation {hash} couldn't be checked ({}); checked again later", kind(e));
     let wait = CHECK_AGAIN.saturating_mul(1u32.checked_shl(fails.saturating_sub(1)).unwrap_or(u32::MAX)).min(CHECK_AGAIN_MAX);
-    w.outbox.held.insert(seq, Held { until: now.checked_add(wait).unwrap_or(now), fails });
+    w.outbox.checks.insert(op.seq, Checking { fails, until: now.checked_add(wait), ..Checking::default() });
 }
 
 /// A text as a check compares it: its runs of white space one space, trimmed.
@@ -575,6 +620,6 @@ fn keep(w: &mut Worker, ops: &[OpRecord]) {
         .filter(|o| !matches!(o.state, OpState::NotSent { .. }) && seen.insert(o.chat.as_str()))
         .map(|o| Head { seq: o.seq, chat: o.chat.clone(), key: w.key_of(&o.chat), check: o.state != OpState::Waiting })
         .collect();
-    w.outbox.held.retain(|seq, _| heads.iter().any(|h| h.check && h.seq == *seq));
+    w.outbox.checks.retain(|seq, _| heads.iter().any(|h| h.check && h.seq == *seq));
     w.outbox.heads = heads;
 }

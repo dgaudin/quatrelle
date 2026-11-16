@@ -315,7 +315,10 @@ offers nothing, since it may be in Teams already.
 When the network drops during a send, Quatrelle can't tell whether Teams got the message: before
 sending it again, it looks for it in the conversation. That avoids nearly every duplicate, but
 can't rule one out: Teams may list a message only after Quatrelle looked. One posted three times
-that Teams never confirms is marked Not sent.
+that Teams never confirms is marked Not sent. Quatrelle looks through 200 changes of the
+conversation at most: when more came since (a busy conversation while the computer slept), or
+when looking fails five times running (over about eight minutes), the message is marked Not sent
+rather than sent again, and you decide.
 
 **Not sent.** A message that couldn't go stays in its conversation marked **Not sent**, with
 why: "Teams refused this message" (with Teams' code), "Too long for Teams", "Too many messages

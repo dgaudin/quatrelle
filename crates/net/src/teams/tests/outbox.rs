@@ -15,14 +15,16 @@ use quatrelle_mime::teams_compose;
 use quatrelle_model::pim::teams::{self as model, ChatMessage, ChatText, Job, Op, OutState, Outgoing, SEND_MAX, Unsent};
 use serde_json::json;
 
-use super::sync::{OTHER, Run, STEP, run, run_with};
+use super::sync::{NOW, OTHER, Run, STEP, run, run_with};
 use super::worker::{AtDesk, Desk, Seen, desk, emit_into, grant, settings};
 use super::{CHAT, ME, MINUTE, T0, TENANT, chat, teams_with};
 use crate::NetError;
 use crate::teams::chat_of;
+use crate::teams::graph::filter_time;
 use crate::teams::limits::Cadence;
 use crate::teams::outbox::answer_code;
 use crate::teams::store::{ChatRecord, Copy, Identity, OpRecord, OpState, Opened};
+use crate::teams::sync::rfc3339;
 use crate::teams::worker::Worker;
 
 fn body(text: &str) -> ChatText {
@@ -268,6 +270,118 @@ fn a_send_not_made_is_sent_again_at_most_three_times() {
     r.turns(Duration::from_secs(60));
     assert_eq!(r.hits("post"), 3, "never again on its own");
     assert_eq!(r.held(CHAT, "Not made"), 0);
+}
+
+/// `n` messages of Ana's in a chat of the fake, a second apart, after the user's last post: what a
+/// busy chat brings while a check waits (the computer asleep, say).
+fn busy_after(r: &Run, chat: &str, n: i64) {
+    for i in 1..=n {
+        r.post(chat, "u-ana", NOW + i * 1_000, &format!("Meanwhile {i}"));
+    }
+}
+
+/// The reads of a chat that check a message from `after` (its range begins 2 s before it).
+fn check_reads(r: &Run, chat: &str, after: i64) -> usize {
+    let filter = format!("lastModifiedDateTime gt {}", filter_time(&rfc3339(after - 2_000)).unwrap());
+    r.fake(|t| t.message_reads.iter().filter(|(c, f)| c == chat && *f == filter).count())
+}
+
+/// A-I1: a check reads on past its first page, a page a step: 60 messages of others after the one
+/// whose answer was lost, it's found on the second, and never posted again.
+#[test]
+fn a_check_reads_on_past_its_first_page() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
+    r.fake(|t| {
+        t.answer_lost.insert("post".into(), 1);
+        t.lost_retry_after = Some(1);
+    });
+    r.send(CHAT, "1-1", "Lost in a busy chat");
+    assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
+    busy_after(&r, CHAT, 60);
+    assert!(r.turns_until(Duration::from_secs(15), |r| r.ops().is_empty()), "found sent: {:?}", r.ops());
+    assert_eq!(check_reads(&r, CHAT, T0 + 2 * MINUTE), 2, "two pages read");
+    r.turns(Duration::from_secs(10));
+    assert_eq!((r.hits("post"), r.held(CHAT, "Lost in a busy chat")), (1, 1));
+}
+
+/// A-I1: more changed since than a check reads (250 messages, five pages): after its four pages
+/// it can't tell, so the message is "Not sent" (couldn't be confirmed), never posted again.
+#[test]
+fn a_check_past_its_pages_is_not_sent_rather_than_posted_again() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
+    r.fake(|t| {
+        t.answer_lost.insert("post".into(), 1);
+        t.lost_retry_after = Some(1);
+    });
+    r.send(CHAT, "1-1", "Lost in a busier chat");
+    assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
+    busy_after(&r, CHAT, 250);
+    let unconfirmed = not_sent(Unsent::Unconfirmed, None);
+    assert!(r.turns_until(Duration::from_secs(20), |r| r.ops().first().is_some_and(|o| o.state == unconfirmed)), "{:?}", r.ops());
+    assert_eq!(check_reads(&r, CHAT, T0 + 2 * MINUTE), 4, "four pages read, no more");
+    assert_eq!(r.outbox_said(CHAT)[0].state, OutState::NotSent { reason: Unsent::Unconfirmed, code: None });
+    r.turns(Duration::from_secs(30));
+    assert_eq!((r.hits("post"), r.held(CHAT, "Lost in a busier chat")), (1, 1));
+}
+
+/// A-m2: a check Graph keeps failing (the chat's messages answer 500) waits 30 s, then twice as
+/// long each time; the fifth failure running makes the message "Not sent" (couldn't be
+/// confirmed), never posted again: the chat's next message goes, and Delete takes this one.
+#[test]
+fn a_check_that_keeps_failing_waits_longer_then_is_not_sent() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
+    r.fake(|t| {
+        // Not made: the chat's last message stays, so only the checks read it.
+        t.fail_next.insert("post".into(), 1);
+        t.fail_reads.push(CHAT.into());
+    });
+    r.send(CHAT, "1-1", "Never confirmed");
+    r.send(CHAT, "1-2", "Next in line");
+    assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
+    let unconfirmed = not_sent(Unsent::Unconfirmed, None);
+    let (mut checks, mut reads) = (Vec::new(), r.reads(CHAT));
+    while r.at < Duration::from_secs(600) && !r.ops().first().is_some_and(|o| o.state == unconfirmed) {
+        r.turns(STEP);
+        if r.reads(CHAT) > reads {
+            reads = r.reads(CHAT);
+            checks.push(r.at);
+        }
+    }
+    let gaps: Vec<u64> = checks.windows(2).map(|w| (w[1] - w[0]).as_secs()).collect();
+    assert_eq!(gaps, [30, 60, 120, 240], "five checks, each wait twice the last: {checks:?}");
+    assert_eq!(r.ops()[0].state, unconfirmed);
+    assert_eq!(r.outbox_said(CHAT)[0].state, OutState::NotSent { reason: Unsent::Unconfirmed, code: None });
+    r.fake(|t| t.fail_reads.clear());
+    assert!(r.turns_until(Duration::from_secs(3), |r| r.hits("post") == 2), "the chat's next goes");
+    r.turns(Duration::from_secs(300));
+    assert_eq!(r.hits("post"), 2, "and the one not sent never goes again on its own");
+    assert_eq!((r.held(CHAT, "Never confirmed"), r.held(CHAT, "Next in line")), (0, 1));
+    let seq = r.ops()[0].seq;
+    r.w.job(Job::Discard { seq });
+    assert!(r.ops().is_empty(), "Delete takes it");
+}
+
+/// A check never reads from past Graph's clock and an hour (a record read back with a time far
+/// ahead: a damaged file, or a time Graph made up, chained). Nothing sent now can be told from
+/// such a time: the message is "Not sent" (couldn't be confirmed), not posted again.
+#[test]
+fn a_check_from_a_time_ahead_of_graph_is_capped_and_posts_nothing_more() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 3)]));
+    r.w.work_offline(true);
+    r.send(CHAT, "1-1", "From ahead");
+    let op = r.ops().remove(0);
+    let ahead = NOW + 100 * 365 * 24 * 60 * MINUTE;
+    r.w.copy.as_ref().unwrap().put_op(&OpRecord { after: Some(ahead), ..op }).unwrap();
+    r.fake(|t| {
+        t.answer_lost.insert("post".into(), 1);
+        t.lost_retry_after = Some(1);
+    });
+    r.w.work_offline(false);
+    let unconfirmed = not_sent(Unsent::Unconfirmed, None);
+    assert!(r.turns_until(Duration::from_secs(15), |r| r.ops().first().is_some_and(|o| o.state == unconfirmed)), "{:?}", r.ops());
+    assert_eq!(check_reads(&r, CHAT, NOW + 60 * MINUTE), 1, "read from Graph's time and an hour");
+    r.turns(Duration::from_secs(20));
+    assert_eq!((r.hits("post"), r.held(CHAT, "From ahead")), (1, 1));
 }
 
 #[test]

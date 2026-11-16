@@ -80,8 +80,9 @@ The outbox is the worker's (`net/src/teams/outbox.rs`): a message the user sends
 becomes a record in the copy (`outbox/<n>.json`) before anything goes, so it outlives a
 restart. Each chat's records go in order, one request a step under the same limiter
 (at most one send a second per chat); an answer lost on the way leaves the record "unknown", and
-the chat is read to find the message before it is posted again (three posts at most). A record
-refused, or never confirmed, stays "not sent" until the user retries or deletes it. The worker
+the chat is read to find the message (a page a step, four at most) before it is posted again
+(three posts at most); more pages left, or five reads failing running, and it is never posted
+again. A record refused, or never confirmed, stays "not sent" until the user retries or deletes it. The worker
 reports each chat's records (`Outbox`) and their count (`Unsent`); the engine shows them in the
 chat and keeps what it sent that the worker hasn't answered for yet. Chats are marked read by the
 same worker: one mark waits for a chat, however often it's asked meanwhile.
