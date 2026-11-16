@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The index read back from the file at start, in slices: the chats listed, then one chat's
-//! name and words a slice.
+//! name and words a slice. A hostile tranche read back, changed and cut as a write does it (the
+//! `teams_index` fuzz target).
 
 use super::*;
 
@@ -195,4 +196,104 @@ fn free_past_next(list: &mut [Segment]) {
         let fixed = seg.freed(&past);
         *seg = fixed;
     }
+}
+
+/// The `teams_index` fuzz target's input: a chat id, a tranche's bytes, a message's JSON and a
+/// control byte, split at NUL bytes (a part missing is empty, the control byte then 0).
+pub(crate) fn fuzz_index_input(data: &[u8]) -> (String, &[u8], &[u8], u8) {
+    let mut parts = data.split(|b| *b == 0);
+    let chat = String::from_utf8_lossy(parts.next().unwrap_or_default()).into_owned();
+    let tranche = parts.next().unwrap_or_default();
+    let message = parts.next().unwrap_or_default();
+    let control = parts.next().and_then(|c| c.first().copied()).unwrap_or(0);
+    (chat, tranche, message, control)
+}
+
+/// What a draft holds: each message's creation time and words, by its id.
+fn holding(d: &Draft) -> BTreeMap<String, (i64, Vec<String>)> {
+    let mut words: HashMap<u32, Vec<String>> = HashMap::new();
+    for (w, list) in &d.words {
+        for p in list {
+            words.entry(*p).or_default().push(w.clone());
+        }
+    }
+    d.places
+        .iter()
+        .filter_map(|(id, p)| {
+            let at = d.messages.get(usize::try_from(*p).ok()?)?.1;
+            Some((id.clone(), (at, words.remove(p).unwrap_or_default())))
+        })
+        .collect()
+}
+
+/// A hostile tranche (the `teams_index` fuzz target), read as the copy reads one: `Ok` unless it's
+/// a tranche of the chat; then within its caps. Its first message taken out, and the message
+/// taken as a write takes one (one under id `1` when it has no id that can be kept): its id taken
+/// out, its words put in unless it's deleted; still within its caps. Cut as the writer cuts it
+/// (the control byte: `% 3` the side, `1 + byte / 3 % 16` the most messages a tranche), each
+/// piece written and read back the same, within its caps, the count and a tranche's bytes; the
+/// pieces holding together what the tranche held; two side by side sharing a millisecond only
+/// when one of them holds only that millisecond (a run longer than a tranche, or past its bytes).
+/// `Err` names what broke.
+#[doc(hidden)]
+pub fn fuzz_teams_index(data: &[u8]) -> std::result::Result<(), String> {
+    let (chat, tranche, message, control) = fuzz_index_input(data);
+    let hash = chat_hash(&chat);
+    let Some((mut d, Form::Tranche(n))) = Draft::read(tranche, &hash, TRANCHE_READ_MAX) else { return Ok(()) };
+    d.within_caps().map_err(|e| format!("a tranche read back: {e}"))?;
+    if let Some(first) = d.messages.iter().map(|(id, _)| id.clone()).find(|id| !id.is_empty()) {
+        d.remove(&HashSet::from([first.as_str()]));
+    }
+    let m = serde_json::from_slice::<ChatMessage>(message)
+        .ok()
+        .filter(|m| id_ok(&m.id))
+        .unwrap_or_else(|| ChatMessage { id: "1".into(), ..ChatMessage::default() });
+    d.remove(&HashSet::from([m.id.as_str()]));
+    if m.deleted.is_none() {
+        d.add(&m.id, m.created, words_of(&m));
+    }
+    d.within_caps().map_err(|e| format!("the tranche changed: {e}"))?;
+    let held = holding(&d);
+    let side = match control % 3 {
+        0 => Side::Front,
+        1 => Side::Back,
+        _ => Side::Halves,
+    };
+    let cap = 1 + usize::from(control / 3 % 16);
+    let pieces = super::write::fitted(d, side, cap).map_err(|e| format!("a tranche cut: {e}"))?;
+    let mut together: BTreeMap<String, (i64, Vec<String>)> = BTreeMap::new();
+    for piece in &pieces {
+        let bytes = piece.to_bytes(n).map_err(|e| format!("a piece written: {e}"))?;
+        if !matches!(Draft::read(&bytes, &hash, TRANCHE_READ_MAX), Some((back, Form::Tranche(k))) if k == n && back == *piece) {
+            return Err(format!("a piece of {} messages isn't read back as it was written", piece.held()));
+        }
+        piece.within_caps().map_err(|e| format!("a piece: {e}"))?;
+        if piece.held() > cap {
+            return Err(format!("a piece of {} messages, past {cap}", piece.held()));
+        }
+        let widest = piece.to_bytes(TRANCHES_MAX).map_err(|e| format!("a piece written: {e}"))?.len();
+        if piece.held() > 1 && widest > TRANCHE_BYTES {
+            return Err(format!("a piece of {} messages and {widest} bytes", piece.held()));
+        }
+        for (id, what) in holding(piece) {
+            if together.insert(id, what).is_some() {
+                return Err("a message in two pieces".into());
+            }
+        }
+    }
+    if together != held {
+        return Err(format!("the pieces hold {} messages, the tranche {}", together.len(), held.len()));
+    }
+    for pair in pieces.windows(2) {
+        let (Some(a), Some(b)) = (pair.first().and_then(Draft::span), pair.get(1).and_then(Draft::span)) else {
+            return Err("a piece holding nothing".into());
+        };
+        if a.newest > b.first {
+            return Err("two pieces out of order".into());
+        }
+        if a.newest == b.first && a.first < a.newest && b.first < b.newest {
+            return Err("two pieces share a millisecond neither holds alone".into());
+        }
+    }
+    Ok(())
 }

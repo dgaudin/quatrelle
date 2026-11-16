@@ -18,8 +18,10 @@ use crate::teams::store::{ChatRecord, Copy, Identity, Opened, chat_hash};
 use crate::teams::worker::Worker;
 
 /// The index's files: the tranches, the stub, the old format read and converted, a copy rolled
-/// back and forward again.
+/// back and forward again; the fuzz targets' seeds.
 mod formats;
+/// The hits against the messages, whatever the writes: a proptest.
+mod oracle;
 /// What a write puts in the index, in bytes: an insert, an edit, a deletion, a history's copy;
 /// what a query reads, and what leaves first past the bound.
 mod tranches;

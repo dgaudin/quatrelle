@@ -41,6 +41,8 @@ pub(crate) mod worker;
 pub use check::{CheckOptions, run_check};
 pub use graph::{Me, Page, Range, Stats, TeamsClient, chat_of, member_of, message_of, presence_of};
 #[doc(hidden)]
+pub use search::fuzz_teams_index;
+#[doc(hidden)]
 pub use store::fuzz_teams_copy;
 pub use worker::{REFRESH_KEY, keyring};
 

@@ -284,6 +284,42 @@ impl Draft {
         Some((seg, form))
     }
 
+    /// Within the caps it's read back to: each message's id usable and held once; each word one
+    /// the index may hold, at most [`INDEX_WORDS`] a message; each word's places in [`order`],
+    /// none twice, free or past the messages. `Err` names what isn't.
+    pub(super) fn within_caps(&self) -> std::result::Result<(), String> {
+        let mut ids: HashSet<&str> = HashSet::new();
+        for (p, (id, _)) in self.messages.iter().enumerate().filter(|(_, (id, _))| !id.is_empty()) {
+            if !id_ok(id) || !ids.insert(id.as_str()) {
+                return Err(format!("the message at place {p}: its id unusable or held twice"));
+            }
+        }
+        let mut counts = vec![0usize; self.messages.len()];
+        for (w, list) in &self.words {
+            if !word_ok(w) {
+                return Err(format!("a word the index can't hold ({} bytes)", w.len()));
+            }
+            let at = |p: &u32| order(&self.messages, *p);
+            if !list.windows(2).all(|pair| match pair {
+                [a, b] => at(a) < at(b),
+                _ => true,
+            }) {
+                return Err(format!("a word's places out of order or twice ({} of them)", list.len()));
+            }
+            for p in list {
+                let held = usize::try_from(*p).ok().filter(|at| self.messages.get(*at).is_some_and(|(id, _)| !id.is_empty()));
+                match held.and_then(|at| counts.get_mut(at)) {
+                    Some(n) => *n += 1,
+                    None => return Err(format!("a word at place {p}: free or past the messages")),
+                }
+            }
+        }
+        match counts.iter().position(|n| *n > INDEX_WORDS) {
+            Some(p) => Err(format!("the message at place {p}: more than {INDEX_WORDS} words")),
+            None => Ok(()),
+        }
+    }
+
     /// As the file keeps it, tranche `tranche` of its chat.
     pub(super) fn to_bytes(&self, tranche: u32) -> Result<Vec<u8>> {
         let out = SegmentOut { chat: &self.chat, tranche, messages: &self.messages, words: &self.words };

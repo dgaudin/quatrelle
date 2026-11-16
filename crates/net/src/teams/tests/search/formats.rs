@@ -4,10 +4,14 @@
 //! segment read then cut at the chat's first write, a chat's tranches read to its cap, a copy
 //! rolled back to the old format and forward again, an old segment past 1,024 tranches, and a
 //! store that can't list a chat's tranches. Hostile tranches, tranches without a head, a head
-//! that can't be read, and a run parted at a lower number read back whole.
+//! that can't be read, and a run parted at a lower number read back whole. The fuzz targets'
+//! seeds, each read back as it says.
 
 use super::tranches::{changes, deleted, ids_in, msg_at};
 use super::*;
+use crate::teams::search::fuzz_index_input;
+use crate::teams::store::fuzz_files;
+use crate::teams::{fuzz_teams_copy, fuzz_teams_index};
 
 pub(super) const NONE: Vec<(String, String)> = Vec::new();
 
@@ -435,4 +439,90 @@ fn an_old_segment_too_big_to_read_is_replaced_by_the_stub() {
     let copy = open(&store);
     assert_eq!(hits(&copy, "talk"), one(B, &id(6)));
     assert_eq!(hits(&copy, "lunch"), one(A, &id(2)));
+}
+
+/// The `teams_store` seeds of the index, and `teams_index`'s.
+const LEGACY_SEGMENT: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fuzz/seeds/teams_store/legacy-segment"));
+const TRANCHES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fuzz/seeds/teams_store/tranches"));
+const ROLLED_BACK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fuzz/seeds/teams_store/rolled-back"));
+const TRANCHE: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../fuzz/seeds/teams_index/tranche"));
+
+/// The fuzz entries' seeds, each read back as it says before the entry runs on it: `teams_store`'s
+/// an old segment, tranches behind the stub, an old segment beside a tranche (a rollback);
+/// `teams_index`'s A's tranche 0 of three messages, two of one millisecond. Each passes its entry,
+/// and so does junk, a tranche holding an id twice, and one whose message is held already.
+#[test]
+fn the_fuzz_entries_reach_the_tranches() {
+    let h = chat_hash(A);
+    // A seed's files in a store, the copy opened as the entry opens it and its index read back.
+    let opened = |seed: &[u8]| {
+        let (chat, files, message) = fuzz_files(seed);
+        assert_eq!(chat, A);
+        assert!(message.is_some_and(|m| serde_json::from_slice::<ChatMessage>(m).is_ok()), "a message to write");
+        let store = Store::memory_from(files);
+        let (copy, opened) = Copy::open(store.clone(), &Identity { tenant_id: "t-1".into(), object_id: "u-1".into() }).unwrap();
+        assert_eq!(opened, Opened::Same, "the seed's identity");
+        while copy.index_step() {}
+        (copy, store)
+    };
+    let head = |store: &Store| -> serde_json::Value {
+        serde_json::from_slice(&store.account_file(TEAMS_ACCOUNT, &format!("index/{h}.json")).unwrap().unwrap()).unwrap()
+    };
+    let both = vec![(A.to_string(), "2".to_string()), (A.to_string(), "1".to_string())];
+
+    {
+        let (seeded, store) = opened(LEGACY_SEGMENT);
+        assert_eq!(hits(&seeded, "plan"), both, "the old segment's two messages");
+        assert!(!seeded.found("plan").partial);
+        assert!(head(&store).get("moved").is_none() && index_files(&store, A).is_none(), "the old format");
+    }
+    {
+        let (seeded, store) = opened(TRANCHES);
+        assert_eq!(hits(&seeded, "budget"), one(A, "1"), "tranche 0's words");
+        assert_eq!(hits(&seeded, "lunch"), one(A, "2"), "tranche 1's words");
+        assert_eq!(hits(&seeded, "plan"), both);
+        assert!(!seeded.found("plan").partial);
+        assert_eq!(head(&store)["moved"], 2);
+        let mut names = store.account_files(TEAMS_ACCOUNT, &format!("index/{h}")).unwrap();
+        names.sort_unstable();
+        assert_eq!(names, ["0.json", "1.json"]);
+    }
+    {
+        let (seeded, store) = opened(ROLLED_BACK);
+        assert!(seeded.found("plan").partial, "a rollback said");
+        assert!(index_files(&store, A).is_none(), "the tranche from before the rollback went");
+        assert_eq!(hits(&seeded, "secret"), NONE);
+        assert_eq!(hits(&seeded, "plan"), one(A, "2"), "the old segment's message");
+    }
+
+    for seed in [LEGACY_SEGMENT, TRANCHES, ROLLED_BACK] {
+        assert_eq!(fuzz_teams_copy(seed), Ok(()));
+    }
+
+    // A's tranche 0 of three messages, the last two of one millisecond, and a message made in it
+    // too: once the first is taken out, a run of three, cut two a tranche.
+    let (chat, tranche, message, control) = fuzz_index_input(TRANCHE);
+    assert_eq!(chat, A);
+    let kept: serde_json::Value = serde_json::from_slice(tranche).unwrap();
+    assert_eq!((&kept["chat"], &kept["tranche"]), (&serde_json::json!(A), &serde_json::json!(0)));
+    let times: Vec<i64> = kept["messages"].as_array().unwrap().iter().map(|m| m[1].as_i64().unwrap()).collect();
+    assert!(times.len() == 3 && times[1] == times[2] && times[0] < times[1], "{times:?}");
+    assert_eq!(serde_json::from_slice::<ChatMessage>(message).unwrap().created, times[2]);
+    assert_eq!((control % 3, 1 + control / 3 % 16), (0, 2), "cut from the front, two a tranche");
+    // Read back by the copy as A's tranche 0, behind the stub: its three messages found.
+    let (copy, store) = copy();
+    drop(copy);
+    store.write_account_files(TEAMS_ACCOUNT, &[stub_of(A), (format!("index/{h}/0.json"), tranche.to_vec())]).unwrap();
+    assert_eq!(hits(&open(&store), "plan").len(), 3);
+
+    for data in [
+        TRANCHE,
+        b"",
+        b"\0\0\0",
+        b"19:x\0{\"chat\":\"19:x\",\"tranche\":0,\"messages\":[[\"1\",0],[\"1\",0]],\"words\":{\"a\":[0,1,7]}}",
+        // The message under id 1 (none is given) is held already: its id taken out first.
+        b"19:x\0{\"chat\":\"19:x\",\"tranche\":0,\"messages\":[[\"2\",0],[\"1\",0]],\"words\":{}}",
+    ] {
+        assert_eq!(fuzz_teams_index(data), Ok(()), "{}", String::from_utf8_lossy(data));
+    }
 }

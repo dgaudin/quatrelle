@@ -59,6 +59,9 @@ mod segment;
 mod tranche;
 mod write;
 
+#[cfg(test)]
+pub(crate) use load::fuzz_index_input;
+pub use load::fuzz_teams_index;
 use segment::{Draft, Form, Segment, query_words, stub, words_of, words_of_texts};
 pub(crate) use tranche::{Goes, Span, candidates, route};
 use tranche::{Tranches, by_first};
@@ -288,6 +291,57 @@ impl Index {
             return cap;
         }
         RESIDENT_MAX
+    }
+
+    /// Within its caps, as read back and as written: each chat's tranches at most
+    /// [`TRANCHES_MAX`], under distinct numbers below it, at most [`SEGMENT_MAX`] bytes together,
+    /// each of the chat (its id said with them), a message of it in one of them only, in the
+    /// chat's order ([`by_first`]), each within a tranche's caps and its range what it holds; and
+    /// among the newest, exactly the tranches held. `Err` names what isn't.
+    pub(crate) fn within_caps(&self) -> std::result::Result<(), String> {
+        let most = usize::try_from(TRANCHES_MAX).unwrap_or(usize::MAX);
+        let mut held: BTreeSet<(Reverse<i64>, String, u32)> = BTreeSet::new();
+        for (hash, t) in &self.segments {
+            if t.list.len() > most {
+                return Err(format!("a chat of {} tranches", t.list.len()));
+            }
+            let bytes = t.list.iter().map(|s| s.bytes).fold(0, u64::saturating_add);
+            if bytes > u64::try_from(SEGMENT_MAX).unwrap_or(u64::MAX) {
+                return Err(format!("a chat's tranches of {bytes} bytes"));
+            }
+            if !t.list.is_empty() && chat_hash(&t.chat) != *hash {
+                return Err("a chat's tranches said of another chat".into());
+            }
+            let (mut numbers, mut ids) = (HashSet::new(), HashSet::new());
+            for s in &t.list {
+                if s.key >= TRANCHES_MAX || !numbers.insert(s.key) {
+                    return Err(format!("a chat's tranche under number {}, past the cap or twice", s.key));
+                }
+                if chat_hash(&s.chat) != *hash {
+                    return Err(format!("tranche {} of another chat", s.key));
+                }
+                let d = Draft::of(s);
+                d.within_caps().map_err(|e| format!("tranche {}: {e}", s.key))?;
+                if d.span() != Some(s.span()) {
+                    return Err(format!("tranche {}: its range or count isn't what it holds", s.key));
+                }
+                if s.messages.iter().any(|(id, _)| !id.is_empty() && !ids.insert(&**id)) {
+                    return Err(format!("tranche {}: a message another tranche of the chat holds", s.key));
+                }
+                held.insert((Reverse(s.newest), hash.clone(), s.key));
+            }
+            let order = |s: &Segment| (s.first, s.newest, s.key);
+            if !t.list.windows(2).all(|pair| match pair {
+                [a, b] => order(a) < order(b),
+                _ => true,
+            }) {
+                return Err("a chat's tranches out of its order".into());
+            }
+        }
+        if held != self.by_newest {
+            return Err(format!("{} tranches among the newest, {} held", self.by_newest.len(), held.len()));
+        }
+        Ok(())
     }
 
     /// A chat's words to be read back again from the file (its write failed).

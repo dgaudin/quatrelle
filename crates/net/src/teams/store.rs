@@ -510,15 +510,9 @@ fn damaged_copies(store: &Store) -> Vec<PathBuf> {
         .collect()
 }
 
-/// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened
-/// for `t-1`/`u-1`, listed, read in pages and written to, its index read back and searched, its
-/// pictures too (the chat id taken as a user's for a photo), its outbox read back, written to and
-/// emptied (the message's body taken as one going out). `data` is a chat id, then pairs of a
-/// key under `Teams/` and its bytes, then (when they're odd) a message's JSON, split at NUL bytes;
-/// a `=` in a key is the chat's hash (`chats/=.json`, `msgs/=/0.json`). `Err` names a cap that
-/// what was read back breaks.
-#[doc(hidden)]
-pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
+/// The `teams_store` fuzz target's input, as [`fuzz_teams_copy`] reads it: the chat id, the files
+/// (each key under `Teams/`, a `=` in it the chat's hash) and the message, when there's one.
+pub(super) fn fuzz_files(data: &[u8]) -> (String, Vec<(String, Vec<u8>)>, Option<&[u8]>) {
     let mut parts = data.split(|b| *b == 0);
     let chat = String::from_utf8_lossy(parts.next().unwrap_or_default()).into_owned();
     let rest: Vec<&[u8]> = parts.collect();
@@ -531,6 +525,20 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
         .chunks(2)
         .filter_map(|kv| Some((format!("{TEAMS_ACCOUNT}/{}", String::from_utf8_lossy(kv.first()?).replace('=', &hash)), kv.get(1)?.to_vec())))
         .collect();
+    (chat, files, message)
+}
+
+/// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened
+/// for `t-1`/`u-1`, listed, read in pages and written to, its index read back within its caps
+/// and searched, then read back again by a second opening, which finds the same; its pictures too
+/// (the chat id taken as a user's for a photo), its outbox read back, written to and emptied (the
+/// message's body taken as one going out). `data` is a chat id, then pairs of a key under
+/// `Teams/` and its bytes, then (when they're odd) a message's JSON, split at NUL bytes; a `=` in
+/// a key is the chat's hash (`chats/=.json`, `msgs/=/0.json`, `index/=/0.json`). `Err` names a
+/// cap that what was read back breaks.
+#[doc(hidden)]
+pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
+    let (chat, files, message) = fuzz_files(data);
     let who = Identity { tenant_id: "t-1".into(), object_id: "u-1".into() };
     let Ok((copy, _)) = Copy::open(Store::memory_from(files), &who) else { return Ok(()) };
     for r in copy.chats().iter().chain(copy.chat(&chat).as_ref()) {
@@ -561,16 +569,26 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     m.chat = chat.clone();
     let changed = copy.upsert(&chat, std::slice::from_ref(&m)).unwrap_or_default();
     check("what changed", &changed, 1)?;
-    // The search's index read back (a chat a slice) and searched: no hit past the bound, none
-    // under an id the copy wouldn't keep.
-    for _ in 0..=quatrelle_model::pim::teams::MAX_CHATS {
-        if !copy.index_step() {
-            break;
+    // The search's index read back (a chat a slice) within its caps and searched: no hit past the
+    // bound, none under an id the copy wouldn't keep.
+    let read_back = |copy: &Copy| -> std::result::Result<(), String> {
+        for _ in 0..=quatrelle_model::pim::teams::MAX_CHATS {
+            if !copy.index_step() {
+                break;
+            }
         }
-    }
+        copy.index.borrow().within_caps().map_err(|e| format!("the index read back: {e}"))
+    };
+    read_back(&copy)?;
     let found = copy.found("message");
     if found.indexing || found.hits.len() > super::search::MAX_HITS || found.hits.iter().any(|(c, m)| !id_ok(c) || !(m.is_empty() || id_ok(m))) {
         return Err(format!("a search of the copy read back: {} hits, indexing {}", found.hits.len(), found.indexing));
+    }
+    // Read back again from the file as it's now, by a second opening: the same hits.
+    let (again, _) = Copy::open(copy.store.clone(), &who).map_err(|e| format!("a second opening: {e}"))?;
+    read_back(&again)?;
+    if ["message", "a", "plan"].into_iter().any(|q| again.found(q).hits != copy.found(q).hits) {
+        return Err("a second opening finds other hits".into());
     }
     check("the last pages, once written", &copy.last_pages(&chat, 2), 2 * PAGE)?;
     // The image cache read back (its uses, a photo's record), then a picture kept past them.
