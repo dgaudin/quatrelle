@@ -462,26 +462,31 @@ fn an_old_segment_too_big_to_read_is_replaced_by_the_stub() {
         assert_eq!(store.account_files(TEAMS_ACCOUNT, &format!("index/{ha}")).unwrap(), ["0.json"]);
     }
 
-    // B's head damaged beside its tranches: they go, and it's said (the copy's "partial" set aside
-    // to see B's own).
-    let copy = open(&store);
-    copy.upsert(B, &[msg(B, 5, "budget talk")]).unwrap();
-    drop(copy);
-    store.write_account_files(TEAMS_ACCOUNT, &[(format!("index/{hb}.json"), b"{not json".to_vec())]).unwrap();
-    store.remove_account_files(TEAMS_ACCOUNT, "index/partial").unwrap();
-    let copy = open(&store);
-    assert_eq!(hits(&copy, "talk"), NONE);
-    assert!(copy.found("talk").partial);
-    assert!(index_files(&store, B).is_none(), "B's tranches went");
-    // What was written since A's write, the load's "partial" too, set aside.
-    changes(&store);
-    copy.upsert(B, &[msg(B, 6, "dinner talk")]).unwrap();
-    let keys: Vec<String> = changes(&store).into_iter().map(|(k, _)| k).filter(|k| k.starts_with("index/")).collect();
-    assert_eq!(keys, [format!("index/{hb}.json"), format!("index/{hb}/0.json")]);
-    drop(copy);
-    let copy = open(&store);
-    assert_eq!(hits(&copy, "talk"), one(B, &id(6)));
-    assert_eq!(hits(&copy, "lunch"), one(A, &id(2)));
+    // B's head damaged, shaped like a tranche, or another chat's stub, beside its tranches: they
+    // go, and it's said (the copy's "partial" set aside to see B's own).
+    let shaped = tranche_file(B, 0, &[(id(1), T0 + MINUTE)], serde_json::json!({ "shaped": [0] }));
+    for (round, head) in [b"{not json".to_vec(), shaped, stub_of(A).1].into_iter().enumerate() {
+        let i = 10 * round as i64;
+        let copy = open(&store);
+        copy.upsert(B, &[msg(B, i + 5, "budget talk")]).unwrap();
+        drop(copy);
+        store.write_account_files(TEAMS_ACCOUNT, &[(format!("index/{hb}.json"), head)]).unwrap();
+        store.remove_account_files(TEAMS_ACCOUNT, "index/partial").unwrap();
+        let copy = open(&store);
+        assert_eq!(hits(&copy, "talk"), NONE, "head {round}");
+        assert_eq!(hits(&copy, "shaped"), NONE);
+        assert!(copy.found("talk").partial);
+        assert!(index_files(&store, B).is_none(), "B's tranches went (head {round})");
+        // What was written since A's write, the load's "partial" too, set aside.
+        changes(&store);
+        copy.upsert(B, &[msg(B, i + 6, "dinner talk")]).unwrap();
+        let keys: Vec<String> = changes(&store).into_iter().map(|(k, _)| k).filter(|k| k.starts_with("index/")).collect();
+        assert_eq!(keys, [format!("index/{hb}.json"), format!("index/{hb}/0.json")]);
+        drop(copy);
+        let copy = open(&store);
+        assert_eq!(hits(&copy, "talk"), one(B, &id(i + 6)));
+        assert_eq!(hits(&copy, "lunch"), one(A, &id(2)));
+    }
 }
 
 /// The `teams_store` seeds of the index, and `teams_index`'s.
