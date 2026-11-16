@@ -5,8 +5,8 @@
 //! picker of the mail editor, and Enter to send (`teams.send`, with the byte ranges of the bold
 //! and italic runs); Shift+Enter makes a new line. These keys act where they come among the
 //! frame's events, on the text as it stood when they were pressed (what's typed after them in the
-//! same frame waits for the next). While the box has the keyboard, the window's keys never send
-//! the mail being written ([`box_focused`]).
+//! same frame waits for the next). In Conversations the window's keys never send the mail being
+//! written (`app/keys.rs`), so neither does a key pressed in the box.
 //!
 //! The text is never lost. A message too long for Teams (its HTML past [`SEND_MAX`] bytes), or
 //! with too many waiting already (the command's own caps, checked first), stays in the box, and
@@ -153,11 +153,6 @@ impl Refusal {
 /// The text box's id, for `chat`.
 fn box_id(chat: &str) -> egui::Id {
     egui::Id::unique(("teams-box", chat))
-}
-
-/// Whether the open chat's box has the keyboard (the window's keys then leave the mail alone).
-pub(crate) fn box_focused(s: &Session, ctx: &egui::Context) -> bool {
-    s.teams.open.as_deref().is_some_and(|chat| ctx.memory(|m| m.has_focus(box_id(chat))))
 }
 
 /// One of the box's own keys: Enter alone (Shift+Enter is the text box's new line), Ctrl+B,

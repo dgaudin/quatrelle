@@ -292,8 +292,9 @@ The box at the foot of a conversation sends to it (there is none in a conversati
 longer in, or one Graph won't serve).
 
 - **Enter** sends; **Shift+Enter** starts a new line. **Ctrl+B** and **Ctrl+I** make the
-  selection bold or italic, and the emoji button opens the mail editor's emoji picker. While the
-  box has the keyboard, the keys that send the mail being written (Ctrl+Enter, Alt+S) do nothing.
+  selection bold or italic, and the emoji button opens the mail editor's emoji picker. In
+  Conversations, wherever the keyboard is, the keys that send the mail being written (Ctrl+Enter,
+  Alt+S) do nothing: a mail goes from Mail, or from its own window.
 - What is sent is the text as typed, its lines, bold and italic: what looks like markup goes as
   it was written, and a web address typed isn't made a link. Mentions and pictures can't be sent
   yet (a typed "@name" goes as text).

@@ -555,6 +555,37 @@ fn ctrl_enter_in_the_box_never_sends_the_mail_being_written() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// B-I1: in Conversations none of the mail's fields is on screen, so no key there sends the mail
+/// being written, wherever the keyboard is: on nothing, on a message's bubble, in the
+/// conversations' search.
+#[test]
+fn in_conversations_no_key_sends_the_mail_being_written() {
+    let bubble = said("m1", user("u-ana", "Ana Lima"), NOW - 60, para(vec![words("Can you look at the agenda?")]));
+    let (mut a, dir) = writing_app("teams-no-mail-anywhere", vec![bubble]);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"to": "ann@x.example", "subject": "Hi", "body": "Hello"}));
+    a.session.module = quatrelle_engine::Module::Conversations;
+    let send_keys = |a: &mut MailApp, place: &str| {
+        for (k, m) in [(Key::Enter, Modifiers::COMMAND), (Key::S, Modifiers::ALT)] {
+            frame_sized(&ctx, a, vec![Event::ModifiersChanged(m), key(k, m)], size);
+            frame_sized(&ctx, a, vec![Event::ModifiersChanged(Modifiers::NONE)], size);
+            assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending), "{place}, {k:?}: the mail wasn't sent");
+        }
+    };
+    let text = settled_text_at(&ctx, &mut a, "Can you look at the agenda?", size).expect("the bubble");
+    send_keys(&mut a, "nothing has the keyboard");
+    click_at(&ctx, &mut a, text, 1, size);
+    send_keys(&mut a, "a bubble clicked");
+    a.ui.conversations.focus_search = true;
+    frame_sized(&ctx, &mut a, vec![], size);
+    frame_sized(&ctx, &mut a, vec![Event::Text("plan".into())], size);
+    assert_eq!(a.ui.conversations.query, "plan", "the search has the keyboard");
+    send_keys(&mut a, "in the search");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The engine's refusals are known by the constants it exports (P12), each said in the window's
 /// words: too long, too many waiting, the chat left, a Delete while it may be in Teams; any other
 /// in the box's own.

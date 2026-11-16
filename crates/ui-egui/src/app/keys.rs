@@ -48,9 +48,11 @@ impl MailApp {
             self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
         }
         let typing = ctx.text_edit_focused();
-        // Writing in a conversation: no key there sends the mail being written (a reply in Teams
-        // is never an e-mail).
-        let teams_box = crate::conversations::box_focused(&self.session, ctx);
+        // The keys that send the mail being written (Ctrl+Enter, Alt+S) send it only from one of
+        // its fields. In Conversations none is on screen (the mail is drawn in Mail, or in a window
+        // of its own whose keys are its own): there they never send it, from the box, a bubble,
+        // the list or a search alike (a reply in Teams is never an e-mail).
+        let mail_send = self.session.module != Module::Conversations;
         // A press anywhere but on an attachment hands the keyboard back from the attachments and
         // clears their selection; not one in a menu over them (Save Selected… is one).
         if ctx.input(|i| i.pointer.primary_pressed()) && !self.ui.attachment_hovered {
@@ -192,7 +194,7 @@ impl MailApp {
             }
             if let Some(spec) = reg.by_shortcut(&combo) {
                 let id = spec.id;
-                if teams_box && id == "compose.send" {
+                if !mail_send && id == "compose.send" {
                     continue;
                 }
                 // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
@@ -251,7 +253,7 @@ impl MailApp {
                 }
             }
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) && self.session.compose.is_some() && !teams_box {
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) && self.session.compose.is_some() && mail_send {
             self.run("compose.send", json!({}));
         }
     }
