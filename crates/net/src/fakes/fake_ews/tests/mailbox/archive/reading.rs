@@ -250,8 +250,18 @@ fn nothing_of_the_archive_is_kept() {
     }
     // The data file read again (what it keeps may be compressed): the folder list names the
     // archive's folders, and holds no list and no source of them.
+    // The pool's threads let the file go a moment after it stops: on Linux reading the file
+    // above doesn't wait for that (only Windows refuses it while open), so its lock is waited for.
     let store = Store::open_packed(t.join("app"), t.join("Quatrelle Files")).unwrap();
-    let folders = store.load_folders("a1").unwrap();
+    let folders = loop {
+        match store.load_folders("a1") {
+            Ok(f) => break f,
+            Err(e) => {
+                assert!(Instant::now() < end, "the data file stayed open: {e}");
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    };
     assert_eq!(folders.iter().filter(|f| f.archive).count(), 5);
     assert!(folders.iter().any(|f| f.archive && f.path == TOP));
     for f in folders.iter().filter(|f| f.archive) {
