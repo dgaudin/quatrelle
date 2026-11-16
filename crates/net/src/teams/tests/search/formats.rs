@@ -3,12 +3,24 @@
 //! The index's files: a chat's tranches written by number and read back, the stub, an old
 //! segment read then cut at the chat's first write, a chat's tranches read to its cap, a copy
 //! rolled back to the old format and forward again, an old segment past 1,024 tranches, and a
-//! store that can't list a chat's tranches.
+//! store that can't list a chat's tranches. Hostile tranches, tranches without a head, a head
+//! that can't be read, and a run parted at a lower number read back whole.
 
-use super::tranches::changes;
+use super::tranches::{changes, deleted, ids_in, msg_at};
 use super::*;
 
 pub(super) const NONE: Vec<(String, String)> = Vec::new();
+
+/// A chat's stub, as this version writes it at the head of a chat's tranches.
+fn stub_of(chat: &str) -> (String, Vec<u8>) {
+    let stub = serde_json::json!({ "chat": chat, "messages": [], "words": {}, "moved": 2 });
+    (format!("index/{}.json", chat_hash(chat)), serde_json::to_vec(&stub).unwrap())
+}
+
+/// A tranche of `chat` that says it's number `tranche`, holding these messages and words.
+fn tranche_file(chat: &str, tranche: i64, messages: &[(String, i64)], words: serde_json::Value) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({ "chat": chat, "tranche": tranche, "messages": messages, "words": words })).unwrap()
+}
 
 /// [`copy`], on a store whose files can be made to fail.
 pub(super) fn failing_copy() -> (Copy, Store) {
@@ -76,7 +88,9 @@ fn tranches_are_written_by_number_and_read_back() {
         assert!(messages.iter().all(|(id, _)| !id.is_empty()), "tranche {n} holds a free place");
     }
     assert!(store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/3.json")).unwrap().is_none());
-    assert!(store.account_file(TEAMS_ACCOUNT, &format!("index/{h}.json")).unwrap().is_none(), "a chat new to the index gets no stub");
+    // Its head, with its first tranches: what tells them from those an old version left.
+    let head = store.account_file(TEAMS_ACCOUNT, &format!("index/{h}.json")).unwrap().expect("a chat new to the index gets its stub");
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&head).unwrap()["moved"], 2);
     drop(copy);
     let copy = open(&store);
     let plan = hits(&copy, "plan");
@@ -108,12 +122,14 @@ fn past_16_mb_a_chats_tranches_are_skipped_and_said() {
     drop(copy);
     let h = chat_hash(A);
     let pad = "p".repeat((19 << 20) / 10);
+    // Their head: tranches without one read as a rollback.
     let files: Vec<(String, Vec<u8>)> = (0..9i64)
         .map(|n| {
             let kept =
                 serde_json::json!({ "chat": A, "tranche": n, "messages": [[id(n), T0 + n * MINUTE]], "words": { format!("w{n}"): [0] }, "pad": pad });
             (format!("index/{h}/{n}.json"), serde_json::to_vec(&kept).unwrap())
         })
+        .chain([stub_of(A)])
         .collect();
     store.write_account_files(TEAMS_ACCOUNT, &files).unwrap();
     let copy = open(&store);
@@ -224,4 +240,199 @@ fn an_old_segment_past_1024_tranches_keeps_the_newest() {
     assert_eq!(hits(&copy, "second"), one(A, &id(1)));
     assert_eq!(hits(&copy, "plan").len(), MAX_HITS);
     assert!(copy.found("plan").partial);
+}
+
+/// Tranches planted under A's folder: too big, damaged, another chat's, under another number, past
+/// 1,024, under names this version never writes, one holding a message a lower-numbered tranche
+/// holds (and one holding nothing else), one holding a message past the next tranche's first.
+/// Read back, each is passed over or freed of what it can't hold; A's next write empties what was
+/// passed over and writes again what was freed, and leaves alone what it never reads.
+#[test]
+fn a_hostile_tranche_is_held_to_the_caps() {
+    let (copy, store) = copy();
+    let h = chat_hash(A);
+    copy.upsert(A, &(1..4).map(|i| msg(A, i, &format!("kept {i}"))).collect::<Vec<_>>()).unwrap();
+    drop(copy);
+    let at = |i: i64| (id(i), T0 + i * MINUTE);
+    let huge = serde_json::json!({ "chat": A, "tranche": 1, "messages": [at(10)], "words": { "huge": [0] }, "pad": "h".repeat(2 << 20) });
+    let unnamed = tranche_file(A, 5, &[at(60)], serde_json::json!({ "unnamed": [0] }));
+    let planted: Vec<(String, Vec<u8>)> = [
+        ("1", serde_json::to_vec(&huge).unwrap()),
+        ("2", b"{not json".to_vec()),
+        ("3", tranche_file(B, 3, &[at(30)], serde_json::json!({ "stolen": [0] }))),
+        ("4", tranche_file(A, 9, &[at(40)], serde_json::json!({ "misfiled": [0] }))),
+        ("1024", tranche_file(A, 1_024, &[at(45)], serde_json::json!({ "beyond": [0] }))),
+        ("05", unnamed.clone()),
+        ("x", unnamed.clone()),
+        // Message 2 again, at its own time: tranche 0 holds it.
+        ("6", tranche_file(A, 6, &[at(2), at(50)], serde_json::json!({ "twice": [0], "fine": [1] }))),
+        // Message 71 made at minute 200: past tranche 8's first.
+        ("7", tranche_file(A, 7, &[at(70), (id(71), T0 + 200 * MINUTE)], serde_json::json!({ "seventy": [0], "outside": [1] }))),
+        ("8", tranche_file(A, 8, &[at(100)], serde_json::json!({ "hundred": [0] }))),
+        // Message 3 alone, again: left holding nothing, an orphan.
+        ("9", tranche_file(A, 9, &[at(3)], serde_json::json!({ "thrice": [0] }))),
+    ]
+    .into_iter()
+    .map(|(n, bytes)| (format!("index/{h}/{n}.json"), bytes))
+    .collect();
+    store.write_account_files(TEAMS_ACCOUNT, &planted).unwrap();
+    let check = |copy: &Copy| {
+        for word in ["huge", "stolen", "misfiled", "beyond", "unnamed", "twice", "outside", "thrice"] {
+            assert_eq!(hits(copy, word), NONE, "{word}");
+        }
+        assert_eq!(hits(copy, "kept").len(), 3);
+        assert_eq!(hits(copy, "fine"), one(A, &id(50)));
+        assert_eq!(hits(copy, "seventy"), one(A, &id(70)));
+        assert_eq!(hits(copy, "hundred"), one(A, &id(100)));
+    };
+    let copy = open(&store);
+    check(&copy);
+
+    copy.upsert(A, &[msg(A, 300, "lunch")]).unwrap();
+    let file = |n: &str| store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/{n}.json")).unwrap();
+    for n in ["1", "2", "3", "4", "9", "1024"] {
+        assert_eq!(file(n), None, "{n}.json");
+    }
+    let quoted = |i: i64| format!("\"{}\"", id(i));
+    let six = String::from_utf8(file("6").unwrap()).unwrap();
+    assert!(six.contains("fine") && !six.contains("twice") && !six.contains(&quoted(2)), "{six}");
+    let seven = String::from_utf8(file("7").unwrap()).unwrap();
+    assert!(seven.contains("seventy") && !seven.contains("outside") && !seven.contains(&quoted(71)), "{seven}");
+    assert_eq!(file("05"), Some(unnamed.clone()));
+    assert_eq!(file("x"), Some(unnamed));
+    for copy in [copy, open(&store)] {
+        check(&copy);
+        assert_eq!(hits(&copy, "lunch"), one(A, &id(300)));
+    }
+}
+
+/// Rolled back, the old version deleted the secret, then let A's words go past its own cap: it
+/// takes the head away (the stub is A's segment to it), and leaves A's tranches without one.
+/// Forward again, tranches without a head read as a rollback: they go (orphans when they can't),
+/// and the deleted message's words with them.
+#[test]
+fn tranches_without_a_head_are_taken_for_a_rollback() {
+    let h = chat_hash(A);
+    let rolled_back = |copy: Copy, store: &Store| {
+        // 0.json holds message 1, 1.json the secret.
+        copy.index.borrow_mut().tranche_cap = Some(1);
+        copy.upsert(A, &[msg(A, 1, "plan a"), msg(A, 2, "the secret plan")]).unwrap();
+        drop(copy);
+        assert!(index_files(store, A).unwrap().contains("secret"));
+        store.remove_account_files(TEAMS_ACCOUNT, &format!("index/{h}.json")).unwrap();
+    };
+    let head = |store: &Store| store.account_file(TEAMS_ACCOUNT, &format!("index/{h}.json")).unwrap();
+    let (copy, store) = copy();
+    rolled_back(copy, &store);
+    let copy = open(&store);
+    assert_eq!(hits(&copy, "secret"), NONE);
+    assert_eq!(hits(&copy, "plan"), NONE, "read again from what's left: nothing");
+    assert!(copy.found("plan").partial);
+    assert!(index_files(&store, A).is_none(), "its tranches went");
+    // Its next write puts its head back with its first tranche.
+    copy.upsert(A, &[msg(A, 4, "dinner")]).unwrap();
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&head(&store).unwrap()).unwrap()["moved"], 2);
+    drop(copy);
+    let copy = open(&store);
+    assert_eq!(hits(&copy, "dinner"), one(A, &id(4)));
+    assert_eq!(hits(&copy, "secret"), NONE);
+
+    // The same where A's tranches can't be removed: orphans, the secret's emptied by A's next write.
+    let (copy, store) = failing_copy();
+    rolled_back(copy, &store);
+    store.fail(None, Some(&format!("index/{h}")));
+    let copy = open(&store);
+    assert_eq!(hits(&copy, "secret"), NONE);
+    assert!(index_files(&store, A).unwrap().contains("secret"), "the folder stayed");
+    copy.upsert(A, &[msg(A, 4, "dinner")]).unwrap();
+    assert!(!index_files(&store, A).unwrap().contains("secret"));
+    assert!(head(&store).is_some());
+    drop(copy);
+    store.fail(None, None);
+    let copy = open(&store);
+    assert_eq!(hits(&copy, "secret"), NONE);
+    assert_eq!(hits(&copy, "dinner"), one(A, &id(4)));
+}
+
+/// I1: a run longer than a tranche, parted after newer messages went in with it: the piece with
+/// the newer ones takes a lower number than the run's first piece, and begins in the same
+/// millisecond. Read back, tranches are ordered by first time, then newest: the newer ones stay
+/// where `route` finds them, never freed as past the next tranche's first.
+#[test]
+fn a_run_longer_than_a_tranche_keeps_its_later_messages() {
+    let (copy, store) = copy();
+    copy.index.borrow_mut().tranche_cap = Some(8);
+    let h = chat_hash(A);
+    let t = T0 + 100 * MINUTE;
+    let run = |k: usize| msg_at(A, &format!("run-{k:02}"), t, "run");
+    copy.upsert(A, &(0..8).map(|i| msg(A, i, "old")).collect::<Vec<_>>()).unwrap();
+    copy.upsert(A, &(0..3).map(run).collect::<Vec<_>>()).unwrap();
+    // The old ones deleted: number 0 free, the run's three in tranche 1.
+    copy.upsert(A, &(0..8).map(|i| deleted(msg(A, i, ""), 200)).collect::<Vec<_>>()).unwrap();
+    copy.upsert(A, &[msg_at(A, "later-1", t + 1, "later"), msg_at(A, "later-2", t + 2, "later")]).unwrap();
+    copy.upsert(A, &(3..12).map(run).collect::<Vec<_>>()).unwrap();
+    let ids = |n: u32| ids_in(&String::from_utf8(store.account_file(TEAMS_ACCOUNT, &format!("index/{h}/{n}.json")).unwrap().unwrap()).unwrap());
+    assert_eq!(ids(1), (0..8).map(|k| format!("run-{k:02}")).collect::<Vec<_>>(), "the run's first piece keeps its number");
+    let mut rest = ids(0);
+    rest.sort_unstable();
+    assert_eq!(rest, ["later-1", "later-2", "run-08", "run-09", "run-10", "run-11"], "the rest takes the lowest free");
+    let later = vec![(A.to_string(), "later-2".to_string()), (A.to_string(), "later-1".to_string())];
+    for copy in [copy, open(&store)] {
+        assert_eq!(hits(&copy, "later"), later);
+        assert_eq!(hits(&copy, "run").len(), 12);
+    }
+}
+
+/// Review Focus 5: an old copy's head past SEGMENT_MAX, or damaged: passed over and said, the stub
+/// in its place at the chat's first write, and its tranches kept at every later start.
+#[test]
+fn an_old_segment_too_big_to_read_is_replaced_by_the_stub() {
+    let (copy, store) = copy();
+    drop(copy);
+    let (ha, hb) = (chat_hash(A), chat_hash(B));
+    let old = serde_json::json!({ "chat": A, "messages": [[id(1), T0 + MINUTE]], "words": { "lost": [0] }, "pad": "p".repeat(16 << 20) });
+    store.write_account_files(TEAMS_ACCOUNT, &[(format!("index/{ha}.json"), serde_json::to_vec(&old).unwrap())]).unwrap();
+    let copy = open(&store);
+    assert_eq!(copy.found("lost"), Found { hits: vec![], indexing: false, partial: true });
+    store.track_changes();
+    copy.upsert(A, &[msg(A, 2, "lunch")]).unwrap();
+    let mut index: Vec<(String, Vec<u8>)> = store
+        .take_changes()
+        .into_iter()
+        .filter_map(|(k, b)| Some((k.strip_prefix(&format!("{TEAMS_ACCOUNT}/"))?.to_string(), b?)))
+        .filter(|(k, _)| k.starts_with("index/"))
+        .collect();
+    index.sort_unstable();
+    let keys: Vec<&str> = index.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys, [format!("index/{ha}.json"), format!("index/{ha}/0.json")]);
+    let stub = &index[0].1;
+    assert!(stub.len() < 200, "{} bytes", stub.len());
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(stub).unwrap()["moved"], 2);
+    drop(copy);
+    for _ in 0..2 {
+        let copy = open(&store);
+        assert_eq!(hits(&copy, "lunch"), one(A, &id(2)));
+        assert_eq!(store.account_files(TEAMS_ACCOUNT, &format!("index/{ha}")).unwrap(), ["0.json"]);
+    }
+
+    // B's head damaged beside its tranches: they go, and it's said (the copy's "partial" set aside
+    // to see B's own).
+    let copy = open(&store);
+    copy.upsert(B, &[msg(B, 5, "budget talk")]).unwrap();
+    drop(copy);
+    store.write_account_files(TEAMS_ACCOUNT, &[(format!("index/{hb}.json"), b"{not json".to_vec())]).unwrap();
+    store.remove_account_files(TEAMS_ACCOUNT, "index/partial").unwrap();
+    let copy = open(&store);
+    assert_eq!(hits(&copy, "talk"), NONE);
+    assert!(copy.found("talk").partial);
+    assert!(index_files(&store, B).is_none(), "B's tranches went");
+    // What was written since A's write, the load's "partial" too, set aside.
+    changes(&store);
+    copy.upsert(B, &[msg(B, 6, "dinner talk")]).unwrap();
+    let keys: Vec<String> = changes(&store).into_iter().map(|(k, _)| k).filter(|k| k.starts_with("index/")).collect();
+    assert_eq!(keys, [format!("index/{hb}.json"), format!("index/{hb}/0.json")]);
+    drop(copy);
+    let copy = open(&store);
+    assert_eq!(hits(&copy, "talk"), one(B, &id(6)));
+    assert_eq!(hits(&copy, "lunch"), one(A, &id(2)));
 }

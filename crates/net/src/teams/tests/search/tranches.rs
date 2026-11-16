@@ -169,7 +169,7 @@ fn tranche_files(store: &Store, chat: &str) -> Vec<String> {
 }
 
 /// The ids of the messages a tranche's file holds.
-fn ids_in(file: &str) -> Vec<String> {
+pub(super) fn ids_in(file: &str) -> Vec<String> {
     let kept: serde_json::Value = serde_json::from_str(file).unwrap();
     kept["messages"].as_array().unwrap().iter().map(|m| m[0].as_str().unwrap().to_string()).filter(|id| !id.is_empty()).collect()
 }
@@ -181,7 +181,7 @@ fn files_holding(store: &Store, message: &str) -> usize {
 }
 
 /// A message of `chat` under this id, made at `at`, saying `says`.
-fn msg_at(chat: &str, id: &str, at: i64, says: &str) -> ChatMessage {
+pub(super) fn msg_at(chat: &str, id: &str, at: i64, says: &str) -> ChatMessage {
     ChatMessage { id: id.into(), created: at, modified: at, ..msg(chat, 0, says) }
 }
 
@@ -191,7 +191,7 @@ fn edited(mut m: ChatMessage, at: i64) -> ChatMessage {
     m
 }
 
-fn deleted(mut m: ChatMessage, at: i64) -> ChatMessage {
+pub(super) fn deleted(mut m: ChatMessage, at: i64) -> ChatMessage {
     m.deleted = Some(T0 + at * MINUTE);
     m
 }

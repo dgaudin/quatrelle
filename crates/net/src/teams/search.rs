@@ -10,11 +10,14 @@
 //!   kept as [`Copy::upsert`] writes, in the same transaction as the pages: a message's words go
 //!   in, an edit replaces them, a deletion takes them out (nothing of a deleted message stays). A
 //!   write puts in only the tranches it changes; the index never rebuilds from scratch.
-//! * The old format, one segment a chat at `index/<chat hash>.json`, is read back as it was, cut
-//!   into tranches in memory, and written as tranches at the chat's next write, a stub left in
-//!   its place (an empty segment to the old version, `moved` to this one). A segment without
-//!   `moved` beside tranches is the old version's, written after them: they go (they may hold
-//!   the words of a message it deleted since), and it is taken.
+//! * A chat's head, `index/<chat hash>.json`, is a stub written with its first tranches: an empty
+//!   segment to the old version, `moved` to this one. The old format, one segment a chat there,
+//!   is read back as it was, cut into tranches in memory, and written as tranches at the chat's
+//!   next write, the stub in its place. A segment without `moved` beside tranches is the old
+//!   version's, written after them; tranches beside a head that can't be read, or without one
+//!   (the old version takes it away as it lets a chat's words go), are left from before a
+//!   rollback too: they go (they may hold the words of a message the old version deleted since),
+//!   the head is taken for what it says (nothing, unless the old segment), and `partial` is set.
 //! * Words are those of a message's text and its sender's name, [folded](fold_word) as the mail's
 //!   search folds them (case, accents), each with its [parts](parts): at most [`INDEX_WORDS`]
 //!   distinct ones a message, each cut to [`INDEX_WORD_CHARS`] characters. A query's words must
@@ -32,7 +35,8 @@
 //! * Read back at start in slices, one chat a loop turn ([`load`]): the window never waits for
 //!   it, and until it's read whole a search answers "indexing" with no hits. What is read back
 //!   is hostile input: a file under another chat's key or another number is passed over, the
-//!   caps applied again.
+//!   caps applied again, and a message a lower-numbered tranche holds, or one made past the next
+//!   tranche's first, freed (its tranche written again at the chat's next write).
 //! * Chats' names are not kept in the index: they come from the chats' records, read as the index
 //!   is, and as they're written.
 

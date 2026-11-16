@@ -13,8 +13,8 @@
 //!   `imgref/<hash>`: which picture a message's hosted image is; `photos/<hash>.json`: someone's
 //!   photo, or that they have none (`images.rs`);
 //! * the chat's words, for the search, kept with its pages (`search.rs`): `index/<hash>/<n>.json`,
-//!   a tranche of them; `index/<hash>.json`, the stub its words in the old format left, or those
-//!   words still; `index/partial`, the oldest chats' words left the index;
+//!   a tranche of them; `index/<hash>.json`, the stub at the head of its tranches, or its words in
+//!   the old format still; `index/partial`, the oldest chats' words left the index;
 //! * `outbox/<seq>.json`: a message going out, by its number in 20 digits ([`OpRecord`],
 //!   `outbox.rs`).
 //!

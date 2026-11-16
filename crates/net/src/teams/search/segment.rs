@@ -30,6 +30,10 @@ pub(super) struct Segment {
     /// The bytes it takes in the file, and in memory (as estimated).
     pub(super) bytes: u64,
     pub(super) resident: u64,
+    /// Places were freed as it was read back (a message a lower-numbered tranche holds, or one
+    /// past the next tranche's first): the file holds more than it, so it's written again at the
+    /// chat's next write.
+    pub(super) fixed: bool,
 }
 
 /// A chat's words, or a tranche of them, while they're read back or changed: the form one write
@@ -219,7 +223,7 @@ impl Draft {
         by_id.sort_unstable_by(|a, b| id_at(a).cmp(id_at(b)));
         resident = resident.saturating_add(n(by_id.len()).saturating_mul(4));
         let by_id = by_id.into_boxed_slice();
-        Segment { chat: self.chat.into_boxed_str(), key, messages, words, first, newest, held, by_id, bytes: n(bytes), resident }
+        Segment { chat: self.chat.into_boxed_str(), key, messages, words, first, newest, held, by_id, bytes: n(bytes), resident, fixed: false }
     }
 
     /// A file of the index read back, when it's `hash`'s, at most `max` bytes, and can be read:
@@ -345,6 +349,15 @@ impl Segment {
     /// Its range and size.
     pub(super) fn span(&self) -> Span {
         Span { first: self.first, newest: self.newest, held: usize::try_from(self.held).unwrap_or(usize::MAX) }
+    }
+
+    /// As read back, with the messages under these ids freed: `fixed`, its file as it was.
+    pub(super) fn freed(&self, ids: &HashSet<&str>) -> Segment {
+        let mut d = Draft::of(self);
+        d.remove(ids);
+        let mut seg = d.settle(self.key, usize::try_from(self.bytes).unwrap_or(usize::MAX));
+        seg.fixed = true;
+        seg
     }
 
     /// The lists of the words beginning with `term`.

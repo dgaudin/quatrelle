@@ -57,7 +57,9 @@ impl Copy {
         let mut ix = self.index.borrow_mut();
         let had = match ix.take_chat(&hash) {
             Some(t) => t,
-            None => self.chat_index(&mut ix, &hash)?.unwrap_or_else(|| Tranches::empty(chat)),
+            // A chat new to the index: the stub goes at its head with its first tranches, as for
+            // a chat of the old format with nothing in it.
+            None => self.chat_index(&mut ix, &hash)?.unwrap_or_else(|| Tranches { legacy: true, ..Tranches::empty(chat) }),
         };
         let caps = Caps { tranche: ix.tranche_cap(), chat: ix.chat_cap() };
         match staged(chat, &hash, had, changed, caps) {
@@ -253,18 +255,20 @@ impl Out {
 
 /// A chat's tranches with what changed: each message, oldest first, taken out of the tranche that
 /// holds it and, unless it's deleted, put in the one its creation time routes it to ([`route`]);
-/// only the tranches that changed cut and written (a chat of the old format's all, and its stub),
-/// each tranche a write empties or drops (past [`TRANCHES_MAX`] or its bytes, the oldest) and each
-/// orphan written empty, then removed.
+/// only the tranches that changed cut and written (a chat without the stub's all, and the stub;
+/// those freed of messages as they were read back), each tranche a write empties or drops (past
+/// [`TRANCHES_MAX`] or its bytes, the oldest) and each orphan written empty, then removed.
 fn staged(chat: &str, hash: &str, had: Tranches, changed: &[ChatMessage], caps: Caps) -> Result<Staged> {
     let Tranches { mut list, legacy, orphans, .. } = had;
     by_first(&mut list);
-    // A chat of the old format's tranches are in memory only: all written.
+    // A chat without the stub's tranches are in memory only, and a fixed tranche's file holds
+    // more than it: written.
     let mut parts: Vec<Part> = list
         .into_iter()
         .map(|seg| {
+            let open = legacy || seg.fixed;
             let mut part = Part::kept(seg);
-            if legacy {
+            if open {
                 part.opened();
             }
             part

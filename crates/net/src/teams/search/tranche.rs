@@ -15,8 +15,10 @@ pub(super) struct Tranches {
     pub(super) chat: String,
     /// Its tranches, by their first message's time, then their newest's, then their number.
     pub(super) list: Vec<Segment>,
-    /// Its words are in the old format in the file (one segment, at `index/<hash>.json`): cut in
-    /// memory only, written as tranches at the chat's next write, and leaving the index whole.
+    /// The file has no stub at its head (`index/<hash>.json`): its words in the old format there
+    /// (one segment), a head that can't be read, or none. Its tranches are in memory only (cut
+    /// from the old segment, if any), written with the stub at the chat's next write, and leave
+    /// the index whole.
     pub(super) legacy: bool,
     /// Numbers in the file the index doesn't hold (a tranche that couldn't be read or removed):
     /// written empty at the chat's next write, then removed.
