@@ -17,6 +17,9 @@ use crate::teams::search::{Found, MAX_HITS};
 use crate::teams::store::{ChatRecord, Copy, Identity, Opened, chat_hash};
 use crate::teams::worker::Worker;
 
+/// What a write puts in the index, in bytes: an insert, an edit, a deletion, a history's copy.
+mod tranches;
+
 const A: &str = "19:a1b2@thread.v2";
 const B: &str = "19:c3d4@thread.v2";
 
