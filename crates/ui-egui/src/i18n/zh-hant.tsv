@@ -2253,6 +2253,9 @@ module	Conversations	交談
 	Teams doesn't let this conversation be read here	Teams 不允許在此閱讀此對話
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	傳給 {chat} 的一則訊息未傳送
+	Teams didn't take your reaction in {chat}	Teams 未接受你在 {chat} 中的回應
+	Your edit in {chat} wasn't made	你在 {chat} 中的編輯未完成
+	Your deletion in {chat} wasn't made	你在 {chat} 中的刪除未完成
 	Write a message	輸入訊息
 	This message is too long for Teams	此訊息對 Teams 來說太長
 	Too many messages are waiting	等待傳送的訊息太多

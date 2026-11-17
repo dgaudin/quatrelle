@@ -2249,6 +2249,9 @@ module	Conversations	Gesprekken
 	Teams doesn't let this conversation be read here	Teams laat dit gesprek hier niet lezen
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Een bericht aan {chat} is niet verzonden
+	Teams didn't take your reaction in {chat}	Teams heeft je reactie in {chat} niet aangenomen
+	Your edit in {chat} wasn't made	Je bewerking in {chat} is niet doorgevoerd
+	Your deletion in {chat} wasn't made	Je verwijdering in {chat} is niet doorgevoerd
 	Write a message	Schrijf een bericht
 	This message is too long for Teams	Dit bericht is te lang voor Teams
 	Too many messages are waiting	Er wachten te veel berichten

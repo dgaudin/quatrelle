@@ -2252,6 +2252,9 @@ module	Conversations	Conversas
 	Teams doesn't let this conversation be read here	O Teams não permite ler esta conversa aqui
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Uma mensagem para {chat} não foi enviada
+	Teams didn't take your reaction in {chat}	O Teams não aceitou sua reação em {chat}
+	Your edit in {chat} wasn't made	Sua edição em {chat} não foi aplicada
+	Your deletion in {chat} wasn't made	Sua exclusão em {chat} não foi aplicada
 	Write a message	Escreva uma mensagem
 	This message is too long for Teams	Esta mensagem é longa demais para o Teams
 	Too many messages are waiting	Há mensagens demais aguardando

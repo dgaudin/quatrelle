@@ -2251,6 +2251,9 @@ module	Conversations	대화
 	Teams doesn't let this conversation be read here	Teams에서 이 대화를 여기서 읽도록 허용하지 않습니다
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	{chat}에 메시지를 보내지 못했습니다
+	Teams didn't take your reaction in {chat}	{chat}에서 남긴 반응을 Teams가 받지 않았습니다
+	Your edit in {chat} wasn't made	{chat}에서 한 편집이 적용되지 않았습니다
+	Your deletion in {chat} wasn't made	{chat}에서 한 삭제가 적용되지 않았습니다
 	Write a message	메시지 입력
 	This message is too long for Teams	이 메시지는 Teams에 보내기에 너무 깁니다
 	Too many messages are waiting	대기 중인 메시지가 너무 많습니다

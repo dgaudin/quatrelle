@@ -51,8 +51,8 @@ pub(crate) use teams::default_settings as default_teams_settings;
 #[cfg(test)]
 pub(crate) use teams::row_scans as teams_row_scans;
 pub use teams::{
-    ChatMembers, PICTURE_BYTES_MAX, PICTURES_MAX, PRESENCE_MAX, TEAMS_HITS_MAX, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_TOO_LONG, TEAMS_TOO_MANY,
-    TeamsAnnouncement, TeamsFound, TeamsPage, TeamsState,
+    ChatMembers, PICTURE_BYTES_MAX, PICTURES_MAX, PRESENCE_MAX, ShownReaction, TEAMS_HITS_MAX, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT,
+    TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY, TeamsAnnouncement, TeamsFound, TeamsPage, TeamsState,
 };
 pub use webex::{WebexAsk, WebexState};
 

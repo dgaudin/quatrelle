@@ -2249,6 +2249,9 @@ module	Conversations	会話
 	Teams doesn't let this conversation be read here	Teams ではこの会話をここで読むことができません
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	{chat} へのメッセージは送信されませんでした
+	Teams didn't take your reaction in {chat}	{chat} でのリアクションは Teams に受け付けられませんでした
+	Your edit in {chat} wasn't made	{chat} での編集は反映されませんでした
+	Your deletion in {chat} wasn't made	{chat} での削除は反映されませんでした
 	Write a message	メッセージを入力
 	This message is too long for Teams	このメッセージは Teams には長すぎます
 	Too many messages are waiting	送信待ちのメッセージが多すぎます

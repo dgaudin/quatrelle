@@ -9,11 +9,12 @@ use std::ops::Range;
 
 use quatrelle_model::Job;
 use quatrelle_model::addr::trust::url_host;
-use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, PRESENCE_IDS, Picture, Status};
+use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PRESENCE_IDS, Picture, Status};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
-use crate::{Module, TeamsPage};
+use crate::mime::Typed;
+use crate::{Module, TEAMS_RANGES_MAX, TeamsPage};
 
 const OPTIONS: &str = "File › Options › Teams";
 const MODULE: &str = "Conversations";
@@ -21,8 +22,6 @@ const MODULE: &str = "Conversations";
 const QUERY_CHARS: usize = 200;
 /// The longest address of a picture from elsewhere.
 const PICTURE_URL_MAX: usize = 2048;
-/// The most byte ranges of each style a message sent takes.
-const RANGES_MAX: usize = 1_000;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
@@ -49,7 +48,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params(r#"{"kind": "hosted", "chat": string, "message": string, "hosted": string} | {"kind": "photo", "user": string} | {"kind": "outside", "url": string (https)}"#)
             .when(ready),
         CommandSpec::new("teams.send", "Send a message", MODULE, send)
-            .params(r#"{"chat": string (a listed conversation's id), "text": string, "bold"?: [[from, to]] (byte ranges of the text, at most 1,000), "italic"?: [[from, to]] (the same)}"#)
+            .params(r#"{"chat": string (a listed conversation's id), "text": string, "bold"?: [[from, to]] (byte ranges of the text, at most 1,000), "italic"?: [[from, to]] (the same), "mentions"?: [[from, to, "user id"]] (at most 50 byte ranges of the text, each a name on one line, apart: the open conversation's members of the organisation)}"#)
+            .when(ready),
+        CommandSpec::new("teams.edit", "Edit a message", MODULE, edit)
+            .params(r#"{"chat": string (the open conversation), "message": string (one's own message in it), "text": string, "bold"?: [[from, to]], "italic"?: [[from, to]] (as teams.send's), "mentions"?: [[from, to, "user id"]] (as teams.send's, or people the message mentions already)}"#)
+            .when(ready),
+        CommandSpec::new("teams.delete", "Delete a message", MODULE, delete)
+            .params(r#"{"chat": string (the open conversation), "message": string (one's own message in it)}"#)
+            .when(ready),
+        CommandSpec::new("teams.react", "React to a message", MODULE, react)
+            .params(r#"{"chat": string (the open conversation), "message": string (one of its messages), "emoji": string (a quick reaction, or one the message shows: set, or taken back when it's the user's)}"#)
             .when(ready),
         CommandSpec::new("teams.retry", "Send again", MODULE, retry)
             .params(r#"{"seq": number (a message of the open conversation that wasn't sent), "local"?: string (its local id, for one numbered 0)}"#)
@@ -244,12 +252,12 @@ fn visible(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// A style's byte ranges of `text` from the params (`[[from, to]]`, absent or null for none): each
-/// on the text's characters, at most [`RANGES_MAX`].
+/// on the text's characters, at most [`TEAMS_RANGES_MAX`].
 fn ranges(v: &Value, k: &str, text: &str) -> Result<Vec<Range<usize>>, CmdError> {
-    let bad = || CmdError::Params(format!("`{k}` is at most {RANGES_MAX} byte ranges [from, to] of the text, on its characters"));
+    let bad = || CmdError::Params(format!("`{k}` is at most {TEAMS_RANGES_MAX} byte ranges [from, to] of the text, on its characters"));
     let given = match v.get(k) {
         None | Some(Value::Null) => return Ok(Vec::new()),
-        Some(Value::Array(given)) if given.len() <= RANGES_MAX => given,
+        Some(Value::Array(given)) if given.len() <= TEAMS_RANGES_MAX => given,
         Some(_) => return Err(bad()),
     };
     given.iter().map(|r| range(r, text).ok_or_else(bad)).collect()
@@ -258,17 +266,65 @@ fn ranges(v: &Value, k: &str, text: &str) -> Result<Vec<Range<usize>>, CmdError>
 /// `[from, to]`: a range of `text`'s bytes, from one character's start to another's.
 fn range(r: &Value, text: &str) -> Option<Range<usize>> {
     let [from, to] = r.as_array()?.as_slice() else { return None };
+    bounds(from, to, text)
+}
+
+fn bounds(from: &Value, to: &Value, text: &str) -> Option<Range<usize>> {
     let at = |x: &Value| x.as_u64().and_then(|n| usize::try_from(n).ok());
     let (from, to) = (at(from)?, at(to)?);
     (from <= to && text.is_char_boundary(from) && text.is_char_boundary(to)).then_some(from..to)
 }
 
+/// The people @mentioned in `text` from the params (`[[from, to, "user id"]]`, absent or null for
+/// none): each a byte range on the text's characters, as a style's, and a user id; at most
+/// [`MAX_MENTIONS`]. Whether each is a name on one line, apart from the others, and someone who
+/// may be mentioned is the session's to say.
+fn mentions(v: &Value, text: &str) -> Result<Vec<(Range<usize>, String)>, CmdError> {
+    let bad =
+        || CmdError::Params(format!("`mentions` is at most {MAX_MENTIONS} [from, to, \"user id\"]: byte ranges of the text, on its characters"));
+    let given = match v.get("mentions") {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::Array(given)) if given.len() <= MAX_MENTIONS => given,
+        Some(_) => return Err(bad()),
+    };
+    given.iter().map(|m| mention(m, text).ok_or_else(bad)).collect()
+}
+
+fn mention(m: &Value, text: &str) -> Option<(Range<usize>, String)> {
+    let [from, to, user] = m.as_array()?.as_slice() else { return None };
+    let user = user.as_str().filter(|u| !u.is_empty() && u.len() <= MAX_ID)?;
+    Some((bounds(from, to, text)?, user.to_string()))
+}
+
+/// What the box holds, from the params: `text`, its `bold` and `italic` ranges and its `mentions`.
+fn typed(v: &Value) -> Result<Typed, CmdError> {
+    let text = p::req_str(v, "text")?;
+    let (bold, italic, mentions) = (ranges(v, "bold", text)?, ranges(v, "italic", text)?, mentions(v, text)?);
+    Ok(Typed { text: text.to_string(), bold, italic, mentions })
+}
+
 fn send(s: &mut Session, v: &Value) -> CmdResult {
     let chat = id_param(v, "chat")?;
-    let text = p::req_str(v, "text")?;
-    let (bold, italic) = (ranges(v, "bold", text)?, ranges(v, "italic", text)?);
-    let local = s.teams_send(chat, text, bold, italic)?;
+    let local = s.teams_send(chat, &typed(v)?)?;
     Ok(json!({"local": local}))
+}
+
+fn edit(s: &mut Session, v: &Value) -> CmdResult {
+    let (chat, message) = (id_param(v, "chat")?, id_param(v, "message")?);
+    let local = s.teams_edit(chat, message, &typed(v)?)?;
+    Ok(json!({"local": local}))
+}
+
+fn delete(s: &mut Session, v: &Value) -> CmdResult {
+    let (chat, message) = (id_param(v, "chat")?, id_param(v, "message")?);
+    let local = s.teams_delete(chat, message)?;
+    Ok(json!({"local": local}))
+}
+
+fn react(s: &mut Session, v: &Value) -> CmdResult {
+    let (chat, message, emoji) = (id_param(v, "chat")?, id_param(v, "message")?, p::req_str(v, "emoji")?);
+    let (local, on) = s.teams_react(chat, message, emoji)?;
+    Ok(json!({"local": local, "on": on}))
 }
 
 /// A message going out from the params: its number in the outbox, and its local id, which names

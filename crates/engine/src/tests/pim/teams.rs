@@ -9,6 +9,8 @@ use super::*;
 use crate::Module;
 
 mod announce;
+/// Changes to messages already there: reactions, edits, deletions; and mentions sent.
+mod changes;
 /// A search's hit opened at its message.
 mod find;
 mod outbox;
@@ -516,7 +518,7 @@ fn teams_commands_survive_junk_params_while_on() {
     let mut s = signed_in((0..5).map(|i| row(i, 100 - i as i64)).collect());
     s.module = Module::Conversations;
     let ids: Vec<&str> = s.registry().all().iter().map(|c| c.id).filter(|id| id.starts_with("teams.")).collect();
-    assert_eq!(ids.len(), 16, "{ids:?}");
+    assert_eq!(ids.len(), 19, "{ids:?}");
     let junk = [
         json!(null),
         json!({}),
@@ -528,6 +530,9 @@ fn teams_commands_survive_junk_params_while_on() {
         json!({"chat": "19:chat1@thread.v2", "text": "é\u{0}\u{202E}", "bold": [[1, 2], [0, 9e99]], "italic": [[-1, 0]], "seq": 1e300}),
         json!({"chat": "19:chat1@thread.v2", "text": "<b>", "bold": [[0, 3]], "italic": {"a": 1}, "seq": 0, "local": ["x"]}),
         json!({"chat": "19:chat1@thread.v2", "text": "x".repeat(100_000), "seq": u64::MAX, "local": "\u{0}"}),
+        json!({"chat": "19:chat1@thread.v2", "message": "m1", "emoji": "\u{1F44D}".repeat(10_000), "text": "é a", "mentions": [[0, 2, "m1"], [1, 2, ""], [0, 9e99, 5], "x"]}),
+        json!({"chat": "19:chat1@thread.v2", "message": "m2", "emoji": "\u{FE0F}", "text": "\n", "mentions": [[0, 1, "u-1"]], "bold": [[0, 1]]}),
+        json!({"chat": "19:chat1@thread.v2", "message": ["m1"], "emoji": 5, "text": "hi", "mentions": {"a": [0, 1, "u"]}}),
     ];
     for _ in 0..2 {
         for id in &ids {

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Teams, as the engine keeps it: where the connection stands, the rows of the list, the open
-//! chat's last messages and those going out (`outbox.rs`), presence, search hits and pictures
-//! waiting for the window, what is announced of new messages (`announce.rs`), and the Teams pages
-//! the window opens in the meetings browser's window ([`TeamsPage`]). Only the Teams worker
-//! (`net::teams`) talks to Graph and holds the copy and the outbox; the engine sends it jobs and
-//! applies what it reports, in windows that never grow with the copy (`window.rs`).
+//! chat's last messages, those going out (`outbox.rs`) and the changes to them going out, shown
+//! at once over them (`changes.rs`: edits, deletions, reactions), presence, search hits and
+//! pictures waiting for the window, what is announced of new messages (`announce.rs`), and the
+//! Teams pages the window opens in the meetings browser's window ([`TeamsPage`]). Only the Teams
+//! worker (`net::teams`) talks to Graph and holds the copy and the outbox; the engine sends it
+//! jobs and applies what it reports, in windows that never grow with the copy (`window.rs`).
 //!
 //! What is hostile here: everything an event carries came from Graph or the copy on disk (the
 //! worker checked it, the engine still bounds it: the rows at [`teams::MAX_CHATS`], the window at
@@ -23,13 +24,15 @@ use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 use super::*;
 
 mod announce;
+mod changes;
 mod members;
 mod outbox;
 mod window;
 
 pub use announce::TeamsAnnouncement;
+pub use changes::ShownReaction;
 pub use members::ChatMembers;
-pub use outbox::{TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
+pub use outbox::{TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
 
 #[cfg(test)]
 pub(crate) use window::row_scans;
@@ -119,8 +122,8 @@ pub struct TeamsState {
     pub drive_host: Option<String>,
     /// A copy made for another account, set aside (its path), until the user deletes it.
     pub set_aside: Option<String>,
-    /// The open chat's messages going out: as the worker last said them, then those sent here it
-    /// doesn't number (`seq` 0: not answered for yet, or refused); at most
+    /// The open chat's messages and changes going out: as the worker last said them, then those
+    /// sent here it doesn't number (`seq` 0: not answered for yet, or refused); at most
     /// [`teams::OUTBOX_CHAT_MAX`].
     pub outgoing: Vec<Outgoing>,
     /// How many messages the outbox holds in all (waiting, being sent or not sent), as the worker

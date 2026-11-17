@@ -2248,6 +2248,9 @@ module	Conversations	المحادثات
 	Teams doesn't let this conversation be read here	لا يسمح Teams بقراءة هذه المحادثة هنا
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	لم تُرسل رسالة إلى {chat}
+	Teams didn't take your reaction in {chat}	لم يقبل Teams تفاعلك في {chat}
+	Your edit in {chat} wasn't made	لم يُطبَّق تعديلك في {chat}
+	Your deletion in {chat} wasn't made	لم يُنفَّذ حذفك في {chat}
 	Write a message	اكتب رسالة
 	This message is too long for Teams	هذه الرسالة طويلة جدًا على Teams
 	Too many messages are waiting	عدد الرسائل المنتظرة كبير جدًا

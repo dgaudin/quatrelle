@@ -2252,6 +2252,9 @@ module	Conversations	Беседы
 	Teams doesn't let this conversation be read here	Teams не позволяет читать эту беседу здесь
 # Teams: writing in a conversation.
 	A message to {chat} wasn't sent	Сообщение не отправлено: {chat}
+	Teams didn't take your reaction in {chat}	Teams не принял вашу реакцию: {chat}
+	Your edit in {chat} wasn't made	Ваша правка не внесена: {chat}
+	Your deletion in {chat} wasn't made	Ваше удаление не выполнено: {chat}
 	Write a message	Напишите сообщение
 	This message is too long for Teams	Это сообщение слишком длинное для Teams
 	Too many messages are waiting	Слишком много сообщений ожидает отправки
