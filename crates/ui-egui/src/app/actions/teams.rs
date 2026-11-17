@@ -55,7 +55,9 @@ impl MailApp {
         };
         match self.services.open_path(&target) {
             Ok(()) if could_run => {
-                self.session.notice(tf!("{name} could run a program, so it isn't opened: it is in the folder shown", name = name), false)
+                // The mail's sentence, the name said apart before it.
+                let said = tl!("This file could run a program: it is shown in its folder, not opened.");
+                self.session.notice(format!("{name}: {said}"), false)
             }
             Ok(()) => {}
             Err(e) => self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true),

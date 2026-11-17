@@ -2337,4 +2337,3 @@ presence	Offline	Не в сети
 	The download was too slow	Загрузка шла слишком медленно
 	Too many files are being downloaded	Загружается слишком много файлов
 	This file is no longer in the conversation	Этого файла больше нет в беседе
-	{name} could run a program, so it isn't opened: it is in the folder shown	{name} может запустить программу, поэтому он не открыт: показана его папка

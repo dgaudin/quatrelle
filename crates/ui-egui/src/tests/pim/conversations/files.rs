@@ -139,7 +139,11 @@ fn a_program_is_shown_in_its_folder() {
     }
     let folder = std::path::Path::new(&path).parent().unwrap().to_path_buf();
     assert_eq!(*opened.borrow(), vec![folder], "its folder, never the file");
-    assert!(a.session.notices.iter().any(|n| n.text.contains("could run a program, so it isn't opened")), "{:?}", a.session.notices);
+    assert!(
+        a.session.notices.iter().any(|n| n.text.contains("This file could run a program: it is shown in its folder, not opened.")),
+        "{:?}",
+        a.session.notices
+    );
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -165,7 +169,7 @@ fn a_name_in_the_notice_is_drawn_plain() {
     let path = saved_file("ui-t11-notice.exe");
     a.teams_saved(quatrelle_engine::TeamsSaved { path: path.clone(), name, open: false });
     let n = a.session.notices.last().map(|n| n.text.clone()).unwrap_or_default();
-    assert!(n.contains("could run a program"), "{n:?}");
+    assert!(n.contains("This file could run a program: it is shown in its folder, not opened."), "{n:?}");
     assert!(!n.contains('\u{202E}'), "{n:?}");
     assert!(n.chars().filter(|c| *c == 'x').count() <= 80, "{n:?}");
     assert_eq!(*opened.borrow(), vec![folder]);

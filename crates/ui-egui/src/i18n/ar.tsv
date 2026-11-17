@@ -2332,4 +2332,3 @@ presence	Offline	غير متصل
 	The download was too slow	كان التنزيل بطيئًا جدًا
 	Too many files are being downloaded	يجري تنزيل عدد كبير من الملفات
 	This file is no longer in the conversation	لم يعد هذا الملف في المحادثة
-	{name} could run a program, so it isn't opened: it is in the folder shown	قد يشغّل {name} برنامجًا، لذلك لم يُفتح: يظهر مجلده
