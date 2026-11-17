@@ -9,36 +9,11 @@ mod held;
 mod journal;
 mod listing;
 mod noted;
+mod scratch;
 
 /// A big folder's list is kept in pages by number: read back newest first as it was; a flag
 /// change writes one page, new mail the last one; shrunk, the pages go; and a list kept whole
 /// (from before) still reads.
-/// Files handed to other apps go in a folder of the user's own, made when missing; on Linux
-/// and the BSDs not in the shared /tmp, and owner-only.
-#[test]
-fn scratch_folders_are_the_users_own() {
-    let a = scratch_dir("test-scratch").unwrap();
-    assert!(a.is_dir());
-    assert_eq!(scratch_dir("test-scratch"), Some(a.clone()), "the same folder each time");
-    if cfg!(all(unix, not(target_os = "macos"))) {
-        assert!(!a.starts_with("/tmp"), "{}", a.display());
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let parent = a.parent().unwrap();
-            assert_eq!(fs::metadata(parent).unwrap().permissions().mode() & 0o777, 0o700);
-        }
-    }
-    let _ = fs::remove_dir(&a);
-}
-
-/// What is cleared of those folders when Quatrelle goes takes in the pictures pasted in a Teams
-/// conversation's box.
-#[test]
-fn the_scratch_folders_cleared_take_in_teams() {
-    assert!(SCRATCH.contains(&"teams"), "{SCRATCH:?}");
-}
-
 #[test]
 fn a_big_folder_list_is_kept_in_pages() {
     for packed in [false, true] {

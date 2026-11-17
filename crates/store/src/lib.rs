@@ -606,6 +606,31 @@ pub fn clear_scratch() {
     }
 }
 
+/// How long a picture pasted in a Teams conversation's box is kept in its [`scratch_dir`] past
+/// its last change, across restarts: a message still waiting in the outbox may name it (one too
+/// big to go inside its message goes up as a file, read from there when its turn comes).
+pub const PASTED_KEPT: std::time::Duration = std::time::Duration::from_secs(7 * 86_400);
+/// The most entries of a folder [`remove_older`] looks at.
+#[cfg(not(target_arch = "wasm32"))]
+const REMOVE_OLDER_MAX: usize = 100_000;
+
+/// Remove the files of `dir` last changed before `now` less `older_than`: not the folders in it,
+/// nor what a link points to, nor `dir` itself; at most [`REMOVE_OLDER_MAX`] entries looked at.
+/// How many went.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn remove_older(dir: &Path, older_than: std::time::Duration, now: std::time::SystemTime) -> usize {
+    let (Some(before), Ok(entries)) = (now.checked_sub(older_than), fs::read_dir(dir)) else { return 0 };
+    let mut gone = 0;
+    for e in entries.take(REMOVE_OLDER_MAX).flatten() {
+        // The entry's own (a link isn't followed): a file, changed before then.
+        let old = e.metadata().ok().filter(fs::Metadata::is_file).and_then(|m| m.modified().ok()).is_some_and(|t| t < before);
+        if old && fs::remove_file(e.path()).is_ok() {
+            gone += 1;
+        }
+    }
+    gone
+}
+
 /// The calling thread (the window's) is never kept waiting by Compact Now: what it reads of the
 /// data file being compacted fails at once ("being compacted") until it's done, rather than
 /// freezing the window. Writes still wait.

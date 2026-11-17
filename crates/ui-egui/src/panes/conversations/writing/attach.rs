@@ -12,8 +12,9 @@
 //! the parts change. An edit takes no file: nothing is added while one is under way. A send
 //! refused comes back with its parts, looked at again ([`put_back`]). A pasted picture's file goes
 //! when the box lets the picture go ([`let_go`]: its cross, pushed past the cap, its draft let go);
-//! one sent stays for the worker, which keeps its bytes once it takes the message, and what is
-//! left in the folder goes at the next start (`apps/quatrelle/src/main.rs`).
+//! one sent stays for the worker, which reads it when the message's turn comes (a picture inside
+//! the message once it takes it, a big one as a file when it goes up, perhaps after a restart),
+//! and Quatrelle starting lets go of those a week old (`apps/quatrelle/src/main.rs`).
 //!
 //! What is hostile here: the paths are the user's (the dialog's, or a refused command's params),
 //! each looked at when added; the worker looks again when the message's turn comes (a file

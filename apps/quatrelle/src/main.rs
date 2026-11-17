@@ -405,10 +405,11 @@ fn main() -> eframe::Result {
         Some(single_instance::Claim::Primary(server)) => Some(server),
         _ => None,
     };
-    // Pictures pasted in a Teams conversation's box by an earlier run: nothing refers to them any
-    // more (the worker keeps a picture's bytes once it takes its message).
+    // Pictures pasted in a Teams conversation's box more than a week ago: a younger one may still
+    // be named by a message waiting in the outbox (one too big to go inside its message goes up as
+    // a file, read from there when its turn comes, a restart between).
     if let Some(dir) = quatrelle_engine::store::scratch_dir("teams") {
-        let _ = std::fs::remove_dir_all(dir);
+        quatrelle_engine::store::remove_older(&dir, quatrelle_engine::store::PASTED_KEPT, std::time::SystemTime::now());
     }
     let mut moved = match base.as_deref().map(location::apply_pending_move) {
         Some(Ok(Some(to))) => Some(Ok(to)),
