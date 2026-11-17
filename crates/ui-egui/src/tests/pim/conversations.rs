@@ -21,6 +21,7 @@ use super::*;
 mod changes;
 mod chat;
 mod editing;
+mod files;
 mod find;
 mod mentions;
 mod notify;

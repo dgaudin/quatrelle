@@ -35,6 +35,7 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, UiState, widgets};
 
+mod files;
 mod hover;
 mod outgoing;
 mod parts;
@@ -560,7 +561,7 @@ fn bubble(
                     text::body(ui, t, body, mentions, &cx, width - 20.0, acts);
                 });
                 parts::pictures(p, c, ui, m, acts);
-                parts::files(p, ui, m, width - 20.0, acts);
+                files::files(p, ui, m, width - 20.0, acts);
                 parts::cards(p, ui, m, acts);
             });
         });

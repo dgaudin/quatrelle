@@ -2323,3 +2323,14 @@ presence	Offline	オフライン
 	{browser} couldn't open the page: {error}	{browser} でページを開けませんでした: {error}
 # Teams: a search hit opened at its message.
 	Go to the newest messages	最新のメッセージへ移動
+# Teams: a shared file opened from its card.
+	Downloading…	ダウンロード中…
+	This file couldn't be downloaded	このファイルをダウンロードできませんでした
+	It is bigger than Quatrelle downloads (100 MB): open it in the browser	Quatrelle がダウンロードできる大きさ (100 MB) を超えています。ブラウザーで開いてください
+	There isn't enough room on the disk	ディスクの空き容量が足りません
+	Teams refused it	Teams に拒否されました
+	Teams can't be reached	Teams に接続できません
+	The download was too slow	ダウンロードが遅すぎました
+	Too many files are being downloaded	ダウンロード中のファイルが多すぎます
+	This file is no longer in the conversation	このファイルは会話にもうありません
+	{name} could run a program, so it isn't opened: it is in the folder shown	{name} はプログラムを実行する可能性があるため開きません。フォルダーを表示しました

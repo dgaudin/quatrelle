@@ -1,26 +1,21 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! What a message carries besides its words: its pictures, its files as cards, and its cards (its
-//! reactions are `reactions.rs`').
+//! What a message carries besides its words: its pictures and its cards (its files' cards are
+//! `files.rs`', its reactions `reactions.rs`').
 //!
 //! What is hostile here: a picture kept with the message is asked for when the message is first
 //! drawn, at most [`HOSTED_PER_MESSAGE`] (the rest stay placeholders); one from elsewhere waits
-//! for a click on "Show picture", and drawing or scrolling never asks for it. A file's link
-//! is the sender's: its host is written on the card, "Link to another site" (and no file-type
-//! icon) when it's neither the user's OneDrive nor their organisation's SharePoint, and it opens
-//! only on a click, through [`launchable_link`].
+//! for a click on "Show picture", and drawing or scrolling never asks for it.
 
 use egui::{RichText, Sense, Ui, Vec2, vec2};
-use quatrelle_engine::mime::{self, AttachmentKind};
-use quatrelle_engine::model::addr::trust::url_host;
 use quatrelle_engine::model::ical::launchable_link;
-use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, HOSTED_PER_MESSAGE, Picture, is_bidi, one_line};
+use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, HOSTED_PER_MESSAGE, Picture, is_bidi};
 use serde_json::json;
 
 use super::{ConversationsUi, Pane, Shown};
+use crate::Action;
 use crate::icons::{self, Icon};
 use crate::theme;
-use crate::{Action, widgets};
 
 /// The largest a thumbnail is drawn.
 const THUMB: Vec2 = vec2(240.0, 180.0);
@@ -170,57 +165,6 @@ fn elsewhere(p: &Pane, ui: &mut Ui, url: &str, acts: &mut Vec<Action>) {
         .inner;
     if r.clicked() {
         acts.push(Action::Run("teams.picture", json!({"kind": "outside", "url": url})));
-    }
-}
-
-/// Whether a file's host is the user's own: their OneDrive's, or their organisation's
-/// SharePoint (the OneDrive's host without `-my`).
-fn own_host(p: &Pane, host: &str) -> bool {
-    let Some(drive) = p.s.teams.drive_host.as_deref().or(p.s.prefs.teams.drive_host.as_deref()) else { return false };
-    let site = drive.split_once('.').and_then(|(first, rest)| Some(format!("{}.{rest}", first.strip_suffix("-my")?)));
-    host.eq_ignore_ascii_case(drive) || site.is_some_and(|s| host.eq_ignore_ascii_case(&s))
-}
-
-/// The message's files, each a card: its icon by type, its name, its size when known and the host
-/// its link goes to; "Link to another site" when that isn't the user's own; "Open in browser".
-pub(super) fn files(p: &Pane, ui: &mut Ui, m: &ChatMessage, width: f32, acts: &mut Vec<Action>) {
-    let t = &p.t;
-    for a in &m.attachments {
-        let Attachment::File { name, url, size, .. } = a else { continue };
-        // Judged as it is; written without what could turn it around.
-        let host = url_host(url).map(|h| h.to_ascii_lowercase());
-        let ours = host.as_deref().is_some_and(|h| own_host(p, h));
-        let host = host.map(|h| shown(&h));
-        ui.add_space(4.0);
-        egui::Frame::new().stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
-            ui.set_max_width(width.min(340.0));
-            ui.horizontal_top(|ui| {
-                if ours {
-                    let icon = match mime::kind_of("", name) {
-                        AttachmentKind::Image => Icon::Image,
-                        AttachmentKind::Video => Icon::Video,
-                        _ => Icon::File,
-                    };
-                    let (r, _) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::hover());
-                    icons::paint(ui.painter(), r, icon, t.accent);
-                }
-                ui.vertical(|ui| {
-                    let name = one_line(name);
-                    let g = widgets::one_line(ui, &name, theme::bold(13.0), t.text, ui.available_width());
-                    ui.label(g);
-                    let said: Vec<String> = size.map(widgets::size_text).into_iter().chain(host.clone()).collect();
-                    if !said.is_empty() {
-                        ui.label(RichText::new(said.join(" · ")).size(11.5).color(t.dim));
-                    }
-                    if !ours {
-                        ui.label(RichText::new(tl!("Link to another site")).size(11.5).color(t.warn));
-                    }
-                    if launchable_link(url) && ui.button(tl!("Open in browser")).on_hover_text(shown(url)).clicked() {
-                        acts.push(Action::OpenUrl(url.clone()));
-                    }
-                });
-            });
-        });
     }
 }
 

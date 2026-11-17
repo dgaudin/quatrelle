@@ -2325,3 +2325,14 @@ presence	Offline	오프라인
 	{browser} couldn't open the page: {error}	{browser}에서 페이지를 열 수 없습니다: {error}
 # Teams: a search hit opened at its message.
 	Go to the newest messages	최신 메시지로 이동
+# Teams: a shared file opened from its card.
+	Downloading…	다운로드 중…
+	This file couldn't be downloaded	이 파일을 다운로드할 수 없습니다
+	It is bigger than Quatrelle downloads (100 MB): open it in the browser	Quatrelle이 다운로드하는 크기(100MB)를 넘습니다: 브라우저에서 여세요
+	There isn't enough room on the disk	디스크 공간이 부족합니다
+	Teams refused it	Teams가 거부했습니다
+	Teams can't be reached	Teams에 연결할 수 없습니다
+	The download was too slow	다운로드가 너무 느렸습니다
+	Too many files are being downloaded	다운로드 중인 파일이 너무 많습니다
+	This file is no longer in the conversation	이 파일은 더 이상 대화에 없습니다
+	{name} could run a program, so it isn't opened: it is in the folder shown	{name}은(는) 프로그램을 실행할 수 있어 열지 않았습니다: 해당 폴더를 표시했습니다

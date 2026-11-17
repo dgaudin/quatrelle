@@ -2329,3 +2329,14 @@ presence	Offline	離線
 	{browser} couldn't open the page: {error}	{browser} 無法開啟頁面: {error}
 # Teams: a search hit opened at its message.
 	Go to the newest messages	前往最新訊息
+# Teams: a shared file opened from its card.
+	Downloading…	正在下載…
+	This file couldn't be downloaded	無法下載此檔案
+	It is bigger than Quatrelle downloads (100 MB): open it in the browser	它超過 Quatrelle 可下載的大小（100 MB）：請在瀏覽器中開啟
+	There isn't enough room on the disk	磁碟空間不足
+	Teams refused it	Teams 拒絕了要求
+	Teams can't be reached	無法連線到 Teams
+	The download was too slow	下載太慢
+	Too many files are being downloaded	正在下載的檔案太多
+	This file is no longer in the conversation	此檔案已不在對話中
+	{name} could run a program, so it isn't opened: it is in the folder shown	{name} 可能執行程式，因此不會開啟：已顯示其所在資料夾

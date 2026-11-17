@@ -2322,3 +2322,14 @@ presence	Offline	غير متصل
 	{browser} couldn't open the page: {error}	تعذّر على {browser} فتح الصفحة: {error}
 # Teams: a search hit opened at its message.
 	Go to the newest messages	الانتقال إلى أحدث الرسائل
+# Teams: a shared file opened from its card.
+	Downloading…	جارٍ التنزيل…
+	This file couldn't be downloaded	تعذّر تنزيل هذا الملف
+	It is bigger than Quatrelle downloads (100 MB): open it in the browser	حجمه أكبر مما ينزّله Quatrelle (100 ميغابايت): افتحه في المتصفح
+	There isn't enough room on the disk	لا توجد مساحة كافية على القرص
+	Teams refused it	رفضه Teams
+	Teams can't be reached	تعذّر الوصول إلى Teams
+	The download was too slow	كان التنزيل بطيئًا جدًا
+	Too many files are being downloaded	يجري تنزيل عدد كبير من الملفات
+	This file is no longer in the conversation	لم يعد هذا الملف في المحادثة
+	{name} could run a program, so it isn't opened: it is in the folder shown	قد يشغّل {name} برنامجًا، لذلك لم يُفتح: يظهر مجلده

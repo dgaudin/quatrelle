@@ -2326,3 +2326,14 @@ presence	Offline	Offline
 	{browser} couldn't open the page: {error}	{browser} não conseguiu abrir a página: {error}
 # Teams: a search hit opened at its message.
 	Go to the newest messages	Ir para as mensagens mais recentes
+# Teams: a shared file opened from its card.
+	Downloading…	Baixando…
+	This file couldn't be downloaded	Não foi possível baixar este arquivo
+	It is bigger than Quatrelle downloads (100 MB): open it in the browser	É maior do que o Quatrelle baixa (100 MB): abra-o no navegador
+	There isn't enough room on the disk	Não há espaço suficiente no disco
+	Teams refused it	O Teams recusou
+	Teams can't be reached	Não foi possível acessar o Teams
+	The download was too slow	O download estava lento demais
+	Too many files are being downloaded	Arquivos demais estão sendo baixados
+	This file is no longer in the conversation	Este arquivo não está mais na conversa
+	{name} could run a program, so it isn't opened: it is in the folder shown	{name} poderia executar um programa, por isso não é aberto: a pasta dele é mostrada

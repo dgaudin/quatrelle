@@ -2322,3 +2322,14 @@ presence	Offline	לא מחובר
 	{browser} couldn't open the page: {error}	{browser} לא הצליח לפתוח את הדף: {error}
 # Teams: a search hit opened at its message.
 	Go to the newest messages	מעבר להודעות האחרונות
+# Teams: a shared file opened from its card.
+	Downloading…	מוריד…
+	This file couldn't be downloaded	לא ניתן היה להוריד את הקובץ הזה
+	It is bigger than Quatrelle downloads (100 MB): open it in the browser	הוא גדול ממה ש-Quatrelle מוריד (100 מ״ב): פתחו אותו בדפדפן
+	There isn't enough room on the disk	אין מספיק מקום בדיסק
+	Teams refused it	Teams סירב לו
+	Teams can't be reached	אין גישה אל Teams
+	The download was too slow	ההורדה הייתה איטית מדי
+	Too many files are being downloaded	יותר מדי קבצים בהורדה
+	This file is no longer in the conversation	הקובץ הזה כבר אינו בשיחה
+	{name} could run a program, so it isn't opened: it is in the folder shown	{name} עלול להפעיל תוכנית ולכן הוא לא נפתח: התיקייה שלו מוצגת

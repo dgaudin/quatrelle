@@ -6,6 +6,7 @@
 use crate::*;
 
 mod pictures;
+mod teams;
 
 impl MailApp {
     /// New mail and Teams' new messages: desktop notifications, and the unread count in the window
@@ -80,6 +81,7 @@ impl MailApp {
         let away = self.ui.put_away || self.ui.backstage.is_some() || ctx.input(|i| i.viewport().minimized == Some(true));
         conversations::announce(&mut self.session, &mut *self.services, ctx, away);
         self.teams_pages();
+        self.teams_files();
         let unread = self.session.inbox_unread();
         let view = match self.session.module {
             Module::Mail => view_title(&self.session),
