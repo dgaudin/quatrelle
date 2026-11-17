@@ -161,6 +161,9 @@ pub(crate) struct FakeTeams {
     /// The next n requests of a route (by route name) carried out, then the connection closed
     /// with no answer at all.
     pub(crate) cut_after: HashMap<String, u32>,
+    /// Every Teams request closed with no answer at all, nothing done (the network away):
+    /// counted in `hits`, never in `posts` or `writes`.
+    pub(crate) cut_all: bool,
     /// Chats (their ids) whose message reads are answered 500.
     pub(crate) fail_reads: Vec<String>,
     /// Chats (their ids) whose message reads are refused with 403.
@@ -507,6 +510,9 @@ impl Data {
         *hit += 1;
         let hit = *hit;
         t.last_headers.insert(name.to_string(), headers.to_vec());
+        if t.cut_all {
+            return Some(Reply::cut());
+        }
         let mut authorized = authorized;
         if let Some((route, nth, renewed)) = t.token_expires.clone() {
             t.expired |= route == name && hit >= nth;

@@ -15,12 +15,13 @@
 //!   words replace the old ones in the index, a deletion's leave it); the next read brings Graph's
 //!   own version. A change is the same however often it's made: answered 5xx or left "Sending" by
 //!   a run cut off, it goes again, [`POSTS`] times at most, then it is "Not sent" (couldn't be
-//!   confirmed). Unanswered (the network away, the connection cut), that wasn't a try: it waits
-//!   for the network as a send does, and goes again once the worker's pause is over. Refused (a
-//!   deletion's 404 too: Graph answers so for a chat it no longer serves the user, while the
-//!   others still read the message), it is "Not sent" with Teams' code, nothing written in the
-//!   copy, made again only when the user asks; a read showing the message deleted lets go of it
-//!   ([`gone`]).
+//!   confirmed). Unanswered (the network away, the connection cut), it is held back a while
+//!   (`held.rs`) and the worker goes on with the rest: that is a try only once Graph answered
+//!   another request since (the network works, that request alone is cut), else it waits for the
+//!   network as a send does. Refused (a deletion's 404 too: Graph answers so for a chat it no
+//!   longer serves the user, while the others still read the message), it is "Not sent" with
+//!   Teams' code, nothing written in the copy, made again only when the user asks; a read showing
+//!   the message deleted lets go of it ([`gone`]).
 //! * A reaction is never kept "Not sent": refused, unconfirmed or of a chat left, it leaves the
 //!   outbox and is said once (a `seq` 0 item), and Teams' own state stands.
 //! * A message a read shows deleted takes the changes to it still to make with it ([`gone`]).
@@ -145,8 +146,10 @@ fn merged(ops: &[OpRecord], new: &OpRecord) -> (Vec<u64>, bool) {
 /// Graph's 204; waiting again when Graph didn't take it (the sign-in refused, a 429, waited out
 /// whole); "Not sent" when refused (any other 4xx, a deletion's 404 among them; 413: too long);
 /// made again when an answer didn't say (a 5xx: [`POSTS`] tries in all), after the worker's pause
-/// or Graph's `Retry-After`, then "Not sent" (couldn't be confirmed); waiting for the network,
-/// its tries as they were, when there was no answer at all. A reaction not made leaves the outbox.
+/// or Graph's `Retry-After`, then "Not sent" (couldn't be confirmed). No answer at all: held back
+/// ([`Held::unanswered`]); a try as a 5xx is once Graph answered another request since, with no
+/// pause (the network answers), else waiting for the network, its tries as they were, after the
+/// worker's pause. A reaction not made leaves the outbox.
 pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) {
     let (route, chat, me) = (Route::Send(head.key), head.chat.clone(), w.settings.object_id.clone());
     let made = match &op.what {
@@ -164,15 +167,24 @@ pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) 
         OutKind::Send => return,
     };
     let e = match made {
-        Ok(()) => return done(w, &op),
+        Ok(()) => {
+            w.outbox.held.forget(op.seq);
+            return done(w, &op);
+        }
         Err(e) => e,
     };
     // Unanswered, or answered 5xx: it may have been made, and is made again (the same change).
-    // With no answer at all nothing was said of it: that wasn't a try, it waits for the network.
+    // With no answer at all nothing was said of it: a try only once Graph answered another request
+    // since (the network works), else it waits for the network. Any answer forgets that.
     let state = after_post(&e);
     let again = state == OpState::Unknown;
+    let unanswered = again && of_the_network(&e);
+    let counts = unanswered && w.outbox.held.unanswered(op.seq, w.answered, now);
+    if !unanswered {
+        w.outbox.held.forget(op.seq);
+    }
     op.state = match state {
-        OpState::Unknown if of_the_network(&e) => OpState::Waiting,
+        OpState::Unknown if unanswered && !counts => OpState::Waiting,
         OpState::Unknown => {
             op.tries = op.tries.saturating_add(1);
             if op.tries < POSTS { OpState::Waiting } else { OpState::NotSent { reason: Unsent::Unconfirmed, code: None } }
@@ -182,7 +194,8 @@ pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) 
     let then = match &op.state {
         OpState::NotSent { .. } if matches!(op.what, OutKind::React { .. }) => "let go",
         OpState::NotSent { .. } => "not made",
-        _ if again && of_the_network(&e) => "made again once the network answers",
+        _ if counts => "a try, the network answering: made again after a longer wait",
+        _ if unanswered => "made again once the network answers",
         _ if again => "made again after a wait",
         _ => "it waits",
     };
@@ -193,7 +206,7 @@ pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) 
     }
     if busy(&e) {
         w.busy_wait(now);
-    } else if again {
+    } else if again && !counts {
         w.pause(&e, now);
     }
 }

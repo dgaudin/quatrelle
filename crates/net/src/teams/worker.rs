@@ -240,6 +240,9 @@ pub(crate) struct Worker {
     pub(crate) pictures: Pictures,
     /// What the outbox's steps look at, and the chats to mark read (`outbox.rs`).
     pub(crate) outbox: Outbox,
+    /// The requests Graph answered, whatever the status: what tells a request cut while the
+    /// network works from the network away (`outbox/held.rs`).
+    pub(crate) answered: u64,
     #[cfg(test)]
     pub(crate) hooks: Hooks,
 }
@@ -275,6 +278,7 @@ impl Worker {
             backfill: Backfill::default(),
             pictures: Pictures::default(),
             outbox: Outbox::default(),
+            answered: 0,
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -503,12 +507,17 @@ impl Worker {
         again
     }
 
+    /// One request, counted by the limiter, and in [`Worker::answered`] when Graph answered it.
     fn ask<T>(&mut self, route: Route, now: Instant, call: &impl Fn(&TeamsClient) -> Result<T>) -> Result<T> {
         self.limiter.took(route, now);
-        match &self.client {
+        let result = match &self.client {
             Some(client) => call(client),
             None => Err(NetError::Refused("Teams isn't signed in".into())),
+        };
+        if result.as_ref().err().is_none_or(answer) {
+            self.answered = self.answered.saturating_add(1);
         }
+        result
     }
 
     /// A step of `cadence` failed. Busy (429, 503): nothing at all is asked of Teams while its
@@ -619,6 +628,12 @@ pub(super) fn kind(e: &NetError) -> String {
         NetError::Store(_) => "the local copy".into(),
         _ => "refused".into(),
     }
+}
+
+/// Whether a failure is Graph's answer all the same: an HTTP status (a refusal, read by
+/// `http_code`; a 5xx or a 429, which the client makes a `Closed`), or the sign-in refused (401).
+fn answer(e: &NetError) -> bool {
+    matches!(e, NetError::Auth(_)) || sync::http_code(e).is_some() || matches!(e, NetError::Closed(m) if http_status(m))
 }
 
 /// Whether a failure is Graph asking to wait: a 429 or a 503.

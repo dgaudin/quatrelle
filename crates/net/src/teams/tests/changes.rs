@@ -23,6 +23,9 @@ use crate::teams::outbox;
 use crate::teams::store::{OpRecord, OpState};
 use crate::teams::worker::Worker;
 
+/// A change always cut without an answer: held back, and given up once the network works.
+mod held;
+
 /// The user's first message of `chat(CHAT, T0, 4)`: `(T0 + MINUTE).to_string()`.
 const OWN: &str = "1790812860000";
 /// The user's second (`T0 + 3 min`).
@@ -311,28 +314,25 @@ fn an_edit_answered_5xx_is_made_again_three_times_at_most() {
     assert_eq!(r.kept(CHAT, OWN, T0 + MINUTE).body.plain(), "Answer lost");
 }
 
-/// Ruling 10: a change whose request gets no answer at all (the network away, the connection cut)
-/// isn't a try: it waits for the network as a send does, however long, said neither refused nor
-/// let go; the network back, each is made, once.
+/// Ruling 10: a change whose request gets no answer at all while nothing else is answered either
+/// (the network away) isn't a try: it waits for the network as a send does, however long, said
+/// neither refused nor let go; the network back, each is made, once, a hold (20 s) later at most.
 #[test]
 fn a_change_without_an_answer_waits_for_the_network() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
-    r.fake(|t| {
-        t.cut_after.insert("setReaction".into(), 1_000);
-        t.cut_after.insert("edit".into(), 1_000);
-    });
+    r.fake(|t| t.cut_all = true);
     r.op(react(CHAT, "1-1", ANAS, T0, THUMBS, true));
     r.op(edit(CHAT, "1-2", OWN, T0 + MINUTE, "Written on the train"));
     r.turns(Duration::from_secs(60));
     let cuts = r.hits("setReaction");
-    assert!(cuts > 3, "tried past three times: {cuts}");
+    assert!(cuts >= 2, "tried again: {cuts}");
     let states: Vec<(String, OpState, u8)> = r.ops().into_iter().map(|o| (o.local, o.state, o.tries)).collect();
     assert_eq!(states, [("1-1".to_string(), OpState::Waiting, 0), ("1-2".to_string(), OpState::Waiting, 0)]);
     let not_made = |o: &Outgoing| matches!(o.state, OutState::NotSent { .. });
     assert!(r.outboxes(CHAT).iter().all(|(items, _)| !items.iter().any(not_made)), "nothing said not made: {:?}", r.outboxes(CHAT));
     // The network back.
-    r.fake(|t| t.cut_after.clear());
-    r.turns(Duration::from_secs(15));
+    r.fake(|t| t.cut_all = false);
+    r.turns(Duration::from_secs(25));
     assert_eq!((r.hits("setReaction"), r.hits("edit")), (cuts + 1, 1));
     assert!(r.ops().is_empty(), "{:?}", r.ops());
     assert_eq!(r.kept(CHAT, ANAS, T0).reactions, [Reaction { emoji: THUMBS.into(), users: vec![ME.into()] }]);
@@ -455,7 +455,8 @@ fn a_change_left_sending_by_a_run_cut_off_goes_again() {
     assert!(r.ops().is_empty());
     assert_eq!(r.kept(CHAT, OWN, T0 + MINUTE).body.plain(), "Cut off");
 
-    // Cut off with no answer at all: it goes again after a wait, and that wasn't a try (Ruling 10).
+    // Cut off with no answer at all: it goes again after its hold (20 s), and that wasn't a try
+    // (Ruling 10: a first failure without an answer never counts).
     r.fake(|t| {
         t.cut_after.insert("edit".into(), 1);
     });
@@ -464,7 +465,7 @@ fn a_change_left_sending_by_a_run_cut_off_goes_again() {
     assert_eq!(r.hits("edit"), 2);
     let ops = r.ops();
     assert_eq!((ops[0].state.clone(), ops[0].tries), (OpState::Waiting, 0));
-    r.turns(Duration::from_secs(13));
+    r.turns(Duration::from_secs(20));
     assert_eq!(r.hits("edit"), 3);
     assert!(r.ops().is_empty());
 }

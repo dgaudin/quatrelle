@@ -55,8 +55,10 @@ use crate::NetError;
 use crate::worker::connect::fenced;
 
 mod changes;
+mod held;
 
 pub(crate) use changes::gone;
+use held::Held;
 
 /// The most chats waiting to be marked read.
 const MARKS_MAX: usize = 1_000;
@@ -90,6 +92,16 @@ pub(crate) struct Outbox {
     /// The checks under way or held back, by message number (one a chat's first message, so
     /// [`OUTBOX_MAX`] at most).
     checks: HashMap<u64, Checking>,
+    /// The heads whose last request got no answer at all, held back a while (`held.rs`).
+    held: Held,
+}
+
+impl Outbox {
+    /// When a head may go again, if it's held back: by its check's wait, or after a request of it
+    /// that got no answer.
+    fn until(&self, seq: u64) -> Option<Instant> {
+        self.checks.get(&seq).and_then(|c| c.until).into_iter().chain(self.held.until(seq)).max()
+    }
 }
 
 /// A chat's first message still to go.
@@ -252,7 +264,7 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
     let mut chosen = None;
     for i in 0..w.outbox.heads.len() {
         let Some((seq, route)) = w.outbox.heads.get(i).map(|h| (h.seq, h.route())) else { break };
-        if w.outbox.checks.get(&seq).and_then(|c| c.until).is_some_and(|until| now < until) || !w.may(route, now) {
+        if w.outbox.until(seq).is_some_and(|until| now < until) || !w.may(route, now) {
             continue;
         }
         chosen = w.outbox.heads.get(i).cloned();
@@ -267,7 +279,7 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
     true
 }
 
-/// When the next mark or message may go, by the limiter (a check held back by its own wait); none
+/// When the next mark or message may go, by the limiter (a head held back by its own wait); none
 /// when there's nothing to send, or nothing is asked of Teams.
 pub(crate) fn due(w: &Worker, now: Instant) -> Option<Instant> {
     if !w.polling() || w.offline() {
@@ -277,7 +289,7 @@ pub(crate) fn due(w: &Worker, now: Instant) -> Option<Instant> {
     let marks = w.outbox.marks.iter().filter_map(|m| at(Route::Send(m.key)));
     let heads = w.outbox.heads.iter().filter_map(|h| {
         let may = at(h.route())?;
-        Some(w.outbox.checks.get(&h.seq).and_then(|c| c.until).map_or(may, |until| may.max(until)))
+        Some(w.outbox.until(h.seq).map_or(may, |until| may.max(until)))
     });
     marks.chain(heads).min()
 }
@@ -669,7 +681,8 @@ fn count(ops: &[OpRecord]) -> u32 {
 }
 
 /// What the steps look at, from `ops` (by number): each chat's first message or change still to
-/// go. The checks held back of messages no longer checked are forgotten.
+/// go. The checks of messages no longer checked, and the holds of records no longer heads, are
+/// forgotten.
 fn keep(w: &mut Worker, ops: &[OpRecord]) {
     let mut seen = HashSet::new();
     let heads: Vec<Head> = ops
@@ -678,5 +691,6 @@ fn keep(w: &mut Worker, ops: &[OpRecord]) {
         .map(|o| Head { seq: o.seq, chat: o.chat.clone(), key: w.key_of(&o.chat), check: checked(o) })
         .collect();
     w.outbox.checks.retain(|seq, _| heads.iter().any(|h| h.check && h.seq == *seq));
+    w.outbox.held.retain(|seq| heads.iter().any(|h| h.seq == seq));
     w.outbox.heads = heads;
 }
