@@ -131,3 +131,127 @@ fn a_windows_command_leaves_the_main_windows_message_coming() {
     assert!(shown || s.body_waiting(&b), "the main window's message is still coming");
     done(s);
 }
+
+/// The sample with its first message in a window of its own and, selected and read in the main
+/// window, one of another conversation from another sender (what Ignore and Block sender take in
+/// besides the message: its conversation, its sender's mail).
+fn apart(name: &str) -> (Session, MessageKey, MessageKey) {
+    let mut s = sample_session(name);
+    let a = s.list[0].clone();
+    let topic = quatrelle_model::thread::base_subject(&a.subject).to_lowercase();
+    let b = s
+        .list
+        .iter()
+        .find(|m| !m.from.email.eq_ignore_ascii_case(&a.from.email) && quatrelle_model::thread::base_subject(&m.subject).to_lowercase() != topic)
+        .map(|m| m.key.clone())
+        .expect("another conversation from someone else");
+    s.run("message.popOut", &json!({"key": a.key.to_id()})).unwrap();
+    s.run("list.open", &json!({"key": b.to_id()})).unwrap();
+    (s, a.key.clone(), b)
+}
+
+/// What files mail away from a window takes the window's message, never the one selected in the
+/// main window: Junk, Ignore, Block sender, and a Quick Step that answers it then deletes it.
+const FILING: [(&str, &str); 4] =
+    [("mail.junk", "{}"), ("mail.ignore", "{}"), ("junk.blockSender", "{}"), ("quickStep.run", r#"{"name": "Answer and bin"}"#)];
+
+/// A Quick Step that writes a reply then deletes, as the ready-made "Reply then delete".
+fn answer_and_bin(s: &mut Session) {
+    s.run("quickStep.create", &json!({"name": "Answer and bin", "actions": [{"do": "delete"}], "write": "reply"})).unwrap();
+}
+
+#[test]
+fn a_windows_filing_commands_take_its_message_not_the_one_selected() {
+    for (id, params) in FILING {
+        let (mut s, a, b) = apart("window-filing");
+        answer_and_bin(&mut s);
+        let b_flags = s.summary(&b).unwrap().flags.clone();
+        let params: Value = serde_json::from_str(params).unwrap();
+        s.run_in_window(&a, id, &params).unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert!(s.summary(&a).is_none(), "{id}: the window's message filed away");
+        assert_eq!(s.summary(&b).map(|m| m.flags.clone()), Some(b_flags), "{id}: the main window's message as it was");
+        assert_eq!(main_window(&s), (vec![b.clone()], Some(b.clone())), "{id}");
+        assert!(s.windows.is_empty(), "{id}: its window closes");
+        if id == "quickStep.run" {
+            assert_eq!(s.compose.as_ref().and_then(|c| c.source.clone()), Some(a), "the step answers the window's message");
+        }
+        done(s);
+    }
+}
+
+#[test]
+fn a_window_whose_message_left_the_list_files_none_of_the_list_away() {
+    for (id, params) in FILING {
+        let (mut s, a, _) = apart("window-filing-elsewhere");
+        answer_and_bin(&mut s);
+        s.run("folder.open", &json!({"account": "sample", "folder": "Archive"})).unwrap();
+        let shown: Vec<MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
+        s.run("list.selectAll", &json!({})).unwrap();
+        let main = main_window(&s);
+        let params: Value = serde_json::from_str(params).unwrap();
+        assert!(matches!(s.run_in_window(&a, id, &params), Err(CmdError::Disabled(_))), "{id}");
+        assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown, "{id}: nothing of the list moved");
+        assert_eq!(main_window(&s), main, "{id}");
+        assert!(s.compose.is_none(), "{id}");
+        done(s);
+    }
+}
+
+/// Two windows open: each acts on its own message.
+#[test]
+fn two_windows_each_act_on_their_own_message() {
+    let (mut s, a, b) = two("two-windows");
+    let c = s.list.iter().map(|m| m.key.clone()).find(|k| *k != a && *k != b).unwrap();
+    s.run("message.popOut", &json!({"key": c.to_id()})).unwrap();
+    s.run("list.open", &json!({"key": b.to_id()})).unwrap();
+    let flags = |s: &Session, k: &MessageKey| s.summary(k).unwrap().flags.clone();
+    let (fa, fb, fc) = (flags(&s, &a), flags(&s, &b), flags(&s, &c));
+    s.run_in_window(&a, "mail.markUnread", &json!({})).unwrap();
+    s.run_in_window(&c, "mail.flag", &json!({"on": !fc.flagged})).unwrap();
+    assert_eq!((flags(&s, &a).seen, flags(&s, &a).flagged), (false, fa.flagged), "the first window's: unread only");
+    assert_eq!((flags(&s, &c).seen, flags(&s, &c).flagged), (fc.seen, !fc.flagged), "the second window's: flagged only");
+    assert_eq!(flags(&s, &b), fb);
+    s.run_in_window(&c, "mail.delete", &json!({})).unwrap();
+    assert!(s.summary(&c).is_none() && s.summary(&a).is_some());
+    assert_eq!(s.windows.iter().map(|w| w.key.clone()).collect::<Vec<_>>(), vec![a.clone()], "the other window stays");
+    assert_eq!(main_window(&s), (vec![b.clone()], Some(b)));
+    done(s);
+}
+
+/// The main window's selection holds several messages, the window's among them: only the
+/// window's message is acted on, and the selection comes back (less it, once it's gone).
+#[test]
+fn a_window_whose_message_is_among_several_selected_acts_on_it_alone() {
+    let (mut s, a, b) = two("window-among-selected");
+    s.run("list.select", &json!({"key": a.to_id(), "add": true})).unwrap();
+    assert!(s.selection.contains(&a) && s.selection.contains(&b));
+    let main = main_window(&s);
+    let fb = s.summary(&b).unwrap().flags.clone();
+    s.run_in_window(&a, "mail.markUnread", &json!({})).unwrap();
+    assert!(!s.summary(&a).unwrap().flags.seen);
+    assert_eq!(s.summary(&b).unwrap().flags, fb, "the other selected message as it was");
+    assert_eq!(main_window(&s), main, "the selection as it was");
+    s.run_in_window(&a, "mail.delete", &json!({})).unwrap();
+    assert!(s.summary(&a).is_none() && s.summary(&b).is_some(), "only the window's message deleted");
+    assert_eq!(main_window(&s), (vec![b.clone()], main.1), "the selection less the message gone, the message read as it was");
+    assert!(s.windows.is_empty());
+    done(s);
+}
+
+/// A reply being written in the reading pane is left as it is while a window's buttons are used.
+#[test]
+fn a_reply_written_in_the_pane_is_left_as_it_is() {
+    let (mut s, a, b) = apart("window-pane-reply");
+    s.run("mail.reply", &json!({})).unwrap();
+    s.run("compose.update", &json!({"body": "Half a thought"})).unwrap();
+    let before = s.compose.clone().expect("the reply in the pane");
+    assert!(!before.window && before.source.as_ref() == Some(&b));
+    for id in ["mail.markUnread", "mail.flag", "mail.archive"] {
+        s.run_in_window(&a, id, &json!({})).unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert_eq!(s.compose.as_ref(), Some(&before), "{id}: the pane's reply untouched");
+        assert!(s.composes.is_empty() && s.set_aside.is_empty(), "{id}: nothing set aside");
+        assert_eq!(main_window(&s), (vec![b.clone()], Some(b.clone())), "{id}");
+    }
+    assert!(s.summary(&a).is_none(), "archived");
+    done(s);
+}

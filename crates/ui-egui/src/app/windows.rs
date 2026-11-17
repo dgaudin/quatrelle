@@ -364,10 +364,12 @@ impl MailApp {
                 acts.push(Action::Run("message.closeWindow", json!({"key": key.to_id()})));
             }
         }
-        // A window gone takes its dialog with it.
+        // A window gone takes its dialog and its ribbon's fit with it.
         if self.ui.window_dialog.as_ref().is_some_and(|(k, _)| !self.session.windows.iter().any(|w| w.key == *k)) {
             self.ui.window_dialog = None;
         }
+        let open: std::collections::HashSet<String> = self.session.windows.iter().map(|w| ribbon::fit_key(&w.key)).collect();
+        self.ui.ribbon_groups.retain(|k, _| !k.starts_with("message-window/") || open.contains(k));
     }
 
     /// An action from a message's own window, done to its message: that message stands in as the

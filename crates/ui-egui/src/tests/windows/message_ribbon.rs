@@ -144,3 +144,115 @@ fn to_names_the_people_it_knows() {
     assert!(said.iter().any(|l| l == "someone@contoso.example"), "nobody known: the address");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The message windows' ribbon fits, by window.
+fn fits(a: &MailApp) -> Vec<(String, usize, Vec<Vec<f32>>)> {
+    let mut v: Vec<(String, usize, Vec<Vec<f32>>)> =
+        a.ui.ribbon_groups
+            .iter()
+            .filter(|(k, _)| k.starts_with("message-window"))
+            .map(|(k, g)| (k.clone(), g.compact_from, g.columns.clone()))
+            .collect();
+    v.sort_by(|x, y| x.0.cmp(&y.0));
+    v
+}
+
+/// A frame in a window of `size`; how soon it asks for the next one.
+fn frame_repaint(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> std::time::Duration {
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    out.viewport_output.get(&egui::ViewportId::ROOT).map_or(std::time::Duration::MAX, |v| v.repaint_delay)
+}
+
+/// Two message windows of different widths each keep their own fit of the ribbon (one fit for
+/// both had each take the other's at every frame, ask for another frame, and never settle); once
+/// fitted, no frame more is asked for. A window closed forgets its fit.
+#[test]
+fn two_message_windows_keep_their_own_ribbon_fit_and_settle() {
+    let (mut a, dir) = app("window-fits");
+    let wide = a.session.list[0].key.clone();
+    let narrow = a.session.list[2].key.clone();
+    let place = |w: f32| crate::WindowPlace { x: 10.0, y: 10.0, w, h: 560.0, maximized: false, monitor: None };
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1700.0, 1000.0);
+    a.ui.places.insert("message".into(), place(1560.0));
+    a.run("message.popOut", json!({"key": wide.to_id()}));
+    for _ in 0..3 {
+        frame_repaint(&ctx, &mut a, size);
+    }
+    a.ui.places.insert("message".into(), place(640.0));
+    a.run("message.popOut", json!({"key": narrow.to_id()}));
+    for _ in 0..30 {
+        frame_repaint(&ctx, &mut a, size);
+    }
+    let settled = fits(&a);
+    assert_eq!(settled.len(), 2, "a fit for each window: {settled:?}");
+    assert_ne!(settled[0].1, settled[1].1, "the wide one large, the narrow one compact: {settled:?}");
+    for _ in 0..4 {
+        let next = frame_repaint(&ctx, &mut a, size);
+        assert_eq!(fits(&a), settled, "each keeps its own fit");
+        assert!(next > std::time::Duration::from_millis(100), "no frame more asked for once fitted: {next:?}");
+    }
+    a.act(crate::Action::Run("message.closeWindow", json!({"key": narrow.to_id()})));
+    frame_repaint(&ctx, &mut a, size);
+    assert_eq!(fits(&a).len(), 1, "the closed window's fit forgotten");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// What the window's accessible tree says of each button named `name`: its place, and whether it
+/// can be used.
+fn buttons_named(ctx: &egui::Context, a: &mut MailApp, name: &str) -> Vec<(egui::Rect, bool)> {
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    let tree = out.platform_output.accesskit_update.expect("AccessKit is on");
+    tree.nodes
+        .iter()
+        .filter(|(_, n)| n.label() == Some(name))
+        .filter_map(|(_, n)| n.bounds().map(|b| (b, !n.is_disabled())))
+        .map(|(b, on)| (egui::Rect::from_min_max(egui::pos2(b.x0 as f32, b.y0 as f32), egui::pos2(b.x1 as f32, b.y1 as f32)), on))
+        .collect()
+}
+
+/// Its message no longer in the list (another folder opened in the main window, a message of it
+/// selected and read): what files or marks the window's message is greyed in its ribbon and says
+/// why on hover; what answers it is not.
+#[test]
+fn a_message_windows_buttons_are_greyed_once_its_message_left_the_list() {
+    let (mut a, dir, _, _) = popped("window-greyed");
+    a.run("folder.open", json!({"account": "sample", "folder": "Archive"}));
+    let first = a.session.list.first().map(|m| m.key.clone()).expect("the Archive has mail");
+    a.run("list.open", json!({"key": first.to_id()}));
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    ctx.all_styles_mut(|s| {
+        s.interaction.tooltip_delay = 0.0;
+        s.interaction.show_tooltips_only_when_still = false;
+    });
+    for _ in 0..10 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    // The window's own (the main window has none of these).
+    for name in ["Ignore", "Junk"] {
+        let found = buttons_named(&ctx, &mut a, name);
+        assert!(!found.is_empty() && found.iter().all(|(_, on)| !on), "{name} greyed: {found:?}");
+    }
+    let meeting = buttons_named(&ctx, &mut a, "Meeting");
+    assert!(!meeting.is_empty() && meeting.iter().all(|(_, on)| *on), "Meeting answers it still: {meeting:?}");
+    // The main window's can be used (a message of the Archive selected); the window's not.
+    for name in ["Delete", "Archive", "Quick steps", "Move to", "Categorize"] {
+        let found = buttons_named(&ctx, &mut a, name);
+        assert!(found.iter().any(|(_, on)| *on) && found.iter().any(|(_, on)| !on), "{name}: {found:?}");
+    }
+    let (ignore, _) = buttons_named(&ctx, &mut a, "Ignore")[0];
+    let why = "This message is no longer in the list: open its folder to change it.";
+    let size = egui::vec2(1280.0, 800.0);
+    let mut said = false;
+    for _ in 0..6 {
+        let shapes = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(ignore.center())], size);
+        said |= text_at(&shapes, why).is_some();
+    }
+    assert!(said, "its tooltip says why");
+    let _ = std::fs::remove_dir_all(dir);
+}

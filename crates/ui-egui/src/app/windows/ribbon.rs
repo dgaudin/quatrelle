@@ -10,8 +10,12 @@
 
 use crate::*;
 
-/// Where the ribbon's fit to the window is kept from one frame to the next (`ribbon_groups`).
-const FIT: &str = "message-window";
+/// Where a message window's ribbon fit is kept from one frame to the next (`ribbon_groups`): one
+/// per window, as each has its own width (one for all had two windows take each other's at every
+/// frame, and never settle).
+pub(super) fn fit_key(key: &MessageKey) -> String {
+    format!("message-window/{}", key.to_id())
+}
 
 /// The window's tabs, then the Message tab's ribbon; too narrow for every group's large
 /// buttons, its last groups drawn compact, as the main window's (worked out from this frame for
@@ -20,7 +24,8 @@ pub(super) fn message_ribbon(ui: &mut Ui, s: &Session, st: &mut UiState, w: &qua
     let t = st.tokens;
     tabs(ui, &t, &w.key, main, acts);
     ui.add_space(2.0);
-    let fit = st.ribbon_groups.get(FIT).cloned().unwrap_or_default();
+    let fit_key = fit_key(&w.key);
+    let fit = st.ribbon_groups.get(&fit_key).cloned().unwrap_or_default();
     let gid = widgets::group_fit_id();
     let room_right = ui.max_rect().right();
     ui.ctx().data_mut(|d| d.insert_temp(gid, widgets::GroupFit::start(fit.compact_from, fit.columns)));
@@ -36,10 +41,10 @@ pub(super) fn message_ribbon(ui: &mut Ui, s: &Session, st: &mut UiState, w: &qua
         columns: gfit.groups.iter().map(|g| g.2.clone()).collect(),
         overflow: gfit.right - room_right,
     };
-    if st.ribbon_groups.get(FIT).is_none_or(|g| g.compact_from != next.compact_from || g.columns != next.columns) {
+    if st.ribbon_groups.get(&fit_key).is_none_or(|g| g.compact_from != next.compact_from || g.columns != next.columns) {
         ui.ctx().request_repaint();
     }
-    st.ribbon_groups.insert(FIT.into(), next);
+    st.ribbon_groups.insert(fit_key, next);
 }
 
 /// File and Help open the main window's File page (Help: its About page), brought forward;
