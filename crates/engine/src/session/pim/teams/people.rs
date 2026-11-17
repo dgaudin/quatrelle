@@ -181,8 +181,9 @@ impl Session {
         if let [only] = &chosen[..]
             && let Some(chat) = self.teams.chat_with(&only.id).map(str::to_string)
         {
-            self.teams_show(Some(chat.clone()));
+            // Queued first: refused, nothing changes and the pane keeps what was typed.
             let local = self.teams_send(&chat, typed, parts)?;
+            self.teams_show(Some(chat.clone()));
             self.teams.created = Some(chat.clone());
             return Ok(Created::Chat { chat, local });
         }
@@ -215,13 +216,19 @@ impl Session {
             self.teams.creating = Some(TeamsCreating::Failed { why: NotCreated::Refused, code: None });
             return;
         }
-        self.teams.creating = None;
-        self.teams_show(Some(chat.clone()));
+        // The first message is queued before the chat is shown: refused (the outbox full, too long),
+        // the creation ends as failed, the pane stays with what was typed, and the chat, there in
+        // Teams, shows in the list; sending again opens it (a one-to-one chat) instead of making
+        // another.
         if let Some(FirstMessage { typed, parts, .. }) = first
             && self.teams_send(&chat, &typed, parts).is_err()
         {
+            self.teams.creating = Some(TeamsCreating::Failed { why: NotCreated::Refused, code: None });
             self.notice_with("Your message to the new conversation wasn't sent", &[], true);
+            return;
         }
+        self.teams.creating = None;
+        self.teams_show(Some(chat.clone()));
         self.teams.created = Some(chat);
     }
 

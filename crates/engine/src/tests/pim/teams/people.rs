@@ -335,3 +335,46 @@ fn signing_out_forgets_people_and_a_creation() {
     s.prefs.teams.signed_in = true;
     assert!(matches!(s.run("teams.create", &json!({"people": [ANA], "text": "hello"})), Err(CmdError::Params(_))));
 }
+
+/// The outbox full: a message to a listed chat is refused.
+fn outbox_full(s: &mut Session) {
+    s.teams.unsent = u32::try_from(quatrelle_model::pim::teams::OUTBOX_MAX).unwrap_or(u32::MAX);
+}
+
+#[test]
+fn a_refused_first_message_in_an_existing_chat_changes_nothing() {
+    let mut s = session();
+    s.apply(teams_event(teams::Event::Chats { rows: vec![one_on_one(ANA), row(2, 5)] }));
+    open(&mut s, "19:chat2@thread.v2");
+    found(&mut s, "ana", vec![ana()]);
+    outbox_full(&mut s);
+    assert!(matches!(s.run("teams.create", &json!({"people": [ANA], "text": "hello"})), Err(CmdError::Disabled(_))));
+    assert_eq!(s.teams.open.as_deref(), Some("19:chat2@thread.v2"));
+    assert_eq!(s.take_teams_created(), None);
+    assert!(teams_jobs(&mut s).is_empty());
+    // Too long a body: the same.
+    s.teams.unsent = 0;
+    assert!(s.run("teams.create", &json!({"people": [ANA], "text": "x".repeat(200_000)})).is_err());
+    assert_eq!(s.teams.open.as_deref(), Some("19:chat2@thread.v2"));
+    assert_eq!(s.take_teams_created(), None);
+}
+
+#[test]
+fn a_refused_first_message_in_a_created_chat_keeps_the_pane() {
+    let mut s = session();
+    found(&mut s, "ana", vec![ana()]);
+    let local = local_of(&s.run("teams.create", &json!({"people": [ANA], "text": "hello"})).unwrap());
+    s.apply(teams_event(teams::Event::Chats { rows: vec![one_on_one(ANA)] }));
+    s.take_jobs();
+    outbox_full(&mut s);
+    s.apply(teams_event(teams::Event::Created { local, chat: CHAT.into() }));
+    assert_eq!(s.teams.open, None, "no chat switched");
+    assert_eq!(s.take_teams_created(), None, "the pane stays");
+    assert!(matches!(s.teams.creating, Some(TeamsCreating::Failed { .. })), "{:?}", s.teams.creating);
+    assert!(sends(&teams_jobs(&mut s)).is_empty());
+    // Sending again is taken: the chat is there now, and is opened.
+    s.teams.unsent = 0;
+    let r = s.run("teams.create", &json!({"people": [ANA], "text": "hello"})).unwrap();
+    assert_eq!(r["chat"], CHAT);
+    assert_eq!(s.take_teams_created().as_deref(), Some(CHAT));
+}
