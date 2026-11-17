@@ -2262,6 +2262,10 @@ module	Conversations	المحادثات
 	Quatrelle couldn't confirm it was sent	تعذّر على Quatrelle التأكد من إرسالها
 	Retry	إعادة المحاولة
 	{n} messages not sent yet will be lost	ستُفقد {n} رسائل لم تُرسل بعد
+	Editing message	جارٍ تعديل الرسالة
+	To remove a message, delete it	لإزالة رسالة، احذفها
+	This message couldn't be edited	تعذّر تعديل هذه الرسالة
+	Your last message can't be edited here	لا يمكن تعديل رسالتك الأخيرة هنا
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (خارجي)
 	{name} (App)	{name} (تطبيق)

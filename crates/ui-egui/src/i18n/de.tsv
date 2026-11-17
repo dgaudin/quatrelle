@@ -2267,6 +2267,10 @@ module	Conversations	Unterhaltungen
 	Quatrelle couldn't confirm it was sent	Quatrelle konnte nicht bestätigen, dass sie gesendet wurde
 	Retry	Erneut versuchen
 	{n} messages not sent yet will be lost	{n} noch nicht gesendete Nachrichten gehen verloren
+	Editing message	Nachricht wird bearbeitet
+	To remove a message, delete it	Um eine Nachricht zu entfernen, löschen Sie sie
+	This message couldn't be edited	Diese Nachricht konnte nicht bearbeitet werden
+	Your last message can't be edited here	Ihre letzte Nachricht kann hier nicht bearbeitet werden
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Extern)
 	{name} (App)	{name} (App)

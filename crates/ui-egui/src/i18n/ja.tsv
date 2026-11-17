@@ -2263,6 +2263,10 @@ module	Conversations	会話
 	Quatrelle couldn't confirm it was sent	Quatrelle は送信を確認できませんでした
 	Retry	再試行
 	{n} messages not sent yet will be lost	まだ送信されていない {n} 件のメッセージは失われます
+	Editing message	メッセージを編集中
+	To remove a message, delete it	メッセージを取り除くには、削除してください
+	This message couldn't be edited	このメッセージを編集できませんでした
+	Your last message can't be edited here	最後のメッセージはここでは編集できません
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (アプリ)

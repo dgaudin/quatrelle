@@ -14,16 +14,16 @@ use super::chat::*;
 use super::*;
 use crate::Action;
 
-const SIZE: (usize, usize) = (1280, 800);
+pub(super) const SIZE: (usize, usize) = (1280, 800);
 
 /// The support chat open, with `messages`.
-fn writing_app(name: &str, messages: Vec<ChatMessage>) -> (MailApp, std::path::PathBuf) {
+pub(super) fn writing_app(name: &str, messages: Vec<ChatMessage>) -> (MailApp, std::path::PathBuf) {
     let (a, dir, _) = chat_app(name, group_row(), TEAMS_LINK, messages);
     (a, dir)
 }
 
 /// The box given the keyboard: a click on its hint.
-fn focus_box(ctx: &egui::Context, a: &mut MailApp) {
+pub(super) fn focus_box(ctx: &egui::Context, a: &mut MailApp) {
     settled_at(ctx, a, SIZE);
     let (_, texts) = pane(ctx, a, vec![], SIZE);
     let hint = rect_of(&texts, |t| t == "Write a message").expect("the box and its hint");
@@ -31,7 +31,7 @@ fn focus_box(ctx: &egui::Context, a: &mut MailApp) {
 }
 
 /// `events` given to the pane a frame each, then one more: what it asked for.
-fn typed(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>) -> Vec<Action> {
+pub(super) fn typed(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>) -> Vec<Action> {
     let mut acts = Vec::new();
     for e in events {
         acts.extend(pane(ctx, a, vec![e], SIZE).0);
@@ -41,7 +41,7 @@ fn typed(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>) -> Vec<Action
 }
 
 /// The params of the messages the box sent.
-fn sends(acts: &[Action]) -> Vec<Value> {
+pub(super) fn sends(acts: &[Action]) -> Vec<Value> {
     acts.iter()
         .filter_map(|x| match x {
             Action::Run("teams.send", p) => Some(p.clone()),
@@ -51,7 +51,7 @@ fn sends(acts: &[Action]) -> Vec<Value> {
 }
 
 /// The params of the commands `id` asked for.
-fn asked(acts: &[Action], id: &str) -> Vec<Value> {
+pub(super) fn asked(acts: &[Action], id: &str) -> Vec<Value> {
     acts.iter()
         .filter_map(|x| match x {
             Action::Run(i, p) if *i == id => Some(p.clone()),
@@ -61,11 +61,11 @@ fn asked(acts: &[Action], id: &str) -> Vec<Value> {
 }
 
 /// What the box of the open chat holds.
-fn in_box(a: &MailApp) -> String {
+pub(super) fn in_box(a: &MailApp) -> String {
     a.ui.conversations.drafts.get(CHAT).map(|d| d.text.clone()).unwrap_or_default()
 }
 
-fn enter() -> Event {
+pub(super) fn enter() -> Event {
     key(Key::Enter, Modifiers::NONE)
 }
 
@@ -168,7 +168,7 @@ fn a_blank_message_isnt_sent() {
 }
 
 /// A frame's events in one go, then `more` frames: what the pane asked for.
-fn one_frame(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, more: usize) -> Vec<Action> {
+pub(super) fn one_frame(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, more: usize) -> Vec<Action> {
     let mut acts = pane(ctx, a, events, SIZE).0;
     for _ in 0..more {
         acts.extend(pane(ctx, a, vec![], SIZE).0);

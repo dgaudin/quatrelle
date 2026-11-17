@@ -2266,6 +2266,10 @@ module	Conversations	Беседы
 	Quatrelle couldn't confirm it was sent	Quatrelle не удалось подтвердить отправку
 	Retry	Повторить
 	{n} messages not sent yet will be lost	Неотправленные сообщения будут потеряны: {n}
+	Editing message	Изменение сообщения
+	To remove a message, delete it	Чтобы убрать сообщение, удалите его
+	This message couldn't be edited	Не удалось изменить это сообщение
+	Your last message can't be edited here	Ваше последнее сообщение нельзя изменить здесь
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Внешнее)
 	{name} (App)	{name} (Приложение)

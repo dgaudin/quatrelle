@@ -3,20 +3,27 @@
 //! The box at the foot of a conversation: a draft per chat (in memory, at most [`DRAFTS_MAX`]
 //! chats), bold and italic over the text's [`Styles`] as the mail editor keeps them, the emoji
 //! picker of the mail editor, and Enter to send (`teams.send`, with the byte ranges of the bold
-//! and italic runs); Shift+Enter makes a new line. These keys act where they come among the
-//! frame's events, on the text as it stood when they were pressed (what's typed after them in the
-//! same frame waits for the next). In Conversations the window's keys never send the mail being
-//! written (`app/keys.rs`), so neither does a key pressed in the box.
+//! and italic runs, and of the people @mentioned when there are); Shift+Enter makes a new line.
+//! "@" offers the chat's people, mentioned by name (`mentions.rs`); ↑ in an empty box edits the
+//! user's last message, Esc lets an edit go (`editing.rs`). These keys act where they come among
+//! the frame's events, on the text as it stood when they were pressed (what's typed after them in
+//! the same frame waits for the next), and are the box's as it stood at the frame's start: the
+//! offer's while people are offered (Esc closes it), an edit's while one is under way (Esc lets
+//! it go). An Esc the box doesn't take is the window's, as before (the keyboard let go, the
+//! search emptied: `app/keys.rs` asks [`takes_escape`]). In Conversations the window's keys never
+//! send the mail being written (`app/keys.rs`), so neither does a key pressed in the box.
 //!
 //! The text is never lost. A message too long for Teams (its HTML past [`SEND_MAX`] bytes), or
 //! with too many waiting already (the command's own caps, checked first), stays in the box, and
-//! the box says why. One the engine refuses all the same goes back in it with its styles
-//! ([`refused`]), and why is said under the box in the interface's language: never in the
-//! engine's English words.
+//! the box says why. One the engine refuses all the same goes back in it with its styles and
+//! mentions, an edit as an edit of its message again ([`refused`]), the caret where it was; why
+//! is said under the box in the interface's language: never in the engine's English words.
 //!
-//! What is hostile here: nothing from outside: the text is the user's, sent as text (the writer
-//! escapes it, so what looks like markup goes as it was typed). What it costs is bounded: the
-//! drafts kept, the ranges sent at the command's cap, a text weighed again only when it changes.
+//! What is hostile here: the text is the user's, sent as text (the writer escapes it, so what
+//! looks like markup goes as it was typed); the chat's members' names (Graph's) are put in as
+//! mentions on one line only; a message's words are loaded for an edit only as the box holds
+//! them. What it costs is bounded: the drafts kept, the ranges sent and read back at the
+//! command's caps, a text weighed again only when it changes.
 //!
 //! [`SEND_MAX`]: quatrelle_engine::model::pim::teams::SEND_MAX
 
@@ -25,9 +32,9 @@ use std::ops::Range;
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Key, KeyboardShortcut, Modifiers, RichText, Ui};
 use quatrelle_engine::mime::rich::{self, Style, Styles};
-use quatrelle_engine::mime::{teams_compose, teams_write};
-use quatrelle_engine::model::pim::teams::{MAX_ID, OUTBOX_CHAT_MAX, OUTBOX_MAX};
-use quatrelle_engine::{CmdError, Session, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
+use quatrelle_engine::mime::{Typed, teams_compose_typed, teams_write_mentions};
+use quatrelle_engine::model::pim::teams::{MAX_ID, MAX_MENTIONS, OUTBOX_CHAT_MAX, OUTBOX_MAX};
+use quatrelle_engine::{CmdError, Session, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
 use serde_json::{Value, json};
 
 use super::ConversationsUi;
@@ -36,11 +43,16 @@ use crate::rich_edit::{self, Picker};
 use crate::theme::{self, Tokens};
 use crate::{Action, widgets};
 
+mod editing;
+mod mentions;
+
+use editing::{Editing, Words};
+pub(crate) use mentions::BoxMention;
+use mentions::Offer;
+
 /// The most chats whose drafts are kept: past it, the one drawn longest ago goes (an empty one
 /// first).
 const DRAFTS_MAX: usize = 20;
-/// The most byte ranges of each style `teams.send` takes.
-const RANGES_MAX: usize = 1_000;
 /// The text's size.
 const SIZE: f32 = 14.0;
 /// The tallest the box grows; past it, it scrolls.
@@ -63,21 +75,45 @@ pub(crate) struct ChatDraft {
     typing: Option<Style>,
     /// The selection (characters) at the end of the last frame.
     sel: Range<usize>,
-    /// Why the last message (or a Retry, a Delete) wasn't taken: said under the box until the
-    /// text changes.
+    /// Why the last message (or an edit, a Retry, a Delete, ↑) wasn't taken: said under the box
+    /// until the text changes.
     said: Option<Refusal>,
     /// When it was last drawn ([`ConversationsUi::drafted`]).
     used: u64,
     /// What came after one of the box's keys in a frame (typed, pasted, another key), for the
     /// next frame: so the key acts on the text as it stood when it was pressed.
     pending: Vec<egui::Event>,
+    /// The people @mentioned in the text, by character, in its order (at most [`MAX_MENTIONS`]).
+    pub(crate) mentions: Vec<BoxMention>,
+    /// The chat's people offered after an "@" typed.
+    offer: Option<Offer>,
+    /// The user's own message being edited, and what the box held before.
+    editing: Option<Editing>,
+    /// Where the caret goes at the next frame (the keyboard given to the box): words put in the
+    /// box from elsewhere than its keys (an edit begun or let go, a refusal, a member picked).
+    caret_to: Option<Range<usize>>,
+    /// The edit handed to the engine this frame (its message, and the words the box had loaded),
+    /// for a refusal of it to be an edit judged as before; let go at the next frame.
+    handed: Option<(String, Typed)>,
 }
 
 impl ChatDraft {
+    /// What the box holds, as `teams.send` and `teams.edit` take it: the text, the byte ranges of
+    /// its bold and italic, and of each mention with its member's id.
+    fn typed(&self) -> Typed {
+        let (bold, italic) = runs(&self.text, &self.styles);
+        let mut mentions = Vec::new();
+        if !self.mentions.is_empty() {
+            let at = Chars::of(&self.text);
+            mentions = self.mentions.iter().filter_map(|m| Some((at.byte(m.chars.start)?..at.byte(m.chars.end)?, m.user.clone()))).collect();
+        }
+        Typed { text: self.text.clone(), bold, italic, mentions }
+    }
+
     /// Whether its HTML is too long for Teams, worked out again (after each change).
     fn weigh(&mut self) {
-        let (bold, italic) = runs(&self.text, &self.styles);
-        self.too_long = teams_write(&teams_compose(&self.text, &bold, &italic)).is_err();
+        let (body, mentions) = teams_compose_typed(&self.typed());
+        self.too_long = teams_write_mentions(&body, &mentions).is_err();
     }
 
     /// `text` put in place of the selection, in the look typing has there; the cursor after it.
@@ -85,12 +121,14 @@ impl ChatDraft {
         self.styles.fit(&self.text);
         let n = self.text.chars().count();
         let sel = self.sel.start.min(n)..self.sel.end.min(n);
-        let byte = |at: usize| self.text.char_indices().nth(at).map_or(self.text.len(), |(b, _)| b);
-        let (Some(head), Some(tail)) = (self.text.get(..byte(sel.start)), self.text.get(byte(sel.end)..)) else { return };
+        let (Some(head), Some(tail)) = (self.text.get(..byte_at(&self.text, sel.start)), self.text.get(byte_at(&self.text, sel.end)..)) else {
+            return;
+        };
         let new = format!("{head}{text}{tail}");
         let style = self.typing.clone().unwrap_or_else(|| rich_edit::typing_style(&self.text, &self.styles, sel.start));
         let at = sel.start + text.chars().count();
         self.styles.edit_at(&self.text, &new, &style, Some(at));
+        mentions::follow(&mut self.mentions, &self.text, &new);
         self.text = new;
         self.sel = at..at;
         self.changed();
@@ -102,12 +140,51 @@ impl ChatDraft {
         self.said.map(Refusal::sentence)
     }
 
+    /// The message being edited in the box.
+    #[cfg(test)]
+    pub(crate) fn editing(&self) -> Option<&str> {
+        self.editing.as_ref().map(|e| e.message.as_str())
+    }
+
     /// What follows a change of the text or of its looks.
     fn changed(&mut self) {
         self.typing = None;
         self.said = None;
         self.weigh();
     }
+}
+
+/// Where each character of a text starts, to go between characters and bytes.
+struct Chars {
+    starts: Vec<usize>,
+    len: usize,
+}
+
+impl Chars {
+    fn of(text: &str) -> Chars {
+        Chars { starts: text.char_indices().map(|(b, _)| b).collect(), len: text.len() }
+    }
+
+    /// The character a byte starts (the text's end too).
+    fn at(&self, b: usize) -> Option<usize> {
+        if b == self.len { Some(self.starts.len()) } else { self.starts.binary_search(&b).ok() }
+    }
+
+    /// A byte range's characters, both ends on characters' starts.
+    fn range(&self, r: &Range<usize>) -> Option<Range<usize>> {
+        let (from, to) = (self.at(r.start)?, self.at(r.end)?);
+        (from <= to).then_some(from..to)
+    }
+
+    /// The first byte of character `c` (the text's end too).
+    fn byte(&self, c: usize) -> Option<usize> {
+        if c == self.starts.len() { Some(self.len) } else { self.starts.get(c).copied() }
+    }
+}
+
+/// The byte character `c` of `text` starts at; past the text, its end.
+fn byte_at(text: &str, c: usize) -> usize {
+    text.char_indices().nth(c).map_or(text.len(), |(b, _)| b)
 }
 
 /// Why something the box asked for wasn't taken, as the window says it.
@@ -117,8 +194,14 @@ enum Refusal {
     TooMany,
     Left,
     MayBeInTeams,
-    /// Anything else (the chat gone from the list, say).
+    /// Anything else of a message (the chat gone from the list, say).
     NotSent,
+    /// An edit leaving nothing of the message: deleting it is what removes it.
+    NothingLeft,
+    /// Anything else of an edit (the message no longer one the box may edit, say).
+    NotEdited,
+    /// ↑ on a last message the box can't hold.
+    LastNotEditable,
 }
 
 impl Refusal {
@@ -134,7 +217,9 @@ impl Refusal {
             TEAMS_TOO_MANY => Some(Refusal::TooMany),
             TEAMS_MAY_BE_IN_TEAMS => Some(Refusal::MayBeInTeams),
             TEAMS_LEFT => Some(Refusal::Left),
+            TEAMS_NOTHING_LEFT => Some(Refusal::NothingLeft),
             _ if id == "teams.send" => Some(Refusal::NotSent),
+            _ if id == "teams.edit" => Some(Refusal::NotEdited),
             _ => None,
         }
     }
@@ -146,6 +231,9 @@ impl Refusal {
             Refusal::Left => tl!("You're no longer in this conversation"),
             Refusal::MayBeInTeams => tl!("This message may already be in Teams"),
             Refusal::NotSent => tl!("This message couldn't be sent"),
+            Refusal::NothingLeft => tl!("To remove a message, delete it"),
+            Refusal::NotEdited => tl!("This message couldn't be edited"),
+            Refusal::LastNotEditable => tl!("Your last message can't be edited here"),
         }
     }
 }
@@ -155,20 +243,64 @@ fn box_id(chat: &str) -> egui::Id {
     egui::Id::unique(("teams-box", chat))
 }
 
-/// One of the box's own keys: Enter alone (Shift+Enter is the text box's new line), Ctrl+B,
-/// Ctrl+I.
+/// Whether Esc is the open chat's box's: it has the keyboard, and people are offered (Esc closes
+/// the offer) or a message is edited (Esc lets the edit go). The window's own Esc (emptying the
+/// search) waits then.
+pub(crate) fn takes_escape(ctx: &egui::Context, c: &ConversationsUi, open: Option<&str>) -> bool {
+    open.is_some_and(|chat| ctx.memory(|m| m.has_focus(box_id(chat))) && c.drafts.get(chat).is_some_and(|d| d.offering() || d.editing.is_some()))
+}
+
+/// One of the box's own keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BoxKey {
+    /// Enter alone (Shift+Enter is the text box's new line): the message sent, or the edit.
     Send,
     Bold,
     Italic,
+    /// Enter or Tab alone, people offered: the one chosen picked.
+    Pick,
+    /// ↑ or ↓ alone, people offered: the one above, or below, chosen.
+    Previous,
+    Next,
+    /// Esc alone, people offered: the offer closed.
+    Close,
+    /// Esc alone, a message edited: the edit let go.
+    Cancel,
+    /// ↑ alone in an empty box: the user's last message edited.
+    EditLast,
+    /// Esc alone the box doesn't take, come after another of its keys in a frame (replayed):
+    /// egui never saw it, so the box lets go of the keyboard as an Esc does.
+    LetGo,
 }
 
-impl BoxKey {
-    fn of(e: &egui::Event) -> Option<BoxKey> {
+/// Which keys are the box's, as it stands at the frame's start.
+struct Mode {
+    offering: bool,
+    editing: bool,
+    /// Empty, not editing, and the window has a last message of the user's: ↑ edits it.
+    up_edits: bool,
+}
+
+impl Mode {
+    fn of(s: &Session, d: &ChatDraft) -> Mode {
+        let (offering, editing) = (d.offering(), d.editing.is_some());
+        let up_edits = !offering && !editing && d.text.is_empty() && s.teams.last_own(&s.prefs.teams.object_id).is_some();
+        Mode { offering, editing, up_edits }
+    }
+
+    /// `e` as one of the box's keys (`replayed`: left from the last frame, after one of them).
+    fn key(&self, e: &egui::Event, replayed: bool) -> Option<BoxKey> {
         let egui::Event::Key { key, pressed: true, modifiers, .. } = e else { return None };
+        let alone = modifiers.is_none();
         match key {
-            Key::Enter if modifiers.is_none() => Some(BoxKey::Send),
+            Key::Enter | Key::Tab if alone && self.offering => Some(BoxKey::Pick),
+            Key::Enter if alone => Some(BoxKey::Send),
+            Key::ArrowUp if alone && self.offering => Some(BoxKey::Previous),
+            Key::ArrowDown if alone && self.offering => Some(BoxKey::Next),
+            Key::ArrowUp if alone && self.up_edits => Some(BoxKey::EditLast),
+            Key::Escape if alone && self.offering => Some(BoxKey::Close),
+            Key::Escape if alone && self.editing => Some(BoxKey::Cancel),
+            Key::Escape if alone && replayed => Some(BoxKey::LetGo),
             Key::B if modifiers.matches_logically(Modifiers::COMMAND) => Some(BoxKey::Bold),
             Key::I if modifiers.matches_logically(Modifiers::COMMAND) => Some(BoxKey::Italic),
             _ => None,
@@ -182,11 +314,11 @@ fn for_the_box(e: &egui::Event) -> bool {
 }
 
 /// `chat`'s draft, made when it has none: past [`DRAFTS_MAX`] chats, the one drawn longest ago
-/// goes, an empty one first.
+/// goes, an empty one first (one with an edit under way isn't empty).
 fn draft<'a>(c: &'a mut ConversationsUi, chat: &str) -> &'a mut ChatDraft {
     c.drafted = c.drafted.saturating_add(1);
     if !c.drafts.contains_key(chat) && c.drafts.len() >= DRAFTS_MAX {
-        let oldest = c.drafts.iter().min_by_key(|(_, d)| (!d.text.is_empty(), d.used)).map(|(k, _)| k.clone());
+        let oldest = c.drafts.iter().min_by_key(|(_, d)| (!d.text.is_empty() || d.editing.is_some(), d.used)).map(|(k, _)| k.clone());
         if let Some(k) = oldest {
             c.drafts.remove(&k);
         }
@@ -228,51 +360,85 @@ fn pairs(ranges: &[Range<usize>]) -> Value {
     Value::Array(ranges.iter().map(|r| json!([r.start, r.end])).collect())
 }
 
-/// `text`'s styles from `teams.send`'s params: bold and italic on the byte ranges given (at most
-/// [`RANGES_MAX`] of each; one off the text's characters is left out).
-fn styled(text: &str, params: &Value) -> Styles {
+/// Mentions as `teams.send` takes them: `[[from, to, "user id"]]`.
+fn mention_pairs(mentions: &[(Range<usize>, String)]) -> Value {
+    Value::Array(mentions.iter().map(|(r, user)| json!([r.start, r.end, user])).collect())
+}
+
+/// `text`'s styles: bold and italic on the byte ranges given (one off the text's characters is
+/// left out).
+fn styled(text: &str, bold: &[Range<usize>], italic: &[Range<usize>]) -> Styles {
     let mut st = Styles::plain(text);
-    // Each character's first byte, to find where a byte range starts and ends in characters.
-    let starts: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
-    let char_at = |b: usize| if b == text.len() { Some(starts.len()) } else { starts.binary_search(&b).ok() };
-    let looks: [(&str, fn(&mut Style)); 2] = [("bold", |s| s.bold = true), ("italic", |s| s.italic = true)];
-    for (k, set) in looks {
-        for r in params.get(k).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default().iter().take(RANGES_MAX) {
-            let at = |i: usize| r.get(i).and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok()).and_then(char_at);
-            if let (Some(from), Some(to)) = (at(0), at(1))
-                && from < to
-            {
-                st.restyle(text, from..to, |s| {
-                    let mut s = s.clone();
-                    set(&mut s);
-                    s
-                });
-            }
+    if bold.is_empty() && italic.is_empty() {
+        return st;
+    }
+    let at = Chars::of(text);
+    let looks: [(&[Range<usize>], fn(&mut Style)); 2] = [(bold, |s| s.bold = true), (italic, |s| s.italic = true)];
+    for (ranges, set) in looks {
+        for r in ranges.iter().filter_map(|r| at.range(r)).filter(|r| !r.is_empty()) {
+            st.restyle(text, r, |s| {
+                let mut s = s.clone();
+                set(&mut s);
+                s
+            });
         }
     }
     st
 }
 
-/// What the engine refused of the box's (`teams.send`, `.retry` or `.discard`, with `params`;
-/// `open` is the chat on screen, which Retry and Delete are of): a message sent goes back in its
-/// chat's box with its bold and italic, before what was typed since; why is said under the box.
+/// The byte ranges of style `key` in `teams.send`'s or `teams.edit`'s params (at most
+/// [`TEAMS_RANGES_MAX`]; one off `text`'s characters is left out).
+fn ranges_of(text: &str, params: &Value, key: &str) -> Vec<Range<usize>> {
+    let given = params.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let number = |v: Option<&Value>| v.and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok());
+    given
+        .iter()
+        .take(TEAMS_RANGES_MAX)
+        .filter_map(|r| Some(number(r.get(0))?..number(r.get(1))?))
+        .filter(|r| r.start < r.end && text.is_char_boundary(r.start) && text.is_char_boundary(r.end))
+        .collect()
+}
+
+/// The mentions in `teams.send`'s or `teams.edit`'s params: byte ranges of `text` and user ids
+/// (at most [`MAX_MENTIONS`]; one off its characters, or whose id is empty or longer than
+/// [`MAX_ID`], is left out).
+fn mentions_of(text: &str, params: &Value) -> Vec<(Range<usize>, String)> {
+    let given = params.get("mentions").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let number = |v: Option<&Value>| v.and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok());
+    let user = |v: Option<&Value>| v.and_then(Value::as_str).filter(|u| !u.is_empty() && u.len() <= MAX_ID).map(str::to_string);
+    given
+        .iter()
+        .take(MAX_MENTIONS)
+        .filter_map(|m| Some((number(m.get(0))?..number(m.get(1))?, user(m.get(2))?)))
+        .filter(|(r, _)| r.start < r.end && text.is_char_boundary(r.start) && text.is_char_boundary(r.end))
+        .collect()
+}
+
+/// What the engine refused of the box's (`teams.send`, `.edit`, `.retry` or `.discard`, with
+/// `params`; `open` is the chat on screen, which Retry and Delete are of): a message sent goes
+/// back in its chat's box with its bold, italic and mentions, before what was typed since (into
+/// the words set aside, while an edit is under way); an edit goes back as an edit of its message
+/// again; why is said under the box.
 pub(crate) fn refused(c: &mut ConversationsUi, open: Option<&str>, id: &str, params: &Value, e: &CmdError) {
-    let chat = if id == "teams.send" { params.get("chat").and_then(Value::as_str) } else { open };
+    let chat = if matches!(id, "teams.send" | "teams.edit") { params.get("chat").and_then(Value::as_str) } else { open };
     let Some(chat) = chat.filter(|c| !c.is_empty() && c.len() <= MAX_ID) else { return };
     let said = Refusal::of(id, e);
     let d = draft(c, chat);
-    if id == "teams.send"
+    if id == "teams.edit" {
+        editing::refused_edit(d, params);
+    } else if id == "teams.send"
         && let Some(text) = params.get("text").and_then(Value::as_str)
     {
-        let (mut back, mut styles) = (text.to_string(), styled(text, params));
-        if !d.text.is_empty() {
-            rich::append(&mut back, &mut styles, "\n", &Styles::plain("\n"));
-            rich::append(&mut back, &mut styles, &d.text, &d.styles);
+        let styles = styled(text, &ranges_of(text, params, "bold"), &ranges_of(text, params, "italic"));
+        let mentions = mentions::of_bytes(text, &mentions_of(text, params));
+        match d.editing.as_mut() {
+            Some(edit) => edit.set_aside.put_back(text, styles, mentions),
+            None => {
+                let mut words = Words::take(d);
+                words.put_back(text, styles, mentions);
+                words.into_box(d);
+            }
         }
-        d.text = back;
-        d.styles = styles;
-        d.sel = 0..0;
-        d.changed();
     }
     if said.is_some() {
         d.said = said;
@@ -282,23 +448,37 @@ pub(crate) fn refused(c: &mut ConversationsUi, open: Option<&str>, id: &str, par
 /// The box of `chat` (the open one), at the foot of the pane: none for a chat the user left or
 /// one Teams won't let be read.
 pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens, chat: &str, acts: &mut Vec<Action>) {
+    let edit_asked = c.edit_asked.take();
     if s.teams.row(chat).is_none_or(|r| r.left || r.unreadable) {
         return;
     }
     // The command's caps, the open chat's share then all of it: past them nothing is taken.
     let full = s.teams.outgoing.len() >= OUTBOX_CHAT_MAX || usize::try_from(s.teams.unsent).unwrap_or(usize::MAX) >= OUTBOX_MAX;
     let d = draft(c, chat);
+    d.handed = None;
+    if let Some(message) = edit_asked {
+        editing::asked(s, d, &message);
+    }
     let frame = egui::Frame::new().fill(t.surface).inner_margin(egui::Margin { left: 16, right: 16, top: 6, bottom: 10 });
     egui::Panel::bottom("teams-box").resizable(false).show_separator_line(false).frame(frame).show(ui, |ui| {
         let id = box_id(chat);
+        if let Some(r) = d.caret_to.take() {
+            rich_edit::set_caret(ui.ctx(), id, r.start, r.end);
+            ui.memory_mut(|m| m.request_focus(id));
+        }
         let key = if ui.memory(|m| m.has_focus(id)) {
-            keys(ui, d, id)
+            let mode = Mode::of(s, d);
+            keys(ui, d, id, &mode)
         } else {
             // The keyboard went elsewhere: what was left for the box isn't given to another.
             d.pending.clear();
             None
         };
         let focused = ui.memory(|m| m.has_focus(id));
+        // The offer and the edit's banner over the box, as the frame found them; what's clicked
+        // in them acts once the text box has taken this frame's typing.
+        let picked = if focused { mentions::rows(ui, t, d) } else { None };
+        let cancelled = d.editing.is_some() && editing::banner(ui, t);
         let border = egui::Frame::new()
             .fill(if t.dark { t.surface } else { egui::Color32::WHITE })
             .stroke(egui::Stroke::new(1.0, if focused { t.accent } else { t.border }))
@@ -319,12 +499,33 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
         // The key acts on the text as it stood when it was pressed: what came before it in the
         // frame was given to the text box just now.
         match key {
+            Some(BoxKey::Send) if d.editing.is_some() => editing::send_edit(d, chat, full, acts),
             Some(BoxKey::Send) => send(ui, d, id, chat, full, acts),
             Some(BoxKey::Bold) => toggle(d, |s| s.bold, |s, on| s.bold = on),
             Some(BoxKey::Italic) => toggle(d, |s| s.italic, |s, on| s.italic = on),
+            Some(BoxKey::Pick) => mentions::pick_chosen(d),
+            Some(BoxKey::Previous) => mentions::choose(d, true),
+            Some(BoxKey::Next) => mentions::choose(d, false),
+            Some(BoxKey::Close) => mentions::close(d),
+            Some(BoxKey::Cancel) => editing::cancel(d),
+            Some(BoxKey::EditLast) => editing::edit_last(s, d),
+            Some(BoxKey::LetGo) => ui.memory_mut(|m| m.surrender_focus(id)),
             None => {}
         }
-        if key.is_some() || !d.pending.is_empty() {
+        if let Some((user, name)) = picked {
+            mentions::pick(d, &user, &name);
+        }
+        if cancelled {
+            editing::cancel(d);
+        }
+        let focused = ui.memory(|m| m.has_focus(id));
+        mentions::refresh(d, s.teams.members(), &s.prefs.teams.object_id, &s.prefs.teams.tenant_id, focused);
+        // While people are offered or a message is edited, Tab and Esc are the box's (picking,
+        // closing the offer, letting the edit go), not egui's (moving the keyboard, dropping it).
+        let (offering, held) = (d.offering(), d.offering() || d.editing.is_some());
+        let filter = egui::EventFilter { tab: offering, horizontal_arrows: true, vertical_arrows: true, escape: held };
+        ui.memory_mut(|m| m.set_focus_lock_filter(id, filter));
+        if key.is_some() || !d.pending.is_empty() || d.caret_to.is_some() {
             ui.ctx().request_repaint();
         }
         let said = if d.too_long {
@@ -341,25 +542,26 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
     });
 }
 
-/// The box's own keys (Enter alone sends, Ctrl+B and Ctrl+I make bold and italic), taken where
-/// they come in the frame's events, after what was left from the last frame: what comes before
-/// the first of them is the text box's now; that key is returned, to act once the text box has
-/// taken it; what follows it for the text box waits for the next frame (`pending`).
-fn keys(ui: &mut Ui, d: &mut ChatDraft, id: egui::Id) -> Option<BoxKey> {
+/// The box's own keys ([`Mode`]: as the box stood at the frame's start), taken where they come in
+/// the frame's events, after what was left from the last frame: what comes before the first of
+/// them is the text box's now; that key is returned, to act once the text box has taken it; what
+/// follows it for the text box waits for the next frame (`pending`).
+fn keys(ui: &mut Ui, d: &mut ChatDraft, id: egui::Id, mode: &Mode) -> Option<BoxKey> {
     let n = d.text.chars().count();
     if let Some((a, b)) = rich_edit::caret(ui.ctx(), id) {
         d.sel = a.min(b).min(n)..a.max(b).min(n);
     }
     let mut waiting = std::mem::take(&mut d.pending);
+    let replayed = waiting.len();
     ui.input_mut(|i| {
         waiting.append(&mut i.events);
         let mut events = waiting;
-        let Some(at) = events.iter().position(|e| BoxKey::of(e).is_some()) else {
+        let Some(at) = events.iter().enumerate().position(|(k, e)| mode.key(e, k < replayed).is_some()) else {
             i.events = events;
             return None;
         };
         let mut after = events.split_off(at).into_iter();
-        let key = after.next().as_ref().and_then(BoxKey::of);
+        let key = after.next().and_then(|e| mode.key(&e, at < replayed));
         for e in after {
             if for_the_box(&e) && d.pending.len() < PENDING_MAX {
                 d.pending.push(e);
@@ -396,35 +598,54 @@ fn toggle(d: &mut ChatDraft, get: fn(&Style) -> bool, set: fn(&mut Style, bool))
 
 /// What's written sent, when there's something to send (judged on what would be sent: spaces,
 /// blank lines or control characters alone are nothing), it isn't too long and the outbox has
-/// room: the box emptied, the keyboard kept. Otherwise it stays.
+/// room: the box emptied, the keyboard kept. Otherwise it stays. The people @mentioned go as
+/// `mentions` when there are.
 fn send(ui: &Ui, d: &mut ChatDraft, id: egui::Id, chat: &str, full: bool, acts: &mut Vec<Action>) {
     if d.too_long || full {
         return;
     }
-    let (bold, italic) = runs(&d.text, &d.styles);
-    if teams_compose(&d.text, &bold, &italic).blocks.is_empty() {
+    let typed = d.typed();
+    if teams_compose_typed(&typed).0.blocks.is_empty() {
         return;
     }
-    acts.push(Action::Run("teams.send", json!({"chat": chat, "text": d.text, "bold": pairs(&bold), "italic": pairs(&italic)})));
+    let mut params = json!({"chat": chat, "text": typed.text, "bold": pairs(&typed.bold), "italic": pairs(&typed.italic)});
+    if !typed.mentions.is_empty()
+        && let Some(p) = params.as_object_mut()
+    {
+        p.insert("mentions".into(), mention_pairs(&typed.mentions));
+    }
+    acts.push(Action::Run("teams.send", params));
     d.text.clear();
     d.styles = Styles::default();
+    d.mentions.clear();
+    d.offer = None;
     d.sel = 0..0;
     d.changed();
     rich_edit::set_caret(ui.ctx(), id, 0, 0);
 }
 
 /// The text box: its bold and italic drawn from the styles, which follow each change as the mail
-/// editor's do.
+/// editor's do, and its mentions as a bubble draws them, which follow it too.
 fn edit(ui: &mut Ui, t: &Tokens, d: &mut ChatDraft, id: egui::Id) {
     d.styles.fit(&d.text);
     let before = d.text.clone();
     let styles = d.styles.clone();
     let typing = d.typing.clone().unwrap_or_else(|| rich_edit::typing_style(&before, &styles, d.sel.start));
     let sel = d.sel.clone();
-    let color = t.text;
+    let marks = d.mentions.clone();
+    let t = *t;
     let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let text = buf.as_str();
-        ui.painter().layout_job(job(text, &rich_edit::following(&before, text, &styles, &typing, &sel), color, wrap))
+        let followed;
+        let marks = if text == before {
+            &marks
+        } else {
+            let mut m = marks.clone();
+            mentions::follow(&mut m, &before, text);
+            followed = m;
+            &followed
+        };
+        ui.painter().layout_job(job(text, &rich_edit::following(&before, text, &styles, &typing, &sel), marks, &t, wrap))
     };
     let out = egui::TextEdit::multiline(&mut d.text)
         .id(id)
@@ -441,6 +662,7 @@ fn edit(ui: &mut Ui, t: &Tokens, d: &mut ChatDraft, id: egui::Id) {
     });
     if d.text != before {
         d.styles.edit_at(&before, &d.text, &typing, cursor.as_ref().map(|r| r.end));
+        mentions::follow(&mut d.mentions, &before, &d.text);
         d.changed();
         ui.ctx().request_repaint();
     } else if cursor.as_ref().is_some_and(|r| *r != d.sel) {
@@ -452,21 +674,28 @@ fn edit(ui: &mut Ui, t: &Tokens, d: &mut ChatDraft, id: egui::Id) {
     }
 }
 
-/// `text` laid out in its bold and italic.
-fn job(text: &str, styles: &Styles, color: egui::Color32, wrap: f32) -> LayoutJob {
+/// `text` laid out in its bold and italic, its `mentions` (in the text's order) in the accent on
+/// its soft tint, as a bubble draws them.
+fn job(text: &str, styles: &Styles, mentions: &[BoxMention], t: &Tokens, wrap: f32) -> LayoutJob {
     let looks: Vec<(bool, bool)> = styles.palette.iter().map(|s| (s.bold, s.italic)).collect();
-    let format = |(bold, italics): (bool, bool)| TextFormat {
+    let format = |(bold, italics, mention): (bool, bool, bool)| TextFormat {
         font_id: if bold { theme::bold(SIZE) } else { theme::regular(SIZE) },
-        color,
+        color: if mention { t.accent } else { t.text },
+        background: if mention { t.accent_soft } else { egui::Color32::TRANSPARENT },
         italics,
         ..Default::default()
     };
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap;
+    let mut marks = mentions.iter().map(|m| &m.chars).peekable();
     let mut start = 0;
     let mut look = None;
     for (k, (at, _)) in text.char_indices().enumerate() {
-        let here = styles.chars.get(k).and_then(|&p| looks.get(usize::from(p))).copied().unwrap_or_default();
+        while marks.peek().is_some_and(|r| r.end <= k) {
+            marks.next();
+        }
+        let (bold, italic) = styles.chars.get(k).and_then(|&p| looks.get(usize::from(p))).copied().unwrap_or_default();
+        let here = (bold, italic, marks.peek().is_some_and(|r| r.contains(&k)));
         if look != Some(here) {
             if let (Some(was), Some(part)) = (look, text.get(start..at)) {
                 job.append(part, 0.0, format(was));
@@ -477,7 +706,7 @@ fn job(text: &str, styles: &Styles, color: egui::Color32, wrap: f32) -> LayoutJo
     match (look, text.get(start..)) {
         (Some(was), Some(part)) => job.append(part, 0.0, format(was)),
         // Empty: the box still has a line's height.
-        _ => job.append("", 0.0, format((false, false))),
+        _ => job.append("", 0.0, format((false, false, false))),
     }
     job
 }

@@ -2265,6 +2265,10 @@ module	Conversations	대화
 	Quatrelle couldn't confirm it was sent	Quatrelle에서 전송 여부를 확인하지 못했습니다
 	Retry	다시 시도
 	{n} messages not sent yet will be lost	아직 보내지 않은 메시지 {n}개가 사라집니다
+	Editing message	메시지 편집 중
+	To remove a message, delete it	메시지를 없애려면 삭제하세요
+	This message couldn't be edited	이 메시지를 편집하지 못했습니다
+	Your last message can't be edited here	마지막 메시지는 여기에서 편집할 수 없습니다
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (외부)
 	{name} (App)	{name} (앱)

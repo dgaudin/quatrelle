@@ -162,6 +162,13 @@ impl MailApp {
                     self.ui.cal_search.query.clear();
                     continue;
                 }
+                // In Conversations, the box's first while it offers people or edits a message (it
+                // closes the offer, or lets the edit go): the search stays as it is.
+                if self.session.module == Module::Conversations
+                    && conversations::takes_escape(ctx, &self.ui.conversations, self.session.teams.open.as_deref())
+                {
+                    continue;
+                }
                 // In Conversations, it empties its search: the list comes back.
                 if self.session.module == Module::Conversations && !self.ui.conversations.query.is_empty() {
                     self.ui.conversations.query.clear();

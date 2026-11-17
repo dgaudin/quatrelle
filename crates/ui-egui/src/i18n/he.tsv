@@ -2262,6 +2262,10 @@ module	Conversations	שיחות
 	Quatrelle couldn't confirm it was sent	Quatrelle לא הצליח לאשר שההודעה נשלחה
 	Retry	נסה שוב
 	{n} messages not sent yet will be lost	{n} הודעות שעדיין לא נשלחו יאבדו
+	Editing message	עריכת הודעה
+	To remove a message, delete it	כדי להסיר הודעה, מחק אותה
+	This message couldn't be edited	לא ניתן היה לערוך הודעה זו
+	Your last message can't be edited here	לא ניתן לערוך כאן את ההודעה האחרונה שלך
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (חיצוני)
 	{name} (App)	{name} (אפליקציה)

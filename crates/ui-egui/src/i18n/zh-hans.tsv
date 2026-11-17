@@ -2264,6 +2264,10 @@ module	Conversations	对话
 	Quatrelle couldn't confirm it was sent	Quatrelle 无法确认是否已发送
 	Retry	重试
 	{n} messages not sent yet will be lost	尚未发送的 {n} 条消息将会丢失
+	Editing message	正在编辑消息
+	To remove a message, delete it	要移除消息，请将其删除
+	This message couldn't be edited	无法编辑此消息
+	Your last message can't be edited here	你的最后一条消息无法在此编辑
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (应用)

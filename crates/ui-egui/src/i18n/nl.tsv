@@ -2263,6 +2263,10 @@ module	Conversations	Gesprekken
 	Quatrelle couldn't confirm it was sent	Quatrelle kon niet bevestigen dat het is verzonden
 	Retry	Opnieuw proberen
 	{n} messages not sent yet will be lost	{n} nog niet verzonden berichten gaan verloren
+	Editing message	Bericht wordt bewerkt
+	To remove a message, delete it	Verwijder een bericht om het weg te halen
+	This message couldn't be edited	Dit bericht kon niet worden bewerkt
+	Your last message can't be edited here	Je laatste bericht kan hier niet worden bewerkt
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Extern)
 	{name} (App)	{name} (App)

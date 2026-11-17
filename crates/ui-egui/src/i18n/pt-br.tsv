@@ -2266,6 +2266,10 @@ module	Conversations	Conversas
 	Quatrelle couldn't confirm it was sent	O Quatrelle não conseguiu confirmar o envio
 	Retry	Tentar novamente
 	{n} messages not sent yet will be lost	{n} mensagens ainda não enviadas serão perdidas
+	Editing message	Editando a mensagem
+	To remove a message, delete it	Para tirar uma mensagem, exclua-a
+	This message couldn't be edited	Não foi possível editar esta mensagem
+	Your last message can't be edited here	Sua última mensagem não pode ser editada aqui
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Externo)
 	{name} (App)	{name} (Aplicativo)

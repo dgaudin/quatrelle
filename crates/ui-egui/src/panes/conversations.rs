@@ -6,8 +6,8 @@
 //! the engine announces of new messages goes to the desktop's notifications ([`announce`]).
 //! The module is shown with Teams on and signed in (File › Options › Teams); its list
 //! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are,
-//! with the box to write in at its foot (`writing.rs`). Pictures are decoded on a thread of their
-//! own (`pictures.rs`).
+//! with the box to write in at its foot (`writing.rs`: the people offered after "@", the edit of
+//! one's own message). Pictures are decoded on a thread of their own (`pictures.rs`).
 
 use std::collections::{HashMap, HashSet};
 
@@ -34,7 +34,7 @@ pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};
 #[cfg(test)]
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
-pub(crate) use writing::{ChatDraft, refused};
+pub(crate) use writing::{ChatDraft, refused, takes_escape};
 
 /// What Conversations keeps between frames.
 #[derive(Clone, Debug, Default)]
@@ -76,6 +76,9 @@ pub struct ConversationsUi {
     /// a box was drawn (the one drawn longest ago goes first).
     pub(crate) drafts: HashMap<String, ChatDraft>,
     pub(crate) drafted: u64,
+    /// The open chat's message to edit in the box (its id), asked for from the message itself:
+    /// loaded at the next frame when it can be edited here.
+    pub edit_asked: Option<String>,
 }
 
 /// What a row's picture is: a person's (their photo once it came, else their initials), a
