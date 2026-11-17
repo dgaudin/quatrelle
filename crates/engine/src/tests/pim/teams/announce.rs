@@ -171,6 +171,21 @@ fn the_open_chat_in_a_focused_window_is_marked_read_not_announced() {
     assert!(teams_jobs(&mut s).is_empty());
 }
 
+/// A chat Graph won't serve, left out of the list (the default), isn't announced, as a hidden
+/// one; shown (File › Options › Teams), its new last line is.
+#[test]
+fn an_unreadable_chat_is_announced_only_when_shown() {
+    let mut s = at_t(1);
+    let mut unreadable = row(2, 10);
+    unreadable.unreadable = true;
+    s.apply(teams_event(teams::Event::Chats { rows: vec![unreadable] }));
+    arrive(&mut s, vec![news(&chat(2), "m1")]);
+    assert!(taken_at(&mut s, T).is_empty(), "left out of the list");
+    s.run("teams.settings", &json!({"showUnreadable": true})).unwrap();
+    arrive(&mut s, vec![news(&chat(2), "m2")]);
+    assert_eq!(chats_of(&taken_at(&mut s, T + 60)), [chat(2)]);
+}
+
 /// Review Focus 4: the chat is open, the window in the background (in the tray, another
 /// application in front): its new messages are announced, and it isn't marked read.
 #[test]

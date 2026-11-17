@@ -2202,6 +2202,8 @@ folder	Online Archive	オンライン アーカイブ
 	How to register the application	アプリケーションの登録方法
 	Announce new messages	新着メッセージを知らせる
 	Only messages sent to me alone or naming me	自分だけに送られた、または自分の名前が入ったメッセージのみ
+	Show conversations that can't be read	読めない会話を表示
+	Teams refuses their messages: mostly old conversations you're no longer in	Teams がメッセージを拒否しています。ほとんどは、もう参加していない古い会話です
 	A copy made for another account was set aside	別のアカウント用のコピーを別に保管しました
 	Signed in as {name} ({address})	{name} ({address}) としてサインイン中
 	Switch Teams on and fill in both IDs first	先に Teams をオンにして、両方の ID を入力してください

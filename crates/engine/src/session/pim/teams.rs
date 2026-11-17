@@ -153,9 +153,10 @@ pub struct TeamsState {
 }
 
 impl TeamsState {
-    /// The rail's badge: unread messages of the listed (not hidden) chats; none at 0, `99+` past 99.
-    pub fn unread_badge(&self) -> Option<String> {
-        let n = self.rows.iter().filter(|r| !r.hidden).fold(0u64, |n, r| n.saturating_add(u64::from(r.unread)));
+    /// The rail's badge: unread messages of the listed chats ([`TeamsState::listed`]); none at 0,
+    /// `99+` past 99.
+    pub fn unread_badge(&self, show_unreadable: bool) -> Option<String> {
+        let n = self.listed(show_unreadable).fold(0u64, |n, r| n.saturating_add(u64::from(r.unread)));
         match n {
             0 => None,
             1..=99 => Some(n.to_string()),
@@ -193,9 +194,15 @@ impl TeamsState {
         self.members.get(id)
     }
 
-    /// The listed rows (not hidden), in the list's order.
-    pub fn listed(&self) -> impl Iterator<Item = &ChatRow> {
-        self.rows.iter().filter(|r| !r.hidden)
+    /// The listed rows, in the list's order: not hidden, and those whose messages Graph refuses
+    /// only when the user shows them (File › Options › Teams).
+    pub fn listed(&self, show_unreadable: bool) -> impl Iterator<Item = &ChatRow> {
+        self.rows.iter().filter(move |r| TeamsState::is_listed(r, show_unreadable))
+    }
+
+    /// Whether a row is listed ([`TeamsState::listed`]): a search's hits go by it too.
+    pub fn is_listed(r: &ChatRow, show_unreadable: bool) -> bool {
+        !r.hidden && (show_unreadable || !r.unreadable)
     }
 
     /// `chat` (or none) now on screen: its window begins empty, filled by what the worker sends,
@@ -437,6 +444,7 @@ impl Session {
             tenant: std::mem::take(&mut t.tenant),
             notify: t.notify,
             notify_only_direct: t.notify_only_direct,
+            show_unreadable: t.show_unreadable,
             ..TeamsSettings::default()
         };
         let set_aside = self.teams.set_aside.take();

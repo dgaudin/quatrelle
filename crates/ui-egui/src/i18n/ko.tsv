@@ -2204,6 +2204,8 @@ folder	Online Archive	온라인 보관함
 	How to register the application	애플리케이션을 등록하는 방법
 	Announce new messages	새 메시지 알리기
 	Only messages sent to me alone or naming me	나에게만 보냈거나 내 이름이 들어간 메시지만
+	Show conversations that can't be read	읽을 수 없는 대화 표시
+	Teams refuses their messages: mostly old conversations you're no longer in	Teams가 메시지를 거부합니다. 대부분 더 이상 참여하지 않는 오래된 대화입니다
 	A copy made for another account was set aside	다른 계정용 사본을 따로 보관했습니다
 	Signed in as {name} ({address})	{name}({address})(으)로 로그인됨
 	Switch Teams on and fill in both IDs first	먼저 Teams를 켜고 두 ID를 모두 입력하세요

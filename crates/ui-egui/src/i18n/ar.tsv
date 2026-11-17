@@ -2201,6 +2201,8 @@ folder	Online Archive	الأرشيف عبر الإنترنت
 	How to register the application	كيفية تسجيل التطبيق
 	Announce new messages	الإعلام بالرسائل الجديدة
 	Only messages sent to me alone or naming me	الرسائل المرسلة إليّ وحدي أو التي تذكرني فقط
+	Show conversations that can't be read	إظهار المحادثات التي لا يمكن قراءتها
+	Teams refuses their messages: mostly old conversations you're no longer in	يرفض Teams رسائلها: غالبًا محادثات قديمة لم تعد مشاركًا فيها
 	A copy made for another account was set aside	وُضعت جانباً نسخة مصنوعة لحساب آخر
 	Signed in as {name} ({address})	تم تسجيل الدخول باسم {name} ({address})
 	Switch Teams on and fill in both IDs first	شغّل Teams أولاً واملأ المعرّفين

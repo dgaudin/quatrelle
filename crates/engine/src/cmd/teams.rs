@@ -26,7 +26,7 @@ const PICTURE_URL_MAX: usize = 2048;
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("teams.settings", "Teams settings", OPTIONS, settings).params(
-            r#"{"on"?: bool (use Teams in Quatrelle), "clientId"?: string (the application (client) ID; "" for none), "tenant"?: string (the directory (tenant) ID or domain; "" for none), "notify"?: bool, "notifyOnlyDirect"?: bool}"#,
+            r#"{"on"?: bool (use Teams in Quatrelle), "clientId"?: string (the application (client) ID; "" for none), "tenant"?: string (the directory (tenant) ID or domain; "" for none), "notify"?: bool, "notifyOnlyDirect"?: bool, "showUnreadable"?: bool (list the conversations whose messages Teams refuses)}"#,
         ),
         CommandSpec::new("teams.signIn", "Sign in to Teams", OPTIONS, sign_in).params("(opens the browser to sign in)").when(on),
         CommandSpec::new("teams.reopenSignIn", "Reopen the sign-in page", OPTIONS, reopen_sign_in)
@@ -136,6 +136,9 @@ fn settings(s: &mut Session, v: &Value) -> CmdResult {
     if let Some(x) = p::bool(v, "notifyOnlyDirect") {
         t.notify_only_direct = x;
     }
+    if let Some(x) = p::bool(v, "showUnreadable") {
+        t.show_unreadable = x;
+    }
     match p::bool(v, "on") {
         Some(true) if !s.prefs.teams.on => {
             s.prefs.teams.on = true;
@@ -146,7 +149,7 @@ fn settings(s: &mut Session, v: &Value) -> CmdResult {
     }
     let t = &s.prefs.teams;
     Ok(
-        json!({"on": t.on, "clientId": t.client_id, "tenant": t.tenant, "notify": t.notify, "notifyOnlyDirect": t.notify_only_direct, "signedIn": t.signed_in}),
+        json!({"on": t.on, "clientId": t.client_id, "tenant": t.tenant, "notify": t.notify, "notifyOnlyDirect": t.notify_only_direct, "showUnreadable": t.show_unreadable, "signedIn": t.signed_in}),
     )
 }
 
@@ -394,7 +397,7 @@ fn picture(s: &mut Session, v: &Value) -> CmdResult {
 
 /// The next (or previous) listed conversation opened: the first (or last) when none is open.
 fn step(s: &mut Session, forward: bool) -> CmdResult {
-    let listed: Vec<&str> = s.teams.listed().map(|r| r.id.as_str()).collect();
+    let listed: Vec<&str> = s.teams.listed(s.prefs.teams.show_unreadable).map(|r| r.id.as_str()).collect();
     let at = s.teams.open.as_deref().and_then(|o| listed.iter().position(|id| *id == o));
     let to = match (at, forward) {
         (None, true) => listed.first(),

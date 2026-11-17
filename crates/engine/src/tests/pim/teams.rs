@@ -123,7 +123,7 @@ fn conversations_falls_back_to_mail_when_teams_is_off() {
 #[test]
 fn the_badge_counts_unread_of_listed_chats_only() {
     let mut s = signed_in(vec![]);
-    assert_eq!(s.teams.unread_badge(), None);
+    assert_eq!(s.teams.unread_badge(false), None);
     let mut a = row(1, 30);
     a.unread = 3;
     let mut hidden = row(2, 20);
@@ -132,10 +132,10 @@ fn the_badge_counts_unread_of_listed_chats_only() {
     let mut b = row(3, 10);
     b.unread = 2;
     s.apply(teams_event(teams::Event::Chats { rows: vec![a.clone(), hidden, b] }));
-    assert_eq!(s.teams.unread_badge().as_deref(), Some("5"), "hidden chats not counted");
+    assert_eq!(s.teams.unread_badge(false).as_deref(), Some("5"), "hidden chats not counted");
     a.unread = 148;
     s.apply(teams_event(teams::Event::Chats { rows: vec![a] }));
-    assert_eq!(s.teams.unread_badge().as_deref(), Some("99+"));
+    assert_eq!(s.teams.unread_badge(false).as_deref(), Some("99+"));
 }
 
 #[test]
@@ -484,6 +484,39 @@ fn next_and_previous_go_through_the_listed_rows() {
     assert_eq!(s.teams.open.as_deref(), Some("19:chat3@thread.v2"), "the last stays");
     s.run("teams.previous", &json!({})).unwrap();
     assert_eq!(s.teams.open.as_deref(), Some("19:chat1@thread.v2"));
+}
+
+/// The chats whose messages Graph refuses (mostly old ones the user is no longer in) are left out
+/// of the list, the badge and Alt+↑/↓ until the user shows them; the choice outlives a sign-out.
+#[test]
+fn unreadable_chats_are_left_out_until_shown() {
+    let mut unreadable = row(2, 20);
+    unreadable.unreadable = true;
+    unreadable.unread = 4;
+    let mut a = row(1, 30);
+    a.unread = 1;
+    let mut s = signed_in(vec![a, unreadable, row(3, 10)]);
+    assert!(!s.prefs.teams.show_unreadable, "left out by default");
+    let listed = |s: &Session| s.teams.listed(s.prefs.teams.show_unreadable).map(|r| r.id.clone()).collect::<Vec<_>>();
+    assert_eq!(listed(&s), ["19:chat1@thread.v2", "19:chat3@thread.v2"]);
+    assert_eq!(s.teams.unread_badge(s.prefs.teams.show_unreadable).as_deref(), Some("1"), "its unread not counted");
+    s.run("view.module", &json!({"name": "conversations"})).unwrap();
+    s.run("teams.next", &json!({})).unwrap();
+    s.run("teams.next", &json!({})).unwrap();
+    assert_eq!(s.teams.open.as_deref(), Some("19:chat3@thread.v2"), "passed over");
+
+    s.run("teams.settings", &json!({"showUnreadable": true})).unwrap();
+    assert!(s.prefs.teams.show_unreadable);
+    assert_eq!(s.run("teams.settings", &json!({})).unwrap()["showUnreadable"], json!(true), "said back");
+    assert_eq!(listed(&s), ["19:chat1@thread.v2", "19:chat2@thread.v2", "19:chat3@thread.v2"]);
+    assert_eq!(s.teams.unread_badge(s.prefs.teams.show_unreadable).as_deref(), Some("5"));
+    s.run("teams.previous", &json!({})).unwrap();
+    assert_eq!(s.teams.open.as_deref(), Some("19:chat2@thread.v2"), "reached");
+
+    s.run("teams.signOut", &json!({})).unwrap();
+    assert!(s.prefs.teams.show_unreadable, "kept past a sign-out");
+    let old: teams::TeamsSettings = serde_json::from_str(r#"{"on": true, "notify": false}"#).unwrap();
+    assert!(!old.show_unreadable, "settings saved before the option: left out");
 }
 
 #[test]

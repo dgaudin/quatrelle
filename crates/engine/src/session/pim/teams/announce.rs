@@ -7,7 +7,8 @@
 //!
 //! The rules, in order: the open chat looked at (Conversations shown in a window with the focus)
 //! is marked read instead, whatever the settings say; then nothing with notifications off, for a
-//! hidden chat, or, when only one-to-one chats and mentions are asked for, for the others; each
+//! hidden chat or one left out of the list (Graph won't serve it, and those aren't shown), or,
+//! when only one-to-one chats and mentions are asked for, for the others; each
 //! message once. A chat coming on screen (the window focused again, Conversations shown again,
 //! the chat opened) is marked read when it has messages unread, once each time, and its news
 //! waiting their turn aren't announced: the user has seen them.
@@ -357,7 +358,7 @@ impl Session {
     pub(super) fn teams_news(&mut self, news: Vec<News>) {
         let now = self.clock.now;
         let t = &self.prefs.teams;
-        let (notify, only_direct) = (t.notify, t.notify_only_direct);
+        let (notify, only_direct, show_unreadable) = (t.notify, t.notify_only_direct, t.show_unreadable);
         let came = self.teams_came_on_screen().filter(|c| self.teams.to_mark_read(c));
         self.teams.announcer.release(now, self.teams.looked.as_deref());
         let mut looked_at = None;
@@ -369,7 +370,8 @@ impl Session {
                 looked_at = Some(n.chat);
                 continue;
             }
-            let hidden = n.hidden || self.teams.row(&n.chat).is_some_and(|r| r.hidden);
+            // Hidden, or left out of the list (Graph won't serve it, and those aren't shown).
+            let hidden = n.hidden || self.teams.row(&n.chat).is_some_and(|r| !TeamsState::is_listed(r, show_unreadable));
             if !notify || hidden || (only_direct && !n.direct && !n.mentions_me) {
                 continue;
             }

@@ -2206,6 +2206,8 @@ folder	Online Archive	Archive en ligne
 	How to register the application	Comment inscrire l'application
 	Announce new messages	Annoncer les nouveaux messages
 	Only messages sent to me alone or naming me	Seulement les messages envoyés à moi seul ou qui me nomment
+	Show conversations that can't be read	Afficher les conversations dont la lecture est impossible
+	Teams refuses their messages: mostly old conversations you're no longer in	Teams refuse leurs messages : surtout d'anciennes conversations dont vous ne faites plus partie
 	A copy made for another account was set aside	Une copie faite pour un autre compte a été mise de côté
 	Signed in as {name} ({address})	Connecté : {name} ({address})
 	Switch Teams on and fill in both IDs first	Activez d'abord Teams et remplissez les deux ID

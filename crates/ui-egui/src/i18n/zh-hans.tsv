@@ -2203,6 +2203,8 @@ folder	Online Archive	在线存档
 	How to register the application	如何注册应用程序
 	Announce new messages	提醒新消息
 	Only messages sent to me alone or naming me	仅限只发给我或提到我的消息
+	Show conversations that can't be read	显示无法阅读的会话
+	Teams refuses their messages: mostly old conversations you're no longer in	Teams 拒绝提供其消息：大多是你已不在其中的旧会话
 	A copy made for another account was set aside	为另一个帐户制作的副本已被放在一边
 	Signed in as {name} ({address})	已登录为 {name} ({address})
 	Switch Teams on and fill in both IDs first	请先打开 Teams 并填写两个 ID

@@ -2201,6 +2201,8 @@ folder	Online Archive	ארכיון מקוון
 	How to register the application	איך לרשום את היישום
 	Announce new messages	הודעה על הודעות חדשות
 	Only messages sent to me alone or naming me	רק הודעות שנשלחו אליי בלבד או שמזכירות אותי
+	Show conversations that can't be read	הצגת שיחות שלא ניתן לקרוא
+	Teams refuses their messages: mostly old conversations you're no longer in	Teams מסרב להציג את ההודעות שלהן: בעיקר שיחות ישנות שאינך משתתף בהן עוד
 	A copy made for another account was set aside	עותק שנעשה עבור חשבון אחר הונח בצד
 	Signed in as {name} ({address})	מחובר בתור {name} ({address})
 	Switch Teams on and fill in both IDs first	הפעילו קודם את Teams ומלאו את שני המזהים

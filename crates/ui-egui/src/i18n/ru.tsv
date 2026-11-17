@@ -2205,6 +2205,8 @@ folder	Online Archive	Онлайн-архив
 	How to register the application	Как зарегистрировать приложение
 	Announce new messages	Сообщать о новых сообщениях
 	Only messages sent to me alone or naming me	Только сообщения лично мне или с упоминанием меня
+	Show conversations that can't be read	Показывать беседы, которые нельзя прочитать
+	Teams refuses their messages: mostly old conversations you're no longer in	Teams не отдаёт их сообщения: чаще всего это старые беседы, в которых вы больше не участвуете
 	A copy made for another account was set aside	Копия для другой учётной записи отложена
 	Signed in as {name} ({address})	Вход выполнен: {name} ({address})
 	Switch Teams on and fill in both IDs first	Сначала включите Teams и заполните оба идентификатора

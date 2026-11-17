@@ -17,9 +17,9 @@
 //! from Mail.
 
 use egui::{Color32, Rect, Sense, Ui, pos2, vec2};
-use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
 use quatrelle_engine::model::pim::teams::{ChatKind, ChatRow, MAX_CHATS, Presence, Status, one_line};
+use quatrelle_engine::{Session, TeamsState};
 use serde_json::json;
 
 use super::pictures::TeamsPictures;
@@ -71,7 +71,7 @@ pub(crate) fn list(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
     search_box(ui, &t, c, acts);
     states(s, ui, &t, acts);
     let searching = !c.query.trim().is_empty();
-    let rows: Vec<&ChatRow> = if searching { hits(s, ui, &t) } else { s.teams.listed().collect() };
+    let rows: Vec<&ChatRow> = if searching { hits(s, ui, &t) } else { s.teams.listed(s.prefs.teams.show_unreadable).collect() };
     if rows.is_empty() {
         if !searching && matches!(s.teams.status, Status::UpToDate | Status::NoKeychain | Status::Offline) {
             ui.add_space(24.0);
@@ -199,7 +199,7 @@ fn hits<'a>(s: &'a Session, ui: &mut Ui, t: &Tokens) -> Vec<&'a ChatRow> {
     let note = |ui: &mut Ui, text: &str| {
         ui.label(egui::RichText::new(text).color(t.dim).size(12.5));
     };
-    let Some(found) = s.teams.found.as_ref() else { return s.teams.listed().collect() };
+    let Some(found) = s.teams.found.as_ref() else { return s.teams.listed(s.prefs.teams.show_unreadable).collect() };
     if found.indexing {
         note(ui, tl!("Indexing…"));
     }
@@ -207,8 +207,14 @@ fn hits<'a>(s: &'a Session, ui: &mut Ui, t: &Tokens) -> Vec<&'a ChatRow> {
         note(ui, tl!("Recent conversations only"));
     }
     let mut seen = std::collections::HashSet::new();
-    let rows: Vec<&ChatRow> =
-        found.hits.iter().filter(|(chat, _)| seen.insert(chat.as_str())).filter_map(|(chat, _)| s.teams.row(chat)).filter(|r| !r.hidden).collect();
+    let show = s.prefs.teams.show_unreadable;
+    let rows: Vec<&ChatRow> = found
+        .hits
+        .iter()
+        .filter(|(chat, _)| seen.insert(chat.as_str()))
+        .filter_map(|(chat, _)| s.teams.row(chat))
+        .filter(|r| TeamsState::is_listed(r, show))
+        .collect();
     if rows.is_empty() {
         note(ui, tl!("No conversation found"));
     }

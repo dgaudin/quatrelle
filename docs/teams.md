@@ -245,6 +245,8 @@ Open File › Options › Teams.
   copy**.
 - **Announce new messages** and **Only messages sent to me alone or naming me** are the two
   switches of the announcements (see Announcements below).
+- **Show conversations that can't be read** lists the chats Graph won't serve (off at first; see
+  The chats Graph won't serve below).
 
 Signing in needs a browser on the same computer: the web app does not offer Teams.
 
@@ -263,8 +265,10 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   longer in say so, in the list and under the conversation's name.
 - **The chats Graph won't serve.** Microsoft does not let an application read some chats: those
   it lists without a name and as of a kind it doesn't say (most likely chats around meetings;
-  the chats of meetings themselves are read as any other). They stay in the list marked **Can't
-  be read here**; opening one says so and offers **Open in Teams**.
+  the chats of meetings themselves are read as any other; most are old chats you are no longer
+  in). They are left out of the list unless **Show conversations that can't be read** is on in
+  File › Options › Teams; shown, they are marked **Can't be read here**, and opening one says so
+  and offers **Open in Teams**.
 - **Reading a conversation.** Messages are grouped by day (Today, Yesterday, then the date), edited
   ones say "(edited)", deleted ones say so, and an app's messages carry an **App** tag. A sender
   outside your organization is tagged **External** on each message. **Members** lists who is in
@@ -402,7 +406,8 @@ text: what looks like markup in a message is shown as written.
 - A conversation's next notification waits five seconds; what comes meanwhile goes as one ("3
   new messages"). At most four notifications go every five seconds; the rest are summed up in one
   ("12 new messages in 5 conversations").
-- For a chat Graph won't serve, its new last line, as the list gives it, is announced.
+- For a chat Graph won't serve, its new last line, as the list gives it, is announced when those
+  chats are shown; left out of the list, they aren't announced.
 
 ### The local copy
 

@@ -107,6 +107,13 @@ pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>
                     acts.push(Action::Run("teams.settings", json!({"notifyOnlyDirect": on})));
                 }
             });
+            let why = note(t, tl!("Teams refuses their messages: mostly old conversations you're no longer in"));
+            setting_row(ui, t, false, name(t, tl!("Show conversations that can't be read")), Some(why), |ui| {
+                let mut on = p.show_unreadable;
+                if widgets::switch(ui, t, &mut on, tl!("Show conversations that can't be read")).changed() {
+                    acts.push(Action::Run("teams.settings", json!({"showUnreadable": on})));
+                }
+            });
             if s.teams.set_aside.is_some() {
                 setting_row(ui, t, false, name(t, tl!("A copy made for another account was set aside")), None, |ui| {
                     if ui.button(tl!("Delete that copy")).clicked() {

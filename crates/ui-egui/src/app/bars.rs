@@ -373,7 +373,7 @@ pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<A
         let on = m == module;
         // Conversations is the module here, not the mail's grouping by thread.
         let shown = if m == Module::Conversations { i18n::tc("module", label) } else { tl!(label) };
-        let count = if m == Module::Conversations { s.teams.unread_badge() } else { None };
+        let count = if m == Module::Conversations { s.teams.unread_badge(s.prefs.teams.show_unreadable) } else { None };
         // To a screen reader, the badge is said with the name.
         let said = match &count {
             Some(n) => tf!("{module}, unread: {n}", module = shown, n = n),

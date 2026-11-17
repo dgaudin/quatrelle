@@ -317,6 +317,8 @@ fn the_options_card_shows_its_fields_in_light_and_dark() {
         "Sign in",
         "Announce new messages",
         "Only messages sent to me alone or naming me",
+        "Show conversations that can't be read",
+        "Teams refuses their messages: mostly old conversations you're no longer in",
     ] {
         assert!(has(&t, wanted), "{wanted}: {t:?}");
     }
@@ -509,10 +511,8 @@ fn a_group_named_like_a_person_still_shows_the_group_icon_and_count() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// A chat Graph won't serve is listed with its name, its preview and "Can't be read here"; a chat
-/// left is listed too.
-#[test]
-fn an_unreadable_chat_is_listed_with_its_preview_and_its_mark() {
+/// A chat Graph won't serve and a chat left.
+fn unreadable_and_left() -> Vec<ChatRow> {
     let mut r = row("19:unr@thread.v2", 1);
     r.name = "Support desk".into();
     r.kind = ChatKind::Other { name: "unreadable".into() };
@@ -522,11 +522,33 @@ fn an_unreadable_chat_is_listed_with_its_preview_and_its_mark() {
     left.name = "Old project".into();
     left.left = true;
     left.at = Some(NOW - 60);
-    let (mut a, dir, _) = module_app("teams-list-unreadable", vec![r, left]);
+    vec![r, left]
+}
+
+/// Shown (File › Options › Teams), a chat Graph won't serve is listed with its name, its preview
+/// and "Can't be read here"; a chat left is listed too.
+#[test]
+fn an_unreadable_chat_is_listed_with_its_preview_and_its_mark() {
+    let (mut a, dir, _) = module_app("teams-list-unreadable", unreadable_and_left());
+    a.session.prefs.teams.show_unreadable = true;
     let ctx = egui::Context::default();
     let texts = settled(&ctx, &mut a);
     for t in ["Support desk", "Paul: it's fixed", "Can't be read here", "Old project"] {
         assert!(has_text(&texts, t), "{t}: {texts:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// By default a chat Graph won't serve isn't listed (mostly old chats the user is no longer in);
+/// a chat left still is.
+#[test]
+fn an_unreadable_chat_is_left_out_by_default() {
+    let (mut a, dir, _) = module_app("teams-list-unreadable-out", unreadable_and_left());
+    let ctx = egui::Context::default();
+    let texts = settled(&ctx, &mut a);
+    assert!(has_text(&texts, "Old project"), "{texts:?}");
+    for t in ["Support desk", "Paul: it's fixed", "Can't be read here"] {
+        assert!(!has_text(&texts, t), "{t}: {texts:?}");
     }
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -727,6 +749,7 @@ fn the_list_states_in_light_and_dark() {
             vec![]
         };
         let (mut a, dir, _) = module_app(&format!("teams-list-{name}"), rows);
+        a.session.prefs.teams.show_unreadable = true;
         a.session.teams_apply(teams::Event::Status { status });
         a.session.teams_apply(teams::Event::Presence { presences: vec![("u-paul".into(), teams::Presence::Available)] });
         let ctx = egui::Context::default();

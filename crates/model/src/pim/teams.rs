@@ -79,6 +79,8 @@ pub struct TeamsSettings {
     /// Announce new messages, and only those sent to the user alone or naming them.
     pub notify: bool,
     pub notify_only_direct: bool,
+    /// List the chats whose messages Graph refuses (mostly old ones the user is no longer in).
+    pub show_unreadable: bool,
 }
 
 impl Default for TeamsSettings {
@@ -95,6 +97,7 @@ impl Default for TeamsSettings {
             drive_host: None,
             notify: true,
             notify_only_direct: false,
+            show_unreadable: false,
         }
     }
 }
