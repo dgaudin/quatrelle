@@ -372,7 +372,7 @@ fn a_window_with_full_reactions_and_50_changes_going_out_draws_in_time() {
             };
             let body = if text.is_empty() { teams::ChatText::default() } else { para(vec![words(text)]) };
             let state = if k.is_multiple_of(2) { OutState::Waiting } else { OutState::NotSent { reason: teams::Unsent::Refused, code: None } };
-            Outgoing { seq: k + 1, local: format!("l{k}"), chat: CHAT.into(), body, mentions: Vec::new(), what, state }
+            Outgoing { seq: k + 1, local: format!("l{k}"), chat: CHAT.into(), body, mentions: Vec::new(), what, state, parts: Vec::new() }
         })
         .collect();
     busy.session.teams_apply(teams::Event::Outbox { chat: CHAT.into(), items: changes, took: None });

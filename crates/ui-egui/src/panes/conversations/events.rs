@@ -89,7 +89,11 @@ fn class(e: &Event) -> Class {
             | teams::Event::NoPicture { .. }
             | teams::Event::Placed { .. }
             | teams::Event::Outbox { .. }
-            | teams::Event::Unsent { .. },
+            | teams::Event::Unsent { .. }
+            | teams::Event::File { .. }
+            | teams::Event::People { .. }
+            | teams::Event::Created { .. }
+            | teams::Event::NotCreated { .. },
         ) => Class::Kept,
     }
 }

@@ -71,7 +71,7 @@ fn refused() -> OutState {
 
 /// A change going out of `chat`, numbered `seq`.
 fn change(chat: &str, seq: u64, local: &str, what: OutKind, state: OutState) -> Outgoing {
-    Outgoing { seq, local: local.into(), chat: chat.into(), body: ChatText::default(), mentions: Vec::new(), what, state }
+    Outgoing { seq, local: local.into(), chat: chat.into(), body: ChatText::default(), mentions: Vec::new(), what, state, parts: Vec::new() }
 }
 
 fn reaction(message: &str, emoji: &str, on: bool) -> OutKind {
@@ -261,6 +261,7 @@ fn an_edit_shows_at_once_and_not_edited_when_refused() {
         mentions: Vec::new(),
         what: OutKind::Edit { message: "m2".into(), created: 1_000_002 },
         state: OutState::Waiting,
+        parts: Vec::new(),
     };
     assert_eq!(s.teams.change_of("m2"), Some(&provisional), "shown at once");
     assert_eq!(s.teams.change_of("m1"), None);
@@ -400,6 +401,7 @@ fn no_last_own_message_while_one_is_going_out() {
         mentions: Vec::new(),
         what: OutKind::Send,
         state,
+        parts: Vec::new(),
     };
     for state in [OutState::Waiting, OutState::Sending] {
         s.apply(outbox(CHAT, vec![send(state.clone())], Some(&local)));

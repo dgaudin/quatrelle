@@ -311,12 +311,13 @@ impl Session {
                 body: body.clone(),
                 mentions: mentions.clone(),
                 what: what.clone(),
+                parts: Vec::new(),
                 state: OutState::Waiting,
             });
         }
         let l = local.clone();
         let op = match what {
-            OutKind::Send => Op::Send { chat, local: l, body, mentions },
+            OutKind::Send => Op::Send { chat, local: l, body, mentions, parts: Vec::new() },
             OutKind::Edit { message, created } => Op::Edit { chat, local: l, message, created, body, mentions },
             OutKind::Delete { message, created } => Op::Delete { chat, local: l, message, created },
             OutKind::React { message, created, emoji, on } => Op::React { chat, local: l, message, created, emoji, on },

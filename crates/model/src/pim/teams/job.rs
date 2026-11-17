@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ChatMessage, ChatRow, Member, News, Op, Outgoing, Picture, Presence, Status, TeamsSettings};
+use super::{ChatMessage, ChatRow, FileOutcome, Member, News, NotCreated, Op, Outgoing, Person, Picture, Presence, Status, TeamsSettings};
 
 /// A job for the Teams worker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +42,14 @@ pub enum Job {
     /// Open `chat` at its message `message` (a search's hit): answered by that message's page
     /// and those after it, then [`Event::Placed`].
     Find { chat: String, message: String },
+    /// Save the file `attachment` of the message `message` (created at `created`) of `chat`;
+    /// answered by [`Event::File`].
+    File { chat: String, message: String, created: i64, attachment: String },
+    /// Look `query` up in the directory; answered by [`Event::People`].
+    Directory { query: String },
+    /// Create the conversation `local` with `people` (and `topic` for a group); answered by
+    /// [`Event::Created`] or [`Event::NotCreated`].
+    Create { local: String, people: Vec<Person>, topic: Option<String> },
 }
 
 /// What the Teams worker reports.
@@ -139,5 +147,29 @@ pub enum Event {
         chat: String,
         message: String,
         newest: bool,
+    },
+    /// How [`Job::File`] ended.
+    File {
+        chat: String,
+        message: String,
+        attachment: String,
+        outcome: FileOutcome,
+    },
+    /// What [`Job::Directory`] found; `failed`: the directory couldn't be asked.
+    People {
+        query: String,
+        people: Vec<Person>,
+        failed: bool,
+    },
+    /// The conversation `local` was created as `chat`.
+    Created {
+        local: String,
+        chat: String,
+    },
+    /// The conversation `local` wasn't created; `code` is Teams' answer when it gave one.
+    NotCreated {
+        local: String,
+        why: NotCreated,
+        code: Option<String>,
     },
 }

@@ -40,7 +40,8 @@ fn ops_are_kept_in_order_and_read_back() {
             body: text("Reply 2"),
             mentions: Vec::new(),
             what: OutKind::Send,
-            state: OutState::Sending
+            state: OutState::Sending,
+            parts: Vec::new()
         }
     );
     // Written again as its state moves: the same record.

@@ -69,7 +69,8 @@ fn going_out(p: &Pane, ui: &mut Ui, o: &Outgoing, acts: &mut Vec<Action>) {
 /// Why a message wasn't sent, in the window's words.
 fn why(reason: Unsent) -> &'static str {
     match reason {
-        Unsent::Refused => tl!("Teams refused this message"),
+        // Until the window has a sentence for each of the files' reasons, they say what a refusal says.
+        Unsent::Refused | Unsent::FileGone | Unsent::FileTooBig | Unsent::NotShared => tl!("Teams refused this message"),
         Unsent::TooLong => tl!("Too long for Teams"),
         Unsent::TooMany => tl!("Too many messages are waiting"),
         Unsent::Left => tl!("You're no longer in this conversation"),
@@ -118,7 +119,7 @@ pub(super) fn change_state(p: &Pane, ui: &mut Ui, o: &Outgoing, acts: &mut Vec<A
 /// not yet taken (numbered 0), or being sent, it may be in Teams already.
 fn going(ui: &mut Ui, t: &Tokens, o: &Outgoing, said: &str, let_go: &str, acts: &mut Vec<Action>) {
     ui.label(RichText::new(said).size(11.0).color(t.dim));
-    if o.seq != 0 && o.state == OutState::Waiting {
+    if o.seq != 0 && matches!(o.state, OutState::Waiting | OutState::Uploading) {
         ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
             if ui.button(let_go).clicked() {
                 acts.push(Action::Run("teams.discard", json!({"seq": o.seq})));

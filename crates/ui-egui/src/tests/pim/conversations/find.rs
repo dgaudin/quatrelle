@@ -137,6 +137,7 @@ fn answer_the_find(a: &mut MailApp) {
         mentions: Vec::new(),
         what: OutKind::Send,
         state: OutState::Waiting,
+        parts: Vec::new(),
     };
     a.session.teams_apply(teams::Event::Outbox { chat: CHAT.into(), items: vec![going], took: None });
 }

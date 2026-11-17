@@ -208,6 +208,7 @@ fn outgoing(chat: &str, seq: u64) -> Outgoing {
         mentions: Vec::new(),
         what: OutKind::Send,
         state: OutState::Waiting,
+        parts: Vec::new(),
     }
 }
 

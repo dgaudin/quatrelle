@@ -305,7 +305,9 @@ fn every_payload_round_trips_through_json() {
 fn delivery_two_jobs_and_events_round_trip_through_json() {
     let body = ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "hi".into(), ..Run::default() }] }] };
     for job in [
-        teams::Job::Op { op: Op::Send { chat: "19:a@thread.v2".into(), local: "1731500000-1".into(), body: body.clone(), mentions: Vec::new() } },
+        teams::Job::Op {
+            op: Op::Send { chat: "19:a@thread.v2".into(), local: "1731500000-1".into(), body: body.clone(), mentions: Vec::new(), parts: Vec::new() },
+        },
         teams::Job::Op { op: Op::MarkRead { chat: "19:a@thread.v2".into() } },
         teams::Job::Retry { seq: 7 },
         teams::Job::Discard { seq: 7 },
@@ -321,6 +323,7 @@ fn delivery_two_jobs_and_events_round_trip_through_json() {
         body,
         mentions: Vec::new(),
         what: OutKind::Send,
+        parts: Vec::new(),
         state: OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 403 Forbidden".into()) },
     };
     let news = News {
@@ -384,7 +387,7 @@ fn delivery_three_ops_and_outgoing_round_trip_through_json() {
     };
     let mentions = vec![Mention { id: 0, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }];
     for op in [
-        Op::Send { chat: "19:a@thread.v2".into(), local: "1-1".into(), body: body.clone(), mentions: mentions.clone() },
+        Op::Send { chat: "19:a@thread.v2".into(), local: "1-1".into(), body: body.clone(), mentions: mentions.clone(), parts: Vec::new() },
         Op::Edit {
             chat: "19:a@thread.v2".into(),
             local: "1-2".into(),
@@ -414,6 +417,7 @@ fn delivery_three_ops_and_outgoing_round_trip_through_json() {
         mentions,
         what: OutKind::React { message: "m".into(), created: 5, emoji: "\u{1F44D}".into(), on: true },
         state: OutState::Waiting,
+        parts: Vec::new(),
     };
     assert_eq!(serde_json::from_str::<Outgoing>(&serde_json::to_string(&o).unwrap()).unwrap(), o);
 }
@@ -453,4 +457,85 @@ fn only_a_member_of_the_organisation_may_be_mentioned() {
     assert!(!mentionable(&m("aadUserConversationMember", None), "tenant-1"));
     assert!(!mentionable(&m("anonymousGuestConversationMember", Some("tenant-1")), "tenant-1"));
     assert!(!mentionable(&m("aadUserConversationMember", Some("")), ""));
+}
+
+#[test]
+fn delivery_four_ops_jobs_and_events_round_trip_through_json() {
+    fn round<T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug>(v: T) {
+        assert_eq!(serde_json::from_str::<T>(&serde_json::to_string(&v).unwrap()).unwrap(), v);
+    }
+    let ana =
+        Person { id: "00000000-0000-0000-0000-0000000000a1".into(), name: "Ana Lima".into(), address: "ana@contoso.example".into(), guest: false };
+    round(Op::Send {
+        chat: "19:a@thread.v2".into(),
+        local: "l1".into(),
+        body: ChatText::default(),
+        mentions: vec![],
+        parts: vec![Part::File { path: "a.txt".into() }, Part::Picture { path: "p.png".into() }],
+    });
+    for job in [
+        teams::Job::File { chat: "c".into(), message: "m".into(), created: 5, attachment: "a".into() },
+        teams::Job::Directory { query: "an".into() },
+        teams::Job::Create { local: "n1".into(), people: vec![ana.clone()], topic: Some("Studio".into()) },
+    ] {
+        round(job);
+    }
+    let whys = [FileWhy::TooBig, FileWhy::NoRoom, FileWhy::Refused, FileWhy::Offline, FileWhy::Stalled, FileWhy::Busy, FileWhy::Gone];
+    for outcome in
+        whys.into_iter().map(|why| FileOutcome::Failed { why, code: Some("HTTP 403".into()) }).chain([FileOutcome::Saved { path: "x".into() }])
+    {
+        round(teams::Event::File { chat: "c".into(), message: "m".into(), attachment: "a".into(), outcome });
+    }
+    round(teams::Event::People { query: "an".into(), people: vec![ana], failed: false });
+    round(teams::Event::Created { local: "n1".into(), chat: "c".into() });
+    for why in [NotCreated::Offline, NotCreated::Refused, NotCreated::TooMany] {
+        round(teams::Event::NotCreated { local: "n1".into(), why, code: None });
+        round(why);
+    }
+    let parts =
+        vec![OutPart { name: "a.txt".into(), size: 10, picture: false, sent: 4 }, OutPart { name: "p.png".into(), size: 20, picture: true, sent: 0 }];
+    let mut o = Outgoing {
+        seq: 1,
+        local: "l1".into(),
+        chat: "c".into(),
+        body: ChatText::default(),
+        mentions: vec![],
+        what: OutKind::Send,
+        parts,
+        state: OutState::Uploading,
+    };
+    round(o.clone());
+    for reason in [Unsent::FileGone, Unsent::FileTooBig, Unsent::NotShared] {
+        o.state = OutState::NotSent { reason, code: None };
+        round(o.clone());
+    }
+}
+
+#[test]
+fn what_delivery_three_wrote_reads_back_without_parts() {
+    let op: Op = serde_json::from_str(r#"{"op":"send","chat":"c","local":"l","body":{"blocks":[]}}"#).unwrap();
+    assert!(matches!(op, Op::Send { parts, .. } if parts.is_empty()));
+    let o: Outgoing = serde_json::from_str(r#"{"seq":1,"local":"l","chat":"c","body":{"blocks":[]},"state":{"state":"waiting"}}"#).unwrap();
+    assert!(o.parts.is_empty());
+}
+
+#[test]
+fn a_person_is_a_guid_a_line_and_an_address() {
+    let ok =
+        Person { id: "00000000-0000-0000-0000-0000000000a1".into(), name: "Ana Lima".into(), address: "ana@contoso.example".into(), guest: false };
+    assert!(person_ok(&ok));
+    let with = |f: &dyn Fn(&mut Person)| {
+        let mut p = ok.clone();
+        f(&mut p);
+        person_ok(&p)
+    };
+    for id in ["u-ana", "a/b", "x')"] {
+        assert!(!with(&|p| p.id = id.into()), "{id}");
+    }
+    for name in ["", "Ana  Lima", "Ana\u{202E}"] {
+        assert!(!with(&|p| p.name = name.into()), "{name:?}");
+    }
+    assert!(!with(&|p| p.address = "ana @contoso.example".into()));
+    assert!(!with(&|p| p.address = format!("{}@x.example", "a".repeat(320))));
+    assert!(is_object_id("00000000-0000-0000-0000-0000000000a1") && !is_object_id("0000000-0000-0000-0000-0000000000a1"));
 }

@@ -479,6 +479,7 @@ impl Session {
         }
         let signed_in = self.prefs.teams.signed_in;
         match e {
+            teams::Event::File { .. } | teams::Event::People { .. } | teams::Event::Created { .. } | teams::Event::NotCreated { .. } => {}
             teams::Event::Status { status } => self.teams_status(status),
             teams::Event::Account { name, address, object_id, tenant_id, drive_host } => {
                 if object_id.is_empty() || object_id.len() > MAX_ID || tenant_id.len() > MAX_ID {

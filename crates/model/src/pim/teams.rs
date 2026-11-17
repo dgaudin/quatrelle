@@ -7,10 +7,12 @@
 
 use serde::{Deserialize, Serialize};
 
+mod files;
 mod job;
 mod op;
 mod text;
 
+pub use files::*;
 pub use job::{Event, Job};
 pub use op::*;
 pub use text::{Block, BlockKind, ChatText, Run};

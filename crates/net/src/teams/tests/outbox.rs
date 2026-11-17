@@ -38,7 +38,7 @@ fn not_sent(reason: Unsent, code: Option<&str>) -> OpState {
 impl Run {
     /// The user sends `text` to `chat`, the engine calling the message `local`.
     pub(super) fn send(&mut self, chat: &str, local: &str, text: &str) {
-        self.w.job(Job::Op { op: Op::Send { chat: chat.into(), local: local.into(), body: body(text), mentions: Vec::new() } });
+        self.w.job(Job::Op { op: Op::Send { chat: chat.into(), local: local.into(), body: body(text), mentions: Vec::new(), parts: Vec::new() } });
     }
 
     /// The outbox as the copy holds it.
@@ -112,6 +112,7 @@ fn a_message_is_sent_as_escaped_html_once() {
             local: "1-1".into(),
             body: teams_compose("<img src=\"https://evil.example/x.png\"> & hi", &[], &[]),
             mentions: Vec::new(),
+            parts: Vec::new(),
         },
     });
     // Taken at once: said waiting, with the engine's id.
@@ -255,6 +256,7 @@ fn a_check_finds_the_message_as_graph_rewrote_it() {
             local: "1-1".into(),
             body: teams_compose("a & b", std::slice::from_ref(&(4..5)), &[]),
             mentions: Vec::new(),
+            parts: Vec::new(),
         },
     });
     assert!(r.turns_until(Duration::from_secs(2), |r| r.hits("post") == 1));
@@ -563,6 +565,7 @@ fn a_message_that_cant_be_taken_is_answered_not_sent() {
             mentions: Vec::new(),
             what: OutKind::Send,
             state: OutState::NotSent { reason, code: None },
+            parts: Vec::new(),
         };
         assert_eq!(items, [item]);
     }

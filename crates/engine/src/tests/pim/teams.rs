@@ -588,6 +588,7 @@ fn teams_commands_survive_junk_params_while_on() {
             mentions: Vec::new(),
             what: teams::OutKind::Send,
             state: not_sent,
+            parts: Vec::new(),
         }];
         s.apply(teams_event(teams::Event::Outbox { chat: "19:chat1@thread.v2".into(), items, took: None }));
     }

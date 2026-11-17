@@ -215,6 +215,7 @@ fn measure(name: &str, shape: Shape) -> Took {
                     local: format!("scale-{j}"),
                     body: teams_compose("Lunch at noon?", &[], &[]),
                     mentions: Vec::new(),
+                    parts: Vec::new(),
                 },
             },
         );

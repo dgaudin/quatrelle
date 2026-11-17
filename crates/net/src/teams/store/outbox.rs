@@ -83,6 +83,7 @@ impl OpRecord {
             body: self.body.clone(),
             mentions: self.mentions.clone(),
             what: self.what.clone(),
+            parts: Vec::new(),
             state,
         }
     }

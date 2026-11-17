@@ -114,7 +114,13 @@ fn a_hit_opened_says_its_outbox() {
     teams.forbid_post.push(CHAT.into());
     let mut r = run(teams);
     r.w.job(Job::Op {
-        op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body: teams_compose("Stays not sent", &[], &[]), mentions: Vec::new() },
+        op: Op::Send {
+            chat: CHAT.into(),
+            local: "1-1".into(),
+            body: teams_compose("Stays not sent", &[], &[]),
+            mentions: Vec::new(),
+            parts: Vec::new(),
+        },
     });
     r.turns(Duration::from_secs(3));
     let refused = OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 403 Forbidden".into()) };

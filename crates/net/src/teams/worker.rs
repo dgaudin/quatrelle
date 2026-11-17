@@ -391,6 +391,7 @@ impl Worker {
             Job::Retry { seq } => outbox::retry(self, seq),
             Job::Discard { seq } => outbox::discard(self, seq),
             Job::Find { chat, message } => sync::find(self, chat, message),
+            Job::File { .. } | Job::Directory { .. } | Job::Create { .. } => log::debug!("teams: not handled yet"),
         }
     }
 

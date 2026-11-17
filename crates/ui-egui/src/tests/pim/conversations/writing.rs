@@ -70,7 +70,16 @@ pub(super) fn enter() -> Event {
 }
 
 fn outgoing(seq: u64, local: &str, text: &str, state: OutState) -> Outgoing {
-    Outgoing { seq, local: local.into(), chat: CHAT.into(), body: para(vec![words(text)]), mentions: Vec::new(), what: OutKind::Send, state }
+    Outgoing {
+        seq,
+        local: local.into(),
+        chat: CHAT.into(),
+        body: para(vec![words(text)]),
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state,
+        parts: Vec::new(),
+    }
 }
 
 fn outbox(items: Vec<Outgoing>) -> teams::Event {

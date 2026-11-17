@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ChatText, Mention};
+use super::{ChatText, Mention, OutPart, Part};
 
 /// The most messages the outbox holds, and the most of one chat's: past them a message isn't taken
 /// ([`Unsent::TooMany`]).
@@ -51,6 +51,9 @@ pub enum Op {
         body: ChatText,
         #[serde(default)]
         mentions: Vec<Mention>,
+        /// The files and pictures that go with it.
+        #[serde(default)]
+        parts: Vec<Part>,
     },
     /// Replace the words of the message `message` (created at `created`, in milliseconds, for the
     /// worker to find its page) of `chat` by `body`.
@@ -86,6 +89,9 @@ pub struct Outgoing {
     /// What it is: a message to send, or a change to one already there.
     #[serde(default)]
     pub what: OutKind,
+    /// The files and pictures going with it, as the conversation shows them.
+    #[serde(default)]
+    pub parts: Vec<OutPart>,
     pub state: OutState,
 }
 
@@ -122,6 +128,8 @@ pub enum OutState {
     Waiting,
     /// Being sent, or sent without an answer and being checked.
     Sending,
+    /// Its files going up.
+    Uploading,
     /// Not sent, and never sent again unless the user asks; `code` is Teams' answer when it gave
     /// one (`HTTP 403 Forbidden`, at most 64 characters).
     NotSent { reason: Unsent, code: Option<String> },
@@ -141,6 +149,12 @@ pub enum Unsent {
     Left,
     /// Teams didn't answer, and whether it arrived couldn't be confirmed.
     Unconfirmed,
+    /// A file was gone, changed or not a file when its turn came.
+    FileGone,
+    /// A file or picture is past its cap ([`FILE_MAX`], [`PICTURE_INLINE_MAX`]).
+    FileTooBig,
+    /// The file couldn't be shared with everyone in the chat.
+    NotShared,
 }
 
 /// A new message to announce, as the worker (which holds every chat's members) tells of it; the

@@ -172,6 +172,7 @@ fn a_hit_opens_as_any_chat_does() {
         mentions: Vec::new(),
         what: OutKind::Send,
         state: OutState::NotSent { reason: Unsent::TooMany, code: None },
+        parts: Vec::new(),
     };
     s.apply(teams_event(teams::Event::Outbox { chat: CHAT.into(), items: vec![refusal.clone()], took: Some("100-1".into()) }));
     assert_eq!(s.teams.outgoing, std::slice::from_ref(&refusal));

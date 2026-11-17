@@ -244,6 +244,86 @@ pub fn is_teams_chat_link(url: &str) -> bool {
         && launchable_link(url)
 }
 
+/// The most people a Teams call link names.
+pub const TEAMS_CALL_PEOPLE: usize = 20;
+
+/// The start of every Teams call link.
+const TEAMS_CALL: &str = "https://teams.microsoft.com/l/call/0/0?users=";
+
+/// Whether `a` is a plain address a call link can carry: 3 to [`crate::pim::teams::ADDRESS_MAX`]
+/// characters, exactly one `@` with something on each side, and none of white space, a control or
+/// bidi character, nor `, : / \ ? # & = % " < >`.
+fn plain_call_address(a: &str) -> bool {
+    let n = a.chars().count();
+    let Some((user, host)) = a.split_once('@') else { return false };
+    (3..=crate::pim::teams::ADDRESS_MAX).contains(&n)
+        && !user.is_empty()
+        && !host.is_empty()
+        && !host.contains('@')
+        && !a.chars().any(|c| c.is_whitespace() || c.is_control() || crate::pim::teams::is_bidi(c) || ",:/\\?#&=%\"<>".contains(c))
+}
+
+/// The link that starts a Teams call with these people (`addresses`, each trimmed, once for each
+/// whatever its case), with video when `video`; none when an address isn't plain, there are none
+/// or more than [`TEAMS_CALL_PEOPLE`]. Each address is percent-encoded whole, so it can't add a
+/// person or an option.
+pub fn teams_call_link(addresses: &[&str], video: bool) -> Option<String> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut users: Vec<String> = Vec::new();
+    for a in addresses {
+        let a = a.trim();
+        if !plain_call_address(a) {
+            return None;
+        }
+        if seen.contains(&a.to_ascii_lowercase()) {
+            continue;
+        }
+        seen.push(a.to_ascii_lowercase());
+        let mut enc = String::new();
+        for b in a.bytes() {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                enc.push(char::from(b));
+            } else {
+                enc.push_str(&format!("%{b:02X}"));
+            }
+        }
+        users.push(enc);
+    }
+    if users.is_empty() || users.len() > TEAMS_CALL_PEOPLE {
+        return None;
+    }
+    let link = format!("{TEAMS_CALL}{}{}", users.join(","), if video { "&withVideo=true" } else { "" });
+    is_teams_call_link(&link).then_some(link)
+}
+
+/// Whether a web address is a Teams call link: `https` without a port, on `teams.microsoft.com`
+/// exactly, the path `l/call/0/0`, no fragment, and the query `users=<v>` or
+/// `users=<v>&withVideo=true`, `<v>` not empty and only `A-Z a-z 0-9 - . _ ~ ,` and `%XX`; and
+/// [`launchable_link`].
+pub fn is_teams_call_link(url: &str) -> bool {
+    let Some((host, rest)) = web_host_and_path(url) else { return false };
+    let Some((path, query)) = rest.split_once('?') else { return false };
+    let users = match query.strip_prefix("users=") {
+        Some(u) => u.strip_suffix("&withVideo=true").unwrap_or(u),
+        None => return false,
+    };
+    let b = users.as_bytes();
+    let mut i = 0;
+    while let Some(&c) = b.get(i) {
+        if c == b'%' {
+            if !(b.get(i + 1).is_some_and(u8::is_ascii_hexdigit) && b.get(i + 2).is_some_and(u8::is_ascii_hexdigit)) {
+                return false;
+            }
+            i += 3;
+        } else if c.is_ascii_alphanumeric() || matches!(c, b'-' | b'.' | b'_' | b'~' | b',') {
+            i += 1;
+        } else {
+            return false;
+        }
+    }
+    https_without_port(url) && host == "teams.microsoft.com" && path.eq_ignore_ascii_case("l/call/0/0") && !users.is_empty() && launchable_link(url)
+}
+
 /// Most path segments and query keys a link's shape names ([`link_shape`]); the rest is `…`.
 const SHAPE_PARTS: usize = 8;
 

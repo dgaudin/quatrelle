@@ -670,7 +670,7 @@ fn a_message_with_mentions_goes_with_its_array_and_its_check_finds_it() {
     });
     let typed = Typed { text: "Ana Lima, the figures?".into(), mentions: vec![(0..8, "u-ana".into())], ..Typed::default() };
     let (body, mentions) = teams_compose_typed(&typed);
-    r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body, mentions } });
+    r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body, mentions, parts: Vec::new() } });
     r.turns(Duration::from_secs(10));
     let posts = r.fake(|t| t.posts.clone());
     assert_eq!(posts.len(), 1, "posted once: {posts:?}");

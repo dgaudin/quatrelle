@@ -171,7 +171,7 @@ pub(super) fn outbox(a: &mut MailApp, items: Vec<Outgoing>) {
 /// A change going out numbered `seq`, of `what`, in `state`; an edit's words `text`.
 pub(super) fn change(seq: u64, what: OutKind, text: &str, state: OutState) -> Outgoing {
     let body = if text.is_empty() { teams::ChatText::default() } else { para(vec![words(text)]) };
-    Outgoing { seq, local: format!("l{seq}"), chat: CHAT.into(), body, mentions: Vec::new(), what, state }
+    Outgoing { seq, local: format!("l{seq}"), chat: CHAT.into(), body, mentions: Vec::new(), what, state, parts: Vec::new() }
 }
 
 fn editing(a: &MailApp) -> Option<String> {

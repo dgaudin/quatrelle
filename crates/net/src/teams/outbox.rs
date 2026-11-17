@@ -142,7 +142,7 @@ struct Checking {
 /// into the outbox (or answered "Not sent"), or a chat to mark read.
 pub(crate) fn queue(w: &mut Worker, op: Op) {
     match op {
-        Op::Send { chat, local, body, mentions } => take(w, chat, local, body, mentions),
+        Op::Send { chat, local, body, mentions, parts: _ } => take(w, chat, local, body, mentions),
         Op::Edit { chat, local, message, created, body, mentions } => {
             changes::take(w, chat, local, OutKind::Edit { message, created }, body, mentions)
         }

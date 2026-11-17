@@ -18,7 +18,16 @@ fn outbox(chat: &str, items: Vec<Outgoing>, took: Option<&str>) -> Event {
 }
 
 fn item(chat: &str, seq: u64, local: &str, state: OutState) -> Outgoing {
-    Outgoing { seq, local: local.into(), chat: chat.into(), body: teams_compose("hi", &[], &[]), mentions: Vec::new(), what: OutKind::Send, state }
+    Outgoing {
+        seq,
+        local: local.into(),
+        chat: chat.into(),
+        body: teams_compose("hi", &[], &[]),
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state,
+        parts: Vec::new(),
+    }
 }
 
 fn refused() -> OutState {
@@ -58,16 +67,25 @@ fn a_message_shows_at_once_then_as_the_worker_keeps_it() {
             body: body.clone(),
             mentions: Vec::new(),
             what: OutKind::Send,
-            state: OutState::Waiting
+            state: OutState::Waiting,
+            parts: Vec::new()
         }]
     );
     assert_eq!(
         teams_jobs(&mut s),
-        [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: local.clone(), body: body.clone(), mentions: Vec::new() } }]
+        [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: local.clone(), body: body.clone(), mentions: Vec::new(), parts: Vec::new() } }]
     );
     // The worker took it, as its seventh: shown once, as it keeps it.
-    let kept =
-        Outgoing { seq: 7, local: local.clone(), chat: CHAT.into(), body, mentions: Vec::new(), what: OutKind::Send, state: OutState::Waiting };
+    let kept = Outgoing {
+        seq: 7,
+        local: local.clone(),
+        chat: CHAT.into(),
+        body,
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state: OutState::Waiting,
+        parts: Vec::new(),
+    };
     s.apply(outbox(CHAT, vec![kept.clone()], Some(&local)));
     assert_eq!(s.teams.outgoing, [kept]);
     // Teams has it: gone from the messages going out.
@@ -209,6 +227,7 @@ fn a_message_refused_by_the_outbox_stays_until_deleted_or_sent_again() {
         mentions: Vec::new(),
         what: OutKind::Send,
         state: too_many.clone(),
+        parts: Vec::new(),
     };
     s.apply(outbox(CHAT, vec![item(CHAT, 3, "100-1", OutState::Waiting), refusal.clone()], Some(&local)));
     assert_eq!(s.teams.outgoing.last(), Some(&refusal));
@@ -223,11 +242,20 @@ fn a_message_refused_by_the_outbox_stays_until_deleted_or_sent_again() {
     assert_ne!(again, local);
     assert_eq!(
         teams_jobs(&mut s),
-        [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: again.clone(), body: body.clone(), mentions: Vec::new() } }]
+        [teams::Job::Op { op: Op::Send { chat: CHAT.into(), local: again.clone(), body: body.clone(), mentions: Vec::new(), parts: Vec::new() } }]
     );
     assert_eq!(
         s.teams.outgoing,
-        [Outgoing { seq: 0, local: again, chat: CHAT.into(), body, mentions: Vec::new(), what: OutKind::Send, state: OutState::Waiting }]
+        [Outgoing {
+            seq: 0,
+            local: again,
+            chat: CHAT.into(),
+            body,
+            mentions: Vec::new(),
+            what: OutKind::Send,
+            state: OutState::Waiting,
+            parts: Vec::new()
+        }]
     );
 }
 
