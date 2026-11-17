@@ -17,7 +17,7 @@ use quatrelle_model::pim::teams::{
     ChatText, FILE_MAX, FILE_NAME_MAX, Mention, OutPart, PARTS_MAX, PATH_MAX, PICTURE_INLINE_MAX, is_bidi, is_object_id,
 };
 
-use super::super::graph::{drive_name, own_segment};
+use super::super::graph::{drive_name, on_microsofts_hosts, own_segment};
 use super::*;
 use crate::http::Url;
 
@@ -96,9 +96,9 @@ fn name_ok(name: &str) -> bool {
 /// change); `None` when they keep them. At most [`PARTS_MAX`], and none but on a message sent. A
 /// file: its path [`path_ok`], its name [`name_ok`], 1 byte to [`FILE_MAX`], a time a date can
 /// hold either side of 1970; once uploaded, its item one segment of an address, its GUID an object
-/// id, an `https` address of at most 8 KiB without white space, control or bidi character, its
-/// name [`name_ok`]. A picture: its name [`name_ok`], `image/png` or `image/jpeg`, 1 byte to
-/// [`PICTURE_INLINE_MAX`].
+/// id, an address of at most 8 KiB without white space, control or bidi character on Microsoft's
+/// file hosts ([`on_microsofts_hosts`]: never elsewhere), its name [`name_ok`]. A picture: its
+/// name [`name_ok`], `image/png` or `image/jpeg`, 1 byte to [`PICTURE_INLINE_MAX`].
 pub(super) fn broken(parts: &[PartRecord], send: bool) -> Option<&'static str> {
     if parts.len() > PARTS_MAX {
         return Some("more parts than a message takes");
@@ -130,7 +130,7 @@ fn part_broken(part: &PartRecord) -> Option<&'static str> {
 
 fn uploaded_ok(u: &Uploaded) -> bool {
     let address = u.url.len() <= MAX_URL && !u.url.chars().any(|c| c.is_whitespace() || c.is_control() || is_bidi(c));
-    own_segment(&u.item) && is_object_id(&u.guid) && name_ok(&u.name) && address && Url::parse(&u.url).is_ok_and(|p| p.https)
+    own_segment(&u.item) && is_object_id(&u.guid) && name_ok(&u.name) && address && Url::parse(&u.url).is_ok_and(|p| on_microsofts_hosts(&p))
 }
 
 /// Where the `n`th part of record `seq`, a picture, keeps its bytes.

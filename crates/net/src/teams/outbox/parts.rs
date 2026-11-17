@@ -207,14 +207,17 @@ pub(super) fn ready(w: &mut Worker, head: &Head, op: &mut OpRecord, now: Instant
     }
 }
 
-/// The file of part `at` looked at again (as it was attached, else "Not sent"), an upload session
-/// asked for, and handed to the upload lane.
+/// The file of part `at` looked at again (as it was attached, else "Not sent": too big past
+/// [`FILE_MAX`], else gone), an upload session asked for, and handed to the upload lane.
 fn begin(w: &mut Worker, head: &Head, op: &mut OpRecord, at: usize, now: Instant) -> Ready {
     let Some(PartRecord::File { path, name, size, modified, .. }) = op.parts.get(at).cloned() else { return Ready::Busy };
     let hash = w.hashed(&head.chat);
-    if !std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() == size && modified_of(&m) == modified) {
-        log::warn!("teams: a file of a message to conversation {hash} is no longer as it was attached: not sent");
-        return not_sent(w, op, Unsent::FileGone, None);
+    let now_is = std::fs::metadata(&path).ok().filter(std::fs::Metadata::is_file);
+    if !now_is.as_ref().is_some_and(|m| m.len() == size && modified_of(m) == modified) {
+        // Grown past the cap (a Retry keeps the size it had): too big, as the take says it.
+        let why = if now_is.is_some_and(|m| m.len() > FILE_MAX) { Unsent::FileTooBig } else { Unsent::FileGone };
+        log::warn!("teams: a file of a message to conversation {hash} is no longer as it was attached ({why:?}): not sent");
+        return not_sent(w, op, why, None);
     }
     let session = match w.request(Route::Drive, now, |c| c.upload_session(&name)) {
         Ok(session) => session,
@@ -432,7 +435,8 @@ pub(crate) fn uploaded(w: &mut Worker, done: Done, now: Instant) {
 
 /// The message posted with its parts: its pictures inside it, their bytes as the copy keeps them
 /// (one gone or not of its length: refused), and its files, all ready, by reference under the
-/// names OneDrive gave them.
+/// names OneDrive gave them, each at an address on the user's own OneDrive as it is read back
+/// (else refused: the copy is never taken at its word).
 pub(super) fn post(w: &mut Worker, head: &Head, op: &OpRecord, now: Instant) -> crate::Result<Value> {
     let lost = || NetError::Refused("a part of the message is no longer there".into());
     let (mut pictures, mut files): (Vec<(Vec<u8>, &str)>, Vec<FileRef<'_>>) = (Vec::new(), Vec::new());
@@ -443,7 +447,9 @@ pub(super) fn post(w: &mut Worker, head: &Head, op: &OpRecord, now: Instant) -> 
                     w.copy.as_ref().and_then(|c| c.picture(op.seq, n)).filter(|b| u32::try_from(b.len()).ok() == Some(*len)).ok_or_else(lost)?;
                 pictures.push((bytes, mime.as_str()));
             }
-            PartRecord::File { up: Some(up), .. } if up.shared => files.push(FileRef { guid: &up.guid, url: &up.url, name: &up.name }),
+            PartRecord::File { up: Some(up), .. } if up.shared && own_drive(w, &up.url) => {
+                files.push(FileRef { guid: &up.guid, url: &up.url, name: &up.name })
+            }
             PartRecord::File { .. } => return Err(lost()),
         }
     }

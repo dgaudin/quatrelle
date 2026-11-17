@@ -8,7 +8,8 @@
 //! A post's `<attachment id>`s and `attachments[].id`s, and its `../hostedContents/n/$value`s and
 //! `hostedContents[].@microsoft.graph.temporaryId`s, must be the same sets (else 400); each
 //! attachment a `reference` to a file of the user's OneDrive, by its `webDavUrl` and its eTag's
-//! GUID (else 400); each picture at most 4 MiB once decoded (else 413).
+//! GUID (else 400); each picture at most 4 MiB once decoded (else 413). A picture's place is kept
+//! as Graph keeps it: at the hosted content's own address in the message made.
 //! Only the signed-in user's own messages are edited or soft-deleted (else 403).
 
 use std::collections::BTreeSet;
@@ -71,6 +72,13 @@ fn file_places(html: &str) -> BTreeSet<String> {
 /// The numbers `n` of the `../hostedContents/n/$value` places of some HTML.
 fn picture_places(html: &str) -> BTreeSet<String> {
     html.split("../hostedContents/").skip(1).filter_map(|rest| rest.split_once("/$value").map(|(n, _)| n.to_string())).collect()
+}
+
+/// Some HTML's picture places as Graph keeps them once message `message` of `chat` is made: each
+/// `../hostedContents/n/$value` at that hosted content's own address.
+fn hosted_places(html: &str, chat: &str, message: &str) -> String {
+    let own = format!("https://graph.microsoft.com/v1.0/chats/{}/messages/{}/hostedContents/", crate::http::pct(chat), crate::http::pct(message));
+    html.replace("../hostedContents/", &own)
 }
 
 /// A list of a post's body, empty when it has none.
@@ -308,7 +316,8 @@ impl FakeTeams {
                 let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
                 let after = chat.messages.iter().filter_map(|m| m.id.parse::<i64>().ok()).max().map_or(0, |m| m + 1);
                 let id = ms_of(&now).unwrap_or_default().max(after).to_string();
-                let kept = rewrite.map_or_else(|| html.to_string(), |f| f(html));
+                let html = hosted_places(html, &chat.id, &id);
+                let kept = rewrite.map_or_else(|| html.clone(), |f| f(&html));
                 let mut made = FakeMessage::new(&id, Some(&mine), &now, &kept);
                 made.mentions = mentioned_users(input);
                 (made.files, made.hosted) = (files, pictures);

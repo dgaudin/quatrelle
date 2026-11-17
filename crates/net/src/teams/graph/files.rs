@@ -48,8 +48,15 @@ pub fn transfer_url(base: &str, url: &str) -> Result<Url> {
         return Err(refused());
     }
     let to = Url::parse(url).map_err(|_| refused())?;
-    let taken = if to.https { to.port == 443 && microsoft_host(&to.host) } else { hop_allowed(base, &to) };
+    let taken = if to.https { on_microsofts_hosts(&to) } else { hop_allowed(base, &to) };
     if taken { Ok(to) } else { Err(refused()) }
+}
+
+/// Whether an address is on Microsoft's file hosts: `https` on the default port, to a DNS name
+/// (never an IP address, nor user information) ending with one of [`TRANSFER_SUFFIXES`] after a
+/// label of its own. [`transfer_url`]'s rule, and the outbox's for a file uploaded.
+pub(crate) fn on_microsofts_hosts(to: &Url) -> bool {
+    to.https && to.port == 443 && microsoft_host(&to.host)
 }
 
 /// A transfer's address refused: the address itself is never said (it carries its own

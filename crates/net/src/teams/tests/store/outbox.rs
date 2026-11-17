@@ -541,6 +541,13 @@ fn part_records_past_their_rules_are_passed_over() {
         ("an uploaded file at an http address", up(|u| u.url = "http://contoso-my.sharepoint.com/x.pdf".into())),
         ("an uploaded file at an address with a space", up(|u| u.url = "https://contoso-my.sharepoint.com/a b.pdf".into())),
         ("an uploaded file at an address past 8 KiB", up(|u| u.url = format!("https://contoso-my.sharepoint.com/{}", "a".repeat(8 << 10)))),
+        // H16: an address elsewhere than Microsoft's file hosts, as `transfer_url` says them.
+        ("an uploaded file at an address elsewhere", up(|u| u.url = "https://evil.example/x.pdf".into())),
+        ("an uploaded file at a look-alike address", up(|u| u.url = "https://sharepoint.com.evil.example/x".into())),
+        ("an uploaded file at a host glued to the suffix", up(|u| u.url = "https://evilsharepoint.com/x.pdf".into())),
+        ("an uploaded file at an IP address", up(|u| u.url = "https://10.0.0.1/x.pdf".into())),
+        ("an uploaded file on another port", up(|u| u.url = "https://contoso-my.sharepoint.com:8443/x.pdf".into())),
+        ("an uploaded file with user information", up(|u| u.url = "https://user@contoso-my.sharepoint.com/x.pdf".into())),
         ("an uploaded item a/b", up(|u| u.item = "a/b".into())),
         ("an uploaded item of none", up(|u| u.item = String::new())),
         ("an uploaded name that climbs", up(|u| u.name = "../x".into())),

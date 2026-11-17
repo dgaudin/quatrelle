@@ -20,7 +20,7 @@ use super::sync::{NOW, OTHER, Run, STEP, run};
 use super::{CHAT, MINUTE, T0, TENANT, me};
 use crate::fake_graph::{FakeChat, FakeMessage, FakeTeams, FakeUser, rfc3339};
 use crate::teams::graph::etag_guid;
-use crate::teams::store::OpState;
+use crate::teams::store::{OpState, PartRecord, Uploaded};
 
 /// The other members, by their object ids, as the organisation's people have them.
 const ANA: &str = "00000000-0000-0000-0000-0000000000a1";
@@ -273,6 +273,25 @@ fn a_file_changed_since_it_was_attached_is_not_sent() {
     assert_eq!((r.hits("uploadSession"), r.hits("post")), (1, 1));
 }
 
+/// H11: a file grown past 100 MiB since it was attached is said too big, not gone, and so again
+/// after a Retry; nothing is asked of OneDrive.
+#[test]
+fn a_file_grown_past_the_cap_since_it_was_attached_is_too_big() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.w.work_offline(true);
+    let path = file("huge.bin", &[1u8; 4_000]);
+    r.send_with(CHAT, "1-1", "Growing", vec![Part::File { path: path.clone() }]);
+    std::fs::OpenOptions::new().write(true).open(&path).unwrap().set_len(FILE_MAX + 1).unwrap();
+    r.w.work_offline(false);
+    let big = not_sent(Unsent::FileTooBig, None);
+    assert!(r.turns_until(Duration::from_secs(5), |r| first_state(r) == Some(big.clone())), "{:?}", r.ops());
+    let seq = r.ops()[0].seq;
+    r.w.job(Job::Retry { seq });
+    assert_eq!(first_state(&r), Some(OpState::Waiting));
+    assert!(r.turns_until(Duration::from_secs(5), |r| first_state(r) == Some(big.clone())), "{:?}", r.ops());
+    assert_eq!(r.hits("uploadSession"), 0);
+}
+
 /// H8, Review Focus 2: an upload cut once its first range went is taken up where Graph says:
 /// every byte once, one message.
 #[test]
@@ -362,6 +381,30 @@ fn an_item_elsewhere_than_the_users_drive_is_refused() {
     }
 }
 
+/// H16: a file the outbox read back as uploaded on one of Microsoft's hosts that isn't the user's
+/// own OneDrive (another site of the organisation) is never posted.
+#[test]
+fn a_file_kept_as_uploaded_elsewhere_is_never_posted() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.w.work_offline(true);
+    let path = file("report.pdf", &[7u8; 4_000]);
+    r.send_with(CHAT, "1-1", "From another site", vec![Part::File { path }]);
+    let mut op = r.ops().remove(0);
+    let Some(PartRecord::File { up, .. }) = op.parts.get_mut(0) else { panic!("{op:?}") };
+    *up = Some(Uploaded {
+        item: "01ITEM0001".into(),
+        guid: "5b8c7d0e-0001-4000-8000-000000000001".into(),
+        url: "https://contoso.sharepoint.com/sites/team/Shared%20Documents/report.pdf".into(),
+        name: "report.pdf".into(),
+        shared: true,
+    });
+    r.w.copy.as_ref().unwrap().put_op(&op).unwrap();
+    r.w.work_offline(false);
+    let refused = |r: &Run| matches!(first_state(r), Some(OpState::NotSent { reason: Unsent::Refused, .. }));
+    assert!(r.turns_until(Duration::from_secs(10), refused), "{:?}", r.ops());
+    assert_eq!((r.hits("uploadSession"), r.hits("post")), (0, 0));
+}
+
 /// H10: a share that fails for one of the group isn't half made: "Not sent", nothing posted; sent
 /// again, the file is shared again, never uploaded again.
 #[test]
@@ -429,6 +472,24 @@ fn a_message_of_the_same_text_without_its_file_isnt_taken_for_it() {
     assert_eq!((r.hits("uploadSession"), r.hits("post")), (1, 2), "checked, not found, posted again");
     let carried = r.fake(|t| t.chat(CHAT).unwrap().messages.iter().filter(|m| !m.files.is_empty()).count());
     assert_eq!((carried, r.held(CHAT, "Same words")), (1, 2));
+}
+
+/// Decision 16 with a picture: a post whose answer is lost is found by its text and its picture
+/// (Graph lists the picture at its own address), never posted again, and its record goes.
+#[test]
+fn a_post_with_a_picture_whose_answer_is_lost_is_found() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.fake(|t| {
+        t.answer_lost.insert("post".into(), 1);
+        t.lost_retry_after = Some(1);
+    });
+    let path = file("paste.png", &png(1_000));
+    r.send_with(CHAT, "1-1", "Look at this", vec![Part::Picture { path }]);
+    let seq = r.ops()[0].seq;
+    assert!(r.turns_until(Duration::from_secs(30), |r| r.ops().is_empty()), "{:?}", r.ops());
+    r.turns(Duration::from_secs(20));
+    assert_eq!((r.hits("post"), r.held(CHAT, "Look at this")), (1, 1));
+    assert_eq!(r.w.copy.as_ref().unwrap().picture(seq, 0), None);
 }
 
 /// Review Focus 2: Quatrelle closed while a file goes up: started again, the upload begins anew
