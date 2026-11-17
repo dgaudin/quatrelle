@@ -35,6 +35,7 @@ pub(crate) mod files;
 pub mod graph;
 pub(crate) mod limits;
 pub(crate) mod outbox;
+pub(crate) mod people;
 pub(crate) mod pictures;
 pub(crate) mod search;
 pub(crate) mod store;

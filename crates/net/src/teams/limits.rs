@@ -60,12 +60,16 @@ pub(crate) enum Route {
     Drive,
     /// The signed-in user (`GET /me`).
     Me,
+    /// The directory searched (`GET /users`): once a second.
+    Directory,
+    /// A conversation created (`POST /chats`).
+    Create,
 }
 
 impl Route {
     /// Whether this route has a limit of its own (one a second), besides the ceiling.
     fn spaced(self) -> bool {
-        matches!(self, Route::ChatList | Route::Messages(_) | Route::Hosted(_) | Route::Send(_))
+        matches!(self, Route::ChatList | Route::Messages(_) | Route::Hosted(_) | Route::Send(_) | Route::Directory)
     }
 }
 

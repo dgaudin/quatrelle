@@ -24,6 +24,8 @@ mod limits;
 mod outbox;
 /// The outbox's files and pictures: uploaded, shared, posted; refused, cut, restarted.
 mod parts;
+/// The directory searched and a conversation created: found in the copy, made, refused, cut.
+mod people;
 /// Hosted images, photos, outside images and presence, fetched for what is on screen.
 mod pictures;
 /// Graph's JSON read into the model, and the client's calls for pictures and presence.

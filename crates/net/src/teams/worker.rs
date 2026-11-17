@@ -36,6 +36,7 @@ use super::files::{self, Transfers};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
 use super::outbox::{self, Outbox};
+use super::people::{self, People};
 use super::pictures::{self, Pictures};
 use super::search;
 use super::store::Copy;
@@ -252,6 +253,8 @@ pub(crate) struct Worker {
     pub(crate) answered: u64,
     /// The files opened and sent: their lanes, and the files waiting (`files.rs`).
     pub(crate) transfers: Transfers,
+    /// The last directory search and the creation waiting (`people.rs`).
+    pub(crate) people: People,
     #[cfg(test)]
     pub(crate) hooks: Hooks,
 }
@@ -289,6 +292,7 @@ impl Worker {
             outbox: Outbox::default(),
             answered: 0,
             transfers: Transfers::default(),
+            people: People::default(),
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -346,7 +350,7 @@ impl Worker {
         let mut wake = None;
         if self.polling && !self.offline {
             let mut at = self.limiter.next_deadline(now);
-            if pictures::waiting(self, now) {
+            if pictures::waiting(self, now) || people::waiting(self) {
                 at = now;
             }
             if let Some(due) = outbox::due(self, now) {
@@ -402,7 +406,8 @@ impl Worker {
             Job::Discard { seq } => outbox::discard(self, seq),
             Job::Find { chat, message } => sync::find(self, chat, message),
             Job::File { chat, message, created, attachment } => files::open(self, chat, message, created, attachment),
-            Job::Directory { .. } | Job::Create { .. } => log::debug!("teams: not handled yet"),
+            Job::Directory { query } => people::directory(self, query),
+            Job::Create { local, people: who, topic } => people::create(self, local, who, topic),
         }
     }
 
@@ -433,7 +438,7 @@ impl Worker {
     /// presence's minute, then a picture for the screen (unless the open chat's read is due), then
     /// whatever cadence is due (`sync.rs`), else the history (`backfill.rs`).
     pub(crate) fn tick(&mut self, now: Instant) {
-        if outbox::step(self, now) || files::step(self, now) {
+        if outbox::step(self, now) || files::step(self, now) || people::step(self, now) {
             return;
         }
         if pictures::presence(self, now) || (!self.limiter.due(Cadence::Open, now) && pictures::step(self, now)) {
@@ -465,6 +470,7 @@ impl Worker {
             log::info!("teams: working offline");
             let signing = self.signing.take().is_some();
             self.sync.give_up();
+            people::stop(self);
             self.held = None;
             if self.polling || signing {
                 self.status(Status::Offline);
@@ -593,6 +599,7 @@ impl Worker {
         self.backfill.reset();
         self.pictures.halt();
         files::stop(self);
+        people::stop(self);
         self.signing = None;
         self.held = None;
         self.not_before = None;
