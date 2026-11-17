@@ -47,9 +47,9 @@ pub use session::{
     pim::{
         ACCOUNT_COLOR, AgendaItem, CONFLICTS, CalMode, CalendarRefusal, ChatMembers, ConflictWords, DueReminder, EVENT_HITS_MAX, EventHit, EventWhen,
         MAX_FILE_CARDS, MAX_FILE_EVENTS, Module, NoteRef, PALETTE_COLOR, PALETTE_COLORS, PICTURE_BYTES_MAX, PICTURES_MAX, PRESENCE_MAX, Person,
-        RemovalRefusal, SYNC_ISSUES, ShownReaction, TEAMS_FILES_KEPT, TEAMS_HITS_MAX, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT,
-        TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY, TEAMS_TOO_MANY_FILES, TaskChange, TaskRef, TeamsAnnouncement, TeamsFileState, TeamsFound,
-        TeamsPage, TeamsSaved, TeamsState, WebexAsk, WebexState, parse_local, teams_could_run,
+        RemovalRefusal, SYNC_ISSUES, ShownReaction, TEAMS_ATTACH_AGAIN, TEAMS_FILES_KEPT, TEAMS_HITS_MAX, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS,
+        TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY, TEAMS_TOO_MANY_DOWNLOADS, TEAMS_TOO_MANY_FILES, TaskChange, TaskRef,
+        TeamsAnnouncement, TeamsFileState, TeamsFound, TeamsPage, TeamsSaved, TeamsState, WebexAsk, WebexState, parse_local, teams_could_run,
     },
     quick_steps::{QuickStep, StepWrite},
     scheduling::{Fetched, RoomFinder},

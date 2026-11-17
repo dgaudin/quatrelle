@@ -27,9 +27,6 @@ pub const TEAMS_TOO_MANY_FILES: &str = "at most 10 files and pictures go with a 
 /// The most files of the open chat whose state is kept, and the most saved files waiting for the
 /// window.
 pub const TEAMS_FILES_KEPT: usize = 64;
-/// The refusal of `teams.retry` for a message the outbox refused with its files: it kept nothing
-/// of them, and the engine only their names.
-pub(super) const ATTACH_AGAIN: &str = "attach the files again";
 /// The longest code of Teams' answer kept, in characters.
 const CODE_MAX: usize = 64;
 /// The longest extension a saved name keeps (the worker's).
@@ -92,7 +89,7 @@ impl Files {
             self.states.remove(i);
         } else if self.states.len() >= TEAMS_FILES_KEPT {
             let oldest = self.states.iter().position(|(.., s)| *s != TeamsFileState::Asked);
-            let oldest = oldest.ok_or_else(|| CmdError::Disabled("too many files are being downloaded".into()))?;
+            let oldest = oldest.ok_or_else(|| CmdError::Disabled(TEAMS_TOO_MANY_DOWNLOADS.into()))?;
             self.states.remove(oldest);
         }
         self.states.push_back((message.to_string(), attachment.to_string(), TeamsFileState::Asked));
@@ -142,16 +139,25 @@ pub fn teams_could_run(name: &str) -> bool {
 }
 
 /// Whether the parts a message takes can be: at most [`PARTS_MAX`], each by a path that is
-/// absolute, at most [`PATH_MAX`] bytes, without a control character.
+/// absolute, at most [`PATH_MAX`] bytes, without a control character, ending in a file's name (not
+/// a root or a `..`: it would be shown without a name).
 pub(super) fn parts_ok(parts: &[Part]) -> Result<(), CmdError> {
     if parts.len() > PARTS_MAX {
         return Err(CmdError::Params(TEAMS_TOO_MANY_FILES.into()));
     }
-    let usable = |path: &str| !path.is_empty() && path.len() <= PATH_MAX && !path.chars().any(char::is_control) && Path::new(path).is_absolute();
+    let usable = |path: &str| {
+        !path.is_empty()
+            && path.len() <= PATH_MAX
+            && !path.chars().any(char::is_control)
+            && Path::new(path).is_absolute()
+            && Path::new(path).file_name().is_some()
+    };
     if parts.iter().all(|(Part::File { path } | Part::Picture { path })| usable(path)) {
         Ok(())
     } else {
-        Err(CmdError::Params(format!("a file or picture is given by its full path, at most {PATH_MAX} bytes, without a control character")))
+        Err(CmdError::Params(format!(
+            "a file or picture is given by its full path, at most {PATH_MAX} bytes, without a control character, ending in its name"
+        )))
     }
 }
 
@@ -253,7 +259,7 @@ impl Session {
     /// [`teams::Event::File`]: how a file asked ended, taken only for one of the open chat asked
     /// and not answered yet. Not saved: kept to say so (Teams' code only in the client's shape).
     /// Saved: taken only inside the folder of files handed to other apps, under a name of its own
-    /// (else refused), marked as come from elsewhere, and handed to the window.
+    /// (else refused), marked as come from elsewhere when it's there, and handed to the window.
     pub(super) fn teams_file(&mut self, chat: &str, message: &str, attachment: &str, outcome: FileOutcome) {
         if self.teams.open.as_deref() != Some(chat) || self.teams.file_state(message, attachment) != Some(&TeamsFileState::Asked) {
             return;
@@ -262,7 +268,11 @@ impl Session {
             FileOutcome::Failed { why, code } => TeamsFileState::Failed { why, code: code.filter(|c| code_ok(c)) },
             FileOutcome::Saved { path } => match in_open_folder(&path) {
                 Some(path) => {
-                    crate::cmd::mark_from_internet(Path::new(&path));
+                    // Only a file there: on Windows the mark (a stream of the file) would make an
+                    // empty one of a name that isn't.
+                    if Path::new(&path).is_file() {
+                        crate::cmd::mark_from_internet(Path::new(&path));
+                    }
                     self.teams.files.hand(handed(&path));
                     TeamsFileState::Saved { path }
                 }

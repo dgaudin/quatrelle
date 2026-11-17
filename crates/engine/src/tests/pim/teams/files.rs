@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use quatrelle_model::pim::teams::{Attachment, FileOutcome, FileWhy, Op, OutKind, OutPart, OutState, Outgoing, Part, SEND_MAX, Sender, Unsent};
 
 use super::*;
-use crate::{CmdResult, TEAMS_FILES_KEPT, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsSaved, teams_could_run};
+use crate::{
+    CmdResult, TEAMS_ATTACH_AGAIN, TEAMS_FILES_KEPT, TEAMS_TOO_MANY_DOWNLOADS, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsSaved, teams_could_run,
+};
 
 const CHAT: &str = "19:chat1@thread.v2";
 const OTHER: &str = "19:chat2@thread.v2";
@@ -18,7 +20,6 @@ const ME: &str = "u-me";
 const TENANT_ID: &str = "tenant-1";
 /// The id of m1's file.
 const G: &str = "00000000-0000-0000-0000-0000000000f1";
-const ATTACH_AGAIN: &str = "attach the files again";
 
 fn from(id: &str) -> Sender {
     Sender::User { id: id.into(), name: String::new(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT_ID.into()) }
@@ -149,7 +150,10 @@ fn eleven_parts_or_a_path_that_isnt_one_are_refused() {
     assert_eq!(s.run("teams.send", &json!({"chat": CHAT, "text": "x", "files": paths(11)})), too_many);
     assert_eq!(s.run("teams.send", &json!({"chat": CHAT, "text": "x", "files": paths(6), "pictures": paths(5)})), too_many);
     let long = tmp(&"a".repeat(5_000));
-    for bad in [json!(["report.pdf"]), json!([long]), json!([tmp("a\nb")]), json!([5]), json!(5), json!("x"), json!([""])] {
+    // A path without a file's name (a root, a folder's `..`) would show as a chip without a name.
+    let nameless = [json!(["/"]), json!([tmp("..")])];
+    for bad in [json!(["report.pdf"]), json!([long]), json!([tmp("a\nb")]), json!([5]), json!(5), json!("x"), json!([""])].into_iter().chain(nameless)
+    {
         for k in ["files", "pictures"] {
             let mut v = json!({"chat": CHAT, "text": "x"});
             v[k] = bad.clone();
@@ -205,7 +209,7 @@ fn a_message_refused_with_its_files_is_not_sent_again_without_them() {
     assert_eq!(o.parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["report.pdf"], "shown with the files it had");
     // Sent again, it would go without its files: the files are attached again instead.
     let retry = s.run("teams.retry", &json!({"seq": 0, "local": local}));
-    assert_eq!(retry, Err(CmdError::Disabled(ATTACH_AGAIN.into())));
+    assert_eq!(retry, Err(CmdError::Disabled(TEAMS_ATTACH_AGAIN.into())));
     assert!(teams_jobs(&mut s).is_empty());
     assert_eq!(s.teams.outgoing.len(), 1, "left where it was");
     // The same for a chat not open, once it's opened.
@@ -215,7 +219,7 @@ fn a_message_refused_with_its_files_is_not_sent_again_without_them() {
     teams_jobs(&mut s);
     assert_eq!(s.teams.outgoing.iter().map(|o| (o.local.as_str(), o.parts.len())).collect::<Vec<_>>(), [(other.as_str(), 1)]);
     let retry = s.run("teams.retry", &json!({"seq": 0, "local": other}));
-    assert_eq!(retry, Err(CmdError::Disabled(ATTACH_AGAIN.into())));
+    assert_eq!(retry, Err(CmdError::Disabled(TEAMS_ATTACH_AGAIN.into())));
     assert!(teams_jobs(&mut s).is_empty());
     // One without files is sent again, as before.
     let plain = local_of(&s.run("teams.send", &json!({"chat": OTHER, "text": "plain"})).unwrap());
@@ -326,6 +330,19 @@ fn a_saved_file_is_handed_to_the_window_once() {
     // Said again: it isn't asked any more, nothing handed.
     saved(&mut s, "m1", G, &path);
     assert_eq!(s.take_teams_saved(), None);
+}
+
+#[test]
+fn a_saved_file_that_isnt_there_is_never_made() {
+    // Marked as come from elsewhere only when it's there: on Windows, the mark (a stream of the
+    // file) would make an empty file of a name that isn't.
+    let mut s = opened();
+    open_file(&mut s, "m1", G).unwrap();
+    let path = in_scratch(&format!("never made {}.pdf", std::process::id()));
+    assert!(!std::path::Path::new(&path).exists());
+    saved(&mut s, "m1", G, &path);
+    assert!(!std::path::Path::new(&path).exists(), "nothing written");
+    assert_eq!(s.take_teams_saved().map(|h| h.path), Some(path));
 }
 
 #[test]
@@ -478,7 +495,7 @@ fn the_files_kept_are_bounded() {
         open_file(&mut s, "m7", &key(k)).unwrap();
     }
     teams_jobs(&mut s);
-    assert!(matches!(open_file(&mut s, "m7", &key(TEAMS_FILES_KEPT)), Err(CmdError::Disabled(_))));
+    assert_eq!(open_file(&mut s, "m7", &key(TEAMS_FILES_KEPT)), Err(CmdError::Disabled(TEAMS_TOO_MANY_DOWNLOADS.into())));
     assert!(teams_jobs(&mut s).is_empty());
     assert_eq!(s.teams.file_state("m7", &key(0)), Some(&TeamsFileState::Asked));
 }

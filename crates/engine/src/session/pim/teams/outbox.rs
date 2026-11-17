@@ -31,14 +31,18 @@ use super::*;
 const SAID_MAX: usize = 1_000;
 /// The most messages refused by the outbox kept for the chats not open (each its share at most).
 const REFUSED_MAX: usize = 1_000;
-/// The refusals of `teams.send`, `teams.edit`, `teams.retry` and `teams.discard` the window knows
-/// (and says in its own words): the message too long for Teams, too many waiting, the chat left,
-/// a message that may be in Teams already, an edit that leaves nothing of its message.
+/// The refusals of `teams.send`, `teams.edit`, `teams.retry`, `teams.discard` and
+/// `teams.openFile` the window knows (and says in its own words): the message too long for Teams,
+/// too many waiting, the chat left, a message that may be in Teams already, an edit that leaves
+/// nothing of its message, a message the outbox refused with its files (it kept nothing of them,
+/// and the engine only their names: they're attached again), every file kept being downloaded.
 pub const TEAMS_TOO_LONG: &str = "This message is too long for Teams";
 pub const TEAMS_TOO_MANY: &str = "Too many messages are waiting";
 pub const TEAMS_LEFT: &str = "you're no longer in this conversation";
 pub const TEAMS_MAY_BE_IN_TEAMS: &str = "This message may already be in Teams";
 pub const TEAMS_NOTHING_LEFT: &str = "there's nothing left of this message; delete it instead";
+pub const TEAMS_ATTACH_AGAIN: &str = "attach the files again";
+pub const TEAMS_TOO_MANY_DOWNLOADS: &str = "too many files are being downloaded";
 /// The most byte ranges of each style a message sent or edited takes (`teams.send`,
 /// `teams.edit`): the box holds no more.
 pub const TEAMS_RANGES_MAX: usize = 1_000;
@@ -369,7 +373,7 @@ impl Session {
             return Err(CmdError::Disabled("only a message that wasn't sent can be sent again".into()));
         };
         if seq == 0 && !o.parts.is_empty() {
-            return Err(CmdError::Disabled(files::ATTACH_AGAIN.into()));
+            return Err(CmdError::Disabled(TEAMS_ATTACH_AGAIN.into()));
         }
         if seq != 0 {
             o.state = OutState::Waiting;
