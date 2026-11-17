@@ -593,8 +593,8 @@ pub fn scratch_dir(_name: &str) -> Option<PathBuf> {
 }
 
 /// The [`scratch_dir`]s Quatrelle puts mail in: attachments opened with other apps, and the
-/// pictures and video frames made of them.
-pub const SCRATCH: [&str; 3] = ["open", "thumbs", "frames"];
+/// pictures and video frames made of them; and the pictures pasted in a Teams conversation's box.
+pub const SCRATCH: [&str; 4] = ["open", "thumbs", "frames", "teams"];
 
 /// Remove what's in the [`SCRATCH`] folders (issue #4: nothing of an online-only account, or a
 /// portable copy, stays behind). A file another app still has open stays.

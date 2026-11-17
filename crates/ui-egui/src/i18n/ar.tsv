@@ -2332,3 +2332,16 @@ presence	Offline	غير متصل
 	The download was too slow	كان التنزيل بطيئًا جدًا
 	Too many files are being downloaded	يجري تنزيل عدد كبير من الملفات
 	This file is no longer in the conversation	لم يعد هذا الملف في المحادثة
+# Teams: files and pictures going with a message.
+	Attach a file	إرفاق ملف
+	At most 10 files and pictures go with a message	لا يُرسَل مع الرسالة أكثر من 10 ملفات وصور
+	{name} is bigger than Teams takes here (100 MB)	{name} أكبر مما يقبله Teams هنا (100 ميغابايت)
+	{name} is empty	{name} فارغ
+	{name} can't be read	تعذّرت قراءة {name}
+	There's no folder to put the picture in	لا يوجد مجلد لوضع الصورة فيه
+	Uploading… {percent} %	جارٍ رفع الملفات… {percent}%
+	Uploading…	جارٍ رفع الملفات…
+	A file is no longer there, or has changed	لم يعد أحد الملفات موجودًا، أو تغيّر
+	A file is bigger than Teams takes here (100 MB)	أحد الملفات أكبر مما يقبله Teams هنا (100 ميغابايت)
+	OneDrive didn't share the file with everyone in this conversation	لم يشارك OneDrive الملف مع كل من في هذه المحادثة
+	Attach the files again to send it	أرفق الملفات مرة أخرى لإرسالها

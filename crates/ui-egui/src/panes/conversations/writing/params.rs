@@ -3,12 +3,16 @@
 //! What the box hands the engine and takes back from it: `teams.send`'s and `teams.edit`'s params
 //! (the byte ranges of the text's bold, italic and mentions, [`pairs`], [`mention_pairs`]), read
 //! back from those of a message refused ([`ranges_of`], [`mentions_of`], [`styled`]), and the
-//! refusal put back in the box and said in the window's words ([`refused`], [`Refusal`]).
+//! refusal put back in the box, with its files and pictures, and said in the window's words
+//! ([`refused`], [`Refusal`]).
 //!
 //! What is hostile here: the params of a refusal (the box's own, or a script's): ranges and
 //! mentions checked against the text's characters, at the command's caps.
 
-use quatrelle_engine::{CmdError, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
+use quatrelle_engine::{
+    CmdError, TEAMS_ATTACH_AGAIN, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY,
+    TEAMS_TOO_MANY_FILES,
+};
 
 use super::*;
 
@@ -27,6 +31,10 @@ pub(super) enum Refusal {
     NotEdited,
     /// ↑ on a last message the box can't hold.
     LastNotEditable,
+    /// More files and pictures than a message takes.
+    TooManyFiles,
+    /// Retry of a message the outbox refused with its files: they're attached again.
+    AttachAgain,
 }
 
 impl Refusal {
@@ -43,6 +51,8 @@ impl Refusal {
             TEAMS_MAY_BE_IN_TEAMS => Some(Refusal::MayBeInTeams),
             TEAMS_LEFT => Some(Refusal::Left),
             TEAMS_NOTHING_LEFT => Some(Refusal::NothingLeft),
+            TEAMS_TOO_MANY_FILES => Some(Refusal::TooManyFiles),
+            TEAMS_ATTACH_AGAIN => Some(Refusal::AttachAgain),
             _ if id == "teams.send" => Some(Refusal::NotSent),
             _ if id == "teams.edit" => Some(Refusal::NotEdited),
             _ => None,
@@ -59,6 +69,8 @@ impl Refusal {
             Refusal::NothingLeft => tl!("To remove a message, delete it"),
             Refusal::NotEdited => tl!("This message couldn't be edited"),
             Refusal::LastNotEditable => tl!("Your last message can't be edited here"),
+            Refusal::TooManyFiles => tl!("At most 10 files and pictures go with a message"),
+            Refusal::AttachAgain => tl!("Attach the files again to send it"),
         }
     }
 }
@@ -125,8 +137,9 @@ pub(super) fn mentions_of(text: &str, params: &Value) -> Vec<(Range<usize>, Stri
 /// What the engine refused of the box's (`teams.send`, `.edit`, `.retry` or `.discard`, with
 /// `params`; `open` is the chat on screen, which Retry and Delete are of): a message sent goes
 /// back in its chat's box with its bold, italic and mentions, before what was typed since (into
-/// the words set aside, while an edit is under way); an edit goes back as an edit of its message
-/// again; why is said under the box.
+/// the words set aside, while an edit is under way), and its files and pictures before those
+/// added since (`attach::put_back`); an edit goes back as an edit of its message again; why is
+/// said under the box.
 pub(crate) fn refused(c: &mut ConversationsUi, open: Option<&str>, id: &str, params: &Value, e: &CmdError) {
     let chat = if matches!(id, "teams.send" | "teams.edit") { params.get("chat").and_then(Value::as_str) } else { open };
     let Some(chat) = chat.filter(|c| !c.is_empty() && c.len() <= MAX_ID) else { return };
@@ -147,6 +160,7 @@ pub(crate) fn refused(c: &mut ConversationsUi, open: Option<&str>, id: &str, par
                 words.into_box(d);
             }
         }
+        attach::put_back(d, params);
     }
     if said.is_some() {
         d.said = said;

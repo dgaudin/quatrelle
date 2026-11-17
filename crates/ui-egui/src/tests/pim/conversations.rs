@@ -15,9 +15,10 @@ use super::super::list::follow_up::{Textures, frame_with_size};
 use super::*;
 
 /// The conversation pane, its pictures, where a sign-in stands, new messages announced, and
-/// writing (with @mentions, and editing one's own message); reactions and the bar over a
-/// message, one's edits and deletions going out; a search's hit opened at its message; the
-/// frames at scale.
+/// writing (with @mentions, editing one's own message, and files and pictures going with one);
+/// reactions and the bar over a message, one's edits and deletions going out; a search's hit
+/// opened at its message; the frames at scale.
+mod attach;
 mod changes;
 mod chat;
 mod editing;

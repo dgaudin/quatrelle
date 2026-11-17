@@ -2335,3 +2335,16 @@ presence	Offline	Offline
 	The download was too slow	Il download era troppo lento
 	Too many files are being downloaded	Troppi file in fase di download
 	This file is no longer in the conversation	Questo file non è più nella conversazione
+# Teams: files and pictures going with a message.
+	Attach a file	Allega un file
+	At most 10 files and pictures go with a message	Un messaggio porta al massimo 10 file e immagini
+	{name} is bigger than Teams takes here (100 MB)	{name} supera ciò che Teams accetta qui (100 MB)
+	{name} is empty	{name} è vuoto
+	{name} can't be read	Impossibile leggere {name}
+	There's no folder to put the picture in	Non c’è una cartella in cui mettere l’immagine
+	Uploading… {percent} %	Caricamento dei file… {percent}%
+	Uploading…	Caricamento dei file…
+	A file is no longer there, or has changed	Un file non c’è più o è cambiato
+	A file is bigger than Teams takes here (100 MB)	Un file supera ciò che Teams accetta qui (100 MB)
+	OneDrive didn't share the file with everyone in this conversation	OneDrive non ha condiviso il file con tutti i partecipanti a questa conversazione
+	Attach the files again to send it	Allega di nuovo i file per inviarlo

@@ -5,13 +5,17 @@
 //! picker of the mail editor, and Enter to send (`teams.send`, with the byte ranges of the bold
 //! and italic runs, and of the people @mentioned when there are); Shift+Enter makes a new line.
 //! "@" offers the chat's people, mentioned by name (`mentions.rs`); ↑ in an empty box edits the
-//! user's last message, Esc lets an edit go (`editing.rs`). These keys act where they come among
-//! the frame's events, on the text as it stood when they were pressed (what's typed after them in
-//! the same frame waits for the next), and are the box's as it stood at the frame's start: the
-//! offer's while people are offered (Esc closes it), an edit's while one is under way (Esc lets
-//! it go). An Esc the box doesn't take is the window's, as before (the keyboard let go, the
-//! search emptied: `app/keys.rs` asks [`takes_escape`]). In Conversations the window's keys never
-//! send the mail being written (`app/keys.rs`), so neither does a key pressed in the box.
+//! user's last message, Esc lets an edit go (`editing.rs`). The paperclip beside the emoji button
+//! asks the window for files to attach, Ctrl+V with no text pasted for the clipboard's picture:
+//! they go with the message as chips over the box, sent with the text or alone (`attach.rs`).
+//! The params sent, and read back from a refusal, are `params.rs`'. These keys act where they
+//! come among the frame's events, on the text as it stood when they were pressed (what's typed
+//! after them in the same frame waits for the next), and are the box's as it stood at the
+//! frame's start: the offer's while people are offered (Esc closes it), an edit's while one is
+//! under way (Esc lets it go). An Esc the box doesn't take is the window's, as before (the
+//! keyboard let go, the search emptied: `app/keys.rs` asks [`takes_escape`]). In Conversations
+//! the window's keys never send the mail being written (`app/keys.rs`), so neither does a key
+//! pressed in the box.
 //!
 //! The text is never lost. A message too long for Teams (its HTML past [`SEND_MAX`] bytes), or
 //! with too many waiting already (the command's own caps, checked first), stays in the box, and
@@ -37,15 +41,18 @@ use quatrelle_engine::mime::{Typed, teams_compose_typed, teams_write_mentions};
 use quatrelle_engine::model::pim::teams::{MAX_ID, MAX_MENTIONS, OUTBOX_CHAT_MAX, OUTBOX_MAX};
 use serde_json::{Value, json};
 
-use super::ConversationsUi;
+use super::{ConversationsUi, TeamsAct};
 use crate::icons::Icon;
 use crate::rich_edit::{self, Picker};
 use crate::theme::{self, Tokens};
 use crate::{Action, widgets};
 
+mod attach;
 mod editing;
 mod mentions;
 mod params;
+
+pub(crate) use attach::{add_files, add_picture};
 
 use editing::{Editing, Words};
 pub(crate) use mentions::BoxMention;
@@ -98,6 +105,11 @@ pub(crate) struct ChatDraft {
     /// The edit handed to the engine this frame (its message, and the words the box had loaded),
     /// for a refusal of it to be an edit judged as before; let go at the next frame.
     handed: Option<(String, Typed)>,
+    /// The files and pictures going with the message, in the order added (`attach.rs`).
+    pub(crate) parts: Vec<attach::BoxPart>,
+    /// What of the files and pictures added wasn't taken, and why: said under the box until the
+    /// text or the parts change.
+    not_taken: Vec<String>,
 }
 
 impl ChatDraft {
@@ -153,6 +165,7 @@ impl ChatDraft {
     fn changed(&mut self) {
         self.typing = None;
         self.said = None;
+        self.not_taken.clear();
         self.weigh();
     }
 }
@@ -266,11 +279,12 @@ fn for_the_box(e: &egui::Event) -> bool {
 }
 
 /// `chat`'s draft, made when it has none: past [`DRAFTS_MAX`] chats, the one drawn longest ago
-/// goes, an empty one first (one with an edit under way isn't empty).
-fn draft<'a>(c: &'a mut ConversationsUi, chat: &str) -> &'a mut ChatDraft {
+/// goes, an empty one first (one with an edit under way, or files, isn't empty).
+pub(crate) fn draft<'a>(c: &'a mut ConversationsUi, chat: &str) -> &'a mut ChatDraft {
     c.drafted = c.drafted.saturating_add(1);
     if !c.drafts.contains_key(chat) && c.drafts.len() >= DRAFTS_MAX {
-        let oldest = c.drafts.iter().min_by_key(|(_, d)| (!d.text.is_empty() || d.editing.is_some(), d.used)).map(|(k, _)| k.clone());
+        let written = |d: &ChatDraft| !d.text.is_empty() || d.editing.is_some() || !d.parts.is_empty();
+        let oldest = c.drafts.iter().min_by_key(|(_, d)| (written(d), d.used)).map(|(k, _)| k.clone());
         if let Some(k) = oldest {
             c.drafts.remove(&k);
         }
@@ -340,10 +354,18 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
             None
         };
         let focused = ui.memory(|m| m.has_focus(id));
+        // Ctrl+V with no text pasted: the window reads the clipboard's picture (an edit takes none).
+        if focused && d.editing.is_none() && ui.input(|i| attach::pasting(&i.events)) {
+            acts.push(Action::Teams(TeamsAct::Paste { chat: chat.to_string() }));
+        }
         // The offer and the edit's banner over the box, as the frame found them; what's clicked
-        // in them acts once the text box has taken this frame's typing.
+        // in them acts once the text box has taken this frame's typing. The files and pictures
+        // going with the message (set aside with its words while one's own is edited).
         let picked = if focused { mentions::rows(ui, t, d) } else { None };
         let cancelled = d.editing.is_some() && editing::banner(ui, t);
+        if d.editing.is_none() {
+            attach::chips(ui, t, d);
+        }
         let border = egui::Frame::new()
             .fill(if t.dark { t.surface } else { egui::Color32::WHITE })
             .stroke(egui::Stroke::new(1.0, if focused { t.accent } else { t.border }))
@@ -351,7 +373,9 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
             .inner_margin(egui::Margin::symmetric(10, 6));
         border.show(ui, |ui| {
             ui.horizontal_top(|ui| {
-                let room = (ui.available_width() - 36.0).max(80.0);
+                // Files go with a message, not with an edit; the browser has none.
+                let clip = d.editing.is_none() && !cfg!(target_arch = "wasm32");
+                let room = (ui.available_width() - if clip { 66.0 } else { 36.0 }).max(80.0);
                 egui::ScrollArea::vertical()
                     .id_salt(("teams-box-scroll", chat))
                     .max_height(TALLEST)
@@ -359,6 +383,9 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
                     .auto_shrink([false, true])
                     .show(ui, |ui| edit(ui, t, d, id));
                 emoji(ui, t, d, id, &s.prefs.recent_emoji, acts);
+                if clip && widgets::bar_icon_button(ui, Icon::Attach, "Attach a file", t).clicked() {
+                    acts.push(Action::Teams(TeamsAct::Attach { chat: chat.to_string() }));
+                }
             });
         });
         // The key acts on the text as it stood when it was pressed: what came before it in the
@@ -400,9 +427,13 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
         } else {
             d.said.map(Refusal::sentence)
         };
-        if let Some(said) = said {
+        // Then what of the files wasn't taken (a sentence said already isn't said twice).
+        let lines: Vec<&str> = said.into_iter().chain(d.not_taken.iter().map(String::as_str).filter(|l| Some(*l) != said)).collect();
+        if !lines.is_empty() {
             ui.add_space(4.0);
-            ui.label(RichText::new(said).size(12.5).color(t.danger));
+        }
+        for line in lines {
+            ui.label(RichText::new(line).size(12.5).color(t.danger));
         }
     });
 }
@@ -461,28 +492,32 @@ fn toggle(d: &mut ChatDraft, get: fn(&Style) -> bool, set: fn(&mut Style, bool))
     d.weigh();
 }
 
-/// What's written sent, when there's something to send (judged on what would be sent: spaces,
-/// blank lines or control characters alone are nothing), it isn't too long and the outbox has
-/// room: the box emptied, the keyboard kept. Otherwise it stays. The people @mentioned go as
-/// `mentions` when there are.
+/// What's written sent with its files and pictures, when there's something to send (judged on
+/// what would be sent: spaces, blank lines or control characters alone are nothing; files alone
+/// are a message), it isn't too long and the outbox has room: the box emptied, the keyboard kept.
+/// Otherwise it stays. The people @mentioned go as `mentions`, the files as `files` and the
+/// pictures as `pictures` (their paths), when there are.
 fn send(ui: &Ui, d: &mut ChatDraft, id: egui::Id, chat: &str, full: bool, acts: &mut Vec<Action>) {
     if d.too_long || full {
         return;
     }
     let typed = d.typed();
-    if teams_compose_typed(&typed).0.blocks.is_empty() {
+    if teams_compose_typed(&typed).0.blocks.is_empty() && d.parts.is_empty() {
         return;
     }
     let mut params = json!({"chat": chat, "text": typed.text, "bold": pairs(&typed.bold), "italic": pairs(&typed.italic)});
-    if !typed.mentions.is_empty()
-        && let Some(p) = params.as_object_mut()
-    {
-        p.insert("mentions".into(), mention_pairs(&typed.mentions));
+    let (files, pictures) = attach::paths(&d.parts);
+    if let Some(p) = params.as_object_mut() {
+        let lists = [("mentions", mention_pairs(&typed.mentions)), ("files", json!(files)), ("pictures", json!(pictures))];
+        for (k, list) in lists.into_iter().filter(|(_, l)| l.as_array().is_some_and(|l| !l.is_empty())) {
+            p.insert(k.into(), list);
+        }
     }
     acts.push(Action::Run("teams.send", params));
     d.text.clear();
     d.styles = Styles::default();
     d.mentions.clear();
+    d.parts.clear();
     d.offer = None;
     d.sel = 0..0;
     d.changed();

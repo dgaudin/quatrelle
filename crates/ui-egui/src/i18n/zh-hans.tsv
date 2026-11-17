@@ -2336,3 +2336,16 @@ presence	Offline	离线
 	The download was too slow	下载太慢
 	Too many files are being downloaded	正在下载的文件太多
 	This file is no longer in the conversation	此文件已不在对话中
+# Teams: files and pictures going with a message.
+	Attach a file	附加文件
+	At most 10 files and pictures go with a message	一条消息最多附带 10 个文件和图片
+	{name} is bigger than Teams takes here (100 MB)	{name} 超过了 Teams 在此接受的大小（100 MB）
+	{name} is empty	{name} 是空的
+	{name} can't be read	无法读取 {name}
+	There's no folder to put the picture in	没有可放置图片的文件夹
+	Uploading… {percent} %	正在上传… {percent}%
+	Uploading…	正在上传…
+	A file is no longer there, or has changed	某个文件已不在原处或已被更改
+	A file is bigger than Teams takes here (100 MB)	某个文件超过了 Teams 在此接受的大小（100 MB）
+	OneDrive didn't share the file with everyone in this conversation	OneDrive 未与此会话中的所有人共享该文件
+	Attach the files again to send it	请重新附加文件以发送

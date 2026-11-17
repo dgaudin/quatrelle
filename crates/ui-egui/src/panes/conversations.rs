@@ -7,9 +7,10 @@
 //! The module is shown with Teams on and signed in (File › Options › Teams); its list
 //! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are,
 //! with the box to write in at its foot (`writing.rs`: the people offered after "@", the edit of
-//! one's own message); a message the pointer is on offers its bar (reactions, Copy, Edit and
-//! Delete), a deletion is asked first. Pictures are decoded on a thread of their own
-//! (`pictures.rs`).
+//! one's own message, the files and pictures going with a message, which the window picks or
+//! reads off the clipboard when the box asks: [`TeamsAct`]); a message the pointer is on offers
+//! its bar (reactions, Copy, Edit and Delete), a deletion is asked first. Pictures are decoded on
+//! a thread of their own (`pictures.rs`).
 
 use std::collections::{HashMap, HashSet};
 
@@ -36,7 +37,16 @@ pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};
 #[cfg(test)]
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
-pub(crate) use writing::{ChatDraft, refused};
+pub(crate) use writing::{ChatDraft, add_files, add_picture, draft, refused};
+
+/// What a conversation's box asks of the window, which has the system's file dialog and its
+/// clipboard (`app/actions/teams.rs`): files to go with `chat`'s message, or the picture on the
+/// clipboard pasted in it.
+#[derive(Clone, Debug)]
+pub enum TeamsAct {
+    Attach { chat: String },
+    Paste { chat: String },
+}
 
 /// What Conversations keeps between frames.
 #[derive(Clone, Debug, Default)]

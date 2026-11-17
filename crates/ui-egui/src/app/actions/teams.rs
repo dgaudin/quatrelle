@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! A file shared in a Teams conversation, once the engine has saved it: opened with the system's
-//! app, or, when its name could run a program, its folder shown instead.
+//! What a Teams conversation asks of the window. A file shared in it, once the engine has saved
+//! it: opened with the system's app, or, when its name could run a program, its folder shown
+//! instead. What its box asks for ([`TeamsAct`]): files picked in the system's file dialog, or the
+//! picture on the clipboard, to go with the message being written.
 //!
 //! What is hostile here: the file and its name are a stranger's. A program is never started from
 //! here (the engine says which files could run: `teams_could_run`); the path is the engine's,
 //! inside the user's own folder of files handed to other apps, and the system is handed it as it
 //! is (the launching rules are `Services::open_path`'s). The name is said on one line, without
 //! control or bidi characters, cut at [`NAME_MAX`]. A file removed since it was saved (the engine
-//! hands it again at the next "Open") is said, not handed over.
+//! hands it again at the next "Open") is said, not handed over. The files picked and the
+//! clipboard's picture are the user's: looked at, or written to a file of the user's own, by the
+//! box (`writing/attach.rs`).
 
 use quatrelle_engine::TeamsSaved;
 use quatrelle_engine::model::pim::teams::{is_bidi, one_line};
 
 use super::*;
+use crate::conversations::TeamsAct;
 
 /// The most characters of a name said in a notice.
 const NAME_MAX: usize = 80;
@@ -30,6 +35,28 @@ fn plain(name: &str) -> String {
 }
 
 impl MailApp {
+    /// What a conversation's box asked for: the system's file dialog (asked without waiting: its
+    /// answer comes back here), whose files go with `chat`'s message; or the picture on the
+    /// clipboard, pasted in it. Nothing in the browser, which has neither.
+    pub(crate) fn teams_act(&mut self, a: TeamsAct) {
+        if cfg!(target_arch = "wasm32") {
+            return;
+        }
+        match a {
+            TeamsAct::Attach { chat } => {
+                let again = Action::Teams(TeamsAct::Attach { chat: chat.clone() });
+                if let Some(paths) = self.file_answer(FileAsk::Attach, again) {
+                    conversations::add_files(conversations::draft(&mut self.ui.conversations, &chat), paths);
+                }
+            }
+            TeamsAct::Paste { chat } => {
+                if let Some(png) = self.services.clipboard_picture() {
+                    conversations::add_picture(conversations::draft(&mut self.ui.conversations, &chat), &png);
+                }
+            }
+        }
+    }
+
     /// The files the engine saved for the window since the last frame, each handed on once.
     pub(crate) fn teams_files(&mut self) {
         while let Some(saved) = self.session.take_teams_saved() {

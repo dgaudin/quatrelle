@@ -2333,3 +2333,16 @@ presence	Offline	オフライン
 	The download was too slow	ダウンロードが遅すぎました
 	Too many files are being downloaded	ダウンロード中のファイルが多すぎます
 	This file is no longer in the conversation	このファイルは会話にもうありません
+# Teams: files and pictures going with a message.
+	Attach a file	ファイルを添付
+	At most 10 files and pictures go with a message	1 つのメッセージに付けられるファイルと画像は 10 個までです
+	{name} is bigger than Teams takes here (100 MB)	{name} は、ここで Teams が受け付ける大きさ (100 MB) を超えています
+	{name} is empty	{name} は空です
+	{name} can't be read	{name} を読み取れません
+	There's no folder to put the picture in	画像を置くフォルダーがありません
+	Uploading… {percent} %	アップロード中… {percent}%
+	Uploading…	アップロード中…
+	A file is no longer there, or has changed	ファイルが見つからないか、変更されています
+	A file is bigger than Teams takes here (100 MB)	ファイルが、ここで Teams が受け付ける大きさ (100 MB) を超えています
+	OneDrive didn't share the file with everyone in this conversation	OneDrive がこの会話の全員とファイルを共有しませんでした
+	Attach the files again to send it	送信するには、ファイルをもう一度添付してください

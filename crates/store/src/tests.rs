@@ -32,6 +32,13 @@ fn scratch_folders_are_the_users_own() {
     let _ = fs::remove_dir(&a);
 }
 
+/// What is cleared of those folders when Quatrelle goes takes in the pictures pasted in a Teams
+/// conversation's box.
+#[test]
+fn the_scratch_folders_cleared_take_in_teams() {
+    assert!(SCRATCH.contains(&"teams"), "{SCRATCH:?}");
+}
+
 #[test]
 fn a_big_folder_list_is_kept_in_pages() {
     for packed in [false, true] {

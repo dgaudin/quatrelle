@@ -238,6 +238,7 @@ impl MailApp {
                 self.run(id, p);
                 self.teams_pages();
             }
+            Action::Teams(a) => self.teams_act(a),
             Action::Run(id, p) => {
                 // A Search Folder isn't a search typed in: the box is left empty.
                 if matches!(id, "search.clear" | "searchFolder.open") {

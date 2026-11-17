@@ -2333,3 +2333,16 @@ presence	Offline	Offline
 	The download was too slow	De download was te traag
 	Too many files are being downloaded	Er worden te veel bestanden gedownload
 	This file is no longer in the conversation	Dit bestand staat niet meer in het gesprek
+# Teams: files and pictures going with a message.
+	Attach a file	Een bestand bijvoegen
+	At most 10 files and pictures go with a message	Een bericht gaat met hoogstens 10 bestanden en afbeeldingen
+	{name} is bigger than Teams takes here (100 MB)	{name} is groter dan Teams hier aanneemt (100 MB)
+	{name} is empty	{name} is leeg
+	{name} can't be read	{name} kan niet worden gelezen
+	There's no folder to put the picture in	Er is geen map om de afbeelding in te zetten
+	Uploading… {percent} %	Bestanden uploaden… {percent}%
+	Uploading…	Bestanden uploaden…
+	A file is no longer there, or has changed	Een bestand is er niet meer, of is gewijzigd
+	A file is bigger than Teams takes here (100 MB)	Een bestand is groter dan Teams hier aanneemt (100 MB)
+	OneDrive didn't share the file with everyone in this conversation	OneDrive heeft het bestand niet met iedereen in dit gesprek gedeeld
+	Attach the files again to send it	Voeg de bestanden opnieuw toe om het te versturen

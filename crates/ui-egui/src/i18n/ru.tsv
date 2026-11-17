@@ -2337,3 +2337,16 @@ presence	Offline	Не в сети
 	The download was too slow	Загрузка шла слишком медленно
 	Too many files are being downloaded	Загружается слишком много файлов
 	This file is no longer in the conversation	Этого файла больше нет в беседе
+# Teams: files and pictures going with a message.
+	Attach a file	Вложить файл
+	At most 10 files and pictures go with a message	К сообщению можно приложить не более 10 файлов и изображений
+	{name} is bigger than Teams takes here (100 MB)	{name} больше, чем Teams принимает здесь (100 МБ)
+	{name} is empty	{name} пуст
+	{name} can't be read	Не удаётся прочитать {name}
+	There's no folder to put the picture in	Нет папки, куда положить изображение
+	Uploading… {percent} %	Отправка файлов… {percent}%
+	Uploading…	Отправка файлов…
+	A file is no longer there, or has changed	Файла больше нет на месте, или он изменился
+	A file is bigger than Teams takes here (100 MB)	Файл больше, чем Teams принимает здесь (100 МБ)
+	OneDrive didn't share the file with everyone in this conversation	OneDrive не открыл доступ к файлу всем участникам этой беседы
+	Attach the files again to send it	Вложите файлы заново, чтобы отправить его

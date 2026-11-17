@@ -313,6 +313,8 @@ pub enum Action {
     /// Say why something can't be done now, as a command's refusal is said (a message whose
     /// text came first: its attachments are still coming).
     Refuse(String),
+    /// What a Teams conversation's box asks of the window: the file dialog, the clipboard's picture.
+    Teams(conversations::TeamsAct),
 }
 
 pub struct MailApp {
