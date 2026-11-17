@@ -151,6 +151,9 @@ pub(crate) struct FakeTeams {
     pub(crate) rewrite_posts: Option<fn(&str) -> String>,
     /// The next n requests of a route (by route name) answered 500, then the route works again.
     pub(crate) fail_next: HashMap<String, u32>,
+    /// The next n requests of a route (by route name) answered 404 with nothing done, as Graph
+    /// answers for a chat it no longer serves the user, then the route works again.
+    pub(crate) not_found_next: HashMap<String, u32>,
     /// The next n requests of a route carried out, but answered 503 (the answer lost on the way).
     pub(crate) answer_lost: HashMap<String, u32>,
     /// The `Retry-After` (seconds) those 503s say; `None`: they say none.
@@ -547,7 +550,8 @@ impl Data {
 
 impl FakeTeams {
     /// Why a request isn't answered, if it isn't: throttled, no token, someone else's chats, or
-    /// a failure asked for in `fail_next`. A download is never refused (it is another server).
+    /// a failure asked for in `fail_next` or `not_found_next`. A download is never refused (it is
+    /// another server).
     fn refusal(&mut self, name: &str, authorized: bool, someone_else: bool) -> Option<Reply> {
         if name == "download" {
             return None;
@@ -572,6 +576,10 @@ impl FakeTeams {
         if let Some(n) = self.fail_next.get_mut(name).filter(|n| **n > 0) {
             *n -= 1;
             return Some(Reply::error(500, "InternalServerError", "Failed, as the test asked."));
+        }
+        if let Some(n) = self.not_found_next.get_mut(name).filter(|n| **n > 0) {
+            *n -= 1;
+            return Some(Reply::error(404, "NotFound", "Not found, as the test asked."));
         }
         None
     }

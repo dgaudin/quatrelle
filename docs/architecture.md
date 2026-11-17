@@ -103,9 +103,12 @@ Edits, deletions and reactions (`teams.edit`, `teams.delete`, `teams.react`) are
 same outbox (`net/src/teams/outbox/changes.rs`): in their chat's order with the sends, on the same
 route, counted in the same caps, what waits of one message merged first (a reaction taken back
 cancels the one waiting, a later edit replaces one waiting, a deletion drops both). A change is
-the same however often it's made, so it is made again rather than checked: unanswered or
-answered 5xx, it goes again, three times at most. On Graph's answer the worker writes it into its
-copy at once (an edit's words, a deletion leaving only the message's id, times and sender, a
+the same however often it's made, so it is made again rather than checked: answered 5xx, it goes
+again, three times at most; with no answer at all (the network away, the connection cut) that
+wasn't a try, and it waits for the network as a send does. Only Graph's 204 is done: a refusal
+writes nothing, a deletion's 404 among them (Graph answers so for a chat it no longer serves the
+user, while the others still read the message). On Graph's 204 the worker writes the change into
+its copy at once (an edit's words, a deletion leaving only the message's id, times and sender, a
 reaction's user), and the next read brings Graph's own version. A reaction not made leaves the
 outbox and is said once; a message a read shows deleted takes the changes still waiting for it.
 The engine shows each at once over its window (`session/pim/teams/changes.rs`), and only the

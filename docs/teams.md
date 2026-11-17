@@ -362,14 +362,16 @@ team wasn't sent". Switching Teams off keeps the messages waiting: they go when 
   gone for everyone in the conversation, and Quatrelle can't bring it back. Esc or Cancel keeps it.
 - **Changes going out.** An edit shows its new words at once, dimmed, with "Editing…" under the
   message; a deletion dims the message and says "Deleting…". While one waits its turn, **Cancel**
-  lets it go. One Teams doesn't make says "Not edited" or "Not deleted" and why ("Teams refused
-  this change", with Teams' code, or "Quatrelle couldn't confirm the change was made"), with
-  **Retry** and **Cancel**; when its conversation isn't on the screen, a notice says so ("Your
-  edit in Support team wasn't made"). A change of a message the conversation doesn't show at the
-  moment (an older one) is listed after the messages going out. Edits, deletions and reactions go
-  in the order made, with the messages sent, and count in the same limits (50 waiting in a
-  conversation, 500 in all). A message deleted in Teams meanwhile takes its changes still waiting
-  with it.
+  lets it go. Without a network a change waits for it, however long, as a message does, and goes
+  once the network is back. One Teams doesn't make says "Not edited" or "Not deleted" and why
+  ("Teams refused this change", with Teams' code, or "Quatrelle couldn't confirm the change was
+  made", after Teams answered with trouble of its own three times), with **Retry** and
+  **Cancel**; when its conversation isn't on the screen, a notice says so ("Your edit in Support
+  team wasn't made"). A change of a message the conversation doesn't show at the moment (an older
+  one) is listed after the messages going out. Edits, deletions and reactions go in the order
+  made, with the messages sent, and count in the same limits (50 waiting in a conversation, 500
+  in all). A message deleted in Teams meanwhile takes its changes still waiting with it, a
+  deletion Teams refused among them.
 
 ### Marked read
 

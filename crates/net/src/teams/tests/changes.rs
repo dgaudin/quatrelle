@@ -3,9 +3,11 @@
 //! The worker's changes to messages already there, against the fake Graph, the worker driven by
 //! hand: an edit as a PATCH of escaped HTML with its mentions, a deletion by the user's own path,
 //! a reaction as its emoji, each written in the copy on Graph's answer; what waits merged (a
-//! reaction taken back, a later edit, a deletion); in order with the sends; refused, unanswered,
-//! cut off; let go when Teams shows the message deleted, or the chat is left; the caps; the
-//! search; and what the log says.
+//! reaction taken back, a later edit, a deletion; what is being made left as it is); in order
+//! with the sends; refused (a deletion's 404 too), answered 5xx, unanswered (waiting for the
+//! network, never a try), cut off; let go when Teams shows the message deleted, or the chat is
+//! left; the caps, merging first; the search; a message with mentions sent and checked; and what
+//! the log says.
 
 use std::time::{Duration, Instant};
 
@@ -282,7 +284,7 @@ fn a_refused_edit_is_not_edited_and_tried_again_only_when_asked() {
 }
 
 #[test]
-fn an_edit_unanswered_is_sent_again_three_times_at_most() {
+fn an_edit_answered_5xx_is_made_again_three_times_at_most() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
     r.fake(|t| {
         t.fail_next.insert("edit".into(), 5);
@@ -307,6 +309,34 @@ fn an_edit_unanswered_is_sent_again_three_times_at_most() {
     assert_eq!(r.hits("edit"), 2);
     assert!(r.ops().is_empty());
     assert_eq!(r.kept(CHAT, OWN, T0 + MINUTE).body.plain(), "Answer lost");
+}
+
+/// Ruling 10: a change whose request gets no answer at all (the network away, the connection cut)
+/// isn't a try: it waits for the network as a send does, however long, said neither refused nor
+/// let go; the network back, each is made, once.
+#[test]
+fn a_change_without_an_answer_waits_for_the_network() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.fake(|t| {
+        t.cut_after.insert("setReaction".into(), 1_000);
+        t.cut_after.insert("edit".into(), 1_000);
+    });
+    r.op(react(CHAT, "1-1", ANAS, T0, THUMBS, true));
+    r.op(edit(CHAT, "1-2", OWN, T0 + MINUTE, "Written on the train"));
+    r.turns(Duration::from_secs(60));
+    let cuts = r.hits("setReaction");
+    assert!(cuts > 3, "tried past three times: {cuts}");
+    let states: Vec<(String, OpState, u8)> = r.ops().into_iter().map(|o| (o.local, o.state, o.tries)).collect();
+    assert_eq!(states, [("1-1".to_string(), OpState::Waiting, 0), ("1-2".to_string(), OpState::Waiting, 0)]);
+    let not_made = |o: &Outgoing| matches!(o.state, OutState::NotSent { .. });
+    assert!(r.outboxes(CHAT).iter().all(|(items, _)| !items.iter().any(not_made)), "nothing said not made: {:?}", r.outboxes(CHAT));
+    // The network back.
+    r.fake(|t| t.cut_after.clear());
+    r.turns(Duration::from_secs(15));
+    assert_eq!((r.hits("setReaction"), r.hits("edit")), (cuts + 1, 1));
+    assert!(r.ops().is_empty(), "{:?}", r.ops());
+    assert_eq!(r.kept(CHAT, ANAS, T0).reactions, [Reaction { emoji: THUMBS.into(), users: vec![ME.into()] }]);
+    assert_eq!(r.kept(CHAT, OWN, T0 + MINUTE).body.plain(), "Written on the train");
 }
 
 /// R16, R17: Graph asking to wait holds a change as it holds a send: nothing at all asked of
@@ -347,17 +377,40 @@ fn graph_asking_to_wait_holds_a_change_for_its_retry_after() {
     assert!(r.ops().is_empty());
 }
 
+/// Ruling 11: a deletion answered 404 is a refusal like any other, since Graph answers so for a
+/// chat it no longer serves the user while the others still read the message: "Not deleted" with
+/// Teams' code, nothing written in the copy, never made again unasked. Deleted after all, the
+/// next read lets go of it.
 #[test]
-fn a_deletion_answered_404_is_done() {
+fn a_deletion_answered_404_is_refused_until_a_read_shows_it_deleted() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
-    r.fake(|t| t.chat_mut(CHAT).unwrap().messages.retain(|m| m.id != OWN));
+    r.fake(|t| {
+        t.not_found_next.insert("softDelete".into(), 1);
+    });
     r.op(delete(CHAT, "1-1", OWN, T0 + MINUTE));
     r.turns(Duration::from_secs(3));
     assert_eq!(r.hits("softDelete"), 1);
-    assert!(r.ops().is_empty());
-    assert!(r.outbox_said(CHAT).is_empty());
-    assert!(r.kept(CHAT, OWN, T0 + MINUTE).deleted.is_some());
+    assert_eq!(r.ops()[0].state, refused("HTTP 404 NotFound"));
+    assert_eq!(r.outbox_said(CHAT)[0].state, OutState::NotSent { reason: Unsent::Refused, code: Some("HTTP 404 NotFound".into()) });
+    assert!(r.fake(|t| t.chat(CHAT).unwrap().messages.iter().any(|m| m.id == OWN && m.deleted.is_none())), "Teams still has it");
+    let kept = r.kept(CHAT, OWN, T0 + MINUTE);
+    assert!(kept.deleted.is_none() && kept.body.plain() == "Message 1", "the copy's message isn't deleted: {kept:?}");
+    assert!(r.messages_said(CHAT).iter().all(|m| m.deleted.is_none()), "no message said deleted");
     r.turns(Duration::from_secs(30));
+    assert_eq!(r.hits("softDelete"), 1, "never again on its own");
+    // Deleted in Teams after all: the next read shows it so, and lets go of the deletion.
+    r.fake(|t| {
+        let at = NOW + 10_000;
+        t.clock = Some(at + 1_000);
+        let m = t.chat_mut(CHAT).unwrap().messages.iter_mut().find(|m| m.id == OWN).unwrap();
+        m.deleted = Some(rfc3339(at));
+        m.modified = rfc3339(at);
+    });
+    r.w.job(Job::Open { chat: Some(CHAT.into()) });
+    r.turns(Duration::from_secs(5));
+    assert!(r.kept(CHAT, OWN, T0 + MINUTE).deleted.is_some(), "read deleted");
+    assert!(r.ops().is_empty(), "{:?}", r.ops());
+    assert!(r.outbox_said(CHAT).is_empty(), "nothing lingers under it");
     assert_eq!(r.hits("softDelete"), 1);
 }
 
@@ -402,7 +455,7 @@ fn a_change_left_sending_by_a_run_cut_off_goes_again() {
     assert!(r.ops().is_empty());
     assert_eq!(r.kept(CHAT, OWN, T0 + MINUTE).body.plain(), "Cut off");
 
-    // Cut off with no answer at all: it goes again after a wait.
+    // Cut off with no answer at all: it goes again after a wait, and that wasn't a try (Ruling 10).
     r.fake(|t| {
         t.cut_after.insert("edit".into(), 1);
     });
@@ -410,7 +463,7 @@ fn a_change_left_sending_by_a_run_cut_off_goes_again() {
     r.turns(Duration::from_secs(2));
     assert_eq!(r.hits("edit"), 2);
     let ops = r.ops();
-    assert_eq!((ops[0].state.clone(), ops[0].tries), (OpState::Waiting, 1));
+    assert_eq!((ops[0].state.clone(), ops[0].tries), (OpState::Waiting, 0));
     r.turns(Duration::from_secs(13));
     assert_eq!(r.hits("edit"), 3);
     assert!(r.ops().is_empty());
@@ -525,6 +578,108 @@ fn changes_count_in_the_caps_not_in_unsent() {
     assert_eq!(took.as_deref(), Some("2-2"));
     assert!(items.last().is_some_and(|o| o.seq == 0 && o.what == OutKind::Send && o.state == too_many), "{:?}", items.last());
     assert_eq!(r.unsent(), Some(1));
+}
+
+/// Ruling 6: the caps count what the outbox will hold once merged. At 50 changes waiting in a
+/// chat one more is refused, but the same reaction again isn't (it is no more), taking back a
+/// reaction that waits is taken (49 left), and so is an edit in the place of the one waiting.
+#[test]
+fn at_the_cap_a_change_that_cancels_or_replaces_is_taken() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 60)]));
+    r.w.work_offline(true);
+    r.op(edit(CHAT, "1-0", OWN, T0 + MINUTE, "First words"));
+    for i in 2..51 {
+        let at = T0 + i * MINUTE;
+        r.op(react(CHAT, &format!("1-{i}"), &at.to_string(), at, THUMBS, true));
+    }
+    assert_eq!(r.ops().len(), 50);
+    let too_many = OutState::NotSent { reason: Unsent::TooMany, code: None };
+    let refused_now = |r: &Run| r.outbox_said(CHAT).iter().any(|o| o.seq == 0 && o.state == too_many);
+    r.op(react(CHAT, "2-1", ANAS, T0, THUMBS, true));
+    assert!(refused_now(&r), "one more is refused");
+    assert_eq!(r.ops().len(), 50);
+    let at = T0 + 3 * MINUTE;
+    r.op(react(CHAT, "2-0", &at.to_string(), at, THUMBS, true));
+    assert!(!refused_now(&r), "the same reaction again is no more: {:?}", r.outbox_said(CHAT).last());
+    assert_eq!(r.ops().len(), 50);
+    let at = T0 + 2 * MINUTE;
+    r.op(react(CHAT, "2-2", &at.to_string(), at, THUMBS, false));
+    assert!(!refused_now(&r), "a take-back is taken: {:?}", r.outbox_said(CHAT).last());
+    assert_eq!(r.ops().len(), 49);
+    assert!(r.ops().iter().all(|o| o.local != "1-2"), "the reaction waiting cancelled");
+    r.op(react(CHAT, "2-3", ANAS, T0, THUMBS, true));
+    assert_eq!(r.ops().len(), 50);
+    r.op(edit(CHAT, "2-4", OWN, T0 + MINUTE, "Second words"));
+    assert!(!refused_now(&r), "an edit in the place of one waiting is taken");
+    let ops = r.ops();
+    let edits: Vec<(&str, String)> =
+        ops.iter().filter(|o| matches!(o.what, OutKind::Edit { .. })).map(|o| (o.local.as_str(), o.body.plain())).collect();
+    assert_eq!((ops.len(), edits), (50, vec![("2-4", "Second words".to_string())]));
+}
+
+/// Merging looks at what waits only: a change being made (its request under way) is neither
+/// cancelled nor replaced by the next of its message, which is kept after it.
+#[test]
+fn merging_touches_only_what_waits() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.w.work_offline(true);
+    r.op(react(CHAT, "1-1", ANAS, T0, THUMBS, true));
+    r.op(edit(CHAT, "1-2", OWN, T0 + MINUTE, "Being made"));
+    for op in r.ops() {
+        r.w.copy.as_ref().unwrap().put_op(&OpRecord { state: OpState::Sending, ..op }).unwrap();
+    }
+    r.op(react(CHAT, "1-3", ANAS, T0, THUMBS, false));
+    r.op(edit(CHAT, "1-4", OWN, T0 + MINUTE, "After it"));
+    let locals: Vec<String> = r.ops().into_iter().map(|o| o.local).collect();
+    assert_eq!(locals, ["1-1", "1-2", "1-3", "1-4"]);
+}
+
+/// Two reactions of one kind can both wait: the "on" was being made when its take-back came
+/// (both kept), then went back to waiting (unanswered). A third click, "on", is merged with the
+/// last of them: it cancels the take-back, and the chip ends as that click left it.
+#[test]
+fn a_reaction_is_merged_with_the_last_of_its_kind_waiting() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.w.work_offline(true);
+    r.op(react(CHAT, "1-1", ANAS, T0, THUMBS, true));
+    let on = r.ops().remove(0);
+    r.w.copy.as_ref().unwrap().put_op(&OpRecord { state: OpState::Sending, ..on.clone() }).unwrap();
+    r.op(react(CHAT, "1-2", ANAS, T0, THUMBS, false));
+    r.w.copy.as_ref().unwrap().put_op(&on).unwrap();
+    let locals = |r: &Run| r.ops().into_iter().map(|o| o.local).collect::<Vec<String>>();
+    assert_eq!(locals(&r), ["1-1", "1-2"], "on then off, both waiting");
+    r.op(react(CHAT, "1-3", ANAS, T0, THUMBS, true));
+    assert_eq!(locals(&r), ["1-1"], "the take-back cancelled: the last click was on");
+    r.w.work_offline(false);
+    r.turns(Duration::from_secs(10));
+    assert_eq!(r.routes(), ["setReaction"]);
+    assert!(r.ops().is_empty());
+    assert_eq!(r.kept(CHAT, ANAS, T0).reactions, [Reaction { emoji: THUMBS.into(), users: vec![ME.into()] }]);
+}
+
+/// A message with mentions, sent by the worker: its body carries the `mentions` array its `<at>`
+/// agree with (the fake refuses them otherwise); its answer lost, the check finds it by its words
+/// as Graph reads them back, its mention among them, and it isn't posted again.
+#[test]
+fn a_message_with_mentions_goes_with_its_array_and_its_check_finds_it() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.fake(|t| {
+        t.answer_lost.insert("post".into(), 1);
+        t.lost_retry_after = Some(1);
+    });
+    let typed = Typed { text: "Ana Lima, the figures?".into(), mentions: vec![(0..8, "u-ana".into())], ..Typed::default() };
+    let (body, mentions) = teams_compose_typed(&typed);
+    r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body, mentions } });
+    r.turns(Duration::from_secs(10));
+    let posts = r.fake(|t| t.posts.clone());
+    assert_eq!(posts.len(), 1, "posted once: {posts:?}");
+    assert_eq!(posts[0].1["body"]["content"], "<p><at id=\"0\">Ana Lima</at>, the figures?</p>");
+    let mention =
+        json!({"id": 0, "mentionText": "Ana Lima", "mentioned": {"user": {"id": "u-ana", "displayName": "Ana Lima", "userIdentityType": "aadUser"}}});
+    assert_eq!(posts[0].1["mentions"], json!([mention]));
+    assert!(r.ops().is_empty(), "found sent: {:?}", r.ops());
+    let m = r.messages_said(CHAT).into_iter().rfind(|m| m.body.plain() == "Ana Lima, the figures?").expect("found, and shown");
+    assert_eq!(m.mentions.iter().map(|x| x.user_id.as_deref()).collect::<Vec<_>>(), [Some("u-ana")]);
 }
 
 #[test]

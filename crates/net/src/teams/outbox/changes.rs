@@ -10,13 +10,17 @@
 //!   reaction taken back before it went cancels it (neither goes), the same reaction twice is
 //!   kept once, a later edit replaces one waiting, a deletion drops the edits and reactions
 //!   waiting and a second deletion isn't kept. Else it is answered "Not sent" (`seq` 0).
-//! * It is made when its turn comes, written "Sending" first. Graph's 204, or a 404 for a
-//!   deletion, is done: the record goes, and the change is written in the copy at Graph's time
-//!   and said (an edit's words replace the old ones in the index, a deletion's leave it); the next
-//!   read brings Graph's own version. A change is the same however often it's made: unanswered,
-//!   answered 5xx or left "Sending" by a run cut off, it goes again, [`POSTS`] times at most, then
-//!   it is "Not sent" (couldn't be confirmed). Refused, it is "Not sent" with Teams' code, made
-//!   again only when the user asks.
+//! * It is made when its turn comes, written "Sending" first. Graph's 204 is done, and only it:
+//!   the record goes, and the change is written in the copy at Graph's time and said (an edit's
+//!   words replace the old ones in the index, a deletion's leave it); the next read brings Graph's
+//!   own version. A change is the same however often it's made: answered 5xx or left "Sending" by
+//!   a run cut off, it goes again, [`POSTS`] times at most, then it is "Not sent" (couldn't be
+//!   confirmed). Unanswered (the network away, the connection cut), that wasn't a try: it waits
+//!   for the network as a send does, and goes again once the worker's pause is over. Refused (a
+//!   deletion's 404 too: Graph answers so for a chat it no longer serves the user, while the
+//!   others still read the message), it is "Not sent" with Teams' code, nothing written in the
+//!   copy, made again only when the user asks; a read showing the message deleted lets go of it
+//!   ([`gone`]).
 //! * A reaction is never kept "Not sent": refused, unconfirmed or of a chat left, it leaves the
 //!   outbox and is said once (a `seq` 0 item), and Teams' own state stands.
 //! * A message a read shows deleted takes the changes to it still to make with it ([`gone`]).
@@ -108,7 +112,9 @@ pub(super) fn take(w: &mut Worker, chat: String, local: String, what: OutKind, b
 }
 
 /// What taking `new` does to the changes waiting of its message (in its chat, "Waiting" only):
-/// the records it lets go, and whether it is kept itself.
+/// the records it lets go, and whether it is kept itself. A reaction is weighed against the last
+/// of its kind waiting: two can wait (the first was being made when the second came, then went
+/// back to waiting), and the last says where the chip stands.
 fn merged(ops: &[OpRecord], new: &OpRecord) -> (Vec<u64>, bool) {
     let Some(message) = new.what.message() else { return (Vec::new(), true) };
     let waiting: Vec<&OpRecord> =
@@ -116,7 +122,7 @@ fn merged(ops: &[OpRecord], new: &OpRecord) -> (Vec<u64>, bool) {
     let seqs = |keep: fn(&OutKind) -> bool| waiting.iter().filter(|o| keep(&o.what)).map(|o| o.seq).collect::<Vec<u64>>();
     match &new.what {
         OutKind::React { emoji, on, .. } => {
-            let same = waiting.iter().find_map(|o| match &o.what {
+            let same = waiting.iter().rev().find_map(|o| match &o.what {
                 OutKind::React { emoji: e, on: was, .. } if same_reaction(e, emoji) => Some((o.seq, *was)),
                 _ => None,
             });
@@ -136,11 +142,11 @@ fn merged(ops: &[OpRecord], new: &OpRecord) -> (Vec<u64>, bool) {
 }
 
 /// A change made, its record written "Sending" already, on its chat's send route: done on
-/// Graph's 204 (a deletion on a 404 too: the message is gone); waiting again when Graph didn't
-/// take it (the sign-in refused, a 429, waited out whole); "Not sent" when refused (413: too
-/// long); made again when no answer said ([`POSTS`] tries in all), after the worker's pause or
-/// Graph's `Retry-After`, then "Not sent" (couldn't be confirmed). A reaction not made leaves the
-/// outbox.
+/// Graph's 204; waiting again when Graph didn't take it (the sign-in refused, a 429, waited out
+/// whole); "Not sent" when refused (any other 4xx, a deletion's 404 among them; 413: too long);
+/// made again when an answer didn't say (a 5xx: [`POSTS`] tries in all), after the worker's pause
+/// or Graph's `Retry-After`, then "Not sent" (couldn't be confirmed); waiting for the network,
+/// its tries as they were, when there was no answer at all. A reaction not made leaves the outbox.
 pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) {
     let (route, chat, me) = (Route::Send(head.key), head.chat.clone(), w.settings.object_id.clone());
     let made = match &op.what {
@@ -159,13 +165,14 @@ pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) 
     };
     let e = match made {
         Ok(()) => return done(w, &op),
-        Err(e) if matches!(op.what, OutKind::Delete { .. }) && http_code(&e) == Some(404) => return done(w, &op),
         Err(e) => e,
     };
     // Unanswered, or answered 5xx: it may have been made, and is made again (the same change).
+    // With no answer at all nothing was said of it: that wasn't a try, it waits for the network.
     let state = after_post(&e);
     let again = state == OpState::Unknown;
     op.state = match state {
+        OpState::Unknown if of_the_network(&e) => OpState::Waiting,
         OpState::Unknown => {
             op.tries = op.tries.saturating_add(1);
             if op.tries < POSTS { OpState::Waiting } else { OpState::NotSent { reason: Unsent::Unconfirmed, code: None } }
@@ -175,6 +182,7 @@ pub(super) fn make(w: &mut Worker, head: &Head, mut op: OpRecord, now: Instant) 
     let then = match &op.state {
         OpState::NotSent { .. } if matches!(op.what, OutKind::React { .. }) => "let go",
         OpState::NotSent { .. } => "not made",
+        _ if again && of_the_network(&e) => "made again once the network answers",
         _ if again => "made again after a wait",
         _ => "it waits",
     };
