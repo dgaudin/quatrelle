@@ -40,8 +40,11 @@ fn press(ctx: &egui::Context, a: &mut MailApp, k: Key, m: Modifiers) {
     }
 }
 
+/// Whether Delete asks about `n` messages: in the main window, or in the window of the message it
+/// deletes (a message's page of its own).
 fn asking(a: &MailApp, n: usize) -> bool {
-    matches!(a.ui.dialog, Some(Dialog::ConfirmDelete { count, .. }) if count == n)
+    let asked = a.ui.dialog.as_ref().or(a.ui.window_dialog.as_ref().map(|(_, d)| d));
+    matches!(asked, Some(Dialog::ConfirmDelete { count, .. }) if *count == n)
 }
 
 #[test]
@@ -118,8 +121,8 @@ fn in_the_outbox_shift_delete_is_delete() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// A message's page of its own (the browser): Shift+Delete deletes that message, asked first,
-/// not the one selected in the list; one no longer in the list isn't deleted (nor the list's).
+/// A message's page of its own (the browser): Shift+Delete deletes that message, asked first (in
+/// that page), not the one selected in the list; one no longer in the list isn't deleted (nor the list's).
 #[test]
 fn in_a_messages_own_page_shift_delete_deletes_its_message() {
     let (a, dir) = app("shift-delete-page");
@@ -146,7 +149,7 @@ fn in_a_messages_own_page_shift_delete_deletes_its_message() {
     frame(&ctx, &mut tab, vec![]);
     let said = tab.session.notices.len();
     press(&ctx, &mut tab, Key::Delete, Modifiers::SHIFT);
-    assert!(tab.ui.dialog.is_none() && kept_as(&tab, "INBOX", other), "refused");
+    assert!(tab.ui.dialog.is_none() && tab.ui.window_dialog.is_none() && kept_as(&tab, "INBOX", other), "refused");
     assert_eq!(tab.session.store.as_ref().unwrap().load_folder("sample", "Archive").unwrap().messages.len(), archived, "Archive untouched");
     assert!(tab.session.notices.len() > said, "said why");
     let _ = std::fs::remove_dir_all(dir);

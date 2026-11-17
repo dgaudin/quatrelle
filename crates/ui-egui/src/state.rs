@@ -140,6 +140,9 @@ pub struct UiState {
     pub(crate) editors: HashMap<u64, rich_edit::Editor>,
     /// The message whose window a dialog for messages belongs to (Save changes, Address Book).
     pub(crate) dialog_for: Option<u64>,
+    /// The dialog of a message's own window (Move to…, the Deleted Items question…): shown in that
+    /// window, acting on its message ([`Dialog::for_message_window`]).
+    pub(crate) window_dialog: Option<(MessageKey, Dialog)>,
     /// The system's file dialog open, and what asked for it (`app/file_dialogs.rs`).
     pub(crate) files: app::FileDialogs,
     /// The appointments and meetings open in windows of their own, each with its number, and

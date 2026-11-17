@@ -288,16 +288,7 @@ impl MailApp {
                 // Asked from an appointment's window: Options is behind it.
                 self.ui.focus_main = true;
             }
-            Action::InWindow(key, inner) => {
-                // The window's message stands in as the open one while the action runs.
-                if self.session.reading.as_ref().is_some_and(|r| r.key == key) {
-                    self.act(*inner);
-                } else if let Some(w) = self.session.windows.iter().find(|w| w.key == key).cloned() {
-                    let main = self.session.reading.replace(w);
-                    self.act(*inner);
-                    self.session.reading = main;
-                }
-            }
+            Action::InWindow(key, inner) => self.act_in_window(key, *inner),
             Action::PickAccountDataFile => {
                 if let Some(path) = self.file_answer_one(FileAsk::DataFile, Action::PickAccountDataFile)
                     && let Some(dialogs::Dialog::AddAccount(f)) = self.ui.dialog.as_mut()

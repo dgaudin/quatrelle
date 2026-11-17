@@ -25,6 +25,22 @@ pub(super) fn known_contact(ctx: &egui::Context, s: &Session, email: &str) -> Op
     card
 }
 
+/// How someone a message went to is named above it, as Outlook names them: the name its header
+/// gives, else the name of the contact saved with that address, of what the directory answered
+/// for it, or of one's own account; the address when none is known.
+pub(super) fn shown_name(ctx: &egui::Context, s: &Session, a: &EmailAddress) -> String {
+    let email = a.email.trim();
+    if !a.name.trim().is_empty() || email.is_empty() {
+        return a.display().to_string();
+    }
+    let real = |n: &str| Some(n.trim().to_string()).filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case(email));
+    known_contact(ctx, s, email)
+        .and_then(|c| real(&c.display()))
+        .or_else(|| s.directory_known(email).and_then(|d| real(&d.name)))
+        .or_else(|| s.accounts.iter().find(|x| x.config.email.trim().eq_ignore_ascii_case(email)).and_then(|x| real(&x.config.name)))
+        .unwrap_or_else(|| email.to_string())
+}
+
 /// Someone's name above a message, as a link: lit and underlined under the pointer, under its
 /// words on each line it is drawn on. A name cut by the end of a line starts after the names
 /// before it, and its rectangle spans the lines' whole width: underlined along that, it was

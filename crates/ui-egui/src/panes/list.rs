@@ -790,17 +790,7 @@ fn row_input(
         ui.separator();
         // Find related, as Outlook's: the conversation, or everything from the sender.
         ui.menu_button((widgets::menu_icon(Some(Icon::Search)), tl!("Find related")), |ui| {
-            let topic = quatrelle_engine::model::thread::base_subject(&subject);
-            let searches = [
-                ("Messages in this conversation", format!("subject:\"{}\"", topic.replace('"', ""))),
-                ("Messages from sender", format!("from:{sender}")),
-            ];
-            for (label, query) in searches {
-                if ui.button(tl!(label)).clicked() {
-                    acts.push(Action::Search(query));
-                    ui.close();
-                }
-            }
+            crate::organize::find_related(ui, &subject, &sender, acts)
         });
         crate::organize::context_items(ui, s, t, acts, flags.pinned());
         ui.separator();

@@ -308,6 +308,15 @@ impl Dialog {
         matches!(self, Dialog::SaveOnClose(_) | Dialog::LostOnClose { .. } | Dialog::UpdateOnClose(_))
     }
 
+    /// A dialog that acts on the message it was opened for: from a message's own window, it shows
+    /// there and acts on that window's message (the main window's selection left as it is).
+    pub fn for_message_window(&self) -> bool {
+        matches!(
+            self,
+            Dialog::MoveTo { .. } | Dialog::ConfirmDelete { .. } | Dialog::NewCategory { .. } | Dialog::QuickStep(_) | Dialog::Preview { .. }
+        )
+    }
+
     pub fn for_compose(&self) -> bool {
         matches!(
             self,

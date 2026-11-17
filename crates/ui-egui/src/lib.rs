@@ -298,7 +298,8 @@ pub enum Action {
     ResumeImport(String),
     /// Choose an existing data file for the account being added (its mail comes in first).
     PickAccountDataFile,
-    /// An action from a message's own window, on that message (its attachments, Save As, Print).
+    /// An action from a message's own window, on that message (its ribbon's and header's buttons,
+    /// its attachments, Save As, Print), whatever the main window has selected.
     InWindow(MessageKey, Box<Action>),
     /// Choose where to write an account's mail as an Outlook data file (a new one, by Save as).
     ExportDataFile(String),
@@ -416,6 +417,7 @@ impl MailApp {
                 compose_shown: Default::default(),
                 editors: HashMap::new(),
                 dialog_for: None,
+                window_dialog: None,
                 files: Default::default(),
                 event_windows: Vec::new(),
                 event_window_ids: 0,
