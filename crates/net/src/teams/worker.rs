@@ -32,6 +32,7 @@ use quatrelle_store::Store;
 use sha2::{Digest, Sha256};
 
 use super::backfill::{self, Backfill};
+use super::files::{self, Transfers};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
 use super::outbox::{self, Outbox};
@@ -85,6 +86,10 @@ pub(crate) struct Hooks {
     pub(crate) outside: Option<fn(&str, usize) -> Result<crate::http::Response>>,
     /// How long an outside picture is waited for, in place of the minute.
     pub(crate) outside_deadline: Option<Duration>,
+    /// Where a file opened is saved, in place of the user's own folder (`files.rs`).
+    pub(crate) files_dir: Option<std::path::PathBuf>,
+    /// The floor a transfer keeps to (bytes a second, over a window), in place of Quatrelle's.
+    pub(crate) floor: Option<(u64, Duration)>,
 }
 
 #[cfg(test)]
@@ -232,7 +237,9 @@ pub(crate) struct Worker {
     /// The cache the copy is in (its drive is what the history looks at before it downloads).
     pub(crate) store: Store,
     creds: Arc<dyn Credentials>,
-    graph: String,
+    /// Graph's address: the transfers' lanes reach this computer only when it is there too, as
+    /// the tests' servers are (`files.rs`).
+    pub(crate) graph: String,
     authority: Arc<dyn Authority>,
     /// Where the history stands (`backfill.rs`).
     pub(crate) backfill: Backfill,
@@ -243,6 +250,8 @@ pub(crate) struct Worker {
     /// The requests Graph answered, whatever the status: what tells a request cut while the
     /// network works from the network away (`outbox/held.rs`).
     pub(crate) answered: u64,
+    /// The files opened and sent: their lanes, and the files waiting (`files.rs`).
+    pub(crate) transfers: Transfers,
     #[cfg(test)]
     pub(crate) hooks: Hooks,
 }
@@ -279,6 +288,7 @@ impl Worker {
             pictures: Pictures::default(),
             outbox: Outbox::default(),
             answered: 0,
+            transfers: Transfers::default(),
             signing: None,
             sign_ins: 0,
             answers: mpsc::channel(),
@@ -328,9 +338,9 @@ impl Worker {
 
     /// When the loop looks again, a job apart: the next cadence due, a picture waiting or the next
     /// message or mark of the outbox, the time a held step may go, the end of a wait after a
-    /// failure; never at once ([`TURN`] at least). `None` when there is nothing to look at until a
-    /// job comes: switched off, signed out, or waiting to be signed in again, and no sign-in on
-    /// its way from the browser.
+    /// failure; never at once ([`TURN`] at least); soon while a transfer runs or a file waits.
+    /// `None` when there is nothing to look at until a job comes: switched off, signed out, or
+    /// waiting to be signed in again, and no sign-in on its way from the browser.
     pub(crate) fn wake(&self, now: Instant) -> Option<Instant> {
         let after = |wait: Duration| now.checked_add(wait).unwrap_or(now);
         let mut wake = None;
@@ -350,7 +360,7 @@ impl Worker {
         if self.signing.is_some() {
             wake = Some(wake.map_or(after(AWAITING), |at| at.min(after(AWAITING))));
         }
-        search::wake(self, now, wake)
+        files::wake(self, now, search::wake(self, now, wake))
     }
 
     /// A step panicked: what it was doing is given up, and nothing is asked for a wait that
@@ -391,16 +401,18 @@ impl Worker {
             Job::Retry { seq } => outbox::retry(self, seq),
             Job::Discard { seq } => outbox::discard(self, seq),
             Job::Find { chat, message } => sync::find(self, chat, message),
-            Job::File { .. } | Job::Directory { .. } | Job::Create { .. } => log::debug!("teams: not handled yet"),
+            Job::File { chat, message, created, attachment } => files::open(self, chat, message, created, attachment),
+            Job::Directory { .. } | Job::Create { .. } => log::debug!("teams: not handled yet"),
         }
     }
 
     /// One turn of the loop at `now`: a sign-in's answer taken, a slice of the search's index read
-    /// back, then, when Teams may be asked, one step of what is due. Working offline, nothing is
-    /// asked: the copy still answers the jobs.
+    /// back, the transfers' words, then, when Teams may be asked, one step of what is due. Working
+    /// offline, nothing is asked: the copy still answers the jobs.
     pub(crate) fn turn(&mut self, now: Instant) {
         self.authorized(now);
         search::load(self);
+        files::done(self, now);
         if self.offline {
             if self.polling {
                 self.status(Status::Offline);
@@ -417,11 +429,11 @@ impl Worker {
         }
     }
 
-    /// One step, a request at most: the outbox (`outbox.rs`), the presence's minute, then a picture
-    /// for the screen (unless the open chat's read is due), then whatever cadence is due
-    /// (`sync.rs`), else the history (`backfill.rs`).
+    /// One step, a request at most: the outbox (`outbox.rs`), a file to open (`files.rs`), the
+    /// presence's minute, then a picture for the screen (unless the open chat's read is due), then
+    /// whatever cadence is due (`sync.rs`), else the history (`backfill.rs`).
     pub(crate) fn tick(&mut self, now: Instant) {
-        if outbox::step(self, now) {
+        if outbox::step(self, now) || files::step(self, now) {
             return;
         }
         if pictures::presence(self, now) || (!self.limiter.due(Cadence::Open, now) && pictures::step(self, now)) {
@@ -569,7 +581,8 @@ impl Worker {
         (self.emit)(Event::Teams { event });
     }
 
-    /// Nothing more is asked of Teams: the tokens leave memory, the copy stays as it is.
+    /// Nothing more is asked of Teams: the tokens leave memory, the transfers stop, the copy stays
+    /// as it is.
     fn halt(&mut self) {
         self.polling = false;
         self.client = None;
@@ -579,6 +592,7 @@ impl Worker {
         self.sync = SyncState::default();
         self.backfill.reset();
         self.pictures.halt();
+        files::stop(self);
         self.signing = None;
         self.held = None;
         self.not_before = None;

@@ -26,9 +26,12 @@
 //!   is written and read back in slices, and the chats by their names.
 //! * `outbox`: the messages the user sends, kept in the copy and posted in order, a lost answer
 //!   checked rather than posted again, what wasn't sent said; and the chats to mark read.
+//! * `files`: a file someone shared, downloaded and saved for the user alone, and a file's bytes
+//!   sent up to OneDrive, each on a lane of its own without the token.
 
 pub(crate) mod backfill;
 pub mod check;
+pub(crate) mod files;
 pub mod graph;
 pub(crate) mod limits;
 pub(crate) mod outbox;

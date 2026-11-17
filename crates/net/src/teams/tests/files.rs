@@ -17,6 +17,37 @@ use crate::teams::graph::{
     person_of, put_range_on, search_term, transfer_url, upload_status_on,
 };
 
+/// A file someone shared, downloaded through Graph and saved for the user alone.
+mod download;
+/// A file's bytes sent up to an upload session, by the upload lane.
+mod upload;
+
+/// A folder of a test's own in the temporary folder, new and empty, removed with what it holds
+/// when the test is over.
+struct Scratch(std::path::PathBuf);
+
+impl Scratch {
+    fn new(name: &str) -> Scratch {
+        let dir = std::env::temp_dir().join(format!("quatrelle-teams-files-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Scratch(dir)
+    }
+}
+
+impl std::ops::Deref for Scratch {
+    type Target = std::path::Path;
+    fn deref(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// The signed-in user and the people of the directory, by object ids.
 const MORGAN: &str = "00000000-0000-0000-0000-0000000000a0";
 const ANA: &str = "00000000-0000-0000-0000-0000000000a1";

@@ -277,7 +277,8 @@ pub(crate) fn rfc3339(ms: i64) -> String {
 
 /// One answer: status, body, content type, where a redirect points, the fake's clock when it
 /// answered (Unix seconds, sent as `Date`) and its `Retry-After` (a 429 always says 1); or, when
-/// `cut`, none at all (the connection closed once the request is read).
+/// `cut`, none at all (the connection closed once the request is read); `stall`: its body stops
+/// after so many bytes, the connection left open.
 pub(super) struct Reply {
     pub(super) status: u16,
     pub(super) body: Vec<u8>,
@@ -286,11 +287,12 @@ pub(super) struct Reply {
     pub(super) date: Option<i64>,
     pub(super) retry_after: Option<u64>,
     pub(super) cut: bool,
+    pub(super) stall: Option<usize>,
 }
 
 impl Reply {
     fn bytes(status: u16, body: Vec<u8>, kind: &'static str) -> Self {
-        Self { status, body, kind, location: None, date: None, retry_after: None, cut: false }
+        Self { status, body, kind, location: None, date: None, retry_after: None, cut: false, stall: None }
     }
 
     fn json(status: u16, v: &Value) -> Self {
@@ -451,7 +453,6 @@ impl FakeTeams {
 
     /// One Teams request, by route name, on paths already decoded and normalized.
     fn answer(&mut self, name: &str, p: &[&str], query: &str, raw_path: &str, input: &Value, base: &str) -> Reply {
-        let not_found = || Reply::error(404, "NotFound", "Not found.");
         let q = params(query);
         if name == "me" {
             let full = json!({"id": self.me.id, "displayName": self.me.display_name, "mail": self.me.mail, "userPrincipalName": self.me.upn});
@@ -484,13 +485,8 @@ impl FakeTeams {
         if name == "createChat" {
             return self.create_chat(input, base);
         }
-        if name == "shares" || name == "download" {
-            let Some(bytes) = p.get(1).and_then(|id| self.shared_bytes(id)) else { return not_found() };
-            if name == "shares" {
-                let token = p.get(1).copied().unwrap_or_default();
-                return Reply { location: Some(format!("{base}/download/{token}")), ..Reply::bytes(302, Vec::new(), "text/plain") };
-            }
-            return Reply::bytes(200, bytes, "application/octet-stream");
+        if let Some(r) = self.share_route(name, p, base) {
+            return r;
         }
         self.chat_route(name, p, query, raw_path, input, base)
     }

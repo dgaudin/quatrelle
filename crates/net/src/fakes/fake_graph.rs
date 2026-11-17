@@ -387,6 +387,16 @@ fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str, location: O
     let _ = s.write_all(body);
 }
 
+/// An answer whose body stops after `r.stall` bytes: its head says the whole length, then nothing
+/// more comes for a minute, the connection left open (a server stalled mid-body).
+fn stalled(s: &mut impl Write, r: &teams::Reply) {
+    let head = format!("HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", r.status, r.kind, r.body.len());
+    let _ = s.write_all(head.as_bytes());
+    let _ = s.write_all(r.body.get(..r.stall.unwrap_or(0).min(r.body.len())).unwrap_or_default());
+    let _ = s.flush();
+    std::thread::sleep(std::time::Duration::from_secs(60));
+}
+
 /// Start the server; it runs until the test process ends.
 pub fn serve(data: Data) -> Server {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -436,6 +446,7 @@ pub fn serve(data: Data) -> Server {
                 match hold {
                     // No answer: the connection closes as `s` goes.
                     _ if r.cut => {}
+                    _ if r.stall.is_some() => drop(std::thread::spawn(move || stalled(&mut s, &r))),
                     Some(wait) => drop(std::thread::spawn(move || {
                         std::thread::sleep(wait);
                         respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date, r.retry_after);

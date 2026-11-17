@@ -25,7 +25,6 @@ pub const UPLOAD_FOLDER: &str = "Microsoft Teams Chat Files";
 pub(crate) const TRANSFER_SUFFIXES: [&str; 1] = [".sharepoint.com"];
 /// The bytes of one range sent to an upload session (5 MiB): a multiple of the 320 KiB OneDrive
 /// wants of every range but the last.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) const CHUNK: usize = 16 * 327_680;
 /// The longest transfer address, or file's address, taken.
 const MAX_TRANSFER_URL: usize = 8 << 10;
@@ -339,12 +338,7 @@ impl TeamsClient {
     /// servers on this computer ([`transfer_public_only`]). Its errors name the host by
     /// [`host_tail`] alone: the address carries its own authorisation, and a name a log keeps.
     pub(crate) fn transfer_stream(&self, url: &Url) -> Result<Stream> {
-        if !transfer_public_only(&self.base) {
-            return connect(url);
-        }
-        let tail = host_tail(&url.host);
-        let sock = stream::tcp_public(&url.host, url.port).map_err(|e| without_host(e, &tail))?;
-        if url.https { stream::tls(sock, &url.host).map_err(|e| without_host(e, &tail)) } else { Ok(Stream::Plain(sock)) }
+        transfer_stream_at(&self.base, url)
     }
 
     /// The first hop of a shared file's download, with the token, waited out while busy: Graph's
@@ -420,7 +414,6 @@ pub(crate) fn put_range_on<S: Read + Write>(s: &mut S, url: &Url, bytes: &[u8], 
 
 /// Where an upload stands: the next byte OneDrive expects (at most `total`), asked at the
 /// session's address without the token; a session gone is `Refused("the upload session is gone")`.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn upload_status_on<S: Read + Write>(s: &mut S, url: &Url, total: u64) -> Result<u64> {
     let resp = http::exchange(s, &Request::get(&address(url), MAX_RANGE_ANSWER), url)?;
     if resp.status != 200 {
@@ -431,7 +424,6 @@ pub(crate) fn upload_status_on<S: Read + Write>(s: &mut S, url: &Url, total: u64
 }
 
 /// Cancel an upload session at its address, without the token (one already gone is fine).
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn cancel_upload_on<S: Read + Write>(s: &mut S, url: &Url) -> Result<()> {
     let mut req = Request::get(&address(url), MAX_RANGE_ANSWER);
     req.method = "DELETE".into();
@@ -451,6 +443,17 @@ fn transfer_error(status: u16, body: &[u8]) -> NetError {
     }
 }
 
+/// [`TeamsClient::transfer_stream`] for a client whose API is at `base`, without the client (it
+/// holds the token): what the worker's transfer lanes connect with.
+pub(crate) fn transfer_stream_at(base: &str, url: &Url) -> Result<Stream> {
+    if !transfer_public_only(base) {
+        return connect(url);
+    }
+    let tail = host_tail(&url.host);
+    let sock = stream::tcp_public(&url.host, url.port).map_err(|e| without_host(e, &tail))?;
+    if url.https { stream::tls(sock, &url.host).map_err(|e| without_host(e, &tail)) } else { Ok(Stream::Plain(sock)) }
+}
+
 /// A connection's error, said without the host's name (it can carry the address's own
 /// authorisation, and a log keeps what an error says): its kind and `tail` ([`host_tail`]) only.
 pub(crate) fn without_host(e: NetError, tail: &str) -> NetError {
@@ -463,7 +466,7 @@ pub(crate) fn without_host(e: NetError, tail: &str) -> NetError {
 }
 
 /// A URL as a request names it.
-fn address(url: &Url) -> String {
+pub(crate) fn address(url: &Url) -> String {
     format!("{}{}", url.origin(), url.path)
 }
 

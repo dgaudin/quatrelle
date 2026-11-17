@@ -10,6 +10,9 @@
 //! The ranges follow OneDrive's rules: each the next expected (else 416), of one total, a multiple
 //! of 320 KiB but the last, under 60 MiB (else 400); the last makes the file (201), a name taken
 //! numbered as OneDrive does (`report 1.pdf`). A session expires after `expire_after` ranges.
+//!
+//! A file shared in a chat: its first hop (`shares`, with the token) redirects to its download
+//! (`download`, without), which serves its bytes.
 
 use super::*;
 
@@ -83,6 +86,16 @@ pub(crate) struct FakeDrive {
     pub(crate) no_guid: bool,
     /// The files made so far.
     pub(crate) made: u32,
+    /// A shared file's first hop redirects there, in place of the fake's own download address.
+    pub(crate) share_location: Option<String>,
+    /// A download answers a redirect (to itself) in place of the file: a second hop.
+    pub(crate) download_redirect: bool,
+    /// A download's body stops after this many bytes, its connection left open, saying nothing.
+    pub(crate) stall_after: Option<usize>,
+    /// An upload's status says the next byte expected is the first, whatever came: going back.
+    pub(crate) status_back: bool,
+    /// Every range is refused with this status (Graph's code `accessDenied`).
+    pub(crate) refuse_ranges: Option<u16>,
 }
 
 /// `bytes a-b/total`.
@@ -178,9 +191,30 @@ impl FakeTeams {
                 s.gone = true;
                 Reply::empty(204)
             }
-            "GET" => expecting(200, s.bytes.len() as u64),
-            _ => self.put_range(at, headers, body),
+            "GET" => expecting(200, if self.drive_files.status_back { 0 } else { s.bytes.len() as u64 }),
+            _ => match self.drive_files.refuse_ranges {
+                Some(status) => Reply::error(status, "accessDenied", "Refused, as the test asked."),
+                None => self.put_range(at, headers, body),
+            },
         }
+    }
+
+    /// A shared file's first hop (`shares`: a redirect to its download, or to `share_location`)
+    /// and its download (`download`: its bytes, a redirect again, or a body that stalls); `None`
+    /// for the other routes.
+    pub(super) fn share_route(&self, name: &str, p: &[&str], base: &str) -> Option<Reply> {
+        if !matches!(name, "shares" | "download") {
+            return None;
+        }
+        let Some(bytes) = p.get(1).and_then(|id| self.shared_bytes(id)) else { return Some(Reply::error(404, "NotFound", "Not found.")) };
+        let token = p.get(1).copied().unwrap_or_default();
+        let to = |at: String| Reply { location: Some(at), ..Reply::bytes(302, Vec::new(), "text/plain") };
+        let d = &self.drive_files;
+        Some(match name {
+            "shares" => to(d.share_location.clone().unwrap_or_else(|| format!("{base}/download/{token}"))),
+            _ if d.download_redirect => to(format!("{base}/download/{token}")),
+            _ => Reply { stall: d.stall_after, ..Reply::bytes(200, bytes, "application/octet-stream") },
+        })
     }
 
     fn put_range(&mut self, at: usize, headers: &[(String, String)], body: &[u8]) -> Reply {
