@@ -2254,6 +2254,7 @@ module	Conversations	会話
 	Teams didn't take your reaction in {chat}	{chat} でのリアクションは Teams に受け付けられませんでした
 	Your edit in {chat} wasn't made	{chat} での編集は反映されませんでした
 	Your deletion in {chat} wasn't made	{chat} での削除は反映されませんでした
+	Your message to the new conversation wasn't sent	新しい会話へのメッセージは送信されませんでした
 	Write a message	メッセージを入力
 	This message is too long for Teams	このメッセージは Teams には長すぎます
 	Too many messages are waiting	送信待ちのメッセージが多すぎます

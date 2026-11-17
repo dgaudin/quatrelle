@@ -30,6 +30,7 @@ mod changes;
 mod files;
 mod members;
 mod outbox;
+mod people;
 mod window;
 
 pub use announce::TeamsAnnouncement;
@@ -40,6 +41,8 @@ pub use outbox::{
     TEAMS_ATTACH_AGAIN, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY,
     TEAMS_TOO_MANY_DOWNLOADS,
 };
+pub(crate) use people::Created;
+pub use people::{TEAMS_NEEDS_NETWORK, TEAMS_NO_CALL, TEAMS_PEOPLE_KEPT, TeamsCreating, TeamsPeople};
 
 #[cfg(test)]
 pub(crate) use window::row_scans;
@@ -74,6 +77,8 @@ pub enum TeamsPage {
     SignIn(String),
     /// A chat in Teams ([`is_teams_chat_link`]).
     Chat(String),
+    /// A call in Teams ([`quatrelle_model::ical::is_teams_call_link`]).
+    Call(String),
 }
 
 /// Teams in the engine: bounded windows over the worker's copy.
@@ -160,6 +165,16 @@ pub struct TeamsState {
     /// The open chat's files asked for, the saved ones waiting for the window, the parts of the
     /// messages sent not answered for yet.
     files: files::Files,
+    /// What the directory found for the query last asked.
+    pub people: Option<TeamsPeople>,
+    /// The creation of a conversation: waited for, or not made.
+    pub creating: Option<TeamsCreating>,
+    /// The people the directory gave: only they can be added to a conversation.
+    known: people::Known,
+    /// The first message of the conversation being created, until it exists.
+    first: Option<people::FirstMessage>,
+    /// The chat a creation ended in, for the window once ([`Session::take_teams_created`]).
+    created: Option<String>,
 }
 
 impl TeamsState {
@@ -490,7 +505,6 @@ impl Session {
         }
         let signed_in = self.prefs.teams.signed_in;
         match e {
-            teams::Event::People { .. } | teams::Event::Created { .. } | teams::Event::NotCreated { .. } => {}
             teams::Event::Status { status } => self.teams_status(status),
             teams::Event::Account { name, address, object_id, tenant_id, drive_host } => {
                 if object_id.is_empty() || object_id.len() > MAX_ID || tenant_id.len() > MAX_ID {
@@ -522,6 +536,9 @@ impl Session {
             teams::Event::News { news } => self.teams_news(news),
             teams::Event::Placed { chat, message, newest } => self.teams.placed(&chat, &message, newest),
             teams::Event::File { chat, message, attachment, outcome } => self.teams_file(&chat, &message, &attachment, outcome),
+            teams::Event::People { query, people, failed } => self.teams_found_people(&query, people, failed),
+            teams::Event::Created { local, chat } => self.teams_created(&local, chat),
+            teams::Event::NotCreated { local, why, code } => self.teams_not_created(&local, why, code),
             // A picture not to be had in this run: for the window to show so, and not asked again.
             teams::Event::NoPicture { picture } => self.teams.take_no_picture(picture),
         }

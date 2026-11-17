@@ -2258,6 +2258,7 @@ module	Conversations	交談
 	Teams didn't take your reaction in {chat}	Teams 未接受你在 {chat} 中的回應
 	Your edit in {chat} wasn't made	你在 {chat} 中的編輯未完成
 	Your deletion in {chat} wasn't made	你在 {chat} 中的刪除未完成
+	Your message to the new conversation wasn't sent	你傳給新對話的訊息未傳送
 	Write a message	輸入訊息
 	This message is too long for Teams	此訊息對 Teams 來說太長
 	Too many messages are waiting	等待傳送的訊息太多

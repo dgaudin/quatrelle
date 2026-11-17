@@ -14,6 +14,7 @@ use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
 use crate::mime::Typed;
+use crate::session::pim::Created;
 use crate::{Module, TEAMS_RANGES_MAX, TEAMS_TOO_MANY_FILES, TeamsPage};
 
 const OPTIONS: &str = "File › Options › Teams";
@@ -49,6 +50,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(ready),
         CommandSpec::new("teams.send", "Send a message", MODULE, send)
             .params(r#"{"chat": string (a listed conversation's id), "text": string ("" with files or pictures), "bold"?: [[from, to]] (byte ranges of the text, at most 1,000), "italic"?: [[from, to]] (the same), "mentions"?: [[from, to, "user id"]] (at most 50 byte ranges of the text, each a name on one line, apart: the open conversation's members of the organisation), "files"?: [string] (the full paths of files to send with it), "pictures"?: [string] (the full paths of pictures pasted, PNG or JPEG; at most 10 files and pictures together)}"#)
+            .when(ready),
+        CommandSpec::new("teams.people", "Search the directory", MODULE, people)
+            .params(r#"{"query": string (a name or an address, at most 64 characters; "" forgets the people found)}"#)
+            .when(ready),
+        CommandSpec::new("teams.create", "Start a conversation", MODULE, create)
+            .params(r#"{"people": [string] (1 to 20 user ids the directory gave, once each), "topic"?: string (a group's name), "text": string, "bold"?: [[from, to]], "italic"?: [[from, to]], "files"?: [string], "pictures"?: [string] (as teams.send's, no mentions)} (a one-to-one chat there already is opened and the message sent to it; else the conversation is created online and the message sent once it exists)"#)
+            .when(ready),
+        CommandSpec::new("teams.call", "Call", MODULE, call)
+            .params(r#"{"video"?: bool} (the open one-to-one or group conversation's other members, in Teams: its link handed to the window)"#)
             .when(ready),
         CommandSpec::new("teams.edit", "Edit a message", MODULE, edit)
             .params(r#"{"chat": string (the open conversation), "message": string (one's own message in it), "text": string, "bold"?: [[from, to]], "italic"?: [[from, to]] (as teams.send's), "mentions"?: [[from, to, "user id"]] (as teams.send's, or people the message mentions already)}"#)
@@ -332,6 +342,40 @@ fn send(s: &mut Session, v: &Value) -> CmdResult {
     let chat = id_param(v, "chat")?;
     let local = s.teams_send(chat, &typed(v)?, parts(v)?)?;
     Ok(json!({"local": local}))
+}
+
+/// The directory searched for people.
+fn people(s: &mut Session, v: &Value) -> CmdResult {
+    let asked = s.teams_people(p::req_str(v, "query")?)?;
+    Ok(json!({"asked": asked}))
+}
+
+/// A conversation started with people the directory gave, and its first message.
+fn create(s: &mut Session, v: &Value) -> CmdResult {
+    let given = v.get("people").and_then(Value::as_array).ok_or_else(|| CmdError::Params("`people` (a list of user ids) is required".into()))?;
+    if given.len() > teams::NEW_CHAT_PEOPLE {
+        return Err(CmdError::Params(format!("a conversation is with at most {} people", teams::NEW_CHAT_PEOPLE)));
+    }
+    let people = given
+        .iter()
+        .map(|u| u.as_str().filter(|u| !u.is_empty() && u.len() <= MAX_ID).map(str::to_string))
+        .collect::<Option<Vec<String>>>()
+        .ok_or_else(|| CmdError::Params("`people` are user ids".into()))?;
+    let topic = match v.get("topic") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(t)) => Some(t.as_str()),
+        Some(_) => return Err(CmdError::Params("`topic` is a string".into())),
+    };
+    Ok(match s.teams_create(&people, topic, &typed(v)?, parts(v)?)? {
+        Created::Chat { chat, local } => json!({"chat": chat, "local": local}),
+        Created::Creating { local } => json!({"creating": local}),
+    })
+}
+
+/// The open conversation called: its link handed to the window.
+fn call(s: &mut Session, v: &Value) -> CmdResult {
+    let url = s.teams_call(p::bool(v, "video").unwrap_or(false))?;
+    Ok(json!({"url": url}))
 }
 
 /// A file someone shared in the open conversation opened: asked of the worker once.

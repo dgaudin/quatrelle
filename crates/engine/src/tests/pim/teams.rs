@@ -18,6 +18,8 @@ mod find;
 mod outbox;
 /// The pages the window opens: the sign-in, a chat in Teams.
 mod pages;
+/// People searched, a conversation created, a call.
+mod people;
 /// Pictures that can't be had.
 mod pictures;
 
@@ -553,7 +555,7 @@ fn teams_commands_survive_junk_params_while_on() {
     let mut s = signed_in((0..5).map(|i| row(i, 100 - i as i64)).collect());
     s.module = Module::Conversations;
     let ids: Vec<&str> = s.registry().all().iter().map(|c| c.id).filter(|id| id.starts_with("teams.")).collect();
-    assert_eq!(ids.len(), 20, "{ids:?}");
+    assert_eq!(ids.len(), 23, "{ids:?}");
     let junk = [
         json!(null),
         json!({}),
@@ -570,6 +572,9 @@ fn teams_commands_survive_junk_params_while_on() {
         json!({"chat": "19:chat1@thread.v2", "message": ["m1"], "emoji": 5, "text": "hi", "mentions": {"a": [0, 1, "u"]}}),
         json!({"chat": "19:chat1@thread.v2", "message": "m1", "attachment": "x".repeat(10_000), "text": "", "files": ["\u{0}", 5, null], "pictures": "x"}),
         json!({"chat": "19:chat1@thread.v2", "message": "m2", "attachment": [], "text": "", "files": vec!["/a"; 1_000], "pictures": [{"path": "/a"}]}),
+        json!({"people": [null, 1, "", "\u{0}"], "topic": 5, "text": "hi", "video": "yes", "query": "x".repeat(10_000)}),
+        json!({"people": vec!["u"; 1_000], "topic": ["a"], "text": "\u{202E}", "video": [], "query": 5}),
+        json!({"people": "u", "topic": "x".repeat(10_000), "text": "x".repeat(100_000), "video": null, "files": ["\u{0}"]}),
     ];
     for _ in 0..2 {
         for id in &ids {

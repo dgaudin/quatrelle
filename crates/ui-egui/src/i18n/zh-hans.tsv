@@ -2255,6 +2255,7 @@ module	Conversations	对话
 	Teams didn't take your reaction in {chat}	Teams 未接受你在 {chat} 中的回应
 	Your edit in {chat} wasn't made	你在 {chat} 中的编辑未完成
 	Your deletion in {chat} wasn't made	你在 {chat} 中的删除未完成
+	Your message to the new conversation wasn't sent	你发给新对话的消息未发送
 	Write a message	输入消息
 	This message is too long for Teams	此消息对 Teams 来说太长
 	Too many messages are waiting	等待发送的消息太多

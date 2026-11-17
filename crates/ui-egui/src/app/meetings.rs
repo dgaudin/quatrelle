@@ -11,7 +11,7 @@
 //! leaves one line in the log ([`page_line`]): what it is, where it opened, and its link's shape
 //! ([`link_shape`]), never an id, a value or a profile's folder.
 
-use quatrelle_engine::model::ical::{is_microsoft_sign_in, is_teams_chat_link, link_shape};
+use quatrelle_engine::model::ical::{is_microsoft_sign_in, is_teams_call_link, is_teams_chat_link, link_shape};
 use quatrelle_engine::{MEETINGS_PROFILE, TeamsPage, is_profile_dir};
 
 use crate::*;
@@ -87,6 +87,7 @@ impl MailApp {
             let (url, ours) = match &page {
                 TeamsPage::SignIn(url) => (url.as_str(), is_microsoft_sign_in(url)),
                 TeamsPage::Chat(url) => (url.as_str(), is_teams_chat_link(url)),
+                TeamsPage::Call(url) => (url.as_str(), is_teams_call_link(url)),
             };
             if !ours {
                 log::warn!("{}", page_line(&page, &PageOutcome::Refused));
@@ -178,6 +179,7 @@ pub(crate) fn page_line(page: &TeamsPage, outcome: &PageOutcome) -> String {
     let (what, url) = match page {
         TeamsPage::SignIn(url) => ("the sign-in page", url),
         TeamsPage::Chat(url) => ("a chat", url),
+        TeamsPage::Call(url) => ("a call", url),
     };
     let shape = link_shape(url);
     let plain = |s: &str| s.chars().filter(|c| !c.is_control()).take(200).collect::<String>();

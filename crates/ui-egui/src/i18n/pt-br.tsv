@@ -2257,6 +2257,7 @@ module	Conversations	Conversas
 	Teams didn't take your reaction in {chat}	O Teams não aceitou sua reação em {chat}
 	Your edit in {chat} wasn't made	Sua edição em {chat} não foi aplicada
 	Your deletion in {chat} wasn't made	Sua exclusão em {chat} não foi aplicada
+	Your message to the new conversation wasn't sent	Sua mensagem para a nova conversa não foi enviada
 	Write a message	Escreva uma mensagem
 	This message is too long for Teams	Esta mensagem é longa demais para o Teams
 	Too many messages are waiting	Há mensagens demais aguardando

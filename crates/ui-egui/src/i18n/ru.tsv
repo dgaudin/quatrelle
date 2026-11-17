@@ -2257,6 +2257,7 @@ module	Conversations	Беседы
 	Teams didn't take your reaction in {chat}	Teams не принял вашу реакцию: {chat}
 	Your edit in {chat} wasn't made	Ваша правка не внесена: {chat}
 	Your deletion in {chat} wasn't made	Ваше удаление не выполнено: {chat}
+	Your message to the new conversation wasn't sent	Ваше сообщение в новую беседу не отправлено
 	Write a message	Напишите сообщение
 	This message is too long for Teams	Это сообщение слишком длинное для Teams
 	Too many messages are waiting	Слишком много сообщений ожидает отправки

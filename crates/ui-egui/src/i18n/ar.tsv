@@ -2253,6 +2253,7 @@ module	Conversations	المحادثات
 	Teams didn't take your reaction in {chat}	لم يقبل Teams تفاعلك في {chat}
 	Your edit in {chat} wasn't made	لم يُطبَّق تعديلك في {chat}
 	Your deletion in {chat} wasn't made	لم يُنفَّذ حذفك في {chat}
+	Your message to the new conversation wasn't sent	لم تُرسَل رسالتك إلى المحادثة الجديدة
 	Write a message	اكتب رسالة
 	This message is too long for Teams	هذه الرسالة طويلة جدًا على Teams
 	Too many messages are waiting	عدد الرسائل المنتظرة كبير جدًا

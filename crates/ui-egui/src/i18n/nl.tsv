@@ -2254,6 +2254,7 @@ module	Conversations	Gesprekken
 	Teams didn't take your reaction in {chat}	Teams heeft je reactie in {chat} niet aangenomen
 	Your edit in {chat} wasn't made	Je bewerking in {chat} is niet doorgevoerd
 	Your deletion in {chat} wasn't made	Je verwijdering in {chat} is niet doorgevoerd
+	Your message to the new conversation wasn't sent	Je bericht aan het nieuwe gesprek is niet verstuurd
 	Write a message	Schrijf een bericht
 	This message is too long for Teams	Dit bericht is te lang voor Teams
 	Too many messages are waiting	Er wachten te veel berichten
