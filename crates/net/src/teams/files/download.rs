@@ -155,34 +155,65 @@ fn create(dir: &Path, name: &str) -> io::Result<(File, PathBuf)> {
 }
 
 /// The name a file is saved under, the `n`-th tried: `name` made safe (`sanitize_filename`), its
-/// extension (up to 16 letters and digits) kept apart, ` (n)` before it from 2 on, all within
-/// `sanitize_filename`'s 180 characters, and its own safe name.
+/// extension (up to 16 letters and digits, the one the name has once made safe) kept apart, ` (n)`
+/// before it from 2 on, all within `sanitize_filename`'s 180 characters, and its own safe name.
 pub(super) fn saved_name(name: &str, n: u32) -> String {
-    let last = name.rsplit(['/', '\\']).next().unwrap_or_default();
-    let (stem, ext) = match last.rsplit_once('.') {
+    let clean = cleaned(name);
+    let (stem, ext) = match clean.rsplit_once('.') {
         Some((stem, ext))
             if !stem.trim().is_empty() && (1..=EXTENSION_MAX).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric()) =>
         {
             (stem, Some(ext))
         }
-        _ => (last, None),
+        _ => (clean.as_str(), None),
     };
     let number = if n > 1 { format!(" ({n})") } else { String::new() };
-    let room = NAME_MAX.saturating_sub(number.len()).saturating_sub(ext.map_or(0, |e| e.len() + 1));
+    let ext = ext.map(|e| format!(".{e}")).unwrap_or_default();
+    let room = NAME_MAX.saturating_sub(number.len()).saturating_sub(ext.len());
     // A cut can leave an end to trim or a name Windows keeps: made safe again, twice at most
     // (once it starts with `_`, nothing more is added).
-    let mut stem = sanitize_filename(stem);
+    let mut stem = settled(stem);
     for _ in 0..3 {
         if stem.chars().count() <= room {
             break;
         }
-        stem = sanitize_filename(&stem.chars().take(room).collect::<String>());
+        stem = settled(&stem.chars().take(room).collect::<String>());
     }
-    let whole = match ext {
-        Some(ext) => format!("{stem}{number}.{ext}"),
-        None => format!("{stem}{number}"),
-    };
-    if whole.chars().count() <= NAME_MAX && sanitize_filename(&whole) == whole { whole } else { format!("attachment{number}") }
+    let whole = format!("{stem}{number}{ext}");
+    if whole.chars().count() <= NAME_MAX && sanitize_filename(&whole) == whole { whole } else { format!("attachment{number}{ext}") }
+}
+
+/// `name`'s last part as `sanitize_filename` makes it, without its cut: each character as it keeps
+/// it (asked of it, so its rules stay its own: an invisible one dropped, a control one `_`), and its
+/// ends trimmed of white space and dots, as Windows trims them. Its extension is the saved name's.
+fn cleaned(name: &str) -> String {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or_default();
+    let kept: String = last
+        .chars()
+        .filter_map(|c| {
+            let alone = sanitize_filename(&format!("a{c}a"));
+            let mut kept = alone.chars().skip(1);
+            match (kept.next(), kept.next()) {
+                (Some(k), Some('a')) => Some(k),
+                _ => None,
+            }
+        })
+        .collect();
+    kept.trim_matches(|c: char| c.is_whitespace() || c == '.').to_string()
+}
+
+/// `s` made safe until it is its own safe name (`sanitize_filename` trims its ends once: `x. .`
+/// gives `x.`, which gives `x`).
+fn settled(s: &str) -> String {
+    let mut safe = sanitize_filename(s);
+    for _ in 0..4 {
+        let again = sanitize_filename(&safe);
+        if again == safe {
+            break;
+        }
+        safe = again;
+    }
+    safe
 }
 
 #[cfg(test)]
@@ -214,5 +245,45 @@ mod tests {
         let cut = saved_name(&long, 999);
         assert!(cut.ends_with(" (999).pdf") && cut.chars().count() == NAME_MAX, "{cut}");
         assert_eq!(saved_name(&spaced, 1), "_CON.txt", "cut to its first word, a name Windows keeps");
+    }
+
+    /// H1: the extension is the one the name has once made safe: a trailing dot or space, or an
+    /// invisible character inside it, neither hides it nor puts the number after it; a control
+    /// character becomes `_`.
+    #[test]
+    fn a_hostile_end_keeps_the_extension_and_the_number_before_it() {
+        for name in ["evil.exe.", "evil.exe ", "evil.ex\u{200B}e", "evil.exe. .", "evil.exe\u{202E}", " evil.exe .."] {
+            assert_eq!(saved_name(name, 1), "evil.exe", "{name:?}");
+            assert_eq!(saved_name(name, 2), "evil (2).exe", "{name:?}");
+        }
+        let long = format!("{}.exe.", "x".repeat(250));
+        for (n, end) in [(1, ".exe"), (2, " (2).exe")] {
+            let saved = saved_name(&long, n);
+            assert!(saved.ends_with(end) && saved.chars().count() == NAME_MAX, "{n}: {saved}");
+        }
+        assert_eq!(saved_name("ev\u{7}il.exe", 2), "ev_il (2).exe");
+        assert_eq!(saved_name("evil.e\u{7}xe", 1), "evil.e_xe", "no longer an extension");
+    }
+
+    proptest::proptest! {
+        /// Any name: its own safe name, within 180 characters; and the extension of the name made
+        /// safe, when `sanitize_filename` didn't cut it, kept with the number before it.
+        #[test]
+        fn any_name_is_saved_under_its_own_safe_name(
+            name in "(\\PC|[ .\u{200B}\u{202E}\u{7}/\\\\]){0,260}(\\.[a-zA-Z0-9]{1,4})?[ .\u{200B}]{0,3}",
+            n in 1u32..=999,
+        ) {
+            let saved = saved_name(&name, n);
+            proptest::prop_assert_eq!(&sanitize_filename(&saved), &saved);
+            proptest::prop_assert!(saved.chars().count() <= NAME_MAX, "{}", saved.chars().count());
+            let safe = sanitize_filename(&name);
+            let ext = safe.rsplit_once('.').filter(|(stem, ext)| {
+                !stem.trim().is_empty() && (1..=EXTENSION_MAX).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric())
+            });
+            if let (true, Some((_, ext))) = (safe.chars().count() < NAME_MAX, ext) {
+                let end = if n > 1 { format!(" ({n}).{ext}") } else { format!(".{ext}") };
+                proptest::prop_assert!(saved.ends_with(&end), "{:?} → {:?}, wanted the end {:?}", name, saved, end);
+            }
+        }
     }
 }

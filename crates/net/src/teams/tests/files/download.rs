@@ -164,15 +164,18 @@ fn a_hostile_name_is_saved_under_a_safe_one() {
     let dir = Scratch::new("hostile");
     let long = format!("{}.pdf", "x".repeat(250));
     let longer = format!("{}.pdf", "y".repeat(400));
-    let names: [(&str, &str); 6] = [
+    let names: [(&str, &str); 9] = [
         ("00000000-0000-0000-0000-0000000000b1", "../../x.txt"),
         ("00000000-0000-0000-0000-0000000000b2", "CON.txt"),
         ("00000000-0000-0000-0000-0000000000b3", "a\u{202E}fdp.exe"),
         ("00000000-0000-0000-0000-0000000000b4", &long),
         ("00000000-0000-0000-0000-0000000000b5", &longer),
         ("00000000-0000-0000-0000-0000000000b6", ""),
+        ("00000000-0000-0000-0000-0000000000b7", "evil.exe."),
+        ("00000000-0000-0000-0000-0000000000b8", "evil.exe "),
+        ("00000000-0000-0000-0000-0000000000b9", "re\u{7}port\u{1}.txt"),
     ];
-    let urls: Vec<String> = (1..=6).map(|i| format!("https://contoso.sharepoint.com/sites/team/f{i}.bin")).collect();
+    let urls: Vec<String> = (1..=9).map(|i| format!("https://contoso.sharepoint.com/sites/team/f{i}.bin")).collect();
     let files: Vec<(&str, &str, &str, &[u8])> = names.iter().zip(&urls).map(|((id, name), url)| (*id, *name, url.as_str(), &b"x"[..])).collect();
     let mut r = started(teams(&files), &dir);
     let mut got = Vec::new();
@@ -191,7 +194,10 @@ fn a_hostile_name_is_saved_under_a_safe_one() {
     assert_eq!((got[3].chars().count(), got[3].ends_with(".pdf")), (180, true), "{}", got[3]);
     assert!(got[4].starts_with("yyy") && got[4].chars().count() == 180, "{}", got[4]);
     assert_eq!(got[5], "attachment");
-    assert_eq!(listed(&dir).len(), 6, "nothing outside the folder: {:?}", listed(&dir));
+    assert_eq!(got[6], "evil.exe", "a trailing dot trimmed, the extension kept");
+    assert_eq!(got[7], "evil (2).exe", "the number before the extension, whatever ends the name");
+    assert_eq!(got[8], "report.txt", "a control character: none in the copy's name");
+    assert_eq!(listed(&dir).len(), 9, "nothing outside the folder: {:?}", listed(&dir));
 }
 
 /// H7: a name taken gets a number, a link planted at the next is passed over, and nothing is
