@@ -18,6 +18,7 @@ fuzz_target!(|input: &[u8]| {
     let _ = mime::html_to_text(&page);
     let _ = mime::html_links(&page);
     let _ = mime::html_images(&page);
+    let _ = mime::trackers(&page);
     let _ = mime::layout::inline_css(&page);
     let layout = mime::layout::html_layout(&page);
     // Quoted under a reply: its columns made blocks of text to edit, its HTML as it goes out

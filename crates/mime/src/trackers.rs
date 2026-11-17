@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What a message carries to learn about its reader. A newsletter's 1-by-1 picture tells its
 //! sender when (and from where) it was opened; its links go through a click counter, or carry
 //! tags (`utm_source`, `fbclid`…) that say which mailing and which reader clicked.
@@ -286,11 +287,11 @@ pub fn trackers(html: &str) -> Trackers {
         from = end + 1;
         let Some(src) = crate::html::tag_attr(tag, "src").map(|s| s.trim().replace("&amp;", "&")) else { continue };
         let Some(u) = split(&src) else { continue };
-        let tiny =
-            |a: &str| crate::html::tag_attr(tag, a).is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
-        let style = crate::html::tag_attr(tag, "style").unwrap_or("").to_ascii_lowercase().replace(' ', "");
-        let hidden = style.contains("display:none") || style.contains("width:1px") || style.contains("height:1px") || style.contains("width:0");
-        if (tiny("width") || tiny("height") || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c)))
+        // By its own properties: a signature's icon `border-width: 0px` was taken for `width:0`,
+        // and stayed hidden when the message's pictures were shown.
+        let style = crate::html::tag_attr(tag, "style").map(crate::css::declarations).unwrap_or_default();
+        let hidden = style.iter().any(|d| d.prop == "display" && d.value.trim().eq_ignore_ascii_case("none"));
+        if (crate::html::tiny_picture(tag) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c)))
             && !pictures.contains(&src)
             && pictures.len() < 50
         {
@@ -353,12 +354,23 @@ mod tests {
             <img src="https://shop.example/logo.png" width="120" alt="Shop">
             <img src="https://open.shop.example/o.gif?r=9" width="1" height="1">
             <img src="https://news.us1.list-manage.com/track/open.php?u=1" alt="">
-            <img src="https://t.example/p.png" style="display: none"></p>"#;
+            <img src="https://t.example/p.png" style="display: none">
+            <img src="https://img.shop.example/phone.png" alt="phone" width="13" style="border-width: 0px; display: block">
+            <img src="https://t.example/q.png" style="height: 1px !important; width: 1px !important">
+            <img src="https://t.example/r.png" style="WIDTH:0"></p>"#;
         let t = trackers(html);
         assert_eq!(t.links, 2);
+        // A signature's icon without a border isn't one (`border-width: 0px` was read as `width:0`):
+        // shown when the message's pictures are.
         assert_eq!(
             t.pictures,
-            ["https://open.shop.example/o.gif?r=9", "https://news.us1.list-manage.com/track/open.php?u=1", "https://t.example/p.png"]
+            [
+                "https://open.shop.example/o.gif?r=9",
+                "https://news.us1.list-manage.com/track/open.php?u=1",
+                "https://t.example/p.png",
+                "https://t.example/q.png",
+                "https://t.example/r.png"
+            ]
         );
         assert!(trackers("<p>plain</p>").is_empty());
     }

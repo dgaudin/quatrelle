@@ -451,7 +451,18 @@ pub(super) fn tag_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     None
 }
 
-/// `html` with a description on every picture that has none, except tracking pixels (1 by 1).
+/// Whether an `<img …>` tag (`tag`) is a tracking pixel or a spacer by the size it sets: 2 pixels
+/// or less across or down, by its `width` or `height`, or by its style's (`width: 1px
+/// !important`, `max-height: 0`), the property itself (a `border-width: 0` isn't one).
+pub(crate) fn tiny_picture(tag: &str) -> bool {
+    let attr = |a: &str| tag_attr(tag, a).is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
+    let style = tag_attr(tag, "style").map(css::declarations).unwrap_or_default();
+    let css = |p: &str| style.iter().rev().find(|d| d.prop == p).and_then(|d| layout::length_px(&d.value)).is_some_and(|n| n <= 2.0);
+    attr("width") || attr("height") || ["width", "height", "max-width", "max-height"].into_iter().any(css)
+}
+
+/// `html` with a description on every picture that has none, except tracking pixels and spacers
+/// ([`tiny_picture`]).
 pub(super) fn mark_pictures(html: &str) -> String {
     let html = html.replace(PICTURE_MARK, "");
     let lower = html.to_ascii_lowercase();
@@ -462,9 +473,8 @@ pub(super) fn mark_pictures(html: &str) -> String {
         let start = from + i;
         let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
         let tag = html.get(start..end).unwrap_or("");
-        let tiny = |a: &str| tag_attr(tag, a).is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
         let described = tag_attr(tag, "alt").is_some_and(|a| !a.trim().is_empty());
-        if !described && !tiny("width") && !tiny("height") && tag_attr(tag, "src").is_some_and(|s| !s.trim().is_empty()) {
+        if !described && !tiny_picture(tag) && tag_attr(tag, "src").is_some_and(|s| !s.trim().is_empty()) {
             out.push_str(html.get(last..start + 4).unwrap_or(""));
             out.push_str(&format!(" alt=\"{PICTURE_MARK}\""));
             last = start + 4;

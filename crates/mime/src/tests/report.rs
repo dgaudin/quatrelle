@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 use super::*;
 
 pub(crate) fn report() -> Vec<u8> {
@@ -73,11 +74,13 @@ fn a_generated_report_keeps_its_pictures_colours_and_titles() {
     assert_eq!(charts.map(|c| c.align), Some(layout::Align::Center), "centred charts stay centred");
 }
 
-/// Tracking pixels stay out; a picture's own description is kept; `<font size>` titles.
+/// Tracking pixels stay out, sized by their attributes or by their style (one sized so showed
+/// as `[picture]` under a signature); a picture's own description is kept; `<font size>` titles.
 #[test]
 fn pictures_without_a_description_keep_their_place() {
     let r = html_to_rich(
-        r#"<p><img src="cid:a@x"><img src="https://t.example/p.gif" width="1" height="1"><img src="cid:b@x" alt="Chart"><img alt="" src='cid:c@x'></p>"#,
+        r#"<p><img src="cid:a@x"><img src="https://t.example/p.gif" width="1" height="1"><img src="cid:b@x" alt="Chart"><img alt="" src='cid:c@x'>
+        <img style="height: 1px !important; max-height: 1px !important; width: 1px !important" src="https://t.example/q.png"></p>"#,
     );
     let imgs: Vec<(&str, &str)> = r.iter().flatten().filter_map(|s| Some((s.image.as_deref()?, s.text.as_str()))).collect();
     assert_eq!(imgs, [("cid:a@x", ""), ("cid:b@x", "Chart"), ("cid:c@x", "")]);
