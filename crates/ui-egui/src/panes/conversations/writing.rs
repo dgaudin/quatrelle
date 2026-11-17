@@ -6,8 +6,8 @@
 //! and italic runs, and of the people @mentioned when there are); Shift+Enter makes a new line.
 //! "@" offers the chat's people, mentioned by name (`mentions.rs`); ↑ in an empty box edits the
 //! user's last message, Esc lets an edit go (`editing.rs`). The paperclip beside the emoji button
-//! asks the window for files to attach, Ctrl+V with no text pasted for the clipboard's picture:
-//! they go with the message as chips over the box, sent with the text or alone (`attach.rs`).
+//! asks the window for files to attach, a screenshot pasted asks it to add the picture: they go
+//! with the message as chips over the box, sent with the text or alone (`attach.rs`).
 //! The params sent, and read back from a refusal, are `params.rs`'. These keys act where they
 //! come among the frame's events, on the text as it stood when they were pressed (what's typed
 //! after them in the same frame waits for the next), and are the box's as it stood at the
@@ -285,8 +285,9 @@ pub(crate) fn draft<'a>(c: &'a mut ConversationsUi, chat: &str) -> &'a mut ChatD
     if !c.drafts.contains_key(chat) && c.drafts.len() >= DRAFTS_MAX {
         let written = |d: &ChatDraft| !d.text.is_empty() || d.editing.is_some() || !d.parts.is_empty();
         let oldest = c.drafts.iter().min_by_key(|(_, d)| (written(d), d.used)).map(|(k, _)| k.clone());
-        if let Some(k) = oldest {
-            c.drafts.remove(&k);
+        // Its pasted pictures' files go with it.
+        if let Some(gone) = oldest.and_then(|k| c.drafts.remove(&k)) {
+            gone.parts.iter().for_each(|p| attach::let_go(&p.path));
         }
     }
     let d = c.drafts.entry(chat.to_string()).or_default();
@@ -354,9 +355,11 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
             None
         };
         let focused = ui.memory(|m| m.has_focus(id));
-        // Ctrl+V with no text pasted: the window reads the clipboard's picture (an edit takes none).
-        if focused && d.editing.is_none() && ui.input(|i| attach::pasting(&i.events)) {
-            acts.push(Action::Teams(TeamsAct::Paste { chat: chat.to_string() }));
+        // A screenshot pasted goes with the message (an edit takes none): the window writes it.
+        if focused && d.editing.is_none() {
+            for png in ui.input(|i| attach::pasted(&i.events)) {
+                acts.push(Action::Teams(TeamsAct::Paste { chat: chat.to_string(), png }));
+            }
         }
         // The offer and the edit's banner over the box, as the frame found them; what's clicked
         // in them acts once the text box has taken this frame's typing. The files and pictures

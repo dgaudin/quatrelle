@@ -8,7 +8,7 @@
 //! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are,
 //! with the box to write in at its foot (`writing.rs`: the people offered after "@", the edit of
 //! one's own message, the files and pictures going with a message, which the window picks or
-//! reads off the clipboard when the box asks: [`TeamsAct`]); a message the pointer is on offers
+//! writes when the box asks: [`TeamsAct`]); a message the pointer is on offers
 //! its bar (reactions, Copy, Edit and Delete), a deletion is asked first. Pictures are decoded on
 //! a thread of their own (`pictures.rs`).
 
@@ -39,13 +39,13 @@ pub(crate) use list::{list, list_not_drawn};
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
 pub(crate) use writing::{ChatDraft, add_files, add_picture, draft, refused};
 
-/// What a conversation's box asks of the window, which has the system's file dialog and its
-/// clipboard (`app/actions/teams.rs`): files to go with `chat`'s message, or the picture on the
-/// clipboard pasted in it.
+/// What a conversation's box asks of the window, which has the system's file dialog and writes
+/// files (`app/actions/teams.rs`): files to go with `chat`'s message, or a screenshot pasted in it
+/// (`png`, the picture egui handed over, encoded).
 #[derive(Clone, Debug)]
 pub enum TeamsAct {
     Attach { chat: String },
-    Paste { chat: String },
+    Paste { chat: String, png: Vec<u8> },
 }
 
 /// What Conversations keeps between frames.

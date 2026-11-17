@@ -10,15 +10,20 @@
 //! the user only), and goes inside the message when it's at most [`PICTURE_INLINE_MAX`], else as
 //! a file (decision 4: [`add_picture`]). What isn't taken is said under the box until the text or
 //! the parts change. An edit takes no file: nothing is added while one is under way. A send
-//! refused comes back with its parts, looked at again ([`put_back`]).
+//! refused comes back with its parts, looked at again ([`put_back`]). A pasted picture's file goes
+//! when the box lets the picture go ([`let_go`]: its cross, pushed past the cap, its draft let go);
+//! one sent stays for the worker, which keeps its bytes once it takes the message, and what is
+//! left in the folder goes at the next start (`apps/quatrelle/src/main.rs`).
 //!
 //! What is hostile here: the paths are the user's (the dialog's, or a refused command's params),
 //! each looked at when added; the worker looks again when the message's turn comes (a file
 //! changed since isn't sent). A path the engine wouldn't take (not absolute, past [`PATH_MAX`], a
 //! control character, not UTF-8, no file name) isn't taken. Names are drawn on one line, without
-//! bidi characters. The clipboard's bytes are written as they came (the worker sends a PNG or a
-//! JPEG only). What it costs is bounded: [`PARTS_MAX`] parts, [`SAID_MAX`] sentences,
-//! [`PASTED_MAX`] names tried for a picture's file.
+//! bidi characters. A screenshot pasted is the picture egui hands over, encoded as a PNG here
+//! (`png_of`, at most 12,000 pixels a side); the clipboard isn't read again. A file is removed
+//! only when it is in the folder of pictures pasted, which only the box writes. What it costs is
+//! bounded: [`PARTS_MAX`] parts, [`SAID_MAX`] sentences, [`PASTED_MAX`] names tried for a
+//! picture's file.
 
 use std::path::{Path, PathBuf};
 
@@ -148,7 +153,7 @@ pub(crate) fn add_files(d: &mut ChatDraft, paths: Vec<PathBuf>) {
     }
 }
 
-/// A picture pasted (`png`, the clipboard's), added to the message: written to a new file of the
+/// A screenshot pasted (`png`, encoded), added to the message: written to a new file of the
 /// user's own folder, a picture inside the message when it's at most [`PICTURE_INLINE_MAX`] bytes,
 /// else a file. Nothing while a message is edited.
 pub(crate) fn add_picture(d: &mut ChatDraft, png: &[u8]) {
@@ -223,6 +228,7 @@ pub(super) fn put_back(d: &mut ChatDraft, params: &Value) {
         let Some(path) = p.as_str().filter(|p| !p.is_empty() && p.len() <= PATH_MAX).map(PathBuf::from) else { continue };
         if let Err(why) = take(d, path.clone(), picture) {
             say_why(d, why, &path);
+            let_go(&path);
         }
     }
     for p in since {
@@ -231,9 +237,10 @@ pub(super) fn put_back(d: &mut ChatDraft, params: &Value) {
         }
         if d.parts.len() >= PARTS_MAX {
             say_why(d, NotTaken::Full, &p.path);
-            break;
+            let_go(&p.path);
+        } else {
+            d.parts.push(p);
         }
-        d.parts.push(p);
     }
 }
 
@@ -244,12 +251,24 @@ pub(super) fn paths(parts: &[BoxPart]) -> (Vec<String>, Vec<String>) {
     (of(false), of(true))
 }
 
-/// Whether the frame's events paste a picture: one came (`PasteImage`: egui read it off the
-/// clipboard, which held no text), or Ctrl+V (⌘V) was pressed and no text came with it.
-pub(super) fn pasting(events: &[egui::Event]) -> bool {
-    let text = events.iter().any(|e| matches!(e, egui::Event::Paste(_)));
-    let shortcut = |e: &egui::Event| matches!(e, egui::Event::Key { key: Key::V, pressed: true, modifiers, .. } if modifiers.matches_logically(Modifiers::COMMAND));
-    !text && events.iter().any(|e| matches!(e, egui::Event::PasteImage(_)) || shortcut(e))
+/// The screenshots pasted in the frame's events, as PNGs (at most [`PARTS_MAX`]): egui reads a
+/// picture off the clipboard when it holds no text and hands its pixels over (`PasteImage`, a
+/// frame later under Wayland); Ctrl+V itself never reaches the box.
+pub(super) fn pasted(events: &[egui::Event]) -> Vec<Vec<u8>> {
+    let pictures = events.iter().filter_map(|e| match e {
+        egui::Event::PasteImage(img) => crate::reading::png_of(img),
+        _ => None,
+    });
+    pictures.take(PARTS_MAX).collect()
+}
+
+/// A part the box lets go, by its path (its cross, pushed past the cap, its draft let go): the
+/// file of a picture pasted is removed with it. Nothing else refers to that file: each paste
+/// writes a new one, and the parts of a message sent aren't let go (the worker reads them).
+pub(super) fn let_go(path: &Path) {
+    if quatrelle_engine::store::scratch_dir("teams").is_some_and(|dir| path.parent() == Some(dir.as_path())) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// The parts as chips over the box, wrapped into rows (scrolling past two): each its icon (a
@@ -287,7 +306,7 @@ pub(super) fn chips(ui: &mut Ui, t: &Tokens, d: &mut ChatDraft) {
         }
     });
     if let Some(i) = remove.filter(|&i| i < d.parts.len()) {
-        d.parts.remove(i);
+        let_go(&d.parts.remove(i).path);
         changing(d);
     }
     ui.add_space(4.0);

@@ -23,12 +23,14 @@ use super::*;
 use crate::conversations::{TeamsAct, add_files, add_picture, draft};
 use crate::{Action, FileAsk};
 
-/// The file dialogs asked for, the answer the next frame gets, and the picture on the clipboard.
+/// The file dialogs asked for, the answer the next frame gets, the picture on the clipboard and
+/// how many times it was read.
 #[derive(Default)]
 struct Desk {
     asked: Vec<FileAsk>,
     answer: Option<Vec<PathBuf>>,
     clipboard: Option<Vec<u8>>,
+    reads: usize,
 }
 
 /// A desktop whose file dialog and clipboard the test answers for.
@@ -49,7 +51,9 @@ impl crate::Services for Desktop {
         self.0.borrow_mut().answer.take()
     }
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
-        self.0.borrow().clipboard.clone()
+        let mut desk = self.0.borrow_mut();
+        desk.reads += 1;
+        desk.clipboard.clone()
     }
 }
 
@@ -114,8 +118,11 @@ fn control(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<egui::Po
     Some(egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32))
 }
 
-fn ctrl_v() -> Event {
-    key(Key::V, Modifiers::COMMAND)
+/// A screenshot pasted: egui hands the window its pixels (Ctrl+V itself never reaches it).
+fn screenshot(color: egui::Color32) -> (Event, Vec<u8>) {
+    let shot = egui::ColorImage::filled([4, 3], color);
+    let png = crate::reading::png_of(&shot).expect("a PNG");
+    (Event::PasteImage(std::sync::Arc::new(shot)), png)
 }
 
 /// A message of the support chat going out, numbered `seq`, with `parts`.
@@ -197,9 +204,9 @@ fn a_chip_is_removed_by_its_cross() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// "here", a file and a picture pasted (Ctrl+V with nothing pasted as text: the window reads the
-/// clipboard's picture): Enter sends them together, the file under `files` and the picture under
-/// `pictures`; the box and its chips are empty after.
+/// "here", a file and a screenshot pasted (egui hands the window its pixels): the screenshot itself
+/// is the picture, the clipboard isn't read again; Enter sends them together, the file under
+/// `files` and the picture under `pictures`; the box and its chips are empty after.
 #[test]
 fn enter_sends_text_files_and_pictures() {
     let (mut a, dir, files, desk) = attach_app("teams-attach-send", vec![]);
@@ -208,9 +215,11 @@ fn enter_sends_text_files_and_pictures() {
     typed(&ctx, &mut a, vec![Event::Text("here".into())]);
     let report = file(&files, "report.pdf", 2048);
     add_files(draft(&mut a.ui.conversations, CHAT), vec![report.clone()]);
+    // Something else on the clipboard by now: never what goes.
     desk.borrow_mut().clipboard = Some(quatrelle_engine::sample::sample_png());
-    let asks = teams_acts(typed(&ctx, &mut a, vec![ctrl_v()]));
-    assert!(matches!(asks.as_slice(), [TeamsAct::Paste { chat }] if chat == CHAT), "{asks:?}");
+    let (paste, png) = screenshot(egui::Color32::RED);
+    let asks = teams_acts(typed(&ctx, &mut a, vec![paste]));
+    assert!(matches!(asks.as_slice(), [TeamsAct::Paste { chat, .. }] if chat == CHAT), "{asks:?}");
     for t in asks {
         a.act(Action::Teams(t));
     }
@@ -218,7 +227,8 @@ fn enter_sends_text_files_and_pictures() {
     assert_eq!(pasted.parent(), quatrelle_engine::store::scratch_dir("teams").as_deref(), "in the user's own folder");
     let name = pasted.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
     assert!(name.starts_with("pasted-") && name.ends_with(".png"), "{name}");
-    assert_eq!(std::fs::read(&pasted).ok(), Some(quatrelle_engine::sample::sample_png()), "the clipboard's picture");
+    assert_eq!(std::fs::read(&pasted).ok(), Some(png), "the screenshot pasted");
+    assert_eq!(desk.borrow().reads, 0, "the clipboard isn't read again");
     let acts = typed(&ctx, &mut a, vec![enter()]);
     assert_eq!(
         sends(&acts),
@@ -294,8 +304,8 @@ fn a_file_too_big_or_empty_isnt_added() {
 }
 
 /// A picture pasted of 1,000 bytes goes inside the message; one past 4 MiB as a file; each a file
-/// of the user's own, readable by them only. A picture egui read off the clipboard (a screenshot)
-/// asks the window for it too; text pasted is text.
+/// of the user's own, readable by them only. A screenshot pasted asks the window to add it; text
+/// pasted is text.
 #[test]
 fn a_pasted_picture_is_a_chip_and_a_big_one_goes_as_a_file() {
     let (mut a, dir, _, _) = attach_app("teams-attach-picture", vec![]);
@@ -321,10 +331,9 @@ fn a_pasted_picture_is_a_chip_and_a_big_one_goes_as_a_file() {
         sends(&acts),
         vec![json!({"chat": CHAT, "text": "", "bold": [], "italic": [], "files": [path_of(&big_path)], "pictures": [path_of(&small_path)]})]
     );
-    let shot = egui::ColorImage::filled([4, 3], egui::Color32::RED);
-    let asks = teams_acts(typed(&ctx, &mut a, vec![Event::PasteImage(std::sync::Arc::new(shot))]));
-    assert!(matches!(asks.as_slice(), [TeamsAct::Paste { chat }] if chat == CHAT), "{asks:?}");
-    let asks = teams_acts(one_frame(&ctx, &mut a, vec![ctrl_v(), Event::Paste("words".into())], 1));
+    let asks = teams_acts(typed(&ctx, &mut a, vec![screenshot(egui::Color32::RED).0]));
+    assert!(matches!(asks.as_slice(), [TeamsAct::Paste { chat, .. }] if chat == CHAT), "{asks:?}");
+    let asks = teams_acts(one_frame(&ctx, &mut a, vec![Event::Paste("words".into())], 1));
     assert!(asks.is_empty(), "{asks:?}");
     assert_eq!(in_box(&a), "words");
     let _ = (std::fs::remove_file(small_path), std::fs::remove_file(big_path));
@@ -336,7 +345,7 @@ fn a_pasted_picture_is_a_chip_and_a_big_one_goes_as_a_file() {
 #[test]
 fn no_file_while_editing_a_message() {
     let mine = said("m2", user(ME, "Riley Moreno"), NOW - 300, para(vec![words("hello")]));
-    let (mut a, dir, files, desk) = attach_app("teams-attach-editing", vec![mine]);
+    let (mut a, dir, files, _) = attach_app("teams-attach-editing", vec![mine]);
     let ctx = egui::Context::default();
     let report = file(&files, "report.pdf", 2048);
     focus_box(&ctx, &mut a);
@@ -344,13 +353,51 @@ fn no_file_while_editing_a_message() {
     typed(&ctx, &mut a, vec![key(Key::ArrowUp, Modifiers::NONE)]);
     assert_eq!(in_box(&a), "hello", "editing");
     assert!(control(&ctx, &mut a, "Attach a file").is_none(), "no paperclip while editing");
-    desk.borrow_mut().clipboard = Some(quatrelle_engine::sample::sample_png());
-    assert!(teams_acts(typed(&ctx, &mut a, vec![ctrl_v()])).is_empty(), "a paste asks nothing");
+    assert!(teams_acts(typed(&ctx, &mut a, vec![screenshot(egui::Color32::RED).0])).is_empty(), "a paste asks nothing");
     add_picture(draft(&mut a.ui.conversations, CHAT), &quatrelle_engine::sample::sample_png());
     add_files(draft(&mut a.ui.conversations, CHAT), vec![report]);
     assert!(parts(&a).is_empty(), "nothing added");
     typed(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
     assert!(control(&ctx, &mut a, "Attach a file").is_some(), "the edit let go: the paperclip is back");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A pasted picture's file goes when the box lets the picture go: its cross clicked, its draft let
+/// go when drafts are many, or pushed past ten by a send refused coming back before it.
+#[test]
+fn a_pasted_picture_let_go_leaves_no_file() {
+    let (mut a, dir, files, _) = attach_app("teams-attach-let-go", vec![]);
+    let png = quatrelle_engine::sample::sample_png();
+    let ctx = egui::Context::default();
+    // Its cross.
+    add_picture(draft(&mut a.ui.conversations, CHAT), &png);
+    let crossed = part_path(&a, 0);
+    let name = crossed.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+    settled_at(&ctx, &mut a, SIZE);
+    let cross = control(&ctx, &mut a, &format!("Remove: {name}")).expect("its cross");
+    click_pane(&ctx, &mut a, cross, SIZE);
+    assert!(parts(&a).is_empty());
+    assert!(!crossed.exists(), "its file is gone: {}", crossed.display());
+    // Pushed past ten by a refused send's ten files.
+    add_picture(draft(&mut a.ui.conversations, CHAT), &png);
+    let pushed = part_path(&a, 0);
+    a.session.teams_apply(teams::Event::Unsent { count: OUTBOX_MAX as u32 });
+    let ten: Vec<String> = (1..=10).map(|i| path_of(&file(&files, &format!("f{i:02}.txt"), 10))).collect();
+    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "ten", "files": ten})));
+    assert_eq!(parts(&a).len(), 10);
+    assert!(!pushed.exists(), "its file is gone: {}", pushed.display());
+    // Its draft let go: the drawn longest ago, once every draft holds something.
+    let old = "19:old@thread.v2";
+    add_picture(draft(&mut a.ui.conversations, old), &png);
+    let evicted = a.ui.conversations.drafts.get(old).and_then(|d| d.parts.first()).map(|p| p.path.clone()).expect("its picture");
+    for i in 0..40 {
+        draft(&mut a.ui.conversations, &format!("19:c{i:02}@thread.v2")).text = "kept".into();
+    }
+    assert!(!a.ui.conversations.drafts.contains_key(old), "its draft went");
+    assert!(!evicted.exists(), "its file is gone: {}", evicted.display());
+    for p in [crossed, pushed, evicted] {
+        let _ = std::fs::remove_file(p);
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 
