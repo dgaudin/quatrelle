@@ -2271,6 +2271,15 @@ module	Conversations	Conversaciones
 	To remove a message, delete it	Para quitar un mensaje, elimínalo
 	This message couldn't be edited	No se pudo editar este mensaje
 	Your last message can't be edited here	Tu último mensaje no se puede editar aquí
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	¿Eliminar este mensaje?
+	It will be deleted for everyone in this conversation.	Se eliminará para todos en esta conversación.
+	Editing…	Editando…
+	Deleting…	Eliminando…
+	Not edited	No editado
+	Not deleted	No eliminado
+	Teams refused this change	Teams rechazó este cambio
+	Quatrelle couldn't confirm the change was made	Quatrelle no pudo confirmar que se aplicó el cambio
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Externo)
 	{name} (App)	{name} (Aplicación)

@@ -465,6 +465,9 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
         if let Some(r) = d.caret_to.take() {
             rich_edit::set_caret(ui.ctx(), id, r.start, r.end);
             ui.memory_mut(|m| m.request_focus(id));
+            // egui holds the box's keys (Esc among them) only from the frame after the one that
+            // gave it the keyboard: that frame is drawn at once, so an Esc right after is the box's.
+            ui.ctx().request_repaint();
         }
         let key = if ui.memory(|m| m.has_focus(id)) {
             let mode = Mode::of(s, d);

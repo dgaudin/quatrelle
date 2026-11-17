@@ -162,8 +162,9 @@ impl MailApp {
                     self.ui.cal_search.query.clear();
                     continue;
                 }
-                // In Conversations, the box's first while it offers people or edits a message (it
-                // closes the offer, or lets the edit go): the search stays as it is.
+                // In Conversations, the delete question's first (a no), then the box's while it
+                // offers people or edits a message (it closes the offer, or lets the edit go): the
+                // search stays as it is.
                 if self.session.module == Module::Conversations
                     && conversations::takes_escape(ctx, &self.ui.conversations, self.session.teams.open.as_deref())
                 {

@@ -2269,6 +2269,15 @@ module	Conversations	대화
 	To remove a message, delete it	메시지를 없애려면 삭제하세요
 	This message couldn't be edited	이 메시지를 편집하지 못했습니다
 	Your last message can't be edited here	마지막 메시지는 여기에서 편집할 수 없습니다
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	이 메시지를 삭제할까요?
+	It will be deleted for everyone in this conversation.	이 대화의 모든 사람에게서 삭제됩니다.
+	Editing…	편집하는 중…
+	Deleting…	삭제하는 중…
+	Not edited	편집하지 못함
+	Not deleted	삭제하지 못함
+	Teams refused this change	Teams에서 이 변경을 거부했습니다
+	Quatrelle couldn't confirm the change was made	Quatrelle에서 변경이 적용되었는지 확인하지 못했습니다
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (외부)
 	{name} (App)	{name} (앱)

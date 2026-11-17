@@ -2266,6 +2266,15 @@ module	Conversations	المحادثات
 	To remove a message, delete it	لإزالة رسالة، احذفها
 	This message couldn't be edited	تعذّر تعديل هذه الرسالة
 	Your last message can't be edited here	لا يمكن تعديل رسالتك الأخيرة هنا
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	هل تريد حذف هذه الرسالة؟
+	It will be deleted for everyone in this conversation.	سيتم حذفها لدى جميع المشاركين في هذه المحادثة.
+	Editing…	جارٍ التعديل…
+	Deleting…	جارٍ الحذف…
+	Not edited	لم تُعدَّل
+	Not deleted	لم تُحذف
+	Teams refused this change	رفض Teams هذا التغيير
+	Quatrelle couldn't confirm the change was made	تعذّر على Quatrelle التأكد من إجراء التغيير
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (خارجي)
 	{name} (App)	{name} (تطبيق)

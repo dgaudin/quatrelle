@@ -7,7 +7,9 @@
 //! The module is shown with Teams on and signed in (File › Options › Teams); its list
 //! ([`list`]) is where the folders are in Mail, the open chat ([`chat`]) where the messages are,
 //! with the box to write in at its foot (`writing.rs`: the people offered after "@", the edit of
-//! one's own message). Pictures are decoded on a thread of their own (`pictures.rs`).
+//! one's own message); a message the pointer is on offers its bar (reactions, Copy, Edit and
+//! Delete), a deletion is asked first. Pictures are decoded on a thread of their own
+//! (`pictures.rs`).
 
 use std::collections::{HashMap, HashSet};
 
@@ -34,7 +36,7 @@ pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};
 #[cfg(test)]
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
-pub(crate) use writing::{ChatDraft, refused, takes_escape};
+pub(crate) use writing::{ChatDraft, refused};
 
 /// What Conversations keeps between frames.
 #[derive(Clone, Debug, Default)]
@@ -79,6 +81,17 @@ pub struct ConversationsUi {
     /// The open chat's message to edit in the box (its id), asked for from the message itself:
     /// loaded at the next frame when it can be edited here.
     pub edit_asked: Option<String>,
+    /// The message whose bar is shown (its id) and where the bar was at the last frame: the bar
+    /// stays while the pointer goes from the message onto it.
+    pub hovered: Option<(String, egui::Rect)>,
+    /// The user's own message asked to be deleted (its id): the question is asked over the window.
+    pub deleting: Option<String>,
+}
+
+/// Whether Esc is Conversations' own: the delete question's (a no), or the box's (it closes the
+/// offer, or lets the edit go). The window's own Esc (emptying the search) waits then.
+pub(crate) fn takes_escape(ctx: &egui::Context, c: &ConversationsUi, open: Option<&str>) -> bool {
+    c.deleting.is_some() || writing::takes_escape(ctx, c, open)
 }
 
 /// What a row's picture is: a person's (their photo once it came, else their initials), a

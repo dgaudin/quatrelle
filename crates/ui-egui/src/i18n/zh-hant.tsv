@@ -2271,6 +2271,15 @@ module	Conversations	交談
 	To remove a message, delete it	要移除訊息，請將其刪除
 	This message couldn't be edited	無法編輯此訊息
 	Your last message can't be edited here	你的最後一則訊息無法在此編輯
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	刪除此訊息？
+	It will be deleted for everyone in this conversation.	此訊息將為此對話中的所有人刪除。
+	Editing…	正在編輯…
+	Deleting…	正在刪除…
+	Not edited	未編輯
+	Not deleted	未刪除
+	Teams refused this change	Teams 拒絕了此變更
+	Quatrelle couldn't confirm the change was made	Quatrelle 無法確認變更是否已完成
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (應用程式)

@@ -2270,6 +2270,15 @@ module	Conversations	Беседы
 	To remove a message, delete it	Чтобы убрать сообщение, удалите его
 	This message couldn't be edited	Не удалось изменить это сообщение
 	Your last message can't be edited here	Ваше последнее сообщение нельзя изменить здесь
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	Удалить это сообщение?
+	It will be deleted for everyone in this conversation.	Оно будет удалено для всех участников этой беседы.
+	Editing…	Изменение…
+	Deleting…	Удаление…
+	Not edited	Не изменено
+	Not deleted	Не удалено
+	Teams refused this change	Teams отклонил это изменение
+	Quatrelle couldn't confirm the change was made	Quatrelle не удалось подтвердить, что изменение внесено
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Внешнее)
 	{name} (App)	{name} (Приложение)

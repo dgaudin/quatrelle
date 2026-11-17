@@ -628,5 +628,10 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.circle(8.0, 4.5, 0.9);
             pen.circle(11.0, 6.5, 0.9);
         }
+        Icon::Edit => {
+            // A pencil leaning right: its body, the band at its top, its point at the bottom left.
+            pen.line(&[(10.5, 2.5), (13.5, 5.5), (5.0, 14.0), (1.5, 14.5), (2.0, 11.0), (10.5, 2.5)]);
+            pen.line(&[(9.0, 4.0), (12.0, 7.0)]);
+        }
     }
 }

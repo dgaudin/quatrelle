@@ -2270,6 +2270,15 @@ module	Conversations	Conversas
 	To remove a message, delete it	Para tirar uma mensagem, exclua-a
 	This message couldn't be edited	Não foi possível editar esta mensagem
 	Your last message can't be edited here	Sua última mensagem não pode ser editada aqui
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	Excluir esta mensagem?
+	It will be deleted for everyone in this conversation.	Ela será excluída para todos nesta conversa.
+	Editing…	Editando…
+	Deleting…	Excluindo…
+	Not edited	Não editada
+	Not deleted	Não excluída
+	Teams refused this change	O Teams recusou esta alteração
+	Quatrelle couldn't confirm the change was made	O Quatrelle não conseguiu confirmar que a alteração foi aplicada
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Externo)
 	{name} (App)	{name} (Aplicativo)

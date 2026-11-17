@@ -7,15 +7,16 @@
 //! a new message of another chat to announce (each chat at its newest), then going back through
 //! the open chat 50 pages (an older page of 100 a time; B's from 10 pages back) cost B's frame no
 //! more than twice A's (and 2 ms): what a frame draws and the engine keeps is bounded by the
-//! screen and the window, never by the copy.
+//! screen and the window, never by the copy. A window full of reactions draws as fast with 50
+//! changes going out as without.
 
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use quatrelle_engine::model::pim::teams::{ChatMessage, MessageKind, News, Sender, WINDOW_MAX};
+use quatrelle_engine::model::pim::teams::{ChatMessage, MessageKind, News, OutKind, OutState, Outgoing, Reaction, Sender, WINDOW_MAX};
 
-use super::chat::{ME, TEAMS_LINK, TENANT_ID, members, para, words};
+use super::chat::{CHAT, ME, TALL, TEAMS_LINK, TENANT_ID, chat_app, group_row, members, pane, para, said, settled_at, user, words};
 use super::*;
 
 /// A copy as the generator makes it up: `rows` conversations, `total` messages in all, the first
@@ -337,4 +338,65 @@ fn opening_scrolling_and_receiving_stay_flat_at_2000_chats_and_300000_messages()
         assert!(b <= 2 * a + Duration::from_millis(2), "{what}: B {b:?} past twice A {a:?} and 2 ms; {said}");
         assert!(a < Duration::from_secs(2) && b < Duration::from_secs(2), "{what}: a frame past 2 s; {said}");
     }
+}
+
+/// A window of 500 messages, each with five reactions of 20 people: a frame of the pane with 50
+/// changes going out (edits, deletions and reactions of messages in it) costs no more than twice
+/// one without (and 2 ms), the middle of five each, their frames in turn; each under 400 ms.
+#[test]
+fn a_window_with_full_reactions_and_50_changes_going_out_draws_in_time() {
+    let message = |i: usize| {
+        let from = if i.is_multiple_of(2) { user(ME, "Riley Moreno") } else { user("u-ana", "Ana Lima") };
+        let mut m = said(&format!("m{i:03}"), from, NOW - 6000 + i as i64 * 10, para(vec![words(&format!("Line {i} of the plan"))]));
+        m.reactions = (0..5)
+            .map(|r| Reaction {
+                emoji: char::from_u32(0x1F600 + r).unwrap_or('x').to_string(),
+                users: (0..20).map(|k| format!("u-{k:02}")).collect(),
+            })
+            .collect();
+        m
+    };
+    let messages: Vec<ChatMessage> = (0..WINDOW_MAX).map(message).collect();
+    let (mut plain, plain_dir, _) = chat_app("teams-scale-chips", group_row(), TEAMS_LINK, messages.clone());
+    let (mut busy, busy_dir, _) = chat_app("teams-scale-changes", group_row(), TEAMS_LINK, messages);
+    assert_eq!(busy.session.teams.window.len(), WINDOW_MAX);
+    // The user's own messages are the even ones.
+    let changes: Vec<Outgoing> = (0..50u64)
+        .map(|k| {
+            let i = (k as usize * 10) % WINDOW_MAX;
+            let (message, created) = (format!("m{i:03}"), (NOW - 6000 + i as i64 * 10) * 1000);
+            let (what, text) = match k % 3 {
+                0 => (OutKind::Edit { message, created }, "New words of the plan"),
+                1 => (OutKind::Delete { message, created }, ""),
+                _ => (OutKind::React { message, created, emoji: "\u{1F44D}".into(), on: true }, ""),
+            };
+            let body = if text.is_empty() { teams::ChatText::default() } else { para(vec![words(text)]) };
+            let state = if k.is_multiple_of(2) { OutState::Waiting } else { OutState::NotSent { reason: teams::Unsent::Refused, code: None } };
+            Outgoing { seq: k + 1, local: format!("l{k}"), chat: CHAT.into(), body, mentions: Vec::new(), what, state }
+        })
+        .collect();
+    busy.session.teams_apply(teams::Event::Outbox { chat: CHAT.into(), items: changes, took: None });
+    assert!(busy.session.teams.outgoing.len() >= 40, "{}", busy.session.teams.outgoing.len());
+    let (plain_ctx, busy_ctx) = (egui::Context::default(), egui::Context::default());
+    settled_at(&plain_ctx, &mut plain, TALL);
+    settled_at(&busy_ctx, &mut busy, TALL);
+    let timed = |ctx: &egui::Context, a: &mut MailApp| {
+        let started = Instant::now();
+        pane(ctx, a, vec![], TALL);
+        started.elapsed()
+    };
+    let (mut without, mut with) = (Vec::new(), Vec::new());
+    for _ in 0..5 {
+        without.push(timed(&plain_ctx, &mut plain));
+        with.push(timed(&busy_ctx, &mut busy));
+    }
+    let (a, b) = (median(without.clone()), median(with.clone()));
+    let said = format!("without {a:?}, with 50 changes {b:?} (frames {without:?} and {with:?})");
+    eprintln!("teams chips: {said}");
+    let (_, texts) = pane(&busy_ctx, &mut busy, vec![], TALL);
+    assert!(texts.iter().any(|(t, _)| t == "Not edited" || t == "Editing…"), "the changes drawn: {said}");
+    assert!(b <= 2 * a + Duration::from_millis(2), "{said}");
+    assert!(without.iter().chain(&with).all(|d| *d < Duration::from_millis(400)), "a frame past 400 ms: {said}");
+    let _ = std::fs::remove_dir_all(plain_dir);
+    let _ = std::fs::remove_dir_all(busy_dir);
 }

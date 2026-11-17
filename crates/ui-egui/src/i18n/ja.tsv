@@ -2267,6 +2267,15 @@ module	Conversations	会話
 	To remove a message, delete it	メッセージを取り除くには、削除してください
 	This message couldn't be edited	このメッセージを編集できませんでした
 	Your last message can't be edited here	最後のメッセージはここでは編集できません
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	このメッセージを削除しますか?
+	It will be deleted for everyone in this conversation.	この会話のすべての参加者に対して削除されます。
+	Editing…	編集しています…
+	Deleting…	削除しています…
+	Not edited	編集されていません
+	Not deleted	削除されていません
+	Teams refused this change	Teams がこの変更を拒否しました
+	Quatrelle couldn't confirm the change was made	Quatrelle は変更が反映されたことを確認できませんでした
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (アプリ)

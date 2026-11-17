@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! What a message carries besides its words: its pictures, its files as cards, its cards, and its
-//! reactions (read only in this delivery).
+//! What a message carries besides its words: its pictures, its files as cards, and its cards (its
+//! reactions are `reactions.rs`').
 //!
 //! What is hostile here: a picture kept with the message is asked for when the message is first
 //! drawn, at most [`HOSTED_PER_MESSAGE`] (the rest stay placeholders); one from elsewhere waits
 //! for a click on "Show picture", and drawing or scrolling never asks for it. A file's link
 //! is the sender's: its host is written on the card, "Link to another site" (and no file-type
 //! icon) when it's neither the user's OneDrive nor their organisation's SharePoint, and it opens
-//! only on a click, through [`launchable_link`]. A reaction's emoji is drawn without control or
-//! bidi characters, a few characters at most.
+//! only on a click, through [`launchable_link`].
 
 use egui::{RichText, Sense, Ui, Vec2, vec2};
 use quatrelle_engine::mime::{self, AttachmentKind};
 use quatrelle_engine::model::addr::trust::url_host;
 use quatrelle_engine::model::ical::launchable_link;
-use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, HOSTED_PER_MESSAGE, MAX_REACTIONS, Picture, is_bidi, one_line};
+use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, HOSTED_PER_MESSAGE, Picture, is_bidi, one_line};
 use serde_json::json;
 
 use super::{ConversationsUi, Pane, Shown};
@@ -29,10 +28,6 @@ const THUMB: Vec2 = vec2(240.0, 180.0);
 const HELD: Vec2 = vec2(160.0, 100.0);
 /// The most pictures from elsewhere drawn of a message.
 const OUTSIDE_MAX: usize = 20;
-/// The most names a reaction's hover lists.
-const NAMES_MAX: usize = 20;
-/// The most characters of a reaction's emoji drawn.
-const EMOJI_CHARS: usize = 8;
 /// The most messages remembered as having had their pictures asked for.
 const ASKED_MAX: usize = 5_000;
 
@@ -239,37 +234,5 @@ pub(super) fn cards(p: &Pane, ui: &mut Ui, m: &ChatMessage, acts: &mut Vec<Actio
     egui::Frame::new().stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
         ui.label(RichText::new(tl!("This content can be seen in Teams")).size(12.5).color(t.dim));
         p.open_in_teams(ui, acts);
-    });
-}
-
-/// The message's reactions, as chips (the emoji and how many); hovered, who reacted (the chat's
-/// members, by name: looked up only while a chip is hovered, as the chips are drawn every frame).
-pub(super) fn reactions(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
-    if m.reactions.is_empty() {
-        return;
-    }
-    let t = &p.t;
-    ui.horizontal_wrapped(|ui| {
-        for r in m.reactions.iter().take(MAX_REACTIONS) {
-            let emoji: String = r.emoji.chars().filter(|&c| !(c.is_control() || is_bidi(c))).take(EMOJI_CHARS).collect();
-            if emoji.is_empty() {
-                continue;
-            }
-            let mine = r.users.iter().any(|u| !p.me.is_empty() && u.eq_ignore_ascii_case(p.me));
-            let stroke = egui::Stroke::new(1.0, if mine { t.accent } else { t.border });
-            let chip = egui::Frame::new()
-                .stroke(stroke)
-                .corner_radius(10)
-                .inner_margin(egui::Margin::symmetric(7, 1))
-                .show(ui, |ui| ui.label(RichText::new(format!("{emoji} {}", r.users.len())).size(12.0).color(t.text)))
-                .response;
-            if chip.hovered() {
-                let names: Vec<String> =
-                    r.users.iter().filter_map(|u| p.s.teams.member(u)).map(|x| one_line(&x.name)).filter(|n| !n.is_empty()).take(NAMES_MAX).collect();
-                if !names.is_empty() {
-                    chip.on_hover_text(names.join(", "));
-                }
-            }
-        }
     });
 }

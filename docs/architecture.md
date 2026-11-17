@@ -99,6 +99,18 @@ reports each chat's records (`Outbox`) and their count (`Unsent`); the engine sh
 chat and keeps what it sent that the worker hasn't answered for yet. Chats are marked read by the
 same worker: one mark waits for a chat, however often it's asked meanwhile.
 
+Edits, deletions and reactions (`teams.edit`, `teams.delete`, `teams.react`) are records of the
+same outbox (`net/src/teams/outbox/changes.rs`): in their chat's order with the sends, on the same
+route, counted in the same caps, what waits of one message merged first (a reaction taken back
+cancels the one waiting, a later edit replaces one waiting, a deletion drops both). A change is
+the same however often it's made, so it is made again rather than checked: unanswered or
+answered 5xx, it goes again, three times at most. On Graph's answer the worker writes it into its
+copy at once (an edit's words, a deletion leaving only the message's id, times and sender, a
+reaction's user), and the next read brings Graph's own version. A reaction not made leaves the
+outbox and is said once; a message a read shows deleted takes the changes still waiting for it.
+The engine shows each at once over its window (`session/pim/teams/changes.rs`), and only the
+user's own messages are edited or deleted.
+
 New messages are announced from the worker's word for each (`News`: who sent it as the chat's
 members name them, External or App, whether it names the user, the chat's name); the engine
 decides what is announced (`session/pim/teams/announce.rs`: the open chat on screen is marked read

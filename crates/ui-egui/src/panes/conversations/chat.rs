@@ -6,8 +6,11 @@
 //! asked for when the user scrolls to the top; opened at a search's hit, scrolled to it once and
 //! the message tinted a moment, and, the newer ones left out, "Go to the newest messages" under
 //! the last; after them, what the user sent that Teams doesn't have yet (`outgoing.rs`); and the
-//! box to write in at the foot (`super::writing`). A chat Graph won't let be read shows what the
-//! list gave of it and "Open in Teams".
+//! box to write in at the foot (`super::writing`). A message's reactions are chips under it
+//! (`reactions.rs`); the pointer on it shows its bar (`hover.rs`: reactions, Copy, Edit and
+//! Delete), a deletion is asked first; an edit going out draws its words dimmed in the bubble, a
+//! deletion dims it, and either says where it stands under it. A chat Graph won't let be read shows
+//! what the list gave of it and "Open in Teams".
 //!
 //! What is hostile here: everything drawn came from senders (names, words, links, pictures,
 //! files) or from Graph (the chat's link). "External" is drawn before the name a sender chose and
@@ -21,7 +24,9 @@
 use egui::{Align, Color32, Layout, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
-use quatrelle_engine::model::pim::teams::{ChatKind, ChatMessage, ChatRow, MessageKind, Picture, Presence, Sender, is_internal, one_line};
+use quatrelle_engine::model::pim::teams::{
+    ChatKind, ChatMessage, ChatRow, MessageKind, OutKind, Outgoing, Picture, Presence, Sender, is_internal, one_line,
+};
 use serde_json::json;
 
 use super::ConversationsUi;
@@ -30,14 +35,18 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, UiState, widgets};
 
+mod hover;
 mod outgoing;
 mod parts;
+mod reactions;
 mod text;
 
 /// How near the top (in points) the chat is scrolled for the page before to be asked for.
 const TOP: f32 = 40.0;
 /// How long the message a search found stays tinted once it's scrolled to, in seconds.
 const FOUND_TINT: f64 = 2.0;
+/// How much what goes out is dimmed (a message, an edit's words, a bubble being deleted).
+const DIMMED: f32 = 0.6;
 
 /// What every part of the pane reads.
 struct Pane<'a> {
@@ -49,6 +58,8 @@ struct Pane<'a> {
     tenant: &'a str,
     /// The chat's link, when it's one "Open in Teams" may open.
     teams_link: Option<&'a str>,
+    /// The chat takes changes: the user is still in it (and Teams lets it be read).
+    writable: bool,
 }
 
 impl Pane<'_> {
@@ -91,6 +102,8 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         c.chat_scroll_to = None;
         c.viewing = None;
         c.went_to = None;
+        c.hovered = None;
+        c.deleting = None;
     }
     // Pictures let go for room: their messages ask for them again once on screen (all of them,
     // when some let go were too many to remember).
@@ -110,7 +123,8 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         acts.push(Action::Run("teams.picture", picture_params(picture)));
     }
     let teams_link = s.teams.teams_link();
-    let pane = Pane { s, t: *tokens, pics: &teams_queue.pictures, me: &s.prefs.teams.object_id, tenant: &s.prefs.teams.tenant_id, teams_link };
+    let (me, tenant, writable) = (&s.prefs.teams.object_id, &s.prefs.teams.tenant_id, !row.left && !row.unreadable);
+    let pane = Pane { s, t: *tokens, pics: &teams_queue.pictures, me, tenant, teams_link, writable };
     egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| header(&pane, ui, row, acts));
     let line = ui.available_rect_before_wrap();
     ui.painter().hline(line.x_range(), line.top(), egui::Stroke::new(1.0, pane.t.border));
@@ -122,6 +136,7 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         messages(&pane, c, ui, open, acts);
     }
     viewer(&pane, c, ui.ctx());
+    hover::delete_question(&pane, c, ui.ctx(), acts);
 }
 
 /// `teams.picture`'s params for a picture.
@@ -418,18 +433,29 @@ fn time_line(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
 }
 
 /// One message: the user's own on the right on the accent's tint; another's on the left, the
-/// first of a row under its sender's picture and name.
+/// first of a row under its sender's picture and name. Its bubble and time are the row its bar
+/// goes over; under them its chips, and its edit or deletion going out.
 fn message(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, first: bool, acts: &mut Vec<Action>) {
     let t = &p.t;
     ui.add_space(if first { 10.0 } else { 3.0 });
     let width = (ui.available_width() * 0.7).clamp(180.0, 620.0);
+    let change = p.s.teams.change_of(&m.id);
+    // Chips take a click as the engine takes a reaction: not while the message is being deleted.
+    let writable = p.writable && !change.is_some_and(|o| matches!(o.what, OutKind::Delete { .. }));
+    let under = |c: &mut ConversationsUi, ui: &mut Ui, row: egui::Rect, acts: &mut Vec<Action>| {
+        hover::bar(p, c, ui, m, row, acts);
+        reactions::reactions(p, ui, m, writable, acts);
+        if let Some(o) = change {
+            outgoing::change_state(p, ui, o, acts);
+        }
+    };
     if p.is_own(m) {
         ui.with_layout(Layout::top_down(Align::Max), |ui| {
-            ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                bubble(p, c, ui, m, t.accent_soft, width, acts);
+            let row = ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                bubble(p, c, ui, m, change, t.accent_soft, width, acts);
                 ui.with_layout(Layout::top_down(Align::Max), |ui| time_line(p, ui, m));
             });
-            parts::reactions(p, ui, m);
+            under(c, ui, row.response.rect, acts);
         });
         return;
     }
@@ -443,11 +469,11 @@ fn message(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, firs
             if first {
                 name_line(p, ui, m);
             }
-            ui.horizontal_top(|ui| {
-                bubble(p, c, ui, m, if t.dark { t.chrome } else { Color32::from_rgb(0xF3, 0xF4, 0xF6) }, width, acts);
+            let row = ui.horizontal_top(|ui| {
+                bubble(p, c, ui, m, change, if t.dark { t.chrome } else { Color32::from_rgb(0xF3, 0xF4, 0xF6) }, width, acts);
                 ui.vertical(|ui| time_line(p, ui, m));
             });
-            parts::reactions(p, ui, m);
+            under(c, ui, row.response.rect, acts);
         });
     });
 }
@@ -489,31 +515,54 @@ fn name_line(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
     });
 }
 
-/// The bubble: the text (or what became of it), its pictures, files and cards.
+/// The bubble: the text (or what became of it), its pictures, files and cards; `change` its edit
+/// going out (its words drawn dimmed instead) or its deletion (the bubble dimmed).
 #[allow(clippy::too_many_arguments)]
-fn bubble(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, fill: Color32, width: f32, acts: &mut Vec<Action>) {
+fn bubble(
+    p: &Pane,
+    c: &mut ConversationsUi,
+    ui: &mut Ui,
+    m: &ChatMessage,
+    change: Option<&Outgoing>,
+    fill: Color32,
+    width: f32,
+    acts: &mut Vec<Action>,
+) {
     let t = &p.t;
-    egui::Frame::new().fill(fill).corner_radius(8).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
-        ui.set_max_width(width);
-        // The user's own hug the right, others' the left.
-        let align = if p.is_own(m) { Align::Max } else { Align::Min };
-        ui.with_layout(Layout::top_down(align), |ui| {
-            let said = if m.deleted.is_some() {
-                Some(tl!("This message was deleted"))
-            } else if m.unshowable {
-                Some(tl!("This message can't be shown"))
-            } else {
-                None
-            };
-            if let Some(said) = said {
-                ui.label(RichText::new(said).italics().color(t.dim));
-                return;
-            }
-            let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text };
-            text::body(ui, t, &m.body, &m.mentions, &cx, width - 20.0, acts);
-            parts::pictures(p, c, ui, m, acts);
-            parts::files(p, ui, m, width - 20.0, acts);
-            parts::cards(p, ui, m, acts);
+    let edit = change.filter(|o| matches!(o.what, OutKind::Edit { .. }));
+    let deleting = change.is_some_and(|o| matches!(o.what, OutKind::Delete { .. }));
+    ui.scope(|ui| {
+        if deleting {
+            ui.multiply_opacity(DIMMED);
+        }
+        egui::Frame::new().fill(fill).corner_radius(8).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
+            ui.set_max_width(width);
+            // The user's own hug the right, others' the left.
+            let align = if p.is_own(m) { Align::Max } else { Align::Min };
+            ui.with_layout(Layout::top_down(align), |ui| {
+                let said = if m.deleted.is_some() {
+                    Some(tl!("This message was deleted"))
+                } else if m.unshowable {
+                    Some(tl!("This message can't be shown"))
+                } else {
+                    None
+                };
+                if let Some(said) = said {
+                    ui.label(RichText::new(said).italics().color(t.dim));
+                    return;
+                }
+                let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text };
+                let (body, mentions) = edit.map_or((&m.body, &m.mentions), |o| (&o.body, &o.mentions));
+                ui.scope(|ui| {
+                    if edit.is_some() {
+                        ui.multiply_opacity(DIMMED);
+                    }
+                    text::body(ui, t, body, mentions, &cx, width - 20.0, acts);
+                });
+                parts::pictures(p, c, ui, m, acts);
+                parts::files(p, ui, m, width - 20.0, acts);
+                parts::cards(p, ui, m, acts);
+            });
         });
     });
 }

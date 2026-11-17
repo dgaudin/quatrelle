@@ -2268,6 +2268,15 @@ module	Conversations	对话
 	To remove a message, delete it	要移除消息，请将其删除
 	This message couldn't be edited	无法编辑此消息
 	Your last message can't be edited here	你的最后一条消息无法在此编辑
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	删除此消息？
+	It will be deleted for everyone in this conversation.	此消息将为此会话中的所有人删除。
+	Editing…	正在编辑…
+	Deleting…	正在删除…
+	Not edited	未编辑
+	Not deleted	未删除
+	Teams refused this change	Teams 拒绝了此更改
+	Quatrelle couldn't confirm the change was made	Quatrelle 无法确认更改是否已完成
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (外部)
 	{name} (App)	{name} (应用)

@@ -149,6 +149,8 @@ pub enum Icon {
     Rename,
     /// A painter's palette: a colour to choose.
     Color,
+    /// A pencil: edit (one's own message in Conversations).
+    Edit,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -267,6 +269,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Conversations => f!("chat"),
         Icon::Rename => f!("rename"),
         Icon::Color => f!("color"),
+        Icon::Edit => f!("edit"),
     }
 }
 
@@ -430,6 +433,7 @@ mod tests {
             Conversations,
             Rename,
             Color,
+            Edit,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

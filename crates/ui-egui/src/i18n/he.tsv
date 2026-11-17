@@ -2266,6 +2266,15 @@ module	Conversations	שיחות
 	To remove a message, delete it	כדי להסיר הודעה, מחק אותה
 	This message couldn't be edited	לא ניתן היה לערוך הודעה זו
 	Your last message can't be edited here	לא ניתן לערוך כאן את ההודעה האחרונה שלך
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	למחוק הודעה זו?
+	It will be deleted for everyone in this conversation.	היא תימחק עבור כל המשתתפים בשיחה הזו.
+	Editing…	עורך…
+	Deleting…	מוחק…
+	Not edited	לא נערכה
+	Not deleted	לא נמחקה
+	Teams refused this change	Teams דחה שינוי זה
+	Quatrelle couldn't confirm the change was made	Quatrelle לא הצליח לאשר שהשינוי בוצע
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (חיצוני)
 	{name} (App)	{name} (אפליקציה)

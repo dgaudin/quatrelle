@@ -213,7 +213,7 @@ called until you confirm there. It prints `call: opened`, or why not; it never p
 
 Once your organization has registered the application (section 1), Quatrelle reads your Teams
 chats from a copy kept on your computer, as Outlook's Cached Exchange Mode keeps mail, and you
-can reply in them.
+can reply in them, react to messages, mention people, and edit or delete your own messages.
 
 ### Options › Teams
 
@@ -268,7 +268,8 @@ switch Teams off while it is open, Quatrelle returns to Mail.
 - **Reading a conversation.** Messages are grouped by day (Today, Yesterday, then the date), edited
   ones say "(edited)", deleted ones say so, and an app's messages carry an **App** tag. A sender
   outside your organization is tagged **External** on each message. **Members** lists who is in
-  the chat. Reactions are shown, read only.
+  the chat. Reactions are chips under their message (see Reacting, mentioning, editing and
+  deleting).
 - **Open in Teams**, beside every conversation's name, opens that conversation in Teams itself, in
   the browser window Teams meetings open in (else the default browser); the chats Graph won't
   serve and the content Quatrelle can't show (cards) offer it too. Quatrelle makes the
@@ -295,9 +296,9 @@ longer in, or one Graph won't serve).
   selection bold or italic, and the emoji button opens the mail editor's emoji picker. In
   Conversations, wherever the keyboard is, the keys that send the mail being written (Ctrl+Enter,
   Alt+S) do nothing: a mail goes from Mail, or from its own window.
-- What is sent is the text as typed, its lines, bold and italic: what looks like markup goes as
-  it was written, and a web address typed isn't made a link. Mentions and pictures can't be sent
-  yet (a typed "@name" goes as text).
+- What is sent is the text as typed, its lines, bold and italic, and the people mentioned (see
+  below): what looks like markup goes as it was written, and a web address typed isn't made a
+  link. Pictures and files can't be sent yet.
 - A message longer than Teams takes (80 KB once written for Teams) stays in the box, which says
   "This message is too long for Teams". With 50 messages waiting in the conversation, or 500 in
   all, it stays there too: "Too many messages are waiting".
@@ -328,6 +329,47 @@ sent". **Retry** sends it again; **Delete** removes it. A message not sent is ne
 itself. One the outbox didn't take (too many waiting, a conversation left) is kept only while
 Quatrelle runs. When its conversation isn't on the screen, a notice says "A message to Support
 team wasn't sent". Switching Teams off keeps the messages waiting: they go when it's on again.
+
+### Reacting, mentioning, editing and deleting
+
+- **The bar.** With the pointer on a message, a bar shows over its top edge: six quick reactions
+  (👍 ❤️ 😆 😮 😢 😡), **Copy**, and on your own messages **Edit** and **Delete**. Copy puts the
+  message's words on the clipboard as plain text. In a conversation you're no longer in, the bar
+  offers Copy alone. System lines (someone added, the conversation renamed), deleted messages,
+  messages that can't be shown and a message being deleted have no bar.
+- **Reactions.** Under a message, each kind of reaction is a chip with how many reacted so; yours
+  are in the accent colour. A click on a chip adds your reaction of that kind, or takes it back;
+  hovering it lists who reacted, by the conversation's members' names. A reaction Teams names in
+  words rather than as an emoji (other than the six quick ones) is shown but can't be clicked.
+  Your reaction counts at once and goes to Teams in its turn; one clicked and taken back before
+  it went sends nothing. One Teams doesn't take is said by a notice ("Teams didn't take your
+  reaction in Support team"), and the chip goes back to what Teams has.
+- **Mentions.** Typing "@" in the box offers the conversation's members from your organization
+  (eight at most), found by the start of their name, of a word of it, or of their address: ↑ and
+  ↓ choose, Enter, Tab or a click picks, Esc closes the list. The name goes in highlighted and
+  the person is mentioned in Teams; changing its letters afterwards makes it plain text. People
+  from other organizations can't be mentioned from Quatrelle (their name can still be typed). A
+  message mentions 50 people at most.
+- **Editing.** ↑ in an empty box edits your last message in the conversation (not while newer
+  messages are left out), and **Edit** on the bar any of yours. Its words come into the box under
+  "Editing message", and what you were typing is set aside until the edit is sent or cancelled.
+  Enter sends it; Esc or Cancel cancels it. An edit that changes nothing sends nothing; one that
+  leaves nothing isn't sent ("To remove a message, delete it"). Only a message the box can hold
+  whole can be edited here: its text, bold, italic, links written as their own address, and
+  mentions. A message with a list, a quote, code, underlining, a picture or a file has no Edit
+  (↑ says "Your last message can't be edited here"): edit it in Teams.
+- **Deleting.** **Delete** on the bar asks "Delete this message?" first. Deleted, the message is
+  gone for everyone in the conversation, and Quatrelle can't bring it back. Esc or Cancel keeps it.
+- **Changes going out.** An edit shows its new words at once, dimmed, with "Editing…" under the
+  message; a deletion dims the message and says "Deleting…". While one waits its turn, **Cancel**
+  lets it go. One Teams doesn't make says "Not edited" or "Not deleted" and why ("Teams refused
+  this change", with Teams' code, or "Quatrelle couldn't confirm the change was made"), with
+  **Retry** and **Cancel**; when its conversation isn't on the screen, a notice says so ("Your
+  edit in Support team wasn't made"). A change of a message the conversation doesn't show at the
+  moment (an older one) is listed after the messages going out. Edits, deletions and reactions go
+  in the order made, with the messages sent, and count in the same limits (50 waiting in a
+  conversation, 500 in all). A message deleted in Teams meanwhile takes its changes still waiting
+  with it.
 
 ### Marked read
 
@@ -379,7 +421,7 @@ Quatrelle keeps well under Microsoft's limits, with one worker that makes one re
 
 | What | How often |
 |---|---|
-| A message you send | as soon as it may: at most one a second in each conversation |
+| A message you send, edit, delete or react to | as soon as it may: at most one a second in each conversation |
 | Marking a conversation read | when you look at it |
 | The chat open on the screen | every 3 seconds |
 | The list of chats | every 10 seconds |
@@ -394,9 +436,8 @@ or signing out stops all of it at once.
 
 ### Not yet
 
-Sending files and pictures, mentioning someone, reacting, editing or deleting a message sent,
-starting a conversation, and starting calls or meetings are not there yet: they come in later
-versions of Quatrelle. For those, use Open in Teams.
+Sending pictures and files, starting a conversation, and starting calls or meetings are not
+there yet: they come in later versions of Quatrelle. For those, use Open in Teams.
 
 ## 8. Sending the result back
 

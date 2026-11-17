@@ -2267,6 +2267,15 @@ module	Conversations	Gesprekken
 	To remove a message, delete it	Verwijder een bericht om het weg te halen
 	This message couldn't be edited	Dit bericht kon niet worden bewerkt
 	Your last message can't be edited here	Je laatste bericht kan hier niet worden bewerkt
+# Teams: reacting to a message, and one's edits and deletions going out.
+	Delete this message?	Dit bericht verwijderen?
+	It will be deleted for everyone in this conversation.	Het wordt voor iedereen in dit gesprek verwijderd.
+	Editing…	Wordt bewerkt…
+	Deleting…	Wordt verwijderd…
+	Not edited	Niet bewerkt
+	Not deleted	Niet verwijderd
+	Teams refused this change	Teams heeft deze wijziging geweigerd
+	Quatrelle couldn't confirm the change was made	Quatrelle kon niet bevestigen dat de wijziging is doorgevoerd
 # Teams: new messages announced on the desktop.
 	{name} (External)	{name} (Extern)
 	{name} (App)	{name} (App)
