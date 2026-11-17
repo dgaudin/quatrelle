@@ -258,6 +258,10 @@ impl Session {
     /// The body the reading pane waits for, got ready here and shown: a command acts on the
     /// message as shown.
     pub fn finish_pending_body(&mut self) {
+        // A window's message stands in for the pane's, whose body keeps coming.
+        if self.window_stands_in() {
+            return;
+        }
         let Some(work) = self.body.waiting.clone() else { return };
         self.body.work = None;
         if self.reading.as_ref().is_some_and(|r| r.key == work.key) {

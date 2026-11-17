@@ -53,6 +53,7 @@ pub use mailboxes::{
 };
 use mailboxes::{Contacts, bare_name, directory_key};
 pub use opening::SenderMarks;
+pub use opening::WindowScope;
 #[cfg(test)]
 pub(crate) use opening::source_lines;
 pub use opening::{BodyWork, HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, PreparedBody, SOURCE_SHOWN, STILL_DOWNLOADING, SourceView, Toward};
@@ -291,6 +292,8 @@ pub struct Session {
     pub reading: Option<Reading>,
     /// Messages opened in their own windows (double-click), oldest first.
     pub windows: Vec<Reading>,
+    /// A window's command running, on its message ([`Session::enter_window`]).
+    pub(crate) acting_for: Option<opening::Acting>,
     /// Messages' sources, each shown in a window of its own (issue #27), oldest first.
     pub sources: Vec<SourceView>,
     /// The message being written that commands act on (`compose.*`).
@@ -564,6 +567,7 @@ impl Session {
             anchor: None,
             reading: None,
             windows: Vec::new(),
+            acting_for: None,
             sources: Vec::new(),
             compose: None,
             composes: Vec::new(),

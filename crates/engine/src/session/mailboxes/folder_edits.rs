@@ -408,7 +408,8 @@ impl Session {
         self.reading = None;
         self.selection.clear();
         self.focus = None;
-        if let Some(k) = next
+        // From a window's message standing in: the main window goes back to its own.
+        if let Some(k) = next.filter(|_| !self.window_stands_in())
             && self.index_of(&k).is_some()
         {
             // Show the next message, but don't mark it read just because something was deleted.

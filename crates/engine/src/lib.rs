@@ -39,7 +39,7 @@ pub use session::{
     Resolved, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, SOURCE_SHOWN, STILL_COMING, STILL_DOWNLOADING, ScamMiss, ScamTest, ScamToday,
     Scheme, Seal, SearchClock, SearchScope, Security, SendBlock, SendCheck, Sender, SenderAddresses, SenderMarks, ServerSearch, Session, SignedBy,
     Sizes, SmimeSettings, Source, SourceView, Suggestion, UnfinishedImport, UpdateCheck, VacationState, View, WEBEX_ROOM_LINE_MAX,
-    WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, Written, directory_people, fill_name, group_entry,
+    WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, WindowScope, Written, directory_people, fill_name, group_entry,
     invite::{Invite, InviteProblem},
     is_profile_dir,
     junk::{JunkList, junk_entry},

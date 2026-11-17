@@ -12,6 +12,7 @@ mod held;
 mod prepare;
 mod selecting;
 mod source;
+mod windows;
 pub use held::{HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, STILL_DOWNLOADING};
 pub(crate) use prepare::BodyLane;
 pub use prepare::{BodyWork, PreparedBody};
@@ -19,6 +20,8 @@ pub use selecting::Toward;
 #[cfg(test)]
 pub(crate) use source::source_lines;
 pub use source::{SOURCE_SHOWN, SourceView};
+pub(crate) use windows::Acting;
+pub use windows::WindowScope;
 
 impl Session {
     /// A message file read by the network layer, to show as `file.open` shows one.

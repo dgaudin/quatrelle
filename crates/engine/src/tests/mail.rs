@@ -19,6 +19,7 @@ mod source;
 mod store_errors;
 mod synced;
 mod text_first;
+mod windows;
 
 #[test]
 fn sample_inbox_lists_newest_first_with_groups() {
