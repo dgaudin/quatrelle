@@ -43,7 +43,8 @@ mod writing;
 // The list's, the settings', the message being written's and organizing mail's own parts,
 // named here as before.
 pub use accounts::{AccountState, ImportState, UnfinishedImport, UpdateCheck, VacationState, newer_release};
-pub use changing::MarkWork;
+use changing::UNDO_DEPTH;
+pub use changing::{MarkWork, Undo};
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, arranged, flag_rank, person, size_group};
 pub(crate) use mailboxes::none_offered;
@@ -63,7 +64,7 @@ pub use prefs::{
     WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
 use searching::SearchIndex;
-pub use searching::{IndexWork, SearchClock};
+pub use searching::{IndexWork, SearchClock, SearchScope, ServerSearch};
 pub use security::{
     AccountPgp, CardSearch, DEFAULT_CAP, KnownCert, Learn, Learnt, Lock, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys,
     PersonKey, PgpCard, Reach, RevocationCheck, SMIME_DOC, ScamMiss, ScamTest, ScamToday, Scheme, Seal, Security, SignedBy, SmimeSettings,
@@ -74,36 +75,6 @@ pub use writing::{
     Rewrite, SendBlock, SendCheck, Sender, Written, add_pictures, group_entry, style_signature,
 };
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum SearchScope {
-    /// Every folder of every account (Outlook's All Mailboxes).
-    All,
-    /// Every folder of the account on view (Outlook's Current Mailbox, its default); every
-    /// account's from a unified view.
-    #[default]
-    Mailbox,
-    /// The folder on view and the folders inside it.
-    Subfolders,
-    /// The folder (or unified view) on screen.
-    Current,
-}
-
-/// A search asked of the servers ([`Session::search_server`]).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ServerSearch {
-    /// Which search it is (the jobs' `search`), so a newer one stops it.
-    pub id: u64,
-    pub query: String,
-    /// Accounts still searching.
-    pub pending: usize,
-    /// What the servers found (in their folders' lists now), shown whether or not the words are
-    /// in what's downloaded here.
-    pub found: HashSet<MessageKey>,
-    /// Why an account couldn't search.
-    pub errors: Vec<String>,
-}
-
 /// A mailbox in the folder pane: an account, or a shared mailbox one opens ([`Session::pane_sections`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaneSection {
@@ -113,32 +84,6 @@ pub struct PaneSection {
     /// A shared mailbox: its top folder's path.
     pub mailbox: Option<String>,
 }
-
-/// A change the user made that Undo can put back.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Undo {
-    /// Messages moved (deleted to Deleted Items, archived, moved): found again in `to` by their
-    /// Message-ID (a move gives them new keys) and moved back where each came from.
-    Move { account: String, to: String, back: Vec<(String, String)> },
-    /// IMAP mail archived on this computer (the worker said where each went): the copies in
-    /// Archives, each with the folder of the server it came from, to put back there.
-    Archive { account: String, back: Vec<(MessageKey, String)> },
-    /// Archived mail put back on the server, into `to` of `account`: found there again by Message-ID
-    /// (the server gave each a new number) and archived once more.
-    PutBack { account: String, to: String, ids: Vec<String> },
-    /// Flags or keywords changed: the changes that put them back.
-    Ops { account: String, ops: Vec<Op> },
-    /// Follow-ups changed (flagged, cleared, marked complete): the flag and keyword changes that
-    /// put them back, by account, and each message's due and done days as they were, by its
-    /// follow-up id.
-    FollowUp { ops: Vec<(String, Vec<Op>)>, days: Vec<(String, Option<i64>, Option<i64>)> },
-    /// An appointment moved (or one occurrence of it, `occurrence`): where it was, and whether
-    /// its guests were told (they're told of its return the same way).
-    EventMove { uid: String, occurrence: Option<i64>, start: i64, end: i64, send: bool },
-}
-
-/// Changes Undo remembers.
-const UNDO_DEPTH: usize = 20;
 
 /// The most messages open in their own windows at once.
 pub const MAX_WINDOWS: usize = 8;
@@ -883,22 +828,4 @@ pub fn parse_key(v: &Value) -> Option<MessageKey> {
 /// What a follow-up date is kept under ([`Summary::follow_up_id`]).
 fn follow_up_id(m: &Summary) -> String {
     m.follow_up_id()
-}
-
-impl SearchScope {
-    pub const ALL: [SearchScope; 4] = [SearchScope::Current, SearchScope::Subfolders, SearchScope::Mailbox, SearchScope::All];
-
-    /// Its name in commands (`search.run`'s `scope`).
-    pub fn code(self) -> &'static str {
-        match self {
-            SearchScope::All => "all",
-            SearchScope::Mailbox => "mailbox",
-            SearchScope::Subfolders => "subfolders",
-            SearchScope::Current => "current",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<SearchScope> {
-        SearchScope::ALL.into_iter().find(|s| s.code().eq_ignore_ascii_case(code))
-    }
 }
