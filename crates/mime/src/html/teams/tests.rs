@@ -7,6 +7,7 @@ use super::*;
 use proptest::strategy::Strategy;
 use quatrelle_model::pim::teams::{BlockKind, SEND_MAX};
 
+mod parts;
 mod typed;
 
 const C: &str = "19:a@thread.v2";

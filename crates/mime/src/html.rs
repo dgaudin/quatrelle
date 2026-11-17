@@ -20,7 +20,7 @@ pub use pairs::html_link_pairs;
 use rules::{RULE_MARK, mark_rules};
 pub use teams::{
     TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, Typed, html_escape, teams_compose, teams_compose_typed, teams_foreign_markup, teams_html,
-    teams_text, teams_typed, teams_write, teams_write_mentions,
+    teams_text, teams_typed, teams_write, teams_write_mentions, teams_write_parts,
 };
 pub use to_markdown::{MARKDOWN_WRITTEN_MAX, html_markdown, rich_markdown};
 

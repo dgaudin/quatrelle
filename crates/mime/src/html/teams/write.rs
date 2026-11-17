@@ -2,12 +2,13 @@
 // Copyright (c) 2026 Didier Gaudin
 //! A message typed in a chat's box written as the HTML sent to Teams: the text a paragraph a line,
 //! its bold and italic runs, escaped. The writer writes only its own tags (`p`, `b`, `i`, `u`,
-//! `s`, `code`, `br`, `at` for a mention, and `a` to a web address): never a picture, a script, a style or any other
+//! `s`, `code`, `br`, `at` for a mention, and `a` to a web address), and the places of the pictures
+//! and files going with it ([`teams_write_parts`]): never a script, a style, any other picture or
 //! attribute, whatever the text says. What it writes is capped at [`SEND_MAX`] bytes.
 
 use std::ops::Range;
 
-use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, Mention, Run, SEND_MAX};
+use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, Mention, PARTS_MAX, Run, SEND_MAX};
 
 use super::{TEAMS_RUNS, web_address};
 
@@ -95,6 +96,24 @@ pub fn teams_write_mentions(t: &ChatText, mentions: &[Mention]) -> Result<String
             w.push("&nbsp;")?;
         }
         w.push("</p>")?;
+    }
+    Ok(w.out)
+}
+
+/// [`teams_write_mentions`], then the places of what goes with the text: for each of the `pictures`
+/// (at most [`PARTS_MAX`]) a paragraph `<p><img src="../hostedContents/n/$value"></p>`, n from 1,
+/// the number Graph reads as the picture's `temporaryId`; then for each of `files` (the first
+/// [`PARTS_MAX`], their ids escaped) `<attachment id="…"></attachment>`. Without any, it is
+/// [`teams_write_mentions`]' own output. `Err` once past [`SEND_MAX`] bytes, the places counted.
+pub fn teams_write_parts(t: &ChatText, mentions: &[Mention], pictures: usize, files: &[&str]) -> Result<String, TooLong> {
+    let mut w = Writer { mentions, out: teams_write_mentions(t, mentions)? };
+    for n in 1..=pictures.min(PARTS_MAX) {
+        w.push(&format!("<p><img src=\"../hostedContents/{n}/$value\"></p>"))?;
+    }
+    for id in files.iter().take(PARTS_MAX) {
+        w.push("<attachment id=\"")?;
+        w.push(&html_escape(id))?;
+        w.push("\"></attachment>")?;
     }
     Ok(w.out)
 }
@@ -282,15 +301,18 @@ const OWN: &[&str] = &[
 
 /// The first piece of `html` that isn't the writer's own markup, if any: a `<`, `>`, `"`, `'` or
 /// `&` that doesn't begin one of its tags, a link to the web, a mention's `<at id="n">` or one of
-/// its entities. Escaped text may say `src=` or `style=`; this sees whether any attribute but a web
-/// link's `href` or a mention's `id` is written. For the tests and the fuzz targets.
+/// its entities, a picture's place (`<img src="../hostedContents/n/$value">`, n of one or two digits)
+/// and a file's (`<attachment id="…"></attachment>`, the id a GUID). Escaped text may say `src=` or `style=`; this sees whether any attribute but a web
+/// link's `href` or a mention's `id`, a picture's `src` or a file's `id` is written. For the tests and the fuzz targets.
 #[doc(hidden)]
 pub fn teams_foreign_markup(html: &str) -> Option<&str> {
     let mut rest = html;
     while let Some(i) = rest.find(['<', '>', '"', '\'', '&']) {
         let at = &rest[i..];
         let own = OWN.iter().find(|own| at.starts_with(**own)).map(|own| own.len());
-        let Some(len) = own.or_else(|| link_tag(at)).or_else(|| mention_tag(at)) else { return Some(at) };
+        let Some(len) = own.or_else(|| link_tag(at)).or_else(|| mention_tag(at)).or_else(|| picture_tag(at)).or_else(|| file_tag(at)) else {
+            return Some(at);
+        };
         rest = &at[len..];
     }
     None
@@ -310,4 +332,24 @@ fn mention_tag(at: &str) -> Option<usize> {
     let id = at.strip_prefix("<at id=\"")?;
     let digits = id.find(|c: char| !c.is_ascii_digit())?;
     (digits > 0 && id[digits..].starts_with("\">")).then(|| "<at id=\"".len() + digits + 2)
+}
+
+/// The length of the tag `at` starts with when it's a picture's place: `<img src="../hostedContents/n/$value">`,
+/// n of one or two digits.
+fn picture_tag(at: &str) -> Option<usize> {
+    let n = at.strip_prefix("<img src=\"../hostedContents/")?;
+    let digits = n.find(|c: char| !c.is_ascii_digit())?;
+    const END: &str = "/$value\">";
+    ((1..=2).contains(&digits) && n[digits..].starts_with(END)).then(|| "<img src=\"../hostedContents/".len() + digits + END.len())
+}
+
+/// The length of the tag `at` starts with when it's a file's place: `<attachment id="guid"></attachment>`,
+/// the guid in hexadecimal digits grouped 8-4-4-4-12.
+fn file_tag(at: &str) -> Option<usize> {
+    const START: &str = "<attachment id=\"";
+    const END: &str = "\"></attachment>";
+    let rest = at.strip_prefix(START)?;
+    let guid = rest.get(..36)?;
+    let shaped = guid.split('-').map(str::len).eq([8, 4, 4, 4, 12]) && guid.chars().all(|c| c == '-' || c.is_ascii_hexdigit());
+    (shaped && rest[36..].starts_with(END)).then(|| START.len() + 36 + END.len())
 }

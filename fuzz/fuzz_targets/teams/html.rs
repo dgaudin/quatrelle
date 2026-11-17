@@ -4,13 +4,13 @@
 //! and the runs within their caps, a hosted image only by an id the worker can put back in
 //! Graph's address (no `/`, not only dots), links only to the web; the same bytes as a
 //! plain-text body. Then written back as for sending, and the same bytes as typed in the box
-//! with bold and italic ranges and a mention: at most `SEND_MAX` bytes of the writer's own markup alone.
+//! with bold and italic ranges and a mention, and with the places of pictures and files: at most `SEND_MAX` bytes of the writer's own markup alone.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use quatrelle_mime::{
     TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, Typed, teams_compose_typed, teams_foreign_markup, teams_html, teams_text, teams_typed, teams_write,
-    teams_write_mentions,
+    teams_write_mentions, teams_write_parts,
 };
 use quatrelle_model::pim::teams::{MAX_ID, SEND_MAX};
 
@@ -18,7 +18,7 @@ fn check(written: Result<String, TooLong>) {
     match written {
         Ok(html) => {
             assert!(html.len() <= SEND_MAX, "{} bytes", html.len());
-            assert!(!html.contains("<img") && !html.contains("<script"), "{html}");
+            assert!(!html.contains("<script"), "{html}");
             if let Some(piece) = teams_foreign_markup(&html) {
                 panic!("not the writer's markup: {piece:?} in {html:?}");
             }
@@ -44,6 +44,9 @@ fuzz_target!(|data: &[u8]| {
     }
     assert!(teams_text(&html).plain().len() <= TEAMS_HTML_MAX);
     check(teams_write(&text));
+    // With the places of pictures and files: still only the writer's own markup.
+    let pictures = usize::from(data.first().copied().unwrap_or(0)) % 12;
+    check(teams_write_parts(&text, &[], pictures, &["00000000-0000-0000-0000-00000000000a"]));
     // The bytes as typed, with ranges that may fall off the text or inside a character.
     let (n, third) = (html.len(), html.len() / 3);
     let typed = Typed {
