@@ -199,14 +199,28 @@ fn ranges_go_in_order_without_the_token() {
         assert!(matches!(put(&s, bytes, from, total), Err(NetError::Refused(_))), "{from} {total}");
     }
 
-    // An answer that goes backwards, or past the end, ends the range in an error.
+    // An answer must fit the range it answers: the next byte past it and before the end, or the
+    // file made once the last range is in.
     let accepted = |next: &str| answer(202, &format!(r#"{{"nextExpectedRanges": ["{next}"]}}"#));
-    let (base, h) = crate::http::tests::serve(vec![accepted("0-"), accepted("20-"), accepted("11-"), answer(201, r#"{"id": "a/b"}"#)]);
+    let made = |id: &str| answer(201, &format!(r#"{{"id": "{id}"}}"#));
+    let (base, h) = crate::http::tests::serve(vec![
+        accepted("0-"),
+        accepted("15-"),
+        accepted("20-"),
+        accepted("10-"),
+        made("item-1"),
+        made("a/b"),
+        made("item-1"),
+    ]);
     let url = crate::http::Url::parse(&format!("{base}/upload/s")).unwrap();
-    assert!(put_range_on(&mut tcp(&url), &url, &[1; 10], 0, 20).is_err(), "backwards");
-    assert!(put_range_on(&mut tcp(&url), &url, &[1; 10], 0, 20).unwrap() == RangeAnswer::Next(20), "the end");
-    assert!(put_range_on(&mut tcp(&url), &url, &[1; 10], 0, 10).is_err(), "past the end");
-    assert!(matches!(put_range_on(&mut tcp(&url), &url, &[1; 10], 0, 10), Err(NetError::Protocol(_))), "an id that isn't one");
+    let put = |bytes: &[u8], total: u64| put_range_on(&mut tcp(&url), &url, bytes, 0, total);
+    assert!(put(&[1; 10], 20).is_err(), "backwards");
+    assert_eq!(put(&[1; 10], 20).unwrap(), RangeAnswer::Next(15), "later is taken");
+    assert!(put(&[1; 10], 20).is_err(), "nothing left to send");
+    assert!(matches!(put(&[1; 10], 10), Err(NetError::Protocol(m)) if m == "Graph: an upload not finished after its last range"));
+    assert!(matches!(put(&[1; 10], 20), Err(NetError::Protocol(m)) if m == "Graph: an upload finished early"));
+    assert!(matches!(put(&[1; 10], 10), Err(NetError::Protocol(_))), "an id that isn't one");
+    assert_eq!(put(&[1; 10], 10).unwrap(), RangeAnswer::Done("item-1".into()));
     let seen = h.join().unwrap();
     assert!(seen[0].starts_with("PUT /upload/s HTTP/1.1\r\n") && seen[0].contains("\r\nContent-Range: bytes 0-9/20\r\n"), "{}", seen[0]);
     assert!(seen.iter().all(|r| !r.to_ascii_lowercase().contains("authorization")));
@@ -283,6 +297,26 @@ fn a_share_is_read_only_signed_in_and_silent() {
     }
     assert!(matches!(c.invite("a/b", &to), Err(NetError::Refused(_))));
     assert_eq!(hits(&server, "invite"), 3);
+}
+
+#[test]
+fn a_partial_share_counts_what_it_doesnt_say_was_granted_as_failed() {
+    // A 207 says some recipients failed: those its answer doesn't list as granted are counted so.
+    let partial = |value: &str| answer(207, &format!(r#"{{"value": {value}}}"#));
+    let (base, h) = crate::http::tests::serve(vec![
+        answer(200, ME_JSON),
+        partial("[]"),
+        partial(r#"[{"id": "p1"}]"#),
+        partial(r#"[{"id": "p1"}, {"error": {"code": "notAllowed"}}]"#),
+        partial(r#"[{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]"#),
+        partial(r#"[1, "x", {"error": null}]"#),
+    ]);
+    let (c, _) = TeamsClient::connect(&base, "t").unwrap();
+    let to = [Recipient::Id(ANA), Recipient::Address("guest@fabrikam.example")];
+    let shared: Vec<Shared> = (0..5).map(|_| c.invite("item-1", &to).unwrap()).collect();
+    let said = |granted, failed| Shared { granted, failed };
+    assert_eq!(shared, [said(0, 2), said(1, 1), said(1, 1), said(2, 0), said(1, 1)]);
+    assert_eq!(h.join().unwrap().len(), 6);
 }
 
 #[test]
@@ -373,6 +407,31 @@ fn a_shared_files_address_comes_without_its_bytes() {
     // A download follows the same rule, before any connection to the other host.
     assert!(matches!(c.download_shared(SHARED, 1 << 20), Err(NetError::Refused(m)) if m == "not one of Microsoft's file hosts"));
     assert_eq!(h.join().unwrap().len(), 5);
+}
+
+#[test]
+fn a_redirect_that_isnt_an_address_is_refused_without_saying_it() {
+    // A download's address carries its own authorisation: an error never quotes it.
+    let to = |loc: &str| format!("HTTP/1.1 302 Found\r\nLocation: {loc}\r\nContent-Length: 0\r\n\r\n").into_bytes();
+    let odd = [
+        "https://user@contoso-my.sharepoint.com/x?tempauth=SECRET",
+        "https://contoso-my .sharepoint.com/x?tempauth=SECRET",
+        "https://contoso-my.sharepoint.com:99999/x?tempauth=SECRET",
+        "https://contoso-my.sharepoint.com\t/x?tempauth=SECRET",
+    ];
+    let mut answers = vec![answer(200, ME_JSON)];
+    answers.extend(odd.iter().map(|l| to(l)));
+    answers.push(to(odd[0]));
+    let (base, h) = crate::http::tests::serve(answers);
+    let (c, _) = TeamsClient::connect(&base, "t").unwrap();
+    let mut errors: Vec<NetError> = odd.iter().map(|_| c.shared_location(SHARED).unwrap_err()).collect();
+    errors.push(c.download_shared(SHARED, 1 << 20).unwrap_err());
+    for e in errors {
+        let said = e.to_string();
+        assert!(matches!(&e, NetError::Refused(m) if m == "not one of Microsoft's file hosts"), "{said}");
+        assert!(!said.contains("contoso") && !said.contains("SECRET"), "{said}");
+    }
+    assert_eq!(h.join().unwrap().len(), 6);
 }
 
 #[test]

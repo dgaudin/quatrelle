@@ -44,13 +44,19 @@ const MAX_RANGE_ANSWER: usize = 1 << 20;
 /// the client's own API is there too (the tests' servers, as [`hop_allowed`]). Anything else is
 /// refused, before any connection.
 pub fn transfer_url(base: &str, url: &str) -> Result<Url> {
-    let refused = || NetError::Refused("not one of Microsoft's file hosts".into());
+    let refused = not_microsofts;
     if url.is_empty() || url.len() > MAX_TRANSFER_URL || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err(refused());
     }
     let to = Url::parse(url).map_err(|_| refused())?;
     let taken = if to.https { to.port == 443 && microsoft_host(&to.host) } else { hop_allowed(base, &to) };
     if taken { Ok(to) } else { Err(refused()) }
+}
+
+/// A transfer's address refused: the address itself is never said (it carries its own
+/// authorisation).
+fn not_microsofts() -> NetError {
+    NetError::Refused("not one of Microsoft's file hosts".into())
 }
 
 /// A DNS name (labels of 1 to 63 lower-case letters, digits and `-`), not an IP address, ending
@@ -218,7 +224,7 @@ impl TeamsClient {
     /// Share a file of the user's OneDrive with these people: to read it, signed in, without a
     /// mail. The item's id must be one segment of the address, the recipients 1 to
     /// [`SHARE_PEOPLE`], each an object id or an address, else it is refused before any request.
-    /// A 207 says some failed: those its answer lists with an error.
+    /// A 207 says some failed: those its answer doesn't list as granted ([`shared_of`]).
     pub fn invite(&self, item: &str, to: &[Recipient<'_>]) -> Result<Shared> {
         let fits = |r: &Recipient<'_>| match r {
             Recipient::Id(id) => is_object_id(id),
@@ -237,7 +243,7 @@ impl TeamsClient {
         let body = json!({"recipients": recipients, "roles": ["read"], "requireSignIn": true, "sendInvitation": false});
         let req = self.prepared("POST", &self.at(&format!("/me/drive/items/{}/invite", seg(item))), Some(&body), false)?;
         let (status, v) = self.answered(&req, true)?;
-        Ok(if status == 207 { shared_of(&v) } else { Shared { granted: to.len(), failed: 0 } })
+        Ok(if status == 207 { shared_of(&v, to.len()) } else { Shared { granted: to.len(), failed: 0 } })
     }
 
     /// Delete a file of the user's OneDrive (a check's own test file): the id must be one segment
@@ -343,10 +349,11 @@ impl TeamsClient {
             status_error(head.status, &tally.kept)?;
             return Err(NetError::Protocol(format!("HTTP {}", head.status)));
         };
-        // An address as it came, or a path joined to Graph's (the tests' servers).
+        // An address as it came, or a path joined to Graph's (the tests' servers); one that isn't
+        // an address is refused as any other, never quoted.
         let to = match Url::parse(location) {
             Ok(_) => location.to_string(),
-            Err(_) => address(&Url::parse(&first)?.join(location)?),
+            Err(_) => Url::parse(&first).and_then(|u| u.join(location)).map(|u| address(&u)).map_err(|_| not_microsofts())?,
         };
         transfer_url(&self.base, &to).map(Hop::To)
     }
@@ -361,8 +368,9 @@ enum Hop {
 }
 
 /// Send `bytes`, the file's from byte `from` on, to an upload session's address on the connection
-/// `s`, without the token: the next byte OneDrive expects (past these bytes, at most `total`), or
-/// the file made once the last range is in. A range already there is `Protocol("HTTP 416")` (ask
+/// `s`, without the token: the next byte OneDrive expects (past these bytes, before `total`), or
+/// the file made once the last range is in ([`range_answer_of`]); the file made before its last
+/// range, or not made after it, is an error. A range already there is `Protocol("HTTP 416")` (ask
 /// where the upload stands: [`upload_status_on`]), a session gone
 /// `Refused("the upload session is gone")`; what isn't a range of `total` is refused before
 /// anything is written.
@@ -374,10 +382,12 @@ pub(crate) fn put_range_on<S: Read + Write>(s: &mut S, url: &Url, bytes: &[u8], 
     req.method = "PUT".into();
     req.body = bytes.to_vec();
     let resp = http::exchange(s, &req, url)?;
-    let done = match resp.status {
-        202 => false,
-        200 | 201 => true,
-        status => return Err(transfer_error(status, &resp.body)),
+    let done = match (resp.status, end == total) {
+        (202, false) => false,
+        (200 | 201, true) => true,
+        (202, true) => return Err(NetError::Protocol("Graph: an upload not finished after its last range".into())),
+        (200 | 201, false) => return Err(NetError::Protocol("Graph: an upload finished early".into())),
+        (status, _) => return Err(transfer_error(status, &resp.body)),
     };
     let v = serde_json::from_slice::<Value>(&resp.body).unwrap_or(Value::Null);
     range_answer_of(&v, done, end, total).ok_or_else(|| NetError::Protocol("OneDrive: an answer to a range that isn't one".into()))
@@ -457,14 +467,15 @@ pub fn next_expected_of(v: &Value, total: u64) -> Option<u64> {
     start.parse::<u64>().ok().filter(|n| *n <= total)
 }
 
-/// What a range's answer says: for a 202 (`done` false), the next byte OneDrive expects, which must
-/// be `end` (past the range) or later and at most `total`; for a 200 or a 201, the file made, by
-/// its item's id (one segment of an address).
+/// What the answer to a range ending at `end` says: for a 202 (`done` false) on a range that isn't
+/// the last, the next byte OneDrive expects, which must be `end` or later and before `total`; for a
+/// 200 or a 201 on the last range (`end` is `total`), the file made, by its item's id (one segment
+/// of an address). Anything else says nothing.
 pub fn range_answer_of(v: &Value, done: bool, end: u64, total: u64) -> Option<RangeAnswer> {
-    if done {
-        v.get("id").and_then(Value::as_str).filter(|id| own_segment(id)).map(|id| RangeAnswer::Done(id.to_string()))
-    } else {
-        next_expected_of(v, total).filter(|n| *n >= end).map(RangeAnswer::Next)
+    match (done, end == total) {
+        (true, true) => v.get("id").and_then(Value::as_str).filter(|id| own_segment(id)).map(|id| RangeAnswer::Done(id.to_string())),
+        (false, false) => next_expected_of(v, total).filter(|n| *n >= end && *n < total).map(RangeAnswer::Next),
+        _ => None,
     }
 }
 
@@ -494,11 +505,13 @@ pub fn drive_item_of(v: &Value) -> Option<DriveItem> {
     })
 }
 
-/// A share's answer when some recipients failed (207): those it lists with an `error`, and the
-/// others, among its first [`SHARE_PEOPLE`].
-pub fn shared_of(v: &Value) -> Shared {
+/// A share's answer when some of the `asked` recipients failed (207): those it lists as granted
+/// (an entry without an `error`, among its first [`SHARE_PEOPLE`]), at most `asked`; the others
+/// failed, so what it doesn't say was granted is counted as failed.
+pub fn shared_of(v: &Value, asked: usize) -> Shared {
     let listed = v.get("value").and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
     let listed = listed.get(..listed.len().min(SHARE_PEOPLE)).unwrap_or_default();
-    let failed = listed.iter().filter(|e| e.get("error").is_some_and(|x| !x.is_null())).count();
-    Shared { granted: listed.len().saturating_sub(failed), failed }
+    let said = listed.iter().filter(|e| e.as_object().is_some_and(|o| o.get("error").is_none_or(Value::is_null))).count();
+    let granted = said.min(asked);
+    Shared { granted, failed: asked.saturating_sub(granted) }
 }

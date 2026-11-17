@@ -104,17 +104,19 @@ fn read_files(v: &Value) {
         assert!(item.web_dav_url.len() <= 8 << 10 && !item.web_dav_url.chars().any(|c| c.is_whitespace() || c.is_control()));
     }
     let _ = upload_url_of(v);
-    let shared = shared_of(v);
-    assert!(shared.granted + shared.failed <= SHARE_PEOPLE);
+    for asked in [0, 2, SHARE_PEOPLE] {
+        let shared = shared_of(v, asked);
+        assert_eq!(shared.granted + shared.failed, asked);
+    }
     let total = v.get("size").and_then(Value::as_u64).unwrap_or(5 << 20);
     for total in [total, 0, u64::MAX] {
         if let Some(next) = next_expected_of(v, total) {
             assert!(next <= total);
         }
-        for done in [false, true] {
-            match range_answer_of(v, done, total / 2, total) {
-                Some(RangeAnswer::Next(n)) => assert!(n >= total / 2 && n <= total),
-                Some(RangeAnswer::Done(id)) => assert!(segment_ok(&id), "{id:?}"),
+        for (done, end) in [(false, total / 2), (true, total / 2), (false, total), (true, total)] {
+            match range_answer_of(v, done, end, total) {
+                Some(RangeAnswer::Next(n)) => assert!(!done && end < total && n >= end && n < total),
+                Some(RangeAnswer::Done(id)) => assert!(done && end == total && segment_ok(&id), "{id:?}"),
                 None => {}
             }
         }
