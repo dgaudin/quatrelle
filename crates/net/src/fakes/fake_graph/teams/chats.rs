@@ -5,6 +5,10 @@
 //! soft-deleted), hosted images and read mark. A post or an edit must say its `body.contentType`
 //! (`html` or `text`, else 400), and its `content` must fit [`FakeTeams::post_limit`] (else 413);
 //! the `<at id>` of its HTML and the `id`s of its `mentions` must be the same set (else 400).
+//! A post's `<attachment id>`s and `attachments[].id`s, and its `../hostedContents/n/$value`s and
+//! `hostedContents[].@microsoft.graph.temporaryId`s, must be the same sets (else 400); each
+//! attachment a `reference` to a file of the user's OneDrive, by its `webDavUrl` and its eTag's
+//! GUID (else 400); each picture at most 4 MiB once decoded (else 413).
 //! Only the signed-in user's own messages are edited or soft-deleted (else 403).
 
 use std::collections::BTreeSet;
@@ -15,6 +19,8 @@ use super::*;
 
 /// The most bytes a post's content may have when the test sets no limit.
 const POST_LIMIT: usize = 100 << 10;
+/// The most bytes of a picture a post carries, once decoded.
+const HOSTED_LIMIT: usize = 4 << 20;
 
 /// The names Graph may give the six quick reactions, in the order of [`QUICK_REACTIONS`].
 const QUICK_NAMES: [&str; 6] = ["like", "heart", "laugh", "surprised", "sad", "angry"];
@@ -57,6 +63,24 @@ fn refused_body(input: &Value, limit: usize) -> Option<Reply> {
     (at_ids(html) != listed).then(|| Reply::error(400, "BadRequest", "The mentions and the at tags of the body don't match."))
 }
 
+/// The ids of the `<attachment id="…">` tags of some HTML.
+fn file_places(html: &str) -> BTreeSet<String> {
+    html.split("<attachment id=\"").skip(1).filter_map(|rest| rest.split_once('"').map(|(id, _)| id.to_string())).collect()
+}
+
+/// The numbers `n` of the `../hostedContents/n/$value` places of some HTML.
+fn picture_places(html: &str) -> BTreeSet<String> {
+    html.split("../hostedContents/").skip(1).filter_map(|rest| rest.split_once("/$value").map(|(n, _)| n.to_string())).collect()
+}
+
+/// A list of a post's body, empty when it has none.
+fn list<'a>(input: &'a Value, key: &str) -> &'a [Value] {
+    input.get(key).and_then(Value::as_array).map_or(&[], Vec::as_slice)
+}
+
+/// A post's files (id, name, address) and pictures (id, bytes).
+type Parts = (Vec<(String, String, String)>, Vec<(String, Vec<u8>)>);
+
 /// The users a body's `mentions` name, in order.
 fn mentioned_users(input: &Value) -> Vec<String> {
     input
@@ -69,6 +93,39 @@ fn mentioned_users(input: &Value) -> Vec<String> {
 }
 
 impl FakeTeams {
+    /// What a post carries besides its text, checked as Graph does (the module's rules).
+    fn post_parts(&self, input: &Value) -> Result<Parts, Reply> {
+        let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
+        let (attachments, hosted) = (list(input, "attachments"), list(input, "hostedContents"));
+        let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let ids: BTreeSet<String> = attachments.iter().map(|a| text(a, "id")).collect();
+        let numbers: BTreeSet<String> = hosted.iter().map(|h| text(h, "@microsoft.graph.temporaryId")).collect();
+        if file_places(html) != ids || picture_places(html) != numbers {
+            return Err(Reply::error(400, "BadRequest", "The places of the body and its attachments or hosted contents don't match."));
+        }
+        let mut files = Vec::new();
+        for a in attachments {
+            let (id, url) = (text(a, "id"), text(a, "contentUrl"));
+            let mine = self.drive_files.files.iter().any(|f| self.web_dav_url(f) == url && f.guid().eq_ignore_ascii_case(&id));
+            if text(a, "contentType") != "reference" || !mine {
+                return Err(Reply::error(400, "BadRequest", "An attachment isn't a file of the user's OneDrive."));
+            }
+            files.push((id, text(a, "name"), url));
+        }
+        let mut pictures = Vec::new();
+        for h in hosted {
+            let bytes = unbase64(text(h, "contentBytes").as_bytes());
+            if bytes.len() > HOSTED_LIMIT {
+                return Err(Reply::error(413, "RequestEntityTooLarge", "A hosted content is too large."));
+            }
+            if !text(h, "contentType").starts_with("image/") {
+                return Err(Reply::error(400, "BadRequest", "A hosted content isn't a picture."));
+            }
+            pictures.push((text(h, "@microsoft.graph.temporaryId"), bytes));
+        }
+        Ok((files, pictures))
+    }
+
     fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
         json!({
             "id": m.id, "replyToId": null, "etag": ms_of(&m.modified).unwrap_or_default().to_string(),
@@ -82,7 +139,9 @@ impl FakeTeams {
             "attachments": m.attachments.iter().enumerate().map(|(i, (kind, url))| json!({
                 "id": format!("{}-{i}", m.id), "contentType": kind, "contentUrl": url, "content": null,
                 "name": url.rsplit('/').next(), "thumbnailUrl": null, "teamsAppId": null,
-            })).collect::<Vec<_>>(),
+            })).chain(m.files.iter().map(|(id, name, url)| json!({
+                "id": id, "contentType": "reference", "contentUrl": url, "content": null, "name": name, "thumbnailUrl": null, "teamsAppId": null,
+            }))).collect::<Vec<_>>(),
             "mentions": m.mentions.iter().enumerate().map(|(i, user)| json!({
                 "id": i, "mentionText": self.user(user).map(|u| u.display_name.clone()), "mentioned": self.identity(user),
             })).collect::<Vec<_>>(),
@@ -103,7 +162,7 @@ impl FakeTeams {
         chat.messages.iter().filter(|m| m.deleted.is_none()).max_by_key(|m| ms_of(&m.created))
     }
 
-    fn chat_json(&self, c: &FakeChat, preview: bool) -> Value {
+    pub(super) fn chat_json(&self, c: &FakeChat, preview: bool) -> Value {
         let created = c.messages.iter().map(|m| m.created.as_str()).min_by_key(|t| ms_of(t)).unwrap_or("2026-01-01T00:00:00.000Z");
         let updated = c.updated.as_deref().unwrap_or(created);
         let mut v = json!({
@@ -191,6 +250,7 @@ impl FakeTeams {
         let guests = self.guests.clone();
         let here = |list: &[String]| list.iter().any(|f| Some(f.as_str()) == p.get(1).copied());
         let (edit_refused, react_refused) = (here(&self.forbid_edit), here(&self.forbid_react));
+        let parts = (name == "post").then(|| self.post_parts(input));
         let Some(chat) = self.chats.get_mut(ci) else { return not_found() };
         match name {
             "members" if members_refused => Reply::error(403, "Forbidden", "Reading this chat's members is not allowed."),
@@ -240,12 +300,18 @@ impl FakeTeams {
                 if let Some(refused) = refused_body(input, post_limit) {
                     return refused;
                 }
+                let (files, pictures) = match parts {
+                    Some(Err(refused)) => return refused,
+                    Some(Ok(parts)) => parts,
+                    None => Parts::default(),
+                };
                 let html = input.pointer("/body/content").and_then(Value::as_str).unwrap_or_default();
                 let after = chat.messages.iter().filter_map(|m| m.id.parse::<i64>().ok()).max().map_or(0, |m| m + 1);
                 let id = ms_of(&now).unwrap_or_default().max(after).to_string();
                 let kept = rewrite.map_or_else(|| html.to_string(), |f| f(html));
                 let mut made = FakeMessage::new(&id, Some(&mine), &now, &kept);
                 made.mentions = mentioned_users(input);
+                (made.files, made.hosted) = (files, pictures);
                 chat.messages.push(made);
                 let chat = chat.clone();
                 let made = chat.messages.last().map(|m| self.message_json(&chat, m)).unwrap_or(Value::Null);

@@ -3,19 +3,32 @@
 //! Graph's answers about Teams (a server's, carrying what senders wrote) read into the model: a
 //! chat, a member, a message and a presence, from the value itself and from each item of its
 //! `value` list. Never a panic (the readers run without their guards too, so one is seen), and
-//! what comes out within its caps: ids, lists, names on one line, bodies.
+//! what comes out within its caps: ids, lists, names on one line, bodies. And the answers about
+//! files and people: an upload session's address, a range's answer, a file's item and its eTag, a
+//! share's answer, a person of the directory; every string of the input as a transfer's address.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use quatrelle_model::pim::teams::{
     Attachment, Chat, ChatMessage, MAX_ATTACHMENTS, MAX_BODY, MAX_ID, MAX_MEMBERS, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, Member,
-    NAME_CHARS, REACTION_CHARS, Sender, is_bidi,
+    NAME_CHARS, REACTION_CHARS, SHARE_PEOPLE, Sender, is_bidi, is_object_id, person_ok,
 };
-use quatrelle_net::teams::graph::{MAX_ROLES, chat_of, chat_of_unguarded, member_of, message_of, message_of_unguarded, presence_of};
+use quatrelle_net::teams::graph::{
+    MAX_ROLES, RangeAnswer, chat_of, chat_of_unguarded, drive_item_of, etag_guid, member_of, message_of, message_of_unguarded, next_expected_of,
+    person_of, presence_of, range_answer_of, shared_of, transfer_url, upload_url_of,
+};
 use serde_json::Value;
 
 /// The most items of a `value` list read from one input.
 const ITEMS: usize = 64;
+/// The most strings of one input tried as a transfer's address, and how deep they are looked for.
+const STRINGS: usize = 64;
+const DEPTH: usize = 4;
+
+/// Whether an id can be one segment of an address: what Graph's ids are taken as.
+fn segment_ok(id: &str) -> bool {
+    id_ok(id) && !id.chars().all(|c| c == '.') && !id.contains(['/', '\\', '?', '#'])
+}
 
 fn id_ok(id: &str) -> bool {
     !id.is_empty() && id.chars().count() <= MAX_ID && !id.chars().any(char::is_control)
@@ -78,6 +91,53 @@ fn check_message(m: &ChatMessage) {
     }
 }
 
+/// The answers about files and people.
+fn read_files(v: &Value) {
+    if let Some(p) = person_of(v) {
+        assert!(person_ok(&p), "{p:?}");
+    }
+    if let Some(guid) = v.get("eTag").and_then(Value::as_str).and_then(etag_guid) {
+        assert!(is_object_id(&guid) && guid == guid.to_ascii_lowercase(), "{guid:?}");
+    }
+    if let Some(item) = drive_item_of(v) {
+        assert!(segment_ok(&item.id) && is_object_id(&item.guid) && !item.name.is_empty(), "{item:?}");
+        assert!(item.web_dav_url.len() <= 8 << 10 && !item.web_dav_url.chars().any(|c| c.is_whitespace() || c.is_control()));
+    }
+    let _ = upload_url_of(v);
+    let shared = shared_of(v);
+    assert!(shared.granted + shared.failed <= SHARE_PEOPLE);
+    let total = v.get("size").and_then(Value::as_u64).unwrap_or(5 << 20);
+    for total in [total, 0, u64::MAX] {
+        if let Some(next) = next_expected_of(v, total) {
+            assert!(next <= total);
+        }
+        for done in [false, true] {
+            match range_answer_of(v, done, total / 2, total) {
+                Some(RangeAnswer::Next(n)) => assert!(n >= total / 2 && n <= total),
+                Some(RangeAnswer::Done(id)) => assert!(segment_ok(&id), "{id:?}"),
+                None => {}
+            }
+        }
+    }
+    let mut strings = Vec::new();
+    strings_of(v, DEPTH, &mut strings);
+    for s in strings {
+        if let Ok(url) = transfer_url("https://graph.microsoft.com/v1.0", s) {
+            assert!(url.https && url.port == 443 && url.host.ends_with(".sharepoint.com"), "{s:?}");
+        }
+    }
+}
+
+/// The strings of a value, [`STRINGS`] at most, `depth` levels down.
+fn strings_of<'a>(v: &'a Value, depth: usize, out: &mut Vec<&'a str>) {
+    match v {
+        Value::String(s) if out.len() < STRINGS => out.push(s),
+        Value::Array(a) if depth > 0 => a.iter().for_each(|x| strings_of(x, depth - 1, out)),
+        Value::Object(o) if depth > 0 => o.values().for_each(|x| strings_of(x, depth - 1, out)),
+        _ => {}
+    }
+}
+
 fn read(v: &Value) {
     for c in [chat_of_unguarded(v), chat_of(v)].iter().flatten() {
         check_chat(c);
@@ -90,6 +150,7 @@ fn read(v: &Value) {
     if let Some((id, _)) = presence_of(v) {
         assert!(id_ok(&id));
     }
+    read_files(v);
 }
 
 fuzz_target!(|data: &[u8]| {

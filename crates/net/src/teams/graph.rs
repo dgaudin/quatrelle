@@ -3,19 +3,20 @@
 // Copyright (c) 2026 Didier Gaudin
 //! A client for Graph's chat API (v1.0): the signed-in user, chats, their members and
 //! messages, posting text or HTML and editing text, reactions, soft deletes, marking a chat
-//! read, counting the bytes of a file shared in a chat, a message's hosted images, people's
-//! photos and presence, and the host of the user's OneDrive; its answers are read into the
-//! model here too.
+//! read, a message's hosted images, people's photos and presence, and the host of the user's
+//! OneDrive; its answers are read into the model here too (`read`). OneDrive's uploads, a
+//! file's item and share, a post with pictures and files, and a file shared in a chat (its
+//! address, its bytes counted) are in `files`; the directory and a chat's creation in `people`.
 //!
 //! Every request carries the bearer token and goes on a connection of its own. No redirect is
 //! followed with the token: a Graph answer that redirects is an error, except a shared file's
-//! content, whose one redirect (to SharePoint's pre-signed download address) is followed by
-//! hand without it. A 429 or a 503 is waited out ([`BUSY_ROUNDS`] rounds at most, `Retry-After`
-//! capped at 20 s; a post of a message only on a 429, as a 503 may come after it was made) and
-//! every 429 counted in [`Stats`]; the Teams worker turns the waits off
-//! ([`TeamsClient::set_waiting`]) and keeps to its own limiter, which reads the last
-//! `Retry-After` ([`TeamsClient::retry_after`]). Errors say the HTTP status and Graph's
-//! error code, never its message, which can quote a chat's content.
+//! content, whose one redirect (to SharePoint's pre-signed download address, on Microsoft's file
+//! hosts: [`transfer_url`]) is followed by hand without it. A 429 or a 503 is waited out
+//! ([`BUSY_ROUNDS`] rounds at most, `Retry-After` capped at 20 s; a post of a message only on a
+//! 429, as a 503 may come after it was made) and every 429 counted in [`Stats`]; the Teams
+//! worker turns the waits off ([`TeamsClient::set_waiting`]) and keeps to its own limiter, which
+//! reads the last `Retry-After` ([`TeamsClient::retry_after`]). Errors say the HTTP status and
+//! Graph's error code, never its message, which can quote a chat's content.
 
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -29,8 +30,12 @@ use crate::http::{self, Request, Response, Url};
 use crate::stream::{self, Stream};
 use crate::{NetError, Result};
 
+mod files;
+mod people;
 mod read;
 
+pub use files::*;
+pub use people::*;
 pub use read::*;
 
 /// Largest JSON answer accepted.
@@ -324,20 +329,10 @@ impl TeamsClient {
     /// Post a message written in HTML in a chat: the message Graph made. The chat's id must be one
     /// segment of the address ([`own_segment`]) and the HTML at most [`SEND_MAX`] bytes, else it is
     /// refused before any request. `mentions` (those with a user id) go as the message's `mentions`
-    /// array, only when there are some. Waited out on a 429 only, as [`Self::send_text`].
+    /// array, only when there are some. Waited out on a 429 only, as [`Self::send_text`]. With
+    /// pictures and files: [`Self::send_parts`].
     pub fn send_html(&self, chat: &str, html: &str, mentions: &[Mention]) -> Result<Value> {
-        if !own_segment(chat) {
-            return Err(NetError::Refused("not a chat's id".into()));
-        }
-        if html.len() > SEND_MAX {
-            return Err(NetError::Refused(format!("a message longer than Teams takes ({SEND_MAX} bytes)")));
-        }
-        let mut body = json!({"body": {"contentType": "html", "content": html}});
-        let mentioned = mentions_json(mentions);
-        if mentioned.as_array().is_some_and(|a| !a.is_empty()) {
-            body["mentions"] = mentioned;
-        }
-        self.request("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false, false)
+        self.send_parts(chat, html, mentions, &[], &[])
     }
 
     /// Replace the words of a message the signed-in user sent by HTML: the chat's and the
@@ -407,49 +402,6 @@ impl TeamsClient {
         let body = json!({"user": {"id": user, "tenantId": tenant}});
         self.json("POST", &self.at(&format!("/chats/{}/markChatReadForUser", seg(chat))), Some(&body), false).map(drop)
     }
-
-    /// Download a file shared in a chat, by the `contentUrl` its attachment carries, counting
-    /// its bytes and keeping none: Graph's `/shares/u!…/driveItem/content`, then its one
-    /// redirect followed without the token. More than `max` bytes is refused.
-    pub fn download_shared(&self, content_url: &str, max: usize) -> Result<usize> {
-        let content_url = content_url.trim();
-        if content_url.is_empty() || content_url.len() > MAX_SHARE_URL {
-            return Err(NetError::Refused("not a shared file's address".into()));
-        }
-        let share = crate::imap::base64(content_url.as_bytes()).trim_end_matches('=').replace('/', "_").replace('+', "-");
-        let first = self.at(&format!("/shares/u!{share}/driveItem/content"));
-        let req = Request::get(&first, max).header("Authorization", &self.bearer());
-        let mut round = 0;
-        let (head, tally) = loop {
-            round += 1;
-            let (head, tally) = self.download(&req, true)?;
-            if !busy(head.status) || !self.waiting.get() || round >= BUSY_ROUNDS {
-                break (head, tally);
-            }
-            pause(backoff_secs(head.header("Retry-After"), round));
-        };
-        if head.ok() {
-            // Graph served the file itself.
-            return Ok(tally.bytes);
-        }
-        let Some(location) = redirect(&head) else {
-            status_error(head.status, &tally.kept)?;
-            return Err(NetError::Protocol(format!("HTTP {}", head.status)));
-        };
-        let to = Url::parse(&first)?.join(location)?;
-        if !hop_allowed(&self.base, &to) {
-            return Err(NetError::Tls("the shared file's download isn't https".into()));
-        }
-        // A request of its own: the token stays with Graph.
-        let (head, tally) = self.download(&Request::get(&format!("{}{}", to.origin(), to.path), max), false)?;
-        if redirect(&head).is_some() {
-            return Err(NetError::Protocol("the shared file's download redirected again".into()));
-        }
-        if !head.ok() {
-            return Err(NetError::Protocol(format!("HTTP {}", head.status)));
-        }
-        Ok(tally.bytes)
-    }
 }
 
 // Requests.
@@ -478,6 +430,11 @@ impl TeamsClient {
 
     /// [`Self::json`], a 503 waited out only when `again` (the request can be repeated).
     fn request(&self, method: &str, url: &str, body: Option<&Value>, prefer: bool, again: bool) -> Result<Value> {
+        self.answered(&self.prepared(method, url, body, prefer)?, again).map(|(_, v)| v)
+    }
+
+    /// A request to Graph with the token, its body JSON, a JSON answer wanted.
+    fn prepared(&self, method: &str, url: &str, body: Option<&Value>, prefer: bool) -> Result<Request> {
         let mut req = match body {
             Some(b) => {
                 let bytes = serde_json::to_vec(b).map_err(|e| NetError::Protocol(e.to_string()))?;
@@ -490,12 +447,19 @@ impl TeamsClient {
         if prefer {
             req = req.header("Prefer", PREFER_ENUMS);
         }
-        let resp = self.send(&req, again)?;
+        Ok(req)
+    }
+
+    /// A request sent as [`Self::send`] does: its status and its JSON answer (`Null` when empty);
+    /// an HTTP failure as [`status_error`] says it.
+    fn answered(&self, req: &Request, again: bool) -> Result<(u16, Value)> {
+        let resp = self.send(req, again)?;
         status_error(resp.status, &resp.body)?;
         if resp.body.iter().all(u8::is_ascii_whitespace) {
-            return Ok(Value::Null);
+            return Ok((resp.status, Value::Null));
         }
-        serde_json::from_slice(&resp.body).map_err(|e| NetError::Protocol(format!("Graph: {e}")))
+        let v = serde_json::from_slice(&resp.body).map_err(|e| NetError::Protocol(format!("Graph: {e}")))?;
+        Ok((resp.status, v))
     }
 
     /// A request, waited out while busy when [waiting](Self::set_waiting) (a 503 only when
@@ -523,15 +487,15 @@ impl TeamsClient {
     }
 
     /// A GET whose body is counted as it comes and not kept (only the start of an error's, for
-    /// its code); a redirect's body is left unread.
-    fn download(&self, req: &Request, graph: bool) -> Result<(Response, Tally)> {
+    /// its code); a redirect's body is left unread, and a file's when not `served`.
+    fn download(&self, req: &Request, graph: bool, served: bool) -> Result<(Response, Tally)> {
         let url = Url::parse(&req.url)?;
         let mut s = connect(&url)?;
         self.count();
         let mut tally = Tally::default();
         let sink = &mut tally;
         let head = http::exchange_into(&mut s, req, &url, move |head: &Response| {
-            if busy(head.status) {
+            if busy(head.status) || (head.ok() && !served) {
                 return Ok(None);
             }
             if head.ok()
@@ -609,7 +573,8 @@ fn connect(url: &Url) -> Result<Stream> {
 
 /// Whether a download's redirect to `to` may be followed by a client whose API is at `base`:
 /// https, or plain HTTP to this computer only when the client's own API is there too (the
-/// tests' servers). Graph itself never sends the download to a local port.
+/// tests' servers). Graph itself never sends the download to a local port. [`transfer_url`]
+/// takes plain HTTP by this rule, and https only on Microsoft's file hosts.
 pub(super) fn hop_allowed(base: &str, to: &Url) -> bool {
     to.https || (loopback(to) && Url::parse(base).is_ok_and(|b| !b.https && loopback(&b)))
 }

@@ -1,21 +1,25 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The fake Graph server's Teams: the signed-in user, chats, their members and messages (listed
-//! in a `lastModifiedDateTime` range, posted, edited, reacted to, soft-deleted), marking a chat
-//! read, shared files, messages' hosted images, people's photos and presence, and the user's
-//! OneDrive, as Graph v1.0 answers them.
+//! in a `lastModifiedDateTime` range, posted with pictures and files, edited, reacted to,
+//! soft-deleted), marking a chat read, shared files, messages' hosted images, people's photos
+//! and presence, the user's OneDrive (its upload sessions, items and shares: `drive.rs`), the
+//! directory and the chats created (`people.rs`), as Graph v1.0 answers them.
 //!
 //! Each request is counted in [`FakeTeams::hits`] and its headers kept in
 //! [`FakeTeams::last_headers`] under its route name: `me`, `chats`, `members`, `messages`,
 //! `post`, `edit`, `setReaction`, `unsetReaction`, `softDelete`, `markChatReadForUser`,
-//! `shares`, `download`, `hosted`, `photo`, `presence`, `drive`, and `unknown` for a Teams path
-//! no route answers (404).
+//! `shares`, `download`, `hosted`, `photo`, `presence`, `drive`, `uploadSession`, `upload`,
+//! `item`, `deleteItem`, `invite`, `users`, `createChat`, and `unknown` for a Teams path no
+//! route answers (404).
 
 use std::collections::HashMap;
 
 use super::*;
 
 mod chats;
+mod drive;
+mod people;
 
 /// A Microsoft Entra user, as the fake knows one.
 #[derive(Clone, Debug, Default)]
@@ -92,6 +96,9 @@ pub(crate) struct FakeMessage {
     pub(crate) attachments: Vec<(String, String)>,
     /// Its hosted images: (hosted content id, bytes).
     pub(crate) hosted: Vec<(String, Vec<u8>)>,
+    /// Files of the user's OneDrive it carries: (id, name, contentUrl), listed as `reference`
+    /// attachments after `attachments`.
+    pub(crate) files: Vec<(String, String, String)>,
     /// Graph's `from` as given, in place of the one made from `from`: an application, someone of
     /// another organisation, or a name the members don't give.
     pub(crate) from_json: Option<Value>,
@@ -225,6 +232,16 @@ pub(crate) struct FakeTeams {
     pub(crate) list_next_elsewhere: bool,
     /// The chat list's pages are this long, whatever `$top` asks (and the last says no more).
     pub(crate) list_page: Option<usize>,
+    /// The user's OneDrive: its files, upload sessions, ranges and shares.
+    pub(crate) drive_files: drive::FakeDrive,
+    /// The organisation's directory, as `GET /users` searches it (its guests: `guests`).
+    pub(crate) directory: Vec<FakeUser>,
+    /// The `$search` of the last `GET /users`, decoded, as it came.
+    pub(crate) last_search: String,
+    /// `POST /chats` is refused with 403.
+    pub(crate) forbid_create: bool,
+    /// Every `POST /chats` body received, whatever its answer.
+    pub(crate) creations: Vec<Value>,
 }
 
 impl FakeTeams {
@@ -316,7 +333,23 @@ fn route_name(method: &str, p: &[&str]) -> Option<&'static str> {
         ("GET", ["users", _, "photos", "48x48", "$value"]) => "photo",
         ("POST", ["communications", "getPresencesByUserId"]) => "presence",
         ("GET", ["me", "drive"]) => "drive",
-        (_, ["chats", ..] | ["shares", ..] | ["download", ..] | ["communications", ..] | ["users", _, "photos", ..]) => "unknown",
+        ("POST", ["me", "drive", "root:", .., "createUploadSession"]) => "uploadSession",
+        ("PUT" | "GET" | "DELETE", ["upload", _]) => "upload",
+        ("GET", ["me", "drive", "items", _]) => "item",
+        ("DELETE", ["me", "drive", "items", _]) => "deleteItem",
+        ("POST", ["me", "drive", "items", _, "invite"]) => "invite",
+        ("GET", ["users"]) => "users",
+        ("POST", ["chats"]) => "createChat",
+        (
+            _,
+            ["chats", ..]
+            | ["shares", ..]
+            | ["download", ..]
+            | ["upload", ..]
+            | ["me", "drive", ..]
+            | ["communications", ..]
+            | ["users", _, "photos", ..],
+        ) => "unknown",
         _ => return None,
     })
 }
@@ -432,6 +465,12 @@ impl FakeTeams {
         if let Some(r) = self.people(name, p, &q, input) {
             return r;
         }
+        if let Some(r) = self.drive_route(name, p, &q, raw_path, input, base) {
+            return r;
+        }
+        if name == "createChat" {
+            return self.create_chat(input, base);
+        }
         if name == "shares" || name == "download" {
             let Some(key) = p.get(1).and_then(|id| share_key(self, id)) else { return not_found() };
             if name == "shares" {
@@ -525,10 +564,20 @@ impl Data {
             t.refuse_once = None;
             authorized = false;
         }
+        if name == "upload" {
+            // An upload session's address carries its own authorisation: a token is refused there.
+            authorized = !headers.iter().any(|(k, _)| k == "authorization");
+        }
         t.holding = t.hold.take_if(|(route, _)| *route == name).map(|(_, wait)| wait);
         let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
         if name == "post" {
             t.posts.push((p.get(1).copied().unwrap_or_default().to_string(), input.clone()));
+        }
+        if name == "invite" {
+            t.drive_files.invites.push((p.get(3).copied().unwrap_or_default().to_string(), input.clone()));
+        }
+        if name == "createChat" {
+            t.creations.push(input.clone());
         }
         if matches!(name, "post" | "edit" | "setReaction" | "unsetReaction" | "softDelete") {
             let (chat, msg) = (p.get(1).copied().unwrap_or_default(), p.get(3).copied().unwrap_or_default());
@@ -537,7 +586,11 @@ impl Data {
         let mut reply = match t.refusal(name, authorized, someone_else) {
             Some(r) => r,
             None => {
-                let done = t.answer(name, &p, query, raw_path, &input, base);
+                let done = match name {
+                    "upload" => t.upload(method, &p, headers, body),
+                    "users" => t.users(query, headers),
+                    _ => t.answer(name, &p, query, raw_path, &input, base),
+                };
                 if let Some(n) = t.cut_after.get_mut(name).filter(|n| **n > 0) {
                     *n -= 1;
                     Reply::cut()
@@ -556,21 +609,22 @@ impl Data {
 
 impl FakeTeams {
     /// Why a request isn't answered, if it isn't: throttled, no token, someone else's chats, or
-    /// a failure asked for in `fail_next` or `not_found_next`. A download is never refused (it is
-    /// another server).
+    /// a failure asked for in `fail_next` or `not_found_next`. A download is never refused, an
+    /// upload never throttled, and refused only a token (they are other servers than Graph).
     fn refusal(&mut self, name: &str, authorized: bool, someone_else: bool) -> Option<Reply> {
         if name == "download" {
             return None;
         }
-        if self.throttle_once == Some(name) {
+        let graph = name != "upload";
+        if graph && self.throttle_once == Some(name) {
             self.throttle_once = None;
             return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
         }
         if self.forbid_list && name == "chats" && authorized {
             return Some(Reply::error(403, "Forbidden", "This account has no Teams chats."));
         }
-        let counted: u32 = self.hits.iter().filter(|(k, _)| *k != "download").map(|(_, n)| *n).sum();
-        if counted > self.throttle_from && self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
+        let counted: u32 = self.hits.iter().filter(|(k, _)| !matches!(k.as_str(), "download" | "upload")).map(|(_, n)| *n).sum();
+        if graph && counted > self.throttle_from && self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
             return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
         }
         if !authorized {

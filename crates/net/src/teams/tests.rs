@@ -15,6 +15,9 @@ mod backfill;
 mod changes;
 /// The step 0 check.
 mod check;
+/// OneDrive's uploads, a file's item and share, a post with parts, a shared file's address, the
+/// directory and a conversation created: the client's calls and the fake's rules.
+mod files;
 /// The limiter, the cadences and the slow-down after a 429.
 mod limits;
 /// The worker's outbox: sending in order, unknown outcomes checked, "Not sent", marking read.
