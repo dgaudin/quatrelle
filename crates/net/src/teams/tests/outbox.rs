@@ -27,7 +27,7 @@ use crate::teams::store::{ChatRecord, Copy, Identity, OpRecord, OpState, Opened}
 use crate::teams::sync::rfc3339;
 use crate::teams::worker::Worker;
 
-fn body(text: &str) -> ChatText {
+pub(super) fn body(text: &str) -> ChatText {
     teams_compose(text, &[], &[])
 }
 
@@ -77,14 +77,19 @@ impl Run {
         self.fake(|t| t.chat(chat).map_or(0, |c| c.messages.iter().filter(|m| m.body_html.contains(text)).count()))
     }
 
-    /// Turns, a [`STEP`] apart, until `done`, for `span` at most: whether it came.
-    fn turns_until(&mut self, span: Duration, done: impl Fn(&Run) -> bool) -> bool {
+    /// Turns, a [`STEP`] apart, until `done`, for `span` at most: whether it came. While a
+    /// transfer runs, a few milliseconds of this computer's clock go between two turns (the
+    /// lanes are threads).
+    pub(super) fn turns_until(&mut self, span: Duration, done: impl Fn(&Run) -> bool) -> bool {
         let end = self.at + span;
         while self.at < end {
             if done(self) {
                 return true;
             }
             self.turns(STEP);
+            if self.w.transfers.busy() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
         }
         done(self)
     }
@@ -92,7 +97,7 @@ impl Run {
 
 /// Quatrelle started again: a new worker on `r`'s cache and keychain, going on from the sign-in
 /// kept (the one before gone); `offline`: the network isn't there yet.
-fn restart(r: Run, offline: bool) -> (Run, Arc<Desk>) {
+pub(super) fn restart(r: Run, offline: bool) -> (Run, Arc<Desk>) {
     let Run { w, server, creds, .. } = r;
     let store = w.store.clone();
     drop(w);
@@ -668,6 +673,7 @@ fn an_outbox_of_another_identity_is_never_sent() {
                 state: OpState::Waiting,
                 tries: 0,
                 after: None,
+                parts: Vec::new(),
             };
             copy.put_op(&op).unwrap();
         }
@@ -758,6 +764,7 @@ fn a_refusals_code_is_kept_short() {
             state: OpState::NotSent { reason: Unsent::Refused, code },
             tries: 0,
             after: None,
+            parts: Vec::new(),
         };
         copy.put_op(&op).unwrap();
     }

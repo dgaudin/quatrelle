@@ -43,7 +43,7 @@ use std::time::{Duration, Instant};
 
 use quatrelle_mime::{TEAMS_RUNS, teams_html, teams_write_mentions};
 use quatrelle_model::pim::teams::{
-    CLOCK_TOLERANCE_MS, ChatMessage, ChatText, Event, Mention, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, Outgoing, Sender, Unsent,
+    CLOCK_TOLERANCE_MS, ChatMessage, ChatText, Event, Mention, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, Outgoing, Part, Sender, Unsent,
 };
 
 use super::graph::{Range, message_of};
@@ -56,9 +56,11 @@ use crate::worker::connect::fenced;
 
 mod changes;
 mod held;
+mod parts;
 
 pub(crate) use changes::gone;
 use held::Held;
+pub(crate) use parts::uploaded;
 
 /// The most chats waiting to be marked read.
 const MARKS_MAX: usize = 1_000;
@@ -94,6 +96,8 @@ pub(crate) struct Outbox {
     checks: HashMap<u64, Checking>,
     /// The heads whose last request got no answer at all, held back a while (`held.rs`).
     held: Held,
+    /// The messages whose files are being made ready, by number (`parts.rs`).
+    uploads: HashMap<u64, parts::Upload>,
 }
 
 impl Outbox {
@@ -142,7 +146,7 @@ struct Checking {
 /// into the outbox (or answered "Not sent"), or a chat to mark read.
 pub(crate) fn queue(w: &mut Worker, op: Op) {
     match op {
-        Op::Send { chat, local, body, mentions, parts: _ } => take(w, chat, local, body, mentions),
+        Op::Send { chat, local, body, mentions, parts } => take(w, chat, local, body, mentions, parts),
         Op::Edit { chat, local, message, created, body, mentions } => {
             changes::take(w, chat, local, OutKind::Edit { message, created }, body, mentions)
         }
@@ -157,13 +161,13 @@ pub(crate) fn queue(w: &mut Worker, op: Op) {
     }
 }
 
-/// A message to send: kept as the next of the outbox, waiting, when it can go; else answered
-/// "Not sent" with nothing kept. Ids the engine never makes are dropped unanswered.
-fn take(w: &mut Worker, chat: String, local: String, body: ChatText, mentions: Vec<Mention>) {
+/// A message to send: kept as the next of the outbox, waiting, with its parts ([`parts::taken`]),
+/// when it can go; else answered "Not sent", nothing kept. Ids no engine makes: dropped unanswered.
+fn take(w: &mut Worker, chat: String, local: String, body: ChatText, mentions: Vec<Mention>, parts: Vec<Part>) {
     if !id_ok(&chat) || !local_ok(&local) {
         return log::warn!("teams: a message to send without usable ids was dropped");
     }
-    let op = OpRecord { seq: 0, local, chat, body, mentions, what: OutKind::Send, state: OpState::Waiting, tries: 0, after: None };
+    let op = OpRecord { seq: 0, local, chat, body, mentions, what: OutKind::Send, state: OpState::Waiting, tries: 0, after: None, parts: Vec::new() };
     // Switched off or signed out meanwhile: nothing can keep it.
     let Some(copy) = &w.copy else { return refuse(w, &[], op, Unsent::Refused) };
     let ops = copy.ops();
@@ -171,18 +175,22 @@ fn take(w: &mut Worker, chat: String, local: String, body: ChatText, mentions: V
     let full = copy.op_count().is_none_or(|n| n >= OUTBOX_MAX) || ops.iter().filter(|o| o.chat == op.chat).count() >= OUTBOX_CHAT_MAX;
     let why = match () {
         _ if copy.chat(&op.chat).is_none_or(|r| r.chat.left) => Some(Unsent::Left),
-        _ if runs > TEAMS_RUNS || teams_write_mentions(&op.body, &op.mentions).is_err() => Some(Unsent::TooLong),
+        _ if runs > TEAMS_RUNS || !parts::fits(&op.body, &op.mentions, &parts) => Some(Unsent::TooLong),
         _ if full => Some(Unsent::TooMany),
         _ => None,
     };
     if let Some(why) = why {
         return refuse(w, &ops, op, why);
     }
+    let (records, pictures) = match parts::taken(w, &op.chat, parts) {
+        Ok(taken) => taken,
+        Err(why) => return refuse(w, &ops, op, why),
+    };
     // What a check of it looks after: the newest message the copy knows in the chat.
     let newest = copy.last_pages(&op.chat, 1).iter().map(|m| m.created).max();
     let after = newest.or_else(|| server_ms(w).map(|t| t.saturating_sub(OVERLAP_MS)));
-    let op = OpRecord { seq: copy.next_seq(), after, ..op };
-    if let Err(e) = copy.put_op(&op) {
+    let op = OpRecord { seq: copy.next_seq(), after, parts: records, ..op };
+    if let Err(e) = copy.put_op(&op).and_then(|()| parts::keep(copy, &op, pictures)) {
         log::error!("teams: a message to send couldn't be kept: {}", kind(&NetError::Store(e)));
         return refuse(w, &ops, op, Unsent::Refused);
     }
@@ -229,11 +237,12 @@ pub(crate) fn retry(w: &mut Worker, seq: u64) {
     log::info!("teams: {} conversation {} goes again, as asked", changes::named(&op.what), w.hashed(&op.chat));
     op.state = OpState::Waiting;
     op.tries = 0;
+    parts::again(&mut op);
     settle(w, &op);
 }
 
-/// [`Job::Discard`](quatrelle_model::pim::teams::Job::Discard): a message waiting, or "Not
-/// sent", deleted from the outbox. One being sent or checked stays: it may be in Teams already.
+/// [`Job::Discard`](quatrelle_model::pim::teams::Job::Discard): a message waiting (its upload
+/// cancelled), or "Not sent", deleted from the outbox. One being sent or checked stays.
 pub(crate) fn discard(w: &mut Worker, seq: u64) {
     let Some(op) = w.copy.as_ref().and_then(|c| c.op_at(seq)) else {
         return log::info!("teams: no message there to delete");
@@ -244,6 +253,7 @@ pub(crate) fn discard(w: &mut Worker, seq: u64) {
         {
             log::error!("teams: a message couldn't be deleted from the outbox: {}", kind(&NetError::Store(e)));
         }
+        parts::let_go(w, seq);
         log::info!("teams: a message to conversation {} was deleted from the outbox, as asked", w.hashed(&op.chat));
     } else {
         log::info!("teams: a message being sent isn't deleted: it may be in Teams already");
@@ -264,7 +274,7 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
     let mut chosen = None;
     for i in 0..w.outbox.heads.len() {
         let Some((seq, route)) = w.outbox.heads.get(i).map(|h| (h.seq, h.route())) else { break };
-        if w.outbox.until(seq).is_some_and(|until| now < until) || !w.may(route, now) {
+        if w.outbox.until(seq).is_some_and(|until| now < until) || w.transfers.uploading(seq) || !w.may(route, now) {
             continue;
         }
         chosen = w.outbox.heads.get(i).cloned();
@@ -287,19 +297,20 @@ pub(crate) fn due(w: &Worker, now: Instant) -> Option<Instant> {
     }
     let at = |route: Route| now.checked_add(w.limiter.wait(route, now));
     let marks = w.outbox.marks.iter().filter_map(|m| at(Route::Send(m.key)));
-    let heads = w.outbox.heads.iter().filter_map(|h| {
+    let heads = w.outbox.heads.iter().filter(|h| !w.transfers.uploading(h.seq)).filter_map(|h| {
         let may = at(h.route())?;
         Some(w.outbox.until(h.seq).map_or(may, |until| may.max(until)))
     });
     marks.chain(heads).min()
 }
 
-/// The chat was left (or deleted): its messages and changes still to go won't, said "Not sent";
-/// its reactions leave the outbox, each said once.
+/// The chat was left (or deleted): its messages and changes still to go won't, said "Not sent",
+/// their uploads let go ([`parts::let_go`]); its reactions leave the outbox, each said once.
 pub(crate) fn left(w: &mut Worker, chat: &str) {
     let Some(copy) = &w.copy else { return };
-    let (mut moved, mut gone) = (0usize, Vec::new());
+    let (mut moved, mut gone, mut parted) = (0usize, Vec::new(), Vec::new());
     for op in copy.ops().into_iter().filter(|o| o.chat == chat && !matches!(o.state, OpState::NotSent { .. })) {
+        parted.extend((!op.parts.is_empty()).then_some(op.seq));
         let not_made = OpRecord { state: OpState::NotSent { reason: Unsent::Left, code: None }, ..op };
         let reaction = matches!(not_made.what, OutKind::React { .. });
         match if reaction { copy.remove_op(not_made.seq) } else { copy.put_op(&not_made) } {
@@ -315,6 +326,7 @@ pub(crate) fn left(w: &mut Worker, chat: &str) {
             gone.len()
         );
         let ops = copy.ops();
+        parted.into_iter().for_each(|seq| parts::let_go(w, seq));
         said(w, &ops, chat, None, gone);
     }
 }
@@ -453,6 +465,10 @@ fn current(w: &mut Worker, head: &Head) -> Option<OpRecord> {
 fn post(w: &mut Worker, head: &Head, now: Instant) {
     let Some(mut op) = current(w, head) else { return };
     let send = op.what == OutKind::Send;
+    // Its files made ready first, a step each ([`parts::ready`]).
+    if send && !op.parts.is_empty() && !matches!(parts::ready(w, head, &mut op, now), parts::Ready::Post) {
+        return;
+    }
     // A change's words are written as it's made.
     let Ok(html) = (if send { teams_write_mentions(&op.body, &op.mentions) } else { Ok(String::new()) }) else {
         op.state = OpState::NotSent { reason: Unsent::TooLong, code: None };
@@ -478,7 +494,11 @@ fn post(w: &mut Worker, head: &Head, now: Instant) {
         return changes::make(w, head, op, now);
     }
     let chat = head.chat.clone();
-    let e = match w.request(Route::Send(head.key), now, |c| c.send_html(&chat, &html, &op.mentions)) {
+    let made = match op.parts.is_empty() {
+        true => w.request(Route::Send(head.key), now, |c| c.send_html(&chat, &html, &op.mentions)),
+        false => parts::post(w, head, &op, now),
+    };
+    let e = match made {
         Ok(v) => return sent(w, &op, message_of(&chat, &v)),
         Err(e) => e,
     };
@@ -542,7 +562,8 @@ fn check(w: &mut Worker, head: &Head, now: Instant) {
     let (me, text) = (w.settings.object_id.clone(), as_read(&op.body, &op.mentions, &chat));
     let found = page.items.iter().take(CHECK_ITEMS).map(|v| message_of(&chat, v)).find(|m| {
         let mine = matches!(&m.sender, Sender::User { id, .. } if !me.is_empty() && id.eq_ignore_ascii_case(&me));
-        mine && !m.id.is_empty() && m.deleted.is_none() && after.is_none_or(|a| m.created > a) && flat(&m.body.plain()) == text
+        let same = mine && !m.id.is_empty() && m.deleted.is_none() && after.is_none_or(|a| m.created > a) && flat(&m.body.plain()) == text;
+        same && parts::same_files(&op, m)
     });
     if let Some(m) = found {
         w.outbox.checks.remove(&op.seq);
@@ -670,7 +691,7 @@ fn said(w: &mut Worker, ops: &[OpRecord], chat: &str, took: Option<String>, extr
 /// `chat`'s messages and changes going out, of `ops`, said; `extra` after them (not kept: not
 /// taken, or a reaction let go), `took` naming what was just answered for.
 fn snapshot(w: &Worker, ops: &[OpRecord], chat: &str, took: Option<String>, extra: Vec<Outgoing>) {
-    let mut items: Vec<Outgoing> = ops.iter().filter(|o| o.chat == chat).map(OpRecord::outgoing).collect();
+    let mut items: Vec<Outgoing> = ops.iter().filter(|o| o.chat == chat).map(|o| parts::shown(w, o.outgoing())).collect();
     items.extend(extra);
     w.say(Event::Outbox { chat: chat.to_string(), items, took });
 }
@@ -692,5 +713,6 @@ fn keep(w: &mut Worker, ops: &[OpRecord]) {
         .collect();
     w.outbox.checks.retain(|seq, _| heads.iter().any(|h| h.check && h.seq == *seq));
     w.outbox.held.retain(|seq| heads.iter().any(|h| h.seq == seq));
+    w.outbox.uploads.retain(|seq, _| heads.iter().any(|h| h.seq == *seq));
     w.outbox.heads = heads;
 }

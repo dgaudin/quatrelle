@@ -644,6 +644,7 @@ fn op(seq: u64, chat: &str) -> OpRecord {
         state: OpState::Waiting,
         tries: 0,
         after: Some(T0),
+        parts: Vec::new(),
     }
 }
 

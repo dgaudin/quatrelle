@@ -2,12 +2,17 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The outbox kept in the copy: its records in order and read back, those under another number's
 //! name or past the outbox's caps passed over (and never written), no more than 500 read, emptied
-//! without the rest of the copy, and gone with a copy set aside for another identity.
+//! without the rest of the copy, and gone with a copy set aside for another identity; what goes
+//! with a message (files and pictures, the pictures' bytes beside it) kept and read back the same.
 
 use quatrelle_mime::TEAMS_RUNS;
-use quatrelle_model::pim::teams::{LOCAL_MAX, MAX_MENTIONS, Mention, NAME_CHARS, OUTBOX_MAX, OutKind, OutState, Outgoing, SEND_MAX, Unsent};
+use quatrelle_model::pim::teams::{
+    FILE_MAX, LOCAL_MAX, MAX_MENTIONS, Mention, NAME_CHARS, OUTBOX_MAX, OutKind, OutPart, OutState, Outgoing, PATH_MAX, PICTURE_INLINE_MAX, SEND_MAX,
+    Unsent,
+};
 
 use super::*;
+use crate::teams::store::{PartRecord, Uploaded};
 
 fn seqs(c: &Copy) -> Vec<u64> {
     c.ops().iter().map(|o| o.seq).collect()
@@ -338,6 +343,31 @@ fn any_out_kind() -> impl proptest::strategy::Strategy<Value = OutKind> {
     ]
 }
 
+/// Any part of a message within what the outbox keeps: a file uploaded or not, a picture. Names
+/// begin with `x`, never one Windows keeps for itself (`con`, `nul`…), so each is its own drive
+/// name.
+fn any_part() -> impl proptest::strategy::Strategy<Value = PartRecord> {
+    use proptest::prelude::*;
+    let up = proptest::option::of(("[A-Z0-9]{1,12}", any::<u128>(), "[a-z]{1,8}", any::<bool>()).prop_map(|(item, g, page, shared)| Uploaded {
+        item,
+        guid: guid(g),
+        url: format!("https://contoso-my.sharepoint.com/personal/riley/x{page}.pdf"),
+        name: format!("x{page}.pdf"),
+        shared,
+    }));
+    prop_oneof![
+        ("[a-z]{1,8}", 1..=FILE_MAX, -253_402_300_799_999..=253_402_300_799_999i64, up).prop_map(|(name, size, modified, up)| PartRecord::File {
+            path: absolute(&format!("x{name}.pdf")),
+            name: format!("x{name}.pdf"),
+            size,
+            modified,
+            up
+        }),
+        ("[a-z]{1,8}", proptest::sample::select(vec!["image/png", "image/jpeg"]), 1..=PICTURE_INLINE_MAX as u32)
+            .prop_map(|(name, mime, len)| PartRecord::Picture { name: format!("x{name}.png"), mime: mime.into(), len }),
+    ]
+}
+
 proptest::proptest! {
     /// Any record reads back from its JSON as it was; one within the caps, from the copy too.
     #[test]
@@ -354,6 +384,7 @@ proptest::proptest! {
         any_tries in proptest::prelude::any::<u8>(),
         what in any_out_kind(),
         people in proptest::collection::vec(("[a-z]{1,8}", "[a-z]{1,8}"), 0..4),
+        parts in proptest::collection::vec(any_part(), 0..=3),
     ) {
         let mentions = people.into_iter().enumerate().map(|(i, (user, name))| Mention { id: i as u32, text: name, user_id: Some(user) }).collect();
         let mut runs: Vec<Run> = words.into_iter().map(|(text, bold, italic)| Run { text, bold, italic, ..Run::default() }).collect();
@@ -364,7 +395,9 @@ proptest::proptest! {
             OutKind::Delete { .. } | OutKind::React { .. } => (Vec::new(), Vec::new()),
         };
         let blocks = if runs.is_empty() && !matches!(what, OutKind::Send | OutKind::Edit { .. }) { Vec::new() } else { vec![Block { kind: BlockKind::Paragraph, runs }] };
-        let op = OpRecord { seq, local, chat, body: ChatText { blocks }, mentions, what, state, tries, after };
+        // Parts go with a message sent only.
+        let parts = if what == OutKind::Send { parts } else { Vec::new() };
+        let op = OpRecord { seq, local, chat, body: ChatText { blocks }, mentions, what, state, tries, after, parts };
         let loose = OpRecord { seq: any_seq, local: anything.clone(), chat: anything, tries: any_tries, ..op.clone() };
         proptest::prop_assert_eq!(serde_json::from_slice::<OpRecord>(&serde_json::to_vec(&loose).unwrap()).unwrap(), loose);
         let (c, _) = Copy::open(Store::memory(), &who("u-1")).unwrap();
@@ -399,4 +432,167 @@ fn an_outbox_that_cant_be_listed_numbers_nothing_over_a_record() {
     assert!(written.is_err(), "numbered {}: refused, not written over", next.seq);
     assert_eq!(c.ops(), [op(1, A)], "the message waiting is still the user's");
     let _ = std::fs::remove_dir_all(&t);
+}
+
+/// A path of the temporary folder: an absolute one, wherever the tests run.
+fn absolute(name: &str) -> String {
+    std::env::temp_dir().join(name).to_string_lossy().into_owned()
+}
+
+/// An object id made of `n`'s hexadecimal digits.
+fn guid(n: u128) -> String {
+    let h = format!("{n:032x}");
+    format!("{}-{}-{}-{}-{}", &h[..8], &h[8..12], &h[12..16], &h[16..20], &h[20..])
+}
+
+/// A file of 4,000 bytes, uploaded when `up` says so.
+fn file_part(up: Option<Uploaded>) -> PartRecord {
+    PartRecord::File { path: absolute("report.pdf"), name: "report.pdf".into(), size: 4_000, modified: T0, up }
+}
+
+/// What OneDrive made of the file, shared with the chat or not.
+fn uploaded(shared: bool) -> Uploaded {
+    Uploaded {
+        item: "01ITEM0001".into(),
+        guid: "5b8c7d0e-0001-4000-8000-000000000001".into(),
+        url: "https://contoso-my.sharepoint.com/personal/riley/Microsoft%20Teams%20Chat%20Files/report%201.pdf".into(),
+        name: "report 1.pdf".into(),
+        shared,
+    }
+}
+
+fn picture_part(len: u32) -> PartRecord {
+    PartRecord::Picture { name: "paste.png".into(), mime: "image/png".into(), len }
+}
+
+fn with_parts(seq: u64, parts: Vec<PartRecord>) -> OpRecord {
+    OpRecord { parts, ..op(seq, A) }
+}
+
+#[test]
+fn part_records_are_kept_and_read_back() {
+    let (c, s) = copy();
+    let going = with_parts(1, vec![file_part(None), file_part(Some(uploaded(true))), picture_part(1_000)]);
+    c.put_op(&going).unwrap();
+    assert_eq!(c.ops(), std::slice::from_ref(&going));
+    // As the conversation shows them: a file's bytes all gone up once it is uploaded.
+    let file = |sent: u64| OutPart { name: "report.pdf".into(), size: 4_000, picture: false, sent };
+    assert_eq!(going.outgoing().parts, [file(0), file(4_000), OutPart { name: "paste.png".into(), size: 1_000, picture: true, sent: 0 }]);
+    // A picture's bytes, beside the record, by its place among the parts.
+    c.put_picture(1, 2, &[9u8; 1_000]).unwrap();
+    assert_eq!(c.picture(1, 2), Some(vec![9u8; 1_000]));
+    assert_eq!((c.picture(1, 0), c.picture(2, 2)), (None, None));
+    assert!(s.account_file(TEAMS_ACCOUNT, "outbox-parts/00000000000000000001/2").unwrap().is_some(), "its number in 20 digits");
+    // Never past 4 MiB, nor empty: refused when written, passed over when read back.
+    let past = vec![0u8; PICTURE_INLINE_MAX as usize + 1];
+    assert!(c.put_picture(1, 3, &past).is_err());
+    assert!(c.put_picture(1, 3, &[]).is_err());
+    s.write_account_files(TEAMS_ACCOUNT, &[("outbox-parts/00000000000000000001/3".into(), past)]).unwrap();
+    assert_eq!(c.picture(1, 3), None);
+    // At the caps: ten parts, a path of 4,096 bytes, 100 MiB, a picture of 4 MiB, times a date holds.
+    let long = absolute(&"a".repeat(PATH_MAX));
+    let long = format!("{}{}", &long[..PATH_MAX - 4], ".pdf");
+    let at_caps = with_parts(
+        2,
+        vec![
+            PartRecord::File { path: long, name: "a.pdf".into(), size: FILE_MAX, modified: -253_402_300_799_999, up: None },
+            PartRecord::File { path: absolute("b.pdf"), name: "b.pdf".into(), size: 1, modified: 253_402_300_799_999, up: Some(uploaded(false)) },
+            picture_part(PICTURE_INLINE_MAX as u32),
+        ]
+        .into_iter()
+        .chain((0..7).map(|_| picture_part(1)))
+        .collect(),
+    );
+    c.put_op(&at_caps).unwrap();
+    assert_eq!(c.ops(), [going, at_caps]);
+    c.put_picture(2, 2, &vec![0u8; PICTURE_INLINE_MAX as usize]).unwrap();
+    assert_eq!(c.picture(2, 2).map(|b| b.len()), Some(PICTURE_INLINE_MAX as usize));
+}
+
+/// H16: a record whose parts break their rules is never written, and passed over when read back.
+#[test]
+fn part_records_past_their_rules_are_passed_over() {
+    let (c, s) = copy();
+    let file = |path: &str, name: &str, size: u64| PartRecord::File { path: path.into(), name: name.into(), size, modified: T0, up: None };
+    let up = |change: fn(&mut Uploaded)| {
+        let mut u = uploaded(true);
+        change(&mut u);
+        with_parts(1, vec![file_part(Some(u))])
+    };
+    let picture = |mime: &str, len: u32| with_parts(1, vec![PartRecord::Picture { name: "paste.png".into(), mime: mime.into(), len }]);
+    let report = absolute("report.pdf");
+    let broken = [
+        ("eleven parts", with_parts(1, vec![picture_part(1); 11])),
+        ("parts on an edit", OpRecord { parts: vec![file_part(None)], ..edit(1, text("x"), Vec::new()) }),
+        ("parts on a reaction", OpRecord { parts: vec![picture_part(1)], ..react(1, "\u{1F44D}") }),
+        ("a relative path", with_parts(1, vec![file("report.pdf", "report.pdf", 1)])),
+        ("a path with a line break", with_parts(1, vec![file(&absolute("a\nb.pdf"), "report.pdf", 1)])),
+        ("a path past PATH_MAX", with_parts(1, vec![file(&absolute(&"a".repeat(PATH_MAX)), "report.pdf", 1)])),
+        ("a name that climbs", with_parts(1, vec![file(&report, "../x", 1)])),
+        ("a name of none", with_parts(1, vec![file(&report, "", 1)])),
+        ("a name OneDrive refuses", with_parts(1, vec![file(&report, "a#b.pdf", 1)])),
+        ("a size of 0", with_parts(1, vec![file(&report, "report.pdf", 0)])),
+        ("a size past FILE_MAX", with_parts(1, vec![file(&report, "report.pdf", FILE_MAX + 1)])),
+        (
+            "a time past what a date holds",
+            with_parts(1, vec![PartRecord::File { path: report.clone(), name: "report.pdf".into(), size: 1, modified: i64::MAX, up: None }]),
+        ),
+        ("an uploaded file of GUID x", up(|u| u.guid = "x".into())),
+        ("an uploaded file at an http address", up(|u| u.url = "http://contoso-my.sharepoint.com/x.pdf".into())),
+        ("an uploaded file at an address with a space", up(|u| u.url = "https://contoso-my.sharepoint.com/a b.pdf".into())),
+        ("an uploaded file at an address past 8 KiB", up(|u| u.url = format!("https://contoso-my.sharepoint.com/{}", "a".repeat(8 << 10)))),
+        ("an uploaded item a/b", up(|u| u.item = "a/b".into())),
+        ("an uploaded item of none", up(|u| u.item = String::new())),
+        ("an uploaded name that climbs", up(|u| u.name = "../x".into())),
+        ("a picture of SVG", picture("image/svg+xml", 1)),
+        ("a picture of 0 bytes", picture("image/png", 0)),
+        ("a picture past PICTURE_INLINE_MAX", picture("image/jpeg", PICTURE_INLINE_MAX as u32 + 1)),
+        ("a picture's name that climbs", with_parts(1, vec![PartRecord::Picture { name: "../x.png".into(), mime: "image/png".into(), len: 1 }])),
+        ("a body and its places past SEND_MAX", OpRecord { body: text(&"<".repeat(SEND_MAX / 4 - 2)), ..with_parts(1, vec![file_part(None)]) }),
+    ];
+    for (what, o) in &broken {
+        assert!(c.put_op(o).is_err(), "{what}: refused when written");
+        s.write_account_files(TEAMS_ACCOUNT, &[(op_key(o.seq), serde_json::to_vec(o).unwrap())]).unwrap();
+        assert!(c.ops().is_empty(), "{what}: passed over");
+        c.clear_ops().unwrap();
+    }
+}
+
+#[test]
+fn records_of_delivery_three_read_back_without_parts() {
+    let (c, s) = copy();
+    // As delivery 3 wrote it: no `parts`.
+    let raw = r#"{"seq":1,"local":"l-1.0","chat":"19:a1b2@thread.v2","body":{"blocks":[{"kind":{"block":"paragraph"},"runs":[{"text":"Old"}]}]},
+        "mentions":[],"what":{"what":"send"},"state":{"state":"waiting"},"tries":0,"after":1790812800000}"#;
+    s.write_account_files(TEAMS_ACCOUNT, &[(op_key(1), raw.as_bytes().to_vec())]).unwrap();
+    let ops = c.ops();
+    assert_eq!(ops.len(), 1, "read back");
+    assert!(ops[0].parts.is_empty());
+    assert!(ops[0].outgoing().parts.is_empty());
+    // And a file uploaded before its share is read back with what OneDrive made of it.
+    let raw = serde_json::to_vec(&with_parts(2, vec![file_part(Some(uploaded(false)))])).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(v["parts"][0]["part"], "file");
+    assert_eq!(v["parts"][0]["up"]["shared"], false);
+}
+
+#[test]
+fn removing_a_record_takes_its_pictures() {
+    let (c, s) = copy();
+    for seq in 1..=3 {
+        c.put_op(&with_parts(seq, vec![picture_part(10), file_part(None), picture_part(10)])).unwrap();
+        c.put_picture(seq, 0, &[1u8; 10]).unwrap();
+        c.put_picture(seq, 2, &[2u8; 10]).unwrap();
+    }
+    c.remove_op(1).unwrap();
+    assert_eq!((c.picture(1, 0), c.picture(1, 2)), (None, None));
+    assert!(s.account_files(TEAMS_ACCOUNT, "outbox-parts/00000000000000000001").unwrap_or_default().is_empty());
+    assert_eq!(c.picture(2, 2), Some(vec![2u8; 10]), "another's stay");
+    // Their pictures alone, the records kept.
+    c.remove_pictures(2).unwrap();
+    assert_eq!((c.picture(2, 0), seqs(&c)), (None, vec![2, 3]));
+    // The outbox emptied: every picture with it.
+    c.clear_ops().unwrap();
+    assert_eq!(c.picture(3, 0), None);
+    assert!(s.account_files(TEAMS_ACCOUNT, "outbox-parts").unwrap_or_default().is_empty());
 }

@@ -7,9 +7,9 @@
 //! It is read back as hostile as the rest of the copy: a record past [`MAX_OP`] bytes, under
 //! another number's name, or past its caps ([`OpRecord::broken`]) is passed over, and what is
 //! passed over is logged by count, never by what it holds. A record that wouldn't be read back is
-//! never written.
+//! never written. A record removed takes its pictures' bytes with it (`parts.rs`).
 
-use quatrelle_mime::{TEAMS_RUNS, teams_write_mentions};
+use quatrelle_mime::TEAMS_RUNS;
 use quatrelle_model::pim::teams::{
     ChatText, LOCAL_MAX, MAX_MENTIONS, Mention, NAME_CHARS, OUTBOX_MAX, OutKind, OutState, Outgoing, Unsent, one_line, reactable,
 };
@@ -26,7 +26,7 @@ const MAX_TRIES: u8 = 9;
 /// The longest code of Teams' answer kept ([`OpState::NotSent`]).
 const MAX_CODE: usize = 64;
 /// The last time a record says (milliseconds since 1970): the end of year 9999, what a date can hold.
-const MAX_MS: i64 = 253_402_300_799_999;
+pub(super) const MAX_MS: i64 = 253_402_300_799_999;
 
 /// A message going out, as the outbox keeps it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,6 +51,10 @@ pub(crate) struct OpRecord {
     /// The newest creation time known in the chat when it was taken (milliseconds since 1970, on
     /// Graph's clock): a message of the user's made after it may be this one.
     pub(crate) after: Option<i64>,
+    /// What goes with a message sent: its files and pictures, in the order added. Delivery 3's
+    /// records have none.
+    #[serde(default)]
+    pub(crate) parts: Vec<PartRecord>,
 }
 
 /// Where a message going out stands, as the worker knows it.
@@ -83,7 +87,7 @@ impl OpRecord {
             body: self.body.clone(),
             mentions: self.mentions.clone(),
             what: self.what.clone(),
-            parts: Vec::new(),
+            parts: self.parts.iter().map(PartRecord::shown).collect(),
             state,
         }
     }
@@ -98,8 +102,12 @@ impl OpRecord {
     /// emoji is one [`reactable`] takes; a deletion or a reaction has no body and no mentions, an
     /// edit has a body. Mentions: at most [`MAX_MENTIONS`], each of an id of its own, a user
     /// with a usable id, a name of one line of 1 to [`NAME_CHARS`] characters, and every run
-    /// that names one names one of the list. `after` is a time a date can hold.
+    /// that names one names one of the list. `after` is a time a date can hold. Its parts keep
+    /// theirs ([`parts::broken`](super::parts::broken)), and their places count in the bytes.
     pub(super) fn broken(&self) -> Option<&'static str> {
+        let send = self.what == OutKind::Send;
+        let parts = super::parts::broken(&self.parts, send);
+        let pictures = self.parts.iter().filter(|p| matches!(p, PartRecord::Picture { .. })).count();
         let local = local_ok(&self.local);
         let code = match &self.state {
             OpState::NotSent { code: Some(c), .. } => {
@@ -140,7 +148,8 @@ impl OpRecord {
             _ if !kept => Some("a body or mentions a change doesn't take, or an edit without a body"),
             _ if !people => Some("mentions outside their rules"),
             _ if !named => Some("a run naming a mention not in the list"),
-            _ if teams_write_mentions(&self.body, &self.mentions).is_err() => Some("a body longer than Teams takes"),
+            _ if parts.is_some() => parts,
+            _ if !fits(&self.body, &self.mentions, pictures, self.parts.len().saturating_sub(pictures)) => Some("a body longer than Teams takes"),
             _ if self.after.is_some_and(|t| !ms(t)) => Some("a time outside what a date holds"),
             _ => None,
         }
@@ -210,9 +219,10 @@ impl Copy {
         (op.seq == seq && op.broken().is_none()).then_some(op)
     }
 
-    /// Record `seq` gone; none there is no error.
+    /// Record `seq` gone, then its pictures; none there is no error.
     pub(crate) fn remove_op(&self, seq: u64) -> Result<()> {
-        self.store.remove_account_files(TEAMS_ACCOUNT, &op_key(seq))
+        self.store.remove_account_files(TEAMS_ACCOUNT, &op_key(seq))?;
+        self.remove_pictures(seq)
     }
 
     /// Every record of the outbox gone, whatever it holds; the rest of the copy stays.
@@ -220,9 +230,11 @@ impl Copy {
         Copy::clear_outbox(&self.store)
     }
 
-    /// [`Copy::clear_ops`] on the copy in `store`, open or not (signing out while switched off).
+    /// [`Copy::clear_ops`] on the copy in `store`, open or not (signing out while switched off):
+    /// the records, then their pictures.
     pub(crate) fn clear_outbox(store: &Store) -> Result<()> {
-        store.remove_account_files(TEAMS_ACCOUNT, OUTBOX)
+        store.remove_account_files(TEAMS_ACCOUNT, OUTBOX)?;
+        Copy::clear_pictures(store)
     }
 
     /// How many records the outbox holds, read back or passed over (what its caps count); `None`

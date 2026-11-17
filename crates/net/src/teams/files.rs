@@ -45,7 +45,6 @@ mod upload;
 mod watched;
 
 pub(crate) use download::save;
-#[cfg_attr(not(test), expect(unused_imports))]
 pub(crate) use upload::modified_of;
 pub(crate) use upload::send_up;
 use watched::Watched;
@@ -68,7 +67,6 @@ pub(crate) type FileKey = (String, String, String);
 /// changed: [`modified_of`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Source {
-    #[cfg_attr(not(test), expect(dead_code))]
     File { path: PathBuf, size: u64, modified: i64 },
 }
 
@@ -178,7 +176,6 @@ impl Transfers {
 
     /// Part `part` of the message `seq` sent up to `session` from `source`, on the upload lane:
     /// false when one of that message's runs or waits already, or the lane can't be had.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn upload(&mut self, seq: u64, part: usize, session: UploadSession, source: Source, base: &str, floor: (u64, Duration)) -> bool {
         if self.uploads.iter().any(|f| f.key.0 == seq) {
             return false;
@@ -198,7 +195,6 @@ impl Transfers {
     }
 
     /// The uploads of the message `seq` cancelled and let go: nothing of them is heard after.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn cancel_upload(&mut self, seq: u64) {
         self.uploads.retain(|f| {
             let theirs = f.key.0 == seq;
@@ -224,6 +220,11 @@ impl Transfers {
     /// Whether a transfer runs or waits on a lane.
     pub(crate) fn busy(&self) -> bool {
         !self.downloads.is_empty() || !self.uploads.is_empty()
+    }
+
+    /// Whether an upload of the message `seq` runs or waits on its lane.
+    pub(crate) fn uploading(&self, seq: u64) -> bool {
+        self.uploads.iter().any(|f| f.key.0 == seq)
     }
 
     /// The next word of a lane about a transfer still awaited; the words of one cancelled since
@@ -482,7 +483,7 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
 
 /// Graph's answer as an outcome keeps it: its status and code (`HTTP 404 NotFound`), a server's
 /// error's as a refusal's.
-fn code_of(e: &NetError) -> Option<String> {
+pub(crate) fn code_of(e: &NetError) -> Option<String> {
     match e {
         NetError::Closed(m) => answer_code(&NetError::Protocol(m.clone())),
         e => answer_code(e),
@@ -490,7 +491,7 @@ fn code_of(e: &NetError) -> Option<String> {
 }
 
 /// Every word of the lanes: a file saved or not, said; the uploads' words, for the outbox.
-pub(crate) fn done(w: &mut Worker, _now: Instant) {
+pub(crate) fn done(w: &mut Worker, now: Instant) {
     while let Some(word) = w.transfers.take() {
         match word {
             Done::Saved { key, path } => saved(w, key, path),
@@ -498,7 +499,7 @@ pub(crate) fn done(w: &mut Worker, _now: Instant) {
                 log::info!("teams: a file of chat {} not saved: {why:?}", w.hashed(&key.0));
                 tell(w, key, FileOutcome::Failed { why, code });
             }
-            Done::Sent { .. } | Done::Uploaded { .. } | Done::NotUploaded { .. } => log::debug!("teams: an upload's word, for the outbox"),
+            Done::Sent { .. } | Done::Uploaded { .. } | Done::NotUploaded { .. } => super::outbox::uploaded(w, word, now),
         }
     }
 }
@@ -563,7 +564,7 @@ impl Worker {
     }
 
     /// The floor a transfer keeps to: a test's, else [`FLOOR`] over [`WINDOW`].
-    fn floor(&self) -> (u64, Duration) {
+    pub(crate) fn floor(&self) -> (u64, Duration) {
         #[cfg(test)]
         if let Some(floor) = self.hooks.floor {
             return floor;

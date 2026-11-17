@@ -152,7 +152,7 @@ impl Copy {
         if ![chat, message, hosted].into_iter().all(id_ok) {
             return Err(refused("a picture without usable ids"));
         }
-        self.put_picture(imgref_key(chat, message, hosted), |sum| Ok(sum.as_bytes().to_vec()), bytes)
+        self.put_by_sum(imgref_key(chat, message, hosted), |sum| Ok(sum.as_bytes().to_vec()), bytes)
     }
 
     /// A message's hosted image, when it's kept: only bytes that are the ones it was kept as.
@@ -162,7 +162,7 @@ impl Copy {
         }
         let sum = self.store.account_file(TEAMS_ACCOUNT, &imgref_key(chat, message, hosted)).ok()??;
         let sum = String::from_utf8(sum).ok().filter(|s| is_sum(s))?;
-        self.picture(&sum)
+        self.by_sum(&sum)
     }
 
     /// A message's hosted image gone from the copy: where it was said to be, and the picture. One
@@ -191,7 +191,7 @@ impl Copy {
         }
         let record = self.read(&photo_key(user)).and_then(|b| serde_json::from_slice::<PhotoRecord>(&b).ok()).filter(|r| r.user == user);
         let Some(r) = record else { return (None, None) };
-        let bytes = r.sum.as_deref().filter(|s| is_sum(s)).and_then(|s| self.picture(s));
+        let bytes = r.sum.as_deref().filter(|s| is_sum(s)).and_then(|s| self.by_sum(s));
         (bytes, r.photo_missing_until)
     }
 
@@ -201,7 +201,7 @@ impl Copy {
             return Err(refused("a photo without a usable id"));
         }
         let record = |sum: &str| json(&PhotoRecord { user: user.to_string(), sum: Some(sum.to_string()), photo_missing_until: None });
-        self.put_picture(photo_key(user), record, bytes)
+        self.put_by_sum(photo_key(user), record, bytes)
     }
 
     /// Graph said someone has no photo: not asked again before `until`.
@@ -225,7 +225,7 @@ impl Copy {
 
     /// A picture's bytes, when they're kept and are the ones its hash says: now the most recently
     /// used.
-    fn picture(&self, sum: &str) -> Option<Vec<u8>> {
+    fn by_sum(&self, sum: &str) -> Option<Vec<u8>> {
         let bytes = self.store.account_file(TEAMS_ACCOUNT, &img_key(sum)).ok()??;
         if bytes.len() > MAX_PICTURE || hex(&Sha256::digest(&bytes)) != sum {
             return None;
@@ -240,7 +240,7 @@ impl Copy {
     /// A picture kept under its bytes' hash, with `at` pointing at it (what `point` writes there,
     /// given the hash), in one write with its use and the uses of pictures shown since the last;
     /// the least recently used go first when the cache would be past its bounds.
-    fn put_picture(&self, at: String, point: impl FnOnce(&str) -> Result<Vec<u8>>, bytes: &[u8]) -> Result<()> {
+    fn put_by_sum(&self, at: String, point: impl FnOnce(&str) -> Result<Vec<u8>>, bytes: &[u8]) -> Result<()> {
         if bytes.len() > MAX_PICTURE {
             return Err(refused("a picture too big"));
         }

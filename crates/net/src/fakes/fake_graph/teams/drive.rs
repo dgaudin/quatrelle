@@ -9,7 +9,8 @@
 //!
 //! The ranges follow OneDrive's rules: each the next expected (else 416), of one total, a multiple
 //! of 320 KiB but the last, under 60 MiB (else 400); the last makes the file (201), a name taken
-//! numbered as OneDrive does (`report 1.pdf`). A session expires after `expire_after` ranges.
+//! numbered as OneDrive does (`report 1.pdf`). A session expires after `expire_after` ranges; a
+//! range mid-way can have its answer held back (`hold_range`) or its connection cut (`cut_range`).
 //!
 //! A file shared in a chat: its first hop (`shares`, with the token) redirects to its download
 //! (`download`, without), which serves its bytes.
@@ -96,6 +97,12 @@ pub(crate) struct FakeDrive {
     pub(crate) status_back: bool,
     /// Every range is refused with this status (Graph's code `accessDenied`).
     pub(crate) refuse_ranges: Option<u16>,
+    /// The range put once this many were taken has its answer held back this long, once: an
+    /// upload stalled mid-way.
+    pub(crate) hold_range: Option<(usize, std::time::Duration)>,
+    /// The range put once this many were taken is carried out, then its connection closed with
+    /// no answer, once: an upload cut mid-way.
+    pub(crate) cut_range: Option<usize>,
 }
 
 /// `bytes a-b/total`.
@@ -194,8 +201,22 @@ impl FakeTeams {
             "GET" => expecting(200, if self.drive_files.status_back { 0 } else { s.bytes.len() as u64 }),
             _ => match self.drive_files.refuse_ranges {
                 Some(status) => Reply::error(status, "accessDenied", "Refused, as the test asked."),
-                None => self.put_range(at, headers, body),
+                None => {
+                    self.mid_way();
+                    self.put_range(at, headers, body)
+                }
             },
+        }
+    }
+
+    /// What `hold_range` and `cut_range` make of the range being put.
+    fn mid_way(&mut self) {
+        let taken = self.drive_files.ranges.len();
+        if let Some((_, wait)) = self.drive_files.hold_range.take_if(|(n, _)| *n == taken) {
+            self.holding = Some(wait);
+        }
+        if self.drive_files.cut_range.take_if(|n| *n == taken).is_some() {
+            *self.cut_after.entry("upload".into()).or_default() += 1;
         }
     }
 

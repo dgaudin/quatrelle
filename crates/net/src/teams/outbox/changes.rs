@@ -63,7 +63,7 @@ pub(super) fn take(w: &mut Worker, chat: String, local: String, what: OutKind, b
     if !id_ok(&chat) || !local_ok(&local) || !what.message().is_some_and(id_ok) {
         return log::warn!("teams: a change to a message without usable ids was dropped");
     }
-    let op = OpRecord { seq: 0, local, chat, body, mentions, what, state: OpState::Waiting, tries: 0, after: None };
+    let op = OpRecord { seq: 0, local, chat, body, mentions, what, state: OpState::Waiting, tries: 0, after: None, parts: Vec::new() };
     // Switched off or signed out meanwhile: nothing can keep it.
     let Some(copy) = &w.copy else { return refuse(w, &[], op, Unsent::Refused) };
     let mut ops = copy.ops();

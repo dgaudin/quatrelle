@@ -16,7 +16,8 @@
 //!   a tranche of them; `index/<hash>.json`, the stub at the head of its tranches, or its words in
 //!   the old format still; `index/partial`, the oldest chats' words left the index;
 //! * `outbox/<seq>.json`: a message going out, by its number in 20 digits ([`OpRecord`],
-//!   `outbox.rs`).
+//!   `outbox.rs`), and `outbox-parts/<seq>/<n>`: the bytes of its pictures ([`PartRecord`],
+//!   `parts.rs`).
 //!
 //! `<hash>` is the first 32 hex digits of the SHA-256 of the chat's id. The file is hostile input
 //! as much as a server is: every record carries the id it's for (one under another's key is
@@ -32,9 +33,11 @@ use sha2::{Digest, Sha256};
 mod images;
 mod outbox;
 mod pages;
+mod parts;
 
 pub(crate) use outbox::*;
 pub(crate) use pages::{PAGE, Side, edge_down, edge_near, edge_up, lowest_free, side};
+pub(crate) use parts::{PartRecord, Uploaded, fits, path_ok};
 
 /// The most bytes of a record read back (a page, a chat): more is a damaged or hostile file. Above
 /// the most a record within the caps takes (5,000 members, or one message's reactions).
@@ -531,8 +534,9 @@ pub(super) fn fuzz_files(data: &[u8]) -> (String, Vec<(String, Vec<u8>)>, Option
 /// A hostile copy (the `teams_store` fuzz target): a memory store filled from `data`, then opened
 /// for `t-1`/`u-1`, listed, read in pages and written to, its index read back within its caps
 /// and searched, then read back again by a second opening, which finds the same; its pictures too
-/// (the chat id taken as a user's for a photo), its outbox read back, written to and emptied (the
-/// message's body taken as one going out). `data` is a chat id, then pairs of a key under
+/// (the chat id taken as a user's for a photo), its outbox read back (each record within its
+/// rules, its pictures within their cap), written to and emptied (the message's body taken as one
+/// going out, with a file uploaded and a picture). `data` is a chat id, then pairs of a key under
 /// `Teams/` and its bytes, then (when they're odd) a message's JSON, split at NUL bytes; a `=` in
 /// a key is the chat's hash (`chats/=.json`, `msgs/=/0.json`, `index/=/0.json`). `Err` names a
 /// cap that what was read back breaks.
@@ -613,6 +617,10 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
     if ops.len() > quatrelle_model::pim::teams::OUTBOX_MAX || !ordered || ops.iter().any(|o| o.seq >= next || o.broken().is_some()) {
         return Err(format!("the outbox read back: {} records, the next number {next}", ops.len()));
     }
+    let cap = usize::try_from(quatrelle_model::pim::teams::PICTURE_INLINE_MAX).unwrap_or(usize::MAX);
+    if ops.iter().any(|o| (0..o.parts.len()).filter_map(|n| copy.picture(o.seq, n)).any(|b| b.is_empty() || b.len() > cap)) {
+        return Err("a picture of the outbox read back past its cap".into());
+    }
     if let Some(first) = ops.first() {
         let _ = copy.remove_op(first.seq);
         if copy.ops().iter().any(|o| o.seq == first.seq) {
@@ -623,6 +631,18 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
         if !copy.ops().is_empty() || copy.next_seq() != 1 {
             return Err("the outbox emptied still holds records".into());
         }
+        let up = Uploaded {
+            item: "01ITEM0001".into(),
+            guid: "5b8c7d0e-0001-4000-8000-000000000001".into(),
+            url: "https://contoso-my.sharepoint.com/personal/me/Microsoft%20Teams%20Chat%20Files/report.pdf".into(),
+            name: "report.pdf".into(),
+            shared: true,
+        };
+        let path = std::env::temp_dir().join("report.pdf").to_string_lossy().into_owned();
+        let parts = vec![
+            PartRecord::File { path, name: "report.pdf".into(), size: 4_000, modified: 1, up: Some(up) },
+            PartRecord::Picture { name: "paste.png".into(), mime: "image/png".into(), len: 9 },
+        ];
         let taken = OpRecord {
             seq: 1,
             local: "l-1".into(),
@@ -633,9 +653,19 @@ pub fn fuzz_teams_copy(data: &[u8]) -> std::result::Result<(), String> {
             state: OpState::Waiting,
             tries: 0,
             after: None,
+            parts,
         };
-        if copy.put_op(&taken).is_ok() && copy.ops() != [taken] {
-            return Err("a record of the outbox written isn't read back".into());
+        if copy.put_op(&taken).is_ok() {
+            if copy.ops() != [taken] {
+                return Err("a record of the outbox written isn't read back".into());
+            }
+            let picture = b"\x89PNG-ish".as_slice();
+            if copy.put_picture(1, 1, picture).is_ok() && copy.picture(1, 1).as_deref() != Some(picture) {
+                return Err("a picture of the outbox kept isn't read back".into());
+            }
+            if copy.remove_op(1).is_ok() && copy.picture(1, 1).is_some() {
+                return Err("a picture of the outbox stays after its record".into());
+            }
         }
     }
     Ok(())
