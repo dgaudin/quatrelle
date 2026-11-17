@@ -6,7 +6,10 @@
 //! Its words are loaded in the box ([`begin`]), bold, italic and mentions kept, under "Editing
 //! message" and Cancel ([`banner`]); what the box held is set aside ([`Words`]: a message the
 //! engine refuses meanwhile goes back in there), and comes back once the edit is sent or let go
-//! ([`cancel`], Esc or Cancel). Enter sends it as `teams.edit` ([`send_edit`]),
+//! ([`cancel`], Esc or Cancel). Edit on the message being edited keeps what was typed; Edit on
+//! another of the user's switches to it, deliberately: that one's words are loaded in the place
+//! of the edit under way (its changes let go), and what was set aside before stays aside. Enter
+//! sends it as `teams.edit` ([`send_edit`]),
 //! unless it changes nothing — judged on what would be sent, the box's words and those loaded
 //! composed alike: nothing is sent, the edit let go — or leaves nothing: the box says to delete
 //! the message instead. One the engine refuses comes back in the box, still an edit of its
@@ -162,8 +165,13 @@ pub(super) fn edit_last(s: &Session, d: &mut ChatDraft) {
 }
 
 /// The open chat's message `message` asked to be edited (from the message itself): edited when
-/// it's in the window and the box can hold it; else nothing.
+/// it's in the window and the box can hold it; else nothing. The message being edited already:
+/// what was typed stays, and the keyboard goes back to the box where it was.
 pub(super) fn asked(s: &Session, d: &mut ChatDraft, message: &str) {
+    if d.editing.as_ref().is_some_and(|e| e.message == message) {
+        d.caret_to = Some(d.sel.clone());
+        return;
+    }
     let me = s.prefs.teams.object_id.as_str();
     let Some(m) = s.teams.window.iter().find(|m| m.id == message) else { return };
     if let Some(typed) = s.teams.editable(m, me).then(|| s.teams.typed_for(m)).flatten() {

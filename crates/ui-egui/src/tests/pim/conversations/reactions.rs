@@ -311,6 +311,24 @@ fn a_chip_click_toggles_ones_reaction() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A screen reader names each chip by what it shows, its emoji and its count: the one a click
+/// takes as well as one of a kind that isn't an emoji.
+#[test]
+fn chips_are_named_for_a_screen_reader() {
+    let mut m = ana("m1", NOW - 60, "Lunch at noon");
+    m.reactions =
+        vec![Reaction { emoji: "\u{1F44D}".into(), users: vec!["u-ana".into()] }, Reaction { emoji: "custom".into(), users: vec!["u-bruno".into()] }];
+    let (mut a, dir) = writing_app("teams-chips-named", vec![m]);
+    let ctx = egui::Context::default();
+    let s = settle(&ctx, &mut a);
+    for chip in ["\u{1F44D} 1", "custom 1"] {
+        let drawn = s.text(chip).unwrap_or_else(|| panic!("{chip} drawn: {:?}", s.texts));
+        let named = s.label(chip).unwrap_or_else(|| panic!("{chip} named: {:?}", s.labels));
+        assert!(named.contains(drawn.center()), "{chip}: named at {named:?}, drawn at {drawn:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The user's 👍 going out (shown at once, before the worker has it) counts on the chip, which is
 /// drawn as theirs: the accent around its soft tint.
 #[test]

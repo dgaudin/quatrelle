@@ -351,12 +351,14 @@ team wasn't sent". Switching Teams off keeps the messages waiting: they go when 
   from other organizations can't be mentioned from Quatrelle (their name can still be typed). A
   message mentions 50 people at most.
 - **Editing.** ↑ in an empty box edits your last message in the conversation (not while newer
-  messages are left out), and **Edit** on the bar any of yours. Its words come into the box under
-  "Editing message", and what you were typing is set aside until the edit is sent or cancelled.
-  Enter sends it; Esc or Cancel cancels it. An edit that changes nothing sends nothing; one that
-  leaves nothing isn't sent ("To remove a message, delete it"). Only a message the box can hold
-  whole can be edited here: its text, bold, italic, links written as their own address, and
-  mentions. A message with a list, a quote, code, underlining, a picture or a file has no Edit
+  messages are left out, nor while one you sent is still going out), and **Edit** on the bar any
+  of yours. Its words come into the box under "Editing message", and what you were typing is set
+  aside until the edit is sent or cancelled. **Edit** on the message being edited keeps what you
+  typed; on another of yours, that one is edited instead, and the changes typed in the first are
+  let go. Enter sends it; Esc or Cancel cancels it. An edit that changes nothing sends nothing;
+  one that leaves nothing isn't sent ("To remove a message, delete it"). Only a message the box
+  can hold whole can be edited here: its text, bold, italic, links written as their own address,
+  and mentions. A message with a list, a quote, code, underlining, a picture or a file has no Edit
   (↑ says "Your last message can't be edited here"): edit it in Teams.
 - **Deleting.** **Delete** on the bar asks "Delete this message?" first. Deleted, the message is
   gone for everyone in the conversation, and Quatrelle can't bring it back. Esc or Cancel keeps it.

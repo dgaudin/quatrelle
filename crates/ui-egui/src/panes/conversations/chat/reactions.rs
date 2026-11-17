@@ -6,7 +6,7 @@
 //! a chat they're still in, on a message that takes reactions, and of a kind that is an emoji
 //! ([`reactable`]: one Teams names otherwise can't be sent back, so its chip only shows). Hovered,
 //! a chip lists who reacted, by the chat's members' names, the user among them as the chip counts
-//! them.
+//! them. A screen reader names each chip as it's drawn: its emoji and its count.
 //!
 //! What is hostile here: the reactions are the senders' and Teams' (at most [`MAX_REACTIONS`] a
 //! message, the engine's cap): an emoji is drawn without control or bidi characters, a few
@@ -18,8 +18,8 @@ use quatrelle_engine::model::pim::teams::{ChatMessage, MAX_REACTIONS, is_bidi, o
 use serde_json::json;
 
 use super::Pane;
-use crate::Action;
 use crate::theme::{self, Tokens};
+use crate::{Action, widgets};
 
 /// The most names a reaction's hover lists.
 const NAMES_MAX: usize = 20;
@@ -66,11 +66,12 @@ pub(super) fn reactions(p: &Pane, ui: &mut Ui, m: &ChatMessage, writable: bool, 
 }
 
 /// A chip: its text in a rounded frame, the accent around its soft tint when it's the user's;
-/// clickable, it's tinted under the pointer.
+/// clickable, it's tinted under the pointer. A screen reader reads it by its text.
 fn chip(ui: &mut Ui, t: &Tokens, text: String, mine: bool, clickable: bool) -> egui::Response {
-    let g = ui.painter().layout_no_wrap(text, theme::regular(12.0), t.text);
+    let g = ui.painter().layout_no_wrap(text.clone(), theme::regular(12.0), t.text);
     let size = g.size() + vec2(14.0, 4.0);
     let (rect, resp) = ui.allocate_exact_size(size, if clickable { Sense::click() } else { Sense::hover() });
+    widgets::named(ui, &resp, &text, clickable, None);
     if clickable && resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }

@@ -384,6 +384,35 @@ fn the_last_own_message_is_what_up_edits() {
     assert_eq!(s.teams.last_own(ME), None, "newer ones left out: the last isn't known");
 }
 
+/// ↑ right after a send: while a message of the user's to the open chat is going out (not "Not
+/// sent"), the last isn't in the window yet, so there's none to edit (not the one before it).
+#[test]
+fn no_last_own_message_while_one_is_going_out() {
+    let mut s = opened();
+    s.run("teams.send", &json!({"chat": CHAT, "text": "fixed typo", "mentions": []})).unwrap();
+    let local = s.teams.outgoing.last().map(|o| o.local.clone()).unwrap();
+    assert_eq!(s.teams.last_own(ME), None, "just sent, not answered for yet");
+    let send = |state| Outgoing {
+        seq: 5,
+        local: local.clone(),
+        chat: CHAT.into(),
+        body: ChatText::default(),
+        mentions: Vec::new(),
+        what: OutKind::Send,
+        state,
+    };
+    for state in [OutState::Waiting, OutState::Sending] {
+        s.apply(outbox(CHAT, vec![send(state.clone())], Some(&local)));
+        assert_eq!(s.teams.last_own(ME), None, "{state:?}");
+    }
+    s.apply(outbox(CHAT, vec![send(refused())], None));
+    assert_eq!(s.teams.last_own(ME).map(|m| m.id.as_str()), Some("m2"), "one not sent isn't going out");
+    // Sent: it is the last.
+    s.apply(outbox(CHAT, Vec::new(), None));
+    window(&mut s, vec![mine(3)]);
+    assert_eq!(s.teams.last_own(ME).map(|m| m.id.as_str()), Some("m3"));
+}
+
 #[test]
 fn mentions_name_members_of_the_organisation() {
     let mut s = opened();

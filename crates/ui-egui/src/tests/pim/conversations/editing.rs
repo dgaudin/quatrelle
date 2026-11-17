@@ -131,6 +131,33 @@ fn the_draft_comes_back_after_an_edit() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Edit on the message the box is editing already keeps what was typed in it, and typing goes on;
+/// Edit on another of the user's messages edits that one instead (what was typed in the first is
+/// let go), and the draft set aside still comes back after.
+#[test]
+fn edit_on_the_message_being_edited_keeps_what_was_typed() {
+    let see_you = said("m3", user(ME, "Riley Moreno"), NOW - 60, para(vec![words("see you")]));
+    let (mut a, dir) = writing_app("teams-edit-again", vec![hello(), see_you]);
+    let ctx = egui::Context::default();
+    focus_box(&ctx, &mut a);
+    typed(&ctx, &mut a, vec![text("draft")]);
+    a.ui.conversations.edit_asked = Some("m2".into());
+    typed(&ctx, &mut a, vec![]);
+    typed(&ctx, &mut a, vec![text(" there")]);
+    assert_eq!(in_box(&a), "hello there");
+    a.ui.conversations.edit_asked = Some("m2".into());
+    typed(&ctx, &mut a, vec![]);
+    assert_eq!((in_box(&a).as_str(), editing(&a).as_deref()), ("hello there", Some("m2")), "what was typed is kept");
+    typed(&ctx, &mut a, vec![text("!")]);
+    assert_eq!(in_box(&a), "hello there!", "typing goes on at its end");
+    a.ui.conversations.edit_asked = Some("m3".into());
+    typed(&ctx, &mut a, vec![]);
+    assert_eq!((in_box(&a).as_str(), editing(&a).as_deref()), ("see you", Some("m3")), "the other one edited");
+    typed(&ctx, &mut a, vec![esc()]);
+    assert_eq!((in_box(&a).as_str(), editing(&a)), ("draft", None), "the draft back");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// An edit that changes nothing sends nothing and lets go of the edit, also when the words typed
 /// were taken back; an edit to nothing isn't sent: the box says to delete the message, still
 /// editing it.

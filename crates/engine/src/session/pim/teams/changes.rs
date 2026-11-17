@@ -130,9 +130,12 @@ impl TeamsState {
     }
 
     /// The window's newest message from the user (`me` their id) not deleted: the one ↑ edits.
-    /// None while newer messages are left out of the window (the last isn't known).
+    /// None while the last isn't known: newer messages left out of the window, or a message of the
+    /// user's to the chat going out (not "Not sent": it isn't in the window yet, and ↑ right after
+    /// a send is meant for it, not the one before).
     pub fn last_own(&self, me: &str) -> Option<&ChatMessage> {
-        if self.newer_left_out {
+        let sending = self.outgoing.iter().any(|o| o.what == OutKind::Send && !matches!(o.state, OutState::NotSent { .. }));
+        if self.newer_left_out || sending {
             return None;
         }
         self.window.iter().rev().find(|m| own(m, me) && m.deleted.is_none())
