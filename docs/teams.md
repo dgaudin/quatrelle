@@ -244,7 +244,7 @@ failed. Nothing is ever printed that names the chat, a member, the file or an ad
 | `message with the file: yes` | The message was posted with the file attached. |
 | `listed as a file: yes` | Read back, the message lists the file as a file (not as a card or an image). |
 | `download: yes (host: …sharepoint.com)` | The file's address, asked of Graph, led to a download of the same 30 bytes, without your token. `no (…)` says what stopped it, or how many bytes came. |
-| `cleaned up: yes` | The message and the file are deleted. `no (the message is left)`, `no (the file is left)` or `no (a message may be left)` say what to delete by hand: the message in the chat, the file `Quatrelle check.txt` in the OneDrive folder `Microsoft Teams Chat Files`. |
+| `cleaned up: yes` | The message and the file are deleted. `no (the message is left)`, `no (the file is left)`, `no (a message may be left)` or `no (a file may be left)` say what to delete by hand: the message in the chat, the file `Quatrelle check.txt` (perhaps numbered, as `Quatrelle check 1.txt`) in the OneDrive folder `Microsoft Teams Chat Files`. |
 
 ## 8. Using Teams in Quatrelle
 

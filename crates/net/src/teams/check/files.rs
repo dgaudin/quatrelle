@@ -35,6 +35,8 @@ struct Made {
     message: Option<String>,
     /// A message may have been posted whose id isn't known.
     lost: bool,
+    /// A file may have been made whose item isn't known (the last range's answer was lost).
+    lost_file: bool,
 }
 
 impl Check<'_> {
@@ -70,7 +72,7 @@ impl Check<'_> {
                 return None;
             }
         };
-        let Some(id) = self.upload(&session) else {
+        let Some(id) = self.upload(&session, made) else {
             self.not_tried(&["item:"]);
             return None;
         };
@@ -89,7 +91,7 @@ impl Check<'_> {
     }
 
     /// 2. The bytes, on a connection of their own to the upload's server, without the token.
-    fn upload(&mut self, session: &UploadSession) -> Option<String> {
+    fn upload(&mut self, session: &UploadSession, made: &mut Made) -> Option<String> {
         let total = u64::try_from(CONTENT.len()).unwrap_or(0);
         let sent = self.client.transfer_stream(session.url()).and_then(|mut s| put_range_on(&mut s, session.url(), CONTENT, 0, total));
         match sent {
@@ -102,6 +104,7 @@ impl Check<'_> {
                 None
             }
             Err(e) => {
+                made.lost_file = uncertain(&e);
                 self.said_no("upload:", &e);
                 None
             }
@@ -235,6 +238,9 @@ impl Check<'_> {
         }
         if made.lost {
             left.push("a message may be left");
+        }
+        if made.lost_file {
+            left.push("a file may be left");
         }
         if let Some(id) = &made.item
             && self.client.delete_item(id).is_err()

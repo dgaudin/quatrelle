@@ -150,6 +150,28 @@ fn a_failure_goes_no_further_and_the_clean_up_still_runs() {
 }
 
 #[test]
+fn a_lost_answer_to_the_last_range_leaves_a_file_that_is_said() {
+    // The range was taken and the file made, but the answer never came: its item is unknown, so
+    // it can't be deleted, and the check must not say it cleaned up.
+    let server = files_server(|t| _ = t.answer_lost.insert("upload".into(), 1));
+    let (r, lines) = check(&server, &files_opts());
+    r.unwrap();
+    let said = said(&lines);
+    assert!(said[1].starts_with("upload: no"), "{lines:#?}");
+    assert_eq!(said[7], "cleaned up: no (a file may be left)");
+    assert_eq!(teams_of(&server).drive_files.files.len(), 1, "the fake did make it");
+    // A refusal said before acting (the session gone) leaves nothing to look for.
+    let server = files_server(|t| t.drive_files.expire_after = Some(0));
+    let (r, lines) = check(&server, &files_opts());
+    r.unwrap();
+    assert_eq!(said_last(&lines), "cleaned up: yes");
+}
+
+fn said_last(lines: &[String]) -> &str {
+    line(lines, "cleaned up:")
+}
+
+#[test]
 fn a_file_that_is_not_on_their_drive_is_said() {
     let server = files_server(|t| t.drive_files.item_elsewhere = Some("other-my.sharepoint.com".into()));
     let (r, lines) = check(&server, &files_opts());
