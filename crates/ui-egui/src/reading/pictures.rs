@@ -126,6 +126,57 @@ pub(crate) fn shown_size(own: Vec2, size: Option<mime::ImageSize>, width: f32) -
     (w >= 0.5 && h >= 0.5).then(|| egui::vec2(w, h.min(8000.0)))
 }
 
+/// The room a picture the message sizes keeps when it isn't shown: its width as set (no wider
+/// than its `max-width` or `width`), and its height when that's set too; `None` when no width is
+/// set, or one too thin to see (a spacer).
+pub(crate) fn kept_room(size: Option<mime::ImageSize>, width: f32) -> Option<(f32, Option<f32>)> {
+    use mime::layout::Width;
+    let z = size?;
+    let w = match z.width? {
+        Width::Px(px) => px as f32,
+        Width::Percent(pc) => width * f32::from(pc) / 100.0,
+    };
+    let w = w.min(z.max_width.map_or(f32::INFINITY, |m| m as f32)).min(width);
+    (w >= 0.5).then(|| (w, z.height.map(|h| (h as f32).min(8000.0))))
+}
+
+/// A picture that can't be shown (on the web and not allowed, or not to be had), `zoom` times:
+/// its description in brackets, in the link's colour in a link; or, when that is wider than the
+/// picture would be ([`kept_room`]: a signature's icon 13 pixels wide), the picture's room — as
+/// tall as it is wide, at most a line, unless the message sets its height — filled with what's
+/// behind it when that shows (the box of colour around an icon), else outlined, its description
+/// on hover. A description wider than its place went down a narrow column a few letters a line,
+/// and pushed the lines beside it out of line.
+pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> egui::Response {
+    let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
+    let text = format!("[{alt}]");
+    let zoom = zoom.max(0.01);
+    let line = ui.text_style_height(&egui::TextStyle::Body);
+    let room = kept_room(sp.image_size, width / zoom).map(|(w, h)| vec2(w * zoom, h.map_or((w * zoom).min(line), |h| h * zoom)));
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let wide = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), font, Color32::WHITE).size().x);
+    match room {
+        Some(room) if wide > room.x => {
+            let sense = if sp.link.is_some() { Sense::click() } else { Sense::hover() };
+            let (rect, r) = ui.allocate_exact_size(room, sense);
+            // Too thin to see (a spacer): its room alone.
+            if rect.width() >= 3.0 && rect.height() >= 3.0 {
+                match theme::box_color(sp.background, page, t) {
+                    Some(c) => ui.painter().rect_filled(rect, 0.0, Color32::from_rgb(c[0], c[1], c[2])),
+                    None => ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside),
+                };
+            }
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, alt));
+            r.on_hover_text(alt)
+        }
+        // Inside a link, its place is the link's.
+        _ => match &sp.link {
+            Some(_) => ui.add(egui::Link::new(RichText::new(text).color(t.accent))),
+            None => ui.add(egui::Label::new(RichText::new(text).color(t.faint)).selectable(false)),
+        },
+    }
+}
+
 /// The most pixels on a side a picture is decoded at to be shown: no more than it can be shown
 /// at on this screen, `zoom` times its size.
 fn shown_pixels(ctx: &egui::Context, zoom: f32) -> u32 {
@@ -269,5 +320,24 @@ mod tests {
         let (tex, own) = decode_sized(&ctx, "big", &png, shown_pixels(&ctx, 1.0)).unwrap();
         assert_eq!(own, vec2(2000.0, 1000.0));
         assert_eq!(tex.size(), [900, 450]);
+    }
+
+    #[test]
+    fn a_picture_not_shown_keeps_the_width_it_sets() {
+        use mime::layout::Width;
+        let size = |width, height, max_width| Some(mime::ImageSize { width, height, max_width });
+        // A signature's icon: 13 wide, its height left to the line.
+        assert_eq!(kept_room(size(Some(Width::Px(13)), None, None), 640.0), Some((13.0, None)));
+        assert_eq!(kept_room(size(Some(Width::Px(24)), Some(24), None), 640.0), Some((24.0, Some(24.0))));
+        // No wider than its max-width or the room; a share of the room.
+        assert_eq!(kept_room(size(Some(Width::Px(900)), Some(90), Some(600)), 640.0), Some((600.0, Some(90.0))));
+        assert_eq!(kept_room(size(Some(Width::Px(900)), None, None), 300.0), Some((300.0, None)));
+        assert_eq!(kept_room(size(Some(Width::Percent(50)), None, None), 300.0), Some((150.0, None)));
+        // No width set (or none to see): nothing kept, its description shows.
+        assert_eq!(kept_room(size(None, Some(20), None), 640.0), None);
+        assert_eq!(kept_room(size(Some(Width::Px(0)), Some(1), None), 640.0), None);
+        assert_eq!(kept_room(None, 640.0), None);
+        // A height out of reason is capped.
+        assert_eq!(kept_room(size(Some(Width::Px(10)), Some(u32::MAX), None), 640.0), Some((10.0, Some(8000.0))));
     }
 }

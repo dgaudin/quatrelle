@@ -244,3 +244,114 @@ fn a_report_of_set_widths_keeps_its_words_whole() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A signature laid out as some mail programs write one (made up here): the name, then a table
+/// whose first column, 30 pixels wide, holds a tiny icon on the web (13 pixels wide, in a box
+/// of colour) beside each contact line, and a picture 1 pixel square by its style after it.
+fn icon_signature() -> String {
+    let row = |icon: &str, alt: &str, text: &str| {
+        format!(
+            "<tr style=\"vertical-align: middle; height: 25px;\"><td style=\"vertical-align: middle; width: 30px; height: 25px;\">\
+             <table border=\"0\" cellspacing=\"0\" cellpadding=\"0\"><tbody><tr><td style=\"vertical-align: bottom;\">\
+             <span style=\"display: inline-block; background-color: #2266cc;\"><img style=\"border-width: 0px; vertical-align: middle; \
+             display: block;\" src=\"https://img.contoso.example/sig/{icon}.png\" alt=\"{alt}\" width=\"13\"></span></td></tr></tbody></table></td>\
+             <td style=\"padding: 0px; width: 424px; height: 25px;\"><span style=\"font-size: 14px;\">{text}</span></td></tr>"
+        )
+    };
+    format!(
+        "<div>Hello Riley,</div><div>The new build is ready.</div>\
+         <div class=\"mail_signature\"><table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-family: Georgia;\"><tbody><tr>\
+         <td style=\"padding: 0px; vertical-align: middle;\"><h2 style=\"margin: 0px; font-size: 18px;\">Ana Lima</h2>\
+         <div><span style=\"font-size: 14px;\">Sales, Contoso</span></div>\
+         <table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"width: 454px; height: 100px;\"><tbody>{}{}{}</tbody></table></td>\
+         <td colspan=\"3\" style=\"max-width: 300px; font-size: 12px;\"><div><p style=\"margin: 0px;\">Thanks</p></div></td><td width=\"46\"></td>\
+         </tr></tbody></table></div>\
+         <img style=\"height: 1px !important; max-height: 1px !important; max-width: 1px !important; width: 1px !important\" \
+         src=\"https://t.contoso.example/open.png\">",
+        row("phone", "mobilePhone", "+1 555 0100"),
+        row("mail", "emailAddress", "ana.lima@contoso.example"),
+        row("web", "website", "<a href=\"https://www.contoso.example/\">www.contoso.example</a>"),
+    )
+}
+
+/// A signature's column of tiny icons, not loaded (they're on the web), reads as Outlook shows it:
+/// each icon a small box of its colour, its contact line beside it, the lines one under the
+/// other and lined up. Each icon's description went down its 30-pixel column a few letters a
+/// line (`[`, `mob`, `ileP`…), the contact lines pushed out of line, and the picture of 1 pixel
+/// sized by its style showed as `[picture]`. Each icon's description is still said to a screen
+/// reader. Painted into `QUATRELLE_FRAME_PNG` when set.
+#[test]
+fn a_signatures_tiny_icons_not_loaded_keep_its_lines_in_line() {
+    use super::super::list::follow_up::{Textures, frame_with_size};
+    let (mut a, dir) = app_with_html("icon-signature", "Build ready", &icon_signature());
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let mut tex = Textures::default();
+    // A reading pane wide enough for the signature's table: its rows stay side by side.
+    let size = (2400, 1000);
+    frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size);
+    let k = a.session.list.iter().find(|m| m.subject == "Build ready").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let (mut said, mut shown) = (Vec::new(), Vec::new());
+    for _ in 0..12 {
+        (said, shown) = frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size);
+    }
+    for alt in ["mobilePhone", "emailAddress", "website"] {
+        assert!(said.iter().any(|l| l == alt), "{alt} said: {said:?}");
+    }
+    let texts: Vec<(String, egui::Rect, usize)> = shown
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()), t.galley.rows.len())),
+            _ => None,
+        })
+        .collect();
+    // No word broken across lines.
+    for s in &shown {
+        let egui::Shape::Text(t) = s else { continue };
+        for pair in t.galley.rows.windows(2) {
+            let end = pair[0].row.glyphs.last().map(|g| g.chr);
+            let start = pair[1].row.glyphs.first().map(|g| g.chr);
+            let at_space = pair[0].ends_with_newline || end.is_none_or(char::is_whitespace) || start.is_none_or(char::is_whitespace);
+            assert!(at_space, "{:?} broken inside a word: {texts:?}", t.galley.text());
+        }
+    }
+    assert!(!texts.iter().any(|(t, ..)| t.contains("[picture]")), "the tracking pixel shows nothing: {texts:?}");
+    // The contact lines: each on one line, lined up, one under the other.
+    let lines: Vec<egui::Rect> = ["+1 555 0100", "ana.lima@contoso.example", "www.contoso.example"]
+        .iter()
+        .map(|l| {
+            let (_, r, rows) = texts.iter().find(|(t, ..)| t == l).unwrap_or_else(|| panic!("{l} drawn: {texts:?}"));
+            assert_eq!(*rows, 1, "{l} on one line");
+            *r
+        })
+        .collect();
+    for pair in lines.windows(2) {
+        assert!((pair[0].left() - pair[1].left()).abs() < 0.5, "lined up: {lines:?}");
+        assert!(pair[1].top() >= pair[0].bottom() - 0.5 && pair[1].top() - pair[0].top() < 40.0, "one under the other: {lines:?}");
+    }
+    // Each icon: a small box of its colour beside its line, as tall as it is wide (its height
+    // isn't set), apart from the next one.
+    let blue = egui::Color32::from_rgb(0x22, 0x66, 0xcc);
+    let mut boxes: Vec<egui::Rect> =
+        shown.iter().filter_map(|s| if let egui::Shape::Rect(r) = s { (r.fill == blue).then_some(r.rect) } else { None }).collect();
+    boxes.sort_by(|a, b| a.top().total_cmp(&b.top()));
+    for line in &lines {
+        let beside =
+            boxes.iter().any(|b| (b.width() - 13.0).abs() < 1.5 && b.right() <= line.left() && b.bottom() > line.top() && b.top() < line.bottom());
+        assert!(beside, "a 13-point box of the icon's colour beside {line:?}: {boxes:?}");
+    }
+    assert!(boxes.iter().all(|b| (b.height() - b.width()).abs() < 0.5), "square: {boxes:?}");
+    assert!(boxes.windows(2).all(|p| p[1].top() - p[0].bottom() >= 2.0), "apart, not one bar: {boxes:?}");
+    // Light and dark, and in a pane too narrow for the table (its rows one cell under the other).
+    if let Some(d) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
+        for (dark, size, name) in [(false, size, "light"), (true, size, "dark"), (false, (1400, 900), "narrow")] {
+            a.ui.dark = Some(dark);
+            for _ in 0..12 {
+                frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size);
+            }
+            frame_with_size(&ctx, &mut a, &mut tex, vec![], Some(d.join(format!("icon-signature-{name}.png"))), size);
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
