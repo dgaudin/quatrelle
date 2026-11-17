@@ -113,3 +113,25 @@ proptest! {
         prop_assert_eq!(back, people);
     }
 }
+
+#[test]
+fn each_forbidden_character_alone_refuses_the_call() {
+    for c in [':', '%', '&', '=', '/', '\\', '?', '"', '<', '>', ',', '#', ' ', '\u{7}', '\u{202E}', '\u{200F}'] {
+        let bad = format!("an{c}a@contoso.example");
+        assert_eq!(teams_call_link(&[bad.as_str()], false), None, "{c:?}");
+    }
+}
+
+#[test]
+fn the_call_link_bounds_are_exact() {
+    let of_len = |n: usize| format!("{}@contoso.example", "a".repeat(n - "@contoso.example".len()));
+    assert!(teams_call_link(&[of_len(320).as_str()], false).is_some());
+    assert_eq!(teams_call_link(&[of_len(321).as_str()], false), None);
+    let people = |n: usize| (0..n).map(|i| format!("p{i}@contoso.example")).collect::<Vec<_>>();
+    let twenty = people(20);
+    assert!(teams_call_link(&twenty.iter().map(String::as_str).collect::<Vec<_>>(), false).is_some());
+    let mut twenty_one = people(21);
+    assert_eq!(teams_call_link(&twenty_one.iter().map(String::as_str).collect::<Vec<_>>(), false), None);
+    twenty_one[20] = "P0@CONTOSO.example".into();
+    assert!(teams_call_link(&twenty_one.iter().map(String::as_str).collect::<Vec<_>>(), false).is_some(), "the cap counts people, not addresses");
+}

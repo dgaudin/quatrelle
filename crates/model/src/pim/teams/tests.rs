@@ -539,3 +539,26 @@ fn a_person_is_a_guid_a_line_and_an_address() {
     assert!(!with(&|p| p.address = format!("{}@x.example", "a".repeat(320))));
     assert!(is_object_id("00000000-0000-0000-0000-0000000000a1") && !is_object_id("0000000-0000-0000-0000-0000000000a1"));
 }
+
+#[test]
+fn an_object_id_and_an_address_are_checked_to_the_character() {
+    let id = "00000000-0000-0000-0000-0000000000a1";
+    assert!(is_object_id(id) && is_object_id("ABCDEF01-2345-6789-abcd-ef0123456789"));
+    for bad in [
+        "0000000g-0000-0000-0000-0000000000a1",
+        "00000000-0000-0000-0000-0000000000a'",
+        "00000000-000-00000-0000-0000000000a1",
+        "00000000-0000-0000-000-00000000000a1",
+        "00000000-0000-0000-0000-0000000000a",
+        "00000000-0000-0000-0000-0000000000a12",
+        "",
+        "00000000-0000-0000-0000",
+    ] {
+        assert!(!is_object_id(bad), "{bad:?}");
+    }
+    let with = |address: String| person_ok(&Person { id: id.into(), name: "Ana Lima".into(), address, guest: false });
+    assert!(with("ana@contoso.example".into()));
+    assert!(!with("an\u{7}a@contoso.example".into()) && !with("an\u{202E}a@contoso.example".into()) && !with("an\ta@contoso.example".into()));
+    let of_len = |n: usize| format!("{}@contoso.example", "a".repeat(n - "@contoso.example".len()));
+    assert!(with(of_len(320)) && !with(of_len(321)));
+}
