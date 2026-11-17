@@ -6,7 +6,7 @@
 //! no, HTTP status numbers and durations only, to be pasted back.
 //!
 //! ```text
-//! quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--hour] [--call CHAT]
+//! quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--files CHAT] [--hour] [--call CHAT]
 //! ```
 //!
 //! The tokens live only in this process: nothing is written to disk or to the keychain.
@@ -40,7 +40,7 @@ const CHAT_LINKS: [&str; 4] = [
 ];
 const CLIENT_VAR: &str = "QUATRELLE_TEAMS_CLIENT_ID";
 const TENANT_VAR: &str = "QUATRELLE_TEAMS_TENANT";
-const USAGE: &str = "usage: quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--hour] [--call CHAT]";
+const USAGE: &str = "usage: quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--files CHAT] [--hour] [--call CHAT]";
 const CONSENT: &str = "Microsoft asks for consent to these permissions: see docs/teams.md, step 4";
 /// What means consent is needed: OAuth's codes, and Microsoft's (AADSTS65001 not consented,
 /// 65004 consent declined, 70011 a scope refused, 90094 admin consent required).
@@ -68,6 +68,7 @@ struct Asked {
     client: Option<String>,
     tenant: Option<String>,
     write: Option<String>,
+    files: Option<String>,
     hour: bool,
     call: Option<String>,
 }
@@ -120,6 +121,7 @@ fn run_with(args: &[String], env: &dyn Fn(&str) -> Option<String>) -> Result<(),
     let opts = CheckOptions {
         tenant: tokens.tenant.clone().filter(|t| quatrelle_engine::model::valid_oauth_tenant(t)),
         write_chat: asked.write,
+        files_chat: asked.files,
         hour: asked.hour.then_some(HOUR),
         sleep: std::thread::sleep,
         renew: Some(Box::new(renew)),
@@ -141,6 +143,7 @@ fn parse(args: &[String]) -> Result<Asked, String> {
             "--client" => asked.client = Some(value()?),
             "--tenant" => asked.tenant = Some(value()?),
             "--write" => asked.write = Some(chat_id(&value()?).ok_or("--write: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
+            "--files" => asked.files = Some(chat_id(&value()?).ok_or("--files: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
             "--call" => asked.call = Some(chat_id(&value()?).ok_or("--call: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
             "--hour" => asked.hour = true,
             _ => return Err(USAGE.into()),
@@ -379,6 +382,25 @@ mod tests {
     }
 
     #[test]
+    fn files_takes_a_chat_as_write_does() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let id = "19:abc_def@unq.gbl.spaces";
+        let link = "https://teams.microsoft.com/l/chat/19%3Aabc_def%40unq.gbl.spaces/0?tenantId=x";
+        assert_eq!(parse(&args(&["check", "--files", link])).unwrap().files.as_deref(), Some(id));
+        assert_eq!(parse(&args(&["check", "--files", id, "--write", id])).unwrap().files.as_deref(), Some(id));
+        assert_eq!(parse(&args(&["check"])).unwrap().files, None);
+        // Without a chat, or with something that isn't a Teams chat's id or link: refused before
+        // anything is asked of anyone, and what was given isn't repeated.
+        let e = parse(&args(&["check", "--files"])).err().unwrap();
+        assert!(e.contains("--files needs a value") && e.contains("--files CHAT"), "{e}");
+        for bad in ["https://evil.example/l/chat/19:a@b/0", "48:notes", "x y", ""] {
+            let e = run_with(&args(&["check", "--files", bad]), &|_| None).unwrap_err();
+            assert!(e.contains("--files") && !e.contains("evil") && !e.contains("x y"), "{e}");
+        }
+        assert!(USAGE.contains("[--files CHAT]"));
+    }
+
+    #[test]
     fn consent_errors_point_to_step_4() {
         let consent = "Microsoft asks for consent to these permissions: see docs/teams.md, step 4";
         for text in [
@@ -407,7 +429,7 @@ mod tests {
     #[test]
     fn check_against_the_fake_says_numbers_only() {
         let fake = quatrelle_net::teams_sample();
-        let opts = CheckOptions { tenant: None, write_chat: Some(fake.chat.into()), hour: None, sleep: |_| {}, renew: None };
+        let opts = CheckOptions { tenant: None, write_chat: Some(fake.chat.into()), files_chat: None, hour: None, sleep: |_| {}, renew: None };
         let (mut lines, mut opened) = (Vec::new(), Vec::new());
         check_with(
             &fake.base,
@@ -442,7 +464,7 @@ mod tests {
     #[test]
     fn a_refused_token_is_said_by_its_status() {
         let fake = quatrelle_net::teams_sample();
-        let opts = CheckOptions { tenant: None, write_chat: None, hour: None, sleep: |_| {}, renew: None };
+        let opts = CheckOptions { tenant: None, write_chat: None, files_chat: None, hour: None, sleep: |_| {}, renew: None };
         let mut lines = Vec::new();
         let e = check_with(&fake.base, "not-the-token", &opts, None, &mut |_| Ok(()), &mut |l| lines.push(l.to_string())).unwrap_err();
         assert!(e.contains("401"), "{e}");

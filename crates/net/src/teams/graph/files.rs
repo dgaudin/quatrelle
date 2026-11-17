@@ -70,6 +70,13 @@ fn dns_name(host: &str) -> bool {
         && host.split('.').all(|l| (1..=63).contains(&l.len()) && l.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'))
 }
 
+/// Whether a transfer's connection (an upload session's, a download's) must be to a public
+/// address, by the client's API address `base`: always, but for the tests' servers on this
+/// computer (a plain-HTTP API there), as [`hop_allowed`].
+pub(crate) fn transfer_public_only(base: &str) -> bool {
+    !Url::parse(base).is_ok_and(|b| !b.https && loopback(&b))
+}
+
 /// What the log says of a host: `…` and its last two labels (`…sharepoint.com`) when it is a
 /// DNS name of `a-z 0-9 . -`; `…` alone otherwise (an IP address, one label, anything odd).
 pub fn host_tail(host: &str) -> String {
@@ -133,7 +140,6 @@ pub struct UploadSession {
 
 impl UploadSession {
     /// Where the ranges go.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn url(&self) -> &Url {
         &self.url
     }
@@ -310,8 +316,15 @@ impl TeamsClient {
             Hop::Served(bytes) => return Ok(bytes),
             Hop::To(to) => to,
         };
+        self.download_at(&to, max)
+    }
+
+    /// The bytes of a file at the address [`Self::shared_location`] gave, counted and not kept
+    /// (at most `max`), on a connection of its own to a public address ([`Self::transfer_stream`])
+    /// and without the token. A second redirect or any other answer is an error with its status.
+    pub fn download_at(&self, to: &Url, max: usize) -> Result<usize> {
         // A request of its own: the token stays with Graph.
-        let (head, tally) = self.download(&Request::get(&address(&to), max), false, true)?;
+        let (head, tally) = self.download(&Request::get(&address(to), max), false, true)?;
         if redirect(&head).is_some() {
             return Err(NetError::Protocol("the shared file's download redirected again".into()));
         }
@@ -319,6 +332,19 @@ impl TeamsClient {
             return Err(NetError::Protocol(format!("HTTP {}", head.status)));
         }
         Ok(tally.bytes)
+    }
+
+    /// A connection to the server of an upload session or a download (Microsoft's file hosts), to
+    /// a public address only ([`stream::tcp_public`]: it logs no address tried), but for the tests'
+    /// servers on this computer ([`transfer_public_only`]). Its errors name the host by
+    /// [`host_tail`] alone: the address carries its own authorisation, and a name a log keeps.
+    pub(crate) fn transfer_stream(&self, url: &Url) -> Result<Stream> {
+        if !transfer_public_only(&self.base) {
+            return connect(url);
+        }
+        let tail = host_tail(&url.host);
+        let sock = stream::tcp_public(&url.host, url.port).map_err(|e| without_host(e, &tail))?;
+        if url.https { stream::tls(sock, &url.host).map_err(|e| without_host(e, &tail)) } else { Ok(Stream::Plain(sock)) }
     }
 
     /// The first hop of a shared file's download, with the token, waited out while busy: Graph's
@@ -374,7 +400,6 @@ enum Hop {
 /// where the upload stands: [`upload_status_on`]), a session gone
 /// `Refused("the upload session is gone")`; what isn't a range of `total` is refused before
 /// anything is written.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn put_range_on<S: Read + Write>(s: &mut S, url: &Url, bytes: &[u8], from: u64, total: u64) -> Result<RangeAnswer> {
     let len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
     let end = from.checked_add(len).filter(|end| len > 0 && *end <= total).ok_or_else(|| NetError::Refused("not a range of the file".into()))?;
@@ -426,6 +451,17 @@ fn transfer_error(status: u16, body: &[u8]) -> NetError {
     }
 }
 
+/// A connection's error, said without the host's name (it can carry the address's own
+/// authorisation, and a log keeps what an error says): its kind and `tail` ([`host_tail`]) only.
+pub(crate) fn without_host(e: NetError, tail: &str) -> NetError {
+    match e {
+        NetError::Io(io) => NetError::Io(std::io::Error::new(io.kind(), format!("{tail}: no connection"))),
+        NetError::Tls(_) => NetError::Tls(format!("{tail}: no secure connection")),
+        NetError::Protocol(_) => NetError::Protocol(format!("{tail} is on this computer or its network: only addresses on the internet are used")),
+        other => other,
+    }
+}
+
 /// A URL as a request names it.
 fn address(url: &Url) -> String {
     format!("{}{}", url.origin(), url.path)
@@ -433,7 +469,7 @@ fn address(url: &Url) -> String {
 
 /// An address: 1 to [`ADDRESS_MAX`] characters with an `@`, no white space, control or bidi
 /// character.
-fn address_ok(a: &str) -> bool {
+pub(crate) fn address_ok(a: &str) -> bool {
     !a.is_empty() && a.contains('@') && a.chars().count() <= ADDRESS_MAX && !a.chars().any(|c| c.is_whitespace() || c.is_control() || is_bidi(c))
 }
 

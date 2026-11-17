@@ -21,7 +21,7 @@
 //!   commands                       every engine command, as JSON
 //!   run ID [JSON]                  run an engine command against the cache (its changes
 //!                                  to mail go to the server with the next `sync`)
-//!   teams check [--client ID] [--tenant ID] [--write CHAT] [--hour] [--call CHAT]
+//!   teams check [--client ID] [--tenant ID] [--write CHAT] [--files CHAT] [--hour] [--call CHAT]
 //!                                  sign in to Microsoft 365 and check what Graph gives of
 //!                                  Teams chats: numbers only (docs/teams.md)
 //!   --version                      print the version

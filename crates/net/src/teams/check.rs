@@ -31,6 +31,8 @@ use super::{Me, Range, TeamsClient};
 use crate::graph::utc;
 use crate::{NetError, Result};
 
+/// 7. A file sent, shared and opened.
+mod files;
 /// 6. The approved cadences, for an hour.
 mod hour;
 /// How the check names what it counts.
@@ -73,6 +75,8 @@ pub struct CheckOptions {
     pub tenant: Option<String>,
     /// The chat (its id) where test messages may be posted, reacted to and deleted.
     pub write_chat: Option<String>,
+    /// The chat (its id) where a small file may be sent, opened and removed.
+    pub files_chat: Option<String>,
     /// Run the approved cadences this long (the CLI: an hour).
     pub hour: Option<Duration>,
     /// How to wait: `std::thread::sleep`, or something shorter in tests.
@@ -91,6 +95,9 @@ pub fn run_check(client: &TeamsClient, me: &Me, opts: &CheckOptions, say: &mut d
     ck.reactions_and_files(&read.tally);
     if let Some(chat) = &opts.write_chat {
         ck.write(chat, listed.write_tenant);
+    }
+    if let Some(chat) = &opts.files_chat {
+        ck.files(chat);
     }
     if let Some(d) = opts.hour {
         ck.hour(d, read.newest, read.watermark, &read.refused);

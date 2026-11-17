@@ -490,7 +490,7 @@ impl TeamsClient {
     /// its code); a redirect's body is left unread, and a file's when not `served`.
     fn download(&self, req: &Request, graph: bool, served: bool) -> Result<(Response, Tally)> {
         let url = Url::parse(&req.url)?;
-        let mut s = connect(&url)?;
+        let mut s = if graph { connect(&url)? } else { self.transfer_stream(&url)? };
         self.count();
         let mut tally = Tally::default();
         let sink = &mut tally;

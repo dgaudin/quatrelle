@@ -389,14 +389,27 @@ fn ms_of(t: &str) -> Option<i64> {
     Some(((days * 86_400 + h * 3600 + mi * 60 + s - offset) * 1000).saturating_add(milli))
 }
 
-/// A shared file's key in `shares`: the URL a `u!` share id encodes (base64url, unpadded), or
-/// the id itself.
+/// The URL a `u!` share id encodes (base64url, unpadded).
+fn share_url(id: &str) -> Option<String> {
+    id.strip_prefix("u!").map(|b| String::from_utf8_lossy(&unbase64(b.replace('-', "+").replace('_', "/").as_bytes())).to_string())
+}
+
+/// A shared file's key in `shares`: the URL a `u!` share id encodes, or the id itself.
 fn share_key(teams: &FakeTeams, id: &str) -> Option<String> {
-    let url = id.strip_prefix("u!").map(|b| String::from_utf8_lossy(&unbase64(b.replace('-', "+").replace('_', "/").as_bytes())).to_string());
-    url.into_iter().chain(std::iter::once(id.to_string())).find(|k| teams.shares.contains_key(k))
+    share_url(id).into_iter().chain(std::iter::once(id.to_string())).find(|k| teams.shares.contains_key(k))
 }
 
 impl FakeTeams {
+    /// A shared file's bytes by its share id: a file of `shares`, or one of the user's OneDrive
+    /// by its `webDavUrl` (a file sent in a chat).
+    fn shared_bytes(&self, id: &str) -> Option<Vec<u8>> {
+        if let Some(key) = share_key(self, id) {
+            return self.shares.get(&key).cloned();
+        }
+        let url = share_url(id)?;
+        self.drive_files.files.iter().find(|f| self.web_dav_url(f) == url).map(|f| f.bytes.clone())
+    }
+
     /// A user by id: a chat member or the signed-in user.
     fn user(&self, id: &str) -> Option<&FakeUser> {
         std::iter::once(&self.me).chain(self.chats.iter().flat_map(|c| &c.members)).find(|u| u.id == id)
@@ -472,12 +485,11 @@ impl FakeTeams {
             return self.create_chat(input, base);
         }
         if name == "shares" || name == "download" {
-            let Some(key) = p.get(1).and_then(|id| share_key(self, id)) else { return not_found() };
+            let Some(bytes) = p.get(1).and_then(|id| self.shared_bytes(id)) else { return not_found() };
             if name == "shares" {
                 let token = p.get(1).copied().unwrap_or_default();
                 return Reply { location: Some(format!("{base}/download/{token}")), ..Reply::bytes(302, Vec::new(), "text/plain") };
             }
-            let bytes = self.shares.get(&key).cloned().unwrap_or_default();
             return Reply::bytes(200, bytes, "application/octet-stream");
         }
         self.chat_route(name, p, query, raw_path, input, base)

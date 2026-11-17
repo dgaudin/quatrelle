@@ -8,8 +8,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use super::*;
 use crate::teams::check;
 
+/// The files check: `--files <chat>`.
+mod files;
+
 fn opts() -> CheckOptions {
-    CheckOptions { tenant: None, write_chat: None, hour: None, sleep: |_| {}, renew: None }
+    CheckOptions { tenant: None, write_chat: None, files_chat: None, hour: None, sleep: |_| {}, renew: None }
 }
 
 /// The check run on a fresh client: its result and the lines it said.
@@ -409,6 +412,7 @@ fn check_says_nothing_private() {
     let all = CheckOptions {
         tenant: Some(secret_tenant.into()),
         write_chat: Some("19:quixote-chat@thread.v2".into()),
+        files_chat: None,
         hour: Some(Duration::from_millis(1500)),
         sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))),
         renew: None,

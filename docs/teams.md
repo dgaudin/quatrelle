@@ -99,12 +99,12 @@ check runs, in a few seconds without `--write` or `--hour`.
 The whole check, with everything below:
 
 ```sh
-quatrelle-cli teams check --client … --tenant … --write "<chat link>" --hour --call "<chat link>"
+quatrelle-cli teams check --client … --tenant … --write "<chat link>" --files "<chat link>" --hour --call "<chat link>"
 ```
 
 ## 3. What each line means
 
-A typical run (with `--write` and `--call`):
+A typical run (with `--write`, `--files` and `--call`):
 
 ```text
 chats: 3 (one-to-one 1, group 1, meeting 0, other 1)
@@ -129,7 +129,15 @@ write, send (2/2): yes
 write, soft delete by /me: yes
 write, mark the chat read: yes
 write, test messages left undeleted: 0
-in all: requests 15, throttled 0
+upload session: yes (host: …sharepoint.com)
+upload: yes
+item: yes (attachment id: yes, on your OneDrive: yes)
+shared with the others: 2 of 2
+message with the file: yes
+listed as a file: yes
+download: yes (host: …sharepoint.com)
+cleaned up: yes
+in all: requests 27, throttled 0
 call: opened
 ```
 
@@ -148,6 +156,7 @@ call: opened
 | `write, …` | Only with `--write`: each write Quatrelle needs, `yes`, `no (<HTTP status> <code>)`, or `not tried` when an earlier step failed. See below. |
 | `write, stray test messages swept: N` | Only when a send's answer was lost: the test messages found and deleted anyway. |
 | `write, test messages left undeleted: N` | Should be `0`. Otherwise delete the test messages by hand in that chat. |
+| `upload session: …`, `upload: …`, `item: …`, `shared with the others: …`, `message with the file: …`, `listed as a file: …`, `download: …`, `cleaned up: …` | Only with `--files`: each step of sending a small file and opening it back, `yes`, `no (HTTP <status> <code>)` or `not tried` when an earlier step failed. See section 7. |
 | `hour, after N min: requests …, throttled …, failed …` | Only with `--hour`, every 10 minutes: how it is going. |
 | `hour, S s: requests R, throttled T, failed F, 429 rate X %` | The hour's totals: `throttled` is the number of 429 (Too Many Requests) answers. It may end with `, stopped (401 …)` (the sign-in ran out and couldn't be renewed), `, cut short at the end`, or `, sign-in renewed N` (the access token was renewed in the hour, as expected after 60 to 90 minutes). |
 | `in all: requests R, throttled T` | Every request of the run, and the 429 answers among them. |
@@ -209,7 +218,35 @@ It reads the chat's members and opens Teams' call link (`https://teams.microsoft
 with everyone in it but you: Teams (the app or the web) then offers to start the call. Nothing is
 called until you confirm there. It prints `call: opened`, or why not; it never prints the members.
 
-## 7. Using Teams in Quatrelle
+## 7. `--files <chat>`: a file sent and opened
+
+```sh
+quatrelle-cli teams check --client … --tenant … --files "<chat link>"
+```
+
+It checks, on the chat given, that sending a file and opening one work on your account. It sends
+**one small text file** (30 bytes, `Quatrelle check, please ignore`) to your OneDrive, shares it with
+the chat's other members, posts it in the chat with the message `Quatrelle check, please ignore
+(file)`, reads the message back and downloads the file the way another member's Teams does, then
+**removes the message and the file**. It runs after the writes of `--write` when both are given,
+and takes a chat the same way (section 4). **The others in the chat may see the message come and
+go, and get a notification**: pick a one-to-one chat with a colleague who knows.
+
+Each step prints one line, `yes`, `no (HTTP <status> <code>)`, or `not tried` when an earlier step
+failed. Nothing is ever printed that names the chat, a member, the file or an address.
+
+| Line | Meaning |
+|---|---|
+| `upload session: yes (host: …sharepoint.com)` | OneDrive opened an upload for the file. The host is where the bytes go, said by its last two labels only (the address itself carries its own authorisation and is never printed). `no (HTTP 507 quotaLimitReached)`: the drive is full. |
+| `upload: yes` | The 30 bytes went up in one piece, on a connection of their own to that host and without your token (the upload's address is its own authorisation). |
+| `item: yes (attachment id: yes, on your OneDrive: yes)` | OneDrive gave the file's description a message needs: the id Teams uses for the attachment, and whether the file's address is on your own OneDrive's host (`no`, or `not known` when Graph didn't say which one is yours). |
+| `shared with the others: N of M` | The file was shared, to read, with the chat's members but you, M in all and N granted, with no mail sent. `no (HTTP 403 Forbidden)`: your organisation doesn't let you share files this way. `0 of 0`: nobody else is in the chat. |
+| `message with the file: yes` | The message was posted with the file attached. |
+| `listed as a file: yes` | Read back, the message lists the file as a file (not as a card or an image). |
+| `download: yes (host: …sharepoint.com)` | The file's address, asked of Graph, led to a download of the same 30 bytes, without your token. `no (…)` says what stopped it, or how many bytes came. |
+| `cleaned up: yes` | The message and the file are deleted. `no (the message is left)`, `no (the file is left)` or `no (a message may be left)` say what to delete by hand: the message in the chat, the file `Quatrelle check.txt` in the OneDrive folder `Microsoft Teams Chat Files`. |
+
+## 8. Using Teams in Quatrelle
 
 Once your organization has registered the application (section 1), Quatrelle reads your Teams
 chats from a copy kept on your computer, as Outlook's Cached Exchange Mode keeps mail, and you
@@ -448,7 +485,7 @@ or signing out stops all of it at once.
 Sending pictures and files, starting a conversation, and starting calls or meetings are not
 there yet: they come in later versions of Quatrelle. For those, use Open in Teams.
 
-## 8. Sending the result back
+## 9. Sending the result back
 
 Everything printed on the standard output is numbers, kinds of chat, yes or no, HTTP statuses with
 Graph's error codes, and durations: copy it as it is and paste it back. The sign-in address printed on the error output (`Open this address
