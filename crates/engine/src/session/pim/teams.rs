@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Teams, as the engine keeps it: where the connection stands, the rows of the list, the open
-//! chat's last messages, those going out (`outbox.rs`) and the changes to them going out, shown
-//! at once over them (`changes.rs`: edits, deletions, reactions), presence, search hits and
-//! pictures waiting for the window, what is announced of new messages (`announce.rs`), and the
-//! Teams pages the window opens in the meetings browser's window ([`TeamsPage`]). Only the Teams
-//! worker (`net::teams`) talks to Graph and holds the copy and the outbox; the engine sends it
-//! jobs and applies what it reports, in windows that never grow with the copy (`window.rs`).
+//! chat's last messages, those going out (`outbox.rs`, their files and pictures checked in
+//! `files.rs`) and the changes to them going out, shown at once over them (`changes.rs`: edits,
+//! deletions, reactions), the files shared asked for and saved (`files.rs`), presence, search
+//! hits and pictures waiting for the window, what is announced of new messages (`announce.rs`),
+//! and the Teams pages the window opens in the meetings browser's window ([`TeamsPage`]). Only
+//! the Teams worker (`net::teams`) talks to Graph and holds the copy and the outbox; the engine
+//! sends it jobs and applies what it reports, in windows that never grow with the copy
+//! (`window.rs`).
 //!
 //! What is hostile here: everything an event carries came from Graph or the copy on disk (the
 //! worker checked it, the engine still bounds it: the rows at [`teams::MAX_CHATS`], the window at
@@ -25,12 +27,14 @@ use super::*;
 
 mod announce;
 mod changes;
+mod files;
 mod members;
 mod outbox;
 mod window;
 
 pub use announce::TeamsAnnouncement;
 pub use changes::ShownReaction;
+pub use files::{TEAMS_FILES_KEPT, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsSaved, teams_could_run};
 pub use members::ChatMembers;
 pub use outbox::{TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY};
 
@@ -150,6 +154,9 @@ pub struct TeamsState {
     pub sign_in_page: Option<String>,
     /// The page the window is to open, once ([`Session::take_teams_page`]).
     page: Option<TeamsPage>,
+    /// The open chat's files asked for, the saved ones waiting for the window, the parts of the
+    /// messages sent not answered for yet.
+    files: files::Files,
 }
 
 impl TeamsState {
@@ -212,6 +219,7 @@ impl TeamsState {
     pub(crate) fn open_chat(&mut self, chat: Option<String>) {
         if self.open != chat {
             self.switch_outgoing(chat.as_deref());
+            self.files.chat_left();
         }
         self.open = chat;
         self.window.clear();
@@ -479,7 +487,7 @@ impl Session {
         }
         let signed_in = self.prefs.teams.signed_in;
         match e {
-            teams::Event::File { .. } | teams::Event::People { .. } | teams::Event::Created { .. } | teams::Event::NotCreated { .. } => {}
+            teams::Event::People { .. } | teams::Event::Created { .. } | teams::Event::NotCreated { .. } => {}
             teams::Event::Status { status } => self.teams_status(status),
             teams::Event::Account { name, address, object_id, tenant_id, drive_host } => {
                 if object_id.is_empty() || object_id.len() > MAX_ID || tenant_id.len() > MAX_ID {
@@ -510,6 +518,7 @@ impl Session {
             teams::Event::Unsent { count } => self.teams.unsent = count,
             teams::Event::News { news } => self.teams_news(news),
             teams::Event::Placed { chat, message, newest } => self.teams.placed(&chat, &message, newest),
+            teams::Event::File { chat, message, attachment, outcome } => self.teams_file(&chat, &message, &attachment, outcome),
             // A picture not to be had in this run: for the window to show so, and not asked again.
             teams::Event::NoPicture { picture } => self.teams.take_no_picture(picture),
         }

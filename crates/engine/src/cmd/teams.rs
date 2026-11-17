@@ -9,12 +9,12 @@ use std::ops::Range;
 
 use quatrelle_model::Job;
 use quatrelle_model::addr::trust::url_host;
-use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PRESENCE_IDS, Picture, Status};
+use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PARTS_MAX, PRESENCE_IDS, Part, Picture, Status};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
 use crate::mime::Typed;
-use crate::{Module, TEAMS_RANGES_MAX, TeamsPage};
+use crate::{Module, TEAMS_RANGES_MAX, TEAMS_TOO_MANY_FILES, TeamsPage};
 
 const OPTIONS: &str = "File › Options › Teams";
 const MODULE: &str = "Conversations";
@@ -48,7 +48,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params(r#"{"kind": "hosted", "chat": string, "message": string, "hosted": string} | {"kind": "photo", "user": string} | {"kind": "outside", "url": string (https)}"#)
             .when(ready),
         CommandSpec::new("teams.send", "Send a message", MODULE, send)
-            .params(r#"{"chat": string (a listed conversation's id), "text": string, "bold"?: [[from, to]] (byte ranges of the text, at most 1,000), "italic"?: [[from, to]] (the same), "mentions"?: [[from, to, "user id"]] (at most 50 byte ranges of the text, each a name on one line, apart: the open conversation's members of the organisation)}"#)
+            .params(r#"{"chat": string (a listed conversation's id), "text": string ("" with files or pictures), "bold"?: [[from, to]] (byte ranges of the text, at most 1,000), "italic"?: [[from, to]] (the same), "mentions"?: [[from, to, "user id"]] (at most 50 byte ranges of the text, each a name on one line, apart: the open conversation's members of the organisation), "files"?: [string] (the full paths of files to send with it), "pictures"?: [string] (the full paths of pictures pasted, PNG or JPEG; at most 10 files and pictures together)}"#)
             .when(ready),
         CommandSpec::new("teams.edit", "Edit a message", MODULE, edit)
             .params(r#"{"chat": string (the open conversation), "message": string (one's own message in it), "text": string, "bold"?: [[from, to]], "italic"?: [[from, to]] (as teams.send's), "mentions"?: [[from, to, "user id"]] (as teams.send's, or people the message mentions already)}"#)
@@ -64,6 +64,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(ready),
         CommandSpec::new("teams.discard", "Delete a message going out", MODULE, discard)
             .params(r#"{"seq": number (a message going out in the open conversation), "local"?: string (its local id, for one numbered 0)}"#)
+            .when(ready),
+        CommandSpec::new("teams.openFile", "Open a shared file", MODULE, open_file)
+            .params(r#"{"chat": string (the open conversation), "message": string (one of its messages), "attachment": string (the id of a file it carries)} (downloaded once, then handed to the window to open)"#)
             .when(ready),
         CommandSpec::new("teams.openInTeams", "Open in Teams", MODULE, open_in_teams)
             .params("() (the open conversation in Teams, when its link is a Teams chat link)")
@@ -306,10 +309,36 @@ fn typed(v: &Value) -> Result<Typed, CmdError> {
     Ok(Typed { text: text.to_string(), bold, italic, mentions })
 }
 
+/// The files and pictures from the params (`"files"`, then `"pictures"`: lists of paths, absent or
+/// null for none), at most [`PARTS_MAX`] together; whether each path can be one is the session's
+/// to say.
+fn parts(v: &Value) -> Result<Vec<Part>, CmdError> {
+    let list = |k: &str| match v.get(k) {
+        None | Some(Value::Null) => Ok(&[][..]),
+        Some(Value::Array(given)) => Ok(given.as_slice()),
+        Some(_) => Err(CmdError::Params(format!("`{k}` is a list of full paths"))),
+    };
+    let (files, pictures) = (list("files")?, list("pictures")?);
+    if files.len().saturating_add(pictures.len()) > PARTS_MAX {
+        return Err(CmdError::Params(TEAMS_TOO_MANY_FILES.into()));
+    }
+    let path = |p: &Value| p.as_str().map(str::to_string).ok_or_else(|| CmdError::Params("files and pictures are given by their full paths".into()));
+    let files = files.iter().map(|f| path(f).map(|path| Part::File { path }));
+    let pictures = pictures.iter().map(|p| path(p).map(|path| Part::Picture { path }));
+    files.chain(pictures).collect()
+}
+
 fn send(s: &mut Session, v: &Value) -> CmdResult {
     let chat = id_param(v, "chat")?;
-    let local = s.teams_send(chat, &typed(v)?)?;
+    let local = s.teams_send(chat, &typed(v)?, parts(v)?)?;
     Ok(json!({"local": local}))
+}
+
+/// A file someone shared in the open conversation opened: asked of the worker once.
+fn open_file(s: &mut Session, v: &Value) -> CmdResult {
+    let (chat, message, attachment) = (id_param(v, "chat")?, id_param(v, "message")?, id_param(v, "attachment")?);
+    let asked = s.teams_open_file(chat, message, attachment)?;
+    Ok(json!({"asked": asked}))
 }
 
 fn edit(s: &mut Session, v: &Value) -> CmdResult {

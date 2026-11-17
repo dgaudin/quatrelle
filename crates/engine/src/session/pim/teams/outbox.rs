@@ -9,19 +9,21 @@
 //! without a number (`seq` 0), until the worker answers for it (`took`) or holds it: taken, it
 //! shows as the worker keeps it; refused, the worker's answer carries it "Not sent" without a
 //! number, and it stays in its conversation, known here alone (in memory: not after a restart),
-//! until it's deleted or sent again. An edit or a deletion goes the same way. A reaction is never
-//! kept "Not sent": the worker lets it go and says so once, and so does the engine, by a notice
-//! wherever its chat is; its chip is Teams' own again. The open chat is on screen only while
-//! Conversations is shown in a window with the focus ([`Session::teams_on_screen`]): otherwise, a
-//! message, an edit or a deletion not made there is said too.
+//! until it's deleted or sent again; with the names of its files and pictures (`files.rs`), when
+//! it had some, and then it isn't sent again (the files are attached again). An edit or a
+//! deletion goes the same way. A reaction is never kept "Not sent": the worker lets it go and
+//! says so once, and so does the engine, by a notice wherever its chat is; its chip is Teams' own
+//! again. The open chat is on screen only while Conversations is shown in a window with the focus
+//! ([`Session::teams_on_screen`]): otherwise, a message, an edit or a deletion not made there is
+//! said too.
 //!
 //! What is hostile here: the commands' params (a text, its ranges and mentions, from the window or
 //! a script), checked before anything changes. What the worker says is bounded: a chat's share
 //! ([`OUTBOX_CHAT_MAX`]), the local ids ([`LOCAL_MAX`]), the notices remembered ([`SAID_MAX`]),
 //! the refusals kept for chats not open ([`REFUSED_MAX`]).
 
-use quatrelle_mime::{Typed, teams_compose_typed, teams_write_mentions};
-use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, Mention, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, OutState, Outgoing};
+use quatrelle_mime::{Typed, teams_compose_typed};
+use quatrelle_model::pim::teams::{ChatText, LOCAL_MAX, Mention, OUTBOX_CHAT_MAX, OUTBOX_MAX, Op, OutKind, OutState, Outgoing, Part};
 
 use super::*;
 
@@ -200,7 +202,18 @@ impl Session {
         if chat.is_empty() || chat.len() > MAX_ID {
             return;
         }
-        let items = items.into_iter().filter(|o| o.chat == chat && usable_local(&o.local)).take(OUTBOX_MAX);
+        // The message answered for, refused, carries nothing of its parts: their names are put back.
+        let parts = took.as_deref().and_then(|t| self.teams.files.answered(t));
+        let items = items.into_iter().filter(|o| o.chat == chat && usable_local(&o.local)).take(OUTBOX_MAX).map(|mut o| {
+            if let Some(parts) = &parts
+                && o.seq == 0
+                && o.parts.is_empty()
+                && took.as_deref() == Some(o.local.as_str())
+            {
+                o.parts.clone_from(parts);
+            }
+            o
+        });
         let (not_made, items): (Vec<Outgoing>, Vec<Outgoing>) = items.partition(reaction_not_made);
         let mut new = NotMade::default();
         for o in &not_made {
@@ -250,28 +263,40 @@ impl Session {
     }
 
     /// What the user typed in `chat`'s box (`typed`: its text, the byte ranges of it in bold and
-    /// in italic, the people @mentioned), sent: shown at once when the chat is open, and handed to
-    /// the worker. Its local id is returned. Refused when there's nothing to send, judged on what
-    /// would be sent (a text of spaces, blank lines or control characters is nothing), and when a
+    /// in italic, the people @mentioned), sent with the files and pictures attached (`parts`, by
+    /// their paths): shown at once when the chat is open, and handed to the worker. Its local id is
+    /// returned. Refused when there's nothing to send, judged on what would be sent (a text of
+    /// spaces, blank lines or control characters is nothing; files alone are a message), when a
     /// mention isn't a name on one line naming a member of the open chat of the user's
-    /// organisation (a chat not open takes none: its members aren't known here).
-    pub fn teams_send(&mut self, chat: &str, typed: &Typed) -> Result<String, CmdError> {
+    /// organisation (a chat not open takes none: its members aren't known here), and when a part
+    /// can't be one (`files.rs`: more than [`teams::PARTS_MAX`], or a path that isn't one).
+    pub fn teams_send(&mut self, chat: &str, typed: &Typed, parts: Vec<Part>) -> Result<String, CmdError> {
         self.teams.mentions_ok(chat, typed, &self.prefs.teams.tenant_id, &[])?;
+        files::parts_ok(&parts)?;
         let (body, mentions) = teams_compose_typed(typed);
-        if body.blocks.is_empty() {
+        if body.blocks.is_empty() && parts.is_empty() {
             return Err(CmdError::Params("there's nothing to send".into()));
         }
-        self.teams_queue(chat, OutKind::Send, body, mentions)
+        self.teams_queue(chat, OutKind::Send, body, mentions, parts)
     }
 
-    /// `what` to go to `chat` (a message `body` with its `mentions`, or a change of one of its
-    /// messages): a listed chat the user is still in and Teams lets be read, the HTML within
-    /// [`teams::SEND_MAX`], under the outbox's caps (the open chat's share, then all of it). Shown
-    /// at once when the chat is open, and handed to the worker as the operation of its kind; an
-    /// edit or a deletion lets go of its message's edits not made first (refused, it lets go of
+    /// `what` to go to `chat` (a message `body` with its `mentions` and its `parts`, or a change of
+    /// one of its messages: only a message sent has parts): a listed chat the user is still in and
+    /// Teams lets be read, the HTML within [`teams::SEND_MAX`] (the places of the parts counted),
+    /// under the outbox's caps (the open chat's share, then all of it). Shown at once when the chat
+    /// is open (its parts by name), and handed to the worker as the operation of its kind; an edit
+    /// or a deletion lets go of its message's edits not made first (refused, it lets go of
     /// nothing). A message sent from older messages opens the chat again at its newest first: it
     /// shows after them. Its local id is returned.
-    pub(super) fn teams_queue(&mut self, chat: &str, what: OutKind, body: ChatText, mentions: Vec<Mention>) -> Result<String, CmdError> {
+    pub(super) fn teams_queue(
+        &mut self,
+        chat: &str,
+        what: OutKind,
+        body: ChatText,
+        mentions: Vec<Mention>,
+        parts: Vec<Part>,
+    ) -> Result<String, CmdError> {
+        let parts = if what == OutKind::Send { parts } else { Vec::new() };
         let row = self.teams.row(chat).ok_or_else(|| CmdError::Params("that conversation isn't listed".into()))?;
         if row.left {
             return Err(CmdError::Disabled(TEAMS_LEFT.into()));
@@ -279,7 +304,7 @@ impl Session {
         if row.unreadable {
             return Err(CmdError::Disabled("Teams doesn't let this conversation be written to here".into()));
         }
-        if teams_write_mentions(&body, &mentions).is_err() {
+        if !files::fits(&body, &mentions, &parts) {
             return Err(CmdError::Params(TEAMS_TOO_LONG.into()));
         }
         let open = self.teams.open.as_deref() == Some(chat);
@@ -303,6 +328,8 @@ impl Session {
         // the same id.
         let n = self.fresh_id();
         let local = format!("{}-{n}", self.clock.now);
+        let shown: Vec<_> = parts.iter().map(files::shown_part).collect();
+        self.teams.files.sent_with(&local, shown.clone());
         if open {
             self.teams.outgoing.push(Outgoing {
                 seq: 0,
@@ -311,13 +338,13 @@ impl Session {
                 body: body.clone(),
                 mentions: mentions.clone(),
                 what: what.clone(),
-                parts: Vec::new(),
+                parts: shown,
                 state: OutState::Waiting,
             });
         }
         let l = local.clone();
         let op = match what {
-            OutKind::Send => Op::Send { chat, local: l, body, mentions, parts: Vec::new() },
+            OutKind::Send => Op::Send { chat, local: l, body, mentions, parts },
             OutKind::Edit { message, created } => Op::Edit { chat, local: l, message, created, body, mentions },
             OutKind::Delete { message, created } => Op::Delete { chat, local: l, message, created },
             OutKind::React { message, created, emoji, on } => Op::React { chat, local: l, message, created, emoji, on },
@@ -328,8 +355,10 @@ impl Session {
 
     /// A message (or a change) of the open chat that wasn't sent, sent again: one the worker keeps
     /// is asked of it again (shown waiting at once); one it refused goes as a new one of its kind,
-    /// its text the same (left where it was if that's refused). An edit isn't sent again while its
-    /// message is being deleted: it would come after the deletion. Its local id is returned.
+    /// its text the same (left where it was if that's refused), unless it had files or pictures:
+    /// the worker kept nothing of them and the engine only their names, so they're attached again
+    /// instead. An edit isn't sent again while its message is being deleted: it would come after
+    /// the deletion. Its local id is returned.
     pub(crate) fn teams_retry(&mut self, seq: u64, local: Option<&str>) -> Result<String, CmdError> {
         let i = self.teams.outgoing_at(seq, local)?;
         let what = self.teams.outgoing.get(i).map(|o| &o.what);
@@ -339,6 +368,9 @@ impl Session {
         let Some(o) = self.teams.outgoing.get_mut(i).filter(|o| matches!(o.state, OutState::NotSent { .. })) else {
             return Err(CmdError::Disabled("only a message that wasn't sent can be sent again".into()));
         };
+        if seq == 0 && !o.parts.is_empty() {
+            return Err(CmdError::Disabled(files::ATTACH_AGAIN.into()));
+        }
         if seq != 0 {
             o.state = OutState::Waiting;
             let local = o.local.clone();
@@ -347,7 +379,7 @@ impl Session {
             return Ok(local);
         }
         let Some(o) = self.teams.take_outgoing(i) else { return Err(CmdError::Params("that message isn't going out".into())) };
-        match self.teams_queue(&o.chat, o.what.clone(), o.body.clone(), o.mentions.clone()) {
+        match self.teams_queue(&o.chat, o.what.clone(), o.body.clone(), o.mentions.clone(), Vec::new()) {
             Ok(local) => Ok(local),
             Err(e) => {
                 let at = i.min(self.teams.outgoing.len());

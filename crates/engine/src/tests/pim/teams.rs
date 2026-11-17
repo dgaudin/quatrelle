@@ -11,6 +11,8 @@ use crate::Module;
 mod announce;
 /// Changes to messages already there: reactions, edits, deletions; and mentions sent.
 mod changes;
+/// Files and pictures sent with a message; a shared file opened.
+mod files;
 /// A search's hit opened at its message.
 mod find;
 mod outbox;
@@ -551,7 +553,7 @@ fn teams_commands_survive_junk_params_while_on() {
     let mut s = signed_in((0..5).map(|i| row(i, 100 - i as i64)).collect());
     s.module = Module::Conversations;
     let ids: Vec<&str> = s.registry().all().iter().map(|c| c.id).filter(|id| id.starts_with("teams.")).collect();
-    assert_eq!(ids.len(), 19, "{ids:?}");
+    assert_eq!(ids.len(), 20, "{ids:?}");
     let junk = [
         json!(null),
         json!({}),
@@ -566,6 +568,8 @@ fn teams_commands_survive_junk_params_while_on() {
         json!({"chat": "19:chat1@thread.v2", "message": "m1", "emoji": "\u{1F44D}".repeat(10_000), "text": "é a", "mentions": [[0, 2, "m1"], [1, 2, ""], [0, 9e99, 5], "x"]}),
         json!({"chat": "19:chat1@thread.v2", "message": "m2", "emoji": "\u{FE0F}", "text": "\n", "mentions": [[0, 1, "u-1"]], "bold": [[0, 1]]}),
         json!({"chat": "19:chat1@thread.v2", "message": ["m1"], "emoji": 5, "text": "hi", "mentions": {"a": [0, 1, "u"]}}),
+        json!({"chat": "19:chat1@thread.v2", "message": "m1", "attachment": "x".repeat(10_000), "text": "", "files": ["\u{0}", 5, null], "pictures": "x"}),
+        json!({"chat": "19:chat1@thread.v2", "message": "m2", "attachment": [], "text": "", "files": vec!["/a"; 1_000], "pictures": [{"path": "/a"}]}),
     ];
     for _ in 0..2 {
         for id in &ids {

@@ -222,7 +222,7 @@ impl Session {
         if body.blocks.is_empty() {
             return Err(CmdError::Params(TEAMS_NOTHING_LEFT.into()));
         }
-        self.teams_queue(chat, OutKind::Edit { message: message.to_string(), created }, body, mentions)
+        self.teams_queue(chat, OutKind::Edit { message: message.to_string(), created }, body, mentions, Vec::new())
     }
 
     /// [`teams::Job::Op`] of [`Op::Delete`]: the open chat's message `message` deleted, shown at
@@ -235,7 +235,7 @@ impl Session {
             return Err(CmdError::Disabled("only one's own message can be deleted, once".into()));
         }
         let created = m.created;
-        self.teams_queue(chat, OutKind::Delete { message: message.to_string(), created }, ChatText::default(), Vec::new())
+        self.teams_queue(chat, OutKind::Delete { message: message.to_string(), created }, ChatText::default(), Vec::new(), Vec::new())
     }
 
     /// [`teams::Job::Op`] of [`Op::React`]: the user's reaction `emoji` on the open chat's
@@ -261,7 +261,7 @@ impl Session {
         let on = !chip.is_some_and(|r| r.mine);
         let created = m.created;
         let what = OutKind::React { message: message.to_string(), created, emoji: emoji.to_string(), on };
-        let local = self.teams_queue(chat, what, ChatText::default(), Vec::new())?;
+        let local = self.teams_queue(chat, what, ChatText::default(), Vec::new(), Vec::new())?;
         Ok((local, on))
     }
 }
