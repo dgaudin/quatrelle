@@ -267,9 +267,10 @@ impl Session {
     /// `what` to go to `chat` (a message `body` with its `mentions`, or a change of one of its
     /// messages): a listed chat the user is still in and Teams lets be read, the HTML within
     /// [`teams::SEND_MAX`], under the outbox's caps (the open chat's share, then all of it). Shown
-    /// at once when the chat is open, and handed to the worker as the operation of its kind. A
-    /// message sent from older messages opens the chat again at its newest first: it shows after
-    /// them. Its local id is returned.
+    /// at once when the chat is open, and handed to the worker as the operation of its kind; an
+    /// edit or a deletion lets go of its message's edits not made first (refused, it lets go of
+    /// nothing). A message sent from older messages opens the chat again at its newest first: it
+    /// shows after them. Its local id is returned.
     pub(super) fn teams_queue(&mut self, chat: &str, what: OutKind, body: ChatText, mentions: Vec<Mention>) -> Result<String, CmdError> {
         let row = self.teams.row(chat).ok_or_else(|| CmdError::Params("that conversation isn't listed".into()))?;
         if row.left {
@@ -285,6 +286,12 @@ impl Session {
         let all = usize::try_from(self.teams.unsent).unwrap_or(usize::MAX);
         if (open && self.teams.outgoing.len() >= OUTBOX_CHAT_MAX) || all >= OUTBOX_MAX {
             return Err(CmdError::Disabled(TEAMS_TOO_MANY.into()));
+        }
+        // Taken: an edit or a deletion takes the place of the message's edits not made.
+        if open && let OutKind::Edit { message, .. } | OutKind::Delete { message, .. } = &what {
+            for seq in self.teams.drop_edits_not_made(message) {
+                self.push_job(Job::Teams { job: teams::Job::Discard { seq } });
+            }
         }
         let chat = chat.to_string();
         // A change is to a message of the window as it is: it stays.

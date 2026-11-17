@@ -148,6 +148,17 @@ impl TeamsState {
         self.outgoing.iter().rev().find(|o| is_change(o, message, |k| matches!(k, OutKind::Edit { .. })))
     }
 
+    /// The open chat's message `message`'s edits that weren't made, let go: a newer edit or a
+    /// deletion of it takes their place (sent again later, one would put older words back, or
+    /// stay "Not edited" under a message deleted). The numbers of those the worker keeps are
+    /// returned, for it to let go of them too; one it refused at the door was known here alone.
+    pub(super) fn drop_edits_not_made(&mut self, message: &str) -> Vec<u64> {
+        let not_made = |o: &Outgoing| is_change(o, message, |k| matches!(k, OutKind::Edit { .. })) && matches!(o.state, OutState::NotSent { .. });
+        let kept: Vec<u64> = self.outgoing.iter().filter(|o| o.seq != 0 && not_made(o)).map(|o| o.seq).collect();
+        self.outgoing.retain(|o| !not_made(o));
+        kept
+    }
+
     /// The open chat `chat`'s message `message`, in the window: a change needs it there (else the
     /// state it was offered in no longer holds).
     fn shown_message(&self, chat: &str, message: &str) -> Result<&ChatMessage, CmdError> {

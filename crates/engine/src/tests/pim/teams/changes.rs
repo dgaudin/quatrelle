@@ -576,3 +576,71 @@ fn a_change_from_an_older_view_keeps_the_window() {
     assert!(jobs.iter().all(|j| matches!(j, teams::Job::Op { .. })) && jobs.len() == 3, "{jobs:?}");
     assert!(s.teams.newer_left_out && s.teams.window.len() == 2);
 }
+
+/// The message's edit `local` that Teams refused (`seq` 0: refused at the door, known here alone).
+fn edit_not_made(s: &mut Session, seq: u64, local: &str, text: &str) {
+    let what = OutKind::Edit { message: "m2".into(), created: 1_000_002 };
+    let state = if seq == 0 { OutState::NotSent { reason: Unsent::TooMany, code: None } } else { refused() };
+    let not_made = Outgoing { body: teams_compose(text, &[], &[]), ..change(CHAT, seq, local, what, state) };
+    s.apply(outbox(CHAT, vec![not_made], Some(local)));
+}
+
+fn shown_locals(s: &Session) -> Vec<String> {
+    s.teams.outgoing.iter().map(|o| o.local.clone()).collect()
+}
+
+/// An edit Teams refused is let go by a newer edit of its message (made later, it would put older
+/// words back): the worker is told to let go of the one it keeps, and once the newer one is made
+/// the message reads as Teams has it.
+#[test]
+fn a_newer_edit_takes_the_place_of_one_not_made() {
+    let mut s = opened();
+    let a = edit(&mut s, "m2", "hello A").unwrap();
+    edit_not_made(&mut s, 4, &a, "hello A");
+    teams_jobs(&mut s);
+    // A newer edit refused here lets nothing go.
+    assert!(matches!(edit(&mut s, "m2", &"a".repeat(90 << 10)), Err(CmdError::Params(_))));
+    assert!(teams_jobs(&mut s).is_empty());
+    assert_eq!(shown_locals(&s), std::slice::from_ref(&a));
+    let b = edit(&mut s, "m2", "hello B").unwrap();
+    let jobs = teams_jobs(&mut s);
+    assert!(matches!(&jobs[..], [teams::Job::Discard { seq: 4 }, teams::Job::Op { op: Op::Edit { local, .. } }] if *local == b), "{jobs:?}");
+    assert_eq!(shown_locals(&s), std::slice::from_ref(&b));
+    // The worker took it in the place of the one let go, then made it: it holds neither.
+    s.apply(outbox(CHAT, vec![], Some(&b)));
+    assert_eq!(s.teams.change_of("m2"), None);
+    assert_eq!(s.teams.typed_for(shown(&s, "m2")).map(|t| t.text), Some("hello".into()), "the message's own words");
+}
+
+/// The same with an edit refused at the door (`seq` 0, nothing kept by the worker): it leaves the
+/// conversation, and nothing is asked of the worker.
+#[test]
+fn a_newer_edit_takes_the_place_of_one_refused_at_the_door() {
+    let mut s = opened();
+    let a = edit(&mut s, "m2", "hello A").unwrap();
+    edit_not_made(&mut s, 0, &a, "hello A");
+    s.apply(outbox(CHAT, vec![], None));
+    teams_jobs(&mut s);
+    assert_eq!(shown_locals(&s), std::slice::from_ref(&a), "kept here");
+    let b = edit(&mut s, "m2", "hello B").unwrap();
+    assert!(matches!(&teams_jobs(&mut s)[..], [teams::Job::Op { op: Op::Edit { local, .. } }] if *local == b));
+    assert_eq!(shown_locals(&s), std::slice::from_ref(&b));
+    s.apply(outbox(CHAT, vec![], Some(&b)));
+    assert_eq!(s.teams.change_of("m2"), None);
+    assert_eq!(s.teams.typed_for(shown(&s, "m2")).map(|t| t.text), Some("hello".into()));
+}
+
+/// A deletion lets go of its message's edits not made: nothing "Not edited" stays under a message
+/// deleted.
+#[test]
+fn a_deletion_takes_the_place_of_an_edit_not_made() {
+    let mut s = opened();
+    let a = edit(&mut s, "m2", "hello A").unwrap();
+    edit_not_made(&mut s, 4, &a, "hello A");
+    teams_jobs(&mut s);
+    let d = delete(&mut s, "m2").unwrap();
+    let jobs = teams_jobs(&mut s);
+    assert!(matches!(&jobs[..], [teams::Job::Discard { seq: 4 }, teams::Job::Op { op: Op::Delete { local, .. } }] if *local == d), "{jobs:?}");
+    assert!(matches!(s.teams.change_of("m2").map(|o| &o.what), Some(OutKind::Delete { .. })));
+    assert_eq!(shown_locals(&s), [d]);
+}
