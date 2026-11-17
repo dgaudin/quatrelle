@@ -11,6 +11,8 @@
 //!   for that sender: who they are is the members' to say, not the message's.
 //! * Refused (403, 404) from a chat's first read: Graph doesn't serve it here (tried again a day
 //!   later); refused once read: the user is no longer in it.
+//! * A message read deleted takes the user's changes to it still in the outbox with it
+//!   (`outbox::gone`).
 
 use super::news::say_news;
 use super::*;
@@ -135,6 +137,9 @@ fn page_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
         Some(copy) => copy.upsert_new(chat, &messages)?,
         None => Default::default(),
     };
+    // A message Teams shows deleted takes the changes to it still to make with it.
+    let deleted: Vec<&str> = changed.iter().filter(|m| m.deleted.is_some()).map(|m| m.id.as_str()).collect();
+    crate::teams::outbox::gone(w, chat, &deleted);
     // Only what the copy didn't hold can be news: an edit of, or a reaction to, a message it held
     // (its newest too, whose time the watermark stands on) isn't, whenever it comes.
     let fresh: Vec<ChatMessage> = if first { Vec::new() } else { changed.iter().filter(|m| new.contains(&m.id)).cloned().collect() };

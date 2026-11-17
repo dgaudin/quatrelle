@@ -37,17 +37,17 @@ fn not_sent(reason: Unsent, code: Option<&str>) -> OpState {
 
 impl Run {
     /// The user sends `text` to `chat`, the engine calling the message `local`.
-    fn send(&mut self, chat: &str, local: &str, text: &str) {
+    pub(super) fn send(&mut self, chat: &str, local: &str, text: &str) {
         self.w.job(Job::Op { op: Op::Send { chat: chat.into(), local: local.into(), body: body(text), mentions: Vec::new() } });
     }
 
     /// The outbox as the copy holds it.
-    fn ops(&self) -> Vec<OpRecord> {
+    pub(super) fn ops(&self) -> Vec<OpRecord> {
         self.w.copy.as_ref().map(Copy::ops).unwrap_or_default()
     }
 
     /// The outboxes said of a chat, in order: (items, took).
-    fn outboxes(&self, chat: &str) -> Vec<(Vec<Outgoing>, Option<String>)> {
+    pub(super) fn outboxes(&self, chat: &str) -> Vec<(Vec<Outgoing>, Option<String>)> {
         self.events()
             .into_iter()
             .filter_map(|e| match e {
@@ -58,22 +58,22 @@ impl Run {
     }
 
     /// The items of the last outbox said of a chat.
-    fn outbox_said(&self, chat: &str) -> Vec<Outgoing> {
+    pub(super) fn outbox_said(&self, chat: &str) -> Vec<Outgoing> {
         self.outboxes(chat).pop().map(|(items, _)| items).unwrap_or_else(|| panic!("no outbox said of {chat}: {:?}", self.events()))
     }
 
     /// Every message said of a chat.
-    fn messages_said(&self, chat: &str) -> Vec<ChatMessage> {
+    pub(super) fn messages_said(&self, chat: &str) -> Vec<ChatMessage> {
         self.messages(chat, 0).into_iter().flat_map(|(m, _, _)| m).collect()
     }
 
     /// The last count of the outbox said.
-    fn unsent(&self) -> Option<u32> {
+    pub(super) fn unsent(&self) -> Option<u32> {
         self.events().into_iter().rev().find_map(|e| if let model::Event::Unsent { count } = e { Some(count) } else { None })
     }
 
     /// How many messages of a chat of the fake have `text` in their HTML.
-    fn held(&self, chat: &str, text: &str) -> usize {
+    pub(super) fn held(&self, chat: &str, text: &str) -> usize {
         self.fake(|t| t.chat(chat).map_or(0, |c| c.messages.iter().filter(|m| m.body_html.contains(text)).count()))
     }
 

@@ -11,6 +11,8 @@ use crate::fake_graph::{Data, FakeChat, FakeMessage, FakeTeams, FakeUser, Server
 
 /// The first copy and the history: resumed, refused links, the disk guard, panics.
 mod backfill;
+/// The worker's changes to messages already there: edits, deletions, reactions, merged and let go.
+mod changes;
 /// The step 0 check.
 mod check;
 /// The limiter, the cadences and the slow-down after a 429.

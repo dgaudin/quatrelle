@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! What Quatrelle does in Teams on the user's behalf (a message sent, a chat marked read), the
-//! messages going out as the window shows them, and the new messages the worker reports for the
-//! engine to announce, with the caps on each.
+//! What Quatrelle does in Teams on the user's behalf (a message sent, edited or deleted, a reaction
+//! set or taken back, a chat marked read), what is going out as the window shows it, and the new
+//! messages the worker reports for the engine to announce, with the caps on each.
 
 use serde::{Deserialize, Serialize};
 
@@ -37,8 +37,9 @@ pub const LOCAL_MAX: usize = 64;
 /// The most characters of a new message's text an announcement shows ([`super::first_line`]).
 pub const NEWS_CHARS: usize = 200;
 
-/// What the user did that Teams is to be told: a message sent (kept in the outbox until Teams has
-/// it) or a chat read.
+/// What the user did that Teams is to be told: a message sent, edited or deleted, or a reaction set
+/// or taken back (each kept in the outbox until Teams has it, the changes merged with what waits
+/// of their message), or a chat read.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 pub enum Op {
