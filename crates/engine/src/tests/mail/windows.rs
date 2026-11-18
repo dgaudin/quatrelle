@@ -342,3 +342,54 @@ fn a_reply_written_in_the_pane_is_left_as_it_is() {
     assert!(s.summary(&a).is_none(), "archived");
     done(s);
 }
+
+/// What the main window shows while a window's message isn't in its list: another folder, or a
+/// search that doesn't find it.
+const ELSEWHERE: [&str; 2] = ["another folder", "a search"];
+
+fn show_elsewhere(s: &mut Session, how: &str, a: &MessageKey) {
+    if how == "a search" {
+        s.run("search.run", &json!({"query": "poster", "scope": "all"})).unwrap();
+    } else {
+        s.run("folder.open", &json!({"account": "sample", "folder": "Sent"})).unwrap();
+    }
+    assert!(!s.list.is_empty() && !s.list.iter().any(|m| m.key == *a), "{how}: something shown, not the window's message");
+}
+
+/// Ignore from a window takes its message's whole conversation, wherever the main window is (it
+/// took the window's message alone once the list didn't hold the rest of it).
+#[test]
+fn a_windows_ignore_takes_its_whole_conversation_wherever_the_main_window_is() {
+    for how in ELSEWHERE {
+        let (mut s, a, b) = two("window-ignore-conversation");
+        let (sa, sb) = (s.summary(&a).unwrap().subject.clone(), s.summary(&b).unwrap().subject.clone());
+        let topic = |t: &str| quatrelle_model::thread::base_subject(t).to_lowercase();
+        assert_eq!(topic(&sa), topic(&sb), "the sample's first two are one conversation");
+        show_elsewhere(&mut s, how, &a);
+        s.run_in_window(&a, "mail.ignore", &json!({})).unwrap();
+        for subject in [&sa, &sb] {
+            assert!(!kept_in(&s, "INBOX", subject) && kept_in(&s, "Trash", subject), "{how}: {subject} went to Deleted Items");
+        }
+        assert!(s.windows.is_empty(), "{how}");
+        done(s);
+    }
+}
+
+/// A Quick Step of several steps run from a window does every step on its message, wherever the
+/// main window is (on a search, the list made again after a step dropped the message: marked
+/// read, not done).
+#[test]
+fn a_windows_quick_step_does_every_step_wherever_the_main_window_is() {
+    for how in ELSEWHERE {
+        let (mut s, a, _) = two("window-steps-elsewhere");
+        s.run("quickStep.create", &json!({"name": "Done here", "actions": [{"do": "markRead"}], "complete": true})).unwrap();
+        s.run_in_window(&a, "mail.markUnread", &json!({})).unwrap();
+        let subject = s.summary(&a).unwrap().subject.clone();
+        show_elsewhere(&mut s, how, &a);
+        s.run_in_window(&a, "quickStep.run", &json!({"name": "Done here"})).unwrap();
+        let inbox = s.store.as_ref().unwrap().load_folder(sample::SAMPLE_ACCOUNT, "INBOX").unwrap();
+        let m = inbox.messages.iter().find(|m| m.subject == subject).expect("still in the Inbox");
+        assert!(m.flags.seen && m.flags.follow_up_complete(), "{how}: read and done: {:?}", m.flags);
+        done(s);
+    }
+}

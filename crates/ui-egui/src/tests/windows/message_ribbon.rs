@@ -337,3 +337,41 @@ fn a_message_windows_zoom_is_its_own() {
     assert_eq!(a.session.window_zoom(&mine), 200);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The window's File page, as Outlook's: Escape goes back to the message (the window stays open),
+/// and a window opened again on the same message shows the message, not its File page.
+#[test]
+fn a_message_windows_file_page_goes_back_on_escape_and_not_kept_for_the_next_opening() {
+    let (mut a, dir, mine, _) = popped("window-file-page-escape");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let size = egui::vec2(1280.0, 800.0);
+    let said = |a: &mut MailApp| {
+        let mut tex = Textures::default();
+        frame_with(&ctx, a, &mut tex, vec![], None).0
+    };
+    let open_page = |a: &mut MailApp| {
+        let at = settled_text_at(&ctx, a, "File", size).expect("File");
+        click_at(&ctx, a, at, 1, size);
+        assert!(said(a).iter().any(|l| l == "Save Attachments"), "the File page");
+    };
+    open_page(&mut a);
+    frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.windows.len(), 1, "Escape leaves the File page, not the window");
+    let back = said(&mut a);
+    assert!(!back.iter().any(|l| l == "Save Attachments") && back.iter().any(|l| l == "Meeting"), "back on the message: {back:?}");
+    // Closed from its File page, then opened again: the message.
+    open_page(&mut a);
+    a.act(crate::Action::Run("message.closeWindow", json!({"key": mine.to_id()})));
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    a.run("message.popOut", json!({"key": mine.to_id()}));
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let again = said(&mut a);
+    assert!(!again.iter().any(|l| l == "Save Attachments") && again.iter().any(|l| l == "Meeting"), "the message again: {again:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

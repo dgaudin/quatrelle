@@ -26,6 +26,8 @@ pub(crate) struct OwnWindows {
 /// main window is on that message alone and acts as it does there.
 #[derive(Clone, Debug)]
 pub(crate) struct Acting {
+    /// The window's message.
+    key: MessageKey,
     pub(crate) stands_in: bool,
     /// The window's message, where the list on screen doesn't hold it: [`Session::summary`] and
     /// [`Session::selected`] find it all the same.
@@ -116,7 +118,7 @@ impl Session {
         });
         // Within another window's turn (scopes nest), what stood in stands in still.
         let stands_in = main.is_some() || self.window_stands_in();
-        let outer = self.own_windows.acting.replace(Acting { stands_in, unlisted });
+        let outer = self.own_windows.acting.replace(Acting { key: key.clone(), stands_in, unlisted });
         Some(WindowScope { key: key.clone(), main, listed, to_act, outer })
     }
 
@@ -172,6 +174,26 @@ impl Session {
     /// Whether a window's message stands in for the main window's now.
     pub(crate) fn window_stands_in(&self) -> bool {
         self.own_windows.acting.as_ref().is_some_and(|a| a.stands_in)
+    }
+
+    /// The message of the window acting now, if one is.
+    pub(crate) fn window_acting_key(&self) -> Option<&MessageKey> {
+        self.own_windows.acting.as_ref().map(|a| &a.key)
+    }
+
+    /// The list made again while a window acts (a search run again after a step of a Quick
+    /// Step, a filter) doesn't hold its message: it stands in all the same, as its folder's list
+    /// has it now, for the steps after.
+    pub(crate) fn window_left_list(&mut self, key: &MessageKey) {
+        let now = self
+            .cache
+            .get(&(key.account.clone(), key.folder.clone()))
+            .and_then(|f| f.messages.iter().find(|m| m.key == *key).cloned())
+            .or_else(|| self.index_of(key).and_then(|i| self.list.get(i).cloned()))
+            .or_else(|| self.window_unlisted(key).cloned());
+        if let Some(a) = self.own_windows.acting.as_mut().filter(|a| a.key == *key) {
+            a.unlisted = now;
+        }
     }
 
     /// The message of the window acting now, where the list on screen doesn't hold it.

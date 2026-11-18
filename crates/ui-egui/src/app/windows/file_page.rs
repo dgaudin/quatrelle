@@ -7,19 +7,34 @@
 
 use crate::*;
 
-/// Where egui keeps whether `key`'s window shows its File page.
-fn id(key: &MessageKey) -> egui::Id {
-    egui::Id::unique(("message-file-page", key.to_id()))
+/// The windows showing their File page, kept by egui.
+#[derive(Clone, Default)]
+struct Shown(std::collections::HashSet<MessageKey>);
+
+fn id() -> egui::Id {
+    egui::Id::unique("message-file-pages")
 }
 
 /// Whether `key`'s window shows its File page.
 pub(super) fn shown(ctx: &egui::Context, key: &MessageKey) -> bool {
-    ctx.data(|d| d.get_temp::<bool>(id(key))).unwrap_or(false)
+    ctx.data(|d| d.get_temp::<Shown>(id())).is_some_and(|s| s.0.contains(key))
 }
 
 /// Show `key`'s window's File page, or the message again.
 pub(super) fn show(ctx: &egui::Context, key: &MessageKey, on: bool) {
-    ctx.data_mut(|d| d.insert_temp(id(key), on));
+    ctx.data_mut(|d| {
+        let s = &mut d.get_temp_mut_or_default::<Shown>(id()).0;
+        if on {
+            s.insert(key.clone());
+        } else {
+            s.remove(key);
+        }
+    });
+}
+
+/// The windows open now: a window closed from its File page opens on the message next time.
+pub(super) fn keep(ctx: &egui::Context, open: &[MessageKey]) {
+    ctx.data_mut(|d| d.get_temp_mut_or_default::<Shown>(id()).0.retain(|k| open.contains(k)));
 }
 
 /// The page: its rail at the left (Back, Info, what's done with the message, Close), the message's

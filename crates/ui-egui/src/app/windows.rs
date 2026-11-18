@@ -308,9 +308,14 @@ impl MailApp {
                     st.places.insert("message".into(), p);
                 }
                 let mut mine: Vec<Action> = Vec::new();
-                // Escape closes the find bar first, while it's shown, and the window's dialog.
-                let bar = st.find.shown_in_window(ui.ctx(), &key) || st.window_dialog.as_ref().is_some_and(|(k, _)| *k == key);
+                // Escape closes the find bar first, while it's shown, and the window's dialog; on
+                // the File page, it goes back to the message, as Outlook's.
+                let filing = file_page::shown(ui.ctx(), &key);
+                let bar = st.find.shown_in_window(ui.ctx(), &key) || st.window_dialog.as_ref().is_some_and(|(k, _)| *k == key) || filing;
                 let closing = ui.input(|i| i.viewport().close_requested() || (i.key_pressed(Key::Escape) && !bar));
+                if filing && st.window_dialog.is_none() && ui.input(|i| i.key_pressed(Key::Escape)) {
+                    file_page::show(ui.ctx(), &key, false);
+                }
                 // Ctrl+P prints this window's message.
                 if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P)) {
                     mine.push(Action::Print);
@@ -363,6 +368,8 @@ impl MailApp {
         }
         let open: std::collections::HashSet<String> = self.session.windows.iter().map(|w| ribbon::fit_key(&w.key)).collect();
         self.ui.ribbon_groups.retain(|k, _| !k.starts_with("message-window/") || open.contains(k));
+        let keys: Vec<MessageKey> = self.session.windows.iter().map(|w| w.key.clone()).collect();
+        file_page::keep(ctx, &keys);
     }
 
     /// An action from a message's own window, done to its message: that message stands in as the

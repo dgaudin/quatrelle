@@ -442,10 +442,16 @@ impl Session {
         };
         self.nav.build(&list, &all, conversations, !shown);
         self.threads = all;
+        // The message of a window acting stays selected and read whatever the list now holds (a
+        // search run again after a Quick Step's step dropped it: the next steps did nothing).
+        let standing = self.window_acting_key().cloned();
+        if let Some(k) = standing.as_ref().filter(|k| !self.nav.holds(&list, k)) {
+            self.window_left_list(k);
+        }
         // What's still in the list, by the index just built (a set of every key made for it was
         // a tenth of what a sync's change to a big folder cost).
         let nav = &self.nav;
-        let alive = |k: &MessageKey| nav.holds(&list, k);
+        let alive = |k: &MessageKey| nav.holds(&list, k) || standing.as_ref() == Some(k);
         self.selection.retain(|k| alive(k));
         if self.focus.as_ref().is_some_and(|k| !alive(k)) {
             self.focus = None;
