@@ -281,8 +281,13 @@ const MAX_TRACKERS: usize = 50;
 /// service) and links that report the click. A message's are read in it as it came and once its
 /// style sheet is written on its elements ([`Trackers::add_pictures`]).
 pub fn trackers(html: &str) -> Trackers {
+    trackers_with(html, &mut crate::html::Addresses::default())
+}
+
+/// [`trackers`], its pictures' addresses read with the message's others (`addresses`).
+pub(crate) fn trackers_with(html: &str, addresses: &mut crate::html::Addresses) -> Trackers {
     let mut t = Trackers { pictures: Vec::new(), links: crate::html_links(html).iter().filter(|l| tracks_click(l)).count() };
-    t.add_pictures(html);
+    t.add_pictures(html, addresses);
     t
 }
 
@@ -291,18 +296,22 @@ impl Trackers {
     /// a message once its style sheet is written on its elements ([`crate::layout::inline_css`]: a
     /// pixel sized or hidden by a class) beside those of the message as it came (writing the sheet
     /// on a picture keeps one value of each property and drops the tag's `!important`, which
-    /// turned `width:1px !important; width:300px` back into a picture).
-    pub(crate) fn add_pictures(&mut self, html: &str) {
+    /// turned `width:1px !important; width:300px` back into a picture). Their addresses are read
+    /// with the message's others (`addresses`); past the 50 kept, the rest isn't read.
+    pub(crate) fn add_pictures(&mut self, html: &str, addresses: &mut crate::html::Addresses) {
         let pictures = &mut self.pictures;
         let lower = html.to_ascii_lowercase();
         let mut from = 0;
         while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
+            if pictures.len() >= MAX_TRACKERS {
+                break;
+            }
             let start = from + i;
             let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
             let tag = html.get(start..end).unwrap_or("");
             from = end + 1;
             // As the pictures have it (`&#38;` decoded): one pixel, listed once.
-            let Some(src) = crate::html::tag_attr(tag, "src").map(crate::html::picture_address) else { continue };
+            let Some(src) = crate::html::tag_attr(tag, "src").map(|s| addresses.read(s)) else { continue };
             let Some(u) = split(&src) else { continue };
             // By its own properties (a signature's icon `border-width: 0px` was taken for `width:0`,
             // and stayed hidden when the message's pictures were shown); hidden by any of them, when
@@ -321,10 +330,7 @@ impl Trackers {
                     _ => false,
                 }
             });
-            if (crate::html::tiny_picture(tag) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c)))
-                && !pictures.contains(&src)
-                && pictures.len() < MAX_TRACKERS
-            {
+            if (crate::html::tiny_picture(tag) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c))) && !pictures.contains(&src) {
                 pictures.push(src);
             }
         }
@@ -556,6 +562,45 @@ mod tests {
         let n1 = "<img src=\"https://t.example/o.gif?a=1&#38;b=2\" style=\"width:1px !important; width:300px\">";
         let p = message("<style>img{border:0}</style>", n1);
         assert_eq!((p.trackers.pictures.clone(), loaded(&p)), (vec!["https://t.example/o.gif?a=1&b=2".to_string()], Vec::new()));
+    }
+
+    /// The tokenizer's reads of addresses while `f` runs on this thread.
+    fn tokenized(f: impl FnOnce()) -> usize {
+        let before = crate::layout::TOKENIZED.with(std::cell::Cell::get);
+        f();
+        crate::layout::TOKENIZED.with(std::cell::Cell::get) - before
+    }
+
+    /// A stranger's thousands of pictures cost no more than a few reads of their addresses, in the
+    /// three readings of a message (its pictures, its trackers as it came and once its style sheet
+    /// is on its elements): an address with `&amp;` alone is read as it is, the same address once,
+    /// a message's no more than [`MAX_DECODED`](crate::html::pictures::MAX_DECODED). Each `&` cost a
+    /// tokenizer of its own, thrice: a message of 80,000 pictures took two and a half times as
+    /// long to read.
+    #[test]
+    fn many_pictures_cost_a_few_reads_of_their_addresses() {
+        let tags = |src: &dyn Fn(usize) -> String| (0..5_000).map(|n| format!("<img src=\"{}\" width=\"120\">", src(n))).collect::<String>();
+        // (what, the reads, the most allowed)
+        let mut reads: Vec<(String, usize, usize)> = Vec::new();
+        for sheet in ["", "<style>img{border:0}</style>"] {
+            let amp = tags(&|n| format!("https://img.example/{n}.png?x=1&amp;y=2"));
+            reads.push((format!("`&amp;` alone, under {sheet:?}"), tokenized(|| drop(message(sheet, &amp))), 0));
+            let same = tags(&|_| "https://img.example/a.png?x=1&#38;y=2".to_string());
+            reads.push((format!("the same address, under {sheet:?}"), tokenized(|| drop(message(sheet, &same))), 2));
+            let distinct = tags(&|n| format!("https://img.example/{n}.png?x=1&#38;y=2"));
+            reads.push((
+                format!("5,000 addresses, under {sheet:?}"),
+                tokenized(|| drop(message(sheet, &distinct))),
+                crate::html::pictures::MAX_DECODED,
+            ));
+        }
+        // The trackers stop at the 50 they keep.
+        let pixels: String = (0..5_000).map(|n| format!("<img src=\"https://t.example/o.gif?n={n}&#38;r=1\" width=\"1\" height=\"1\">")).collect();
+        let mut t = Trackers::default();
+        reads.push(("5,000 pixels".into(), tokenized(|| t = trackers(&pixels)), MAX_TRACKERS));
+        assert_eq!(t.pictures.len(), MAX_TRACKERS);
+        let over: Vec<_> = reads.iter().filter(|(_, n, most)| n > most).collect();
+        assert!(over.is_empty(), "read too often (what, reads, most): {over:?}");
     }
 
     #[test]
