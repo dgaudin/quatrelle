@@ -382,11 +382,13 @@ They go with the text, the pictures first and then the files, each in the order 
 - **At most 10 files and pictures go with a message, and each file at most 100 MB.** One that is
   empty, can't be read, is already there, or is over the limit isn't added, and the box says why
   under it. A message may be only files, with no text.
-- A picture pasted that is 4 MB or less goes inside the message and shows in the conversation as
+- A picture pasted that is 4 MB (4 MiB) or less goes inside the message and shows in the conversation as
   any picture does. A bigger one goes as a file. Quatrelle first saves a picture pasted as a file
-  of its own in a folder only you can read; it goes when you take the picture away or leave the
-  box without sending, stays for Quatrelle to send a message that is waiting, and is let go of at
-  Quatrelle's start once it is a week old.
+  of its own in a folder only you can read; that file is removed when you take the picture away with
+  its cross, when the conversation's box lets its words go (a draft let go to make room for
+  others), and when the New conversation pane is closed. Switching to another conversation keeps
+  what was typed, pictures included. Once the message is sent the file stays for Quatrelle to
+  read it, perhaps after a restart, and Quatrelle removes it at its start when it is a week old.
 - **Where a file goes.** It is put in your OneDrive, in the folder `Microsoft Teams Chat Files`,
   and shared **to read only** with the people who are in the conversation when the message is
   sent, nobody else; the message carries a link to it. A file already uploaded stays in that folder when
@@ -398,9 +400,11 @@ They go with the text, the pictures first and then the files, each in the order 
   "A file is no longer there, or has changed" (it is read again when its turn comes), "A file is
   bigger than Teams takes here (100 MB)", or "OneDrive didn't share the file with everyone in this
   conversation" (nothing goes half shared: if the file can't be shared with every other member,
-  or a member has no address, the message isn't sent). If Quatrelle was closed after sending, its
-  files can't be read again: **Retry** isn't offered then, but "Attach the files again to send
-  it"; **Delete** removes it.
+  or a member has no address, the message isn't sent). A message
+  that Quatrelle's outbox refused when it was sent, and that had files, has no **Retry**: it says
+  "Attach the files again to send it" and only **Delete** is offered. A message the outbox took
+  keeps its **Retry** and **Delete**, and its files are kept by their paths, so it can be sent
+  after a restart too (a file that is gone or changed then marks it Not sent, as above). **Delete** removes it.
 
 **Files others shared.** A file card shows its name, size and where its link goes.
 
@@ -414,8 +418,7 @@ They go with the text, the pictures first and then the files, each in the order 
 - **A file that could run** (a program, a script, a web page, a picture that holds scripts or a
   document with macros) isn't opened: it is shown in its folder, and the card says "This file
   could run a program: it is shown in its folder, not opened." You decide what to do with it.
-- **Open in browser** opens the file's link in the browser Teams meetings open in (else the
-  default browser). It is offered for any web link of the card, including the files over 100 MB.
+- **Open in browser** opens the file's link in your default browser. It is offered for any web link of the card, including the files over 100 MB.
 
 ### Starting a conversation
 
@@ -442,7 +445,9 @@ where the conversation is written, in the place of the one open.
 - **A one-to-one conversation already there** with that person is opened, and the message goes to
   it: Teams keeps one conversation for two people.
 - Esc first closes a popup over the pane, then empties **To:** when people are listed under it,
-  then closes the pane, with what was typed. Opening a conversation from the list sets the pane
+  then closes the pane: the people, the name and the words typed are let go, and so are the files
+  of the pictures pasted (files attached are only dropped from the pane, the originals untouched).
+  Opening a conversation from the list sets the pane
   aside: **New conversation** brings it back as it was.
 
 ### Calling
