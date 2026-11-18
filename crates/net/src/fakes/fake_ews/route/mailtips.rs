@@ -13,7 +13,7 @@ fn scope_xml(scope: &str) -> &'static str {
         "internal" => "Internal",
         "external" => "External",
         "externalPartner" => "ExternalPartner",
-        "externalNonOrganization" => "ExternalNonOrganization",
+        "externalNonPartner" => "ExternalNonPartner",
         _ => "",
     }
 }

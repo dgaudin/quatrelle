@@ -48,16 +48,31 @@ fn tip_of(v: &Value) -> Option<MailTip> {
         restricted: flag("deliveryRestricted"),
         external_members: v.get("externalMemberCount").and_then(Value::as_u64).unwrap_or(0).min(u64::from(u32::MAX)) as u32,
         moderated: flag("isModerated"),
-        invalid: flag("invalidRecipient"),
+        invalid: v.get("error").is_some_and(unknown_recipient),
         max_message_size: v.get("maxMessageSize").and_then(Value::as_u64).unwrap_or(0),
         scope: match scope.as_str() {
             "internal" => "internal".into(),
             "external" => "external".into(),
             "externalPartner" => "externalPartner".into(),
-            "externalNonOrganization" => "externalNonOrganization".into(),
+            // Spelled `externalNonParther` in Graph's own reference page.
+            "externalNonPartner" | "externalNonParther" => "externalNonPartner".into(),
             _ => String::new(),
         },
     })
+}
+
+/// Whether a tip's `error` (a `mailTipsError`: its `code` and `message`) says the server doesn't
+/// know the recipient, rather than that it couldn't answer about them.
+fn unknown_recipient(error: &Value) -> bool {
+    let code = s(error, "code").to_ascii_lowercase();
+    code.contains("notfound") || code.contains("invalidrecipient") || code.contains("unknownrecipient")
+}
+
+/// The tips one `getMailTips` answer gives (its `value`): those with something to tell, at most
+/// [`MAX_MAIL_TIPS`].
+pub fn mail_tips_read(v: &Value) -> Vec<MailTip> {
+    let answers = v.get("value").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    answers.iter().take(MAX_MAIL_TIPS).filter_map(tip_of).filter(MailTip::worth_telling).collect()
 }
 
 /// What Graph says about these recipients; only those with something to tell are kept.
@@ -68,8 +83,7 @@ pub fn mail_tips(c: &Client, emails: &[String]) -> Result<Vec<MailTip>> {
     let mut out = Vec::new();
     for chunk in emails.chunks(MAX_MAIL_TIPS) {
         let v = c.post("/me/getMailTips", &mail_tips_request(chunk))?;
-        let answers = v.get("value").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
-        out.extend(answers.iter().take(MAX_MAIL_TIPS).filter_map(tip_of).filter(MailTip::worth_telling));
+        out.extend(mail_tips_read(&v));
         if out.len() >= MAX_MAIL_TIPS {
             break;
         }
@@ -111,5 +125,26 @@ mod tests {
         assert_eq!((tips[0].external_members, tips[0].max_message_size, tips[0].scope.as_str()), (12, 10_485_760, "external"));
         assert!(tips[1].worth_telling(), "a size limit alone is something to tell");
         assert_eq!(tips[1].max_message_size, 2048);
+    }
+
+    /// Graph's own fields: a recipient it doesn't know carries an `error` (it has no
+    /// `invalidRecipient`), another error says nothing of the recipient, and one outside the
+    /// organisation and its partners is `externalNonPartner`.
+    #[test]
+    fn a_recipient_graph_doesnt_know_is_told_by_its_error() {
+        let ana = |more: Value| {
+            let mut v = json!({"emailAddress": {"address": "ana@contoso.example"}});
+            if let (Some(v), Some(more)) = (v.as_object_mut(), more.as_object()) {
+                v.extend(more.clone());
+            }
+            tip_of(&v).unwrap_or_default()
+        };
+        let unknown = ana(json!({"error": {"code": "ErrorRecipientNotFound", "message": "The recipient wasn't found"}}));
+        assert!(unknown.invalid && unknown.worth_telling(), "{unknown:?}");
+        assert!(!ana(json!({"error": {"code": "ErrorServerBusy", "message": "Try again later"}})).invalid, "not about the recipient");
+        assert!(!ana(json!({"invalidRecipient": true})).invalid, "not one of Graph's fields");
+        assert_eq!(ana(json!({"recipientScope": "externalNonPartner"})).scope, "externalNonPartner");
+        assert_eq!(ana(json!({"recipientScope": "externalNonOrganization"})).scope, "", "not one of Graph's values");
+        assert_eq!(ana(json!({"recipientScope": "none"})).scope, "");
     }
 }

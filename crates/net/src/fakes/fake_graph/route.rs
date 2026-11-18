@@ -634,9 +634,12 @@ impl Data {
                             "deliveryRestricted": t.restricted,
                             "externalMemberCount": t.external_members,
                             "isModerated": t.moderated,
-                            "invalidRecipient": t.invalid,
                             "maxMessageSize": t.max_message_size,
                         });
+                        // A recipient the server doesn't know: Graph says so by an error.
+                        if t.invalid {
+                            v["error"] = json!({"code": "ErrorRecipientNotFound", "message": "The recipient wasn't found"});
+                        }
                         if !t.automatic_replies.is_empty() {
                             v["automaticReplies"] = json!({"message": t.automatic_replies});
                         }

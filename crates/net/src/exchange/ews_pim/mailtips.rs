@@ -37,7 +37,7 @@ fn scope_of(scope: &str) -> String {
         "internal" => "internal".into(),
         "external" => "external".into(),
         "externalpartner" => "externalPartner".into(),
-        "externalnonorganization" => "externalNonOrganization".into(),
+        "externalnonpartner" => "externalNonPartner".into(),
         _ => String::new(),
     }
 }
@@ -66,6 +66,14 @@ fn tip_of(e: &El) -> Option<MailTip> {
     })
 }
 
+/// The tips a `GetMailTips` answer gives: those with something to tell, at most
+/// [`MAX_MAIL_TIPS`].
+pub fn mail_tips_read(doc: &El) -> Vec<MailTip> {
+    let mut found = Vec::new();
+    doc.all("MailTips", &mut found);
+    found.iter().filter_map(|e| tip_of(e)).filter(MailTip::worth_telling).take(MAX_MAIL_TIPS).collect()
+}
+
 /// What the server says about these recipients, sent as `from`; only those with something to
 /// tell are kept. A request the server refused says why.
 pub fn mail_tips(c: &Client, from: &str, emails: &[String]) -> Result<Vec<MailTip>> {
@@ -74,10 +82,7 @@ pub fn mail_tips(c: &Client, from: &str, emails: &[String]) -> Result<Vec<MailTi
     }
     let from = if from.trim().is_empty() { c.email() } else { from.trim() };
     let doc = c.call(&mail_tips_request(from, emails))?;
-    let mut found = Vec::new();
-    doc.all("MailTips", &mut found);
-    let mut out: Vec<MailTip> = found.iter().filter_map(|e| tip_of(e)).filter(MailTip::worth_telling).collect();
-    out.truncate(MAX_MAIL_TIPS);
+    let out = mail_tips_read(&doc);
     // Nothing at all: the response messages carry the refusal (an operation a server doesn't
     // have, an address it won't tell about).
     if out.is_empty() {
@@ -128,5 +133,14 @@ mod tests {
         assert_eq!((tips[0].external_members, tips[0].max_message_size, tips[0].scope.as_str()), (12, 10_485_760, "external"));
         assert!(tips[1].worth_telling(), "a size limit alone is something to tell");
         assert_eq!(tips[1].max_message_size, 2048);
+    }
+
+    /// Exchange's scopes, spelled as Graph spells them: one outside the organisation and its
+    /// partners is `externalNonPartner`.
+    #[test]
+    fn a_scope_is_spelled_as_graph_spells_it() {
+        assert_eq!(scope_of("ExternalNonPartner"), "externalNonPartner");
+        assert_eq!(scope_of("ExternalPartner"), "externalPartner");
+        assert_eq!(scope_of("None"), "");
     }
 }

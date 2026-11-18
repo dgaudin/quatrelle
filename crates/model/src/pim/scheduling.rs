@@ -120,8 +120,8 @@ pub struct MailTip {
     /// The largest message they accept, in bytes (0: the server didn't say).
     #[serde(default)]
     pub max_message_size: u64,
-    /// `internal`, `external`, `externalPartner` or `externalNonOrganization` (empty when the
-    /// server didn't say).
+    /// `internal`, `external`, `externalPartner` or `externalNonPartner`, as Graph spells them
+    /// (empty when the server didn't say).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub scope: String,
 }
