@@ -653,3 +653,9 @@ local-first, media-aware v1); the fuller request is
   as before. Saving, and every other file (a PDF, a picture, a document without macros), is
   unchanged; programs, scripts and shortcuts are still never opened at all. The question is drawn in
   every interface language, and from a message's own window as from the reading pane.
+- **2026-11-18** — **A spacer not shown draws nothing**: a picture that isn't shown (pictures from
+  the web not allowed, or a tracking pixel) whose description only repeats its file's name
+  (`spacer-FFFFFF` for `…/spacer-FFFFFF.jpg`, any case, with or without its extension) or starts
+  with "spacer" keeps the room the message gives it and draws nothing there: no `[spacer-FFFFFF]`
+  across a white gap, no frame down a column a few pixels wide, no bubble under the pointer. A
+  picture described in words keeps its placeholder; telling tracking pixels apart is unchanged.

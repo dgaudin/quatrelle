@@ -147,16 +147,25 @@ pub(crate) fn kept_room(size: Option<mime::ImageSize>, width: f32) -> Option<(f3
 /// behind it when that shows (the box of colour around an icon), else outlined, its description
 /// written in it when it holds its words ([`written_in`]: a product's photo), else on hover only.
 /// A description wider than its place went down a narrow column a few letters a line, and pushed
-/// the lines beside it out of line.
-pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> egui::Response {
-    let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
-    let text = format!("[{alt}]");
+/// the lines beside it out of line. A spacer, or a picture whose description only names its file
+/// ([`names_itself`]), keeps that room (none when the message sets no width) and draws nothing in
+/// it, no bubble either: `None`. Its file's name was written across a white gap, and a column a
+/// few pixels wide was framed.
+pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> Option<egui::Response> {
     let zoom = zoom.max(0.01);
     let line = ui.text_style_height(&egui::TextStyle::Body);
     let room = kept_room(sp.image_size, width / zoom).map(|(w, h)| vec2(w * zoom, h.map_or((w * zoom).min(line), |h| h * zoom)));
+    if names_itself(sp.image.as_deref().unwrap_or_default(), &sp.text) {
+        if let Some(room) = room {
+            ui.allocate_space(room);
+        }
+        return None;
+    }
+    let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
+    let text = format!("[{alt}]");
     let font = egui::TextStyle::Body.resolve(ui.style());
     let wide = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), font, Color32::WHITE).size().x);
-    match room {
+    Some(match room {
         Some(room) if wide > room.x => {
             let sense = if sp.link.is_some() { Sense::click() } else { Sense::hover() };
             let (rect, r) = ui.allocate_exact_size(room, sense);
@@ -181,7 +190,29 @@ pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page:
             Some(_) => ui.add(egui::Link::new(RichText::new(text).color(t.accent))),
             None => ui.add(egui::Label::new(RichText::new(text).color(t.faint)).selectable(false)),
         },
+    })
+}
+
+/// Whether a picture's description (`alt`) only names it: it starts with "spacer" (a spacer's,
+/// any case), or it is its file's name, the last part of its address (`src`) with or without its
+/// extension, any case (`spacer-FFFFFF` for `…/spacer-FFFFFF.jpg`). Such a picture lays the message
+/// out and describes nothing. One without a description isn't one (it's `[picture]`), nor one
+/// carried in its address (`data:`), which has no file name.
+fn names_itself(src: &str, alt: &str) -> bool {
+    let alt = alt.trim();
+    if alt.is_empty() {
+        return false;
     }
+    if alt.get(..6).is_some_and(|p| p.eq_ignore_ascii_case("spacer")) {
+        return true;
+    }
+    if src.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("data:")) {
+        return false;
+    }
+    let path = src.split(['?', '#']).next().unwrap_or(src);
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    name.eq_ignore_ascii_case(alt) || stem.eq_ignore_ascii_case(alt)
 }
 
 /// Room left between a box and the description written in it, in points.
@@ -375,5 +406,34 @@ mod tests {
         assert_eq!(kept_room(None, 640.0), None);
         // A height out of reason is capped.
         assert_eq!(kept_room(size(Some(Width::Px(10)), Some(u32::MAX), None), 640.0), Some((10.0, Some(8000.0))));
+    }
+
+    /// A description that only repeats its picture's file name, or a spacer's, describes nothing;
+    /// words do, and so does nothing at all (`[picture]`).
+    #[test]
+    fn a_description_that_only_names_its_file_describes_nothing() {
+        for (src, alt) in [
+            ("https://cdn.example/img/spacer-FFFFFF.jpg", "spacer-FFFFFF"),
+            ("https://cdn.example/img/spacer-FFFFFF.jpg", " SPACER-ffffff "),
+            ("https://cdn.example/img/line-grey.gif?v=3#top", "line-grey"),
+            ("https://cdn.example/img/line-grey.gif", "Line-Grey.GIF"),
+            ("https://cdn.example/img/gap.png", "spacer"),
+            ("https://cdn.example/img/gap.png", "Spacer line"),
+        ] {
+            assert!(names_itself(src, alt), "{src} / {alt}");
+        }
+        for (src, alt) in [
+            ("https://cdn.example/img/hall.jpg", "Grande salle"),
+            ("https://cdn.example/img/hall.jpg", "hall photo"),
+            ("https://cdn.example/img/hall.jpg", ""),
+            ("https://cdn.example/img/hall.jpg", "   "),
+            ("https://cdn.example/", "cdn.example"),
+            // Carried in its address: no file name, whatever follows its last slash.
+            ("data:image/gif;base64,R0lG/AA", "AA"),
+            // A letter across the sixth byte: no "spacer" there, and no slicing through it.
+            ("https://cdn.example/img/a.png", "spaceé"),
+        ] {
+            assert!(!names_itself(src, alt), "{src} / {alt}");
+        }
     }
 }
