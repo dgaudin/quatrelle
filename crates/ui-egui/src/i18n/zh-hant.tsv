@@ -2378,3 +2378,4 @@ presence	Offline	離線
 	Opening it in a browser can run its scripts and load content from the internet.	在瀏覽器中開啟可能會執行其指令碼並從網際網路載入內容。
 	It can run macros: open it only if you trust the sender.	它可能會執行巨集：僅在信任寄件者時開啟。
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	檔名看不出這是哪種檔案：開啟它的程式可能會執行其中的內容。
+	Send without a file?	要不附檔案傳送嗎?

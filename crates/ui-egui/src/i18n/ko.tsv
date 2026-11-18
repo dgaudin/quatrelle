@@ -2374,3 +2374,4 @@ presence	Offline	오프라인
 	Opening it in a browser can run its scripts and load content from the internet.	브라우저에서 열면 스크립트가 실행되고 인터넷에서 콘텐츠를 불러올 수 있습니다.
 	It can run macros: open it only if you trust the sender.	매크로가 실행될 수 있습니다. 보낸 사람을 신뢰하는 경우에만 여십시오.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	이름만으로는 어떤 파일인지 알 수 없습니다. 파일을 여는 프로그램이 그 안의 내용을 실행할 수 있습니다.
+	Send without a file?	파일 없이 보낼까요?

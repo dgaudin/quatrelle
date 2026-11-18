@@ -2376,3 +2376,4 @@ presence	Offline	Offline
 	Opening it in a browser can run its scripts and load content from the internet.	In einem Browser geöffnet, können seine Skripte laufen und Inhalte aus dem Internet geladen werden.
 	It can run macros: open it only if you trust the sender.	Es kann Makros ausführen: Öffnen Sie es nur, wenn Sie dem Absender vertrauen.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	Sein Name verrät nicht, um welche Art Datei es sich handelt: Das Programm, das sie öffnet, kann ausführen, was sie enthält.
+	Send without a file?	Ohne Datei senden?

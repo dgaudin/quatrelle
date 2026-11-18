@@ -132,6 +132,10 @@ pub enum Dialog {
     /// What `compose.send` held the message for (a lookalike recipient, many people seeing each
     /// other's addresses).
     SendCheck(Vec<quatrelle_engine::SendCheck>),
+    /// The message says something is attached, and nothing is: its own question (Attach a file,
+    /// Send, Cancel), not the security check's, so that "Send anyway" isn't clicked for nothing
+    /// at every message.
+    NoAttachment,
     RemoveAccount {
         account: String,
         email: String,
@@ -348,6 +352,7 @@ impl Dialog {
                 | Dialog::SaveChanges
                 | Dialog::EmptySubject
                 | Dialog::SendCheck(_)
+                | Dialog::NoAttachment
                 | Dialog::Spelling(_)
                 | Dialog::WordCount(..)
         ) || matches!(self, Dialog::Signature(f) if f.insert)
@@ -512,6 +517,7 @@ fn body(
         | Dialog::SaveChanges
         | Dialog::EmptySubject
         | Dialog::SendCheck(_)
+        | Dialog::NoAttachment
         | Dialog::WordCount(..)
         | Dialog::Spelling(..) => writing::draw(ui, d, s, people, t, acts),
         Dialog::ConfirmDeleteContact { .. }

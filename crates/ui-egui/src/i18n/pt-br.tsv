@@ -2375,3 +2375,4 @@ presence	Offline	Offline
 	Opening it in a browser can run its scripts and load content from the internet.	Abrilo em um navegador pode executar os scripts dele e carregar conteúdo da internet.
 	It can run macros: open it only if you trust the sender.	Ele pode executar macros: abra-o apenas se confiar no remetente.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	O nome não diz que tipo de arquivo é: o programa que o abrir pode executar o que ele contém.
+	Send without a file?	Enviar sem arquivo?

@@ -2371,3 +2371,4 @@ presence	Offline	לא מחובר
 	Opening it in a browser can run its scripts and load content from the internet.	פתיחתו בדפדפן עלולה להריץ את הסקריפטים שלו ולטעון תוכן מהאינטרנט.
 	It can run macros: open it only if you trust the sender.	הוא עלול להריץ מאקרו: פתחו אותו רק אם אתם סומכים על השולח.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	השם לא מגלה איזה סוג קובץ זה: התוכנה שתפתח אותו עלולה להריץ את מה שבתוכו.
+	Send without a file?	לשלוח בלי קובץ?

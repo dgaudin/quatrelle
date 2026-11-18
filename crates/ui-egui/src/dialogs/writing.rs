@@ -124,6 +124,8 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people
             ui.set_width(440.0);
             title(ui, t, "Check before sending");
             let mut exposed = false;
+            // The file said attached has its own question, asked once these are looked at.
+            let missing = found.contains(&SendCheck::MissingAttachment);
             for f in found.iter() {
                 let line = match f {
                     SendCheck::Lookalike { address, like } => {
@@ -133,9 +135,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people
                         exposed = true;
                         tf!("{n} people who may not know each other will all see each other's addresses.", n = count)
                     }
-                    SendCheck::MissingAttachment => {
-                        tf!("You wrote that something is attached, but nothing is.")
-                    }
+                    SendCheck::MissingAttachment => continue,
                 };
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), egui::Sense::hover());
@@ -156,6 +156,26 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people
                 }
             }
             let (ok, cancel) = buttons(ui, t, "Send anyway", true);
+            if ok {
+                acts.push(if missing {
+                    Action::Dialog(Dialog::NoAttachment)
+                } else {
+                    Action::Run("compose.send", json!({"allowEmptySubject": true, "checked": true}))
+                });
+                return false;
+            }
+            !cancel
+        }
+        Dialog::NoAttachment => {
+            ui.set_width(420.0);
+            title(ui, t, "Send without a file?");
+            ui.add(egui::Label::new(RichText::new(tl!("You wrote that something is attached, but nothing is.")).color(t.text)).wrap());
+            ui.add_space(8.0);
+            if ui.button(tl!("Attach a file")).clicked() {
+                acts.push(Action::AttachFiles);
+                return false;
+            }
+            let (ok, cancel) = buttons(ui, t, "Send", true);
             if ok {
                 acts.push(Action::Run("compose.send", json!({"allowEmptySubject": true, "checked": true})));
                 return false;

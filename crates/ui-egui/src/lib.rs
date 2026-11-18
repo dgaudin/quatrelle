@@ -590,9 +590,11 @@ impl MailApp {
         match self.session.run(id, &params) {
             // Held to be looked at first: said in the message's window when it has one.
             Ok(v) if id == "compose.send" && v.get("check").is_some() => {
-                let found = serde_json::from_value(v["check"].clone()).unwrap_or_default();
+                let found: Vec<quatrelle_engine::SendCheck> = serde_json::from_value(v["check"].clone()).unwrap_or_default();
                 self.ui.dialog_for = self.session.compose.as_ref().filter(|c| c.window).map(|c| c.id);
-                self.ui.dialog = Some(Dialog::SendCheck(found));
+                // A file said attached alone: its own question, not the security check's.
+                let alone = found.iter().all(|f| *f == quatrelle_engine::SendCheck::MissingAttachment);
+                self.ui.dialog = Some(if alone && !found.is_empty() { Dialog::NoAttachment } else { Dialog::SendCheck(found) });
             }
             Ok(_) => {}
             // Not from an account that can send: said over the message, as why it didn't go.

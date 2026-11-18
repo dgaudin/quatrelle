@@ -247,6 +247,7 @@ pub(crate) fn tour() {
                 risk: quatrelle_engine::mime::OpenRisk::WebPage,
             },
             Dialog::EmptySubject,
+            Dialog::NoAttachment,
             Dialog::SendCheck(vec![
                 quatrelle_engine::SendCheck::Lookalike { address: "orders@printsh0p.example".into(), like: "printshop.example".into() },
                 quatrelle_engine::SendCheck::Exposed { count: 12 },
