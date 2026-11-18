@@ -630,8 +630,13 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     st.quote_editors = quote_eds;
     s.compose = Some(taken);
     // MailTips: what the server says about the recipients, asked again when this set hasn't
-    // been asked about yet (the strip draws from the answer frame after frame).
-    if s.mail_tips_wanted() {
+    // been asked about yet (the strip draws from the answer frame after frame); never while an
+    // address is being typed (each letter asked the server again): once it's written.
+    let typing = s
+        .compose
+        .as_ref()
+        .is_some_and(|c| ["to", "cc", "bcc"].into_iter().any(|name| !st.people.typing(FieldId { window: c.id, name }).trim().is_empty()));
+    if !typing && s.mail_tips_wanted() {
         acts.push(Action::Run("compose.mailTips", json!({})));
     }
     // A signature written in HTML, drawn where it stands in the text (with the whole session at

@@ -116,3 +116,102 @@ fn a_message_from_an_account_with_no_server_for_tips_asks_nothing() {
     assert!(a.session.mail_tips_now(a.session.compose.as_ref().unwrap().id).is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Where the message's text `text` is drawn, if it is.
+fn drawn_at(shapes: &[egui::Shape], text: &str) -> Option<egui::Rect> {
+    shapes.iter().find_map(|s| match s {
+        egui::Shape::Text(t) if t.galley.text() == text => Some(t.galley.rect.translate(t.pos.to_vec2())),
+        _ => None,
+    })
+}
+
+/// The MailTips asked for so far, taken.
+fn asked(handed: &Handed) -> Vec<Vec<String>> {
+    std::mem::take(&mut *handed.borrow_mut())
+        .into_iter()
+        .filter_map(|j| match j {
+            Job::GetMailTips { recipients, .. } => Some(recipients),
+            _ => None,
+        })
+        .collect()
+}
+
+/// An address typed letter by letter asks nothing while it's typed (`ana@c` is an address
+/// already, and each letter asked the server again); the field left, it's a recipient, and the
+/// server is asked about it once.
+#[test]
+fn an_address_being_typed_asks_nothing_until_it_is_written() {
+    let (mut a, dir) = app("mail-tips-typing");
+    let handed = Handed::default();
+    a.backend = Box::new(Recorder(handed.clone()));
+    let account = with_exchange(&mut a);
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({"account": account}));
+    frame(&ctx, &mut a, vec![]);
+    let to = quatrelle_engine::FieldId { window: a.session.compose.as_ref().map_or(0, |c| c.id), name: "to" };
+    ctx.memory_mut(|m| m.request_focus(crate::look::people_field::input_id(crate::dialogs::people_field::egui_id(to))));
+    frame(&ctx, &mut a, vec![]);
+    for c in "ana@contoso.example".chars() {
+        frame(&ctx, &mut a, vec![Event::Text(c.to_string())]);
+    }
+    assert!(a.session.compose.as_ref().is_some_and(|c| c.to.contains("ana@contoso.example")), "typed");
+    let typing = asked(&handed);
+    assert!(typing.is_empty(), "nothing asked while it's typed: {typing:?}");
+    // The field left: one question, about it.
+    frame(&ctx, &mut a, vec![key(Key::Tab, Modifiers::NONE)]);
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert_eq!(asked(&handed), [vec!["ana@contoso.example".to_string()]], "asked once it's written");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The strip is drawn only when it has a line to say: a size limit the message stays under (what
+/// Exchange gives for nearly every recipient) draws nothing, the text where it was. A hundred
+/// recipients with long tips keep it a few lines high, the rest scrolled to.
+#[test]
+fn the_strip_says_only_what_there_is_to_say_in_a_few_lines() {
+    let (mut a, dir) = app("mail-tips-empty");
+    let handed = Handed::default();
+    a.backend = Box::new(Recorder(handed.clone()));
+    let account = with_exchange(&mut a);
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 900.0);
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"to": "ana@contoso.example", "body": "Hello there"}));
+    let mut shapes = Vec::new();
+    for _ in 0..3 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let alone = drawn_at(&shapes, "Hello there").unwrap_or_else(|| panic!("the text: {:?}", texts(&shapes)));
+    let answer = |a: &mut MailApp, tips: Vec<MailTip>| {
+        let ask = a.session.compose.as_ref().and_then(|c| a.session.mail_tips_now(c.id)).map_or(0, |s| s.ask);
+        a.session.apply(MailEvent::MailTips { account: account.clone(), ask, tips, error: None });
+    };
+    answer(&mut a, vec![MailTip { email: "ana@contoso.example".into(), max_message_size: 10_485_760, ..Default::default() }]);
+    for _ in 0..3 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let with_limit = drawn_at(&shapes, "Hello there").unwrap_or_else(|| panic!("the text: {:?}", texts(&shapes)));
+    assert!((with_limit.top() - alone.top()).abs() < 0.5, "no empty strip over the text: {alone:?} then {with_limit:?}");
+    // A hundred recipients (their field taller), each with a long tip.
+    let people: Vec<String> = (0..100).map(|n| format!("p{n}@contoso.example")).collect();
+    a.run("compose.update", json!({"to": people.join("; ")}));
+    for _ in 0..3 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let alone = drawn_at(&shapes, "Hello there").unwrap_or_else(|| panic!("the text: {:?}", texts(&shapes)));
+    let long = "Away for the season, writing back once home again. ".repeat(20);
+    answer(&mut a, people.iter().map(|p| MailTip { email: p.clone(), custom: long.clone(), ..Default::default() }).collect());
+    for _ in 0..3 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    assert!(texts(&shapes).iter().any(|t| t.contains("Away for the season")), "the tips are drawn");
+    let under = drawn_at(&shapes, "Hello there").map_or(f32::INFINITY, |r| r.top());
+    assert!(under - alone.top() < 150.0, "a few lines high: the text moved {} down", under - alone.top());
+    let _ = std::fs::remove_dir_all(dir);
+}
