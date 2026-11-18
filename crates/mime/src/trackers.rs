@@ -301,7 +301,8 @@ impl Trackers {
             let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
             let tag = html.get(start..end).unwrap_or("");
             from = end + 1;
-            let Some(src) = crate::html::tag_attr(tag, "src").map(|s| s.trim().replace("&amp;", "&")) else { continue };
+            // As the pictures have it (`&#38;` decoded): one pixel, listed once.
+            let Some(src) = crate::html::tag_attr(tag, "src").map(crate::html::picture_address) else { continue };
             let Some(u) = split(&src) else { continue };
             // By its own properties (a signature's icon `border-width: 0px` was taken for `width:0`,
             // and stayed hidden when the message's pictures were shown); hidden by any of them, when
@@ -509,6 +510,52 @@ mod tests {
                    <img class=\"clear\" src=\"https://t.example/c.png\"><img src=\"https://img.example/logo.png\" width=\"120\" alt=\"Logo\"></body></html>";
         let p = crate::parse(raw.as_bytes()).unwrap();
         assert_eq!(p.trackers.pictures, ["https://t.example/a.png", "https://t.example/b.png", "https://t.example/c.png"]);
+    }
+
+    /// A whole message with `body` under `sheet`, as parsed.
+    fn message(sheet: &str, body: &str) -> crate::Parsed {
+        let raw = format!(
+            "From: a@shop.example\r\nTo: b@studio.example\r\nSubject: s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+             <html><head>{sheet}</head><body><p>Hello</p>{body}</body></html>"
+        );
+        crate::parse(raw.as_bytes()).unwrap()
+    }
+
+    /// The web pictures of `p` asked for once its pictures are shown (as the session asks them).
+    fn loaded(p: &crate::Parsed) -> Vec<String> {
+        p.images.iter().filter(|u| u.starts_with("https://") && !p.trackers.pictures.contains(u)).cloned().collect()
+    }
+
+    /// An address written with a character reference (`&#38;`, `&#x26;`, `&quest;` and `&amp;`) is
+    /// one address, as a browser reads it, in the pictures and in the trackers alike: a pixel was
+    /// listed twice (as written, and as decoded once the style sheet was written on it), which said
+    /// two pixels for one.
+    #[test]
+    fn a_pixel_written_with_character_references_is_listed_once() {
+        let written = ["?a=1&#38;b=2", "?a=1&#x26;b=3", "?a=1&amp;b=4", "&quest;a=1&#38;b=5"];
+        let decoded = ["?a=1&b=2", "?a=1&b=3", "?a=1&b=4", "?a=1&b=5"];
+        let pixels: String = written.iter().map(|q| format!("<img src=\"https://t.example/o.gif{q}\" width=\"1\" height=\"1\">")).collect();
+        let listed: Vec<String> = decoded.iter().map(|q| format!("https://t.example/o.gif{q}")).collect();
+        for sheet in ["", "<style>img{border:0}</style>"] {
+            let p = message(sheet, &pixels);
+            assert_eq!((&p.trackers.pictures, loaded(&p)), (&listed, Vec::new()), "each once, as decoded, none asked for, under {sheet:?}");
+        }
+    }
+
+    /// … which used up the 50 kept: some of 49 such pixels were asked for.
+    #[test]
+    fn forty_nine_pixels_written_with_references_are_all_held_back() {
+        let many: String = (0..49).map(|n| format!("<img src=\"https://t.example/o.gif?n={n}&#38;r=1\" width=\"1\" height=\"1\">")).collect();
+        let p = message("<style>img{border:0}</style>", &many);
+        assert_eq!((p.trackers.pictures.len(), loaded(&p).len()), (49, 0), "listed, asked for");
+    }
+
+    /// … and asked for the one sized `width:1px !important; width:300px` under a style sheet.
+    #[test]
+    fn a_pixel_sized_twice_written_with_a_reference_is_held_back() {
+        let n1 = "<img src=\"https://t.example/o.gif?a=1&#38;b=2\" style=\"width:1px !important; width:300px\">";
+        let p = message("<style>img{border:0}</style>", n1);
+        assert_eq!((p.trackers.pictures.clone(), loaded(&p)), (vec!["https://t.example/o.gif?a=1&b=2".to_string()], Vec::new()));
     }
 
     #[test]

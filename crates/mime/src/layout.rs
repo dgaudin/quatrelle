@@ -291,6 +291,15 @@ fn parse(html: &str) -> Node {
     stack.pop().unwrap_or_default()
 }
 
+/// The value of the first attribute of the first element of `html` as the tokenizer reads it: its
+/// character references decoded as a browser decodes them (`&#38;`, `&quest;`).
+pub(crate) fn first_attr_value(html: &str) -> Option<String> {
+    parse(html).kids.into_iter().find_map(|k| match k {
+        Kid::El(n) => n.attrs.into_iter().next().map(|(_, v)| v),
+        Kid::Text(_) => None,
+    })
+}
+
 impl Node {
     fn attr(&self, name: &str) -> Option<&str> {
         self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())

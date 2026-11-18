@@ -607,6 +607,26 @@ pub fn remote_images(rich: &RichText) -> Vec<String> {
     out
 }
 
+/// Most bytes of a picture's address decoded by the tokenizer; a longer one only has its `&amp;`
+/// read (no picture is asked for past 4096).
+const ADDRESS_MAX: usize = 8192;
+
+/// A picture's address as written in its tag (`raw`, out of its quotes) as a browser reads it:
+/// its character references decoded (`&amp;`, `&#38;`, `&#x26;`, `&quest;`…), the same in the
+/// pictures and in the trackers, so one address written two ways is one (a pixel listed as
+/// written and as decoded said two pixels for one, used up the 50 kept, and was asked for).
+pub(crate) fn picture_address(raw: &str) -> String {
+    let raw = raw.trim();
+    if !raw.contains('&') {
+        return raw.to_string();
+    }
+    let q = if raw.contains('"') { '\'' } else { '"' };
+    if raw.len() > ADDRESS_MAX || raw.contains(q) {
+        return raw.replace("&amp;", "&");
+    }
+    layout::first_attr_value(&format!("<i a={q}{raw}{q}>")).map_or_else(|| raw.replace("&amp;", "&"), |v| v.trim().to_string())
+}
+
 /// Every `<img src>` of an HTML body, in order, without repeats (at most 200). Pictures without
 /// a description (tracking pixels, mostly) leave no trace in the formatted text, so they are
 /// found here, to be blocked or shown like the rest.
@@ -625,7 +645,7 @@ pub fn html_images(html: &str) -> Vec<String> {
                 Some(q @ ('"' | '\'')) => v.get(1..).and_then(|r| r.split(q).next()).unwrap_or(""),
                 _ => v.split([' ', '\t', '\n', '/']).next().unwrap_or(""),
             };
-            let src = src.trim().replace("&amp;", "&");
+            let src = picture_address(src);
             if !src.is_empty() && src.len() < 4096 && !out.contains(&src) {
                 out.push(src);
             }

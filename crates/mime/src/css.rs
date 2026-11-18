@@ -63,8 +63,8 @@ pub(crate) struct Sheet {
 }
 
 /// `text` without `/* … */` comments. A `/*` in a quoted string or in a `url(…)` belongs to it (an
-/// address `https://x.example/a/*.png`: what followed it was lost), as CSS reads it; a comment
-/// left open takes the rest.
+/// address `https://x.example/a/*.png`: what followed it was lost), as CSS reads it; a string
+/// left open ends with its line, and a comment left open takes the rest.
 fn without_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     // Inside a quoted string (its quote), inside `url(` … `)`.
@@ -84,7 +84,8 @@ fn without_comments(text: &str) -> String {
         }
         match quote {
             Some(q) => {
-                if c == q {
+                // Its quote, or the end of its line (a malformed sheet lost the rules after it).
+                if c == q || matches!(c, '\n' | '\r' | '\x0C') {
                     quote = None;
                 }
             }
@@ -363,5 +364,17 @@ mod tests {
         assert_eq!(read("background:url(a/*.png"), ["background:url(a/*.png"], "an address left open keeps the rest");
         let s = Sheet::parse(".a { background: url(x/*.png) } .b { color: red }");
         assert_eq!(props(&s, &[el("p", &["b"])]), ["color:red"]);
+    }
+
+    /// A string left open ends with its line, as CSS ends it: the comments after it are comments
+    /// still (it was open to the end of the text, so a malformed sheet lost its next rule).
+    #[test]
+    fn a_string_left_open_ends_with_its_line() {
+        for sheet in [".q{content:'it}\n/* c */ .b{color:red}", ".q{content:\"it}\n/* c */ .b{color:red}"] {
+            let s = Sheet::parse(sheet);
+            assert_eq!(props(&s, &[el("p", &["b"])]), ["color:red"], "{sheet:?}");
+        }
+        assert_eq!(without_comments("a:'x\n/* c */b"), "a:'x\nb");
+        assert_eq!(without_comments("a:'x/* c */b'"), "a:'x/* c */b'", "inside the string, on its line");
     }
 }
