@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use quatrelle_engine::model::pim::teams::{NEW_CHAT_PEOPLE, NotCreated, OUTBOX_MAX, Person};
+use quatrelle_engine::model::pim::teams::{NEW_CHAT_PEOPLE, News, NotCreated, OUTBOX_MAX, Person};
 use quatrelle_engine::{TeamsCreating, TeamsPeople};
 use serde_json::Value;
 
@@ -248,7 +248,9 @@ fn ctrl_n_and_the_button_open_a_new_conversation() {
     frame(&w.ctx, &mut a, vec![Event::Text("ana".into())]);
     assert_eq!(pane_of(&a).to, "ana", "the keyboard in To:");
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
-    assert!(a.ui.conversations.new_chat.is_none(), "Esc closes it");
+    assert_eq!(pane_of(&a).to, "", "Esc empties To: first");
+    frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert!(a.ui.conversations.new_chat.is_none(), "then Esc closes it");
     let texts = settled_at(&w.ctx, &mut a, SIZE);
     assert!(has_text(&texts, "Members: 4"), "the chat back: {texts:?}");
     let plus = window_control(&w.ctx, &mut a, "New conversation").expect("the list's button");
@@ -719,5 +721,131 @@ fn the_new_conversation_in_light_and_dark() {
     let Some(TeamsCreating::Waiting { local }) = a.session.teams.creating.clone() else { panic!("waiting") };
     a.session.teams_apply(teams::Event::NotCreated { local, why: NotCreated::Refused, code: Some("HTTP 403 Forbidden".into()) });
     painted(&mut a, &w.ctx, "failed", &["Teams didn't create the conversation", "Teams refused it (HTTP 403 Forbidden)", "Launch", "hello"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Fix round 1, Important 1: Esc meant for the emoji picker open over the new conversation's box
+/// closes the picker only: the people, the text and the pane stay. A second Esc closes the pane.
+#[test]
+fn esc_closes_the_emoji_picker_not_the_pane() {
+    let (mut a, dir, mut w, _) = Win::app("teams-new-esc-picker", vec![], true);
+    let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);
+    w.pick(&mut a, ana());
+    w.write(&mut a, "hello");
+    let emoji = window_control(&w.ctx, &mut a, "Emoji").expect("the box's emoji button");
+    click_at(&w.ctx, &mut a, emoji, 1, size);
+    assert!(egui::Popup::is_any_open(&w.ctx), "the picker open");
+    frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    frame(&w.ctx, &mut a, vec![]);
+    assert!(!egui::Popup::is_any_open(&w.ctx), "the picker closed");
+    assert!(a.ui.conversations.new_chat.is_some(), "the pane stays");
+    assert_eq!((picked(&a), in_new_box(&a)), (vec!["Ana Lima".to_string()], "hello".to_string()), "nothing lost");
+    frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert!(a.ui.conversations.new_chat.is_none(), "then Esc closes it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Fix round 1, Important 1: Esc while people are listed under "To:" empties "To:" (the list goes,
+/// the keyboard stays there); the pane, its chips and its text stay. Once "To:" is empty, Esc
+/// closes the pane.
+#[test]
+fn esc_with_people_listed_empties_to_first() {
+    let (mut a, dir, mut w, _) = Win::app("teams-new-esc-list", vec![], true);
+    w.pick(&mut a, bruno());
+    w.write(&mut a, "hello");
+    w.look_up(&mut a, "ana", vec![ana()]);
+    assert!(has_text(&w.texts(&mut a), "ana@contoso.example"), "Ana listed");
+    frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert!(a.ui.conversations.new_chat.is_some(), "the pane stays");
+    assert_eq!((pane_of(&a).to.as_str(), picked(&a), in_new_box(&a)), ("", vec!["Bruno Reis".to_string()], "hello".to_string()));
+    let texts = settled_at(&w.ctx, &mut a, SIZE);
+    assert!(!has_text(&texts, "ana@contoso.example"), "the list gone: {texts:?}");
+    frame(&w.ctx, &mut a, vec![Event::Text("b".into())]);
+    assert_eq!(pane_of(&a).to, "b", "the keyboard still in To:");
+    frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert_eq!(pane_of(&a).to, "", "emptied again");
+    frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert!(a.ui.conversations.new_chat.is_none(), "then Esc closes it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The marks read the app sent.
+fn marks_read(jobs: &Shared<Job>) -> usize {
+    jobs.borrow().iter().filter(|j| matches!(j, Job::Teams { job: teams::Job::Op { op: teams::Op::MarkRead { .. } } })).count()
+}
+
+/// Fix round 1, Important 2 (ruled): the chat the pane hides isn't on screen for the engine: its
+/// news are announced, it isn't marked read. Its row clicked in the list, the chat takes the pane's
+/// place and is marked read; New conversation brings the pane back as it was (the people, the group
+/// name, the text, the file).
+#[test]
+fn the_chat_under_the_pane_is_away_and_a_row_takes_its_place() {
+    let (mut a, dir, mut w, jobs) = Win::app("teams-new-hidden", vec![], true);
+    let shown = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(Recorder(shown.clone()));
+    let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);
+    w.pick(&mut a, ana());
+    w.pick(&mut a, bruno());
+    w.click_text(&mut a, "Group name (optional)");
+    w.typed(&mut a, vec![Event::Text("Launch".into())]);
+    w.write(&mut a, "hello");
+    let pdf = dir.join("a.pdf");
+    std::fs::write(&pdf, b"%PDF-1.7").unwrap();
+    add_files(draft(&mut a.ui.conversations, NEW), vec![pdf]);
+    for _ in 0..2 {
+        frame(&w.ctx, &mut a, vec![]);
+    }
+    jobs.borrow_mut().clear();
+    a.session.teams_apply(teams::Event::Chats { rows: vec![ChatRow { unread: 1, ..group_row() }] });
+    let news = News {
+        chat: group_row().id,
+        message: "m1".into(),
+        sender: "Ana Lima".into(),
+        external: false,
+        app: false,
+        mentions_me: false,
+        chat_name: Some("Support team".into()),
+        direct: false,
+        hidden: false,
+        text: "Lunch?".into(),
+        at: NOW * 1_000,
+    };
+    a.session.teams_apply(teams::Event::News { news: vec![news] });
+    for _ in 0..2 {
+        frame(&w.ctx, &mut a, vec![]);
+    }
+    assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Lima in Support team".to_string(), "Lunch?".to_string())], "announced");
+    assert_eq!(marks_read(&jobs), 0, "not marked read under the pane");
+    let row = settled_text_at(&w.ctx, &mut a, "Support team", size).expect("its row in the list");
+    assert!(row.x < 400.0, "the list's row: {row:?}");
+    click_at(&w.ctx, &mut a, row, 1, size);
+    let texts = settled_at(&w.ctx, &mut a, SIZE);
+    assert!(a.ui.conversations.new_chat.is_none(), "the chat takes the pane's place");
+    assert!(has_text(&texts, "Members: 4") && !has_text(&texts, "To:"), "{texts:?}");
+    assert!(marks_read(&jobs) >= 1, "marked read once shown");
+    frame(&w.ctx, &mut a, vec![key(Key::N, Modifiers::COMMAND)]);
+    let texts = settled_at(&w.ctx, &mut a, SIZE);
+    assert_eq!((picked(&a), pane_of(&a).topic.as_str()), (vec!["Ana Lima".to_string(), "Bruno Reis".to_string()], "Launch"));
+    assert_eq!(in_new_box(&a), "hello");
+    for t in ["Ana Lima", "Bruno Reis", "Launch", "hello", "a.pdf"] {
+        assert!(has_text(&texts, t), "back as it was: {t}: {texts:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Fix round 1, Minor 1: Enter in the box and a click on Cancel in the same frame: the pane closes
+/// and nothing is created.
+#[test]
+fn enter_and_cancel_in_the_same_frame_create_nothing() {
+    let (mut a, dir, mut w, _) = Win::app("teams-new-cancel-enter", vec![], true);
+    w.pick(&mut a, ana());
+    w.write(&mut a, "hello");
+    let cancel = rect_of(&w.texts(&mut a), |t| t == "Cancel").expect("Cancel").center();
+    let press = |pressed| Event::PointerButton { pos: cancel, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    let mut acts = w.pane(&mut a, 0.02, vec![Event::PointerMoved(cancel)]).0;
+    acts.extend(w.pane(&mut a, 0.02, vec![press(true)]).0);
+    acts.extend(w.pane(&mut a, 0.02, vec![press(false), enter()]).0);
+    assert!(a.ui.conversations.new_chat.is_none(), "Cancel closes it");
+    assert!(creates(&acts).is_empty(), "nothing created");
     let _ = std::fs::remove_dir_all(dir);
 }

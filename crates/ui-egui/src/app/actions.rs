@@ -77,12 +77,12 @@ impl MailApp {
             self.ui.put_away = false;
         }
         // Nobody looks at the open chat while the window is put away or minimized, nor while the
-        // File page is drawn in the module's place.
+        // File page or a new conversation (closed or set aside first) is drawn in its place.
+        conversations::new_chat_each_frame(&mut self.session, &mut self.ui.conversations);
         let away = self.ui.put_away || self.ui.backstage.is_some() || ctx.input(|i| i.viewport().minimized == Some(true));
-        conversations::announce(&mut self.session, &mut *self.services, ctx, away);
+        conversations::announce(&mut self.session, &mut *self.services, ctx, away || self.ui.conversations.new_chat.is_some());
         self.teams_pages();
         self.teams_files();
-        conversations::new_chat_created(&mut self.session, &mut self.ui.conversations);
         let unread = self.session.inbox_unread();
         let view = match self.session.module {
             Module::Mail => view_title(&self.session),

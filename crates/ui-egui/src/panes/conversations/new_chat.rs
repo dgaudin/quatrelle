@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! A new conversation (decision 14), written where the open chat is: Ctrl+N or the list's "New
-//! conversation" opens it ([`open`]), Esc (`app/keys.rs`) or Cancel closes it, what was typed let
-//! go ([`close`]). "To:" holds the people picked as chips ("External" first for a guest, a cross
+//! conversation" opens it ([`open`]), Cancel or Esc closes it, what was typed let go (Esc goes to
+//! a popup over the pane first, then to the people listed under "To:": [`escape`]). The chat it
+//! hides isn't on screen (`MailApp::announce` tells the engine so); a chat opened from behind it
+//! takes its place, the pane set aside as it is for New conversation to bring back ([`leave`],
+//! [`each_frame`]). "To:" holds the people picked as chips ("External" first for a guest, a cross
 //! that takes one away, Backspace in the empty field the last one), then a field whose text is
 //! looked up in the organisation's directory [`SEARCH_WAIT`] after the last key (`teams.people`,
 //! once for each text); the people found are listed under it, those picked left out: ↑ and ↓
@@ -12,7 +15,7 @@
 //! ([`send`]), what was written staying in the pane until the chat is made. While it is created,
 //! everything waits; a failure the pane asked for says why, the people, the name, the text and the
 //! files still there to try again; the chat made, or the one-to-one chat already there, takes the
-//! pane's place ([`created`]).
+//! pane's place ([`each_frame`]).
 //!
 //! What is hostile here: the directory's names and addresses (Graph's), drawn on one line through
 //! [`one_line`] (no control or bidi character) and as text, never as markup; Teams' code for a
@@ -62,6 +65,8 @@ pub(crate) struct NewChat {
     /// The pane asked for the conversation and the engine took it: a failure since is the pane's
     /// own, and said (one left from before it opened isn't).
     pub(super) asked: bool,
+    /// A chat was opened from behind the pane: at the next frame it takes the pane's place.
+    pub(super) leaving: bool,
 }
 
 /// What the directory gave for what's typed in "To:".
@@ -79,29 +84,65 @@ fn to_id() -> egui::Id {
     egui::Id::unique("teams-new-chat-to")
 }
 
-/// The pane opened, or "To:" given the keyboard again, while Teams is on and signed in; the open
-/// chat's delete question and the picture shown big go with it.
+/// The pane opened, or "To:" given the keyboard again, while Teams is on and signed in: the one
+/// set aside for a chat opened meanwhile comes back as it was. The open chat's delete question and
+/// the picture shown big go.
 pub(crate) fn open(s: &Session, c: &mut ConversationsUi) {
     if s.prefs.teams.on && s.prefs.teams.signed_in {
         (c.deleting, c.viewing) = (None, None);
-        c.new_chat.get_or_insert_with(NewChat::default).focus = true;
+        let n = c.new_chat.get_or_insert_with(|| c.new_chat_aside.take().unwrap_or_default());
+        (n.focus, n.leaving) = (true, false);
     }
 }
 
-/// The pane closed: what was written goes, the files of its pasted pictures with it, unless a
-/// creation is waited for (its first message reads them).
-pub(crate) fn close(s: &Session, c: &mut ConversationsUi) {
-    if c.new_chat.take().is_some() {
+/// The pane closed (shown or set aside): what was written goes, the files of its pasted pictures
+/// with it, unless a creation is waited for (its first message reads them).
+fn close(s: &Session, c: &mut ConversationsUi) {
+    let (shown, aside) = (c.new_chat.take(), c.new_chat_aside.take());
+    if shown.is_some() || aside.is_some() {
         super::writing::drop_draft(c, NEW, matches!(s.teams.creating, Some(TeamsCreating::Waiting { .. })));
     }
 }
 
-/// The chat a creation ended in, or the one-to-one chat found there already (the engine shows
-/// it), taken every frame: the pane closes for it, and its draft goes, its files the message's now.
-pub(crate) fn created(s: &mut Session, c: &mut ConversationsUi) {
+/// A chat opened from behind the pane (a row of the list, Alt+↑ or ↓): it takes the pane's place
+/// at the next frame ([`each_frame`]).
+pub(crate) fn leave(c: &mut ConversationsUi) {
+    if let Some(n) = c.new_chat.as_mut() {
+        n.leaving = true;
+    }
+}
+
+/// Esc in Conversations while the pane is open (`app/keys.rs`, once a dialog had it): a popup over
+/// the pane (the emoji picker…) closes by itself, and nothing else goes; with people listed under
+/// "To:", "To:" is emptied (the list goes, the keyboard stays there); else the pane closes.
+pub(crate) fn escape(ctx: &egui::Context, s: &Session, c: &mut ConversationsUi) {
+    if c.deleting.is_some() || egui::Popup::is_any_open(ctx) {
+        return;
+    }
+    let Some(n) = c.new_chat.as_mut() else { return };
+    if matches!(found(s, n), Found::Nothing) {
+        close(s, c);
+    } else {
+        n.to.clear();
+        // The people found forgotten at the next frame (`ask`: `teams.people` of nothing).
+        (n.chosen, n.search_due) = (0, Some(0.0));
+    }
+}
+
+/// What the pane learns each frame, before the window tells the engine what's on screen
+/// (`MailApp::announce`): Teams off or signed out, it goes; the chat a creation ended in, or the
+/// one-to-one chat found there already (the engine shows it), closes it, its draft going, its files
+/// the message's now; a chat opened from behind it takes its place, the pane set aside as it is.
+pub(crate) fn each_frame(s: &mut Session, c: &mut ConversationsUi) {
+    if !(s.prefs.teams.on && s.prefs.teams.signed_in) {
+        close(s, c);
+    }
     if s.take_teams_created().is_some() {
-        c.new_chat = None;
+        (c.new_chat, c.new_chat_aside) = (None, None);
         super::writing::drop_draft(c, NEW, true);
+    }
+    if c.new_chat.as_ref().is_some_and(|n| n.leaving) {
+        c.new_chat_aside = c.new_chat.take().map(|n| NewChat { leaving: false, ..n });
     }
 }
 
@@ -165,6 +206,10 @@ pub(crate) fn pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens
             ui.label(RichText::new(tl!("New conversation")).font(theme::bold(17.0)).color(t.text));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| cancel = ui.link(tl!("Cancel")).clicked());
         });
+        // Cancel first: nothing typed or pressed in the same frame goes out.
+        if cancel {
+            return;
+        }
         let Some(n) = c.new_chat.as_mut() else { return };
         state(s, n, ui, t);
         if waiting {
@@ -178,6 +223,10 @@ pub(crate) fn pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens
             ui.add(name.desired_width(ui.available_width().min(TOPIC_W)));
         }
     });
+    if cancel {
+        close(s, c);
+        return;
+    }
     let line = ui.available_rect_before_wrap();
     ui.painter().hline(line.x_range(), line.top(), egui::Stroke::new(1.0, t.border));
     if waiting {
@@ -192,9 +241,6 @@ pub(crate) fn pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens
         if let Some(p) = clicked.inner {
             pick(n, &p, ui, acts);
         }
-    }
-    if cancel {
-        close(s, c);
     }
 }
 
@@ -261,6 +307,7 @@ fn to_line(s: &Session, n: &mut NewChat, ui: &mut Ui, t: &Tokens, acts: &mut Vec
             if ui.available_width() < FIELD_MIN {
                 ui.end_row();
             }
+            let listing = !matches!(found(s, n), Found::Nothing);
             let field = egui::TextEdit::singleline(&mut n.to)
                 .id(id)
                 .frame(egui::Frame::NONE)
@@ -271,6 +318,12 @@ fn to_line(s: &Session, n: &mut NewChat, ui: &mut Ui, t: &Tokens, acts: &mut Vec
             let resp = ui.add(field);
             if std::mem::take(&mut n.focus) {
                 resp.request_focus();
+            }
+            // While people are listed, Esc is the field's (it empties it: `escape`), not egui's
+            // (which would take the keyboard away).
+            if listing && resp.has_focus() {
+                let filter = egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, escape: true, ..Default::default() };
+                ui.memory_mut(|m| m.set_focus_lock_filter(id, filter));
             }
             if resp.changed() {
                 n.search_due = Some(ui.input(|i| i.time) + SEARCH_WAIT);

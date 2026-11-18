@@ -285,12 +285,13 @@ fn for_the_box(e: &egui::Event) -> bool {
 }
 
 /// `chat`'s draft, made when it has none: past [`DRAFTS_MAX`] chats, the one drawn longest ago
-/// goes, an empty one first (one with an edit under way, or files, isn't empty).
+/// goes, an empty one first (one with an edit under way, or files, isn't empty); never the new
+/// conversation's (it goes with its pane, perhaps set aside).
 pub(crate) fn draft<'a>(c: &'a mut ConversationsUi, chat: &str) -> &'a mut ChatDraft {
     c.drafted = c.drafted.saturating_add(1);
     if !c.drafts.contains_key(chat) && c.drafts.len() >= DRAFTS_MAX {
         let written = |d: &ChatDraft| !d.text.is_empty() || d.editing.is_some() || !d.parts.is_empty();
-        let oldest = c.drafts.iter().min_by_key(|(_, d)| (written(d), d.used)).map(|(k, _)| k.clone());
+        let oldest = c.drafts.iter().filter(|(k, _)| k.as_str() != NEW).min_by_key(|(_, d)| (written(d), d.used)).map(|(k, _)| k.clone());
         // Its pasted pictures' files go with it.
         if let Some(gone) = oldest.and_then(|k| c.drafts.remove(&k)) {
             gone.parts.iter().for_each(|p| attach::let_go(&p.path));

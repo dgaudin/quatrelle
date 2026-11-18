@@ -40,7 +40,7 @@ pub(crate) use list::{list, list_not_drawn};
 #[cfg(test)]
 pub(crate) use new_chat::NEW;
 pub(crate) use new_chat::NewChat;
-pub(crate) use new_chat::{close as close_new_chat, created as new_chat_created, open as open_new_chat};
+pub(crate) use new_chat::{each_frame as new_chat_each_frame, escape as escape_new_chat, leave as leave_new_chat, open as open_new_chat};
 #[cfg(test)]
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
 pub(crate) use writing::{ChatDraft, add_files, add_picture, draft, refused};
@@ -102,13 +102,15 @@ pub struct ConversationsUi {
     pub hovered: Option<(String, egui::Rect)>,
     /// The user's own message asked to be deleted (its id): the question is asked over the window.
     pub deleting: Option<String>,
-    /// The new conversation written in the open chat's place (`new_chat.rs`), while there is one.
+    /// The new conversation written in the open chat's place (`new_chat.rs`), while there is one;
+    /// and the one set aside for a chat opened meanwhile, which New conversation brings back.
     pub(crate) new_chat: Option<NewChat>,
+    pub(crate) new_chat_aside: Option<NewChat>,
 }
 
-/// Whether Esc is Conversations' own: the delete question's (a no), a new conversation's (it
-/// closes: `app/keys.rs`), or the box's (it closes the offer, or lets the edit go). The window's
-/// own Esc (emptying the search) waits then.
+/// Whether Esc is Conversations' own: the delete question's (a no), a new conversation's (a popup
+/// over it closes, the people listed go, else it closes: `app/keys.rs`), or the box's (it closes
+/// the offer, or lets the edit go). The window's own Esc (emptying the search) waits then.
 pub(crate) fn takes_escape(ctx: &egui::Context, c: &ConversationsUi, open: Option<&str>) -> bool {
     c.deleting.is_some() || c.new_chat.is_some() || writing::takes_escape(ctx, c, open)
 }

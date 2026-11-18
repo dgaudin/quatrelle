@@ -163,15 +163,13 @@ impl MailApp {
                     continue;
                 }
                 // In Conversations, the delete question's first (a no), then a new conversation's
-                // (it closes, what was written let go), then the box's while it offers people or
-                // edits a message (it closes the offer, or lets the edit go): the search stays as
-                // it is.
+                // (a popup over it closes, the people listed go, else it closes, what was written
+                // let go), then the box's while it offers people or edits a message (it closes the
+                // offer, or lets the edit go): the search stays as it is.
                 if self.session.module == Module::Conversations
                     && conversations::takes_escape(ctx, &self.ui.conversations, self.session.teams.open.as_deref())
                 {
-                    if self.ui.conversations.deleting.is_none() {
-                        conversations::close_new_chat(&self.session, &mut self.ui.conversations);
-                    }
+                    conversations::escape_new_chat(ctx, &self.session, &mut self.ui.conversations);
                     continue;
                 }
                 // In Conversations, it empties its search: the list comes back.
@@ -262,6 +260,7 @@ impl MailApp {
                 }
                 if matches!(id, "teams.next" | "teams.previous") {
                     self.ui.conversations.scroll_to_open = true;
+                    conversations::leave_new_chat(&mut self.ui.conversations);
                 }
             }
         }
