@@ -206,6 +206,9 @@ pub(crate) struct FakeTeams {
     pub(crate) hold: Option<(&'static str, std::time::Duration)>,
     /// Set for the server by the request being answered: how long its answer is held back.
     pub(crate) holding: Option<std::time::Duration>,
+    /// The next request of this route (by route name) is answered with its head, then a byte of
+    /// its body this often, without end, until the client goes: a server that trickles, once.
+    pub(crate) trickle: Option<(&'static str, std::time::Duration)>,
     /// The fake's clock (milliseconds since 1970), when a test sets it: what its `Date` says,
     /// and what a change made now is dated from. `None`: this computer's clock.
     pub(crate) clock: Option<i64>,
@@ -278,7 +281,8 @@ pub(crate) fn rfc3339(ms: i64) -> String {
 /// One answer: status, body, content type, where a redirect points, the fake's clock when it
 /// answered (Unix seconds, sent as `Date`) and its `Retry-After` (a 429 always says 1); or, when
 /// `cut`, none at all (the connection closed once the request is read); `stall`: its body stops
-/// after so many bytes, the connection left open.
+/// after so many bytes, the connection left open; `trickle`: its head, then a byte this often,
+/// without end (in milliseconds: the reply stays small).
 pub(super) struct Reply {
     pub(super) status: u16,
     pub(super) body: Vec<u8>,
@@ -288,11 +292,12 @@ pub(super) struct Reply {
     pub(super) retry_after: Option<u64>,
     pub(super) cut: bool,
     pub(super) stall: Option<usize>,
+    pub(super) trickle: Option<u16>,
 }
 
 impl Reply {
     fn bytes(status: u16, body: Vec<u8>, kind: &'static str) -> Self {
-        Self { status, body, kind, location: None, date: None, retry_after: None, cut: false, stall: None }
+        Self { status, body, kind, location: None, date: None, retry_after: None, cut: false, stall: None, trickle: None }
     }
 
     fn json(status: u16, v: &Value) -> Self {
@@ -611,6 +616,7 @@ impl Data {
             }
         };
         reply.date = Some(t.date().div_euclid(1000));
+        reply.trickle = t.trickle.take_if(|(route, _)| *route == name).map(|(_, every)| u16::try_from(every.as_millis()).unwrap_or(u16::MAX));
         Some(reply)
     }
 }

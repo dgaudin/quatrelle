@@ -13,7 +13,9 @@
 //! * An image from another site ([`Picture::Outside`]): the user clicked it, Teams being on. Over
 //!   `https` only, to the internet only (`http::get_public`: never this computer or its network,
 //!   whatever the name resolves to, redirects included), [`MAX_PICTURE`] bytes at most, a minute
-//!   in all, on a thread of its own (a slow server never holds the worker); never kept.
+//!   in all, on a thread of its own (a slow server never holds the worker); never kept. The
+//!   minute is the fetch's own (`http::get_public_within`): a server that trickles its answer
+//!   holds that thread no longer, and its place is free again then.
 //! * A picture the copy has is answered from it at once, without a request (a hosted one only
 //!   while its message shows it); one that can't be had (refused, too big, not the message's own,
 //!   busy or offline three times, an outside fetch that failed) is said so, once for each ask
@@ -72,8 +74,9 @@ const OUTSIDE_DEADLINE: Duration = Duration::from_secs(60);
 /// refused until one ends (a server that trickles holds a thread, never the worker).
 const MAX_STALLED: usize = 2;
 
-/// What fetches an outside picture: `http::get_public`, or a test's stand-in.
-type Fetch = fn(&str, usize) -> crate::Result<http::Response>;
+/// What fetches an outside picture within a deadline: `http::get_public_within`, or a test's
+/// stand-in.
+type Fetch = fn(&str, usize, Duration) -> crate::Result<http::Response>;
 
 /// What the pictures and the presence hold between two steps, in memory only. Every collection is
 /// bounded ([`MAX_PENDING`], [`MAX_REFUSED`], [`PRESENCE_IDS`]).
@@ -454,9 +457,10 @@ fn outside_thread(w: &mut Worker) -> Option<SyncSender<(String, Fetch, Duration)
     w.pictures.outside.clone()
 }
 
-/// One outside picture, on its thread: fetched on a thread of its own, waited for `deadline` in
-/// all, said when it came in time as it came (the window decodes it); never kept. While
-/// [`MAX_STALLED`] fetches still run, it's refused.
+/// One outside picture, on its thread: fetched on a thread of its own within `deadline` (the
+/// fetch's own: it ends then, whatever the server does), waited for that long, said when it came
+/// in time as it came (the window decodes it); never kept. While [`MAX_STALLED`] fetches still
+/// run, it's refused.
 fn fetch_outside(emit: &Emit, stalled: &Arc<AtomicUsize>, url: String, fetch: Fetch, deadline: Duration) {
     let none = |url: String| emit(quatrelle_model::Event::Teams { event: teams::Event::NoPicture { picture: Picture::Outside { url } } });
     if stalled.load(Ordering::SeqCst) >= MAX_STALLED {
@@ -467,7 +471,7 @@ fn fetch_outside(emit: &Emit, stalled: &Arc<AtomicUsize>, url: String, fetch: Fe
     let (done, came) = mpsc::channel();
     let (address, running) = (url.clone(), stalled.clone());
     let spawned = std::thread::Builder::new().name("teams-outside-fetch".into()).spawn(move || {
-        let got = fenced(|| fetch(&address, MAX_PICTURE));
+        let got = fenced(|| fetch(&address, MAX_PICTURE, deadline));
         running.fetch_sub(1, Ordering::SeqCst);
         let _ = done.send(got);
     });
@@ -516,14 +520,14 @@ fn public_https(url: &str) -> bool {
     }
 }
 
-/// What fetches outside pictures and how long one is waited for: `http::get_public` and
+/// What fetches outside pictures and how long one may take: `http::get_public_within` and
 /// [`OUTSIDE_DEADLINE`], or a test's.
 #[cfg(not(test))]
 fn fetcher(_w: &Worker) -> (Fetch, Duration) {
-    (http::get_public, OUTSIDE_DEADLINE)
+    (http::get_public_within, OUTSIDE_DEADLINE)
 }
 
 #[cfg(test)]
 fn fetcher(w: &Worker) -> (Fetch, Duration) {
-    (w.hooks.outside.unwrap_or(http::get_public), w.hooks.outside_deadline.unwrap_or(OUTSIDE_DEADLINE))
+    (w.hooks.outside.unwrap_or(http::get_public_within), w.hooks.outside_deadline.unwrap_or(OUTSIDE_DEADLINE))
 }

@@ -45,7 +45,14 @@ fn an_id_that_cant_be_one_is_refused_before_any_request() {
         assert!(matches!(c.send_html(id, "<p>hi</p>", &[]), Err(NetError::Refused(_))), "{id:?}");
         assert!(matches!(c.mark_read(id, ME, TENANT), Err(NetError::Refused(_))), "{id:?}");
     }
-    assert_eq!(hits(&server, "post") + hits(&server, "markChatReadForUser"), 0);
+    // A chat's members, read on the way to the user's own organisation, the same: an id that can't
+    // be one segment of the address (only dots would climb the path) or past Graph's length.
+    let long = "a".repeat(513);
+    for id in ["..", ".", "", "x\ny", long.as_str()] {
+        assert!(matches!(c.members(id), Err(NetError::Refused(_))), "{id:?}");
+        assert!(matches!(c.members_all(id), Err(NetError::Refused(_))), "{id:?}");
+    }
+    assert_eq!(hits(&server, "post") + hits(&server, "markChatReadForUser") + hits(&server, "members") + hits(&server, "unknown"), 0);
     assert_eq!(c.stats().requests, 1, "/me only");
     // A chat's own id goes.
     c.mark_read(CHAT, ME, TENANT).unwrap();

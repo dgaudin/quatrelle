@@ -246,6 +246,8 @@ impl Worker {
                 return self.refuse(&with_code(NO_ACCOUNT, &e));
             }
         };
+        #[cfg(test)]
+        self.hooks.deadline_of(&client);
         if !plain_id(&me.id) {
             log::warn!("teams: the account's id can't be one");
             return self.refuse(NO_ACCOUNT);
@@ -510,6 +512,8 @@ impl Worker {
             }
             Err(e) => return Err(e),
         };
+        #[cfg(test)]
+        self.hooks.deadline_of(&client);
         if !me.id.eq_ignore_ascii_case(&self.settings.object_id) {
             log::warn!("teams: the sign-in kept is another account's than the copy's");
             self.sign_in_again();

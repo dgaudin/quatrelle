@@ -83,20 +83,29 @@ pub(crate) struct Hooks {
     pub(crate) trip_read: Option<String>,
     /// This chat's work panics once its task has left the round, once: a bug met after it.
     pub(crate) trip_done: Option<String>,
-    /// What fetches an outside picture, in place of `http::get_public`.
-    pub(crate) outside: Option<fn(&str, usize) -> Result<crate::http::Response>>,
+    /// What fetches an outside picture within its deadline, in place of `http::get_public_within`.
+    pub(crate) outside: Option<fn(&str, usize, Duration) -> Result<crate::http::Response>>,
     /// How long an outside picture is waited for, in place of the minute.
     pub(crate) outside_deadline: Option<Duration>,
     /// Where a file opened is saved, in place of the user's own folder (`files.rs`).
     pub(crate) files_dir: Option<std::path::PathBuf>,
     /// The floor a transfer keeps to (bytes a second, over a window), in place of Quatrelle's.
     pub(crate) floor: Option<(u64, Duration)>,
+    /// How long a request to Graph may take in all, in place of `graph::DEADLINE`.
+    pub(crate) graph_deadline: Option<Duration>,
 }
 
 #[cfg(test)]
 impl Hooks {
     fn trip(&self) {
         Hooks::trip_on(&self.trip_list);
+    }
+
+    /// The test's deadline for Graph's requests, on a client just made.
+    pub(crate) fn deadline_of(&self, client: &TeamsClient) {
+        if let Some(within) = self.graph_deadline {
+            client.set_deadline(within);
+        }
     }
 
     /// [`Hooks::trip_done`]'s panic, when `chat`'s task has just left the round.

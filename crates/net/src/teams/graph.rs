@@ -8,7 +8,9 @@
 //! file's item and share, a post with pictures and files, and a file shared in a chat (its
 //! address, its bytes counted) are in `files`; the directory and a chat's creation in `people`.
 //!
-//! Every request carries the bearer token and goes on a connection of its own. No redirect is
+//! Every request carries the bearer token and goes on a connection of its own, made and answered
+//! within [`DEADLINE`] (its connection, its TLS handshake and every byte of its answer: a server
+//! that trickles its answer fails it as a connection cut does, `TimedOut`). No redirect is
 //! followed with the token: a Graph answer that redirects is an error, except a shared file's
 //! content, whose one redirect (to SharePoint's pre-signed download address, on Microsoft's file
 //! hosts: [`transfer_url`]) is followed by hand without it. A 429 or a 503 is waited out
@@ -21,6 +23,7 @@
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use quatrelle_model::pim::teams::{MAX_ID, MAX_MEMBERS, Mention, PRESENCE_IDS, SEND_MAX, reactable};
 use serde_json::{Value, json};
@@ -40,6 +43,10 @@ pub use read::*;
 
 /// Largest JSON answer accepted.
 const MAX_JSON: usize = 8 << 20;
+/// How long a request to Graph may take in all, from its connection to the last byte of its
+/// answer: the worker hears its jobs between two requests, so this is also the longest a sign-out
+/// waits on a request under way.
+pub const DEADLINE: Duration = Duration::from_secs(120);
 /// Sent with every chat list and message read: kinds of chat, reactions, message types and the
 /// like added to Graph after v1.0 was published come as they are rather than as
 /// `unknownFutureValue`.
@@ -113,6 +120,8 @@ pub struct TeamsClient {
     waiting: Cell<bool>,
     /// The last 429's or 503's `Retry-After`, in seconds.
     retry: Cell<Option<u64>>,
+    /// How long a request may take in all ([`DEADLINE`]; a test's shorter one).
+    deadline: Cell<Duration>,
 }
 
 impl TeamsClient {
@@ -136,6 +145,7 @@ impl TeamsClient {
             date: Cell::new(None),
             waiting: Cell::new(waiting),
             retry: Cell::new(None),
+            deadline: Cell::new(DEADLINE),
         };
         let v = c.json("GET", &c.at("/me?$select=id,displayName,mail,userPrincipalName"), None, false)?;
         let text = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().chars().take(320).collect::<String>();
@@ -182,6 +192,18 @@ impl TeamsClient {
         self.retry.get()
     }
 
+    /// A test's deadline for each request, in place of [`DEADLINE`].
+    #[cfg(test)]
+    pub(crate) fn set_deadline(&self, within: Duration) {
+        self.deadline.set(within);
+    }
+
+    /// When a request begun now must be answered by.
+    fn until(&self) -> Instant {
+        let now = Instant::now();
+        now.checked_add(self.deadline.get()).unwrap_or(now)
+    }
+
     /// A page of the signed-in user's chats, the most recently active first, each with a
     /// preview of its last message; `next` is the previous page's [`Page::next`].
     pub fn chats(&self, next: Option<&str>) -> Result<Page> {
@@ -192,8 +214,12 @@ impl TeamsClient {
         page(self.json("GET", &url, None, true)?)
     }
 
-    /// A chat's members, every page.
+    /// A chat's members, every page. The id must be one segment of the address ([`path_id`]),
+    /// else it is refused before any request.
     pub fn members(&self, chat: &str) -> Result<Vec<Value>> {
+        if !path_id(chat) {
+            return Err(NetError::Refused("not a chat's id".into()));
+        }
         let mut url = self.at(&format!("/chats/{}/members", seg(chat)));
         let mut out = Vec::new();
         for _ in 0..MEMBER_PAGES {
@@ -476,10 +502,12 @@ impl TeamsClient {
         }
     }
 
-    /// One request on a connection of its own, its answer as it came (a redirect isn't followed).
+    /// One request on a connection of its own, made and answered within the deadline, its answer
+    /// as it came (a redirect isn't followed).
     fn once(&self, req: &Request) -> Result<Response> {
         let url = Url::parse(&req.url)?;
-        let mut s = connect(&url)?;
+        let until = self.until();
+        let mut s = stream::Timed::new(connect_within(&url, until)?, until);
         self.count();
         let resp = http::exchange(&mut s, req, &url)?;
         self.heard(&resp, true);
@@ -487,10 +515,18 @@ impl TeamsClient {
     }
 
     /// A GET whose body is counted as it comes and not kept (only the start of an error's, for
-    /// its code); a redirect's body is left unread, and a file's when not `served`.
+    /// its code); a redirect's body is left unread, and a file's when not `served`. Graph's, its
+    /// body unread (a shared file's address, which the worker asks for), within the deadline.
     fn download(&self, req: &Request, graph: bool, served: bool) -> Result<(Response, Tally)> {
         let url = Url::parse(&req.url)?;
-        let mut s = if graph { connect(&url)? } else { self.transfer_stream(&url)? };
+        let mut s = match (graph, served) {
+            (true, false) => {
+                let until = self.until();
+                Timed::Within(stream::Timed::new(connect_within(&url, until)?, until))
+            }
+            (true, true) => Timed::Open(connect(&url)?),
+            (false, _) => Timed::Open(self.transfer_stream(&url)?),
+        };
         self.count();
         let mut tally = Tally::default();
         let sink = &mut tally;
@@ -569,6 +605,42 @@ fn too_large(max: usize) -> NetError {
 fn connect(url: &Url) -> Result<Stream> {
     let sock = stream::tcp(&url.host, url.port)?;
     if url.https { stream::tls(sock, &url.host) } else { Ok(Stream::Plain(sock)) }
+}
+
+/// [`connect`], connected (TLS's handshake too) by `until`.
+fn connect_within(url: &Url, until: Instant) -> Result<Stream> {
+    let sock = stream::tcp_within(&url.host, url.port, until)?;
+    if url.https { stream::tls_within(sock, &url.host, until) } else { Ok(Stream::Plain(sock)) }
+}
+
+/// A download's connection: within the deadline, or open (the check's whole file, a transfer).
+enum Timed {
+    Within(stream::Timed<Stream>),
+    Open(Stream),
+}
+
+impl std::io::Read for Timed {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Timed::Within(s) => s.read(buf),
+            Timed::Open(s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for Timed {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Timed::Within(s) => s.write(buf),
+            Timed::Open(s) => s.write(buf),
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Timed::Within(s) => s.flush(),
+            Timed::Open(s) => s.flush(),
+        }
+    }
 }
 
 /// Whether a download's redirect to `to` may be followed by a client whose API is at `base`:

@@ -503,6 +503,31 @@ fn a_sign_out_stalled_behind_a_request_never_undoes_the_sign_in_after_it() {
     assert_eq!(pool.teams_test.started, 1, "one worker");
 }
 
+/// Review 1.5, network 1: the first read of the list answered a byte every 50 ms without end. The
+/// request is given up at its deadline as the network's ("Offline"), and a sign-out asked while it
+/// trickles is heard then: the keychain emptied within the deadline, not once the answer is over.
+#[test]
+fn a_sign_out_during_an_answer_that_trickles_is_heard_by_its_deadline() {
+    let mut teams = one_chat();
+    teams.trickle = Some(("chats", Duration::from_millis(50)));
+    let hooks = Hooks { graph_deadline: Some(Duration::from_secs(1)), ..Hooks::default() };
+    let r = rig_with(teams, grant(Some(TENANT)), Store::memory(), Arc::new(Kept::default()), hooks);
+    r.sign_in("organizations");
+    let until = Instant::now() + WAIT;
+    while r.hits("chats") == 0 {
+        assert!(Instant::now() < until, "the list was never asked for: {:?}", teams_of(&r.seen));
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(r.kept().as_deref(), Some(REFRESH));
+    let asked = Instant::now();
+    r.handle.submit(Job::SignOut { delete_copy: false });
+    let seen = r.wait("the sign-out", |e| said(e, &Status::SignedOut));
+    assert!(asked.elapsed() < Duration::from_secs(2), "heard {:?} after it was asked", asked.elapsed());
+    assert_eq!(r.kept(), None, "the keychain emptied");
+    let at = |s: &Status| seen.iter().position(|e| *e == status(s.clone()));
+    assert!(at(&Status::Offline) < at(&Status::SignedOut) && at(&Status::Offline).is_some(), "the trickle was a cut, then the sign-out: {seen:?}");
+}
+
 #[test]
 fn a_worker_with_nothing_to_ask_waits_on_its_channel() {
     let turns = Arc::new(AtomicU32::new(0));
