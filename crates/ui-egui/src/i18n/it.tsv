@@ -2370,3 +2370,6 @@ presence	Offline	Offline
 	You wrote that something is attached, but nothing is.	Hai scritto che qualcosa è allegato, ma non lo è.
 	{email}: {line}	{email}: {line}
 	This message is larger than the {size} this recipient accepts	Questo messaggio supera il limite di {size} di questo destinatario
+	Open this file?	Aprire questo file?
+	Opening it in a browser can run its scripts and load content from the internet.	Aprirlo in un browser può eseguire i suoi script e caricare contenuti da Internet.
+	It can run macros: open it only if you trust the sender.	Può eseguire macro: aprilo solo se ti fidi del mittente.

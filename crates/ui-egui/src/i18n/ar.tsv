@@ -2367,3 +2367,6 @@ presence	Offline	غير متصل
 	You wrote that something is attached, but nothing is.	كتبت أن هناك مرفقاً، ولكن لا يوجد شيء مرفق.
 	{email}: {line}	{email}: {line}
 	This message is larger than the {size} this recipient accepts	هذه الرسالة أكبر من {size} التي يقبلها هذا المستلم
+	Open this file?	فتح هذا الملف؟
+	Opening it in a browser can run its scripts and load content from the internet.	فتحه في متصفح قد يشغّل برامجه النصية ويحمّل محتوى من الإنترنت.
+	It can run macros: open it only if you trust the sender.	قد يشغّل وحدات ماكرو: افتحه فقط إذا كنت تثق بالمرسل.

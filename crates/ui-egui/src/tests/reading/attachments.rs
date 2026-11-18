@@ -106,6 +106,105 @@ impl Clocked {
     }
 }
 
+/// A message with a page, a macro document and a PDF attached, put in the sample's Inbox.
+fn files_to_check(a: &mut MailApp) -> MessageKey {
+    let raw = b"From: Zoe Park <zoe@studio.example>\r\nTo: riley@studio.example\r\nSubject: Files to check\r\nMessage-ID: <risky@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSee the files.\r\n--b\r\nContent-Type: text/html; name=\"page.html\"\r\nContent-Disposition: attachment; filename=\"page.html\"\r\nContent-Transfer-Encoding: base64\r\n\r\nPGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtbD4=\r\n--b\r\nContent-Type: application/vnd.ms-word.document.macroEnabled.12; name=\"budget.docm\"\r\nContent-Disposition: attachment; filename=\"budget.docm\"\r\nContent-Transfer-Encoding: base64\r\n\r\nUEsDBAo=\r\n--b\r\nContent-Type: application/pdf; name=\"report.pdf\"\r\nContent-Disposition: attachment; filename=\"report.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\nJVBERi0=\r\n--b--\r\n";
+    let store = a.session.store.clone().unwrap();
+    let mut inbox = store.load_folder("sample", "INBOX").unwrap();
+    let key = MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9902 };
+    inbox.messages.insert(0, quatrelle_engine::mime::summary_from_full(raw, key.clone(), Default::default(), raw.len() as u32, NOW));
+    store.save_folder("sample", "INBOX", &inbox).unwrap();
+    store.write_body(&key, raw).unwrap();
+    a.session.apply(MailEvent::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    key
+}
+
+/// A page whose scripts a browser would run, or a document whose macros would, asks first; a PDF
+/// opens at once, and a page is only handed to its program once the question is answered.
+#[test]
+fn a_page_or_a_macro_document_asks_before_it_opens() {
+    let (mut a, dir) = app("risky-attachment");
+    let ctx = egui::Context::default();
+    let key = files_to_check(&mut a);
+    a.run("list.open", json!({"key": key.to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    let at = |a: &MailApp, name: &str| {
+        a.session
+            .reading
+            .as_ref()
+            .and_then(|r| r.parsed.as_ref())
+            .and_then(|p| p.attachments.iter().find(|x| x.name == name))
+            .map(|x| x.index)
+            .unwrap_or_else(|| panic!("{name} is attached"))
+    };
+    let (page, macro_doc, pdf) = (at(&a, "page.html"), at(&a, "budget.docm"), at(&a, "report.pdf"));
+    // A page: asked first, and nothing handed to another program yet.
+    a.act(crate::Action::OpenAttachment(page));
+    match &a.ui.dialog {
+        Some(Dialog::RiskyAttachment { name, risk: quatrelle_engine::mime::OpenRisk::WebPage, .. }) => assert_eq!(name, "page.html"),
+        other => panic!("asked: {other:?}"),
+    }
+    assert!(a.session.notices.is_empty(), "nothing opened: {:?}", a.session.notices);
+    // The question's Open: the file goes to its program (which the test's refuses, and is said).
+    a.ui.dialog = None;
+    a.act(crate::Action::InWindow(key.clone(), Box::new(crate::Action::OpenAttachmentNow(page))));
+    assert!(a.session.notices.last().is_some_and(|n| n.text.contains("page.html could not be opened")), "{:?}", a.session.notices);
+    a.session.notices.clear();
+    // A macro document: its own warning.
+    a.act(crate::Action::OpenAttachment(macro_doc));
+    match &a.ui.dialog {
+        Some(Dialog::RiskyAttachment { name, risk: quatrelle_engine::mime::OpenRisk::Macros, .. }) => assert_eq!(name, "budget.docm"),
+        other => panic!("asked: {other:?}"),
+    }
+    a.ui.dialog = None;
+    // A PDF is no risk: it goes straight to its program.
+    a.act(crate::Action::OpenAttachment(pdf));
+    assert!(a.ui.dialog.is_none(), "no question for a PDF");
+    assert!(a.session.notices.last().is_some_and(|n| n.text.contains("report.pdf could not be opened")), "{:?}", a.session.notices);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Asked from a message's own window, the question shows in that window, not in the main one
+/// (which reads another message); its Open hands that window's message's page to its program.
+#[test]
+fn a_page_asks_in_the_message_window_it_is_opened_from() {
+    let (mut a, dir) = app("risky-attachment-window");
+    let key = files_to_check(&mut a);
+    let plain = a.session.list.iter().find(|m| !m.has_attachments).map(|m| m.key.clone()).unwrap();
+    a.run("message.popOut", json!({"key": key.to_id()}));
+    a.run("list.open", json!({"key": plain.to_id()}));
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let page = a
+        .session
+        .windows
+        .iter()
+        .find(|w| w.key == key)
+        .and_then(|w| w.parsed.as_ref())
+        .and_then(|p| p.attachments.iter().find(|x| x.name == "page.html"))
+        .map(|x| x.index)
+        .expect("the window's page");
+    a.act(crate::Action::InWindow(key.clone(), Box::new(crate::Action::OpenAttachment(page))));
+    assert!(a.ui.dialog.is_none(), "not asked in the main window: {:?}", a.ui.dialog);
+    match &a.ui.window_dialog {
+        Some((k, Dialog::RiskyAttachment { key: of, name, .. })) => {
+            assert_eq!((k, of), (&key, &key));
+            assert_eq!(name, "page.html");
+        }
+        other => panic!("asked in the window: {other:?}"),
+    }
+    assert!(a.session.notices.is_empty(), "nothing opened yet: {:?}", a.session.notices);
+    // Its Open, clicked in the window: the page goes to its program (which the test's refuses,
+    // and that is said).
+    let at = settled_text_at(&ctx, &mut a, "Open", size).expect("the question's Open");
+    click_at(&ctx, &mut a, at, 1, size);
+    assert!(a.ui.window_dialog.is_none(), "answered");
+    assert!(a.session.notices.iter().any(|n| n.text.contains("page.html could not be opened")), "{:?}", a.session.notices);
+    assert_eq!(a.session.reading.as_ref().map(|r| r.key.clone()), Some(plain), "the main window reads its own message");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A double-click on an attachment only opens it, as Outlook's: its first click showed the file
 /// in the reading pane, left there behind the app it opened in. A click alone still previews it,
 /// once the double-click time is out. Every kind: text, PDF, Office files, pictures, an attached

@@ -469,7 +469,7 @@ impl MailApp {
                     Err(e) => self.session.notice(e.to_string(), true),
                 }
             }
-            Action::SaveAttachment(i) | Action::OpenAttachment(i) if self.services.downloads() => {
+            Action::SaveAttachment(i) | Action::OpenAttachment(i) | Action::OpenAttachmentNow(i) if self.services.downloads() => {
                 let name = quatrelle_engine::mime::sanitize_filename(&self.attachment_name(i));
                 match self.session.attachment_bytes(i) {
                     Ok(b) => self.services.download(&name, &b),
@@ -613,12 +613,19 @@ impl MailApp {
                 }
             }
             Action::OpenAttachment(i) => {
-                let name = self.attachment_name(i);
-                if let Some(path) = self.attachment_to_temp(i, true)
-                    && let Err(e) = self.services.open_path(&path)
+                let name = quatrelle_engine::mime::sanitize_filename(&self.attachment_name(i));
+                // A page whose scripts would run, or a document whose macros would: asked first.
+                if let Some(risk) = quatrelle_engine::mime::open_risk(&name)
+                    && let Some(key) = self.session.reading.as_ref().map(|r| r.key.clone())
                 {
-                    self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true);
+                    self.ui.dialog = Some(Dialog::RiskyAttachment { key, index: i, name, risk });
+                    return;
                 }
+                self.open_attachment(i, &name);
+            }
+            Action::OpenAttachmentNow(i) => {
+                let name = quatrelle_engine::mime::sanitize_filename(&self.attachment_name(i));
+                self.open_attachment(i, &name);
             }
         }
     }
@@ -773,6 +780,15 @@ impl MailApp {
                 self.session.notice(e.to_string(), true);
                 None
             }
+        }
+    }
+
+    /// Hand an attachment to the program that opens it, saying so when that fails.
+    fn open_attachment(&mut self, i: usize, name: &str) {
+        if let Some(path) = self.attachment_to_temp(i, true)
+            && let Err(e) = self.services.open_path(&path)
+        {
+            self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true);
         }
     }
 

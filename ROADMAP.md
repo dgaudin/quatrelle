@@ -645,3 +645,11 @@ local-first, media-aware v1); the fuller request is
   that carries no attachment stops at the usual Send Check dialog, whose "Send anyway" still sends
   it. `compose.mailTips` answers the strip's state as a command; the sample mailbox shows the
   attachment reminder with no server at all.
+- **2026-11-18** — **Files from outside: a page or a macro document asks before it opens** (the rest
+  of gap #12): opening an attachment that is a web page (`.html`, `.htm`, `.xhtml`, `.svg`, `.mht`…)
+  or a document whose macros can run (`.docm`, `.xlsm`, `.pptm`, `.xlsb`, and the old binary `.doc`,
+  `.xls`, `.ppt`…) stops at a question saying what it can do — run the page's scripts and load what
+  it likes from the internet, or run the document's macros — and "Open" then hands it to its program
+  as before. Saving, and every other file (a PDF, a picture, a document without macros), is
+  unchanged; programs, scripts and shortcuts are still never opened at all. The question is drawn in
+  every interface language, and from a message's own window as from the reading pane.

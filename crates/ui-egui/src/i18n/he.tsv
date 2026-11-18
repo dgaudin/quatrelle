@@ -2367,3 +2367,6 @@ presence	Offline	לא מחובר
 	You wrote that something is attached, but nothing is.	כתבת שמשהו מצורף, אבל שום דבר לא מצורף.
 	{email}: {line}	{email}: {line}
 	This message is larger than the {size} this recipient accepts	הודעה זו גדולה מ{size} שהנמען הזה מקבל
+	Open this file?	לפתוח את הקובץ הזה?
+	Opening it in a browser can run its scripts and load content from the internet.	פתיחתו בדפדפן עלולה להריץ את הסקריפטים שלו ולטעון תוכן מהאינטרנט.
+	It can run macros: open it only if you trust the sender.	הוא עלול להריץ מאקרו: פתחו אותו רק אם אתם סומכים על השולח.

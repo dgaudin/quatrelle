@@ -4,6 +4,7 @@
 //! Dialogs: previews, calendars and people.
 
 use super::*;
+use quatrelle_engine::mime::OpenRisk;
 
 /// What a calendar or contacts file opened with Quatrelle holds, as `file.open` answers.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -148,6 +149,23 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, pics: &mut crate::r
                     acts.push(Action::Run("link.trustShareServer", json!({"server": server})));
                 }
                 acts.push(Action::OpenShare(link.clone()));
+                return false;
+            }
+            !cancel
+        }
+        Dialog::RiskyAttachment { key, index, name, risk } => {
+            ui.set_width(440.0);
+            title(ui, t, "Open this file?");
+            ui.label(RichText::new(name.as_str()).font(theme::bold(14.0)).color(t.text));
+            ui.add_space(4.0);
+            let why = match risk {
+                OpenRisk::WebPage => tl!("Opening it in a browser can run its scripts and load content from the internet."),
+                OpenRisk::Macros => tl!("It can run macros: open it only if you trust the sender."),
+            };
+            ui.add(egui::Label::new(RichText::new(why).color(t.dim)).wrap());
+            let (ok, cancel) = buttons(ui, t, "Open", true);
+            if ok {
+                acts.push(Action::InWindow(key.clone(), Box::new(Action::OpenAttachmentNow(*index))));
                 return false;
             }
             !cancel

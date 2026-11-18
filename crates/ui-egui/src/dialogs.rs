@@ -6,6 +6,7 @@
 use egui::{Margin, Rect, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Compose;
 use quatrelle_engine::Session;
+use quatrelle_engine::mime::OpenRisk;
 use quatrelle_engine::model::organize::{Condition, Rule, RuleAction};
 use quatrelle_engine::model::{AccountConfig, Folder, FolderRole, Security};
 use serde_json::json;
@@ -105,6 +106,15 @@ pub enum Dialog {
         server: String,
         path: String,
         always: bool,
+    },
+    /// Opening an attachment that a browser would run scripts from, or a document whose macros
+    /// would run: asked first, then opened (`Action::OpenAttachmentNow`).
+    RiskyAttachment {
+        /// The message it belongs to (the one its window shows, when it was asked from there).
+        key: quatrelle_engine::model::MessageKey,
+        index: usize,
+        name: String,
+        risk: OpenRisk,
     },
     /// A calendar or contacts file opened with Quatrelle: what it holds and where it would go,
     /// added once the user says so.
@@ -300,6 +310,7 @@ impl Dialog {
                     | Dialog::EmptySubject
                     | Dialog::SaveChanges
                     | Dialog::SendCheck(_)
+                    | Dialog::RiskyAttachment { .. }
             )
     }
 
@@ -313,7 +324,12 @@ impl Dialog {
     pub fn for_message_window(&self) -> bool {
         matches!(
             self,
-            Dialog::MoveTo { .. } | Dialog::ConfirmDelete { .. } | Dialog::NewCategory { .. } | Dialog::QuickStep(_) | Dialog::Preview { .. }
+            Dialog::MoveTo { .. }
+                | Dialog::ConfirmDelete { .. }
+                | Dialog::NewCategory { .. }
+                | Dialog::QuickStep(_)
+                | Dialog::Preview { .. }
+                | Dialog::RiskyAttachment { .. }
         )
     }
 
@@ -494,6 +510,7 @@ fn body(
         Dialog::ConfirmDeleteContact { .. }
         | Dialog::DeleteOccurrence { .. }
         | Dialog::OpenShare { .. }
+        | Dialog::RiskyAttachment { .. }
         | Dialog::AddFromFile(_)
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }

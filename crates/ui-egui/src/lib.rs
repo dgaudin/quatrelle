@@ -188,6 +188,8 @@ pub enum Action {
     /// `webex.createMeeting`'s params: the window waits for the answer, or says why not.
     ForWebex(u64, Value),
     OpenAttachment(usize),
+    /// Open an attachment whose page or macros `Action::OpenAttachment` asked about first.
+    OpenAttachmentNow(usize),
     SaveAttachment(usize),
     /// Open or save one of an appointment's or a contact's files.
     OpenItemFile(pim_dialogs::ItemFile),

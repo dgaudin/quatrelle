@@ -2371,3 +2371,6 @@ presence	Offline	离线
 	You wrote that something is attached, but nothing is.	您写的是有附件，但没有附件。
 	{email}: {line}	{email}: {line}
 	This message is larger than the {size} this recipient accepts	此邮件超过此收件人接受的 {size}
+	Open this file?	打开此文件？
+	Opening it in a browser can run its scripts and load content from the internet.	在浏览器中打开可能会运行其脚本并从互联网加载内容。
+	It can run macros: open it only if you trust the sender.	它可能会运行宏：仅在信任发件人时打开。

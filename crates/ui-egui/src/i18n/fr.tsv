@@ -2372,3 +2372,6 @@ presence	Offline	Hors ligne
 	You wrote that something is attached, but nothing is.	Vous avez écrit qu'un élément est joint, mais rien ne l'est.
 	{email}: {line}	{email} : {line}
 	This message is larger than the {size} this recipient accepts	Ce message dépasse les {size} que ce destinataire accepte
+	Open this file?	Ouvrir ce fichier ?
+	Opening it in a browser can run its scripts and load content from the internet.	L’ouvrir dans un navigateur peut exécuter ses scripts et charger du contenu depuis Internet.
+	It can run macros: open it only if you trust the sender.	Il peut exécuter des macros : ne l’ouvrez que si vous faites confiance à l’expéditeur.

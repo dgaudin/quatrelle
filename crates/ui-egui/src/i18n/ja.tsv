@@ -2368,3 +2368,6 @@ presence	Offline	オフライン
 	You wrote that something is attached, but nothing is.	添付ファイルがあると書かれていますが、何も添付されていません。
 	{email}: {line}	{email}: {line}
 	This message is larger than the {size} this recipient accepts	このメッセージは、この受信者が受け取れる {size} を超えています
+	Open this file?	このファイルを開きますか?
+	Opening it in a browser can run its scripts and load content from the internet.	ブラウザーで開くと、スクリプトが実行され、インターネットから内容が読み込まれることがあります。
+	It can run macros: open it only if you trust the sender.	マクロが実行されることがあります。送信者を信頼できる場合にのみ開いてください。

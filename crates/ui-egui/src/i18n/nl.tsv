@@ -2368,3 +2368,6 @@ presence	Offline	Offline
 	You wrote that something is attached, but nothing is.	U schreef dat er iets bijgevoegd is, maar er is niets bijgevoegd.
 	{email}: {line}	{email}: {line}
 	This message is larger than the {size} this recipient accepts	Dit bericht is groter dan de {size} die deze ontvanger accepteert
+	Open this file?	Dit bestand openen?
+	Opening it in a browser can run its scripts and load content from the internet.	Het in een browser openen kan de scripts ervan uitvoeren en inhoud van het internet laden.
+	It can run macros: open it only if you trust the sender.	Het kan macro’s uitvoeren: open het alleen als u de afzender vertrouwt.

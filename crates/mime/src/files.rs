@@ -164,6 +164,45 @@ pub fn runs_code(name: &str) -> bool {
     EXECUTABLE_EXTENSIONS.iter().any(|group| group.contains(&extension))
 }
 
+/// What opening an attachment in its usual program can do that looking at it can't: a page's
+/// scripts run and reach the internet, a document's macros run. A file that starts a program
+/// ([`runs_code`]) is never opened at all, so it is no mere risk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenRisk {
+    /// A page (or a drawing a browser shows): its scripts run and it can load what it likes.
+    WebPage,
+    /// A document whose macros run as it opens, or an old binary Office format carrying them.
+    Macros,
+}
+
+/// Why opening this attachment is worth asking about first, if it is. Only the last extension
+/// counts, as it does for the system that would open it; the name is cleaned first, so one that
+/// disguises its extension is read as it would be saved.
+pub fn open_risk(name: &str) -> Option<OpenRisk> {
+    let cleaned = sanitize_filename(name).to_ascii_lowercase();
+    let (_, extension) = cleaned.rsplit_once('.')?;
+    let extension = extension.trim();
+    if WEB_PAGE_EXTENSIONS.contains(&extension) {
+        Some(OpenRisk::WebPage)
+    } else if MACRO_EXTENSIONS.contains(&extension) {
+        Some(OpenRisk::Macros)
+    } else {
+        None
+    }
+}
+
+/// Extensions a browser opens as a page: what it shows can run scripts and load remote content
+/// (an SVG included: to a browser, a drawing is a document).
+const WEB_PAGE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "xht", "shtml", "shtm", "svg", "svgz", "mht", "mhtml"];
+
+/// Extensions of documents whose macros run on opening: Office's macro-enabled formats, the old
+/// binary Office formats that carry macros too, and the databases and publications whose code
+/// runs. Add-ins that run (`.xlam`, `.ppam`) are already never opened ([`runs_code`]).
+const MACRO_EXTENSIONS: &[&str] = &[
+    "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm", "doc", "dot", "xls", "xlt", "ppt", "pot", "pps", "vsd", "vss", "vst",
+    "mdb", "accdb", "pub",
+];
+
 /// File types: an extension (with its dot) and its MIME type. A type's first extension is the one an attachment
 /// sent without a name (or with a name without one) is saved with; the types after a type's own
 /// are other names senders use for it.
@@ -364,6 +403,25 @@ mod tests {
         ];
         for name in safe {
             assert!(!runs_code(name), "{name} should not count as code");
+        }
+    }
+
+    /// A page a browser would run scripts from, and a document whose macros run, ask first; an
+    /// ordinary document, a picture and a PDF don't, and what runs code is no mere risk.
+    #[test]
+    fn pages_and_macro_documents_ask_before_they_open() {
+        for name in ["invite.html", "Page.HTM", "plan.xhtml", "logo.svg", "drawing.SVGZ", "mail.mhtml", "photo\u{202E}gpj.svg"] {
+            assert_eq!(open_risk(name), Some(OpenRisk::WebPage), "{name}");
+        }
+        for name in
+            ["budget.docm", "BUDGET.DOCM", "letter.dotm", "sheet.xlsm", "book.xlsb", "deck.pptm", "notes.doc", "sums.xls", "talk.ppt", "base.accdb"]
+        {
+            assert_eq!(open_risk(name), Some(OpenRisk::Macros), "{name}");
+        }
+        for name in
+            ["report.pdf", "photo.png", "notes.txt", "minutes.docx", "sums.xlsx", "setup.exe", "macro.vbs", "print.html.exe", "no-extension", ""]
+        {
+            assert_eq!(open_risk(name), None, "{name}");
         }
     }
 
