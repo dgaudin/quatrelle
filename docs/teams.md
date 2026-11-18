@@ -414,8 +414,9 @@ They go with the text, the pictures first and then the files, each in the order 
 - **After a restart** (or Teams switched off and on again), a message whose files weren't all
   shared yet, or that has pictures and wasn't sent yet, isn't sent from what Quatrelle had kept of
   it: nothing of it is read, uploaded or shared. It shows Not sent, "A file is no longer there,
-  or has changed", says "Attach the files again to send it", and only **Delete** is offered. A
-  message of words alone goes on as before.
+  or has changed", says "Attach the files again to send it", and only **Delete** is offered. It
+  stays, its words with it, from one start to the next until you delete it. A message of words
+  alone goes on as before.
 
 **Files others shared.** A file card shows its name, size and where its link goes.
 
@@ -588,10 +589,11 @@ Quatrelle keeps well under Microsoft's limits, with one worker that makes one re
 | History of older messages | in the gaps, when nothing above is due |
 
 After a "too many requests" answer (429 or 503), nothing is asked until Microsoft's wait is over,
-then Quatrelle goes slower, and returns to its pace after an hour without one. A request takes two
-minutes at most (a server that answers slowly is taken for the network gone: Offline, tried again
-later). Switching Teams off or signing out stops all of it at once, a request already under way
-ending first.
+then Quatrelle goes slower, and returns to its pace after an hour without one. Each request ends
+within two minutes (a server that answers slowly is taken for the network gone: Offline, tried
+again later). Switching Teams off or signing out stops all of it, once what was under way has
+ended: a step may make a few requests in a row (reading a long list of members, signing in), each
+ending within two minutes.
 
 ### Not yet
 
