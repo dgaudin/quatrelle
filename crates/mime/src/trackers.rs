@@ -586,7 +586,7 @@ mod tests {
             let amp = tags(&|n| format!("https://img.example/{n}.png?x=1&amp;y=2"));
             reads.push((format!("`&amp;` alone, under {sheet:?}"), tokenized(|| drop(message(sheet, &amp))), 0));
             let same = tags(&|_| "https://img.example/a.png?x=1&#38;y=2".to_string());
-            reads.push((format!("the same address, under {sheet:?}"), tokenized(|| drop(message(sheet, &same))), 2));
+            reads.push((format!("the same address, under {sheet:?}"), tokenized(|| drop(message(sheet, &same))), 1));
             let distinct = tags(&|n| format!("https://img.example/{n}.png?x=1&#38;y=2"));
             reads.push((
                 format!("5,000 addresses, under {sheet:?}"),
