@@ -348,7 +348,8 @@ fn rows_downloaded_ahead_get_their_preview_from_the_source() {
     assert!(wanted(&s).is_empty(), "the two without a source wait");
     let preview = |s: &Session, uid| s.list.iter().find(|m| m.key == key(uid)).map(|m| s.preview_of(m).to_string()).unwrap_or_default();
     assert_eq!(preview(&s, 3), "The figures for week 3.", "the signature isn't part of it");
-    assert_eq!(preview(&s, 8), "Logo Banner First block");
+    // Its logo (`logo.png`, described "Logo") only names itself: left out of the preview.
+    assert_eq!(preview(&s, 8), "Banner First block");
     assert_eq!(preview(&s, 9), "");
     assert_eq!(preview(&s, 11), "From its listing");
     // Its source downloaded meanwhile: a minute later the row is looked at again.
