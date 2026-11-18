@@ -380,6 +380,9 @@ fn a_size_is_read_by_its_leading_digits() {
         assert_eq!(trackers(&tag).pictures, [o], "{tag}");
         assert_eq!(loaded(&message("", &tag)), Vec::<String>::new(), "{tag}");
     }
+    // A space before `%` doesn't make a share: `1 %` is 1 pixel, as a browser reads it.
+    let spaced = format!(r#"<img src="{o}" width="1 %">"#);
+    assert_eq!(trackers(&spaced).pictures, [o], "{spaced}");
     for size in [r#"width="1%""#, r#"width="13x""#, r#"width="x1""#] {
         let tag = format!(r#"<img src="https://img.example/a.png" {size}>"#);
         assert!(trackers(&tag).pictures.is_empty(), "{tag}");

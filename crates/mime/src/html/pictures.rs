@@ -211,7 +211,8 @@ fn tag_px(v: &str) -> Option<f32> {
     let whole = digits(v.get(sign..)?);
     let fraction = v.get(sign + whole..).filter(|r| r.starts_with('.')).map_or(0, |r| 1 + digits(r.get(1..).unwrap_or_default()));
     let number = v.get(..sign + whole + fraction)?;
-    let share = v.get(number.len()..).is_some_and(|r| r.trim_start().starts_with('%'));
+    // No space before it (`1 %` is 1 pixel, as a browser reads it).
+    let share = v.get(number.len()..).is_some_and(|r| r.starts_with('%'));
     if whole + fraction.saturating_sub(1) == 0 || share {
         return None;
     }

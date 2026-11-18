@@ -93,10 +93,9 @@ pub(super) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'
 pub(super) enum Found<'n> {
     /// A tag: its name (lowercase), whether it ends an element, where it is.
     Tag(&'n str, bool, std::ops::Range<usize>),
-    /// A comment, or what's read as one (`<!doctype …>`, `<?xml …>`, `</ x>`): where it is.
+    /// A comment, or what's read as one (`<!doctype …>`, `<?xml …>`, `</ x>`, and a CDATA
+    /// section, to its first `>` as outside an SVG picture): where it is.
     Comment(std::ops::Range<usize>),
-    /// A CDATA section (`<![CDATA[ … ]]>`), which an SVG picture's text can be: where it is.
-    Cdata(std::ops::Range<usize>),
 }
 
 /// Where a comment whose text starts at `from` ends (past its `-->` or `--!>`), each byte looked
@@ -128,7 +127,7 @@ enum Script {
     Twice,
 }
 
-/// The tags, comments and CDATA sections of `html` in order, as a browser's tokenizer finds them
+/// The tags and comments of `html` in order, as a browser's tokenizer finds them
 /// (without scripts, as the text converter and the layout read it): the text of the elements of
 /// [`RAW`] and all that follows a `<plaintext>` hold none; a tag ends at its `>` past quoted
 /// values, and one left open at the end isn't one (nor is anything after it). Given to `each`
@@ -195,15 +194,6 @@ pub(super) fn read(html: &str, mut each: impl FnMut(Found<'_>) -> bool) {
             }
             at = next;
             continue;
-        } else if bytes.get(lt..lt + 9) == Some(b"<![CDATA[") {
-            // To its `]]>` (a browser ends it at the first `>` outside an SVG picture: more is
-            // taken for text here, never less).
-            let next = past(lt + 9, "]]>").unwrap_or(html.len());
-            if !each(Found::Cdata(lt..next)) || next >= html.len() {
-                return;
-            }
-            at = next;
-            continue;
         } else {
             let named = |i: usize| bytes.get(i).is_some_and(u8::is_ascii_alphabetic);
             if matches!(bytes.get(lt + 1), Some(b'!' | b'?')) || (end && bytes.get(lt + 2).is_some() && !named(lt + 2)) {
@@ -254,7 +244,7 @@ pub(super) fn read(html: &str, mut each: impl FnMut(Found<'_>) -> bool) {
 pub(crate) fn tags(html: &str, mut each: impl FnMut(&str, bool, std::ops::Range<usize>) -> bool) {
     read(html, |found| match found {
         Found::Tag(name, end, range) => each(name, end, range),
-        Found::Comment(_) | Found::Cdata(_) => true,
+        Found::Comment(_) => true,
     });
 }
 
@@ -293,18 +283,28 @@ impl Depth {
     }
 }
 
+/// Elements around which the text converter's tree is no longer the tokenizer's alone: an SVG or
+/// MathML picture (its `<title>` and `<style>` are markup, its CDATA sections run to `]]>`), a
+/// CDATA section outside one (which ends at its first `>`), a template (which ignores the ends
+/// in it), and those past which a `</div>` isn't one.
+const DISAGREE: &[&[u8]] = &[b"<svg", b"<math", b"<![cdata[", b"<template", b"<select", b"<object", b"<applet", b"<marquee"];
+
 /// Whether `html` nests tables, or boxes, past what any mail does, counted as no reader of it can
 /// nest deeper: every table or box opened counts, wherever it's written but in a comment (in a
-/// `<noscript>`, which the text converter reads as markup; in an SVG picture's `<title>` or
-/// `<style>`, which aren't text there; in a script, a style sheet, a title, a value), and only
-/// the ends a browser surely reads close one (not one in a script's comment or a CDATA section).
-/// Counting too many only reads a harmless message flat.
+/// `<noscript>`, which the text converter reads as markup; in a script, a style sheet, a title,
+/// a value), and only the ends a browser surely reads close one (not one in a script's comment).
+/// With any of [`DISAGREE`] in it, an end or a comment seen here can be none for the text
+/// converter: every table or box opened counts then, comments too, and no end. Counting too many
+/// only reads a harmless message flat.
 pub(crate) fn too_deep(html: &str) -> bool {
     // Too few to nest that deep: looked at no further.
     let bytes = html.as_bytes();
     let count = |needle: &[u8]| bytes.windows(needle.len()).filter(|w| w.eq_ignore_ascii_case(needle)).count();
     if count(b"<table") <= MAX_TABLES && count(b"<div") + count(b"<blockquote") <= MAX_BOXES {
         return false;
+    }
+    if DISAGREE.iter().any(|tag| bytes.windows(tag.len()).any(|w| w.eq_ignore_ascii_case(tag))) {
+        return true;
     }
     let mut depth = Depth::default();
     // Up to where the tables and boxes opened are counted.
@@ -333,7 +333,7 @@ pub(crate) fn too_deep(html: &str) -> bool {
 /// `html` with nothing nested: each block's tags a line break, links, pictures and what marks
 /// words (bold, italic…) as they were, everything else left out but its text. The elements whose
 /// text is copied as it is (a style sheet, a script, a `<textarea>`…) keep their tags, for it to
-/// be read as text again; a CDATA section's text is written as text.
+/// be read as text again.
 pub(crate) fn flattened(html: &str) -> String {
     const KEPT: &[&str] = &[
         "a",
@@ -364,7 +364,7 @@ pub(crate) fn flattened(html: &str) -> String {
     let mut at = 0;
     read(html, |found| {
         let range = match &found {
-            Found::Tag(_, _, r) | Found::Comment(r) | Found::Cdata(r) => r.clone(),
+            Found::Tag(_, _, r) | Found::Comment(r) => r.clone(),
         };
         out.push_str(html.get(at..range.start).unwrap_or_default());
         match found {
@@ -373,7 +373,6 @@ pub(crate) fn flattened(html: &str) -> String {
             Found::Tag("td" | "th", ..) => out.push(' '),
             Found::Tag(..) => {}
             Found::Comment(_) => out.push_str(html.get(range.clone()).unwrap_or_default()),
-            Found::Cdata(_) => out.push_str(&html.get(range.clone()).unwrap_or_default().replace('<', "&lt;").replace('>', "&gt;")),
         }
         at = range.end;
         true
@@ -437,6 +436,28 @@ mod tests {
         assert!(!too_deep(&"<!--[if mso]><table><tr><td><![endif]--><div>x</div><!--[if mso]></td></tr></table><![endif]-->".repeat(500)));
     }
 
+    /// Found in review: where the text converter's tree isn't the tokenizer's alone, an end or a
+    /// comment this reading sees can be none for it, and tables nested past them went unseen: a
+    /// CDATA section outside an SVG picture, which ends at its first `>` (T1-1); an SVG picture's
+    /// `<title>`, which is markup there (T1-2); a `</table>` in a `<template>`, which is ignored
+    /// (T1-3); a `</div>` after an `<object>`, a `<marquee>`, an `<applet>` or in a `<select>`
+    /// (T1-4). With any of these in a message, every table or box opened counts, and no end.
+    #[test]
+    fn tables_where_the_readers_may_disagree_are_counted_whole() {
+        let tables = "<table><tr><td>".repeat(200);
+        let cases = [
+            ("T1-1", format!("<![CDATA[ > <style> ]]><!--</style>{tables}")),
+            ("T1-2", format!("<svg><title><style></title><!--</style>{tables}")),
+            ("T1-3", "<table><tr><td><template></table></template>".repeat(200)),
+            ("T1-4 object", "<div><object></div>".repeat(2100)),
+            ("T1-4 marquee", "<div><marquee></div>".repeat(2100)),
+            ("T1-4 applet", "<div><applet></div>".repeat(2100)),
+            ("T1-4 select", "<div><select></div>".repeat(2100)),
+        ];
+        let unseen: Vec<&str> = cases.iter().filter(|(_, html)| !too_deep(&format!("<p>x</p>{html}"))).map(|(what, _)| *what).collect();
+        assert!(unseen.is_empty(), "nesting not seen: {unseen:?}");
+    }
+
     /// Found in review: the end of each comment was looked for twice, `-->` and `--!>`, and the
     /// second ran to the end of the document when there was none: 4 MB of `<!---->` had some
     /// 10^12 bytes read, in each reading of a message. The document is looked through once.
@@ -452,7 +473,7 @@ mod tests {
     }
 
     /// … and read flat, what may be markup for the text converter isn't nested any more: the
-    /// text of an element kept as text again keeps its tags, and a CDATA section's is text.
+    /// text of an element kept as text again keeps its tags.
     #[test]
     fn text_that_may_be_markup_is_read_flat_and_quick() {
         let tables = r#"<table><tr><td><div><a href="https://x.example/a">link</a>"#.repeat(200_000 / 60);

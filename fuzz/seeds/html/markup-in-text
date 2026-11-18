@@ -5,3 +5,7 @@
 <table><tr><td><script><!--<script></script></td></tr></table></script>
 <table><tr><td><!--</td></tr></table>--><img src="https://t.example/o.gif?a=1&#38;b=2" alt=">" width="1x" style="width&#58;1px">
 <image src=a.png><img/src=b.png><template><img src=c.png></template><plaintext><table>
+<![CDATA[ > <style> ]]><!--</style><table><tr><td><table><tr><td>
+<svg><title><style></title><!--</style><table><tr><td><table><tr><td>
+<table><tr><td><template></table></template><table><tr><td><template></table></template>
+<div><object></div><div><marquee></div><div><applet></div><div><select></div><img src=d.png width="1 %">
