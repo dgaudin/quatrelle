@@ -233,6 +233,21 @@ fn a_saved_file_is_the_users_only() {
     assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
 }
 
+/// Review 1.5, files 7: a file saved is marked as come from the internet (Windows' Zone.Identifier,
+/// zone 3) by the worker as it makes it, whatever becomes of its answer afterwards: Office opens
+/// it in Protected View, wherever it is opened from.
+#[cfg(windows)]
+#[test]
+fn a_saved_file_is_marked_as_come_from_the_internet() {
+    let dir = Scratch::new("zone");
+    let mut r = started(one("plan.doc", b"bytes"), &dir);
+    ask(&mut r, G);
+    let path = saved(outcome(&mut r, G));
+    let zone = std::fs::read_to_string(format!("{}:Zone.Identifier", path.display())).unwrap();
+    assert!(zone.contains("ZoneId=3"), "{zone}");
+    assert_eq!(std::fs::read(&path).unwrap(), b"bytes", "the file itself as it came");
+}
+
 /// H3: the cap counted while reading, whatever the length says; nothing past what an answer says
 /// of its length is written; and whatever is refused leaves no file.
 #[test]

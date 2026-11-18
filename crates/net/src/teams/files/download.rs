@@ -7,7 +7,8 @@
 //! What the download says of a name is never read: the name is the attachment's own, made safe.
 //! The cap is counted while the body comes, whatever its length says, and nothing past what an
 //! answer says of its length is written. Whatever goes wrong (a refusal, the cap, the floor, a
-//! cancel, the disk, a panic) leaves no file.
+//! cancel, the disk, a panic) leaves no file. On Windows the file is marked as come from the
+//! internet as soon as it is made ([`mark_from_internet`]), whatever becomes of its answer.
 
 use std::cell::Cell;
 use std::fs::{File, OpenOptions};
@@ -85,6 +86,7 @@ fn fetch(
             disk.set(true);
             NetError::Io(e)
         })?;
+        mark_from_internet(&path);
         partial.0 = Some(path);
         Ok(Some(Out { file, disk: &disk, written: &written }))
     });
@@ -133,6 +135,18 @@ impl Write for Out<'_> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.file.flush().inspect_err(|_| self.disk.set(true))
+    }
+}
+
+/// Windows' mark that a file came from the internet (its `Zone.Identifier` stream, zone 3), as
+/// browsers and mail programs add, set before a byte of it is written: Office opens it in Protected
+/// View and SmartScreen checks a program before it runs, whoever opens it (Quatrelle, or the user
+/// in its folder). Best effort; nothing elsewhere (macOS's quarantine isn't set).
+fn mark_from_internet(path: &Path) {
+    if cfg!(windows) {
+        let mut stream = path.as_os_str().to_owned();
+        stream.push(":Zone.Identifier");
+        let _ = std::fs::write(stream, "[ZoneTransfer]\nZoneId=3\n");
     }
 }
 

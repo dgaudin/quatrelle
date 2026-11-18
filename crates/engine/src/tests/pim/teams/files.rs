@@ -412,6 +412,17 @@ fn teams_could_run_more_than_the_mails_attachments() {
     assert!(!crate::mime::runs_code("page.html") && !crate::mime::runs_code("macros.docm"));
 }
 
+/// Review 1.5, files 7: the Office formats before 2007 carry macros as the `m` ones do: a document,
+/// a template, a sheet, a deck or a show of them, or a rich text, is shown in its folder, never
+/// opened, whatever its capitals.
+#[test]
+fn a_legacy_office_file_is_shown_in_its_folder() {
+    for name in ["plan.doc", "plan.dot", "sheet.xls", "sheet.xlt", "deck.ppt", "deck.pot", "deck.pps", "letter.rtf", "old.doc"] {
+        assert!(teams_could_run(name), "{name}");
+        assert!(teams_could_run(&name.to_ascii_uppercase()), "{name}");
+    }
+}
+
 /// Final review, core I-1: the system's opener types a file whose extension it doesn't know by
 /// what it holds (on Linux a web page saved as `report.pdfx` opens in the browser): only a type
 /// Quatrelle knows, and that can't run, is opened; anything else is shown in its folder.
@@ -420,7 +431,7 @@ fn only_a_type_quatrelle_knows_is_opened() {
     for name in ["report.pdfx", "page.foo", "draw.qqq", "notes.zzz", "README", "archive.tar.gz", "plan.dwg", "a.b.c"] {
         assert!(teams_could_run(name), "shown in its folder: {name}");
     }
-    let known = ["report.pdf", "letter.docx", "photo.png", "notes.txt", "PHOTO.JPEG", "sheet.xlsx", "deck.pptx", "old.doc", "data.csv"];
+    let known = ["report.pdf", "letter.docx", "photo.png", "notes.txt", "PHOTO.JPEG", "sheet.xlsx", "deck.pptx", "data.csv"];
     for name in known.into_iter().chain(["song.mp3", "clip.mp4", "archive.zip", "invite.ics", "card.vcf", "text.odt", "scan.tiff"]) {
         assert!(!teams_could_run(name), "opened: {name}");
     }
