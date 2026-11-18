@@ -174,7 +174,8 @@ fn page_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
 
 /// Messages from senders the members don't have: the members read again, then the messages go.
 /// Should the members fail to come, the messages go all the same (in the copy already, they'd
-/// never be read as news again), their senders judged by what they say, and the failure is said.
+/// never be read as news again), their senders External (the members don't have them), and the
+/// failure is said.
 fn strangers_step(w: &mut Worker, chat: &str, now: Instant) -> Result<ReadStep> {
     if !w.may(Route::Members, now) {
         return Ok(ReadStep::Asked);

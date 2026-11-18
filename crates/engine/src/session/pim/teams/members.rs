@@ -5,7 +5,7 @@
 //! [`MAX_MEMBERS`] members. An id is matched whatever its capitals (Graph writes a user's id in
 //! either), the same way everywhere: a sender's name, a mention, "External", the user's own.
 
-use quatrelle_model::pim::teams::{MAX_MEMBERS, Member, Sender, is_internal, sender_internal};
+use quatrelle_model::pim::teams::{MAX_MEMBERS, Member, Sender, is_internal};
 
 use super::*;
 
@@ -40,14 +40,12 @@ impl ChatMembers {
         self.list.iter()
     }
 
-    /// Whether a message's sender is of the organisation `tenant`: by their membership when
-    /// they're a member, else by what the message says of them.
+    /// Whether a message's sender is of the organisation `tenant`: by their membership alone, as
+    /// the model's `sender_internal` judges them. One the members don't have (a guest who left,
+    /// anyone while the members aren't known) is outside, whatever the message says of them.
     pub fn sender_internal(&self, sender: &Sender, tenant: &str) -> bool {
         match sender {
-            Sender::User { id, .. } => match self.get(id) {
-                Some(m) => is_internal(m, tenant),
-                None => sender_internal(sender, &[], tenant),
-            },
+            Sender::User { id, .. } => self.get(id).is_some_and(|m| is_internal(m, tenant)),
             _ => false,
         }
     }

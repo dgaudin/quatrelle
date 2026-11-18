@@ -6,7 +6,8 @@
 //!
 //! A row says who as the chat's members do: its name ([`row_name`]), "External" when a member
 //! isn't proven of the organisation, and its last line's sender judged by
-//! [`sender_internal`] (a sender the members don't have was looked for among them before).
+//! [`sender_internal`] (a sender the members don't have was looked for among them before, and is
+//! External if they still don't; the user's own last line never is).
 //! The open chat's members and link go too, for its header, its mentions and "Open in Teams":
 //! when it's opened, and again when they change. The link is Teams' own to the conversation, built
 //! ([`built_chat_link`]); Graph's `webUrl` only for a chat it can't be built for.
@@ -111,7 +112,7 @@ fn row_of(r: &ChatRecord, me: &str, tenant: &str) -> ChatRow {
         name: row_name(c, me),
         kind: c.kind.clone(),
         last_line: last_line(c, me),
-        last_external: c.preview.as_ref().is_some_and(|p| !matches!(p.sender, Sender::Nobody) && !sender_internal(&p.sender, &c.members, tenant)),
+        last_external: c.preview.as_ref().is_some_and(|p| theirs(&p.sender, me) && !sender_internal(&p.sender, &c.members, tenant)),
         at: c.last_activity,
         unread,
         hidden: c.hidden,

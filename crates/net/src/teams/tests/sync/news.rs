@@ -232,6 +232,36 @@ fn an_unreadable_chats_new_preview_is_news_once() {
     assert!(r.row(GROUP).last_line.contains("Yes"), "{:?}", r.row(GROUP));
 }
 
+/// Security review 1.5 (content n° 1): a guest wrote, then left the chat; the members are read
+/// again since (a newcomer's message), so they no longer have the guest. The guest's next message
+/// says they're an `aadUser` of the tenant (as Graph says of a guest): External all the same, in
+/// the news and on the row's last line.
+#[test]
+fn a_guest_who_left_is_still_external() {
+    let mut g = group(GROUP, Some("Agenda"), T0);
+    g.members.push(FakeUser::new("u-gale", "Gale Stone"));
+    let mut teams = teams_with(vec![g]);
+    teams.guests.push("u-gale".into());
+    let mut r = run(teams);
+    let members = r.hits("members");
+    r.fake(|t| {
+        let c = t.chat_mut(GROUP).unwrap();
+        c.members.retain(|u| u.id != "u-gale");
+        c.members.push(FakeUser::new("u-ivy", "Ivy Moss"));
+    });
+    write(&r, GROUP, "u-ivy", NOW + MINUTE, "<p>Hi, I'm new</p>", |_| {});
+    r.turns(Duration::from_secs(11));
+    assert_eq!(r.hits("members"), members + 1, "the members read again: the guest has left");
+    let tenant = r.fake(|t| t.tenant.clone());
+    let gale = json!({"user": {"id": "u-gale", "displayName": "Gale Stone", "userIdentityType": "aadUser", "tenantId": tenant}});
+    let from = r.events().len();
+    write(&r, GROUP, "u-gale", NOW + 2 * MINUTE, "<p>Hello again</p>", |m| m.from_json = Some(gale));
+    until_news(&mut r, from, GROUP);
+    let said = news(&r, from);
+    assert!(matches!(said.as_slice(), [n] if n.sender == "Gale Stone" && n.external), "{said:?}");
+    assert!(r.row(GROUP).last_external, "{:?}", r.row(GROUP));
+}
+
 /// A chat Graph won't serve, whose new last message is from someone the members don't have: the
 /// members are read again before it's said, and they say who that is (a guest, though the
 /// message says they're of the organisation).

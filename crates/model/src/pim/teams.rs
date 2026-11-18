@@ -416,14 +416,12 @@ pub fn mentionable(m: &Member, tenant: &str) -> bool {
 }
 
 /// Whether a message's sender is of the organisation `tenant`: by their membership of the chat
-/// when they're a member, else by what the message says (an `aadUser` of that tenant). An
-/// application or no one isn't.
+/// alone ([`is_internal`]). One the `members` don't have is outside whatever the message says of
+/// them: a guest is an `aadUser` of the tenant too, and one who left is no longer a member; so is
+/// everyone while the members couldn't be read. An application or no one isn't.
 pub fn sender_internal(s: &Sender, members: &[Member], tenant: &str) -> bool {
-    let Sender::User { id, identity_type, tenant_id, .. } = s else { return false };
-    if let Some(m) = members.iter().find(|m| m.user_id.eq_ignore_ascii_case(id)) {
-        return is_internal(m, tenant);
-    }
-    identity_type.as_deref() == Some("aadUser") && !tenant.is_empty() && tenant_id.as_deref().is_some_and(|t| t.eq_ignore_ascii_case(tenant))
+    let Sender::User { id, .. } = s else { return false };
+    members.iter().find(|m| m.user_id.eq_ignore_ascii_case(id)).is_some_and(|m| is_internal(m, tenant))
 }
 
 /// The name a chat is listed by, `me` being the user's own id: a one-to-one chat's other person; a

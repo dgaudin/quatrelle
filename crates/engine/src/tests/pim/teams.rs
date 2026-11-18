@@ -759,3 +759,24 @@ fn a_member_is_found_by_id_in_any_case() {
     open(&mut s, "19:chat1@thread.v2");
     assert!(s.teams.member("u-9").is_none(), "forgotten with the chat");
 }
+
+/// Security review 1.5 (content n° 1): a sender the open chat's members don't have is External,
+/// whatever the message says of them (an `aadUser` of the tenant, as a guest who left is), and so
+/// is everyone while the members aren't known; a member is judged by their membership.
+#[test]
+fn a_sender_the_members_dont_have_is_external() {
+    let tenant = "11111111-2222-3333-4444-000000000001";
+    let says_internal = |id: &str| teams::Sender::User {
+        id: id.into(),
+        name: "Gale Stone".into(),
+        identity_type: Some("aadUser".into()),
+        tenant_id: Some(tenant.into()),
+    };
+    let mut s = signed_in(vec![row(1, 10)]);
+    open(&mut s, "19:chat1@thread.v2");
+    assert!(!s.teams.members().sender_internal(&says_internal("u-gale"), tenant), "the members not known yet");
+    let colleague = teams::Member { tenant_id: Some(tenant.into()), ..member(1) };
+    s.apply(members_event("19:chat1@thread.v2", vec![colleague], true));
+    assert!(s.teams.members().sender_internal(&says_internal("U-1"), tenant), "a member of the organisation");
+    assert!(!s.teams.members().sender_internal(&says_internal("u-gale"), tenant), "no longer among the members");
+}

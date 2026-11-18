@@ -52,15 +52,20 @@ fn internal_only_when_proven_so() {
     assert!(!is_internal(&m("aadUserConversationMember", Some(""), &[]), ""), "no tenant known proves nothing");
 }
 
+/// Security review 1.5 (content n° 1): a sender the members don't have is External, whatever the
+/// message says of them: a guest of the tenant is an `aadUser` of it too, and one who left the
+/// chat is no longer among its members; nor is anyone while the members couldn't be read.
 #[test]
-fn a_stranger_not_in_the_members_is_external_unless_an_aad_user_of_the_tenant() {
+fn a_sender_not_among_the_members_is_external_whatever_the_message_says() {
     let u = |t: Option<&str>, kind: Option<&str>| Sender::User {
         id: "x".into(),
         name: "X".into(),
         identity_type: kind.map(Into::into),
         tenant_id: t.map(Into::into),
     };
-    assert!(sender_internal(&u(Some("t-1"), Some("aadUser")), &[], "t-1"));
+    assert!(!sender_internal(&u(Some("t-1"), Some("aadUser")), &[], "t-1"), "the members unknown");
+    let gone_guest = u(Some("t-1"), Some("aadUser"));
+    assert!(!sender_internal(&gone_guest, &[member("a", "Ana"), member("b", "Bruno")], "t-1"), "no longer a member");
     assert!(!sender_internal(&u(Some("t-1"), Some("anonymousGuest")), &[], "t-1"));
     assert!(!sender_internal(&u(None, Some("aadUser")), &[], "t-1"));
     assert!(!sender_internal(&Sender::App { id: "a".into(), name: "Bot".into() }, &[], "t-1"));
