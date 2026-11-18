@@ -27,7 +27,8 @@ fn links_lose_their_tags_and_wrappers() {
 /// goes is still told, for showing.
 #[test]
 fn links_checked_when_clicked_open_through_their_check() {
-    let safe = "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fdocs.example%2Fplan%3Fv%3D2%26utm_campaign%3Dq3&data=05%7C01&reserved=0";
+    let safe =
+        "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fdocs.example%2Fplan%3Fv%3D2%26utm_campaign%3Dq3&data=05%7C01&reserved=0";
     let defended = "https://urldefense.com/v3/__https://portal.example/login__;!!abc$";
     assert_eq!(clean_link(safe), safe);
     assert_eq!(clean_link(defended), defended);
@@ -250,11 +251,7 @@ fn many_pictures_cost_a_few_reads_of_their_addresses() {
         let same = tags(&|_| "https://img.example/a.png?x=1&#38;y=2".to_string());
         reads.push((format!("the same address, under {sheet:?}"), tokenized(|| drop(message(sheet, &same))), 1));
         let distinct = tags(&|n| format!("https://img.example/{n}.png?x=1&#38;y=2"));
-        reads.push((
-            format!("5,000 addresses, under {sheet:?}"),
-            tokenized(|| drop(message(sheet, &distinct))),
-            crate::html::pictures::MAX_DECODED,
-        ));
+        reads.push((format!("5,000 addresses, under {sheet:?}"), tokenized(|| drop(message(sheet, &distinct))), crate::html::pictures::MAX_DECODED));
     }
     // The trackers are the pictures listed that report back (each tag of a picture listed is
     // asked, so every address is read): no more reads than a message's.
@@ -342,7 +339,6 @@ fn pictures_no_browser_loads_are_never_asked_for() {
         format!("<textarea>{o}</textarea>"),
         format!("<style>/* {o} */</style>"),
         format!("<title>{o}</title>"),
-        format!("<noscript>{o}</noscript>"),
         format!("<template><p>{o}</p></template>"),
         format!("<p title='{o}'>x</p>"),
         format!("<!doctype {o}"),
@@ -357,6 +353,68 @@ fn pictures_no_browser_loads_are_never_asked_for() {
         crate::html_images(r#"<!--><img src=a.png><p alt='>'><img src=b.png><script>x</script><IMAGE SRC=c.png><img/src=d.png>"#),
         ["a.png", "b.png", "c.png", "d.png"]
     );
+}
+
+/// Found in review: past the 512 values the tokenizer reads for a message, an address written
+/// with a reference (`&#38;`) wasn't read in the message as it came, matched none of the pictures
+/// listed, and its tag wasn't asked: a pixel sized `width:1px !important; width:300px` under a
+/// style sheet was asked for. A picture whose address can't be read any more is taken for a
+/// tracking picture.
+#[test]
+fn a_pixel_past_the_values_read_is_held_back() {
+    let decoys: String = (0..512).map(|n| format!("<img src=\"https://img.example/d.png\" style=\"color:&#35;{n:06}\">")).collect();
+    let pixel = "<img src=\"https://t.example/o.gif?a=1&#38;b=2\" style=\"width:1px !important; width:300px\">";
+    for sheet in ["", "<style>img{border:0}</style>"] {
+        let p = message(sheet, &format!("{decoys}{pixel}"));
+        assert!(!loaded(&p).iter().any(|s| s.starts_with("https://t.example/")), "under {sheet:?}: {:?}", loaded(&p));
+    }
+}
+
+/// Found in review: a size a browser reads by its leading digits (`1x`, `1em`) wasn't read, and
+/// the pixel was asked for. A share of the space (`1%`) isn't a size in pixels.
+#[test]
+fn a_size_is_read_by_its_leading_digits() {
+    let o = "https://t.example/o.gif";
+    for size in [r#"width="1x" height="1x""#, r#"width="1em""#, r#"height="1.5""#, r#"width=" 2 px""#, r#"height="0pt""#] {
+        let tag = format!(r#"<img src="{o}" {size}>"#);
+        assert_eq!(trackers(&tag).pictures, [o], "{tag}");
+        assert_eq!(loaded(&message("", &tag)), Vec::<String>::new(), "{tag}");
+    }
+    for size in [r#"width="1%""#, r#"width="13x""#, r#"width="x1""#] {
+        let tag = format!(r#"<img src="https://img.example/a.png" {size}>"#);
+        assert!(trackers(&tag).pictures.is_empty(), "{tag}");
+    }
+}
+
+/// Mail as Outlook and others write it loses nothing to the reading of its tags: its conditional
+/// comments, `<o:p>`, a `<noscript>` with a picture (read without scripts, as the text
+/// converter reads it), and a signature whose pictures aren't loaded keep their pictures, their
+/// sizes and their titles.
+#[test]
+fn ordinary_mail_keeps_its_pictures_and_titles() {
+    let body = r#"<!--[if gte mso 9]><xml><o:OfficeDocumentSettings><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->
+<h1>Quarterly news</h1>
+<!--[if !mso]><!--><img src="https://img.example/logo.png" alt="Contoso"><!--<![endif]-->
+<![if !vml]><img src="https://img.example/vml.png" width="300" alt="Banner"><![endif]>
+<p class=MsoNormal>Hello<o:p>&nbsp;</o:p></p>
+<p class=MsoNormal><b><span style='font-size:20.0pt;font-family:"Segoe UI"'>Big title</span></b><o:p></o:p></p>
+<noscript><img src="https://img.example/ns.png" alt="Without scripts"></noscript>
+<table><tr><td><img src="https://img.example/sig.png" width="120" height="40" alt="Ana Lima"></td><td><b>Ana Lima</b><br>Contoso</td></tr></table>"#;
+    let shown: Vec<String> = ["logo", "vml", "ns", "sig"].iter().map(|f| format!("https://img.example/{f}.png")).collect();
+    for sheet in ["", "<style>p.MsoNormal{margin:0}</style>"] {
+        let p = message(sheet, body);
+        assert_eq!((&p.images, &p.trackers.pictures, loaded(&p)), (&shown, &Vec::new(), shown.clone()), "under {sheet:?}");
+        let spans: Vec<&crate::Span> = p.rich.iter().flatten().collect();
+        for src in &shown {
+            assert!(spans.iter().any(|s| s.image.as_ref() == Some(src)), "{src} has its place, under {sheet:?}: {spans:?}");
+        }
+        let sig = spans.iter().find(|s| s.image.as_deref() == Some("https://img.example/sig.png"));
+        assert_eq!(sig.and_then(|s| s.image_size).and_then(|s| s.width), Some(crate::layout::Width::Px(120)), "under {sheet:?}");
+        // A heading, and a title Word sized (its size and weight kept).
+        assert!(spans.iter().any(|s| s.heading == 1 && s.text.contains("Quarterly news")), "under {sheet:?}: {spans:?}");
+        assert!(spans.iter().any(|s| s.bold && s.size == Some(20) && s.text.contains("Big title")), "under {sheet:?}: {spans:?}");
+        assert!(!crate::html::too_deep(body));
+    }
 }
 
 #[test]

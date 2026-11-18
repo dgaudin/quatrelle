@@ -27,29 +27,19 @@ const SRC_MAX: usize = 4096;
 /// tokenizer, in all the readings of the message (as it came and once its style sheet is on its
 /// elements), and [`MAX_DECODED`] at most: each `&` cost a tokenizer of its own, three times
 /// over, and thousands of pictures took two and a half times as long to read. The sizes and
-/// styles a tracking picture is told by are read the same way ([`Addresses::value`]).
+/// styles a tracking picture is told by are read the same way. One that can't be read any more
+/// (past [`MAX_DECODED`]) is unread: its picture is taken for a tracking picture.
 #[derive(Default)]
 pub(crate) struct Addresses {
     read: HashMap<String, Option<String>>,
 }
 
 impl Addresses {
-    /// The address written `raw` in its tag (out of its quotes), as a browser reads it.
-    pub(crate) fn read(&mut self, raw: &str) -> String {
-        self.read_with(raw, layout::first_attr_value)
-    }
-
-    /// The value written `raw` in a tag (out of its quotes), as a browser reads it; `None` when it
-    /// holds a character reference that wasn't read (past [`MAX_DECODED`], too long, or one the
-    /// tokenizer couldn't read).
+    /// The value written `raw` in a tag (out of its quotes: an address, a size, a style), as a
+    /// browser reads it; `None` when it holds a character reference that wasn't read (past
+    /// [`MAX_DECODED`], too long, or one the tokenizer couldn't read).
     pub(crate) fn value(&mut self, raw: &str) -> Option<String> {
         self.value_with(raw, layout::first_attr_value)
-    }
-
-    /// [`Addresses::read`], `decode` reading the attribute it's given (`None`: it couldn't, and
-    /// the `&amp;` alone is read).
-    fn read_with(&mut self, raw: &str, decode: impl FnOnce(&str) -> Option<String>) -> String {
-        self.value_with(raw, decode).unwrap_or_else(|| raw.trim().replace("&amp;", "&"))
     }
 
     /// [`Addresses::value`], `decode` reading the attribute it's given.
@@ -115,11 +105,28 @@ pub(crate) struct Pictures {
 
 impl Pictures {
     /// The `<img>`s of `html`: their addresses listed (when `list`, up to [`MAX_PICTURES`]), and
-    /// each tag of an address listed asked whether it's a tracking picture.
+    /// each tag of an address listed asked whether it's a tracking picture. An address that can't
+    /// be read any more (past [`MAX_DECODED`]) is a tracking picture's: listed so; in a reading
+    /// that lists none, it's one of those listed, but which isn't known, and all those whose tag
+    /// isn't read there are held back (512 values to read before it, and a pixel sized
+    /// `width:1px !important; width:300px` under a style sheet was asked for).
     pub(crate) fn read(&mut self, html: &str, list: bool) {
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut unread = false;
         img_tags(html, |tag, _| {
-            let Some(src) = tag_attr(tag, "src").map(|s| self.addresses.read(s)) else { return true };
-            if src.is_empty() || src.len() >= SRC_MAX || self.pixels.contains(&src) {
+            let Some(raw) = tag_attr(tag, "src") else { return true };
+            let Some(src) = self.addresses.value(raw) else {
+                unread = true;
+                let folded = raw.trim().replace("&amp;", "&");
+                if list && !folded.is_empty() && folded.len() < SRC_MAX && (self.images.contains(&folded) || self.images.len() < MAX_PICTURES) {
+                    if !self.images.contains(&folded) {
+                        self.images.push(folded.clone());
+                    }
+                    self.pixels.insert(folded);
+                }
+                return true;
+            };
+            if src.is_empty() || src.len() >= SRC_MAX {
                 return true;
             }
             if !self.images.contains(&src) {
@@ -128,11 +135,18 @@ impl Pictures {
                 }
                 self.images.push(src.clone());
             }
-            if self.tracks(tag, &src) {
+            if !list && !seen.contains(&src) {
+                seen.insert(src.clone());
+            }
+            if !self.pixels.contains(&src) && self.tracks(tag, &src) {
                 self.pixels.insert(src);
             }
             true
         });
+        if unread && !list {
+            let unseen: Vec<String> = self.images.iter().filter(|s| !seen.contains(*s)).cloned().collect();
+            self.pixels.extend(unseen);
+        }
     }
 
     /// The pictures behind a layout's boxes (`behind`), listed after the others (up to
@@ -182,9 +196,26 @@ pub(crate) fn tiny_picture(tag: &str) -> bool {
 /// with `style="width:28px"`, which a browser shows 28 pixels wide, unlike [`picture_sizes`]);
 /// and one side is enough (a line 600 by 1 is taken for one too).
 pub(crate) fn tiny_size(width: Option<&str>, height: Option<&str>, style: &[css::Decl]) -> bool {
-    let attr = |v: Option<&str>| v.is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
+    let attr = |v: Option<&str>| v.and_then(tag_px).is_some_and(|n| n <= 2.0);
     let css = style.iter().any(|d| matches!(d.prop.as_str(), "width" | "height" | "max-width" | "max-height") && tiny_length(&d.value));
     attr(width) || attr(height) || css
+}
+
+/// A size written in a tag (`width="1"`) as a browser reads it, by its leading digits (`1x`,
+/// `1em` and `1.5` are 1 and 1.5 pixels; `1x` was read as nothing, and the pixel was asked for);
+/// `None` without one, or for a share of the space (`1%`).
+fn tag_px(v: &str) -> Option<f32> {
+    let v = v.trim_start();
+    let sign = usize::from(v.starts_with(['+', '-']));
+    let digits = |s: &str| s.bytes().take_while(u8::is_ascii_digit).count();
+    let whole = digits(v.get(sign..)?);
+    let fraction = v.get(sign + whole..).filter(|r| r.starts_with('.')).map_or(0, |r| 1 + digits(r.get(1..).unwrap_or_default()));
+    let number = v.get(..sign + whole + fraction)?;
+    let share = v.get(number.len()..).is_some_and(|r| r.trim_start().starts_with('%'));
+    if whole + fraction.saturating_sub(1) == 0 || share {
+        return None;
+    }
+    number.parse::<f32>().ok()
 }
 
 /// A CSS length of 2 pixels or less, or of nothing in any unit (`0%`, `0vw`, which aren't read as
@@ -201,16 +232,17 @@ fn tiny_length(v: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// An address the tokenizer couldn't read (a panic in it, which [`layout::first_attr_value`]
-    /// catches) has its `&amp;` alone read, as before the tokenizer read them: a sane address, the
-    /// same in every reading of the message.
+    /// A value the tokenizer couldn't read (a panic in it, which [`layout::first_attr_value`]
+    /// catches) is unread, as one past [`MAX_DECODED`] (its picture is taken for a tracking
+    /// picture), in every reading of the message; `&amp;` alone is read without it.
     #[test]
-    fn an_address_the_tokenizer_cant_read_has_its_amp_read() {
+    fn a_value_the_tokenizer_cant_read_is_unread() {
         let raw = " https://t.example/o.gif?a=1&#38;b=2&amp;c=3 ";
         let mut a = Addresses::default();
-        assert_eq!(a.read_with(raw, |_| None), "https://t.example/o.gif?a=1&#38;b=2&c=3");
-        assert_eq!(a.read(raw), "https://t.example/o.gif?a=1&#38;b=2&c=3", "kept so");
-        assert_eq!(Addresses::default().read(raw), "https://t.example/o.gif?a=1&b=2&c=3", "read by the tokenizer");
+        assert_eq!(a.value_with(raw, |_| None), None);
+        assert_eq!(a.value(raw), None, "kept so");
+        assert_eq!(Addresses::default().value(raw).as_deref(), Some("https://t.example/o.gif?a=1&b=2&c=3"), "read by the tokenizer");
+        assert_eq!(Addresses::default().value(" https://t.example/o.gif?a=1&amp;c=3").as_deref(), Some("https://t.example/o.gif?a=1&c=3"));
         assert_eq!(layout::first_attr_value("<i a=\"x&quest;y\">").as_deref(), Some("x?y"));
     }
 }
