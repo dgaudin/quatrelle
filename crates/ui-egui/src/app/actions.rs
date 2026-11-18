@@ -663,9 +663,10 @@ impl MailApp {
     }
 
     /// Follow a link from a message: only web pages and mail addresses, never local files or
-    /// other schemes. A web address its cleaning changed (out of a wrapper, its tracking left out)
-    /// opens only if a browser may be handed it ([`launchable_link`]): nothing looked at it as the
-    /// message wrote it. One opened as written goes as it always did.
+    /// other schemes. A web address its cleaning took to another host (out of a wrapper) opens
+    /// only if a browser may be handed it ([`launchable_link`]): nothing looked at it as the
+    /// message wrote it. One on the host written (as written, or its tracking left out) goes as it
+    /// always did.
     ///
     /// [`launchable_link`]: quatrelle_engine::model::ical::launchable_link
     pub(crate) fn open_link(&mut self, url: &str) {
@@ -687,7 +688,7 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::OpenShare { link: share, server, path, always: false });
             }
         } else if (lower.starts_with("https://") || lower.starts_with("http://"))
-            && u != url.trim()
+            && !same_host(u, url)
             && !quatrelle_engine::model::ical::launchable_link(u)
         {
             self.session.notice(tf!("Links like {link} aren't opened", link = widgets::shorten(u, 40)), true);
@@ -791,4 +792,10 @@ impl MailApp {
         let all: Vec<usize> = r.parsed.as_ref().map(|p| p.attachments.iter().filter(|a| !a.inline).map(|a| a.index).collect()).unwrap_or_default();
         self.ui.attachment_selected = Some((r.key.clone(), all));
     }
+}
+
+/// Whether two web addresses are on the same host (none read of either counts as the same).
+fn same_host(a: &str, b: &str) -> bool {
+    let host = |s: &str| quatrelle_engine::model::addr::trust::url_host(s).map(|h| h.to_ascii_lowercase());
+    host(a) == host(b)
 }

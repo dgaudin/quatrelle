@@ -134,17 +134,18 @@ fn a_cleaned_link_opens_only_if_a_browser_may_be_handed_it() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// The mail opens the links it opened before: only one its wrapper hid (links cleaned) is held to
-/// what a browser may be handed. A host with `_` (an intranet's) and an IPv6 address open, links
-/// cleaned or not; written as it is, an address opens as it did, user information and all.
+/// The mail opens the links it opened before: only one its wrapper hid (links cleaned: another
+/// host than written) is held to what a browser may be handed. A host with `_` (an intranet's) and
+/// an IPv6 address open, links cleaned or not, and one whose tracking only was left out opens
+/// without it; written as it is, an address opens as it did, user information and all.
 #[test]
 fn a_mail_link_not_cleaned_away_opens_as_before() {
     let (mut a, dir, o) = launching("link-as-before", &[], false);
     a.session.prefs.clean_links = true;
-    for url in ["https://intranet_host.example/page", "https://[2001:db8::1]/page"] {
+    for url in ["https://intranet_host.example/page", "https://[2001:db8::1]/page", "https://intranet_host.example/?utm_source=x"] {
         a.act(crate::Action::OpenUrl(url.into()));
     }
-    assert_eq!(opened(&o), ["url https://intranet_host.example/page", "url https://[2001:db8::1]/page"]);
+    assert_eq!(opened(&o), ["url https://intranet_host.example/page", "url https://[2001:db8::1]/page", "url https://intranet_host.example/"]);
     a.session.prefs.clean_links = false;
     o.borrow_mut().clear();
     a.act(crate::Action::OpenUrl("https://banque.example@piege.example/".into()));
