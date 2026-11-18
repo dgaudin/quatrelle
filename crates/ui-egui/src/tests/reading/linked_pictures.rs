@@ -190,8 +190,8 @@ fn a_big_picture_not_shown_says_what_it_shows() {
 /// table out): their room is kept — a column 32 wide, a gap 25 high — and nothing is drawn in it,
 /// neither `[spacer-FFFFFF]` across the gap nor a frame down the column, nor a bubble under the
 /// pointer. A picture described in words keeps its placeholder, and so does one whose
-/// description only repeats its file's name when it fits in its place (`[4321]`, a phone number
-/// in 89 by 22).
+/// description only repeats its file's name when it fits in its place, across and down (`[4321]`,
+/// a phone number in 89 by 22); in a rule 6 high it's not written, and the rule keeps its room.
 #[test]
 fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     let spacer = "https://cdn.example/img/spacer-FFFFFF.jpg";
@@ -201,7 +201,8 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
          <td>After</td></tr></table>\
          <p>Above</p><p><img src=\"{spacer}\" width=\"522\" height=\"25\" alt=\"spacer-FFFFFF\"></p><p>Below</p>\
          <p><img src=\"https://cdn.example/img/hall.jpg\" width=\"180\" height=\"90\" alt=\"Grande salle\"></p>\
-         <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"></p>"
+         <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"></p>\
+         <p>Over</p><p><img src=\"https://cdn.example/img/rule-grey.gif\" width=\"672\" height=\"6\" alt=\"rule-grey\"></p><p>Under</p>"
     );
     let (mut a, dir) = app_with_html("spacer-not-shown", "Spacers", &html);
     let ctx = egui::Context::default();
@@ -235,6 +236,7 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     let shown = in_pane(&shapes);
     assert!(shown.iter().any(|t| t.contains("Grande salle")), "a picture described in words keeps its placeholder: {shown:?}");
     assert!(shown.iter().any(|t| t == "[4321]"), "a file's name that fits stays written: {shown:?}");
+    assert!(!shown.iter().any(|t| t.contains("rule-grey")), "a file's name taller than its place isn't written: {shown:?}");
     assert!(!shown.iter().any(|t| t.contains("spacer")), "a spacer's name isn't drawn: {shown:?}");
     // What shows: a fill, an outline or a picture (a table's cell is a frame with nothing to see).
     let framed: Vec<Rect> = shapes
@@ -242,7 +244,9 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
         .filter_map(|s| match s {
             Shape::Rect(r)
                 if (r.fill.a() > 0 || (r.stroke.width > 0.0 && r.stroke.color.a() > 0) || r.brush.is_some())
-                    && [(32.0, 118.0), (522.0, 25.0)].iter().any(|(w, h)| (r.rect.width() - w).abs() < 1.5 && (r.rect.height() - h).abs() < 1.5) =>
+                    && [(32.0, 118.0), (522.0, 25.0), (672.0, 6.0)]
+                        .iter()
+                        .any(|(w, h)| (r.rect.width() - w).abs() < 1.5 && (r.rect.height() - h).abs() < 1.5) =>
             {
                 Some(r.rect)
             }
@@ -252,6 +256,8 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     assert!(framed.is_empty(), "nothing drawn in a spacer's room: {framed:?}");
     assert!(after.left() - before.right() >= 31.5, "the column keeps its width: {before:?} {after:?}");
     assert!(below.top() - above.bottom() >= 25.0, "the gap keeps its height: {above:?} {below:?}");
+    let (over, under) = (found(&shapes, "Over"), found(&shapes, "Under"));
+    assert!(under.top() - over.bottom() >= 6.0, "the rule keeps its room: {over:?} {under:?}");
     // The pointer on the column: no bubble names it.
     let at = egui::pos2((before.right() + after.left()) / 2.0, before.center().y);
     let mut shapes = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(at)], size);

@@ -148,19 +148,23 @@ pub(crate) fn kept_room(size: Option<mime::ImageSize>, width: f32) -> Option<(f3
 /// written in it when it holds its words ([`written_in`]: a product's photo), else on hover only.
 /// A description wider than its place went down a narrow column a few letters a line, and pushed
 /// the lines beside it out of line. A spacer ([`mime::spacer_described`]), or a picture whose
-/// description only names its file ([`mime::names_itself`]) and isn't held by its place, keeps
-/// that room (none when the message sets no width) and draws nothing in it, no bubble either:
-/// `None`. `[spacer-FFFFFF]` was written across a white gap, and a column a few pixels wide was
-/// framed; a file's name that fits stays written (`[4321]`, a phone number).
+/// description only names its file ([`mime::names_itself`]) and isn't held by its place (across,
+/// and down to a line of text when the message sets its height), keeps that room (none when the
+/// message sets no width) and draws nothing in it, no bubble either: `None`. `[spacer-FFFFFF]` was
+/// written across a white gap, a column a few pixels wide was framed, and a rule 6 high pushed the
+/// layout down by a line; a file's name that fits stays written (`[4321]`, a phone number).
 pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> Option<egui::Response> {
     let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
     let text = format!("[{alt}]");
     let zoom = zoom.max(0.01);
     let line = ui.text_style_height(&egui::TextStyle::Body);
-    let room = kept_room(sp.image_size, width / zoom).map(|(w, h)| vec2(w * zoom, h.map_or((w * zoom).min(line), |h| h * zoom)));
+    let kept = kept_room(sp.image_size, width / zoom);
+    let room = kept.map(|(w, h)| vec2(w * zoom, h.map_or((w * zoom).min(line), |h| h * zoom)));
     let font = egui::TextStyle::Body.resolve(ui.style());
     let wide = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), font, Color32::WHITE).size().x);
-    let crowded = room.is_some_and(|room| wide > room.x);
+    // Its height counts when the message sets it: a line of text must fit.
+    let low = kept.and_then(|(_, h)| h).is_some_and(|h| h * zoom < line);
+    let crowded = room.is_some_and(|room| wide > room.x) || low;
     if mime::spacer_described(&sp.text) || (crowded && mime::names_itself(sp.image.as_deref().unwrap_or_default(), &sp.text)) {
         if let Some(room) = room {
             ui.allocate_space(room);
