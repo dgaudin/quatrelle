@@ -29,8 +29,7 @@ mod flat;
 mod lengths;
 mod styling;
 mod write;
-pub(crate) use blocks::background_pictures;
-use blocks::*;
+pub(crate) use blocks::{background_pictures, laid_out};
 pub use clean::{clean_html, quote_html};
 pub(crate) use edges::length_px;
 use edges::*;
@@ -703,48 +702,7 @@ impl Node {
 
 /// The layout of an HTML message: empty when it has no columns (the text flows instead).
 pub fn html_layout(html: &str) -> Vec<Block> {
-    let lower = html.to_ascii_lowercase();
-    if !(lower.contains("<table")
-        || lower.contains("flex")
-        || lower.contains("grid")
-        || lower.contains("inline-block")
-        || lower.contains("float")
-        || lower.contains("background")
-        || lower.contains("absolute")
-        || lower.contains("width"))
-    {
-        return Vec::new();
-    }
-    let html = match html.char_indices().nth(crate::HTML_MAX) {
-        Some((i, _)) => html.get(..i).unwrap_or(html),
-        None => html,
-    };
-    // Nested deeper than any mail is: no layout, its words read flat (the layout's time grows
-    // with each table nested, as the text converter's does).
-    if crate::html::too_deep(html) {
-        return Vec::new();
-    }
-    // A table's footer at its end, as in the message's text (`html::footers_last`).
-    let html = &*crate::html::footers_last(html);
-    let built = std::panic::catch_unwind(|| {
-        let root = parse(html);
-        let mut css = String::new();
-        collect_css(&root, &mut css, 0);
-        let mut ctx = Ctx { css, cells: 0, color: None };
-        let body = find(&root, "body", 0).unwrap_or(&root);
-        // A body of a set width is a column of that width, as a box would be.
-        let out = if body.tag == "body" && matches!(body.width(), Some(Width::Px(_))) {
-            let column = Node { tag: "div".into(), attrs: body.attrs.clone(), kids: body.kids.iter().map(copy).collect() };
-            blocks(&[Kid::El(column)], &mut ctx, 0)
-        } else {
-            blocks(&body.kids, &mut ctx, 0)
-        };
-        if ctx.cells > MAX_CELLS { Vec::new() } else { out }
-    });
-    match built {
-        Ok(b) if has_columns(&b) => b,
-        _ => Vec::new(),
-    }
+    laid_out(html).0
 }
 
 fn find<'a>(n: &'a Node, tag: &str, depth: usize) -> Option<&'a Node> {

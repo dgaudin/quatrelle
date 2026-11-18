@@ -358,30 +358,33 @@ fn parse_as(raw: &[u8], read: fn(Option<AddressList<'_>>) -> Vec<EmailAddress>) 
         _ => None,
     };
     let html = m.body_html(0).filter(|_| real_html).or(tnef_html.map(std::borrow::Cow::Borrowed));
-    // The trackers of the message as it came, and of it once its style sheet is written on its
-    // elements (below), both kept; the pictures' addresses read once each, in all three readings.
-    let mut addresses = html::Addresses::default();
-    let mut tracking = html.as_ref().map(|h| trackers::trackers_with(h, &mut addresses)).unwrap_or_default();
+    // The pictures as shown, and those of them that report back: asked of each of their tags in
+    // the message as it came and once its style sheet is written on its elements, and of each box
+    // they're behind (`html::Pictures`).
+    let links = html.as_ref().map_or(0, |h| trackers::tracking_links(h));
+    let mut pictures = html::Pictures::default();
     let mut hidden = None;
-    let (rich, images, layout) = match &html {
-        Some(h) => {
+    let (rich, layout) = match &html {
+        Some(raw) => {
             // Style sheet rules as inline styles, so cells keep their colours and titles their size.
-            let h = layout::inline_css(h);
-            // A pixel sized or hidden by a class is one too.
-            tracking.add_pictures(&h, &mut addresses);
+            let h = layout::inline_css(raw);
             hidden = hidden_text(&h);
-            let layout = layout::html_layout(&h);
-            // Pictures behind boxes are shown, or held back, like the others.
-            let mut images = html_images_with(&h, &mut addresses);
-            for src in layout::background_pictures(&layout) {
-                if !images.contains(&src) && images.len() < 200 {
-                    images.push(src);
-                }
+            let (layout, behind) = layout::laid_out(&h);
+            // A pixel sized or hidden by a class is one too; and as it came, since writing the
+            // sheet on a picture keeps one value of each property and drops the tag's
+            // `!important` (`width:1px !important; width:300px`).
+            pictures.read(&h, true);
+            if h.as_str() != raw.as_ref() {
+                pictures.read(raw, false);
             }
-            (html_to_rich(&h), images, layout)
+            // Pictures behind boxes are shown, or held back, like the others.
+            pictures.behind(layout::background_pictures(&layout), behind);
+            (html_to_rich(&h), layout)
         }
-        None => (Vec::new(), Vec::new(), Vec::new()),
+        None => (Vec::new(), Vec::new()),
     };
+    let tracking = Trackers { pictures: pictures.trackers(), links };
+    let images = pictures.images;
     let (text, had_html) = match (m.text_body().next().is_some(), m.body_text(0), m.body_html(0)) {
         _ if let Some(h) = tnef_html => (html_to_text(h), true),
         // Prefer the HTML version when the text part is an auto-generated stub.

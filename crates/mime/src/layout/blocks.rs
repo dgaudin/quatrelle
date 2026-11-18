@@ -92,6 +92,78 @@ pub fn background_pictures(b: &[Block]) -> Vec<String> {
     out
 }
 
+/// Which of the pictures behind a layout's boxes (`behind`) report back, by the elements of the
+/// message (`root`) they're behind, all of them looked at: on a counting service, or behind a box
+/// 2 pixels or less across or down, or hidden ([`crate::trackers::tracking_picture`]). They
+/// were never asked: a counter's picture loaded with the others as a box's background.
+fn tracking_backgrounds(root: &Node, behind: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    // Every element, without recursion (the tree is at most `MAX_NODES` elements).
+    let mut todo = vec![root];
+    while let Some(n) = todo.pop() {
+        if let Some(src) = n.background_image()
+            && behind.contains(&src)
+            && !out.contains(&src)
+            && crate::trackers::tracking_picture(&src, n.attr("width"), n.attr("height"), n.attr("style"))
+        {
+            out.push(src);
+        }
+        todo.extend(n.kids.iter().filter_map(|k| if let Kid::El(e) = k { Some(e) } else { None }));
+    }
+    out
+}
+
+/// The layout of an HTML message ([`html_layout`]: empty when it has no columns, the text flowing
+/// instead), and the pictures behind its boxes that report back ([`tracking_backgrounds`]).
+pub(crate) fn laid_out(html: &str) -> (Vec<Block>, Vec<String>) {
+    let lower = html.to_ascii_lowercase();
+    if !(lower.contains("<table")
+        || lower.contains("flex")
+        || lower.contains("grid")
+        || lower.contains("inline-block")
+        || lower.contains("float")
+        || lower.contains("background")
+        || lower.contains("absolute")
+        || lower.contains("width"))
+    {
+        return (Vec::new(), Vec::new());
+    }
+    let html = match html.char_indices().nth(crate::HTML_MAX) {
+        Some((i, _)) => html.get(..i).unwrap_or(html),
+        None => html,
+    };
+    // Nested deeper than any mail is: no layout, its words read flat (the layout's time grows
+    // with each table nested, as the text converter's does).
+    if crate::html::too_deep(html) {
+        return (Vec::new(), Vec::new());
+    }
+    // A table's footer at its end, as in the message's text (`html::footers_last`).
+    let html = &*crate::html::footers_last(html);
+    let built = std::panic::catch_unwind(|| {
+        let root = parse(html);
+        let mut css = String::new();
+        collect_css(&root, &mut css, 0);
+        let mut ctx = Ctx { css, cells: 0, color: None };
+        let body = find(&root, "body", 0).unwrap_or(&root);
+        // A body of a set width is a column of that width, as a box would be.
+        let out = if body.tag == "body" && matches!(body.width(), Some(Width::Px(_))) {
+            let column = Node { tag: "div".into(), attrs: body.attrs.clone(), kids: body.kids.iter().map(copy).collect() };
+            blocks(&[Kid::El(column)], &mut ctx, 0)
+        } else {
+            blocks(&body.kids, &mut ctx, 0)
+        };
+        if ctx.cells > MAX_CELLS {
+            return (Vec::new(), Vec::new());
+        }
+        let pixels = tracking_backgrounds(&root, &background_pictures(&out));
+        (out, pixels)
+    });
+    match built {
+        Ok((b, pixels)) if has_columns(&b) => (b, pixels),
+        _ => (Vec::new(), Vec::new()),
+    }
+}
+
 /// Boxes side by side among others (two floated tables in a signature, with a heading above):
 /// each run of two or more is put in a box of its own, which lays them out as columns. As in a
 /// browser, a table after floated boxes sits beside them too (it ends the run), and nothing

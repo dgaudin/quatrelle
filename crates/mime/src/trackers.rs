@@ -274,67 +274,47 @@ pub fn tracks_click(url: &str) -> bool {
         || u.query.is_some_and(|q| q.split('&').any(|p| is_tag(p.split('=').next().unwrap_or(p))))
 }
 
-/// Tracking pictures listed at most (past that many, the others are taken for pictures).
-const MAX_TRACKERS: usize = 50;
-
 /// The trackers in an HTML body: tiny pictures (1 or 2 pixels across, hidden, or on a counting
-/// service) and links that report the click. A message's are read in it as it came and once its
-/// style sheet is written on its elements ([`Trackers::add_pictures`]).
+/// service) and links that report the click. A message's pictures are asked in it as it came and
+/// once its style sheet is written on its elements ([`crate::html::Pictures`]).
 pub fn trackers(html: &str) -> Trackers {
-    trackers_with(html, &mut crate::html::Addresses::default())
+    let mut p = crate::html::Pictures::default();
+    p.read(html, true);
+    Trackers { pictures: p.trackers(), links: tracking_links(html) }
 }
 
-/// [`trackers`], its pictures' addresses read with the message's others (`addresses`).
-pub(crate) fn trackers_with(html: &str, addresses: &mut crate::html::Addresses) -> Trackers {
-    let mut t = Trackers { pictures: Vec::new(), links: crate::html_links(html).iter().filter(|l| tracks_click(l)).count() };
-    t.add_pictures(html, addresses);
-    t
+/// How many of the links of an HTML body report the click.
+pub(crate) fn tracking_links(html: &str) -> usize {
+    crate::html_links(html).iter().filter(|l| tracks_click(l)).count()
 }
 
-impl Trackers {
-    /// The tracking pictures of `html` added to these, once each, up to [`MAX_TRACKERS`]: those of
-    /// a message once its style sheet is written on its elements ([`crate::layout::inline_css`]: a
-    /// pixel sized or hidden by a class) beside those of the message as it came (writing the sheet
-    /// on a picture keeps one value of each property and drops the tag's `!important`, which
-    /// turned `width:1px !important; width:300px` back into a picture). Their addresses are read
-    /// with the message's others (`addresses`); past the 50 kept, the rest isn't read.
-    pub(crate) fn add_pictures(&mut self, html: &str, addresses: &mut crate::html::Addresses) {
-        let pictures = &mut self.pictures;
-        let lower = html.to_ascii_lowercase();
-        let mut from = 0;
-        while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
-            if pictures.len() >= MAX_TRACKERS {
-                break;
-            }
-            let start = from + i;
-            let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
-            let tag = html.get(start..end).unwrap_or("");
-            from = end + 1;
-            // As the pictures have it (`&#38;` decoded): one pixel, listed once.
-            let Some(src) = crate::html::tag_attr(tag, "src").map(|s| addresses.read(s)) else { continue };
-            let Some(u) = split(&src) else { continue };
-            // By its own properties (a signature's icon `border-width: 0px` was taken for `width:0`,
-            // and stayed hidden when the message's pictures were shown); hidden by any of them, when
-            // in doubt.
-            let style = crate::html::tag_attr(tag, "style").map(crate::css::declarations).unwrap_or_default();
-            let hidden = style.iter().any(|d| {
-                let v = d.value.trim();
-                match d.prop.as_str() {
-                    "display" => v.eq_ignore_ascii_case("none"),
-                    "visibility" => v.eq_ignore_ascii_case("hidden") || v.eq_ignore_ascii_case("collapse"),
-                    // Seen through: none of it, or next to none (`0`, `0%`, `0.01`).
-                    "opacity" => match v.strip_suffix('%') {
-                        Some(pc) => pc.trim().parse::<f32>().is_ok_and(|n| n < 5.0),
-                        None => v.parse::<f32>().is_ok_and(|n| n < 0.05),
-                    },
-                    _ => false,
-                }
-            });
-            if (crate::html::tiny_picture(tag) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c))) && !pictures.contains(&src) {
-                pictures.push(src);
-            }
+/// Whether `src` is a web address (the only kind a tracking picture has).
+pub(crate) fn on_the_web(src: &str) -> bool {
+    split(src).is_some()
+}
+
+/// Whether a picture at `src` reports back, by what its tag or the box it's behind says
+/// (`width`, `height`, `style`, as a browser reads them): 1 or 2 pixels across or down
+/// ([`crate::html::tiny_size`]), hidden, or on a counting service. By its own properties (a
+/// signature's icon `border-width: 0px` was taken for `width:0`, and stayed hidden when the
+/// message's pictures were shown); hidden by any of them, when in doubt.
+pub(crate) fn tracking_picture(src: &str, width: Option<&str>, height: Option<&str>, style: Option<&str>) -> bool {
+    let Some(u) = split(src) else { return false };
+    let style = style.map(crate::css::declarations).unwrap_or_default();
+    let hidden = style.iter().any(|d| {
+        let v = d.value.trim();
+        match d.prop.as_str() {
+            "display" => v.eq_ignore_ascii_case("none"),
+            "visibility" => v.eq_ignore_ascii_case("hidden") || v.eq_ignore_ascii_case("collapse"),
+            // Seen through: none of it, or next to none (`0`, `0%`, `0.01`).
+            "opacity" => match v.strip_suffix('%') {
+                Some(pc) => pc.trim().parse::<f32>().is_ok_and(|n| n < 5.0),
+                None => v.parse::<f32>().is_ok_and(|n| n < 0.05),
+            },
+            _ => false,
         }
-    }
+    });
+    crate::html::tiny_size(width, height, &style) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c))
 }
 
 #[cfg(test)]
@@ -594,13 +574,107 @@ mod tests {
                 crate::html::pictures::MAX_DECODED,
             ));
         }
-        // The trackers stop at the 50 they keep.
+        // The trackers are the pictures listed that report back (each tag of a picture listed is
+        // asked, so every address is read): no more reads than a message's.
         let pixels: String = (0..5_000).map(|n| format!("<img src=\"https://t.example/o.gif?n={n}&#38;r=1\" width=\"1\" height=\"1\">")).collect();
         let mut t = Trackers::default();
-        reads.push(("5,000 pixels".into(), tokenized(|| t = trackers(&pixels)), MAX_TRACKERS));
-        assert_eq!(t.pictures.len(), MAX_TRACKERS);
+        reads.push(("5,000 pixels".into(), tokenized(|| t = trackers(&pixels)), crate::html::pictures::MAX_DECODED));
+        assert_eq!(t.pictures.len(), crate::html::pictures::MAX_PICTURES);
         let over: Vec<_> = reads.iter().filter(|(_, n, most)| n > most).collect();
         assert!(over.is_empty(), "read too often (what, reads, most): {over:?}");
+    }
+
+    /// Found in review: a `>` in a quoted value ended the tag where the pictures and the trackers
+    /// were read (`alt=">"`), before the pixel's size, and the pixel was asked for with the
+    /// message's pictures. Read as a browser reads the tag, a quoted value that reads like a size
+    /// (`alt=' width=500'`) isn't one either, and a size written with a character reference
+    /// (`width&#58;1px`) is the size it says.
+    #[test]
+    fn a_pixel_is_one_whatever_its_values_hold() {
+        let o = "https://t.example/o.gif";
+        for tag in [
+            format!(r#"<img src="{o}" alt=">" width="1" height="1">"#),
+            format!(r#"<img src="{o}" title='>' width="1" height="1">"#),
+            format!(r#"<img src="{o}" alt=">" style="width:1px">"#),
+            format!(r#"<img src="{o}" alt=' width=500 height=500 ' width=1 height=1>"#),
+            format!(r#"<img src="{o}" style="width&#58;1px;height&#58;1px">"#),
+        ] {
+            assert_eq!(trackers(&tag).pictures, [o], "{tag}");
+            for sheet in ["", "<style>img{border:0}</style>"] {
+                let p = message(sheet, &tag);
+                assert_eq!((p.trackers.pictures.clone(), loaded(&p)), (vec![o.to_string()], Vec::<String>::new()), "{tag} under {sheet:?}");
+            }
+        }
+    }
+
+    /// Found in review: the trackers were listed up to 50 and the pictures up to 200: 50 pixels of
+    /// any address first, and the next, the real one, was asked for. Each picture listed is asked
+    /// whether it's a tracking picture.
+    #[test]
+    fn fifty_decoys_let_no_pixel_through() {
+        let decoys: String = (0..50).map(|n| format!("<img src=\"https://d.example/{n}.gif\" width=\"1\" height=\"1\">")).collect();
+        let real = "<img src=\"https://t.example/o.gif\" width=\"1\" height=\"1\">";
+        for sheet in ["", "<style>img{border:0}</style>"] {
+            let p = message(sheet, &format!("{decoys}{real}"));
+            assert!(p.trackers.pictures.iter().any(|s| s == "https://t.example/o.gif"), "listed, under {sheet:?}");
+            assert_eq!(loaded(&p), Vec::<String>::new(), "none asked for, under {sheet:?}");
+        }
+        // As many as the pictures listed: each held back, none past them asked for.
+        let many: String = (0..300).map(|n| format!("<img src=\"https://d.example/{n}.gif\" width=\"1\" height=\"1\">")).collect();
+        let p = message("", &many);
+        assert_eq!((p.images.len(), p.trackers.pictures.len(), loaded(&p).len()), (200, 200, 0), "listed, held back, asked for");
+    }
+
+    /// Found in review: a picture behind a box was never asked whether it reports back: a counting
+    /// service's (the surest sign) loaded with the message's pictures as a box's background, and
+    /// so did one behind a box 1 pixel wide.
+    #[test]
+    fn a_tracking_picture_behind_a_box_is_one() {
+        let counter = "https://x.list-manage.com/track/open.php?u=1";
+        let pixel = "https://t.example/o.gif";
+        for (body, src) in [
+            (format!(r#"<div style="background-image:url({counter});width:1px;height:1px"></div>"#), counter),
+            (format!(r#"<table><tr><td background="{counter}">Hello</td><td>there</td></tr></table>"#), counter),
+            (format!(r#"<div style="background-image:url({pixel});width:2px;height:300px">x</div>"#), pixel),
+            (format!(r#"<table><tr><td style="background:url('{pixel}')" height="1">x</td><td>y</td></tr></table>"#), pixel),
+        ] {
+            let p = message("", &body);
+            assert!(p.images.iter().any(|s| s == src), "a picture of the message: {body}");
+            assert_eq!((p.trackers.pictures.clone(), loaded(&p)), (vec![src.to_string()], Vec::<String>::new()), "{body}");
+        }
+        // A banner behind a heading is shown with the others.
+        let p = message("", r#"<div style="background-image:url(https://img.example/banner.png);width:600px"><h1>News</h1></div>"#);
+        assert_eq!(loaded(&p), ["https://img.example/banner.png"]);
+    }
+
+    /// Found in review: a picture in a comment (or a script, a `<textarea>`…) was asked for when the
+    /// message's pictures were shown, which no browser does. The pictures are found as a browser
+    /// reads the tags.
+    #[test]
+    fn pictures_no_browser_loads_are_never_asked_for() {
+        let o = r#"<img src="https://t.example/o.gif">"#;
+        for html in [
+            format!("<!-- {o} --><p>x</p>"),
+            format!("<!-- a -- {o} --!><p>x</p>"),
+            format!("<script>var s = '{o}';</script>"),
+            format!("<textarea>{o}</textarea>"),
+            format!("<style>/* {o} */</style>"),
+            format!("<title>{o}</title>"),
+            format!("<noscript>{o}</noscript>"),
+            format!("<template><p>{o}</p></template>"),
+            format!("<p title='{o}'>x</p>"),
+            format!("<!doctype {o}"),
+            format!("<p class='{o}"),
+        ] {
+            assert_eq!(crate::html_images(&html), Vec::<String>::new(), "{html}");
+            assert_eq!(loaded(&message("", &html)), Vec::<String>::new(), "{html}");
+        }
+        // As a browser reads them: after an empty comment, past a `>` in a quoted value, after a
+        // script's end, `<image>`, `<img/src=…>`.
+        assert_eq!(
+            crate::html_images(r#"<!--><img src=a.png><p alt='>'><img src=b.png><script>x</script><IMAGE SRC=c.png><img/src=d.png>"#),
+            ["a.png", "b.png", "c.png", "d.png"]
+        );
     }
 
     #[test]
