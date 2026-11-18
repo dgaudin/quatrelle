@@ -69,30 +69,43 @@ pub(super) fn deflated(kept: &[u8]) -> bool {
 /// A file as kept, back as it was written (what the tests read a value as kept with).
 #[cfg(test)]
 pub(super) fn unpack(kept: Vec<u8>) -> io::Result<Vec<u8>> {
-    unpack_within(kept, INFLATE_MAX)
+    unpack_capped(kept, None)
 }
 
-/// [`unpack`], at most `max` bytes as written: past them, refused as it is inflated (past
-/// [`INFLATE_MAX`], as damaged), never more than `max` and a byte held.
-fn unpack_within(kept: Vec<u8>, max: u64) -> io::Result<Vec<u8>> {
+/// A file as kept, back as it was written: inflated to [`INFLATE_MAX`] at most (past it, damaged).
+/// With a read's `cap`, at most that: refused as it is inflated past it, never more than the cap
+/// and a byte held ([`crate::files::too_large`]); without one, as every read always was.
+fn unpack_capped(kept: Vec<u8>, cap: Option<u64>) -> io::Result<Vec<u8>> {
     use std::io::Read;
     let Some(stream) = kept.strip_prefix(DEFLATED).or_else(|| kept.strip_prefix(DEFLATED_OLD)) else {
-        return if kept.len() as u64 > max { Err(too_big(max)) } else { Ok(kept) };
+        return match cap {
+            Some(max) if kept.len() as u64 > max => Err(crate::files::too_large()),
+            _ => Ok(kept),
+        };
     };
-    let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(RESERVE_MAX).min(usize::try_from(max).unwrap_or(usize::MAX)));
-    flate2::read::DeflateDecoder::new(stream).take(max.min(INFLATE_MAX) + 1).read_to_end(&mut out)?;
+    let most = inflated_most(cap);
+    let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(RESERVE_MAX).min(usize::try_from(most).unwrap_or(usize::MAX)));
+    flate2::read::DeflateDecoder::new(stream).take(most + 1).read_to_end(&mut out)?;
     #[cfg(test)]
     MOST_READ.with(|m| m.set(m.get().max(out.len())));
-    if out.len() as u64 > max.min(INFLATE_MAX) {
-        return Err(too_big(max));
+    if out.len() as u64 > most {
+        return Err(too_big(cap));
     }
     Ok(out)
 }
 
-/// A file longer than a read takes: past [`INFLATE_MAX`], a damaged one (what every read takes at
-/// most); past a cap a read set below it, a file too large for it ([`crate::files::too_large`]).
-fn too_big(max: u64) -> io::Error {
-    if max >= INFLATE_MAX { io::Error::new(io::ErrorKind::InvalidData, "a compressed file is too big") } else { crate::files::too_large() }
+/// The most a file may come to once inflated: [`INFLATE_MAX`], or a read's lower cap.
+fn inflated_most(cap: Option<u64>) -> u64 {
+    cap.map_or(INFLATE_MAX, |max| max.min(INFLATE_MAX))
+}
+
+/// A file that comes to more than a read takes: past the read's own cap, too large for it; past
+/// [`INFLATE_MAX`], damaged (what every read says of it).
+fn too_big(cap: Option<u64>) -> io::Error {
+    match cap {
+        Some(max) if max < INFLATE_MAX => crate::files::too_large(),
+        _ => io::Error::new(io::ErrorKind::InvalidData, "a compressed file is too big"),
+    }
 }
 /// The database's page, and what a page run needs besides the value (its header and the key).
 pub(super) const PAGE: usize = 4096;
@@ -180,22 +193,43 @@ pub(super) fn read_file(
     files: &impl ReadableTable<&'static str, &'static [u8]>,
     key: &str,
 ) -> io::Result<Option<Vec<u8>>> {
-    read_file_within(tx, files, key, INFLATE_MAX)
+    read_file_capped(tx, files, key, None)
 }
 
-/// [`read_file`], at most `max` bytes as written: a longer file is refused as it is read (a
-/// compressed one as it is inflated, one kept as it is before its pieces are read), never held
-/// past `max` and a byte.
+/// [`read_file`], at most `max` bytes as written: a longer file is refused as it is read (one
+/// kept whole before it is copied, a compressed one as it is inflated, one kept as it is in pieces
+/// before its pieces are read), never held past `max` and a byte. Only a read that asks for it
+/// has a cap: [`read_file`] reads a file of any length, as it always did.
 pub(super) fn read_file_within(
     tx: &redb::ReadTransaction,
     files: &impl ReadableTable<&'static str, &'static [u8]>,
     key: &str,
     max: u64,
 ) -> io::Result<Option<Vec<u8>>> {
+    read_file_capped(tx, files, key, Some(max))
+}
+
+fn read_file_capped(
+    tx: &redb::ReadTransaction,
+    files: &impl ReadableTable<&'static str, &'static [u8]>,
+    key: &str,
+    cap: Option<u64>,
+) -> io::Result<Option<Vec<u8>>> {
     use std::io::Read;
-    let Some(v) = files.get(key).map_err(other)?.map(|g| g.value().to_vec()) else { return Ok(None) };
-    let Some(len) = pieced_len(&v) else { return unpack_within(v, max).map(Some) };
-    let max = max.min(INFLATE_MAX);
+    let Some(kept) = files.get(key).map_err(other)? else { return Ok(None) };
+    // Kept whole and as it is, a value past the cap is refused before it is copied out.
+    if let Some(max) = cap {
+        let value = kept.value();
+        if pieced_len(value).is_none() && !deflated(value) && value.len() as u64 > max {
+            return Err(crate::files::too_large());
+        }
+    }
+    let v = kept.value().to_vec();
+    drop(kept);
+    #[cfg(test)]
+    MOST_READ.with(|m| m.set(m.get().max(v.len())));
+    let Some(len) = pieced_len(&v) else { return unpack_capped(v, cap).map(Some) };
+    let most = inflated_most(cap);
     let pieces = tx.open_table(PIECES).map_err(other)?;
     let mut reader = PieceReader { pieces: pieces.range((key, 0)..=(key, u32::MAX)).map_err(other)?, piece: None, at: 0, read: 0, failed: false };
     // Whether it's compressed: its first bytes, read before anything else (both prefixes are
@@ -203,16 +237,17 @@ pub(super) fn read_file_within(
     let mut head = Vec::with_capacity(DEFLATED.len());
     (&mut reader).take(DEFLATED.len() as u64).read_to_end(&mut head)?;
     let out = if head == DEFLATED || head == DEFLATED_OLD {
-        let room = usize::try_from(len).unwrap_or(0).saturating_mul(3).min(RESERVE_MAX).min(usize::try_from(max).unwrap_or(usize::MAX));
+        let room = usize::try_from(len).unwrap_or(0).saturating_mul(3).min(RESERVE_MAX).min(usize::try_from(most).unwrap_or(usize::MAX));
         let mut out = Vec::with_capacity(room);
-        let inflated = flate2::read::DeflateDecoder::new(&mut reader).take(max + 1).read_to_end(&mut out);
+        let inflated = flate2::read::DeflateDecoder::new(&mut reader).take(most + 1).read_to_end(&mut out);
         #[cfg(test)]
         MOST_READ.with(|m| m.set(m.get().max(out.len())));
         if reader.failed {
             return Err(inflated.err().unwrap_or_else(|| io::Error::other("a piece couldn't be read")));
         }
-        if out.len() as u64 > max {
-            return Err(too_big(max));
+        // Past a read's cap, refused at once: what follows isn't read.
+        if cap.is_some() && out.len() as u64 > most {
+            return Err(too_big(cap));
         }
         // What follows the stream, if anything, counted with the rest: a piece missing is told
         // as such whether or not the stream ended well without it.
@@ -221,10 +256,15 @@ pub(super) fn read_file_within(
             return Err(pieces_missing(key));
         }
         inflated?;
+        if out.len() as u64 > most {
+            return Err(too_big(cap));
+        }
         out
     } else {
-        if len > max {
-            return Err(too_big(max));
+        if let Some(max) = cap
+            && len > max
+        {
+            return Err(crate::files::too_large());
         }
         let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).min(RESERVE_MAX));
         out.extend_from_slice(&head);

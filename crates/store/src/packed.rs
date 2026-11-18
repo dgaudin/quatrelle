@@ -283,11 +283,16 @@ impl Packs {
     }
 
     fn get(&self, account: &str, key: &str) -> io::Result<Option<Vec<u8>>> {
-        self.get_within(account, key, INFLATE_MAX)
+        self.get_capped(account, key, None)
     }
 
     /// [`Packs::get`], at most `max` bytes as written ([`read_file_within`]).
     fn get_within(&self, account: &str, key: &str, max: u64) -> io::Result<Option<Vec<u8>>> {
+        self.get_capped(account, key, Some(max))
+    }
+
+    /// A file, without a cap ([`read_file`]: as every read always was) or within one.
+    fn get_capped(&self, account: &str, key: &str, cap: Option<u64>) -> io::Result<Option<Vec<u8>>> {
         let Some(db) = self.db(account, false)? else { return Ok(None) };
         let tx = db.begin_read().map_err(other)?;
         let table = match tx.open_table(FILES) {
@@ -295,7 +300,10 @@ impl Packs {
             Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
             Err(e) => return Err(other(e)),
         };
-        read_file_within(&tx, &table, key, max)
+        match cap {
+            None => read_file(&tx, &table, key),
+            Some(max) => read_file_within(&tx, &table, key, max),
+        }
     }
 
     /// Whether a file is there (without reading it).
