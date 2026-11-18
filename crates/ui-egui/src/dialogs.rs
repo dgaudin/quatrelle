@@ -116,6 +116,12 @@ pub enum Dialog {
         name: String,
         risk: OpenRisk,
     },
+    /// The same for one of an appointment's or a contact's files (an invitation's, say), then
+    /// opened (`Action::OpenItemFileNow`).
+    RiskyItemFile {
+        item: crate::pim_dialogs::ItemFile,
+        risk: OpenRisk,
+    },
     /// A calendar or contacts file opened with Quatrelle: what it holds and where it would go,
     /// added once the user says so.
     AddFromFile(Box<FileHolds>),
@@ -311,6 +317,7 @@ impl Dialog {
                     | Dialog::SaveChanges
                     | Dialog::SendCheck(_)
                     | Dialog::RiskyAttachment { .. }
+                    | Dialog::RiskyItemFile { .. }
             )
     }
 
@@ -511,6 +518,7 @@ fn body(
         | Dialog::DeleteOccurrence { .. }
         | Dialog::OpenShare { .. }
         | Dialog::RiskyAttachment { .. }
+        | Dialog::RiskyItemFile { .. }
         | Dialog::AddFromFile(_)
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }

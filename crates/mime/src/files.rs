@@ -105,7 +105,7 @@ const EXECUTABLE_EXTENSIONS: &[&[&str]] = &[
     // Windows: settings files that connect somewhere or start a command, update packages and
     // cabinets, Office add-ins and the data files that fetch or run (web queries, SYLK).
     &["rdp", "search-ms", "theme", "themepack", "wsb", "ws", "ps2", "msu", "cab"],
-    &["xlam", "ppam", "wll", "iqy", "slk"],
+    &["xlam", "ppam", "xla", "ppa", "wll", "iqy", "slk"],
     // Windows: disk images that mount and run.
     &["iso", "img", "vhd", "vhdx"],
     // macOS: app bundles, disk images, installers, AppleScript and Automator.
@@ -165,7 +165,8 @@ pub fn runs_code(name: &str) -> bool {
 }
 
 /// What opening an attachment in its usual program can do that looking at it can't: a page's
-/// scripts run and reach the internet, a document's macros run. A file that starts a program
+/// scripts run and reach the internet, a document's macros run, and a file whose name doesn't say
+/// what it is goes to whatever the system takes it for. A file that starts a program
 /// ([`runs_code`]) is never opened at all, so it is no mere risk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpenRisk {
@@ -173,35 +174,68 @@ pub enum OpenRisk {
     WebPage,
     /// A document whose macros run as it opens, or an old binary Office format carrying them.
     Macros,
+    /// A name that doesn't say what the file is (no extension, or one of no type known here):
+    /// the system opens it by what's in it, a page as like as not.
+    Unknown,
 }
 
-/// Why opening this attachment is worth asking about first, if it is. Only the last extension
-/// counts, as it does for the system that would open it; the name is cleaned first, so one that
-/// disguises its extension is read as it would be saved.
-pub fn open_risk(name: &str) -> Option<OpenRisk> {
+/// Why opening this attachment is worth asking about first, if it is: what its name says (only
+/// the last extension counts, as it does for the system that would open it; the name is cleaned
+/// first, so one that disguises its extension is read as it would be saved), what the type the
+/// sender `declared` says whatever the name, and a name that says nothing (no extension, or one
+/// of no type known here), which leaves the system to go by what's in the file. A file that
+/// starts a program ([`runs_code`]) is never opened at all, so it is no mere risk.
+pub fn open_risk(name: &str, declared: &str) -> Option<OpenRisk> {
+    if runs_code(name) {
+        return None;
+    }
     let cleaned = sanitize_filename(name).to_ascii_lowercase();
-    let (_, extension) = cleaned.rsplit_once('.')?;
-    let extension = extension.trim();
-    if WEB_PAGE_EXTENSIONS.contains(&extension) {
+    let extension = cleaned.rsplit_once('.').map_or("", |(_, e)| e.trim());
+    let declared = declared.split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+    if WEB_PAGE_EXTENSIONS.contains(&extension) || WEB_PAGE_TYPES.contains(&declared.as_str()) {
         Some(OpenRisk::WebPage)
-    } else if MACRO_EXTENSIONS.contains(&extension) {
+    } else if MACRO_EXTENSIONS.contains(&extension) || macro_type(&declared) {
         Some(OpenRisk::Macros)
+    } else if extension.is_empty() || mime_from_name(&cleaned) == "application/octet-stream" {
+        Some(OpenRisk::Unknown)
     } else {
         None
     }
 }
 
 /// Extensions a browser opens as a page: what it shows can run scripts and load remote content
-/// (an SVG included: to a browser, a drawing is a document).
-const WEB_PAGE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "xht", "shtml", "shtm", "svg", "svgz", "mht", "mhtml"];
+/// (an SVG included: to a browser, a drawing is a document; XML too, through its style sheets).
+const WEB_PAGE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "xht", "shtml", "shtm", "svg", "svgz", "mht", "mhtml", "xml", "xsl", "xslt"];
+
+/// Types a sender declares for a page a browser runs (the same as [`WEB_PAGE_EXTENSIONS`]).
+const WEB_PAGE_TYPES: &[&str] =
+    &["text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml", "application/xslt+xml", "multipart/related"];
 
 /// Extensions of documents whose macros run on opening: Office's macro-enabled formats, the old
-/// binary Office formats that carry macros too, and the databases and publications whose code
-/// runs. Add-ins that run (`.xlam`, `.ppam`) are already never opened ([`runs_code`]).
+/// binary Office formats that carry macros too (Excel's macro sheets and workspaces, Word's
+/// backups), LibreOffice's documents and templates, whose macros run too, RTF, which carries
+/// objects that do, and the databases and publications whose code runs. Add-ins that run
+/// (`.xlam`, `.xla`, `.ppam`, `.ppa`) are never opened at all ([`runs_code`]).
 const MACRO_EXTENSIONS: &[&str] = &[
-    "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm", "doc", "dot", "xls", "xlt", "ppt", "pot", "pps", "vsd", "vss", "vst",
-    "mdb", "accdb", "pub",
+    "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm", "doc", "dot", "xls", "xlt", "xlm", "xlw", "ppt", "pot", "pps", "wbk",
+    "vsd", "vss", "vst", "mdb", "accdb", "pub", "rtf", "odt", "ods", "odp", "odg", "odb", "ott", "ots", "otp", "otg", "fodt", "fods", "fodp", "fodg",
 ];
+
+/// Whether a type a sender declares is one of a document whose macros run: Office's
+/// macro-enabled and old binary formats, LibreOffice's, RTF.
+fn macro_type(declared: &str) -> bool {
+    declared.contains("macroenabled")
+        || declared.starts_with("application/vnd.oasis.opendocument.")
+        || matches!(
+            declared,
+            "application/msword"
+                | "application/vnd.ms-excel"
+                | "application/vnd.ms-powerpoint"
+                | "application/vnd.visio"
+                | "application/rtf"
+                | "text/rtf"
+        )
+}
 
 /// File types: an extension (with its dot) and its MIME type. A type's first extension is the one an attachment
 /// sent without a name (or with a name without one) is saved with; the types after a type's own
@@ -411,17 +445,70 @@ mod tests {
     #[test]
     fn pages_and_macro_documents_ask_before_they_open() {
         for name in ["invite.html", "Page.HTM", "plan.xhtml", "logo.svg", "drawing.SVGZ", "mail.mhtml", "photo\u{202E}gpj.svg"] {
-            assert_eq!(open_risk(name), Some(OpenRisk::WebPage), "{name}");
+            assert_eq!(open_risk(name, ""), Some(OpenRisk::WebPage), "{name}");
         }
         for name in
             ["budget.docm", "BUDGET.DOCM", "letter.dotm", "sheet.xlsm", "book.xlsb", "deck.pptm", "notes.doc", "sums.xls", "talk.ppt", "base.accdb"]
         {
-            assert_eq!(open_risk(name), Some(OpenRisk::Macros), "{name}");
+            assert_eq!(open_risk(name, ""), Some(OpenRisk::Macros), "{name}");
         }
-        for name in
-            ["report.pdf", "photo.png", "notes.txt", "minutes.docx", "sums.xlsx", "setup.exe", "macro.vbs", "print.html.exe", "no-extension", ""]
-        {
-            assert_eq!(open_risk(name), None, "{name}");
+        for name in ["report.pdf", "photo.png", "notes.txt", "minutes.docx", "sums.xlsx", "setup.exe", "macro.vbs", "print.html.exe"] {
+            assert_eq!(open_risk(name, ""), None, "{name}");
+        }
+    }
+
+    /// The question comes too when the name doesn't say what the file is (no extension, or one of
+    /// no type known here: the system then goes by what's in it), and when the type the sender
+    /// declared is a page or a document whose macros run, whatever the name says. A known name
+    /// with a type that says nothing asks nothing; what runs code is never opened at all.
+    #[test]
+    fn a_file_whose_name_says_nothing_or_whose_type_is_risky_asks() {
+        let octets = "application/octet-stream";
+        for name in ["facture", "facture.htmlx", "no-extension", ""] {
+            assert_eq!(open_risk(name, octets), Some(OpenRisk::Unknown), "{name}");
+        }
+        for (name, declared) in [
+            ("report.pdf", "text/html"),
+            ("report.pdf", "Text/HTML; charset=utf-8"),
+            ("drawing.png", "image/svg+xml"),
+            ("page.txt", "application/xhtml+xml"),
+        ] {
+            assert_eq!(open_risk(name, declared), Some(OpenRisk::WebPage), "{name} as {declared}");
+        }
+        for (name, declared) in [("budget.xlsx", "application/vnd.ms-excel.sheet.macroEnabled.12"), ("letter.docx", "application/msword")] {
+            assert_eq!(open_risk(name, declared), Some(OpenRisk::Macros), "{name} as {declared}");
+        }
+        for (name, declared) in [("report.pdf", "application/pdf"), ("report.pdf", octets), ("photo.png", "image/png"), ("setup.exe", octets)] {
+            assert_eq!(open_risk(name, declared), None, "{name} as {declared}");
+        }
+    }
+
+    /// More documents whose code runs: LibreOffice's (their macros run), XML and its style
+    /// sheets (a browser runs their scripts), Excel's macro sheets and workspaces, Word's backups,
+    /// RTF; Excel's and PowerPoint's old add-ins run, and are never opened at all.
+    #[test]
+    fn more_documents_whose_code_runs_ask_first() {
+        for name in [
+            "plan.odt",
+            "sums.ods",
+            "talk.odp",
+            "sketch.odg",
+            "letter.ott",
+            "sheet.ots",
+            "flat.fodt",
+            "flat.fods",
+            "macros.xlm",
+            "space.xlw",
+            "backup.wbk",
+            "letter.rtf",
+        ] {
+            assert_eq!(open_risk(name, ""), Some(OpenRisk::Macros), "{name}");
+        }
+        for name in ["data.xml", "style.xsl", "style.xslt"] {
+            assert_eq!(open_risk(name, ""), Some(OpenRisk::WebPage), "{name}");
+        }
+        for name in ["addin.xla", "addin.ppa"] {
+            assert!(runs_code(name), "{name}");
         }
     }
 

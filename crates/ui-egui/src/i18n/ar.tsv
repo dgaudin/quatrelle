@@ -2370,3 +2370,4 @@ presence	Offline	غير متصل
 	Open this file?	فتح هذا الملف؟
 	Opening it in a browser can run its scripts and load content from the internet.	فتحه في متصفح قد يشغّل برامجه النصية ويحمّل محتوى من الإنترنت.
 	It can run macros: open it only if you trust the sender.	قد يشغّل وحدات ماكرو: افتحه فقط إذا كنت تثق بالمرسل.
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	اسمه لا يبيّن نوع الملف: قد يشغّل البرنامج الذي يفتحه ما يحتويه.

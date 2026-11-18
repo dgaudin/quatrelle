@@ -2375,3 +2375,4 @@ presence	Offline	Desconectado
 	Open this file?	¿Abrir este archivo?
 	Opening it in a browser can run its scripts and load content from the internet.	Abrirlo en un navegador puede ejecutar sus scripts y cargar contenido de Internet.
 	It can run macros: open it only if you trust the sender.	Puede ejecutar macros: ábralo solo si confía en el remitente.
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	Su nombre no dice qué tipo de archivo es: el programa que lo abra puede ejecutar lo que contiene.

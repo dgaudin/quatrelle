@@ -437,8 +437,9 @@ impl MailApp {
             Action::SetLanguage(l) => self.ui.language = l,
             Action::OpenUrl(url) => self.open_link(&url),
             Action::OpenMeeting(url) => self.open_meeting(&url),
-            Action::OpenItemFile(f) => self.item_file(f, true),
-            Action::SaveItemFile(f) => self.item_file(f, false),
+            Action::OpenItemFile(f) => self.item_file(f, true, false),
+            Action::OpenItemFileNow(f) => self.item_file(f, true, true),
+            Action::SaveItemFile(f) => self.item_file(f, false, false),
             Action::MakeMeetingProfile => self.make_meeting_profile(),
             Action::OpenShare(link) => self.open_share(&link),
             Action::AddFile(path) => self.add_file(&path),
@@ -614,8 +615,9 @@ impl MailApp {
             }
             Action::OpenAttachment(i) => {
                 let name = quatrelle_engine::mime::sanitize_filename(&self.attachment_name(i));
-                // A page whose scripts would run, or a document whose macros would: asked first.
-                if let Some(risk) = quatrelle_engine::mime::open_risk(&name)
+                // A page whose scripts would run, a document whose macros would, or a file whose
+                // name says nothing, by its name and the type its sender declared: asked first.
+                if let Some(risk) = quatrelle_engine::mime::open_risk(&name, &self.attachment_mime(i))
                     && let Some(key) = self.session.reading.as_ref().map(|r| r.key.clone())
                 {
                     self.ui.dialog = Some(Dialog::RiskyAttachment { key, index: i, name, risk });
@@ -800,6 +802,17 @@ impl MailApp {
             .and_then(|p| p.attachments.iter().find(|a| a.index == i))
             .map(|a| a.name.clone())
             .unwrap_or_else(|| "attachment".into())
+    }
+
+    /// The media type the sender declared for an attachment of the message being read.
+    pub(crate) fn attachment_mime(&self, i: usize) -> String {
+        self.session
+            .reading
+            .as_ref()
+            .and_then(|r| r.parsed.as_ref())
+            .and_then(|p| p.attachments.iter().find(|a| a.index == i))
+            .map(|a| a.mime.clone())
+            .unwrap_or_default()
     }
 
     /// Every attachment of the message being read, selected (Ctrl+A in its attachments).

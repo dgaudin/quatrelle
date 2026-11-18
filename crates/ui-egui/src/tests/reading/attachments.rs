@@ -164,6 +164,57 @@ fn a_page_or_a_macro_document_asks_before_it_opens() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A file the sender declared a page asks as one, whatever its name says; one whose name says
+/// nothing (no extension, or one of no type known here) asks too: the system would go by what's
+/// in it, a page as like as not.
+#[test]
+fn a_page_by_its_type_or_a_name_that_says_nothing_asks_first() {
+    let (mut a, dir) = app("risky-declared");
+    let ctx = egui::Context::default();
+    let page = "PGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtbD4=";
+    let part = |mime: &str, name: &str| {
+        format!(
+            "--b\r\nContent-Type: {mime}; name=\"{name}\"\r\nContent-Disposition: attachment; filename=\"{name}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{page}\r\n"
+        )
+    };
+    let raw = format!(
+        "From: Zoe Park <zoe@studio.example>\r\nTo: riley@studio.example\r\nSubject: More files\r\nMessage-ID: <risky-declared@x>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSee the files.\r\n{}{}{}--b--\r\n",
+        part("text/html", "report.pdf"),
+        part("application/octet-stream", "facture"),
+        part("application/octet-stream", "facture.htmlx"),
+    );
+    let raw = raw.as_bytes();
+    let store = a.session.store.clone().unwrap();
+    let mut inbox = store.load_folder("sample", "INBOX").unwrap();
+    let key = MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9903 };
+    inbox.messages.insert(0, quatrelle_engine::mime::summary_from_full(raw, key.clone(), Default::default(), raw.len() as u32, NOW));
+    store.save_folder("sample", "INBOX", &inbox).unwrap();
+    store.write_body(&key, raw).unwrap();
+    a.session.apply(MailEvent::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    a.run("list.open", json!({"key": key.to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    use quatrelle_engine::mime::OpenRisk;
+    for (name, risk) in [("report.pdf", OpenRisk::WebPage), ("facture", OpenRisk::Unknown), ("facture.htmlx", OpenRisk::Unknown)] {
+        let index = a
+            .session
+            .reading
+            .as_ref()
+            .and_then(|r| r.parsed.as_ref())
+            .and_then(|p| p.attachments.iter().find(|x| x.name == name))
+            .map(|x| x.index)
+            .unwrap_or_else(|| panic!("{name} is attached"));
+        a.ui.dialog = None;
+        a.act(crate::Action::OpenAttachment(index));
+        match &a.ui.dialog {
+            Some(Dialog::RiskyAttachment { name: asked, risk: why, .. }) => assert_eq!((asked.as_str(), *why), (name, risk)),
+            other => panic!("{name}: {other:?}"),
+        }
+        assert!(a.session.notices.is_empty(), "nothing opened: {:?}", a.session.notices);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Asked from a message's own window, the question shows in that window, not in the main one
 /// (which reads another message); its Open hands that window's message's page to its program.
 #[test]

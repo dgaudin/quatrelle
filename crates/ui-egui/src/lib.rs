@@ -193,6 +193,8 @@ pub enum Action {
     SaveAttachment(usize),
     /// Open or save one of an appointment's or a contact's files.
     OpenItemFile(pim_dialogs::ItemFile),
+    /// Open the file `Action::OpenItemFile` asked about first (a page, a document with macros).
+    OpenItemFileNow(pim_dialogs::ItemFile),
     SaveItemFile(pim_dialogs::ItemFile),
     AttachFiles,
     /// Attach Item, open on a kind of item.

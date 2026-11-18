@@ -2374,3 +2374,4 @@ presence	Offline	离线
 	Open this file?	打开此文件？
 	Opening it in a browser can run its scripts and load content from the internet.	在浏览器中打开可能会运行其脚本并从互联网加载内容。
 	It can run macros: open it only if you trust the sender.	它可能会运行宏：仅在信任发件人时打开。
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	文件名看不出这是什么类型的文件：打开它的程序可能会运行其中的内容。
