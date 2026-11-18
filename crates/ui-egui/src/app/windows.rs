@@ -6,6 +6,7 @@
 use crate::dialogs::people_field::{MEETING_WINDOWS, places};
 use crate::*;
 
+mod file_page;
 mod ribbon;
 
 impl MailApp {
@@ -270,18 +271,13 @@ impl MailApp {
             self.ui.title_shown = title;
         }
         let mut mine: Vec<Action> = Vec::new();
-        // No main window here to open File or Help in.
-        message_top(ui, &mut self.session, &mut self.ui, &w, false, &mut mine);
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-            reading::window(&mut self.session, &mut self.ui, ui, w, &mut mine);
-        });
+        message_content(ui, &mut self.session, &mut self.ui, &w, &mut mine);
         acts.extend(mine.into_iter().map(|a| for_window(key, a)));
     }
 
     /// Messages opened in windows of their own (double-click), each a native window with its tabs
     /// and ribbon, as Outlook's; in the browser, each in a browser window of its own.
     pub(crate) fn message_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
-        let t = self.ui.tokens;
         if self.ui.page_message.is_none() {
             for w in self.session.windows.clone() {
                 if self.services.open_message_window(&w.key.to_id()) {
@@ -327,7 +323,7 @@ impl MailApp {
                         (i.consume_key(egui::Modifiers::NONE, Key::Delete), i.consume_key(egui::Modifiers::SHIFT, Key::Delete) || cut)
                     });
                     if delete || for_good {
-                        mine.extend(super::keys::delete_from_window(session, &key, for_good));
+                        mine.extend(super::keys::delete_from_window(&key, for_good));
                     }
                     // Reply, Reply all and Forward by their keys, as in the main window.
                     let answer = ui.input_mut(|i| {
@@ -346,10 +342,7 @@ impl MailApp {
                         mine.push(Action::Run(id, json!({})));
                     }
                 }
-                message_top(ui, session, st, &w, true, &mut mine);
-                egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-                    reading::window(session, st, ui, w.clone(), &mut mine);
-                });
+                message_content(ui, session, st, &w, &mut mine);
                 let leave = mine.iter().any(|a| matches!(a, Action::Run("message.closeWindow", _)));
                 // The File page (Junk Email options…) is the main window's: brought forward.
                 if mine.iter().any(|a| matches!(a, Action::Backstage(_))) {
@@ -377,7 +370,7 @@ impl MailApp {
     /// that acts on the message shows in that window; any other in the main window, brought
     /// forward (an appointment's opens in a window of its own).
     pub(crate) fn act_in_window(&mut self, key: MessageKey, a: Action) {
-        let Some(scope) = self.session.enter_window(&key) else {
+        let Some(scope) = self.session.enter_window_to_act(&key) else {
             // Its window gone (a file dialog's answer coming late): the reading pane's message
             // still takes it when it's the same one.
             if self.session.reading.as_ref().is_some_and(|r| r.key == key) {
@@ -424,16 +417,21 @@ fn for_window(key: &MessageKey, a: Action) -> Action {
     if main { a } else { Action::InWindow(key.clone(), Box::new(a)) }
 }
 
-/// A message window's top: its tabs and ribbon, as Outlook's, and its dialog, drawn while its
-/// message stands in as the one selected and read, so that what's offered is for it. `main`:
-/// there's a main window to open File and Help in (not in the browser's page for one message).
-fn message_top(ui: &mut Ui, session: &mut Session, st: &mut UiState, w: &quatrelle_engine::Reading, main: bool, mine: &mut Vec<Action>) {
+/// A message window's content, as Outlook's: its tabs and ribbon over the message, or its own File
+/// page in their place; and its dialog. All but the message are drawn while its message stands in
+/// as the one selected and read, so that what's offered is for it, wherever the main window is.
+fn message_content(ui: &mut Ui, session: &mut Session, st: &mut UiState, w: &quatrelle_engine::Reading, mine: &mut Vec<Action>) {
     let t = st.tokens;
     let key = &w.key;
     let scope = session.enter_window(key);
-    egui::Panel::top(egui::Id::unique(("message-window-ribbon", key.to_id())))
-        .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
-        .show(ui, |ui| ribbon::message_ribbon(ui, session, st, w, main, mine));
+    let filing = file_page::shown(ui.ctx(), key);
+    if filing {
+        file_page::page(ui, session, &t, w, mine);
+    } else {
+        egui::Panel::top(egui::Id::unique(("message-window-ribbon", key.to_id())))
+            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
+            .show(ui, |ui| ribbon::message_ribbon(ui, session, st, w, mine));
+    }
     if let Some((k, mut d)) = st.window_dialog.take() {
         if k == *key {
             let keep = dialogs::show(ui.ctx(), &mut d, session, &mut st.people, &mut st.pictures, &t, mine);
@@ -446,6 +444,11 @@ fn message_top(ui: &mut Ui, session: &mut Session, st: &mut UiState, w: &quatrel
     }
     if let Some(scope) = scope {
         session.leave_window(scope);
+    }
+    if !filing {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
+            reading::window(session, st, ui, w.clone(), mine);
+        });
     }
 }
 

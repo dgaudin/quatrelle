@@ -2082,7 +2082,6 @@ folder	Conflicts	衝突
 	Contact card	連絡人名片
 	All files	所有檔案
 	{ext} file	{ext} 檔案
-	This message is no longer in the list: open its folder to delete it.	這封郵件已不在清單中：請開啟其所在資料夾後再刪除。
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del 會永久刪除郵件，與在「刪除的郵件」中按 Del 相同
 	Drop to add them to {folder}	放開即可加入 {folder}
 	Added to {folder}: {n}	已加入 {folder}：{n}
@@ -2339,6 +2338,4 @@ presence	Offline	離線
 	The download was too slow	下載太慢
 	Too many files are being downloaded	正在下載的檔案太多
 	This file is no longer in the conversation	此檔案已不在對話中
-	Help	說明
 	Zoom	縮放
-	This message is no longer in the list: open its folder to change it.	這封郵件已不在清單中：請開啟其所在資料夾後再變更。

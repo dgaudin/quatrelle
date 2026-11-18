@@ -169,9 +169,13 @@ pub fn show(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Actio
 /// A message in a window of its own. What it asks for applies to that message: the window hands
 /// it on as its own ([`Action::InWindow`]), the main window's selection left as it is.
 pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: quatrelle_engine::Reading, acts: &mut Vec<Action>) {
+    // At its own zoom (the main window's put back after).
+    let own = s.window_zoom(&w.key);
+    let zoom = std::mem::replace(&mut s.prefs.reading_zoom, own);
     let saved = s.reading.replace(w);
     message(s, st, ui, acts, true);
     s.reading = saved;
+    s.prefs.reading_zoom = zoom;
 }
 
 /// What asking for something that needs the whole message says while only its text is here:
@@ -450,7 +454,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         && ui.rect_contains_pointer(scrolled.inner_rect)
         && let Some(percent) = zoom_step(ui.ctx(), s.prefs.reading_zoom)
     {
-        acts.push(Action::Run("view.zoom", json!({"percent": percent})));
+        // A window's own zoom, or the main window's.
+        let params = if in_window { json!({"percent": percent, "key": r.key.to_id()}) } else { json!({"percent": percent}) };
+        acts.push(Action::Run("view.zoom", params));
     }
     // The message scrolled under the header: a line between them.
     if headed && scrolled.state.clamped_offset().y > 0.5 {

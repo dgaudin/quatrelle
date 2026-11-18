@@ -214,10 +214,18 @@ pub(super) fn new_mail(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 pub(super) fn delete(s: &mut Session, v: &Value) -> CmdResult {
-    if s.view == View::Outbox && s.search.is_none() {
+    // From a message's own window, by where its message is, not by what the main window shows (in
+    // Deleted Items, a message of the Inbox was deleted for good).
+    let window = s.window_stands_in();
+    let outbox = if window {
+        !s.selection.is_empty() && s.selection.iter().all(|k| k.folder == crate::session::OUTBOX)
+    } else {
+        s.view == View::Outbox && s.search.is_none()
+    };
+    if outbox {
         return s.delete_outbox_selection();
     }
-    let in_trash = s.view_role() == Some(FolderRole::Trash) && s.search.is_none();
+    let in_trash = !window && s.view_role() == Some(FolderRole::Trash) && s.search.is_none();
     let all_in_trash =
         s.selected().iter().all(|m| s.account(&m.key.account).and_then(|a| a.folder(FolderRole::Trash)).is_some_and(|t| t.path == m.key.folder));
     if p::bool(v, "permanent").unwrap_or(false) || in_trash || all_in_trash {

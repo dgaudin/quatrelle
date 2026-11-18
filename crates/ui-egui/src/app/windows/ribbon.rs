@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! A message's own window as Outlook's: the tabs File, Message and Help, and the Message tab's
-//! ribbon, its groups as Outlook's (Delete, Respond, Quick steps, Move, Tags, Find, Zoom), each
+//! A message's own window as Outlook's: the tabs File (its own File page) and Message, and the
+//! Message tab's ribbon, its groups as Outlook's (Delete, Respond, Quick steps, Move, Tags, Find, Zoom), each
 //! button one of Quatrelle's commands, named as Quatrelle names it. Drawn while the window's
 //! message stands in as the one selected and read ([`Session::enter_window`]): what's offered is
-//! for that message, and the window hands on what's asked as done to it. Outlook's buttons for what
-//! Quatrelle doesn't do (Send to OneNote, All apps, Read aloud, Immersive reader, Translate)
-//! aren't there.
+//! for that message, wherever the main window is, and the window hands on what's asked as done to
+//! it. Outlook's buttons and tabs for what Quatrelle doesn't do (Send to OneNote, All apps, Read
+//! aloud, Immersive reader, Translate, Help) aren't there.
 
 use crate::*;
 
@@ -19,10 +19,10 @@ pub(super) fn fit_key(key: &MessageKey) -> String {
 
 /// The window's tabs, then the Message tab's ribbon; too narrow for every group's large
 /// buttons, its last groups drawn compact, as the main window's (worked out from this frame for
-/// the next). `main`: there's a main window to open File and Help in.
-pub(super) fn message_ribbon(ui: &mut Ui, s: &Session, st: &mut UiState, w: &quatrelle_engine::Reading, main: bool, acts: &mut Vec<Action>) {
+/// the next).
+pub(super) fn message_ribbon(ui: &mut Ui, s: &Session, st: &mut UiState, w: &quatrelle_engine::Reading, acts: &mut Vec<Action>) {
     let t = st.tokens;
-    tabs(ui, &t, &w.key, main, acts);
+    tabs(ui, &t, &w.key, acts);
     ui.add_space(2.0);
     let fit_key = fit_key(&w.key);
     let fit = st.ribbon_groups.get(&fit_key).cloned().unwrap_or_default();
@@ -47,26 +47,21 @@ pub(super) fn message_ribbon(ui: &mut Ui, s: &Session, st: &mut UiState, w: &qua
     st.ribbon_groups.insert(fit_key, next);
 }
 
-/// File and Help open the main window's File page (Help: its About page), brought forward;
-/// Message is the tab shown. Drawn inside the page (the browser), the window has no title bar to
-/// close it from: Close at the right.
-fn tabs(ui: &mut Ui, t: &Tokens, key: &MessageKey, main: bool, acts: &mut Vec<Action>) {
+/// File opens the window's own File page ([`super::file_page`]); Message is the tab shown. Drawn
+/// inside the page (the browser), the window has no title bar to close it from: Close at the
+/// right.
+fn tabs(ui: &mut Ui, t: &Tokens, key: &MessageKey, acts: &mut Vec<Action>) {
     ui.horizontal(|ui| {
         let tab = |ui: &mut Ui, label: &str, on: bool| {
             let font = if on { theme::bold(13.5) } else { theme::regular(13.5) };
             ui.add(egui::Button::new(RichText::new(label).color(if on { t.accent } else { t.dim }).font(font)).frame_when_inactive(false))
         };
-        if main && tab(ui, tl!("File"), false).clicked() {
-            acts.push(Action::Backstage(backstage::Page::Info));
-            acts.push(Action::FocusMain);
+        if tab(ui, tl!("File"), false).clicked() {
+            super::file_page::show(ui.ctx(), key, true);
         }
         let r = tab(ui, tl!("Message"), true);
         let line = [egui::pos2(r.rect.left() + 6.0, r.rect.bottom() + 1.0), egui::pos2(r.rect.right() - 6.0, r.rect.bottom() + 1.0)];
         ui.painter().line_segment(line, egui::Stroke::new(2.0, t.accent));
-        if main && tab(ui, tl!("Help"), false).on_hover_text(tl!("About")).clicked() {
-            acts.push(Action::Backstage(backstage::Page::About));
-            acts.push(Action::FocusMain);
-        }
         if ui.ctx().embed_viewports() {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if widgets::tiny_icon_button(ui, Icon::Close, "Close", t).clicked() {
@@ -83,20 +78,15 @@ fn groups(ui: &mut Ui, s: &Session, tokens: &Tokens, w: &quatrelle_engine::Readi
     let key = &w.key;
     let p = w.parsed.as_ref();
     let on = |id: &str| s.registry().get(id).is_some_and(|c| (c.enabled)(s).is_none());
-    // What acts on the list's mail can't reach a message no longer in it (another folder opened
-    // since): greyed, and said why.
-    let listed = s.summary(key).is_some();
-    let why =
-        |r: egui::Response| if listed { r } else { r.on_hover_text(tl!("This message is no longer in the list: open its folder to change it.")) };
     let mut groups = widgets::Groups::new(ui);
 
     let ignored = s.summary(key).is_some_and(|m| s.is_ignored(m));
     let tip = if ignored { tl!("Stop ignoring the conversation") } else { tl!("Its messages, and replies that arrive later, go to Deleted Items") };
-    if why(widgets::big_button(ui, Icon::Ignore, "Ignore", &t, on("mail.ignore")).on_hover_text(tip)).clicked() {
+    if widgets::big_button(ui, Icon::Ignore, "Ignore", &t, on("mail.ignore")).on_hover_text(tip).clicked() {
         acts.push(Action::Run("mail.ignore", json!({})));
     }
     // Junk, as Outlook's drop-down: reported (or not, in Junk Email), the sender's lists.
-    let r = why(widgets::big_button(ui, Icon::Junk, "Junk", &t, listed));
+    let r = widgets::big_button(ui, Icon::Junk, "Junk", &t, on("mail.junk") || on("mail.notJunk"));
     egui::Popup::menu(&r).show(|ui| {
         let in_junk = s.folder(&key.account, &key.folder).is_some_and(|f| f.role == quatrelle_engine::model::FolderRole::Junk);
         let (id, label) = if in_junk { ("mail.notJunk", tl!("Not junk")) } else { ("mail.junk", tl!("Report junk")) };
@@ -108,10 +98,10 @@ fn groups(ui: &mut Ui, s: &Session, tokens: &Tokens, w: &quatrelle_engine::Readi
         crate::junk_menu(ui, s, acts);
     });
     // Asked first where it's for good, as the Delete key does.
-    if why(widgets::big_button(ui, Icon::Delete, "Delete", &t, on("mail.delete")).on_hover_text(tl!("Delete (Del)"))).clicked() {
+    if widgets::big_button(ui, Icon::Delete, "Delete", &t, on("mail.delete")).on_hover_text(tl!("Delete (Del)")).clicked() {
         acts.push(Action::DeleteMail { for_good: false });
     }
-    if why(widgets::big_button(ui, Icon::Archive, "Archive", &t, on("mail.archive"))).clicked() {
+    if widgets::big_button(ui, Icon::Archive, "Archive", &t, on("mail.archive")).clicked() {
         acts.push(Action::Run("mail.archive", json!({})));
     }
     groups.end(ui, &t, "Delete");
@@ -143,11 +133,11 @@ fn groups(ui: &mut Ui, s: &Session, tokens: &Tokens, w: &quatrelle_engine::Readi
     }
     groups.end(ui, &t, "Respond");
 
-    let r = why(widgets::big_button(ui, Icon::Steps, "Quick steps", &t, listed));
+    let r = widgets::big_button(ui, Icon::Steps, "Quick steps", &t, on("quickStep.run"));
     egui::Popup::menu(&r).show(|ui| crate::quick_steps_menu(ui, s, acts));
     groups.end(ui, &t, "Quick steps");
 
-    if why(widgets::big_button(ui, Icon::Move, "Move to", &t, on("mail.move"))).clicked() {
+    if widgets::big_button(ui, Icon::Move, "Move to", &t, on("mail.move")).clicked() {
         acts.push(Action::Dialog(Dialog::move_to()));
     }
     // Rules: one made from this message's sender, or all of them.
@@ -189,17 +179,17 @@ fn groups(ui: &mut Ui, s: &Session, tokens: &Tokens, w: &quatrelle_engine::Readi
 
     // Exchange's retention and archive policies, where the server offers some.
     if s.offers_policy(&key.account, &key.folder) {
-        let r = why(widgets::big_button(ui, Icon::Clock, "Policy", &t, listed));
+        let r = widgets::big_button(ui, Icon::Clock, "Policy", &t, on("mail.retentionPolicy") || on("mail.archivePolicy"));
         egui::Popup::menu(&r).show(|ui| crate::panes::policy::policy_parts(ui, s, acts, crate::panes::policy::PolicyFor::Mail(key)));
     }
     let unread = s.summary(key).is_some_and(|m| !m.flags.seen);
     let (id, icon, label) = if unread { ("mail.markRead", Icon::Read, "Mark read") } else { ("mail.markUnread", Icon::Unread, "Mark unread") };
-    if why(widgets::big_button(ui, icon, label, &t, on(id))).clicked() {
+    if widgets::big_button(ui, icon, label, &t, on(id)).clicked() {
         acts.push(Action::Run(id, json!({})));
     }
-    let r = why(widgets::big_button(ui, Icon::Tag, "Categorize", &t, listed));
+    let r = widgets::big_button(ui, Icon::Tag, "Categorize", &t, on("mail.categorize"));
     egui::Popup::menu(&r).show(|ui| organize::categorize_menu(ui, s, &t, acts));
-    let r = why(widgets::big_button(ui, Icon::Flag, "Follow up", &t, on("mail.flag")));
+    let r = widgets::big_button(ui, Icon::Flag, "Follow up", &t, on("mail.flag"));
     egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts));
     groups.end(ui, &t, "Tags");
 
@@ -213,13 +203,13 @@ fn groups(ui: &mut Ui, s: &Session, tokens: &Tokens, w: &quatrelle_engine::Readi
     }
     groups.end(ui, &t, "Find");
 
-    // The message's zoom (all mail read is shown at it, as the status bar's).
-    let now = s.prefs.reading_zoom;
+    // The window's own zoom (the main window keeps its own).
+    let now = s.window_zoom(key);
     let r = widgets::big_button(ui, Icon::FontGrow, "Zoom", &t, true).on_hover_text(tf!("{percent}%", percent = now));
     egui::Popup::menu(&r).show(|ui| {
         for percent in ZOOMS {
             if ui.radio(now == percent, tf!("{percent}%", percent = percent)).clicked() {
-                acts.push(Action::Run("view.zoom", json!({"percent": percent})));
+                acts.push(Action::Run("view.zoom", json!({"percent": percent, "key": key.to_id()})));
                 ui.close();
             }
         }

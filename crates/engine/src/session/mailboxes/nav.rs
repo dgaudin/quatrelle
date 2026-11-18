@@ -153,15 +153,16 @@ impl Session {
         self.nav.len == self.list.len()
     }
 
+    /// A message of the list; while a window acts, its message, wherever it is.
     pub fn summary(&self, key: &MessageKey) -> Option<&Summary> {
-        self.index_of(key).and_then(|i| self.list.get(i)).map(Arc::as_ref)
+        self.index_of(key).and_then(|i| self.list.get(i)).map(Arc::as_ref).or_else(|| self.window_unlisted(key).map(Arc::as_ref))
     }
 
     /// The selected messages (in list order), shared with the list but in a list of their own.
     /// What's drawn each frame uses [`Session::selected_iter`] or [`Session::first_selected`],
     /// which make none.
     pub fn selected(&self) -> Vec<Arc<Summary>> {
-        let out: Vec<Arc<Summary>> = if self.selection.len() < 8 {
+        let mut out: Vec<Arc<Summary>> = if self.selection.len() < 8 {
             let mut at: Vec<usize> = self.selection.iter().filter_map(|k| self.index_of(k)).collect();
             at.sort_unstable();
             at.dedup();
@@ -170,6 +171,12 @@ impl Session {
             let chosen: HashSet<&MessageKey> = self.selection.iter().collect();
             self.list.iter().filter(|m| chosen.contains(&m.key)).cloned().collect()
         };
+        // A window acting: its message, which the list on screen may not hold.
+        if let Some(m) = self.selection.iter().find_map(|k| self.window_unlisted(k))
+            && !out.iter().any(|x| x.key == m.key)
+        {
+            out.push(m.clone());
+        }
         self.nav.clones.fetch_add(u64::try_from(out.len()).unwrap_or(u64::MAX), Ordering::Relaxed);
         out
     }
@@ -181,7 +188,13 @@ impl Session {
 
     /// The selected message highest in the list.
     pub fn first_selected(&self) -> Option<&Summary> {
-        self.selection.iter().filter_map(|k| self.index_of(k)).min().and_then(|i| self.list.get(i)).map(Arc::as_ref)
+        self.selection
+            .iter()
+            .filter_map(|k| self.index_of(k))
+            .min()
+            .and_then(|i| self.list.get(i))
+            .or_else(|| self.selection.iter().find_map(|k| self.window_unlisted(k)))
+            .map(Arc::as_ref)
     }
 
     /// How many summaries [`Session::selected`] has handed out of the list (debug stats). Only

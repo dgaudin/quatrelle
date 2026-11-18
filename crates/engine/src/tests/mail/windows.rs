@@ -78,23 +78,31 @@ fn a_window_on_the_message_read_deletes_as_the_main_window_does() {
     done(s);
 }
 
-/// Its message no longer in the list (another folder opened since): what acts on the list's mail
-/// can't reach it, and nothing else is filed away in its place; Reply still answers it.
+/// Whether the sample's `folder` holds a message called `subject` (on disk, not only in the list
+/// shown).
+fn kept_in(s: &Session, folder: &str, subject: &str) -> bool {
+    s.store.as_ref().unwrap().load_folder(sample::SAMPLE_ACCOUNT, folder).unwrap().messages.iter().any(|m| m.subject == subject)
+}
+
+/// Its message no longer in the list (another folder shown since in the main window): what files
+/// mail away acts on it all the same, and nothing of the list on screen moves; Reply answers it.
 #[test]
-fn a_window_whose_message_left_the_list_files_nothing_else_away() {
+fn a_window_whose_message_left_the_list_still_acts_on_it() {
     let (mut s, a, _) = two("window-elsewhere");
-    s.run("folder.open", &json!({"account": "sample", "folder": "Archive"})).unwrap();
+    let subject = s.summary(&a).unwrap().subject.clone();
+    s.run("folder.open", &json!({"account": "sample", "folder": "Sent"})).unwrap();
     let shown: Vec<MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
-    let first = shown.first().cloned().expect("the Archive has mail");
+    let first = shown.first().cloned().expect("Sent has mail");
     s.run("list.open", &json!({"key": first.to_id()})).unwrap();
     let main = main_window(&s);
-    assert!(matches!(s.run_in_window(&a, "mail.archive", &json!({})), Err(CmdError::Disabled(_))));
-    assert!(matches!(s.run_in_window(&a, "mail.delete", &json!({})), Err(CmdError::Disabled(_))));
-    assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown, "nothing moved");
-    assert_eq!(main_window(&s), main);
     s.run_in_window(&a, "mail.reply", &json!({})).unwrap();
-    assert_eq!(s.compose.as_ref().and_then(|c| c.source.clone()), Some(a));
+    assert_eq!(s.compose.as_ref().and_then(|c| c.source.clone()), Some(a.clone()));
+    s.run("compose.discard", &json!({})).unwrap();
+    s.run_in_window(&a, "mail.archive", &json!({})).unwrap();
+    assert!(kept_in(&s, "Archive", &subject) && !kept_in(&s, "INBOX", &subject), "archived");
+    assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown, "the list on screen as it was");
     assert_eq!(main_window(&s), main);
+    assert!(s.windows.is_empty(), "its window closes");
     done(s);
 }
 
@@ -180,21 +188,100 @@ fn a_windows_filing_commands_take_its_message_not_the_one_selected() {
 }
 
 #[test]
-fn a_window_whose_message_left_the_list_files_none_of_the_list_away() {
+fn a_window_whose_message_left_the_list_still_files_it_and_nothing_else() {
     for (id, params) in FILING {
         let (mut s, a, _) = apart("window-filing-elsewhere");
         answer_and_bin(&mut s);
-        s.run("folder.open", &json!({"account": "sample", "folder": "Archive"})).unwrap();
+        let subject = s.summary(&a).unwrap().subject.clone();
+        s.run("folder.open", &json!({"account": "sample", "folder": "Sent"})).unwrap();
         let shown: Vec<MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
         s.run("list.selectAll", &json!({})).unwrap();
         let main = main_window(&s);
         let params: Value = serde_json::from_str(params).unwrap();
-        assert!(matches!(s.run_in_window(&a, id, &params), Err(CmdError::Disabled(_))), "{id}");
+        s.run_in_window(&a, id, &params).unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert!(!kept_in(&s, "INBOX", &subject), "{id}: the window's message filed away");
         assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown, "{id}: nothing of the list moved");
         assert_eq!(main_window(&s), main, "{id}");
-        assert!(s.compose.is_none(), "{id}");
+        assert!(s.windows.is_empty(), "{id}: its window closes");
+        if id == "quickStep.run" {
+            assert_eq!(s.compose.as_ref().and_then(|c| c.source.clone()), Some(a), "the step answers the window's message");
+        }
         done(s);
     }
+}
+
+/// Its message no longer in the list: what marks it marks it all the same (read, flag, category).
+#[test]
+fn a_window_whose_message_left_the_list_still_marks_it() {
+    let (mut s, a, _) = two("window-marks-elsewhere");
+    let subject = s.summary(&a).unwrap().subject.clone();
+    let category = s.prefs.categories.first().map(|c| c.name.clone()).expect("a category");
+    s.run("folder.open", &json!({"account": "sample", "folder": "Sent"})).unwrap();
+    let shown: Vec<MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
+    for (id, params) in
+        [("mail.markUnread", json!({})), ("mail.flag", json!({"on": true})), ("mail.categorize", json!({"category": category, "on": true}))]
+    {
+        s.run_in_window(&a, id, &params).unwrap_or_else(|e| panic!("{id}: {e}"));
+    }
+    let inbox = s.store.as_ref().unwrap().load_folder(sample::SAMPLE_ACCOUNT, "INBOX").unwrap();
+    let m = inbox.messages.iter().find(|m| m.subject == subject).expect("still in the Inbox");
+    let c = s.prefs.categories.first().unwrap();
+    assert!(!m.flags.seen && m.flags.flagged && c.marks(&m.flags), "{:?}", m.flags);
+    assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown);
+    assert_eq!(s.windows.len(), 1, "still open: its message is still there");
+    done(s);
+}
+
+/// The main window on Deleted Items, a window's message in the Inbox: Delete moves it to Deleted
+/// Items; what the main window shows doesn't make it a delete for good.
+#[test]
+fn a_windows_delete_goes_by_where_its_message_is() {
+    let (mut s, a, _) = two("window-delete-from-trash-view");
+    let subject = s.summary(&a).unwrap().subject.clone();
+    s.run("folder.open", &json!({"account": "sample", "folder": "Trash"})).unwrap();
+    s.run_in_window(&a, "mail.delete", &json!({})).unwrap();
+    assert!(kept_in(&s, "Trash", &subject) && !kept_in(&s, "INBOX", &subject), "in Deleted Items, not deleted for good");
+    assert!(s.windows.is_empty());
+    done(s);
+}
+
+/// Its message moved elsewhere meanwhile (deleted from the main window): the window's commands
+/// find nothing to act on, and act on nothing else.
+#[test]
+fn a_window_whose_message_went_elsewhere_files_nothing() {
+    let (mut s, a, _) = two("window-gone-elsewhere");
+    let subject = s.summary(&a).unwrap().subject.clone();
+    s.run("list.open", &json!({"key": a.to_id()})).unwrap();
+    s.run("mail.delete", &json!({})).unwrap();
+    assert_eq!(s.windows.len(), 1, "the window stays, showing what it showed");
+    let shown: Vec<MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
+    let main = main_window(&s);
+    for id in ["mail.archive", "mail.delete", "mail.markUnread", "mail.junk"] {
+        assert!(matches!(s.run_in_window(&a, id, &json!({})), Err(CmdError::Disabled(_))), "{id}");
+    }
+    assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown);
+    assert_eq!(main_window(&s), main);
+    assert!(kept_in(&s, "Trash", &subject) && !kept_in(&s, "Archive", &subject) && !kept_in(&s, "Junk", &subject));
+    done(s);
+}
+
+/// Each window keeps its own zoom, from the main window's when it opened; the main window keeps
+/// its own.
+#[test]
+fn each_window_keeps_its_own_zoom() {
+    let (mut s, a, b) = two("window-zoom");
+    s.run("view.zoom", &json!({"percent": 120})).unwrap();
+    let c = s.list.iter().map(|m| m.key.clone()).find(|k| *k != a && *k != b).unwrap();
+    s.run("message.popOut", &json!({"key": c.to_id()})).unwrap();
+    s.run("view.zoom", &json!({"percent": 200, "key": a.to_id()})).unwrap();
+    assert_eq!((s.window_zoom(&a), s.window_zoom(&c), s.prefs.reading_zoom), (200, 120, 120));
+    s.run("view.zoom", &json!({"percent": 90})).unwrap();
+    assert_eq!((s.window_zoom(&a), s.window_zoom(&c), s.prefs.reading_zoom), (200, 120, 90));
+    s.run("view.zoom", &json!({"percent": 1000, "key": c.to_id()})).unwrap();
+    assert_eq!(s.window_zoom(&c), 400, "within the zooms offered");
+    assert!(s.run("view.zoom", &json!({"percent": 150, "key": b.to_id()})).is_err(), "no window shows it");
+    assert_eq!(s.prefs.reading_zoom, 90);
+    done(s);
 }
 
 /// Two windows open: each acts on its own message.

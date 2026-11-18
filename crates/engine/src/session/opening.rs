@@ -20,7 +20,7 @@ pub use selecting::Toward;
 #[cfg(test)]
 pub(crate) use source::source_lines;
 pub use source::{SOURCE_SHOWN, SourceView};
-pub(crate) use windows::Acting;
+pub(crate) use windows::OwnWindows;
 pub use windows::WindowScope;
 
 impl Session {
@@ -159,7 +159,8 @@ impl Session {
     pub fn pop_out(&mut self, key: &MessageKey) -> CmdResult {
         if !self.windows.iter().any(|w| &w.key == key) {
             if self.windows.len() >= MAX_WINDOWS {
-                self.windows.remove(0);
+                let oldest = self.windows.remove(0);
+                self.window_closed(&oldest.key);
             }
             let cached = self.cached_source(key);
             // Not kept here and shown in the reading pane: the window holds its source too.
@@ -179,6 +180,7 @@ impl Session {
             self.windows.push(w);
             // Opened on its own (a double-click): read, whatever the reading pane does.
             self.mark_seen(key);
+            self.window_opened(key);
         }
         Ok(serde_json::json!({"key": key.to_id(), "windows": self.windows.len()}))
     }
@@ -230,6 +232,7 @@ impl Session {
 
     pub fn close_window(&mut self, key: &MessageKey) {
         self.windows.retain(|w| &w.key != key);
+        self.window_closed(key);
     }
 
     /// A message as it's read: one without a `Date` gets the time the server took it in, as the

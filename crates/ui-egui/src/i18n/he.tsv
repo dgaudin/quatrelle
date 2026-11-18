@@ -2077,7 +2077,6 @@ folder	Conflicts	התנגשויות
 	Contact card	כרטיס איש קשר
 	All files	כל הקבצים
 	{ext} file	קובץ {ext}
-	This message is no longer in the list: open its folder to delete it.	ההודעה הזו כבר לא ברשימה: פתח את התיקייה שלה כדי למחוק אותה.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del מוחק דואר לצמיתות, כמו Del בפריטים שנמחקו
 	Drop to add them to {folder}	שחררו כדי להוסיף אותם אל {folder}
 	Added to {folder}: {n}	נוספו אל {folder}: {n}
@@ -2332,6 +2331,4 @@ presence	Offline	לא מחובר
 	The download was too slow	ההורדה הייתה איטית מדי
 	Too many files are being downloaded	יותר מדי קבצים בהורדה
 	This file is no longer in the conversation	הקובץ הזה כבר אינו בשיחה
-	Help	עזרה
 	Zoom	זום
-	This message is no longer in the list: open its folder to change it.	ההודעה הזו כבר לא ברשימה: פתח את התיקייה שלה כדי לשנות אותה.

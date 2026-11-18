@@ -222,7 +222,7 @@ impl MailApp {
                     // A message's page of its own (the browser): its message, not the list's
                     // selection.
                     if let Some(k) = self.ui.page_message.clone() {
-                        for a in delete_from_window(&self.session, &k, for_good) {
+                        for a in delete_from_window(&k, for_good) {
                             self.act(a);
                         }
                         continue;
@@ -337,13 +337,10 @@ fn question<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, count: 
 }
 
 /// Delete (or, `for_good`, Shift+Delete) on the message of a window of its own, or of the
-/// browser's page for one: that message, asked first in that window as in the list, the main
-/// window's selection left as it is; the window closes once it's gone. One no longer in the list
-/// (another folder opened since) isn't deleted: it's said why.
-pub(crate) fn delete_from_window(s: &Session, key: &MessageKey, for_good: bool) -> Vec<Action> {
-    if s.summary(key).is_none() {
-        return vec![Action::Refuse(tl!("This message is no longer in the list: open its folder to delete it.").to_string())];
-    }
+/// browser's page for one: that message, wherever the main window's list is, asked first in that
+/// window as in the list, the main window's selection left as it is; the window closes once it's
+/// gone.
+pub(crate) fn delete_from_window(key: &MessageKey, for_good: bool) -> Vec<Action> {
     vec![Action::InWindow(key.clone(), Box::new(Action::DeleteMail { for_good }))]
 }
 

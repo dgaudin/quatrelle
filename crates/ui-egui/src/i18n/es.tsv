@@ -2082,7 +2082,6 @@ menu	View	Ver
 	Contact card	Tarjeta de contacto
 	All files	Todos los archivos
 	{ext} file	Archivo {ext}
-	This message is no longer in the list: open its folder to delete it.	Este mensaje ya no está en la lista: abre su carpeta para eliminarlo.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Mayús+Supr elimina el correo definitivamente, como Supr en Elementos eliminados
 	Drop to add them to {folder}	Suéltelos para añadirlos a {folder}
 	Added to {folder}: {n}	Añadidos a {folder}: {n}
@@ -2337,6 +2336,4 @@ presence	Offline	Desconectado
 	The download was too slow	La descarga fue demasiado lenta
 	Too many files are being downloaded	Se están descargando demasiados archivos
 	This file is no longer in the conversation	Este archivo ya no está en la conversación
-	Help	Ayuda
 	Zoom	Zoom
-	This message is no longer in the list: open its folder to change it.	Este mensaje ya no está en la lista: abre su carpeta para cambiarlo.

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! UI tests: a message's own window as Outlook's: its tabs (File, Message, Help), its Message
-//! ribbon, and Reply, Reply all and Forward in its header, each acting on that window's message
-//! and not on the one selected in the main window; who it went to named, not only addressed.
+//! UI tests: a message's own window as Outlook's: its tabs (File, Message), its own File page, its
+//! Message ribbon, and Reply, Reply all and Forward in its header, each acting on that window's
+//! message and not on the one selected in the main window, wherever the main window is; its own
+//! zoom; who it went to named, not only addressed.
 //! With `QUATRELLE_FRAME_PNG` set to a folder, the window is painted there in light and dark.
 
 use super::super::list::follow_up::{Textures, frame_with, frame_with_size};
@@ -39,10 +40,11 @@ fn a_message_window_has_tabs_a_message_ribbon_and_the_reply_group() {
         }
         let png = pictures.as_ref().map(|d| d.join(format!("message-window-{theme}.png")));
         let (said, shapes) = frame_with(&ctx, &mut a, &mut tex, vec![], png);
-        // The window's own: the main window has none of these.
-        for name in ["Help", "Ignore", "Junk", "Meeting", "Rules", "Actions", "Find related", "Zoom"] {
+        // The window's own: the main window has none of these. No Help: Quatrelle has none.
+        for name in ["Message", "Ignore", "Junk", "Meeting", "Rules", "Actions", "Find related", "Zoom"] {
             assert!(said.iter().any(|l| l == name), "{name} in {said:?}");
         }
+        assert!(!said.iter().any(|l| l == "Help"), "no Help tab");
         for group in ["Delete", "Respond", "Quick steps", "Move", "Tags", "Find", "Zoom"] {
             assert!(drawn(&shapes, group) > 0, "the group {group}");
         }
@@ -215,44 +217,123 @@ fn buttons_named(ctx: &egui::Context, a: &mut MailApp, name: &str) -> Vec<(egui:
         .collect()
 }
 
-/// Its message no longer in the list (another folder opened in the main window, a message of it
-/// selected and read): what files or marks the window's message is greyed in its ribbon and says
-/// why on hover; what answers it is not.
+/// Its message no longer in the list (another folder shown in the main window, a message of it
+/// selected and read): what files or marks the window's message is offered all the same, and
+/// acts on it, the main window's list and selection left as they were.
 #[test]
-fn a_message_windows_buttons_are_greyed_once_its_message_left_the_list() {
-    let (mut a, dir, _, _) = popped("window-greyed");
-    a.run("folder.open", json!({"account": "sample", "folder": "Archive"}));
-    let first = a.session.list.first().map(|m| m.key.clone()).expect("the Archive has mail");
+fn a_message_windows_buttons_act_on_it_wherever_the_main_window_is() {
+    let (mut a, dir, mine, _) = popped("window-elsewhere");
+    let subject = a.session.summary(&mine).unwrap().subject.clone();
+    a.run("folder.open", json!({"account": "sample", "folder": "Sent"}));
+    let first = a.session.list.first().map(|m| m.key.clone()).expect("Sent has mail");
     a.run("list.open", json!({"key": first.to_id()}));
     let ctx = egui::Context::default();
     ctx.enable_accesskit();
-    ctx.all_styles_mut(|s| {
-        s.interaction.tooltip_delay = 0.0;
-        s.interaction.show_tooltips_only_when_still = false;
-    });
     for _ in 0..10 {
         frame(&ctx, &mut a, vec![]);
     }
-    // The window's own (the main window has none of these).
-    for name in ["Ignore", "Junk"] {
+    for name in ["Ignore", "Junk", "Delete", "Archive", "Quick steps", "Move to", "Categorize", "Follow up", "Mark unread"] {
         let found = buttons_named(&ctx, &mut a, name);
-        assert!(!found.is_empty() && found.iter().all(|(_, on)| !on), "{name} greyed: {found:?}");
+        assert!(!found.is_empty() && found.iter().all(|(_, on)| *on), "{name} can be used: {found:?}");
     }
-    let meeting = buttons_named(&ctx, &mut a, "Meeting");
-    assert!(!meeting.is_empty() && meeting.iter().all(|(_, on)| *on), "Meeting answers it still: {meeting:?}");
-    // The main window's can be used (a message of the Archive selected); the window's not.
-    for name in ["Delete", "Archive", "Quick steps", "Move to", "Categorize"] {
-        let found = buttons_named(&ctx, &mut a, name);
-        assert!(found.iter().any(|(_, on)| *on) && found.iter().any(|(_, on)| !on), "{name}: {found:?}");
-    }
-    let (ignore, _) = buttons_named(&ctx, &mut a, "Ignore")[0];
-    let why = "This message is no longer in the list: open its folder to change it.";
+    let shown: Vec<MessageKey> = a.session.list.iter().map(|m| m.key.clone()).collect();
+    let main = (a.session.selection.clone(), a.session.reading.as_ref().map(|r| r.key.clone()));
+    a.act(crate::Action::InWindow(mine.clone(), Box::new(crate::Action::DeleteMail { for_good: false })));
+    let trash = a.session.store.as_ref().unwrap().load_folder("sample", "Trash").unwrap();
+    assert!(trash.messages.iter().any(|m| m.subject == subject), "the window's message in Deleted Items");
+    assert_eq!(a.session.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), shown, "the main window's list as it was");
+    assert_eq!((a.session.selection.clone(), a.session.reading.as_ref().map(|r| r.key.clone())), main);
+    assert!(a.session.windows.is_empty(), "its window closes");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The File tab opens the window's own File page, as Outlook's message window does (not the main
+/// window's): Save As, Save Attachments, Print and the message's headers, each for the window's
+/// message; Back returns to the message.
+#[test]
+fn a_message_windows_file_tab_opens_its_own_file_page() {
+    let (mut a, dir, mine, other) = popped("window-file-page");
+    a.run("list.open", json!({"key": other.to_id()}));
+    let subject = a.session.summary(&mine).unwrap().subject.clone();
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
     let size = egui::vec2(1280.0, 800.0);
-    let mut said = false;
-    for _ in 0..6 {
-        let shapes = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(ignore.center())], size);
-        said |= text_at(&shapes, why).is_some();
+    // The window's File (drawn over the main window's).
+    let at = settled_text_at(&ctx, &mut a, "File", size).expect("File");
+    click_at(&ctx, &mut a, at, 1, size);
+    assert!(a.ui.backstage.is_none(), "not the main window's File page");
+    let said = |a: &mut MailApp| {
+        let mut tex = Textures::default();
+        frame_with(&ctx, a, &mut tex, vec![], None).0
+    };
+    let page = said(&mut a);
+    for name in ["Back", "Info", "Save As", "Print", "Message headers", "Close"] {
+        assert!(page.iter().any(|l| l == name), "{name} in {page:?}");
     }
-    assert!(said, "its tooltip says why");
+    assert!(page.iter().any(|l| l == &subject), "the window's message's details: {page:?}");
+    let at = settled_text_at(&ctx, &mut a, "Message headers", size).expect("Message headers");
+    click_at(&ctx, &mut a, at, 1, size);
+    match &a.ui.window_dialog {
+        Some((k, Dialog::Preview { text, .. })) => {
+            assert_eq!(k, &mine);
+            assert!(text.contains(&subject), "the window's message's headers: {text}");
+        }
+        other => panic!("its headers in the window: {other:?}"),
+    }
+    assert!(a.ui.dialog.is_none());
+    let back = said(&mut a);
+    assert!(!back.iter().any(|l| l == "Save Attachments"), "back on the message: {back:?}");
+    let _ = std::fs::remove_dir_all(dir);
+    // The page, painted (its textures kept from the first frame on).
+    if let Some(pictures) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
+        let (mut a, dir, _, other) = popped("window-file-page-picture");
+        a.run("list.open", json!({"key": other.to_id()}));
+        let ctx = egui::Context::default();
+        let mut tex = Textures::default();
+        let mut at = None;
+        for _ in 0..30 {
+            at = text_at(&frame_with(&ctx, &mut a, &mut tex, vec![], None).1, "File").or(at);
+        }
+        let at = at.expect("File");
+        let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        for events in [vec![Event::PointerMoved(at)], vec![press(true)], vec![press(false)], vec![Event::PointerMoved(egui::pos2(600.0, 600.0))]] {
+            frame_with(&ctx, &mut a, &mut tex, events, None);
+        }
+        for _ in 0..10 {
+            frame_with(&ctx, &mut a, &mut tex, vec![], None);
+        }
+        frame_with(&ctx, &mut a, &mut tex, vec![], Some(pictures.join("message-window-file-page.png")));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// Each window keeps its own zoom: the window's text drawn at it, the main window's zoom left as
+/// it is.
+#[test]
+fn a_message_windows_zoom_is_its_own() {
+    let (mut a, dir) = app_with_html("window-zoom", "Zoomed", "<p>Read me larger</p>");
+    let mine = a.session.list.iter().find(|m| m.subject == "Zoomed").map(|m| m.key.clone()).unwrap();
+    let other = a.session.list.iter().find(|m| m.key != mine).map(|m| m.key.clone()).unwrap();
+    a.run("message.popOut", json!({"key": mine.to_id()}));
+    a.run("list.open", json!({"key": other.to_id()}));
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    let height = |a: &mut MailApp| {
+        let mut h = None;
+        for _ in 0..6 {
+            let shapes = frame_shapes(&ctx, a, vec![], size);
+            h = shapes.iter().rev().find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text().starts_with("Read me larger") => Some(t.galley.rect.height()),
+                _ => None,
+            });
+        }
+        h.expect("the window's text")
+    };
+    let before = height(&mut a);
+    a.act(crate::Action::Run("view.zoom", json!({"percent": 200, "key": mine.to_id()})));
+    let after = height(&mut a);
+    assert!(after > before * 1.6, "drawn at its own zoom: {before} then {after}");
+    assert_eq!(a.session.prefs.reading_zoom, 100, "the main window's zoom as it was");
+    assert_eq!(a.session.window_zoom(&mine), 200);
     let _ = std::fs::remove_dir_all(dir);
 }

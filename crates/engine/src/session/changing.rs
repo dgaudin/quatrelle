@@ -99,6 +99,7 @@ impl Session {
     }
 
     pub(super) fn apply_op_memory(&mut self, account: &str, op: &Op) {
+        self.note_window_removals(op);
         if op.is_folder_op() {
             self.apply_folder_op_memory(account, op);
             return;

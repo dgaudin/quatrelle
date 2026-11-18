@@ -237,8 +237,8 @@ pub struct Session {
     pub reading: Option<Reading>,
     /// Messages opened in their own windows (double-click), oldest first.
     pub windows: Vec<Reading>,
-    /// A window's command running, on its message ([`Session::enter_window`]).
-    pub(crate) acting_for: Option<opening::Acting>,
+    /// What's kept of the windows: the one acting, each one's message and zoom ([`Session::enter_window`]).
+    pub(crate) own_windows: opening::OwnWindows,
     /// Messages' sources, each shown in a window of its own (issue #27), oldest first.
     pub sources: Vec<SourceView>,
     /// The message being written that commands act on (`compose.*`).
@@ -512,7 +512,7 @@ impl Session {
             anchor: None,
             reading: None,
             windows: Vec::new(),
-            acting_for: None,
+            own_windows: Default::default(),
             sources: Vec::new(),
             compose: None,
             composes: Vec::new(),

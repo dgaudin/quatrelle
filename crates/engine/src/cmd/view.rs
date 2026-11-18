@@ -13,10 +13,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("view.zoom", "Zoom", "View › Zoom", |s, v| {
             let percent = p::u64(v, "percent").ok_or_else(|| CmdError::Params("`percent` is required (50 to 400)".into()))?;
             let (low, high) = (u64::from(*crate::READING_ZOOM.start()), u64::from(*crate::READING_ZOOM.end()));
-            s.prefs.reading_zoom = u16::try_from(percent.clamp(low, high)).unwrap_or(100);
+            let percent = u16::try_from(percent.clamp(low, high)).unwrap_or(100);
+            // A message's own window keeps its own.
+            if v.get("key").is_some() {
+                let k = parse_key(v).ok_or_else(|| CmdError::Params("`key` isn't a message".into()))?;
+                return Ok(json!({"percent": s.set_window_zoom(&k, percent)?}));
+            }
+            s.prefs.reading_zoom = percent;
             Ok(json!({"percent": s.prefs.reading_zoom}))
         })
-        .params(r#"{"percent": number (the message read, 50 to 400; 100 as written)}"#),
+        .params(r#"{"percent": number (the message read, 50 to 400; 100 as written), "key"?: string (the message of a window of its own: that window's zoom alone)}"#),
         CommandSpec::new("view.conversations", "Show as conversations", "View › Messages", |s, v| {
             s.prefs.conversations = p::bool(v, "on").unwrap_or(!s.prefs.conversations);
             s.refresh_list();
