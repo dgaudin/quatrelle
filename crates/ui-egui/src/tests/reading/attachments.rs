@@ -79,8 +79,9 @@ impl Clocked {
     }
 
     /// A double-click on the chip whose ▾ is `more`, then a click alone: the double-click opens
-    /// the file (the test's services say it can't) and leaves no preview, then or after; the click
-    /// previews it once the double-click time is out. What it previews, if anything.
+    /// the file (the test's services say it can't), or asks first for one whose name says nothing
+    /// (answered Cancel), and leaves no preview, then or after; the click previews it once the
+    /// double-click time is out. What it previews, if anything.
     fn double_then_single(&mut self, ctx: &egui::Context, a: &mut MailApp, more: egui::Rect, what: &str) -> Option<(MessageKey, usize)> {
         let body = egui::pos2(more.left() - 60.0, more.center().y);
         let press = |pressed| Event::PointerButton { pos: body, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
@@ -95,7 +96,13 @@ impl Clocked {
             self.frame(ctx, a, vec![], 0.4);
         }
         assert!(a.ui.attachment_view.is_none(), "{what}: a double-click left a preview");
-        assert!(a.session.notices.len() > notices, "{what}: a double-click opens the file");
+        let asked = matches!(a.ui.dialog, Some(Dialog::RiskyAttachment { .. }));
+        assert!(asked || a.session.notices.len() > notices, "{what}: a double-click opens the file");
+        if asked {
+            // Cancel, and a frame for the question to be gone before the next click.
+            a.ui.dialog = None;
+            self.frame(ctx, a, vec![], 0.4);
+        }
         self.frame(ctx, a, vec![press(true)], 0.05);
         self.frame(ctx, a, vec![press(false)], 0.05);
         assert!(a.ui.attachment_view.is_none(), "{what}: a click waits out the double-click time");
@@ -259,7 +266,7 @@ fn a_page_asks_in_the_message_window_it_is_opened_from() {
 /// A double-click on an attachment only opens it, as Outlook's: its first click showed the file
 /// in the reading pane, left there behind the app it opened in. A click alone still previews it,
 /// once the double-click time is out. Every kind: text, PDF, Office files, pictures, an attached
-/// message and a file of no known kind.
+/// message and a file of no known kind (which asks first).
 #[test]
 fn a_double_clicked_attachment_only_opens() {
     let (mut a, dir) = app("attach-double");
