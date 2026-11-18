@@ -8,6 +8,10 @@
 //! user's last message, Esc lets an edit go (`editing.rs`). The paperclip beside the emoji button
 //! asks the window for files to attach, a screenshot pasted asks it to add the picture: they go
 //! with the message as chips over the box, sent with the text or alone (`attach.rs`).
+//! The new conversation's box is one too (`new_chat.rs`, its draft under [`NEW`]): there's no chat
+//! yet, so no "@" offer nor ↑, and Enter hands what's written to the pane, which asks for the
+//! conversation with it and keeps it until the chat is made ([`new_chat::send`]); while one is
+//! made, the box waits (its `Ui` disabled) and takes no key.
 //! The params sent, and read back from a refusal, are `params.rs`'. These keys act where they
 //! come among the frame's events, on the text as it stood when they were pressed (what's typed
 //! after them in the same frame waits for the next), and are the box's as it stood at the
@@ -39,8 +43,9 @@ use quatrelle_engine::Session;
 use quatrelle_engine::mime::rich::{self, Style, Styles};
 use quatrelle_engine::mime::{Typed, teams_compose_typed, teams_write_mentions};
 use quatrelle_engine::model::pim::teams::{MAX_ID, MAX_MENTIONS, OUTBOX_CHAT_MAX, OUTBOX_MAX};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
+use super::new_chat::{self, NEW, NewChat};
 use super::{ConversationsUi, TeamsAct};
 use crate::icons::Icon;
 use crate::rich_edit::{self, Picker};
@@ -247,9 +252,10 @@ struct Mode {
 }
 
 impl Mode {
-    fn of(s: &Session, d: &ChatDraft) -> Mode {
+    /// `new`: the new conversation's box, where ↑ edits nothing.
+    fn of(s: &Session, d: &ChatDraft, new: bool) -> Mode {
         let (offering, editing) = (d.offering(), d.editing.is_some());
-        let up_edits = !offering && !editing && d.text.is_empty() && s.teams.last_own(&s.prefs.teams.object_id).is_some();
+        let up_edits = !new && !offering && !editing && d.text.is_empty() && s.teams.last_own(&s.prefs.teams.object_id).is_some();
         Mode { offering, editing, up_edits }
     }
 
@@ -295,6 +301,13 @@ pub(crate) fn draft<'a>(c: &'a mut ConversationsUi, chat: &str) -> &'a mut ChatD
     d
 }
 
+/// `chat`'s draft let go, the files of its pasted pictures with it unless they go out (`sent`).
+pub(super) fn drop_draft(c: &mut ConversationsUi, chat: &str, sent: bool) {
+    if let Some(d) = c.drafts.remove(chat).filter(|_| !sent) {
+        d.parts.iter().for_each(|p| attach::let_go(&p.path));
+    }
+}
+
 /// The byte ranges of `text` in bold and in italic, as `teams.send` takes them.
 fn runs(text: &str, styles: &Styles) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
     let looks: Vec<(bool, bool)> = styles.palette.iter().map(|s| (s.bold, s.italic)).collect();
@@ -323,14 +336,18 @@ fn span(out: &mut Vec<Range<usize>>, open: &mut Option<usize>, on: bool, at: usi
 }
 
 /// The box of `chat` (the open one), at the foot of the pane: none for a chat the user left or
-/// one Teams won't let be read.
+/// one Teams won't let be read. The new conversation's ([`NEW`]) while its pane is open.
 pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens, chat: &str, acts: &mut Vec<Action>) {
-    let edit_asked = c.edit_asked.take();
-    if s.teams.row(chat).is_none_or(|r| r.left || r.unreadable) {
+    let new = chat == NEW;
+    let edit_asked = if new { None } else { c.edit_asked.take() };
+    // The pane's people and name, for Enter: put back once the box is drawn.
+    let mut who = if new { c.new_chat.take() } else { None };
+    if (new && who.is_none()) || (!new && s.teams.row(chat).is_none_or(|r| r.left || r.unreadable)) {
         return;
     }
     // The command's caps, the open chat's share then all of it: past them nothing is taken.
-    let full = s.teams.outgoing.len() >= OUTBOX_CHAT_MAX || usize::try_from(s.teams.unsent).unwrap_or(usize::MAX) >= OUTBOX_MAX;
+    let all = usize::try_from(s.teams.unsent).unwrap_or(usize::MAX) >= OUTBOX_MAX;
+    let full = all || (!new && s.teams.outgoing.len() >= OUTBOX_CHAT_MAX);
     let d = draft(c, chat);
     d.handed = None;
     if let Some(message) = edit_asked {
@@ -346,15 +363,16 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
             // gave it the keyboard: that frame is drawn at once, so an Esc right after is the box's.
             ui.ctx().request_repaint();
         }
-        let key = if ui.memory(|m| m.has_focus(id)) {
-            let mode = Mode::of(s, d);
+        // A box that waits takes no key.
+        let key = if ui.is_enabled() && ui.memory(|m| m.has_focus(id)) {
+            let mode = Mode::of(s, d, new);
             keys(ui, d, id, &mode)
         } else {
             // The keyboard went elsewhere: what was left for the box isn't given to another.
             d.pending.clear();
             None
         };
-        let focused = ui.memory(|m| m.has_focus(id));
+        let focused = ui.is_enabled() && ui.memory(|m| m.has_focus(id));
         // A screenshot pasted goes with the message (an edit takes none): the window writes it.
         if focused && d.editing.is_none() {
             for png in ui.input(|i| attach::pasted(&i.events)) {
@@ -394,6 +412,7 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
         // The key acts on the text as it stood when it was pressed: what came before it in the
         // frame was given to the text box just now.
         match key {
+            Some(BoxKey::Send) if new => create(d, who.as_mut(), full, acts),
             Some(BoxKey::Send) if d.editing.is_some() => editing::send_edit(d, chat, full, acts),
             Some(BoxKey::Send) => send(ui, d, id, chat, full, acts),
             Some(BoxKey::Bold) => toggle(d, |s| s.bold, |s, on| s.bold = on),
@@ -414,7 +433,9 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
             editing::cancel(d);
         }
         let focused = ui.memory(|m| m.has_focus(id));
-        mentions::refresh(d, s.teams.members(), &s.prefs.teams.object_id, &s.prefs.teams.tenant_id, focused);
+        if !new {
+            mentions::refresh(d, s.teams.members(), &s.prefs.teams.object_id, &s.prefs.teams.tenant_id, focused);
+        }
         // While people are offered or a message is edited, Tab and Esc are the box's (picking,
         // closing the offer, letting the edit go), not egui's (moving the keyboard, dropping it).
         let (offering, held) = (d.offering(), d.offering() || d.editing.is_some());
@@ -422,6 +443,10 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
         ui.memory_mut(|m| m.set_focus_lock_filter(id, filter));
         if key.is_some() || !d.pending.is_empty() || d.caret_to.is_some() {
             ui.ctx().request_repaint();
+        }
+        // Someone picked since: who to write to is no longer asked for.
+        if d.said == Some(Refusal::NoOne) && who.as_ref().is_some_and(|n| !n.picked.is_empty()) {
+            d.said = None;
         }
         let said = if d.too_long {
             Some(tl!("This message is too long for Teams"))
@@ -439,6 +464,9 @@ pub(crate) fn writing(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tok
             ui.label(RichText::new(line).size(12.5).color(t.danger));
         }
     });
+    if new {
+        c.new_chat = who;
+    }
 }
 
 /// The box's own keys ([`Mode`]: as the box stood at the frame's start), taken where they come in
@@ -495,28 +523,49 @@ fn toggle(d: &mut ChatDraft, get: fn(&Style) -> bool, set: fn(&mut Style, bool))
     d.weigh();
 }
 
-/// What's written sent with its files and pictures, when there's something to send (judged on
-/// what would be sent: spaces, blank lines or control characters alone are nothing; files alone
-/// are a message), it isn't too long and the outbox has room: the box emptied, the keyboard kept.
-/// Otherwise it stays. The people @mentioned go as `mentions`, the files as `files` and the
-/// pictures as `pictures` (their paths), when there are.
-fn send(ui: &Ui, d: &mut ChatDraft, id: egui::Id, chat: &str, full: bool, acts: &mut Vec<Action>) {
+/// What's written as a message's params, when there's something to send (judged on what would be
+/// sent: spaces, blank lines or control characters alone are nothing; files alone are a message),
+/// it isn't too long and the outbox has room: the text, its bold and italic, and the people
+/// @mentioned as `mentions`, the files as `files` and the pictures as `pictures` (their paths),
+/// when there are.
+fn message(d: &ChatDraft, full: bool) -> Option<Map<String, Value>> {
     if d.too_long || full {
-        return;
+        return None;
     }
     let typed = d.typed();
     if teams_compose_typed(&typed).0.blocks.is_empty() && d.parts.is_empty() {
-        return;
+        return None;
     }
-    let mut params = json!({"chat": chat, "text": typed.text, "bold": pairs(&typed.bold), "italic": pairs(&typed.italic)});
     let (files, pictures) = attach::paths(&d.parts);
-    if let Some(p) = params.as_object_mut() {
-        let lists = [("mentions", mention_pairs(&typed.mentions)), ("files", json!(files)), ("pictures", json!(pictures))];
-        for (k, list) in lists.into_iter().filter(|(_, l)| l.as_array().is_some_and(|l| !l.is_empty())) {
-            p.insert(k.into(), list);
-        }
+    let mut params = Map::new();
+    params.insert("text".into(), json!(typed.text));
+    params.insert("bold".into(), pairs(&typed.bold));
+    params.insert("italic".into(), pairs(&typed.italic));
+    let lists = [("mentions", mention_pairs(&typed.mentions)), ("files", json!(files)), ("pictures", json!(pictures))];
+    for (k, list) in lists.into_iter().filter(|(_, l)| l.as_array().is_some_and(|l| !l.is_empty())) {
+        params.insert(k.into(), list);
     }
-    acts.push(Action::Run("teams.send", params));
+    Some(params)
+}
+
+/// Enter in the new conversation's box: with no one picked, the box says so; else what's written,
+/// when it can go ([`message`]), asked for as the conversation's first message, and kept.
+fn create(d: &mut ChatDraft, who: Option<&mut NewChat>, full: bool, acts: &mut Vec<Action>) {
+    let Some(n) = who else { return };
+    if n.picked.is_empty() {
+        d.said = Some(Refusal::NoOne);
+    } else if let Some(message) = message(d, full) {
+        d.said = None;
+        new_chat::send(n, message, acts);
+    }
+}
+
+/// What's written sent with its files and pictures, when it can go ([`message`]): the box emptied,
+/// the keyboard kept. Otherwise it stays.
+fn send(ui: &Ui, d: &mut ChatDraft, id: egui::Id, chat: &str, full: bool, acts: &mut Vec<Action>) {
+    let Some(mut params) = message(d, full) else { return };
+    params.insert("chat".into(), json!(chat));
+    acts.push(Action::Run("teams.send", Value::Object(params)));
     d.text.clear();
     d.styles = Styles::default();
     d.mentions.clear();

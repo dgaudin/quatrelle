@@ -2350,3 +2350,14 @@ presence	Offline	Не в сети
 	A file is bigger than Teams takes here (100 MB)	Файл больше, чем Teams принимает здесь (100 МБ)
 	OneDrive didn't share the file with everyone in this conversation	OneDrive не открыл доступ к файлу всем участникам этой беседы
 	Attach the files again to send it	Вложите файлы заново, чтобы отправить его
+	New conversation	Новая беседа
+	A name or an address	Имя или адрес
+	No one found	Никого не найдено
+	The directory couldn't be searched	Не удалось выполнить поиск в справочнике
+	At most 20 people	Не более 20 человек
+	Group name (optional)	Название группы (необязательно)
+	Choose who to write to first	Сначала выберите, кому написать
+	Creating the conversation…	Создание беседы…
+	Teams didn't create the conversation	Teams не создал беседу
+	Teams can't be reached: try again	Teams недоступен: повторите попытку
+	Another conversation is being created	Создаётся другая беседа

@@ -25,6 +25,7 @@ mod editing;
 mod files;
 mod find;
 mod mentions;
+mod new_chat;
 mod notify;
 mod pictures;
 mod reactions;

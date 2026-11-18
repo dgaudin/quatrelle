@@ -4,14 +4,14 @@
 //! (the byte ranges of the text's bold, italic and mentions, [`pairs`], [`mention_pairs`]), read
 //! back from those of a message refused ([`ranges_of`], [`mentions_of`], [`styled`]), and the
 //! refusal put back in the box, with its files and pictures, and said in the window's words
-//! ([`refused`], [`Refusal`]).
+//! ([`refused`], [`Refusal`]); a new conversation refused is said in its box, which kept it all.
 //!
 //! What is hostile here: the params of a refusal (the box's own, or a script's): ranges and
 //! mentions checked against the text's characters, at the command's caps.
 
 use quatrelle_engine::{
-    CmdError, TEAMS_ATTACH_AGAIN, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY,
-    TEAMS_TOO_MANY_FILES,
+    CmdError, TEAMS_ATTACH_AGAIN, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NEEDS_NETWORK, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG,
+    TEAMS_TOO_MANY, TEAMS_TOO_MANY_FILES,
 };
 
 use super::*;
@@ -35,6 +35,12 @@ pub(super) enum Refusal {
     TooManyFiles,
     /// Retry of a message the outbox refused with its files: they're attached again.
     AttachAgain,
+    /// Enter in the new conversation's box with no one picked.
+    NoOne,
+    /// A new conversation while Teams can't be reached (it's created online).
+    Offline,
+    /// Anything else of a new conversation (a person the directory didn't give, one being created).
+    NotCreated,
 }
 
 impl Refusal {
@@ -53,7 +59,9 @@ impl Refusal {
             TEAMS_NOTHING_LEFT => Some(Refusal::NothingLeft),
             TEAMS_TOO_MANY_FILES => Some(Refusal::TooManyFiles),
             TEAMS_ATTACH_AGAIN => Some(Refusal::AttachAgain),
+            TEAMS_NEEDS_NETWORK => Some(Refusal::Offline),
             _ if id == "teams.send" => Some(Refusal::NotSent),
+            _ if id == "teams.create" => Some(Refusal::NotCreated),
             _ if id == "teams.edit" => Some(Refusal::NotEdited),
             _ => None,
         }
@@ -71,6 +79,9 @@ impl Refusal {
             Refusal::LastNotEditable => tl!("Your last message can't be edited here"),
             Refusal::TooManyFiles => tl!("At most 10 files and pictures go with a message"),
             Refusal::AttachAgain => tl!("Attach the files again to send it"),
+            Refusal::NoOne => tl!("Choose who to write to first"),
+            Refusal::Offline => tl!("Teams can't be reached: try again"),
+            Refusal::NotCreated => tl!("Teams didn't create the conversation"),
         }
     }
 }
@@ -134,15 +145,25 @@ pub(super) fn mentions_of(text: &str, params: &Value) -> Vec<(Range<usize>, Stri
         .collect()
 }
 
-/// What the engine refused of the box's (`teams.send`, `.edit`, `.retry` or `.discard`, with
-/// `params`; `open` is the chat on screen, which Retry and Delete are of): a message sent goes
-/// back in its chat's box with its bold, italic and mentions, before what was typed since (into
-/// the words set aside, while an edit is under way), and its files and pictures before those
-/// added since (`attach::put_back`); an edit goes back as an edit of its message again; why is
-/// said under the box.
+/// What the engine refused of the box's (`teams.send`, `.edit`, `.retry`, `.discard` or
+/// `.create`, with `params`; `open` is the chat on screen, which Retry and Delete are of): a
+/// message sent goes back in its chat's box with its bold, italic and mentions, before what was
+/// typed since (into the words set aside, while an edit is under way), and its files and pictures
+/// before those added since (`attach::put_back`); an edit goes back as an edit of its message
+/// again; a new conversation's box kept what it asked with, and its pane says no failure of it;
+/// why is said under the box.
 pub(crate) fn refused(c: &mut ConversationsUi, open: Option<&str>, id: &str, params: &Value, e: &CmdError) {
-    let chat = if matches!(id, "teams.send" | "teams.edit") { params.get("chat").and_then(Value::as_str) } else { open };
-    let Some(chat) = chat.filter(|c| !c.is_empty() && c.len() <= MAX_ID) else { return };
+    let chat = match id {
+        "teams.create" => {
+            if let Some(n) = c.new_chat.as_mut() {
+                n.asked = false;
+            }
+            Some(NEW)
+        }
+        "teams.send" | "teams.edit" => params.get("chat").and_then(Value::as_str),
+        _ => open,
+    };
+    let Some(chat) = chat.filter(|c| (id == "teams.create" && *c == NEW) || (!c.is_empty() && c.len() <= MAX_ID)) else { return };
     let said = Refusal::of(id, e);
     let d = draft(c, chat);
     if id == "teams.edit" {

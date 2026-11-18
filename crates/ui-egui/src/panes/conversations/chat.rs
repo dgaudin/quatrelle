@@ -91,6 +91,11 @@ impl Pane<'_> {
 
 /// The open chat: its header, then its messages (or, Graph refusing them, what's known of it).
 pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
+    // A new conversation is written in the open chat's place.
+    if ui_state.conversations.new_chat.is_some() {
+        super::new_chat::pane(s, &mut ui_state.conversations, ui, &ui_state.tokens, acts);
+        return;
+    }
     let Some(open) = s.teams.open.as_deref() else { return };
     let Some(row) = s.teams.row(open) else { return };
     let UiState { conversations: c, teams_queue, tokens, .. } = ui_state;
@@ -150,7 +155,7 @@ fn picture_params(p: &Picture) -> serde_json::Value {
 }
 
 /// A framed tag ("External", "App") in the line: drawn whole.
-fn tag(ui: &mut Ui, t: &Tokens, text: &str) -> egui::Response {
+pub(super) fn tag(ui: &mut Ui, t: &Tokens, text: &str) -> egui::Response {
     egui::Frame::new()
         .stroke(egui::Stroke::new(1.0, t.border))
         .corner_radius(4)

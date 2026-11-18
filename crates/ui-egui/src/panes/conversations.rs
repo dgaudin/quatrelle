@@ -9,8 +9,9 @@
 //! with the box to write in at its foot (`writing.rs`: the people offered after "@", the edit of
 //! one's own message, the files and pictures going with a message, which the window picks or
 //! writes when the box asks: [`TeamsAct`]); a message the pointer is on offers
-//! its bar (reactions, Copy, Edit and Delete), a deletion is asked first. Pictures are decoded on
-//! a thread of their own (`pictures.rs`).
+//! its bar (reactions, Copy, Edit and Delete), a deletion is asked first. A new conversation is
+//! written in the open chat's place (`new_chat.rs`: people from the directory, its first message
+//! in the same box). Pictures are decoded on a thread of their own (`pictures.rs`).
 
 use std::collections::{HashMap, HashSet};
 
@@ -25,6 +26,7 @@ use crate::theme::Tokens;
 mod chat;
 mod events;
 mod list;
+mod new_chat;
 mod pictures;
 mod writing;
 
@@ -35,6 +37,10 @@ pub(crate) use events::{body_of, repaint_in, title_of};
 #[cfg(test)]
 pub(crate) use list::picture_of;
 pub(crate) use list::{list, list_not_drawn};
+#[cfg(test)]
+pub(crate) use new_chat::NEW;
+pub(crate) use new_chat::NewChat;
+pub(crate) use new_chat::{close as close_new_chat, created as new_chat_created, open as open_new_chat};
 #[cfg(test)]
 pub(crate) use pictures::{Decoder, IMAGES_BYTES, MAX_PIXELS, Shown, TeamsPictures, pixels};
 pub(crate) use writing::{ChatDraft, add_files, add_picture, draft, refused};
@@ -96,12 +102,15 @@ pub struct ConversationsUi {
     pub hovered: Option<(String, egui::Rect)>,
     /// The user's own message asked to be deleted (its id): the question is asked over the window.
     pub deleting: Option<String>,
+    /// The new conversation written in the open chat's place (`new_chat.rs`), while there is one.
+    pub(crate) new_chat: Option<NewChat>,
 }
 
-/// Whether Esc is Conversations' own: the delete question's (a no), or the box's (it closes the
-/// offer, or lets the edit go). The window's own Esc (emptying the search) waits then.
+/// Whether Esc is Conversations' own: the delete question's (a no), a new conversation's (it
+/// closes: `app/keys.rs`), or the box's (it closes the offer, or lets the edit go). The window's
+/// own Esc (emptying the search) waits then.
 pub(crate) fn takes_escape(ctx: &egui::Context, c: &ConversationsUi, open: Option<&str>) -> bool {
-    c.deleting.is_some() || writing::takes_escape(ctx, c, open)
+    c.deleting.is_some() || c.new_chat.is_some() || writing::takes_escape(ctx, c, open)
 }
 
 /// What a row's picture is: a person's (their photo once it came, else their initials), a

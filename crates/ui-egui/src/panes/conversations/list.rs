@@ -6,7 +6,7 @@
 //! are; the rows are only gone through once a frame, to leave the hidden ones out). A row: the
 //! picture (a photo, else coloured initials; a group's and a meeting's own icon), the presence dot
 //! of a one-to-one chat, the name, the last line and its time. A search's hit opens its chat at
-//! the message found.
+//! the message found. Beside the search box, "New conversation" (`new_chat.rs`).
 //!
 //! What is hostile here: every name and line came from Graph (through the worker): drawn on one
 //! line ([`one_line`]), cut to the pane, never able to push "External" or "Can't be read here"
@@ -68,7 +68,7 @@ pub(crate) fn list(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         c.seen_users.clear();
         c.photos_asked.clear();
     }
-    search_box(ui, &t, c, acts);
+    search_box(s, ui, &t, c, acts);
     states(s, ui, &t, acts);
     let searching = !c.query.trim().is_empty();
     let rows: Vec<&ChatRow> = if searching { hits(s, ui, &t) } else { s.teams.listed(s.prefs.teams.show_unreadable).collect() };
@@ -112,29 +112,41 @@ pub(crate) fn list_not_drawn(s: &Session, c: &mut ConversationsUi, acts: &mut Ve
     }
 }
 
-/// The search box at the top: the search goes [`SEARCH_PAUSE`] after the last key (Enter: at
-/// once); emptied, the list comes back at once.
-fn search_box(ui: &mut Ui, t: &Tokens, c: &mut ConversationsUi, acts: &mut Vec<Action>) {
+/// The search box at the top, "New conversation" beside it while one can be started: the search
+/// goes [`SEARCH_PAUSE`] after the last key (Enter: at once); emptied, the list comes back at once.
+fn search_box(s: &Session, ui: &mut Ui, t: &Tokens, c: &mut ConversationsUi, acts: &mut Vec<Action>) {
     let frame = egui::Frame::new()
         .fill(if t.dark { t.surface } else { Color32::WHITE })
         .stroke(egui::Stroke::new(1.0, t.border))
         .corner_radius(4)
         .inner_margin(egui::Margin::symmetric(6, 3));
-    let resp = frame
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-                icons::paint(ui.painter(), r, Icon::Search, t.dim);
-                ui.add(
-                    egui::TextEdit::singleline(&mut c.query)
-                        .hint_text(tl!("Search conversations"))
-                        .char_limit(QUERY_CHARS)
-                        .frame(egui::Frame::NONE)
-                        .desired_width(ui.available_width())
-                        .text_color(t.text),
-                )
-            })
-            .inner
+    let start = s.prefs.teams.on && s.prefs.teams.signed_in;
+    let resp = ui
+        .horizontal(|ui| {
+            // The frame's margins and borders are 14 points; the button and its gap 40.
+            let room = if start { (ui.available_width() - 40.0).max(80.0) } else { ui.available_width() };
+            let resp = frame
+                .show(ui, |ui| {
+                    ui.set_width(room - 14.0);
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+                        icons::paint(ui.painter(), r, Icon::Search, t.dim);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut c.query)
+                                .hint_text(tl!("Search conversations"))
+                                .char_limit(QUERY_CHARS)
+                                .frame(egui::Frame::NONE)
+                                .desired_width(ui.available_width())
+                                .text_color(t.text),
+                        )
+                    })
+                    .inner
+                })
+                .inner;
+            if start && widgets::bar_icon_button(ui, Icon::Plus, "New conversation", t).clicked() {
+                super::new_chat::open(s, c);
+            }
+            resp
         })
         .inner;
     if std::mem::take(&mut c.focus_search) {

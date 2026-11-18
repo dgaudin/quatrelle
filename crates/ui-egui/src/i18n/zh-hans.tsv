@@ -2349,3 +2349,14 @@ presence	Offline	离线
 	A file is bigger than Teams takes here (100 MB)	某个文件超过了 Teams 在此接受的大小（100 MB）
 	OneDrive didn't share the file with everyone in this conversation	OneDrive 未与此会话中的所有人共享该文件
 	Attach the files again to send it	请重新附加文件以发送
+	New conversation	新对话
+	A name or an address	姓名或地址
+	No one found	未找到任何人
+	The directory couldn't be searched	无法搜索目录
+	At most 20 people	最多 20 人
+	Group name (optional)	群组名称 (可选)
+	Choose who to write to first	请先选择要写给谁
+	Creating the conversation…	正在创建对话…
+	Teams didn't create the conversation	Teams 未创建对话
+	Teams can't be reached: try again	无法连接到 Teams: 请重试
+	Another conversation is being created	正在创建另一个对话

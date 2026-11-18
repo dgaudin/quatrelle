@@ -2345,3 +2345,14 @@ presence	Offline	غير متصل
 	A file is bigger than Teams takes here (100 MB)	أحد الملفات أكبر مما يقبله Teams هنا (100 ميغابايت)
 	OneDrive didn't share the file with everyone in this conversation	لم يشارك OneDrive الملف مع كل من في هذه المحادثة
 	Attach the files again to send it	أرفق الملفات مرة أخرى لإرسالها
+	New conversation	محادثة جديدة
+	A name or an address	اسم أو عنوان
+	No one found	لم يُعثر على أحد
+	The directory couldn't be searched	تعذّر البحث في الدليل
+	At most 20 people	20 شخصًا على الأكثر
+	Group name (optional)	اسم المجموعة (اختياري)
+	Choose who to write to first	اختر أولًا من تكتب إليه
+	Creating the conversation…	جارٍ إنشاء المحادثة…
+	Teams didn't create the conversation	لم يُنشئ Teams المحادثة
+	Teams can't be reached: try again	تعذّر الوصول إلى Teams: أعد المحاولة
+	Another conversation is being created	يجري إنشاء محادثة أخرى

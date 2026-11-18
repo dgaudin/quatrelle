@@ -2346,3 +2346,14 @@ presence	Offline	オフライン
 	A file is bigger than Teams takes here (100 MB)	ファイルが、ここで Teams が受け付ける大きさ (100 MB) を超えています
 	OneDrive didn't share the file with everyone in this conversation	OneDrive がこの会話の全員とファイルを共有しませんでした
 	Attach the files again to send it	送信するには、ファイルをもう一度添付してください
+	New conversation	新しい会話
+	A name or an address	名前またはアドレス
+	No one found	見つかりませんでした
+	The directory couldn't be searched	ディレクトリを検索できませんでした
+	At most 20 people	20 人までです
+	Group name (optional)	グループ名 (省略可)
+	Choose who to write to first	先に宛先を選んでください
+	Creating the conversation…	会話を作成しています…
+	Teams didn't create the conversation	Teams で会話を作成できませんでした
+	Teams can't be reached: try again	Teams に接続できません: もう一度お試しください
+	Another conversation is being created	別の会話を作成しています

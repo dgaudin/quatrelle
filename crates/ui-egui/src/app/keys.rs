@@ -162,12 +162,16 @@ impl MailApp {
                     self.ui.cal_search.query.clear();
                     continue;
                 }
-                // In Conversations, the delete question's first (a no), then the box's while it
-                // offers people or edits a message (it closes the offer, or lets the edit go): the
-                // search stays as it is.
+                // In Conversations, the delete question's first (a no), then a new conversation's
+                // (it closes, what was written let go), then the box's while it offers people or
+                // edits a message (it closes the offer, or lets the edit go): the search stays as
+                // it is.
                 if self.session.module == Module::Conversations
                     && conversations::takes_escape(ctx, &self.ui.conversations, self.session.teams.open.as_deref())
                 {
+                    if self.ui.conversations.deleting.is_none() {
+                        conversations::close_new_chat(&self.session, &mut self.ui.conversations);
+                    }
                     continue;
                 }
                 // In Conversations, it empties its search: the list comes back.
@@ -267,9 +271,10 @@ impl MailApp {
     }
 
     /// The shown module's new item (Ctrl+N), as its ribbon's New button makes it: a message, an
-    /// appointment (at the half hour or the day selected), a contact, a task, a note.
+    /// appointment (at the half hour or the day selected), a contact, a task, a note, a
+    /// conversation (which needs no mail account).
     fn new_item(&mut self) {
-        if self.session.accounts.is_empty() {
+        if self.session.accounts.is_empty() && self.session.module != Module::Conversations {
             return;
         }
         match self.session.module {
@@ -280,8 +285,7 @@ impl MailApp {
             }
             Module::People => self.ui.dialog = Some(Dialog::new_contact()),
             Module::Tasks => self.ui.tasks.focus_new = true,
-            // No new conversation from Quatrelle yet.
-            Module::Conversations => {}
+            Module::Conversations => conversations::open_new_chat(&self.session, &mut self.ui.conversations),
             Module::Notes => {
                 let mut acts = Vec::new();
                 notes::new_note(&mut acts);

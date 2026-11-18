@@ -82,6 +82,7 @@ impl MailApp {
         conversations::announce(&mut self.session, &mut *self.services, ctx, away);
         self.teams_pages();
         self.teams_files();
+        conversations::new_chat_created(&mut self.session, &mut self.ui.conversations);
         let unread = self.session.inbox_unread();
         let view = match self.session.module {
             Module::Mail => view_title(&self.session),
@@ -227,7 +228,7 @@ impl MailApp {
             },
             // What the conversation's box asked for and the engine refused: a message or an edit
             // goes back in the box, why said under it in the interface's language (not a notice).
-            Action::Run(id @ ("teams.send" | "teams.edit" | "teams.retry" | "teams.discard"), p) => {
+            Action::Run(id @ ("teams.send" | "teams.edit" | "teams.retry" | "teams.discard" | "teams.create"), p) => {
                 if let Err(e) = self.session.run(id, &p) {
                     log::info!("{id}: {e}");
                     conversations::refused(&mut self.ui.conversations, self.session.teams.open.as_deref(), id, &p, &e);
