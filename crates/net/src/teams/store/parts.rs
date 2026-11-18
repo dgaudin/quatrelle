@@ -151,7 +151,8 @@ impl Copy {
     /// The bytes kept of the `n`th part of record `seq`, when there are some, at most
     /// [`PICTURE_INLINE_MAX`].
     pub(crate) fn picture(&self, seq: u64, n: usize) -> Option<Vec<u8>> {
-        let bytes = self.store.account_file(TEAMS_ACCOUNT, &picture_key(seq, n)).ok()??;
+        let cap = usize::try_from(PICTURE_INLINE_MAX).unwrap_or(usize::MAX);
+        let bytes = self.store.account_file_within(TEAMS_ACCOUNT, &picture_key(seq, n), cap).ok()??;
         (!bytes.is_empty() && u64::try_from(bytes.len()).is_ok_and(|len| len <= PICTURE_INLINE_MAX)).then_some(bytes)
     }
 

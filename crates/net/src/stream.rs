@@ -7,7 +7,7 @@ use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
@@ -36,14 +36,26 @@ const SHORT_TRY: Duration = Duration::from_secs(3);
 /// Set the first time an IPv4 address connects after an IPv6 one of the same host didn't.
 static V4_LEADS: AtomicBool = AtomicBool::new(false);
 
-/// A stream whose read timeout can change (IDLE waits in short slices).
+/// What a connection whose deadline went by says ([`Timed`], [`tls_within`]): `TimedOut`.
+pub const PAST_DEADLINE: &str = "no full answer in time";
+
+/// A stream whose read timeout can change (IDLE waits in short slices), and its write timeout
+/// (a [`Timed`] connection's writes wait no longer than its deadline).
 pub trait Timeouts {
     fn set_read_timeout(&mut self, t: Option<Duration>) -> io::Result<()>;
+    fn set_write_timeout(&mut self, _t: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 pub enum Stream {
     Plain(TcpStream),
     Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+    /// Plain HTTP with a deadline for all of its exchange ([`Timed`]: the tests' servers).
+    PlainWithin(Timed<TcpStream>),
+    /// TLS spoken over a socket with a deadline ([`tls_within`]): every read and write of the
+    /// socket itself, under rustls, looks at it, so a record that trickles in can't outlast it.
+    TlsWithin(Box<StreamOwned<ClientConnection, Timed<TcpStream>>>),
 }
 
 impl Read for Stream {
@@ -51,6 +63,8 @@ impl Read for Stream {
         match self {
             Stream::Plain(s) => s.read(buf),
             Stream::Tls(s) => s.read(buf),
+            Stream::PlainWithin(s) => s.read(buf),
+            Stream::TlsWithin(s) => s.read(buf),
         }
     }
 }
@@ -60,12 +74,16 @@ impl Write for Stream {
         match self {
             Stream::Plain(s) => s.write(buf),
             Stream::Tls(s) => s.write(buf),
+            Stream::PlainWithin(s) => s.write(buf),
+            Stream::TlsWithin(s) => s.write(buf),
         }
     }
     fn flush(&mut self) -> io::Result<()> {
         match self {
             Stream::Plain(s) => s.flush(),
             Stream::Tls(s) => s.flush(),
+            Stream::PlainWithin(s) => s.flush(),
+            Stream::TlsWithin(s) => s.flush(),
         }
     }
 }
@@ -75,6 +93,17 @@ impl Timeouts for Stream {
         match self {
             Stream::Plain(s) => s.set_read_timeout(t),
             Stream::Tls(s) => s.sock.set_read_timeout(t),
+            // Each read of a connection with a deadline sets its own.
+            Stream::PlainWithin(s) => s.get_ref().set_read_timeout(t),
+            Stream::TlsWithin(s) => s.sock.get_ref().set_read_timeout(t),
+        }
+    }
+    fn set_write_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
+        match self {
+            Stream::Plain(s) => s.set_write_timeout(t),
+            Stream::Tls(s) => s.sock.set_write_timeout(t),
+            Stream::PlainWithin(s) => s.get_ref().set_write_timeout(t),
+            Stream::TlsWithin(s) => s.sock.get_ref().set_write_timeout(t),
         }
     }
 }
@@ -83,6 +112,74 @@ impl Timeouts for TcpStream {
     fn set_read_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
         TcpStream::set_read_timeout(self, t)
     }
+    fn set_write_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
+        TcpStream::set_write_timeout(self, t)
+    }
+}
+
+/// A connection with a deadline for the whole of its exchange: every read and write looks at it
+/// first, and waits no longer than what is left of it (the connection's own [`IO_TIMEOUT`] still
+/// holds between two bytes). Past it, `TimedOut` ([`PAST_DEADLINE`]): a server that answers a byte
+/// at a time, however steadily, can't hold the connection longer than that.
+pub struct Timed<S> {
+    inner: S,
+    until: Instant,
+}
+
+impl<S> Timed<S> {
+    /// The connection under the deadline.
+    pub fn get_ref(&self) -> &S {
+        &self.inner
+    }
+}
+
+impl<S: Timeouts> Timed<S> {
+    pub fn new(inner: S, until: Instant) -> Self {
+        Timed { inner, until }
+    }
+
+    /// What is left before the deadline, at most [`IO_TIMEOUT`]; past it, the error.
+    fn left(&self) -> io::Result<Duration> {
+        match left_until(self.until) {
+            Some(left) => Ok(left.min(IO_TIMEOUT)),
+            None => Err(past_deadline()),
+        }
+    }
+
+    /// The deadline's error in place of a wait that ran into it.
+    fn judged(&self, e: io::Error) -> io::Error {
+        if nothing_yet(&e) && left_until(self.until).is_none() { past_deadline() } else { e }
+    }
+}
+
+impl<S: Read + Timeouts> Read for Timed<S> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let wait = self.left()?;
+        self.inner.set_read_timeout(Some(wait))?;
+        self.inner.read(buf).map_err(|e| self.judged(e))
+    }
+}
+
+impl<S: Write + Timeouts> Write for Timed<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let wait = self.left()?;
+        self.inner.set_write_timeout(Some(wait))?;
+        self.inner.write(buf).map_err(|e| self.judged(e))
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        let wait = self.left()?;
+        self.inner.set_write_timeout(Some(wait))?;
+        self.inner.flush().map_err(|e| self.judged(e))
+    }
+}
+
+/// What is left before `until`; `None` once it has come.
+fn left_until(until: Instant) -> Option<Duration> {
+    Some(until.saturating_duration_since(Instant::now())).filter(|left| !left.is_zero())
+}
+
+fn past_deadline() -> io::Error {
+    io::Error::new(io::ErrorKind::TimedOut, PAST_DEADLINE)
 }
 
 /// What every TLS connection trusts: the bundled Mozilla roots and the system's, less what the
@@ -122,7 +219,12 @@ fn attempt_order(addrs: Vec<SocketAddr>, prefer_v4: bool) -> Vec<SocketAddr> {
 
 /// Open a TCP connection, trying each resolved address in turn.
 pub fn tcp(host: &str, port: u16) -> Result<TcpStream> {
-    connect(host, port, false)
+    connect(host, port, false, None)
+}
+
+/// [`tcp`], connected by `until` (each address tried waits no longer than what is left).
+pub fn tcp_within(host: &str, port: u16, until: Instant) -> Result<TcpStream> {
+    connect(host, port, false, Some(until))
 }
 
 /// [`tcp`] to the internet only: never this computer, its network, or a link-local address,
@@ -130,7 +232,12 @@ pub fn tcp(host: &str, port: u16) -> Result<TcpStream> {
 /// picture address must not reach a router's or printer's web page, or a service on this
 /// computer. Checked on the addresses connected to, so a name that resolves to one is refused.
 pub fn tcp_public(host: &str, port: u16) -> Result<TcpStream> {
-    connect(host, port, true)
+    connect(host, port, true, None)
+}
+
+/// [`tcp_public`], connected by `until`.
+pub fn tcp_public_within(host: &str, port: u16, until: Instant) -> Result<TcpStream> {
+    connect(host, port, true, Some(until))
 }
 
 /// Whether an address is on the public internet: not loopback, private (RFC 1918, IPv6 unique
@@ -172,7 +279,7 @@ pub fn is_public(ip: std::net::IpAddr) -> bool {
     }
 }
 
-fn connect(host: &str, port: u16, public_only: bool) -> Result<TcpStream> {
+fn connect(host: &str, port: u16, public_only: bool, until: Option<Instant>) -> Result<TcpStream> {
     // A name that doesn't resolve is almost always a mistyped or guessed server name.
     let addrs = (host, port).to_socket_addrs().map_err(|e| {
         NetError::Io(io::Error::new(
@@ -192,6 +299,10 @@ fn connect(host: &str, port: u16, public_only: bool) -> Result<TcpStream> {
     for a in &candidates {
         left -= 1;
         let budget = if left == 0 { CONNECT_TIMEOUT } else { SHORT_TRY };
+        let budget = match until {
+            Some(until) => left_until(until).ok_or_else(past_deadline)?.min(budget),
+            None => budget,
+        };
         match TcpStream::connect_timeout(a, budget) {
             Ok(s) => {
                 if v6_missed && a.is_ipv4() {
@@ -238,14 +349,33 @@ pub fn nothing_yet(e: &io::Error) -> bool {
 
 /// Wrap a TCP connection in TLS, verifying the certificate against `host`.
 pub fn tls(sock: TcpStream, host: &str) -> Result<Stream> {
-    let name = ServerName::try_from(host.to_string()).map_err(|e| NetError::Tls(format!("{host}: {e}")))?;
-    let conn = ClientConnection::new(tls_config()?, name).map_err(|e| NetError::Tls(e.to_string()))?;
-    let mut s = StreamOwned::new(conn, sock);
+    let mut s = StreamOwned::new(client(host)?, sock);
     // Finish the handshake now so certificate problems surface as TLS errors, not later I/O.
     while s.conn.is_handshaking() {
         s.conn.complete_io(&mut s.sock).map_err(|e| NetError::Tls(e.to_string()))?;
     }
     Ok(Stream::Tls(Box::new(s)))
+}
+
+/// [`tls`] with a deadline for all of the connection's exchange, its handshake included: TLS is
+/// spoken over a [`Timed`] socket, so every read and write of the socket itself looks at the
+/// deadline. A TLS read waits for a whole record (16 KiB at most) and a handshake for all of its
+/// messages: a deadline looked at above rustls let a record that trickled in outlast it by days.
+/// Past it, `TimedOut` ([`PAST_DEADLINE`]).
+pub fn tls_within(sock: TcpStream, host: &str, until: Instant) -> Result<Stream> {
+    let mut s = StreamOwned::new(client(host)?, Timed::new(sock, until));
+    while s.conn.is_handshaking() {
+        if let Err(e) = s.conn.complete_io(&mut s.sock) {
+            return Err(if left_until(until).is_none() { past_deadline().into() } else { NetError::Tls(e.to_string()) });
+        }
+    }
+    Ok(Stream::TlsWithin(Box::new(s)))
+}
+
+/// A TLS client for `host`, verifying its certificate against it.
+fn client(host: &str) -> Result<ClientConnection> {
+    let name = ServerName::try_from(host.to_string()).map_err(|e| NetError::Tls(format!("{host}: {e}")))?;
+    ClientConnection::new(tls_config()?, name).map_err(|e| NetError::Tls(e.to_string()))
 }
 
 #[cfg(test)]

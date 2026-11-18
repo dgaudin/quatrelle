@@ -321,7 +321,7 @@ switch Teams off while it is open, Quatrelle returns to Mail.
 - **Pictures** kept with a message are fetched when the message is first drawn, a few per message,
   and shown in place; a click shows one big. A picture from elsewhere on the web is never fetched
   by itself: its place says **Show picture**, and only that click loads it (an `https` address, a
-  size limit, a time limit). One that can't be had (refused, too big, out of reach) says "Picture
+  size limit, a minute at most, however slowly its server answers). One that can't be had (refused, too big, out of reach) says "Picture
   not available"; Quatrelle remembers it (a thousand such pictures at most) and doesn't ask for it
   again until it starts again.
 - **Files** shared in a chat appear as cards with the file's name and the host of its link. A
@@ -353,7 +353,8 @@ the order written in each conversation, a second apart at least; a message waiti
 conversation doesn't hold back the others', though everything pauses while Teams asks to wait or
 after it fails. Once the outbox has taken them, they are kept in the copy until Teams has them:
 without the network, in Work offline, or while Teams asks to wait, they wait (and still show
-"Sending…" after a restart), then go. A message waiting its turn offers **Delete**; one being sent
+"Sending…" after a restart: a message of words alone; one with files or pictures, see Pictures and
+files), then go. A message waiting its turn offers **Delete**; one being sent
 offers nothing, since it may be in Teams already.
 
 When the network drops during a send, Quatrelle can't tell whether Teams got the message: before
@@ -392,7 +393,8 @@ They go with the text, the pictures first and then the files, each in the order 
   it is a week old.
 - **Where a file goes.** It is put in your OneDrive, in the folder `Microsoft Teams Chat Files`,
   and shared **to read only** with the people who are in the conversation when the message is
-  sent, nobody else; the message carries a link to it. A file already uploaded stays in that folder when
+  sent, nobody else (Quatrelle asks Teams who they are just before it shares, and checks that
+  what OneDrive made is that file, in that folder); the message carries a link to it. A file already uploaded stays in that folder when
   its message is cancelled or isn't sent: delete it there if you don't want it.
 - **Sending shows.** The message appears at once on your side, dimmed, with **Uploading…** and the
   share done as the files go up (a big file may take a while), then "Sending…" as for any message. Everything waits when
@@ -407,8 +409,14 @@ They go with the text, the pictures first and then the files, each in the order 
   or a member has no address, the message isn't sent). A message
   that Quatrelle's outbox refused when it was sent, and that had files, has no **Retry**: it says
   "Attach the files again to send it" and only **Delete** is offered. A message the outbox took
-  keeps its **Retry** and **Delete**, and its files are kept by their paths, so it can be sent
-  after a restart too (a file that is gone or changed then marks it Not sent, as above). **Delete** removes it.
+  keeps its **Retry** and **Delete** while Quatrelle runs (a file that is gone or changed when it
+  goes marks it Not sent, as above). **Delete** removes it.
+- **After a restart** (or Teams switched off and on again), a message whose files weren't all
+  shared yet, or that has pictures and wasn't sent yet, isn't sent from what Quatrelle had kept of
+  it: nothing of it is read, uploaded or shared. It shows Not sent, "A file is no longer there,
+  or has changed", says "Attach the files again to send it", and only **Delete** is offered. It
+  stays, its words with it, from one start to the next until you delete it. A message of words
+  alone goes on as before.
 
 **Files others shared.** A file card shows its name, size and where its link goes.
 
@@ -420,11 +428,14 @@ They go with the text, the pictures first and then the files, each in the order 
   Teams' code), Teams can't be reached, the download was too slow, too many files are being
   downloaded, or the file is no longer in the conversation. A file removed from that folder since
   it was downloaded is downloaded again at the next **Open**.
-- **A file that could run** (a program, a script, a web page, a picture that holds scripts or a
-  document with macros), or of a type Quatrelle doesn't know (without an extension, or with one it
-  doesn't know: your computer would go by what the file holds), isn't opened: it is shown in its
-  folder, and the card says "This file could run a program: it is shown in its folder, not
-  opened." You decide what to do with it.
+- **A file that could run** (a program, a script, a web page, a picture that holds scripts, a
+  document with macros, or a Word, Excel or PowerPoint file of the formats before 2007 and a rich
+  text file, which can hold them too), or of a type Quatrelle doesn't know (without an extension,
+  or with one it doesn't know: your computer would go by what the file holds), isn't opened: it is
+  shown in its folder, and the card says "This file could run a program: it is shown in its
+  folder, not opened." You decide what to do with it. On Windows every file downloaded is marked
+  as coming from the internet, as browsers do: Office opens it in Protected View, wherever you
+  open it from.
 - **Open in browser** opens the file's link in your default browser. It is offered for any web link of the card, including the files over 100 MB.
 
 ### Starting a conversation
@@ -578,8 +589,11 @@ Quatrelle keeps well under Microsoft's limits, with one worker that makes one re
 | History of older messages | in the gaps, when nothing above is due |
 
 After a "too many requests" answer (429 or 503), nothing is asked until Microsoft's wait is over,
-then Quatrelle goes slower, and returns to its pace after an hour without one. Switching Teams off
-or signing out stops all of it at once.
+then Quatrelle goes slower, and returns to its pace after an hour without one. Each request ends
+within two minutes (a server that answers slowly is taken for the network gone: Offline, tried
+again later). Switching Teams off or signing out stops all of it, once what was under way has
+ended: a step may make a few requests in a row (reading a long list of members, signing in), each
+ending within two minutes.
 
 ### Not yet
 

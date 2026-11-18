@@ -105,6 +105,13 @@ pub(crate) struct FakeDrive {
     /// The range put once this many were taken is carried out, then its connection closed with
     /// no answer, once: an upload cut mid-way.
     pub(crate) cut_range: Option<usize>,
+    /// The last range's answer names this item, in place of the file it made (`root`: the drive's
+    /// own folder, which the fake answers for and shares as Graph would).
+    pub(crate) done_as: Option<String>,
+    /// Items are answered with this size, in place of their bytes'.
+    pub(crate) item_size: Option<u64>,
+    /// Items are answered in this folder (their `parentReference.path`), in place of Teams' own.
+    pub(crate) item_parent: Option<String>,
 }
 
 /// `bytes a-b/total`.
@@ -151,8 +158,11 @@ impl FakeTeams {
     ) -> Option<Reply> {
         let not_found = || Reply::error(404, "itemNotFound", "The item wasn't found.");
         let at = p.get(3).and_then(|id| self.drive_files.files.iter().position(|f| f.id == *id));
+        let root = p.get(3) == Some(&"root");
         Some(match (name, at) {
             ("uploadSession", _) => self.upload_session(p, raw_path, input, base),
+            ("item", None) if root => self.root_item(),
+            ("invite", None) if root => self.invite(input),
             ("item", Some(at)) => self.item(at, q),
             ("deleteItem", Some(at)) => {
                 self.drive_files.files.remove(at);
@@ -282,7 +292,8 @@ impl FakeTeams {
             bytes,
             etag: format!("\"{{5B8C7D0E-{n:04X}-4000-8000-{n:012X}}},1\""),
         };
-        let reply = Reply::json(201, &json!({"id": item.id, "name": item.name, "size": item.bytes.len()}));
+        let id = d.done_as.clone().unwrap_or_else(|| item.id.clone());
+        let reply = Reply::json(201, &json!({"id": id, "name": item.name, "size": item.bytes.len()}));
         d.files.push(item);
         reply
     }
@@ -292,11 +303,33 @@ impl FakeTeams {
         let Some(f) = self.drive_files.files.get(at) else { return Reply::error(404, "itemNotFound", "The item wasn't found.") };
         let etag = if self.drive_files.no_guid { "\"{not-a-guid},1\"".to_string() } else { f.etag.clone() };
         let dav = self.web_dav_url(f);
-        let full = json!({"id": f.id, "eTag": etag, "name": f.name, "size": f.bytes.len(), "webUrl": format!("{dav}?web=1"), "webDavUrl": dav});
+        let d = &self.drive_files;
+        let size = d.item_size.unwrap_or(f.bytes.len() as u64);
+        let path = d.item_parent.clone().unwrap_or_else(|| format!("/drive/root:/{FOLDER}"));
+        let parent = json!({"driveType": "business", "id": "01FOLDER0001", "name": path.rsplit('/').next().unwrap_or_default(), "path": path});
+        let full = json!({
+            "id": f.id, "eTag": etag, "name": f.name, "size": size, "webUrl": format!("{dav}?web=1"), "webDavUrl": dav,
+            "file": {"mimeType": "application/octet-stream"}, "parentReference": parent,
+        });
         let selected: Vec<&str> =
             q.get("$select").map(|s| s.split(',').map(str::trim).collect()).unwrap_or_else(|| vec!["id", "eTag", "name", "size", "webUrl"]);
         let v: serde_json::Map<String, Value> = selected.iter().filter_map(|k| full.get(*k).map(|x| (k.to_string(), x.clone()))).collect();
         Reply::json(200, &Value::Object(v))
+    }
+
+    /// The drive's own folder, as Graph answers for `root`: a folder (no `file` facet), of the size
+    /// of all it holds, at the drive's top (no `parentReference` path).
+    fn root_item(&self) -> Reply {
+        let drive = self.drive.clone().unwrap_or_else(|| DRIVE.to_string());
+        let size: usize = self.drive_files.files.iter().map(|f| f.bytes.len()).sum();
+        Reply::json(
+            200,
+            &json!({
+                "id": "root", "eTag": "\"{0F0F0F0F-0000-4000-8000-000000000000},1\"", "name": "root", "size": size + 1_000_000,
+                "webUrl": drive, "webDavUrl": drive, "folder": {"childCount": self.drive_files.files.len()},
+                "parentReference": {"driveType": "business", "id": "01DRIVE0001"},
+            }),
+        )
     }
 
     /// A share: 403 when refused; each recipient in `fail_share` listed with its error (207).

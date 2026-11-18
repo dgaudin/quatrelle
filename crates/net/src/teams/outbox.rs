@@ -98,6 +98,10 @@ pub(crate) struct Outbox {
     held: Held,
     /// The messages whose files are being made ready, by number (`parts.rs`).
     uploads: HashMap<u64, parts::Upload>,
+    /// The messages read back at the copy's opening with files not shared, or pictures
+    /// ([`parts::opened`]), by number: never a head, never sent again, said without their number,
+    /// whatever the copy holds of them. At most the outbox's records ([`OUTBOX_MAX`]).
+    refused: HashSet<u64>,
 }
 
 impl Outbox {
@@ -230,6 +234,10 @@ pub(crate) fn retry(w: &mut Worker, seq: u64) {
     let Some(mut op) = w.copy.as_ref().and_then(|c| c.op_at(seq)) else {
         return log::info!("teams: no message there to send again");
     };
+    if w.outbox.refused.contains(&seq) {
+        log::info!("teams: a message read back with its files isn't sent again: they're attached again");
+        return changed(w, &op.chat);
+    }
     if !matches!(op.state, OpState::NotSent { .. }) {
         log::info!("teams: a message asked to go again isn't one that wasn't sent: left as it is");
         return changed(w, &op.chat);
@@ -247,11 +255,11 @@ pub(crate) fn discard(w: &mut Worker, seq: u64) {
     let Some(op) = w.copy.as_ref().and_then(|c| c.op_at(seq)) else {
         return log::info!("teams: no message there to delete");
     };
-    if matches!(op.state, OpState::Waiting | OpState::NotSent { .. }) {
-        if let Some(copy) = &w.copy
-            && let Err(e) = copy.remove_op(seq)
-        {
+    if matches!(op.state, OpState::Waiting | OpState::NotSent { .. }) || w.outbox.refused.contains(&seq) {
+        if let Some(Err(e)) = w.copy.as_ref().map(|copy| copy.remove_op(seq)) {
             log::error!("teams: a message couldn't be deleted from the outbox: {}", kind(&NetError::Store(e)));
+        } else {
+            w.outbox.refused.remove(&seq);
         }
         parts::let_go(w, seq);
         log::info!("teams: a message to conversation {} was deleted from the outbox, as asked", w.hashed(&op.chat));
@@ -259,6 +267,21 @@ pub(crate) fn discard(w: &mut Worker, seq: u64) {
         log::info!("teams: a message being sent isn't deleted: it may be in Teams already");
     }
     changed(w, &op.chat);
+}
+
+/// [`Job::DiscardUnnumbered`](quatrelle_model::pim::teams::Job::DiscardUnnumbered): a message the
+/// outbox said without its number, refused at the copy's opening ([`parts::opened`]), deleted by
+/// its local id, as the window names it. Any other is left as it is.
+pub(crate) fn discard_unnumbered(w: &mut Worker, local: &str) {
+    if !local_ok(local) {
+        return log::warn!("teams: a message to delete without a usable id was dropped");
+    }
+    let refused = &w.outbox.refused;
+    let found = w.copy.as_ref().and_then(|c| c.ops().into_iter().find(|o| o.local == local && refused.contains(&o.seq)));
+    match found {
+        Some(op) => discard(w, op.seq),
+        None => log::info!("teams: no message said without its number there to delete"),
+    }
 }
 
 /// One step of the outbox at `now`, a request at most: a chat to mark read, else the first
@@ -333,7 +356,9 @@ pub(crate) fn left(w: &mut Worker, chat: &str) {
 
 /// The copy was opened: what the steps look at begun again (the marks of before let go), a
 /// message left "Sending" (a run cut off during its request) checked rather than posted again, a
-/// change left so made again ([`changes::opened`]), and the outbox's count said.
+/// change left so made again ([`changes::opened`]), a message with files or pictures the copy
+/// alone vouches for let go, its files attached again ([`parts::opened`]), and the outbox's count
+/// said.
 pub(crate) fn opened(w: &mut Worker) {
     w.outbox = Outbox::default();
     let Some(copy) = &w.copy else { return };
@@ -352,6 +377,9 @@ pub(crate) fn opened(w: &mut Worker) {
     for item in changes::opened(w, &mut ops) {
         let chat = item.chat.clone();
         snapshot(w, &ops, &chat, None, vec![item]);
+    }
+    for chat in parts::opened(w, &mut ops) {
+        snapshot(w, &ops, &chat, None, Vec::new());
     }
     w.say(Event::Unsent { count: count(&ops) });
     keep(w, &ops);
@@ -691,7 +719,7 @@ fn said(w: &mut Worker, ops: &[OpRecord], chat: &str, took: Option<String>, extr
 /// `chat`'s messages and changes going out, of `ops`, said; `extra` after them (not kept: not
 /// taken, or a reaction let go), `took` naming what was just answered for.
 fn snapshot(w: &Worker, ops: &[OpRecord], chat: &str, took: Option<String>, extra: Vec<Outgoing>) {
-    let mut items: Vec<Outgoing> = ops.iter().filter(|o| o.chat == chat).map(|o| parts::shown(w, o.outgoing())).collect();
+    let mut items: Vec<Outgoing> = ops.iter().filter(|o| o.chat == chat).map(|o| parts::said_as(w, o)).collect();
     items.extend(extra);
     w.say(Event::Outbox { chat: chat.to_string(), items, took });
 }
@@ -708,7 +736,7 @@ fn keep(w: &mut Worker, ops: &[OpRecord]) {
     let mut seen = HashSet::new();
     let heads: Vec<Head> = ops
         .iter()
-        .filter(|o| !matches!(o.state, OpState::NotSent { .. }) && seen.insert(o.chat.as_str()))
+        .filter(|o| !matches!(o.state, OpState::NotSent { .. }) && !w.outbox.refused.contains(&o.seq) && seen.insert(o.chat.as_str()))
         .map(|o| Head { seq: o.seq, chat: o.chat.clone(), key: w.key_of(&o.chat), check: checked(o) })
         .collect();
     w.outbox.checks.retain(|seq, _| heads.iter().any(|h| h.check && h.seq == *seq));

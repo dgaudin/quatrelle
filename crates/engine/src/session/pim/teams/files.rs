@@ -37,9 +37,13 @@ const EXTENSION_MAX: usize = 16;
 /// A file's place in a message is written with its GUID: one of the same length stands for it.
 const GUID_PLACE: &str = "00000000-0000-0000-0000-000000000000";
 /// Extensions of files that run code when opened, beyond those of mail's attachments
-/// ([`runs_code`]): web pages and SVGs (their scripts), and Office documents with macros.
-const ALSO_RUNS: [&str; 17] =
-    ["html", "htm", "xhtml", "shtml", "mht", "mhtml", "svg", "svgz", "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm"];
+/// ([`runs_code`]): web pages and SVGs (their scripts), Office documents with macros, and the
+/// Office formats before 2007 and rich text, which carry them as well (documents, templates,
+/// sheets, decks and shows).
+const ALSO_RUNS: [&str; 25] = [
+    "html", "htm", "xhtml", "shtml", "mht", "mhtml", "svg", "svgz", "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm", "doc",
+    "dot", "xls", "xlt", "ppt", "pot", "pps", "rtf",
+];
 
 /// Where a file of the open chat asked for stands.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -298,7 +302,8 @@ impl Session {
     /// [`teams::Event::File`]: how a file asked ended, taken only for one of the open chat asked
     /// and not answered yet. Not saved: kept to say so (Teams' code only in the client's shape).
     /// Saved: taken only inside the folder of files handed to other apps, under a name of its own
-    /// (else refused), marked as come from elsewhere when it's there, and handed to the window.
+    /// (else refused), and handed to the window. The worker marked it as come from the internet as
+    /// it made it (on Windows), whether or not it's taken here.
     pub(super) fn teams_file(&mut self, chat: &str, message: &str, attachment: &str, outcome: FileOutcome) {
         if self.teams.open.as_deref() != Some(chat) || self.teams.file_state(message, attachment) != Some(&TeamsFileState::Asked) {
             return;
@@ -307,11 +312,6 @@ impl Session {
             FileOutcome::Failed { why, code } => TeamsFileState::Failed { why, code: code.filter(|c| code_ok(c)) },
             FileOutcome::Saved { path } => match in_open_folder(&path) {
                 Some(path) => {
-                    // Only a file there: on Windows the mark (a stream of the file) would make an
-                    // empty one of a name that isn't.
-                    if Path::new(&path).is_file() {
-                        crate::cmd::mark_from_internet(Path::new(&path));
-                    }
                     self.teams.files.hand(handed(&path));
                     TeamsFileState::Saved { path }
                 }

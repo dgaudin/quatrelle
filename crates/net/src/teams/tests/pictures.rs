@@ -206,7 +206,7 @@ fn only_twenty_hosted_images_per_message() {
 /// What the test's stand-in for `get_public` was asked for.
 static OUTSIDE: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-fn outside(url: &str, max: usize) -> crate::Result<Response> {
+fn outside(url: &str, max: usize, _within: Duration) -> crate::Result<Response> {
     assert_eq!(max, MAX_PICTURE);
     OUTSIDE.lock().unwrap().push(url.to_string());
     Ok(Response { status: 200, body: b"GIF89a".to_vec(), ..Response::default() })
@@ -474,7 +474,7 @@ fn a_kept_picture_is_said_only_for_its_messages_own() {
 static STALL: AtomicBool = AtomicBool::new(true);
 static STALLED: AtomicU32 = AtomicU32::new(0);
 
-fn stalls(_url: &str, _max: usize) -> crate::Result<Response> {
+fn stalls(_url: &str, _max: usize, _within: Duration) -> crate::Result<Response> {
     STALLED.fetch_add(1, Ordering::SeqCst);
     let until = Instant::now() + Duration::from_secs(3);
     while STALL.load(Ordering::SeqCst) && Instant::now() < until {
@@ -508,7 +508,7 @@ fn an_outside_fetch_never_holds_the_worker() {
 static HANG: AtomicBool = AtomicBool::new(true);
 static HUNG: AtomicU32 = AtomicU32::new(0);
 
-fn hangs(_url: &str, _max: usize) -> crate::Result<Response> {
+fn hangs(_url: &str, _max: usize, _within: Duration) -> crate::Result<Response> {
     HUNG.fetch_add(1, Ordering::SeqCst);
     let until = Instant::now() + Duration::from_secs(3);
     while HANG.load(Ordering::SeqCst) && Instant::now() < until {
@@ -535,6 +535,59 @@ fn an_outside_fetch_past_its_deadline_says_nothing() {
     std::thread::sleep(Duration::from_millis(300));
     assert!(r.pictures().is_empty(), "{:?}", r.pictures());
     assert_eq!(r.no_pictures().len(), 3, "each said not to be had: two given up, the third refused");
+}
+
+/// Where this test's slow outside pictures come from: a server on this computer that answers a
+/// picture's head, then a byte every 50 ms without end, until the connection goes.
+static TRICKLING: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn trickling() -> &'static str {
+    TRICKLING.get_or_init(|| {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let at = format!("http://127.0.0.1:{}/slow.gif", l.local_addr().unwrap().port());
+        std::thread::spawn(move || {
+            for conn in l.incoming() {
+                let Ok(mut s) = conn else { continue };
+                std::thread::spawn(move || {
+                    use std::io::{Read, Write};
+                    let _ = s.read(&mut [0u8; 4096]);
+                    let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: image/gif\r\nContent-Length: 5000000\r\n\r\nGIF89a");
+                    while s.write_all(b"\0").is_ok() {
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                });
+            }
+        });
+        at
+    })
+}
+
+/// The app's fetch of an outside picture, within its deadline, but to this computer (which the
+/// app's own refuses): a `slow` picture from the trickling server, any other at once.
+fn within_here(url: &str, max: usize, within: Duration) -> crate::Result<Response> {
+    if url.contains("slow") {
+        return crate::http::send_within(&crate::http::Request::get(trickling(), max), within);
+    }
+    Ok(Response { status: 200, body: b"GIF89a fast".to_vec(), ..Response::default() })
+}
+
+/// Review 1.5, files 6: an outside picture whose server trickles its bytes, one every 50 ms without
+/// end, holds its fetch no longer than its deadline: two such clicks (the most that may run), the
+/// deadline past, and a third picture is served, where it was refused until a restart.
+#[test]
+fn a_trickling_outside_picture_ends_at_its_deadline() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 1)]));
+    r.w.hooks.outside = Some(within_here);
+    r.w.hooks.outside_deadline = Some(Duration::from_millis(500));
+    for i in 0..2 {
+        r.ask(Picture::Outside { url: format!("https://images.contoso.example/slow-{i}.gif") });
+    }
+    eventually("both said not to be had", || r.no_pictures().len() == 2);
+    // Their fetches end with their deadline: their places are free.
+    std::thread::sleep(Duration::from_millis(300));
+    r.ask(Picture::Outside { url: "https://images.contoso.example/fast.gif".into() });
+    eventually("the third picture", || r.pictures().iter().any(|(p, _)| matches!(p, Picture::Outside { url } if url.ends_with("fast.gif"))));
+    assert_eq!(r.no_pictures().len(), 2, "{:?}", r.no_pictures());
 }
 
 /// Fix round 1: a picture that keeps failing is tried three times, at the back of the queue, and
@@ -637,7 +690,7 @@ fn a_picture_not_to_be_had_is_said_once() {
     assert_eq!(r.no_pictures(), [p]);
 }
 
-fn fails(_url: &str, _max: usize) -> crate::Result<Response> {
+fn fails(_url: &str, _max: usize, _within: Duration) -> crate::Result<Response> {
     Ok(Response { status: 503, ..Response::default() })
 }
 

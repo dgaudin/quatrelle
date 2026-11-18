@@ -133,6 +133,29 @@ fn connect_reads_me() {
     assert!(seen[0].starts_with("GET /me?$select=id,displayName,mail,userPrincipalName HTTP/1.1\r\n"), "{}", seen[0]);
 }
 
+/// Review 1.5, network 1: a Graph answer that trickles, a byte of its body every 50 ms without end,
+/// is given up at the request's deadline as a connection cut is (the network's: "Offline", tried
+/// again later), where each read alone would wait a minute and the whole of it for ever.
+#[test]
+fn a_graph_answer_that_trickles_is_given_up() {
+    use std::time::{Duration, Instant};
+    let server = serve_teams(teams_with(vec![chat(CHAT, T0, 2)]));
+    server.data.lock().unwrap().teams.as_mut().unwrap().trickle = Some(("chats", Duration::from_millis(50)));
+    let c = client(&server);
+    c.set_deadline(Duration::from_secs(1));
+    let (done, came) = std::sync::mpsc::channel();
+    let asked = Instant::now();
+    std::thread::spawn(move || {
+        let _ = done.send(c.chats(None).map(|p| p.items.len()));
+    });
+    let got = came.recv_timeout(Duration::from_secs(5)).expect("the list still waits on the trickle");
+    let e = got.unwrap_err();
+    assert!(matches!(&e, NetError::Io(io) if io.kind() == std::io::ErrorKind::TimedOut), "{e}");
+    assert!(crate::teams::worker::of_the_network(&e), "the network's: Offline, and tried again");
+    assert!(asked.elapsed() < Duration::from_secs(2), "{:?}", asked.elapsed());
+    assert_eq!(hits(&server, "chats"), 1);
+}
+
 #[test]
 fn server_time_is_the_servers_date() {
     let dated = |date: &str| {

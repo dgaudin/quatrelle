@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use quatrelle_model::pim::teams::{self as model, ChatMessage, ChatRow, Job, NO_NAME};
 
-use super::worker::{Kept, Seen, account, by_hand, grant, teams_of, turn_until};
+use super::worker::{Kept, Seen, account, by_hand_on, grant, teams_of, turn_until};
 use super::{CHAT, MINUTE, T0, TENANT, chat, hits, me, serve_teams, teams_with};
 use crate::fake_graph::{FakeChat, FakeMessage, FakeTeams, FakeUser, Server, rfc3339};
 use crate::teams::limits::Cadence;
@@ -72,10 +72,19 @@ pub(super) fn run_with(teams: FakeTeams, ready: impl FnOnce(&mut Worker)) -> Run
 }
 
 /// [`run_with`], the sign-in saying the account is of the organisation `tenant`.
-pub(super) fn run_as(mut teams: FakeTeams, tenant: &str, ready: impl FnOnce(&mut Worker)) -> Run {
+pub(super) fn run_as(teams: FakeTeams, tenant: &str, ready: impl FnOnce(&mut Worker)) -> Run {
+    run_as_on(teams, tenant, quatrelle_store::Store::memory(), ready)
+}
+
+/// [`run`] on the cache `store` (one whose files can be made to fail: `Store::failing`).
+pub(super) fn run_on(teams: FakeTeams, store: quatrelle_store::Store) -> Run {
+    run_as_on(teams, TENANT, store, |_| {})
+}
+
+fn run_as_on(mut teams: FakeTeams, tenant: &str, store: quatrelle_store::Store, ready: impl FnOnce(&mut Worker)) -> Run {
     teams.clock.get_or_insert(NOW);
     let server = serve_teams(teams);
-    let (mut w, _, seen, creds) = by_hand(&server, grant(Some(tenant)));
+    let (mut w, _, seen, creds) = by_hand_on(&server, grant(Some(tenant)), store);
     ready(&mut w);
     let t0 = Instant::now();
     w.job(Job::SignIn { client_id: super::worker::CLIENT.into(), tenant: "organizations".into() });

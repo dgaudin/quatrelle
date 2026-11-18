@@ -39,6 +39,10 @@ pub enum Job {
     Retry { seq: u64 },
     /// Delete the message `seq` from the outbox; refused while it's being sent.
     Discard { seq: u64 },
+    /// Delete from the outbox the message it said "Not sent" without its number though it keeps
+    /// it (one read back with files not shared yet, to be attached again), by its `local` id;
+    /// nothing for any other.
+    DiscardUnnumbered { local: String },
     /// Open `chat` at its message `message` (a search's hit): answered by that message's page
     /// and those after it, then [`Event::Placed`].
     Find { chat: String, message: String },

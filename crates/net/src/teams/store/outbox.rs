@@ -211,10 +211,7 @@ impl Copy {
 
     /// Record `seq`, when it's sound and under its own name.
     pub(crate) fn op_at(&self, seq: u64) -> Option<OpRecord> {
-        let bytes = self.store.account_file(TEAMS_ACCOUNT, &op_key(seq)).ok()??;
-        if bytes.len() > MAX_OP {
-            return None;
-        }
+        let bytes = self.store.account_file_within(TEAMS_ACCOUNT, &op_key(seq), MAX_OP).ok()??;
         let op: OpRecord = serde_json::from_slice(&bytes).ok()?;
         (op.seq == seq && op.broken().is_none()).then_some(op)
     }

@@ -397,6 +397,17 @@ fn stalled(s: &mut impl Write, r: &teams::Reply) {
     std::thread::sleep(std::time::Duration::from_secs(60));
 }
 
+/// An answer that trickles: its head says a body of a megabyte (within what a client takes), then
+/// a byte comes every `every`, without end, until the client goes (a server that holds a request
+/// without ever failing it: at 20 bytes a second, the megabyte would take half a day).
+fn trickled(s: &mut impl Write, r: &teams::Reply, every: std::time::Duration) {
+    let head = format!("HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", r.status, r.kind, 1u64 << 20);
+    let _ = s.write_all(head.as_bytes());
+    while s.write_all(b" ").and_then(|()| s.flush()).is_ok() {
+        std::thread::sleep(every);
+    }
+}
+
 /// Start the server; it runs until the test process ends.
 pub fn serve(data: Data) -> Server {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -447,6 +458,10 @@ pub fn serve(data: Data) -> Server {
                     // No answer: the connection closes as `s` goes.
                     _ if r.cut => {}
                     _ if r.stall.is_some() => drop(std::thread::spawn(move || stalled(&mut s, &r))),
+                    _ if r.trickle.is_some() => {
+                        let every = std::time::Duration::from_millis(u64::from(r.trickle.unwrap_or_default()));
+                        drop(std::thread::spawn(move || trickled(&mut s, &r, every)))
+                    }
                     Some(wait) => drop(std::thread::spawn(move || {
                         std::thread::sleep(wait);
                         respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date, r.retry_after);

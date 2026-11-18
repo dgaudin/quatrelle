@@ -265,8 +265,13 @@ pub(super) fn settings(object: &str) -> TeamsSettings {
 
 /// A worker driven by hand, a turn at a time, at the times the test makes.
 pub(super) fn by_hand(server: &Server, tokens: Tokens) -> (Worker, Arc<Desk>, Seen, Arc<Kept>) {
+    by_hand_on(server, tokens, Store::memory())
+}
+
+/// [`by_hand`], on the cache `store` (one whose files can be made to fail).
+pub(super) fn by_hand_on(server: &Server, tokens: Tokens, store: Store) -> (Worker, Arc<Desk>, Seen, Arc<Kept>) {
     let (desk, seen, creds) = (desk(tokens), Seen::default(), Arc::new(Kept::default()));
-    let w = Worker::new(Store::memory(), creds.clone(), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk.clone()))).unwrap();
+    let w = Worker::new(store, creds.clone(), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk.clone()))).unwrap();
     (w, desk, seen, creds)
 }
 

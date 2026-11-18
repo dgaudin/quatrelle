@@ -154,7 +154,8 @@ impl Copy {
             return false;
         }
         match what {
-            Removal::File => matches!(self.store.account_file(TEAMS_ACCOUNT, key), Ok(None)),
+            // Looked at without being read: anything there is refused past its cap of nothing.
+            Removal::File => matches!(self.store.account_file_within(TEAMS_ACCOUNT, key, 0), Ok(None)),
             Removal::Folder => match self.store.account_files(TEAMS_ACCOUNT, key) {
                 Ok(names) => names.is_empty(),
                 Err(StoreError::Io { source, .. }) => source.kind() == std::io::ErrorKind::NotFound,

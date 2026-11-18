@@ -130,6 +130,9 @@ fn photo_key(user: &str) -> String {
     format!("photos/{}.json", hash32(user.as_bytes()))
 }
 
+/// The longest of what says where a picture is (its hash, in hex) read back.
+const SUM_MAX: usize = 64;
+
 /// Whether `s` is a picture's hash as the cache names them: 64 lowercase hex digits.
 fn is_sum(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
@@ -160,7 +163,7 @@ impl Copy {
         if ![chat, message, hosted].into_iter().all(id_ok) {
             return None;
         }
-        let sum = self.store.account_file(TEAMS_ACCOUNT, &imgref_key(chat, message, hosted)).ok()??;
+        let sum = self.store.account_file_within(TEAMS_ACCOUNT, &imgref_key(chat, message, hosted), SUM_MAX).ok()??;
         let sum = String::from_utf8(sum).ok().filter(|s| is_sum(s))?;
         self.by_sum(&sum)
     }
@@ -170,7 +173,11 @@ impl Copy {
     /// a deleted message showed doesn't stay.
     pub(super) fn forget_hosted(&self, chat: &str, message: &str, hosted: &str) -> Result<()> {
         let at = imgref_key(chat, message, hosted);
-        if let Some(sum) = self.store.account_file(TEAMS_ACCOUNT, &at)?
+        let kept = match self.store.account_file_within(TEAMS_ACCOUNT, &at, SUM_MAX) {
+            Err(e) if e.too_large() => None,
+            kept => kept?,
+        };
+        if let Some(sum) = kept
             && let Ok(sum) = String::from_utf8(sum)
             && is_sum(&sum)
         {
@@ -226,8 +233,8 @@ impl Copy {
     /// A picture's bytes, when they're kept and are the ones its hash says: now the most recently
     /// used.
     fn by_sum(&self, sum: &str) -> Option<Vec<u8>> {
-        let bytes = self.store.account_file(TEAMS_ACCOUNT, &img_key(sum)).ok()??;
-        if bytes.len() > MAX_PICTURE || hex(&Sha256::digest(&bytes)) != sum {
+        let bytes = self.store.account_file_within(TEAMS_ACCOUNT, &img_key(sum), MAX_PICTURE).ok()??;
+        if hex(&Sha256::digest(&bytes)) != sum {
             return None;
         }
         if let Ok(mut images) = self.images.try_borrow_mut() {

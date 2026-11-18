@@ -91,7 +91,11 @@ impl Copy {
         // damaged, another chat's, a tranche's shape), or none beside tranches (an old version
         // takes the head away as it lets a chat's words go, maybe after it deleted a message),
         // reads as an old segment with nothing in it.
-        let head = self.store.account_file(TEAMS_ACCOUNT, &segment_key(hash))?;
+        // Read within SEGMENT_MAX: one longer is refused as it is read, and is one that can't be.
+        let head = match self.store.account_file_within(TEAMS_ACCOUNT, &segment_key(hash), SEGMENT_MAX) {
+            Err(e) if e.too_large() => Some(Vec::new()),
+            head => head?,
+        };
         let len = head.as_ref().map_or(0, Vec::len);
         let (old, chat) = match head.as_deref().and_then(|b| Draft::read(b, hash, SEGMENT_MAX)) {
             Some((d, Form::Stub)) => (None, d.chat),
@@ -132,7 +136,15 @@ impl Copy {
         let mut list = Vec::new();
         let mut read = 0usize;
         for (i, n) in numbers.iter().copied().enumerate() {
-            let Some(bytes) = self.store.account_file(TEAMS_ACCOUNT, &tranche_key(hash, n))? else { continue };
+            // Read within TRANCHE_READ_MAX: one longer is refused as it is read, an orphan.
+            let bytes = match self.store.account_file_within(TEAMS_ACCOUNT, &tranche_key(hash, n), TRANCHE_READ_MAX) {
+                Err(e) if e.too_large() => {
+                    orphans.push(n);
+                    continue;
+                }
+                read => read?,
+            };
+            let Some(bytes) = bytes else { continue };
             read = read.saturating_add(bytes.len());
             if read > SEGMENT_MAX {
                 log::warn!("Teams search: a chat's words past {SEGMENT_MAX} bytes: its highest-numbered tranches passed over");

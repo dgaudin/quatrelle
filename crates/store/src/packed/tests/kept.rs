@@ -231,3 +231,77 @@ fn packing_reserves_what_an_attachment_comes_to() {
     }
     assert!(grown > 0, "no file came to between eight and nine tenths");
 }
+
+/// A file read within a cap (`account_file_within`: the Teams copy's records, its search index) is
+/// refused as it is read, never held past its cap and a byte: a crafted copy's record of 65 MiB of
+/// zeros, kept compressed in a few KiB, isn't inflated whole to be found too big after. Within its
+/// cap it reads whole; and so does a file that isn't compressed, refused before its pieces are read.
+#[test]
+fn a_record_past_its_cap_is_not_inflated() {
+    let t = temp("within");
+    let s = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    let cap = 64 << 20;
+    s.write_account_files("Teams", &[("chats/1f0c.json".into(), vec![0u8; 65 << 20])]).unwrap();
+    super::super::MOST_READ.with(|m| m.set(0));
+    let e = s.account_file_within("Teams", "chats/1f0c.json", cap).unwrap_err();
+    assert!(e.too_large(), "{e}");
+    let most = super::super::MOST_READ.with(std::cell::Cell::get);
+    assert!(most <= cap + 1, "{most} bytes inflated for a cap of {cap}");
+    let whole = s.account_file_within("Teams", "chats/1f0c.json", 65 << 20).unwrap();
+    assert_eq!(whole.map(|b| b.len()), Some(65 << 20));
+    // Bytes that don't compress, kept as they are in pieces.
+    let raw = noise(300_000, 5);
+    s.write_account_files("Teams", &[("msgs/1f0c/1.json".into(), raw.clone())]).unwrap();
+    assert!(s.account_file_within("Teams", "msgs/1f0c/1.json", 299_999).unwrap_err().too_large());
+    assert_eq!(s.account_file_within("Teams", "msgs/1f0c/1.json", 300_000).unwrap(), Some(raw));
+    assert_eq!(s.account_file_within("Teams", "msgs/1f0c/none.json", 10).unwrap(), None);
+    // A small one, kept whole, and a store in memory, the same.
+    s.write_account_files("Teams", &[("listed".into(), b"true".to_vec())]).unwrap();
+    assert!(s.account_file_within("Teams", "listed", 3).unwrap_err().too_large());
+    assert_eq!(s.account_file_within("Teams", "listed", 4).unwrap().as_deref(), Some(&b"true"[..]));
+    let m = Store::memory();
+    m.write_account_files("Teams", &[("listed".into(), b"true".to_vec())]).unwrap();
+    assert!(m.account_file_within("Teams", "listed", 3).unwrap_err().too_large());
+    assert_eq!(m.account_file_within("Teams", "listed", 4).unwrap().as_deref(), Some(&b"true"[..]));
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// Review 1.5, tour 1 (new 2): a value kept whole past a read's cap (a crafted data file: Quatrelle
+/// keeps a big file in pieces) is refused before it is copied out of the data file, never held.
+/// Without a cap, it reads as it is.
+#[test]
+fn a_whole_value_past_its_cap_is_refused_before_it_is_copied() {
+    let t = temp("whole");
+    let s = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    s.write_account_files("Teams", &[("listed".into(), b"true".to_vec())]).unwrap();
+    let raw = noise(200_000, 9);
+    let crate::files::Files::Packed(x) = &s.files.main else { panic!("not a store of data files") };
+    x.change("Teams", |t| t.files.insert("chats/big.json", raw.as_slice()).map(drop).map_err(super::super::other)).unwrap();
+    super::super::MOST_READ.with(|m| m.set(0));
+    assert!(s.account_file_within("Teams", "chats/big.json", 1_000).unwrap_err().too_large());
+    let most = super::super::MOST_READ.with(std::cell::Cell::get);
+    assert!(most <= 1_001, "{most} bytes copied for a cap of 1000");
+    assert_eq!(s.account_file("Teams", "chats/big.json").unwrap(), Some(raw));
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// Review 1.5, tour 1 (new 1): a cap is only for the reads that ask for one (the Teams copy's).
+/// Without one, a file past any cap reads whole as it always did, kept as it is in pieces or
+/// compressed, whole or not: the mail's sources, which may come to more than a gigabyte.
+#[test]
+fn a_read_without_a_cap_reads_past_any_cap() {
+    let t = temp("uncapped");
+    let s = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    let text: Vec<u8> = "The figures for October are in the attached sheet. ".bytes().cycle().take(300_000).collect();
+    let files = [("msgs/raw.bin", noise(300_000, 4)), ("msgs/text.txt", text), ("msgs/small.txt", b"Subject: hi".to_vec())];
+    for (rel, bytes) in &files {
+        s.write_account_files("a1", &[(rel.to_string(), bytes.clone())]).unwrap();
+        let cap = bytes.len() - 1;
+        assert!(s.account_file_within("a1", rel, cap).unwrap_err().too_large(), "{rel}");
+        assert_eq!(s.account_file("a1", rel).unwrap().as_ref(), Some(bytes), "{rel}");
+    }
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}

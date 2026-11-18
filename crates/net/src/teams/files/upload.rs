@@ -222,6 +222,8 @@ impl Up<'_> {
             let sock = match &s {
                 Stream::Plain(t) => t,
                 Stream::Tls(t) => &t.sock,
+                Stream::PlainWithin(t) => t.get_ref(),
+                Stream::TlsWithin(t) => t.sock.get_ref(),
             };
             sock.set_read_timeout(Some(CANCEL_IO))?;
             sock.set_write_timeout(Some(CANCEL_IO))?;

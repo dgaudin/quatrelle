@@ -18,9 +18,11 @@ use crate::{NetError, Result};
 mod events;
 mod redirect;
 mod streamed;
+mod within;
 pub use events::{BodyStream, EventStream, Sse, Streamed, open_events};
 use redirect::Chain;
 pub use streamed::{exchange_into, get_into};
+pub use within::{get_public_within, send_within};
 
 /// Longest header block accepted.
 const MAX_HEAD: usize = 64 << 10;
@@ -206,19 +208,19 @@ impl Request {
 /// sites it [trusts](Request::trusting)) takes no `Authorization`, `Proxy-Authorization` or
 /// `Cookie` header along.
 pub fn send(req: &Request) -> Result<Response> {
-    send_to(req, false)
+    send_to(req, false, None)
 }
 
 /// GET from the internet only ([`stream::tcp_public`]), every redirect included: what a message
 /// asks for (its pictures) never reaches this computer or its network.
 pub fn get_public(url: &str, max: usize) -> Result<Response> {
-    send_to(&Request::get(url, max), true)
+    send_to(&Request::get(url, max), true, None)
 }
 
 /// Send a request to the internet only, as [`get_public`]: an address a message or a certificate
 /// names never reaches this computer or its network.
 pub fn send_public(req: &Request) -> Result<Response> {
-    send_to(req, true)
+    send_to(req, true, None)
 }
 
 /// What a test gets for calling the real Webex.
@@ -233,7 +235,9 @@ fn is_real_webex(host: &str) -> bool {
     host == "webexapis.com" || host.ends_with(".webexapis.com")
 }
 
-fn send_to(req: &Request, public_only: bool) -> Result<Response> {
+/// `req` sent, its redirects followed, every connection by `until` when there is one
+/// ([`within`]).
+fn send_to(req: &Request, public_only: bool, until: Option<Instant>) -> Result<Response> {
     let mut url = Url::parse(&req.url)?;
     let mut chain = Chain::new(req, &url);
     for _ in 0..=MAX_REDIRECTS {
@@ -241,7 +245,10 @@ fn send_to(req: &Request, public_only: bool) -> Result<Response> {
         if is_real_webex(&url.host) {
             return Err(NetError::Protocol(REAL_WEBEX.into()));
         }
-        let resp = once(chain.current(), &url, public_only)?;
+        let resp = match until {
+            Some(until) => within::once(chain.current(), &url, public_only, until)?,
+            None => once(chain.current(), &url, public_only)?,
+        };
         let follow = matches!(resp.status, 301 | 302 | 303 | 307 | 308) && (req.method == "GET" || req.method == "HEAD");
         match resp.header("Location").filter(|_| follow) {
             Some(loc) => {

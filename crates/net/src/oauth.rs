@@ -235,7 +235,17 @@ impl std::fmt::Debug for Tokens {
     }
 }
 
-fn token_request(p: &Provider, mut fields: Vec<(&str, String)>, extra_scope: &str) -> Result<Tokens> {
+/// How long a token request may take in all, its connection to the last byte of its answer: the
+/// thread that renews (the Teams worker's, an account's) hears nothing else meanwhile.
+const TOKEN_DEADLINE: Duration = Duration::from_secs(120);
+
+fn token_request(p: &Provider, fields: Vec<(&str, String)>, extra_scope: &str) -> Result<Tokens> {
+    token_request_within(p, fields, extra_scope, TOKEN_DEADLINE)
+}
+
+/// A token request answered within `within` ([`crate::http::send_within`]): a sign-in service
+/// that trickles its answer fails it as a connection cut does, never a refusal.
+pub(crate) fn token_request_within(p: &Provider, mut fields: Vec<(&str, String)>, extra_scope: &str, within: Duration) -> Result<Tokens> {
     fields.push(("client_id", p.client_id.clone()));
     // The permissions wanted, each time: without them a personal Microsoft account's token
     // covered reading (IMAP) but not sending (SMTP refused it, 535 5.7.3). Google and Webex take
@@ -247,8 +257,9 @@ fn token_request(p: &Provider, mut fields: Vec<(&str, String)>, extra_scope: &st
         fields.push(("client_secret", s.clone()));
     }
     let pairs: Vec<(&str, &str)> = fields.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let r = crate::http::send(
+    let r = crate::http::send_within(
         &Request::post(&p.token_url, "application/x-www-form-urlencoded", form(&pairs), 1 << 20).header("Accept", "application/json"),
+        within,
     )?;
     // The service busy or failing (429, 5xx, said in its JSON or not): the connection's failure,
     // tried again; never taken for a refusal that asks to sign in again.

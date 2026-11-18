@@ -12,7 +12,7 @@ use super::*;
 /// The outside pictures the test's stand-in for `get_public` was asked for.
 static FETCHED: AtomicU32 = AtomicU32::new(0);
 
-fn fetched(_url: &str, _max: usize) -> crate::Result<crate::http::Response> {
+fn fetched(_url: &str, _max: usize, _within: std::time::Duration) -> crate::Result<crate::http::Response> {
     FETCHED.fetch_add(1, Ordering::SeqCst);
     Ok(crate::http::Response { status: 200, body: b"GIF89a".to_vec(), ..crate::http::Response::default() })
 }
