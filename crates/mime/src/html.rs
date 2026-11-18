@@ -453,12 +453,27 @@ pub(super) fn tag_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
 
 /// Whether an `<img …>` tag (`tag`) is a tracking pixel or a spacer by the size it sets: 2 pixels
 /// or less across or down, by its `width` or `height`, or by its style's (`width: 1px
-/// !important`, `max-height: 0`), the property itself (a `border-width: 0` isn't one).
+/// !important`, `max-height: 0`, `width: 0%`), the property itself (a `border-width: 0` isn't
+/// one). When in doubt, a pixel: any of its style's sizes counts, not only the one a browser
+/// applies (`width:1px !important; width:300px` is 1 pixel there, `width:1px; width:auto`
+/// isn't, and both are taken for one); the tag's size counts even when its style sets another
+/// (`width="0"` with `style="width:28px"`, which a browser shows 28 pixels wide, unlike
+/// [`picture_sizes`]); and one side is enough (a line 600 by 1 is taken for one too).
 pub(crate) fn tiny_picture(tag: &str) -> bool {
     let attr = |a: &str| tag_attr(tag, a).is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
     let style = tag_attr(tag, "style").map(css::declarations).unwrap_or_default();
-    let css = |p: &str| style.iter().rev().find(|d| d.prop == p).and_then(|d| layout::length_px(&d.value)).is_some_and(|n| n <= 2.0);
-    attr("width") || attr("height") || ["width", "height", "max-width", "max-height"].into_iter().any(css)
+    let css = style.iter().any(|d| matches!(d.prop.as_str(), "width" | "height" | "max-width" | "max-height") && tiny_length(&d.value));
+    attr("width") || attr("height") || css
+}
+
+/// A CSS length of 2 pixels or less, or of nothing in any unit (`0%`, `0vw`, which aren't read as
+/// pixels).
+fn tiny_length(v: &str) -> bool {
+    if let Some(n) = layout::length_px(v) {
+        return n <= 2.0;
+    }
+    let number: String = v.trim().chars().take_while(|c| c.is_ascii_digit() || matches!(c, '.' | '+' | '-')).take(32).collect();
+    number.parse::<f32>().is_ok_and(|n| n == 0.0)
 }
 
 /// `html` with a description on every picture that has none, except tracking pixels and spacers

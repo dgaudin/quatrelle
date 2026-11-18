@@ -274,8 +274,9 @@ pub fn tracks_click(url: &str) -> bool {
         || u.query.is_some_and(|q| q.split('&').any(|p| is_tag(p.split('=').next().unwrap_or(p))))
 }
 
-/// The trackers in an HTML body: tiny pictures (1 or 2 pixels across, or on a counting service)
-/// and links that report the click.
+/// The trackers in an HTML body: tiny pictures (1 or 2 pixels across, hidden, or on a counting
+/// service) and links that report the click. Read once the page's style sheet is written on its
+/// elements ([`crate::layout::inline_css`]), a pixel sized or hidden by a class is seen too.
 pub fn trackers(html: &str) -> Trackers {
     let lower = html.to_ascii_lowercase();
     let mut pictures: Vec<String> = Vec::new();
@@ -287,10 +288,23 @@ pub fn trackers(html: &str) -> Trackers {
         from = end + 1;
         let Some(src) = crate::html::tag_attr(tag, "src").map(|s| s.trim().replace("&amp;", "&")) else { continue };
         let Some(u) = split(&src) else { continue };
-        // By its own properties: a signature's icon `border-width: 0px` was taken for `width:0`,
-        // and stayed hidden when the message's pictures were shown.
+        // By its own properties (a signature's icon `border-width: 0px` was taken for `width:0`,
+        // and stayed hidden when the message's pictures were shown); hidden by any of them, when
+        // in doubt.
         let style = crate::html::tag_attr(tag, "style").map(crate::css::declarations).unwrap_or_default();
-        let hidden = style.iter().any(|d| d.prop == "display" && d.value.trim().eq_ignore_ascii_case("none"));
+        let hidden = style.iter().any(|d| {
+            let v = d.value.trim();
+            match d.prop.as_str() {
+                "display" => v.eq_ignore_ascii_case("none"),
+                "visibility" => v.eq_ignore_ascii_case("hidden") || v.eq_ignore_ascii_case("collapse"),
+                // Seen through: none of it, or next to none (`0`, `0%`, `0.01`).
+                "opacity" => match v.strip_suffix('%') {
+                    Some(pc) => pc.trim().parse::<f32>().is_ok_and(|n| n < 5.0),
+                    None => v.parse::<f32>().is_ok_and(|n| n < 0.05),
+                },
+                _ => false,
+            }
+        });
         if (crate::html::tiny_picture(tag) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c)))
             && !pictures.contains(&src)
             && pictures.len() < 50
@@ -373,6 +387,83 @@ mod tests {
             ]
         );
         assert!(trackers("<p>plain</p>").is_empty());
+    }
+
+    /// Each style that hides a picture or makes it a pixel, as a browser reads it: what the first
+    /// rule (looking for `width:1px`, `width:0`… in the text) caught stays caught — when in doubt,
+    /// a tracker — and what makes no picture small (an icon's `border-width: 0`) doesn't count.
+    #[test]
+    fn pixels_by_their_style() {
+        let tracker = [
+            "width:1px",
+            "height:1px",
+            "max-width:1px",
+            "max-height:1px",
+            "max-width:0px",
+            "width:1px !important",
+            "WIDTH:1PX",
+            "width : 1px",
+            "width:0",
+            "width:0.1em",
+            "height:0",
+            "width:1pt",
+            "width:1",
+            "width:2px",
+            "width:\n1px",
+            "display:none",
+            "display:none!important",
+            "DISPLAY: NONE",
+            "height:1px !important;width:1px !important;border-width:0 !important;margin:0 !important",
+            // `!` and `important` apart, an `!important` before a plain one, a zero in any unit,
+            // a comment: all valid CSS, taken for pictures once the text was read as declarations.
+            "width: 1px ! important; height: 1px ! important",
+            "display: none ! important",
+            "width:0%",
+            "width:0vw",
+            "width:1px !important; width:300px",
+            "width:1px/**/",
+            "width:1px; width:auto",
+            // Hidden, not sized.
+            "visibility:hidden",
+            "visibility: hidden !important",
+            "opacity:0",
+            "opacity: 0.0",
+        ];
+        let picture = [
+            "min-width:1px",
+            "min-height:1px",
+            "line-height:1px",
+            "border-width:0",
+            "border-width: 0px; display: block",
+            "width:13px",
+            "width:3px;height:3px",
+            "opacity:0.6",
+            "visibility:visible",
+            "width:50%",
+        ];
+        let wrong: Vec<(&str, bool)> = tracker
+            .iter()
+            .map(|s| (*s, true))
+            .chain(picture.iter().map(|s| (*s, false)))
+            .filter(|(style, expected)| {
+                let html = format!("<p><img src=\"https://img.example/p.png\" style=\"{style}\"></p>");
+                trackers(&html).pictures.is_empty() == *expected
+            })
+            .collect();
+        assert!(wrong.is_empty(), "read wrong (style, a tracker): {wrong:?}");
+    }
+
+    /// A pixel sized or hidden by a class of the message's style sheet is one too: the trackers are
+    /// read once the page's styles are written on its elements.
+    #[test]
+    fn pixels_by_a_class() {
+        let raw = "From: a@shop.example\r\nTo: b@studio.example\r\nSubject: s\r\nMIME-Version: 1.0\r\n\
+                   Content-Type: text/html; charset=utf-8\r\n\r\n\
+                   <html><head><style>.px{width:1px;height:1px} .ghost{visibility:hidden} .clear{opacity:0}</style></head>\
+                   <body><p>Hello</p><img class=\"px\" src=\"https://t.example/a.png\"><img class=\"ghost\" src=\"https://t.example/b.png\">\
+                   <img class=\"clear\" src=\"https://t.example/c.png\"><img src=\"https://img.example/logo.png\" width=\"120\" alt=\"Logo\"></body></html>";
+        let p = crate::parse(raw.as_bytes()).unwrap();
+        assert_eq!(p.trackers.pictures, ["https://t.example/a.png", "https://t.example/b.png", "https://t.example/c.png"]);
     }
 
     #[test]

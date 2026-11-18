@@ -358,12 +358,14 @@ fn parse_as(raw: &[u8], read: fn(Option<AddressList<'_>>) -> Vec<EmailAddress>) 
         _ => None,
     };
     let html = m.body_html(0).filter(|_| real_html).or(tnef_html.map(std::borrow::Cow::Borrowed));
-    let tracking = html.as_ref().map(|h| trackers(h)).unwrap_or_default();
+    let mut tracking = Trackers::default();
     let mut hidden = None;
     let (rich, images, layout) = match &html {
         Some(h) => {
             // Style sheet rules as inline styles, so cells keep their colours and titles their size.
             let h = layout::inline_css(h);
+            // The trackers read there: a pixel sized or hidden by a class is one too.
+            tracking = trackers(&h);
             hidden = hidden_text(&h);
             let layout = layout::html_layout(&h);
             // Pictures behind boxes are shown, or held back, like the others.
