@@ -117,3 +117,28 @@ fn a_file_cards_wrapped_link_names_where_it_goes() {
     let _ = std::fs::remove_dir_all(dir);
     let _ = std::fs::remove_dir_all(dir2);
 }
+
+/// Re-review n° 3: a file card whose link is the organisation's link check (Safe Links) around the
+/// user's own SharePoint names where it goes, but isn't the user's own: a click opens the check's
+/// address, which a sender can forge. Out of a plain redirect, what opens is the SharePoint, which
+/// is the user's.
+#[test]
+fn a_file_card_is_the_users_own_only_by_what_its_click_opens() {
+    let file = |url: &str| {
+        let mut m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A file")]));
+        m.attachments = vec![Attachment::File { id: "f-1".into(), name: "notes.docx".into(), url: url.into(), size: Some(2048) }];
+        m
+    };
+    let ctx = egui::Context::default();
+    let gate = "https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fcontoso.sharepoint.com%2Fsites%2Fteam%2Fnotes.docx&data=05%7C01&reserved=0";
+    let (mut a, dir, _) = chat_app("teams-link-card-gate", group_row(), TEAMS_LINK, vec![file(gate)]);
+    let texts = settled_pane(&ctx, &mut a);
+    assert!(!texts_with(&texts, "contoso.sharepoint.com").is_empty(), "where it goes: {texts:?}");
+    assert!(has_text(&texts, "Link to another site"), "not the user's own: {texts:?}");
+    let plain = "https://www.google.com/url?q=https%3A%2F%2Fcontoso.sharepoint.com%2Fsites%2Fteam%2Fnotes.docx";
+    let (mut a2, dir2, _) = chat_app("teams-link-card-redirect", group_row(), TEAMS_LINK, vec![file(plain)]);
+    let texts = settled_pane(&ctx, &mut a2);
+    assert!(!has_text(&texts, "Link to another site"), "the SharePoint opens: {texts:?}");
+    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(dir2);
+}

@@ -335,7 +335,8 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   again until it starts again.
 - **Files** shared in a chat appear as cards with the file's name and the host its link goes to
   (out of a redirect, as links are). A link to your own OneDrive or your organization's SharePoint
-  is shown as such; any other host is written on the card, "Link to another site". Nothing opens until you click it; **Open** and
+  is shown as such; any other host is written on the card, "Link to another site", as is a link
+  that goes through a link check (a click opens the check's address, whatever it names). Nothing opens until you click it; **Open** and
   **Open in browser** are on the card (see Pictures and files).
 
 ### Replying

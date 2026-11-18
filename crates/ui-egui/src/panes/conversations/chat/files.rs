@@ -5,9 +5,10 @@
 //! file: `app/actions/teams.rs`) and "Open in browser".
 //!
 //! What is hostile here: a file's link is the sender's. The host it goes to (out of its wrappers
-//! when links are cleaned, as the mail shows it) is written on the card, "Link to another site"
-//! (and no file-type icon) when it's neither the user's OneDrive nor their organisation's
-//! SharePoint; the link opens only on a click, and only one a browser may be handed, as written
+//! when links are cleaned, as the mail shows it) is written on the card; "Link to another site"
+//! (and no file-type icon) when what a click opens isn't the user's OneDrive nor their
+//! organisation's SharePoint (a link check's wrapper stays: a sender can write one around any
+//! address); the link opens only on a click, and only one a browser may be handed, as written
 //! and as the window opens it (`parts::openable`); the pointer on "Open in browser" shows where.
 //! "Open" asks the engine, which downloads by the file's id through the user's own sign-in, never
 //! by the link. A file that could run a program says so on its card: it is shown in its folder,
@@ -58,12 +59,13 @@ pub(super) fn files(p: &Pane, ui: &mut Ui, m: &ChatMessage, width: f32, acts: &m
     let t = &p.t;
     for a in &m.attachments {
         let Attachment::File { id, name, url, size } = a else { continue };
-        // Judged where it goes, as it is; written without what could turn it around.
+        // The user's own by what a click opens, as it is; written where it goes, without what
+        // could turn it around.
         let clean = p.s.prefs.clean_links;
         let goes = destination(url, clean);
-        let host = url_host(&goes).map(|h| h.to_ascii_lowercase());
-        let ours = host.as_deref().is_some_and(|h| own_host(p, h));
-        let host = host.map(|h| shown(&h));
+        let opens = if clean { mime::clean_link(url) } else { url.clone() };
+        let ours = url_host(&opens).is_some_and(|h| own_host(p, &h.to_ascii_lowercase()));
+        let host = url_host(&goes).map(|h| shown(&h.to_ascii_lowercase()));
         let state = p.s.teams.file_state(&m.id, id);
         ui.add_space(4.0);
         egui::Frame::new().stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
