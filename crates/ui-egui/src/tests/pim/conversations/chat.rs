@@ -731,3 +731,36 @@ fn a_left_chat_says_so_under_its_header() {
     assert!(said.top() >= header.bottom(), "{said:?} under {header:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Re-review n° 4: in the narrowest pane (332 points: the window at its narrowest, 760, and the
+/// list at its widest, 380) and at the default width, an outsider's long messages leave room for
+/// "External" and the time beside them: both stay whole in the pane. With `QUATRELLE_FRAME_PNG`
+/// set, both widths are painted.
+#[test]
+fn external_and_the_time_stay_in_the_narrowest_pane() {
+    let sam = || user("u-sam", "Sam Okafor");
+    let long = "We moved the review to Thursday, and the figures for the third quarter are in the shared folder now";
+    let row: Vec<ChatMessage> = (0..6)
+        .map(|k| said(&format!("m{k:02}"), sam(), NOW - 1800 + k * 30, para(vec![words(if k % 2 == 0 { long } else { "Short note" })])))
+        .collect();
+    let (mut a, dir, _) = chat_app("teams-chat-narrowest", group_row(), TEAMS_LINK, row);
+    let ctx = egui::Context::default();
+    let pictures = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
+    let mut tex = Textures::default();
+    // The list at its default 260 points: a window of 640 leaves the pane the narrowest's 332.
+    for (w, pane) in [(640usize, 332.0), (760, 452.0)] {
+        for _ in 0..8 {
+            frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (w, 480));
+        }
+        let png = pictures.as_ref().map(|d| d.join(format!("teams-chat-narrowest-{pane}.png")));
+        let (_, shapes) = frame_with_size(&ctx, &mut a, &mut tex, vec![], png, (w, 480));
+        let texts = texts_of(&shapes);
+        let is_time = |t: &str| t.len() == 5 && t.as_bytes().get(2) == Some(&b':');
+        let beside: Vec<&(String, egui::Rect)> = texts.iter().filter(|(t, r)| (t == "External" || is_time(t)) && r.left() > 300.0).collect();
+        assert!(beside.iter().any(|(t, _)| t == "External") && beside.iter().any(|(t, _)| is_time(t)), "{pane}: {texts:?}");
+        for (t, r) in beside {
+            assert!(r.right() <= w as f32 - 1.0, "{pane}-point pane: {t:?} out of it at {r:?}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

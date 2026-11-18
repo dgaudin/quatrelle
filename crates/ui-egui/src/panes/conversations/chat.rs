@@ -53,6 +53,9 @@ const TOP: f32 = 40.0;
 const FOUND_TINT: f64 = 2.0;
 /// How much what goes out is dimmed (a message, an edit's words, a bubble being deleted).
 const DIMMED: f32 = 0.6;
+/// A bubble's margins left and right of its text, and a tag's ([`tag`]: its frame and stroke).
+const BUBBLE_MARGINS: f32 = 20.0;
+const TAG_MARGINS: f32 = 12.0;
 
 /// What every part of the pane reads.
 struct Pane<'a> {
@@ -439,6 +442,18 @@ fn time_line(p: &Pane, ui: &mut Ui, m: &ChatMessage, external: bool) {
     }
 }
 
+/// How wide a message's time column is: its time, "External" before it (`external`), "(edited)"
+/// above it.
+fn time_width(p: &Pane, ui: &Ui, m: &ChatMessage, external: bool) -> f32 {
+    let wide = |text: &str| ui.painter().layout_no_wrap(text.to_string(), theme::regular(11.0), p.t.dim).size().x;
+    let mut row = wide("00:00");
+    if external {
+        row += wide(tl!("External")) + TAG_MARGINS + ui.spacing().item_spacing.x;
+    }
+    let edited = if m.edited.is_some() && m.deleted.is_none() { wide(tl!("(edited)")) } else { 0.0 };
+    row.max(edited)
+}
+
 /// Whether `m`'s sender is a person not proven of the organisation: one the chat's members don't
 /// have, or who isn't of it ([`quatrelle_engine::ChatMembers::sender_internal`]).
 fn outsider(p: &Pane, m: &ChatMessage) -> bool {
@@ -487,9 +502,14 @@ fn message(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, firs
             if first {
                 name_line(p, ui, m);
             }
+            // The time's column ("External" beside it on an outsider's next messages) is taken from
+            // the text's, with the bubble's margins: the row stays in the pane, however narrow.
+            let mark = !first && outsider(p, m);
+            let side = time_width(p, ui, m, mark) + ui.spacing().item_spacing.x + BUBBLE_MARGINS;
+            let width = width.min((ui.available_width() - side).max(60.0));
             let row = ui.horizontal_top(|ui| {
                 bubble(p, c, ui, m, change, if t.dark { t.chrome } else { Color32::from_rgb(0xF3, 0xF4, 0xF6) }, width, acts);
-                ui.vertical(|ui| time_line(p, ui, m, !first && outsider(p, m)));
+                ui.vertical(|ui| time_line(p, ui, m, mark));
             });
             under(c, ui, row.response.rect, acts);
         });
