@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! MailTips for a message being written (Outlook's: an automatic reply, a full mailbox, a
 //! restricted or moderated recipient, a list reaching outside the organisation). An Exchange or

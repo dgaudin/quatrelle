@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: the MailTips strip over a message being written — what the server says about its
 //! recipients, asked once per set as they change, shown as text, and nothing that holds it back.
