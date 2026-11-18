@@ -36,3 +36,32 @@ fn send_fails_with_no_account_that_can_send() {
     assert!(stderr.contains("data file") && !stdout.contains("sent"), "{stdout} / {stderr}");
     let _ = std::fs::remove_dir_all(&data);
 }
+
+/// A message a check holds back (it says something is attached, and nothing is) fails at once,
+/// saying why and how to send it anyway: it waited three minutes for a send that never came,
+/// then said only "timed out". (No server is reached: the account's is a closed local port.)
+#[test]
+fn send_held_by_a_check_says_why_at_once() {
+    let data = std::env::temp_dir().join(format!("quatrelle-cli-held-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    std::fs::create_dir_all(&data).unwrap();
+    let out = cli(&data, &["add", "--email", "riley@contoso.example", "--imap", "127.0.0.1:9", "--smtp", "127.0.0.1:9"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let started = std::time::Instant::now();
+    let out = Command::new(env!("CARGO_BIN_EXE_quatrelle-cli"))
+        .arg("--data")
+        .arg(&data)
+        .args(["send", "--to", "ana@contoso.example", "--subject", "Plans", "--body", "The plan is attached."])
+        .env_remove("QUATRELLE_DATA")
+        .env_remove("MAILCRAFT_DATA")
+        .env("QUATRELLE_PASSWORD", "pw")
+        .output()
+        .unwrap();
+    let took = started.elapsed();
+    let (stdout, stderr) = (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert!(!out.status.success(), "{stdout}");
+    assert!(took < std::time::Duration::from_secs(60), "said at once: {took:?} / {stderr}");
+    assert!(stderr.contains("attached") && stderr.contains("--checked"), "why, and how to send it anyway: {stderr}");
+    assert!(!stdout.contains("sent"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&data);
+}

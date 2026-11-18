@@ -11,7 +11,9 @@ quatrelle-cli [--data DIR] <command>
   read KEY                       print a message (KEY from `list`)
   source KEY [--headers]         print a message's source, headers and all
   search QUERY                   search the cache (from:, subject:, has:attachment…)
-  send --to ADDR --subject S --body TEXT [--account ID] [--attach FILE]
+  send --to ADDR --subject S --body TEXT [--account ID] [--attach FILE] [--checked]
+      [--checked]            (send even if a check holds it: a lookalike address, many
+                              strangers, something said attached and nothing attached)
   commands                       every engine command, as JSON
   run ID [JSON]                  run an engine command against the cache (its changes
                                  to mail go to the server with the next `sync`)
