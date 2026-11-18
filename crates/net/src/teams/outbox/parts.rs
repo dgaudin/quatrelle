@@ -19,8 +19,12 @@
 //!   inside it and its files by reference.
 //! * A request answered 429 or 503 waits its `Retry-After`; one without an answer, or a server's
 //!   error, is held back (`held.rs`) and made again, [`POSTS`] tries in all; a refusal (a 4xx, a
-//!   507, an address that isn't Microsoft's) is "Not sent" with Teams' code. An upload's session
-//!   gone is begun again, [`SESSIONS`] sessions in all.
+//!   507, an address that isn't Microsoft's) is "Not sent" with Teams' code.
+//! * An upload's tries, bounded three ways: on the lane, a range cut or asked to wait (its
+//!   `Retry-After` waited whole there) is taken up `RESUMES` times (`files/upload.rs`); a session
+//!   gone is begun again, [`SESSIONS`] sessions in all; an upload stopped on the lane (cut past its
+//!   resumes, or slower than the floor) is held back, then begun again, [`POSTS`] uploads in all.
+//!   Past any of them, the message is "Not sent" (couldn't be confirmed).
 //! * Nothing of an upload is kept on disk but what OneDrive made: after a restart, an upload
 //!   under way begins again.
 //!
@@ -50,12 +54,14 @@ use crate::teams::store::{PartRecord, Uploaded, path_ok};
 const SESSIONS: u32 = 2;
 
 /// A message's files being made ready, in memory only: the part in hand, its bytes gone up so
-/// far, its sessions gone, and the item OneDrive made of it until the record keeps it.
+/// far, its sessions gone and its uploads stopped on the lane, and the item OneDrive made of it
+/// until the record keeps it.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Upload {
     part: usize,
     sent: u64,
     gone: u32,
+    failed: u32,
     item: Option<String>,
 }
 
@@ -369,9 +375,10 @@ fn not_sent(w: &mut Worker, op: &mut OpRecord, why: Unsent, code: Option<String>
 /// [`Done::Uploaded`], [`Done::NotUploaded`]): the bytes gone up so far, said with the chat's
 /// outbox; the item OneDrive made, kept for the next step; or why the upload stopped. The file
 /// gone or changed: "Not sent". The session gone: a new one at the next step, [`SESSIONS`] in all,
-/// then "Not sent" (couldn't be confirmed). Stalled or cut: as a request without an answer, and
-/// the upload begun again. Refused: "Not sent" with Teams' code. A word for a message no longer
-/// going out is dropped.
+/// then "Not sent" (couldn't be confirmed). Stalled or cut past its resumes: held back as a
+/// request without an answer, then begun again in a new session, [`POSTS`] uploads in all, then
+/// "Not sent" (couldn't be confirmed). Refused: "Not sent" with Teams' code. A word for a message
+/// no longer going out is dropped.
 pub(crate) fn uploaded(w: &mut Worker, done: Done, now: Instant) {
     let (seq, part) = match &done {
         Done::Sent { seq, part, .. } | Done::Uploaded { seq, part, .. } | Done::NotUploaded { seq, part, .. } => (*seq, *part),
@@ -400,10 +407,15 @@ pub(crate) fn uploaded(w: &mut Worker, done: Done, now: Instant) {
         }
         Done::NotUploaded { why, .. } => {
             upload.sent = 0;
-            let gone = match why {
+            // Counted where a new session doesn't forget them.
+            let counted = match why {
                 UploadFail::SessionGone => {
                     upload.gone = upload.gone.saturating_add(1);
                     upload.gone
+                }
+                UploadFail::Stalled | UploadFail::Network => {
+                    upload.failed = upload.failed.saturating_add(1);
+                    upload.failed
                 }
                 _ => 0,
             };
@@ -412,15 +424,18 @@ pub(crate) fn uploaded(w: &mut Worker, done: Done, now: Instant) {
                 UploadFail::Gone => {
                     not_sent(w, &mut op, Unsent::FileGone, None);
                 }
-                UploadFail::SessionGone if gone >= SESSIONS => {
+                UploadFail::SessionGone if counted >= SESSIONS => {
+                    not_sent(w, &mut op, Unsent::Unconfirmed, None);
+                }
+                UploadFail::Stalled | UploadFail::Network if counted >= u32::from(POSTS) => {
+                    log::warn!("teams: a file of a message to conversation {hash} stopped on its way up {POSTS} times: not sent");
                     not_sent(w, &mut op, Unsent::Unconfirmed, None);
                 }
                 UploadFail::Stalled | UploadFail::Network => {
-                    if w.outbox.held.unanswered(seq, w.answered, now) {
-                        tried(w, &mut op);
-                    } else {
-                        say_chat(w, &op.chat);
-                    }
+                    // Held back as a request without an answer (the network may just have gone),
+                    // then begun again in a new session.
+                    w.outbox.held.unanswered(seq, w.answered, now);
+                    say_chat(w, &op.chat);
                 }
                 UploadFail::Refused(code) => {
                     not_sent(w, &mut op, Unsent::Refused, code);
@@ -483,9 +498,10 @@ pub(super) fn same_files(op: &OpRecord, m: &ChatMessage) -> bool {
 
 /// An item of the outbox as the conversation shows it: a message whose files are being made ready
 /// (an upload of it running, or begun, or its files not all gone up while it is its chat's first)
-/// is "Uploading", the part going up said as far as it is.
+/// is "Uploading", the part going up said as far as it is; nothing goes up in Work offline: it
+/// waits.
 pub(super) fn shown(w: &Worker, mut o: Outgoing) -> Outgoing {
-    if o.state != OutState::Waiting || o.parts.iter().all(|p| p.picture) {
+    if o.state != OutState::Waiting || w.offline() || o.parts.iter().all(|p| p.picture) {
         return o;
     }
     let upload = w.outbox.uploads.get(&o.seq);
@@ -515,6 +531,21 @@ pub(super) fn again(op: &mut OpRecord) {
         {
             (*size, *modified) = (m.len(), modified_of(&m));
         }
+    }
+}
+
+/// "Work offline" turned on or off, the transfers stopped when on (`files::stop`): each upload
+/// begun again from its start (what OneDrive made of its files kept), and the chats whose first
+/// message has files said again, waiting while offline, uploading once back.
+pub(crate) fn offline_changed(w: &mut Worker) {
+    for upload in w.outbox.uploads.values_mut() {
+        upload.sent = 0;
+    }
+    let ops = w.copy.as_ref().map(Copy::ops).unwrap_or_default();
+    let with_files = |seq: u64| ops.iter().any(|o| o.seq == seq && o.parts.iter().any(|p| matches!(p, PartRecord::File { .. })));
+    let chats: Vec<String> = w.outbox.heads.iter().filter(|h| with_files(h.seq)).map(|h| h.chat.clone()).collect();
+    for chat in chats {
+        snapshot(w, &ops, &chat, None, Vec::new());
     }
 }
 

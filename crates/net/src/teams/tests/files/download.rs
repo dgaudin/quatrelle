@@ -451,7 +451,19 @@ fn a_download_slower_than_the_floor_is_given_up() {
 /// written removed.
 #[test]
 fn stopping_teams_stops_a_transfer_and_leaves_no_file() {
-    let dir = Scratch::new("stop");
+    stopped_mid_way("stop", |r| r.w.job(Job::Stop));
+}
+
+/// Final review, net I-2: "Work offline" stops a download under way as switching Teams off does.
+#[test]
+fn working_offline_stops_a_transfer_and_leaves_no_file() {
+    stopped_mid_way("offline", |r| r.w.work_offline(true));
+}
+
+/// A download under way (its body stalled after 1000 bytes, that much written), then `stop`: said
+/// "Offline" at once, the part written removed within a second, the lane's late word dropped.
+fn stopped_mid_way(name: &str, stop: impl Fn(&mut Run)) {
+    let dir = Scratch::new(name);
     let mut t = one("plan.pdf", &bytes(100_000));
     t.drive_files.stall_after = Some(1000);
     let mut r = started(t, &dir);
@@ -464,7 +476,7 @@ fn stopping_teams_stops_a_transfer_and_leaves_no_file() {
     }
     assert!(said(&r, G).is_empty() && r.w.transfers.busy());
     let stopped = Instant::now();
-    r.w.job(Job::Stop);
+    stop(&mut r);
     assert_eq!(said(&r, G), [failed(FileWhy::Offline, None)]);
     assert!(!r.w.transfers.busy());
     assert!(stopped.elapsed() < Duration::from_secs(1));

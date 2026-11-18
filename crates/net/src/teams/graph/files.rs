@@ -207,6 +207,17 @@ pub enum RangeAnswer {
     Done(String),
 }
 
+/// A request at an upload session's address that failed: why, and the `Retry-After` (in seconds)
+/// of an answer asking to wait (429, 503) that said one.
+#[derive(Debug)]
+pub(crate) struct TransferFail(pub(crate) NetError, pub(crate) Option<u64>);
+
+impl From<NetError> for TransferFail {
+    fn from(e: NetError) -> Self {
+        TransferFail(e, None)
+    }
+}
+
 impl TeamsClient {
     /// An upload session for a file of this name in [`UPLOAD_FOLDER`] (a name taken renamed by
     /// OneDrive). The name must be its own [`drive_name`] (the caller names the file first), else
@@ -399,9 +410,15 @@ enum Hop {
 /// the file made once the last range is in ([`range_answer_of`]); the file made before its last
 /// range, or not made after it, is an error. A range already there is `Protocol("HTTP 416")` (ask
 /// where the upload stands: [`upload_status_on`]), a session gone
-/// `Refused("the upload session is gone")`; what isn't a range of `total` is refused before
-/// anything is written.
-pub(crate) fn put_range_on<S: Read + Write>(s: &mut S, url: &Url, bytes: &[u8], from: u64, total: u64) -> Result<RangeAnswer> {
+/// `Refused("the upload session is gone")`, an answer asking to wait with its `Retry-After`
+/// ([`TransferFail`]); what isn't a range of `total` is refused before anything is written.
+pub(crate) fn put_range_on<S: Read + Write>(
+    s: &mut S,
+    url: &Url,
+    bytes: &[u8],
+    from: u64,
+    total: u64,
+) -> std::result::Result<RangeAnswer, TransferFail> {
     let len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
     let end = from.checked_add(len).filter(|end| len > 0 && *end <= total).ok_or_else(|| NetError::Refused("not a range of the file".into()))?;
     let mut req = Request::get(&address(url), MAX_RANGE_ANSWER).header("Content-Range", &format!("bytes {from}-{}/{total}", end - 1));
@@ -411,23 +428,31 @@ pub(crate) fn put_range_on<S: Read + Write>(s: &mut S, url: &Url, bytes: &[u8], 
     let done = match (resp.status, end == total) {
         (202, false) => false,
         (200 | 201, true) => true,
-        (202, true) => return Err(NetError::Protocol("Graph: an upload not finished after its last range".into())),
-        (200 | 201, false) => return Err(NetError::Protocol("Graph: an upload finished early".into())),
-        (status, _) => return Err(transfer_error(status, &resp.body)),
+        (202, true) => return Err(NetError::Protocol("Graph: an upload not finished after its last range".into()).into()),
+        (200 | 201, false) => return Err(NetError::Protocol("Graph: an upload finished early".into()).into()),
+        _ => return Err(transfer_fail(&resp)),
     };
     let v = serde_json::from_slice::<Value>(&resp.body).unwrap_or(Value::Null);
-    range_answer_of(&v, done, end, total).ok_or_else(|| NetError::Protocol("OneDrive: an answer to a range that isn't one".into()))
+    range_answer_of(&v, done, end, total).ok_or_else(|| NetError::Protocol("OneDrive: an answer to a range that isn't one".into()).into())
 }
 
 /// Where an upload stands: the next byte OneDrive expects (at most `total`), asked at the
-/// session's address without the token; a session gone is `Refused("the upload session is gone")`.
-pub(crate) fn upload_status_on<S: Read + Write>(s: &mut S, url: &Url, total: u64) -> Result<u64> {
+/// session's address without the token; a session gone is `Refused("the upload session is gone")`,
+/// an answer asking to wait has its `Retry-After` ([`TransferFail`]).
+pub(crate) fn upload_status_on<S: Read + Write>(s: &mut S, url: &Url, total: u64) -> std::result::Result<u64, TransferFail> {
     let resp = http::exchange(s, &Request::get(&address(url), MAX_RANGE_ANSWER), url)?;
     if resp.status != 200 {
-        return Err(transfer_error(resp.status, &resp.body));
+        return Err(transfer_fail(&resp));
     }
     let v = serde_json::from_slice::<Value>(&resp.body).unwrap_or(Value::Null);
-    next_expected_of(&v, total).ok_or_else(|| NetError::Protocol("OneDrive: an upload without its next range".into()))
+    next_expected_of(&v, total).ok_or_else(|| NetError::Protocol("OneDrive: an upload without its next range".into()).into())
+}
+
+/// A transfer's failed answer ([`transfer_error`]), with its `Retry-After` when it asks to wait
+/// (429, 503) and says how long, in seconds.
+fn transfer_fail(resp: &Response) -> TransferFail {
+    let wait = if busy(resp.status) { resp.header("Retry-After").and_then(|h| h.trim().parse::<u64>().ok()) } else { None };
+    TransferFail(transfer_error(resp.status, &resp.body), wait)
 }
 
 /// Cancel an upload session at its address, without the token (one already gone is fine).

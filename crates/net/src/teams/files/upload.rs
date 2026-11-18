@@ -2,10 +2,11 @@
 // Copyright (c) 2026 Didier Gaudin
 //! A file's bytes sent up to an upload session: ranges of [`CHUNK`] in order, each on a
 //! connection of its own, without the token. A range cut without an answer, or failed by Graph's
-//! server, is taken up where Graph says, after a wait that doubles, [`RESUMES`] times in all; what
-//! Graph says of where the upload stands is taken only forward and within what was sent, and read
-//! [`STATUS_READS`] times at most. The file is sent only as it was when attached. Cancelled, the
-//! session is cancelled too (best effort).
+//! server, is taken up where Graph says, after a wait that doubles; one answered "wait" (429, 503)
+//! with a `Retry-After` is taken up once it is over, waited whole on the lane (nothing of the
+//! worker waits); [`RESUMES`] times in all. What Graph says of where the upload stands is taken
+//! only forward and within what was sent, and read [`STATUS_READS`] times at most. The file is
+//! sent only as it was when attached. Cancelled, the session is cancelled too (best effort).
 
 use std::fs::{File, Metadata};
 use std::io::{Read, Seek, SeekFrom};
@@ -13,14 +14,15 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use super::*;
-use crate::teams::graph::{CHUNK, RangeAnswer, cancel_upload_on, put_range_on, upload_status_on};
+use crate::teams::graph::{CHUNK, RangeAnswer, TransferFail, cancel_upload_on, put_range_on, upload_status_on};
+use crate::teams::limits::retry_wait;
 
-/// The times an upload is taken up after a range or a status read cut, in all.
+/// The times an upload is taken up after a range or a status read cut or asked to wait, in all.
 pub(crate) const RESUMES: u32 = 5;
 /// The most reads of where an upload stands.
 const STATUS_READS: u32 = 64;
-/// The wait before going on after the first cut, doubled after each.
-const RESUME_WAIT: Duration = Duration::from_secs(2);
+/// The wait before going on after the first cut, doubled after each (a hundredth of it in tests).
+const RESUME_WAIT: Duration = if cfg!(test) { Duration::from_millis(20) } else { Duration::from_secs(2) };
 /// The slices a wait is looked at the cancel in.
 const SLICE: Duration = Duration::from_millis(250);
 /// How long the cancel of a session waits for a byte (best effort: the upload is given up).
@@ -82,6 +84,8 @@ struct Up<'a> {
 enum Failed {
     /// Without an answer, or Graph's server failing: asked where it stands, after a wait.
     Cut,
+    /// Asked to wait (429, 503) for this long (its `Retry-After`): asked where it stands after it.
+    Busy(Duration),
     /// A range already there (416): asked where it stands.
     Ask,
     Stop(UploadFail),
@@ -105,9 +109,8 @@ impl Up<'_> {
                     self.forward(n)?;
                     progress(n);
                 }
-                Err(Failed::Cut) => self.resume(true)?,
-                Err(Failed::Ask) => self.resume(false)?,
                 Err(Failed::Stop(why)) => return Err(why),
+                Err(failed) => self.resume(failed)?,
             }
         }
         // Every byte in, and no file said made.
@@ -129,17 +132,20 @@ impl Up<'_> {
         Ok(())
     }
 
-    /// Where the upload stands, read once more: after a cut, each read a resume of
-    /// [`RESUMES`], then a wait that doubles; after a range already there, at once. Gone on from
-    /// where Graph says.
-    fn resume(&mut self, cut: bool) -> Result<(), UploadFail> {
-        let mut cut = cut;
+    /// Where the upload stands, read once more, after `failed`: after a cut, each read a resume of
+    /// [`RESUMES`], then a wait that doubles; asked to wait, its wait whole first, a resume too;
+    /// after a range already there, at once. Gone on from where Graph says.
+    fn resume(&mut self, failed: Failed) -> Result<(), UploadFail> {
+        let mut failed = failed;
         loop {
-            if cut {
+            if !matches!(failed, Failed::Ask) {
                 self.resumes = self.resumes.saturating_add(1);
                 if self.resumes > RESUMES {
                     return Err(UploadFail::Network);
                 }
+            }
+            if let Failed::Busy(wait) = failed {
+                self.wait(wait)?;
             }
             self.reads = self.reads.saturating_add(1);
             if self.reads > STATUS_READS {
@@ -149,25 +155,29 @@ impl Up<'_> {
             match read {
                 Ok(n) => {
                     self.forward(n)?;
-                    if cut {
-                        self.wait()?;
+                    if matches!(failed, Failed::Cut) {
+                        self.wait(self.backoff())?;
                     }
                     return Ok(());
                 }
                 Err(Failed::Cut) => {
-                    cut = true;
-                    self.wait()?;
+                    failed = Failed::Cut;
+                    self.wait(self.backoff())?;
                 }
                 Err(Failed::Ask) => return Err(UploadFail::Network),
                 Err(Failed::Stop(why)) => return Err(why),
+                Err(busy) => failed = busy,
             }
         }
     }
 
-    /// The wait after the `resumes`-th cut: 2 s doubled each time, in slices that look at the
-    /// cancel.
-    fn wait(&self) -> Result<(), UploadFail> {
-        let wait = RESUME_WAIT.saturating_mul(1u32.checked_shl(self.resumes.saturating_sub(1)).unwrap_or(u32::MAX));
+    /// The wait after the `resumes`-th cut: 2 s, doubled each time.
+    fn backoff(&self) -> Duration {
+        RESUME_WAIT.saturating_mul(1u32.checked_shl(self.resumes.saturating_sub(1)).unwrap_or(u32::MAX))
+    }
+
+    /// `wait`, in slices that look at the cancel.
+    fn wait(&self, wait: Duration) -> Result<(), UploadFail> {
         let until = Instant::now().checked_add(wait).unwrap_or_else(Instant::now);
         while Instant::now() < until {
             self.going()?;
@@ -186,11 +196,13 @@ impl Up<'_> {
     }
 
     /// What a failed request at the session means.
-    fn failed(&self, e: &NetError) -> Failed {
+    fn failed(&self, TransferFail(e, retry_after): &TransferFail) -> Failed {
         if self.cancel.load(Ordering::SeqCst) {
             return Failed::Stop(UploadFail::Cancelled);
         }
         match e {
+            // Asked to wait, and for how long: waited whole (an hour at most).
+            _ if busy(e) && retry_after.is_some() => Failed::Busy(retry_wait(*retry_after)),
             NetError::Io(io) if io.kind() == std::io::ErrorKind::TimedOut => Failed::Stop(UploadFail::Stalled),
             NetError::Refused(m) if m.contains("session is gone") => Failed::Stop(UploadFail::SessionGone),
             NetError::Refused(_) => Failed::Stop(UploadFail::Refused(None)),

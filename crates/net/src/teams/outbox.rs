@@ -60,7 +60,7 @@ mod parts;
 
 pub(crate) use changes::gone;
 use held::Held;
-pub(crate) use parts::uploaded;
+pub(crate) use parts::{offline_changed, uploaded};
 
 /// The most chats waiting to be marked read.
 const MARKS_MAX: usize = 1_000;

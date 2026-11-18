@@ -97,6 +97,8 @@ pub(crate) struct FakeDrive {
     pub(crate) status_back: bool,
     /// Every range is refused with this status (Graph's code `accessDenied`).
     pub(crate) refuse_ranges: Option<u16>,
+    /// The next this many ranges are answered 429 with this `Retry-After` (seconds).
+    pub(crate) busy_ranges: Option<(u32, u64)>,
     /// The range put once this many were taken has its answer held back this long, once: an
     /// upload stalled mid-way.
     pub(crate) hold_range: Option<(usize, std::time::Duration)>,
@@ -199,6 +201,11 @@ impl FakeTeams {
                 Reply::empty(204)
             }
             "GET" => expecting(200, if self.drive_files.status_back { 0 } else { s.bytes.len() as u64 }),
+            _ if self.drive_files.busy_ranges.is_some_and(|(n, _)| n > 0) => {
+                let (n, wait) = self.drive_files.busy_ranges.unwrap_or_default();
+                self.drive_files.busy_ranges = Some((n - 1, wait));
+                Reply { retry_after: Some(wait), ..Reply::error(429, "activityLimitReached", "Busy, as the test asked.") }
+            }
             _ => match self.drive_files.refuse_ranges {
                 Some(status) => Reply::error(status, "accessDenied", "Refused, as the test asked."),
                 None => {

@@ -125,7 +125,9 @@ chat's other members before the message is posted, so nothing goes half shared. 
 no Graph token: the upload (to the address OneDrive gave, which is its own authorisation) and the
 download of a file someone shared (`net/src/teams/files/`; `teams.openFile`, by the file's id through Graph, then the
 address Graph gave); both go only to Microsoft's file hosts, on public addresses, on a connection
-of their own, with caps on size and time. The engine hands the window a saved file once
+of their own, with caps on size, time and tries (an upload stopped on its lane is begun again three
+times at most; a `Retry-After` of OneDrive's is waited on the lane), and both stop in Work offline.
+The engine hands the window a saved file once
 (`session/pim/teams/files.rs`), and a name that could run code is shown in its folder, never
 opened. A new conversation (`session/pim/teams/people.rs`) is made from people the directory gave
 (`teams.people`, asked of the worker's `net/src/teams/people.rs` and answered as `Event`s, kept bounded), with its first message queued before the

@@ -333,6 +333,25 @@ fn a_session_gone_starts_over_once() {
     assert_eq!((r.hits("uploadSession"), r.hits("post")), (2, 0));
 }
 
+/// Final review, net I-1: OneDrive failing every range (500): each session is taken up five times
+/// on the lane, three sessions in all, then the message is "Not sent" (couldn't be confirmed),
+/// never begun again; the chat's next message goes once it is settled.
+#[test]
+fn an_upload_always_failing_on_its_lane_ends_not_sent() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.fake(|t| t.drive_files.refuse_ranges = Some(500));
+    let path = file("report.pdf", &[7u8; 4_000]);
+    r.send_with(CHAT, "1-1", "Never through", vec![Part::File { path }]);
+    r.send(CHAT, "1-2", "Behind it");
+    let unconfirmed = not_sent(Unsent::Unconfirmed, None);
+    assert!(until(&mut r, |r| first_state(r) == Some(unconfirmed.clone())), "{:?} after {} sessions", r.ops(), r.hits("uploadSession"));
+    assert!(until(&mut r, |r| r.held(CHAT, "Behind it") == 1), "{:?}", r.ops());
+    r.turns(Duration::from_secs(120));
+    // Each session: the range put six times, where it stands read five times between.
+    assert_eq!((r.hits("uploadSession"), r.hits("upload"), r.hits("post")), (3, 33, 1));
+    assert_eq!(r.outbox_said(CHAT)[0].state, OutState::NotSent { reason: Unsent::Unconfirmed, code: None });
+}
+
 /// H8, P-9: OneDrive full (507) is a refusal: "Not sent" with Graph's code, never tried again.
 #[test]
 fn a_refused_upload_is_not_sent_with_its_code() {
@@ -506,6 +525,29 @@ fn a_run_cut_off_while_uploading_starts_again_and_posts_once() {
     assert_eq!(first_state(&r), Some(OpState::Waiting), "kept as waiting");
     assert!(until(&mut r, |r| r.ops().is_empty()), "{:?}", r.ops());
     assert_eq!((r.hits("post"), r.held(CHAT, "Through a restart")), (1, 1));
+    assert!(r.fake(|t| t.drive_files.files.last().is_some_and(|f| f.bytes == bytes)), "the file's bytes once");
+}
+
+/// Final review, net I-2: "Work offline" while a file goes up stops the upload at once (its
+/// session cancelled, nothing more asked); the message waits, said as waiting; back online, it
+/// goes up again from its start and is posted once.
+#[test]
+fn working_offline_stops_an_upload_that_goes_again_after() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.fake(|t| t.hold = Some(("upload", Duration::from_secs(60))));
+    let bytes = content(6 * MIB);
+    let path = file("big.bin", &bytes);
+    r.send_with(CHAT, "1-1", "Through an evening offline", vec![Part::File { path }]);
+    assert!(until(&mut r, |r| r.hits("upload") >= 1), "the upload never began");
+    r.w.work_offline(true);
+    assert!(!r.w.transfers.busy(), "stopped at once");
+    assert_eq!((first_state(&r), r.outbox_said(CHAT)[0].state.clone()), (Some(OpState::Waiting), OutState::Waiting));
+    assert!(wait(&r, |r| r.fake(|t| t.drive_files.sessions.iter().all(|s| s.gone))), "its session cancelled");
+    r.turns(Duration::from_secs(60));
+    assert_eq!((r.hits("uploadSession"), r.hits("post")), (1, 0), "nothing asked offline");
+    r.w.work_offline(false);
+    assert!(until(&mut r, |r| r.ops().is_empty()), "{:?}", r.ops());
+    assert_eq!((r.hits("uploadSession"), r.hits("post"), r.held(CHAT, "Through an evening offline")), (2, 1, 1));
     assert!(r.fake(|t| t.drive_files.files.last().is_some_and(|f| f.bytes == bytes)), "the file's bytes once");
 }
 

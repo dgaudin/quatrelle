@@ -65,7 +65,7 @@ fn tcp(url: &crate::http::Url) -> TcpStream {
 }
 
 fn put(s: &UploadSession, bytes: &[u8], from: u64, total: u64) -> crate::Result<RangeAnswer> {
-    put_range_on(&mut tcp(s.url()), s.url(), bytes, from, total)
+    put_range_on(&mut tcp(s.url()), s.url(), bytes, from, total).map_err(|f| f.0)
 }
 
 /// A file sent up in one range: its item's id.
@@ -203,7 +203,7 @@ fn ranges_go_in_order_without_the_token() {
     let s = c.upload_session("report.pdf").unwrap();
     let body: Vec<u8> = (0..700_000u32).map(|i| (i % 251) as u8).collect();
     assert_eq!(put(&s, &body[..655_360], 0, 700_000).unwrap(), RangeAnswer::Next(655_360));
-    assert_eq!(upload_status_on(&mut tcp(s.url()), s.url(), 700_000).unwrap(), 655_360);
+    assert_eq!(upload_status_on(&mut tcp(s.url()), s.url(), 700_000).map_err(|f| f.0).unwrap(), 655_360);
     // A range already there, or one that isn't a multiple of 320 KiB, is refused by OneDrive.
     assert!(matches!(put(&s, &body[..327_680], 0, 700_000), Err(NetError::Protocol(m)) if m == "HTTP 416"));
     assert!(matches!(put(&s, &body[655_360..655_370], 655_360, 700_000), Err(NetError::Protocol(m)) if m.starts_with("HTTP 400")));
@@ -213,7 +213,9 @@ fn ranges_go_in_order_without_the_token() {
     assert_eq!((files[0].id.as_str(), files[0].name.as_str(), files[0].bytes == body), (id.as_str(), "report.pdf", true));
     assert!(!headers(&server, "upload").iter().any(|(k, _)| k == "authorization"), "{:?}", headers(&server, "upload"));
     // Finished, the session is gone.
-    assert!(matches!(upload_status_on(&mut tcp(s.url()), s.url(), 700_000), Err(NetError::Refused(m)) if m == "the upload session is gone"));
+    assert!(
+        matches!(upload_status_on(&mut tcp(s.url()), s.url(), 700_000).map_err(|f| f.0), Err(NetError::Refused(m)) if m == "the upload session is gone")
+    );
     // A name taken gets OneDrive's number.
     let again = upload(&c, "report.pdf", b"another");
     assert_eq!(fake(&server, |t| t.drive_files.files.iter().find(|f| f.id == again).unwrap().name.clone()), "report 1.pdf");
@@ -244,7 +246,7 @@ fn ranges_go_in_order_without_the_token() {
         made("item-1"),
     ]);
     let url = crate::http::Url::parse(&format!("{base}/upload/s")).unwrap();
-    let put = |bytes: &[u8], total: u64| put_range_on(&mut tcp(&url), &url, bytes, 0, total);
+    let put = |bytes: &[u8], total: u64| put_range_on(&mut tcp(&url), &url, bytes, 0, total).map_err(|f| f.0);
     assert!(put(&[1; 10], 20).is_err(), "backwards");
     assert_eq!(put(&[1; 10], 20).unwrap(), RangeAnswer::Next(15), "later is taken");
     assert!(put(&[1; 10], 20).is_err(), "nothing left to send");

@@ -93,7 +93,8 @@ impl Check<'_> {
     /// 2. The bytes, on a connection of their own to the upload's server, without the token.
     fn upload(&mut self, session: &UploadSession, made: &mut Made) -> Option<String> {
         let total = u64::try_from(CONTENT.len()).unwrap_or(0);
-        let sent = self.client.transfer_stream(session.url()).and_then(|mut s| put_range_on(&mut s, session.url(), CONTENT, 0, total));
+        let sent =
+            self.client.transfer_stream(session.url()).and_then(|mut s| put_range_on(&mut s, session.url(), CONTENT, 0, total).map_err(|f| f.0));
         match sent {
             Ok(RangeAnswer::Done(id)) => {
                 self.say("upload: yes".into());

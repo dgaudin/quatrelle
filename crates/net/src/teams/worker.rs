@@ -459,8 +459,9 @@ impl Worker {
     }
 
     /// "Work offline" turned on or off. On: nothing more is asked of Teams (a sign-in awaited from
-    /// the browser is let go), what was under way is given up, and "Offline" is said; the copy
-    /// stays open to answer. Off: the cadences go on afresh.
+    /// the browser is let go), what was under way is given up (the transfers too: the files asked
+    /// for said "Offline", the messages whose files went up waiting again), and "Offline" is said;
+    /// the copy stays open to answer. Off: the cadences go on afresh.
     pub(crate) fn work_offline(&mut self, on: bool) {
         if self.offline == on {
             return;
@@ -471,6 +472,7 @@ impl Worker {
             let signing = self.signing.take().is_some();
             self.sync.give_up();
             people::stop(self);
+            files::stop(self);
             self.held = None;
             if self.polling || signing {
                 self.status(Status::Offline);
@@ -480,6 +482,7 @@ impl Worker {
             self.limiter = Limiter::new(Instant::now());
             self.not_before = None;
         }
+        outbox::offline_changed(self);
     }
 
     /// Whether "Work offline" is on.

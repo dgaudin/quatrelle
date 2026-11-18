@@ -137,6 +137,22 @@ fn ranges_that_go_backwards_end_the_upload() {
     assert_eq!(ranges(&server).len(), 2, "nothing sent again");
 }
 
+/// Final review, net I-1: a range OneDrive answers 429 with a `Retry-After` of 2 s is waited whole,
+/// on the lane's own thread, before the session is asked anything again; then the upload goes on
+/// from where it stands, every byte once.
+#[test]
+fn a_busy_range_waits_its_retry_after_whole() {
+    let server = server();
+    let (_dir, path, source) = file("busy", 6 * MIB);
+    let session = client(&server).upload_session("big.bin").unwrap();
+    fake(&server, |t| t.drive_files.busy_ranges = Some((1, 2)));
+    let started = Instant::now();
+    let item = send_up(&session, &source, &server.base, &flag(), FLOOR, &|_| {}).unwrap();
+    assert!(started.elapsed() >= Duration::from_secs(2), "waited {:?}", started.elapsed());
+    assert_eq!(ranges(&server), [(0, 5_242_879, 6_291_456), (5_242_880, 6_291_455, 6_291_456)], "every byte once");
+    assert_eq!(made(&server, &item), std::fs::read(&path).unwrap());
+}
+
 #[test]
 fn a_session_gone_is_said_so() {
     let server = server();

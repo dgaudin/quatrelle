@@ -395,7 +395,10 @@ They go with the text, the pictures first and then the files, each in the order 
   its message is cancelled or isn't sent: delete it there if you don't want it.
 - **Sending shows.** The message appears at once on your side, dimmed, with **Uploading…** and the
   share done as the files go up (a big file may take a while), then "Sending…" as for any message. Everything waits when
-  Teams asks to wait or the network is away.
+  Teams asks to wait or the network is away. **Work offline** stops an upload under way: it starts
+  again from the beginning once you're back online. A file that still can't go up after three
+  tries (each one taken up several times where it stopped) marks its message Not sent, "Quatrelle
+  couldn't confirm it was sent".
 - **Not sent.** Besides the reasons of Replying, a message with files can be marked Not sent for:
   "A file is no longer there, or has changed" (it is read again when its turn comes), "A file is
   bigger than Teams takes here (100 MB)", or "OneDrive didn't share the file with everyone in this
