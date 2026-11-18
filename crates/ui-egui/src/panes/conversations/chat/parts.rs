@@ -32,11 +32,13 @@ pub(super) fn shown(url: &str) -> String {
     url.chars().filter(|&c| !is_bidi(c)).collect()
 }
 
-/// Whether a sender's link opens on a click: it, and what the window opens of it (out of the
-/// wrappers it takes off when links are `clean`ed: File › Options › Safety), are addresses a
-/// browser may be handed ([`launchable_link`]). The window checks the second again.
+/// Whether a sender's link opens on a click: it is an address a browser may be handed
+/// ([`launchable_link`]), as a link of a message always had to be, and so is what the window
+/// opens of it when cleaning changed it (out of the wrappers taken off when links are `clean`ed:
+/// File › Options › Safety). The window checks that one again.
 pub(super) fn openable(url: &str, clean: bool) -> bool {
-    launchable_link(url) && (!clean || launchable_link(&quatrelle_engine::mime::clean_link(url)))
+    let opens = if clean { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
+    launchable_link(url) && (opens.trim() == url.trim() || launchable_link(&opens))
 }
 
 /// Where a sender's link goes, as it's shown (on hover, a card's host): out of every wrapper when

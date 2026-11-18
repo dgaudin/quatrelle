@@ -663,8 +663,11 @@ impl MailApp {
     }
 
     /// Follow a link from a message: only web pages and mail addresses, never local files or
-    /// other schemes. A web page out of its wrappers (links cleaned) opens only if it's an address
-    /// a browser may be handed, as any link from a message: the wrapper was checked, not it.
+    /// other schemes. A web address its cleaning changed (out of a wrapper, its tracking left out)
+    /// opens only if a browser may be handed it ([`launchable_link`]): nothing looked at it as the
+    /// message wrote it. One opened as written goes as it always did.
+    ///
+    /// [`launchable_link`]: quatrelle_engine::model::ical::launchable_link
     pub(crate) fn open_link(&mut self, url: &str) {
         // Where it really goes, without what says who clicked (File › Options › Safety).
         let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
@@ -683,7 +686,10 @@ impl MailApp {
             } else {
                 self.ui.dialog = Some(Dialog::OpenShare { link: share, server, path, always: false });
             }
-        } else if (lower.starts_with("https://") || lower.starts_with("http://")) && !quatrelle_engine::model::ical::launchable_link(u) {
+        } else if (lower.starts_with("https://") || lower.starts_with("http://"))
+            && u != url.trim()
+            && !quatrelle_engine::model::ical::launchable_link(u)
+        {
             self.session.notice(tf!("Links like {link} aren't opened", link = widgets::shorten(u, 40)), true);
         } else if lower.starts_with("https://") || lower.starts_with("http://") {
             if let Err(e) = self.services.open_url(u) {
