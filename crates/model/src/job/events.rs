@@ -373,6 +373,15 @@ pub enum Event {
         people: Vec<crate::scheduling::Availability>,
         error: Option<String>,
     },
+    /// What the server says about the recipients [`Job::GetMailTips`] asked about (Outlook's
+    /// MailTips), with its `ask` back: one entry per recipient with something to tell, or why the
+    /// whole request failed.
+    MailTips {
+        account: String,
+        ask: u64,
+        tips: Vec<crate::scheduling::MailTip>,
+        error: Option<String>,
+    },
     /// The language model's answer to [`Job::AskLlm`], or why there's none.
     LlmAnswered {
         id: u64,

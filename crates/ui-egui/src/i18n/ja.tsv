@@ -2360,3 +2360,10 @@ presence	Offline	オフライン
 	Audio call	音声通話
 	Video call	ビデオ通話
 	Zoom	ズーム
+	Mailbox full	メールボックスがいっぱいです
+	Delivery restricted	配信制限あり
+	Moderated	モデレート済み
+	Recipient not found	受信者が見つかりません
+	Reaches {n} people outside the organisation	組織外の {n} 人に届きます
+	You wrote that something is attached, but nothing is.	添付ファイルがあると書かれていますが、何も添付されていません。
+	{email}: {line}	{email}: {line}

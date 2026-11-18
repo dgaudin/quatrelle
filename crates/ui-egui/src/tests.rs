@@ -238,6 +238,7 @@ pub(crate) fn tour() {
             Dialog::SendCheck(vec![
                 quatrelle_engine::SendCheck::Lookalike { address: "orders@printsh0p.example".into(), like: "printshop.example".into() },
                 quatrelle_engine::SendCheck::Exposed { count: 12 },
+                quatrelle_engine::SendCheck::MissingAttachment,
             ]),
             Dialog::edit_account(&a.session.accounts[0].config),
             {

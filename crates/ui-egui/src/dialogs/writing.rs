@@ -133,6 +133,9 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people
                         exposed = true;
                         tf!("{n} people who may not know each other will all see each other's addresses.", n = count)
                     }
+                    SendCheck::MissingAttachment => {
+                        tf!("You wrote that something is attached, but nothing is.")
+                    }
                 };
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), egui::Sense::hover());

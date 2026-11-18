@@ -566,6 +566,9 @@ impl Pool {
                     .collect();
                 self.sink.emit(Event::Availability { account, from, to, people, error: Some(error) });
             }
+            Job::GetMailTips { account, ask, .. } if !self.workers.contains_key(&account) => {
+                self.sink.emit(Event::MailTips { account, ask, tips: Vec::new(), error: Some("the account is offline".into()) });
+            }
             // Working offline: what the cache keeps whole is archived, the deletions wait in the journal.
             Job::Archive { account, keys, to_account } if !self.workers.contains_key(&account) => {
                 let Some(acc) = self.configs.get(&account).cloned() else {

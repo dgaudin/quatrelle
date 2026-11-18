@@ -591,6 +591,7 @@ mod changes;
 mod contacts;
 pub(crate) mod events;
 mod files;
+pub mod mailtips;
 mod own_calendars;
 mod push;
 mod reminders;

@@ -2359,3 +2359,10 @@ presence	Offline	לא מחובר
 	Audio call	שיחת אודיו
 	Video call	שיחת וידאו
 	Zoom	זום
+	Mailbox full	תיבת דואר מלאה
+	Delivery restricted	מסירה מוגבלת
+	Moderated	ממונה
+	Recipient not found	הנמען לא נמצא
+	Reaches {n} people outside the organisation	מגיע ל-{n} אנשים מחוץ לארגון
+	You wrote that something is attached, but nothing is.	כתבת שמשהו מצורף, אבל שום דבר לא מצורף.
+	{email}: {line}	{email}: {line}

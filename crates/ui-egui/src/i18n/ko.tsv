@@ -2362,3 +2362,10 @@ presence	Offline	오프라인
 	Audio call	음성 통화
 	Video call	화상 통화
 	Zoom	확대/축소
+	Mailbox full	사서함이 가득 참
+	Delivery restricted	배달 제한됨
+	Moderated	모더레이션됨
+	Recipient not found	받는 사람을 찾을 수 없음
+	Reaches {n} people outside the organisation	조직 외부의 {n}명에게 도달
+	You wrote that something is attached, but nothing is.	첨부 파일이 있다고 썼지만, 아무것도 첨부되지 않았습니다.
+	{email}: {line}	{email}: {line}

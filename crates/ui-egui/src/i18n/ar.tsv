@@ -2359,3 +2359,10 @@ presence	Offline	غير متصل
 	Audio call	مكالمة صوتية
 	Video call	مكالمة فيديو
 	Zoom	تكبير/تصغير
+	Mailbox full	صندوق الوارد ممتلئ
+	Delivery restricted	التسليم مقيد
+	Moderated	مُشرف عليه
+	Recipient not found	المستلم غير موجود
+	Reaches {n} people outside the organisation	يصل إلى {n} أشخاص خارج المؤسسة
+	You wrote that something is attached, but nothing is.	كتبت أن هناك مرفقاً، ولكن لا يوجد شيء مرفق.
+	{email}: {line}	{email}: {line}

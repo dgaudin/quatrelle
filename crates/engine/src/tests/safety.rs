@@ -131,6 +131,28 @@ fn sending_holds_for_a_lookalike_address_or_many_strangers() {
 }
 
 #[test]
+fn sending_holds_when_something_is_said_to_be_attached_and_nothing_is() {
+    let mut s = sample_session("missing-attachment");
+    let send = |s: &mut Session, p: Value| s.run("compose.send", &p).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "Budget", "body": "Please find attached the numbers."})).unwrap();
+    assert_eq!(send(&mut s, json!({}))["check"], json!([{"kind": "missingAttachment"}]));
+    assert!(s.compose.as_ref().is_some_and(|c| !c.sending), "nothing went");
+    // French too, with the accent or without.
+    s.run("compose.update", &json!({"body": "Ci joint le budget."})).unwrap();
+    assert_eq!(send(&mut s, json!({}))["check"], json!([{"kind": "missingAttachment"}]));
+    // A file goes along: nothing to ask.
+    s.run("compose.attach", &json!({"name": "budget.txt", "data": [49]})).unwrap();
+    assert!(send(&mut s, json!({})).get("check").is_none());
+    assert!(s.compose.is_none());
+    // A word that only looks like one ("unattached") says nothing.
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "Plan", "body": "The plan stays unattached to the timeline."})).unwrap();
+    assert!(send(&mut s, json!({})).get("check").is_none());
+    done(s);
+}
+
+#[test]
 fn tracking_pictures_stay_unloaded_when_pictures_are_shown() {
     let mut s = sample_session("trackers");
     let html = r#"<p>New prints are in. <a href="https://shop.example/prints?utm_source=news&amp;fbclid=x">See them</a>

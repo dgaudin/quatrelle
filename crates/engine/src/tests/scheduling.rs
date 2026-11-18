@@ -5,7 +5,7 @@
 //! (the Scheduling Assistant), from the calendars kept here and from an Exchange server.
 
 use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
-use quatrelle_model::scheduling::{Availability, BusyKind, BusySlot, Room, RoomList};
+use quatrelle_model::scheduling::{Availability, BusyKind, BusySlot, MailTip, Room, RoomList};
 
 use super::*;
 
@@ -219,5 +219,115 @@ fn an_exchange_account_asks_its_server_once() {
     // Another day: asked again.
     s.run("calendar.availability", &json!({"account": id, "emails": ["riley@contoso.example"], "from": from + 86_400})).unwrap();
     assert!(matches!(s.take_jobs().as_slice(), [Job::GetAvailability { .. }]));
+    done(s);
+}
+
+/// MailTips for a message being written: an Exchange account is asked about its recipients once
+/// per set, in To, Cc and Bcc order; an answer to a set since changed is let go; closing the
+/// message forgets them; an account with no server for them isn't asked.
+#[test]
+fn mail_tips_follow_the_recipients_of_a_message_being_written() {
+    let mut s = sample_session("mail-tips");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let id = s.run("mail.new", &json!({"account": account})).unwrap()["compose"].as_u64().unwrap();
+    // Nothing to ask about yet.
+    assert!(!s.mail_tips_wanted());
+    assert!(s.run("compose.mailTips", &json!({})).is_err(), "no recipient");
+    s.run("compose.update", &json!({"to": "Ana <ana@contoso.example>; bob@contoso.example", "cc": "carol@contoso.example"})).unwrap();
+    assert!(s.mail_tips_wanted());
+    assert_eq!(s.run("compose.mailTips", &json!({})).unwrap()["state"], "loading");
+    assert!(!s.mail_tips_wanted(), "one request per set, while it's on its way");
+    let (ask, recipients) = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { from, recipients, ask, .. }] => {
+            assert_eq!(from, "riley@contoso.example");
+            (*ask, recipients.clone())
+        }
+        jobs => panic!("{jobs:?}"),
+    };
+    assert_eq!(recipients, ["ana@contoso.example", "bob@contoso.example", "carol@contoso.example"], "in To then Cc, lower case, once each");
+    // One answer worth showing, one ordinary: only the first stays.
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![
+            MailTip { email: "ana@contoso.example".into(), automatic_replies: "Away until Monday".into(), ..Default::default() },
+            MailTip { email: "bob@contoso.example".into(), ..Default::default() },
+        ],
+        error: None,
+    });
+    let r = s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!((r["state"].as_str(), r["tips"].as_array().map(Vec::len)), (Some("ready"), Some(1)));
+    assert_eq!((r["tips"][0]["email"].as_str(), r["tips"][0]["automaticReplies"].as_str()), (Some("ana@contoso.example"), Some("Away until Monday")));
+    // A recipient added: a new question, and the old answer is let go.
+    s.run("compose.update", &json!({"bcc": "dave@contoso.example"})).unwrap();
+    assert!(s.mail_tips_wanted());
+    s.run("compose.mailTips", &json!({})).unwrap();
+    let again = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { ask, recipients, .. }] => {
+            assert_eq!(recipients.last().map(String::as_str), Some("dave@contoso.example"));
+            *ask
+        }
+        jobs => panic!("{jobs:?}"),
+    };
+    assert_ne!(again, ask);
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![MailTip { email: "bob@contoso.example".into(), mailbox_full: true, ..Default::default() }],
+        error: None,
+    });
+    assert_eq!(s.run("compose.mailTips", &json!({})).unwrap()["state"], "loading", "an answer for the set from before is let go");
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask: again,
+        tips: vec![MailTip { email: "dave@contoso.example".into(), custom: "Ring first".into(), ..Default::default() }],
+        error: None,
+    });
+    let r = s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!((r["state"].as_str(), r["tips"][0]["custom"].as_str()), (Some("ready"), Some("Ring first")));
+    // Closing the message forgets them.
+    s.run("compose.close", &json!({"save": false})).unwrap();
+    assert!(s.mail_tips_now(id).is_none());
+    // The sample mailbox has no server that answers MailTips.
+    s.run("mail.new", &json!({"account": sample::SAMPLE_ACCOUNT})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example"})).unwrap();
+    assert!(!s.mail_tips_wanted());
+    assert!(s.run("compose.mailTips", &json!({})).is_err());
+    // Another account's server is asked in turn, even with the same recipients: the tips were
+    // the first server's.
+    let other = s
+        .run("account.add", &json!({"email": "sam@fourthcoffee.example", "ews": "mail.fourthcoffee.example", "username": "sam", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    let (ask, from) = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { ask, from, .. }] => (*ask, from.clone()),
+        jobs => panic!("{jobs:?}"),
+    };
+    assert_eq!(from, "riley@contoso.example");
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![MailTip { email: "ana@contoso.example".into(), custom: "Ring first".into(), ..Default::default() }],
+        error: None,
+    });
+    s.run("compose.update", &json!({"account": other})).unwrap();
+    assert!(s.mail_tips_wanted(), "the other server hasn't been asked about these recipients");
+    assert_eq!(s.run("compose.mailTips", &json!({})).unwrap()["state"], "loading");
+    match s.take_jobs().as_slice() {
+        [Job::GetMailTips { from, .. }] => assert_eq!(from, "sam@fourthcoffee.example"),
+        jobs => panic!("{jobs:?}"),
+    }
     done(s);
 }

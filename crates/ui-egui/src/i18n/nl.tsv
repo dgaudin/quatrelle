@@ -2360,3 +2360,10 @@ presence	Offline	Offline
 	Audio call	Audiogesprek
 	Video call	Videogesprek
 	Zoom	Zoomen
+	Mailbox full	Postbus vol
+	Delivery restricted	Bezorging beperkt
+	Moderated	Gemodereerd
+	Recipient not found	Geen ontvanger gevonden
+	Reaches {n} people outside the organisation	Bereikt {n} personen buiten de organisatie
+	You wrote that something is attached, but nothing is.	U schreef dat er iets bijgevoegd is, maar er is niets bijgevoegd.
+	{email}: {line}	{email}: {line}

@@ -2364,3 +2364,10 @@ presence	Offline	Desconectado
 	Audio call	Llamada de audio
 	Video call	Videollamada
 	Zoom	Zoom
+	Mailbox full	Buzón lleno
+	Delivery restricted	Entrega restringida
+	Moderated	Moderado
+	Recipient not found	Destinatario no encontrado
+	Reaches {n} people outside the organisation	Alcanza a {n} personas fuera de la organización
+	You wrote that something is attached, but nothing is.	Escribió que algo está adjunto, pero no lo está.
+	{email}: {line}	{email}: {line}

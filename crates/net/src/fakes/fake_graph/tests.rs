@@ -16,6 +16,7 @@ mod calendars;
 mod events;
 mod filing;
 mod follow_up;
+mod mailtips;
 mod reminders;
 mod replied;
 mod teams;

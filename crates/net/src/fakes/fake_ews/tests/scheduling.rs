@@ -4,7 +4,7 @@
 //! Tests over the fake EWS server: the rooms it offers and when people and rooms are busy, for
 //! a meeting being written.
 
-use quatrelle_model::scheduling::BusyKind;
+use quatrelle_model::scheduling::{BusyKind, MailTip};
 
 use super::*;
 
@@ -213,4 +213,88 @@ fn a_meeting_made_with_a_room_books_it_as_a_resource() {
     let d = server.data.lock().unwrap();
     let (_, _, item) = d.pim.iter().find(|(_, _, el)| el.text_of("Subject") == Some("Budget")).unwrap();
     assert!(item.child("Resources").is_none() && item.child("RequiredAttendees").is_some());
+}
+
+/// MailTips come for the recipients that have something to tell, as text (an automatic reply's
+/// HTML turned into words); an ordinary recipient gets none, and a server without the operation
+/// says so.
+#[test]
+fn mail_tips_are_read_for_the_recipients_with_something_to_tell() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.mail_tips = vec![
+        MailTip {
+            email: "ana@contoso.example".into(),
+            automatic_replies: "<p>Away until <b>Monday</b></p>".into(),
+            custom: "Ring first".into(),
+            scope: "external".into(),
+            ..Default::default()
+        },
+        MailTip {
+            email: "full@contoso.example".into(),
+            mailbox_full: true,
+            external_members: 12,
+            max_message_size: 10_485_760,
+            restricted: true,
+            moderated: true,
+            ..Default::default()
+        },
+    ];
+    let server = serve(d);
+    let emails = ["ana@contoso.example".to_string(), "bo@contoso.example".into(), "full@contoso.example".into(), "nobody@contoso.example".into()];
+    let tips = crate::ews_pim::mailtips::mail_tips(&client(&server), "riley@contoso.example", &emails).unwrap();
+    assert_eq!(tips.len(), 2, "{tips:?}");
+    assert_eq!((tips[0].email.as_str(), tips[0].automatic_replies.as_str()), ("ana@contoso.example", "Away until Monday"));
+    assert_eq!((tips[0].custom.as_str(), tips[0].scope.as_str()), ("Ring first", "external"));
+    assert!(tips[1].mailbox_full && tips[1].restricted && tips[1].moderated && !tips[1].invalid);
+    assert_eq!((tips[1].external_members, tips[1].max_message_size), (12, 10_485_760));
+    let asked = server.data.lock().unwrap().mail_tips_asked.clone();
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].0, "riley@contoso.example");
+    assert_eq!(asked[0].1, ["ana@contoso.example", "bo@contoso.example", "full@contoso.example", "nobody@contoso.example"]);
+    // A server that doesn't have the operation refuses, which isn't "no tips".
+    let mut d = Data { mail_tips_refused: true, ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let server = serve(d);
+    assert!(crate::ews_pim::mailtips::mail_tips(&client(&server), "riley@contoso.example", &emails).is_err());
+}
+
+/// Through the pool: MailTips are answered on the account's second connection while the first
+/// is still held by a slow mailbox sync, and the answer carries the question's `ask` back.
+#[test]
+fn mail_tips_are_answered_while_the_mailbox_syncs() {
+    let mut d = Data { slow_sync: Some(Duration::from_secs(6)), ..Default::default() };
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, &mail("Hello", "m1"), false, "2026-10-20T09:00:00Z");
+    d.mail_tips = vec![MailTip { email: "ana@contoso.example".into(), custom: "On leave".into(), ..Default::default() }];
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-mail-tips");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "connecting", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { .. } | SyncStatus::Connecting, .. }));
+    let began = Instant::now();
+    pool.submit(Job::GetMailTips {
+        account: "a1".into(),
+        from: "riley@contoso.example".into(),
+        recipients: vec!["ana@contoso.example".into()],
+        ask: 7,
+    });
+    let seen = until(&pool, "mail tips", |e| matches!(e, Event::MailTips { .. }));
+    match seen.last() {
+        Some(Event::MailTips { account, ask, tips, error }) => {
+            assert_eq!((account.as_str(), *ask, error.as_deref()), ("a1", 7, None));
+            assert_eq!(tips.len(), 1);
+            assert_eq!(tips[0].custom, "On leave");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(began.elapsed() < Duration::from_secs(6), "answered on the second connection, not after the sync");
+    drop(pool);
 }

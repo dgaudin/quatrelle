@@ -71,8 +71,8 @@ pub use security::{
 };
 use writing::NameCheck;
 pub use writing::{
-    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Outcome, Quote, QuotePoint, Resolved,
-    Rewrite, SendBlock, SendCheck, Sender, Written, add_pictures, group_entry, style_signature,
+    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, MailTipsState, NAMES_NOT_FOUND, NameChoice, Outcome, Quote, QuotePoint,
+    Resolved, Rewrite, SendBlock, SendCheck, Sender, Written, add_pictures, group_entry, mail_tips_recipients, style_signature,
 };
 
 /// A mailbox in the folder pane: an account, or a shared mailbox one opens ([`Session::pane_sections`]).
@@ -438,6 +438,11 @@ pub struct Session {
     /// When people and rooms are busy, by (account, address, from, to), once asked for (the
     /// Scheduling Assistant's free/busy).
     pub free_busy: HashMap<(String, String, i64, i64), scheduling::Fetched<quatrelle_model::scheduling::Availability>>,
+    /// What the server said about each message being written's recipients (Outlook's MailTips),
+    /// by message id, once asked for.
+    pub mail_tips: HashMap<u64, MailTipsState>,
+    /// The number of the last MailTips question, so an answer to an older one is let go.
+    pub(crate) mail_tips_ask: u64,
     /// Mail, Calendar or People.
     pub module: pim::Module,
     pub cal_mode: pim::CalMode,
@@ -602,6 +607,8 @@ impl Session {
             docs_unread: HashSet::new(),
             rooms: HashMap::new(),
             free_busy: HashMap::new(),
+            mail_tips: HashMap::new(),
+            mail_tips_ask: 0,
             webex: pim::WebexState::default(),
             teams: pim::TeamsState::default(),
             module: pim::Module::Mail,
@@ -738,6 +745,14 @@ impl Session {
     pub fn take_jobs(&mut self) -> Vec<Job> {
         self.update_calendar_reading();
         self.step_age_scans();
+        // What a server said about a message no longer being written goes with it (closed without
+        // being kept, or set aside too long ago): only the current message and the ones still at
+        // hand keep theirs.
+        self.mail_tips.retain(|id, _| {
+            self.compose.as_ref().is_some_and(|c| c.id == *id)
+                || self.composes.iter().any(|c| c.id == *id)
+                || self.set_aside.iter().any(|c| c.id == *id)
+        });
         std::mem::take(&mut self.jobs)
     }
 

@@ -620,6 +620,37 @@ impl Data {
                 }
                 ok(json!({ "value": out }))
             }
+            ("POST", ["me", "getMailTips"]) => {
+                self.mail_tips_asked.push(input.clone());
+                let asked = input["EmailAddresses"].as_array().cloned().unwrap_or_default();
+                let out: Vec<Value> = asked
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter_map(|email| self.mail_tips.iter().find(|t| t.email.eq_ignore_ascii_case(email.trim())))
+                    .map(|t| {
+                        let mut v = json!({
+                            "emailAddress": {"address": t.email},
+                            "mailboxFull": t.mailbox_full,
+                            "deliveryRestricted": t.restricted,
+                            "externalMemberCount": t.external_members,
+                            "isModerated": t.moderated,
+                            "invalidRecipient": t.invalid,
+                            "maxMessageSize": t.max_message_size,
+                        });
+                        if !t.automatic_replies.is_empty() {
+                            v["automaticReplies"] = json!({"message": t.automatic_replies});
+                        }
+                        if !t.custom.is_empty() {
+                            v["customMailTip"] = json!(t.custom);
+                        }
+                        if !t.scope.is_empty() {
+                            v["recipientScope"] = json!(t.scope);
+                        }
+                        v
+                    })
+                    .collect();
+                ok(json!({ "value": out }))
+            }
             ("GET", ["me", "contacts"]) => ok(json!({ "value": self.contacts })),
             ("POST", ["me", "contacts"]) => {
                 let id = self.id("CT");

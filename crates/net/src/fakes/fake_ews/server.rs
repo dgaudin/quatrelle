@@ -388,7 +388,11 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         let inner = if plain {
             parts.concat()
         } else {
-            let tag = name.trim_end_matches("Response").to_string() + "ResponseMessage";
+            let tag = if name == "GetMailTipsResponse" {
+                "MailTipsResponseMessageType".to_string()
+            } else {
+                name.trim_end_matches("Response").to_string() + "ResponseMessage"
+            };
             format!(
                 "<m:ResponseMessages>{}</m:ResponseMessages>",
                 parts.concat().replace("<m:R ", &format!("<m:{tag} ")).replace("</m:R>", &format!("</m:{tag}>"))

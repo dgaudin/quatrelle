@@ -9,6 +9,7 @@ mod across;
 mod clipboard;
 mod file_dialogs;
 mod lost_gpu;
+mod mail_tips;
 mod markdown;
 mod people_field;
 mod pgp;

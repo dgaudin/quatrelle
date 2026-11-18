@@ -26,6 +26,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
             .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "from"?: string (who it's from: a shared mailbox the account opens, or another address it may send from; empty: the account's own), "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
             .when(has_compose),
+        CommandSpec::new("compose.mailTips", "What the server says about the recipients", "Message", compose_mail_tips)
+            .params(r#"{"refresh"?: bool (ask again, even if this set of recipients was asked about)}"#)
+            .when(has_compose),
         CommandSpec::new("compose.language", "Language", "Message › Review", |s, v| {
             let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
             let lang = p::str(v, "language").unwrap_or("").trim().to_ascii_lowercase();
@@ -151,6 +154,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("attachment.saveAll", "Save all attachments", "Reading pane", save_all_attachments).params(r#"{"dir": string, "indices"?: [number] (only these attachments)}"#).when(has_reading),
         CommandSpec::new("attachment.preview", "Preview attachment", "Reading pane", preview_attachment).params(r#"{"index": number}"#).when(has_reading),
     ]
+}
+
+pub(super) fn compose_mail_tips(s: &mut Session, v: &Value) -> CmdResult {
+    s.request_mail_tips(p::bool(v, "refresh").unwrap_or(false))
 }
 
 pub(super) fn compose_update(s: &mut Session, v: &Value) -> CmdResult {
@@ -483,6 +490,7 @@ pub(super) fn close_compose(s: &mut Session, v: &Value) -> CmdResult {
         false
     };
     s.compose = None;
+    s.mail_tips.remove(&c.id);
     if saved {
         s.notice("Saved in Drafts", false);
     }
@@ -493,6 +501,7 @@ pub(super) fn close_compose(s: &mut Session, v: &Value) -> CmdResult {
 pub(super) fn discard(s: &mut Session, _: &Value) -> CmdResult {
     let c = s.compose.take();
     if let Some(c) = &c {
+        s.mail_tips.remove(&c.id);
         s.remove_saved_copies(c);
     }
     Ok(json!({"discarded": c.map(|c| c.id)}))

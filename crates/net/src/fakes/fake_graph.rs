@@ -110,6 +110,10 @@ pub struct Data {
     pub no_freebusy: Vec<String>,
     /// The `getSchedule` bodies seen.
     pub schedule_asked: Vec<Value>,
+    /// What Graph says about recipients (`getMailTips`), by address.
+    pub mail_tips: Vec<quatrelle_model::scheduling::MailTip>,
+    /// The `getMailTips` bodies seen.
+    pub mail_tips_asked: Vec<Value>,
     /// The one bearer token taken, when not [`TOKEN`] (a test renews it as tokens expire).
     pub token: Option<String>,
     /// How long a request for a message's source (`$value`) waits before its token is checked:

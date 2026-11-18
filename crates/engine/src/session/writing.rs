@@ -11,6 +11,7 @@ mod assistant;
 mod compose;
 mod drafts;
 mod items;
+mod mailtips;
 mod names;
 mod quote;
 mod reopen;
@@ -22,6 +23,7 @@ pub use assistant::{AssistKind, Assistant, Filing, LlmModels, Rewrite};
 use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
+pub use mailtips::{MailTipsState, mail_tips_recipients};
 pub(crate) use names::NameCheck;
 pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, group_entry};
 pub use quote::{Quote, QuotePoint, Written};
@@ -31,6 +33,53 @@ pub use sending::SendBlock;
 /// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To
 /// and Cc asks first.
 const EXPOSED_FROM: usize = 8;
+
+/// What a message says when something goes with it, folded (accents gone, lower case): the
+/// languages the interface speaks. A message carrying none of these and nothing attached goes
+/// after a look ([`SendCheck::MissingAttachment`]).
+const ATTACHMENT_PHRASES: [&str; 27] = [
+    "attached",
+    "attachment",
+    "attaching",
+    "enclosed",
+    "enclosure",
+    "ci-joint",
+    "ci joint",
+    "ci-jointes",
+    "ci jointes",
+    "piece jointe",
+    "pieces jointes",
+    "fichier joint",
+    "fichiers joints",
+    "en annexe",
+    "adjunto",
+    "adjunta",
+    "archivo adjunto",
+    "documento adjunto",
+    "anbei",
+    "anhang",
+    "angehangt",
+    "allegato",
+    "allegata",
+    "in allegato",
+    "em anexo",
+    "anexo",
+    "bijgevoegd",
+];
+
+/// Whether what was written says something goes with the message. Only whole words count:
+/// "unattached" isn't a promise of anything, and neither is a link.
+fn mentions_attachment(subject: &str, body: &str) -> bool {
+    let whole = format!("{subject}\n{body}");
+    let text = quatrelle_model::search::fold_word(&whole);
+    ATTACHMENT_PHRASES.iter().any(|p| {
+        text.match_indices(p).any(|(i, _)| {
+            let before = text.get(..i).and_then(|s| s.chars().next_back());
+            let after = text.get(i + p.len()..).and_then(|s| s.chars().next());
+            !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+        })
+    })
+}
 
 /// Something to look at before a message goes (`compose.send` holds it and says what).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +92,9 @@ pub enum SendCheck {
     /// other (each organisation outside the sender's own counted once, each address at a big mail
     /// service on its own).
     Exposed { count: usize },
+    /// The message says something goes with it ("see attached", "ci-joint"…) and nothing is
+    /// attached.
+    MissingAttachment,
 }
 
 impl Session {
@@ -381,6 +433,14 @@ impl Session {
         if people.len() >= EXPOSED_FROM {
             found.push(SendCheck::Exposed { count: people.len() });
         }
+        // Something said to be attached, and nothing is: the words in what was written, not in
+        // the original under a reply.
+        if d.attachments.is_empty() {
+            let (own, _, _) = c.own_bodies();
+            if mentions_attachment(&d.subject, &own) {
+                found.push(SendCheck::MissingAttachment);
+            }
+        }
         found
     }
 
@@ -522,6 +582,7 @@ impl Session {
         }
         self.composes.retain(|x| x.id != c.id);
         self.set_aside.retain(|x| x.id != c.id);
+        self.mail_tips.remove(&c.id);
         self.notice("Message sent", false);
     }
 

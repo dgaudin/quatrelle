@@ -399,6 +399,7 @@ pub fn card_json(c: &Card) -> Value {
 }
 
 mod files;
+pub mod mailtips;
 mod reminders;
 pub mod scheduling;
 

@@ -2366,3 +2366,10 @@ presence	Offline	離線
 	Audio call	語音通話
 	Video call	視訊通話
 	Zoom	縮放
+	Mailbox full	信箱已滿
+	Delivery restricted	投遞受限
+	Moderated	已審核
+	Recipient not found	找不到收件人
+	Reaches {n} people outside the organisation	觸達組織外的 {n} 人
+	You wrote that something is attached, but nothing is.	您寫的是有附件，但沒有附件。
+	{email}: {line}	{email}: {line}

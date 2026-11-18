@@ -306,6 +306,7 @@ impl Session {
             self.compose = None;
         }
         self.composes.retain(|c| c.account != id);
+        self.mail_tips.retain(|_, s| s.account != id);
         let view = self.default_view();
         self.open_view(view);
         Ok(serde_json::json!({ "removed": id, "dataFile": kept.map(|f| f.display().to_string()) }))

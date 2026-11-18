@@ -242,6 +242,12 @@ pub struct Data {
     pub taken: Vec<(String, String, String, String, String)>,
     /// The `GetUserAvailability` requests seen: the addresses asked about and the window.
     pub availability_asked: Vec<(Vec<String>, String, String)>,
+    /// What the server says about recipients (`GetMailTips`), by address.
+    pub mail_tips: Vec<quatrelle_model::scheduling::MailTip>,
+    /// The `GetMailTips` requests seen: the sender and the addresses asked about.
+    pub mail_tips_asked: Vec<(String, Vec<String>)>,
+    /// `GetMailTips` isn't available on this server (refused as an invalid operation).
+    pub mail_tips_refused: bool,
     /// The server tells of changes as they happen (streaming notifications); without it
     /// `Subscribe` is refused, as by a server older than Exchange 2010 SP1.
     pub streaming: bool,
@@ -404,6 +410,9 @@ impl Default for Data {
             no_freebusy: Vec::new(),
             taken: Vec::new(),
             availability_asked: Vec::new(),
+            mail_tips: Vec::new(),
+            mail_tips_asked: Vec::new(),
+            mail_tips_refused: false,
             streaming: false,
             subscriptions: Vec::new(),
             stream_for: std::time::Duration::from_secs(2),
