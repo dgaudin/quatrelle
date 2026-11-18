@@ -331,3 +331,92 @@ fn mail_tips_follow_the_recipients_of_a_message_being_written() {
     }
     done(s);
 }
+
+/// One MailTips question on its way per message: the recipients changed while it is out wait for
+/// its answer, the newest set in place of any that waited, and only then is the server asked
+/// again; back to the set on its way, nothing waits.
+#[test]
+fn one_mail_tips_question_is_on_its_way_at_a_time() {
+    let mut s = sample_session("mail-tips-one");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    let asked = |s: &mut Session| -> Vec<(u64, Vec<String>)> {
+        s.take_jobs()
+            .into_iter()
+            .filter_map(|j| match j {
+                Job::GetMailTips { ask, recipients, .. } => Some((ask, recipients)),
+                _ => None,
+            })
+            .collect()
+    };
+    let ask_now = |s: &mut Session, update: Value| {
+        s.run("compose.update", &update).unwrap();
+        if s.mail_tips_wanted() {
+            s.run("compose.mailTips", &json!({})).unwrap();
+        }
+    };
+    ask_now(&mut s, json!({"to": "ana@contoso.example"}));
+    let first = asked(&mut s);
+    assert_eq!(first.len(), 1, "{first:?}");
+    // Two more sets while it is on its way: nothing more is asked yet.
+    ask_now(&mut s, json!({"cc": "bo@contoso.example"}));
+    ask_now(&mut s, json!({"cc": "bo@contoso.example; cy@contoso.example"}));
+    assert!(!s.mail_tips_wanted(), "the newest set waits for the answer");
+    assert!(asked(&mut s).is_empty(), "one question on its way");
+    // Its answer: the newest set is asked about, once.
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask: first[0].0,
+        tips: vec![MailTip { email: "ana@contoso.example".into(), custom: "Ring first".into(), ..Default::default() }],
+        error: None,
+    });
+    let next = asked(&mut s);
+    let sets: Vec<&Vec<String>> = next.iter().map(|(_, r)| r).collect();
+    assert_eq!(sets, [&vec!["ana@contoso.example".to_string(), "bo@contoso.example".into(), "cy@contoso.example".into()]], "the newest set, once");
+    // A set changed and changed back while that one is out: nothing waits.
+    ask_now(&mut s, json!({"cc": "bo@contoso.example"}));
+    ask_now(&mut s, json!({"cc": "bo@contoso.example; cy@contoso.example"}));
+    assert!(!s.mail_tips_wanted());
+    s.apply(Event::MailTips { account: account.clone(), ask: next[0].0, tips: Vec::new(), error: None });
+    assert!(asked(&mut s).is_empty(), "nothing waited");
+    done(s);
+}
+
+/// An answer naming an address that wasn't asked about keeps nothing of it.
+#[test]
+fn mail_tips_keep_only_the_recipients_asked_about() {
+    let mut s = sample_session("mail-tips-asked");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    s.run("compose.update", &json!({"to": "cy@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    let ask = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { ask, .. }] => *ask,
+        jobs => panic!("{jobs:?}"),
+    };
+    s.apply(Event::MailTips {
+        account,
+        ask,
+        tips: vec![
+            MailTip { email: "zed@contoso.example".into(), custom: "Not asked".into(), ..Default::default() },
+            MailTip { email: "cy@contoso.example".into(), mailbox_full: true, ..Default::default() },
+        ],
+        error: None,
+    });
+    let r = s.run("compose.mailTips", &json!({})).unwrap();
+    let emails: Vec<&str> = r["tips"].as_array().into_iter().flatten().filter_map(|t| t["email"].as_str()).collect();
+    assert_eq!(emails, ["cy@contoso.example"], "only who was asked about: {r}");
+    done(s);
+}
