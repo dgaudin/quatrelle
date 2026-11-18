@@ -201,6 +201,11 @@ pub struct Data {
     pub only_agent: Option<String>,
     /// Answer item searches (the mail sync) only after this long: a mailbox taking minutes.
     pub slow_sync: Option<std::time::Duration>,
+    /// Hold every item search until a test sets this back to `None` (or this long has passed):
+    /// a sync surely still running while something else is asked. How many are held now is in
+    /// `held_searches`.
+    pub sync_gate: Option<std::time::Duration>,
+    pub held_searches: usize,
     /// Give messages' whole sources only after this long (a big attachment on a slow line).
     pub slow_sources: Option<std::time::Duration>,
     /// Answer `GetFolder` (a folder's counts, the first step of reading it) only after this long.
@@ -391,6 +396,8 @@ impl Default for Data {
             agents: Vec::new(),
             only_agent: None,
             slow_sync: None,
+            sync_gate: None,
+            held_searches: 0,
             slow_sources: None,
             slow_counts: None,
             slow_pim: None,

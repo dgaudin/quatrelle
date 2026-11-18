@@ -268,6 +268,20 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             super::streaming::stream_events(&mut s, shared, &op, &cookie);
             return;
         }
+        // A search held until the test lets go (`sync_gate`), or its time is out.
+        if op.name == "FindItem" {
+            let mut d = shared.lock().unwrap();
+            if let Some(most) = d.sync_gate {
+                let since = std::time::Instant::now();
+                d.held_searches += 1;
+                while d.sync_gate.is_some() && since.elapsed() < most {
+                    drop(d);
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    d = shared.lock().unwrap();
+                }
+                d.held_searches -= 1;
+            }
+        }
         // Slow answers: the fork holds every mail search (`slow_sync`), the shared version only
         // a mail folder's listing and not a PIM folder's (`hold`); whole messages and `GetFolder` too.
         let hold = {

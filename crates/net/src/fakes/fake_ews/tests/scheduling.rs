@@ -260,10 +260,12 @@ fn mail_tips_are_read_for_the_recipients_with_something_to_tell() {
 }
 
 /// Through the pool: MailTips are answered on the account's second connection while the first
-/// is still held by a slow mailbox sync, and the answer carries the question's `ask` back.
+/// is held in the mailbox's sync (its search is held by the server until the test lets it go: it
+/// is surely still running when the question is asked, and when it's answered), and the answer
+/// carries the question's `ask` back.
 #[test]
 fn mail_tips_are_answered_while_the_mailbox_syncs() {
-    let mut d = Data { slow_sync: Some(Duration::from_secs(6)), ..Default::default() };
+    let mut d = Data { sync_gate: Some(Duration::from_secs(60)), ..Default::default() };
     let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.deliver(&inbox, &mail("Hello", "m1"), false, "2026-10-20T09:00:00Z");
     d.mail_tips = vec![MailTip { email: "ana@contoso.example".into(), custom: "On leave".into(), ..Default::default() }];
@@ -278,8 +280,8 @@ fn mail_tips_are_answered_while_the_mailbox_syncs() {
         ..Default::default()
     };
     pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
-    until(&pool, "connecting", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { .. } | SyncStatus::Connecting, .. }));
-    let began = Instant::now();
+    // The main connection is in the sync's first search, and stays there.
+    eventually("the sync's search held", || server.data.lock().unwrap().held_searches > 0);
     pool.submit(Job::GetMailTips {
         account: "a1".into(),
         from: "riley@contoso.example".into(),
@@ -287,6 +289,7 @@ fn mail_tips_are_answered_while_the_mailbox_syncs() {
         ask: 7,
     });
     let seen = until(&pool, "mail tips", |e| matches!(e, Event::MailTips { .. }));
+    assert!(server.data.lock().unwrap().held_searches > 0, "answered while the sync is still held");
     match seen.last() {
         Some(Event::MailTips { account, ask, tips, error }) => {
             assert_eq!((account.as_str(), *ask, error.as_deref()), ("a1", 7, None));
@@ -295,6 +298,6 @@ fn mail_tips_are_answered_while_the_mailbox_syncs() {
         }
         other => panic!("{other:?}"),
     }
-    assert!(began.elapsed() < Duration::from_secs(6), "answered on the second connection, not after the sync");
+    server.data.lock().unwrap().sync_gate = None;
     drop(pool);
 }
