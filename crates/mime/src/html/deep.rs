@@ -10,101 +10,374 @@ const MAX_TABLES: usize = 48;
 /// Boxes (`div`, `blockquote`) open one in another past which HTML is read flat.
 const MAX_BOXES: usize = 2048;
 
-/// The tags of `html` in order, outside comments and the text of `script`, `style`, `textarea`
-/// and `title`, each as (its name, lowercase; whether it ends an element; where it is): the one
-/// pass both [`too_deep`] and [`flattened`] make (and the look for a code block of Markdown on
-/// the clipboard, `markdown.rs`), linear in `html`.
-pub(super) fn tags(html: &str, mut each: impl FnMut(&str, bool, std::ops::Range<usize>) -> bool) {
+/// Elements whose content a browser reads as text, not markup, up to their own end tag. Not
+/// `<noscript>`: the text converter and the layout read HTML without scripts, and what it holds
+/// is markup for them (tables nested in it went past the guard against nesting).
+const RAW: &[&str] = &["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"];
+
+#[cfg(test)]
+thread_local! {
+    /// The bytes looked through for the ends of comments (and of what's read as one), on this
+    /// test thread.
+    static SEARCHED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// White space between a tag's parts, as HTML has it.
+fn is_space(c: u8) -> bool {
+    matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0C)
+}
+
+/// The attributes of a tag, from `from` (after its name) in `html`, as a browser's tokenizer reads
+/// them, each given to `each` as (its name, as written; its value, as written: in its quotes,
+/// `""` for a name alone) until `each` says no more. A value in quotes runs to its closing quote,
+/// `>` and all; a quote elsewhere (`a"b`) is a character like any. Where the tag ends (its `>`);
+/// `None` when it doesn't (a browser drops a tag left open at the end).
+pub(super) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'a str, &'a str) -> bool) -> Option<usize> {
+    let bytes = html.as_bytes();
+    let spaces = |mut i: usize, slash: bool| {
+        while bytes.get(i).is_some_and(|&c| is_space(c) || (slash && c == b'/')) {
+            i += 1;
+        }
+        i
+    };
+    let mut i = from;
+    let mut asking = true;
+    loop {
+        // Before a name: white space, and a `/` that doesn't end the tag.
+        i = spaces(i, true);
+        if *bytes.get(i)? == b'>' {
+            return Some(i);
+        }
+        // Its name: its first character whatever it is (an `=` too), then up to a space, `/`,
+        // `>` or `=`.
+        let name_at = i;
+        i += 1;
+        while bytes.get(i).is_some_and(|&c| !is_space(c) && !matches!(c, b'/' | b'>' | b'=')) {
+            i += 1;
+        }
+        let name = html.get(name_at..i).unwrap_or_default();
+        i = spaces(i, false);
+        let mut open = false;
+        let value = if bytes.get(i) == Some(&b'=') {
+            i = spaces(i + 1, false);
+            match bytes.get(i).copied() {
+                Some(q @ (b'"' | b'\'')) => {
+                    let close = bytes.get(i + 1..).and_then(|r| r.iter().position(|&c| c == q)).map(|p| i + 1 + p);
+                    let v = html.get(i + 1..close.unwrap_or(bytes.len())).unwrap_or_default();
+                    // Left open: to the end (and the tag doesn't end).
+                    open = close.is_none();
+                    i = close.map_or(bytes.len(), |c| c + 1);
+                    v
+                }
+                _ => {
+                    let at = i;
+                    while bytes.get(i).is_some_and(|&c| !is_space(c) && c != b'>') {
+                        i += 1;
+                    }
+                    html.get(at..i).unwrap_or_default()
+                }
+            }
+        } else {
+            ""
+        };
+        if asking {
+            asking = each(name, value);
+        }
+        if open {
+            return None;
+        }
+    }
+}
+
+/// What [`read`] finds in HTML, in order.
+pub(super) enum Found<'n> {
+    /// A tag: its name (lowercase), whether it ends an element, where it is.
+    Tag(&'n str, bool, std::ops::Range<usize>),
+    /// A comment, or what's read as one (`<!doctype …>`, `<?xml …>`, `</ x>`, and a CDATA
+    /// section, to its first `>` as outside an SVG picture): where it is.
+    Comment(std::ops::Range<usize>),
+}
+
+/// Where a comment whose text starts at `from` ends (past its `-->` or `--!>`), each byte looked
+/// at once; `None` when it runs to the end. (Looking for `-->`, then for `--!>`, ran to the end of
+/// the document for each comment when there was no `--!>` in it.)
+fn comment_end(html: &str, from: usize) -> Option<usize> {
+    let bytes = html.as_bytes();
+    let mut i = from;
+    let end = loop {
+        let Some(p) = html.get(i..).and_then(|r| r.find("--")).map(|p| p + i) else { break None };
+        match (bytes.get(p + 2), bytes.get(p + 3)) {
+            (Some(b'>'), _) => break Some(p + 3),
+            (Some(b'!'), Some(b'>')) => break Some(p + 4),
+            _ => i = p + 1,
+        }
+    };
+    #[cfg(test)]
+    SEARCHED.with(|n| n.set(n.get() + end.unwrap_or(html.len()).saturating_sub(from)));
+    end
+}
+
+/// How far into a script's text it is, as a browser reads it: `<!--` in it hides its end until
+/// `-->`, but for one after a `<script>` written in that comment (which ends at its own
+/// `</script>`).
+#[derive(Clone, Copy, PartialEq)]
+enum Script {
+    Text,
+    Commented,
+    Twice,
+}
+
+/// The tags and comments of `html` in order, as a browser's tokenizer finds them
+/// (without scripts, as the text converter and the layout read it): the text of the elements of
+/// [`RAW`] and all that follows a `<plaintext>` hold none; a tag ends at its `>` past quoted
+/// values, and one left open at the end isn't one (nor is anything after it). Given to `each`
+/// until it says no more; each byte looked at a few times at most.
+pub(super) fn read(html: &str, mut each: impl FnMut(Found<'_>) -> bool) {
     let bytes = html.as_bytes();
     let mut at = 0;
     let mut raw: Option<&'static str> = None;
+    let mut script = Script::Text;
+    // Where `-->` is looked for in a script's comment (between one `<` and the next).
+    let mut since = 0;
+    // Where what's read as a comment ends (past its `>`).
+    let past = |from: usize, end: &str| {
+        let found = html.get(from..).and_then(|s| s.find(end));
+        #[cfg(test)]
+        SEARCHED.with(|n| n.set(n.get() + found.map_or(html.len().saturating_sub(from), |e| e + end.len())));
+        found.map(|e| from + e + end.len())
+    };
+    // Whether `name` (lowercase) is written at `i`, an element's name ending there.
+    let named_at = |i: usize, name: &str| {
+        bytes.get(i..i + name.len()).is_some_and(|n| n.eq_ignore_ascii_case(name.as_bytes()))
+            && bytes.get(i + name.len()).is_none_or(|&c| is_space(c) || matches!(c, b'/' | b'>'))
+    };
     while let Some(lt) = bytes.get(at..).and_then(|b| b.iter().position(|&c| c == b'<')).map(|p| p + at) {
-        if bytes.get(lt..lt + 4) == Some(b"<!--") {
-            at = html.get(lt + 4..).and_then(|s| s.find("-->")).map_or(bytes.len(), |e| lt + 4 + e + 3);
-            continue;
-        }
-        let end = bytes.get(lt + 1).is_some_and(|&c| c == b'/');
+        let end = bytes.get(lt + 1) == Some(&b'/');
         let start = lt + 1 + usize::from(end);
-        let name_len = bytes.get(start..).map_or(0, |b| b.iter().take_while(|c| c.is_ascii_alphanumeric()).count());
-        // The tag's end, past quoted values (a `>` in one doesn't end it).
-        let mut close = start + name_len;
-        let mut quote = None;
-        while let Some(&c) = bytes.get(close) {
-            match (quote, c) {
-                (Some(q), c) if c == q => quote = None,
-                (None, b'"' | b'\'') => quote = Some(c),
-                (None, b'>') => break,
-                _ => {}
-            }
-            close += 1;
-        }
-        let next = (close + 1).min(bytes.len());
-        if name_len == 0 {
-            at = lt + 1;
-            continue;
-        }
-        let name = html.get(start..start + name_len).unwrap_or_default().to_ascii_lowercase();
         if let Some(r) = raw {
-            // Inside a raw text element only its own end tag counts.
-            if end && name == r {
-                raw = None;
-            } else {
+            if r == "script" {
+                if script != Script::Text && html.get(since..lt).is_some_and(|t| t.contains("-->")) {
+                    script = Script::Text;
+                }
+                since = lt + 1;
+                let script_tag = named_at(start, "script");
+                // Its end, but in a `<script>` written in its comment (that one's own).
+                let ends = end && script_tag && script != Script::Twice;
+                script = match script {
+                    Script::Text if bytes.get(lt..lt + 4) == Some(b"<!--") => {
+                        // `<!-->` and `<!--->` end at once: `-->` is looked for from the `--`.
+                        since = lt + 2;
+                        Script::Commented
+                    }
+                    Script::Commented if !end && script_tag => Script::Twice,
+                    Script::Twice if end && script_tag => Script::Commented,
+                    s => s,
+                };
+                if !ends {
+                    at = lt + 1;
+                    continue;
+                }
+            } else if !(end && named_at(start, r)) {
+                // Inside raw text only its own end tag counts.
                 at = lt + 1;
                 continue;
             }
-        } else if !end {
-            raw = ["script", "style", "textarea", "title"].into_iter().find(|r| *r == name);
+        } else if bytes.get(lt..lt + 4) == Some(b"<!--") {
+            // `<!-->` and `<!--->` end where they start; the others at `-->` (or `--!>`).
+            let short = [b"<!-->".as_slice(), b"<!--->".as_slice()].into_iter().find(|s| bytes.get(lt..lt + s.len()) == Some(*s));
+            let Some(next) = short.map(|s| lt + s.len()).or_else(|| comment_end(html, lt + 4)) else {
+                each(Found::Comment(lt..html.len()));
+                return;
+            };
+            if !each(Found::Comment(lt..next)) {
+                return;
+            }
+            at = next;
+            continue;
+        } else {
+            let named = |i: usize| bytes.get(i).is_some_and(u8::is_ascii_alphabetic);
+            if matches!(bytes.get(lt + 1), Some(b'!' | b'?')) || (end && bytes.get(lt + 2).is_some() && !named(lt + 2)) {
+                // `<!doctype …>`, `<?xml …>`, `</ x>`: a comment to the first `>` (`</>`: nothing).
+                let Some(next) = past(lt + 2, ">") else {
+                    each(Found::Comment(lt..html.len()));
+                    return;
+                };
+                if !each(Found::Comment(lt..next)) {
+                    return;
+                }
+                at = next;
+                continue;
+            }
+            if !named(start) {
+                // A `<` in the text.
+                at = lt + 1;
+                continue;
+            }
         }
-        if !each(&name, end, lt..next) {
+        let name_len = bytes.get(start..).map_or(0, |b| b.iter().take_while(|&&c| !is_space(c) && c != b'/' && c != b'>').count());
+        // Left open at the end: not a tag, and nothing after it is one.
+        let Some(close) = attributes(html, start + name_len, |_, _| false) else { return };
+        let next = close + 1;
+        let name = html.get(start..start + name_len).unwrap_or_default().to_ascii_lowercase();
+        if raw.is_some() {
+            // Its own end tag.
+            raw = None;
+        } else if !end {
+            if name == "plaintext" {
+                // All that follows is text.
+                each(Found::Tag(&name, end, lt..next));
+                return;
+            }
+            raw = RAW.iter().copied().find(|r| *r == name);
+            script = Script::Text;
+        }
+        if !each(Found::Tag(&name, end, lt..next)) {
             return;
         }
         at = next;
     }
 }
 
-/// Whether `html` nests tables, or boxes, past what any mail does.
+/// The tags of `html` in order ([`read`]), each as (its name, lowercase; whether it ends an
+/// element; where it is) until `each` says no more: what the pictures (`pictures.rs`), the
+/// headings and the look for a code block of Markdown on the clipboard (`markdown.rs`) read.
+pub(crate) fn tags(html: &str, mut each: impl FnMut(&str, bool, std::ops::Range<usize>) -> bool) {
+    read(html, |found| match found {
+        Found::Tag(name, end, range) => each(name, end, range),
+        Found::Comment(_) => true,
+    });
+}
+
+/// How deep tables and boxes are, as [`too_deep`] counts them.
+#[derive(Default)]
+struct Depth {
+    tables: usize,
+    boxes: usize,
+    deep: bool,
+}
+
+impl Depth {
+    /// The tables and boxes `text` opens, wherever it does (in a script, a style sheet, a title,
+    /// a value: when in doubt, opened).
+    fn opened(&mut self, text: &[u8]) {
+        let mut at = 0;
+        while let Some(lt) = text.get(at..).and_then(|b| b.iter().position(|&c| c == b'<')).map(|p| p + at) {
+            let is = |name: &[u8]| text.get(lt + 1..lt + 1 + name.len()).is_some_and(|n| n.eq_ignore_ascii_case(name));
+            if is(b"table") {
+                self.tables = self.tables.saturating_add(1);
+            } else if is(b"div") || is(b"blockquote") {
+                self.boxes = self.boxes.saturating_add(1);
+            }
+            self.deep |= self.tables > MAX_TABLES || self.boxes > MAX_BOXES;
+            at = lt + 1;
+        }
+    }
+
+    /// An end a browser surely reads.
+    fn closed(&mut self, name: &str) {
+        match name {
+            "table" => self.tables = self.tables.saturating_sub(1),
+            "div" | "blockquote" => self.boxes = self.boxes.saturating_sub(1),
+            _ => {}
+        }
+    }
+}
+
+/// Elements around which the text converter's tree is no longer the tokenizer's alone: an SVG or
+/// MathML picture (its `<title>` and `<style>` are markup, its CDATA sections run to `]]>`), a
+/// CDATA section outside one (which ends at its first `>`), a template (which ignores the ends
+/// in it), and those past which a `</div>` isn't one.
+const DISAGREE: &[&[u8]] = &[b"<svg", b"<math", b"<![cdata[", b"<template", b"<select", b"<object", b"<applet", b"<marquee"];
+
+/// Whether `html` nests tables, or boxes, past what any mail does, counted as no reader of it can
+/// nest deeper: every table or box opened counts, wherever it's written but in a comment (in a
+/// `<noscript>`, which the text converter reads as markup; in a script, a style sheet, a title,
+/// a value), and only the ends a browser surely reads close one (not one in a script's comment).
+/// With any of [`DISAGREE`] in it, an end or a comment seen here can be none for the text
+/// converter: every table or box opened counts then, comments too, and no end. Counting too many
+/// only reads a harmless message flat.
 pub(crate) fn too_deep(html: &str) -> bool {
     // Too few to nest that deep: looked at no further.
-    let lower = html.as_bytes();
-    let count = |needle: &[u8]| lower.windows(needle.len()).filter(|w| w.eq_ignore_ascii_case(needle)).count();
+    let bytes = html.as_bytes();
+    let count = |needle: &[u8]| bytes.windows(needle.len()).filter(|w| w.eq_ignore_ascii_case(needle)).count();
     if count(b"<table") <= MAX_TABLES && count(b"<div") + count(b"<blockquote") <= MAX_BOXES {
         return false;
     }
-    let (mut tables, mut boxes, mut deep) = (0usize, 0usize, false);
-    tags(html, |name, end, _| {
-        let depth = match name {
-            "table" => &mut tables,
-            "div" | "blockquote" => &mut boxes,
-            _ => return true,
-        };
-        *depth = if end { depth.saturating_sub(1) } else { depth.saturating_add(1) };
-        deep = tables > MAX_TABLES || boxes > MAX_BOXES;
-        !deep
+    if DISAGREE.iter().any(|tag| bytes.windows(tag.len()).any(|w| w.eq_ignore_ascii_case(tag))) {
+        return true;
+    }
+    let mut depth = Depth::default();
+    // Up to where the tables and boxes opened are counted.
+    let mut counted = 0;
+    read(html, |found| {
+        match found {
+            Found::Comment(range) => {
+                depth.opened(bytes.get(counted..range.start).unwrap_or_default());
+                counted = range.end;
+            }
+            Found::Tag(name, true, range) if matches!(name, "table" | "div" | "blockquote") => {
+                depth.opened(bytes.get(counted..range.start).unwrap_or_default());
+                counted = range.start;
+                depth.closed(name);
+            }
+            _ => {}
+        }
+        !depth.deep
     });
-    deep
+    if !depth.deep {
+        depth.opened(bytes.get(counted.min(bytes.len())..).unwrap_or_default());
+    }
+    depth.deep
 }
 
 /// `html` with nothing nested: each block's tags a line break, links, pictures and what marks
-/// words (bold, italic…) as they were, everything else left out but its text.
+/// words (bold, italic…) as they were, everything else left out but its text. The elements whose
+/// text is copied as it is (a style sheet, a script, a `<textarea>`…) keep their tags, for it to
+/// be read as text again.
 pub(crate) fn flattened(html: &str) -> String {
-    const KEPT: &[&str] = &["a", "b", "strong", "i", "em", "u", "s", "strike", "code", "img", "br", "head", "style", "script", "title"];
+    const KEPT: &[&str] = &[
+        "a",
+        "b",
+        "strong",
+        "i",
+        "em",
+        "u",
+        "s",
+        "strike",
+        "code",
+        "img",
+        "br",
+        "head",
+        "style",
+        "script",
+        "title",
+        "textarea",
+        "xmp",
+        "iframe",
+        "noembed",
+        "noframes",
+        "plaintext",
+    ];
     const BLOCKS: &[&str] =
         &["p", "div", "table", "tr", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "hr", "dl", "dt", "dd", "center"];
     let mut out = String::with_capacity(html.len() / 2);
     let mut at = 0;
-    tags(html, |name, _, range| {
+    read(html, |found| {
+        let range = match &found {
+            Found::Tag(_, _, r) | Found::Comment(r) => r.clone(),
+        };
         out.push_str(html.get(at..range.start).unwrap_or_default());
-        if KEPT.contains(&name) {
-            out.push_str(html.get(range.clone()).unwrap_or_default());
-        } else if BLOCKS.contains(&name) {
-            out.push_str("<br>");
-        } else if matches!(name, "td" | "th") {
-            out.push(' ');
+        match found {
+            Found::Tag(name, ..) if KEPT.contains(&name) => out.push_str(html.get(range.clone()).unwrap_or_default()),
+            Found::Tag(name, ..) if BLOCKS.contains(&name) => out.push_str("<br>"),
+            Found::Tag("td" | "th", ..) => out.push(' '),
+            Found::Tag(..) => {}
+            Found::Comment(_) => out.push_str(html.get(range.clone()).unwrap_or_default()),
         }
         at = range.end;
         true
     });
-    out.push_str(html.get(at..).unwrap_or_default());
+    out.push_str(html.get(at.min(html.len())..).unwrap_or_default());
     out
 }
 
@@ -132,9 +405,86 @@ mod tests {
         assert!(!too_deep(&nested));
         assert!(!too_deep(&"<div>".repeat(MAX_BOXES)));
         assert!(too_deep(&"<div>".repeat(MAX_BOXES + 1)));
-        // Tags in a comment, a style sheet or a script, or a `>` in a value, nest nothing.
-        let quiet = format!("<!--{}--><style>{}</style><a title=\"{}\">x</a>", "<table>".repeat(100), "<table>".repeat(100), "<table>".repeat(100));
-        assert!(!too_deep(&quiet));
+        // Tags in a comment nest nothing; in a style sheet or a value they're counted, when in doubt.
+        assert!(!too_deep(&format!("<!--{}--><p>x</p>", "<table>".repeat(100))));
+        assert!(too_deep(&format!("<style>{}</style>", "<table>".repeat(100))));
+        assert!(too_deep(&format!("<a title=\"{}\">x</a>", "<table>".repeat(100))));
+    }
+
+    /// Found in review: tables nested by the thousand after an element whose content this reading
+    /// takes for text, where the text converter, the layout or a browser read markup (a
+    /// `<noscript>`, read without scripts; a `<title>` or `<style>` in an SVG picture; a script,
+    /// a style sheet or a title never closed), went unseen, and took minutes to read. The guard
+    /// counts every table opened, in any text; only the ends a browser surely reads close one:
+    /// not one in a comment, in a CDATA section, or in a script that hides its end in a comment.
+    #[test]
+    fn tables_after_text_that_may_be_markup_are_too_deep() {
+        let tables = "<table><tr><td><div>".repeat(200);
+        for before in ["<noscript>", "<svg><title>", "<svg><style>", "<math><style>", "<script>", "<style>", "<title>", "<textarea>", "<xmp>"] {
+            assert!(too_deep(&format!("<p>x</p>{before}{tables}")), "{before}");
+        }
+        for unit in [
+            "<table><tr><td><!--</td></tr></table>-->",
+            "<table><tr><td><svg><![CDATA[ > </td></tr></table> ]]></svg>",
+            "<table><tr><td><script><!--<script></script></td></tr></table></script>",
+        ] {
+            assert!(too_deep(&unit.repeat(100)), "{unit}");
+        }
+        // Tables closed as they're opened, by the hundred: not deep, Outlook's conditional
+        // comments around them too.
+        assert!(!too_deep(&"<table><tr><td>x</td></tr></table>".repeat(500)));
+        assert!(!too_deep(&"<!--[if mso]><table><tr><td><![endif]--><div>x</div><!--[if mso]></td></tr></table><![endif]-->".repeat(500)));
+    }
+
+    /// Found in review: where the text converter's tree isn't the tokenizer's alone, an end or a
+    /// comment this reading sees can be none for it, and tables nested past them went unseen: a
+    /// CDATA section outside an SVG picture, which ends at its first `>` (T1-1); an SVG picture's
+    /// `<title>`, which is markup there (T1-2); a `</table>` in a `<template>`, which is ignored
+    /// (T1-3); a `</div>` after an `<object>`, a `<marquee>`, an `<applet>` or in a `<select>`
+    /// (T1-4). With any of these in a message, every table or box opened counts, and no end.
+    #[test]
+    fn tables_where_the_readers_may_disagree_are_counted_whole() {
+        let tables = "<table><tr><td>".repeat(200);
+        let cases = [
+            ("T1-1", format!("<![CDATA[ > <style> ]]><!--</style>{tables}")),
+            ("T1-2", format!("<svg><title><style></title><!--</style>{tables}")),
+            ("T1-3", "<table><tr><td><template></table></template>".repeat(200)),
+            ("T1-4 object", "<div><object></div>".repeat(2100)),
+            ("T1-4 marquee", "<div><marquee></div>".repeat(2100)),
+            ("T1-4 applet", "<div><applet></div>".repeat(2100)),
+            ("T1-4 select", "<div><select></div>".repeat(2100)),
+        ];
+        let unseen: Vec<&str> = cases.iter().filter(|(_, html)| !too_deep(&format!("<p>x</p>{html}"))).map(|(what, _)| *what).collect();
+        assert!(unseen.is_empty(), "nesting not seen: {unseen:?}");
+    }
+
+    /// Found in review: the end of each comment was looked for twice, `-->` and `--!>`, and the
+    /// second ran to the end of the document when there was none: 4 MB of `<!---->` had some
+    /// 10^12 bytes read, in each reading of a message. The document is looked through once.
+    #[test]
+    fn comments_by_the_hundred_thousand_are_looked_through_once() {
+        for size in [400 << 10, 4 << 20] {
+            let html = format!("{}<img src=\"https://t.example/o.gif\">", "<!---->".repeat(size / 7));
+            let before = SEARCHED.with(std::cell::Cell::get);
+            assert_eq!(crate::html_images(&html), ["https://t.example/o.gif"]);
+            let read = SEARCHED.with(std::cell::Cell::get) - before;
+            assert!(read <= 2 * html.len(), "{read} bytes looked through for {} bytes of comments", html.len());
+        }
+    }
+
+    /// … and read flat, what may be markup for the text converter isn't nested any more: the
+    /// text of an element kept as text again keeps its tags.
+    #[test]
+    fn text_that_may_be_markup_is_read_flat_and_quick() {
+        let tables = r#"<table><tr><td><div><a href="https://x.example/a">link</a>"#.repeat(200_000 / 60);
+        for before in ["<noscript>", "<svg><title>", "<svg><style>", "<script>", "<textarea>", "<xmp>", "<svg><![CDATA[ > ", "<plaintext>"] {
+            let html = format!("<p>Hello</p>{before}{tables}");
+            assert!(too_deep(&html), "{before}");
+            let started = std::time::Instant::now();
+            let p = crate::parse(format!("Content-Type: text/html\r\n\r\n{html}").as_bytes());
+            assert!(started.elapsed() < std::time::Duration::from_secs(5), "{before}: {:?}", started.elapsed());
+            assert!(p.is_some_and(|p| p.text.contains("Hello")), "{before}");
+        }
     }
 
     #[test]

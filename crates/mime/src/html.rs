@@ -4,7 +4,7 @@
 //! HTML mail as text and as rich text: pasted and received HTML, its pictures, headings, links.
 
 use super::*;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 mod deep;
 mod footers;
@@ -19,7 +19,7 @@ mod teams;
 mod to_markdown;
 pub use pairs::html_link_pairs;
 pub use pictures::html_images;
-pub(crate) use pictures::{Addresses, html_images_with, tiny_picture};
+pub(crate) use pictures::{Pictures, tiny_picture, tiny_size};
 use rules::{RULE_MARK, mark_rules};
 pub use teams::{
     TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, Typed, html_escape, teams_compose, teams_compose_typed, teams_foreign_markup, teams_html,
@@ -65,15 +65,9 @@ fn picture_width(v: &str) -> Option<layout::Width> {
 
 /// The size each `<img>` of `html` sets, in order, with its address (`src`).
 pub(super) fn picture_sizes(html: &str) -> Vec<(String, ImageSize)> {
-    let lower = html.to_ascii_lowercase();
     let mut out = Vec::new();
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
-        let start = from + i;
-        let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
-        from = end + 1;
-        let tag = html.get(start..end).unwrap_or("");
-        let Some(src) = tag_attr(tag, "src").map(str::trim).filter(|s| !s.is_empty()) else { continue };
+    pictures::img_tags(html, |tag, _| {
+        let Some(src) = tag_attr(tag, "src").map(str::trim).filter(|s| !s.is_empty()) else { return true };
         let style = tag_attr(tag, "style").map(css::declarations).unwrap_or_default();
         let css = |prop: &str| style.iter().rev().find(|d| d.prop == prop).map(|d| d.value.as_str());
         // The style's size wins over the attributes', as in a browser: `auto` too, which leaves
@@ -89,10 +83,8 @@ pub(super) fn picture_sizes(html: &str) -> Vec<(String, ImageSize)> {
         };
         let max_width = css("max-width").and_then(css_px).or(made_for);
         out.push((src.to_string(), ImageSize { width, height, max_width }));
-        if out.len() >= MAX_SIZED {
-            break;
-        }
-    }
+        out.len() < MAX_SIZED
+    });
     out
 }
 
@@ -171,7 +163,8 @@ const PASTED_PICTURE_MAX: usize = 5 << 20;
 /// [`pasted_html`] keeping the pictures that come along: those embedded in the HTML (`data:`
 /// addresses, which web pages and some apps copy) become pictures of the message, each where
 /// a [`rich::PICTURE`] stands; those named by `cid:` (text copied from this editor, whose
-/// message has them) keep their id. Pictures on the web or in another program's files go.
+/// message has them) keep their id. Pictures on the web or in another program's files go, and
+/// those past the [`MAX_PICTURES`](pictures::MAX_PICTURES) first.
 pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<InlinePicture>) {
     const MARK: char = '\u{E000}';
     // Sizes and typefaces come with the spans (`html_to_rich` reads them).
@@ -185,6 +178,11 @@ pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<Inlin
                 kept.push(sp);
                 continue;
             };
+            // At most as many as a message's pictures are listed: past them, a picture goes (and
+            // one embedded isn't kept for nothing).
+            if cids.len() >= pictures::MAX_PICTURES {
+                continue;
+            }
             let cid = match src.strip_prefix("cid:") {
                 Some(cid) if !cid.is_empty() => Some(cid.to_string()),
                 _ => data_picture(&src).filter(|_| pictures.len() < PASTED_PICTURES).map(|p| {
@@ -212,8 +210,13 @@ pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<Inlin
     let (mut text, mut styles) = rich::from_rich(&lines);
     let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
     text = text.replace(MARK, &rich::PICTURE.to_string());
+    // Each its picture's style, in one pass (one restyle each walked the whole text again).
+    styles.fit(&text);
     for (at, cid) in marks.into_iter().zip(cids) {
-        styles.restyle(&text, at..at + 1, |s| rich::Style { picture: Some(cid.clone()), ..s.clone() });
+        let id = styles.intern(rich::Style { picture: Some(cid), ..styles.style(at) });
+        if let Some(c) = styles.chars.get_mut(at) {
+            *c = id;
+        }
     }
     (text, styles, pictures)
 }
@@ -425,55 +428,42 @@ pub(super) const HEADING_MARK: char = '\u{E000}';
 /// converter would otherwise leave out: removed again once they're pictures.
 pub(super) const PICTURE_MARK: char = '\u{E001}';
 
-/// An attribute's value in a tag's text (`<img alt="x" …>`), as written; `Some("")` when it's
-/// there and empty.
+/// An attribute's value in a tag's text (`<img alt="x" …>`), as written, read as a browser reads
+/// the tag ([`deep::attributes`]: a value in quotes that reads like another attribute,
+/// `alt=" width=500"`, isn't one); its first, as a browser keeps; `Some("")` when it's there
+/// and empty.
 pub(super) fn tag_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
-    let lower = tag.to_ascii_lowercase();
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find(name)).map(|i| i + from) {
-        from = i + name.len();
-        let before = lower.as_bytes().get(i.wrapping_sub(1)).copied().unwrap_or(b' ');
-        if !before.is_ascii_whitespace() || i == 0 {
-            continue;
+    // Past `<` (or `</`, either can be left out) and the element's name.
+    let named = tag.strip_prefix('<').unwrap_or(tag);
+    let named = named.strip_prefix('/').unwrap_or(named);
+    let from = tag.len() - named.len() + named.find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>').unwrap_or(named.len());
+    let mut found = None;
+    deep::attributes(tag, from, |n, v| {
+        if n.eq_ignore_ascii_case(name) {
+            found = Some(v);
         }
-        let after = lower.get(from..).unwrap_or("").trim_start();
-        if !after.starts_with('=') {
-            // A bare attribute (`alt`): there, and empty.
-            if after.starts_with(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/') || after.is_empty() {
-                return Some("");
-            }
-            continue;
-        }
-        let at = tag.len() - after.len() + 1;
-        let v = tag.get(at..).unwrap_or("").trim_start();
-        return Some(match v.chars().next() {
-            Some(q @ ('"' | '\'')) => v.get(1..).and_then(|r| r.split(q).next()).unwrap_or(""),
-            _ => v.split(|c: char| c.is_ascii_whitespace() || c == '>').next().unwrap_or(""),
-        });
-    }
-    None
+        found.is_none()
+    });
+    found
 }
 
 /// `html` with a description on every picture that has none, except tracking pixels and spacers
 /// ([`tiny_picture`]).
 pub(super) fn mark_pictures(html: &str) -> String {
     let html = html.replace(PICTURE_MARK, "");
-    let lower = html.to_ascii_lowercase();
     let mut out = String::with_capacity(html.len() + 64);
     let mut last = 0;
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
-        let start = from + i;
-        let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
-        let tag = html.get(start..end).unwrap_or("");
+    pictures::img_tags(&html, |tag, range| {
         let described = tag_attr(tag, "alt").is_some_and(|a| !a.trim().is_empty());
         if !described && !tiny_picture(tag) && tag_attr(tag, "src").is_some_and(|s| !s.trim().is_empty()) {
-            out.push_str(html.get(last..start + 4).unwrap_or(""));
+            // After the element's name (`<img`, `<image`).
+            let named = range.start + 1 + tag.get(1..).and_then(|t| t.find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')).unwrap_or(0);
+            out.push_str(html.get(last..named).unwrap_or(""));
             out.push_str(&format!(" alt=\"{PICTURE_MARK}\""));
-            last = start + 4;
+            last = named;
         }
-        from = end + 1;
-    }
+        true
+    });
     out.push_str(html.get(last..).unwrap_or(""));
     out
 }
@@ -551,22 +541,16 @@ pub(super) fn close_css_rules(html: &str) -> String {
 /// `html` with a mark after every `<h1>`…`<h6>` start tag (and any mark already in it removed).
 pub(super) fn mark_headings(html: &str) -> String {
     let html = html.replace(HEADING_MARK, "");
-    let lower = html.to_ascii_lowercase();
     let mut out = String::with_capacity(html.len() + 64);
     let mut last = 0;
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find("<h")) {
-        let start = from + i;
-        let is_heading = lower.as_bytes().get(start + 2).is_some_and(|b| (b'1'..=b'6').contains(b))
-            && lower.as_bytes().get(start + 3).is_some_and(|b| *b == b'>' || b.is_ascii_whitespace());
-        let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
-        if is_heading {
-            out.push_str(html.get(last..=end).unwrap_or(""));
+    deep::tags(&html, |name, end, range| {
+        if !end && matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6") {
+            out.push_str(html.get(last..range.end).unwrap_or(""));
             out.push(HEADING_MARK);
-            last = end + 1;
+            last = range.end;
         }
-        from = end + 1;
-    }
+        true
+    });
     out.push_str(html.get(last..).unwrap_or(""));
     out
 }
@@ -698,6 +682,9 @@ pub fn html_links(html: &str) -> Vec<String> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Trim trailing spaces and collapse runs of blank lines.
 pub(super) fn tidy_text(s: &str) -> String {

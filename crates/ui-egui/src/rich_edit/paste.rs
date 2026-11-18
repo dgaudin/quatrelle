@@ -25,10 +25,10 @@ thread_local! {
     static PASTE_HTML: std::cell::RefCell<Option<(Option<String>, u128)>> = const { std::cell::RefCell::new(None) };
 }
 
-/// The clipboard's HTML for this paste and how long reading it took (ms): read once a paste,
-/// whoever asks (the check for a picture alone, the paste, the picture's reading after the
-/// frame), as a read can wait on the app that copied; read again after
-/// [`forget_clipboard_html`].
+/// The clipboard's HTML for this paste (no more of it than of a message's) and how long reading
+/// it took (ms): read once a paste, whoever asks (the check for a picture alone, the paste, the
+/// picture's reading after the frame), as a read can wait on the app that copied; read again
+/// after [`forget_clipboard_html`].
 pub(crate) fn clipboard_html_once() -> (Option<String>, u128) {
     PASTE_HTML.with(|kept| {
         let known = kept.borrow().clone();
@@ -36,7 +36,14 @@ pub(crate) fn clipboard_html_once() -> (Option<String>, u128) {
             return read;
         }
         let began = web_time::Instant::now();
-        let html = crate::clipboard_html();
+        // Read no further than a message's HTML is ([`HTML_MAX`](quatrelle_engine::mime::HTML_MAX)):
+        // whoever looks at it (the check for a picture alone, the paste) reads it all.
+        let html = crate::clipboard_html().map(|mut h| {
+            if let Some((cut, _)) = h.char_indices().nth(quatrelle_engine::mime::HTML_MAX) {
+                h.truncate(cut);
+            }
+            h
+        });
         let read = (html, began.elapsed().as_millis());
         *kept.borrow_mut() = Some(read.clone());
         read
@@ -183,13 +190,9 @@ fn paste_html(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id, html:
     // The pictures that came along (embedded in the HTML) become the message's; one named by
     // `cid:` stays where the message has it already (text copied from the editor), and any
     // other picture goes.
-    let known: Vec<String> = c.inline.iter().chain(&pictures).map(|p| p.cid.clone()).collect();
-    for _ in 0..10_000 {
-        let unknown =
-            add.chars().enumerate().find(|(i, ch)| *ch == PICTURE && add_styles.style(*i).picture.as_ref().is_none_or(|cid| !known.contains(cid)));
-        let Some((at, _)) = unknown else { break };
-        rich::splice(&mut add, &mut add_styles, at..at + 1, "", &Styles::plain(""));
-    }
+    // In one pass: taken out one at a time, the whole text was built again for each.
+    let known: std::collections::HashSet<&str> = c.inline.iter().chain(&pictures).map(|p| p.cid.as_str()).collect();
+    rich::retain(&mut add, &mut add_styles, |ch, s| ch != PICTURE || s.picture.as_deref().is_some_and(|cid| known.contains(cid)));
     c.styles.fit(&c.body);
     let n = c.body.chars().count();
     let sel = ed.sel.start.min(n)..ed.sel.end.min(n);

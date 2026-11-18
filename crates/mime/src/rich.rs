@@ -135,6 +135,8 @@ impl Styles {
             self.palette.push(Style::default());
         }
         let n = char_len(text);
+        #[cfg(test)]
+        work::walked(n);
         self.chars.resize(n, 0);
         let max = u16::try_from(self.palette.len().saturating_sub(1)).unwrap_or(u16::MAX);
         for c in &mut self.chars {
@@ -710,6 +712,25 @@ pub fn splice(text: &mut String, styles: &mut Styles, range: std::ops::Range<usi
     *styles = out_styles;
 }
 
+/// `text` and `styles` with only the characters `keep` says (each with its style), in one pass;
+/// a line's end always stays, so each paragraph keeps its layout. Taking characters out one at a
+/// time ([`splice`]) builds the whole text again for each.
+pub fn retain(text: &mut String, styles: &mut Styles, mut keep: impl FnMut(char, &Style) -> bool) {
+    styles.fit(text);
+    let plain = Style::default();
+    let mut kept = String::with_capacity(text.len());
+    let mut chars = Vec::with_capacity(styles.chars.len());
+    for (c, &s) in text.chars().zip(&styles.chars) {
+        if c == '\n' || keep(c, styles.palette.get(usize::from(s)).unwrap_or(&plain)) {
+            kept.push(c);
+            chars.push(s);
+        }
+    }
+    *text = kept;
+    styles.chars = chars;
+    styles.fit(text);
+}
+
 /// Append `add` (text and styles) to `text` and `styles`.
 pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &Styles) {
     styles.fit(text);
@@ -733,3 +754,35 @@ pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &St
 
 #[cfg(test)]
 mod tests;
+
+/// What building styles costs, counted on a test thread: the characters [`Styles::fit`] walks.
+#[cfg(test)]
+pub(crate) mod work {
+    use std::cell::Cell;
+
+    thread_local! {
+        static WALKED: Cell<usize> = const { Cell::new(0) };
+        static MOST: Cell<usize> = const { Cell::new(usize::MAX) };
+    }
+
+    pub(super) fn walked(n: usize) {
+        let walked = WALKED.with(|w| {
+            w.set(w.get().saturating_add(n));
+            w.get()
+        });
+        let most = MOST.with(Cell::get);
+        // Stopped as soon as it's past: work that grows with the square of the text would take
+        // minutes to be told.
+        assert!(walked <= most, "walked {walked} characters, past the {most} allowed");
+    }
+
+    /// `f` run allowed `most` characters walked (the test fails as soon as it's past), and the
+    /// characters it walked.
+    pub(crate) fn at_most<R>(most: usize, f: impl FnOnce() -> R) -> (R, usize) {
+        WALKED.with(|w| w.set(0));
+        MOST.with(|m| m.set(most));
+        let r = f();
+        MOST.with(|m| m.set(usize::MAX));
+        (r, WALKED.with(Cell::get))
+    }
+}
