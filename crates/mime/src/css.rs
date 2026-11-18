@@ -62,18 +62,47 @@ pub(crate) struct Sheet {
     any: Vec<usize>,
 }
 
-/// `text` without `/* … */` comments.
+/// `text` without `/* … */` comments. A `/*` in a quoted string or in a `url(…)` belongs to it (an
+/// address `https://x.example/a/*.png`: what followed it was lost), as CSS reads it; a comment
+/// left open takes the rest.
 fn without_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(i) = rest.find("/*") {
-        out.push_str(rest.get(..i).unwrap_or(""));
-        rest = match rest.get(i + 2..).and_then(|r| r.find("*/").map(|j| (r, j))) {
-            Some((r, j)) => r.get(j + 2..).unwrap_or(""),
-            None => "",
-        };
+    // Inside a quoted string (its quote), inside `url(` … `)`.
+    let mut quote: Option<char> = None;
+    let mut in_url = false;
+    let mut i = 0;
+    while let Some(c) = text.get(i..).and_then(|r| r.chars().next()) {
+        i += c.len_utf8();
+        if c == '\\' {
+            // An escaped character, whatever it is.
+            out.push(c);
+            if let Some(next) = text.get(i..).and_then(|r| r.chars().next()) {
+                out.push(next);
+                i += next.len_utf8();
+            }
+            continue;
+        }
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                }
+            }
+            None if c == '"' || c == '\'' => quote = Some(c),
+            None if in_url => in_url = c != ')',
+            None if c == '(' => in_url = out.len().checked_sub(3).and_then(|s| out.get(s..)).is_some_and(|w| w.eq_ignore_ascii_case("url")),
+            None if c == '/' && text.get(i..).is_some_and(|r| r.starts_with('*')) => {
+                // To the end of the comment, or of the text when it's left open.
+                match text.get(i + 1..).and_then(|r| r.find("*/")) {
+                    Some(j) => i += 1 + j + 2,
+                    None => break,
+                }
+                continue;
+            }
+            None => {}
+        }
+        out.push(c);
     }
-    out.push_str(rest);
     out
 }
 
@@ -317,5 +346,22 @@ mod tests {
         assert_eq!(Sheet::parse(&many).rules.len(), MAX_RULES);
         assert!(selector(&"a ".repeat(20)).is_none(), "too long a selector");
         assert_eq!(declarations("color: red !important; x"), vec![Decl { prop: "color".into(), value: "red".into(), important: true }]);
+    }
+
+    /// A `/*` in an address (`url(…)`, quoted or not) or in a quoted string is part of it, not a
+    /// comment: what follows it in the style was lost. A comment after it still goes, and one left
+    /// open takes the rest, as CSS reads it.
+    #[test]
+    fn a_comment_starts_outside_addresses_and_strings() {
+        let read = |s: &str| declarations(s).into_iter().map(|d| format!("{}:{}", d.prop, d.value)).collect::<Vec<_>>();
+        assert_eq!(read("background:url(https://x.example/a/*.png); color:red"), ["background:url(https://x.example/a/*.png)", "color:red"]);
+        assert_eq!(
+            read("background:URL('a/*.png') /* plain */; width:1px; content:'/*'; color:red"),
+            ["background:URL('a/*.png')", "width:1px", "content:'/*'", "color:red"]
+        );
+        assert_eq!(read("color:red; /* open"), ["color:red"]);
+        assert_eq!(read("background:url(a/*.png"), ["background:url(a/*.png"], "an address left open keeps the rest");
+        let s = Sheet::parse(".a { background: url(x/*.png) } .b { color: red }");
+        assert_eq!(props(&s, &[el("p", &["b"])]), ["color:red"]);
     }
 }
