@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Requests with a deadline for all of their exchange: the connections, the TLS handshakes, the
-//! redirects and every byte of the answer ([`stream::Timed`]). Past it, the request fails as a
+//! redirects and every byte of the answer ([`stream::Timed`], under TLS: [`stream::tls_within`]). Past it, the request fails as a
 //! connection cut does (`TimedOut`): what a server that answers a byte at a time gets, however
 //! steadily it answers. For what one thread waits on alone: a sign-in's token, a picture a message
 //! points at.
@@ -21,8 +21,8 @@ pub fn get_public_within(url: &str, max: usize, within: Duration) -> Result<Resp
 /// One request on a connection of its own, made and answered by `until`.
 pub(super) fn once(req: &Request, url: &Url, public_only: bool, until: Instant) -> Result<Response> {
     let sock = if public_only { stream::tcp_public_within(&url.host, url.port, until)? } else { stream::tcp_within(&url.host, url.port, until)? };
-    let s = if url.https { stream::tls_within(sock, &url.host, until)? } else { Stream::Plain(sock) };
-    exchange(&mut stream::Timed::new(s, until), req, url)
+    let mut s = if url.https { stream::tls_within(sock, &url.host, until)? } else { Stream::PlainWithin(stream::Timed::new(sock, until)) };
+    exchange(&mut s, req, url)
 }
 
 #[cfg(test)]
@@ -108,6 +108,32 @@ mod tests {
         });
         let got = came.recv_timeout(Duration::from_secs(5)).expect("the renewal still waits on the trickle");
         assert!(matches!(&got, Err(NetError::Io(e)) if e.kind() == std::io::ErrorKind::TimedOut), "{got:?}");
+        assert!(asked.elapsed() < Duration::from_secs(2), "{:?}", asked.elapsed());
+    }
+
+    /// Review 1.5, tour 1: under TLS, a server (or anyone on the way) that answers the ClientHello
+    /// with a record's header saying 16 KiB, then a byte of it every 50 ms, holds the handshake no
+    /// longer than the deadline: each read of the socket under rustls looks at it, where a TLS read
+    /// waited for its whole record (13 minutes here, 11 days at a byte every 59 s).
+    #[test]
+    fn a_tls_record_that_trickles_ends_at_its_deadline() {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("https://127.0.0.1:{}/", l.local_addr().unwrap().port());
+        std::thread::spawn(move || {
+            if let Ok((mut s, _)) = l.accept() {
+                let _ = s.read(&mut [0u8; 4096]);
+                let _ = s.write_all(&[0x16, 0x03, 0x03, 0x40, 0x00]);
+                while s.write_all(&[0x02]).is_ok() {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+        });
+        let asked = Instant::now();
+        let (done, came) = std::sync::mpsc::channel();
+        std::thread::spawn(move || drop(done.send(send_within(&Request::get(&url, 1 << 10), Duration::from_secs(1)))));
+        let got = came.recv_timeout(Duration::from_secs(5)).expect("the TLS record still trickles in");
+        let e = got.unwrap_err();
+        assert!(matches!(&e, NetError::Io(io) if io.kind() == std::io::ErrorKind::TimedOut), "{e}");
         assert!(asked.elapsed() < Duration::from_secs(2), "{:?}", asked.elapsed());
     }
 

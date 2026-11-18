@@ -51,6 +51,11 @@ pub trait Timeouts {
 pub enum Stream {
     Plain(TcpStream),
     Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+    /// Plain HTTP with a deadline for all of its exchange ([`Timed`]: the tests' servers).
+    PlainWithin(Timed<TcpStream>),
+    /// TLS spoken over a socket with a deadline ([`tls_within`]): every read and write of the
+    /// socket itself, under rustls, looks at it, so a record that trickles in can't outlast it.
+    TlsWithin(Box<StreamOwned<ClientConnection, Timed<TcpStream>>>),
 }
 
 impl Read for Stream {
@@ -58,6 +63,8 @@ impl Read for Stream {
         match self {
             Stream::Plain(s) => s.read(buf),
             Stream::Tls(s) => s.read(buf),
+            Stream::PlainWithin(s) => s.read(buf),
+            Stream::TlsWithin(s) => s.read(buf),
         }
     }
 }
@@ -67,12 +74,16 @@ impl Write for Stream {
         match self {
             Stream::Plain(s) => s.write(buf),
             Stream::Tls(s) => s.write(buf),
+            Stream::PlainWithin(s) => s.write(buf),
+            Stream::TlsWithin(s) => s.write(buf),
         }
     }
     fn flush(&mut self) -> io::Result<()> {
         match self {
             Stream::Plain(s) => s.flush(),
             Stream::Tls(s) => s.flush(),
+            Stream::PlainWithin(s) => s.flush(),
+            Stream::TlsWithin(s) => s.flush(),
         }
     }
 }
@@ -82,12 +93,17 @@ impl Timeouts for Stream {
         match self {
             Stream::Plain(s) => s.set_read_timeout(t),
             Stream::Tls(s) => s.sock.set_read_timeout(t),
+            // Each read of a connection with a deadline sets its own.
+            Stream::PlainWithin(s) => s.get_ref().set_read_timeout(t),
+            Stream::TlsWithin(s) => s.sock.get_ref().set_read_timeout(t),
         }
     }
     fn set_write_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
         match self {
             Stream::Plain(s) => s.set_write_timeout(t),
             Stream::Tls(s) => s.sock.set_write_timeout(t),
+            Stream::PlainWithin(s) => s.get_ref().set_write_timeout(t),
+            Stream::TlsWithin(s) => s.sock.get_ref().set_write_timeout(t),
         }
     }
 }
@@ -108,6 +124,13 @@ impl Timeouts for TcpStream {
 pub struct Timed<S> {
     inner: S,
     until: Instant,
+}
+
+impl<S> Timed<S> {
+    /// The connection under the deadline.
+    pub fn get_ref(&self) -> &S {
+        &self.inner
+    }
 }
 
 impl<S: Timeouts> Timed<S> {
@@ -326,38 +349,33 @@ pub fn nothing_yet(e: &io::Error) -> bool {
 
 /// Wrap a TCP connection in TLS, verifying the certificate against `host`.
 pub fn tls(sock: TcpStream, host: &str) -> Result<Stream> {
-    handshake(sock, host, None)
-}
-
-/// [`tls`], the handshake done by `until`: each of its reads waits no longer than what is left
-/// (past it, `TimedOut`: [`PAST_DEADLINE`]). The connection reads and writes with
-/// [`IO_TIMEOUT`] again after.
-pub fn tls_within(sock: TcpStream, host: &str, until: Instant) -> Result<Stream> {
-    handshake(sock, host, Some(until))
-}
-
-fn handshake(sock: TcpStream, host: &str, until: Option<Instant>) -> Result<Stream> {
-    let name = ServerName::try_from(host.to_string()).map_err(|e| NetError::Tls(format!("{host}: {e}")))?;
-    let conn = ClientConnection::new(tls_config()?, name).map_err(|e| NetError::Tls(e.to_string()))?;
-    let mut s = StreamOwned::new(conn, sock);
+    let mut s = StreamOwned::new(client(host)?, sock);
     // Finish the handshake now so certificate problems surface as TLS errors, not later I/O.
     while s.conn.is_handshaking() {
-        if let Some(until) = until {
-            let left = left_until(until).ok_or_else(past_deadline)?;
-            s.sock.set_read_timeout(Some(left.min(IO_TIMEOUT)))?;
-            s.sock.set_write_timeout(Some(left.min(IO_TIMEOUT)))?;
-        }
-        match s.conn.complete_io(&mut s.sock) {
-            Ok(_) => {}
-            Err(e) if nothing_yet(&e) && until.is_some_and(|u| left_until(u).is_none()) => return Err(past_deadline().into()),
-            Err(e) => return Err(NetError::Tls(e.to_string())),
-        }
-    }
-    if until.is_some() {
-        s.sock.set_read_timeout(Some(IO_TIMEOUT))?;
-        s.sock.set_write_timeout(Some(IO_TIMEOUT))?;
+        s.conn.complete_io(&mut s.sock).map_err(|e| NetError::Tls(e.to_string()))?;
     }
     Ok(Stream::Tls(Box::new(s)))
+}
+
+/// [`tls`] with a deadline for all of the connection's exchange, its handshake included: TLS is
+/// spoken over a [`Timed`] socket, so every read and write of the socket itself looks at the
+/// deadline. A TLS read waits for a whole record (16 KiB at most) and a handshake for all of its
+/// messages: a deadline looked at above rustls let a record that trickled in outlast it by days.
+/// Past it, `TimedOut` ([`PAST_DEADLINE`]).
+pub fn tls_within(sock: TcpStream, host: &str, until: Instant) -> Result<Stream> {
+    let mut s = StreamOwned::new(client(host)?, Timed::new(sock, until));
+    while s.conn.is_handshaking() {
+        if let Err(e) = s.conn.complete_io(&mut s.sock) {
+            return Err(if left_until(until).is_none() { past_deadline().into() } else { NetError::Tls(e.to_string()) });
+        }
+    }
+    Ok(Stream::TlsWithin(Box::new(s)))
+}
+
+/// A TLS client for `host`, verifying its certificate against it.
+fn client(host: &str) -> Result<ClientConnection> {
+    let name = ServerName::try_from(host.to_string()).map_err(|e| NetError::Tls(format!("{host}: {e}")))?;
+    ClientConnection::new(tls_config()?, name).map_err(|e| NetError::Tls(e.to_string()))
 }
 
 #[cfg(test)]

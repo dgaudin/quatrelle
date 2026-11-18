@@ -389,6 +389,8 @@ fn connected(base: &str, url: &Url, cancel: &Arc<AtomicBool>, floor: (u64, Durat
     let sock = match &s {
         Stream::Plain(t) => t,
         Stream::Tls(t) => &t.sock,
+        Stream::PlainWithin(t) => t.get_ref(),
+        Stream::TlsWithin(t) => t.sock.get_ref(),
     };
     sock.set_read_timeout(Some(LANE_IO))?;
     sock.set_write_timeout(Some(LANE_IO))?;

@@ -506,8 +506,7 @@ impl TeamsClient {
     /// as it came (a redirect isn't followed).
     fn once(&self, req: &Request) -> Result<Response> {
         let url = Url::parse(&req.url)?;
-        let until = self.until();
-        let mut s = stream::Timed::new(connect_within(&url, until)?, until);
+        let mut s = connect_within(&url, self.until())?;
         self.count();
         let resp = http::exchange(&mut s, req, &url)?;
         self.heard(&resp, true);
@@ -520,12 +519,9 @@ impl TeamsClient {
     fn download(&self, req: &Request, graph: bool, served: bool) -> Result<(Response, Tally)> {
         let url = Url::parse(&req.url)?;
         let mut s = match (graph, served) {
-            (true, false) => {
-                let until = self.until();
-                Timed::Within(stream::Timed::new(connect_within(&url, until)?, until))
-            }
-            (true, true) => Timed::Open(connect(&url)?),
-            (false, _) => Timed::Open(self.transfer_stream(&url)?),
+            (true, false) => connect_within(&url, self.until())?,
+            (true, true) => connect(&url)?,
+            (false, _) => self.transfer_stream(&url)?,
         };
         self.count();
         let mut tally = Tally::default();
@@ -607,40 +603,11 @@ fn connect(url: &Url) -> Result<Stream> {
     if url.https { stream::tls(sock, &url.host) } else { Ok(Stream::Plain(sock)) }
 }
 
-/// [`connect`], connected (TLS's handshake too) by `until`.
+/// [`connect`] with a deadline for all of its exchange: connected, TLS's handshake done, and every
+/// read and write of the socket itself made by `until` (under TLS too: [`stream::tls_within`]).
 fn connect_within(url: &Url, until: Instant) -> Result<Stream> {
     let sock = stream::tcp_within(&url.host, url.port, until)?;
-    if url.https { stream::tls_within(sock, &url.host, until) } else { Ok(Stream::Plain(sock)) }
-}
-
-/// A download's connection: within the deadline, or open (the check's whole file, a transfer).
-enum Timed {
-    Within(stream::Timed<Stream>),
-    Open(Stream),
-}
-
-impl std::io::Read for Timed {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Timed::Within(s) => s.read(buf),
-            Timed::Open(s) => s.read(buf),
-        }
-    }
-}
-
-impl Write for Timed {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Timed::Within(s) => s.write(buf),
-            Timed::Open(s) => s.write(buf),
-        }
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Timed::Within(s) => s.flush(),
-            Timed::Open(s) => s.flush(),
-        }
-    }
+    if url.https { stream::tls_within(sock, &url.host, until) } else { Ok(Stream::PlainWithin(stream::Timed::new(sock, until))) }
 }
 
 /// Whether a download's redirect to `to` may be followed by a client whose API is at `base`:
