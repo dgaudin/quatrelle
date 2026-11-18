@@ -12,12 +12,14 @@
 //!
 //! What is hostile here: the members' names and addresses (Graph's): offered and drawn on one
 //! line, a name with nothing left on one line never offered, looked at no further than the query's
-//! [`QUERY_CHARS`] characters when matched. What it costs is bounded: the offer worked out again
+//! [`QUERY_CHARS`] characters when matched; a guest (not proven of the organisation:
+//! [`is_internal`]) offered with "External" before their name, so they don't pass for the
+//! colleague they're named like. What it costs is bounded: the offer worked out again
 //! only when its "@" or its query changes, the mentions at [`MAX_MENTIONS`].
 
 use egui::{Sense, pos2, vec2};
 use quatrelle_engine::ChatMembers;
-use quatrelle_engine::model::pim::teams::{mentionable, one_line};
+use quatrelle_engine::model::pim::teams::{is_internal, mentionable, one_line};
 
 use super::*;
 
@@ -37,13 +39,13 @@ pub(crate) struct BoxMention {
 }
 
 /// The members offered after an "@": the "@"'s character, what's typed after it up to the caret,
-/// those of the chat it finds (user id, name and address on one line), the one chosen, and
+/// those of the chat it finds ([`Offered`]), the one chosen, and
 /// whether Esc closed it.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Offer {
     at: usize,
     query: String,
-    people: Vec<(String, String, String)>,
+    people: Vec<Offered>,
     chosen: usize,
     closed: bool,
 }
@@ -104,12 +106,21 @@ pub(super) fn query_at(text: &str, caret: usize) -> Option<(usize, String)> {
     None
 }
 
+/// A member offered after an "@": their user id, their name and address on one line, and whether
+/// they're a guest (External: not proven of the organisation).
+#[derive(Clone, Debug)]
+pub(super) struct Offered {
+    user: String,
+    name: String,
+    address: String,
+    external: bool,
+}
+
 /// The open chat's `members` offered for `query`: those who can be @mentioned (of the
 /// organisation `tenant`, guests included: [`mentionable`]), never the user `me`, with a name left
 /// on one line and a usable id, whose name, a word of it, or address starts with the query
-/// (whatever the capitals); in the members' order, at most [`OFFER_MAX`]. Each its user id, and
-/// its name and address on one line.
-pub(super) fn offered(members: &ChatMembers, me: &str, tenant: &str, query: &str) -> Vec<(String, String, String)> {
+/// (whatever the capitals); in the members' order, at most [`OFFER_MAX`].
+pub(super) fn offered(members: &ChatMembers, me: &str, tenant: &str, query: &str) -> Vec<Offered> {
     let mut out = Vec::new();
     for m in members.as_slice() {
         if out.len() >= OFFER_MAX {
@@ -122,7 +133,7 @@ pub(super) fn offered(members: &ChatMembers, me: &str, tenant: &str, query: &str
         let name = one_line(&m.name);
         let address = one_line(&m.address);
         if !name.is_empty() && (starts(&name, query) || name.split(' ').any(|w| starts(w, query)) || starts(&address, query)) {
-            out.push((id.clone(), name, address));
+            out.push(Offered { user: id.clone(), name, address, external: !is_internal(m, tenant) });
         }
     }
     out
@@ -166,7 +177,7 @@ pub(super) fn close(d: &mut ChatDraft) {
 
 /// Enter or Tab on the offer: the member chosen picked.
 pub(super) fn pick_chosen(d: &mut ChatDraft) {
-    let chosen = d.offer.as_ref().filter(|o| !o.closed).and_then(|o| o.people.get(o.chosen)).map(|(user, name, _)| (user.clone(), name.clone()));
+    let chosen = d.offer.as_ref().filter(|o| !o.closed).and_then(|o| o.people.get(o.chosen)).map(|o| (o.user.clone(), o.name.clone()));
     if let Some((user, name)) = chosen {
         pick(d, &user, &name);
     }
@@ -228,8 +239,8 @@ pub(super) fn of_bytes(text: &str, given: &[(Range<usize>, String)]) -> Vec<BoxM
     out
 }
 
-/// The offer, drawn as rows above the box (the name, then the address dim; the member chosen on
-/// the accent's soft tint): the one clicked, when one is.
+/// The offer, drawn as rows above the box ("External" first for a guest, the name, then the
+/// address dim; the member chosen on the accent's soft tint): the one clicked, when one is.
 pub(super) fn rows(ui: &mut Ui, t: &Tokens, d: &ChatDraft) -> Option<(String, String)> {
     let o = d.offer.as_ref().filter(|_| d.offering())?;
     let mut clicked = None;
@@ -241,15 +252,21 @@ pub(super) fn rows(ui: &mut Ui, t: &Tokens, d: &ChatDraft) -> Option<(String, St
     frame.show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         let w = ui.available_width().min(OFFER_W);
-        for (k, (user, name, address)) in o.people.iter().enumerate() {
+        for (k, Offered { user, name, address, external }) in o.people.iter().enumerate() {
             let (rect, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
-            widgets::named(ui, &resp, name, true, None);
+            let said = if *external { format!("{name}, {}", tl!("External")) } else { name.clone() };
+            widgets::named(ui, &resp, &said, true, None);
             let on = k == o.chosen;
             if on || resp.hovered() {
                 ui.painter().rect_filled(rect, 4.0, if on { t.accent_soft } else { t.hover_row });
             }
-            let left = rect.left() + 8.0;
-            let room = (rect.width() - 16.0).max(40.0);
+            let mut left = rect.left() + 8.0;
+            if *external {
+                // Whole, before the name the member chose.
+                let (wide, _) = super::super::list::tag(ui.painter(), t, tl!("External"), left, rect.center().y - 8.5);
+                left += wide + 6.0;
+            }
+            let room = (rect.right() - 8.0 - left).max(40.0);
             let name_g = widgets::one_line(ui, name, theme::regular(13.5), t.text, room);
             let after = left + name_g.size().x + 10.0;
             ui.painter().galley(pos2(left, rect.center().y - name_g.size().y / 2.0), name_g, t.text);
