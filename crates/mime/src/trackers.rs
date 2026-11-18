@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What a message carries to learn about its reader. A newsletter's 1-by-1 picture tells its
 //! sender when (and from where) it was opened; its links go through a click counter, or carry
 //! tags (`utm_source`, `fbclid`…) that say which mailing and which reader clicked.
@@ -273,32 +274,67 @@ pub fn tracks_click(url: &str) -> bool {
         || u.query.is_some_and(|q| q.split('&').any(|p| is_tag(p.split('=').next().unwrap_or(p))))
 }
 
-/// The trackers in an HTML body: tiny pictures (1 or 2 pixels across, or on a counting service)
-/// and links that report the click.
+/// Tracking pictures listed at most (past that many, the others are taken for pictures).
+const MAX_TRACKERS: usize = 50;
+
+/// The trackers in an HTML body: tiny pictures (1 or 2 pixels across, hidden, or on a counting
+/// service) and links that report the click. A message's are read in it as it came and once its
+/// style sheet is written on its elements ([`Trackers::add_pictures`]).
 pub fn trackers(html: &str) -> Trackers {
-    let lower = html.to_ascii_lowercase();
-    let mut pictures: Vec<String> = Vec::new();
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
-        let start = from + i;
-        let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
-        let tag = html.get(start..end).unwrap_or("");
-        from = end + 1;
-        let Some(src) = crate::html::tag_attr(tag, "src").map(|s| s.trim().replace("&amp;", "&")) else { continue };
-        let Some(u) = split(&src) else { continue };
-        let tiny =
-            |a: &str| crate::html::tag_attr(tag, a).is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
-        let style = crate::html::tag_attr(tag, "style").unwrap_or("").to_ascii_lowercase().replace(' ', "");
-        let hidden = style.contains("display:none") || style.contains("width:1px") || style.contains("height:1px") || style.contains("width:0");
-        if (tiny("width") || tiny("height") || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c)))
-            && !pictures.contains(&src)
-            && pictures.len() < 50
-        {
-            pictures.push(src);
+    trackers_with(html, &mut crate::html::Addresses::default())
+}
+
+/// [`trackers`], its pictures' addresses read with the message's others (`addresses`).
+pub(crate) fn trackers_with(html: &str, addresses: &mut crate::html::Addresses) -> Trackers {
+    let mut t = Trackers { pictures: Vec::new(), links: crate::html_links(html).iter().filter(|l| tracks_click(l)).count() };
+    t.add_pictures(html, addresses);
+    t
+}
+
+impl Trackers {
+    /// The tracking pictures of `html` added to these, once each, up to [`MAX_TRACKERS`]: those of
+    /// a message once its style sheet is written on its elements ([`crate::layout::inline_css`]: a
+    /// pixel sized or hidden by a class) beside those of the message as it came (writing the sheet
+    /// on a picture keeps one value of each property and drops the tag's `!important`, which
+    /// turned `width:1px !important; width:300px` back into a picture). Their addresses are read
+    /// with the message's others (`addresses`); past the 50 kept, the rest isn't read.
+    pub(crate) fn add_pictures(&mut self, html: &str, addresses: &mut crate::html::Addresses) {
+        let pictures = &mut self.pictures;
+        let lower = html.to_ascii_lowercase();
+        let mut from = 0;
+        while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
+            if pictures.len() >= MAX_TRACKERS {
+                break;
+            }
+            let start = from + i;
+            let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
+            let tag = html.get(start..end).unwrap_or("");
+            from = end + 1;
+            // As the pictures have it (`&#38;` decoded): one pixel, listed once.
+            let Some(src) = crate::html::tag_attr(tag, "src").map(|s| addresses.read(s)) else { continue };
+            let Some(u) = split(&src) else { continue };
+            // By its own properties (a signature's icon `border-width: 0px` was taken for `width:0`,
+            // and stayed hidden when the message's pictures were shown); hidden by any of them, when
+            // in doubt.
+            let style = crate::html::tag_attr(tag, "style").map(crate::css::declarations).unwrap_or_default();
+            let hidden = style.iter().any(|d| {
+                let v = d.value.trim();
+                match d.prop.as_str() {
+                    "display" => v.eq_ignore_ascii_case("none"),
+                    "visibility" => v.eq_ignore_ascii_case("hidden") || v.eq_ignore_ascii_case("collapse"),
+                    // Seen through: none of it, or next to none (`0`, `0%`, `0.01`).
+                    "opacity" => match v.strip_suffix('%') {
+                        Some(pc) => pc.trim().parse::<f32>().is_ok_and(|n| n < 5.0),
+                        None => v.parse::<f32>().is_ok_and(|n| n < 0.05),
+                    },
+                    _ => false,
+                }
+            });
+            if (crate::html::tiny_picture(tag) || hidden || COUNTERS.iter().any(|c| host_is(&u.host, c))) && !pictures.contains(&src) {
+                pictures.push(src);
+            }
         }
     }
-    let links = crate::html_links(html).iter().filter(|l| tracks_click(l)).count();
-    Trackers { pictures, links }
 }
 
 #[cfg(test)]
@@ -353,14 +389,218 @@ mod tests {
             <img src="https://shop.example/logo.png" width="120" alt="Shop">
             <img src="https://open.shop.example/o.gif?r=9" width="1" height="1">
             <img src="https://news.us1.list-manage.com/track/open.php?u=1" alt="">
-            <img src="https://t.example/p.png" style="display: none"></p>"#;
+            <img src="https://t.example/p.png" style="display: none">
+            <img src="https://img.shop.example/phone.png" alt="phone" width="13" style="border-width: 0px; display: block">
+            <img src="https://t.example/q.png" style="height: 1px !important; width: 1px !important">
+            <img src="https://t.example/r.png" style="WIDTH:0"></p>"#;
         let t = trackers(html);
         assert_eq!(t.links, 2);
+        // A signature's icon without a border isn't one (`border-width: 0px` was read as `width:0`):
+        // shown when the message's pictures are.
         assert_eq!(
             t.pictures,
-            ["https://open.shop.example/o.gif?r=9", "https://news.us1.list-manage.com/track/open.php?u=1", "https://t.example/p.png"]
+            [
+                "https://open.shop.example/o.gif?r=9",
+                "https://news.us1.list-manage.com/track/open.php?u=1",
+                "https://t.example/p.png",
+                "https://t.example/q.png",
+                "https://t.example/r.png"
+            ]
         );
         assert!(trackers("<p>plain</p>").is_empty());
+    }
+
+    /// Styles that hide a picture or make it a pixel, as a browser reads them: what the first rule
+    /// (looking for `width:1px`, `width:0`… in the text) caught stays caught — when in doubt, a
+    /// tracker.
+    const PIXEL_STYLES: &[&str] = &[
+        "width:1px",
+        "height:1px",
+        "max-width:1px",
+        "max-height:1px",
+        "max-width:0px",
+        "width:1px !important",
+        "WIDTH:1PX",
+        "width : 1px",
+        "width:0",
+        "width:0.1em",
+        "height:0",
+        "width:1pt",
+        "width:1",
+        "width:2px",
+        "width:\n1px",
+        "display:none",
+        "display:none!important",
+        "DISPLAY: NONE",
+        "height:1px !important;width:1px !important;border-width:0 !important;margin:0 !important",
+        // `!` and `important` apart, an `!important` before a plain one, a zero in any unit,
+        // a comment: all valid CSS, taken for pictures once the text was read as declarations.
+        "width: 1px ! important; height: 1px ! important",
+        "display: none ! important",
+        "width:0%",
+        "width:0vw",
+        "width:1px !important; width:300px",
+        "width:1px/**/",
+        "width:1px; width:auto",
+        "width:1px; width:300px",
+        "display:none; display:block",
+        // A `/*` in an address isn't a comment (the rest of the style went with it); one after
+        // it is.
+        "background:url(https://x.example/a/*.png); width:1px",
+        "background:url('https://x.example/a/*.png'); width:1px",
+        "background:url(https://x.example/a.png) /* plain */; width:1px",
+        // Hidden, not sized.
+        "visibility:hidden",
+        "visibility: hidden !important",
+        "opacity:0",
+        "opacity: 0.0",
+    ];
+
+    /// Styles that make no picture small (an icon's `border-width: 0`).
+    const PICTURE_STYLES: &[&str] = &[
+        "min-width:1px",
+        "min-height:1px",
+        "line-height:1px",
+        "border-width:0",
+        "border-width: 0px; display: block",
+        "width:13px",
+        "width:3px;height:3px",
+        "opacity:0.6",
+        "visibility:visible",
+        "width:50%",
+        "background:url(https://x.example/a/*.png); width:13px",
+    ];
+
+    /// The styles of [`PIXEL_STYLES`] and [`PICTURE_STYLES`] that `tracker` (whether a picture of
+    /// that style is taken for a tracker) reads wrong, each with what it should have said.
+    fn read_wrong(tracker: impl Fn(&str) -> bool) -> Vec<(&'static str, bool)> {
+        PIXEL_STYLES
+            .iter()
+            .map(|s| (*s, true))
+            .chain(PICTURE_STYLES.iter().map(|s| (*s, false)))
+            .filter(|(s, expected)| tracker(s) != *expected)
+            .collect()
+    }
+
+    #[test]
+    fn pixels_by_their_style() {
+        let wrong = read_wrong(|style| !trackers(&format!("<p><img src=\"https://img.example/p.png\" style=\"{style}\"></p>")).pictures.is_empty());
+        assert!(wrong.is_empty(), "read wrong (style, a tracker): {wrong:?}");
+    }
+
+    /// The same styles in a whole message whose style sheet touches its pictures (`img{border:0}`,
+    /// as most newsletters' does): written on the picture, the sheet keeps one value of each
+    /// property and drops the tag's `!important`, which loaded `width:1px !important;
+    /// width:300px` again.
+    #[test]
+    fn pixels_by_their_style_under_a_style_sheet() {
+        let wrong = read_wrong(|style| {
+            let raw = format!(
+                "From: a@shop.example\r\nTo: b@studio.example\r\nSubject: s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+                 <html><head><style>img{{border:0}}</style></head><body><p>Hello</p>\
+                 <img src=\"https://img.example/p.png\" style=\"{style}\"></body></html>"
+            );
+            crate::parse(raw.as_bytes()).is_some_and(|p| !p.trackers.pictures.is_empty())
+        });
+        assert!(wrong.is_empty(), "read wrong in a message (style, a tracker): {wrong:?}");
+    }
+
+    /// A pixel sized or hidden by a class of the message's style sheet is one too: the trackers are
+    /// read once the page's styles are written on its elements.
+    #[test]
+    fn pixels_by_a_class() {
+        let raw = "From: a@shop.example\r\nTo: b@studio.example\r\nSubject: s\r\nMIME-Version: 1.0\r\n\
+                   Content-Type: text/html; charset=utf-8\r\n\r\n\
+                   <html><head><style>.px{width:1px;height:1px} .ghost{visibility:hidden} .clear{opacity:0}</style></head>\
+                   <body><p>Hello</p><img class=\"px\" src=\"https://t.example/a.png\"><img class=\"ghost\" src=\"https://t.example/b.png\">\
+                   <img class=\"clear\" src=\"https://t.example/c.png\"><img src=\"https://img.example/logo.png\" width=\"120\" alt=\"Logo\"></body></html>";
+        let p = crate::parse(raw.as_bytes()).unwrap();
+        assert_eq!(p.trackers.pictures, ["https://t.example/a.png", "https://t.example/b.png", "https://t.example/c.png"]);
+    }
+
+    /// A whole message with `body` under `sheet`, as parsed.
+    fn message(sheet: &str, body: &str) -> crate::Parsed {
+        let raw = format!(
+            "From: a@shop.example\r\nTo: b@studio.example\r\nSubject: s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+             <html><head>{sheet}</head><body><p>Hello</p>{body}</body></html>"
+        );
+        crate::parse(raw.as_bytes()).unwrap()
+    }
+
+    /// The web pictures of `p` asked for once its pictures are shown (as the session asks them).
+    fn loaded(p: &crate::Parsed) -> Vec<String> {
+        p.images.iter().filter(|u| u.starts_with("https://") && !p.trackers.pictures.contains(u)).cloned().collect()
+    }
+
+    /// An address written with a character reference (`&#38;`, `&#x26;`, `&quest;` and `&amp;`) is
+    /// one address, as a browser reads it, in the pictures and in the trackers alike: a pixel was
+    /// listed twice (as written, and as decoded once the style sheet was written on it), which said
+    /// two pixels for one.
+    #[test]
+    fn a_pixel_written_with_character_references_is_listed_once() {
+        let written = ["?a=1&#38;b=2", "?a=1&#x26;b=3", "?a=1&amp;b=4", "&quest;a=1&#38;b=5"];
+        let decoded = ["?a=1&b=2", "?a=1&b=3", "?a=1&b=4", "?a=1&b=5"];
+        let pixels: String = written.iter().map(|q| format!("<img src=\"https://t.example/o.gif{q}\" width=\"1\" height=\"1\">")).collect();
+        let listed: Vec<String> = decoded.iter().map(|q| format!("https://t.example/o.gif{q}")).collect();
+        for sheet in ["", "<style>img{border:0}</style>"] {
+            let p = message(sheet, &pixels);
+            assert_eq!((&p.trackers.pictures, loaded(&p)), (&listed, Vec::new()), "each once, as decoded, none asked for, under {sheet:?}");
+        }
+    }
+
+    /// … which used up the 50 kept: some of 49 such pixels were asked for.
+    #[test]
+    fn forty_nine_pixels_written_with_references_are_all_held_back() {
+        let many: String = (0..49).map(|n| format!("<img src=\"https://t.example/o.gif?n={n}&#38;r=1\" width=\"1\" height=\"1\">")).collect();
+        let p = message("<style>img{border:0}</style>", &many);
+        assert_eq!((p.trackers.pictures.len(), loaded(&p).len()), (49, 0), "listed, asked for");
+    }
+
+    /// … and asked for the one sized `width:1px !important; width:300px` under a style sheet.
+    #[test]
+    fn a_pixel_sized_twice_written_with_a_reference_is_held_back() {
+        let n1 = "<img src=\"https://t.example/o.gif?a=1&#38;b=2\" style=\"width:1px !important; width:300px\">";
+        let p = message("<style>img{border:0}</style>", n1);
+        assert_eq!((p.trackers.pictures.clone(), loaded(&p)), (vec!["https://t.example/o.gif?a=1&b=2".to_string()], Vec::new()));
+    }
+
+    /// The tokenizer's reads of addresses while `f` runs on this thread.
+    fn tokenized(f: impl FnOnce()) -> usize {
+        let before = crate::layout::TOKENIZED.with(std::cell::Cell::get);
+        f();
+        crate::layout::TOKENIZED.with(std::cell::Cell::get) - before
+    }
+
+    /// A stranger's thousands of pictures cost no more than a few reads of their addresses, in the
+    /// three readings of a message (its pictures, its trackers as it came and once its style sheet
+    /// is on its elements): an address with `&amp;` alone is read as it is, the same address once,
+    /// a message's no more than [`MAX_DECODED`](crate::html::pictures::MAX_DECODED). Each `&` cost a
+    /// tokenizer of its own, thrice: a message of 80,000 pictures took two and a half times as
+    /// long to read.
+    #[test]
+    fn many_pictures_cost_a_few_reads_of_their_addresses() {
+        let tags = |src: &dyn Fn(usize) -> String| (0..5_000).map(|n| format!("<img src=\"{}\" width=\"120\">", src(n))).collect::<String>();
+        // (what, the reads, the most allowed)
+        let mut reads: Vec<(String, usize, usize)> = Vec::new();
+        for sheet in ["", "<style>img{border:0}</style>"] {
+            let amp = tags(&|n| format!("https://img.example/{n}.png?x=1&amp;y=2"));
+            reads.push((format!("`&amp;` alone, under {sheet:?}"), tokenized(|| drop(message(sheet, &amp))), 0));
+            let same = tags(&|_| "https://img.example/a.png?x=1&#38;y=2".to_string());
+            reads.push((format!("the same address, under {sheet:?}"), tokenized(|| drop(message(sheet, &same))), 1));
+            let distinct = tags(&|n| format!("https://img.example/{n}.png?x=1&#38;y=2"));
+            reads.push((
+                format!("5,000 addresses, under {sheet:?}"),
+                tokenized(|| drop(message(sheet, &distinct))),
+                crate::html::pictures::MAX_DECODED,
+            ));
+        }
+        // The trackers stop at the 50 they keep.
+        let pixels: String = (0..5_000).map(|n| format!("<img src=\"https://t.example/o.gif?n={n}&#38;r=1\" width=\"1\" height=\"1\">")).collect();
+        let mut t = Trackers::default();
+        reads.push(("5,000 pixels".into(), tokenized(|| t = trackers(&pixels)), MAX_TRACKERS));
+        assert_eq!(t.pictures.len(), MAX_TRACKERS);
+        let over: Vec<_> = reads.iter().filter(|(_, n, most)| n > most).collect();
+        assert!(over.is_empty(), "read too often (what, reads, most): {over:?}");
     }
 
     #[test]

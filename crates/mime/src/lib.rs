@@ -358,16 +358,21 @@ fn parse_as(raw: &[u8], read: fn(Option<AddressList<'_>>) -> Vec<EmailAddress>) 
         _ => None,
     };
     let html = m.body_html(0).filter(|_| real_html).or(tnef_html.map(std::borrow::Cow::Borrowed));
-    let tracking = html.as_ref().map(|h| trackers(h)).unwrap_or_default();
+    // The trackers of the message as it came, and of it once its style sheet is written on its
+    // elements (below), both kept; the pictures' addresses read once each, in all three readings.
+    let mut addresses = html::Addresses::default();
+    let mut tracking = html.as_ref().map(|h| trackers::trackers_with(h, &mut addresses)).unwrap_or_default();
     let mut hidden = None;
     let (rich, images, layout) = match &html {
         Some(h) => {
             // Style sheet rules as inline styles, so cells keep their colours and titles their size.
             let h = layout::inline_css(h);
+            // A pixel sized or hidden by a class is one too.
+            tracking.add_pictures(&h, &mut addresses);
             hidden = hidden_text(&h);
             let layout = layout::html_layout(&h);
             // Pictures behind boxes are shown, or held back, like the others.
-            let mut images = html_images(&h);
+            let mut images = html_images_with(&h, &mut addresses);
             for src in layout::background_pictures(&layout) {
                 if !images.contains(&src) && images.len() < 200 {
                     images.push(src);

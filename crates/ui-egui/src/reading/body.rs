@@ -496,15 +496,7 @@ impl Body<'_> {
             } else {
                 match picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, sp.image_size, self.zoom, self.acts) {
                     (true, r) => r,
-                    (false, _) => {
-                        let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
-                        let text = format!("[{alt}]");
-                        // Inside a link, its place is the link's.
-                        Some(match &sp.link {
-                            Some(_) => ui.add(egui::Link::new(RichText::new(text).color(t.accent))),
-                            None => ui.add(egui::Label::new(RichText::new(text).color(t.faint)).selectable(false)),
-                        })
-                    }
+                    (false, _) => Some(unseen(&t, ui, sp, width, page, self.zoom)),
                 }
             };
             // A picture in a link follows it, as in Outlook and browsers.

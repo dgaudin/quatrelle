@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! UI tests: a picture inside a link (a newsletter's button) opens the link, shown or not.
+//! UI tests: a picture inside a link (a newsletter's button) opens the link, shown or not; a
+//! picture not shown says what it shows.
 
 use super::*;
 use egui::{Pos2, Rect, Shape};
@@ -108,4 +109,84 @@ fn a_picture_in_a_link_opens_the_link() {
     tap(&ctx, &mut a, bare.center());
     assert_eq!(opened.borrow().len(), before, "a picture in no link opens nothing");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Pictures on the web not shown, each with a description wider than the picture: a product's
+/// photo of 280 by 280 shows its box with the description written in it, wrapped at its words, as
+/// Outlook writes it in a picture it hasn't loaded (it was an empty frame); an icon of 24 in a link,
+/// too small for its words, is a box that is said to a screen reader as the link and opens it.
+#[test]
+fn a_big_picture_not_shown_says_what_it_shows() {
+    let shirt = "Blue cotton shirt with long sleeves, slim fit, from the new spring collection";
+    let follow = "Follow Contoso on the network";
+    let html = format!(
+        "<p>Our new collection is here.</p>\
+         <p><img src=\"https://img.contoso.example/shirt.jpg\" width=\"280\" height=\"280\" alt=\"{shirt}\"></p>\
+         <p><a href=\"https://www.contoso.example/follow\"><img src=\"https://img.contoso.example/net.png\" width=\"24\" height=\"24\" alt=\"{follow}\"></a></p>"
+    );
+    let (mut a, dir) = app_with_html("big-picture-not-shown", "New collection", &html);
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    a.services = Box::new(Opening(opened.clone()));
+    use super::super::list::follow_up::{Textures, frame_with_size};
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    // Its textures kept from the first frame (the font's), for the picture painted below; at the
+    // size `tap` draws at.
+    let mut tex = Textures::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (1280, 800));
+    let k = a.session.list.iter().find(|m| m.subject == "New collection").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..6 {
+        shapes = frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (1280, 800)).1;
+    }
+    if let Some(d) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
+        frame_with_size(&ctx, &mut a, &mut tex, vec![], Some(d.join("big-picture-not-shown.png")), (1280, 800));
+    }
+    let boxed = |w: f32| {
+        shapes.iter().find_map(|s| match s {
+            Shape::Rect(r) if r.brush.is_none() && r.stroke.width > 0.0 && (r.rect.width() - w).abs() < 1.5 && (r.rect.height() - w).abs() < 1.5 => {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+    };
+    let photo = boxed(280.0).expect("the photo's box");
+    let written = shapes.iter().find_map(|s| match s {
+        Shape::Text(t) if t.galley.text() == shirt => Some(t),
+        _ => None,
+    });
+    let written = written.unwrap_or_else(|| panic!("the description in the box: {:?}", texts(&shapes)));
+    let at = written.galley.rect.translate(written.pos.to_vec2());
+    assert!(photo.contains_rect(at), "inside the box: {at:?} in {photo:?}");
+    assert!(written.galley.rows.len() > 1, "wrapped to the box");
+    for pair in written.galley.rows.windows(2) {
+        let end = pair[0].row.glyphs.last().map(|g| g.chr);
+        let start = pair[1].row.glyphs.first().map(|g| g.chr);
+        assert!(end.is_none_or(char::is_whitespace) || start.is_none_or(char::is_whitespace), "at its words: {shirt:?}");
+    }
+    // The icon: a box without words, said as the link, opening it.
+    let icon = boxed(24.0).expect("the icon's box");
+    let over: Vec<&str> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            Shape::Text(t) if icon.shrink(1.0).intersects(t.galley.rect.translate(t.pos.to_vec2())) => Some(t.galley.text()),
+            _ => None,
+        })
+        .collect();
+    assert!(over.is_empty(), "no words in the icon: {over:?}");
+    let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)), ..Default::default() };
+    let out = ctx.run_ui(input, |ui| a.ui(ui));
+    let nodes = out.platform_output.accesskit_update.map(|u| u.nodes).unwrap_or_default();
+    let role = nodes.iter().find(|(_, n)| n.label() == Some(follow)).map(|(_, n)| n.role());
+    assert_eq!(role, Some(egui::accesskit::Role::Link), "said as the link");
+    tap(&ctx, &mut a, icon.center());
+    assert_eq!(*opened.borrow(), vec!["https://www.contoso.example/follow".to_string()], "the icon's box opens its link");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Every text drawn.
+fn texts(shapes: &[Shape]) -> Vec<String> {
+    shapes.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().to_string()) } else { None }).collect()
 }

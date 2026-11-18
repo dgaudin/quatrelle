@@ -291,6 +291,26 @@ fn parse(html: &str) -> Node {
     stack.pop().unwrap_or_default()
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The tokenizer's reads by [`first_attr_value`] on this thread: what a message costs to read.
+    pub(crate) static TOKENIZED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The value of the first attribute of the first element of `html` as the tokenizer reads it: its
+/// character references decoded as a browser decodes them (`&#38;`, `&quest;`).
+pub(crate) fn first_attr_value(html: &str) -> Option<String> {
+    #[cfg(test)]
+    TOKENIZED.with(|n| n.set(n.get() + 1));
+    // A third-party parser: a panic in it reads no value, rather than ending the program (on a
+    // network thread too, where messages are read without a guard).
+    let root = std::panic::catch_unwind(|| parse(html)).ok()?;
+    root.kids.into_iter().find_map(|k| match k {
+        Kid::El(n) => n.attrs.into_iter().next().map(|(_, v)| v),
+        Kid::Text(_) => None,
+    })
+}
+
 impl Node {
     fn attr(&self, name: &str) -> Option<&str> {
         self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())

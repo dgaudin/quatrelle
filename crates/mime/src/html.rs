@@ -13,10 +13,13 @@ pub(crate) mod links;
 mod markdown;
 pub use markdown::{MARKDOWN_HTML_MAX, MARKDOWN_MAX, code_block_markdown, looks_like_markdown, markdown_html, pasted_markdown};
 mod pairs;
+pub(crate) mod pictures;
 mod rules;
 mod teams;
 mod to_markdown;
 pub use pairs::html_link_pairs;
+pub use pictures::html_images;
+pub(crate) use pictures::{Addresses, html_images_with, tiny_picture};
 use rules::{RULE_MARK, mark_rules};
 pub use teams::{
     TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, Typed, html_escape, teams_compose, teams_compose_typed, teams_foreign_markup, teams_html,
@@ -451,7 +454,8 @@ pub(super) fn tag_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     None
 }
 
-/// `html` with a description on every picture that has none, except tracking pixels (1 by 1).
+/// `html` with a description on every picture that has none, except tracking pixels and spacers
+/// ([`tiny_picture`]).
 pub(super) fn mark_pictures(html: &str) -> String {
     let html = html.replace(PICTURE_MARK, "");
     let lower = html.to_ascii_lowercase();
@@ -462,9 +466,8 @@ pub(super) fn mark_pictures(html: &str) -> String {
         let start = from + i;
         let Some(end) = lower.get(start..).and_then(|r| r.find('>')).map(|e| start + e) else { break };
         let tag = html.get(start..end).unwrap_or("");
-        let tiny = |a: &str| tag_attr(tag, a).is_some_and(|v| v.trim().trim_end_matches("px").trim().parse::<f32>().is_ok_and(|n| n <= 2.0));
         let described = tag_attr(tag, "alt").is_some_and(|a| !a.trim().is_empty());
-        if !described && !tiny("width") && !tiny("height") && tag_attr(tag, "src").is_some_and(|s| !s.trim().is_empty()) {
+        if !described && !tiny_picture(tag) && tag_attr(tag, "src").is_some_and(|s| !s.trim().is_empty()) {
             out.push_str(html.get(last..start + 4).unwrap_or(""));
             out.push_str(&format!(" alt=\"{PICTURE_MARK}\""));
             last = start + 4;
@@ -577,37 +580,6 @@ pub fn remote_images(rich: &RichText) -> Vec<String> {
             && !out.contains(src)
         {
             out.push(src.clone());
-        }
-    }
-    out
-}
-
-/// Every `<img src>` of an HTML body, in order, without repeats (at most 200). Pictures without
-/// a description (tracking pixels, mostly) leave no trace in the formatted text, so they are
-/// found here, to be blocked or shown like the rest.
-pub fn html_images(html: &str) -> Vec<String> {
-    let lower = html.to_ascii_lowercase();
-    let mut out: Vec<String> = Vec::new();
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find("<img")) {
-        let start = from + i;
-        let end = lower.get(start..).and_then(|r| r.find('>')).map_or(lower.len(), |e| start + e);
-        let tag_lower = lower.get(start..end).unwrap_or("");
-        let tag = html.get(start..end).unwrap_or("");
-        if let Some(p) = tag_lower.find(" src=").or_else(|| tag_lower.find("\nsrc=")) {
-            let v = tag.get(p + 5..).unwrap_or("");
-            let src = match v.chars().next() {
-                Some(q @ ('"' | '\'')) => v.get(1..).and_then(|r| r.split(q).next()).unwrap_or(""),
-                _ => v.split([' ', '\t', '\n', '/']).next().unwrap_or(""),
-            };
-            let src = src.trim().replace("&amp;", "&");
-            if !src.is_empty() && src.len() < 4096 && !out.contains(&src) {
-                out.push(src);
-            }
-        }
-        from = end.max(start + 4);
-        if out.len() >= 200 {
-            break;
         }
     }
     out
