@@ -134,6 +134,18 @@ fn a_cleaned_link_opens_only_if_a_browser_may_be_handed_it() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Re-review, rounds 1 and 2, n° 1: a wrapper written with a `\`, and carrying one, has no host
+/// that can be read on either side; that isn't the same host: what it carries is checked, and
+/// `banque.example@piege.example` isn't handed to the browser.
+#[test]
+fn a_wrapper_whose_hosts_cant_be_read_is_checked() {
+    let (mut a, dir, o) = launching("link-unreadable-hosts", &[], false);
+    a.session.prefs.clean_links = true;
+    a.act(crate::Action::OpenUrl("https://www.google.com/url?q=https%3A%2F%2Fbanque.example%40piege.example%2F%5C&z=\\".into()));
+    assert!(opened(&o).is_empty(), "{:?}", opened(&o));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The mail opens the links it opened before: only one its wrapper hid (links cleaned: another
 /// host than written) is held to what a browser may be handed. A host with `_` (an intranet's) and
 /// an IPv6 address open, links cleaned or not, and one whose tracking only was left out opens

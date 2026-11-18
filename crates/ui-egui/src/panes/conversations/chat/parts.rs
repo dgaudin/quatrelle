@@ -8,7 +8,6 @@
 //! for a click on "Show picture", and drawing or scrolling never asks for it.
 
 use egui::{RichText, Sense, Ui, Vec2, vec2};
-use quatrelle_engine::model::addr::trust::url_host;
 use quatrelle_engine::model::ical::launchable_link;
 use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, HOSTED_PER_MESSAGE, Picture, is_bidi};
 use serde_json::json;
@@ -35,12 +34,12 @@ pub(super) fn shown(url: &str) -> String {
 
 /// Whether a sender's link opens on a click: it is an address a browser may be handed
 /// ([`launchable_link`]), as a link of a message always had to be, and so is what the window
-/// opens of it when cleaning took it to another host (out of a wrapper taken off when links are
-/// `clean`ed: File › Options › Safety). The window checks that one again.
+/// opens of it unless cleaning left it on the host written (out of a wrapper taken off when links
+/// are `clean`ed: File › Options › Safety; [`crate::cleaned_on_written_host`], the window's own
+/// rule). The window checks that one again.
 pub(super) fn openable(url: &str, clean: bool) -> bool {
     let opens = if clean { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
-    let host = |s: &str| url_host(s).map(|h| h.to_ascii_lowercase());
-    launchable_link(url) && (host(&opens) == host(url) || launchable_link(&opens))
+    launchable_link(url) && (crate::cleaned_on_written_host(opens.trim(), url) || launchable_link(&opens))
 }
 
 /// Where a sender's link goes, as it's shown (on hover, a card's host): out of every wrapper when

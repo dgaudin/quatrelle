@@ -688,7 +688,7 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::OpenShare { link: share, server, path, always: false });
             }
         } else if (lower.starts_with("https://") || lower.starts_with("http://"))
-            && !same_host(u, url)
+            && !cleaned_on_written_host(u, url)
             && !quatrelle_engine::model::ical::launchable_link(u)
         {
             self.session.notice(tf!("Links like {link} aren't opened", link = widgets::shorten(u, 40)), true);
@@ -794,8 +794,12 @@ impl MailApp {
     }
 }
 
-/// Whether two web addresses are on the same host (none read of either counts as the same).
-fn same_host(a: &str, b: &str) -> bool {
+/// Whether `cleaned`, what cleaning made of the link `written` (File › Options › Safety), is on
+/// the host written: the address itself, untouched, or both hosts read and the same (whatever
+/// their capitals). A host that can't be read, on either side (a `\` in the address, say), isn't
+/// the same: what the address carries is checked before it's opened. The mail's links and a
+/// conversation's go by this one rule.
+pub(crate) fn cleaned_on_written_host(cleaned: &str, written: &str) -> bool {
     let host = |s: &str| quatrelle_engine::model::addr::trust::url_host(s).map(|h| h.to_ascii_lowercase());
-    host(a) == host(b)
+    cleaned == written.trim() || matches!((host(cleaned), host(written)), (Some(x), Some(y)) if x == y)
 }

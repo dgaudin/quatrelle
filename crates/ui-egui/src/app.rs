@@ -20,6 +20,7 @@ mod updates;
 mod webex;
 mod windows;
 
+pub(crate) use actions::cleaned_on_written_host;
 pub use alt_code::{alt_code_pages, alt_codes};
 pub(crate) use costs::Merging;
 pub(crate) use file_dialogs::FileDialogs;

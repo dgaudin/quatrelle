@@ -16,6 +16,8 @@ use crate::Action;
 const WRAPPED: &str = "https://www.google.com/url?q=https%3A%2F%2Fpiege.example%2Fpay";
 /// A wrapper that carries an address with user information (`banque.example@`), which can't be.
 const WRAPPED_AT: &str = "https://www.google.com/url?q=https%3A%2F%2Fbanque.example%40piege.example%2F";
+/// The same with a `\` written in the wrapper and carried: neither host can be read.
+const WRAPPED_AT_BACKSLASH: &str = "https://www.google.com/url?q=https%3A%2F%2Fbanque.example%40piege.example%2F%5C&z=\\";
 
 /// A message of Ana's saying "Read the plan", "the plan" a link to `url`.
 fn linked(url: &str) -> ChatMessage {
@@ -141,4 +143,20 @@ fn a_file_card_is_the_users_own_only_by_what_its_click_opens() {
     assert!(!has_text(&texts, "Link to another site"), "the SharePoint opens: {texts:?}");
     let _ = std::fs::remove_dir_all(dir);
     let _ = std::fs::remove_dir_all(dir2);
+}
+
+/// Re-review, rounds 1 and 2, n° 1: a wrapper written with a `\`, and carrying one, has no host
+/// that can be read on either side, which isn't the same host: what it carries is checked, and the
+/// link is plain text (no tooltip, a click asks for nothing).
+#[test]
+fn a_wrapper_whose_hosts_cant_be_read_is_plain_text() {
+    let (mut a, dir, _) = chat_app("teams-link-backslash", group_row(), TEAMS_LINK, vec![linked(WRAPPED_AT_BACKSLASH)]);
+    let ctx = egui::Context::default();
+    let texts = settled_pane(&ctx, &mut a);
+    let at = the_link(&texts);
+    let (_, texts) = pointed(&ctx, &mut a, at);
+    assert!(texts_with(&texts, "piege.example").is_empty(), "no tooltip: {texts:?}");
+    let acts = click_pane(&ctx, &mut a, at, TALL);
+    assert!(!acts.iter().any(|x| matches!(x, Action::OpenUrl(_))), "a click asked for a link");
+    let _ = std::fs::remove_dir_all(dir);
 }
