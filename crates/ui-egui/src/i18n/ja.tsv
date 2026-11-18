@@ -2357,3 +2357,6 @@ presence	Offline	オフライン
 	Teams didn't create the conversation	Teams で会話を作成できませんでした
 	Teams can't be reached: try again	Teams に接続できません: もう一度お試しください
 	Another conversation is being created	別の会話を作成しています
+	Call	通話
+	Audio call	音声通話
+	Video call	ビデオ通話

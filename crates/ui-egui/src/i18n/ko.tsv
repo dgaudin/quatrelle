@@ -2359,3 +2359,6 @@ presence	Offline	오프라인
 	Teams didn't create the conversation	Teams에서 대화를 만들지 못했습니다
 	Teams can't be reached: try again	Teams에 연결할 수 없습니다: 다시 시도하세요
 	Another conversation is being created	다른 대화를 만드는 중입니다
+	Call	통화
+	Audio call	음성 통화
+	Video call	화상 통화

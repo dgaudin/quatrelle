@@ -326,7 +326,8 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   again until it starts again.
 - **Files** shared in a chat appear as cards with the file's name and the host of its link. A
   link to your own OneDrive or your organization's SharePoint is shown as such; any other host is
-  written on the card, "Link to another site". Nothing opens until you click it.
+  written on the card, "Link to another site". Nothing opens until you click it; **Open** and
+  **Open in browser** are on the card (see Pictures and files).
 
 ### Replying
 
@@ -339,7 +340,7 @@ longer in, or one Graph won't serve).
   Alt+S) do nothing: a mail goes from Mail, or from its own window.
 - What is sent is the text as typed, its lines, bold and italic, and the people mentioned (see
   below): what looks like markup goes as it was written, and a web address typed isn't made a
-  link. Pictures and files can't be sent yet.
+  link. Pictures and files go with a message (see Pictures and files below).
 - A message longer than Teams takes (80 KB once written for Teams) stays in the box, which says
   "This message is too long for Teams". With 50 messages waiting in the conversation, or 500 in
   all, it stays there too: "Too many messages are waiting".
@@ -370,6 +371,93 @@ sent". **Retry** sends it again; **Delete** removes it. A message not sent is ne
 itself. One the outbox didn't take (too many waiting, a conversation left) is kept only while
 Quatrelle runs. When its conversation isn't on the screen, a notice says "A message to Support
 team wasn't sent". Switching Teams off keeps the messages waiting: they go when it's on again.
+
+### Pictures and files
+
+**Sending.** The paperclip beside the box attaches files (the system's file dialog), and a
+picture on the clipboard (a screenshot, a picture copied from another program) is added with Ctrl+V.
+Each shows above the box as a small chip with its name and size and a cross that takes it away.
+They go with the text, the pictures first and then the files, each in the order added.
+
+- **At most 10 files and pictures go with a message, and each file at most 100 MB.** One that is
+  empty, can't be read, is already there, or is over the limit isn't added, and the box says why
+  under it. A message may be only files, with no text.
+- A picture pasted that is 4 MB or less goes inside the message and shows in the conversation as
+  any picture does. A bigger one goes as a file. Quatrelle first saves a picture pasted as a file
+  of its own in a folder only you can read; it goes when you take the picture away or leave the
+  box without sending, stays for Quatrelle to send a message that is waiting, and is let go of at
+  Quatrelle's start once it is a week old.
+- **Where a file goes.** It is put in your OneDrive, in the folder `Microsoft Teams Chat Files`,
+  and shared **to read only** with the people who are in the conversation when the message is
+  sent, nobody else; the message carries a link to it. A file already uploaded stays in that folder when
+  its message is cancelled or isn't sent: delete it there if you don't want it.
+- **Sending shows.** The message appears at once on your side, dimmed, with **Uploading…** and the
+  share done as the files go up (a big file may take a while), then "Sending…" as for any message. Everything waits when
+  Teams asks to wait or the network is away.
+- **Not sent.** Besides the reasons of Replying, a message with files can be marked Not sent for:
+  "A file is no longer there, or has changed" (it is read again when its turn comes), "A file is
+  bigger than Teams takes here (100 MB)", or "OneDrive didn't share the file with everyone in this
+  conversation" (nothing goes half shared: if the file can't be shared with every other member,
+  or a member has no address, the message isn't sent). If Quatrelle was closed after sending, its
+  files can't be read again: **Retry** isn't offered then, but "Attach the files again to send
+  it"; **Delete** removes it.
+
+**Files others shared.** A file card shows its name, size and where its link goes.
+
+- **Open** downloads the file, with your own sign-in and not by the link on the card, into a
+  folder of Quatrelle's that only you can read, and opens it with your computer's program for
+  that type of file; the card says "Downloading…" meanwhile. Files of 100 MB or less are
+  downloaded: a bigger one says "It is bigger than Quatrelle downloads (100 MB): open it in the
+  browser". When it fails the card says why: not enough room on the disk, Teams refused it (with
+  Teams' code), Teams can't be reached, the download was too slow, too many files are being
+  downloaded, or the file is no longer in the conversation.
+- **A file that could run** (a program, a script, a web page, a picture that holds scripts or a
+  document with macros) isn't opened: it is shown in its folder, and the card says "This file
+  could run a program: it is shown in its folder, not opened." You decide what to do with it.
+- **Open in browser** opens the file's link in the browser Teams meetings open in (else the
+  default browser). It is offered for any web link of the card, including the files over 100 MB.
+
+### Starting a conversation
+
+**New conversation**, beside the search box of the list, or Ctrl+N in Conversations, opens a pane
+where the conversation is written, in the place of the one open.
+
+- **To:** holds the people you pick, each a chip (tagged **External** for someone outside your
+  organization) with a cross, or Backspace in the empty field for the last one. Type a name or an
+  address: after a short pause Quatrelle looks it up in your organization's directory, and lists
+  the people found under the field (**Searching…**, **No one found**, or "The directory couldn't
+  be searched"). ↑ and ↓ choose and Enter or a click picks. Only people the directory gave can be
+  picked; an address typed that the directory doesn't know isn't added.
+- **At most 20 people** besides you. With two or more, **Group name (optional)** is offered.
+- At the foot is the box of a conversation, with its bold, italic, emoji, files and pictures
+  (without the @ mentions, which need the conversation's members). **Enter creates the
+  conversation and sends the first message**; nothing is made before.
+- **It needs the network.** While Teams makes it ("Creating the conversation…") everything
+  waits. When Teams can't be reached ("Teams can't be reached: try again") or refuses ("Teams
+  didn't create the conversation", with its code), the pane stays as it was, with the people,
+  the name, the words and the files, to try again. If the conversation is made and the first
+  message is refused (too long, too many waiting), the pane also stays with what was typed, a
+  notice says the message wasn't sent, and the conversation is in the list: sending again opens
+  it rather than making another.
+- **A one-to-one conversation already there** with that person is opened, and the message goes to
+  it: Teams keeps one conversation for two people.
+- Esc first closes a popup over the pane, then empties **To:** when people are listed under it,
+  then closes the pane, with what was typed. Opening a conversation from the list sets the pane
+  aside: **New conversation** brings it back as it was.
+
+### Calling
+
+**Call**, in the header of a conversation, beside Open in Teams, offers **Audio call** and
+**Video call**. It is there in a one-to-one conversation and in a group chat, when every other
+person has an address Teams gave and there are at most 20 of them; not in the chat of a meeting,
+a conversation you have left, one whose members aren't known yet, or one where someone has no
+address.
+
+Choosing one opens Teams' call page for the other people of the conversation in the browser window
+Teams meetings open in (else the default browser): Teams, the app or the web, then asks you to
+confirm, and **nothing is called until you do there**. Quatrelle itself neither places nor hears
+a call. The link is made from the members' addresses and checked again before it opens: only a
+Teams call page on `teams.microsoft.com` ever opens, and the log names no one.
 
 ### Reacting, mentioning, editing and deleting
 
@@ -482,8 +570,10 @@ or signing out stops all of it at once.
 
 ### Not yet
 
-Sending pictures and files, starting a conversation, and starting calls or meetings are not
-there yet: they come in later versions of Quatrelle. For those, use Open in Teams.
+Channels, teams, scheduling a meeting, starting a conversation with someone outside the
+directory (an address the directory doesn't know), and pictures placed between two paragraphs of
+a message (they go with the message, not in its text) are not there yet. For those, use Open in
+Teams.
 
 ## 9. Sending the result back
 

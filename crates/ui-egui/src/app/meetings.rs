@@ -2,14 +2,15 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Joining an online meeting: a Teams one in a browser's app window (File › Options ›
 //! Applications says which browser). Teams' own pages open there too: Microsoft's page to sign in
-//! to Teams on, and a chat in Teams ("Open in Teams").
+//! to Teams on, a chat in Teams ("Open in Teams") and a call ("Call" in a conversation's header).
 //!
 //! What is hostile here: the pages come from the Teams worker (Microsoft's sign-in service) and
 //! from Graph (a chat's link). Each is checked again before it's handed to a browser, as one
 //! argument after the app window's option: only Microsoft's sign-in page
-//! ([`is_microsoft_sign_in`]) and a Teams chat ([`is_teams_chat_link`]) ever open. Each page
+//! ([`is_microsoft_sign_in`]), a Teams chat ([`is_teams_chat_link`]) and a Teams call
+//! ([`is_teams_call_link`]) ever open. Each page
 //! leaves one line in the log ([`page_line`]): what it is, where it opened, and its link's shape
-//! ([`link_shape`]), never an id, a value or a profile's folder.
+//! ([`link_shape`]), never an id, an address, a value or a profile's folder.
 
 use quatrelle_engine::model::ical::{is_microsoft_sign_in, is_teams_call_link, is_teams_chat_link, link_shape};
 use quatrelle_engine::{MEETINGS_PROFILE, TeamsPage, is_profile_dir};
@@ -77,42 +78,43 @@ impl MailApp {
         self.services.open_app_window(program, profile, url).map(|()| Some((name.clone(), kind))).map_err(|e| (name.clone(), e))
     }
 
-    /// The Teams pages the engine asks for (Microsoft's page to sign in on, a chat in Teams), in
+    /// The Teams pages the engine asks for (Microsoft's page to sign in on, a chat in Teams, a call), in
     /// the meetings browser's app window, else the default browser (none found, the default chosen,
     /// or the launch failed, which is said). Each is checked again first: a page that isn't
-    /// Microsoft's sign-in or a Teams chat opens nowhere. Each leaves its line in the log
+    /// Microsoft's sign-in, a Teams chat or a Teams call link opens nowhere. Each leaves its line in the log
     /// ([`page_line`]).
     pub(crate) fn teams_pages(&mut self) {
         while let Some(page) = self.session.take_teams_page() {
-            let (url, ours) = match &page {
-                TeamsPage::SignIn(url) => (url.as_str(), is_microsoft_sign_in(url)),
-                TeamsPage::Chat(url) => (url.as_str(), is_teams_chat_link(url)),
-                TeamsPage::Call(url) => (url.as_str(), is_teams_call_link(url)),
-            };
-            if !ours {
-                log::warn!("{}", page_line(&page, &PageOutcome::Refused));
-                continue;
+            self.open_teams_page(&page);
+        }
+    }
+
+    /// One Teams page ([`Self::teams_pages`]): checked again, then opened or refused.
+    pub(crate) fn open_teams_page(&mut self, page: &TeamsPage) {
+        let (url, ours) = match page {
+            TeamsPage::SignIn(url) => (url.as_str(), is_microsoft_sign_in(url)),
+            TeamsPage::Chat(url) => (url.as_str(), is_teams_chat_link(url)),
+            TeamsPage::Call(url) => (url.as_str(), is_teams_call_link(url)),
+        };
+        if !ours {
+            return log::warn!("{}", page_line(page, &PageOutcome::Refused));
+        }
+        let failed = match self.in_app_window(url) {
+            Ok(Some((browser, profile))) => return log::info!("{}", page_line(page, &PageOutcome::AppWindow { browser: &browser, profile })),
+            Ok(None) => None,
+            Err((browser, e)) => {
+                self.session.notice(tf!("{browser} couldn't open the page: {error}", browser = browser, error = e), true);
+                Some((browser, e))
             }
-            let failed = match self.in_app_window(url) {
-                Ok(Some((browser, profile))) => {
-                    log::info!("{}", page_line(&page, &PageOutcome::AppWindow { browser: &browser, profile }));
-                    continue;
-                }
-                Ok(None) => None,
-                Err((browser, e)) => {
-                    self.session.notice(tf!("{browser} couldn't open the page: {error}", browser = browser, error = e), true);
-                    Some((browser, e))
-                }
-            };
-            match (self.services.open_url(url), &failed) {
-                (Ok(()), None) => log::info!("{}", page_line(&page, &PageOutcome::DefaultBrowser)),
-                (Ok(()), Some((browser, e))) => log::warn!("{}", page_line(&page, &PageOutcome::InsteadOf { browser, error: e })),
-                (Err(e), _) => {
-                    self.session.notice(tf!("The link couldn't be opened: {error}", error = e), true);
-                    // Both tries failed: both said.
-                    let error = failed.map_or_else(|| e.clone(), |(browser, first)| format!("{browser}: {first}; the default browser: {e}"));
-                    log::warn!("{}", page_line(&page, &PageOutcome::Failed { error: &error }));
-                }
+        };
+        match (self.services.open_url(url), &failed) {
+            (Ok(()), None) => log::info!("{}", page_line(page, &PageOutcome::DefaultBrowser)),
+            (Ok(()), Some((browser, e))) => log::warn!("{}", page_line(page, &PageOutcome::InsteadOf { browser, error: e })),
+            (Err(e), _) => {
+                self.session.notice(tf!("The link couldn't be opened: {error}", error = e), true);
+                // Both tries failed: both said.
+                let error = failed.map_or_else(|| e.clone(), |(browser, first)| format!("{browser}: {first}; the default browser: {e}"));
+                log::warn!("{}", page_line(page, &PageOutcome::Failed { error: &error }));
             }
         }
     }

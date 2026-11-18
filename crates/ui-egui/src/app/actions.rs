@@ -235,7 +235,7 @@ impl MailApp {
                 }
             }
             // A Teams page asked for opens at once (no frame may follow before the next input).
-            Action::Run(id @ ("teams.openInTeams" | "teams.reopenSignIn"), p) => {
+            Action::Run(id @ ("teams.openInTeams" | "teams.reopenSignIn" | "teams.call"), p) => {
                 self.run(id, p);
                 self.teams_pages();
             }

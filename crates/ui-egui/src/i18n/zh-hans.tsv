@@ -2360,3 +2360,6 @@ presence	Offline	离线
 	Teams didn't create the conversation	Teams 未创建对话
 	Teams can't be reached: try again	无法连接到 Teams: 请重试
 	Another conversation is being created	正在创建另一个对话
+	Call	通话
+	Audio call	语音通话
+	Video call	视频通话

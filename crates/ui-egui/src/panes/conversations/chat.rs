@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The conversation pane (the module's right): the open chat's header (its name, the other
-//! person's presence, its members, "Open in Teams"), then its messages by day, one sender's in a
+//! person's presence, its members, "Open in Teams", "Call": `header.rs`), then its messages by day, one sender's in a
 //! row under one name and picture, the user's own on the right; system lines; the page before
 //! asked for when the user scrolls to the top; opened at a search's hit, scrolled to it once and
 //! the message tinted a moment, and, the newer ones left out, "Go to the newest messages" under
@@ -24,9 +24,7 @@
 use egui::{Align, Color32, Layout, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
 use quatrelle_engine::model::dates;
-use quatrelle_engine::model::pim::teams::{
-    ChatKind, ChatMessage, ChatRow, MessageKind, OutKind, Outgoing, Picture, Presence, Sender, is_internal, one_line,
-};
+use quatrelle_engine::model::pim::teams::{ChatMessage, ChatRow, MessageKind, OutKind, Outgoing, Picture, Presence, Sender, one_line};
 use serde_json::json;
 
 use super::ConversationsUi;
@@ -36,6 +34,7 @@ use crate::theme::{self, Tokens};
 use crate::{Action, UiState, widgets};
 
 mod files;
+mod header;
 mod hover;
 mod outgoing;
 mod parts;
@@ -131,7 +130,7 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
     let teams_link = s.teams.teams_link();
     let (me, tenant, writable) = (&s.prefs.teams.object_id, &s.prefs.teams.tenant_id, !row.left && !row.unreadable);
     let pane = Pane { s, t: *tokens, pics: &teams_queue.pictures, me, tenant, teams_link, writable };
-    egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| header(&pane, ui, row, acts));
+    egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| header::header(&pane, ui, row, acts));
     let line = ui.available_rect_before_wrap();
     ui.painter().hline(line.x_range(), line.top(), egui::Stroke::new(1.0, pane.t.border));
     if row.unreadable {
@@ -181,61 +180,6 @@ fn presence(p: Presence, t: &Tokens) -> Option<(&'static str, Color32)> {
         _ => t.danger,
     };
     Some((crate::i18n::tc("presence", word), color))
-}
-
-/// The header: "External" first when someone is from outside, the name, a one-to-one chat's
-/// other person's presence, the members (their list on a click) and "Open in Teams" when the
-/// chat's link is one; a chat the user is no longer in says so under it.
-fn header(p: &Pane, ui: &mut Ui, row: &ChatRow, acts: &mut Vec<Action>) {
-    let t = &p.t;
-    ui.horizontal(|ui| {
-        if row.external {
-            tag(ui, t, tl!("External")).on_hover_text(tl!("Someone in this conversation is outside your organisation"));
-        }
-        // Room for the members' button, and for "Open in Teams" beside it.
-        let buttons = if p.teams_link.is_some() { 260.0 } else { 140.0 };
-        let room = (ui.available_width() - buttons).max(60.0);
-        let g = widgets::one_line(ui, &one_line(&row.name), theme::bold(17.0), t.text, room);
-        ui.label(g);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            members(p, ui, row);
-            p.open_in_teams(ui, acts);
-        });
-    });
-    let shown =
-        row.person.as_deref().filter(|_| row.kind == ChatKind::OneOnOne).and_then(|u| p.s.teams.presence.get(u)).and_then(|&pr| presence(pr, t));
-    if let Some((word, color)) = shown {
-        ui.horizontal(|ui| {
-            let (dot, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
-            ui.painter().circle_filled(dot.center(), 4.5, color);
-            ui.label(RichText::new(word).size(12.5).color(t.dim));
-        });
-    }
-    if row.left {
-        ui.label(RichText::new(tl!("You're no longer in this conversation")).size(12.5).color(t.dim));
-    }
-}
-
-/// "Members: n", and on a click their list, each from outside marked "External".
-fn members(p: &Pane, ui: &mut Ui, row: &ChatRow) {
-    let t = &p.t;
-    let list = p.s.teams.members().as_slice();
-    let n = if list.is_empty() { row.members as usize } else { list.len() };
-    ui.menu_button(tf!("Members: {n}", n = n), |ui| {
-        ui.set_min_width(240.0);
-        egui::ScrollArea::vertical().max_height(320.0).show_rows(ui, 24.0, list.len(), |ui, range| {
-            for m in list.get(range).unwrap_or_default() {
-                ui.horizontal(|ui| {
-                    ui.set_height(22.0);
-                    if !is_internal(m, p.tenant) {
-                        tag(ui, t, tl!("External"));
-                    }
-                    let g = widgets::one_line(ui, &one_line(&m.name), theme::regular(13.0), t.text, ui.available_width());
-                    ui.label(g);
-                });
-            }
-        });
-    });
 }
 
 /// A chat Graph won't let be read: what the list gave of it, and "Open in Teams".

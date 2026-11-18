@@ -19,6 +19,7 @@ use super::*;
 /// reactions and the bar over a message, one's edits and deletions going out; a search's hit
 /// opened at its message; the frames at scale.
 mod attach;
+mod call;
 mod changes;
 mod chat;
 mod editing;

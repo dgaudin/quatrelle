@@ -116,6 +116,25 @@ leaves the outbox and is said once; a message a read shows deleted takes the cha
 for it. The engine shows each at once over its window (`session/pim/teams/changes.rs`), and only
 the user's own messages are edited or deleted.
 
+Files and pictures go in the same outbox (`net/src/teams/outbox/parts.rs`; Graph's side in `net/src/teams/graph/files.rs`): the engine
+checks the parts a message takes (`teams.send`: at most 10, each path absolute and bounded) and the
+worker reads them when the message's turn comes, a changed file isn't sent. A record is made of
+parts, each waiting, uploading, shared or done: a picture of 4 MB or less goes inside the message,
+a bigger one and every file up to OneDrive in pieces, shared read-only with the
+chat's other members before the message is posted, so nothing goes half shared. Two lanes carry
+no Graph token: the upload (to the address OneDrive gave, which is its own authorisation) and the
+download of a file someone shared (`net/src/teams/files/`; `teams.openFile`, by the file's id through Graph, then the
+address Graph gave); both go only to Microsoft's file hosts, on public addresses, on a connection
+of their own, with caps on size and time. The engine hands the window a saved file once
+(`session/pim/teams/files.rs`), and a name that could run code is shown in its folder, never
+opened. A new conversation (`session/pim/teams/people.rs`) is made from people the directory gave
+(`teams.people`, asked of the worker's `net/src/teams/people.rs` and answered as `Event`s, kept bounded), with its first message queued before the
+chat is shown; a one-to-one chat already there is opened instead. A call
+(`teams.call`) is a page, not a request: the engine builds Teams' call link from the open chat's
+members' addresses (`quatrelle_model::ical::teams_call_link`, which refuses an address that could
+add a person or an option and more than 20 people) and the window checks it again
+(`is_teams_call_link`) before it opens it in the meetings browser's window.
+
 New messages are announced from the worker's word for each (`News`: who sent it as the chat's
 members name them, External or App, whether it names the user, the chat's name); the engine
 decides what is announced (`session/pim/teams/announce.rs`: the open chat on screen is marked read

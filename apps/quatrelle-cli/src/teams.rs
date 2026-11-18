@@ -14,10 +14,9 @@
 use std::cell::Cell;
 use std::time::Duration;
 
-use quatrelle_engine::model::ical::launchable_link;
+use quatrelle_engine::model::ical::teams_call_link;
 use quatrelle_engine::model::mailto::percent_decode;
 use quatrelle_net::NetError;
-use quatrelle_net::http::pct;
 use quatrelle_net::oauth;
 use quatrelle_net::teams::{CheckOptions, TeamsClient, run_check};
 use serde_json::Value;
@@ -172,15 +171,11 @@ fn chat_id(arg: &str) -> Option<String> {
     ok.then_some(id)
 }
 
-/// Teams' link to call the people given (their sign-in names), but `me`: `None` when nobody is
-/// left or the link couldn't be opened.
+/// Teams' link to call the people given (their sign-in names), but `me`: the model's
+/// ([`teams_call_link`]); `None` when nobody is left or the link couldn't be made.
 fn call_link(me: &str, upns: &[String]) -> Option<String> {
-    let others: Vec<String> = upns.iter().map(|u| u.trim()).filter(|u| !u.is_empty() && !u.eq_ignore_ascii_case(me.trim())).map(pct).collect();
-    if others.is_empty() {
-        return None;
-    }
-    let link = format!("https://teams.microsoft.com/l/call/0/0?users={}", others.join(","));
-    launchable_link(&link).then_some(link)
+    let others: Vec<&str> = upns.iter().map(|u| u.trim()).filter(|u| !u.is_empty() && !u.eq_ignore_ascii_case(me.trim())).collect();
+    teams_call_link(&others, false)
 }
 
 /// Why [`call_link`] gave none.
@@ -355,6 +350,13 @@ mod tests {
         assert_eq!(call_link("me@contoso.example", &["me@contoso.example".to_string()]), None);
         assert_eq!(call_link("me@contoso.example", &[]), None);
         assert_eq!(call_link("me@contoso.example", &[String::new()]), None);
+        // The model's link: an address that could add an option or someone is refused whole, a
+        // person counts once whatever the case.
+        assert_eq!(call_link("me@contoso.example", &["ana@contoso.example&withVideo=true".to_string()]), None);
+        assert_eq!(
+            call_link("me@contoso.example", &["Ana@contoso.example".to_string(), "ana@CONTOSO.example".into()]).as_deref(),
+            Some("https://teams.microsoft.com/l/call/0/0?users=Ana%40contoso.example")
+        );
         // A big group's link is too long to open: said as such, not as nobody to call.
         let many: Vec<String> = (0..120).map(|i| format!("someone.with.a.long.name{i}@contoso.example")).collect();
         assert_eq!(call_link("me@contoso.example", &many), None);
