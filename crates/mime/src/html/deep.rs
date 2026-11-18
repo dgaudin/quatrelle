@@ -253,6 +253,9 @@ pub(crate) fn tags(html: &str, mut each: impl FnMut(&str, bool, std::ops::Range<
 struct Depth {
     tables: usize,
     boxes: usize,
+    /// The boxes open when each table open was (at most [`MAX_TABLES`] of them, past which it's
+    /// deep): an end in a table closes only a box opened in it, and the table's end closes those.
+    floors: Vec<usize>,
     deep: bool,
 }
 
@@ -265,6 +268,9 @@ impl Depth {
             let is = |name: &[u8]| text.get(lt + 1..lt + 1 + name.len()).is_some_and(|n| n.eq_ignore_ascii_case(name));
             if is(b"table") {
                 self.tables = self.tables.saturating_add(1);
+                if self.floors.len() <= MAX_TABLES {
+                    self.floors.push(self.boxes);
+                }
             } else if is(b"div") || is(b"blockquote") {
                 self.boxes = self.boxes.saturating_add(1);
             }
@@ -273,11 +279,20 @@ impl Depth {
         }
     }
 
-    /// An end a browser surely reads.
+    /// An end a browser surely reads: a box's closes one opened in the table it's in, not one
+    /// opened before it (a cell bounds what an end in it can close: `<div><table><tr><td></div>`
+    /// left the box open, and a box more was nested each time); a table's closes the boxes opened
+    /// in it.
     fn closed(&mut self, name: &str) {
+        let floor = self.floors.last().copied().unwrap_or(0);
         match name {
-            "table" => self.tables = self.tables.saturating_sub(1),
-            "div" | "blockquote" => self.boxes = self.boxes.saturating_sub(1),
+            "table" => {
+                self.tables = self.tables.saturating_sub(1);
+                if let Some(floor) = self.floors.pop() {
+                    self.boxes = self.boxes.min(floor);
+                }
+            }
+            "div" | "blockquote" if self.boxes > floor => self.boxes -= 1,
             _ => {}
         }
     }
@@ -285,9 +300,9 @@ impl Depth {
 
 /// Elements around which the text converter's tree is no longer the tokenizer's alone: an SVG or
 /// MathML picture (its `<title>` and `<style>` are markup, its CDATA sections run to `]]>`), a
-/// CDATA section outside one (which ends at its first `>`), a template (which ignores the ends
-/// in it), and those past which a `</div>` isn't one.
-const DISAGREE: &[&[u8]] = &[b"<svg", b"<math", b"<![cdata[", b"<template", b"<select", b"<object", b"<applet", b"<marquee"];
+/// template (which ignores the ends in it), and those past which a `</div>` isn't one. (A CDATA
+/// section outside a picture is read here as they read it, to its first `>`.)
+const DISAGREE: &[&[u8]] = &[b"<svg", b"<math", b"<template", b"<select", b"<object", b"<applet", b"<marquee"];
 
 /// Whether `html` nests tables, or boxes, past what any mail does, counted as no reader of it can
 /// nest deeper: every table or box opened counts, wherever it's written but in a comment (in a
@@ -458,6 +473,36 @@ mod tests {
         assert!(unseen.is_empty(), "nesting not seen: {unseen:?}");
     }
 
+    /// Found in review: a CDATA section anywhere had every table opened counted, ends aside: one
+    /// in a script or a style sheet (read as the readers read it) flattened a letter of a hundred
+    /// tables for nothing.
+    #[test]
+    fn a_cdata_section_in_a_script_flattens_nothing() {
+        let closed = "<table><tr><td>x</td></tr></table>".repeat(100);
+        for cdata in ["<script>//<![CDATA[\nx()\n//]]></script>", "<style>/*<![CDATA[*/ p{} /*]]>*/</style>"] {
+            assert!(!too_deep(&format!("{cdata}{closed}")), "{cdata}");
+        }
+    }
+
+    /// Found in review: a `</div>` in a table's cell, for a box opened before the table, is none
+    /// for the text converter (the cell bounds what it can close), but the guard took it for one:
+    /// a box more nested each time, the 2048 passed unseen (T2-1). An end closes only a box opened
+    /// in the table it's in; a table's end closes those.
+    #[test]
+    fn boxes_left_open_across_a_cell_are_counted() {
+        let forms = [
+            "<div><table><tr><td></div></table>",
+            "<div><table><caption></div></table>",
+            "<div><table><tr><th></div></table>",
+            "<blockquote><table><tr><td></blockquote></table>",
+        ];
+        let unseen: Vec<&str> = forms.into_iter().filter(|unit| !too_deep(&unit.repeat(2100))).collect();
+        assert!(unseen.is_empty(), "nesting not seen: {unseen:?}");
+        // Boxes closed in their cells, tables closed in turn: not deep.
+        assert!(!too_deep(&"<div><table><tr><td><div>x</div></td></tr></table></div>".repeat(2100)));
+        assert!(!too_deep(&"<table><tr><td><div>x</div></td></tr></table><div>y</div>".repeat(2100)));
+    }
+
     /// Found in review: the end of each comment was looked for twice, `-->` and `--!>`, and the
     /// second ran to the end of the document when there was none: 4 MB of `<!---->` had some
     /// 10^12 bytes read, in each reading of a message. The document is looked through once.
@@ -477,7 +522,19 @@ mod tests {
     #[test]
     fn text_that_may_be_markup_is_read_flat_and_quick() {
         let tables = r#"<table><tr><td><div><a href="https://x.example/a">link</a>"#.repeat(200_000 / 60);
-        for before in ["<noscript>", "<svg><title>", "<svg><style>", "<script>", "<textarea>", "<xmp>", "<svg><![CDATA[ > ", "<plaintext>"] {
+        for before in [
+            "<noscript>",
+            "<svg><title>",
+            "<svg><style>",
+            "<script>",
+            "<textarea>",
+            "<xmp>",
+            "<svg><![CDATA[ > ",
+            "<plaintext>",
+            "<![CDATA[ > <style> ]]><!--</style>",
+            "<svg><title><style></title><!--</style>",
+            "<table><tr><td><template></table></template>",
+        ] {
             let html = format!("<p>Hello</p>{before}{tables}");
             assert!(too_deep(&html), "{before}");
             let started = std::time::Instant::now();
