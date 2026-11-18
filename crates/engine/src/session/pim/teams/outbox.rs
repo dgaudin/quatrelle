@@ -402,9 +402,13 @@ impl Session {
         if going {
             return Err(CmdError::Disabled(TEAMS_MAY_BE_IN_TEAMS.into()));
         }
-        self.teams.take_outgoing(i);
+        let taken = self.teams.take_outgoing(i);
         if seq != 0 {
             self.push_job(Job::Teams { job: teams::Job::Discard { seq } });
+        } else if let Some(o) = taken.filter(|o| !o.parts.is_empty() && matches!(o.state, OutState::NotSent { .. })) {
+            // One with files said without its number may be one the worker keeps (read back with
+            // its files not shared): deleted there too, by its local id.
+            self.push_job(Job::Teams { job: teams::Job::DiscardUnnumbered { local: o.local } });
         }
         Ok(())
     }

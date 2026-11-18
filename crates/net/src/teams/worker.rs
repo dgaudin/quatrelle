@@ -413,6 +413,7 @@ impl Worker {
             Job::Op { op } => outbox::queue(self, op),
             Job::Retry { seq } => outbox::retry(self, seq),
             Job::Discard { seq } => outbox::discard(self, seq),
+            Job::DiscardUnnumbered { local } => outbox::discard_unnumbered(self, &local),
             Job::Find { chat, message } => sync::find(self, chat, message),
             Job::File { chat, message, created, attachment } => files::open(self, chat, message, created, attachment),
             Job::Directory { query } => people::directory(self, query),

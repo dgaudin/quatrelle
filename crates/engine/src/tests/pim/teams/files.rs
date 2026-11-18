@@ -221,6 +221,11 @@ fn a_message_refused_with_its_files_is_not_sent_again_without_them() {
     let retry = s.run("teams.retry", &json!({"seq": 0, "local": other}));
     assert_eq!(retry, Err(CmdError::Disabled(TEAMS_ATTACH_AGAIN.into())));
     assert!(teams_jobs(&mut s).is_empty());
+    // Deleted, one with files said without its number goes from the worker's outbox too, by its
+    // local id: it may be one the worker keeps (read back with its files not shared).
+    s.run("teams.discard", &json!({"seq": 0, "local": other})).unwrap();
+    assert_eq!(teams_jobs(&mut s), [teams::Job::DiscardUnnumbered { local: other.clone() }]);
+    assert!(s.teams.outgoing.is_empty());
     // One without files is sent again, as before.
     let plain = local_of(&s.run("teams.send", &json!({"chat": OTHER, "text": "plain"})).unwrap());
     teams_jobs(&mut s);

@@ -27,10 +27,13 @@
 //!   resumes, or slower than the floor) is held back, then begun again, [`POSTS`] uploads in all.
 //!   Past any of them, the message is "Not sent" (couldn't be confirmed).
 //! * A message read back from the copy (a start, Teams switched on again) whose files aren't all
-//!   shared, or that has pictures and isn't in Teams, isn't taken up again ([`opened`]): it leaves
-//!   the outbox, and is said "Not sent" without a number, its files to be attached again. Its
-//!   record names files on the disk and items of the OneDrive, and the copy is never taken at its
-//!   word for those: nothing of it is read, uploaded or shared. A message of text alone goes on.
+//!   shared, or that has pictures and isn't in Teams, isn't taken up again ([`opened`]): it stays
+//!   in the copy "Not sent" (its words kept from one start to the next, each start refusing it
+//!   again), its number kept apart for the run (never a head, never sent again, whatever the disk
+//!   does with its writes), and it is said without its number, its files to be attached again.
+//!   Its record names files on the disk and items of the OneDrive, and the copy is never taken at
+//!   its word for those: nothing of it is read, uploaded or shared. A message of text alone goes
+//!   on. Deleted, by its local id ([`crate::teams::outbox::discard_unnumbered`]), it goes.
 //!
 //! What is hostile here: the files themselves (changed, gone, a folder, a device, too big, a
 //! picture that isn't one), Graph's answers (an item elsewhere, a share half made, error codes)
@@ -56,11 +59,13 @@ use crate::teams::store::{PartRecord, Uploaded, path_ok};
 
 /// The upload sessions a file's upload is begun in, in all, when OneDrive says them gone.
 const SESSIONS: u32 = 2;
+/// Members read for a share are read again when it goes later than this after them.
+const MEMBERS_FRESH: Duration = Duration::from_secs(60);
 
 /// A message's files being made ready, in memory only: the part in hand, its bytes gone up so
 /// far, its sessions gone and its uploads stopped on the lane, the item OneDrive made of it until
-/// the record keeps it, and the chat's members as Graph gave them for its share (read the step
-/// before, used once).
+/// the record keeps it, and the chat's members as Graph gave them for its share and when (read the
+/// step before, used once, within [`MEMBERS_FRESH`]).
 #[derive(Clone, Debug, Default)]
 pub(super) struct Upload {
     part: usize,
@@ -68,7 +73,7 @@ pub(super) struct Upload {
     gone: u32,
     failed: u32,
     item: Option<String>,
-    members: Option<Vec<Member>>,
+    members: Option<(Instant, Vec<Member>)>,
 }
 
 /// Where a message with parts stands when its turn comes.
@@ -191,32 +196,49 @@ fn recipients<'a>(members: &'a [Member], me: &str, tenant: &str) -> Option<Vec<R
 }
 
 /// The copy opened: each message of `ops` it read back that carries what this run didn't take
-/// itself ([`unproven`]) leaves the outbox (its pictures too) and `ops`, nothing of it read,
-/// uploaded or shared: what to say of it, "Not sent" without a number, its files and pictures by
-/// name (the window asks for them to be attached again, as for a message the outbox didn't take).
-/// One the copy won't let go is kept "Not sent" (its Retry takes it as it is now), else at least
-/// left out of this run.
-pub(super) fn opened(w: &Worker, ops: &mut Vec<OpRecord>) -> Vec<Outgoing> {
+/// itself ([`unproven`]) is refused for the run, nothing of it read, uploaded or shared: its
+/// number kept apart ([`Outbox::refused`]), and itself made "Not sent" in `ops` and in the copy
+/// (its words kept to the next start, which refuses it again). The copy failing to write it so, it
+/// stays apart all the same. The chats it was found in, to say their outboxes.
+pub(super) fn opened(w: &mut Worker, ops: &mut [OpRecord]) -> Vec<String> {
     let Some(copy) = &w.copy else { return Vec::new() };
-    let not_sent = || OpState::NotSent { reason: Unsent::FileGone, code: None };
-    let mut said = Vec::new();
-    ops.retain(|op| {
-        if !unproven(op) {
-            return true;
+    let mut chats: Vec<String> = Vec::new();
+    for op in ops.iter_mut().filter(|op| unproven(op)) {
+        w.outbox.refused.insert(op.seq);
+        if !chats.contains(&op.chat) {
+            chats.push(op.chat.clone());
         }
-        if let Err(e) = copy.remove_op(op.seq) {
-            log::error!("teams: a message read back with its files couldn't leave the outbox: {}", kind(&NetError::Store(e)));
-            if let Err(e) = copy.put_op(&OpRecord { state: not_sent(), ..op.clone() }) {
-                log::error!("teams: a message's state couldn't be kept: {}", kind(&NetError::Store(e)));
+        if !matches!(op.state, OpState::NotSent { .. }) {
+            op.state = unsent_read_back();
+            if let Err(e) = copy.put_op(op) {
+                log::error!("teams: a message read back with its files couldn't be kept as not sent: {}", kind(&NetError::Store(e)));
             }
         }
-        said.push(OpRecord { seq: 0, state: not_sent(), ..op.clone() }.outgoing());
-        false
-    });
-    if !said.is_empty() {
-        log::info!("teams: {} messages with files or pictures read back from the copy aren't sent again: they're attached again", said.len());
     }
-    said
+    if !w.outbox.refused.is_empty() {
+        log::info!(
+            "teams: {} messages with files or pictures read back from the copy aren't sent again: they're attached again",
+            w.outbox.refused.len()
+        );
+    }
+    chats
+}
+
+/// What a message refused at the copy's opening is said as, when it isn't "Not sent" already.
+fn unsent_read_back() -> OpState {
+    OpState::NotSent { reason: Unsent::FileGone, code: None }
+}
+
+/// A message of the outbox as the conversation shows it: one refused at the copy's opening
+/// ([`opened`]) "Not sent" without its number (the window asks for its files to be attached
+/// again, and deletes it by its local id), whatever the copy says of its state; any other as
+/// [`shown`] says it.
+pub(super) fn said_as(w: &Worker, op: &OpRecord) -> Outgoing {
+    if !w.outbox.refused.contains(&op.seq) {
+        return shown(w, op.outgoing());
+    }
+    let state = if matches!(op.state, OpState::NotSent { .. }) { op.state.clone() } else { unsent_read_back() };
+    OpRecord { seq: 0, state, ..op.clone() }.outgoing()
 }
 
 /// Whether a message read back from the copy carries what only its record vouches for: a file
@@ -233,6 +255,10 @@ fn unproven(op: &OpRecord) -> bool {
 /// where that file stands: its upload begun ([`begin`]), the item OneDrive made asked for
 /// ([`described`]), or its share ([`share`]). Every file ready: [`Ready::Post`].
 pub(super) fn ready(w: &mut Worker, head: &Head, op: &mut OpRecord, now: Instant) -> Ready {
+    // Never for a message refused at the copy's opening, whatever the copy says of it.
+    if w.outbox.refused.contains(&op.seq) {
+        return Ready::Settled;
+    }
     let unready = |p: &PartRecord| matches!(p, PartRecord::File { up, .. } if !up.as_ref().is_some_and(|u| u.shared));
     let Some(at) = op.parts.iter().position(unready) else {
         w.outbox.uploads.remove(&op.seq);
@@ -311,12 +337,13 @@ fn described(w: &mut Worker, op: &mut OpRecord, at: usize, item: &str, now: Inst
 }
 
 /// Part `at`'s file, the item `item`, shared with the chat's other members as they are now: as
-/// Graph gave them the step before ([`members_now`], read first), never as the copy knows them
-/// (someone removed since would get the file); with every one of them, or the message is "Not
-/// sent".
+/// Graph gave them the step before ([`members_now`], read first, and again when the share goes
+/// more than [`MEMBERS_FRESH`] after), never as the copy knows them (someone removed since would
+/// get the file); with every one of them, or the message is "Not sent".
 fn share(w: &mut Worker, op: &mut OpRecord, at: usize, item: &str, now: Instant) -> Ready {
     let hash = w.hashed(&op.chat);
-    let Some(members) = w.outbox.uploads.get_mut(&op.seq).and_then(|u| u.members.take()) else { return members_now(w, op, now) };
+    let read = w.outbox.uploads.get_mut(&op.seq).and_then(|u| u.members.take());
+    let Some((_, members)) = read.filter(|(at, _)| now.saturating_duration_since(*at) <= MEMBERS_FRESH) else { return members_now(w, op, now) };
     let Some(to) = recipients(&members, &w.settings.object_id, &w.settings.tenant_id) else {
         log::warn!("teams: a file for conversation {hash} can't be shared with everyone in it: not sent");
         return not_sent(w, op, Unsent::NotShared, None);
@@ -351,7 +378,7 @@ fn members_now(w: &mut Worker, op: &mut OpRecord, now: Instant) -> Ready {
     };
     answered(w, op);
     if let Some(upload) = w.outbox.uploads.get_mut(&op.seq) {
-        upload.members = Some(members);
+        upload.members = Some((now, members));
     }
     Ready::Busy
 }

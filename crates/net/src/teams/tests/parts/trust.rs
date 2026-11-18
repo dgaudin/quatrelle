@@ -17,8 +17,8 @@ fn said_unnumbered(r: &Run, chat: &str) -> Vec<Outgoing> {
 /// Review 1.5, files 1: an outbox written by hand in the copy (a file said gone up but not shared,
 /// the drive's own folder for its item; a file by its path alone; a pasted picture) makes nothing
 /// shared, read, uploaded or posted once Quatrelle starts again: each is said "Not sent" without a
-/// number, by its parts' names (the window asks for them to be attached again), and leaves the
-/// outbox. A message of words alone goes on as it was.
+/// number, by its parts' names (the window asks for them to be attached again), and stays in the
+/// copy so, its picture too. A message of words alone goes on as it was.
 #[test]
 fn a_tampered_outbox_shares_nothing() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
@@ -38,8 +38,10 @@ fn a_tampered_outbox_shares_nothing() {
     });
     r.w.copy.as_ref().unwrap().put_op(&op).unwrap();
     let (mut r, _) = restart(r, false);
-    assert!(r.turns_until(Duration::from_secs(30), |r| r.ops().is_empty()), "{:?}", r.ops());
+    assert!(r.turns_until(Duration::from_secs(30), |r| r.held(CHAT, "Words alone") == 1), "{:?}", r.ops());
     r.turns(Duration::from_secs(10));
+    let states: Vec<(u64, bool)> = r.ops().iter().map(|o| (o.seq, matches!(o.state, OpState::NotSent { .. }))).collect();
+    assert_eq!(states, [(1, true), (2, true), (3, true)], "kept, not sent");
     let asked = (r.hits("invite"), r.hits("uploadSession"), r.hits("item"));
     assert_eq!(asked, (0, 0, 0), "nothing shared, nothing read nor sent up");
     let held = [r.held(CHAT, "Words alone"), r.held(CHAT, "The drive itself"), r.held(CHAT, "A path alone"), r.held(CHAT, "A picture alone")];
@@ -49,7 +51,15 @@ fn a_tampered_outbox_shares_nothing() {
         let o = said.iter().find(|o| o.local == local).unwrap_or_else(|| panic!("{local} not said: {said:?}"));
         assert_eq!(o.parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), [part], "{local}");
     }
-    assert_eq!(r.w.copy.as_ref().unwrap().picture(3, 0), None, "its picture gone with it");
+    assert!(r.w.copy.as_ref().unwrap().picture(3, 0).is_some(), "its picture kept with it");
+    // Deleted from the window, by its local id: gone, its picture with it.
+    r.w.job(Job::DiscardUnnumbered { local: "1-3".into() });
+    assert_eq!(r.ops().iter().map(|o| o.seq).collect::<Vec<_>>(), [1, 2]);
+    assert_eq!(r.w.copy.as_ref().unwrap().picture(3, 0), None);
+    // Nothing else is deleted by a local id: one the outbox numbers keeps its own way.
+    r.send(CHAT, "1-5", "Numbered");
+    r.w.job(Job::DiscardUnnumbered { local: "1-5".into() });
+    assert!(r.ops().iter().any(|o| o.local == "1-5"));
 }
 
 /// Review 1.5, files 2: the item the upload's last answer names is asked of Graph and must be the
@@ -125,4 +135,64 @@ fn a_chat_graph_doesnt_know_shares_nothing() {
     assert!(r.turns_until(Duration::from_secs(30), unshared), "{:?}", r.ops());
     r.turns(Duration::from_secs(10));
     assert_eq!((r.hits("invite"), r.hits("post")), (0, 0));
+}
+
+/// Review 1.5, tour 1 (files 1): a message read back with a file not shared yet stays in the copy,
+/// "Not sent", its words kept from one start to the next; each start refuses it again (said
+/// without its number, its file to be attached again), and a Retry never takes it up.
+#[test]
+fn a_message_read_back_with_files_is_kept_unsent_through_restarts() {
+    let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
+    r.w.work_offline(true);
+    r.send_with(CHAT, "1-1", "Kept through restarts", vec![Part::File { path: file("report.pdf", &[7u8; 4_000]) }]);
+    let seq = r.ops()[0].seq;
+    for round in 0..2 {
+        r = restart(r, false).0;
+        r.turns(Duration::from_secs(10));
+        let said = said_unnumbered(&r, CHAT);
+        let o = said.iter().find(|o| o.local == "1-1").unwrap_or_else(|| panic!("round {round}: {:?}", r.events()));
+        assert_eq!((o.body.plain(), o.parts.len()), ("Kept through restarts".to_string(), 1), "round {round}");
+        assert!(matches!(first_state(&r), Some(OpState::NotSent { .. })), "round {round}: kept in the copy, not sent: {:?}", r.ops());
+        r.w.job(Job::Retry { seq });
+        r.turns(Duration::from_secs(10));
+        assert_eq!((r.hits("uploadSession"), r.hits("invite"), r.held(CHAT, "Kept through restarts")), (0, 0, 0), "round {round}");
+    }
+}
+
+/// Review 1.5, tour 1 (files 1): the copy refusing to write a message read back with its file (left
+/// waiting on the disk, the write failing) sends and shares nothing of it, whatever comes after: a
+/// message sent behind it goes, a Retry of it doesn't.
+#[test]
+fn a_message_read_back_with_files_goes_nowhere_when_the_disk_fails() {
+    let store = quatrelle_store::Store::failing();
+    let mut r = super::super::sync::run_on(teams_with(vec![chat(CHAT, T0, 4)]), store.clone());
+    r.w.work_offline(true);
+    r.send_with(CHAT, "1-1", "Read back", vec![Part::File { path: file("report.pdf", &[7u8; 4_000]) }]);
+    let seq = r.ops()[0].seq;
+    store.fail(None, Some(&format!("{seq:020}.json")));
+    let (mut r, _) = restart(r, false);
+    assert_eq!(first_state(&r), Some(OpState::Waiting), "the disk kept it waiting");
+    r.send(CHAT, "1-2", "Words after it");
+    r.w.job(Job::Retry { seq });
+    assert!(r.turns_until(Duration::from_secs(30), |r| r.held(CHAT, "Words after it") == 1), "{:?}", r.ops());
+    r.turns(Duration::from_secs(20));
+    assert_eq!((r.hits("uploadSession"), r.hits("invite"), r.held(CHAT, "Read back")), (0, 0, 0));
+}
+
+/// Review 1.5, tour 1 (files 3): members read for a share that goes more than a minute later (the
+/// limiter, a Retry-After, the network away, a computer asleep) are read again first: someone
+/// removed meanwhile isn't given the file.
+#[test]
+fn members_read_more_than_a_minute_before_the_share_are_read_again() {
+    let mut r = run(teams_with(vec![group(GROUP)]));
+    let before = r.hits("members");
+    r.send_with(GROUP, "1-1", "For who is there now", vec![Part::File { path: file("report.pdf", &[7u8; 4_000]) }]);
+    assert!(until(&mut r, |r| r.hits("members") > before), "the members were never read for the share");
+    assert_eq!(r.hits("invite"), 0, "read, not shared yet");
+    r.fake(|t| t.chat_mut(GROUP).unwrap().members.retain(|m| m.id != BRUNO));
+    r.at += Duration::from_secs(90);
+    assert!(until(&mut r, |r| r.ops().is_empty()), "{:?}", r.ops());
+    let asked = r.fake(|t| t.drive_files.invites.iter().map(|(_, body)| body["recipients"].clone()).collect::<Vec<_>>());
+    assert_eq!(asked, [json!([{"objectId": ANA}])]);
+    assert_eq!(r.hits("members"), before + 2, "read again before the share");
 }

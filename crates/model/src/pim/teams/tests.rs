@@ -311,6 +311,7 @@ fn delivery_two_jobs_and_events_round_trip_through_json() {
         teams::Job::Op { op: Op::MarkRead { chat: "19:a@thread.v2".into() } },
         teams::Job::Retry { seq: 7 },
         teams::Job::Discard { seq: 7 },
+        teams::Job::DiscardUnnumbered { local: "1731500000-1".into() },
         teams::Job::Find { chat: "19:a@thread.v2".into(), message: "1730000000000".into() },
     ] {
         let j = Job::Teams { job };

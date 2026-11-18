@@ -515,9 +515,9 @@ fn a_post_with_a_picture_whose_answer_is_lost_is_found() {
 }
 
 /// Review Focus 2, then review 1.5 (files 1): Quatrelle closed while a file goes up. Started
-/// again, the message isn't taken up from what the copy says of its file: it leaves the outbox and
-/// is said "Not sent" without a number, its file by name (attached again to send it); nothing more
-/// goes up, nothing is posted.
+/// again, the message isn't taken up from what the copy says of its file: it stays in the copy
+/// "Not sent" and is said without its number, its file by name (attached again to send it);
+/// nothing more goes up, nothing is posted.
 #[test]
 fn a_run_cut_off_while_uploading_asks_for_its_file_again() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
@@ -526,7 +526,7 @@ fn a_run_cut_off_while_uploading_asks_for_its_file_again() {
     r.send_with(CHAT, "1-1", "Through a restart", vec![Part::File { path }]);
     assert!(until(&mut r, |r| r.hits("upload") >= 1), "the upload never began");
     let (mut r, _) = restart(r, false);
-    assert!(r.ops().is_empty(), "it left the outbox: {:?}", r.ops());
+    assert!(matches!(first_state(&r), Some(OpState::NotSent { .. })), "kept, not sent: {:?}", r.ops());
     let o = r.outbox_said(CHAT).into_iter().find(|o| o.local == "1-1").unwrap_or_else(|| panic!("{:?}", r.events()));
     assert_eq!((o.seq, o.state, o.parts.len()), (0, OutState::NotSent { reason: Unsent::FileGone, code: None }, 1));
     r.turns(Duration::from_secs(20));
