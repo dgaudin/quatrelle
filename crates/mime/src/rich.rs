@@ -710,6 +710,25 @@ pub fn splice(text: &mut String, styles: &mut Styles, range: std::ops::Range<usi
     *styles = out_styles;
 }
 
+/// `text` and `styles` with only the characters `keep` says (each with its style), in one pass;
+/// a line's end always stays, so each paragraph keeps its layout. Taking characters out one at a
+/// time ([`splice`]) builds the whole text again for each.
+pub fn retain(text: &mut String, styles: &mut Styles, mut keep: impl FnMut(char, &Style) -> bool) {
+    styles.fit(text);
+    let plain = Style::default();
+    let mut kept = String::with_capacity(text.len());
+    let mut chars = Vec::with_capacity(styles.chars.len());
+    for (c, &s) in text.chars().zip(&styles.chars) {
+        if c == '\n' || keep(c, styles.palette.get(usize::from(s)).unwrap_or(&plain)) {
+            kept.push(c);
+            chars.push(s);
+        }
+    }
+    *text = kept;
+    styles.chars = chars;
+    styles.fit(text);
+}
+
 /// Append `add` (text and styles) to `text` and `styles`.
 pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &Styles) {
     styles.fit(text);

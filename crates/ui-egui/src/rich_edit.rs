@@ -40,6 +40,8 @@ pub(crate) use links::link_dialog;
 use links::*;
 use menu::*;
 #[cfg(test)]
+pub(crate) use paste::REBUILT;
+#[cfg(test)]
 pub(crate) use paste::or_as_pasted;
 use paste::*;
 pub(crate) use paste::{clipboard_html_once, forget_clipboard_html};

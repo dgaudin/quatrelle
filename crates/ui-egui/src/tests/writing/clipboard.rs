@@ -140,3 +140,37 @@ fn a_paste_reads_the_clipboards_html_once() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+/// Found in review: HTML pasted with thousands of pictures the message hasn't (`cid:` addresses
+/// of another message) had them taken out one at a time, the whole text built again for each:
+/// 10,000 froze the window. They go in one pass.
+#[test]
+fn unknown_pictures_pasted_go_in_one_pass() {
+    crate::set_clipboard_html(clipboard_html);
+    let pictures: String = (0..10_000).map(|n| format!("<img src=\"cid:n{n}\">")).collect();
+    let (mut a, dir, ctx) = writing("paste-unknown-pictures");
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some(format!("<p>{pictures}</p><p>Plan for Monday.</p>")));
+    crate::rich_edit::REBUILT.with(|n| n.set(0));
+    frame(&ctx, &mut a, vec![Event::Paste("Plan".into())]);
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = None);
+    let body = compose(&a).body;
+    assert!(!body.contains(quatrelle_engine::mime::rich::PICTURE) && body.contains("Plan for Monday."), "{:?}", body.get(..80));
+    assert_eq!(crate::rich_edit::REBUILT.with(std::cell::Cell::get), 1, "the pasted text built again to take its pictures out");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Found in review: the clipboard's HTML was read whole, however big, by each that looks at it
+/// (the check for a picture alone, the paste): it's read no further than a message's HTML.
+#[test]
+fn the_clipboards_html_is_read_no_further_than_a_messages() {
+    crate::set_clipboard_html(clipboard_html);
+    let most = quatrelle_engine::mime::HTML_MAX;
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some(format!("<p>{}</p>", "é".repeat(most))));
+    crate::rich_edit::forget_clipboard_html();
+    let (html, _) = crate::rich_edit::clipboard_html_once();
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = None);
+    crate::rich_edit::forget_clipboard_html();
+    let html = html.unwrap_or_default();
+    assert_eq!(html.chars().count(), most, "cut where a message's is");
+    assert!(html.starts_with("<p>éé"));
+}

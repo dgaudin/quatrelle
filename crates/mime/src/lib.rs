@@ -73,8 +73,9 @@ pub fn decode_in(charset: &str, bytes: &[u8]) -> Option<String> {
 
 /// Longest preview kept in a summary, in characters.
 pub const PREVIEW_CHARS: usize = 200;
-/// HTML larger than this is cut before conversion (the rest is rarely more than markup).
-pub(crate) const HTML_MAX: usize = 4 << 20;
+/// HTML larger than this, in characters, is cut before conversion (the rest is rarely more than
+/// markup): a message's, and the clipboard's before it's pasted.
+pub const HTML_MAX: usize = 4 << 20;
 
 fn addrs(a: Option<AddressList<'_>>) -> Vec<EmailAddress> {
     a.map(|a| a.mailboxes().filter_map(|x| x.address().map(|e| EmailAddress::new(x.name().unwrap_or_default().trim(), e.trim()))).collect())
