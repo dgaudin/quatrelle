@@ -2082,7 +2082,6 @@ menu	View	Anzeigen
 	Contact card	Kontaktkarte
 	All files	Alle Dateien
 	{ext} file	{ext}-Datei
-	This message is no longer in the list: open its folder to delete it.	Diese Nachricht ist nicht mehr in der Liste: Öffnen Sie ihren Ordner, um sie zu löschen.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Umschalt+Entf löscht E-Mails endgültig, wie Entf in „Gelöschte Elemente“
 	Drop to add them to {folder}	Ablegen, um sie zu {folder} hinzuzufügen
 	Added to {folder}: {n}	Zu {folder} hinzugefügt: {n}
@@ -2364,3 +2363,4 @@ presence	Offline	Offline
 	Call	Anrufen
 	Audio call	Audioanruf
 	Video call	Videoanruf
+	Zoom	Zoom

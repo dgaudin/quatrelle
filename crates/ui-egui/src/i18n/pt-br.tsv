@@ -2081,7 +2081,6 @@ folder	Conflicts	Conflitos
 	Contact card	Cartão de contato
 	All files	Todos os arquivos
 	{ext} file	Arquivo {ext}
-	This message is no longer in the list: open its folder to delete it.	Esta mensagem não está mais na lista: abra a pasta dela para excluí-la.
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del exclui o e-mail permanentemente, como Del em Itens excluídos
 	Drop to add them to {folder}	Solte para adicioná-los a {folder}
 	Added to {folder}: {n}	Adicionados a {folder}: {n}
@@ -2363,3 +2362,4 @@ presence	Offline	Offline
 	Call	Ligar
 	Audio call	Chamada de áudio
 	Video call	Chamada de vídeo
+	Zoom	Zoom

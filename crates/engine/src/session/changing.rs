@@ -9,6 +9,32 @@ mod marks;
 pub(crate) use marks::LocalMarks;
 pub use marks::MarkWork;
 
+/// A change the user made that Undo can put back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Undo {
+    /// Messages moved (deleted to Deleted Items, archived, moved): found again in `to` by their
+    /// Message-ID (a move gives them new keys) and moved back where each came from.
+    Move { account: String, to: String, back: Vec<(String, String)> },
+    /// IMAP mail archived on this computer (the worker said where each went): the copies in
+    /// Archives, each with the folder of the server it came from, to put back there.
+    Archive { account: String, back: Vec<(MessageKey, String)> },
+    /// Archived mail put back on the server, into `to` of `account`: found there again by Message-ID
+    /// (the server gave each a new number) and archived once more.
+    PutBack { account: String, to: String, ids: Vec<String> },
+    /// Flags or keywords changed: the changes that put them back.
+    Ops { account: String, ops: Vec<Op> },
+    /// Follow-ups changed (flagged, cleared, marked complete): the flag and keyword changes that
+    /// put them back, by account, and each message's due and done days as they were, by its
+    /// follow-up id.
+    FollowUp { ops: Vec<(String, Vec<Op>)>, days: Vec<(String, Option<i64>, Option<i64>)> },
+    /// An appointment moved (or one occurrence of it, `occurrence`): where it was, and whether
+    /// its guests were told (they're told of its return the same way).
+    EventMove { uid: String, occurrence: Option<i64>, start: i64, end: i64, send: bool },
+}
+
+/// Changes Undo remembers.
+pub(super) const UNDO_DEPTH: usize = 20;
+
 impl Session {
     /// Apply a change: to the in-memory list at once, then to the cache and server (through a
     /// job), or straight to the cache for local accounts.
@@ -73,6 +99,7 @@ impl Session {
     }
 
     pub(super) fn apply_op_memory(&mut self, account: &str, op: &Op) {
+        self.note_window_removals(op);
         if op.is_folder_op() {
             self.apply_folder_op_memory(account, op);
             return;

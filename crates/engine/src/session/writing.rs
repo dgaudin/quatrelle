@@ -275,7 +275,8 @@ impl Session {
             sign: encrypted,
             encrypt: encrypted,
             came_as,
-            window: self.prefs.reply_window,
+            // From a message's own window, in a window of its own, as Outlook answers it.
+            window: self.prefs.reply_window || self.own_windows.acting.is_some(),
             quote,
             ..Default::default()
         });

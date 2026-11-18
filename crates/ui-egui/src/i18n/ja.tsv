@@ -2078,7 +2078,6 @@ folder	Conflicts	競合
 	Contact card	連絡先カード
 	All files	すべてのファイル
 	{ext} file	{ext} ファイル
-	This message is no longer in the list: open its folder to delete it.	このメッセージはもう一覧にありません。削除するには、そのフォルダーを開いてください。
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del でメールを完全に削除します (削除済みアイテムでの Del と同じです)
 	Drop to add them to {folder}	ドロップして {folder} に追加
 	Added to {folder}: {n}	{folder} に追加しました: {n}
@@ -2360,3 +2359,4 @@ presence	Offline	オフライン
 	Call	通話
 	Audio call	音声通話
 	Video call	ビデオ通話
+	Zoom	ズーム

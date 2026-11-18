@@ -6,6 +6,9 @@
 use crate::dialogs::people_field::{MEETING_WINDOWS, places};
 use crate::*;
 
+mod file_page;
+mod ribbon;
+
 impl MailApp {
     /// Make message `id` the one acted on, with its editor (selection, undo) at hand.
     pub(crate) fn use_compose(&mut self, id: u64) -> bool {
@@ -242,7 +245,8 @@ impl MailApp {
         }
     }
 
-    /// A message's own window: its toolbar and the message; a reply written here; closed when done.
+    /// A message's own window: its tabs, its ribbon and the message; a reply written here; closed
+    /// when done.
     pub(crate) fn message_page(&mut self, ui: &mut Ui, key: &MessageKey, acts: &mut Vec<Action>) {
         let t = self.ui.tokens;
         if self.session.compose.is_some() {
@@ -266,18 +270,14 @@ impl MailApp {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.ui.title_shown = title;
         }
-        egui::Panel::top("message-page-bar")
-            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.border)))
-            .show(ui, |ui| window_toolbar(ui, &self.session, &t, key, acts));
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-            reading::window(&mut self.session, &mut self.ui, ui, w, acts);
-        });
+        let mut mine: Vec<Action> = Vec::new();
+        message_content(ui, &mut self.session, &mut self.ui, &w, &mut mine);
+        acts.extend(mine.into_iter().map(|a| for_window(key, a)));
     }
 
-    /// Messages opened in windows of their own (double-click), each a native window with the
-    /// message's own toolbar; in the browser, each in a browser window of its own.
+    /// Messages opened in windows of their own (double-click), each a native window with its tabs
+    /// and ribbon, as Outlook's; in the browser, each in a browser window of its own.
     pub(crate) fn message_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
-        let t = self.ui.tokens;
         if self.ui.page_message.is_none() {
             for w in self.session.windows.clone() {
                 if self.services.open_message_window(&w.key.to_id()) {
@@ -308,9 +308,14 @@ impl MailApp {
                     st.places.insert("message".into(), p);
                 }
                 let mut mine: Vec<Action> = Vec::new();
-                // Escape closes the find bar first, while it's shown.
-                let bar = st.find.shown_in_window(ui.ctx(), &key);
+                // Escape closes the find bar first, while it's shown, and the window's dialog; on
+                // the File page, it goes back to the message, as Outlook's.
+                let filing = file_page::shown(ui.ctx(), &key);
+                let bar = st.find.shown_in_window(ui.ctx(), &key) || st.window_dialog.as_ref().is_some_and(|(k, _)| *k == key) || filing;
                 let closing = ui.input(|i| i.viewport().close_requested() || (i.key_pressed(Key::Escape) && !bar));
+                if filing && st.window_dialog.is_none() && ui.input(|i| i.key_pressed(Key::Escape)) {
+                    file_page::show(ui.ctx(), &key, false);
+                }
                 // Ctrl+P prints this window's message.
                 if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P)) {
                     mine.push(Action::Print);
@@ -323,29 +328,33 @@ impl MailApp {
                         (i.consume_key(egui::Modifiers::NONE, Key::Delete), i.consume_key(egui::Modifiers::SHIFT, Key::Delete) || cut)
                     });
                     if delete || for_good {
-                        mine.extend(super::keys::delete_from_window(session, &key, for_good));
+                        mine.extend(super::keys::delete_from_window(&key, for_good));
+                    }
+                    // Reply, Reply all and Forward by their keys, as in the main window.
+                    let answer = ui.input_mut(|i| {
+                        let shift = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+                        if i.consume_key(shift, Key::R) {
+                            Some("mail.replyAll")
+                        } else if i.consume_key(egui::Modifiers::COMMAND, Key::R) {
+                            Some("mail.reply")
+                        } else if i.consume_key(egui::Modifiers::COMMAND, Key::F) {
+                            Some("mail.forward")
+                        } else {
+                            None
+                        }
+                    });
+                    if let Some(id) = answer {
+                        mine.push(Action::Run(id, json!({})));
                     }
                 }
-                egui::Panel::top(egui::Id::unique(("message-window-bar", key.to_id())))
-                    .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.border)))
-                    .show(ui, |ui| window_toolbar(ui, session, &t, &key, &mut mine));
-                egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-                    reading::window(session, st, ui, w.clone(), &mut mine);
-                });
+                message_content(ui, session, st, &w, &mut mine);
                 let leave = mine.iter().any(|a| matches!(a, Action::Run("message.closeWindow", _)));
-                // What works on "the open message" works on this window's message.
-                acts.extend(mine.into_iter().map(|a| match a {
-                    Action::OpenAttachment(_)
-                    | Action::SaveAttachment(_)
-                    | Action::OpenInCraft(..)
-                    | Action::DragOut(_)
-                    | Action::SaveAll
-                    | Action::Print
-                    | Action::ExportPdf
-                    | Action::SaveMessage
-                    | Action::Run("attachment.preview", _) => Action::InWindow(key.clone(), Box::new(a)),
-                    a => a,
-                }));
+                // The File page (Junk Email options…) is the main window's: brought forward.
+                if mine.iter().any(|a| matches!(a, Action::Backstage(_))) {
+                    mine.push(Action::FocusMain);
+                }
+                // What it asks for is done to its message, whatever the main window has selected.
+                acts.extend(mine.into_iter().map(|a| for_window(&key, a)));
                 closing && !leave
             });
             if close {
@@ -353,6 +362,100 @@ impl MailApp {
                 acts.push(Action::Run("message.closeWindow", json!({"key": key.to_id()})));
             }
         }
+        // A window gone takes its dialog and its ribbon's fit with it.
+        if self.ui.window_dialog.as_ref().is_some_and(|(k, _)| !self.session.windows.iter().any(|w| w.key == *k)) {
+            self.ui.window_dialog = None;
+        }
+        let open: std::collections::HashSet<String> = self.session.windows.iter().map(|w| ribbon::fit_key(&w.key)).collect();
+        self.ui.ribbon_groups.retain(|k, _| !k.starts_with("message-window/") || open.contains(k));
+        let keys: Vec<MessageKey> = self.session.windows.iter().map(|w| w.key.clone()).collect();
+        file_page::keep(ctx, &keys);
+    }
+
+    /// An action from a message's own window, done to its message: that message stands in as the
+    /// one selected and read while it runs, the window's dialog as the open one. A dialog it opens
+    /// that acts on the message shows in that window; any other in the main window, brought
+    /// forward (an appointment's opens in a window of its own).
+    pub(crate) fn act_in_window(&mut self, key: MessageKey, a: Action) {
+        let Some(scope) = self.session.enter_window_to_act(&key) else {
+            // Its window gone (a file dialog's answer coming late): the reading pane's message
+            // still takes it when it's the same one.
+            if self.session.reading.as_ref().is_some_and(|r| r.key == key) {
+                self.act(a);
+            }
+            return;
+        };
+        let theirs = self.ui.window_dialog.take_if(|(k, _)| *k == key).map(|(_, d)| d);
+        let main = std::mem::replace(&mut self.ui.dialog, theirs);
+        match a {
+            Action::FindInMessage => self.ui.find.bar(true, &key).open(),
+            a => self.act(a),
+        }
+        match std::mem::replace(&mut self.ui.dialog, main) {
+            Some(d) if d.for_message_window() => self.ui.window_dialog = Some((key, d)),
+            Some(d) => {
+                self.ui.focus_main |= !matches!(d, Dialog::Event(_));
+                self.ui.dialog = Some(d);
+            }
+            None => {}
+        }
+        self.session.leave_window(scope);
+    }
+}
+
+/// What a message's own window asks for: done to its message ([`Action::InWindow`]), but what
+/// goes to the main window as it is (another message opened, a search, the File page, a link).
+fn for_window(key: &MessageKey, a: Action) -> Action {
+    let main = match &a {
+        Action::Run(id, _) => *id == "message.closeWindow" || ["list.", "search.", "folder.", "view."].iter().any(|p| id.starts_with(p)),
+        Action::Open(_)
+        | Action::Search(_)
+        | Action::Backstage(_)
+        | Action::FocusMain
+        | Action::Refuse(_)
+        | Action::InWindow(..)
+        | Action::OpenUrl(_)
+        | Action::OpenMeeting(_)
+        | Action::SetDark(_)
+        | Action::ShowFormatted(..)
+        | Action::ShowMarkdown(..) => true,
+        _ => false,
+    };
+    if main { a } else { Action::InWindow(key.clone(), Box::new(a)) }
+}
+
+/// A message window's content, as Outlook's: its tabs and ribbon over the message, or its own File
+/// page in their place; and its dialog. All but the message are drawn while its message stands in
+/// as the one selected and read, so that what's offered is for it, wherever the main window is.
+fn message_content(ui: &mut Ui, session: &mut Session, st: &mut UiState, w: &quatrelle_engine::Reading, mine: &mut Vec<Action>) {
+    let t = st.tokens;
+    let key = &w.key;
+    let scope = session.enter_window(key);
+    let filing = file_page::shown(ui.ctx(), key);
+    if filing {
+        file_page::page(ui, session, &t, w, mine);
+    } else {
+        egui::Panel::top(egui::Id::unique(("message-window-ribbon", key.to_id())))
+            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
+            .show(ui, |ui| ribbon::message_ribbon(ui, session, st, w, mine));
+    }
+    if let Some((k, mut d)) = st.window_dialog.take() {
+        if k == *key {
+            let keep = dialogs::show(ui.ctx(), &mut d, session, &mut st.people, &mut st.pictures, &t, mine);
+            if keep && st.window_dialog.is_none() {
+                st.window_dialog = Some((k, d));
+            }
+        } else {
+            st.window_dialog = Some((k, d));
+        }
+    }
+    if let Some(scope) = scope {
+        session.leave_window(scope);
+    }
+    if !filing {
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
+            reading::window(session, st, ui, w.clone(), mine);
+        });
     }
 }
 
@@ -498,64 +601,4 @@ pub fn after_open(ui: &Ui, place: Option<WindowPlace>) {
 /// A closed window opens afresh next time ([`after_open`]).
 pub(crate) fn forget_open(ctx: &egui::Context, viewport: egui::ViewportId) {
     ctx.data_mut(|d| d.remove::<Option<WindowPlace>>(egui::Id::unique(("after-open", viewport))));
-}
-
-/// The toolbar of a message window. Replying and forwarding happen in the main window, so
-/// they close this one; so do Delete and Archive.
-pub(crate) fn window_toolbar(ui: &mut Ui, s: &Session, t: &Tokens, key: &MessageKey, acts: &mut Vec<Action>) {
-    let close = || Action::Run("message.closeWindow", json!({"key": key.to_id()}));
-    let flagged = s.summary(key).is_some_and(|m| m.flags.flagged);
-    let unread = s.summary(key).is_some_and(|m| !m.flags.seen);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        for (id, icon, label) in
-            [("mail.reply", Icon::Reply, "Reply"), ("mail.replyAll", Icon::ReplyAll, "Reply all"), ("mail.forward", Icon::Forward, "Forward")]
-        {
-            if widgets::tool_button(ui, icon, label, t, true).clicked() {
-                acts.push(Action::Open(key.clone()));
-                acts.push(Action::Run(id, json!({})));
-                acts.push(Action::FocusMain);
-                acts.push(close());
-            }
-        }
-        widgets::group_sep(ui, t);
-        // Delete as the Delete key does: asked first in Deleted Items, where it's for good.
-        if widgets::tool_button(ui, Icon::Delete, "Delete", t, true).clicked() {
-            acts.extend(super::keys::delete_from_window(s, key, false));
-        }
-        if widgets::tool_button(ui, Icon::Archive, "Archive", t, true).clicked() {
-            acts.push(Action::Open(key.clone()));
-            acts.push(Action::Run("mail.archive", json!({})));
-            acts.push(close());
-        }
-        if widgets::tool_button(ui, Icon::Move, "Move to", t, true).clicked() {
-            acts.push(Action::Open(key.clone()));
-            acts.push(Action::Dialog(Dialog::move_to()));
-            acts.push(Action::FocusMain);
-            acts.push(close());
-        }
-        widgets::group_sep(ui, t);
-        let (ricon, rlabel) = if unread { (Icon::Read, "Mark read") } else { (Icon::Unread, "Mark unread") };
-        if widgets::tool_button(ui, ricon, rlabel, t, true).clicked() {
-            acts.push(Action::Run("list.select", json!({"key": key.to_id()})));
-            acts.push(Action::Run(if unread { "mail.markRead" } else { "mail.markUnread" }, json!({})));
-        }
-        if widgets::tool_button(ui, Icon::Flag, if flagged { "Unflag" } else { "Flag" }, t, true).clicked() {
-            acts.push(Action::Run("list.select", json!({"key": key.to_id()})));
-            acts.push(Action::Run("mail.flag", json!({"on": !flagged})));
-        }
-        widgets::group_sep(ui, t);
-        if widgets::tool_button(ui, Icon::Print, "Print", t, true).clicked() {
-            acts.push(Action::Open(key.clone()));
-            acts.push(Action::Print);
-        }
-        // Drawn inside the page (the browser), the window has no title bar to close it from.
-        if ui.ctx().embed_viewports() {
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if widgets::tool_button(ui, Icon::Close, "Close", t, true).clicked() {
-                    acts.push(close());
-                }
-            });
-        }
-    });
 }

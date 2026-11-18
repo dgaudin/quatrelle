@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Menus and marks for organising mail: Categorize, Snooze, rules.
+//! Menus and marks for organising mail: Categorize, Snooze, rules, Find related.
 
 use egui::{RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
@@ -123,5 +123,19 @@ pub fn context_items(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action
         let server = s.server_kind(&m.key.account).is_some();
         acts.push(Action::Dialog(Dialog::rule_from(sender, Some(&m.key.account), server, Some(&m.key.folder))));
         ui.close();
+    }
+}
+
+/// Find related's searches, as Outlook's: the messages of the conversation (by its subject), or
+/// everything from the sender.
+pub fn find_related(ui: &mut Ui, subject: &str, sender: &str, acts: &mut Vec<Action>) {
+    let topic = quatrelle_engine::model::thread::base_subject(subject);
+    let searches =
+        [("Messages in this conversation", format!("subject:\"{}\"", topic.replace('"', ""))), ("Messages from sender", format!("from:{sender}"))];
+    for (label, query) in searches {
+        if ui.button(tl!(label)).clicked() {
+            acts.push(Action::Search(query));
+            ui.close();
+        }
     }
 }

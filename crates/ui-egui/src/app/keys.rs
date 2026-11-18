@@ -224,7 +224,7 @@ impl MailApp {
                     // A message's page of its own (the browser): its message, not the list's
                     // selection.
                     if let Some(k) = self.ui.page_message.clone() {
-                        for a in delete_from_window(&self.session, &k, for_good) {
+                        for a in delete_from_window(&k, for_good) {
                             self.act(a);
                         }
                         continue;
@@ -340,18 +340,11 @@ fn question<'a>(s: &Session, keys: impl Iterator<Item = &'a MessageKey>, count: 
 }
 
 /// Delete (or, `for_good`, Shift+Delete) on the message of a window of its own, or of the
-/// browser's page for one: that message, asked first as in the list; the window closes. One no
-/// longer in the list (another folder opened since) isn't deleted: the list's selection would be,
-/// in its place.
-pub(crate) fn delete_from_window(s: &Session, key: &MessageKey, for_good: bool) -> Vec<Action> {
-    if s.summary(key).is_none() {
-        return vec![Action::Refuse(tl!("This message is no longer in the list: open its folder to delete it.").to_string())];
-    }
-    let close = Action::Run("message.closeWindow", json!({"key": key.to_id()}));
-    if let Some(d) = question(s, std::iter::once(key), 1, for_good) {
-        return vec![Action::Open(key.clone()), Action::Dialog(d), Action::FocusMain, close];
-    }
-    vec![Action::Open(key.clone()), Action::Run(if for_good { "mail.deleteForGood" } else { "mail.delete" }, json!({})), close]
+/// browser's page for one: that message, wherever the main window's list is, asked first in that
+/// window as in the list, the main window's selection left as it is; the window closes once it's
+/// gone.
+pub(crate) fn delete_from_window(key: &MessageKey, for_good: bool) -> Vec<Action> {
+    vec![Action::InWindow(key.clone(), Box::new(Action::DeleteMail { for_good }))]
 }
 
 /// A command whose shortcut acts on the messages selected in Mail, or moves through its list:

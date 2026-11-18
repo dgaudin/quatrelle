@@ -150,7 +150,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     }
 }
 
-fn rail_item(ui: &mut Ui, t: &Tokens, icon: Icon, label: &str, on: bool) -> egui::Response {
+/// An entry of the File page's rail (a message window's File page has the same).
+pub(crate) fn rail_item(ui: &mut Ui, t: &Tokens, icon: Icon, label: &str, on: bool) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 38.0), Sense::click());
     crate::widgets::named(ui, &resp, tl!(label), true, Some(on));
     if on || resp.hovered() {

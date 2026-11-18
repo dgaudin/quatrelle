@@ -166,19 +166,16 @@ pub fn show(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Actio
     });
 }
 
-/// A message in a window of its own. What it asks for applies to that message: it becomes the
-/// open one first.
+/// A message in a window of its own. What it asks for applies to that message: the window hands
+/// it on as its own ([`Action::InWindow`]), the main window's selection left as it is.
 pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: quatrelle_engine::Reading, acts: &mut Vec<Action>) {
-    let key = w.key.clone();
+    // At its own zoom (the main window's put back after).
+    let own = s.window_zoom(&w.key);
+    let zoom = std::mem::replace(&mut s.prefs.reading_zoom, own);
     let saved = s.reading.replace(w);
-    let mut mine = Vec::new();
-    message(s, st, ui, &mut mine, true);
+    message(s, st, ui, acts, true);
     s.reading = saved;
-    // Only refusals said (its text alone here): the message isn't opened again, nor fetched.
-    if mine.iter().any(|a| !matches!(a, Action::Refuse(_))) {
-        acts.push(Action::Open(key));
-    }
-    acts.extend(mine);
+    s.prefs.reading_zoom = zoom;
 }
 
 /// What asking for something that needs the whole message says while only its text is here:
@@ -248,7 +245,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         let formatted = shown_formatted(s, st, &r.key, p);
         egui::ScrollArea::vertical().auto_shrink([false, true]).max_height(most).id_salt(("reading-head", in_window, r.key.to_id())).show(ui, |ui| {
             egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: 18, bottom: 4 }).show(ui, |ui| {
-                placed = header::header(s, t, ui, &r, p, &summary, formatted, in_window, acts);
+                placed = header::header(s, t, ui, &r, p, &summary, formatted, acts);
             });
         });
         egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: 0, bottom: 4 }).show(ui, |ui| {
@@ -457,7 +454,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         && ui.rect_contains_pointer(scrolled.inner_rect)
         && let Some(percent) = zoom_step(ui.ctx(), s.prefs.reading_zoom)
     {
-        acts.push(Action::Run("view.zoom", json!({"percent": percent})));
+        // A window's own zoom, or the main window's.
+        let params = if in_window { json!({"percent": percent, "key": r.key.to_id()}) } else { json!({"percent": percent}) };
+        acts.push(Action::Run("view.zoom", params));
     }
     // The message scrolled under the header: a line between them.
     if headed && scrolled.state.clamped_offset().y > 0.5 {

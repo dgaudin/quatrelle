@@ -2079,7 +2079,6 @@ menu	View	查看
 	Contact card	联系人名片
 	All files	所有文件
 	{ext} file	{ext} 文件
-	This message is no longer in the list: open its folder to delete it.	此邮件已不在列表中：请打开其所在文件夹后再删除。
 	Shift+Delete deletes mail for good, as Delete does in Deleted Items	Shift+Del 会永久删除邮件，与在“已删除邮件”中按 Del 相同
 	Drop to add them to {folder}	放下即可添加到 {folder}
 	Added to {folder}: {n}	已添加到 {folder}：{n}
@@ -2363,3 +2362,4 @@ presence	Offline	离线
 	Call	通话
 	Audio call	语音通话
 	Video call	视频通话
+	Zoom	缩放

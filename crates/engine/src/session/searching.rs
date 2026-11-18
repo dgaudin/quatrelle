@@ -14,6 +14,54 @@ pub(crate) use indexing::SearchIndex;
 pub(crate) use pace::Pace;
 pub use pace::SearchClock;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SearchScope {
+    /// Every folder of every account (Outlook's All Mailboxes).
+    All,
+    /// Every folder of the account on view (Outlook's Current Mailbox, its default); every
+    /// account's from a unified view.
+    #[default]
+    Mailbox,
+    /// The folder on view and the folders inside it.
+    Subfolders,
+    /// The folder (or unified view) on screen.
+    Current,
+}
+
+impl SearchScope {
+    pub const ALL: [SearchScope; 4] = [SearchScope::Current, SearchScope::Subfolders, SearchScope::Mailbox, SearchScope::All];
+
+    /// Its name in commands (`search.run`'s `scope`).
+    pub fn code(self) -> &'static str {
+        match self {
+            SearchScope::All => "all",
+            SearchScope::Mailbox => "mailbox",
+            SearchScope::Subfolders => "subfolders",
+            SearchScope::Current => "current",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<SearchScope> {
+        SearchScope::ALL.into_iter().find(|s| s.code().eq_ignore_ascii_case(code))
+    }
+}
+
+/// A search asked of the servers ([`Session::search_server`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ServerSearch {
+    /// Which search it is (the jobs' `search`), so a newer one stops it.
+    pub id: u64,
+    pub query: String,
+    /// Accounts still searching.
+    pub pending: usize,
+    /// What the servers found (in their folders' lists now), shown whether or not the words are
+    /// in what's downloaded here.
+    pub found: HashSet<MessageKey>,
+    /// Why an account couldn't search.
+    pub errors: Vec<String>,
+}
+
 /// Sent at least this long ago with nothing back, a message is waiting for a reply
 /// (`is:awaiting`); sent longer ago than [`AWAITING_WITHIN_DAYS`], it no longer is.
 pub const AWAITING_AFTER_DAYS: i64 = 2;

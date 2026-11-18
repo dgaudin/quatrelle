@@ -37,27 +37,34 @@ pub(crate) fn policy_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>, targ
     if !s.offers_policy(account, folder) {
         return;
     }
-    ui.menu_button((widgets::menu_icon(Some(Icon::Clock)), tl!("Policy")), |ui| {
-        // A message whose tags aren't known (one of several selected, which a right-click doesn't
-        // open; one opened before the server told its tags) has them asked: once, the engine
-        // remembering it asked.
-        if let PolicyFor::Mail(k) = target
-            && !s.message_tags_known(k)
-        {
-            acts.push(Action::Run("mail.readPolicy", json!({"key": k.to_id()})));
+    ui.menu_button((widgets::menu_icon(Some(Icon::Clock)), tl!("Policy")), |ui| policy_parts(ui, s, acts, target));
+}
+
+/// The submenu's parts (the ribbon of a message's window shows them under its Policy button).
+pub(crate) fn policy_parts(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>, target: PolicyFor<'_>) {
+    let account = match target {
+        PolicyFor::Mail(k) => k.account.as_str(),
+        PolicyFor::Folder(a, _) => a,
+    };
+    // A message whose tags aren't known (one of several selected, which a right-click doesn't
+    // open; one opened before the server told its tags) has them asked: once, the engine
+    // remembering it asked.
+    if let PolicyFor::Mail(k) = target
+        && !s.message_tags_known(k)
+    {
+        acts.push(Action::Run("mail.readPolicy", json!({"key": k.to_id()})));
+    }
+    let mut first = true;
+    for kind in PolicyKind::ALL {
+        if s.policy_tags(account, kind).next().is_none() {
+            continue;
         }
-        let mut first = true;
-        for kind in PolicyKind::ALL {
-            if s.policy_tags(account, kind).next().is_none() {
-                continue;
-            }
-            if !first {
-                ui.separator();
-            }
-            first = false;
-            policy_part(ui, s, acts, target, kind);
+        if !first {
+            ui.separator();
         }
-    });
+        first = false;
+        policy_part(ui, s, acts, target, kind);
+    }
 }
 
 /// One part of the submenu: its heading, the tags of its kind, « As its folder ».

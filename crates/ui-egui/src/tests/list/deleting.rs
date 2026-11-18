@@ -40,8 +40,11 @@ fn press(ctx: &egui::Context, a: &mut MailApp, k: Key, m: Modifiers) {
     }
 }
 
+/// Whether Delete asks about `n` messages: in the main window, or in the window of the message it
+/// deletes (a message's page of its own).
 fn asking(a: &MailApp, n: usize) -> bool {
-    matches!(a.ui.dialog, Some(Dialog::ConfirmDelete { count, .. }) if count == n)
+    let asked = a.ui.dialog.as_ref().or(a.ui.window_dialog.as_ref().map(|(_, d)| d));
+    matches!(asked, Some(Dialog::ConfirmDelete { count, .. }) if *count == n)
 }
 
 #[test]
@@ -118,8 +121,8 @@ fn in_the_outbox_shift_delete_is_delete() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// A message's page of its own (the browser): Shift+Delete deletes that message, asked first,
-/// not the one selected in the list; one no longer in the list isn't deleted (nor the list's).
+/// A message's page of its own (the browser): Shift+Delete deletes that message, asked first (in
+/// that page), not the one selected in the list, wherever the list is.
 #[test]
 fn in_a_messages_own_page_shift_delete_deletes_its_message() {
     let (a, dir) = app("shift-delete-page");
@@ -137,18 +140,19 @@ fn in_a_messages_own_page_shift_delete_deletes_its_message() {
     assert!(!kept(&tab, "INBOX") && !kept(&tab, "Trash"), "the page's message, for good");
     assert!(kept_as(&tab, "INBOX", other), "not the one selected in the list");
 
-    // Another folder shown since: the page's message isn't in the list, the list's isn't taken.
+    // Another folder shown since: the page's message isn't in the list, it's still the one
+    // deleted, and none of the list's.
     tab.show_message_page(&key_of(&tab, other).to_id());
     tab.run("folder.open", json!({"account": "sample", "folder": "Archive"}));
     tab.run("list.selectAll", json!({}));
     let archived = tab.session.selection.len();
     assert!(archived > 0, "something selected in the list");
     frame(&ctx, &mut tab, vec![]);
-    let said = tab.session.notices.len();
     press(&ctx, &mut tab, Key::Delete, Modifiers::SHIFT);
-    assert!(tab.ui.dialog.is_none() && kept_as(&tab, "INBOX", other), "refused");
+    assert!(asking(&tab, 1), "asked first");
+    press(&ctx, &mut tab, Key::Enter, Modifiers::NONE);
+    assert!(!kept_as(&tab, "INBOX", other) && !kept_as(&tab, "Trash", other), "the page's message, for good");
     assert_eq!(tab.session.store.as_ref().unwrap().load_folder("sample", "Archive").unwrap().messages.len(), archived, "Archive untouched");
-    assert!(tab.session.notices.len() > said, "said why");
     let _ = std::fs::remove_dir_all(dir);
 }
 

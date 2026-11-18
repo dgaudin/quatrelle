@@ -24,7 +24,6 @@ pub(super) fn header(
     p: &mime::Parsed,
     summary: &Option<Summary>,
     formatted: bool,
-    in_window: bool,
     acts: &mut Vec<Action>,
 ) -> bool {
     let mut placed = false;
@@ -80,7 +79,7 @@ pub(super) fn header(
             egui::TextStyle::Small,
         );
         // In a pane wide enough, the reply group goes above the date, as Outlook's header has it.
-        let full = offers_actions(s, r, in_window).then(|| action_width(ui, s, false));
+        let full = offers_actions(s, r).then(|| action_width(ui, s, false));
         let with_actions = full.filter(|w| ui.available_width() - w - 16.0 >= MIN_SENDER);
         placed = with_actions.is_some();
         let right = with_actions.map_or(date.size().x, |w| w.max(date.size().x));
@@ -116,7 +115,10 @@ pub(super) fn header(
                         if i > 0 {
                             ui.label(RichText::new("; ").color(t.dim).small());
                         }
-                        let r = person_link(ui, &t, RichText::new(crate::bidi::shown(a.display()).0).color(t.dim).small());
+                        // The name, its address on hover, as Outlook's.
+                        let name = shown_name(ui.ctx(), s, a);
+                        let r = person_link(ui, &t, RichText::new(crate::bidi::shown(&name).0).color(t.dim).small());
+                        let r = if name != a.email.trim() && !a.email.trim().is_empty() { r.on_hover_text(a.email.trim()) } else { r };
                         person_menus(s, &t, &r, a, acts);
                     }
                     if list.len() > MAX_PEOPLE_SHOWN {
@@ -230,10 +232,10 @@ fn acted_line(s: &Session, f: &quatrelle_engine::model::Flags) -> Option<(Icon, 
     }
 }
 
-/// Whether the message has Reply | Reply all | Forward beside it: not in a window (its ribbon
-/// has them) nor in the Outbox (Send now… instead).
-fn offers_actions(s: &Session, r: &quatrelle_engine::Reading, in_window: bool) -> bool {
-    !in_window && s.outbox_entry(&r.key).is_none()
+/// Whether the message has Reply | Reply all | Forward beside it, as Outlook's header has them in
+/// the reading pane and in a message's own window: not in the Outbox (Send now… instead).
+fn offers_actions(s: &Session, r: &quatrelle_engine::Reading) -> bool {
+    s.outbox_entry(&r.key).is_none()
 }
 
 /// The reply group's labels.
@@ -351,7 +353,7 @@ pub(super) fn actions(
                 acts.push(Action::Run("outbox.edit", json!({"key": r.key.to_id()})));
             }
             if widgets::pill_button(ui, Icon::Delete, "Delete", &t).clicked() {
-                delete(s, &r.key, in_window, acts);
+                delete(&r.key, in_window, acts);
             }
         });
     } else if s.folder(&r.key.account, &r.key.folder).is_some_and(|f| f.role == quatrelle_engine::model::FolderRole::Drafts)
@@ -369,10 +371,10 @@ pub(super) fn actions(
                 acts.push(Action::Run("draft.edit", json!({"key": r.key.to_id()})));
             }
             if widgets::pill_button(ui, Icon::Delete, "Delete", &t).clicked() {
-                delete(s, &r.key, in_window, acts);
+                delete(&r.key, in_window, acts);
             }
         });
-    } else if !in_window && !placed {
+    } else if !placed {
         // On one line: their icons alone when it has no room for their words.
         let compact = ui.available_width() < action_width(ui, s, false);
         ui.horizontal(|ui| action_row(s, &t, ui, r, p, formatted, compact, acts));
@@ -381,9 +383,9 @@ pub(super) fn actions(
 
 /// Delete pressed on the message read: asked first where it's for good, as the Delete key does;
 /// in a window of its own, that window's message (not the list's selection), as its toolbar does.
-fn delete(s: &Session, key: &MessageKey, in_window: bool, acts: &mut Vec<Action>) {
+fn delete(key: &MessageKey, in_window: bool, acts: &mut Vec<Action>) {
     if in_window {
-        acts.extend(crate::app::delete_from_window(s, key, false));
+        acts.extend(crate::app::delete_from_window(key, false));
     } else {
         acts.push(Action::DeleteMail { for_good: false });
     }

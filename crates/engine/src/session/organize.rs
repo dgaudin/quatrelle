@@ -337,10 +337,16 @@ impl Session {
             let Some(first) = self.prefs.ignored.iter().next().cloned() else { break };
             self.prefs.ignored.remove(&first);
         }
-        let keys: BTreeSet<MessageKey> = members.iter().map(|m| m.key.clone()).collect();
-        self.selection = keys.into_iter().collect();
-        let n = self.selection.len();
-        self.move_selection(MoveTarget::Role(FolderRole::Trash))?;
+        // Moved as found in their folders, not through the list on screen: a list that doesn't
+        // hold them all (another folder shown, a filter, a message's own window) moved only some.
+        members.sort_by(|x, y| x.key.cmp(&y.key));
+        members.dedup_by(|x, y| x.key == y.key);
+        let keys: Vec<MessageKey> = members.iter().map(|m| m.key.clone()).collect();
+        let next = self.successor(&keys);
+        let members: Vec<Arc<Summary>> = members.into_iter().map(Arc::new).collect();
+        let n = members.len();
+        self.move_messages(&members, &MoveTarget::Role(FolderRole::Trash))?;
+        self.after_removal(next);
         Ok(serde_json::json!({ "ignoring": true, "moved": n }))
     }
 
