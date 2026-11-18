@@ -333,7 +333,9 @@ pub(crate) fn left(w: &mut Worker, chat: &str) {
 
 /// The copy was opened: what the steps look at begun again (the marks of before let go), a
 /// message left "Sending" (a run cut off during its request) checked rather than posted again, a
-/// change left so made again ([`changes::opened`]), and the outbox's count said.
+/// change left so made again ([`changes::opened`]), a message with files or pictures the copy
+/// alone vouches for let go, its files attached again ([`parts::opened`]), and the outbox's count
+/// said.
 pub(crate) fn opened(w: &mut Worker) {
     w.outbox = Outbox::default();
     let Some(copy) = &w.copy else { return };
@@ -349,7 +351,7 @@ pub(crate) fn opened(w: &mut Worker) {
     if cut > 0 {
         log::info!("teams: {cut} messages were being sent when the last run stopped: whether Teams has them is checked");
     }
-    for item in changes::opened(w, &mut ops) {
+    for item in changes::opened(w, &mut ops).into_iter().chain(parts::opened(w, &mut ops)) {
         let chat = item.chat.clone();
         snapshot(w, &ops, &chat, None, vec![item]);
     }

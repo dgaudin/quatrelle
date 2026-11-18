@@ -14,8 +14,8 @@ use quatrelle_model::pim::teams::{
     NAME_CHARS, REACTION_CHARS, SHARE_PEOPLE, Sender, is_bidi, is_object_id, person_ok,
 };
 use quatrelle_net::teams::graph::{
-    MAX_ROLES, RangeAnswer, chat_of, chat_of_unguarded, drive_item_of, etag_guid, member_of, message_of, message_of_unguarded, next_expected_of,
-    person_of, presence_of, range_answer_of, shared_of, transfer_url, upload_url_of,
+    MAX_ROLES, RangeAnswer, chat_of, chat_of_unguarded, drive_item_of, etag_guid, in_upload_folder, member_of, message_of, message_of_unguarded,
+    next_expected_of, person_of, presence_of, range_answer_of, shared_of, transfer_url, upload_url_of,
 };
 use serde_json::Value;
 
@@ -104,6 +104,7 @@ fn read_files(v: &Value) {
         assert!(item.web_dav_url.len() <= 8 << 10 && !item.web_dav_url.chars().any(|c| c.is_whitespace() || c.is_control()));
     }
     let _ = upload_url_of(v);
+    let _ = in_upload_folder(v);
     for asked in [0, 2, SHARE_PEOPLE] {
         let shared = shared_of(v, asked);
         assert_eq!(shared.granted + shared.failed, asked);

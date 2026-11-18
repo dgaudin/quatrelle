@@ -22,6 +22,9 @@ use crate::fake_graph::{FakeChat, FakeMessage, FakeTeams, FakeUser, rfc3339};
 use crate::teams::graph::etag_guid;
 use crate::teams::store::{OpState, PartRecord, Uploaded};
 
+/// What a file's share trusts: the outbox read back, the item OneDrive made, the members.
+mod trust;
+
 /// The other members, by their object ids, as the organisation's people have them.
 const ANA: &str = "00000000-0000-0000-0000-0000000000a1";
 const BRUNO: &str = "00000000-0000-0000-0000-0000000000a2";
@@ -511,21 +514,23 @@ fn a_post_with_a_picture_whose_answer_is_lost_is_found() {
     assert_eq!(r.w.copy.as_ref().unwrap().picture(seq, 0), None);
 }
 
-/// Review Focus 2: Quatrelle closed while a file goes up: started again, the upload begins anew
-/// and the message is posted once.
+/// Review Focus 2, then review 1.5 (files 1): Quatrelle closed while a file goes up. Started
+/// again, the message isn't taken up from what the copy says of its file: it leaves the outbox and
+/// is said "Not sent" without a number, its file by name (attached again to send it); nothing more
+/// goes up, nothing is posted.
 #[test]
-fn a_run_cut_off_while_uploading_starts_again_and_posts_once() {
+fn a_run_cut_off_while_uploading_asks_for_its_file_again() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
     r.fake(|t| t.hold = Some(("upload", Duration::from_secs(60))));
-    let bytes = content(6 * MIB);
-    let path = file("big.bin", &bytes);
+    let path = file("big.bin", &content(6 * MIB));
     r.send_with(CHAT, "1-1", "Through a restart", vec![Part::File { path }]);
     assert!(until(&mut r, |r| r.hits("upload") >= 1), "the upload never began");
     let (mut r, _) = restart(r, false);
-    assert_eq!(first_state(&r), Some(OpState::Waiting), "kept as waiting");
-    assert!(until(&mut r, |r| r.ops().is_empty()), "{:?}", r.ops());
-    assert_eq!((r.hits("post"), r.held(CHAT, "Through a restart")), (1, 1));
-    assert!(r.fake(|t| t.drive_files.files.last().is_some_and(|f| f.bytes == bytes)), "the file's bytes once");
+    assert!(r.ops().is_empty(), "it left the outbox: {:?}", r.ops());
+    let o = r.outbox_said(CHAT).into_iter().find(|o| o.local == "1-1").unwrap_or_else(|| panic!("{:?}", r.events()));
+    assert_eq!((o.seq, o.state, o.parts.len()), (0, OutState::NotSent { reason: Unsent::FileGone, code: None }, 1));
+    r.turns(Duration::from_secs(20));
+    assert_eq!((r.hits("uploadSession"), r.hits("post"), r.held(CHAT, "Through a restart")), (1, 0, 0));
 }
 
 /// Final review, net I-2: "Work offline" while a file goes up stops the upload at once (its

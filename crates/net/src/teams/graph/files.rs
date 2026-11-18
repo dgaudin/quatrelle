@@ -168,6 +168,10 @@ pub struct DriveItem {
     pub guid: String,
     /// Its WebDAV address: the attachment's `contentUrl`.
     pub web_dav_url: String,
+    /// Whether it is a file (Graph's `file` facet): not a folder, a package or a notebook.
+    pub file: bool,
+    /// Whether it is right in [`UPLOAD_FOLDER`], at its drive's root ([`in_upload_folder`]).
+    pub in_upload_folder: bool,
 }
 
 /// What a share did: the recipients granted, and those it failed for.
@@ -234,13 +238,15 @@ impl TeamsClient {
     }
 
     /// A file of the user's OneDrive, with what a message needs of it: its name, size, eTag's GUID
-    /// and WebDAV address (asked for by name: Graph gives it only then). The id must be one
-    /// segment of the address ([`own_segment`]), else it is refused before any request.
+    /// and WebDAV address (asked for by name: Graph gives it only then), and what it is and where
+    /// (its `file` facet, its `parentReference`). The id must be one segment of the address
+    /// ([`own_segment`]), else it is refused before any request.
     pub fn drive_item(&self, id: &str) -> Result<DriveItem> {
         if !own_segment(id) {
             return Err(NetError::Refused("not a file's id".into()));
         }
-        let v = self.json("GET", &self.at(&format!("/me/drive/items/{}?$select=id,eTag,webDavUrl,webUrl,name,size", seg(id))), None, false)?;
+        let select = "id,eTag,webDavUrl,webUrl,name,size,file,parentReference";
+        let v = self.json("GET", &self.at(&format!("/me/drive/items/{}?$select={select}", seg(id))), None, false)?;
         drive_item_of(&v).ok_or_else(|| NetError::Protocol("Graph: a file's item without what a message needs".into()))
     }
 
@@ -564,7 +570,8 @@ pub fn etag_guid(etag: &str) -> Option<String> {
 
 /// A file's item (Graph's `driveItem`) as a message needs it: an id that is one segment of an
 /// address, a name (made a [`drive_name`]), its eTag's GUID and an `https` WebDAV address; its
-/// size, 0 when not said.
+/// size, 0 when not said; whether it has the `file` facet, and is right in [`UPLOAD_FOLDER`]
+/// ([`in_upload_folder`]).
 pub fn drive_item_of(v: &Value) -> Option<DriveItem> {
     let text = |k: &str| v.get(k).and_then(Value::as_str);
     Some(DriveItem {
@@ -573,7 +580,23 @@ pub fn drive_item_of(v: &Value) -> Option<DriveItem> {
         size: v.get("size").and_then(Value::as_u64).unwrap_or(0),
         guid: text("eTag").and_then(etag_guid)?,
         web_dav_url: text("webDavUrl").filter(|u| web_address(u))?.to_string(),
+        file: v.get("file").is_some_and(Value::is_object),
+        in_upload_folder: v.get("parentReference").is_some_and(in_upload_folder),
     })
+}
+
+/// Whether an item's `parentReference` is [`UPLOAD_FOLDER`] at its drive's root: its `path`
+/// (`/drive/root:/Microsoft Teams Chat Files`, percent-encoded or not, at most 8 KiB), or, when it
+/// says none, its `name`. Any other folder, deeper or elsewhere, isn't.
+pub fn in_upload_folder(parent: &Value) -> bool {
+    match parent.get("path").and_then(Value::as_str) {
+        Some(path) if path.len() <= MAX_TRANSFER_URL => {
+            let path = crate::oauth::unpct(path);
+            path.rsplit_once("root:").is_some_and(|(_, rest)| rest.strip_prefix('/').is_some_and(|f| f.eq_ignore_ascii_case(UPLOAD_FOLDER)))
+        }
+        Some(_) => false,
+        None => parent.get("name").and_then(Value::as_str).is_some_and(|n| n.eq_ignore_ascii_case(UPLOAD_FOLDER)),
+    }
 }
 
 /// A share's answer when some of the `asked` recipients failed (207): those it lists as granted
