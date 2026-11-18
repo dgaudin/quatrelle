@@ -58,6 +58,19 @@ fn not_found() -> io::Error {
     io::Error::from(io::ErrorKind::NotFound)
 }
 
+/// What a file read within a cap says when it's longer ([`Files::read_within`]).
+pub(crate) fn too_large() -> io::Error {
+    io::Error::new(io::ErrorKind::FileTooLarge, "a file past its cap")
+}
+
+/// A file on disk, at most `max` bytes: never more read than `max` and a byte.
+pub(crate) fn read_disk_within(p: &Path, max: u64) -> io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    fs::File::open(p)?.take(max.saturating_add(1)).read_to_end(&mut out)?;
+    if out.len() as u64 > max { Err(too_large()) } else { Ok(out) }
+}
+
 /// The paths at or under `dir` in memory, from where they start in the map (paths sort by
 /// component, so everything under a folder is together): an online-only account's listing doesn't
 /// pass over every other file.
@@ -91,6 +104,25 @@ impl Files {
             Files::Failing(f) => {
                 Faults::check(&f.reads, p)?;
                 f.files.read(p)
+            }
+        }
+    }
+
+    /// [`Files::read`], at most `max` bytes: a longer file is refused as it is read
+    /// ([`too_large`]), never held past `max` and a byte.
+    pub(super) fn read_within(&self, p: &Path, max: u64) -> io::Result<Vec<u8>> {
+        match self {
+            Files::Disk => read_disk_within(p, max),
+            #[cfg(not(target_arch = "wasm32"))]
+            Files::Packed(x) => x.read_within(p, max),
+            Files::Memory(m, _) => Files::with(m, |m| match m.get(p) {
+                Some(b) if b.len() as u64 > max => Err(too_large()),
+                Some(b) => Ok(b.clone()),
+                None => Err(not_found()),
+            }),
+            Files::Failing(f) => {
+                Faults::check(&f.reads, p)?;
+                f.files.read_within(p, max)
             }
         }
     }
@@ -365,6 +397,10 @@ impl Routed {
 
     pub(super) fn read(&self, p: &Path) -> io::Result<Vec<u8>> {
         self.at(p).read(p)
+    }
+
+    pub(super) fn read_within(&self, p: &Path, max: u64) -> io::Result<Vec<u8>> {
+        self.at(p).read_within(p, max)
     }
 
     pub(super) fn write(&self, p: &Path, bytes: &[u8]) -> Result<()> {

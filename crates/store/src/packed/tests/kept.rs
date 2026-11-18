@@ -231,3 +231,38 @@ fn packing_reserves_what_an_attachment_comes_to() {
     }
     assert!(grown > 0, "no file came to between eight and nine tenths");
 }
+
+/// A file read within a cap (`account_file_within`: the Teams copy's records, its search index) is
+/// refused as it is read, never held past its cap and a byte: a crafted copy's record of 65 MiB of
+/// zeros, kept compressed in a few KiB, isn't inflated whole to be found too big after. Within its
+/// cap it reads whole; and so does a file that isn't compressed, refused before its pieces are read.
+#[test]
+fn a_record_past_its_cap_is_not_inflated() {
+    let t = temp("within");
+    let s = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    let cap = 64 << 20;
+    s.write_account_files("Teams", &[("chats/1f0c.json".into(), vec![0u8; 65 << 20])]).unwrap();
+    super::super::MOST_READ.with(|m| m.set(0));
+    let e = s.account_file_within("Teams", "chats/1f0c.json", cap).unwrap_err();
+    assert!(e.too_large(), "{e}");
+    let most = super::super::MOST_READ.with(std::cell::Cell::get);
+    assert!(most <= cap + 1, "{most} bytes inflated for a cap of {cap}");
+    let whole = s.account_file_within("Teams", "chats/1f0c.json", 65 << 20).unwrap();
+    assert_eq!(whole.map(|b| b.len()), Some(65 << 20));
+    // Bytes that don't compress, kept as they are in pieces.
+    let raw = noise(300_000, 5);
+    s.write_account_files("Teams", &[("msgs/1f0c/1.json".into(), raw.clone())]).unwrap();
+    assert!(s.account_file_within("Teams", "msgs/1f0c/1.json", 299_999).unwrap_err().too_large());
+    assert_eq!(s.account_file_within("Teams", "msgs/1f0c/1.json", 300_000).unwrap(), Some(raw));
+    assert_eq!(s.account_file_within("Teams", "msgs/1f0c/none.json", 10).unwrap(), None);
+    // A small one, kept whole, and a store in memory, the same.
+    s.write_account_files("Teams", &[("listed".into(), b"true".to_vec())]).unwrap();
+    assert!(s.account_file_within("Teams", "listed", 3).unwrap_err().too_large());
+    assert_eq!(s.account_file_within("Teams", "listed", 4).unwrap().as_deref(), Some(&b"true"[..]));
+    let m = Store::memory();
+    m.write_account_files("Teams", &[("listed".into(), b"true".to_vec())]).unwrap();
+    assert!(m.account_file_within("Teams", "listed", 3).unwrap_err().too_large());
+    assert_eq!(m.account_file_within("Teams", "listed", 4).unwrap().as_deref(), Some(&b"true"[..]));
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}

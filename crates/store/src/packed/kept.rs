@@ -34,6 +34,12 @@ pub(super) const INFLATE_MAX: u64 = 1 << 30;
 /// how long it is, and a crafted one can say 1 GiB with no pieces at all.
 const RESERVE_MAX: usize = 64 << 20;
 
+#[cfg(test)]
+thread_local! {
+    /// The most bytes a read of this thread has inflated (the tests' measure of what a read held).
+    pub(super) static MOST_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// A file as kept: compressed (fast deflate) when that saves a tenth or more.
 ///
 /// miniz_oxide is called directly rather than through flate2: in the app, another crate turns
@@ -60,16 +66,33 @@ pub(super) fn deflated(kept: &[u8]) -> bool {
     kept.starts_with(DEFLATED) || kept.starts_with(DEFLATED_OLD)
 }
 
-/// A file as kept, back as it was written.
+/// A file as kept, back as it was written (what the tests read a value as kept with).
+#[cfg(test)]
 pub(super) fn unpack(kept: Vec<u8>) -> io::Result<Vec<u8>> {
+    unpack_within(kept, INFLATE_MAX)
+}
+
+/// [`unpack`], at most `max` bytes as written: past them, refused as it is inflated (past
+/// [`INFLATE_MAX`], as damaged), never more than `max` and a byte held.
+fn unpack_within(kept: Vec<u8>, max: u64) -> io::Result<Vec<u8>> {
     use std::io::Read;
-    let Some(stream) = kept.strip_prefix(DEFLATED).or_else(|| kept.strip_prefix(DEFLATED_OLD)) else { return Ok(kept) };
-    let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(RESERVE_MAX));
-    flate2::read::DeflateDecoder::new(stream).take(INFLATE_MAX + 1).read_to_end(&mut out)?;
-    if out.len() as u64 > INFLATE_MAX {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "a compressed file is too big"));
+    let Some(stream) = kept.strip_prefix(DEFLATED).or_else(|| kept.strip_prefix(DEFLATED_OLD)) else {
+        return if kept.len() as u64 > max { Err(too_big(max)) } else { Ok(kept) };
+    };
+    let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(RESERVE_MAX).min(usize::try_from(max).unwrap_or(usize::MAX)));
+    flate2::read::DeflateDecoder::new(stream).take(max.min(INFLATE_MAX) + 1).read_to_end(&mut out)?;
+    #[cfg(test)]
+    MOST_READ.with(|m| m.set(m.get().max(out.len())));
+    if out.len() as u64 > max.min(INFLATE_MAX) {
+        return Err(too_big(max));
     }
     Ok(out)
+}
+
+/// A file longer than a read takes: past [`INFLATE_MAX`], a damaged one (what every read takes at
+/// most); past a cap a read set below it, a file too large for it ([`crate::files::too_large`]).
+fn too_big(max: u64) -> io::Error {
+    if max >= INFLATE_MAX { io::Error::new(io::ErrorKind::InvalidData, "a compressed file is too big") } else { crate::files::too_large() }
 }
 /// The database's page, and what a page run needs besides the value (its header and the key).
 pub(super) const PAGE: usize = 4096;
@@ -157,9 +180,22 @@ pub(super) fn read_file(
     files: &impl ReadableTable<&'static str, &'static [u8]>,
     key: &str,
 ) -> io::Result<Option<Vec<u8>>> {
+    read_file_within(tx, files, key, INFLATE_MAX)
+}
+
+/// [`read_file`], at most `max` bytes as written: a longer file is refused as it is read (a
+/// compressed one as it is inflated, one kept as it is before its pieces are read), never held
+/// past `max` and a byte.
+pub(super) fn read_file_within(
+    tx: &redb::ReadTransaction,
+    files: &impl ReadableTable<&'static str, &'static [u8]>,
+    key: &str,
+    max: u64,
+) -> io::Result<Option<Vec<u8>>> {
     use std::io::Read;
     let Some(v) = files.get(key).map_err(other)?.map(|g| g.value().to_vec()) else { return Ok(None) };
-    let Some(len) = pieced_len(&v) else { return unpack(v).map(Some) };
+    let Some(len) = pieced_len(&v) else { return unpack_within(v, max).map(Some) };
+    let max = max.min(INFLATE_MAX);
     let pieces = tx.open_table(PIECES).map_err(other)?;
     let mut reader = PieceReader { pieces: pieces.range((key, 0)..=(key, u32::MAX)).map_err(other)?, piece: None, at: 0, read: 0, failed: false };
     // Whether it's compressed: its first bytes, read before anything else (both prefixes are
@@ -167,10 +203,16 @@ pub(super) fn read_file(
     let mut head = Vec::with_capacity(DEFLATED.len());
     (&mut reader).take(DEFLATED.len() as u64).read_to_end(&mut head)?;
     let out = if head == DEFLATED || head == DEFLATED_OLD {
-        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).saturating_mul(3).min(RESERVE_MAX));
-        let inflated = flate2::read::DeflateDecoder::new(&mut reader).take(INFLATE_MAX + 1).read_to_end(&mut out);
+        let room = usize::try_from(len).unwrap_or(0).saturating_mul(3).min(RESERVE_MAX).min(usize::try_from(max).unwrap_or(usize::MAX));
+        let mut out = Vec::with_capacity(room);
+        let inflated = flate2::read::DeflateDecoder::new(&mut reader).take(max + 1).read_to_end(&mut out);
+        #[cfg(test)]
+        MOST_READ.with(|m| m.set(m.get().max(out.len())));
         if reader.failed {
             return Err(inflated.err().unwrap_or_else(|| io::Error::other("a piece couldn't be read")));
+        }
+        if out.len() as u64 > max {
+            return Err(too_big(max));
         }
         // What follows the stream, if anything, counted with the rest: a piece missing is told
         // as such whether or not the stream ended well without it.
@@ -179,11 +221,11 @@ pub(super) fn read_file(
             return Err(pieces_missing(key));
         }
         inflated?;
-        if out.len() as u64 > INFLATE_MAX {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "a compressed file is too big"));
-        }
         out
     } else {
+        if len > max {
+            return Err(too_big(max));
+        }
         let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).min(RESERVE_MAX));
         out.extend_from_slice(&head);
         reader.read_to_end(&mut out)?;

@@ -42,6 +42,8 @@ pub(crate) use parts::{PartRecord, Uploaded, fits, path_ok};
 /// The most bytes of a record read back (a page, a chat): more is a damaged or hostile file. Above
 /// the most a record within the caps takes (5,000 members, or one message's reactions).
 const MAX_RECORD: usize = 64 << 20;
+/// The longest `identity.json` read (two ids): a longer one is damaged.
+const MAX_IDENTITY: usize = 64 << 10;
 /// The longest kept `nextLink` read back.
 const MAX_LINK: usize = 8 << 10;
 /// The highest page number read back: a page past it is a damaged record.
@@ -271,7 +273,11 @@ impl Copy {
             return Err(refused("no identity to keep the copy for"));
         }
         let copy = Copy { store, images: images::images(), index: std::cell::RefCell::new(super::search::Index::new(&who.object_id)) };
-        let kept = copy.store.account_file(TEAMS_ACCOUNT, "identity.json")?;
+        // One past its cap is refused as it is read: damaged, whose it is can't be told.
+        let kept = match copy.store.account_file_within(TEAMS_ACCOUNT, "identity.json", MAX_IDENTITY) {
+            Err(e) if e.too_large() => Some(Vec::new()),
+            kept => kept?,
+        };
         let whose = match &kept {
             Some(bytes) => match serde_json::from_slice::<Identity>(bytes) {
                 Ok(id) if id.same(who) => return Ok((copy, Opened::Same)),
@@ -317,15 +323,15 @@ impl Copy {
         self.store.write_account_files(TEAMS_ACCOUNT, &[(LISTED.to_string(), b"true".to_vec())])
     }
 
-    /// A record's bytes, when there are some and not too many.
+    /// A record's bytes, when there are some and not too many: one past [`MAX_RECORD`] is refused
+    /// as it is read (inflated no further), and passed over.
     pub(super) fn read(&self, key: &str) -> Option<Vec<u8>> {
-        match self.store.account_file(TEAMS_ACCOUNT, key) {
-            Ok(Some(bytes)) if bytes.len() <= MAX_RECORD => Some(bytes),
-            Ok(Some(_)) => {
+        match self.store.account_file_within(TEAMS_ACCOUNT, key, MAX_RECORD) {
+            Ok(bytes) => bytes,
+            Err(e) if e.too_large() => {
                 log::warn!("Teams copy: a record past {MAX_RECORD} bytes passed over");
                 None
             }
-            Ok(None) => None,
             Err(e) => {
                 // Not the path: it names the chat's hash.
                 let why = match &e {

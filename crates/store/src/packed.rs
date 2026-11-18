@@ -283,6 +283,11 @@ impl Packs {
     }
 
     fn get(&self, account: &str, key: &str) -> io::Result<Option<Vec<u8>>> {
+        self.get_within(account, key, INFLATE_MAX)
+    }
+
+    /// [`Packs::get`], at most `max` bytes as written ([`read_file_within`]).
+    fn get_within(&self, account: &str, key: &str, max: u64) -> io::Result<Option<Vec<u8>>> {
         let Some(db) = self.db(account, false)? else { return Ok(None) };
         let tx = db.begin_read().map_err(other)?;
         let table = match tx.open_table(FILES) {
@@ -290,7 +295,7 @@ impl Packs {
             Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
             Err(e) => return Err(other(e)),
         };
-        read_file(&tx, &table, key)
+        read_file_within(&tx, &table, key, max)
     }
 
     /// Whether a file is there (without reading it).
@@ -434,6 +439,16 @@ impl Packs {
             Place::In(a, k) => self.get(&a, &k)?.ok_or_else(|| io::Error::from(io::ErrorKind::NotFound)),
             Place::Account(_) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
             Place::Disk => fs::read(p),
+        }
+    }
+
+    /// [`Packs::read`], at most `max` bytes as written: refused as it is read, never held past
+    /// `max` and a byte ([`read_file_within`]).
+    pub(crate) fn read_within(&self, p: &Path, max: u64) -> io::Result<Vec<u8>> {
+        match self.place(p) {
+            Place::In(a, k) => self.get_within(&a, &k, max)?.ok_or_else(|| io::Error::from(io::ErrorKind::NotFound)),
+            Place::Account(_) => Err(io::Error::from(io::ErrorKind::IsADirectory)),
+            Place::Disk => crate::files::read_disk_within(p, max),
         }
     }
 

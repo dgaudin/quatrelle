@@ -53,6 +53,13 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+impl StoreError {
+    /// Whether a file was refused for its length ([`Store::account_file_within`]).
+    pub fn too_large(&self) -> bool {
+        matches!(self, StoreError::Io { source, .. } if source.kind() == io::ErrorKind::FileTooLarge)
+    }
+}
+
 fn io_err(path: &Path) -> impl FnOnce(io::Error) -> StoreError + '_ {
     move |source| StoreError::Io { path: path.display().to_string(), source }
 }

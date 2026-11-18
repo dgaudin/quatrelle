@@ -68,6 +68,19 @@ impl Store {
         }
     }
 
+    /// [`Store::account_file`], at most `max` bytes as it was written: a longer one is refused as
+    /// it is read ([`StoreError::too_large`]), never held past `max` and a byte (a compressed one
+    /// is refused as it is inflated, one kept in pieces before its pieces are read). What a file
+    /// someone else may have written is read with (a copy's records, its index).
+    pub fn account_file_within(&self, account: &str, rel: &str, max: usize) -> Result<Option<Vec<u8>>> {
+        let path = self.inner(account, rel)?;
+        match self.files.read_within(&path, u64::try_from(max).unwrap_or(u64::MAX)) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(io_err(&path)(e)),
+        }
+    }
+
     /// Files kept with an account written together, by their places in it ([`Store::account_file`]):
     /// in one transaction of its data file, when it has one.
     pub fn write_account_files(&self, account: &str, files: &[(String, Vec<u8>)]) -> Result<()> {
