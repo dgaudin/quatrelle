@@ -14,6 +14,7 @@ mod items;
 mod mailtips;
 mod names;
 mod quote;
+mod reminder;
 mod reopen;
 mod senders;
 mod sending;
@@ -33,53 +34,6 @@ pub use sending::SendBlock;
 /// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To
 /// and Cc asks first.
 const EXPOSED_FROM: usize = 8;
-
-/// What a message says when something goes with it, folded (accents gone, lower case): the
-/// languages the interface speaks. A message carrying none of these and nothing attached goes
-/// after a look ([`SendCheck::MissingAttachment`]).
-const ATTACHMENT_PHRASES: [&str; 27] = [
-    "attached",
-    "attachment",
-    "attaching",
-    "enclosed",
-    "enclosure",
-    "ci-joint",
-    "ci joint",
-    "ci-jointes",
-    "ci jointes",
-    "piece jointe",
-    "pieces jointes",
-    "fichier joint",
-    "fichiers joints",
-    "en annexe",
-    "adjunto",
-    "adjunta",
-    "archivo adjunto",
-    "documento adjunto",
-    "anbei",
-    "anhang",
-    "angehangt",
-    "allegato",
-    "allegata",
-    "in allegato",
-    "em anexo",
-    "anexo",
-    "bijgevoegd",
-];
-
-/// Whether what was written says something goes with the message. Only whole words count:
-/// "unattached" isn't a promise of anything, and neither is a link.
-fn mentions_attachment(subject: &str, body: &str) -> bool {
-    let whole = format!("{subject}\n{body}");
-    let text = quatrelle_model::search::fold_word(&whole);
-    ATTACHMENT_PHRASES.iter().any(|p| {
-        text.match_indices(p).any(|(i, _)| {
-            let before = text.get(..i).and_then(|s| s.chars().next_back());
-            let after = text.get(i + p.len()..).and_then(|s| s.chars().next());
-            !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
-        })
-    })
-}
 
 /// Something to look at before a message goes (`compose.send` holds it and says what).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -433,11 +387,11 @@ impl Session {
         if people.len() >= EXPOSED_FROM {
             found.push(SendCheck::Exposed { count: people.len() });
         }
-        // Something said to be attached, and nothing is: the words in what was written, not in
-        // the original under a reply.
+        // Something said to be attached, and nothing is: the words the user wrote alone, not the
+        // signature, nor a reply's subject as it came, nor the original under it.
         if d.attachments.is_empty() {
-            let (own, _, _) = c.own_bodies();
-            if mentions_attachment(&d.subject, &own) {
+            let (own, subject) = reminder::own_words(c, &self.quote_words);
+            if reminder::mentions_attachment(subject, &own) {
                 found.push(SendCheck::MissingAttachment);
             }
         }
