@@ -32,6 +32,19 @@ pub(super) fn shown(url: &str) -> String {
     url.chars().filter(|&c| !is_bidi(c)).collect()
 }
 
+/// Whether a sender's link opens on a click: it, and what the window opens of it (out of the
+/// wrappers it takes off when links are `clean`ed: File › Options › Safety), are addresses a
+/// browser may be handed ([`launchable_link`]). The window checks the second again.
+pub(super) fn openable(url: &str, clean: bool) -> bool {
+    launchable_link(url) && (!clean || launchable_link(&quatrelle_engine::mime::clean_link(url)))
+}
+
+/// Where a sender's link goes, as it's shown (on hover, a card's host): out of every wrapper when
+/// links are `clean`ed, as the mail shows it; else as it's written.
+pub(super) fn destination(url: &str, clean: bool) -> String {
+    if clean { quatrelle_engine::mime::link_destination(url) } else { url.to_string() }
+}
+
 /// A message's pictures in the order they come: kept with it (their ids, from its text and its
 /// attachments, each once), at most [`HOSTED_PER_MESSAGE`], and from elsewhere (their
 /// addresses, each once), at most [`OUTSIDE_MAX`]. The rest aren't gathered: a message can carry

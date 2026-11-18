@@ -118,6 +118,22 @@ fn the_default_browser_when_chosen_or_none_found() {
     let _ = std::fs::remove_dir_all(dir2);
 }
 
+/// Security review 1.5 (content n° 3): a link out of its wrapper (links cleaned) is handed to the
+/// browser only if it's one a browser may be: one carrying user information
+/// (`banque.example@piege.example`) is refused and said so, as any link from a message.
+#[test]
+fn a_cleaned_link_opens_only_if_a_browser_may_be_handed_it() {
+    let (mut a, dir, o) = launching("link-cleaned", &[], false);
+    a.session.prefs.clean_links = true;
+    a.act(crate::Action::OpenUrl("https://www.google.com/url?q=https%3A%2F%2Fbanque.example%40piege.example%2F".into()));
+    assert!(opened(&o).is_empty(), "{:?}", opened(&o));
+    let said = a.session.notices.last().map(|n| (n.text.clone(), n.error));
+    assert!(said.as_ref().is_some_and(|(text, error)| *error && text.starts_with("Links like")), "{said:?}");
+    a.act(crate::Action::OpenUrl("https://www.google.com/url?q=https%3A%2F%2Fdocs.example%2Fplan".into()));
+    assert_eq!(opened(&o), ["url https://docs.example/plan"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The browser chosen in Options was uninstalled since: the first one found. Only a program the
 /// system offers is ever launched, whatever the setting says.
 #[test]

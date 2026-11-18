@@ -25,6 +25,9 @@ pub const NAME_CHARS: usize = 80;
 pub const MAX_ID: usize = 512;
 /// The most bytes of a message's body read and kept.
 pub const MAX_BODY: usize = 256 << 10;
+/// The most blocks (paragraphs, quotes, list items) kept of a message's text, and drawn of one:
+/// the window lays a message out whole, a block at a time.
+pub const MAX_BLOCKS: usize = 500;
 /// The most attachments kept of a message.
 pub const MAX_ATTACHMENTS: usize = 20;
 /// The most mentions kept of a message.

@@ -669,6 +669,53 @@ fn a_sender_is_the_member_whatever_the_ids_capitals() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Security review 1.5 (content n° 1): a sender the chat's members don't have, whose message says
+/// they're an `aadUser` of the organisation (a guest who left says so too), is External before
+/// their name.
+#[test]
+fn a_sender_the_members_dont_have_is_external_on_their_message() {
+    let m = said("m1", user("u-gale", "Gale Stone"), NOW, para(vec![words("Hello again")]));
+    let (mut a, dir, _) = chat_app("teams-chat-gone", group_row(), TEAMS_LINK, vec![m]);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, TALL);
+    let gale = rect_of(&texts, |t| t == "Gale Stone").expect("the sender's name");
+    let external = texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).find(|r| (r.center().y - gale.center().y).abs() < 8.0);
+    assert!(external.is_some_and(|r| r.right() <= gale.left()), "External before the name: {external:?} {gale:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Security review 1.5 (content n° 6): thirty messages in a row from a member of another
+/// organisation are each tagged External, not only the first under the name: one scrolled away,
+/// the others still say who is outside.
+#[test]
+fn external_is_on_each_message_of_a_row() {
+    let sam = || user("u-sam", "Sam Okafor");
+    let row: Vec<ChatMessage> =
+        (0..30).map(|k| said(&format!("m{k:02}"), sam(), NOW - 1800 + k * 30, para(vec![words(&format!("Note {k}"))]))).collect();
+    let (mut a, dir, _) = chat_app("teams-chat-external-row", group_row(), TEAMS_LINK, row);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, TALL);
+    assert_eq!(texts.iter().filter(|(t, _)| t == "Sam Okafor").count(), 1, "one name for the row: {texts:?}");
+    let external: Vec<egui::Rect> = texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).collect();
+    for k in 1..30 {
+        let note = rect_of(&texts, |t| t == format!("Note {k}")).expect("the message");
+        assert!(external.iter().any(|r| r.center().y > note.top() - 6.0 && r.center().y < note.bottom() + 6.0), "Note {k} tagged: {external:?}");
+    }
+    assert_eq!(external.len(), 30, "the first under the name, the others beside their time");
+    if let Some(d) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
+        let mut tex = Textures::default();
+        for (dark, theme) in [(false, "light"), (true, "dark")] {
+            a.ui.dark = Some(dark);
+            for _ in 0..6 {
+                frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (1280, 800));
+            }
+            frame_with_size(&ctx, &mut a, &mut tex, vec![], Some(d.join(format!("teams-chat-external-row-{theme}.png"))), (1280, 800));
+        }
+        a.ui.dark = Some(false);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A chat the user is no longer in says so under its header, not only in the list's tooltip.
 #[test]
 fn a_left_chat_says_so_under_its_header() {

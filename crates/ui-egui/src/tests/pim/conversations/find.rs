@@ -241,7 +241,8 @@ fn a_hit_clicked_again_goes_to_its_message_again() {
         a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: true });
     }
     let texts = w.settled(&mut a);
-    assert!(in_view(&texts, "Line 40") && has_text(&texts, "Line -100"), "the older page above it");
+    let holds = |a: &MailApp, id: &str| a.session.teams.window.iter().any(|m| m.id == id);
+    assert!(in_view(&texts, "Line 40") && holds(&a, "m-100"), "the older page above it");
     for again in 2..4 {
         click_the_hit(&mut a, &mut w);
         assert_eq!(finds(&jobs).len(), again, "found again");
@@ -253,7 +254,7 @@ fn a_hit_clicked_again_goes_to_its_message_again() {
         let texts = texts_of(&shapes);
         assert!(in_view(&texts, "Line 40"), "click {again}: at its message: {:?}", rect_of(&texts, |t| t == "Line 40"));
         assert!(tinted(&a, &shapes, "Line 40"), "click {again}: tinted again");
-        assert!(!has_text(&texts, "Line -100"), "click {again}: the window it loaded");
+        assert!(!holds(&a, "m-100"), "click {again}: the window it loaded");
     }
     let _ = std::fs::remove_dir_all(dir);
 }
