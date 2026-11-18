@@ -90,6 +90,8 @@ pub struct ConversationsUi {
     pub went_to: Option<(u64, f64)>,
     /// The picture shown big.
     pub viewing: Option<Picture>,
+    /// The open chat's messages' heights, so only those in view are laid out (`chat/heights.rs`).
+    pub(crate) heights: chat::Heights,
     /// What each chat's box holds, by chat id (at most 20 chats, in memory), and how many times
     /// a box was drawn (the one drawn longest ago goes first).
     pub(crate) drafts: HashMap<String, ChatDraft>,

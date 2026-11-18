@@ -5,7 +5,7 @@
 
 use super::*;
 use proptest::strategy::Strategy;
-use quatrelle_model::pim::teams::{BlockKind, SEND_MAX};
+use quatrelle_model::pim::teams::{BlockKind, MAX_BLOCKS, SEND_MAX};
 
 mod parts;
 mod typed;
@@ -166,6 +166,21 @@ fn input_and_depth_and_output_are_capped() {
     let lists = teams_html(&("<ul><li>".repeat(300) + "z"), C, "1");
     assert_eq!(lists.plain(), "z");
     assert!(matches!(lists.blocks[0].kind, BlockKind::Item { depth, .. } if usize::from(depth) <= TEAMS_DEPTH));
+}
+
+/// Security review 1.5 (content n° 2): a message of 20,000 paragraphs (or list items) keeps at
+/// most [`MAX_BLOCKS`] blocks, the last ending with "…": the window lays a message out whole, a
+/// block at a time. One within the cap keeps all of its blocks.
+#[test]
+fn blocks_are_capped_and_the_cut_says_so() {
+    let t = teams_html(&"<p>a</p>".repeat(20_000), C, "1");
+    assert_eq!(t.blocks.len(), MAX_BLOCKS);
+    assert_eq!(t.blocks.last().and_then(|b| b.runs.last()).map(|r| r.text.as_str()), Some("…"), "the cut says so");
+    let items = teams_html(&format!("<ul>{}</ul>", "<li>i</li>".repeat(2_000)), C, "1");
+    assert_eq!(items.blocks.len(), MAX_BLOCKS);
+    let fits = teams_html(&"<p>a</p>".repeat(MAX_BLOCKS), C, "1");
+    assert_eq!(fits.blocks.len(), MAX_BLOCKS);
+    assert!(fits.plain().ends_with('a'), "nothing cut");
 }
 
 #[test]

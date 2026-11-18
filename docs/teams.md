@@ -308,9 +308,18 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   and offers **Open in Teams**.
 - **Reading a conversation.** Messages are grouped by day (Today, Yesterday, then the date), edited
   ones say "(edited)", deleted ones say so, and an app's messages carry an **App** tag. A sender
-  outside your organization is tagged **External** on each message. **Members** lists who is in
-  the chat. Reactions are chips under their message (see Reacting, mentioning, editing and
-  deleting).
+  outside your organization is tagged **External** on each message: before the name on the first
+  of their messages in a row, beside the time on the next ones. Anyone who isn't among the chat's
+  members is too, whatever their message says (a guest who left, or anyone while Teams hasn't
+  given the members yet). **Members** lists who is in the chat. Reactions are chips under their
+  message (see Reacting, mentioning, editing and deleting). A message shows 500 paragraphs at
+  most, then "…" (open it in Teams to read the rest).
+- **Links** in a message open in your browser on a click. Pointing at one shows where it goes:
+  with **Open links without their tracking** on (File › Options), the address inside a redirect
+  it's wrapped in, as in mail: the page that opens (through your organization's link check when
+  the link goes through one). A link that couldn't be handed to a browser as it is, or out of its
+  redirect (not a web address, too long, or a host that isn't what it reads as, such as
+  `bank.example@other.example`), is plain text.
 - **Open in Teams**, beside every conversation's name, opens that conversation in Teams itself, in
   the browser window Teams meetings open in (else the default browser); the chats Graph won't
   serve and the content Quatrelle can't show (cards) offer it too. Quatrelle makes the
@@ -324,9 +333,10 @@ switch Teams off while it is open, Quatrelle returns to Mail.
   size limit, a minute at most, however slowly its server answers). One that can't be had (refused, too big, out of reach) says "Picture
   not available"; Quatrelle remembers it (a thousand such pictures at most) and doesn't ask for it
   again until it starts again.
-- **Files** shared in a chat appear as cards with the file's name and the host of its link. A
-  link to your own OneDrive or your organization's SharePoint is shown as such; any other host is
-  written on the card, "Link to another site". Nothing opens until you click it; **Open** and
+- **Files** shared in a chat appear as cards with the file's name and the host its link goes to
+  (out of a redirect, as links are). A link to your own OneDrive or your organization's SharePoint
+  is shown as such; any other host is written on the card, "Link to another site", as is a link
+  that goes through a link check (a click opens the check's address, whatever it names). Nothing opens until you click it; **Open** and
   **Open in browser** are on the card (see Pictures and files).
 
 ### Replying
@@ -436,7 +446,9 @@ They go with the text, the pictures first and then the files, each in the order 
   folder, not opened." You decide what to do with it. On Windows every file downloaded is marked
   as coming from the internet, as browsers do: Office opens it in Protected View, wherever you
   open it from.
-- **Open in browser** opens the file's link in your default browser. It is offered for any web link of the card, including the files over 100 MB.
+- **Open in browser** opens the file's link in your default browser; pointing at it shows where it
+  goes. It is offered for any web link of the card a browser may be handed (see Links above),
+  including the files over 100 MB.
 
 ### Starting a conversation
 
@@ -498,7 +510,7 @@ Teams call page on `teams.microsoft.com` ever opens, and the log names no one.
   it went sends nothing. One Teams doesn't take is said by a notice ("Teams didn't take your
   reaction in Support team"), and the chip goes back to what Teams has.
 - **Mentions.** Typing "@" in the box offers the conversation's members from your organization
-  (eight at most), found by the start of their name, of a word of it, or of their address: ↑ and
+  (eight at most; a guest of your organization is tagged **External**), found by the start of their name, of a word of it, or of their address: ↑ and
   ↓ choose, Enter, Tab or a click picks, Esc closes the list. The name goes in highlighted and
   the person is mentioned in Teams; changing its letters afterwards makes it plain text. People
   from other organizations can't be mentioned from Quatrelle (their name can still be typed). A
@@ -542,7 +554,8 @@ a second. A conversation you're no longer in, or one Graph won't serve, isn't ma
 With **Announce new messages** on, each new message from someone else is a desktop notification.
 Its title says who sent it, as the conversation's members name them: "Ana Lima", "Ana Lima in
 Agenda" for a group or a meeting's chat, "Ana Lima mentioned you in Agenda" when it names you;
-"(External)" follows a sender outside your organization (or not shown to be of it), "(App)" an
+"(External)" follows a sender outside your organization (or not shown to be of it: anyone who isn't
+among the conversation's members), "(App)" an
 application. Its text is the message's first line ("New message" when it has none), as plain
 text: what looks like markup in a message is shown as written.
 

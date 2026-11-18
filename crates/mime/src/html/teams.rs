@@ -6,8 +6,8 @@
 //! scripts and styles go with their content.
 //!
 //! The sender writes this HTML: it is read within caps on what comes in ([`TEAMS_HTML_MAX`]),
-//! on how deep it nests ([`TEAMS_DEPTH`]) and on what is kept ([`TEAMS_RUNS`], and the same
-//! bytes as came in). A picture is this message's own hosted image only when its address is
+//! on how deep it nests ([`TEAMS_DEPTH`]) and on what is kept ([`TEAMS_RUNS`], [`MAX_BLOCKS`]
+//! blocks, the last then ending with "…", and the same bytes as came in). A picture is this message's own hosted image only when its address is
 //! exactly Graph's for this chat and this message; any other picture on the web is an outside
 //! one, which waits for a click. Nothing here fetches anything.
 //!
@@ -20,7 +20,7 @@ use html5ever::TokenizerResult;
 use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{BufferQueue, Tag, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts};
-use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, MAX_BODY, MAX_ID, Run, is_bidi};
+use quatrelle_model::pim::teams::{Block, BlockKind, ChatText, MAX_BLOCKS, MAX_BODY, MAX_ID, Run, is_bidi};
 
 mod typed;
 mod write;
@@ -206,10 +206,18 @@ impl Reader<'_> {
         }
     }
 
-    /// The block being written, opened in the kind of `ctx` if there is none.
+    /// The block being written, opened in the kind of `ctx` if there is none. Past
+    /// [`MAX_BLOCKS`] none is: the last one kept ends with "…", and nothing more is kept.
     fn open_block(&mut self, ctx: &Context) -> bool {
         if self.block.is_some() {
             return true;
+        }
+        if self.blocks.len() >= MAX_BLOCKS {
+            self.full = true;
+            if let Some(last) = self.blocks.last_mut() {
+                last.runs.push(Run { text: "…".to_string(), ..Run::default() });
+            }
+            return false;
         }
         // A block after another is a line break in the text.
         if !self.spend(usize::from(!self.blocks.is_empty())) {

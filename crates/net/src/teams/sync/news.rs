@@ -21,7 +21,8 @@
 //! What is hostile here: names and texts (on one line, without control or bidi characters, cut:
 //! [`one_line`], [`first_line`]), and who a sender says they are. What it protects: a sender is
 //! named by the members by id (the message's name only for one they don't have), External unless
-//! proven of the organisation ([`sender_internal`]), and an application is never a person.
+//! the members prove them of the organisation ([`sender_internal`]: one they don't have is External,
+//! whatever the message says), and an application is never a person.
 
 use super::reads::theirs;
 use super::*;

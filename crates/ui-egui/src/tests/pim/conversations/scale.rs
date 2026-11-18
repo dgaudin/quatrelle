@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use quatrelle_engine::model::pim::teams::{ChatMessage, MessageKind, News, OutKind, OutState, Outgoing, Reaction, Sender, WINDOW_MAX};
+use quatrelle_engine::model::pim::teams::{
+    Block, BlockKind, ChatMessage, MAX_BLOCKS, MessageKind, News, OutKind, OutState, Outgoing, Reaction, Run, Sender, WINDOW_MAX,
+};
 
 use super::chat::{CHAT, ME, TALL, TEAMS_LINK, TENANT_ID, chat_app, group_row, members, pane, para, said, settled_at, user, words};
 use super::*;
@@ -399,4 +401,144 @@ fn a_window_with_full_reactions_and_50_changes_going_out_draws_in_time() {
     assert!(without.iter().chain(&with).all(|d| *d < Duration::from_millis(400)), "a frame past 400 ms: {said}");
     let _ = std::fs::remove_dir_all(plain_dir);
     let _ = std::fs::remove_dir_all(busy_dir);
+}
+
+/// Message `k` of a heavy window, Ana's, a minute after the one before: `paragraphs` paragraphs,
+/// "m{k} p{i}" each.
+fn heavy(k: usize, paragraphs: usize) -> ChatMessage {
+    let blocks = (0..paragraphs).map(|i| Block { kind: BlockKind::Paragraph, runs: vec![words(&format!("m{k} p{i}"))] }).collect();
+    said(&format!("h{k:03}"), user("u-ana", "Ana Lima"), NOW - 86_000 + k as i64 * 60, teams::ChatText { blocks })
+}
+
+/// The paragraphs of heavy messages a frame drew.
+fn paragraphs_drawn(texts: &[(String, egui::Rect)]) -> usize {
+    texts.iter().filter(|(t, _)| t.starts_with('m') && t.contains(" p")).count()
+}
+
+/// Security review 1.5 (content n° 2): a message of 3,500 paragraphs (a copy kept before the
+/// reader's cap can hold one) draws [`MAX_BLOCKS`] of them, then "…".
+#[test]
+fn a_message_draws_at_most_its_cap_of_blocks() {
+    let (mut a, dir, _) = chat_app("teams-scale-blocks", group_row(), TEAMS_LINK, vec![heavy(0, 3_500)]);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, TALL);
+    assert_eq!(paragraphs_drawn(&texts), MAX_BLOCKS);
+    assert!(has_text(&texts, "…"), "the cut says so");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Security review 1.5 (content n° 2): a window of 200 messages of 300 paragraphs each draws only
+/// the messages in view (a frame draws a few hundred paragraphs, not 60,000), and opens at its
+/// newest.
+#[test]
+fn only_the_messages_in_view_are_drawn() {
+    let window: Vec<ChatMessage> = (0..200).map(|k| heavy(k, 300)).collect();
+    let (mut a, dir, _) = chat_app("teams-scale-view", group_row(), TEAMS_LINK, window);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    let drawn = paragraphs_drawn(&texts);
+    assert!(drawn <= 600, "{drawn} paragraphs drawn");
+    // The messages in view (twice when the frame is laid out again) and 2,000 blocks' worth more,
+    // the last message measured past them; a message costs its 300 blocks and a block a 8 runs.
+    let (laid, each) = (a.ui.conversations.heights.laid_out, 300 + 300 / 8);
+    assert!(laid <= 2_000 + each + 2 * 2 * each, "{laid} blocks laid out");
+    let last = rect_of(&texts, |t| t == "m199 p299").expect("the newest's last paragraph");
+    assert!(last.top() > 0.0 && last.bottom() < 800.0, "at the newest: {last:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A frame of 1280 × 800 with `events`, then the texts of a frame without any.
+fn heavy_frame(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>) -> Vec<(String, egui::Rect)> {
+    frame_sized(ctx, a, events, egui::vec2(1280.0, 800.0));
+    texts_of(&frame_shapes(ctx, a, vec![], egui::vec2(1280.0, 800.0)))
+}
+
+/// Security review 1.5 (content n° 2): opened at a message in the middle of a heavy window (a
+/// search's hit), the chat is scrolled to it, though the heights around it are guessed at first;
+/// only what's near it is drawn.
+#[test]
+fn a_heavy_windows_message_is_gone_to() {
+    let (mut a, dir, _) = chat_app("teams-scale-go", group_row(), TEAMS_LINK, Vec::new());
+    a.run("teams.open", json!({"chat": CHAT, "message": "h100"}));
+    a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: members(), web_url: Some(TEAMS_LINK.into()), first: true });
+    let window: Vec<ChatMessage> = (0..200).map(|k| heavy(k, 300)).collect();
+    for part in window.chunks(teams::EVENT_ITEMS) {
+        a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: false });
+    }
+    a.session.teams_apply(teams::Event::Placed { chat: CHAT.into(), message: "h100".into(), newest: false });
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, (1280, 800));
+    let near = texts.iter().filter(|(t, r)| t.starts_with("m100 p") && r.top() >= 0.0 && r.bottom() <= 800.0).count();
+    assert!(near > 0, "the message gone to in view: {:?}", texts.iter().filter(|(t, _)| t.contains(" p")).take(5).collect::<Vec<_>>());
+    assert!(paragraphs_drawn(&texts) <= 900, "{} paragraphs drawn", paragraphs_drawn(&texts));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Security review 1.5 (content n° 2): scrolled up a heavy window, an older page comes in above,
+/// heavy too: what's on screen stays where it is, while the frames that follow learn the new
+/// messages' heights out of view; a frame lays out the messages in view and at most 2,000 blocks
+/// more.
+#[test]
+fn a_heavy_window_keeps_its_place_as_heights_become_known() {
+    let (mut a, dir, _) = chat_app("teams-scale-place", group_row(), TEAMS_LINK, (100..200).map(|k| heavy(k, 300)).collect());
+    let ctx = egui::Context::default();
+    settled_at(&ctx, &mut a, (1280, 800));
+    let over = egui::pos2(900.0, 400.0);
+    let notch = Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, 900.0),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+        modifiers: Modifiers::NONE,
+    };
+    heavy_frame(&ctx, &mut a, vec![Event::PointerMoved(over)]);
+    for _ in 0..3 {
+        heavy_frame(&ctx, &mut a, vec![Event::PointerMoved(over), notch.clone()]);
+    }
+    let mut texts = Vec::new();
+    for _ in 0..20 {
+        texts = heavy_frame(&ctx, &mut a, vec![Event::PointerMoved(over)]);
+    }
+    let (seen, was) = texts.iter().find(|(t, r)| t.contains(" p") && r.top() > 300.0 && r.bottom() < 700.0).cloned().expect("a paragraph in view");
+    for part in (0..100).map(|k| heavy(k, 300)).collect::<Vec<_>>().chunks(teams::EVENT_ITEMS) {
+        a.session.teams_apply(teams::Event::Messages { chat: CHAT.into(), messages: part.to_vec(), fresh: false, older: true });
+    }
+    for round in 0..30 {
+        let texts = heavy_frame(&ctx, &mut a, vec![Event::PointerMoved(over)]);
+        let now = rect_of(&texts, |t| t == seen).unwrap_or_else(|| panic!("frame {round}: {seen} gone"));
+        assert!((now.top() - was.top()).abs() < 4.0, "frame {round}: {seen} moved: {was:?} → {now:?}");
+        // The messages in view (twice when the frame is laid out again) and 2,000 blocks' worth
+        // more, the last message measured past them; a message costs its 300 blocks and a block a
+        // 8 runs.
+        let (laid, each) = (a.ui.conversations.heights.laid_out, 300 + 300 / 8);
+        assert!(laid <= 2_000 + each + 2 * 2 * each, "frame {round}: {laid} blocks laid out");
+    }
+    assert_eq!(a.session.teams.window.len(), 200);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Re-review n° 2: a window of 500 messages of one block of 2,000 runs each (styles in turn) isn't
+/// measured all in one frame: a frame lays out the messages in view and some 2,000 blocks' worth
+/// more, runs counted, not the 500 messages' million runs.
+#[test]
+fn a_window_of_many_runs_is_measured_a_part_a_frame() {
+    let message = |k: usize| {
+        let runs = (0..2_000)
+            .map(|i| Run { text: if i % 2 == 0 { "a".into() } else { "b".into() }, bold: i % 2 == 0, italic: i % 2 == 1, ..Default::default() })
+            .collect();
+        said(
+            &format!("r{k:03}"),
+            user("u-ana", "Ana Lima"),
+            NOW - 86_000 + k as i64 * 60,
+            teams::ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] },
+        )
+    };
+    let (mut a, dir, _) = chat_app("teams-scale-runs", group_row(), TEAMS_LINK, (0..WINDOW_MAX).map(message).collect());
+    let ctx = egui::Context::default();
+    for frame in 0..6 {
+        frame_sized(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+        let laid = a.ui.conversations.heights.laid_out;
+        assert!(laid <= 5_000, "frame {frame}: {laid} blocks' worth laid out");
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }

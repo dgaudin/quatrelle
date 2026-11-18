@@ -280,6 +280,10 @@ fn the_offer_in_light_and_dark() {
     let messages = vec![said("m1", user("u-ana", "Ana Lima"), NOW - 600, para(vec![words("Who has the figures?")]))];
     let (mut a, dir) = writing_app("teams-at-frames", messages);
     let mut people = members();
+    // A guest of the organisation: offered, tagged External.
+    let mut guest = member("u-gale", "Gale Stone", TENANT_ID);
+    guest.roles = vec!["guest".into()];
+    people.push(guest);
     for m in &mut people {
         m.address = format!("{}@contoso.example", m.name.to_lowercase().replace(' ', "."));
     }
@@ -309,6 +313,9 @@ fn the_offer_in_light_and_dark() {
         assert!(ana.bottom() <= bruno.top() && bruno.bottom() <= written.top(), "{theme}: {ana:?} {bruno:?} {written:?}");
         let address = rect_of(&texts, |t| t == "ana.lima@contoso.example").expect("Ana's address");
         assert!(address.left() > ana.right() && (address.center().y - ana.center().y).abs() < 4.0, "{theme}: after the name: {address:?}");
+        let gale = rect_of(&texts, |t| t == "Gale Stone").expect("the guest offered");
+        let tag = texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).find(|r| (r.center().y - gale.center().y).abs() < 6.0);
+        assert!(tag.is_some_and(|r| r.right() <= gale.left()), "{theme}: External before the guest: {tag:?} {gale:?}");
     }
     // Picked: the mention in the box, as a bubble draws one.
     a.ui.dark = Some(false);
@@ -325,5 +332,27 @@ fn the_offer_in_light_and_dark() {
         assert!(!has_text(&texts, "Bruno Rossi"), "{theme}: the offer gone");
     }
     a.ui.dark = Some(false);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Security review 1.5 (content n° 4): a guest of the organisation can be mentioned, and is
+/// offered with "External" before their name, so they don't pass for the colleague they're named
+/// like; a member of the organisation has no mark.
+#[test]
+fn a_guest_is_offered_with_external() {
+    let (mut a, dir) = writing_app("teams-at-guest", vec![]);
+    let mut guest = member("u-gale", "Ana Lima Guest", TENANT_ID);
+    guest.roles = vec!["guest".into()];
+    let all = members().into_iter().chain([guest]).collect();
+    a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: all, web_url: Some(TEAMS_LINK.into()), first: true });
+    let ctx = egui::Context::default();
+    focus_box(&ctx, &mut a);
+    typed(&ctx, &mut a, vec![text("@ana")]);
+    let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
+    let (ana, gale) =
+        (rect_of(&texts, |t| t == "Ana Lima").expect("Ana offered"), rect_of(&texts, |t| t == "Ana Lima Guest").expect("the guest offered"));
+    let on = |row: egui::Rect| texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).find(|r| (r.center().y - row.center().y).abs() < 6.0);
+    assert!(on(gale).is_some_and(|r| r.right() <= gale.left()), "External before the guest's name: {texts:?}");
+    assert!(on(ana).is_none(), "not on a member of the organisation: {texts:?}");
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -284,7 +284,7 @@ fn rows_pane(s: &Session, c: &mut ConversationsUi, pics: &TeamsPictures, ui: &mu
 }
 
 /// A framed tag ("External", "Can't be read here") from `left` on the line from `top`: its width.
-fn tag(p: &egui::Painter, t: &Tokens, text: &str, left: f32, top: f32) -> (f32, Rect) {
+pub(super) fn tag(p: &egui::Painter, t: &Tokens, text: &str, left: f32, top: f32) -> (f32, Rect) {
     let g = p.layout_no_wrap(text.to_string(), theme::regular(11.0), t.dim);
     let w = g.size().x + 10.0;
     let r = Rect::from_min_size(pos2(left, top), vec2(w, 17.0));

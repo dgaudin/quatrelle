@@ -669,6 +669,53 @@ fn a_sender_is_the_member_whatever_the_ids_capitals() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Security review 1.5 (content n° 1): a sender the chat's members don't have, whose message says
+/// they're an `aadUser` of the organisation (a guest who left says so too), is External before
+/// their name.
+#[test]
+fn a_sender_the_members_dont_have_is_external_on_their_message() {
+    let m = said("m1", user("u-gale", "Gale Stone"), NOW, para(vec![words("Hello again")]));
+    let (mut a, dir, _) = chat_app("teams-chat-gone", group_row(), TEAMS_LINK, vec![m]);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, TALL);
+    let gale = rect_of(&texts, |t| t == "Gale Stone").expect("the sender's name");
+    let external = texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).find(|r| (r.center().y - gale.center().y).abs() < 8.0);
+    assert!(external.is_some_and(|r| r.right() <= gale.left()), "External before the name: {external:?} {gale:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Security review 1.5 (content n° 6): thirty messages in a row from a member of another
+/// organisation are each tagged External, not only the first under the name: one scrolled away,
+/// the others still say who is outside.
+#[test]
+fn external_is_on_each_message_of_a_row() {
+    let sam = || user("u-sam", "Sam Okafor");
+    let row: Vec<ChatMessage> =
+        (0..30).map(|k| said(&format!("m{k:02}"), sam(), NOW - 1800 + k * 30, para(vec![words(&format!("Note {k}"))]))).collect();
+    let (mut a, dir, _) = chat_app("teams-chat-external-row", group_row(), TEAMS_LINK, row);
+    let ctx = egui::Context::default();
+    let texts = settled_at(&ctx, &mut a, TALL);
+    assert_eq!(texts.iter().filter(|(t, _)| t == "Sam Okafor").count(), 1, "one name for the row: {texts:?}");
+    let external: Vec<egui::Rect> = texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).collect();
+    for k in 1..30 {
+        let note = rect_of(&texts, |t| t == format!("Note {k}")).expect("the message");
+        assert!(external.iter().any(|r| r.center().y > note.top() - 6.0 && r.center().y < note.bottom() + 6.0), "Note {k} tagged: {external:?}");
+    }
+    assert_eq!(external.len(), 30, "the first under the name, the others beside their time");
+    if let Some(d) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
+        let mut tex = Textures::default();
+        for (dark, theme) in [(false, "light"), (true, "dark")] {
+            a.ui.dark = Some(dark);
+            for _ in 0..6 {
+                frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (1280, 800));
+            }
+            frame_with_size(&ctx, &mut a, &mut tex, vec![], Some(d.join(format!("teams-chat-external-row-{theme}.png"))), (1280, 800));
+        }
+        a.ui.dark = Some(false);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A chat the user is no longer in says so under its header, not only in the list's tooltip.
 #[test]
 fn a_left_chat_says_so_under_its_header() {
@@ -682,5 +729,51 @@ fn a_left_chat_says_so_under_its_header() {
     let header = rect_of(&texts, |t| t == "Support team").expect("the header");
     let said = rect_of(&texts, |t| t == "You're no longer in this conversation").expect("said under the header");
     assert!(said.top() >= header.bottom(), "{said:?} under {header:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Re-review n° 4: in the narrowest pane (332 points: the window at its narrowest, 760, and the
+/// list at its widest, 380) and at the default width, an outsider's long messages leave room for
+/// "External" and the time beside them: both stay whole in the pane, beside a picture's place and
+/// beside its thumbnail too (round 3: a thumbnail is as wide as the bubble at most). With
+/// `QUATRELLE_FRAME_PNG` set, both widths are painted, the picture waited for and come.
+#[test]
+fn external_and_the_time_stay_in_the_narrowest_pane() {
+    let sam = || user("u-sam", "Sam Okafor");
+    let long = "We moved the review to Thursday, and the figures for the third quarter are in the shared folder now";
+    let mut row: Vec<ChatMessage> = (0..6)
+        .map(|k| said(&format!("m{k:02}"), sam(), NOW - 1800 + k * 30, para(vec![words(if k % 2 == 0 { long } else { "Short note" })])))
+        .collect();
+    row.push(said("m06", sam(), NOW - 1600, para(vec![words("The plan"), Run { hosted: Some("h1".into()), ..Default::default() }])));
+    let (mut a, dir, _) = chat_app("teams-chat-narrowest", group_row(), TEAMS_LINK, row);
+    let ctx = egui::Context::default();
+    let pictures = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
+    let mut tex = Textures::default();
+    // The list at its default 260 points: a window of 640 leaves the pane the narrowest's 332. The
+    // picture's place first, then its thumbnail (a wide picture: 240 points if it may).
+    let sizes = [(640usize, 332.0, "waiting"), (760, 452.0, "waiting"), (640, 332.0, "come"), (760, 452.0, "come")];
+    // The picture's message's time: drawn (one pushed out of the pane wouldn't be) and in the pane.
+    let at = quatrelle_engine::model::dates::civil(NOW - 1600, &a.session.clock);
+    let its_time = format!("{:02}:{:02}", at.hour, at.minute);
+    for (i, (w, pane, picture)) in sizes.into_iter().enumerate() {
+        if i == 2 {
+            let hosted = Picture::Hosted { chat: CHAT.into(), message: "m06".into(), hosted: "h1".into() };
+            a.session.teams_apply(teams::Event::Picture { picture: hosted.clone(), bytes: super::pictures::png(600, 300) });
+            super::pictures::decoded(&ctx, &mut a);
+            assert!(matches!(a.ui.teams_queue.pictures.image(&hosted), Some(crate::panes::conversations::Shown::Ready(_))), "decoded");
+        }
+        for _ in 0..8 {
+            frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (w, 480));
+        }
+        let png = pictures.as_ref().map(|d| d.join(format!("teams-chat-narrowest-{pane}-{picture}.png")));
+        let (_, shapes) = frame_with_size(&ctx, &mut a, &mut tex, vec![], png, (w, 480));
+        let texts = texts_of(&shapes);
+        let is_time = |t: &str| t.len() == 5 && t.as_bytes().get(2) == Some(&b':');
+        let beside: Vec<&(String, egui::Rect)> = texts.iter().filter(|(t, r)| (t == "External" || is_time(t)) && r.left() > 300.0).collect();
+        assert!(beside.iter().any(|(t, _)| t == "External") && beside.iter().any(|(t, _)| *t == its_time), "{pane}, picture {picture}: {texts:?}");
+        for (t, r) in beside {
+            assert!(r.right() <= w as f32 - 1.0, "{pane}-point pane, picture {picture}: {t:?} out of it at {r:?}");
+        }
+    }
     let _ = std::fs::remove_dir_all(dir);
 }

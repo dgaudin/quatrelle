@@ -6,7 +6,8 @@
 //! asked for when the user scrolls to the top; opened at a search's hit, scrolled to it once and
 //! the message tinted a moment, and, the newer ones left out, "Go to the newest messages" under
 //! the last; after them, what the user sent that Teams doesn't have yet (`outgoing.rs`); and the
-//! box to write in at the foot (`super::writing`). A message's reactions are chips under it
+//! box to write in at the foot (`super::writing`). Only the messages in view are laid out, the
+//! others keeping their place (`heights.rs`). A message's reactions are chips under it
 //! (`reactions.rs`); the pointer on it shows its bar (`hover.rs`: reactions, Copy, Edit and
 //! Delete), a deletion is asked first; an edit going out draws its words dimmed in the bubble, a
 //! deletion dims it, and either says where it stands under it. A chat Graph won't let be read shows
@@ -14,7 +15,9 @@
 //!
 //! What is hostile here: everything drawn came from senders (names, words, links, pictures,
 //! files) or from Graph (the chat's link). "External" is drawn before the name a sender chose and
-//! never cut; an application's message says "App". Names are on one line ([`one_line`]). A
+//! never cut, and beside the time of each next message of theirs; an application's message says
+//! "App". A message's size is the sender's: a frame lays out the messages in view, each at most
+//! `MAX_BLOCKS` blocks (`heights.rs`, `text.rs`). Names are on one line ([`one_line`]). A
 //! picture kept with a message is asked for when the message is first drawn (at most
 //! `HOSTED_PER_MESSAGE`); one from elsewhere only on a click (`parts.rs`). "Open in Teams" is
 //! drawn only when the chat's link is one `is_teams_chat_link` takes, and asks for it through
@@ -32,9 +35,12 @@ use super::pictures::{Shown, TeamsPictures};
 use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, UiState, widgets};
+pub(crate) use heights::Heights;
+use heights::Plan;
 
 mod files;
 mod header;
+mod heights;
 mod hover;
 mod outgoing;
 mod parts;
@@ -47,6 +53,9 @@ const TOP: f32 = 40.0;
 const FOUND_TINT: f64 = 2.0;
 /// How much what goes out is dimmed (a message, an edit's words, a bubble being deleted).
 const DIMMED: f32 = 0.6;
+/// A bubble's margins left and right of its text, and a tag's ([`tag`]: its frame and stroke).
+const BUBBLE_MARGINS: f32 = 20.0;
+const TAG_MARGINS: f32 = 12.0;
 
 /// What every part of the pane reads.
 struct Pane<'a> {
@@ -109,6 +118,7 @@ pub(crate) fn chat(s: &Session, ui_state: &mut UiState, ui: &mut Ui, acts: &mut 
         c.went_to = None;
         c.hovered = None;
         c.deleting = None;
+        c.heights = Heights::default();
     }
     // Pictures let go for room: their messages ask for them again once on screen (all of them,
     // when some let go were too many to remember).
@@ -266,9 +276,12 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
     if let Some(y) = c.chat_scroll_to.take().filter(|_| scroll.is_none()) {
         area = area.vertical_scroll_offset(y);
     }
+    let first_pass = ui.ctx().current_pass_index() == 0;
     let out = area.show(ui, |ui| {
         egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 8)).show(ui, |ui| {
             ui.set_width(ui.available_width());
+            c.heights.begin(ui.available_width(), first_pass);
+            let view_top = ui.clip_rect().top();
             let mut day = None;
             let mut group: Option<Option<String>> = None;
             for m in window {
@@ -287,7 +300,24 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
                     system(p, ui, m);
                     group = None;
                 } else {
-                    message(p, c, ui, m, first, acts);
+                    // The message gone to is laid out wherever it is: it's scrolled to.
+                    match c.heights.plan(ui, m, first, tint == Some(m.id.as_str())) {
+                        Plan::Skip(h) => {
+                            ui.add_space(h);
+                            // The ids after it stay those they have when it's drawn.
+                            ui.skip_ahead_auto_ids(1);
+                        }
+                        plan => {
+                            let top = ui.cursor().top();
+                            ui.push_id(&m.id, |ui| {
+                                if plan == Plan::Measure {
+                                    ui.set_invisible();
+                                }
+                                message(p, c, ui, m, first, acts);
+                            });
+                            c.heights.laid(m, first, top, ui.cursor().top() - top, view_top);
+                        }
+                    }
                 }
                 if let Some((at, top)) = behind {
                     let r = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), top..=ui.min_rect().bottom()).expand2(vec2(8.0, 3.0));
@@ -304,8 +334,15 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
             ui.add_space(8.0);
         });
     });
+    // Gone to once the heights around it are known: until then it's scrolled to again.
     if scroll.is_some() {
-        c.went_to = Some((opening, now));
+        if c.heights.settled() {
+            c.went_to = Some((opening, now));
+        } else {
+            ui.ctx().request_repaint();
+        }
+    } else {
+        c.heights.idle();
     }
     // The tint goes once its time is up.
     if let Some((_, at)) = &c.went_to {
@@ -317,9 +354,19 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
         }
     }
     let (height, offset, view) = (out.content_size.y, out.state.clamped_offset().y, out.inner_rect.height());
+    let grew = c.heights.above();
+    c.heights.end(window.iter());
     if above && let Some((_, _, was_height, was_offset)) = c.chat_view.clone() {
         c.chat_scroll_to = Some(was_offset + (height - was_height).max(0.0));
         ui.ctx().request_discard("older messages came in above");
+    } else if grew != 0.0 && scroll.is_none() {
+        // Heights above the view became known: what's on screen stays where it is (at the
+        // newest, the scroll stays there by itself), and the frame is laid out again before it's
+        // drawn.
+        if height - view - offset > 1.0 {
+            c.chat_scroll_to = Some(offset + grew);
+        }
+        ui.ctx().request_discard("heights above the view became known");
     } else if c.chat_view.as_ref().is_some_and(|v| v.0 == chat)
         && height > view + 1.0
         && offset <= TOP
@@ -330,6 +377,10 @@ fn messages(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, chat: &str, acts: &m
         acts.push(Action::Run("teams.older", json!({"chat": chat})));
     }
     c.chat_view = front.map(|f| (chat.to_string(), f, height, offset));
+    // Messages out of view still guessed at: a next frame measures more of them.
+    if c.heights.guessed() {
+        ui.ctx().request_repaint();
+    }
 }
 
 /// Newer messages left out (opened at an older one): the way to them, under the last message
@@ -373,13 +424,45 @@ fn system(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
     });
 }
 
-/// A message's time, and "(edited)" after it when it was.
-fn time_line(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
+/// A message's time, and "(edited)" after it when it was; "External" before it on the next
+/// messages of an outsider's row (`external`: the first has it before the name).
+fn time_line(p: &Pane, ui: &mut Ui, m: &ChatMessage, external: bool) {
     let c = dates::civil(secs(m.created), &p.s.clock);
     if m.edited.is_some() && m.deleted.is_none() {
         ui.label(RichText::new(tl!("(edited)")).size(11.0).color(p.t.dim));
     }
-    ui.label(RichText::new(format!("{:02}:{:02}", c.hour, c.minute)).size(11.0).color(p.t.dim));
+    let time = RichText::new(format!("{:02}:{:02}", c.hour, c.minute)).size(11.0).color(p.t.dim);
+    if external {
+        ui.horizontal(|ui| {
+            external_tag(p, ui);
+            ui.label(time);
+        });
+    } else {
+        ui.label(time);
+    }
+}
+
+/// How wide a message's time column is: its time, "External" before it (`external`), "(edited)"
+/// above it.
+fn time_width(p: &Pane, ui: &Ui, m: &ChatMessage, external: bool) -> f32 {
+    let wide = |text: &str| ui.painter().layout_no_wrap(text.to_string(), theme::regular(11.0), p.t.dim).size().x;
+    let mut row = wide("00:00");
+    if external {
+        row += wide(tl!("External")) + TAG_MARGINS + ui.spacing().item_spacing.x;
+    }
+    let edited = if m.edited.is_some() && m.deleted.is_none() { wide(tl!("(edited)")) } else { 0.0 };
+    row.max(edited)
+}
+
+/// Whether `m`'s sender is a person not proven of the organisation: one the chat's members don't
+/// have, or who isn't of it ([`quatrelle_engine::ChatMembers::sender_internal`]).
+fn outsider(p: &Pane, m: &ChatMessage) -> bool {
+    matches!(m.sender, Sender::User { .. }) && !p.s.teams.members().sender_internal(&m.sender, p.tenant)
+}
+
+/// "External", whole, and what it means on hover.
+fn external_tag(p: &Pane, ui: &mut Ui) {
+    tag(ui, &p.t, tl!("External")).on_hover_text(tl!("This sender is outside your organisation."));
 }
 
 /// One message: the user's own on the right on the accent's tint; another's on the left, the
@@ -403,7 +486,7 @@ fn message(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, firs
         ui.with_layout(Layout::top_down(Align::Max), |ui| {
             let row = ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                 bubble(p, c, ui, m, change, t.accent_soft, width, acts);
-                ui.with_layout(Layout::top_down(Align::Max), |ui| time_line(p, ui, m));
+                ui.with_layout(Layout::top_down(Align::Max), |ui| time_line(p, ui, m, false));
             });
             under(c, ui, row.response.rect, acts);
         });
@@ -419,9 +502,14 @@ fn message(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatMessage, firs
             if first {
                 name_line(p, ui, m);
             }
+            // The time's column ("External" beside it on an outsider's next messages) is taken from
+            // the text's, with the bubble's margins: the row stays in the pane, however narrow.
+            let mark = !first && outsider(p, m);
+            let side = time_width(p, ui, m, mark) + ui.spacing().item_spacing.x + BUBBLE_MARGINS;
+            let width = width.min((ui.available_width() - side).max(60.0));
             let row = ui.horizontal_top(|ui| {
                 bubble(p, c, ui, m, change, if t.dark { t.chrome } else { Color32::from_rgb(0xF3, 0xF4, 0xF6) }, width, acts);
-                ui.vertical(|ui| time_line(p, ui, m));
+                ui.vertical(|ui| time_line(p, ui, m, mark));
             });
             under(c, ui, row.response.rect, acts);
         });
@@ -451,9 +539,8 @@ fn avatar(p: &Pane, ui: &mut Ui, at: egui::Pos2, sender: &Sender) {
 fn name_line(p: &Pane, ui: &mut Ui, m: &ChatMessage) {
     let t = &p.t;
     ui.horizontal(|ui| {
-        let user = matches!(m.sender, Sender::User { .. });
-        if user && !p.s.teams.members().sender_internal(&m.sender, p.tenant) {
-            tag(ui, t, tl!("External")).on_hover_text(tl!("This sender is outside your organisation."));
+        if outsider(p, m) {
+            external_tag(p, ui);
         }
         let name = p.sender_name(&m.sender);
         let room = (ui.available_width() - 50.0).max(40.0);
@@ -501,7 +588,7 @@ fn bubble(
                     ui.label(RichText::new(said).italics().color(t.dim));
                     return;
                 }
-                let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text };
+                let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text, clean_links: p.s.prefs.clean_links };
                 let (body, mentions) = edit.map_or((&m.body, &m.mentions), |o| (&o.body, &o.mentions));
                 ui.scope(|ui| {
                     if edit.is_some() {

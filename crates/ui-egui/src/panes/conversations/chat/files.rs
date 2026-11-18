@@ -4,9 +4,12 @@
 //! and what can be done with it: "Open" (the engine downloads it, the window opens the saved
 //! file: `app/actions/teams.rs`) and "Open in browser".
 //!
-//! What is hostile here: a file's link is the sender's. Its host is written on the card, "Link
-//! to another site" (and no file-type icon) when it's neither the user's OneDrive nor their
-//! organisation's SharePoint, and the link opens only on a click, through [`launchable_link`].
+//! What is hostile here: a file's link is the sender's. The host it goes to (out of its wrappers
+//! when links are cleaned, as the mail shows it) is written on the card; "Link to another site"
+//! (and no file-type icon) when what a click opens isn't the user's OneDrive nor their
+//! organisation's SharePoint (a link check's wrapper stays: a sender can write one around any
+//! address); the link opens only on a click, and only one a browser may be handed, as written
+//! and as the window opens it (`parts::openable`); the pointer on "Open in browser" shows where.
 //! "Open" asks the engine, which downloads by the file's id through the user's own sign-in, never
 //! by the link. A file that could run a program says so on its card: it is shown in its folder,
 //! not opened.
@@ -14,13 +17,12 @@
 use egui::{RichText, Sense, Ui, vec2};
 use quatrelle_engine::mime::{self, AttachmentKind};
 use quatrelle_engine::model::addr::trust::url_host;
-use quatrelle_engine::model::ical::launchable_link;
 use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, FileWhy, one_line};
 use quatrelle_engine::{TeamsFileState, teams_could_run};
 use serde_json::json;
 
 use super::Pane;
-use super::parts::shown;
+use super::parts::{destination, openable, shown};
 use crate::icons::{self, Icon};
 use crate::theme;
 use crate::{Action, widgets};
@@ -57,10 +59,13 @@ pub(super) fn files(p: &Pane, ui: &mut Ui, m: &ChatMessage, width: f32, acts: &m
     let t = &p.t;
     for a in &m.attachments {
         let Attachment::File { id, name, url, size } = a else { continue };
-        // Judged as it is; written without what could turn it around.
-        let host = url_host(url).map(|h| h.to_ascii_lowercase());
-        let ours = host.as_deref().is_some_and(|h| own_host(p, h));
-        let host = host.map(|h| shown(&h));
+        // The user's own by what a click opens, as it is; written where it goes, without what
+        // could turn it around.
+        let clean = p.s.prefs.clean_links;
+        let goes = destination(url, clean);
+        let opens = if clean { mime::clean_link(url) } else { url.clone() };
+        let ours = url_host(&opens).is_some_and(|h| own_host(p, &h.to_ascii_lowercase()));
+        let host = url_host(&goes).map(|h| shown(&h.to_ascii_lowercase()));
         let state = p.s.teams.file_state(&m.id, id);
         ui.add_space(4.0);
         egui::Frame::new().stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(8).show(ui, |ui| {
@@ -105,7 +110,7 @@ pub(super) fn files(p: &Pane, ui: &mut Ui, m: &ChatMessage, width: f32, acts: &m
                         if !url.is_empty() && !matches!(state, Some(TeamsFileState::Asked)) && ui.button(tl!("Open")).clicked() {
                             acts.push(Action::Run("teams.openFile", json!({"chat": m.chat, "message": m.id, "attachment": id})));
                         }
-                        if launchable_link(url) && ui.button(tl!("Open in browser")).on_hover_text(shown(url)).clicked() {
+                        if openable(url, clean) && ui.button(tl!("Open in browser")).on_hover_text(shown(&goes)).clicked() {
                             acts.push(Action::OpenUrl(url.clone()));
                         }
                     });

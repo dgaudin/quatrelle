@@ -663,7 +663,12 @@ impl MailApp {
     }
 
     /// Follow a link from a message: only web pages and mail addresses, never local files or
-    /// other schemes.
+    /// other schemes. A web address its cleaning took to another host (out of a wrapper) opens
+    /// only if a browser may be handed it ([`launchable_link`]): nothing looked at it as the
+    /// message wrote it. One on the host written (as written, or its tracking left out) goes as it
+    /// always did.
+    ///
+    /// [`launchable_link`]: quatrelle_engine::model::ical::launchable_link
     pub(crate) fn open_link(&mut self, url: &str) {
         // Where it really goes, without what says who clicked (File › Options › Safety).
         let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
@@ -682,6 +687,11 @@ impl MailApp {
             } else {
                 self.ui.dialog = Some(Dialog::OpenShare { link: share, server, path, always: false });
             }
+        } else if (lower.starts_with("https://") || lower.starts_with("http://"))
+            && !cleaned_on_written_host(u, url)
+            && !quatrelle_engine::model::ical::launchable_link(u)
+        {
+            self.session.notice(tf!("Links like {link} aren't opened", link = widgets::shorten(u, 40)), true);
         } else if lower.starts_with("https://") || lower.starts_with("http://") {
             if let Err(e) = self.services.open_url(u) {
                 self.session.notice(tf!("The link couldn't be opened: {error}", error = e), true);
@@ -782,4 +792,14 @@ impl MailApp {
         let all: Vec<usize> = r.parsed.as_ref().map(|p| p.attachments.iter().filter(|a| !a.inline).map(|a| a.index).collect()).unwrap_or_default();
         self.ui.attachment_selected = Some((r.key.clone(), all));
     }
+}
+
+/// Whether `cleaned`, what cleaning made of the link `written` (File › Options › Safety), is on
+/// the host written: the address itself, untouched, or both hosts read and the same (whatever
+/// their capitals). A host that can't be read, on either side (a `\` in the address, say), isn't
+/// the same: what the address carries is checked before it's opened. The mail's links and a
+/// conversation's go by this one rule.
+pub(crate) fn cleaned_on_written_host(cleaned: &str, written: &str) -> bool {
+    let host = |s: &str| quatrelle_engine::model::addr::trust::url_host(s).map(|h| h.to_ascii_lowercase());
+    cleaned == written.trim() || matches!((host(cleaned), host(written)), (Some(x), Some(y)) if x == y)
 }

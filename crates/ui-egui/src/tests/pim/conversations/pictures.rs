@@ -34,7 +34,7 @@ fn png_header(w: u32, h: u32) -> Vec<u8> {
 }
 
 /// A small real PNG.
-fn png(w: u32, h: u32) -> Vec<u8> {
+pub(super) fn png(w: u32, h: u32) -> Vec<u8> {
     let img = image::RgbaImage::from_pixel(w, h, image::Rgba([40, 120, 200, 255]));
     let mut out = Vec::new();
     image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
@@ -42,7 +42,7 @@ fn png(w: u32, h: u32) -> Vec<u8> {
 }
 
 /// Frames until the pictures are decoded (at most five seconds).
-fn decoded(ctx: &egui::Context, a: &mut MailApp) {
+pub(super) fn decoded(ctx: &egui::Context, a: &mut MailApp) {
     let started = std::time::Instant::now();
     loop {
         frame(ctx, a, vec![]);

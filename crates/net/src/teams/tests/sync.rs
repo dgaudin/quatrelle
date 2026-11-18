@@ -482,13 +482,14 @@ fn a_stranger_sender_reads_the_members_again_before_the_row_says_who() {
     assert!(row.last_line.starts_with("Gale"), "{row:?}");
     assert_eq!(ids(&r.messages(GROUP, from)), [(NOW + MINUTE).to_string()]);
 
-    // Someone not among the members at all: read again once, then judged by the message.
+    // Someone not among the members at all: read again once, then External, whatever their
+    // message says (security review 1.5, content n° 1).
     for (i, text) in ["Hello", "Hello again"].iter().enumerate() {
         r.post(GROUP, "u-gone", NOW + (2 + i as i64) * MINUTE, text);
         r.turns(Duration::from_secs(11));
     }
     assert_eq!(r.hits("members"), 3, "once for that sender");
-    assert!(!r.row(GROUP).last_external, "an account of the organisation, by its message: {:?}", r.row(GROUP));
+    assert!(r.row(GROUP).last_external, "not among the members: {:?}", r.row(GROUP));
     assert_eq!(r.fake(|t| t.chat(GROUP).map(|c| c.members.len())), Some(4), "they never were");
 
     // A stranger's message that isn't the last: the members are read again before it goes.

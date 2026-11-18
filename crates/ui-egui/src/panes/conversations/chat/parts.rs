@@ -21,6 +21,8 @@ use crate::theme;
 const THUMB: Vec2 = vec2(240.0, 180.0);
 /// A placeholder's size.
 const HELD: Vec2 = vec2(160.0, 100.0);
+/// The narrowest a picture or its place is drawn, however narrow the bubble.
+const PICTURE_MIN: f32 = 40.0;
 /// The most pictures from elsewhere drawn of a message.
 const OUTSIDE_MAX: usize = 20;
 /// The most messages remembered as having had their pictures asked for.
@@ -30,6 +32,22 @@ const ASKED_MAX: usize = 5_000;
 /// what's read around.
 pub(super) fn shown(url: &str) -> String {
     url.chars().filter(|&c| !is_bidi(c)).collect()
+}
+
+/// Whether a sender's link opens on a click: it is an address a browser may be handed
+/// ([`launchable_link`]), as a link of a message always had to be, and so is what the window
+/// opens of it unless cleaning left it on the host written (out of a wrapper taken off when links
+/// are `clean`ed: File › Options › Safety; [`crate::cleaned_on_written_host`], the window's own
+/// rule). The window checks that one again.
+pub(super) fn openable(url: &str, clean: bool) -> bool {
+    let opens = if clean { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
+    launchable_link(url) && (crate::cleaned_on_written_host(opens.trim(), url) || launchable_link(&opens))
+}
+
+/// Where a sender's link goes, as it's shown (on hover, a card's host): out of every wrapper when
+/// links are `clean`ed, as the mail shows it; else as it's written.
+pub(super) fn destination(url: &str, clean: bool) -> String {
+    if clean { quatrelle_engine::mime::link_destination(url) } else { url.to_string() }
 }
 
 /// A message's pictures in the order they come: kept with it (their ids, from its text and its
@@ -116,10 +134,12 @@ pub(super) fn pictures(p: &Pane, c: &mut ConversationsUi, ui: &mut Ui, m: &ChatM
     }
 }
 
-/// A picture drawn at most [`THUMB`], its shape kept.
+/// A picture drawn at most [`THUMB`] and no wider than the bubble's text (the time beside the
+/// bubble stays in the pane), its shape kept.
 fn thumbnail(ui: &mut Ui, tex: &egui::TextureHandle) -> egui::Response {
     let size = tex.size_vec2();
-    let scale = (THUMB.x / size.x.max(1.0)).min(THUMB.y / size.y.max(1.0)).min(1.0);
+    let most = vec2(THUMB.x.min(ui.max_rect().width()).max(PICTURE_MIN), THUMB.y);
+    let scale = (most.x / size.x.max(1.0)).min(most.y / size.y.max(1.0)).min(1.0);
     let r = ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale).corner_radius(4.0).sense(Sense::click()));
     if r.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -127,11 +147,11 @@ fn thumbnail(ui: &mut Ui, tex: &egui::TextureHandle) -> egui::Response {
     r
 }
 
-/// A picture's place, [`HELD`] big: its frame and a picture's icon, and where what goes under it
-/// is.
+/// A picture's place, [`HELD`] big (no wider than the bubble's text): its frame and a picture's
+/// icon, and where what goes under it is.
 fn place(p: &Pane, ui: &mut Ui) -> egui::Rect {
     let t = &p.t;
-    let (r, _) = ui.allocate_exact_size(HELD, Sense::hover());
+    let (r, _) = ui.allocate_exact_size(vec2(HELD.x.min(ui.max_rect().width()).max(PICTURE_MIN), HELD.y), Sense::hover());
     ui.painter().rect_stroke(r, 4.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let icon = egui::Rect::from_center_size(egui::pos2(r.center().x, r.top() + 30.0), vec2(22.0, 22.0));
     icons::paint(ui.painter(), icon, Icon::Image, t.faint);

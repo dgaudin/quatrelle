@@ -65,7 +65,7 @@ fn going_out(p: &Pane, ui: &mut Ui, o: &Outgoing, acts: &mut Vec<Action>) {
         egui::Frame::new().fill(t.accent_soft).corner_radius(8).inner_margin(egui::Margin::symmetric(10, 7)).show(ui, |ui| {
             ui.set_max_width(width);
             ui.with_layout(Layout::top_down(Align::Max), |ui| {
-                let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text };
+                let cx = text::Context { me: p.me, members: p.s.teams.members(), color: t.text, clean_links: p.s.prefs.clean_links };
                 text::body(ui, t, &o.body, &o.mentions, &cx, width - 20.0, acts);
                 parts(ui, t, &o.parts, width - 20.0);
             });
