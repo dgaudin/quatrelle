@@ -135,6 +135,8 @@ impl Styles {
             self.palette.push(Style::default());
         }
         let n = char_len(text);
+        #[cfg(test)]
+        work::walked(n);
         self.chars.resize(n, 0);
         let max = u16::try_from(self.palette.len().saturating_sub(1)).unwrap_or(u16::MAX);
         for c in &mut self.chars {
@@ -752,3 +754,35 @@ pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &St
 
 #[cfg(test)]
 mod tests;
+
+/// What building styles costs, counted on a test thread: the characters [`Styles::fit`] walks.
+#[cfg(test)]
+pub(crate) mod work {
+    use std::cell::Cell;
+
+    thread_local! {
+        static WALKED: Cell<usize> = const { Cell::new(0) };
+        static MOST: Cell<usize> = const { Cell::new(usize::MAX) };
+    }
+
+    pub(super) fn walked(n: usize) {
+        let walked = WALKED.with(|w| {
+            w.set(w.get().saturating_add(n));
+            w.get()
+        });
+        let most = MOST.with(Cell::get);
+        // Stopped as soon as it's past: work that grows with the square of the text would take
+        // minutes to be told.
+        assert!(walked <= most, "walked {walked} characters, past the {most} allowed");
+    }
+
+    /// `f` run allowed `most` characters walked (the test fails as soon as it's past), and the
+    /// characters it walked.
+    pub(crate) fn at_most<R>(most: usize, f: impl FnOnce() -> R) -> (R, usize) {
+        WALKED.with(|w| w.set(0));
+        MOST.with(|m| m.set(most));
+        let r = f();
+        MOST.with(|m| m.set(usize::MAX));
+        (r, WALKED.with(Cell::get))
+    }
+}

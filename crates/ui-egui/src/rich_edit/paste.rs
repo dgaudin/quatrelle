@@ -50,13 +50,6 @@ pub(crate) fn clipboard_html_once() -> (Option<String>, u128) {
     })
 }
 
-#[cfg(test)]
-thread_local! {
-    /// How many times the text of a paste was built again to take out the pictures the message
-    /// hasn't, on this test thread.
-    pub(crate) static REBUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
 /// A frame starts with no paste: the clipboard's HTML is read again when the next asks for it.
 pub(crate) fn forget_clipboard_html() {
     PASTE_HTML.with(|kept| *kept.borrow_mut() = None);
@@ -199,8 +192,6 @@ fn paste_html(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id, html:
     // other picture goes.
     // In one pass: taken out one at a time, the whole text was built again for each.
     let known: std::collections::HashSet<&str> = c.inline.iter().chain(&pictures).map(|p| p.cid.as_str()).collect();
-    #[cfg(test)]
-    REBUILT.with(|n| n.set(n.get() + 1));
     rich::retain(&mut add, &mut add_styles, |ch, s| ch != PICTURE || s.picture.as_deref().is_some_and(|cid| known.contains(cid)));
     c.styles.fit(&c.body);
     let n = c.body.chars().count();

@@ -163,7 +163,8 @@ const PASTED_PICTURE_MAX: usize = 5 << 20;
 /// [`pasted_html`] keeping the pictures that come along: those embedded in the HTML (`data:`
 /// addresses, which web pages and some apps copy) become pictures of the message, each where
 /// a [`rich::PICTURE`] stands; those named by `cid:` (text copied from this editor, whose
-/// message has them) keep their id. Pictures on the web or in another program's files go.
+/// message has them) keep their id. Pictures on the web or in another program's files go, and
+/// those past the [`MAX_PICTURES`](pictures::MAX_PICTURES) first.
 pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<InlinePicture>) {
     const MARK: char = '\u{E000}';
     // Sizes and typefaces come with the spans (`html_to_rich` reads them).
@@ -177,6 +178,11 @@ pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<Inlin
                 kept.push(sp);
                 continue;
             };
+            // At most as many as a message's pictures are listed: past them, a picture goes (and
+            // one embedded isn't kept for nothing).
+            if cids.len() >= pictures::MAX_PICTURES {
+                continue;
+            }
             let cid = match src.strip_prefix("cid:") {
                 Some(cid) if !cid.is_empty() => Some(cid.to_string()),
                 _ => data_picture(&src).filter(|_| pictures.len() < PASTED_PICTURES).map(|p| {
@@ -204,8 +210,13 @@ pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<Inlin
     let (mut text, mut styles) = rich::from_rich(&lines);
     let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
     text = text.replace(MARK, &rich::PICTURE.to_string());
+    // Each its picture's style, in one pass (one restyle each walked the whole text again).
+    styles.fit(&text);
     for (at, cid) in marks.into_iter().zip(cids) {
-        styles.restyle(&text, at..at + 1, |s| rich::Style { picture: Some(cid.clone()), ..s.clone() });
+        let id = styles.intern(rich::Style { picture: Some(cid), ..styles.style(at) });
+        if let Some(c) = styles.chars.get_mut(at) {
+            *c = id;
+        }
     }
     (text, styles, pictures)
 }
@@ -671,6 +682,9 @@ pub fn html_links(html: &str) -> Vec<String> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Trim trailing spaces and collapse runs of blank lines.
 pub(super) fn tidy_text(s: &str) -> String {

@@ -142,20 +142,20 @@ fn a_paste_reads_the_clipboards_html_once() {
 }
 
 /// Found in review: HTML pasted with thousands of pictures the message hasn't (`cid:` addresses
-/// of another message) had them taken out one at a time, the whole text built again for each:
-/// 10,000 froze the window. They go in one pass.
+/// of another message) froze the window, each taken out, and each styled, in a pass over the
+/// whole text. The paste goes in with its text and none of them (what it costs is told in
+/// `mime`'s `thousands_of_pictures_pasted_with_much_text_cost_a_few_passes`).
 #[test]
-fn unknown_pictures_pasted_go_in_one_pass() {
+fn unknown_pictures_pasted_go() {
     crate::set_clipboard_html(clipboard_html);
     let pictures: String = (0..10_000).map(|n| format!("<img src=\"cid:n{n}\">")).collect();
+    let words = "Plan for Monday, and the week after. ".repeat(500);
     let (mut a, dir, ctx) = writing("paste-unknown-pictures");
-    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some(format!("<p>{pictures}</p><p>Plan for Monday.</p>")));
-    crate::rich_edit::REBUILT.with(|n| n.set(0));
+    CLIPBOARD_HTML.with(|c| *c.borrow_mut() = Some(format!("<p>{pictures}</p><p>{words}</p>")));
     frame(&ctx, &mut a, vec![Event::Paste("Plan".into())]);
     CLIPBOARD_HTML.with(|c| *c.borrow_mut() = None);
     let body = compose(&a).body;
-    assert!(!body.contains(quatrelle_engine::mime::rich::PICTURE) && body.contains("Plan for Monday."), "{:?}", body.get(..80));
-    assert_eq!(crate::rich_edit::REBUILT.with(std::cell::Cell::get), 1, "the pasted text built again to take its pictures out");
+    assert!(!body.contains(quatrelle_engine::mime::rich::PICTURE) && body.contains("Plan for Monday, and the week after."), "{:?}", body.get(..80));
     let _ = std::fs::remove_dir_all(dir);
 }
 
