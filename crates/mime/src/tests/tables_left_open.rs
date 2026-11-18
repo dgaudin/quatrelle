@@ -15,3 +15,14 @@ fn a_megabyte_of_tables_left_open_is_read_at_once() {
     assert!(took < std::time::Duration::from_secs(5), "{took:?}");
     assert!(p.text.contains("link") && p.text.contains("https://x.example/a"));
 }
+
+/// A MailTip's text (any colleague writes their automatic reply) that nests deeper than any mail
+/// does is read flat, as the other conversions read it: tables of two cells, one in another,
+/// within the 16 KB read, came out as more than a megabyte of rules, the words lost among them.
+#[test]
+fn a_tip_nested_deeper_than_mail_is_read_flat() {
+    let html = format!("{}Back on Monday.", "<table><tr><td>x</td><td>".repeat(600));
+    let text = html_to_plain(&html);
+    assert!(text.len() < 4 * html.len(), "{} bytes out of {}", text.len(), html.len());
+    assert!(text.contains("Back on Monday"), "{:?}", text.get(..200));
+}

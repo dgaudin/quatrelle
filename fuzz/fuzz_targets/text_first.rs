@@ -9,7 +9,8 @@
 //! (`check_message`, with the fields its `MessageXml` names), as a `GetReminders` answer
 //! (`reminders_listed`), for the server's version (`server_major`) and for each message's marks
 //! (`marks_listed`), and the whole of it as an Autodiscover answer naming the account's online
-//! archive (`archive_named`).
+//! archive (`archive_named`). Each answer is read as a MailTips answer too (`GetMailTips`,
+//! `getMailTips`): its tips within their caps.
 #![no_main]
 
 use std::io::{self, Read, Write};
@@ -41,6 +42,16 @@ impl Write for Imap<'_> {
     }
 }
 
+/// MailTips as read from a server's answer: at most the cap, each for an address, its texts
+/// bounded.
+fn mail_tips_bounded(tips: &[quatrelle_model::scheduling::MailTip]) {
+    assert!(tips.len() <= quatrelle_model::scheduling::MAX_MAIL_TIPS, "{} tips", tips.len());
+    for t in tips {
+        assert!(t.email.contains('@') && t.email.len() <= 320, "{:?}", t.email);
+        assert!(t.automatic_replies.chars().count() <= 4000 && t.custom.chars().count() <= 4000, "{t:?}");
+    }
+}
+
 fuzz_target!(|data: &[u8]| {
     let Some((&kind, rest)) = data.split_first() else {
         return;
@@ -69,10 +80,14 @@ fuzz_target!(|data: &[u8]| {
                 assert!(a.contains('@') && a.len() < 320 && !a.chars().any(|c| c.is_control() || c.is_whitespace()), "{a:?}");
             }
         }
+        mail_tips_bounded(&quatrelle_net::ews::mail_tips_read(&root));
         quatrelle_net::ews::text_first(&root)
     } else {
         match serde_json::from_slice(rest) {
-            Ok(v) => quatrelle_net::graph::text_first(&v),
+            Ok(v) => {
+                mail_tips_bounded(&quatrelle_net::graph_pim::mailtips::mail_tips_read(&v));
+                quatrelle_net::graph::text_first(&v)
+            }
             Err(_) => None,
         }
     };

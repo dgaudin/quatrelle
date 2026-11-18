@@ -650,6 +650,8 @@ pub fn html_to_plain(html: &str) -> String {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
+    let html = flat_if_too_deep(html);
+    let html = html.as_ref();
     let result = std::panic::catch_unwind(|| html2text::config::plain_no_decorate().string_from_read(html.as_bytes(), 400));
     match result {
         Ok(Ok(s)) => tidy_text(&s),

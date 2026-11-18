@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! An HTML body: converted to text, to formatted lines and to columns, and searched for its
-//! pictures and links; quoted under a reply as it came (its columns as blocks of text, cleaned
-//! and its pictures renamed, its layout written out again); plus the plain-text markup
-//! Quatrelle writes itself.
+//! An HTML body: converted to text (a MailTip's short piece too), to formatted lines and to
+//! columns, and searched for its pictures and links; quoted under a reply as it came (its columns
+//! as blocks of text, cleaned and its pictures renamed, its layout written out again); plus the
+//! plain-text markup Quatrelle writes itself.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -16,6 +16,8 @@ fuzz_target!(|input: &[u8]| {
     let formatted = mime::html_to_rich(&page);
     let _ = mime::remote_images(&formatted);
     let _ = mime::html_to_text(&page);
+    // A short piece shown as it is: a MailTip's automatic reply.
+    let _ = mime::html_to_plain(&page);
     let _ = mime::html_links(&page);
     let _ = mime::html_images(&page);
     let _ = mime::trackers(&page);
