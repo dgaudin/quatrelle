@@ -734,32 +734,45 @@ fn a_left_chat_says_so_under_its_header() {
 
 /// Re-review n° 4: in the narrowest pane (332 points: the window at its narrowest, 760, and the
 /// list at its widest, 380) and at the default width, an outsider's long messages leave room for
-/// "External" and the time beside them: both stay whole in the pane. With `QUATRELLE_FRAME_PNG`
-/// set, both widths are painted.
+/// "External" and the time beside them: both stay whole in the pane, beside a picture's place and
+/// beside its thumbnail too (round 3: a thumbnail is as wide as the bubble at most). With
+/// `QUATRELLE_FRAME_PNG` set, both widths are painted, the picture waited for and come.
 #[test]
 fn external_and_the_time_stay_in_the_narrowest_pane() {
     let sam = || user("u-sam", "Sam Okafor");
     let long = "We moved the review to Thursday, and the figures for the third quarter are in the shared folder now";
-    let row: Vec<ChatMessage> = (0..6)
+    let mut row: Vec<ChatMessage> = (0..6)
         .map(|k| said(&format!("m{k:02}"), sam(), NOW - 1800 + k * 30, para(vec![words(if k % 2 == 0 { long } else { "Short note" })])))
         .collect();
+    row.push(said("m06", sam(), NOW - 1600, para(vec![words("The plan"), Run { hosted: Some("h1".into()), ..Default::default() }])));
     let (mut a, dir, _) = chat_app("teams-chat-narrowest", group_row(), TEAMS_LINK, row);
     let ctx = egui::Context::default();
     let pictures = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from);
     let mut tex = Textures::default();
-    // The list at its default 260 points: a window of 640 leaves the pane the narrowest's 332.
-    for (w, pane) in [(640usize, 332.0), (760, 452.0)] {
+    // The list at its default 260 points: a window of 640 leaves the pane the narrowest's 332. The
+    // picture's place first, then its thumbnail (a wide picture: 240 points if it may).
+    let sizes = [(640usize, 332.0, "waiting"), (760, 452.0, "waiting"), (640, 332.0, "come"), (760, 452.0, "come")];
+    // The picture's message's time: drawn (one pushed out of the pane wouldn't be) and in the pane.
+    let at = quatrelle_engine::model::dates::civil(NOW - 1600, &a.session.clock);
+    let its_time = format!("{:02}:{:02}", at.hour, at.minute);
+    for (i, (w, pane, picture)) in sizes.into_iter().enumerate() {
+        if i == 2 {
+            let hosted = Picture::Hosted { chat: CHAT.into(), message: "m06".into(), hosted: "h1".into() };
+            a.session.teams_apply(teams::Event::Picture { picture: hosted.clone(), bytes: super::pictures::png(600, 300) });
+            super::pictures::decoded(&ctx, &mut a);
+            assert!(matches!(a.ui.teams_queue.pictures.image(&hosted), Some(crate::panes::conversations::Shown::Ready(_))), "decoded");
+        }
         for _ in 0..8 {
             frame_with_size(&ctx, &mut a, &mut tex, vec![], None, (w, 480));
         }
-        let png = pictures.as_ref().map(|d| d.join(format!("teams-chat-narrowest-{pane}.png")));
+        let png = pictures.as_ref().map(|d| d.join(format!("teams-chat-narrowest-{pane}-{picture}.png")));
         let (_, shapes) = frame_with_size(&ctx, &mut a, &mut tex, vec![], png, (w, 480));
         let texts = texts_of(&shapes);
         let is_time = |t: &str| t.len() == 5 && t.as_bytes().get(2) == Some(&b':');
         let beside: Vec<&(String, egui::Rect)> = texts.iter().filter(|(t, r)| (t == "External" || is_time(t)) && r.left() > 300.0).collect();
-        assert!(beside.iter().any(|(t, _)| t == "External") && beside.iter().any(|(t, _)| is_time(t)), "{pane}: {texts:?}");
+        assert!(beside.iter().any(|(t, _)| t == "External") && beside.iter().any(|(t, _)| *t == its_time), "{pane}, picture {picture}: {texts:?}");
         for (t, r) in beside {
-            assert!(r.right() <= w as f32 - 1.0, "{pane}-point pane: {t:?} out of it at {r:?}");
+            assert!(r.right() <= w as f32 - 1.0, "{pane}-point pane, picture {picture}: {t:?} out of it at {r:?}");
         }
     }
     let _ = std::fs::remove_dir_all(dir);
