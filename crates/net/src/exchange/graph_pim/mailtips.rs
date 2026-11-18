@@ -99,7 +99,7 @@ mod tests {
              "mailboxFull": true, "customMailTip": "Ring first", "deliveryRestricted": true,
              "externalMemberCount": 12, "isModerated": true, "maxMessageSize": 10485760,
              "recipientScope": "external"},
-            {"emailAddress": {"address": "bo@contoso.example"}, "mailboxFull": false},
+            {"emailAddress": {"address": "bo@contoso.example"}, "mailboxFull": false, "maxMessageSize": 2048},
             {"automaticReplies": {"message": "no address"}},
         ]});
         let tips: Vec<MailTip> = v["value"].as_array().unwrap().iter().filter_map(tip_of).collect();
@@ -109,6 +109,7 @@ mod tests {
         assert!(tips[0].mailbox_full && tips[0].restricted && tips[0].moderated && !tips[0].invalid);
         assert_eq!(tips[0].custom, "Ring first");
         assert_eq!((tips[0].external_members, tips[0].max_message_size, tips[0].scope.as_str()), (12, 10_485_760, "external"));
-        assert!(!tips[1].worth_telling());
+        assert!(tips[1].worth_telling(), "a size limit alone is something to tell");
+        assert_eq!(tips[1].max_message_size, 2048);
     }
 }

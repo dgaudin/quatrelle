@@ -2367,3 +2367,4 @@ presence	Offline	オフライン
 	Reaches {n} people outside the organisation	組織外の {n} 人に届きます
 	You wrote that something is attached, but nothing is.	添付ファイルがあると書かれていますが、何も添付されていません。
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	このメッセージは、この受信者が受け取れる {size} を超えています

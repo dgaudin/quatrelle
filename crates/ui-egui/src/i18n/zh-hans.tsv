@@ -2370,3 +2370,4 @@ presence	Offline	离线
 	Reaches {n} people outside the organisation	触达组织外的 {n} 人
 	You wrote that something is attached, but nothing is.	您写的是有附件，但没有附件。
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	此邮件超过此收件人接受的 {size}

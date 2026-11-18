@@ -2371,3 +2371,4 @@ presence	Offline	Не в сети
 	Reaches {n} people outside the organisation	Доходит до {n} человек за пределами организации
 	You wrote that something is attached, but nothing is.	Вы написали, что что-то вложено, но вложений нет.
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Это сообщение больше, чем {size}, которые принимает этот получатель

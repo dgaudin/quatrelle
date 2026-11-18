@@ -2371,3 +2371,4 @@ presence	Offline	Hors ligne
 	Reaches {n} people outside the organisation	Atteint {n} personnes en dehors de l'organisation
 	You wrote that something is attached, but nothing is.	Vous avez écrit qu'un élément est joint, mais rien ne l'est.
 	{email}: {line}	{email} : {line}
+	This message is larger than the {size} this recipient accepts	Ce message dépasse les {size} que ce destinataire accepte

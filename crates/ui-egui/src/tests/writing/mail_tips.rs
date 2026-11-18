@@ -64,6 +64,7 @@ fn the_message_shows_what_the_server_says_about_its_recipients() {
             email: "ana@contoso.example".into(),
             automatic_replies: "Away until Monday".into(),
             mailbox_full: true,
+            max_message_size: 1,
             ..Default::default()
         }],
         error: None,
@@ -71,6 +72,7 @@ fn the_message_shows_what_the_server_says_about_its_recipients() {
     let drawn = texts(&frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0)));
     let line = drawn.iter().find(|t| t.contains("Away until Monday")).unwrap_or_else(|| panic!("{drawn:?}"));
     assert!(line.contains("ana@contoso.example") && line.contains("Mailbox full"), "{line}");
+    assert!(line.contains("larger than the 1 B this recipient accepts"), "the message is larger than the 1 B it accepts: {line}");
     // Nothing holds the message back: it's only something told.
     assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending));
     // A recipient added: asked again, and the strip from the previous set is gone until the answer.

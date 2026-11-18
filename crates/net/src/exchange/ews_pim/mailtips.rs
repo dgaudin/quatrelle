@@ -114,7 +114,7 @@ mod tests {
              <t:DeliveryRestricted>true</t:DeliveryRestricted><t:IsModerated>true</t:IsModerated>\
              <t:InvalidRecipient>false</t:InvalidRecipient><t:Scope>External</t:Scope></m:MailTips>\
              <m:MailTips><t:RecipientAddress><t:EmailAddress>bo@contoso.example</t:EmailAddress></t:RecipientAddress>\
-             <t:MailboxFull>false</t:MailboxFull></m:MailTips>\
+             <t:MailboxFull>false</t:MailboxFull><t:MaxMessageSize>2048</t:MaxMessageSize></m:MailTips>\
              </m:MailTipsResponseMessageType></m:ResponseMessages></m:GetMailTipsResponse></s:Body></s:Envelope>",
         );
         let mut elements = Vec::new();
@@ -126,6 +126,7 @@ mod tests {
         assert!(tips[0].mailbox_full && tips[0].restricted && tips[0].moderated && !tips[0].invalid);
         assert_eq!(tips[0].custom, "Ring first");
         assert_eq!((tips[0].external_members, tips[0].max_message_size, tips[0].scope.as_str()), (12, 10_485_760, "external"));
-        assert!(!tips[1].worth_telling(), "an ordinary recipient says nothing");
+        assert!(tips[1].worth_telling(), "a size limit alone is something to tell");
+        assert_eq!(tips[1].max_message_size, 2048);
     }
 }

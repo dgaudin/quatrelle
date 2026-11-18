@@ -2366,3 +2366,4 @@ presence	Offline	לא מחובר
 	Reaches {n} people outside the organisation	מגיע ל-{n} אנשים מחוץ לארגון
 	You wrote that something is attached, but nothing is.	כתבת שמשהו מצורף, אבל שום דבר לא מצורף.
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	הודעה זו גדולה מ{size} שהנמען הזה מקבל

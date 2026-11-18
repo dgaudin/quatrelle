@@ -2367,3 +2367,4 @@ presence	Offline	Offline
 	Reaches {n} people outside the organisation	Bereikt {n} personen buiten de organisatie
 	You wrote that something is attached, but nothing is.	U schreef dat er iets bijgevoegd is, maar er is niets bijgevoegd.
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Dit bericht is groter dan de {size} die deze ontvanger accepteert

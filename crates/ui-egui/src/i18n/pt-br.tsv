@@ -2370,3 +2370,4 @@ presence	Offline	Offline
 	Reaches {n} people outside the organisation	Alcança {n} pessoas fora da organização
 	You wrote that something is attached, but nothing is.	Você escreveu que algo está anexado, mas nada está.
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Esta mensagem é maior que o {size} que este destinatário aceita

@@ -152,6 +152,24 @@ fn sending_holds_when_something_is_said_to_be_attached_and_nothing_is() {
     done(s);
 }
 
+/// A message's size, near enough for a server's limit: its text, and its files as base64 makes
+/// them, with room for the headers. A floor, never above the real message.
+#[test]
+fn a_messages_size_counts_its_text_and_its_files() {
+    let mut s = sample_session("estimated-size");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"subject": "Numbers", "body": "Short."})).unwrap();
+    let short = s.compose.as_ref().map(|c| c.estimated_size()).unwrap_or(0);
+    let long_body = "Long words. ".repeat(1000);
+    s.run("compose.update", &json!({"body": long_body})).unwrap();
+    let long = s.compose.as_ref().map(|c| c.estimated_size()).unwrap_or(0);
+    assert!(long >= short + 11_000, "{short} -> {long}");
+    s.run("compose.attach", &json!({"name": "numbers.bin", "data": vec![7u8; 3000]})).unwrap();
+    let with_file = s.compose.as_ref().map(|c| c.estimated_size()).unwrap_or(0);
+    assert!(with_file >= long + 4000, "base64 and the part's headers: {long} -> {with_file}");
+    done(s);
+}
+
 #[test]
 fn tracking_pictures_stay_unloaded_when_pictures_are_shown() {
     let mut s = sample_session("trackers");

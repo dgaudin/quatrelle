@@ -23,6 +23,7 @@ pub(super) fn draw_tips(s: &Session, st: &UiState, ui: &mut Ui, c: &quatrelle_en
         quatrelle_engine::Fetched::Ready(t) if !t.is_empty() => t,
         _ => return,
     };
+    let size = c.estimated_size();
     ui.add_space(4.0);
     egui::Frame::new().fill(t.chrome.gamma_multiply(0.85)).corner_radius(6).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -53,6 +54,12 @@ pub(super) fn draw_tips(s: &Session, st: &UiState, ui: &mut Ui, c: &quatrelle_en
                     }
                     if tip.invalid {
                         parts.push(tl!("Recipient not found").to_string());
+                    }
+                    if tip.max_message_size > 0 && size > tip.max_message_size {
+                        parts.push(tf!(
+                            "This message is larger than the {size} this recipient accepts",
+                            size = widgets::size_text(tip.max_message_size)
+                        ));
                     }
                     if !parts.is_empty() {
                         let line = parts.join(" — ");

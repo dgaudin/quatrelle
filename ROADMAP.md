@@ -637,9 +637,10 @@ local-first, media-aware v1); the fuller request is
   HTML turned into words), a full mailbox, the organisation's own tip, restricted delivery, a list's
   members outside the organisation, moderation, an address the server doesn't know — once per set of
   recipients (To, Cc and Bcc, lower case, once each), on the account's second connection so a long
-  sync never holds the form; the answer is drawn as a strip over the form, informational only, and
-  the question's number keeps an answer to a set since changed from showing. Accounts without such a
-  server (IMAP, the browser) ask nothing. Beside it, a local guard: a message whose text says
+  sync never holds the form; the answer is drawn as a strip over the form, informational only; a
+  recipient's largest message is compared with the message's own size (text and files, base64
+  included) and said when the message is larger, and the question's number keeps an answer to a set
+  since changed from showing. Accounts without such a server (IMAP, the browser) ask nothing. Beside it, a local guard: a message whose text says
   something is attached ("attached", "ci-joint", "anbei", "adjunto"… in the interface languages) and
   that carries no attachment stops at the usual Send Check dialog, whose "Send anyway" still sends
   it. `compose.mailTips` answers the strip's state as a command; the sample mailbox shows the

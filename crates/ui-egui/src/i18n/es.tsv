@@ -2371,3 +2371,4 @@ presence	Offline	Desconectado
 	Reaches {n} people outside the organisation	Alcanza a {n} personas fuera de la organización
 	You wrote that something is attached, but nothing is.	Escribió que algo está adjunto, pero no lo está.
 	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Este mensaje supera el límite de {size} de este destinatario

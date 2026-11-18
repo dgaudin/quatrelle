@@ -90,7 +90,8 @@ pub struct Availability {
 
 /// What a server says about a message's recipient before it's sent (Outlook's MailTips), as
 /// Exchange (`GetMailTips`) and Microsoft Graph (`getMailTips`) answer it. Kept for a recipient
-/// with something to tell: an ordinary one gets no entry at all.
+/// with something to tell; an ordinary one gets no entry at all (a size limit alone is kept: the
+/// message is compared with it as it is drawn).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MailTip {
@@ -126,7 +127,8 @@ pub struct MailTip {
 }
 
 impl MailTip {
-    /// Whether there's something to tell the user (an ordinary recipient says nothing).
+    /// Whether there's something to tell the user (an ordinary recipient says nothing). A size
+    /// limit alone counts: the message being written is compared with it as it's drawn.
     pub fn worth_telling(&self) -> bool {
         !self.automatic_replies.is_empty()
             || self.mailbox_full
@@ -135,6 +137,7 @@ impl MailTip {
             || self.external_members > 0
             || self.moderated
             || self.invalid
+            || self.max_message_size > 0
     }
 }
 
