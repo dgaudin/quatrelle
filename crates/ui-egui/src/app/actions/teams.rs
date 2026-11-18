@@ -10,7 +10,8 @@
 //! inside the user's own folder of files handed to other apps, and the system is handed it as it
 //! is (the launching rules are `Services::open_path`'s). The name is said on one line, without
 //! control or bidi characters, cut at [`NAME_MAX`]. A file removed since it was saved (the engine
-//! hands it again at the next "Open") is said, not handed over. The files picked and the
+//! hands it again at the next "Open") isn't handed over: the engine is told (`teams.fileGone`),
+//! which downloads it again when an Open handed it, else it is said. The files picked and the
 //! screenshot pasted are the user's: looked at, or written to a file of the user's own, by the box
 //! (`writing/attach.rs`).
 
@@ -62,14 +63,18 @@ impl MailApp {
     }
 
     /// One saved file: opened by the system's app, or, when it could run a program, its folder
-    /// shown with a notice saying so. A file no longer there is said (the mail's sentence), and
-    /// not handed to the system.
+    /// shown with a notice saying so. A file no longer there isn't handed to the system: the engine
+    /// is told, and asks it again when an Open handed it (the card says it downloads); else it is
+    /// said (the mail's sentence).
     pub(crate) fn teams_saved(&mut self, saved: TeamsSaved) {
         let name = plain(&saved.name);
         let path = std::path::PathBuf::from(&saved.path);
         #[cfg(not(target_arch = "wasm32"))]
         if let Err(e) = std::fs::metadata(&path) {
-            self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true);
+            let again = self.session.run("teams.fileGone", &json!({"path": saved.path}));
+            if !again.is_ok_and(|v| v["asked"] == true) {
+                self.session.notice(tf!("{name} could not be opened: {error}", name = name, error = e), true);
+            }
             return;
         }
         let (target, could_run) = match (saved.open, path.parent()) {

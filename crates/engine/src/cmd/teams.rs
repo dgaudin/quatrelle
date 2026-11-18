@@ -9,7 +9,7 @@ use std::ops::Range;
 
 use quatrelle_model::Job;
 use quatrelle_model::addr::trust::url_host;
-use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PARTS_MAX, PRESENCE_IDS, Part, Picture, Status};
+use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PARTS_MAX, PATH_MAX, PRESENCE_IDS, Part, Picture, Status};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
 use super::*;
@@ -77,6 +77,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(ready),
         CommandSpec::new("teams.openFile", "Open a shared file", MODULE, open_file)
             .params(r#"{"chat": string (the open conversation), "message": string (one of its messages), "attachment": string (the id of a file it carries)} (downloaded once, then handed to the window to open)"#)
+            .when(ready),
+        CommandSpec::new("teams.fileGone", "A saved file removed", MODULE, file_gone)
+            .params(r#"{"path": string (a file of the open conversation the window was handed, no longer there)} (forgotten, so that the next Open downloads it again; asked again at once when an Open handed it)"#)
             .when(ready),
         CommandSpec::new("teams.openInTeams", "Open in Teams", MODULE, open_in_teams)
             .params("() (the open conversation in Teams, when its link is a Teams chat link)")
@@ -382,6 +385,14 @@ fn call(s: &mut Session, v: &Value) -> CmdResult {
 fn open_file(s: &mut Session, v: &Value) -> CmdResult {
     let (chat, message, attachment) = (id_param(v, "chat")?, id_param(v, "message")?, id_param(v, "attachment")?);
     let asked = s.teams_open_file(chat, message, attachment)?;
+    Ok(json!({"asked": asked}))
+}
+
+fn file_gone(s: &mut Session, v: &Value) -> CmdResult {
+    let path = p::str(v, "path")
+        .filter(|x| !x.is_empty() && x.len() <= PATH_MAX && !x.chars().any(char::is_control))
+        .ok_or_else(|| CmdError::Params(format!("`path` (a file's full path, at most {PATH_MAX} bytes, without a control character) is required")))?;
+    let asked = s.teams_file_gone(path)?;
     Ok(json!({"asked": asked}))
 }
 

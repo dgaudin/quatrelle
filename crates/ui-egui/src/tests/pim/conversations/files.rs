@@ -193,6 +193,39 @@ fn a_saved_file_that_is_gone_is_said() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Final review, core M-1: a saved file removed since, opened again: the window tells the engine,
+/// which asks it again (no notice, the card says "Downloading…"); saved again, it is opened.
+#[test]
+fn a_saved_file_removed_since_is_downloaded_again() {
+    let (mut a, dir, opened) = file_app("teams-file-again", "report.pdf");
+    let path = saved_file("ui-t11-again.pdf");
+    answered(&mut a, FileOutcome::Saved { path: path.clone() });
+    let ctx = egui::Context::default();
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert_eq!(opened.borrow().len(), 1);
+    std::fs::remove_file(&path).unwrap();
+    a.run("teams.openFile", json!({"chat": CHAT, "message": "m1", "attachment": G}));
+    let texts = card(&ctx, &mut a);
+    assert_eq!(a.session.teams.file_state("m1", G), Some(&quatrelle_engine::TeamsFileState::Asked), "asked again");
+    assert!(has_text(&texts, "Downloading…"), "{texts:?}");
+    assert!(!a.session.notices.iter().any(|n| n.text.contains("could not be opened")), "{:?}", a.session.notices);
+    let path = saved_file("ui-t11-again.pdf");
+    a.session.teams_apply(teams::Event::File {
+        chat: CHAT.into(),
+        message: "m1".into(),
+        attachment: G.into(),
+        outcome: FileOutcome::Saved { path: path.clone() },
+    });
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert_eq!(*opened.borrow(), vec![std::path::PathBuf::from(&path); 2], "opened again");
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A card with Open, one downloading and one failed, light and dark.
 #[test]
 fn the_cards_in_light_and_dark() {

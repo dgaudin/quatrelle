@@ -373,8 +373,11 @@ fn a_file_that_could_run_is_shown_in_its_folder_not_opened() {
         ("macros.docm", false),
         ("link.lnk", false),
         ("PAGE.HTM", false),
-        // No extension: the system's opener would go by what the file holds.
+        // No extension, or one of a type Quatrelle doesn't know: the system's opener would go by
+        // what the file holds.
         ("README", false),
+        ("report.pdfx", false),
+        ("page.foo", false),
         ("notes.txt", true),
         ("report.pdf", true),
     ];
@@ -402,11 +405,79 @@ fn teams_could_run_more_than_the_mails_attachments() {
         assert!(teams_could_run(&format!("file.{ext}")), "{ext}");
         assert!(teams_could_run(&format!("file.{}", ext.to_ascii_uppercase())), "{ext}");
     }
-    for name in ["report.pdf", "notes.txt", "photo.JPG", "sheet.xlsx", "deck.pptx", "letter.docx", "archive.tar.gz", "report (2).pdf"] {
+    for name in ["report.pdf", "notes.txt", "photo.JPG", "sheet.xlsx", "deck.pptx", "letter.docx", "archive.zip", "report (2).pdf"] {
         assert!(!teams_could_run(name), "{name}");
     }
     // The mail's own rule stays as it is.
     assert!(!crate::mime::runs_code("page.html") && !crate::mime::runs_code("macros.docm"));
+}
+
+/// Final review, core I-1: the system's opener types a file whose extension it doesn't know by
+/// what it holds (on Linux a web page saved as `report.pdfx` opens in the browser): only a type
+/// Quatrelle knows, and that can't run, is opened; anything else is shown in its folder.
+#[test]
+fn only_a_type_quatrelle_knows_is_opened() {
+    for name in ["report.pdfx", "page.foo", "draw.qqq", "notes.zzz", "README", "archive.tar.gz", "plan.dwg", "a.b.c"] {
+        assert!(teams_could_run(name), "shown in its folder: {name}");
+    }
+    let known = ["report.pdf", "letter.docx", "photo.png", "notes.txt", "PHOTO.JPEG", "sheet.xlsx", "deck.pptx", "old.doc", "data.csv"];
+    for name in known.into_iter().chain(["song.mp3", "clip.mp4", "archive.zip", "invite.ics", "card.vcf", "text.odt", "scan.tiff"]) {
+        assert!(!teams_could_run(name), "opened: {name}");
+    }
+}
+
+/// Final review, core M-1: a saved file removed since, opened again, is handed again; the window,
+/// finding it gone, says so (`teams.fileGone`) and it is asked again at once. Gone again after
+/// that download, it is only forgotten: the next Open asks it, nothing goes by itself.
+#[test]
+fn a_saved_file_removed_since_is_asked_again() {
+    let mut s = opened();
+    let path = in_scratch("report.pdf");
+    let job = || teams::Job::File { chat: CHAT.into(), message: "m1".into(), created: m1().created, attachment: G.into() };
+    open_file(&mut s, "m1", G).unwrap();
+    saved(&mut s, "m1", G, &path);
+    s.take_teams_saved();
+    teams_jobs(&mut s);
+    let gone = |s: &mut Session| s.run("teams.fileGone", &json!({"path": in_scratch("report.pdf")}));
+    assert_eq!(open_file(&mut s, "m1", G), Ok(json!({"asked": false})));
+    assert_eq!(s.take_teams_saved().map(|h| h.path), Some(path.clone()), "handed again");
+    assert_eq!(gone(&mut s), Ok(json!({"asked": true})));
+    assert_eq!(s.teams.file_state("m1", G), Some(&TeamsFileState::Asked));
+    assert_eq!(teams_jobs(&mut s), [job()], "downloaded again");
+    saved(&mut s, "m1", G, &path);
+    assert!(s.take_teams_saved().is_some());
+    assert_eq!(gone(&mut s), Ok(json!({"asked": false})), "gone again at once: not asked by itself");
+    assert_eq!(s.teams.file_state("m1", G), None);
+    assert!(teams_jobs(&mut s).is_empty());
+    assert_eq!(open_file(&mut s, "m1", G), Ok(json!({"asked": true})), "the next Open asks it");
+    assert_eq!(teams_jobs(&mut s), [job()]);
+    // A path never handed, and junk: nothing.
+    assert_eq!(s.run("teams.fileGone", &json!({"path": in_scratch("other.pdf")})), Ok(json!({"asked": false})));
+    for junk in [json!({}), json!({"path": 5}), json!({"path": ""}), json!({"path": "/a\u{1}b"}), json!({"path": "x".repeat(5_000)})] {
+        assert!(matches!(s.run("teams.fileGone", &junk), Err(CmdError::Params(_))), "{junk}");
+    }
+    assert_eq!(s.teams.file_state("m1", G), Some(&TeamsFileState::Asked));
+}
+
+/// A saved file handed to the window carries Windows' mark of the internet (zone 3), however it
+/// was handed: saved, handed again by an Open, or downloaded again once removed.
+#[test]
+fn a_saved_file_is_marked_as_from_the_internet() {
+    let mut s = opened();
+    let path = in_scratch(&format!("marked {}.pdf", std::process::id()));
+    let marked = |path: &str| !cfg!(windows) || std::fs::read_to_string(format!("{path}:Zone.Identifier")).is_ok_and(|z| z.contains("ZoneId=3"));
+    open_file(&mut s, "m1", G).unwrap();
+    std::fs::write(&path, b"%PDF-1.7").unwrap();
+    saved(&mut s, "m1", G, &path);
+    assert!(s.take_teams_saved().is_some_and(|h| marked(&h.path)), "saved");
+    open_file(&mut s, "m1", G).unwrap();
+    assert!(s.take_teams_saved().is_some_and(|h| marked(&h.path)), "handed again");
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(s.run("teams.fileGone", &json!({"path": path})), Ok(json!({"asked": true})));
+    std::fs::write(&path, b"%PDF-1.7").unwrap();
+    saved(&mut s, "m1", G, &path);
+    assert!(s.take_teams_saved().is_some_and(|h| marked(&h.path)), "downloaded again");
+    std::fs::remove_file(&path).unwrap();
 }
 
 #[test]

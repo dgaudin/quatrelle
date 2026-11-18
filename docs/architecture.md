@@ -128,8 +128,9 @@ address Graph gave); both go only to Microsoft's file hosts, on public addresses
 of their own, with caps on size, time and tries (an upload stopped on its lane is begun again three
 times at most; a `Retry-After` of OneDrive's is waited on the lane), and both stop in Work offline.
 The engine hands the window a saved file once
-(`session/pim/teams/files.rs`), and a name that could run code is shown in its folder, never
-opened. A new conversation (`session/pim/teams/people.rs`) is made from people the directory gave
+(`session/pim/teams/files.rs`), and a name that could run code, or of a type it doesn't know, is
+shown in its folder, never opened; one the window finds removed since is downloaded again at the
+next Open (`teams.fileGone`). A new conversation (`session/pim/teams/people.rs`) is made from people the directory gave
 (`teams.people`, asked of the worker's `net/src/teams/people.rs` and answered as `Event`s, kept bounded), with its first message queued before the
 chat is shown; a one-to-one chat already there is opened instead. A call
 (`teams.call`) is a page, not a request: the engine builds Teams' call link from the open chat's

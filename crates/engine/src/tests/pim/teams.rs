@@ -555,7 +555,7 @@ fn teams_commands_survive_junk_params_while_on() {
     let mut s = signed_in((0..5).map(|i| row(i, 100 - i as i64)).collect());
     s.module = Module::Conversations;
     let ids: Vec<&str> = s.registry().all().iter().map(|c| c.id).filter(|id| id.starts_with("teams.")).collect();
-    assert_eq!(ids.len(), 23, "{ids:?}");
+    assert_eq!(ids.len(), 24, "{ids:?}");
     let junk = [
         json!(null),
         json!({}),
@@ -575,6 +575,8 @@ fn teams_commands_survive_junk_params_while_on() {
         json!({"people": [null, 1, "", "\u{0}"], "topic": 5, "text": "hi", "video": "yes", "query": "x".repeat(10_000)}),
         json!({"people": vec!["u"; 1_000], "topic": ["a"], "text": "\u{202E}", "video": [], "query": 5}),
         json!({"people": "u", "topic": "x".repeat(10_000), "text": "x".repeat(100_000), "video": null, "files": ["\u{0}"]}),
+        json!({"path": "/run/\u{0}\u{202E}".repeat(2_000), "chat": 5}),
+        json!({"path": ["/a"], "message": null}),
     ];
     for _ in 0..2 {
         for id in &ids {

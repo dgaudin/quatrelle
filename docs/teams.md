@@ -417,10 +417,13 @@ They go with the text, the pictures first and then the files, each in the order 
   downloaded: a bigger one says "It is bigger than Quatrelle downloads (100 MB): open it in the
   browser". When it fails the card says why: not enough room on the disk, Teams refused it (with
   Teams' code), Teams can't be reached, the download was too slow, too many files are being
-  downloaded, or the file is no longer in the conversation.
+  downloaded, or the file is no longer in the conversation. A file removed from that folder since
+  it was downloaded is downloaded again at the next **Open**.
 - **A file that could run** (a program, a script, a web page, a picture that holds scripts or a
-  document with macros) isn't opened: it is shown in its folder, and the card says "This file
-  could run a program: it is shown in its folder, not opened." You decide what to do with it.
+  document with macros), or of a type Quatrelle doesn't know (without an extension, or with one it
+  doesn't know: your computer would go by what the file holds), isn't opened: it is shown in its
+  folder, and the card says "This file could run a program: it is shown in its folder, not
+  opened." You decide what to do with it.
 - **Open in browser** opens the file's link in your default browser. It is offered for any web link of the card, including the files over 100 MB.
 
 ### Starting a conversation

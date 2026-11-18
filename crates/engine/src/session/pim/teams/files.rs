@@ -4,20 +4,23 @@
 //! here and shown at once by name (the worker reads them when their turn comes, sends them up and
 //! says how far they went); and a file someone shared in the open chat, asked of the worker once
 //! (`teams.openFile`) and handed to the window once saved ([`Session::take_teams_saved`]), to be
-//! opened with the system's app, or shown in its folder when it could run code.
+//! opened with the system's app, or shown in its folder when it could run code; removed since
+//! (`teams.fileGone`), it is asked again.
 //!
 //! What is hostile here: the parts' paths (from the window or a script): at most [`PARTS_MAX`],
 //! each absolute, at most [`PATH_MAX`] bytes, without a control character. The worker's word on
 //! a file asked: taken only for a file of the open chat asked and not answered yet; a path saved
 //! only inside the user's own folder of files handed to other apps (`scratch_dir("open")`), not
 //! deeper, under a name that is its own `sanitize_filename`; Teams' code only in the client's
-//! shape. A name that could run code is never opened ([`teams_could_run`]). What is kept is
-//! bounded: the files' states ([`TEAMS_FILES_KEPT`], the oldest answered let go first), the files
-//! waiting for the window, the parts of the messages not answered for yet ([`OUTBOX_MAX`]).
+//! shape. A name that could run code, or of a type Quatrelle doesn't know, is never opened
+//! ([`teams_could_run`]). A file the window finds gone is asked again only when an Open handed it,
+//! once: nothing downloads by itself. What is kept is bounded: the files' states
+//! ([`TEAMS_FILES_KEPT`], the oldest answered let go first), the files waiting for the window, the
+//! paths handed again, the parts of the messages not answered for yet ([`OUTBOX_MAX`]).
 
 use std::path::Path;
 
-use quatrelle_mime::{runs_code, sanitize_filename, teams_write_parts};
+use quatrelle_mime::{mime_from_name, runs_code, sanitize_filename, teams_write_parts};
 use quatrelle_model::pim::teams::{Attachment, ChatText, FileOutcome, FileWhy, Mention, OUTBOX_MAX, OutPart, PARTS_MAX, PATH_MAX, Part};
 
 use super::*;
@@ -67,6 +70,9 @@ pub(super) struct Files {
     states: VecDeque<(String, String, TeamsFileState)>,
     /// Oldest first, each once, at most [`TEAMS_FILES_KEPT`].
     saved: VecDeque<TeamsSaved>,
+    /// The paths of saved files an Open handed again, oldest first, each once, at most
+    /// [`TEAMS_FILES_KEPT`]: one the window finds gone is asked again.
+    again: VecDeque<String>,
     /// By local id, oldest first, at most [`OUTBOX_MAX`]: the outbox's refusal of a message
     /// carries nothing of its parts, which are put back from here.
     parts: VecDeque<(String, Vec<OutPart>)>,
@@ -76,6 +82,7 @@ impl Files {
     /// Another chat opened: the files asked go with the one left (their answers aren't taken).
     pub(super) fn chat_left(&mut self) {
         self.states.clear();
+        self.again.clear();
     }
 
     fn at(&self, message: &str, attachment: &str) -> Option<usize> {
@@ -107,6 +114,17 @@ impl Files {
         }
     }
 
+    /// The saved file at `path` handed again by an Open: noted once; past [`TEAMS_FILES_KEPT`]
+    /// the oldest goes.
+    fn handed_again(&mut self, path: &str) {
+        if !self.again.iter().any(|p| p == path) {
+            self.again.push_back(path.to_string());
+        }
+        while self.again.len() > TEAMS_FILES_KEPT {
+            self.again.pop_front();
+        }
+    }
+
     /// The parts of the message `local` sent, until the outbox answers for it.
     pub(super) fn sent_with(&mut self, local: &str, parts: Vec<OutPart>) {
         if parts.is_empty() {
@@ -127,7 +145,9 @@ impl Files {
 
 /// Whether opening a file saved under `name` could run code, so that it's shown in its folder
 /// instead: what [`runs_code`] says of mail's attachments, a web page, an SVG, a document with
-/// macros, and a name without an extension (the system's opener would go by what the file holds).
+/// macros; and a name whose extension isn't of a type Quatrelle knows (mime's table), or without
+/// one: the system's opener would go by what the file holds (on Linux, a web page saved as
+/// `report.pdfx` opens in the browser).
 pub fn teams_could_run(name: &str) -> bool {
     if runs_code(name) {
         return true;
@@ -135,7 +155,8 @@ pub fn teams_could_run(name: &str) -> bool {
     let clean = sanitize_filename(name);
     let Some((stem, ext)) = clean.rsplit_once('.') else { return true };
     let extension = !stem.trim().is_empty() && (1..=EXTENSION_MAX).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric());
-    !extension || ALSO_RUNS.iter().any(|e| ext.eq_ignore_ascii_case(e))
+    let known = mime_from_name(&clean) != "application/octet-stream";
+    !extension || !known || ALSO_RUNS.iter().any(|e| ext.eq_ignore_ascii_case(e))
 }
 
 /// Whether the parts a message takes can be: at most [`PARTS_MAX`], each by a path that is
@@ -239,6 +260,7 @@ impl Session {
             Some(TeamsFileState::Asked) => return Ok(false),
             Some(TeamsFileState::Saved { path }) => {
                 let saved = handed(path);
+                self.teams.files.handed_again(&saved.path);
                 self.teams.files.hand(saved);
                 return Ok(false);
             }
@@ -248,6 +270,23 @@ impl Session {
         let (chat, message, attachment) = (chat.to_string(), message.to_string(), attachment.to_string());
         self.push_job(Job::Teams { job: teams::Job::File { chat, message, created, attachment } });
         Ok(true)
+    }
+
+    /// The saved file at `path` the window was handed isn't there any more (removed since it was
+    /// saved): its state forgotten, so that the next Open asks it again; when an Open had handed
+    /// it again, it is asked again at once (once: gone again after that download, it is only
+    /// forgotten, and nothing downloads by itself). Whether it was asked.
+    pub fn teams_file_gone(&mut self, path: &str) -> Result<bool, CmdError> {
+        let files = &mut self.teams.files;
+        let Some(i) = files.states.iter().position(|(.., s)| matches!(s, TeamsFileState::Saved { path: p } if p == path)) else {
+            return Ok(false);
+        };
+        let Some((message, attachment, _)) = files.states.remove(i) else { return Ok(false) };
+        let again = files.again.iter().position(|p| p == path).and_then(|k| files.again.remove(k)).is_some();
+        match self.teams.open.clone() {
+            Some(chat) if again => self.teams_open_file(&chat, &message, &attachment),
+            _ => Ok(false),
+        }
     }
 
     /// The next saved file for the window to open (or show in its folder), once each, oldest
