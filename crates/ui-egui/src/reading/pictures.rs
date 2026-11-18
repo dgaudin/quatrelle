@@ -145,8 +145,9 @@ pub(crate) fn kept_room(size: Option<mime::ImageSize>, width: f32) -> Option<(f3
 /// picture would be ([`kept_room`]: a signature's icon 13 pixels wide), the picture's room — as
 /// tall as it is wide, at most a line, unless the message sets its height — filled with what's
 /// behind it when that shows (the box of colour around an icon), else outlined, its description
-/// on hover. A description wider than its place went down a narrow column a few letters a line,
-/// and pushed the lines beside it out of line.
+/// written in it when it holds its words ([`written_in`]: a product's photo), else on hover only.
+/// A description wider than its place went down a narrow column a few letters a line, and pushed
+/// the lines beside it out of line.
 pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> egui::Response {
     let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
     let text = format!("[{alt}]");
@@ -166,7 +167,13 @@ pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page:
                     None => ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside),
                 };
             }
-            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, alt));
+            let ink = theme::mail_colors_on(None, sp.background, page, t, t.faint).0;
+            if let Some(g) = written_in(ui, alt, rect, line, ink) {
+                ui.painter().with_clip_rect(rect.shrink(1.0)).galley(rect.min + vec2(WRITTEN_PAD, WRITTEN_PAD / 2.0), g, ink);
+            }
+            // In a link, said as the link it opens.
+            let role = if sp.link.is_some() { egui::Role::Link } else { egui::Role::Image };
+            r.widget_info(|| egui::WidgetInfo::labeled(role, true, alt));
             r.on_hover_text(alt)
         }
         // Inside a link, its place is the link's.
@@ -175,6 +182,35 @@ pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page:
             None => ui.add(egui::Label::new(RichText::new(text).color(t.faint)).selectable(false)),
         },
     }
+}
+
+/// Room left between a box and the description written in it, in points.
+const WRITTEN_PAD: f32 = 4.0;
+/// Characters of a description written in a box, at most.
+const WRITTEN_MAX: usize = 300;
+
+/// A picture's description written in its box (`rect`) when it isn't shown, as Outlook writes it
+/// in a picture it hasn't loaded, wrapped at its words, as many lines as the box holds: when the
+/// box is a line high (`line`) or more and its longest words fit across (a product's photo of
+/// 280 pixels); `None` for a smaller box (a signature's icon, a social network's of 24), whose
+/// description is only on hover, never cut into letters.
+fn written_in(ui: &Ui, alt: &str, rect: Rect, line: f32, ink: Color32) -> Option<std::sync::Arc<egui::Galley>> {
+    let across = rect.width() - 2.0 * WRITTEN_PAD;
+    if rect.height() < line || across < line {
+        return None;
+    }
+    let alt: String = alt.chars().take(WRITTEN_MAX).collect();
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    // The longest few by letters, measured.
+    let mut words: Vec<&str> = alt.split_whitespace().collect();
+    words.sort_by_key(|w| std::cmp::Reverse(w.chars().count()));
+    let fits = words.iter().take(3).all(|w| ui.fonts_mut(|f| f.layout_no_wrap((*w).to_string(), font.clone(), ink).size().x) <= across);
+    if !fits {
+        return None;
+    }
+    let mut job = egui::text::LayoutJob::simple(alt, font, ink, across);
+    job.wrap.max_rows = ((rect.height() - WRITTEN_PAD) / line).floor().max(1.0) as usize;
+    Some(ui.fonts_mut(|f| f.layout_job(job)))
 }
 
 /// The most pixels on a side a picture is decoded at to be shown: no more than it can be shown

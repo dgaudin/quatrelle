@@ -343,6 +343,9 @@ fn a_signatures_tiny_icons_not_loaded_keep_its_lines_in_line() {
     }
     assert!(boxes.iter().all(|b| (b.height() - b.width()).abs() < 0.5), "square: {boxes:?}");
     assert!(boxes.windows(2).all(|p| p[1].top() - p[0].bottom() >= 2.0), "apart, not one bar: {boxes:?}");
+    // Too small to write their descriptions in.
+    let over: Vec<&String> = texts.iter().filter(|(_, r, _)| boxes.iter().any(|b| b.shrink(1.0).intersects(*r))).map(|(t, ..)| t).collect();
+    assert!(over.is_empty(), "nothing written in the icons: {over:?}");
     // Light and dark, and in a pane too narrow for the table (its rows one cell under the other).
     if let Some(d) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
         for (dark, size, name) in [(false, size, "light"), (true, size, "dark"), (false, (1400, 900), "narrow")] {
