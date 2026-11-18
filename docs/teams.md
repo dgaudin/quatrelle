@@ -386,9 +386,10 @@ They go with the text, the pictures first and then the files, each in the order 
   any picture does. A bigger one goes as a file. Quatrelle first saves a picture pasted as a file
   of its own in a folder only you can read; that file is removed when you take the picture away with
   its cross, when the conversation's box lets its words go (a draft let go to make room for
-  others), and when the New conversation pane is closed. Switching to another conversation keeps
-  what was typed, pictures included. Once the message is sent the file stays for Quatrelle to
-  read it, perhaps after a restart, and Quatrelle removes it at its start when it is a week old.
+  others), and when **Cancel** closes the New conversation pane. Switching to another
+  conversation keeps what was typed, pictures included. Once the message is sent the file stays
+  for Quatrelle to read it, perhaps after a restart, and Quatrelle removes it at its start when
+  it is a week old.
 - **Where a file goes.** It is put in your OneDrive, in the folder `Microsoft Teams Chat Files`,
   and shared **to read only** with the people who are in the conversation when the message is
   sent, nobody else; the message carries a link to it. A file already uploaded stays in that folder when
@@ -442,8 +443,9 @@ where the conversation is written, in the place of the one open.
   (without the @ mentions, which need the conversation's members). **Enter creates the
   conversation and sends the first message**; nothing is made before.
 - **It needs the network.** While Teams makes it ("Creating the conversation…") everything
-  waits. When Teams can't be reached ("Teams can't be reached: try again") or refuses ("Teams
-  didn't create the conversation", with its code), the pane stays as it was, with the people,
+  waits, **Cancel** too: the request has gone, and its answer settles it. When Teams can't be
+  reached ("Teams can't be reached: try again") or refuses ("Teams didn't create the
+  conversation", with its code), the pane stays as it was, with the people,
   the name, the words and the files, to try again. If the conversation is made and the first
   message is refused (too long, too many waiting), the pane also stays with what was typed, a
   notice says the message wasn't sent, and the conversation is in the list: sending again opens
@@ -451,10 +453,10 @@ where the conversation is written, in the place of the one open.
 - **A one-to-one conversation already there** with that person is opened, and the message goes to
   it: Teams keeps one conversation for two people.
 - Esc first closes a popup over the pane, then empties **To:** when people are listed under it,
-  then closes the pane: the people, the name and the words typed are let go, and so are the files
-  of the pictures pasted (files attached are only dropped from the pane, the originals untouched).
-  Opening a conversation from the list sets the pane
-  aside: **New conversation** brings it back as it was.
+  then sets the pane aside, as opening a conversation from the list does: **New conversation**
+  (or Ctrl+N) brings it back as it was. Only **Cancel** closes it: the people, the name and the
+  words typed are let go, and so are the files of the pictures pasted (files attached are only
+  dropped from the pane, the originals untouched).
 
 ### Calling
 

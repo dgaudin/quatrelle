@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! A new conversation (decision 14), written where the open chat is: Ctrl+N or the list's "New
-//! conversation" opens it ([`open`]), Cancel or Esc closes it, what was typed let go (Esc goes to
-//! a popup over the pane first, then to the people listed under "To:": [`escape`]). The chat it
-//! hides isn't on screen (`MailApp::announce` tells the engine so); a chat opened from behind it
-//! takes its place, the pane set aside as it is for New conversation to bring back ([`leave`],
-//! [`each_frame`]). "To:" holds the people picked as chips ("External" first for a guest, a cross
-//! that takes one away, Backspace in the empty field the last one), then a field whose text is
-//! looked up in the organisation's directory [`SEARCH_WAIT`] after the last key (`teams.people`,
-//! once for each text); the people found are listed under it, those picked left out: ↑ and ↓
-//! choose, Enter or a click picks. At most [`NEW_CHAT_PEOPLE`]; from two on, a group name. At the
-//! foot, a chat's box (`writing.rs`, its draft under [`NEW`]: bold, italic, emoji, files and
-//! pictures; no "@" offer, no ↑): Enter there creates the conversation with its first message
-//! ([`send`]), what was written staying in the pane until the chat is made. While it is created,
-//! everything waits; a failure the pane asked for says why, the people, the name, the text and the
-//! files still there to try again; the chat made, or the one-to-one chat already there, takes the
-//! pane's place ([`each_frame`]).
+//! conversation" opens it ([`open`]), Cancel closes it, what was typed let go; Esc sets it aside as
+//! it is, for New conversation to bring back (it goes to a popup over the pane first, then to the
+//! people listed under "To:": [`escape`]). The chat it hides isn't on screen (`MailApp::announce`
+//! tells the engine so); a chat opened from behind it takes its place, the pane set aside the same
+//! way ([`leave`], [`each_frame`]). "To:" holds the people picked as chips ("External" first for a
+//! guest, a cross that takes one away, Backspace in the empty field the last one), then a field
+//! whose text is looked up in the organisation's directory [`SEARCH_WAIT`] after the last key
+//! (`teams.people`, once for each text); the people found are listed under it, those picked left
+//! out: ↑ and ↓ choose, Enter or a click picks. At most [`NEW_CHAT_PEOPLE`]; from two on, a group
+//! name. At the foot, a chat's box (`writing.rs`, its draft under [`NEW`]: bold, italic, emoji,
+//! files and pictures; no "@" offer, no ↑): Enter there creates the conversation with its first
+//! message ([`send`]), what was written staying in the pane until the chat is made. While it is
+//! created, everything waits, Cancel too (the request is out: its answer settles it); a failure
+//! the pane asked for says why, the people, the name, the text and the files still there to try
+//! again; the chat made, or the one-to-one chat already there, takes the pane's place
+//! ([`each_frame`]).
 //!
 //! What is hostile here: the directory's names and addresses (Graph's), drawn on one line through
 //! [`one_line`] (no control or bidi character) and as text, never as markup; Teams' code for a
@@ -114,14 +115,16 @@ pub(crate) fn leave(c: &mut ConversationsUi) {
 
 /// Esc in Conversations while the pane is open (`app/keys.rs`, once a dialog had it): a popup over
 /// the pane (the emoji picker…) closes by itself, and nothing else goes; with people listed under
-/// "To:", "To:" is emptied (the list goes, the keyboard stays there); else the pane closes.
+/// "To:", "To:" is emptied (the list goes, the keyboard stays there); else the pane is set aside as
+/// it is (nothing typed is lost by a key: only Cancel lets it go), New conversation bringing it
+/// back.
 pub(crate) fn escape(ctx: &egui::Context, s: &Session, c: &mut ConversationsUi) {
     if c.deleting.is_some() || egui::Popup::is_any_open(ctx) {
         return;
     }
     let Some(n) = c.new_chat.as_mut() else { return };
     if matches!(found(s, n), Found::Nothing) {
-        close(s, c);
+        c.new_chat_aside = c.new_chat.take().map(|n| NewChat { leaving: false, focus: false, ..n });
     } else {
         n.to.clear();
         // The people found forgotten at the next frame (`ask`: `teams.people` of nothing).
@@ -191,8 +194,8 @@ fn pick(n: &mut NewChat, p: &Person, ui: &Ui, acts: &mut Vec<Action>) {
 }
 
 /// The pane: the heading and Cancel, where the creation stands, "To:" and the group's name; the
-/// box at the foot; the people found between. While the conversation is created, all but Cancel
-/// waits.
+/// box at the foot; the people found between. While the conversation is created, everything waits,
+/// Cancel too.
 pub(crate) fn pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens, acts: &mut Vec<Action>) {
     // Teams switched off or signed out meanwhile: nothing can be created.
     if !(s.prefs.teams.on && s.prefs.teams.signed_in) {
@@ -204,7 +207,7 @@ pub(crate) fn pane(s: &Session, c: &mut ConversationsUi, ui: &mut Ui, t: &Tokens
     egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.label(RichText::new(tl!("New conversation")).font(theme::bold(17.0)).color(t.text));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| cancel = ui.link(tl!("Cancel")).clicked());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| cancel = ui.add_enabled(!waiting, egui::Link::new(tl!("Cancel"))).clicked());
         });
         // Cancel first: nothing typed or pressed in the same frame goes out.
         if cancel {

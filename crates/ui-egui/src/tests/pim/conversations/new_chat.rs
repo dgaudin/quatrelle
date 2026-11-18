@@ -7,8 +7,9 @@
 //! name from two people on. Enter in the box creates the conversation with its first message;
 //! while it's created everything waits; a failure, a refusal or a first message refused keeps the
 //! people, the text and the files, and says why; the chat made (or the one-to-one chat there
-//! already) takes the pane's place. Esc or Cancel closes it, the list's search kept. With
-//! `QUATRELLE_FRAME_PNG` set to a folder, the pane is painted there, light and dark.
+//! already) takes the pane's place. Esc sets it aside with all it holds, Cancel closes it (not
+//! while it's created), the list's search kept. With `QUATRELLE_FRAME_PNG` set to a folder, the
+//! pane is painted there, light and dark.
 
 use std::path::PathBuf;
 
@@ -21,7 +22,7 @@ use super::chat::{TEAMS_LINK, chat_app, group_row, settled_at};
 use super::writing::{SIZE, asked, enter};
 use super::*;
 use crate::Action;
-use crate::conversations::{NEW, add_files, draft};
+use crate::conversations::{NEW, add_files, add_picture, draft};
 
 const ANA: &str = "00000000-0000-0000-0000-0000000000a1";
 const BRUNO: &str = "00000000-0000-0000-0000-0000000000b2";
@@ -233,8 +234,8 @@ fn colour_of(shapes: &[egui::Shape], text: &str) -> Option<egui::Color32> {
 }
 
 /// Ctrl+N in Conversations opens the new conversation in the open chat's place, the keyboard in
-/// "To:"; Esc closes it, and the list's button opens it the same; in Mail, Ctrl+N still writes a
-/// message.
+/// "To:"; Esc sets it aside, and the list's button opens it the same; in Mail, Ctrl+N still writes
+/// a message.
 #[test]
 fn ctrl_n_and_the_button_open_a_new_conversation() {
     let (mut a, dir, w, _) = Win::app("teams-new-open", vec![], false);
@@ -250,7 +251,7 @@ fn ctrl_n_and_the_button_open_a_new_conversation() {
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
     assert_eq!(pane_of(&a).to, "", "Esc empties To: first");
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
-    assert!(a.ui.conversations.new_chat.is_none(), "then Esc closes it");
+    assert!(a.ui.conversations.new_chat.is_none(), "then Esc sets it aside");
     let texts = settled_at(&w.ctx, &mut a, SIZE);
     assert!(has_text(&texts, "Members: 4"), "the chat back: {texts:?}");
     let plus = window_control(&w.ctx, &mut a, "New conversation").expect("the list's button");
@@ -483,7 +484,8 @@ fn no_one_picked_sends_nothing_and_says_so() {
 }
 
 /// While the conversation is created: "Creating the conversation…", and what's typed, clicked or
-/// pressed changes nothing (no second creation).
+/// pressed changes nothing (no second creation). Cancel waits too (ruled: the request is out, its
+/// answer settles it).
 #[test]
 fn while_creating_everything_waits() {
     let (mut a, dir, mut w, jobs) = Win::app("teams-new-waiting", vec![], true);
@@ -505,6 +507,9 @@ fn while_creating_everything_waits() {
     w.typed(&mut a, vec![Event::Text("bru".into())]);
     w.pane(&mut a, 0.5, vec![]);
     assert_eq!(pane_of(&a).to, "", "To: waits too");
+    w.click_text(&mut a, "Cancel");
+    assert!(a.ui.conversations.new_chat.is_some(), "Cancel waits while it's created");
+    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Lima".to_string()]));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -640,21 +645,37 @@ fn a_person_already_chatted_with_opens_that_chat() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Esc closes it and lets go of what was typed; the list's search stays as it was. Cancel the
-/// same.
+/// Final review, window I-1 (ruled): Esc sets the pane aside with all it holds, the list's search
+/// kept: Ctrl+N brings back the people, the group name, the text and the pasted picture (its file
+/// still there). Only Cancel lets them go, the pasted picture's file with them.
 #[test]
-fn esc_closes_it_and_keeps_the_lists_search() {
+fn esc_sets_it_aside_and_keeps_the_lists_search() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-esc", vec![], true);
     a.ui.conversations.query = "agenda".into();
+    w.pick(&mut a, ana());
+    w.pick(&mut a, bruno());
+    a.ui.conversations.new_chat.as_mut().expect("open").topic = "Launch".into();
     w.write(&mut a, "hello");
+    add_picture(draft(&mut a.ui.conversations, NEW), &quatrelle_engine::sample::sample_png());
+    let pasted = a.ui.conversations.drafts.get(NEW).and_then(|d| d.parts.first()).map(|p| p.path.clone()).expect("the picture");
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
-    assert!(a.ui.conversations.new_chat.is_none(), "closed");
+    assert!(a.ui.conversations.new_chat.is_none(), "set aside");
     assert_eq!(a.ui.conversations.query, "agenda", "the search kept");
-    assert!(!a.ui.conversations.drafts.contains_key(NEW), "what was typed let go");
-    crate::conversations::open_new_chat(&a.session, &mut a.ui.conversations);
-    assert_eq!(in_new_box(&a), "", "a new one starts empty");
+    assert!(pasted.exists(), "the pasted picture's file kept");
+    frame(&w.ctx, &mut a, vec![key(Key::N, Modifiers::COMMAND)]);
+    let texts = settled_at(&w.ctx, &mut a, SIZE);
+    assert_eq!(
+        (picked(&a), pane_of(&a).topic.as_str(), in_new_box(&a)),
+        (vec!["Ana Lima".to_string(), "Bruno Reis".to_string()], "Launch", "hello".to_string())
+    );
+    let name = pasted.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+    for t in ["Ana Lima", "Bruno Reis", "Launch", "hello", name.as_str()] {
+        assert!(has_text(&texts, t), "back as it was: {t}: {texts:?}");
+    }
     w.click_text(&mut a, "Cancel");
-    assert!(a.ui.conversations.new_chat.is_none(), "Cancel closes it");
+    assert!(a.ui.conversations.new_chat.is_none() && a.ui.conversations.new_chat_aside.is_none(), "Cancel closes it");
+    assert!(!a.ui.conversations.drafts.contains_key(NEW), "what was written let go");
+    assert!(!pasted.exists(), "the pasted picture's file with it");
     assert_eq!(a.ui.conversations.query, "agenda");
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -725,7 +746,8 @@ fn the_new_conversation_in_light_and_dark() {
 }
 
 /// Fix round 1, Important 1: Esc meant for the emoji picker open over the new conversation's box
-/// closes the picker only: the people, the text and the pane stay. A second Esc closes the pane.
+/// closes the picker only: the people, the text and the pane stay. A second Esc sets the pane
+/// aside.
 #[test]
 fn esc_closes_the_emoji_picker_not_the_pane() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-esc-picker", vec![], true);
@@ -741,13 +763,13 @@ fn esc_closes_the_emoji_picker_not_the_pane() {
     assert!(a.ui.conversations.new_chat.is_some(), "the pane stays");
     assert_eq!((picked(&a), in_new_box(&a)), (vec!["Ana Lima".to_string()], "hello".to_string()), "nothing lost");
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
-    assert!(a.ui.conversations.new_chat.is_none(), "then Esc closes it");
+    assert!(a.ui.conversations.new_chat.is_none(), "then Esc sets it aside");
     let _ = std::fs::remove_dir_all(dir);
 }
 
 /// Fix round 1, Important 1: Esc while people are listed under "To:" empties "To:" (the list goes,
-/// the keyboard stays there); the pane, its chips and its text stay. Once "To:" is empty, Esc
-/// closes the pane.
+/// the keyboard stays there); the pane, its chips and its text stay. Once "To:" is empty, Esc sets
+/// the pane aside.
 #[test]
 fn esc_with_people_listed_empties_to_first() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-esc-list", vec![], true);
@@ -765,7 +787,7 @@ fn esc_with_people_listed_empties_to_first() {
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
     assert_eq!(pane_of(&a).to, "", "emptied again");
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
-    assert!(a.ui.conversations.new_chat.is_none(), "then Esc closes it");
+    assert!(a.ui.conversations.new_chat.is_none(), "then Esc sets it aside");
     let _ = std::fs::remove_dir_all(dir);
 }
 
