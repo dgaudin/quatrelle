@@ -127,3 +127,18 @@ fn a_newsletter_preview_reads_its_cells_in_order() {
     let long = mail(&format!("<body>{}</body>", "<p>Mot é</p>".repeat(30_000)));
     assert_eq!(preview_from_source(long.as_bytes()).chars().count(), PREVIEW_CHARS + 1, "and its …");
 }
+
+/// The list's preview leaves out the words of a picture that only names itself (a spacer, a
+/// description repeating its file's name), not one described in words; what's quoted under a
+/// reply and the text the message is read as keep them.
+#[test]
+fn the_preview_leaves_out_a_pictures_own_name() {
+    let html = "<html><body><table><tr><td><img src=\"https://cdn.example/img/spacer-FFFFFF.jpg\" width=\"522\" height=\"25\" alt=\"spacer-FFFFFF\"></td></tr></table>\
+                <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"> Your order is ready.</p>\
+                <p><img src=\"https://cdn.example/img/hall.jpg\" alt=\"Grande salle\"></p></body></html>";
+    let preview = html::html_preview(html);
+    assert!(!preview.contains("spacer") && !preview.contains("4321"), "{preview}");
+    assert!(preview.contains("Your order is ready") && preview.contains("Grande salle"), "{preview}");
+    let text = html_to_text(html);
+    assert!(text.contains("spacer-FFFFFF") && text.contains("4321"), "the text as read is unchanged: {text}");
+}

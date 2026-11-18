@@ -18,8 +18,8 @@ mod rules;
 mod teams;
 mod to_markdown;
 pub use pairs::html_link_pairs;
-pub use pictures::html_images;
 pub(crate) use pictures::{Pictures, tiny_picture, tiny_size};
+pub use pictures::{html_images, names_itself, spacer_described};
 use rules::{RULE_MARK, mark_rules};
 pub use teams::{
     TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, Typed, html_escape, teams_compose, teams_compose_typed, teams_foreign_markup, teams_html,
@@ -607,7 +607,9 @@ const PREVIEW_READS: [usize; 2] = [16 * 1024, 64 * 1024];
 const TIP_HTML_MAX: usize = 16 * 1024;
 
 /// An HTML body's preview ([`crate::preview`] of [`html_to_words`]): read from its `<body>`
-/// (what comes before is styles and the like), a little first, more when that is too short.
+/// (what comes before is styles and the like), a little first, more when that is too short;
+/// without the pictures whose description only names them ([`names_itself`]: a row of spacers
+/// read `spacer-FFFFFF spacer-FFFFFF…`).
 pub(crate) fn html_preview(html: &str) -> String {
     // Where `<body` starts, in any case (an ASCII `<` starts a character).
     let from = html.as_bytes().windows(5).position(|w| w.eq_ignore_ascii_case(b"<body")).unwrap_or(0);
@@ -615,7 +617,8 @@ pub(crate) fn html_preview(html: &str) -> String {
     let mut out = String::new();
     for n in PREVIEW_READS {
         let cut = body.char_indices().nth(n).map(|(i, _)| i);
-        out = crate::preview(&html_to_words(body.get(..cut.unwrap_or(body.len())).unwrap_or(body)));
+        let read = pictures::without_named_pictures(body.get(..cut.unwrap_or(body.len())).unwrap_or(body));
+        out = crate::preview(&html_to_words(&read));
         if cut.is_none() || out.chars().count() >= crate::PREVIEW_CHARS {
             break;
         }

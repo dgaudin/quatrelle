@@ -186,10 +186,12 @@ fn a_big_picture_not_shown_says_what_it_shows() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Spacers on the web not shown, each described by its own file's name (`spacer-FFFFFF`, a white
-/// picture laying a table out): their room is kept — a column 32 wide, a gap 25 high — and nothing
-/// is drawn in it, neither `[spacer-FFFFFF]` across the gap nor a frame down the column, nor a
-/// bubble under the pointer; a picture described in words keeps its placeholder.
+/// Spacers on the web not shown, described as spacers (`spacer-FFFFFF`, a white picture laying a
+/// table out): their room is kept — a column 32 wide, a gap 25 high — and nothing is drawn in it,
+/// neither `[spacer-FFFFFF]` across the gap nor a frame down the column, nor a bubble under the
+/// pointer. A picture described in words keeps its placeholder, and so does one whose
+/// description only repeats its file's name when it fits in its place (`[4321]`, a phone number
+/// in 89 by 22).
 #[test]
 fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     let spacer = "https://cdn.example/img/spacer-FFFFFF.jpg";
@@ -198,7 +200,8 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
          <td width=\"32\"><img src=\"{spacer}\" width=\"32\" height=\"118\" alt=\"spacer-FFFFFF\"></td>\
          <td>After</td></tr></table>\
          <p>Above</p><p><img src=\"{spacer}\" width=\"522\" height=\"25\" alt=\"spacer-FFFFFF\"></p><p>Below</p>\
-         <p><img src=\"https://cdn.example/img/hall.jpg\" width=\"180\" height=\"90\" alt=\"Grande salle\"></p>"
+         <p><img src=\"https://cdn.example/img/hall.jpg\" width=\"180\" height=\"90\" alt=\"Grande salle\"></p>\
+         <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"></p>"
     );
     let (mut a, dir) = app_with_html("spacer-not-shown", "Spacers", &html);
     let ctx = egui::Context::default();
@@ -231,6 +234,7 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     };
     let shown = in_pane(&shapes);
     assert!(shown.iter().any(|t| t.contains("Grande salle")), "a picture described in words keeps its placeholder: {shown:?}");
+    assert!(shown.iter().any(|t| t == "[4321]"), "a file's name that fits stays written: {shown:?}");
     assert!(!shown.iter().any(|t| t.contains("spacer")), "a spacer's name isn't drawn: {shown:?}");
     // What shows: a fill, an outline or a picture (a table's cell is a frame with nothing to see).
     let framed: Vec<Rect> = shapes
