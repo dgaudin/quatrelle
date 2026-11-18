@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use quatrelle_engine::model::pim::teams::{
-    Block, BlockKind, ChatMessage, MAX_BLOCKS, MessageKind, News, OutKind, OutState, Outgoing, Reaction, Sender, WINDOW_MAX,
+    Block, BlockKind, ChatMessage, MAX_BLOCKS, MessageKind, News, OutKind, OutState, Outgoing, Reaction, Run, Sender, WINDOW_MAX,
 };
 
 use super::chat::{CHAT, ME, TALL, TEAMS_LINK, TENANT_ID, chat_app, group_row, members, pane, para, said, settled_at, user, words};
@@ -438,8 +438,10 @@ fn only_the_messages_in_view_are_drawn() {
     let texts = settled_at(&ctx, &mut a, (1280, 800));
     let drawn = paragraphs_drawn(&texts);
     assert!(drawn <= 600, "{drawn} paragraphs drawn");
-    let laid = a.ui.conversations.heights.laid_out;
-    assert!(laid <= 2_000 + 300 + 2 * 2 * 300, "{laid} blocks laid out");
+    // The messages in view (twice when the frame is laid out again) and 2,000 blocks' worth more,
+    // the last message measured past them; a message costs its 300 blocks and a block a 8 runs.
+    let (laid, each) = (a.ui.conversations.heights.laid_out, 300 + 300 / 8);
+    assert!(laid <= 2_000 + each + 2 * 2 * each, "{laid} blocks laid out");
     let last = rect_of(&texts, |t| t == "m199 p299").expect("the newest's last paragraph");
     assert!(last.top() > 0.0 && last.bottom() < 800.0, "at the newest: {last:?}");
     let _ = std::fs::remove_dir_all(dir);
@@ -505,11 +507,38 @@ fn a_heavy_window_keeps_its_place_as_heights_become_known() {
         let texts = heavy_frame(&ctx, &mut a, vec![Event::PointerMoved(over)]);
         let now = rect_of(&texts, |t| t == seen).unwrap_or_else(|| panic!("frame {round}: {seen} gone"));
         assert!((now.top() - was.top()).abs() < 4.0, "frame {round}: {seen} moved: {was:?} → {now:?}");
-        // The messages in view (twice when the frame is laid out again) and 2,000 blocks more, the
-        // last message measured past them.
-        let laid = a.ui.conversations.heights.laid_out;
-        assert!(laid <= 2_000 + 300 + 2 * 2 * 300, "frame {round}: {laid} blocks laid out");
+        // The messages in view (twice when the frame is laid out again) and 2,000 blocks' worth
+        // more, the last message measured past them; a message costs its 300 blocks and a block a
+        // 8 runs.
+        let (laid, each) = (a.ui.conversations.heights.laid_out, 300 + 300 / 8);
+        assert!(laid <= 2_000 + each + 2 * 2 * each, "frame {round}: {laid} blocks laid out");
     }
     assert_eq!(a.session.teams.window.len(), 200);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Re-review n° 2: a window of 500 messages of one block of 2,000 runs each (styles in turn) isn't
+/// measured all in one frame: a frame lays out the messages in view and some 2,000 blocks' worth
+/// more, runs counted, not the 500 messages' million runs.
+#[test]
+fn a_window_of_many_runs_is_measured_a_part_a_frame() {
+    let message = |k: usize| {
+        let runs = (0..2_000)
+            .map(|i| Run { text: if i % 2 == 0 { "a".into() } else { "b".into() }, bold: i % 2 == 0, italic: i % 2 == 1, ..Default::default() })
+            .collect();
+        said(
+            &format!("r{k:03}"),
+            user("u-ana", "Ana Lima"),
+            NOW - 86_000 + k as i64 * 60,
+            teams::ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] },
+        )
+    };
+    let (mut a, dir, _) = chat_app("teams-scale-runs", group_row(), TEAMS_LINK, (0..WINDOW_MAX).map(message).collect());
+    let ctx = egui::Context::default();
+    for frame in 0..6 {
+        frame_sized(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+        let laid = a.ui.conversations.heights.laid_out;
+        assert!(laid <= 5_000, "frame {frame}: {laid} blocks' worth laid out");
+    }
     let _ = std::fs::remove_dir_all(dir);
 }

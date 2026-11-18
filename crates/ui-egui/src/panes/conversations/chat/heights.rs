@@ -5,23 +5,27 @@
 //! lay out. Each message's height is kept, by its id, from the last frame it was laid out; one out
 //! of view takes that place without being laid out. A message whose height isn't known yet (new
 //! to the window, or the pane's width changed) is laid out out of sight, at most
-//! [`MEASURE_BLOCKS`] blocks a frame; past them it takes a guess's place ([`guess`]) until a later
-//! frame lays it out, or it comes into view.
+//! [`MEASURE_BLOCKS`] blocks' worth a frame (runs counted: a block can hold thousands); past them
+//! it takes a guess's place ([`guess`]) until a later frame lays it out, or it comes into view.
 //!
 //! The scroll keeps its ways (`chat.rs`): a height that became known above the view moves the
 //! scroll by as much, so what's on screen stays where it is (the frame is laid out again before
 //! it's drawn); a message gone to is scrolled to again until the heights around it are known.
 //!
 //! What is hostile here: the messages' size, the sender's. What it protects: a frame lays out the
-//! messages in view and at most [`MEASURE_BLOCKS`] blocks more, whatever the window holds.
+//! messages in view and at most [`MEASURE_BLOCKS`] blocks' worth more, runs counted, whatever the
+//! window holds.
 
 use std::collections::{HashMap, HashSet};
 
 use egui::{Rect, Ui, pos2, vec2};
 use quatrelle_engine::model::pim::teams::{ChatMessage, MAX_BLOCKS, WINDOW_MAX};
 
-/// The most blocks laid out a frame for messages out of view whose height isn't known yet.
+/// The most blocks' worth ([`cost`]: runs counted) laid out a frame for messages out of view whose
+/// height isn't known yet.
 const MEASURE_BLOCKS: usize = 2_000;
+/// The runs that cost as much to lay out as a block.
+const RUNS_A_BLOCK: usize = 8;
 /// The most frames a message gone to is scrolled to again while the heights around it settle.
 const SETTLE_FRAMES: u8 = 4;
 /// A height that moved by less than this (in points) hasn't changed.
@@ -101,7 +105,7 @@ impl Heights {
             return Plan::Skip(h);
         }
         if self.budget > 0 {
-            self.budget = self.budget.saturating_sub(blocks(m));
+            self.budget = self.budget.saturating_sub(cost(m));
             return Plan::Measure;
         }
         if known.is_none() {
@@ -114,7 +118,7 @@ impl Heights {
     /// `m` laid out from `top`, `h` tall, the view's top at `view_top`: its height kept; one that
     /// changed above the view moves the scroll by as much.
     pub(super) fn laid(&mut self, m: &ChatMessage, first: bool, top: f32, h: f32, view_top: f32) {
-        self.laid_out = self.laid_out.saturating_add(blocks(m));
+        self.laid_out = self.laid_out.saturating_add(cost(m));
         let was = self.by_id.insert(m.id.clone(), Height { first, h, measured: true }).filter(|w| w.first == first);
         match was {
             Some(w) if (w.h - h).abs() <= SAME => {}
@@ -164,9 +168,12 @@ impl Heights {
     }
 }
 
-/// The blocks laying `m` out costs (at least one: its name and time).
-fn blocks(m: &ChatMessage) -> usize {
-    m.body.blocks.len().clamp(1, MAX_BLOCKS)
+/// What laying `m` out costs, in blocks: its blocks drawn, and a block for every [`RUNS_A_BLOCK`]
+/// runs in them (a block can hold thousands); at least one, its name and time.
+fn cost(m: &ChatMessage) -> usize {
+    let blocks = m.body.blocks.iter().take(MAX_BLOCKS);
+    let runs: usize = blocks.clone().map(|b| b.runs.len()).sum();
+    blocks.count().saturating_add(runs / RUNS_A_BLOCK).max(1)
 }
 
 /// A guess at `m`'s height before it's laid out, `width` the pane's: a line a block and more for
