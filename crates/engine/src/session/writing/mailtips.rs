@@ -12,8 +12,8 @@ use super::*;
 use crate::session::scheduling::Fetched;
 
 /// The recipients a message is about, as a server is asked: the addresses in To, Cc and Bcc,
-/// lower case, once each and in that order. Entries still being typed are left out; a field can
-/// name several, separated as the contacts fields accept.
+/// lower case, once each and in that order; a field can name several, separated as the contacts
+/// fields accept. (The form asks only once none is being typed: `reading/compose.rs`.)
 pub fn mail_tips_recipients(c: &Compose) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for field in [&c.to, &c.cc, &c.bcc] {
