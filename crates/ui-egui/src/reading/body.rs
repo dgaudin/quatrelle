@@ -496,7 +496,7 @@ impl Body<'_> {
             } else {
                 match picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, sp.image_size, self.zoom, self.acts) {
                     (true, r) => r,
-                    (false, _) => unseen(&t, ui, sp, width, page, self.zoom),
+                    (false, _) => unseen(&t, ui, sp, width, page, self.zoom, self.p.trackers.pictures.contains(src)),
                 }
             };
             // A picture in a link follows it, as in Outlook and browsers.

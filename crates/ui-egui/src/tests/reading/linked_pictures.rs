@@ -271,6 +271,78 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A white spacer whose address a pixel of the same message shares (`width="0"`, a column a
+/// layout gave no width) is a tracking picture, never loaded, the message's pictures shown or
+/// not: each use of it without a description keeps its room and draws nothing — no `[picture]`
+/// across a gap 35 high, no frame down a signature's column 13 wide — and the cells beside the
+/// one 0 wide keep their widths. `[picture]` sat over and under a signature's frame, a grey
+/// frame stood between its columns, and its last column, 0 wide, took a hundred pixels from it.
+#[test]
+fn a_spacer_sharing_a_pixels_address_draws_nothing() {
+    let spacer = "https://cdn.example/img/blank.png";
+    let html = format!(
+        "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td>Before</td>\
+         <td width=\"13\"><img src=\"{spacer}\" width=\"13\" height=\"32\"></td><td>After</td>\
+         <td width=\"0\"><img src=\"{spacer}\" width=\"0\" height=\"32\"></td></tr></table>\
+         <p>Above</p><p><img src=\"{spacer}\" width=\"608\" height=\"35\" alt=\"\"></p><p>Below</p>"
+    );
+    let (mut a, dir) = app_with_html("spacer-pixel", "Shared spacer", &html);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 900.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Shared spacer").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    for shown in [false, true] {
+        if shown {
+            a.run("message.showPictures", json!({}));
+        }
+        let mut shapes = Vec::new();
+        for _ in 0..6 {
+            shapes = frame_shapes(&ctx, &mut a, vec![], size);
+        }
+        let found = |text: &str| {
+            shapes
+                .iter()
+                .rev()
+                .find_map(|s| match s {
+                    Shape::Text(t) if t.galley.text() == text => Some(t.galley.rect.translate(t.pos.to_vec2())),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{text:?} is drawn: {:?}", texts(&shapes)))
+        };
+        let (before, after) = (found("Before"), found("After"));
+        let (above, below) = (found("Above"), found("Below"));
+        let in_pane: Vec<String> = shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Text(t) if t.pos.x >= before.left() - 1.0 => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(!in_pane.iter().any(|t| t.contains("[picture")), "shown {shown}: nothing written for a spacer: {in_pane:?}");
+        let framed: Vec<egui::Rect> = shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Rect(r)
+                    if (r.fill.a() > 0 || (r.stroke.width > 0.0 && r.stroke.color.a() > 0) || r.brush.is_some())
+                        && [(13.0, 32.0), (608.0, 35.0)]
+                            .iter()
+                            .any(|(w, h)| (r.rect.width() - w).abs() < 1.5 && (r.rect.height() - h).abs() < 1.5) =>
+                {
+                    Some(r.rect)
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(framed.is_empty(), "shown {shown}: nothing drawn in a spacer's room: {framed:?}");
+        assert!(after.left() - before.right() >= 12.5, "shown {shown}: the column keeps its width: {before:?} {after:?}");
+        assert!(below.top() - above.bottom() >= 35.0, "shown {shown}: the gap keeps its height: {above:?} {below:?}");
+    }
+    let tracked = a.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.trackers.pictures.clone()).unwrap_or_default();
+    assert_eq!(tracked, vec![spacer.to_string()], "the spacer is taken for a tracking picture");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A signature's icon in a link whose description only names its file (`linkedin` for
 /// `…/linkedin.png`, 16 by 16) is never hidden as a spacer is: its box stays, and a click on it
 /// opens the link, as before.

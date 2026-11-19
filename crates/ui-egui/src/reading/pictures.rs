@@ -153,8 +153,11 @@ pub(crate) fn kept_room(size: Option<mime::ImageSize>, width: f32) -> Option<(f3
 /// message sets no width) and draws nothing in it, no bubble either: `None`. `[spacer-FFFFFF]` was
 /// written across a white gap, a column a few pixels wide was framed, and a rule 6 high pushed the
 /// layout down by a line; a file's name that fits stays written (`[4321]`, a phone number). A
-/// picture in a link is never left out so: it stays the link, said and clicked as before.
-pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> Option<egui::Response> {
+/// tracking picture without a description (`never`: never loaded, whatever is shown) is left out
+/// so too: a white spacer whose address a pixel 0 wide shares wrote `[picture]` over and under a
+/// signature's frame and framed its gaps, pictures shown. A picture in a link is never left out
+/// so: it stays the link, said and clicked as before.
+pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32, never: bool) -> Option<egui::Response> {
     let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
     let text = format!("[{alt}]");
     let zoom = zoom.max(0.01);
@@ -167,7 +170,9 @@ pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page:
     let low = kept.and_then(|(_, h)| h).is_some_and(|h| h * zoom < line);
     let crowded = room.is_some_and(|room| wide > room.x) || low;
     // Never in a link: a signature's icon (`linkedin` for `…/linkedin.png`) stays the link.
-    let spacer = mime::spacer_described(&sp.text) || (crowded && mime::names_itself(sp.image.as_deref().unwrap_or_default(), &sp.text));
+    let spacer = mime::spacer_described(&sp.text)
+        || (never && sp.text.trim().is_empty())
+        || (crowded && mime::names_itself(sp.image.as_deref().unwrap_or_default(), &sp.text));
     if spacer && sp.link.is_none() {
         if let Some(room) = room {
             ui.allocate_space(room);
