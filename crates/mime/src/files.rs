@@ -181,9 +181,9 @@ pub enum OpenRisk {
 
 /// Why opening this attachment is worth asking about first, if it is: what its name says (only
 /// the last extension counts, as it does for the system that would open it; the name is cleaned
-/// first, so one that disguises its extension is read as it would be saved), what the type the
-/// sender `declared` says whatever the name, and a name that says nothing (no extension, or one
-/// of no type known here), which leaves the system to go by what's in the file. A file that
+/// first, so one that disguises its extension is read as it would be saved), the type the sender
+/// `declared` when it's a page's whatever the name, and a name that says nothing (no extension, or
+/// one of no type known here), which leaves the system to go by what's in the file. A file that
 /// starts a program ([`runs_code`]) is never opened at all, so it is no mere risk.
 pub fn open_risk(name: &str, declared: &str) -> Option<OpenRisk> {
     if runs_code(name) {
@@ -194,9 +194,9 @@ pub fn open_risk(name: &str, declared: &str) -> Option<OpenRisk> {
     let declared = declared.split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
     if WEB_PAGE_EXTENSIONS.contains(&extension) || WEB_PAGE_TYPES.contains(&declared.as_str()) {
         Some(OpenRisk::WebPage)
-    } else if MACRO_EXTENSIONS.contains(&extension) || macro_type(&declared) {
+    } else if MACRO_EXTENSIONS.contains(&extension) {
         Some(OpenRisk::Macros)
-    } else if extension.is_empty() || mime_from_name(&cleaned) == "application/octet-stream" {
+    } else if extension.is_empty() || (mime_from_name(&cleaned) == "application/octet-stream" && !HARMLESS_EXTENSIONS.contains(&extension)) {
         Some(OpenRisk::Unknown)
     } else {
         None
@@ -207,9 +207,17 @@ pub fn open_risk(name: &str, declared: &str) -> Option<OpenRisk> {
 /// (an SVG included: to a browser, a drawing is a document; XML too, through its style sheets).
 const WEB_PAGE_EXTENSIONS: &[&str] = &["html", "htm", "xhtml", "xht", "shtml", "shtm", "svg", "svgz", "mht", "mhtml", "xml", "xsl", "xslt"];
 
-/// Types a sender declares for a page a browser runs (the same as [`WEB_PAGE_EXTENSIONS`]).
-const WEB_PAGE_TYPES: &[&str] =
-    &["text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml", "application/xslt+xml", "multipart/related"];
+/// Types a sender declares for a page a browser runs: the only declared types that ask (whether
+/// macros run is told by the extension alone: a `.csv` is often sent as Excel's type).
+const WEB_PAGE_TYPES: &[&str] = &["text/html", "application/xhtml+xml", "image/svg+xml"];
+
+/// Usual harmless types the table of types doesn't name, known too when a file opens: archives,
+/// data and logs, Outlook's messages, Office's templates without macros, sound and video, Visio's
+/// drawings. (XML and its style sheets ask: a browser runs them.)
+const HARMLESS_EXTENSIONS: &[&str] = &[
+    "7z", "zip", "rar", "gz", "tgz", "tar", "bz2", "xz", "json", "log", "csv", "tsv", "msg", "eml", "dotx", "xltx", "potx", "ppsx", "vsdx", "mp3",
+    "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "mp4", "m4v", "mov", "avi", "mkv", "webm", "wmv", "mpg", "mpeg", "3gp",
+];
 
 /// Extensions of documents whose macros run on opening: Office's macro-enabled formats, the old
 /// binary Office formats that carry macros too (Excel's macro sheets and workspaces, Word's
@@ -220,22 +228,6 @@ const MACRO_EXTENSIONS: &[&str] = &[
     "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm", "doc", "dot", "xls", "xlt", "xlm", "xlw", "ppt", "pot", "pps", "wbk",
     "vsd", "vss", "vst", "mdb", "accdb", "pub", "rtf", "odt", "ods", "odp", "odg", "odb", "ott", "ots", "otp", "otg", "fodt", "fods", "fodp", "fodg",
 ];
-
-/// Whether a type a sender declares is one of a document whose macros run: Office's
-/// macro-enabled and old binary formats, LibreOffice's, RTF.
-fn macro_type(declared: &str) -> bool {
-    declared.contains("macroenabled")
-        || declared.starts_with("application/vnd.oasis.opendocument.")
-        || matches!(
-            declared,
-            "application/msword"
-                | "application/vnd.ms-excel"
-                | "application/vnd.ms-powerpoint"
-                | "application/vnd.visio"
-                | "application/rtf"
-                | "text/rtf"
-        )
-}
 
 /// File types: an extension (with its dot) and its MIME type. A type's first extension is the one an attachment
 /// sent without a name (or with a name without one) is saved with; the types after a type's own
@@ -475,12 +467,45 @@ mod tests {
         ] {
             assert_eq!(open_risk(name, declared), Some(OpenRisk::WebPage), "{name} as {declared}");
         }
-        for (name, declared) in [("budget.xlsx", "application/vnd.ms-excel.sheet.macroEnabled.12"), ("letter.docx", "application/msword")] {
-            assert_eq!(open_risk(name, declared), Some(OpenRisk::Macros), "{name} as {declared}");
-        }
         for (name, declared) in [("report.pdf", "application/pdf"), ("report.pdf", octets), ("photo.png", "image/png"), ("setup.exe", octets)] {
             assert_eq!(open_risk(name, declared), None, "{name} as {declared}");
         }
+    }
+
+    /// Fewer questions about nothing: the usual harmless types count as known (archives, data and
+    /// logs, Outlook's messages, Office's templates without macros, sound and video, Visio's
+    /// drawings), and a declared type asks only for a page: whether macros run is told by the
+    /// extension alone (a `.csv` sent as Excel's, a `.docx` sent as Word's old type, ask nothing).
+    #[test]
+    fn the_usual_harmless_files_ask_nothing() {
+        for (name, declared) in [
+            ("photos.7z", "application/octet-stream"),
+            ("photos.zip", "application/zip"),
+            ("old.rar", ""),
+            ("backup.tar.gz", ""),
+            ("logs.tar.bz2", ""),
+            ("dump.xz", ""),
+            ("data.json", "application/json"),
+            ("server.log", "text/plain"),
+            ("Plans.msg", "application/vnd.ms-outlook"),
+            ("earlier.eml", "message/rfc822"),
+            ("figures.csv", "application/vnd.ms-excel"),
+            ("letter.docx", "application/msword"),
+            ("sheet.xlsx", "application/vnd.ms-excel.sheet.macroEnabled.12"),
+            ("letter.dotx", ""),
+            ("sheet.xltx", ""),
+            ("deck.potx", ""),
+            ("talk.m4a", ""),
+            ("song.flac", ""),
+            ("clip.mkv", ""),
+            ("clip.webm", ""),
+            ("plan.vsdx", ""),
+        ] {
+            assert_eq!(open_risk(name, declared), None, "{name} as {declared}");
+        }
+        assert_eq!(open_risk("report.pdf", "text/html"), Some(OpenRisk::WebPage), "a page by its type");
+        assert_eq!(open_risk("data.xml", ""), Some(OpenRisk::WebPage), "a browser runs XML's style sheets");
+        assert_eq!(open_risk("style.xsl", ""), Some(OpenRisk::WebPage));
     }
 
     /// More documents whose code runs: LibreOffice's (their macros run), XML and its style
