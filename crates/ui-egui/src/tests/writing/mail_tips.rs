@@ -214,3 +214,42 @@ fn the_strip_says_only_what_there_is_to_say_in_a_few_lines() {
     assert!(under - alone.top() < 150.0, "a few lines high: the text moved {} down", under - alone.top());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An automatic reply written over several lines, as Outlook keeps one ("Hello,", an empty line,
+/// the text, "Regards"), is drawn on one line after the address, as Outlook draws it: its line
+/// breaks as spaces, and what doesn't fit cut short (the whole on hover). It came out as the
+/// address alone, an empty line, then "Hello,".
+#[test]
+fn an_automatic_reply_over_several_lines_is_drawn_on_one() {
+    let (mut a, dir) = app("mail-tips-one-line");
+    let handed = Handed::default();
+    a.backend = Box::new(Recorder(handed.clone()));
+    let account = with_exchange(&mut a);
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"to": "Ana <ana@contoso.example>"}));
+    frame(&ctx, &mut a, vec![]);
+    let ask = handed.borrow().iter().find_map(|j| if let Job::GetMailTips { ask, .. } = j { Some(*ask) } else { None }).expect("asked");
+    let long = "I'm away until December 2; for anything urgent, the technical desk will help you. ".repeat(6);
+    a.session.apply(MailEvent::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![MailTip {
+            email: "ana@contoso.example".into(),
+            automatic_replies: format!("\n\nHello,\n\n{long}\nRegards"),
+            ..Default::default()
+        }],
+        error: None,
+    });
+    let shapes = frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+    let line = shapes
+        .iter()
+        .find_map(|s| if let egui::Shape::Text(t) = s { t.galley.text().starts_with("ana@contoso.example:").then(|| t.galley.clone()) } else { None })
+        .unwrap_or_else(|| panic!("{:?}", texts(&shapes)));
+    assert!(line.text().starts_with("ana@contoso.example: Hello, I'm away until December 2;"), "{:?}", line.text());
+    assert!(!line.text().contains('\n'), "{:?}", line.text());
+    assert_eq!(line.rows.len(), 1, "one line, cut short: {:?}", line.text());
+    let _ = std::fs::remove_dir_all(dir);
+}

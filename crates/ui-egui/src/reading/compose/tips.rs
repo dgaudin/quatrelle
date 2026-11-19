@@ -12,6 +12,12 @@ use super::*;
 /// reply a letter long): the rest is scrolled to.
 const STRIP_MAX_H: f32 = 90.0;
 
+/// A tip's text on one line: an automatic reply is a letter ("Hello,", an empty line, the text,
+/// "Regards"), its line breaks drawn as spaces.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Draw the MailTips strip above the message body when the message's recipients match the ones
 /// asked about and the server has something to say: nothing at all otherwise (a size limit the
 /// message stays under, which Exchange gives for nearly every recipient, says nothing).
@@ -33,13 +39,13 @@ pub(super) fn draw_tips(s: &Session, st: &UiState, ui: &mut Ui, c: &quatrelle_en
         .filter_map(|tip| {
             let mut parts = Vec::new();
             if !tip.automatic_replies.is_empty() {
-                parts.push(tip.automatic_replies.clone());
+                parts.push(one_line(&tip.automatic_replies));
             }
             if tip.mailbox_full {
                 parts.push(tl!("Mailbox full").to_string());
             }
             if !tip.custom.is_empty() {
-                parts.push(tip.custom.clone());
+                parts.push(one_line(&tip.custom));
             }
             if tip.restricted {
                 parts.push(tl!("Delivery restricted").to_string());
@@ -72,7 +78,9 @@ pub(super) fn draw_tips(s: &Session, st: &UiState, ui: &mut Ui, c: &quatrelle_en
             ui.vertical(|ui| {
                 egui::ScrollArea::vertical().id_salt(("mail-tips", c.id)).max_height(STRIP_MAX_H).auto_shrink([false, true]).show(ui, |ui| {
                     for line in &lines {
-                        ui.add(egui::Label::new(RichText::new(line.as_str()).color(t.text).size(12.0)).wrap());
+                        // One line each, as Outlook draws them: what doesn't fit is cut short, the
+                        // whole on hover.
+                        ui.add(egui::Label::new(RichText::new(line.as_str()).color(t.text).size(12.0)).truncate());
                     }
                 });
             });
