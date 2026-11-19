@@ -59,7 +59,7 @@ fn signed_in(mut teams: FakeTeams, store: &Store, ready: impl FnOnce(&mut Worker
     let (mut w, _, seen, creds) = worker(&server, store);
     ready(&mut w);
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());
     Run { w, server, seen, t0, at: Duration::ZERO, _creds: creds }
 }

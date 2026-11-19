@@ -136,7 +136,7 @@ fn a_missing_scope_is_said() {
 fn ids_that_cant_be_ids_open_no_browser() {
     for (client_id, tenant) in [("", "organizations"), (CLIENT, ""), ("not an id", "organizations"), (CLIENT, "contoso/../evil")] {
         let r = rig(one_chat(), grant(Some(TENANT)));
-        r.handle.submit(Job::SignIn { client_id: client_id.into(), tenant: tenant.into() });
+        r.handle.submit(Job::SignIn { client_id: client_id.into(), tenant: tenant.into(), meetings: false });
         let seen = r.wait("the refusal", failed);
         assert!(!said(&seen, &Status::SigningIn), "{seen:?}");
         std::thread::sleep(Duration::from_millis(200));
@@ -253,7 +253,7 @@ fn a_sign_in_nobody_waits_for_any_more_keeps_nothing() {
         let server = serve_teams(one_chat());
         let (mut w, desk, seen, creds) = by_hand(&server, grant(Some(TENANT)));
         let t0 = Instant::now();
-        w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+        w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
         w.job(then);
         let until = Instant::now() + WAIT;
         while desk.authorized.load(Ordering::SeqCst) == 0 {

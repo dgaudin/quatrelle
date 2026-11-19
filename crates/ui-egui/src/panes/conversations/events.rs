@@ -2,20 +2,21 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The Teams worker's events, taken a few a frame: a first copy sends thousands of rows and
 //! messages, and applying them all in one frame would freeze the window. The mail's events are
-//! applied at once, as before. Then the new messages the engine announces, shown on the desktop
-//! ([`announce`]).
+//! applied at once, as before, and so are a Teams meeting's answers (made, changed, deleted): an
+//! appointment's window waits for each, behind no first copy, and none is ever dropped. Then the
+//! new messages the engine announces, shown on the desktop ([`announce`]).
 //!
 //! What is hostile here: how many events the worker sends (it reports what Graph gave). The queue
 //! holds at most [`PENDING_MAX`]; past it go, oldest first, the rows and messages (the worker
 //! sends them again on its next pass), then the statuses a later one says again, then presences,
 //! search results and pictures, and only then new messages to announce. What is said once (who
 //! signed in, a copy set aside, members, a chat left, the sign-in page, a picture not to be had,
-//! a message found) and the outbox's last word stay past it, up to [`KEPT_ROOM`] more, where the
-//! oldest of them go too, counted in the log. A chat's outbox said again stands for the one
-//! before it (unless that one carries a message refused), as the count unsent does. What an
-//! announcement says came from Graph: the engine put it on one line and cut it; here a name is
-//! cut again so its mark ("External", "App") always shows, and the desktop on Linux and the BSDs
-//! escapes the markup of the text.
+//! a message found, whether meetings are allowed) and the outbox's last word stay past it, up to
+//! [`KEPT_ROOM`] more, where the oldest of them go too, counted in the log. A chat's outbox said
+//! again stands for the one before it (unless that one carries a message refused), as the count
+//! unsent does. What an announcement says came from Graph: the engine put it on one line and cut
+//! it; here a name is cut again so its mark ("External", "App") always shows, and the desktop on
+//! Linux and the BSDs escapes the markup of the text.
 
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
@@ -58,6 +59,14 @@ fn is_status(e: &Event) -> bool {
     matches!(teams_event(e), Some(teams::Event::Status { .. }))
 }
 
+/// Whether an event waits in the queue: a Teams event, but a meeting's answer, which is applied
+/// at once with the mail's.
+fn queued(e: &Event) -> bool {
+    teams_event(e).is_some_and(|t| {
+        !matches!(t, teams::Event::MeetingCreated { .. } | teams::Event::MeetingUpdated { .. } | teams::Event::MeetingDeleted { .. })
+    })
+}
+
 /// What becomes of an event waiting when the queue is full: the classes go in this order.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Class {
@@ -93,7 +102,12 @@ fn class(e: &Event) -> Class {
             | teams::Event::File { .. }
             | teams::Event::People { .. }
             | teams::Event::Created { .. }
-            | teams::Event::NotCreated { .. },
+            | teams::Event::NotCreated { .. }
+            // A meeting's answers never wait ([`queued`]); whether meetings are allowed does.
+            | teams::Event::MeetingCreated { .. }
+            | teams::Event::MeetingUpdated { .. }
+            | teams::Event::MeetingDeleted { .. }
+            | teams::Event::Meetings { .. },
         ) => Class::Kept,
     }
 }
@@ -107,12 +121,13 @@ fn took_of(e: &mut Event) -> Option<&mut Option<String>> {
 }
 
 impl TeamsQueue {
-    /// Every Teams event of `events` moved to the queue; the others stay, in their order.
+    /// Every Teams event of `events` moved to the queue, a meeting's answers apart; the others
+    /// stay, in their order.
     pub(crate) fn take(&mut self, events: &mut Vec<Event>) {
-        if !events.iter().any(|e| teams_event(e).is_some()) {
+        if !events.iter().any(queued) {
             return;
         }
-        let (teams, others): (Vec<Event>, Vec<Event>) = std::mem::take(events).into_iter().partition(|e| teams_event(e).is_some());
+        let (teams, others): (Vec<Event>, Vec<Event>) = std::mem::take(events).into_iter().partition(queued);
         *events = others;
         let outbox = teams.iter().any(|e| matches!(teams_event(e), Some(teams::Event::Outbox { .. } | teams::Event::Unsent { .. })));
         self.pending.extend(teams);

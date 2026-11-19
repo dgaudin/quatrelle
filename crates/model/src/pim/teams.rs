@@ -9,11 +9,13 @@ use serde::{Deserialize, Serialize};
 
 mod files;
 mod job;
+mod meeting;
 mod op;
 mod text;
 
 pub use files::*;
 pub use job::{Event, Job};
+pub use meeting::*;
 pub use op::*;
 pub use text::{Block, BlockKind, ChatText, Run};
 
@@ -86,6 +88,8 @@ pub struct TeamsSettings {
     pub notify_only_direct: bool,
     /// List the chats whose messages Graph refuses (mostly old ones the user is no longer in).
     pub show_unreadable: bool,
+    /// Teams meetings are allowed: the permission to make them was given.
+    pub meetings: bool,
 }
 
 impl Default for TeamsSettings {
@@ -103,6 +107,7 @@ impl Default for TeamsSettings {
             notify: true,
             notify_only_direct: false,
             show_unreadable: false,
+            meetings: false,
         }
     }
 }

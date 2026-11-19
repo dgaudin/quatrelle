@@ -270,6 +270,33 @@ fn the_teams_queue_never_drops_what_isnt_said_again() {
     assert!(q.holds(|e| matches!(e, teams::Event::Removed { .. })), "the chat left");
 }
 
+/// A Teams meeting's answers never wait behind a first copy, and are never dropped: they stay
+/// with the mail's events, applied at once. Whether meetings are allowed waits in its place, and
+/// stays past 10,000.
+#[test]
+fn a_meeting_answer_skips_the_teams_queue() {
+    let mut q = crate::conversations::TeamsQueue::default();
+    let mut events: Vec<MailEvent> = (0..12_000).map(|i| chats(vec![row(&format!("19:q{i}@thread.v2"), 0)])).collect();
+    events.extend(
+        [
+            teams::Event::MeetingCreated { ask: 7, meeting: None, error: Some(teams::TeamsMeetingError::Offline) },
+            teams::Event::MeetingDeleted { id: "MSpkYzE3Njc0Yy04MWQ5".into(), error: None },
+            teams::Event::Meetings { allowed: true },
+        ]
+        .into_iter()
+        .map(|event| MailEvent::Teams { event }),
+    );
+    events.push(MailEvent::Quota { account: "sample".into(), used: 1, limit: 2 });
+    q.take(&mut events);
+    assert_eq!(events.len(), 3, "the two answers and the mail's event stay to be applied");
+    assert!(matches!(&events[0], MailEvent::Teams { event: teams::Event::MeetingCreated { ask: 7, .. } }));
+    assert!(matches!(&events[1], MailEvent::Teams { event: teams::Event::MeetingDeleted { .. } }));
+    assert!(matches!(&events[2], MailEvent::Quota { .. }));
+    assert_eq!(q.len(), 10_000);
+    assert!(q.holds(|e| matches!(e, teams::Event::Meetings { allowed: true })), "whether meetings are allowed is kept");
+    assert!(!q.holds(|e| matches!(e, teams::Event::MeetingCreated { .. } | teams::Event::MeetingDeleted { .. })));
+}
+
 /// Restored settings with Teams on and signed in start the Teams worker (the settings come after
 /// the session opened).
 #[test]

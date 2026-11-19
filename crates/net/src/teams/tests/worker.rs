@@ -179,7 +179,7 @@ fn rig_with(teams: FakeTeams, tokens: Tokens, store: Store, creds: Arc<dyn Crede
 
 impl Rig {
     fn sign_in(&self, tenant: &str) {
-        self.handle.submit(Job::SignIn { client_id: CLIENT.into(), tenant: tenant.into() });
+        self.handle.submit(Job::SignIn { client_id: CLIENT.into(), tenant: tenant.into(), meetings: false });
     }
 
     /// Wait until what the worker reported of Teams satisfies `done`; all of it.

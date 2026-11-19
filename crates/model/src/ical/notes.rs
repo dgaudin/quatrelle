@@ -213,13 +213,14 @@ pub fn webex_join_host(url: &str) -> Option<String> {
     page.eq_ignore_ascii_case("j.php").then_some(host)
 }
 
-/// Whether a web address is a Microsoft Teams meeting (`…teams.microsoft.com/l/meetup-join…` or
-/// `…/meet/…`, `teams.live.com/meet…`), by the host the browser would really go to.
+/// Whether a web address is a Microsoft Teams meeting (`…/l/meetup-join…` or `…/meet/…` on one of
+/// Teams' own hosts, [`crate::pim::teams::teams_meeting_host`]; `teams.live.com/meet…`), by the
+/// host the browser would really go to.
 pub fn is_teams_link(url: &str) -> bool {
     let Some((host, path)) = web_host_and_path(url) else { return false };
     let path = path.to_ascii_lowercase();
     let on = |domain: &str| host == domain || host.ends_with(&format!(".{domain}"));
-    (on("teams.microsoft.com") && (path.starts_with("l/meetup-join") || path.starts_with("meet/")))
+    (crate::pim::teams::teams_meeting_host(&host) && (path.starts_with("l/meetup-join") || path.starts_with("meet/")))
         || (on("teams.live.com") && path.starts_with("meet"))
 }
 

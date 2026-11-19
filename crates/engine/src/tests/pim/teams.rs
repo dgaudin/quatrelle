@@ -256,7 +256,7 @@ fn sign_in_needs_both_ids() {
     assert!(teams_jobs(&mut s).is_empty());
     s.run("teams.settings", &json!({"tenant": TENANT})).unwrap();
     s.run("teams.signIn", &json!({})).unwrap();
-    assert_eq!(teams_jobs(&mut s), [teams::Job::SignIn { client_id: CLIENT.into(), tenant: TENANT.into() }]);
+    assert_eq!(teams_jobs(&mut s), [teams::Job::SignIn { client_id: CLIENT.into(), tenant: TENANT.into(), meetings: false }]);
     assert_eq!(s.teams.status, Status::SigningIn);
     assert!(s.run("teams.signIn", &json!({})).is_err(), "already signing in");
     assert!(teams_jobs(&mut s).is_empty());

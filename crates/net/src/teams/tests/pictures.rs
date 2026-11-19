@@ -46,7 +46,7 @@ fn run(mut teams: FakeTeams) -> Run {
     let (desk, seen, creds) = (desk(grant(Some(TENANT))), Seen::default(), Arc::new(Kept::default()));
     let mut w = Worker::new(Store::memory(), creds.clone(), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk))).unwrap();
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());
     let mut r = Run { w, server, seen, t0, at: Duration::ZERO, _creds: creds };
     r.until("the first copy's end", Duration::from_secs(120), |r| said(&r.events(), &Status::UpToDate));
@@ -629,7 +629,7 @@ fn the_people_shown_are_forgotten_when_someone_else_signs_in() {
     let sign_in_as = |r: &mut Run, id: &str, name: &str| {
         let before = accounts(r);
         r.fake(|t| t.me = FakeUser::new(id, name));
-        r.w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+        r.w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
         let seen = r.seen.clone();
         let more = move |_: &Worker| teams_of(&seen).iter().filter(|e| matches!(e, model::Event::Account { .. })).count() > before;
         turn_until(&mut r.w, r.t0 + r.at, "the next account", more);

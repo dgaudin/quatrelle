@@ -177,7 +177,7 @@ fn sign_in(s: &mut Session, _: &Value) -> CmdResult {
     if s.teams.status == Status::SigningIn {
         return Err(CmdError::Disabled("already signing in to Teams".into()));
     }
-    let job = teams::Job::SignIn { client_id: t.client_id.clone(), tenant: t.tenant.clone() };
+    let job = teams::Job::SignIn { client_id: t.client_id.clone(), tenant: t.tenant.clone(), meetings: false };
     s.teams.status = Status::SigningIn;
     s.push_job(Job::Teams { job });
     Ok(json!({}))

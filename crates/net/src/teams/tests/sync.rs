@@ -87,7 +87,7 @@ fn run_as_on(mut teams: FakeTeams, tenant: &str, store: quatrelle_store::Store, 
     let (mut w, _, seen, creds) = by_hand_on(&server, grant(Some(tenant)), store);
     ready(&mut w);
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: super::worker::CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: super::worker::CLIENT.into(), tenant: "organizations".into(), meetings: false });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());
     let mut r = Run { w, server, seen, t0, at: Duration::ZERO, creds };
     r.turns(Duration::from_secs(5));

@@ -48,7 +48,7 @@ fn a_stale_token_is_renewed_once_after_a_sleep() {
     let server = serve_teams(one_chat());
     let (mut w, desk, seen, _) = by_hand(&server, grant(Some(TENANT)));
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
     // The first pass over: the list, then its chat's members and messages.
     turn_until(&mut w, t0, "the first pass", |_| teams_of(&seen).iter().any(|e| matches!(e, model::Event::Chats { .. })));
     assert!(listed(&teams_of(&seen)));
@@ -365,7 +365,7 @@ fn logs_carry_no_id() {
     // No `tid`: the organisation is found by reading chats and their members.
     let (mut w, _, seen, _) = by_hand(&server, grant(None));
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: OPTIONS_TENANT.into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: OPTIONS_TENANT.into(), meetings: false });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some() || failed(&teams_of(&seen)));
     assert_eq!(tenant_of(&teams_of(&seen)), Some(ORG), "{:?}", teams_of(&seen));
     let mut at = Duration::ZERO;
@@ -474,7 +474,7 @@ fn a_sign_out_stalled_behind_a_request_never_undoes_the_sign_in_after_it() {
     let (desk, creds, store) = (desk(grant(Some(TENANT))), Arc::new(Kept::default()), Store::memory());
     let mut pool = crate::worker::Pool::new(store.clone(), creds.clone());
     pool.teams_test.at = Some((server.base.clone(), Box::new(move || Box::new(AtDesk(desk.clone())))));
-    let sign_in = || Any::Teams { job: Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() } };
+    let sign_in = || Any::Teams { job: Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false } };
     let mut seen: Vec<model::Event> = Vec::new();
     let hear = |pool: &crate::worker::Pool, seen: &mut Vec<model::Event>| {
         seen.extend(pool.wait(Duration::from_millis(20)).into_iter().filter_map(|e| if let Event::Teams { event } = e { Some(event) } else { None }));
@@ -552,7 +552,7 @@ fn the_loop_has_a_deadline_only_while_there_is_something_to_look_at() {
     let t0 = Instant::now();
     assert!(w.wake(t0).is_none(), "nobody signed in");
     // A sign-in on its way: its answer is looked for.
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
     assert!(w.wake(t0).is_some_and(|at| at <= t0 + Duration::from_millis(200)));
     turn_until(&mut w, t0, "the first list", |_| listed(&teams_of(&seen)));
     assert!(w.wake(t0).is_some_and(|at| at > t0 && at <= t0 + Duration::from_secs(1)), "going: the next cadence");
@@ -585,7 +585,7 @@ fn no_keychain_never_hides_offline_or_sign_in_again() {
         Worker::new(Store::memory(), Arc::new(MemoryCredentials::default()), emit_into(&seen), server.base.clone(), Box::new(AtDesk(desk.clone())))
             .unwrap();
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
     turn_until(&mut w, t0, "the first list", |_| account(&teams_of(&seen)).is_some());
     assert!(said(&teams_of(&seen), &Status::NoKeychain), "{:?}", teams_of(&seen));
     // The network gone at a renewal: said.
@@ -626,7 +626,7 @@ fn work_offline_reaches_the_teams_worker() {
             );
         }
     };
-    pool.submit(Any::Teams { job: Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() } });
+    pool.submit(Any::Teams { job: Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false } });
     hear_until(&pool, "the first list", &|e| said(e, &Status::UpToDate));
     pool.submit(Any::WorkOffline { on: true });
     hear_until(&pool, "offline", &|e| said(e, &Status::Offline));
@@ -639,7 +639,7 @@ fn a_rotated_sign_in_is_kept_in_the_keychain() {
     let server = serve_teams(one_chat());
     let (mut w, desk, seen, creds) = by_hand(&server, grant(Some(TENANT)));
     let t0 = Instant::now();
-    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into() });
+    w.job(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: false });
     turn_until(&mut w, t0, "the account", |_| account(&teams_of(&seen)).is_some());
     // The keychain lost its entry meanwhile; the next request's token is refused, and renewed.
     creds.delete_secret(&keyring(), REFRESH_KEY);

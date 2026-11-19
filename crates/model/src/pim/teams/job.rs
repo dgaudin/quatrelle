@@ -5,7 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ChatMessage, ChatRow, FileOutcome, Member, News, NotCreated, Op, Outgoing, Person, Picture, Presence, Status, TeamsSettings};
+use super::{
+    ChatMessage, ChatRow, FileOutcome, Member, News, NotCreated, Op, Outgoing, Person, Picture, Presence, Status, TeamsMeeting, TeamsMeetingError,
+    TeamsMeetingFields, TeamsSettings,
+};
 
 /// A job for the Teams worker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,8 +16,14 @@ use super::{ChatMessage, ChatRow, FileOutcome, Member, News, NotCreated, Op, Out
 pub enum Job {
     /// Start (or go on) with these settings: signed in, the copy opened and kept up to date.
     Start { settings: TeamsSettings },
-    /// Sign in through the browser with the application `client_id`, to organisation `tenant`.
-    SignIn { client_id: String, tenant: String },
+    /// Sign in through the browser with the application `client_id`, to organisation `tenant`;
+    /// `meetings`: asking for the permission to make Teams meetings too.
+    SignIn {
+        client_id: String,
+        tenant: String,
+        #[serde(default)]
+        meetings: bool,
+    },
     /// Forget the sign-in; `delete_copy`: delete the local copy too.
     SignOut { delete_copy: bool },
     /// Stop: Teams was switched off.
@@ -54,6 +63,14 @@ pub enum Job {
     /// Create the conversation `local` with `people` (and `topic` for a group); answered by
     /// [`Event::Created`] or [`Event::NotCreated`].
     Create { local: String, people: Vec<Person>, topic: Option<String> },
+    /// Make a Teams meeting of `fields` for the appointment's window that asked (`ask`); answered
+    /// by [`Event::MeetingCreated`].
+    MeetingCreate { ask: u64, fields: TeamsMeetingFields },
+    /// Change the meeting `id` from `before` (what was sent last) to `after`, sending only what
+    /// changed; answered by [`Event::MeetingUpdated`].
+    MeetingUpdate { id: String, before: TeamsMeetingFields, after: TeamsMeetingFields },
+    /// Delete the meeting `id`; answered by [`Event::MeetingDeleted`].
+    MeetingDelete { id: String },
 }
 
 /// What the Teams worker reports.
@@ -175,5 +192,26 @@ pub enum Event {
         local: String,
         why: NotCreated,
         code: Option<String>,
+    },
+    /// How [`Job::MeetingCreate`] `ask` ended: the meeting made, or why there is none.
+    MeetingCreated {
+        ask: u64,
+        meeting: Option<TeamsMeeting>,
+        error: Option<TeamsMeetingError>,
+    },
+    /// How [`Job::MeetingUpdate`] of `id` ended: the meeting as it now is, or why it wasn't changed.
+    MeetingUpdated {
+        id: String,
+        meeting: Option<TeamsMeeting>,
+        error: Option<TeamsMeetingError>,
+    },
+    /// How [`Job::MeetingDelete`] of `id` ended.
+    MeetingDeleted {
+        id: String,
+        error: Option<TeamsMeetingError>,
+    },
+    /// Whether Teams meetings are allowed: the permission given, or found missing.
+    Meetings {
+        allowed: bool,
     },
 }

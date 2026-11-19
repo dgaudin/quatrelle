@@ -393,7 +393,7 @@ impl Worker {
     pub(crate) fn job(&mut self, job: Job) {
         match job {
             Job::Start { settings } => self.start(settings),
-            Job::SignIn { client_id, tenant } => self.sign_in(&client_id, &tenant),
+            Job::SignIn { client_id, tenant, .. } => self.sign_in(&client_id, &tenant),
             Job::SignOut { delete_copy } => self.sign_out(delete_copy),
             // Switched off: nothing asked, no file, no token; the thread stays for what comes
             // next. No status stands (what a start says after is said again).
@@ -418,6 +418,7 @@ impl Worker {
             Job::File { chat, message, created, attachment } => files::open(self, chat, message, created, attachment),
             Job::Directory { query } => people::directory(self, query),
             Job::Create { local, people: who, topic } => people::create(self, local, who, topic),
+            Job::MeetingCreate { .. } | Job::MeetingUpdate { .. } | Job::MeetingDelete { .. } => log::info!("teams: a meeting job was passed over"),
         }
     }
 

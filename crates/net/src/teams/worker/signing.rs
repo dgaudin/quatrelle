@@ -299,6 +299,7 @@ impl Worker {
             notify: self.settings.notify,
             notify_only_direct: self.settings.notify_only_direct,
             show_unreadable: self.settings.show_unreadable,
+            meetings: false,
         };
         let s = &self.settings;
         self.say(teams::Event::Account {

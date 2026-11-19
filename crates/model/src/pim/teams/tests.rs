@@ -202,6 +202,60 @@ fn settings_default_announce_and_are_default() {
     assert!(read.on && read.notify, "missing fields take their defaults");
 }
 
+/// Settings written before meetings could be allowed read back with meetings not allowed.
+#[test]
+fn settings_without_meetings_read_as_not_allowed() {
+    let before = concat!(
+        r#"{"on":true,"client_id":"c","tenant":"organizations","signed_in":true,"name":"Morgan Lee","address":"morgan@contoso.example","#,
+        r#""object_id":"o","tenant_id":"t","drive_host":null,"notify":true,"notify_only_direct":false,"show_unreadable":false}"#,
+    );
+    let read: TeamsSettings = serde_json::from_str(before).unwrap();
+    assert!(read.on && read.signed_in && !read.meetings);
+    assert!(!TeamsSettings::default().meetings);
+}
+
+/// A sign-in asked before meetings could be allowed reads back as one without them.
+#[test]
+fn a_sign_in_job_without_meetings_reads_false() {
+    let job: teams::Job = serde_json::from_str(r#"{"teams":"signIn","client_id":"c","tenant":"organizations"}"#).unwrap();
+    assert_eq!(job, teams::Job::SignIn { client_id: "c".into(), tenant: "organizations".into(), meetings: false });
+}
+
+#[test]
+fn meeting_jobs_and_events_round_trip_through_json() {
+    fn round<T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug>(v: T) {
+        assert_eq!(serde_json::from_str::<T>(&serde_json::to_string(&v).unwrap()).unwrap(), v);
+    }
+    let fields = |title: &str| TeamsMeetingFields { title: title.into(), start: 1_795_165_200, end: 1_795_168_800 };
+    // A passcode is written redacted: an empty one reads back as it was.
+    let meeting = TeamsMeeting {
+        id: "MSpkYzE3Njc0Yy04MWQ5".into(),
+        join_url: "https://teams.microsoft.com/meet/1".into(),
+        meeting_id: "1234567890".into(),
+        passcode: crate::job::Secret::default(),
+        toll_number: "+1 323-555-0166".into(),
+        conference_id: "123 456 789 0".into(),
+        options_url: "https://teams.microsoft.com/meetingOptions/?organizerId=o".into(),
+    };
+    for job in [
+        teams::Job::SignIn { client_id: "c".into(), tenant: "organizations".into(), meetings: true },
+        teams::Job::MeetingCreate { ask: 7, fields: fields("Budget") },
+        teams::Job::MeetingUpdate { id: meeting.id.clone(), before: fields("Budget"), after: fields("Budget 2027") },
+        teams::Job::MeetingDelete { id: meeting.id.clone() },
+    ] {
+        round(job);
+    }
+    for event in [
+        teams::Event::MeetingCreated { ask: 7, meeting: Some(meeting.clone()), error: None },
+        teams::Event::MeetingCreated { ask: 8, meeting: None, error: Some(TeamsMeetingError::Refused { status: 400, code: "BadRequest".into() }) },
+        teams::Event::MeetingUpdated { id: meeting.id.clone(), meeting: None, error: Some(TeamsMeetingError::Untrusted) },
+        teams::Event::MeetingDeleted { id: meeting.id.clone(), error: Some(TeamsMeetingError::Offline) },
+        teams::Event::Meetings { allowed: true },
+    ] {
+        round(event);
+    }
+}
+
 #[test]
 fn jobs_and_events_round_trip_through_json() {
     let j = Job::Teams {
@@ -262,7 +316,7 @@ fn every_payload_round_trips_through_json() {
     };
     let jobs = vec![
         teams::Job::Start { settings: TeamsSettings::default() },
-        teams::Job::SignIn { client_id: "c".into(), tenant: "organizations".into() },
+        teams::Job::SignIn { client_id: "c".into(), tenant: "organizations".into(), meetings: false },
         teams::Job::SignOut { delete_copy: true },
         teams::Job::Stop,
         teams::Job::Open { chat: None },

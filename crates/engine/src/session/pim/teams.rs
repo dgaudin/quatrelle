@@ -541,6 +541,11 @@ impl Session {
             teams::Event::NotCreated { local, why, code } => self.teams_not_created(&local, why, code),
             // A picture not to be had in this run: for the window to show so, and not asked again.
             teams::Event::NoPicture { picture } => self.teams.take_no_picture(picture),
+            // Teams meetings: nothing asks for them yet.
+            teams::Event::MeetingCreated { .. }
+            | teams::Event::MeetingUpdated { .. }
+            | teams::Event::MeetingDeleted { .. }
+            | teams::Event::Meetings { .. } => {}
         }
     }
 
