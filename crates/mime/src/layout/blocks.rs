@@ -11,24 +11,47 @@ pub(super) struct Ctx {
     pub(super) cells: usize,
     /// The text colour the boxes around inherit to the text inside (a cell's `color`).
     pub(super) color: Option<String>,
+    /// The font they inherit to it: each of [`FONT`] a box around sets, as written.
+    pub(super) font: [Option<String>; 4],
 }
 
-/// `f` with the text colour `n` sets, if it sets one, as CSS inherits it.
-pub(super) fn colored<R>(ctx: &mut Ctx, n: &Node, f: impl FnOnce(&mut Ctx) -> R) -> R {
-    // Only what a colour is written with: it goes back into markup.
+/// What of a box's font its text inherits (a mailing's template sets 13.5pt on each cell).
+const FONT: [&str; 4] = ["font-size", "font-family", "font-weight", "font-style"];
+
+impl Ctx {
+    /// What the boxes around set that the text inside inherits, as a style
+    /// (`color:#fff;font-size:13.5pt`); empty when they set nothing.
+    pub(super) fn inherited(&self) -> String {
+        let color = self.color.as_ref().map(|c| ("color", c));
+        let font = FONT.iter().zip(&self.font).filter_map(|(p, v)| v.as_ref().map(|v| (*p, v)));
+        color.into_iter().chain(font).map(|(p, v)| format!("{p}:{v}")).collect::<Vec<_>>().join(";")
+    }
+}
+
+/// `f` with the text colour and font `n` sets, as CSS inherits them.
+pub(super) fn inheriting<R>(ctx: &mut Ctx, n: &Node, f: impl FnOnce(&mut Ctx) -> R) -> R {
+    // Only what a colour or a font is written with: it goes back into markup.
+    let safe = |v: &String, more: &str| v.len() < 80 && v.chars().all(|ch| ch.is_ascii_alphanumeric() || more.contains(ch));
     let own = n
         .style_as_written("color")
         .or_else(|| (n.tag == "font").then(|| n.attr("color").map(str::to_string)).flatten())
-        .filter(|c| c.len() < 40 && c.chars().all(|ch| ch.is_ascii_alphanumeric() || "#(),. %".contains(ch)));
-    match own {
-        Some(c) => {
-            let saved = ctx.color.replace(c);
-            let r = f(ctx);
-            ctx.color = saved;
-            r
-        }
-        None => f(ctx),
+        .filter(|c| safe(c, "#(),. %"));
+    let font: Vec<Option<String>> = FONT.iter().map(|p| n.style_as_written(p).filter(|v| !v.is_empty() && safe(v, "#(),. %'-_"))).collect();
+    if own.is_none() && font.iter().all(Option::is_none) {
+        return f(ctx);
     }
+    let saved = (ctx.color.clone(), ctx.font.clone());
+    if own.is_some() {
+        ctx.color = own;
+    }
+    for (slot, v) in ctx.font.iter_mut().zip(font) {
+        if v.is_some() {
+            *slot = v;
+        }
+    }
+    let r = f(ctx);
+    (ctx.color, ctx.font) = saved;
+    r
 }
 
 pub(super) fn blocks(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
@@ -143,7 +166,7 @@ pub(crate) fn laid_out(html: &str) -> (Vec<Block>, Vec<String>) {
         let root = parse(html);
         let mut css = String::new();
         collect_css(&root, &mut css, 0);
-        let mut ctx = Ctx { css, cells: 0, color: None };
+        let mut ctx = Ctx { css, cells: 0, color: None, font: Default::default() };
         let body = find(&root, "body", 0).unwrap_or(&root);
         // A body of a set width is a column of that width, as a box would be.
         let out = if body.tag == "body" && matches!(body.width(), Some(Width::Px(_))) {
@@ -252,9 +275,11 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     // `between`: a box comes next (line breaks alone before it are room between two boxes).
     let flush = |pending: &mut String, out: &mut Vec<Block>, ctx: &Ctx, between: bool| {
         if pending.chars().any(|c| !c.is_whitespace()) || pending.contains("<img") {
-            let rich = match &ctx.color {
-                Some(c) => crate::html_to_rich(&format!("{}<div style=\"color:{c}\">{}</div>", ctx.css, pending)),
-                None => crate::html_to_rich(&format!("{}{}", ctx.css, pending)),
+            let style = ctx.inherited();
+            let rich = if style.is_empty() {
+                crate::html_to_rich(&format!("{}{}", ctx.css, pending))
+            } else {
+                crate::html_to_rich(&format!("{}<div style=\"{style}\">{}</div>", ctx.css, pending))
             };
             if !rich.is_empty() {
                 out.push(Block::Text(rich));
@@ -276,7 +301,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                 // `cellpadding`: its cells' padding. Their own styles win over both.
                 let (table_border, cell_border) = n.border_attr();
                 let cellpadding = n.cellpadding();
-                let rows: Vec<Vec<Cell>> = colored(ctx, n, |ctx| {
+                let rows: Vec<Vec<Cell>> = inheriting(ctx, n, |ctx| {
                     n.rows()
                         .into_iter()
                         .map(|(tr, row)| {
@@ -290,7 +315,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         blocks: if ctx.cells > MAX_CELLS {
                                             Vec::new()
                                         } else {
-                                            colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
+                                            inheriting(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
                                         },
                                         width,
                                         background: c.background().or(row_bg),
@@ -334,7 +359,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                 flush(&mut pending, &mut out, ctx, true);
                 let (placed, base): (Vec<&Kid>, Vec<&Kid>) = n.kids.iter().partition(|k| matches!(k, Kid::El(c) if c.placed()));
                 let base: Vec<Kid> = base.into_iter().map(copy).collect();
-                let overlays: Vec<Overlay> = colored(ctx, n, |ctx| {
+                let overlays: Vec<Overlay> = inheriting(ctx, n, |ctx| {
                     placed
                         .into_iter()
                         .filter_map(|k| if let Kid::El(c) = k { Some(c) } else { None })
@@ -343,7 +368,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         .map(|c| {
                             let (x, y, from_right, from_bottom) = c.overlay_at();
                             // Its content: its children, or the element itself (a picture).
-                            let content = colored(ctx, c, |ctx| {
+                            let content = inheriting(ctx, c, |ctx| {
                                 if c.kids.is_empty() { blocks(&[Kid::El(c.unplaced())], ctx, depth + 1) } else { blocks(&c.kids, ctx, depth + 1) }
                             });
                             Overlay { x, y, from_right, from_bottom, width: c.width(), background: c.background(), blocks: content }
@@ -353,7 +378,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                 });
                 ctx.cells += 1;
                 let cell = Cell {
-                    blocks: colored(ctx, n, |ctx| blocks(&base, ctx, depth + 1)),
+                    blocks: inheriting(ctx, n, |ctx| blocks(&base, ctx, depth + 1)),
                     background: n.background(),
                     background_image: n.background_image(),
                     align: n.align(),
@@ -370,7 +395,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                 ctx.cells += 1;
                 // Its content is the box itself without the picture, so columns in it stay columns.
                 let cell = Cell {
-                    blocks: colored(ctx, n, |ctx| blocks(&[Kid::El(n.without_background())], ctx, depth + 1)),
+                    blocks: inheriting(ctx, n, |ctx| blocks(&[Kid::El(n.without_background())], ctx, depth + 1)),
                     background: n.background(),
                     background_image: n.background_image(),
                     align: n.align(),
@@ -383,7 +408,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             // Boxes side by side with CSS: a table of one row per line of boxes.
             Kid::El(n) if depth < MAX_DEPTH && n.columns().is_some() => {
                 flush(&mut pending, &mut out, ctx, true);
-                let rows: Vec<Vec<Cell>> = colored(ctx, n, |ctx| {
+                let rows: Vec<Vec<Cell>> = inheriting(ctx, n, |ctx| {
                     n.columns()
                         .unwrap_or_default()
                         .into_iter()
@@ -398,7 +423,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                     } else if c.kids.is_empty() {
                                         vec![]
                                     } else {
-                                        colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
+                                        inheriting(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
                                     };
                                     let width = c.width();
                                     // (A table in a column draws its own edges and padding.)
@@ -451,7 +476,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             {
                 flush(&mut pending, &mut out, ctx, true);
                 ctx.cells += 1;
-                let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
+                let inner = inheriting(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
                 if !inner.is_empty() {
                     out.push(Block::Table(Table {
                         rows: vec![vec![Cell { blocks: inner, align: Align::Center, background: n.background(), span: 1, ..Default::default() }]],
@@ -465,7 +490,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             Kid::El(n) if depth < MAX_DEPTH && n.fixed_width() && (n.has_text(0) || n.has_picture(0)) => {
                 flush(&mut pending, &mut out, ctx, true);
                 ctx.cells += 1;
-                let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
+                let inner = inheriting(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
                 if !inner.is_empty() {
                     let align = if n.tag == "center" { Align::Center } else { n.table_align() };
                     out.push(Block::Table(Table {
@@ -486,7 +511,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             // A wrapper around tables (`<div>`, `<center>`): its parts in turn.
             Kid::El(n) if depth < MAX_DEPTH && n.has_table(0) => {
                 flush(&mut pending, &mut out, ctx, true);
-                let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth));
+                let inner = inheriting(ctx, n, |ctx| blocks(&n.kids, ctx, depth));
                 if n.tag == "center" || n.align() == Align::Center {
                     // Centred: as a one-cell table that sits in the middle.
                     out.push(Block::Table(Table {

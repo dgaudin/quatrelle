@@ -175,6 +175,43 @@ fn text_takes_its_cells_colour() {
     assert!(!format!("{evil:?}").contains("script"), "{evil:?}");
 }
 
+/// The size, typeface and weight a cell (or its table) sets are its text's, as CSS inherits
+/// them: a mailing's template sets 13.5pt on each cell, and only its words in a span of their
+/// own came out at that size (`Your` small, `parcel is ready.` big, the paragraphs under it
+/// small). Words that set their own keep it; a neighbour keeps its own; a value can't smuggle
+/// markup in.
+#[test]
+fn text_takes_its_cells_font() {
+    fn spans(b: &[Block], out: &mut Vec<crate::Span>) {
+        for x in b {
+            match x {
+                Block::Text(r) => out.extend(r.iter().flatten().cloned()),
+                Block::Table(t) => t.rows.iter().flatten().for_each(|c| spans(&c.blocks, out)),
+            }
+        }
+    }
+    let span_of = |b: &[Block], word: &str| {
+        let mut v = Vec::new();
+        spans(b, &mut v);
+        v.into_iter().find(|s| s.text.contains(word)).unwrap_or_else(|| panic!("{word:?} in {b:?}"))
+    };
+    let cell = html_layout(
+        r##"<table width="700"><tr><td style="font-size: 13.5pt; font-family: Georgia; color: #000001">Your <span style="font-size: 13.5pt;">parcel is ready.</span>
+            <p>Pick it up any day.</p><p><span style="font-size: 9pt">Small print</span></p></td>
+            <td width="100">Other</td></tr></table>
+            <table style="font-weight: bold"><tr><td>Left</td><td>Right</td></tr></table>"##,
+    );
+    for word in ["Your", "parcel is ready.", "Pick it up any day."] {
+        let s = span_of(&cell, word);
+        assert_eq!((s.size, s.font.as_deref()), (Some(14), Some("Georgia")), "{word}: {s:?}");
+    }
+    assert_eq!(span_of(&cell, "Small print").size, Some(9), "its own size wins");
+    assert_eq!(span_of(&cell, "Other").size, None, "a neighbour keeps its own");
+    assert!(span_of(&cell, "Left").bold && span_of(&cell, "Right").bold, "the table's weight");
+    let evil = html_layout(r##"<table><tr><td style="font-family:x&quot;><script>x</script>">A</td><td>B</td></tr></table>"##);
+    assert!(!format!("{evil:?}").contains("script"), "{evil:?}");
+}
+
 #[test]
 fn boxes_placed_over_others_are_kept() {
     // A label over a picture, and a note in the bottom right corner.
