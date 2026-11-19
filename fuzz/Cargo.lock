@@ -2170,7 +2170,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-jmap"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "log",
  "quatrelle-mime",
@@ -2183,7 +2183,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-keys"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "cryptoki",
  "quatrelle-smime",
@@ -2195,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-mime"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "encodify",
  "flate2",
@@ -2211,7 +2211,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-model"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2223,7 +2223,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-net"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "cfb",
  "fs4",
@@ -2259,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-pgp"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "pgp",
  "rand_core 0.6.4",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-smime"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2298,7 +2298,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-store"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "dirs",
  "flate2",

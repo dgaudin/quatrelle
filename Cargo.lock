@@ -5354,7 +5354,7 @@ checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
 name = "quatrelle"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "arboard",
  "async-io",
@@ -5394,7 +5394,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-cli"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "chrono",
  "iana-time-zone",
@@ -5405,7 +5405,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-engine"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "der",
  "log",
@@ -5425,7 +5425,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-jmap"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "log",
  "quatrelle-mime",
@@ -5438,7 +5438,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-keys"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "cryptoki",
  "quatrelle-smime",
@@ -5451,7 +5451,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-mime"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "encodify",
  "flate2",
@@ -5468,7 +5468,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-model"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -5481,7 +5481,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-net"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "cfb",
  "der",
@@ -5519,7 +5519,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-pgp"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "pgp",
  "proptest",
@@ -5530,7 +5530,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-print"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "miniz_oxide 0.9.1",
  "skrifa 0.44.0",
@@ -5538,7 +5538,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-smime"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -5567,7 +5567,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-spell"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "flate2",
  "spellbook",
@@ -5575,7 +5575,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-store"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "dirs",
  "flate2",
@@ -5591,7 +5591,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-ui-egui"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "accesskit_consumer",
  "egui",
@@ -5616,7 +5616,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-web"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "eframe",
  "egui",
@@ -8633,7 +8633,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "icu_normalizer",
  "png 0.18.1",
