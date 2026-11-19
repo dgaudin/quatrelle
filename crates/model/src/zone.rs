@@ -1,20 +1,53 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Time zones: the IANA database (built in through `chrono-tz`, so it reads no system files and
-//! works the same everywhere, wasm included) and fixed offsets. A zone turns a local wall-clock
-//! time into Unix seconds and back, with the offset in force on that date (summer time included).
+//! Time zones: the IANA database (built in through `jiff-tzdb`, so it reads no system files and
+//! works the same everywhere, wasm included; its rules read by `jiff`) and fixed offsets. A zone
+//! turns a local wall-clock time into Unix seconds and back, with the offset in force on that date
+//! (summer time included).
 
-use chrono::{DateTime, LocalResult, Offset, TimeZone};
-use chrono_tz::OffsetComponents;
+use std::cell::RefCell;
+
+use jiff::Timestamp;
+use jiff::tz::{AmbiguousOffset, Offset, TimeZone};
 
 /// A time zone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Zone {
     /// Seconds east of UTC, all year.
     Fixed(i32),
-    /// A zone of the IANA database (`Europe/Berlin`).
-    Named(chrono_tz::Tz),
+    /// A zone of the IANA database, by its name there (`Europe/Berlin`).
+    Named(&'static str),
+}
+
+/// Zones whose rules are kept read, per thread, at most (a calendar shows a handful).
+const RULES_KEPT: usize = 64;
+
+/// The rules of zone `name` (a name of the database built in), read once per thread and kept: a
+/// calendar asks for an offset for every event it draws.
+fn rules(name: &'static str) -> Option<TimeZone> {
+    thread_local! {
+        static READ: RefCell<Vec<(&'static str, TimeZone)>> = const { RefCell::new(Vec::new()) };
+    }
+    let kept = READ.with(|r| r.try_borrow().ok().and_then(|r| r.iter().find(|(n, _)| *n == name).map(|(_, tz)| tz.clone())));
+    if kept.is_some() {
+        return kept;
+    }
+    let (canonical, data) = jiff_tzdb::get(name)?;
+    let tz = TimeZone::tzif(canonical, data).ok()?;
+    READ.with(|r| {
+        if let Ok(mut r) = r.try_borrow_mut()
+            && r.len() < RULES_KEPT
+        {
+            r.push((name, tz.clone()));
+        }
+    });
+    Some(tz)
+}
+
+/// A zone of the database built in, by any spelling of its name (`america/new_york` too).
+fn in_database(name: &str) -> Option<Zone> {
+    jiff_tzdb::get(name).map(|(canonical, _)| Zone::Named(canonical))
 }
 
 impl Default for Zone {
@@ -102,18 +135,18 @@ impl Zone {
         if ["UTC", "GMT", "Z", "UT", "Etc/UTC", "Etc/GMT"].iter().any(|u| id.eq_ignore_ascii_case(u)) {
             return Some(Zone::UTC);
         }
-        if let Ok(tz) = id.parse::<chrono_tz::Tz>() {
-            return Some(Zone::Named(tz));
+        if let Some(zone) = in_database(id) {
+            return Some(zone);
         }
         if let Some((iana, _)) = WINDOWS.iter().find(|(_, w)| w.eq_ignore_ascii_case(id)) {
-            return iana.parse::<chrono_tz::Tz>().ok().map(Zone::Named);
+            return in_database(iana);
         }
         // A prefixed name: the longest tail that is a zone.
         let mut rest = id;
         for _ in 0..8 {
             let Some((_, tail)) = rest.split_once('/') else { break };
-            if let Ok(tz) = tail.parse::<chrono_tz::Tz>() {
-                return Some(Zone::Named(tz));
+            if let Some(zone) = in_database(tail) {
+                return Some(zone);
             }
             rest = tail;
         }
@@ -123,7 +156,7 @@ impl Zone {
     /// Its name as [`Zone::named`] reads it back: the IANA name, or the offset (`+0530`).
     pub fn id(&self) -> String {
         match self {
-            Zone::Named(tz) => tz.name().to_string(),
+            Zone::Named(name) => (*name).to_string(),
             Zone::Fixed(o) => {
                 let a = o.unsigned_abs();
                 format!("{}{:02}{:02}", if *o < 0 { '-' } else { '+' }, a / 3600, a % 3600 / 60)
@@ -134,7 +167,7 @@ impl Zone {
     /// Its IANA name, if it has one.
     pub fn name(&self) -> Option<&'static str> {
         match self {
-            Zone::Named(tz) => Some(tz.name()),
+            Zone::Named(name) => Some(name),
             Zone::Fixed(_) => None,
         }
     }
@@ -150,9 +183,10 @@ impl Zone {
     pub fn offset_at(&self, utc: i64) -> i64 {
         match self {
             Zone::Fixed(o) => i64::from(*o),
-            Zone::Named(tz) => {
-                DateTime::from_timestamp(utc, 0).map_or(0, |d| i64::from(tz.offset_from_utc_datetime(&d.naive_utc()).fix().local_minus_utc()))
-            }
+            Zone::Named(name) => match (rules(name), Timestamp::from_second(utc)) {
+                (Some(tz), Ok(at)) => i64::from(tz.to_offset(at).seconds()),
+                _ => 0,
+            },
         }
     }
 
@@ -160,7 +194,10 @@ impl Zone {
     pub fn is_dst(&self, utc: i64) -> bool {
         match self {
             Zone::Fixed(_) => false,
-            Zone::Named(tz) => DateTime::from_timestamp(utc, 0).is_some_and(|d| !tz.offset_from_utc_datetime(&d.naive_utc()).dst_offset().is_zero()),
+            Zone::Named(name) => match (rules(name), Timestamp::from_second(utc)) {
+                (Some(tz), Ok(at)) => tz.to_offset_info(at).dst().is_dst(),
+                _ => false,
+            },
         }
     }
 
@@ -175,12 +212,16 @@ impl Zone {
     pub fn to_utc(&self, local: i64) -> i64 {
         match self {
             Zone::Fixed(o) => local.saturating_sub(i64::from(*o)),
-            Zone::Named(tz) => {
-                let Some(naive) = DateTime::from_timestamp(local, 0).map(|d| d.naive_utc()) else { return local };
-                match tz.offset_from_local_datetime(&naive) {
-                    LocalResult::Single(o) | LocalResult::Ambiguous(o, _) => local.saturating_sub(i64::from(o.fix().local_minus_utc())),
-                    LocalResult::None => local.saturating_sub(self.offset_at(local.saturating_sub(86_400))),
-                }
+            Zone::Named(name) => {
+                let (Some(tz), Ok(wall)) = (rules(name), Timestamp::from_second(local)) else { return local };
+                let offset = match tz.to_ambiguous_timestamp(Offset::UTC.to_datetime(wall)).offset() {
+                    AmbiguousOffset::Unambiguous { offset } => offset,
+                    // Twice (the clocks go back): the first, in the offset before the change.
+                    AmbiguousOffset::Fold { before, .. } => before,
+                    // Never (they go forward): read with the offset before the change.
+                    AmbiguousOffset::Gap { before, .. } => before,
+                };
+                local.saturating_sub(i64::from(offset.seconds()))
             }
         }
     }
@@ -243,6 +284,19 @@ mod tests {
         assert_eq!(ny.to_utc(at(2026, 3, 8, 2, 30)), at(2026, 3, 8, 7, 30));
         // 01:30 on 1 November 2026 happens twice: the first.
         assert_eq!(ny.to_utc(at(2026, 11, 1, 1, 30)), at(2026, 11, 1, 5, 30));
+        // Paris: 02:30 on 29 March 2026 doesn't happen (03:30 summer time); 02:30 on 25 October
+        // happens twice (the first, in summer time).
+        let paris = Zone::named("europe/paris").unwrap();
+        assert_eq!(paris.name(), Some("Europe/Paris"), "any spelling, kept as the database spells it");
+        assert_eq!(paris.to_utc(at(2026, 3, 29, 2, 30)), at(2026, 3, 29, 1, 30));
+        assert_eq!(paris.to_utc(at(2026, 10, 25, 2, 30)), at(2026, 10, 25, 0, 30));
+        // The southern summer, a half-hour zone without one, and a fixed offset.
+        let sydney = Zone::named("Australia/Sydney").unwrap();
+        assert_eq!((sydney.offset_at(at(2026, 1, 15, 0, 0)), sydney.offset_at(at(2026, 7, 15, 0, 0))), (11 * 3600, 10 * 3600));
+        assert!(sydney.is_dst(at(2026, 1, 15, 0, 0)) && !sydney.is_dst(at(2026, 7, 15, 0, 0)));
+        let kolkata = Zone::named("India Standard Time").unwrap();
+        assert_eq!((kolkata.offset_at(at(2026, 7, 1, 0, 0)), kolkata.is_dst(at(2026, 7, 1, 0, 0))), (19_800, false));
+        assert_eq!(Zone::Fixed(-16_200).to_utc(at(2026, 7, 1, 0, 0)), at(2026, 7, 1, 4, 30));
         // Hostile values never panic.
         for t in [i64::MIN, i64::MAX, 0, -1] {
             let _ = (ny.offset_at(t), ny.to_utc(t), ny.local(t), ny.is_dst(t), Zone::Fixed(i32::MIN).to_utc(t));

@@ -140,13 +140,21 @@ impl Drop for ReminderNotes {
     }
 }
 
+/// The time now (Unix seconds) and the system zone's offset then (seconds east of UTC): the
+/// zone `TZ` names, else the system's (its zoneinfo, or Windows' own zone), UTC when none is
+/// found.
+fn now_and_offset() -> (i64, i32) {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+    let offset = jiff::Timestamp::from_second(now).map_or(0, |at| jiff::tz::TimeZone::system().to_offset(at).seconds());
+    (now, offset)
+}
+
 impl Services for Desktop {
     fn system_style(&self) -> quatrelle_ui_egui::theme::SystemStyle {
         self.style.get()
     }
     fn clock(&self) -> (i64, i32) {
-        let now = chrono::Local::now();
-        (now.timestamp(), now.offset().local_minus_utc())
+        now_and_offset()
     }
     fn zone(&self) -> Option<String> {
         iana_time_zone::get_timezone().ok()

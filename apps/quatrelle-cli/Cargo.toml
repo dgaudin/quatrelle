@@ -19,7 +19,8 @@ path = "src/main.rs"
 quatrelle-engine = { workspace = true }
 quatrelle-net = { workspace = true }
 serde_json = { workspace = true }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# The system's own zone and offset, now (its zoneinfo, or Windows' own zone mapped by jiff).
+jiff = { workspace = true, features = ["tz-system", "tzdb-zoneinfo", "tzdb-bundle-platform"] }
 iana-time-zone = "0.1"
 
 [dev-dependencies]

@@ -93,10 +93,10 @@ impl Args {
 }
 
 fn clock() -> Clock {
-    let now = chrono::Local::now();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+    let offset = jiff::Timestamp::from_second(now).map_or(0, |at| jiff::tz::TimeZone::system().to_offset(at).seconds());
     let zone = iana_time_zone::get_timezone().ok().and_then(|z| quatrelle_engine::model::zone::Zone::named(&z));
-    Clock::new(now.timestamp(), now.offset().local_minus_utc())
-        .in_zone(zone.filter(|z| z.offset_at(now.timestamp()) == i64::from(now.offset().local_minus_utc())))
+    Clock::new(now, offset).in_zone(zone.filter(|z| z.offset_at(now) == i64::from(offset)))
 }
 
 fn password(prompt_for: &str) -> Result<String, String> {

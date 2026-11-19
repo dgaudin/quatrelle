@@ -36,9 +36,10 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 log = "0.4"
 unicode-segmentation = "1"
-# time zones: the IANA database built in (pure data, wasm-safe; MIT OR Apache-2.0)
-chrono = { version = "0.4", default-features = false }
-chrono-tz = { version = "0.10", default-features = false }
+# time zones: jiff's rules, read from the IANA database built in (jiff-tzdb: pure data, wasm-safe,
+# no system file read; both Unlicense OR MIT)
+jiff = { version = "1", default-features = false, features = ["std"] }
+jiff-tzdb = "1"
 # the Public Suffix List compiled in (a registrable domain: the "site" a server belongs to; pure data, wasm-safe; MIT OR Apache-2.0)
 psl = "2"
 

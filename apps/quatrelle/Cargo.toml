@@ -23,7 +23,8 @@ egui = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 # The local UTC offset for message times.
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# The system's own zone and offset, now (its zoneinfo, or Windows' own zone mapped by jiff).
+jiff = { workspace = true, features = ["tz-system", "tzdb-zoneinfo", "tzdb-bundle-platform"] }
 iana-time-zone = "0.1"
 # Native file dialogs (attach, save as).
 rfd = "0.17"
