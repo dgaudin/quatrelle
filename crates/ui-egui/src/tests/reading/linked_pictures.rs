@@ -201,12 +201,13 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
          <td>After</td></tr></table>\
          <p>Above</p><p><img src=\"{spacer}\" width=\"522\" height=\"25\" alt=\"spacer-FFFFFF\"></p><p>Below</p>\
          <p><img src=\"https://cdn.example/img/hall.jpg\" width=\"180\" height=\"90\" alt=\"Grande salle\"></p>\
+         <p><img src=\"https://cdn.example/img/m8.jpg\" width=\"180\" height=\"90\" alt=\"Spacers M8 nylon\"></p>\
          <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"></p>\
          <p>Over</p><p><img src=\"https://cdn.example/img/rule-grey.gif\" width=\"672\" height=\"6\" alt=\"rule-grey\"></p><p>Under</p>"
     );
     let (mut a, dir) = app_with_html("spacer-not-shown", "Spacers", &html);
     let ctx = egui::Context::default();
-    let size = egui::vec2(1280.0, 800.0);
+    let size = egui::vec2(1280.0, 1100.0);
     frame(&ctx, &mut a, vec![]);
     let k = a.session.list.iter().find(|m| m.subject == "Spacers").map(|m| m.key.clone()).unwrap();
     a.run("list.open", json!({"key": k.to_id()}));
@@ -236,6 +237,7 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     let shown = in_pane(&shapes);
     assert!(shown.iter().any(|t| t.contains("Grande salle")), "a picture described in words keeps its placeholder: {shown:?}");
     assert!(shown.iter().any(|t| t == "[4321]"), "a file's name that fits stays written: {shown:?}");
+    assert!(shown.iter().any(|t| t == "[Spacers M8 nylon]"), "spacer as a whole word only: {shown:?}");
     assert!(!shown.iter().any(|t| t.contains("rule-grey")), "a file's name taller than its place isn't written: {shown:?}");
     assert!(!shown.iter().any(|t| t.contains("spacer")), "a spacer's name isn't drawn: {shown:?}");
     // What shows: a fill, an outline or a picture (a table's cell is a frame with nothing to see).
@@ -266,6 +268,37 @@ fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
     }
     let shown = in_pane(&shapes);
     assert!(!shown.iter().any(|t| t.contains("spacer")), "no bubble over a spacer: {shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A signature's icon in a link whose description only names its file (`linkedin` for
+/// `…/linkedin.png`, 16 by 16) is never hidden as a spacer is: its box stays, and a click on it
+/// opens the link, as before.
+#[test]
+fn an_icon_in_a_link_named_by_its_file_stays_a_link() {
+    let html = "<p>Find us:</p><p><a href=\"https://www.contoso.example/profile\">\
+                <img src=\"https://cdn.example/img/linkedin.png\" width=\"16\" height=\"16\" alt=\"linkedin\"></a></p>";
+    let (mut a, dir) = app_with_html("icon-in-link", "Signature icons", html);
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    a.services = Box::new(Opening(opened.clone()));
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Signature icons").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..6 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let icon = shapes
+        .iter()
+        .find_map(|s| match s {
+            Shape::Rect(r) if r.stroke.width > 0.0 && (r.rect.width() - 16.0).abs() < 1.5 && (r.rect.height() - 16.0).abs() < 1.5 => Some(r.rect),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("the icon's box: {:?}", texts(&shapes)));
+    tap(&ctx, &mut a, icon.center());
+    assert_eq!(*opened.borrow(), vec!["https://www.contoso.example/profile".to_string()], "the icon opens its link");
     let _ = std::fs::remove_dir_all(dir);
 }
 

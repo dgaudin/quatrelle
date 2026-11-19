@@ -135,10 +135,12 @@ fn a_newsletter_preview_reads_its_cells_in_order() {
 fn the_preview_leaves_out_a_pictures_own_name() {
     let html = "<html><body><table><tr><td><img src=\"https://cdn.example/img/spacer-FFFFFF.jpg\" width=\"522\" height=\"25\" alt=\"spacer-FFFFFF\"></td></tr></table>\
                 <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"> Your order is ready.</p>\
-                <p><img src=\"https://cdn.example/img/hall.jpg\" alt=\"Grande salle\"></p></body></html>";
+                <p><img src=\"https://cdn.example/img/hall.jpg\" alt=\"Grande salle\"></p>\
+                <p><img src=\"https://cdn.example/img/m8.jpg\" alt=\"Spacers M8 nylon\"></p></body></html>";
     let preview = html::html_preview(html);
     assert!(!preview.contains("spacer") && !preview.contains("4321"), "{preview}");
     assert!(preview.contains("Your order is ready") && preview.contains("Grande salle"), "{preview}");
+    assert!(preview.contains("Spacers M8 nylon"), "spacer as a whole word only: {preview}");
     let text = html_to_text(html);
     assert!(text.contains("spacer-FFFFFF") && text.contains("4321"), "the text as read is unchanged: {text}");
 }

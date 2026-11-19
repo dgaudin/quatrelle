@@ -101,9 +101,13 @@ pub fn names_itself(src: &str, alt: &str) -> bool {
     name.eq_ignore_ascii_case(alt) || stem.eq_ignore_ascii_case(alt)
 }
 
-/// Whether a picture's description says it's a spacer (`spacer…`, any case).
+/// Whether a picture's description says it's a spacer: "spacer" as a whole word at its start
+/// (any case), followed by nothing, a dash, an underscore, a digit or a space, never a letter
+/// (`spacer-FFFFFF`, `spacer_2`; not a product's photo, `Spacers M8 nylon`).
 pub fn spacer_described(alt: &str) -> bool {
-    alt.trim().get(..6).is_some_and(|p| p.eq_ignore_ascii_case("spacer"))
+    let alt = alt.trim();
+    alt.get(..6).is_some_and(|p| p.eq_ignore_ascii_case("spacer"))
+        && alt.get(6..).and_then(|rest| rest.chars().next()).is_none_or(|c| matches!(c, '-' | '_') || c.is_ascii_digit() || c.is_whitespace())
 }
 
 /// `html` without the pictures whose description only names them ([`names_itself`]): for the
@@ -286,6 +290,19 @@ fn tiny_length(v: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "spacer" says a spacer as a whole word only: followed by nothing, a dash, an underscore, a
+    /// digit or a space, never a letter (a product's photo, "Spacers M8 nylon").
+    #[test]
+    fn spacer_is_said_as_a_whole_word() {
+        for alt in ["spacer", "Spacer", " SPACER ", "spacer-FFFFFF", "spacer_line", "spacer2", "spacer 3"] {
+            assert!(spacer_described(alt), "{alt}");
+        }
+        for alt in ["Spacers M8 nylon", "Spacerail", "spacerfill", "spaceé", "a spacer"] {
+            assert!(!spacer_described(alt), "{alt}");
+        }
+        assert!(!names_itself("https://cdn.example/img/m8.jpg", "Spacers M8 nylon"));
+    }
 
     /// A description that only repeats its picture's file name, or a spacer's, names it; words
     /// don't, and nor does nothing at all.

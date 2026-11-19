@@ -152,7 +152,8 @@ pub(crate) fn kept_room(size: Option<mime::ImageSize>, width: f32) -> Option<(f3
 /// and down to a line of text when the message sets its height), keeps that room (none when the
 /// message sets no width) and draws nothing in it, no bubble either: `None`. `[spacer-FFFFFF]` was
 /// written across a white gap, a column a few pixels wide was framed, and a rule 6 high pushed the
-/// layout down by a line; a file's name that fits stays written (`[4321]`, a phone number).
+/// layout down by a line; a file's name that fits stays written (`[4321]`, a phone number). A
+/// picture in a link is never left out so: it stays the link, said and clicked as before.
 pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3], zoom: f32) -> Option<egui::Response> {
     let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
     let text = format!("[{alt}]");
@@ -165,7 +166,9 @@ pub(super) fn unseen(t: &Tokens, ui: &mut Ui, sp: &mime::Span, width: f32, page:
     // Its height counts when the message sets it: a line of text must fit.
     let low = kept.and_then(|(_, h)| h).is_some_and(|h| h * zoom < line);
     let crowded = room.is_some_and(|room| wide > room.x) || low;
-    if mime::spacer_described(&sp.text) || (crowded && mime::names_itself(sp.image.as_deref().unwrap_or_default(), &sp.text)) {
+    // Never in a link: a signature's icon (`linkedin` for `…/linkedin.png`) stays the link.
+    let spacer = mime::spacer_described(&sp.text) || (crowded && mime::names_itself(sp.image.as_deref().unwrap_or_default(), &sp.text));
+    if spacer && sp.link.is_none() {
         if let Some(room) = room {
             ui.allocate_space(room);
         }
