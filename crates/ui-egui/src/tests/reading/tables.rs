@@ -245,6 +245,46 @@ fn a_report_of_set_widths_keeps_its_words_whole() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A signature in a frame, as a mailing's template draws one (made up here): a row of a red
+/// edge 2 wide, the content 604, the other edge 2, and a last cell set no width that holds only
+/// a spacer 0 wide. That cell holds nothing and takes no room: the frame's right edge stands 604
+/// from its left, and the content's columns keep their widths, its words whole. It was given a
+/// column's least (140), the content shrank by a fifth, its right edge stood short of the lines
+/// above and under it, and `See you` broke inside its word.
+#[test]
+fn a_frames_empty_last_cell_takes_no_room() {
+    let html = "<table width=\"608\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"><tr>\
+                <td width=\"2\" bgcolor=\"#e2001a\"></td>\
+                <td width=\"604\" bgcolor=\"#ffffff\"><table width=\"604\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\"><tr>\
+                <td width=\"135\">Any question?</td><td width=\"2\" bgcolor=\"#000001\"></td><td width=\"409\">Shops near you</td>\
+                <td width=\"58\"><b>See you</b></td></tr></table></td>\
+                <td width=\"2\" bgcolor=\"#e2001a\"></td>\
+                <td bgcolor=\"#ffffff\"><img src=\"https://cdn.example/s.png\" width=\"0\" height=\"32\"></td>\
+                </tr></table>";
+    let (mut a, dir) = app_with_html("frame-last-cell", "Framed signature", html);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(2000.0, 900.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Framed signature").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shown = Vec::new();
+    for _ in 0..12 {
+        shown = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let red = egui::Color32::from_rgb(0xe2, 0x00, 0x1a);
+    let mut edges: Vec<egui::Rect> =
+        shown.iter().filter_map(|s| if let egui::Shape::Rect(r) = s { (r.fill == red).then_some(r.rect) } else { None }).collect();
+    edges.sort_by(|a, b| a.left().total_cmp(&b.left()));
+    let [left, right] = edges.as_slice() else { panic!("the frame's two edges: {edges:?}") };
+    assert!((right.left() - left.right() - 604.0).abs() < 1.5, "the content keeps its 604: {left:?} {right:?}");
+    let lines = shown.iter().find_map(|s| match s {
+        egui::Shape::Text(t) if t.galley.text() == "See you" => Some(t.galley.rows.len()),
+        _ => None,
+    });
+    assert_eq!(lines, Some(1), "its last column's words whole");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A signature laid out as some mail programs write one (made up here): the name, then a table
 /// whose first column, 30 pixels wide, holds a tiny icon on the web (13 pixels wide, in a box
 /// of colour) beside each contact line, and a picture 1 pixel square by its style after it.

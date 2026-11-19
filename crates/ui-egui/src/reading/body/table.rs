@@ -192,10 +192,18 @@ impl Body<'_> {
             .collect();
         let fixed: f32 = asked.iter().flatten().sum();
         let free = asked.iter().filter(|a| a.is_none()).count();
-        let mut widths: Vec<f32> = if fixed > width || (free > 0 && width - fixed < MIN_COLUMN * free as f32) {
+        // What a cell that asks for nothing needs: a column's least when it holds something; none
+        // when it holds nothing (a frame's last cell of a spacer 0 wide was given 140, and the
+        // frame's content shrank by a fifth, its words broken).
+        let least: Vec<f32> = asked.iter().zip(row).map(|(a, c)| if a.is_none() && !c.blocks.is_empty() { MIN_COLUMN } else { 0.0 }).collect();
+        let needed: f32 = least.iter().sum();
+        // A column the message asks narrow (a signature's logo) isn't squeezed: only one given
+        // less than it needs is.
+        let squeezed = fixed > width || (needed > 0.0 && width - fixed < needed);
+        let mut widths: Vec<f32> = if squeezed {
             // Asked for more than there is: shared out in proportion.
-            let total: f32 = asked.iter().map(|a| a.unwrap_or(MIN_COLUMN)).sum::<f32>().max(1.0);
-            asked.iter().map(|a| a.unwrap_or(MIN_COLUMN) / total * width).collect()
+            let total: f32 = asked.iter().zip(&least).map(|(a, l)| a.unwrap_or(*l)).sum::<f32>().max(1.0);
+            asked.iter().zip(&least).map(|(a, l)| a.unwrap_or(*l) / total * width).collect()
         } else {
             let each = if free > 0 { (width - fixed) / free as f32 } else { 0.0 };
             asked.iter().map(|a| a.unwrap_or(each)).collect()
@@ -207,9 +215,6 @@ impl Body<'_> {
         {
             *last += width - used;
         }
-        // A column the message asks narrow (a signature's logo) isn't squeezed: only one given
-        // less than it needs is.
-        let squeezed = fixed > width || (free > 0 && width - fixed < MIN_COLUMN * free as f32);
         let stack = (2..=3).contains(&row.len()) && squeezed && widths.iter().zip(row).any(|(w, c)| *w < MIN_COLUMN && !c.blocks.is_empty());
         // The cells' numbers (theirs before any table inside them), and their heights as last
         // drawn; the row's height when every one is known and some cell sits below the top.
