@@ -450,6 +450,9 @@ struct Worker {
     no_push: bool,
     /// The last push wait ended in an Inbox sync (so the next one needn't check first).
     pushed: bool,
+    /// What the Inbox's last sync was told by its `SELECT` (UIDVALIDITY, UIDNEXT, count), on
+    /// whichever connection read it; none after one that failed. See `wait_for_mail`.
+    inbox_synced: Option<(u32, u32, u32)>,
     /// Folders to look at again soon: Graph and Exchange file a sent message's copy a moment
     /// after taking it, so Sent Items is read again then rather than at the next poll.
     soon: Vec<(Instant, String)>,
@@ -558,6 +561,7 @@ impl Worker {
             sieve_port: crate::sieve::PORT,
             no_push: false,
             pushed: false,
+            inbox_synced: None,
             soon: Vec::new(),
             search: Arc::new(AtomicU64::new(0)),
             next_poll: Instant::now() + POLL_EVERY,

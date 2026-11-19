@@ -213,7 +213,7 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
     // 5: prefetch the newest sources (in small batches, saving as we go).
     report.fetched = prefetch(c, store, account, folder, &mut st, opts)?;
 
-    report.total = info.exists;
+    (report.total, report.validity, report.uid_next) = (info.exists, info.validity, info.uid_next);
     report.unread = if info.exists == 0 { 0 } else { u32::try_from(c.uid_search("UNSEEN")?.len()).unwrap_or(u32::MAX) };
     Ok(report)
 }
