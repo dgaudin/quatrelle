@@ -275,7 +275,8 @@ pub fn link_written_addresses(spans: Vec<Span>) -> Vec<Span> {
             if range.start > at {
                 out.push(Span { text: sp.text.get(at..range.start).unwrap_or("").to_string(), ..sp.clone() });
             }
-            out.push(Span { text: sp.text.get(range.clone()).unwrap_or("").to_string(), link: Some(url), ..sp.clone() });
+            // Underlined, as a link the message wrote is.
+            out.push(Span { text: sp.text.get(range.clone()).unwrap_or("").to_string(), link: Some(url), underline: true, ..sp.clone() });
             at = range.end;
         }
         if at < sp.text.len() {

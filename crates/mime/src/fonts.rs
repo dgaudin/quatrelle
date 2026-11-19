@@ -77,6 +77,8 @@ fn points(px: f32) -> Option<u8> {
 /// What a start tag sets, if it sets a size or typeface.
 fn font_of(tag: &str, name: &str) -> Option<Font> {
     let mut f = Font::default();
+    // Whether its style says how its text is decorated (`none` takes a link's underline away).
+    let mut decorated = false;
     if let Some(style) = attr(tag, "style") {
         // Its entities first: Word writes `font-family:&quot;Arial&quot;`, whose `;` would
         // split the declaration.
@@ -90,7 +92,10 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
                 "font-weight" => f.bold = heavy(v),
                 "font-style" => f.italic = matches!(v.to_ascii_lowercase().as_str(), "italic" | "oblique"),
                 // (`none` inside an underlined element takes nothing away, as in CSS.)
-                "text-decoration" | "text-decoration-line" => f.underline = v.to_ascii_lowercase().split_whitespace().any(|w| w == "underline"),
+                "text-decoration" | "text-decoration-line" => {
+                    decorated = true;
+                    f.underline = v.to_ascii_lowercase().split_whitespace().any(|w| w == "underline");
+                }
                 "font" => {
                     // The shorthand: `[style] [weight] size[/line] family`.
                     for word in v.split_whitespace() {
@@ -118,6 +123,12 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
         }
     }
     if name == "u" || name == "ins" {
+        f.underline = true;
+    }
+    // A link is underlined, as a browser and Outlook draw one, unless its own style says
+    // otherwise: a mailing that gives its links its text's colour (`<body link="#000001">`)
+    // still shows them as links.
+    if name == "a" && attr(tag, "href").is_some() && !decorated {
         f.underline = true;
     }
     (f != Font::default()).then_some(f)

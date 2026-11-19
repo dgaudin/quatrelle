@@ -425,7 +425,7 @@ impl Body<'_> {
                         background: bg.unwrap_or(Color32::TRANSPARENT),
                         italics: sp.italic,
                         strikethrough: if sp.strike { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
-                        underline: if sp.link.is_some() || sp.underline { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
+                        underline: if sp.underline { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
                         ..Default::default()
                     };
                     job.append(&sp.text, 0.0, format);

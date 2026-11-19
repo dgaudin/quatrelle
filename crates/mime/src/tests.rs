@@ -589,23 +589,33 @@ fn addresses_written_in_html_are_links() {
 }
 
 /// Underlined text comes through as such: `<u>`, `<ins>`, `text-decoration` set inline or by
-/// a style sheet rule; a link's own look stays unless its style underlines it; and the editor
-/// keeps the underline of a signature pasted with one.
+/// a style sheet rule; a link is underlined, as a browser and Outlook draw one, unless its own
+/// style (inline or a rule) takes it away, or it is an anchor without an address; an address
+/// written out in the text is a link underlined too. A mailing's links in the colour of its text
+/// (`<body link="#000001">`) showed nothing that they were links until the pointer was on them.
+/// The editor keeps the underline of a signature pasted with one.
 #[test]
 fn underlined_text_reads_underlined() {
     let html = r#"<style>.key { text-decoration: underline }</style>
         <p>Plain <u>tagged</u> and <ins>inserted</ins> and <span style="text-decoration: underline">styled</span>
         and <span style="text-decoration-line: underline dotted">lined</span> and <b class="key">ruled</b>;
         <a href="https://example.com/a">a link</a>, <a href="https://example.com/b" style="text-decoration:none">a plain one</a>,
-        <a href="https://example.com/c" style="text-decoration:underline">an underlined one</a>.</p>"#;
+        <a href="https://example.com/c" style="text-decoration:underline">an underlined one</a>, <a name="top">an anchor</a>,
+        <span class="quiet"><a href="https://example.com/d" class="quiet">a quiet one</a></span>, www.contoso.example.</p>
+        <style>a.quiet { text-decoration: none }</style>"#;
     let rich = html_to_rich(&crate::layout::inline_css(html));
     let span = |text: &str| rich.iter().flatten().find(|s| s.text.contains(text)).cloned().unwrap_or_else(|| panic!("{text} in {rich:?}"));
     for word in ["tagged", "inserted", "styled", "lined", "ruled"] {
         assert!(span(word).underline, "{word}: {rich:?}");
     }
     assert!(!span("Plain").underline && !span("and").underline);
-    assert!(!span("a link").underline && !span("a plain one").underline, "a link draws as a link, not underlined by the message");
+    assert!(span("a link").underline && span("a link").link.is_some(), "a link is underlined");
+    assert!(!span("a plain one").underline && span("a plain one").link.is_some(), "its own style takes it away");
+    assert!(!span("a quiet one").underline, "a style sheet's rule too");
     assert!(span("an underlined one").underline && span("an underlined one").link.is_some());
+    assert!(!span("an anchor").underline && span("an anchor").link.is_none(), "no address: no link");
+    let written = span("www.contoso.example");
+    assert!(written.underline && written.link.is_some(), "an address written out: {written:?}");
     // Pasted into the editor, the underline is a style of the text.
     let (text, styles) = pasted_html("<p>Hello <u>there</u></p>");
     assert_eq!(text.trim(), "Hello there");
