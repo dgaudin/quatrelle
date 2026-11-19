@@ -1,23 +1,34 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! What's selected in the calendar's grid, as Outlook's: a click selects an appointment or an
-//! empty half hour, a double click opens it (or a new appointment there), Enter opens the
-//! appointment selected, Delete deletes it (a series asks which first); in the Month view a click
-//! selects a day. One thing at a time; one that's no longer shown just isn't drawn.
+//! empty half hour, a drag selects a stretch of them, a double click opens it (or a new
+//! appointment there), Enter opens the appointment selected or a meeting over the stretch,
+//! Delete deletes the appointment (a series asks which first); in the Month view a click selects
+//! a day. One thing at a time; one that's no longer shown just isn't drawn.
 
 use super::*;
 
-/// The appointment, the half hour or the day selected.
+/// The appointment, the stretch of half hours or the day selected.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Pick {
     /// An appointment, told apart as its chip is ([`chip_id`]): whose calendar, its uid, when
     /// this occurrence starts.
     Item { account: String, calendar: String, uid: String, start: i64 },
-    /// An empty half hour of the Day and Week views: the day, the half hour (0 to 47) and the
-    /// calendar's pane (side by side; 0 otherwise).
-    Slot { day: i64, half: i64, pane: usize },
+    /// One or more empty half hours of the Day and Week views: the day, the first half hour
+    /// (0 to 47), the last one selected (the same for one half hour) and the calendar's pane
+    /// (side by side; 0 otherwise).
+    Slot { day: i64, half: i64, last: i64, pane: usize },
     /// A day of the Month view, clicked on its background.
     Day { day: i64 },
+}
+
+/// A stretch of half hours being dragged out, from the half hour pressed (`anchor`) to the one
+/// under the pointer: it stays in the day and pane where it began.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SlotDrag {
+    pub(crate) day: i64,
+    pub(crate) pane: usize,
+    pub(crate) anchor: i64,
 }
 
 impl Pick {
@@ -40,12 +51,48 @@ pub(super) fn outline(c: Color32, t: &Tokens) -> Color32 {
     Color32::from_rgb(shade(r), shade(g), shade(b))
 }
 
-/// Enter opens the appointment selected, when it's shown (not while a dialog is open or text is
-/// typed).
+/// Enter opens the appointment selected, or a meeting over the stretch of half hours selected,
+/// when it's shown (not while a dialog is open or text is typed).
 pub(super) fn enter(s: &Session, st: &UiState, ui: &mut Ui, items: &[AgendaItem], acts: &mut Vec<Action>) {
     if let Some(item) = pressed(st, ui, items, Key::Enter) {
         acts.extend(open(s, item));
+        return;
     }
+    if let Some((start, end, pane)) = selected_stretch(s, st, ui) {
+        let cals = if s.prefs.calendars_side_by_side { s.shown_calendars() } else { Vec::new() };
+        let cal = cals.get(pane).filter(|_| cals.len() > 1);
+        acts.push(days::new_event_in(s, start, end, true, cal));
+    }
+}
+
+/// The stretch of half hours selected, when the view still shows it, and Enter is pressed on it.
+fn selected_stretch(s: &Session, st: &UiState, ui: &mut Ui) -> Option<(i64, i64, usize)> {
+    if st.dialog.is_some() || ui.ctx().text_edit_focused() {
+        return None;
+    }
+    let Some(Pick::Slot { day, half, last, pane }) = st.cal_pick.as_ref() else { return None };
+    if !slot_shown(s, *day, *pane) {
+        return None;
+    }
+    let (first, last) = ((*half).min(*last), (*half).max(*last));
+    if !ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
+        return None;
+    }
+    let midnight = s.local_midnight(*day);
+    Some((midnight + first * 1800, midnight + (last + 1) * 1800, *pane))
+}
+
+/// Whether the Day, Work week or Week view still shows `day` in the calendar's `pane`.
+fn slot_shown(s: &Session, day: i64, pane: usize) -> bool {
+    if s.cal_mode == CalMode::Month {
+        return false;
+    }
+    let (d0, d1) = s.cal_days();
+    if day < d0 || day >= d1 {
+        return false;
+    }
+    let cals = if s.prefs.calendars_side_by_side { s.shown_calendars() } else { Vec::new() };
+    pane < if cals.len() > 1 { cals.len() } else { 1 }
 }
 
 /// Delete deletes the appointment selected, as the menu's Delete does, where the menu would
@@ -72,14 +119,17 @@ fn pressed<'a>(st: &UiState, ui: &mut Ui, items: &'a [AgendaItem], key: Key) -> 
     ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key)).then_some(item)
 }
 
-/// The new appointment Ctrl+N opens, as Outlook's: at the half hour selected (in its calendar,
-/// side by side, as a double click there), on the day selected at 9:00 (as a double click on
-/// it), else as the ribbon's New event.
+/// The new appointment Ctrl+N opens, as Outlook's: over the stretch of half hours selected (in
+/// its calendar, side by side, as a double click there), on the day selected at 9:00 (as a
+/// double click on it), else as the ribbon's New event.
 pub(crate) fn new_event(s: &Session, pick: Option<&Pick>) -> Action {
     match pick {
-        Some(Pick::Slot { day, half, pane }) => {
+        Some(Pick::Slot { day, half, last, pane }) if slot_shown(s, *day, *pane) => {
             let cals = if s.prefs.calendars_side_by_side { s.shown_calendars() } else { Vec::new() };
-            days::new_event_in(s, s.local_midnight(*day) + half * 1800, cals.get(*pane).filter(|_| cals.len() > 1))
+            let cal = cals.get(*pane).filter(|_| cals.len() > 1);
+            let (first, last) = ((*half).min(*last), (*half).max(*last));
+            let midnight = s.local_midnight(*day);
+            days::new_event_in(s, midnight + first * 1800, midnight + (last + 1) * 1800, false, cal)
         }
         Some(Pick::Day { day }) => Action::Dialog(Dialog::new_event(s, Some(s.local_midnight(*day) + 9 * 3600))),
         _ => Action::Dialog(Dialog::new_event(s, None)),

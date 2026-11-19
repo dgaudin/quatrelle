@@ -27,7 +27,7 @@ pub use drag::Drag;
 pub(crate) use found::open_hit;
 pub(crate) use found::{CalSearch, found};
 pub use pick::Pick;
-pub(crate) use pick::new_event;
+pub(crate) use pick::{SlotDrag, new_event};
 pub use side::{nav, todo_bar};
 
 /// Height of an hour in the day and week views.
@@ -133,6 +133,14 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         });
     });
     let (d0, d1) = s.cal_days();
+    // A stretch of half hours selected goes when the calendar shows another view, week or day
+    // (or another set of calendars side by side).
+    let panes = if s.prefs.calendars_side_by_side { s.shown_calendars().len().max(1) } else { 1 };
+    let shown_view = (s.cal_mode, d0, d1, panes);
+    if st.cal_slot_view.is_some_and(|v| v != shown_view) && matches!(st.cal_pick, Some(Pick::Slot { .. })) {
+        st.cal_pick = None;
+    }
+    st.cal_slot_view = Some(shown_view);
     let began = web_time::Instant::now();
     let items = s.agenda(s.local_midnight(d0), s.local_midnight(d1));
     let found = began.elapsed();
@@ -146,6 +154,9 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     // A drag whose chip is no longer drawn (the view changed under it) is let go of.
     if st.cal_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
         st.cal_drag = None;
+    }
+    if st.cal_slot_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
+        st.cal_slot_drag = None;
     }
 }
 

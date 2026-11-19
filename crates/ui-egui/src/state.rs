@@ -230,7 +230,12 @@ pub struct UiState {
     pub(crate) months_drag: f32,
     /// An appointment being dragged to another time ([`calendar::Drag`]).
     pub(crate) cal_drag: Option<calendar::Drag>,
-    /// The appointment or empty half hour selected in the calendar's grid ([`calendar::Pick`]).
+    /// A stretch of half hours being dragged out in the calendar's grid ([`calendar::SlotDrag`]).
+    pub(crate) cal_slot_drag: Option<calendar::SlotDrag>,
+    /// What the calendar last showed (its view, the days in it and the calendars side by side):
+    /// another view, week or day shown, a stretch of half hours selected there goes.
+    pub(crate) cal_slot_view: Option<(CalMode, i64, i64, usize)>,
+    /// The appointment, stretch of half hours or day selected in the calendar's grid ([`calendar::Pick`]).
     pub(crate) cal_pick: Option<calendar::Pick>,
     pub(crate) note_selected: Option<String>,
     /// Tasks: the search, the one picked and its form, the task being typed in.

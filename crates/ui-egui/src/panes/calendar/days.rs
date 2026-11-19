@@ -3,19 +3,24 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The Day, Work week and Week views: the days in columns over the hours (each calendar in a
 //! pane of its own when side by side), the all-day events in a strip above, a click on an empty
-//! half hour selecting it and a double click adding an event there ([`super::pick`]), and
-//! appointments dragged to another time ([`super::drag`]).
+//! half hour selecting it, a drag selecting a stretch of them and a double click adding an event
+//! over it ([`super::pick`]), and appointments dragged to another time ([`super::drag`]).
 
 use super::*;
 use drag::Area;
 
-/// A new event at `at`, in calendar `cal` (account, calendar id) when it can take one.
-pub(super) fn new_event_in(s: &Session, at: i64, cal: Option<&(String, String, String, u8)>) -> Action {
-    let mut d = Dialog::new_event(s, Some(at));
-    if let (Dialog::Event(f), Some((account, id, _, _))) = (&mut d, cal)
-        && let Some(i) = f.calendars.iter().position(|(a, c, _)| a == account && c == id)
-    {
-        f.calendar = i;
+/// A new event from `start` to `end`, in calendar `cal` (account, calendar id) when it can take
+/// one; `inviting` as a meeting, else an appointment.
+pub(super) fn new_event_in(s: &Session, start: i64, end: i64, inviting: bool, cal: Option<&(String, String, String, u8)>) -> Action {
+    let mut d = Dialog::new_event(s, Some(start));
+    if let Dialog::Event(f) = &mut d {
+        f.set_times(s, start, end);
+        f.inviting = inviting;
+        if let Some((account, id, _, _)) = cal
+            && let Some(i) = f.calendars.iter().position(|(a, c, _)| a == account && c == id)
+        {
+            f.calendar = i;
+        }
     }
     Action::Dialog(d)
 }
@@ -159,34 +164,88 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                 ui.painter().line_segment([pos2(x, grid.min.y), pos2(x, grid.max.y)], egui::Stroke::new(1.0, t.border));
             }
         }
-        // A click on an empty half hour selects it, a double click adds an event there (in that
-        // pane's calendar), as Outlook's.
+        // A click on an empty half hour selects it, a drag selects every half hour from the one
+        // pressed to the one under the pointer, a double click adds an event over the stretch
+        // selected (or over the half hour clicked) in that pane's calendar, as Outlook's.
         let half_at = |y: f32| ((y - grid.min.y) / (HOUR / 2.0)).floor().clamp(0.0, 47.0) as i64;
+        // The calendar of pane `j`, when calendars are side by side.
+        let pane_cal = |j: usize| cals.get(j).filter(|_| k > 1);
+        // Whether the stretch selected covers half hour `half` of `day` in pane `j`.
+        let inside = |st: &UiState, day: i64, j: usize, half: i64| {
+            matches!(&st.cal_pick, Some(Pick::Slot { day: d, half: f, last: l, pane: p })
+                if *d == day && *p == j && half >= (*f).min(*l) && half <= (*f).max(*l))
+        };
         for j in 0..k {
             for i in 0..n {
+                let day = d0 + i;
                 let col = Rect::from_min_size(pos2(grid.min.x + day_x(i, j), grid.min.y), vec2(cw, grid.height()));
                 let slot = |half: i64| Rect::from_min_size(pos2(col.min.x, grid.min.y + half as f32 * HOUR / 2.0), vec2(cw, HOUR / 2.0)).shrink(1.0);
-                let r = ui.interact(col, ui.scope_id().with(("hours", d0 + i, j)), Sense::click());
+                let r = ui.interact(col, ui.scope_id().with(("hours", day, j)), Sense::click_and_drag());
                 // The half hour under the pointer lights up (not while something is being dragged
-                // over it); the one selected stays lit, in the selection's colour.
-                if let Some(p) = r.hover_pos().filter(|_| st.cal_drag.is_none()) {
+                // over it); the stretch selected stays lit, in the selection's colour.
+                if let Some(p) = r.hover_pos().filter(|_| st.cal_drag.is_none() && st.cal_slot_drag.is_none()) {
                     ui.painter().rect_filled(slot(half_at(p.y)), 2.0, t.hover_row);
                 }
-                if let Some(Pick::Slot { day, half, pane }) = &st.cal_pick
-                    && *day == d0 + i
+                if let Some(Pick::Slot { day: d, half, last, pane }) = &st.cal_pick
+                    && *d == day
                     && *pane == j
                 {
-                    ui.painter().rect_filled(slot(*half), 2.0, t.accent_soft);
+                    let (first, last) = ((*half).min(*last), (*half).max(*last));
+                    let block = Rect::from_min_size(
+                        pos2(col.min.x, grid.min.y + first as f32 * HOUR / 2.0),
+                        vec2(cw, (last - first + 1) as f32 * HOUR / 2.0),
+                    )
+                    .shrink(1.0);
+                    ui.painter().rect_filled(block, 2.0, t.accent_soft);
                 }
-                if (r.clicked() || r.double_clicked())
+                // Taken hold of on an empty half hour: the stretch begins there and stays in this
+                // day and pane, the pointer's height setting its other end.
+                if r.drag_started_by(egui::PointerButton::Primary) && st.cal_drag.is_none() && st.cal_slot_drag.is_none() {
+                    let at = ui.input(|i| i.pointer.press_origin()).or_else(|| r.interact_pointer_pos());
+                    if let Some(p) = at {
+                        let anchor = half_at(p.y);
+                        st.cal_slot_drag = Some(SlotDrag { day, pane: j, anchor });
+                        st.cal_pick = Some(Pick::Slot { day, half: anchor, last: anchor, pane: j });
+                    }
+                }
+                // A double click inside the stretch opens an appointment over all of it, outside
+                // it over the half hour clicked; a click outside it selects just that half hour
+                // (a click inside leaves the stretch as it is).
+                if r.double_clicked() {
+                    if let Some(p) = r.interact_pointer_pos() {
+                        let half = half_at(p.y);
+                        let (first, last) = match &st.cal_pick {
+                            Some(Pick::Slot { day: d, half: f, last: l, pane: pa })
+                                if *d == day && *pa == j && (*f).min(*l) < (*f).max(*l) && half >= (*f).min(*l) && half <= (*f).max(*l) =>
+                            {
+                                ((*f).min(*l), (*f).max(*l))
+                            }
+                            _ => (half, half),
+                        };
+                        st.cal_pick = Some(Pick::Slot { day, half: first, last, pane: j });
+                        let midnight = s.local_midnight(day);
+                        acts.push(new_event_in(s, midnight + first * 1800, midnight + (last + 1) * 1800, false, pane_cal(j)));
+                    }
+                } else if r.clicked()
                     && let Some(p) = r.interact_pointer_pos()
                 {
                     let half = half_at(p.y);
-                    st.cal_pick = Some(Pick::Slot { day: d0 + i, half, pane: j });
-                    if r.double_clicked() {
-                        acts.push(new_event_in(s, s.local_midnight(d0 + i) + half * 1800, cals.get(j).filter(|_| k > 1)));
+                    if !inside(st, day, j, half) {
+                        st.cal_pick = Some(Pick::Slot { day, half, last: half, pane: j });
                     }
                 }
+            }
+        }
+        // The stretch dragged out: its other end follows the pointer's height, past the day's
+        // ends stopping at its first or last half hour; let go of, it stays selected.
+        if st.cal_slot_drag.is_some() {
+            if !ui.input(|i| i.pointer.primary_down()) || ui.input(|i| i.key_pressed(Key::Escape)) {
+                st.cal_slot_drag = None;
+            } else if let Some(p) = ui.input(|i| i.pointer.latest_pos())
+                && let Some(d) = st.cal_slot_drag
+            {
+                let half = half_at(p.y);
+                st.cal_pick = Some(Pick::Slot { day: d.day, half: d.anchor.min(half), last: d.anchor.max(half), pane: d.pane });
             }
         }
         // Events, side by side when they overlap (each calendar in its own pane, side by side).
