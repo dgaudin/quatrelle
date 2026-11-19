@@ -529,6 +529,21 @@ fn a_line_break_alone_is_room_only_between_two_boxes() {
     assert_eq!(t.rows[1][0].blocks.len(), 1, "nothing after the box: {:?}", t.rows[1][0].blocks);
 }
 
+/// A line starts with its first word: the space a browser drops there (`<strong> Any
+/// question?`) stayed when a size or a typeface was marked before it, as a cell's font is.
+/// Preformatted text keeps its own.
+#[test]
+fn a_line_starts_with_its_first_word() {
+    let b = html_layout(
+        r##"<table width="600"><tr><td style="font-family: Arial; font-size: 13px"><strong> Any question? <br />Answers here! </strong></td>
+            <td style="font-size: 11px"><a href="https://shop.example"> <strong> See you</strong></a><br />on our site</td>
+            <td><pre><span style="font-size: 10pt">   indented</span></pre></td></tr></table>"##,
+    );
+    let Some(Block::Table(t)) = b.first() else { panic!("{b:?}") };
+    let cells: Vec<String> = t.rows[0].iter().map(|c| c.blocks.iter().map(text).collect::<Vec<_>>().join("\n")).collect();
+    assert_eq!(cells, ["Any question?\nAnswers here!", "See you\non our site", "   indented"]);
+}
+
 /// A cell that says its text isn't to wrap (`nowrap`, as Outlook writes a report's cells, or
 /// `white-space: nowrap`) keeps that, so its column can be as wide as its line.
 #[test]

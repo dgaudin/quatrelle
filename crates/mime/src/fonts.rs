@@ -216,6 +216,53 @@ pub(crate) fn only_marks(text: &str) -> bool {
     true
 }
 
+/// How far a line has gone: nothing yet, marks only, or its words.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum LineStart {
+    #[default]
+    Nothing,
+    Marks,
+    Words,
+}
+
+/// `text` without the spaces that follow the marks its line starts with: a browser drops spaces
+/// where a line starts, and the converter kept these, the marks being words to it (`<td
+/// style="font-size: 13px"><strong> Any question?` came out ` Any question?`). Spaces before
+/// any mark are the converter's own (a list's indent) and stay. `at`: how far the line has
+/// gone, carried from piece to piece.
+pub(crate) fn without_spaces_after_marks<'a>(text: &'a str, at: &mut LineStart) -> std::borrow::Cow<'a, str> {
+    if *at == LineStart::Words || text.is_empty() {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    if !text.starts_with([START, END, ' ', '\t']) {
+        *at = LineStart::Words;
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            START => {
+                out.push(c);
+                out.extend(chars.next());
+                *at = LineStart::Marks;
+            }
+            END => {
+                out.push(c);
+                *at = LineStart::Marks;
+            }
+            ' ' | '\t' if *at == LineStart::Marks => {}
+            c => {
+                *at = LineStart::Words;
+                out.push(c);
+                out.push_str(chars.as_str());
+                break;
+            }
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 /// A converted text's marks as runs (the reader's): each piece of text, and what the marked
 /// elements around it set. `open`: the elements still open from the text before, carried from
 /// piece to piece and line to line. Marks out of order (text laid out in columns) are taken as

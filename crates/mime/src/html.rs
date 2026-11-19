@@ -312,8 +312,16 @@ pub fn html_to_rich(html: &str) -> RichText {
             && line
                 .tagged_strings()
                 .all(|ts| crate::fonts::only_marks(&ts.s) && !ts.tag.iter().any(|a| matches!(a, html2text::render::RichAnnotation::Image(_))));
+        let mut start = crate::fonts::LineStart::default();
         for ts in line.tagged_strings() {
-            for (text, font) in crate::fonts::runs(&ts.s, &mut open, &fonts) {
+            // Preformatted text keeps its spaces where its line starts.
+            let s = if ts.tag.iter().any(|a| matches!(a, html2text::render::RichAnnotation::Code | html2text::render::RichAnnotation::Preformat(_))) {
+                start = crate::fonts::LineStart::Words;
+                std::borrow::Cow::Borrowed(ts.s.as_str())
+            } else {
+                crate::fonts::without_spaces_after_marks(&ts.s, &mut start)
+            };
+            for (text, font) in crate::fonts::runs(&s, &mut open, &fonts) {
                 let mut sp = Span {
                     text,
                     bold: font.bold,
