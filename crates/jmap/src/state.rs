@@ -358,6 +358,11 @@ pub struct SyncReport {
     pub newest: Option<i64>,
     /// Message sources downloaded ahead (their summaries filled in, their words searchable).
     pub fetched: usize,
+    /// What IMAP's `SELECT` said as the sync began: UIDVALIDITY and UIDNEXT (0 when the server
+    /// didn't say), the count being `total`. What the Inbox's sync was told, for the look before
+    /// IDLE; the others leave them out.
+    pub validity: u32,
+    pub uid_next: u32,
 }
 
 impl SyncReport {

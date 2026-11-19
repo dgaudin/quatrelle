@@ -59,19 +59,26 @@ impl Worker {
             return;
         }
         let Some(inbox) = inbox else { return };
+        let synced = self.inbox_synced;
         let waiting_since = Instant::now();
         let result = (|| -> Result<bool> {
             let Some(Conn::Imap(c)) = self.conn.as_mut() else { return Err(NetError::Closed("not connected".into())) };
             // Mail that came after the Inbox was synced and before IDLE starts is never pushed
-            // during IDLE: the server already said it (or will only say it to a command). Look
-            // now: the Inbox grew since the sync's SELECT, or a command's answer said it did.
+            // during IDLE: the server already told this connection of it (a SELECT, a command's
+            // answer) or will only tell it to a command. Look now: what this connection was told
+            // of the Inbox isn't what the Inbox's last sync was told, or a command's answer has
+            // said it grew since. That sync may have been on another connection (a full sync
+            // reads the folders on connections of their own), and a change sent here meanwhile
+            // selects the Inbox after it: this connection's own last SELECT says nothing of what
+            // was read. After a sync that failed, that SELECT is all there is to go by: compared
+            // with an older sync's, the same failing sync would be made over and over.
+            let told = |s: &crate::imap::SelectInfo| (s.validity, s.uid_next, s.exists);
+            let before = c.seen(&inbox).map(told);
             if c.selected() != Some(inbox.as_str()) {
-                let synced = c.seen(&inbox).cloned();
-                let now = c.select(&inbox, false)?;
-                if synced.is_some_and(|s| (s.validity, s.uid_next, s.exists) != (now.validity, now.uid_next, now.exists)) {
-                    return Ok(true);
-                }
-            } else if c.take_news() {
+                c.select(&inbox, false)?;
+            }
+            let now = c.seen(&inbox).map(told);
+            if synced.or(before).is_some_and(|s| Some(s) != now) || c.take_news() {
                 return Ok(true);
             }
             let queue = &mut self.queue;
@@ -467,6 +474,9 @@ impl Worker {
     /// `noting`: what its saves changed in the list, told once an edit still waiting is made
     /// again on it.
     pub(super) fn apply_report(&mut self, path: &str, result: std::result::Result<SyncReport, NetError>, noting: NoteGuard) {
+        if self.inbox().as_deref() == Some(path) {
+            self.inbox_synced = result.as_ref().ok().map(|r| (r.validity, r.uid_next, r.total));
+        }
         match result {
             Ok(mut r) => {
                 // The token worked: a later refusal gets a fresh one again.
