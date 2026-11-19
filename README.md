@@ -29,7 +29,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/reading.png" alt="Quatrelle with the sample mailbox: the folder pane on the left with Favorites and the account's folders and unread counts, the ribbon with Reply, Quick steps, Flag, Categorize, Pin and Snooze, the Inbox grouped under Today, Yesterday, Monday and Last week, and the reading pane showing a flagged message with its follow-up, Reply, Reply all, Forward, Print and Save buttons and a picture attachment" width="100%">
+  <img src="docs/images/reading.png" alt="Quatrelle with the sample mailbox: the folder pane on the left with Favorites and the account's folders and unread counts, the ribbon with Reply, Quick steps, Flag, Categorize, Pin and Snooze, the Inbox grouped by day, and the reading pane showing a flagged message with its follow-up, the Reply, Reply all and Forward buttons beside the sender, and a picture attachment" width="100%">
 </p>
 
 <table>
@@ -38,7 +38,7 @@
 <td width="50%"><img src="docs/images/compose.png" alt="Writing a reply in the reading pane: the Message, Insert, Options, Format Text and Review tabs, the font and paragraph buttons, Pop out and Discard, the From, To and Subject fields filled in, the signature and the original message below" width="100%"><p align="center"><sub><b>Write</b> in place: replies quote the original under your signature, with attachments, Cc/Bcc and drafts.</sub></p></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/images/calendar.png" alt="The calendar's week view: the date navigator on the left, the ribbon with Day, Work week, Week and Month, and a week of appointments in their calendars' colours, several side by side on Thursday" width="100%"><p align="center"><sub><b>Calendar</b>: day, week and month views, invitations, meetings with the Scheduling Assistant; Exchange, CalDAV or this computer.</sub></p></td>
+<td width="50%"><img src="docs/images/calendar.png" alt="The calendar's work week: the date navigator on the left, the ribbon with Day, Work week, Week and Month, and the week's appointments in their calendars' colours, several side by side on Thursday" width="100%"><p align="center"><sub><b>Calendar</b>: day, week and month views, invitations, meetings with the Scheduling Assistant; Exchange, CalDAV or this computer.</sub></p></td>
 <td width="50%"><img src="docs/images/table.png" alt="The classic layout: the message list as a table with From, Subject, Received, Size and Categories columns, the reading pane at the bottom, and the To-Do bar's month and coming appointments on the right" width="100%"><p align="center"><sub><b>Classic layout</b>: the list as a table, the reading pane at the bottom or off, the To-Do bar beside it.</sub></p></td>
 </tr>
 </table>
