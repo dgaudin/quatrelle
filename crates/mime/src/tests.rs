@@ -38,6 +38,7 @@ use super::*;
 
 mod build_bytes;
 mod draft_source;
+mod heading_lines;
 mod importance;
 pub(crate) mod index_text;
 mod inline_names;

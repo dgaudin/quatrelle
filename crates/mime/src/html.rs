@@ -302,6 +302,8 @@ pub fn html_to_rich(html: &str) -> RichText {
     let mut out: RichText = Vec::new();
     let mut blank = 0;
     let mut open: Vec<usize> = Vec::new();
+    // The title level of the line before (0: not a title's).
+    let mut title = 0u8;
     for line in lines.into_iter().take(RICH_MAX_LINES) {
         let mut spans: Vec<Span> = Vec::new();
         // A line that held only marks (where a sized paragraph starts, alone before a picture or
@@ -355,6 +357,26 @@ pub fn html_to_rich(html: &str) -> RichText {
                 level = u8::try_from(before.chars().filter(|c| *c == '#').count().clamp(1, 6)).unwrap_or(1);
                 sp.text = sp.text.get(i + HEADING_MARK.len_utf8()..).unwrap_or("").to_string();
             }
+        }
+        // A title's next lines (`<h3>Alpha<br>Beta</h3>`) come out `### Beta`, the mark on its
+        // first line only: they're the title's too, and one with nothing more (the line break
+        // that ends it, in a template's sized greeting) is no line at all.
+        let mut more_of_title = false;
+        if level == 0
+            && title > 0
+            && let Some(first) = spans.iter_mut().find(|s| !s.text.is_empty())
+        {
+            let marks = "#".repeat(usize::from(title));
+            let rest = first.text.trim_start().strip_prefix(marks.as_str()).filter(|r| r.is_empty() || r.starts_with(' '));
+            if let Some(rest) = rest {
+                first.text = rest.trim_start().to_string();
+                level = title;
+                more_of_title = true;
+            }
+        }
+        title = level;
+        if more_of_title && spans.iter().all(|s| s.text.trim().is_empty() && s.image.is_none()) {
+            continue;
         }
         if level > 0 {
             if let Some(first) = spans.first_mut()
