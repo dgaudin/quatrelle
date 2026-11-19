@@ -87,10 +87,7 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
             match k.trim().to_ascii_lowercase().as_str() {
                 "font-size" => f.size = crate::layout::font_px(v).and_then(points),
                 "font-family" => f.family = family(v),
-                "font-weight" => {
-                    let w = v.to_ascii_lowercase();
-                    f.bold = matches!(w.as_str(), "bold" | "bolder") || w.parse::<u16>().is_ok_and(|n| n >= 600);
-                }
+                "font-weight" => f.bold = heavy(v),
                 "font-style" => f.italic = matches!(v.to_ascii_lowercase().as_str(), "italic" | "oblique"),
                 // (`none` inside an underlined element takes nothing away, as in CSS.)
                 "text-decoration" | "text-decoration-line" => f.underline = v.to_ascii_lowercase().split_whitespace().any(|w| w == "underline"),
@@ -98,7 +95,7 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
                     // The shorthand: `[style] [weight] size[/line] family`.
                     for word in v.split_whitespace() {
                         let w = word.to_ascii_lowercase();
-                        f.bold |= matches!(w.as_str(), "bold" | "bolder") || w.parse::<u16>().is_ok_and(|n| (600..=1000).contains(&n));
+                        f.bold |= heavy(&w);
                         f.italic |= matches!(w.as_str(), "italic" | "oblique");
                         if let Some(px) = crate::layout::font_px(word.split('/').next().unwrap_or("")) {
                             f.size = points(px);
@@ -124,6 +121,13 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
         f.underline = true;
     }
     (f != Font::default()).then_some(f)
+}
+
+/// Whether a weight (`font-weight`, or a word of the `font` shorthand) is bold: `bold`,
+/// `bolder`, or 600 to 1000.
+pub(crate) fn heavy(weight: &str) -> bool {
+    let w = weight.trim().to_ascii_lowercase();
+    matches!(w.as_str(), "bold" | "bolder") || w.parse::<u16>().is_ok_and(|n| (600..=1000).contains(&n))
 }
 
 /// Mark where each element with a size or typeface starts and ends; the fonts, by mark.

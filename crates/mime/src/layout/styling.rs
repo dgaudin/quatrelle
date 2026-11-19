@@ -78,6 +78,24 @@ impl Node {
 
     /// The size of the one element it wraps, through inline wrappers (`<b><span style="font-size:
     /// 20pt">`, as Outlook writes a title), when that's all it holds.
+    /// Whether it says its text is bold: by its tag (`<b>`, `<strong>`, `<th>`, a heading's) or
+    /// its style (`font-weight`, the `font` shorthand).
+    fn written_bold(&self) -> bool {
+        matches!(self.tag.as_str(), "b" | "strong" | "th" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
+            || self.style("font-weight").is_some_and(|w| crate::fonts::heavy(&w))
+            || self.style("font").is_some_and(|f| f.split_whitespace().any(crate::fonts::heavy))
+    }
+
+    /// Whether all its text is bold: it says so, or each element holding text inside it does.
+    fn all_bold(&self, depth: usize) -> bool {
+        self.written_bold()
+            || (depth < MAX_DEPTH * 4
+                && self.kids.iter().all(|k| match k {
+                    Kid::Text(t) => t.trim().is_empty(),
+                    Kid::El(e) => !e.has_text(0) || e.all_bold(depth + 1),
+                }))
+    }
+
     fn wrapped_font_size(&self, depth: usize) -> Option<f32> {
         if depth > 4 || block_tag(&self.tag) {
             return None;
@@ -132,11 +150,13 @@ fn style_text(n: &Node, out: &mut String, depth: usize) {
     }
 }
 
-/// An element as selectors see it, kept while its children are styled.
+/// An element as selectors see it, kept while its children are styled, and whether it says
+/// its text is bold.
 struct Ancestor {
     tag: String,
     id: Option<String>,
     classes: Vec<String>,
+    bold: bool,
 }
 
 fn apply_css(n: &mut Node, sheet: &crate::css::Sheet, chain: &mut Vec<Ancestor>, depth: usize) {
@@ -149,6 +169,7 @@ fn apply_css(n: &mut Node, sheet: &crate::css::Sheet, chain: &mut Vec<Ancestor>,
             tag: kid.tag.clone(),
             id: kid.attr("id").map(str::to_string),
             classes: kid.attr("class").map(|c| c.split_whitespace().take(16).map(str::to_string).collect()).unwrap_or_default(),
+            bold: false,
         });
         if !sheet.is_empty() {
             let els: Vec<crate::css::El<'_>> = chain
@@ -178,11 +199,16 @@ fn apply_css(n: &mut Node, sheet: &crate::css::Sheet, chain: &mut Vec<Ancestor>,
                 }
             }
         }
+        if let Some(a) = chain.last_mut() {
+            a.bold = kid.written_bold();
+        }
         apply_css(kid, sheet, chain, depth + 1);
         chain.pop();
     }
-    // Text sized as a title becomes a heading of that level: a block's content goes inside one;
-    // a lone inline element (`<td><font size="5">Title</font></td>`) goes inside one itself.
+    // Text sized as a title, in bold, becomes a heading of that level: a block's content goes
+    // inside one; a lone inline element (`<td><b><font size="5">Title</font></b></td>`) goes
+    // inside one itself. Big text not in bold keeps its weight, as Outlook shows it (a mailing's
+    // 18-pixel greeting came out bold, as a title); its size is drawn all the same.
     let only_child = n
         .kids
         .iter()
@@ -193,11 +219,13 @@ fn apply_css(n: &mut Node, sheet: &crate::css::Sheet, chain: &mut Vec<Ancestor>,
         .count()
         == 1;
     let parent_is_block = block_tag(&n.tag);
+    // (`chain` ends with `n`.)
+    let in_bold = chain.iter().any(|a| a.bold);
     for k in &mut n.kids {
         let Kid::El(kid) = k else { continue };
         let level = kid.font_size().or_else(|| kid.wrapped_font_size(0)).map_or(0, heading_for);
         let is_heading = kid.tag.len() == 2 && kid.tag.starts_with('h') && kid.tag != "hr";
-        if level == 0 || is_heading || !kid.has_text(0) || kid.has_block_inside(0) {
+        if level == 0 || is_heading || !kid.has_text(0) || kid.has_block_inside(0) || !(in_bold || kid.all_bold(0)) {
             continue;
         }
         let h = format!("h{level}");

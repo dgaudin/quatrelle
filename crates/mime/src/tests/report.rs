@@ -59,8 +59,8 @@ fn a_generated_report_keeps_its_pictures_colours_and_titles() {
     let summary = cell("Summary");
     assert_eq!((summary.background, summary.span), (Some([0x88, 0x88, 0x88]), 2));
     assert!(
-        matches!(&summary.blocks[0], layout::Block::Text(r) if r[0][0].heading == 3 && r[0][0].color == Some([255, 255, 255])),
-        "sized as a title, in the class's colour"
+        matches!(&summary.blocks[0], layout::Block::Text(r) if (r[0][0].size, r[0][0].heading) == (Some(15), 0) && r[0][0].color == Some([255, 255, 255])),
+        "at its title's size, in the class's colour (not in bold: no heading, as Outlook shows it)"
     );
     assert_eq!(cell("17.4.1").background, Some([0xf0, 0xf0, 0xf0]), "td.odd");
     assert_eq!(cell("untangle").background, None);
@@ -75,7 +75,8 @@ fn a_generated_report_keeps_its_pictures_colours_and_titles() {
 }
 
 /// Tracking pixels stay out, sized by their attributes or by their style (one sized so showed
-/// as `[picture]` under a signature); a picture's own description is kept; `<font size>` titles.
+/// as `[picture]` under a signature); a picture's own description is kept; bold `<font size>`
+/// titles.
 #[test]
 fn pictures_without_a_description_keep_their_place() {
     let r = html_to_rich(
@@ -85,7 +86,7 @@ fn pictures_without_a_description_keep_their_place() {
     let imgs: Vec<(&str, &str)> = r.iter().flatten().filter_map(|s| Some((s.image.as_deref()?, s.text.as_str()))).collect();
     assert_eq!(imgs, [("cid:a@x", ""), ("cid:b@x", "Chart"), ("cid:c@x", "")]);
     assert!(r.iter().flatten().all(|s| !s.text.contains(PICTURE_MARK)));
-    let p = layout::inline_css(r#"<div><font size="6">Big</font></div><div style="font-size:11pt">Body</div>"#);
+    let p = layout::inline_css(r#"<div><font size="6"><b>Big</b></font></div><div style="font-size:11pt">Body</div>"#);
     let r = html_to_rich(&p);
     let level = |t: &str| r.iter().flatten().find(|s| s.text.contains(t)).map(|s| s.heading);
     assert_eq!((level("Big"), level("Body")), (Some(1), Some(0)), "{p}");
