@@ -53,10 +53,15 @@ fn photos_are_sent_without_where_they_were_taken() {
 
 /// Put a message in the sample Inbox and open it.
 fn deliver(s: &mut Session, n: u32, from: (&str, &str), subject: &str, html: Option<&str>) -> quatrelle_model::MessageKey {
+    deliver_with(s, n, from, subject, "Please look at this.", html)
+}
+
+/// [`deliver`] with its own text.
+fn deliver_with(s: &mut Session, n: u32, from: (&str, &str), subject: &str, body: &str, html: Option<&str>) -> quatrelle_model::MessageKey {
     let d = quatrelle_mime::Draft {
         to: vec![quatrelle_model::EmailAddress::new("Riley", "riley@studio.example")],
         subject: subject.into(),
-        body: "Please look at this.".into(),
+        body: body.into(),
         html: html.map(str::to_string),
         ..Default::default()
     };
@@ -127,6 +132,140 @@ fn sending_holds_for_a_lookalike_address_or_many_strangers() {
     let team: Vec<String> = (1..=12).map(|i| format!("p{i}@studio.example")).collect();
     s.run("compose.update", &json!({"to": format!("{}; orders@printshop.example", team.join("; ")), "subject": "Wrap"})).unwrap();
     assert!(send(&mut s, json!({})).get("check").is_none());
+    done(s);
+}
+
+#[test]
+fn sending_holds_when_something_is_said_to_be_attached_and_nothing_is() {
+    let mut s = sample_session("missing-attachment");
+    let send = |s: &mut Session, p: Value| s.run("compose.send", &p).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "Budget", "body": "Please find attached the numbers."})).unwrap();
+    assert_eq!(send(&mut s, json!({}))["check"], json!([{"kind": "missingAttachment"}]));
+    assert!(s.compose.as_ref().is_some_and(|c| !c.sending), "nothing went");
+    // French too, with the accent or without.
+    s.run("compose.update", &json!({"body": "Ci joint le budget."})).unwrap();
+    assert_eq!(send(&mut s, json!({}))["check"], json!([{"kind": "missingAttachment"}]));
+    // A file goes along: nothing to ask.
+    s.run("compose.attach", &json!({"name": "budget.txt", "data": [49]})).unwrap();
+    assert!(send(&mut s, json!({})).get("check").is_none());
+    assert!(s.compose.is_none());
+    // A word that only looks like one ("unattached") says nothing.
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "Plan", "body": "The plan stays unattached to the timeline."})).unwrap();
+    assert!(send(&mut s, json!({})).get("check").is_none());
+    done(s);
+}
+
+/// A reply's draft opened from Drafts that no longer knows it's a reply (saved by another
+/// program, its original not here): the original under it and its header still aren't the user's
+/// words, nor is its subject as it came.
+#[test]
+fn a_reply_opened_again_from_drafts_still_leaves_out_its_original() {
+    let mut s = sample_session("missing-attachment-draft");
+    let body = "Thanks, got it.\n\nFrom: Ana Lima <ana@soundlab.example>\nSent: Wednesday, 22 October 2026 10:00\n\
+                To: Riley <riley@studio.example>\nSubject: The attachment you asked for\n\nHere is the file, attached.\n";
+    let d = quatrelle_mime::Draft {
+        to: vec![quatrelle_model::EmailAddress::new("Ana Lima", "ana@soundlab.example")],
+        subject: "RE: The attachment you asked for".into(),
+        body: body.into(),
+        in_reply_to: "<gone@soundlab.example>".into(),
+        ..Default::default()
+    };
+    let raw = quatrelle_mime::build(&d, &quatrelle_model::EmailAddress::new("Riley", "riley@studio.example"), NOW, "<draft-elsewhere@x>").unwrap();
+    let store = s.store.clone().unwrap();
+    let mut drafts = store.load_folder("sample", "Drafts").unwrap();
+    let key = quatrelle_model::MessageKey { account: "sample".into(), folder: "Drafts".into(), validity: drafts.validity.max(1), uid: 9300 };
+    let flags = quatrelle_model::Flags { draft: true, seen: true, ..Default::default() };
+    drafts.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key.clone(), flags, raw.len() as u32, NOW));
+    store.save_folder("sample", "Drafts", &drafts).unwrap();
+    store.write_body(&key, &raw).unwrap();
+    s.apply(Event::FolderChanged { account: "sample".into(), folder: "Drafts".into() });
+    s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
+    s.run("draft.edit", &json!({"key": key.to_id()})).unwrap();
+    let c = s.compose.as_ref().expect("the draft open again");
+    assert!(c.body.contains("Here is the file, attached."), "the original is in it: {:?}", c.body);
+    assert!(c.mode.is_none(), "not known as a reply");
+    let v = s.run("compose.send", &json!({})).unwrap();
+    assert!(v.get("check").is_none(), "held: {v}");
+    done(s);
+}
+
+/// The attachment reminder reads only what the user wrote: not the signature and its
+/// confidentiality notice, not a reply's subject as it came, not the original under a reply (in
+/// plain text) nor its header (who sent it, its subject: an original in HTML); what the user
+/// writes in a reply still counts, and so does a subject they wrote themselves.
+#[test]
+fn the_attachment_reminder_reads_only_what_was_written() {
+    let mut s = sample_session("missing-attachment-own");
+    // Each case where the answer is wrong, said at the end.
+    let mut wrong: Vec<&str> = Vec::new();
+    let mut expect = |s: &mut Session, held: bool, case: &'static str| {
+        let v = s.run("compose.send", &json!({})).unwrap();
+        if v.get("check").is_some() != held {
+            wrong.push(case);
+        }
+        if s.compose.is_some() {
+            s.run("compose.close", &json!({"save": false})).unwrap();
+        }
+    };
+    // Words written at the top, as the user starts a message or a reply.
+    let write = |s: &mut Session, words: &str| {
+        let body = s.compose.as_ref().map(|c| c.body.clone()).unwrap_or_default();
+        s.run("compose.update", &json!({"body": format!("{words}{body}")})).unwrap();
+    };
+    let reply_to = |s: &mut Session, n: u32, subject: &str, body: &str, html: Option<&str>| {
+        deliver_with(s, n, ("Ana Lima", "ana@soundlab.example"), subject, body, html);
+        s.run("mail.reply", &json!({})).unwrap();
+    };
+    // A signature whose notice speaks of attachments, in new messages and in replies.
+    let notice = "Riley Moreno\nThis message and any attachment are confidential.";
+    s.run("account.setSignature", &json!({"account": "sample", "signature": notice, "newMessages": true, "replies": true})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "Lunch"})).unwrap();
+    write(&mut s, "Lunch at noon?");
+    assert!(s.compose.as_ref().is_some_and(|c| c.body.contains("confidential")), "the signature is in the text");
+    expect(&mut s, false, "the signature's notice");
+    // A reply's subject as it came.
+    reply_to(&mut s, 1, "The attachment you asked for", "Here it is.", None);
+    write(&mut s, "Thanks, got it.");
+    expect(&mut s, false, "the subject as it came");
+    // The original under it, in plain text.
+    reply_to(&mut s, 2, "Plans", "Here is the file, attached.", None);
+    write(&mut s, "Thanks, got it.");
+    expect(&mut s, false, "the original's words");
+    // An original in HTML: its header (who sent it, its subject) stays in the text.
+    reply_to(&mut s, 3, "Pièce jointe", "See the file.", Some("<p>See the file.</p>"));
+    s.run("compose.update", &json!({"subject": "Lunch"})).unwrap();
+    write(&mut s, "Lunch at noon?");
+    expect(&mut s, false, "the original's header");
+    // What the user writes in a reply counts.
+    reply_to(&mut s, 4, "Plans", "Here are the plans.", None);
+    write(&mut s, "I attached my notes.");
+    expect(&mut s, true, "the user's own words");
+    // And so does a subject they wrote.
+    reply_to(&mut s, 5, "Plans", "Here are the plans.", None);
+    s.run("compose.update", &json!({"subject": "Plans: the attachment follows"})).unwrap();
+    expect(&mut s, true, "a subject the user wrote");
+    assert!(wrong.is_empty(), "wrong: {wrong:?}");
+    done(s);
+}
+
+/// A message's size, near enough for a server's limit: its text, and its files as base64 makes
+/// them, with room for the headers. A floor, never above the real message.
+#[test]
+fn a_messages_size_counts_its_text_and_its_files() {
+    let mut s = sample_session("estimated-size");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"subject": "Numbers", "body": "Short."})).unwrap();
+    let short = s.compose.as_ref().map(|c| c.estimated_size()).unwrap_or(0);
+    let long_body = "Long words. ".repeat(1000);
+    s.run("compose.update", &json!({"body": long_body})).unwrap();
+    let long = s.compose.as_ref().map(|c| c.estimated_size()).unwrap_or(0);
+    assert!(long >= short + 11_000, "{short} -> {long}");
+    s.run("compose.attach", &json!({"name": "numbers.bin", "data": vec![7u8; 3000]})).unwrap();
+    let with_file = s.compose.as_ref().map(|c| c.estimated_size()).unwrap_or(0);
+    assert!(with_file >= long + 4000, "base64 and the part's headers: {long} -> {with_file}");
     done(s);
 }
 

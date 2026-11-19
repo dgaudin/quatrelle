@@ -258,6 +258,7 @@ impl Worker {
             Job::FetchEventFile { reference, ask, .. } => self.fetch_event_file(&reference, ask),
             Job::GetRooms { .. } => self.rooms(),
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
+            Job::GetMailTips { from, recipients, ask, .. } => self.mail_tips(&from, &recipients, ask),
             Job::ServerFolderSizes { .. } => self.folder_sizes(),
             Job::ListRecoverable { ask, offset, .. } => self.list_recoverable(ask, offset),
             Job::RestoreRecoverable { ask, ids, purge, .. } => self.restore_recoverable(ask, ids, purge),

@@ -7,6 +7,7 @@ use super::*;
 
 mod availability;
 mod folders;
+mod mailtips;
 mod rules;
 mod schema;
 
@@ -616,6 +617,8 @@ impl Data {
                 return ("GetRoomsResponse".into(), vec![format!("<m:ResponseCode>NoError</m:ResponseCode><m:Rooms>{rooms}</m:Rooms>")]);
             }
             "GetUserAvailabilityRequest" => return ("GetUserAvailabilityResponse".into(), vec![self.availability(op)]),
+            "GetMailTips" if self.mail_tips_refused => out.push(err("ErrorInvalidOperation")),
+            "GetMailTips" => out.push(self.mail_tips(op)),
             "GetUserOofSettingsRequest" => {
                 let (state, start, end, msg, outside, audience) = self.oof.clone();
                 return (

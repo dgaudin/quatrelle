@@ -79,6 +79,64 @@ pub(super) fn img_tags<'a>(html: &'a str, mut each: impl FnMut(&'a str, std::ops
     });
 }
 
+/// Whether a picture's description (`alt`) only names it: it starts with "spacer" (a spacer's,
+/// any case), or it is its file's name, the last part of its address (`src`) with or without its
+/// extension, any case (`spacer-FFFFFF` for `…/spacer-FFFFFF.jpg`). Such a picture lays the message
+/// out, or says nothing a reader didn't know. One without a description isn't one, nor one
+/// carried in its address (`data:`), which has no file name.
+pub fn names_itself(src: &str, alt: &str) -> bool {
+    let alt = alt.trim();
+    if alt.is_empty() {
+        return false;
+    }
+    if spacer_described(alt) {
+        return true;
+    }
+    if src.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("data:")) {
+        return false;
+    }
+    let path = src.split(['?', '#']).next().unwrap_or(src);
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    name.eq_ignore_ascii_case(alt) || stem.eq_ignore_ascii_case(alt)
+}
+
+/// Whether a picture's description says it's a spacer: "spacer" as a whole word at its start
+/// (any case), followed by nothing, a dash, an underscore, a digit or a space, never a letter
+/// (`spacer-FFFFFF`, `spacer_2`; not a product's photo, `Spacers M8 nylon`).
+pub fn spacer_described(alt: &str) -> bool {
+    let alt = alt.trim();
+    alt.get(..6).is_some_and(|p| p.eq_ignore_ascii_case("spacer"))
+        && alt.get(6..).and_then(|rest| rest.chars().next()).is_none_or(|c| matches!(c, '-' | '_') || c.is_ascii_digit() || c.is_whitespace())
+}
+
+/// `html` without the pictures whose description only names them ([`names_itself`]): for the
+/// list's preview, where their words say nothing (at most [`MAX_PICTURES`] taken out).
+pub(super) fn without_named_pictures(html: &str) -> std::borrow::Cow<'_, str> {
+    // A value as written, out of its quotes.
+    let unquoted = |v: &str| v.trim().trim_matches(['"', '\'']).trim().to_string();
+    let mut out: Vec<std::ops::Range<usize>> = Vec::new();
+    img_tags(html, |tag, range| {
+        let src = tag_attr(tag, "src").map(unquoted).unwrap_or_default();
+        let alt = tag_attr(tag, "alt").map(unquoted).unwrap_or_default();
+        if names_itself(&src, &alt) {
+            out.push(range);
+        }
+        out.len() < MAX_PICTURES
+    });
+    if out.is_empty() {
+        return std::borrow::Cow::Borrowed(html);
+    }
+    let mut kept = String::with_capacity(html.len());
+    let mut last = 0;
+    for r in out {
+        kept.push_str(html.get(last..r.start).unwrap_or(""));
+        last = r.end.max(last);
+    }
+    kept.push_str(html.get(last..).unwrap_or(""));
+    std::borrow::Cow::Owned(kept)
+}
+
 /// Every `<img src>` of an HTML body, in order, without repeats (at most [`MAX_PICTURES`]).
 /// Pictures without a description (tracking pixels, mostly) leave no trace in the formatted
 /// text, so they are found here, to be blocked or shown like the rest.
@@ -232,6 +290,49 @@ fn tiny_length(v: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "spacer" says a spacer as a whole word only: followed by nothing, a dash, an underscore, a
+    /// digit or a space, never a letter (a product's photo, "Spacers M8 nylon").
+    #[test]
+    fn spacer_is_said_as_a_whole_word() {
+        for alt in ["spacer", "Spacer", " SPACER ", "spacer-FFFFFF", "spacer_line", "spacer2", "spacer 3"] {
+            assert!(spacer_described(alt), "{alt}");
+        }
+        for alt in ["Spacers M8 nylon", "Spacerail", "spacerfill", "spaceé", "a spacer"] {
+            assert!(!spacer_described(alt), "{alt}");
+        }
+        assert!(!names_itself("https://cdn.example/img/m8.jpg", "Spacers M8 nylon"));
+    }
+
+    /// A description that only repeats its picture's file name, or a spacer's, names it; words
+    /// don't, and nor does nothing at all.
+    #[test]
+    fn a_description_that_only_repeats_its_file_name_names_it() {
+        for (src, alt) in [
+            ("https://cdn.example/img/spacer-FFFFFF.jpg", "spacer-FFFFFF"),
+            ("https://cdn.example/img/spacer-FFFFFF.jpg", " SPACER-ffffff "),
+            ("https://cdn.example/img/line-grey.gif?v=3#top", "line-grey"),
+            ("https://cdn.example/img/line-grey.gif", "Line-Grey.GIF"),
+            ("https://cdn.example/img/gap.png", "spacer"),
+            ("https://cdn.example/img/gap.png", "Spacer line"),
+            ("https://cdn.example/4321.jpg", "4321"),
+        ] {
+            assert!(names_itself(src, alt), "{src} / {alt}");
+        }
+        for (src, alt) in [
+            ("https://cdn.example/img/hall.jpg", "Grande salle"),
+            ("https://cdn.example/img/hall.jpg", "hall photo"),
+            ("https://cdn.example/img/hall.jpg", ""),
+            ("https://cdn.example/img/hall.jpg", "   "),
+            ("https://cdn.example/", "cdn.example"),
+            // Carried in its address: no file name, whatever follows its last slash.
+            ("data:image/gif;base64,R0lG/AA", "AA"),
+            // A letter across the sixth byte: no "spacer" there, and no slicing through it.
+            ("https://cdn.example/img/a.png", "spaceé"),
+        ] {
+            assert!(!names_itself(src, alt), "{src} / {alt}");
+        }
+    }
 
     /// A value the tokenizer couldn't read (a panic in it, which [`layout::first_attr_value`]
     /// catches) is unread, as one past [`MAX_DECODED`] (its picture is taken for a tracking

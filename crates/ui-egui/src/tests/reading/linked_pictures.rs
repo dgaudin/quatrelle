@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: a picture inside a link (a newsletter's button) opens the link, shown or not; a
-//! picture not shown says what it shows.
+//! picture not shown says what it shows, and a spacer nothing.
 
 use super::*;
 use egui::{Pos2, Rect, Shape};
@@ -183,6 +183,122 @@ fn a_big_picture_not_shown_says_what_it_shows() {
     assert_eq!(role, Some(egui::accesskit::Role::Link), "said as the link");
     tap(&ctx, &mut a, icon.center());
     assert_eq!(*opened.borrow(), vec!["https://www.contoso.example/follow".to_string()], "the icon's box opens its link");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Spacers on the web not shown, described as spacers (`spacer-FFFFFF`, a white picture laying a
+/// table out): their room is kept — a column 32 wide, a gap 25 high — and nothing is drawn in it,
+/// neither `[spacer-FFFFFF]` across the gap nor a frame down the column, nor a bubble under the
+/// pointer. A picture described in words keeps its placeholder, and so does one whose
+/// description only repeats its file's name when it fits in its place, across and down (`[4321]`,
+/// a phone number in 89 by 22); in a rule 6 high it's not written, and the rule keeps its room.
+#[test]
+fn a_spacer_not_shown_keeps_its_room_and_draws_nothing() {
+    let spacer = "https://cdn.example/img/spacer-FFFFFF.jpg";
+    let html = format!(
+        "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td>Before</td>\
+         <td width=\"32\"><img src=\"{spacer}\" width=\"32\" height=\"118\" alt=\"spacer-FFFFFF\"></td>\
+         <td>After</td></tr></table>\
+         <p>Above</p><p><img src=\"{spacer}\" width=\"522\" height=\"25\" alt=\"spacer-FFFFFF\"></p><p>Below</p>\
+         <p><img src=\"https://cdn.example/img/hall.jpg\" width=\"180\" height=\"90\" alt=\"Grande salle\"></p>\
+         <p><img src=\"https://cdn.example/img/m8.jpg\" width=\"180\" height=\"90\" alt=\"Spacers M8 nylon\"></p>\
+         <p><img src=\"https://cdn.example/4321.jpg\" width=\"89\" height=\"22\" alt=\"4321\"></p>\
+         <p>Over</p><p><img src=\"https://cdn.example/img/rule-grey.gif\" width=\"672\" height=\"6\" alt=\"rule-grey\"></p><p>Under</p>"
+    );
+    let (mut a, dir) = app_with_html("spacer-not-shown", "Spacers", &html);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 1100.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Spacers").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..6 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let placed = |shapes: &[Shape], text: &str| {
+        shapes.iter().rev().find_map(|s| match s {
+            Shape::Text(t) if t.galley.text() == text => Some(t.galley.rect.translate(t.pos.to_vec2())),
+            _ => None,
+        })
+    };
+    let found = |shapes: &[Shape], text: &str| placed(shapes, text).unwrap_or_else(|| panic!("{text:?} is drawn: {:?}", texts(shapes)));
+    let (before, after) = (found(&shapes, "Before"), found(&shapes, "After"));
+    let (above, below) = (found(&shapes, "Above"), found(&shapes, "Below"));
+    // The reading pane's texts (the list's preview, left of it, has its own words).
+    let in_pane = |shapes: &[Shape]| -> Vec<String> {
+        shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Text(t) if t.pos.x >= before.left() - 1.0 => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect()
+    };
+    let shown = in_pane(&shapes);
+    assert!(shown.iter().any(|t| t.contains("Grande salle")), "a picture described in words keeps its placeholder: {shown:?}");
+    assert!(shown.iter().any(|t| t == "[4321]"), "a file's name that fits stays written: {shown:?}");
+    assert!(shown.iter().any(|t| t == "[Spacers M8 nylon]"), "spacer as a whole word only: {shown:?}");
+    assert!(!shown.iter().any(|t| t.contains("rule-grey")), "a file's name taller than its place isn't written: {shown:?}");
+    assert!(!shown.iter().any(|t| t.contains("spacer")), "a spacer's name isn't drawn: {shown:?}");
+    // What shows: a fill, an outline or a picture (a table's cell is a frame with nothing to see).
+    let framed: Vec<Rect> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            Shape::Rect(r)
+                if (r.fill.a() > 0 || (r.stroke.width > 0.0 && r.stroke.color.a() > 0) || r.brush.is_some())
+                    && [(32.0, 118.0), (522.0, 25.0), (672.0, 6.0)]
+                        .iter()
+                        .any(|(w, h)| (r.rect.width() - w).abs() < 1.5 && (r.rect.height() - h).abs() < 1.5) =>
+            {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(framed.is_empty(), "nothing drawn in a spacer's room: {framed:?}");
+    assert!(after.left() - before.right() >= 31.5, "the column keeps its width: {before:?} {after:?}");
+    assert!(below.top() - above.bottom() >= 25.0, "the gap keeps its height: {above:?} {below:?}");
+    let (over, under) = (found(&shapes, "Over"), found(&shapes, "Under"));
+    assert!(under.top() - over.bottom() >= 6.0, "the rule keeps its room: {over:?} {under:?}");
+    // The pointer on the column: no bubble names it.
+    let at = egui::pos2((before.right() + after.left()) / 2.0, before.center().y);
+    let mut shapes = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(at)], size);
+    for _ in 0..60 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let shown = in_pane(&shapes);
+    assert!(!shown.iter().any(|t| t.contains("spacer")), "no bubble over a spacer: {shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A signature's icon in a link whose description only names its file (`linkedin` for
+/// `…/linkedin.png`, 16 by 16) is never hidden as a spacer is: its box stays, and a click on it
+/// opens the link, as before.
+#[test]
+fn an_icon_in_a_link_named_by_its_file_stays_a_link() {
+    let html = "<p>Find us:</p><p><a href=\"https://www.contoso.example/profile\">\
+                <img src=\"https://cdn.example/img/linkedin.png\" width=\"16\" height=\"16\" alt=\"linkedin\"></a></p>";
+    let (mut a, dir) = app_with_html("icon-in-link", "Signature icons", html);
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    a.services = Box::new(Opening(opened.clone()));
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Signature icons").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..6 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let icon = shapes
+        .iter()
+        .find_map(|s| match s {
+            Shape::Rect(r) if r.stroke.width > 0.0 && (r.rect.width() - 16.0).abs() < 1.5 && (r.rect.height() - 16.0).abs() < 1.5 => Some(r.rect),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("the icon's box: {:?}", texts(&shapes)));
+    tap(&ctx, &mut a, icon.center());
+    assert_eq!(*opened.borrow(), vec!["https://www.contoso.example/profile".to_string()], "the icon opens its link");
     let _ = std::fs::remove_dir_all(dir);
 }
 

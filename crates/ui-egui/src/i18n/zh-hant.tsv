@@ -2366,3 +2366,16 @@ presence	Offline	離線
 	Audio call	語音通話
 	Video call	視訊通話
 	Zoom	縮放
+	Mailbox full	信箱已滿
+	Delivery restricted	投遞受限
+	Moderated	已審核
+	Recipient not found	找不到收件人
+	Reaches {n} people outside the organisation	觸達組織外的 {n} 人
+	You wrote that something is attached, but nothing is.	您寫的是有附件，但沒有附件。
+	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	此郵件超過此收件者接受的 {size}
+	Open this file?	開啟此檔案？
+	Opening it in a browser can run its scripts and load content from the internet.	在瀏覽器中開啟可能會執行其指令碼並從網際網路載入內容。
+	It can run macros: open it only if you trust the sender.	它可能會執行巨集：僅在信任寄件者時開啟。
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	檔名看不出這是哪種檔案：開啟它的程式可能會執行其中的內容。
+	Send without a file?	要不附檔案傳送嗎?

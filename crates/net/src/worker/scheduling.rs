@@ -149,4 +149,33 @@ impl Worker {
         };
         self.sink.emit(Event::Availability { account: self.id(), from, to, people, error });
     }
+
+    /// What the server says about these recipients before a message from `from` goes, answered
+    /// with [`Event::MailTips`].
+    pub(super) fn mail_tips(&mut self, from: &str, recipients: &[String], ask: u64) {
+        let r = (|| -> Result<Vec<quatrelle_model::scheduling::MailTip>> {
+            if recipients.is_empty() {
+                return Ok(Vec::new());
+            }
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => crate::ews_pim::mailtips::mail_tips(c, from, recipients),
+                Some(Conn::Graph(c)) => crate::graph_pim::mailtips::mail_tips(c, recipients),
+                _ => Err(NetError::No("MailTips come from Exchange and Microsoft 365 accounts".into())),
+            }
+        })();
+        let (tips, error) = match r {
+            Ok(tips) => (tips, None),
+            Err(e) => {
+                let said = e.to_string();
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.conn = None;
+                }
+                (Vec::new(), Some(said))
+            }
+        };
+        self.sink.emit(Event::MailTips { account: self.id(), ask, tips, error });
+    }
 }

@@ -6,6 +6,7 @@
 use egui::{Margin, Rect, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Compose;
 use quatrelle_engine::Session;
+use quatrelle_engine::mime::OpenRisk;
 use quatrelle_engine::model::organize::{Condition, Rule, RuleAction};
 use quatrelle_engine::model::{AccountConfig, Folder, FolderRole, Security};
 use serde_json::json;
@@ -106,6 +107,21 @@ pub enum Dialog {
         path: String,
         always: bool,
     },
+    /// Opening an attachment that a browser would run scripts from, or a document whose macros
+    /// would run: asked first, then opened (`Action::OpenAttachmentNow`).
+    RiskyAttachment {
+        /// The message it belongs to (the one its window shows, when it was asked from there).
+        key: quatrelle_engine::model::MessageKey,
+        index: usize,
+        name: String,
+        risk: OpenRisk,
+    },
+    /// The same for one of an appointment's or a contact's files (an invitation's, say), then
+    /// opened (`Action::OpenItemFileNow`).
+    RiskyItemFile {
+        item: crate::pim_dialogs::ItemFile,
+        risk: OpenRisk,
+    },
     /// A calendar or contacts file opened with Quatrelle: what it holds and where it would go,
     /// added once the user says so.
     AddFromFile(Box<FileHolds>),
@@ -116,6 +132,10 @@ pub enum Dialog {
     /// What `compose.send` held the message for (a lookalike recipient, many people seeing each
     /// other's addresses).
     SendCheck(Vec<quatrelle_engine::SendCheck>),
+    /// The message says something is attached, and nothing is: its own question (Attach a file,
+    /// Send, Cancel), not the security check's, so that "Send anyway" isn't clicked for nothing
+    /// at every message.
+    NoAttachment,
     RemoveAccount {
         account: String,
         email: String,
@@ -300,6 +320,8 @@ impl Dialog {
                     | Dialog::EmptySubject
                     | Dialog::SaveChanges
                     | Dialog::SendCheck(_)
+                    | Dialog::RiskyAttachment { .. }
+                    | Dialog::RiskyItemFile { .. }
             )
     }
 
@@ -313,7 +335,12 @@ impl Dialog {
     pub fn for_message_window(&self) -> bool {
         matches!(
             self,
-            Dialog::MoveTo { .. } | Dialog::ConfirmDelete { .. } | Dialog::NewCategory { .. } | Dialog::QuickStep(_) | Dialog::Preview { .. }
+            Dialog::MoveTo { .. }
+                | Dialog::ConfirmDelete { .. }
+                | Dialog::NewCategory { .. }
+                | Dialog::QuickStep(_)
+                | Dialog::Preview { .. }
+                | Dialog::RiskyAttachment { .. }
         )
     }
 
@@ -325,6 +352,7 @@ impl Dialog {
                 | Dialog::SaveChanges
                 | Dialog::EmptySubject
                 | Dialog::SendCheck(_)
+                | Dialog::NoAttachment
                 | Dialog::Spelling(_)
                 | Dialog::WordCount(..)
         ) || matches!(self, Dialog::Signature(f) if f.insert)
@@ -489,11 +517,14 @@ fn body(
         | Dialog::SaveChanges
         | Dialog::EmptySubject
         | Dialog::SendCheck(_)
+        | Dialog::NoAttachment
         | Dialog::WordCount(..)
         | Dialog::Spelling(..) => writing::draw(ui, d, s, people, t, acts),
         Dialog::ConfirmDeleteContact { .. }
         | Dialog::DeleteOccurrence { .. }
         | Dialog::OpenShare { .. }
+        | Dialog::RiskyAttachment { .. }
+        | Dialog::RiskyItemFile { .. }
         | Dialog::AddFromFile(_)
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }

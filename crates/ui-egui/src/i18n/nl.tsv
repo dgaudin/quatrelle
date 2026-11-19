@@ -2360,3 +2360,16 @@ presence	Offline	Offline
 	Audio call	Audiogesprek
 	Video call	Videogesprek
 	Zoom	Zoomen
+	Mailbox full	Postbus vol
+	Delivery restricted	Bezorging beperkt
+	Moderated	Gemodereerd
+	Recipient not found	Geen ontvanger gevonden
+	Reaches {n} people outside the organisation	Bereikt {n} personen buiten de organisatie
+	You wrote that something is attached, but nothing is.	U schreef dat er iets bijgevoegd is, maar er is niets bijgevoegd.
+	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Dit bericht is groter dan de {size} die deze ontvanger accepteert
+	Open this file?	Dit bestand openen?
+	Opening it in a browser can run its scripts and load content from the internet.	Het in een browser openen kan de scripts ervan uitvoeren en inhoud van het internet laden.
+	It can run macros: open it only if you trust the sender.	Het kan macro’s uitvoeren: open het alleen als u de afzender vertrouwt.
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	De naam zegt niet wat voor bestand het is: het programma dat het opent, kan uitvoeren wat erin zit.
+	Send without a file?	Verzenden zonder bestand?

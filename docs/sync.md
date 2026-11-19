@@ -477,7 +477,8 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   to the server's (none, `DavSync::notes_size_refused`) and a notice says so. Microsoft 365
   accounts over Graph don't sync notes: they stay on this computer, size and all.
 - **Rooms and free/busy** (`ews_pim/scheduling.rs`), on the account's second connection so a
-  long sync never holds them: `GetRoomLists`, then `GetRooms` for each list (an empty answer
+  long sync never holds them (MailTips too, `ews_pim/mailtips.rs`; a message waiting to go on that
+  connection is sent before the questions waiting there): `GetRoomLists`, then `GetRooms` for each list (an empty answer
   where the organisation set no lists up: the engine then offers the rooms the calendar knows);
   `GetUserAvailability` for the organizer, the guests and the rooms over the day shown, with a
   `TimeZone` of no bias (standard and daylight alike) so every time is UTC, the window a day at

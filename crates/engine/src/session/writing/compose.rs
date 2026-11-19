@@ -140,6 +140,18 @@ impl Compose {
         self.with_quote(self.own_bodies())
     }
 
+    /// The message's size as it goes, near enough to compare with the largest a recipient
+    /// accepts: its text, its pictures and files as base64 makes them, and room for the headers
+    /// and the boundaries. The HTML version of the text isn't counted, so the estimate stays
+    /// below the real message (save a picture taken out of the text but still kept).
+    pub fn estimated_size(&self) -> u64 {
+        let encoded = |n: usize| u64::try_from(n).unwrap_or(u64::MAX).saturating_mul(4).saturating_div(3).saturating_add(4);
+        let text = u64::try_from(self.body.len()).unwrap_or(u64::MAX);
+        let inline = self.inline.iter().fold(0u64, |n, p| n.saturating_add(encoded(p.data.len())));
+        let files = self.attachments.iter().fold(0u64, |n, a| n.saturating_add(encoded(a.data.len())));
+        text.saturating_add(inline).saturating_add(files).saturating_add(8 * 1024)
+    }
+
     /// [`Compose::bodies`] of the text alone, without the original kept after it.
     pub(super) fn own_bodies(&self) -> (String, Option<String>, Vec<mime::InlinePicture>) {
         let mut styles = self.styles.clone();

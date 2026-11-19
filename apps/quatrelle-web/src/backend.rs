@@ -541,6 +541,11 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
                 .collect();
             emit(sh, Event::Availability { account, from, to, people, error: Some(error) });
         }
+        // MailTips too: the browser doesn't reach Exchange or Microsoft 365.
+        Job::GetMailTips { account, ask, .. } => {
+            let error = Some("MailTips come from Exchange and Microsoft 365 accounts, which the browser doesn't reach".to_string());
+            emit(sh, Event::MailTips { account, ask, tips: Vec::new(), error });
+        }
         // Nothing to do in the browser: no Outbox (sending needs the server), no CalDAV.
         Job::FlushOutbox { .. } | Job::SyncDav { .. } | Job::SyncCalendars { .. } => {}
         // Mail past what's kept (issue #4).

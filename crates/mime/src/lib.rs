@@ -53,7 +53,7 @@ pub use attachments::{
 pub use attachments::{IndexStats, index_doc_stats};
 use attachments::{attached, dmarc_failed, files_of, has_real_attachments, header_raw};
 use files::attachment_name;
-pub use files::{alt_code_char, alt_code_pages, alt_code_system_pages, mime_from_name, runs_code, sanitize_filename};
+pub use files::{OpenRisk, alt_code_char, alt_code_pages, alt_code_system_pages, mime_from_name, open_risk, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
 pub use html::*;

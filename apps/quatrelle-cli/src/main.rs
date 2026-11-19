@@ -165,6 +165,27 @@ fn start(s: &mut Session, store: &Store, account: &str) -> Result<Pool, String> 
     Ok(pool)
 }
 
+/// A message `compose.send` held to be looked at first: why, as an error (nothing was sent).
+fn held(answer: &Value) -> Result<(), String> {
+    let Some(found) = answer.get("check").and_then(Value::as_array) else { return Ok(()) };
+    let why: Vec<String> = found
+        .iter()
+        .map(|c| match c["kind"].as_str() {
+            Some("lookalike") => {
+                format!(
+                    "{} looks like an address at {}, but isn't one",
+                    c["address"].as_str().unwrap_or_default(),
+                    c["like"].as_str().unwrap_or_default()
+                )
+            }
+            Some("exposed") => format!("{} people who may not know each other would all see each other's addresses", c["count"]),
+            Some("missingAttachment") => "the message says something is attached, but nothing is (--attach FILE adds one)".into(),
+            _ => c.to_string(),
+        })
+        .collect();
+    Err(format!("not sent: {}; add --checked to send it anyway", why.join("; ")))
+}
+
 fn print(v: &Value) {
     outln!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
 }
@@ -421,12 +442,18 @@ fn run() -> Result<(), String> {
                 s.run("compose.attach", &json!({"path": f})).map_err(|e| e.to_string())?;
             }
             let local = s.account(&account).is_some_and(|a| a.is_local());
+            // Sent even if a check holds it, once looked at (`--checked`).
+            let send = json!({"allowEmptySubject": true, "checked": args.flag("--checked")});
             if local {
-                print(&s.run("compose.send", &json!({"allowEmptySubject": true})).map_err(|e| e.to_string())?);
+                let sent = s.run("compose.send", &send).map_err(|e| e.to_string())?;
+                held(&sent)?;
+                print(&sent);
                 return Ok(());
             }
             let mut pool = start(&mut s, &store, &account)?;
-            let sending = s.run("compose.send", &json!({"allowEmptySubject": true})).map_err(|e| e.to_string())?;
+            let sending = s.run("compose.send", &send).map_err(|e| e.to_string())?;
+            // Held to be looked at: said at once, nothing sent (it waited for a send that never came).
+            held(&sending)?;
             let me = sending["sending"].as_u64();
             // This message's word only: one waiting in the Outbox goes out as the account connects,
             // and its word ended the wait before this one was sent (issue #19's testing).

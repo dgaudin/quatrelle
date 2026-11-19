@@ -4,6 +4,23 @@
 //! Dialogs: previews, calendars and people.
 
 use super::*;
+use quatrelle_engine::mime::OpenRisk;
+
+/// The question before a file opens in another program (a message's attachment, an
+/// appointment's or a contact's file): its name and what opening it can do; Open and Cancel.
+fn risky_question(ui: &mut Ui, t: &Tokens, name: &str, risk: OpenRisk) -> (bool, bool) {
+    ui.set_width(440.0);
+    title(ui, t, "Open this file?");
+    ui.label(RichText::new(name).font(theme::bold(14.0)).color(t.text));
+    ui.add_space(4.0);
+    let why = match risk {
+        OpenRisk::WebPage => tl!("Opening it in a browser can run its scripts and load content from the internet."),
+        OpenRisk::Macros => tl!("It can run macros: open it only if you trust the sender."),
+        OpenRisk::Unknown => tl!("Its name doesn't say what kind of file it is: the program that opens it can run what's in it."),
+    };
+    ui.add(egui::Label::new(RichText::new(why).color(t.dim)).wrap());
+    buttons(ui, t, "Open", true)
+}
 
 /// What a calendar or contacts file opened with Quatrelle holds, as `file.open` answers.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -148,6 +165,22 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, pics: &mut crate::r
                     acts.push(Action::Run("link.trustShareServer", json!({"server": server})));
                 }
                 acts.push(Action::OpenShare(link.clone()));
+                return false;
+            }
+            !cancel
+        }
+        Dialog::RiskyAttachment { key, index, name, risk } => {
+            let (ok, cancel) = risky_question(ui, t, name, *risk);
+            if ok {
+                acts.push(Action::InWindow(key.clone(), Box::new(Action::OpenAttachmentNow(*index))));
+                return false;
+            }
+            !cancel
+        }
+        Dialog::RiskyItemFile { item, risk } => {
+            let (ok, cancel) = risky_question(ui, t, &item.file_name(), *risk);
+            if ok {
+                acts.push(Action::OpenItemFileNow(item.clone()));
                 return false;
             }
             !cancel

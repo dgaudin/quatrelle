@@ -2364,3 +2364,16 @@ presence	Offline	Offline
 	Audio call	Audioanruf
 	Video call	Videoanruf
 	Zoom	Zoom
+	Mailbox full	Postfach voll
+	Delivery restricted	Zustellung eingeschränkt
+	Moderated	Moderiert
+	Recipient not found	Empfänger nicht gefunden
+	Reaches {n} people outside the organisation	Erreicht {n} Personen außerhalb der Organisation
+	You wrote that something is attached, but nothing is.	Sie haben geschrieben, dass etwas angehängt ist, aber nichts ist angehängt.
+	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Diese Nachricht ist größer als die {size}, die dieser Empfänger annimmt
+	Open this file?	Diese Datei öffnen?
+	Opening it in a browser can run its scripts and load content from the internet.	In einem Browser geöffnet, können seine Skripte laufen und Inhalte aus dem Internet geladen werden.
+	It can run macros: open it only if you trust the sender.	Es kann Makros ausführen: Öffnen Sie es nur, wenn Sie dem Absender vertrauen.
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	Sein Name verrät nicht, um welche Art Datei es sich handelt: Das Programm, das sie öffnet, kann ausführen, was sie enthält.
+	Send without a file?	Ohne Datei senden?

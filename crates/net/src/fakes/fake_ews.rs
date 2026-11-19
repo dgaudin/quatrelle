@@ -201,6 +201,11 @@ pub struct Data {
     pub only_agent: Option<String>,
     /// Answer item searches (the mail sync) only after this long: a mailbox taking minutes.
     pub slow_sync: Option<std::time::Duration>,
+    /// Hold every item search until a test sets this back to `None` (or this long has passed):
+    /// a sync surely still running while something else is asked. How many are held now is in
+    /// `held_searches`.
+    pub sync_gate: Option<std::time::Duration>,
+    pub held_searches: usize,
     /// Give messages' whole sources only after this long (a big attachment on a slow line).
     pub slow_sources: Option<std::time::Duration>,
     /// Answer `GetFolder` (a folder's counts, the first step of reading it) only after this long.
@@ -242,6 +247,12 @@ pub struct Data {
     pub taken: Vec<(String, String, String, String, String)>,
     /// The `GetUserAvailability` requests seen: the addresses asked about and the window.
     pub availability_asked: Vec<(Vec<String>, String, String)>,
+    /// What the server says about recipients (`GetMailTips`), by address.
+    pub mail_tips: Vec<quatrelle_model::scheduling::MailTip>,
+    /// The `GetMailTips` requests seen: the sender and the addresses asked about.
+    pub mail_tips_asked: Vec<(String, Vec<String>)>,
+    /// `GetMailTips` isn't available on this server (refused as an invalid operation).
+    pub mail_tips_refused: bool,
     /// The server tells of changes as they happen (streaming notifications); without it
     /// `Subscribe` is refused, as by a server older than Exchange 2010 SP1.
     pub streaming: bool,
@@ -385,6 +396,8 @@ impl Default for Data {
             agents: Vec::new(),
             only_agent: None,
             slow_sync: None,
+            sync_gate: None,
+            held_searches: 0,
             slow_sources: None,
             slow_counts: None,
             slow_pim: None,
@@ -404,6 +417,9 @@ impl Default for Data {
             no_freebusy: Vec::new(),
             taken: Vec::new(),
             availability_asked: Vec::new(),
+            mail_tips: Vec::new(),
+            mail_tips_asked: Vec::new(),
+            mail_tips_refused: false,
             streaming: false,
             subscriptions: Vec::new(),
             stream_for: std::time::Duration::from_secs(2),

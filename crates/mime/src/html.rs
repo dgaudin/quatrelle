@@ -18,8 +18,8 @@ mod rules;
 mod teams;
 mod to_markdown;
 pub use pairs::html_link_pairs;
-pub use pictures::html_images;
 pub(crate) use pictures::{Pictures, tiny_picture, tiny_size};
+pub use pictures::{html_images, names_itself, spacer_described};
 use rules::{RULE_MARK, mark_rules};
 pub use teams::{
     TEAMS_DEPTH, TEAMS_HTML_MAX, TEAMS_RUNS, TooLong, Typed, html_escape, teams_compose, teams_compose_typed, teams_foreign_markup, teams_html,
@@ -603,8 +603,13 @@ pub(crate) fn too_deep(html: &str) -> bool {
 /// reading costs in proportion to what is read, for each message downloaded).
 const PREVIEW_READS: [usize; 2] = [16 * 1024, 64 * 1024];
 
+/// HTML read for a short piece of text shown as is (a MailTip), in characters.
+const TIP_HTML_MAX: usize = 16 * 1024;
+
 /// An HTML body's preview ([`crate::preview`] of [`html_to_words`]): read from its `<body>`
-/// (what comes before is styles and the like), a little first, more when that is too short.
+/// (what comes before is styles and the like), a little first, more when that is too short;
+/// without the pictures whose description only names them ([`names_itself`]: a row of spacers
+/// read `spacer-FFFFFF spacer-FFFFFF…`).
 pub(crate) fn html_preview(html: &str) -> String {
     // Where `<body` starts, in any case (an ASCII `<` starts a character).
     let from = html.as_bytes().windows(5).position(|w| w.eq_ignore_ascii_case(b"<body")).unwrap_or(0);
@@ -612,7 +617,8 @@ pub(crate) fn html_preview(html: &str) -> String {
     let mut out = String::new();
     for n in PREVIEW_READS {
         let cut = body.char_indices().nth(n).map(|(i, _)| i);
-        out = crate::preview(&html_to_words(body.get(..cut.unwrap_or(body.len())).unwrap_or(body)));
+        let read = pictures::without_named_pictures(body.get(..cut.unwrap_or(body.len())).unwrap_or(body));
+        out = crate::preview(&html_to_words(&read));
         if cut.is_none() || out.chars().count() >= crate::PREVIEW_CHARS {
             break;
         }
@@ -633,6 +639,23 @@ pub fn html_to_text(html: &str) -> String {
     // Without table borders: mail lays itself out with tables, which came out boxed in `─` and
     // `│` rules (issue #41).
     let result = std::panic::catch_unwind(|| html2text::config::plain().no_table_borders().string_from_read(html.as_bytes(), 400));
+    match result {
+        Ok(Ok(s)) => tidy_text(&s),
+        _ => String::new(),
+    }
+}
+
+/// HTML → words for a short piece of text shown as is (a MailTip's automatic reply): no
+/// Markdown decoration (`**` around bold words), no links as footnotes, bounded. Never panics;
+/// returns an empty string when conversion fails.
+pub fn html_to_plain(html: &str) -> String {
+    let html = match html.char_indices().nth(TIP_HTML_MAX) {
+        Some((i, _)) => html.get(..i).unwrap_or(html),
+        None => html,
+    };
+    let html = flat_if_too_deep(html);
+    let html = html.as_ref();
+    let result = std::panic::catch_unwind(|| html2text::config::plain_no_decorate().string_from_read(html.as_bytes(), 400));
     match result {
         Ok(Ok(s)) => tidy_text(&s),
         _ => String::new(),

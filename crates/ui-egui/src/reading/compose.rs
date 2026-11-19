@@ -10,6 +10,7 @@ use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
 
 mod across;
 mod quote;
+mod tips;
 pub(crate) use across::Across;
 #[cfg(test)]
 pub(crate) use across::AcrossState;
@@ -563,6 +564,9 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             let sep = ui.available_rect_before_wrap();
             ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
             ui.add_space(8.0);
+            // MailTips bar above the body, when the server has something to say about the current
+            // recipients.
+            tips::draw_tips(s, st, ui, c);
             let body_id = rich_edit::body_id(c);
             // The keys of a selection across the text and the original's blocks, before any of
             // their text boxes sees them.
@@ -625,6 +629,16 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     quote_eds.retain(|(id, _), _| *id == taken.id || s.composes.iter().any(|c| c.id == *id));
     st.quote_editors = quote_eds;
     s.compose = Some(taken);
+    // MailTips: what the server says about the recipients, asked again when this set hasn't
+    // been asked about yet (the strip draws from the answer frame after frame); never while an
+    // address is being typed (each letter asked the server again): once it's written.
+    let typing = s
+        .compose
+        .as_ref()
+        .is_some_and(|c| ["to", "cc", "bcc"].into_iter().any(|name| !st.people.typing(FieldId { window: c.id, name }).trim().is_empty()));
+    if !typing && s.mail_tips_wanted() {
+        acts.push(Action::Run("compose.mailTips", json!({})));
+    }
     // A signature written in HTML, drawn where it stands in the text (with the whole session at
     // hand again).
     if let Some(c) = s.compose.as_ref() {

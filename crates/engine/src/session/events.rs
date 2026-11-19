@@ -202,6 +202,7 @@ impl Session {
             }
             Event::Rooms { account, lists, rooms, error } => self.rooms_answered(&account, lists, rooms, error),
             Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
+            Event::MailTips { account, ask, tips, error } => self.mail_tips_answered(&account, ask, tips, error),
             Event::MessagesFiled { account, folder, added, failed } => {
                 if self.filed.len() < 100 {
                     self.filed.push(Filed { account, folder, added, failed });

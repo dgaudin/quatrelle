@@ -631,3 +631,47 @@ local-first, media-aware v1); the fuller request is
   search take it; nothing goes to Exchange. Join and Webex Meeting sit side by side. Also: an answer to
   an invitation that Exchange refuses at two syncs running is said once and not sent again at every
   sync (refused once, it's sent again), and the refusal names the refused field; the real fix waits for that field's name from a real server.
+- **2026-11-18** — **Sending without a mistake: MailTips and the attachment reminder** (issue #1's
+  send-check list): a message written from an Exchange (EWS `GetMailTips`) or Microsoft 365 (Graph
+  `getMailTips`) account asks its server what it says about the recipients — an automatic reply (its
+  HTML turned into words), a full mailbox, the organisation's own tip, restricted delivery, a list's
+  members outside the organisation, moderation, an address the server doesn't know — once per set of
+  recipients (To, Cc and Bcc, lower case, once each), once they're written (never while an address is
+  typed), one question at a time per message (one left 30 seconds unanswered no longer holds the next),
+  on the account's second connection so a long sync never holds the form (a message waiting to go is
+  sent first); the answer is drawn as a strip over the
+  form, only when it has a line to say and a few lines high at most, informational only; a
+  recipient's largest message is compared with the message's own size (text and files, base64
+  included) and said when the message is larger, and the question's number keeps an answer to a set
+  since changed from showing. Accounts without such a server (IMAP, the browser) ask nothing. Beside it, a local guard: a message whose text says
+  something is attached ("attached", "ci-joint", "anbei", "adjunto"… in English, French, Spanish,
+  German, Italian, Portuguese and Dutch) and that carries no attachment asks its own question, "Send
+  without a file?" (Attach a file, Send, Cancel), not the security check's; only what the user wrote
+  is read: not the signature, nor a reply's subject as it came, nor the original under a reply and
+  its header, a reply's draft opened again from Drafts included. `quatrelle-cli send` says at once why
+  a check held a message back (`--checked` sends
+  it anyway). `compose.mailTips` answers the strip's state as a command; the sample mailbox shows the
+  attachment reminder with no server at all.
+- **2026-11-18** — **Files from outside: a page or a macro document asks before it opens** (the rest
+  of gap #12): opening an attachment that is a web page (`.html`, `.htm`, `.xhtml`, `.svg`, `.mht`…)
+  or a document whose macros can run (`.docm`, `.xlsm`, `.pptm`, `.xlsb`, and the old binary `.doc`,
+  `.xls`, `.ppt`…) stops at a question saying what it can do — run the page's scripts and load what
+  it likes from the internet, or run the document's macros — and "Open" then hands it to its program
+  as before. Saving, and every other file (a PDF, a picture, a document without macros), is
+  unchanged; programs, scripts and shortcuts are still never opened at all. The question is drawn in
+  every interface language, and from a message's own window as from the reading pane. It comes too
+  when the type the sender declared is a page's (HTML, XHTML, SVG) whatever the name says, when the
+  name says nothing (no extension, or one of no known type: archives, data and logs, Outlook's
+  messages, Office's templates without macros, sound and video count as known), for LibreOffice's
+  documents, XML, RTF and Office's older macro formats (by their extension alone), and for an
+  appointment's or a contact's files.
+- **2026-11-18** — **A spacer not shown draws nothing**: a picture that isn't shown (pictures from
+  the web not allowed, or a tracking pixel) whose description starts with the word "spacer" (not
+  "Spacers M8 nylon") keeps the room the message gives it and draws nothing there: no
+  `[spacer-FFFFFF]` across a white gap, no frame down a column a few pixels wide, no bubble under the
+  pointer. One whose description only repeats its file's name (`…/4321.jpg` described `4321`, any
+  case, with or without its extension) does the same only where that name doesn't fit in its place,
+  across or down to a line of text; where it fits it stays written. A picture in a link is never left
+  out so (a signature's `linkedin` icon stays the link). A picture described in words keeps its
+  placeholder; the list's preview leaves out the words of both kinds; telling tracking pixels apart
+  is unchanged.

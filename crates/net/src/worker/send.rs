@@ -10,24 +10,43 @@ use super::*;
 /// connections): the next waits for the first of them.
 const TICKED_AT_ONCE: usize = 2;
 
+/// The second connection's next job among those waiting: a message to send first (a question
+/// asked as recipients are written, MailTips, never holds one back), then the others in the
+/// order they came.
+fn next_quick(waiting: &mut VecDeque<Job>) -> Option<Job> {
+    let first = waiting.iter().position(|j| matches!(j, Job::Send { .. })).unwrap_or(0);
+    waiting.remove(first)
+}
+
 /// Said when a sent message's copy has nowhere to go.
 const NO_SENT: &str = "sent, but no copy was saved: the server has no Sent Items folder, and one couldn't be made";
 
 impl Worker {
     /// The account's second connection: sends mail, reads or changes the automatic replies, and
-    /// answers for rooms and free/busy, whatever the main connection is doing. It connects when
+    /// answers for rooms, free/busy and MailTips, whatever the main connection is doing. It connects when
     /// there's something to do, and lets go of an idle connection after a while.
     pub(super) fn run_quick(mut self, rx: Receiver<Job>) {
         let mut reading = Vec::new();
+        // What came while the last job ran, taken in [`next_quick`]'s order.
+        let mut waiting: VecDeque<Job> = VecDeque::new();
         loop {
-            let job = match rx.recv_timeout(QUICK_IDLE) {
-                Ok(j) => j,
-                Err(RecvTimeoutError::Timeout) => {
-                    self.let_go();
-                    continue;
+            while let Ok(j) = rx.try_recv() {
+                waiting.push_back(j);
+            }
+            if waiting.is_empty() {
+                match rx.recv_timeout(QUICK_IDLE) {
+                    Ok(j) => waiting.push_back(j),
+                    Err(RecvTimeoutError::Timeout) => {
+                        self.let_go();
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
                 }
-                Err(RecvTimeoutError::Disconnected) => break,
-            };
+                while let Ok(j) = rx.try_recv() {
+                    waiting.push_back(j);
+                }
+            }
+            let Some(job) = next_quick(&mut waiting) else { continue };
             // Behind the same fence as the main connection's turns (`fenced`).
             let done = fenced(|| {
                 self.fresh_token();
@@ -40,6 +59,7 @@ impl Worker {
                     | Job::SetVacation { .. }
                     | Job::GetRooms { .. }
                     | Job::GetAvailability { .. }
+                    | Job::GetMailTips { .. }
                     | Job::ServerFolderSizes { .. }
                     | Job::ListRecoverable { .. }
                     | Job::RestoreRecoverable { .. }
@@ -447,5 +467,23 @@ fn read_calendar(c: &crate::ews::Client, pim: &quatrelle_model::pim::Pim, id: &s
     match crate::ews_pim::sync_calendars(c, pim, &[id.to_string()], now()) {
         Ok(sync) => sink.emit(Event::DavSynced { account, sync: Box::new(sync) }),
         Err(e) => log::info!("{account}: calendars: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A message waiting to go is sent before the questions that came before it (MailTips asked
+    /// as recipients are written never hold a send back); the others keep their order.
+    #[test]
+    fn a_send_goes_before_the_questions_waiting() {
+        let tips = |ask| Job::GetMailTips { account: "a1".into(), from: String::new(), recipients: vec!["ana@contoso.example".into()], ask };
+        let send = Job::Send { account: "a1".into(), id: 3, raw: Vec::new(), from: String::new(), recipients: Vec::new(), sent_folder: None };
+        let mut waiting: VecDeque<Job> = [tips(1), send, tips(2)].into_iter().collect();
+        assert!(matches!(next_quick(&mut waiting), Some(Job::Send { id: 3, .. })), "the send first");
+        assert!(matches!(next_quick(&mut waiting), Some(Job::GetMailTips { ask: 1, .. })));
+        assert!(matches!(next_quick(&mut waiting), Some(Job::GetMailTips { ask: 2, .. })));
+        assert!(next_quick(&mut waiting).is_none());
     }
 }

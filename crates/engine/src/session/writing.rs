@@ -11,8 +11,10 @@ mod assistant;
 mod compose;
 mod drafts;
 mod items;
+mod mailtips;
 mod names;
 mod quote;
+mod reminder;
 mod reopen;
 mod senders;
 mod sending;
@@ -22,6 +24,7 @@ pub use assistant::{AssistKind, Assistant, Filing, LlmModels, Rewrite};
 use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
+pub use mailtips::{MailTipsState, mail_tips_recipients};
 pub(crate) use names::NameCheck;
 pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, group_entry};
 pub use quote::{Quote, QuotePoint, Written};
@@ -43,6 +46,9 @@ pub enum SendCheck {
     /// other (each organisation outside the sender's own counted once, each address at a big mail
     /// service on its own).
     Exposed { count: usize },
+    /// The message says something goes with it ("see attached", "ci-joint"…) and nothing is
+    /// attached.
+    MissingAttachment,
 }
 
 impl Session {
@@ -381,6 +387,14 @@ impl Session {
         if people.len() >= EXPOSED_FROM {
             found.push(SendCheck::Exposed { count: people.len() });
         }
+        // Something said to be attached, and nothing is: the words the user wrote alone, not the
+        // signature, nor a reply's subject as it came, nor the original under it.
+        if d.attachments.is_empty() {
+            let (own, subject) = reminder::own_words(c, &self.quote_words);
+            if reminder::mentions_attachment(subject, &own) {
+                found.push(SendCheck::MissingAttachment);
+            }
+        }
         found
     }
 
@@ -522,6 +536,7 @@ impl Session {
         }
         self.composes.retain(|x| x.id != c.id);
         self.set_aside.retain(|x| x.id != c.id);
+        self.mail_tips.remove(&c.id);
         self.notice("Message sent", false);
     }
 

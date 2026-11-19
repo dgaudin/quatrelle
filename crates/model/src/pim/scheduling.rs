@@ -88,12 +88,67 @@ pub struct Availability {
     pub error: Option<String>,
 }
 
+/// What a server says about a message's recipient before it's sent (Outlook's MailTips), as
+/// Exchange (`GetMailTips`) and Microsoft Graph (`getMailTips`) answer it. Kept for a recipient
+/// with something to tell; an ordinary one gets no entry at all (a size limit alone is kept: the
+/// message is compared with it as it is drawn).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailTip {
+    pub email: String,
+    /// Their automatic reply, as text.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub automatic_replies: String,
+    /// Their mailbox is full: mail sent to it may bounce.
+    #[serde(default)]
+    pub mailbox_full: bool,
+    /// The tip the organisation set for them (Exchange's `CustomMailTip`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub custom: String,
+    /// Mail to them is restricted (Exchange's `DeliveryRestricted`).
+    #[serde(default)]
+    pub restricted: bool,
+    /// How many people outside the organisation a list reaches.
+    #[serde(default)]
+    pub external_members: u32,
+    /// Their mail is moderated: delivery waits for the moderator.
+    #[serde(default)]
+    pub moderated: bool,
+    /// The server doesn't know this recipient.
+    #[serde(default)]
+    pub invalid: bool,
+    /// The largest message they accept, in bytes (0: the server didn't say).
+    #[serde(default)]
+    pub max_message_size: u64,
+    /// `internal`, `external`, `externalPartner` or `externalNonPartner`, as Graph spells them
+    /// (empty when the server didn't say).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
+}
+
+impl MailTip {
+    /// Whether there's something to tell the user (an ordinary recipient says nothing). A size
+    /// limit alone counts: the message being written is compared with it as it's drawn.
+    pub fn worth_telling(&self) -> bool {
+        !self.automatic_replies.is_empty()
+            || self.mailbox_full
+            || !self.custom.is_empty()
+            || self.restricted
+            || self.external_members > 0
+            || self.moderated
+            || self.invalid
+            || self.max_message_size > 0
+    }
+}
+
 /// Rooms and room lists read at most.
 pub const MAX_ROOMS: usize = 2000;
 /// Busy stretches kept for one person over one window at most.
 pub const MAX_SLOTS: usize = 2000;
 /// People and rooms asked about in one request at most.
 pub const MAX_PEOPLE: usize = 100;
+/// Recipients a server is asked about for MailTips in one request at most.
+pub const MAX_MAIL_TIPS: usize = 100;
 /// The longest window availability is asked for (Exchange answers 62 days at most).
 pub const MAX_WINDOW: i64 = 62 * 86_400;
 

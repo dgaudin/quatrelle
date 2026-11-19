@@ -468,6 +468,11 @@ pub enum Job {
     /// more, two months at most), as the server's free/busy has it; answered by
     /// [`Event::Availability`]. Exchange and Microsoft 365 only.
     GetAvailability { account: String, emails: Vec<String>, from: i64, to: i64 },
+    /// What the server says about these recipients before a message from `from` goes (Outlook's
+    /// MailTips: an automatic reply, a full mailbox, a restricted or moderated recipient, a list
+    /// reaching outside the organisation), answered by [`Event::MailTips`] with `ask` back.
+    /// Exchange and Microsoft 365 only.
+    GetMailTips { account: String, from: String, recipients: Vec<String>, ask: u64 },
     /// Keep the certificate and private key in a `.p12` / `.pfx` file (opened with `password`)
     /// for signing and decrypting the account's mail (S/MIME): the key goes to the system's
     /// keychain only. Answered by [`Event::Identity`].
@@ -603,7 +608,8 @@ impl Job {
             | Job::SearchDirectory { account, .. }
             | Job::ExpandList { account, .. }
             | Job::FetchCalendar { account, .. }
-            | Job::GetAvailability { account, .. } => account,
+            | Job::GetAvailability { account, .. }
+            | Job::GetMailTips { account, .. } => account,
             Job::FetchUrl { .. }
             | Job::Discover { .. }
             | Job::WorkOffline { .. }

@@ -37,6 +37,8 @@ pub struct ItemFile {
     /// Its place among the item's files.
     pub index: usize,
     pub name: String,
+    /// Its media type, as written (empty when not said).
+    pub mime: String,
 }
 
 impl ItemFile {
@@ -53,7 +55,7 @@ impl ItemFile {
     }
 
     /// The name it's saved under.
-    fn file_name(&self) -> String {
+    pub(crate) fn file_name(&self) -> String {
         let name = if self.name.trim().is_empty() { "attachment" } else { self.name.as_str() };
         quatrelle_engine::mime::sanitize_filename(name)
     }
@@ -74,7 +76,7 @@ pub(crate) fn strip(ui: &mut Ui, t: &Tokens, of: &FilesOf, files: &[KeptFile], a
     let id = egui::Id::unique(("item-files", of_id(of)));
     widgets::chip_grid(ui, id, files.len(), 220.0, 360.0, CHIP_H, 2, |ui, i, w| {
         if let Some(file) = files.get(i) {
-            let item = ItemFile { of: of.clone(), index: i, name: file.name.clone() };
+            let item = ItemFile { of: of.clone(), index: i, name: file.name.clone(), mime: file.mime.clone() };
             chip(ui, t, item, file, w, acts);
         }
     });
@@ -152,8 +154,10 @@ fn chip(ui: &mut Ui, t: &Tokens, item: ItemFile, file: &KeptFile, w: f32, acts: 
 impl MailApp {
     /// Open (`open`) or save one of an appointment's or a contact's files: saved where the user
     /// says; opened from the folder attachments are opened from (never a program: the engine
-    /// refuses); handed over as a download in the browser.
-    pub(crate) fn item_file(&mut self, item: ItemFile, open: bool) {
+    /// refuses), once asked about when it's a page, a document with macros or a file whose name
+    /// says nothing (unless `asked`), as a message's attachment is; handed over as a download in
+    /// the browser.
+    pub(crate) fn item_file(&mut self, item: ItemFile, open: bool, asked: bool) {
         let name = item.file_name();
         if self.services.downloads() {
             let got = match &item.of {
@@ -174,6 +178,12 @@ impl MailApp {
             return;
         }
         if !self.ui.has_files {
+            return;
+        }
+        if !asked && let Some(risk) = quatrelle_engine::mime::open_risk(&name, &item.mime) {
+            // Asked in the main window, brought forward (an appointment's own window asked).
+            self.ui.dialog = Some(Dialog::RiskyItemFile { item, risk });
+            self.ui.focus_main = true;
             return;
         }
         let Some(dir) = quatrelle_engine::store::scratch_dir("open") else {

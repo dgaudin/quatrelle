@@ -234,10 +234,24 @@ pub(crate) fn tour() {
             Dialog::LostOnClose { unsent: 2, changes: 1, sending: 1 },
             Dialog::ConfirmDeleteContact { uid: "zoe".into(), name: "Zoe Park".into() },
             Dialog::DeleteOccurrence { uid: "standup".into(), occurrence: 0, name: "Team stand-up".into() },
+            Dialog::RiskyAttachment { key: k.clone(), index: 0, name: "page.html".into(), risk: quatrelle_engine::mime::OpenRisk::WebPage },
+            Dialog::RiskyAttachment { key: k.clone(), index: 0, name: "budget.docm".into(), risk: quatrelle_engine::mime::OpenRisk::Macros },
+            Dialog::RiskyAttachment { key: k.clone(), index: 0, name: "facture".into(), risk: quatrelle_engine::mime::OpenRisk::Unknown },
+            Dialog::RiskyItemFile {
+                item: crate::pim_dialogs::ItemFile {
+                    of: crate::pim_dialogs::FilesOf::Event { uid: "standup".into(), occurrence: None },
+                    index: 0,
+                    name: "agenda.html".into(),
+                    mime: "text/html".into(),
+                },
+                risk: quatrelle_engine::mime::OpenRisk::WebPage,
+            },
             Dialog::EmptySubject,
+            Dialog::NoAttachment,
             Dialog::SendCheck(vec![
                 quatrelle_engine::SendCheck::Lookalike { address: "orders@printsh0p.example".into(), like: "printshop.example".into() },
                 quatrelle_engine::SendCheck::Exposed { count: 12 },
+                quatrelle_engine::SendCheck::MissingAttachment,
             ]),
             Dialog::edit_account(&a.session.accounts[0].config),
             {

@@ -2364,3 +2364,16 @@ presence	Offline	Не в сети
 	Audio call	Аудиозвонок
 	Video call	Видеозвонок
 	Zoom	Масштаб
+	Mailbox full	Ящик заполнен
+	Delivery restricted	Доставка ограничена
+	Moderated	Модерируется
+	Recipient not found	Получатель не найден
+	Reaches {n} people outside the organisation	Доходит до {n} человек за пределами организации
+	You wrote that something is attached, but nothing is.	Вы написали, что что-то вложено, но вложений нет.
+	{email}: {line}	{email}: {line}
+	This message is larger than the {size} this recipient accepts	Это сообщение больше, чем {size}, которые принимает этот получатель
+	Open this file?	Открыть этот файл?
+	Opening it in a browser can run its scripts and load content from the internet.	Открытие в браузере может выполнить его сценарии и загрузить содержимое из интернета.
+	It can run macros: open it only if you trust the sender.	Он может выполнять макросы: открывайте его, только если доверяете отправителю.
+	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	Имя не говорит, что это за файл: программа, которая его откроет, может выполнить его содержимое.
+	Send without a file?	Отправить без файла?

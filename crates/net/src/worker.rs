@@ -195,7 +195,7 @@ fn quick_job(j: &Job, acc: &AccountConfig) -> bool {
     match j {
         Job::Send { .. } => acc.pop.is_none() && acc.jmap.is_none(),
         Job::GetVacation { .. } | Job::SetVacation { .. } => acc.pop.is_none(),
-        Job::GetRooms { .. } | Job::GetAvailability { .. } => acc.ews.is_some() || acc.graph.is_some(),
+        Job::GetRooms { .. } | Job::GetAvailability { .. } | Job::GetMailTips { .. } => acc.ews.is_some() || acc.graph.is_some(),
         Job::ListRecoverable { .. } | Job::RestoreRecoverable { .. } => acc.ews.is_some() || acc.graph.is_some(),
         Job::ServerFolderSizes { .. } | Job::FindCertificates { .. } | Job::SearchDirectory { .. } | Job::ExpandList { .. } => acc.ews.is_some(),
         Job::SyncCalendars { calendars, .. } => acc.ews.is_some() && !calendars.is_empty(),

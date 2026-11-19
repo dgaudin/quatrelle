@@ -149,3 +149,43 @@ fn an_exchange_appointments_files_show_whether_here_or_on_the_server() {
     assert!(t.iter().any(|s| s.contains("MB")), "the deck's size: {t:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An appointment's file a browser would run (an invitation's page, say) asks first, as a
+/// message's attachment does: nothing is handed to another program until its Open. A PDF opens
+/// at once.
+#[test]
+fn an_appointments_page_asks_before_it_opens() {
+    let (mut a, dir) = app("item-files-risky");
+    a.ui.has_files = true;
+    let ctx = egui::Context::default();
+    let mut tex = Textures::default();
+    let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);
+    frame(&ctx, &mut a, vec![]);
+    let start = (NOW / 86_400 + 1) * 86_400 + 15 * 3600;
+    let extra = vec![
+        format!("ATTACH;FMTTYPE=text/html;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"agenda.html\":{}", base64_encode(b"<p>Agenda</p>")),
+        format!("ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"Minutes.pdf\":{}", base64_encode(b"%PDF-1.4")),
+    ];
+    let e = CalEvent { uid: "risky-files-1".into(), summary: "Planning".into(), start, end: start + 3600, extra, ..Default::default() };
+    a.session.create_event(None, None, e).unwrap();
+    let item = a.session.agenda(NOW, NOW + 3 * 86_400).into_iter().find(|i| i.summary == "Planning").unwrap();
+    a.ui.dialog = Dialog::open_event(&a.session, &item.uid, item.occurrence);
+    drawn(&ctx, &mut a, &mut tex, "event-risky-files");
+    // A double-click on the page: asked, nothing opened.
+    let at = settled_text_at(&ctx, &mut a, "agenda.html", size).expect("the page's chip");
+    click_at(&ctx, &mut a, at, 2, size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Open this file?").is_some(), "asked first");
+    assert!(a.session.notices.is_empty(), "nothing opened: {:?}", a.session.notices);
+    // Its Open: handed to its program (the test's refuses, and that's said).
+    let open = settled_text_at(&ctx, &mut a, "Open", size).expect("the question's Open");
+    click_at(&ctx, &mut a, open, 1, size);
+    assert!(a.session.notices.iter().any(|n| n.text.contains("agenda.html could not be opened")), "{:?}", a.session.notices);
+    a.session.notices.clear();
+    // The PDF: at once.
+    let at = settled_text_at(&ctx, &mut a, "Minutes.pdf", size).expect("the PDF's chip");
+    click_at(&ctx, &mut a, at, 2, size);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.notices.iter().any(|n| n.text.contains("Minutes.pdf could not be opened")), "{:?}", a.session.notices);
+    let _ = std::fs::remove_dir_all(dir);
+}

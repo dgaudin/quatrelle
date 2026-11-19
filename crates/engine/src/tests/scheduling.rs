@@ -5,7 +5,7 @@
 //! (the Scheduling Assistant), from the calendars kept here and from an Exchange server.
 
 use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
-use quatrelle_model::scheduling::{Availability, BusyKind, BusySlot, Room, RoomList};
+use quatrelle_model::scheduling::{Availability, BusyKind, BusySlot, MailTip, Room, RoomList};
 
 use super::*;
 
@@ -219,5 +219,247 @@ fn an_exchange_account_asks_its_server_once() {
     // Another day: asked again.
     s.run("calendar.availability", &json!({"account": id, "emails": ["riley@contoso.example"], "from": from + 86_400})).unwrap();
     assert!(matches!(s.take_jobs().as_slice(), [Job::GetAvailability { .. }]));
+    done(s);
+}
+
+/// MailTips for a message being written: an Exchange account is asked about its recipients once
+/// per set, in To, Cc and Bcc order; an answer to a set since changed is let go; closing the
+/// message forgets them; an account with no server for them isn't asked.
+#[test]
+fn mail_tips_follow_the_recipients_of_a_message_being_written() {
+    let mut s = sample_session("mail-tips");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let id = s.run("mail.new", &json!({"account": account})).unwrap()["compose"].as_u64().unwrap();
+    // Nothing to ask about yet.
+    assert!(!s.mail_tips_wanted());
+    assert!(s.run("compose.mailTips", &json!({})).is_err(), "no recipient");
+    s.run("compose.update", &json!({"to": "Ana <ana@contoso.example>; bob@contoso.example", "cc": "carol@contoso.example"})).unwrap();
+    assert!(s.mail_tips_wanted());
+    assert_eq!(s.run("compose.mailTips", &json!({})).unwrap()["state"], "loading");
+    assert!(!s.mail_tips_wanted(), "one request per set, while it's on its way");
+    let (ask, recipients) = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { from, recipients, ask, .. }] => {
+            assert_eq!(from, "riley@contoso.example");
+            (*ask, recipients.clone())
+        }
+        jobs => panic!("{jobs:?}"),
+    };
+    assert_eq!(recipients, ["ana@contoso.example", "bob@contoso.example", "carol@contoso.example"], "in To then Cc, lower case, once each");
+    // One answer worth showing, one ordinary: only the first stays.
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![
+            MailTip { email: "ana@contoso.example".into(), automatic_replies: "Away until Monday".into(), ..Default::default() },
+            MailTip { email: "bob@contoso.example".into(), ..Default::default() },
+        ],
+        error: None,
+    });
+    let r = s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!((r["state"].as_str(), r["tips"].as_array().map(Vec::len)), (Some("ready"), Some(1)));
+    assert_eq!((r["tips"][0]["email"].as_str(), r["tips"][0]["automaticReplies"].as_str()), (Some("ana@contoso.example"), Some("Away until Monday")));
+    // A recipient added: a new question, and the old answer is let go.
+    s.run("compose.update", &json!({"bcc": "dave@contoso.example"})).unwrap();
+    assert!(s.mail_tips_wanted());
+    s.run("compose.mailTips", &json!({})).unwrap();
+    let again = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { ask, recipients, .. }] => {
+            assert_eq!(recipients.last().map(String::as_str), Some("dave@contoso.example"));
+            *ask
+        }
+        jobs => panic!("{jobs:?}"),
+    };
+    assert_ne!(again, ask);
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![MailTip { email: "bob@contoso.example".into(), mailbox_full: true, ..Default::default() }],
+        error: None,
+    });
+    assert_eq!(s.run("compose.mailTips", &json!({})).unwrap()["state"], "loading", "an answer for the set from before is let go");
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask: again,
+        tips: vec![MailTip { email: "dave@contoso.example".into(), custom: "Ring first".into(), ..Default::default() }],
+        error: None,
+    });
+    let r = s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!((r["state"].as_str(), r["tips"][0]["custom"].as_str()), (Some("ready"), Some("Ring first")));
+    // Closing the message forgets them.
+    s.run("compose.close", &json!({"save": false})).unwrap();
+    assert!(s.mail_tips_now(id).is_none());
+    // The sample mailbox has no server that answers MailTips.
+    s.run("mail.new", &json!({"account": sample::SAMPLE_ACCOUNT})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@soundlab.example"})).unwrap();
+    assert!(!s.mail_tips_wanted());
+    assert!(s.run("compose.mailTips", &json!({})).is_err());
+    // Another account's server is asked in turn, even with the same recipients: the tips were
+    // the first server's.
+    let other = s
+        .run("account.add", &json!({"email": "sam@fourthcoffee.example", "ews": "mail.fourthcoffee.example", "username": "sam", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    let (ask, from) = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { ask, from, .. }] => (*ask, from.clone()),
+        jobs => panic!("{jobs:?}"),
+    };
+    assert_eq!(from, "riley@contoso.example");
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask,
+        tips: vec![MailTip { email: "ana@contoso.example".into(), custom: "Ring first".into(), ..Default::default() }],
+        error: None,
+    });
+    s.run("compose.update", &json!({"account": other})).unwrap();
+    assert!(s.mail_tips_wanted(), "the other server hasn't been asked about these recipients");
+    assert_eq!(s.run("compose.mailTips", &json!({})).unwrap()["state"], "loading");
+    match s.take_jobs().as_slice() {
+        [Job::GetMailTips { from, .. }] => assert_eq!(from, "sam@fourthcoffee.example"),
+        jobs => panic!("{jobs:?}"),
+    }
+    done(s);
+}
+
+/// One MailTips question on its way per message: the recipients changed while it is out wait for
+/// its answer, the newest set in place of any that waited, and only then is the server asked
+/// again; back to the set on its way, nothing waits.
+#[test]
+fn one_mail_tips_question_is_on_its_way_at_a_time() {
+    let mut s = sample_session("mail-tips-one");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    let asked = |s: &mut Session| -> Vec<(u64, Vec<String>)> {
+        s.take_jobs()
+            .into_iter()
+            .filter_map(|j| match j {
+                Job::GetMailTips { ask, recipients, .. } => Some((ask, recipients)),
+                _ => None,
+            })
+            .collect()
+    };
+    let ask_now = |s: &mut Session, update: Value| {
+        s.run("compose.update", &update).unwrap();
+        if s.mail_tips_wanted() {
+            s.run("compose.mailTips", &json!({})).unwrap();
+        }
+    };
+    ask_now(&mut s, json!({"to": "ana@contoso.example"}));
+    let first = asked(&mut s);
+    assert_eq!(first.len(), 1, "{first:?}");
+    // Two more sets while it is on its way: nothing more is asked yet.
+    ask_now(&mut s, json!({"cc": "bo@contoso.example"}));
+    ask_now(&mut s, json!({"cc": "bo@contoso.example; cy@contoso.example"}));
+    assert!(!s.mail_tips_wanted(), "the newest set waits for the answer");
+    assert!(asked(&mut s).is_empty(), "one question on its way");
+    // Its answer: the newest set is asked about, once.
+    s.apply(Event::MailTips {
+        account: account.clone(),
+        ask: first[0].0,
+        tips: vec![MailTip { email: "ana@contoso.example".into(), custom: "Ring first".into(), ..Default::default() }],
+        error: None,
+    });
+    let next = asked(&mut s);
+    let sets: Vec<&Vec<String>> = next.iter().map(|(_, r)| r).collect();
+    assert_eq!(sets, [&vec!["ana@contoso.example".to_string(), "bo@contoso.example".into(), "cy@contoso.example".into()]], "the newest set, once");
+    // A set changed and changed back while that one is out: nothing waits.
+    ask_now(&mut s, json!({"cc": "bo@contoso.example"}));
+    ask_now(&mut s, json!({"cc": "bo@contoso.example; cy@contoso.example"}));
+    assert!(!s.mail_tips_wanted());
+    s.apply(Event::MailTips { account: account.clone(), ask: next[0].0, tips: Vec::new(), error: None });
+    assert!(asked(&mut s).is_empty(), "nothing waited");
+    done(s);
+}
+
+/// An answer naming an address that wasn't asked about keeps nothing of it.
+#[test]
+fn mail_tips_keep_only_the_recipients_asked_about() {
+    let mut s = sample_session("mail-tips-asked");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    s.run("compose.update", &json!({"to": "cy@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    let ask = match s.take_jobs().as_slice() {
+        [Job::GetMailTips { ask, .. }] => *ask,
+        jobs => panic!("{jobs:?}"),
+    };
+    s.apply(Event::MailTips {
+        account,
+        ask,
+        tips: vec![
+            MailTip { email: "zed@contoso.example".into(), custom: "Not asked".into(), ..Default::default() },
+            MailTip { email: "cy@contoso.example".into(), mailbox_full: true, ..Default::default() },
+        ],
+        error: None,
+    });
+    let r = s.run("compose.mailTips", &json!({})).unwrap();
+    let emails: Vec<&str> = r["tips"].as_array().into_iter().flatten().filter_map(|t| t["email"].as_str()).collect();
+    assert_eq!(emails, ["cy@contoso.example"], "only who was asked about: {r}");
+    done(s);
+}
+
+/// A question that never gets its answer (the account's worker stopped, say) doesn't hold the
+/// message's MailTips: 30 seconds on, a new one can go, for the recipients as they are, and so
+/// can one asked for again.
+#[test]
+fn a_mail_tips_question_left_unanswered_doesnt_hold_the_message() {
+    let mut s = sample_session("mail-tips-unanswered");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    let asked = |s: &mut Session| -> Vec<Vec<String>> {
+        s.take_jobs()
+            .into_iter()
+            .filter_map(|j| match j {
+                Job::GetMailTips { recipients, .. } => Some(recipients),
+                _ => None,
+            })
+            .collect()
+    };
+    s.run("compose.update", &json!({"to": "ana@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!(asked(&mut s).len(), 1);
+    // No answer. A recipient added waits for it, a while.
+    s.run("compose.update", &json!({"cc": "bo@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    assert!(asked(&mut s).is_empty(), "waits for the answer");
+    s.clock.now += 31;
+    assert!(s.mail_tips_wanted(), "the answer is overdue");
+    s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), [vec!["ana@contoso.example".to_string(), "bo@contoso.example".into()]], "asked again, as they are");
+    // Asked for again: not while that one is young, then yes.
+    s.run("compose.mailTips", &json!({"refresh": true})).unwrap();
+    assert!(asked(&mut s).is_empty(), "the question is young");
+    s.clock.now += 31;
+    s.run("compose.mailTips", &json!({"refresh": true})).unwrap();
+    assert_eq!(asked(&mut s).len(), 1, "asked again once it's overdue");
     done(s);
 }

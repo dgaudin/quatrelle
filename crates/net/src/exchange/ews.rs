@@ -779,6 +779,7 @@ mod sync;
 mod text_first;
 mod xml;
 
+pub use super::ews_pim::mailtips::mail_tips_read;
 #[cfg(test)]
 pub(crate) use autodiscover::TEST_BASES;
 use autodiscover::{alternative_mailboxes, archive_mailbox, autodiscover_public, autodiscover_smtp, autodiscover_urls, clean_name};
