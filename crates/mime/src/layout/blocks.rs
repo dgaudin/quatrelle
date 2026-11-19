@@ -269,6 +269,30 @@ fn without_spacers(rows: Vec<Vec<Cell>>) -> Vec<Vec<Cell>> {
         .collect()
 }
 
+/// Whether markup starts with a line break: a `<br>` with neither a word nor a picture before it.
+fn starts_with_a_break(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let Some(at) =
+        lower.match_indices("<br").map(|(i, _)| i).find(|i| lower.get(i + 3..).is_some_and(|r| r.starts_with(['>', '/', ' ', '\t', '\r', '\n'])))
+    else {
+        return false;
+    };
+    let before = lower.get(..at).unwrap_or("");
+    let mut in_tag = false;
+    let words = before.chars().any(|c| match c {
+        '<' => {
+            in_tag = true;
+            false
+        }
+        '>' => {
+            in_tag = false;
+            false
+        }
+        c => !in_tag && !c.is_whitespace(),
+    });
+    !words && !before.contains("<img")
+}
+
 fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     let mut out = Vec::new();
     let mut pending = String::new();
@@ -282,6 +306,12 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                 crate::html_to_rich(&format!("{}<div style=\"{style}\">{}</div>", ctx.css, pending))
             };
             if !rich.is_empty() {
+                // A line break before its first words: the empty line a browser leaves there
+                // (the converter drops a text's leading empty lines).
+                let mut rich = rich;
+                if starts_with_a_break(pending) {
+                    rich.insert(0, Vec::new());
+                }
                 out.push(Block::Text(rich));
             } else if between && !out.is_empty() && pending.contains("<br") {
                 // Line breaks alone between two boxes: the empty lines a browser leaves there

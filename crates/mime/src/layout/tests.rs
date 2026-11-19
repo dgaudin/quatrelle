@@ -529,6 +529,23 @@ fn a_line_break_alone_is_room_only_between_two_boxes() {
     assert_eq!(t.rows[1][0].blocks.len(), 1, "nothing after the box: {:?}", t.rows[1][0].blocks);
 }
 
+/// A line break that starts a cell's text is an empty line over it, as a browser leaves one: a
+/// mailing's closing words, each in a table of its own, stood right under the paragraph above.
+/// One that ends a cell's text still adds nothing.
+#[test]
+fn a_line_break_starting_a_cells_text_is_an_empty_line() {
+    let html = r##"<table width="700"><tr><td><p>Any other question?</p></td></tr></table>
+        <table width="700"><tr><td><a href="#"><br /><div style="display: inline;"><div><span>Thanks for your trust,</span><br /></div></div></a></td></tr></table>
+        <table width="700"><tr><td><a href="#"><div style="display: inline;"><div><span>The team</span><br /></div></div></a></td></tr></table>"##;
+    let b = html_layout(html);
+    let shown: Vec<Vec<String>> = b
+        .iter()
+        .filter_map(|x| if let Block::Table(t) = x { t.rows.first()?.first() } else { None })
+        .map(|c| c.blocks.iter().map(text).collect())
+        .collect();
+    assert_eq!(shown, [vec!["Any other question?".to_string()], vec!["\nThanks for your trust,".into()], vec!["The team".into()]]);
+}
+
 /// A line starts with its first word: the space a browser drops there (`<strong> Any
 /// question?`) stayed when a size or a typeface was marked before it, as a cell's font is.
 /// Preformatted text keeps its own.
