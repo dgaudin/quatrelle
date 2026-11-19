@@ -157,6 +157,40 @@ fn sending_holds_when_something_is_said_to_be_attached_and_nothing_is() {
     done(s);
 }
 
+/// A reply's draft opened from Drafts that no longer knows it's a reply (saved by another
+/// program, its original not here): the original under it and its header still aren't the user's
+/// words, nor is its subject as it came.
+#[test]
+fn a_reply_opened_again_from_drafts_still_leaves_out_its_original() {
+    let mut s = sample_session("missing-attachment-draft");
+    let body = "Thanks, got it.\n\nFrom: Ana Lima <ana@soundlab.example>\nSent: Wednesday, 22 October 2026 10:00\n\
+                To: Riley <riley@studio.example>\nSubject: The attachment you asked for\n\nHere is the file, attached.\n";
+    let d = quatrelle_mime::Draft {
+        to: vec![quatrelle_model::EmailAddress::new("Ana Lima", "ana@soundlab.example")],
+        subject: "RE: The attachment you asked for".into(),
+        body: body.into(),
+        in_reply_to: "<gone@soundlab.example>".into(),
+        ..Default::default()
+    };
+    let raw = quatrelle_mime::build(&d, &quatrelle_model::EmailAddress::new("Riley", "riley@studio.example"), NOW, "<draft-elsewhere@x>").unwrap();
+    let store = s.store.clone().unwrap();
+    let mut drafts = store.load_folder("sample", "Drafts").unwrap();
+    let key = quatrelle_model::MessageKey { account: "sample".into(), folder: "Drafts".into(), validity: drafts.validity.max(1), uid: 9300 };
+    let flags = quatrelle_model::Flags { draft: true, seen: true, ..Default::default() };
+    drafts.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key.clone(), flags, raw.len() as u32, NOW));
+    store.save_folder("sample", "Drafts", &drafts).unwrap();
+    store.write_body(&key, &raw).unwrap();
+    s.apply(Event::FolderChanged { account: "sample".into(), folder: "Drafts".into() });
+    s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
+    s.run("draft.edit", &json!({"key": key.to_id()})).unwrap();
+    let c = s.compose.as_ref().expect("the draft open again");
+    assert!(c.body.contains("Here is the file, attached."), "the original is in it: {:?}", c.body);
+    assert!(c.mode.is_none(), "not known as a reply");
+    let v = s.run("compose.send", &json!({})).unwrap();
+    assert!(v.get("check").is_none(), "held: {v}");
+    done(s);
+}
+
 /// The attachment reminder reads only what the user wrote: not the signature and its
 /// confidentiality notice, not a reply's subject as it came, not the original under a reply (in
 /// plain text) nor its header (who sent it, its subject: an original in HTML); what the user

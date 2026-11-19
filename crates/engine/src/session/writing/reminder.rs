@@ -53,15 +53,14 @@ pub(super) fn mentions_attachment(subject: &str, body: &str) -> bool {
 }
 
 /// What the user wrote of message `c`: its text without the signature put in it (its text as it
-/// went in, or where one written in HTML stands) and, in a reply or a forward, without the
-/// original under it, from its header on (who sent it, when, to whom, its subject, written in
-/// `words`); and its subject, empty when it's the original's (`Re: …` as the reply came).
+/// went in, or where one written in HTML stands) and without an original quoted under it, from
+/// its header on (who sent it, when, to whom, its subject, written in `words`), whether or not the
+/// message still knows it's a reply (a draft saved elsewhere doesn't); and its subject, empty
+/// when it's the original's (`Re: …` as the reply came).
 pub(super) fn own_words<'a>(c: &'a Compose, words: &mime::QuoteWords) -> (String, &'a str) {
     let mut text = c.body.as_str();
     let mut subject = c.subject.as_str();
-    if c.mode.is_some()
-        && let Some((at, original)) = quote_header(text, words)
-    {
+    if let Some((at, original)) = quote_header(text, words) {
         text = text.get(..at).unwrap_or(text);
         if quatrelle_model::thread::base_subject(subject).eq_ignore_ascii_case(&quatrelle_model::thread::base_subject(original)) {
             subject = "";
