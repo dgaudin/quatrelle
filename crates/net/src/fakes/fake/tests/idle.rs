@@ -6,6 +6,27 @@
 
 use super::*;
 
+/// The fake's account, signed in with a password.
+fn account(port: u16) -> AccountConfig {
+    AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { port, security: Security::None, host: "127.0.0.1".into() },
+        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+        ..Default::default()
+    }
+}
+
+/// The account's calendars and address books looked for today, and none found: the pass after
+/// a full sync, which comes before the look at the Inbox and IDLE, asks nothing of the network.
+/// Otherwise it looks for `studio.example`'s on this computer's DNS: a tenth of a second, or 3 to
+/// 5 s more for each answer lost, and two lost made a ten-second wait after "online" fail.
+fn calendars_looked_for(store: &Store) {
+    let pim = quatrelle_model::pim::Pim { dav_checked: Some(crate::worker::now()), ..Default::default() };
+    store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
+}
+
 /// An `EXISTS` with a new count in any command's answer is news; the next `SELECT` starts over.
 #[test]
 fn a_command_saying_the_folder_grew_is_news() {
@@ -38,16 +59,9 @@ fn mail_arriving_after_the_inbox_sync_shows_before_idle() {
     }
     let port = serve_tcp(&st);
     let store = store("late-mail");
+    calendars_looked_for(&store);
     let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
-    let account = AccountConfig {
-        id: "a1".into(),
-        email: "me@studio.example".into(),
-        username: "me@studio.example".into(),
-        imap: ServerConfig { port, security: Security::None, host: "127.0.0.1".into() },
-        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
-        ..Default::default()
-    };
-    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    pool.submit(Job::Start { account: account(port), password: Some(Secret("pw".into())) });
     until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
     assert!(st.lock().unwrap().deliver_on.is_none(), "delivered during the sync");
     let has_late = || store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.subject == "Late");
@@ -74,16 +88,9 @@ fn a_connection_lost_while_waiting_comes_back_without_an_error() {
     }
     let port = serve_tcp(&st);
     let store = store("lost-idle");
+    calendars_looked_for(&store);
     let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
-    let account = AccountConfig {
-        id: "a1".into(),
-        email: "me@studio.example".into(),
-        username: "me@studio.example".into(),
-        imap: ServerConfig { port, security: Security::None, host: "127.0.0.1".into() },
-        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
-        ..Default::default()
-    };
-    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    pool.submit(Job::Start { account: account(port), password: Some(Secret("pw".into())) });
     let mut seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
     // Waiting in IDLE: mail comes, which the fake never tells of; only a new connection reads it.
     let end = Instant::now() + Duration::from_secs(10);
