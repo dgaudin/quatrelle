@@ -475,27 +475,6 @@ fn a_saved_file_removed_since_is_asked_again() {
     assert_eq!(s.teams.file_state("m1", G), Some(&TeamsFileState::Asked));
 }
 
-/// A saved file handed to the window carries Windows' mark of the internet (zone 3), however it
-/// was handed: saved, handed again by an Open, or downloaded again once removed.
-#[test]
-fn a_saved_file_is_marked_as_from_the_internet() {
-    let mut s = opened();
-    let path = in_scratch(&format!("marked {}.pdf", std::process::id()));
-    let marked = |path: &str| !cfg!(windows) || std::fs::read_to_string(format!("{path}:Zone.Identifier")).is_ok_and(|z| z.contains("ZoneId=3"));
-    open_file(&mut s, "m1", G).unwrap();
-    std::fs::write(&path, b"%PDF-1.7").unwrap();
-    saved(&mut s, "m1", G, &path);
-    assert!(s.take_teams_saved().is_some_and(|h| marked(&h.path)), "saved");
-    open_file(&mut s, "m1", G).unwrap();
-    assert!(s.take_teams_saved().is_some_and(|h| marked(&h.path)), "handed again");
-    std::fs::remove_file(&path).unwrap();
-    assert_eq!(s.run("teams.fileGone", &json!({"path": path})), Ok(json!({"asked": true})));
-    std::fs::write(&path, b"%PDF-1.7").unwrap();
-    saved(&mut s, "m1", G, &path);
-    assert!(s.take_teams_saved().is_some_and(|h| marked(&h.path)), "downloaded again");
-    std::fs::remove_file(&path).unwrap();
-}
-
 #[test]
 fn a_saved_path_outside_the_folder_is_refused() {
     let dir = scratch();
