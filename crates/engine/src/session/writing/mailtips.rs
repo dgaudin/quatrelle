@@ -11,6 +11,10 @@ use quatrelle_model::scheduling::{MAX_MAIL_TIPS, MailTip};
 use super::*;
 use crate::session::scheduling::Fetched;
 
+/// Seconds a question waits for its answer before another may go in its place (the account's
+/// worker stopped, or a panic caught on its connection, and no answer ever comes).
+pub(crate) const MAIL_TIPS_WAIT: i64 = 30;
+
 /// The recipients a message is about, as a server is asked: the addresses in To, Cc and Bcc,
 /// lower case, once each and in that order; a field can name several, separated as the contacts
 /// fields accept. (The form asks only once none is being typed: `reading/compose.rs`.)
@@ -43,6 +47,9 @@ pub struct MailTipsState {
     pub ask: u64,
     /// The server's answer, while it's on its way.
     pub found: Fetched<Vec<MailTip>>,
+    /// When it was asked (the session's clock): past [`MAIL_TIPS_WAIT`] with no answer, another
+    /// question may go.
+    pub asked_at: i64,
     /// The question asked once this one is answered: the recipients as they are now, changed
     /// while it was on its way (one question per message is on its way at a time).
     pub next: Option<MailTipsAsk>,
@@ -74,6 +81,8 @@ impl Session {
         let Some(s) = self.mail_tips.get(&c.id) else { return true };
         let asked = s.account == c.account && s.recipients == recipients;
         match s.found {
+            // No answer past the wait: asked again.
+            Fetched::Loading if self.mail_tips_overdue(s) => true,
             Fetched::Loading if asked => s.next.is_some(),
             Fetched::Loading => !s.next.as_ref().is_some_and(|n| n.account == c.account && n.recipients == recipients),
             _ => !asked,
@@ -99,15 +108,17 @@ impl Session {
         }
         let id = c.id;
         let question = MailTipsAsk { account: c.account.clone(), from: self.compose_from(c).email, recipients };
+        let now = self.clock.now;
         if let Some(s) = self.mail_tips.get_mut(&id) {
             let asked = s.account == question.account && s.recipients == question.recipients;
             // One on its way: this one waits for its answer, in place of any that waited (none
-            // when it's the one on its way).
-            if matches!(s.found, Fetched::Loading) {
+            // when it's the one on its way); past the wait, it goes in that one's place.
+            let young = now.saturating_sub(s.asked_at) < MAIL_TIPS_WAIT;
+            if matches!(s.found, Fetched::Loading) && young {
                 s.next = (!asked || refresh).then_some(question);
                 return Ok(self.mail_tips_json(id));
             }
-            if asked && !refresh {
+            if asked && !refresh && !matches!(s.found, Fetched::Loading) {
                 return Ok(self.mail_tips_json(id));
             }
         }
@@ -120,9 +131,17 @@ impl Session {
         self.mail_tips_ask = self.mail_tips_ask.saturating_add(1);
         let ask = self.mail_tips_ask;
         let MailTipsAsk { account, from, recipients } = question;
-        self.mail_tips
-            .insert(id, MailTipsState { account: account.clone(), recipients: recipients.clone(), ask, found: Fetched::Loading, next: None });
+        let asked_at = self.clock.now;
+        self.mail_tips.insert(
+            id,
+            MailTipsState { account: account.clone(), recipients: recipients.clone(), ask, found: Fetched::Loading, next: None, asked_at },
+        );
         self.jobs.push(Job::GetMailTips { account, from, recipients, ask });
+    }
+
+    /// Whether a question on its way has waited past [`MAIL_TIPS_WAIT`] for its answer.
+    fn mail_tips_overdue(&self, s: &MailTipsState) -> bool {
+        matches!(s.found, Fetched::Loading) && self.clock.now.saturating_sub(s.asked_at) >= MAIL_TIPS_WAIT
     }
 
     /// What's known of message `id`'s MailTips; `None` until it was asked for.

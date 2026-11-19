@@ -420,3 +420,46 @@ fn mail_tips_keep_only_the_recipients_asked_about() {
     assert_eq!(emails, ["cy@contoso.example"], "only who was asked about: {r}");
     done(s);
 }
+
+/// A question that never gets its answer (the account's worker stopped, say) doesn't hold the
+/// message's MailTips: 30 seconds on, a new one can go, for the recipients as they are, and so
+/// can one asked for again.
+#[test]
+fn a_mail_tips_question_left_unanswered_doesnt_hold_the_message() {
+    let mut s = sample_session("mail-tips-unanswered");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    let asked = |s: &mut Session| -> Vec<Vec<String>> {
+        s.take_jobs()
+            .into_iter()
+            .filter_map(|j| match j {
+                Job::GetMailTips { recipients, .. } => Some(recipients),
+                _ => None,
+            })
+            .collect()
+    };
+    s.run("compose.update", &json!({"to": "ana@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!(asked(&mut s).len(), 1);
+    // No answer. A recipient added waits for it, a while.
+    s.run("compose.update", &json!({"cc": "bo@contoso.example"})).unwrap();
+    s.run("compose.mailTips", &json!({})).unwrap();
+    assert!(asked(&mut s).is_empty(), "waits for the answer");
+    s.clock.now += 31;
+    assert!(s.mail_tips_wanted(), "the answer is overdue");
+    s.run("compose.mailTips", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), [vec!["ana@contoso.example".to_string(), "bo@contoso.example".into()]], "asked again, as they are");
+    // Asked for again: not while that one is young, then yes.
+    s.run("compose.mailTips", &json!({"refresh": true})).unwrap();
+    assert!(asked(&mut s).is_empty(), "the question is young");
+    s.clock.now += 31;
+    s.run("compose.mailTips", &json!({"refresh": true})).unwrap();
+    assert_eq!(asked(&mut s).len(), 1, "asked again once it's overdue");
+    done(s);
+}
