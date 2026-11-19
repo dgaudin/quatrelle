@@ -190,6 +190,7 @@ use super::*;
 mod calls;
 mod conference;
 mod find;
+mod meetings;
 mod showing;
 mod zones;
 

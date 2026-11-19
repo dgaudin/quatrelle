@@ -7,6 +7,7 @@
 //! (`X-MICROSOFT-DISALLOW-COUNTER`); and which guests are optional (`ROLE`).
 
 use super::*;
+use crate::pim::teams::valid_teams_meeting_id;
 
 /// How its time shows to others (Outlook's Show As).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -194,6 +195,7 @@ pub(super) fn read(e: &mut CalEvent, name: &str, value: &str, said: &mut bool) -
         }
         "X-MICROSOFT-DISALLOW-COUNTER" => e.no_new_times = value.trim().eq_ignore_ascii_case("TRUE"),
         "X-QUATRELLE-WEBEX-ID" => e.webex_id = Some(value.trim()).filter(|v| valid_webex_id(v)).map(str::to_string),
+        "X-QUATRELLE-TEAMS-ID" => e.teams_meeting_id = Some(value.trim()).filter(|v| valid_teams_meeting_id(v)).map(str::to_string),
         _ => return false,
     }
     true
@@ -223,6 +225,9 @@ pub(super) fn lines(e: &CalEvent) -> Vec<String> {
     }
     if let Some(id) = e.webex_id.as_deref().filter(|id| valid_webex_id(id)) {
         out.push(format!("X-QUATRELLE-WEBEX-ID:{id}"));
+    }
+    if let Some(id) = e.teams_meeting_id.as_deref().filter(|id| valid_teams_meeting_id(id)) {
+        out.push(format!("X-QUATRELLE-TEAMS-ID:{id}"));
     }
     out
 }
