@@ -11,15 +11,21 @@ use super::*;
 /// A tip's text kept at most (an automatic reply can be a whole letter).
 const MAX_TIP_TEXT: usize = 4000;
 
-/// The `GetMailTips` request for `emails` sent as `from`: an address alone, in the schema's
-/// order.
+/// Times a question is asked again for the recipients whose tips the server hasn't ready
+/// (`PendingMailTips`: an automatic reply read from the recipient's mailbox), and the wait
+/// before each time.
+const PENDING_TRIES: usize = 2;
+const PENDING_WAIT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The `GetMailTips` request for `emails` sent as `from`: each address as SMTP, as Microsoft's
+/// example names them, in the schema's order.
 pub(crate) fn mail_tips_request(from: &str, emails: &[String]) -> String {
-    let recipients: String =
-        emails.iter().take(MAX_MAIL_TIPS).map(|e| format!("<t:Mailbox><t:EmailAddress>{}</t:EmailAddress></t:Mailbox>", esc(e.trim()))).collect();
+    let address = |e: &str| format!("<t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType>", esc(e.trim()));
+    let recipients: String = emails.iter().take(MAX_MAIL_TIPS).map(|e| format!("<t:Mailbox>{}</t:Mailbox>", address(e))).collect();
     format!(
-        "<m:GetMailTips><m:SendingAs><t:EmailAddress>{}</t:EmailAddress></m:SendingAs>\
+        "<m:GetMailTips><m:SendingAs>{}</m:SendingAs>\
          <m:Recipients>{recipients}</m:Recipients><m:MailTipsRequested>All</m:MailTipsRequested></m:GetMailTips>",
-        esc(from.trim())
+        address(from)
     )
 }
 
@@ -45,6 +51,11 @@ fn scope_of(scope: &str) -> String {
 /// carries no tip of its own).
 fn tip_of(e: &El) -> Option<MailTip> {
     let email = e.child("RecipientAddress").and_then(|a| a.text_of("EmailAddress"))?.trim().to_ascii_lowercase();
+    tip_for(e, email)
+}
+
+/// One `MailTips` element as the tip of `email`.
+fn tip_for(e: &El, email: String) -> Option<MailTip> {
     if !email.contains('@') || email.len() > 320 {
         return None;
     }
@@ -73,22 +84,77 @@ pub fn mail_tips_read(doc: &El) -> Vec<MailTip> {
     found.iter().filter_map(|e| tip_of(e)).filter(MailTip::worth_telling).take(MAX_MAIL_TIPS).collect()
 }
 
+/// What one answer says about the recipients `asked`: the tips with something to tell, each
+/// under the address asked; the addresses whose tips aren't ready; and how many came under an
+/// address not asked about.
+struct Answer {
+    tips: Vec<MailTip>,
+    pending: Vec<String>,
+    elsewhere: usize,
+}
+
+/// Exchange answers a tip for each recipient, in the order asked, under the address it knows the
+/// recipient by (the main one rather than the one typed): one under an address not asked about
+/// is the one asked in its place, when there's one for each.
+fn answer_of(doc: &El, asked: &[String]) -> Answer {
+    let mut found = Vec::new();
+    doc.all("MailTips", &mut found);
+    let in_order = found.len() == asked.len();
+    let mut out = Answer { tips: Vec::new(), pending: Vec::new(), elsewhere: 0 };
+    for (i, e) in found.iter().enumerate().take(MAX_MAIL_TIPS) {
+        let said = e.child("RecipientAddress").and_then(|a| a.text_of("EmailAddress")).map(|a| a.trim().to_ascii_lowercase()).unwrap_or_default();
+        let email = match asked.get(i) {
+            Some(a) if in_order && !asked.contains(&said) => {
+                out.elsewhere += 1;
+                a.clone()
+            }
+            _ => said,
+        };
+        if e.text_of("PendingMailTips").is_some_and(|p| !p.trim().is_empty()) && asked.contains(&email) {
+            out.pending.push(email.clone());
+        }
+        if let Some(t) = tip_for(e, email).filter(MailTip::worth_telling) {
+            out.tips.push(t);
+        }
+    }
+    out
+}
+
 /// What the server says about these recipients, sent as `from`; only those with something to
-/// tell are kept. A request the server refused says why.
+/// tell are kept, in the order asked. Those whose tips aren't ready are asked about again, a
+/// little later. A request the server refused says why.
 pub fn mail_tips(c: &Client, from: &str, emails: &[String]) -> Result<Vec<MailTip>> {
     if emails.is_empty() {
         return Ok(Vec::new());
     }
     let from = if from.trim().is_empty() { c.email() } else { from.trim() };
-    let doc = c.call(&mail_tips_request(from, emails))?;
-    let out = mail_tips_read(&doc);
-    // Nothing at all: the response messages carry the refusal (an operation a server doesn't
-    // have, an address it won't tell about).
-    if out.is_empty() {
-        for m in crate::ews::messages(&doc) {
-            crate::ews::check_message(m)?;
+    let asked: Vec<String> = emails.iter().take(MAX_MAIL_TIPS).map(|e| e.trim().to_ascii_lowercase()).collect();
+    let mut ask = asked.clone();
+    let mut out: Vec<MailTip> = Vec::new();
+    for round in 0..=PENDING_TRIES {
+        let doc = c.call(&mail_tips_request(from, &ask))?;
+        let a = answer_of(&doc, &ask);
+        // Nothing at all: the response messages carry the refusal (an operation a server
+        // doesn't have, an address it won't tell about).
+        if round == 0 && a.tips.is_empty() && a.pending.is_empty() {
+            for m in crate::ews::messages(&doc) {
+                crate::ews::check_message(m)?;
+            }
         }
+        if a.elsewhere > 0 || !a.pending.is_empty() {
+            log::info!("MailTips: {} of {} under another address, {} not ready yet", a.elsewhere, ask.len(), a.pending.len());
+        }
+        for t in a.tips {
+            out.retain(|o| o.email != t.email);
+            out.push(t);
+        }
+        if a.pending.is_empty() || round == PENDING_TRIES {
+            break;
+        }
+        ask = a.pending;
+        std::thread::sleep(PENDING_WAIT);
     }
+    out.sort_by_key(|t| asked.iter().position(|a| *a == t.email).unwrap_or(usize::MAX));
     Ok(out)
 }
 
@@ -104,6 +170,7 @@ mod tests {
         assert_eq!(xml.matches("<t:Mailbox>").count(), 2);
         assert!(xml.contains("<t:EmailAddress>Bo &lt;bo@contoso.example&gt;</t:EmailAddress>"), "what isn't an address is escaped as it came");
         assert!(xml.contains("<m:MailTipsRequested>All</m:MailTipsRequested>"));
+        assert_eq!(xml.matches("<t:RoutingType>SMTP</t:RoutingType>").count(), 3, "each address as SMTP, as Microsoft's example: {xml}");
     }
 
     #[test]

@@ -259,6 +259,31 @@ fn mail_tips_are_read_for_the_recipients_with_something_to_tell() {
     assert!(crate::ews_pim::mailtips::mail_tips(&client(&server), "riley@contoso.example", &emails).is_err());
 }
 
+/// As Exchange answers: a tip for each recipient in the order asked, an automatic reply under the
+/// recipient's main address rather than the one typed (it was let go: no address asked about),
+/// and not ready at first (`PendingMailTips`: read from the recipient's mailbox), so asked again
+/// for that recipient alone until it is.
+#[test]
+fn an_automatic_reply_is_kept_under_the_address_asked_and_asked_again_while_pending() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.mail_tips = vec![MailTip {
+        email: "ana.lima@contoso.example".into(),
+        automatic_replies: "<p>Away until <b>Monday</b></p>".into(),
+        max_message_size: 10_485_760,
+        ..Default::default()
+    }];
+    d.mail_tips_known_as = vec![("ana@contoso.example".into(), "ana.lima@contoso.example".into())];
+    d.mail_tips_pending = 1;
+    let server = serve(d);
+    let emails = ["bo@contoso.example".to_string(), "ana@contoso.example".into()];
+    let tips = crate::ews_pim::mailtips::mail_tips(&client(&server), "riley@contoso.example", &emails).unwrap();
+    let told: Vec<(&str, &str)> = tips.iter().map(|t| (t.email.as_str(), t.automatic_replies.as_str())).collect();
+    assert_eq!(told, [("ana@contoso.example", "Away until Monday")]);
+    let asked: Vec<Vec<String>> = server.data.lock().unwrap().mail_tips_asked.iter().map(|(_, a)| a.clone()).collect();
+    assert_eq!(asked, [emails.to_vec(), vec!["ana@contoso.example".to_string()]], "asked again for the one not ready only");
+}
+
 /// Through the pool: MailTips are answered on the account's second connection while the first
 /// is held in the mailbox's sync (its search is held by the server until the test lets it go: it
 /// is surely still running when the question is asked, and when it's answered), and the answer

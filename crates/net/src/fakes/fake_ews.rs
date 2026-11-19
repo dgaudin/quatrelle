@@ -253,6 +253,11 @@ pub struct Data {
     pub mail_tips_asked: Vec<(String, Vec<String>)>,
     /// `GetMailTips` isn't available on this server (refused as an invalid operation).
     pub mail_tips_refused: bool,
+    /// Addresses the server answers MailTips under another of the recipient's (asked, answered
+    /// as): its main address rather than the one typed.
+    pub mail_tips_known_as: Vec<(String, String)>,
+    /// Questions answered with an automatic reply not ready yet (`PendingMailTips`) before it is.
+    pub mail_tips_pending: u32,
     /// The server tells of changes as they happen (streaming notifications); without it
     /// `Subscribe` is refused, as by a server older than Exchange 2010 SP1.
     pub streaming: bool,
@@ -420,6 +425,8 @@ impl Default for Data {
             mail_tips: Vec::new(),
             mail_tips_asked: Vec::new(),
             mail_tips_refused: false,
+            mail_tips_known_as: Vec::new(),
+            mail_tips_pending: 0,
             streaming: false,
             subscriptions: Vec::new(),
             stream_for: std::time::Duration::from_secs(2),

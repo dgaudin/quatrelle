@@ -166,10 +166,16 @@ impl Worker {
                 _ => Err(NetError::No("MailTips come from Exchange and Microsoft 365 accounts".into())),
             }
         })();
+        // In the log either way (counts only, no address): a server that refuses, or says
+        // nothing an Outlook beside it shows, is told apart.
         let (tips, error) = match r {
-            Ok(tips) => (tips, None),
+            Ok(tips) => {
+                log::info!("MailTips: {} recipients asked, {} with something to tell", recipients.len(), tips.len());
+                (tips, None)
+            }
             Err(e) => {
                 let said = e.to_string();
+                log::warn!("MailTips: the question was refused: {said}");
                 if e.is_fatal() || matches!(e, NetError::Auth(_)) {
                     self.conn = None;
                 }
