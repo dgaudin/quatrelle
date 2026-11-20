@@ -571,3 +571,38 @@ fn a_cell_that_says_not_to_wrap_keeps_it() {
     let Some(Block::Table(t)) = b.first() else { panic!("a table: {b:?}") };
     assert_eq!(t.rows[0].iter().map(|c| c.nowrap).collect::<Vec<_>>(), [true, true, false, false]);
 }
+
+/// A button written twice, as newsletters write one: drawn with VML for Outlook in a conditional
+/// comment (`<!--[if mso]>`), and in HTML for the others, `mso-hide: all` so Outlook draws only
+/// the first. Quatrelle reads conditional comments as a browser does (a comment, never drawn), so
+/// it shows the second, as a browser shows it: the button went missing from both.
+#[test]
+fn a_button_written_for_outlook_and_for_the_others_shows_as_a_browser_shows_it() {
+    let html = r##"<table width="600" align="center" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:20px">
+        <p>Tell us what you think of the studio.</p></td></tr>
+        <tr><td align="center"><!--[if mso]><a href="https://survey.contoso.example/vml" target="_blank" hidden><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="https://survey.contoso.example/vml" style="height:46px;width:225px" arcsize="50%" stroke="f" fillcolor="#3366cc"><w:anchorlock></w:anchorlock><center style="color:#ffffff">Drawn for Outlook</center></v:roundrect></a><![endif]--><!--[if !mso]><!-- --><span class="msohide button-border" style="border-style:solid;border-color:#3366cc;background:#3366cc;border-width:0px;display:inline-block;border-radius:30px;width:auto;mso-hide:all"><a href="https://survey.contoso.example/answer" class="button" target="_blank" style="text-decoration:none;color:#ffffff;font-size:14px;padding:15px 40px;display:inline-block;background:#3366cc;border-radius:30px;font-weight:bold">Share your opinion</a></span><!--<![endif]--></td></tr></table>"##;
+    let button = |spans: &[&crate::Span]| {
+        spans.iter().any(|s| s.text.contains("Share your opinion") && s.link.as_deref() == Some("https://survey.contoso.example/answer"))
+    };
+    // Laid out: the HTML button, a link, in its centred cell; nothing of the VML.
+    let h = inline_css(html);
+    let b = html_layout(&h);
+    let mut spans = Vec::new();
+    for at in all_blocks(&b) {
+        if let Block::Text(lines) = at.block {
+            spans.extend(lines.iter().flatten());
+        }
+    }
+    assert!(button(&spans), "the button's label and link laid out: {b:?}");
+    let all = format!("{b:?}");
+    assert!(!all.contains("Drawn for Outlook") && !all.contains("/vml"), "nothing of the VML: {all}");
+    // As text flowing (no layout): the button too, nothing of the VML.
+    for html in [html.to_string(), html.replace("<table width=\"600\"", "<table")] {
+        let rich = crate::html_to_rich(&inline_css(&html));
+        assert!(button(&rich.iter().flatten().collect::<Vec<_>>()), "the button in the text: {rich:?}");
+        assert!(!format!("{rich:?}").contains("Drawn for Outlook"));
+    }
+    // Not hidden text: the reader sees it.
+    let long = "Share your opinion on the new studio rooms the opening hours the classes and the prices we keep every answer for one year and never pass it on to anyone else at all";
+    assert_eq!(crate::hidden_text(&html.replace("Share your opinion", long)), None);
+}

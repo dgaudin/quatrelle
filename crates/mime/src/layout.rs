@@ -9,6 +9,12 @@
 //! pictures (a banner behind a heading) and boxes positioned over others (`position: absolute`
 //! inside `position: relative`, a label on a picture) are kept as well.
 //!
+//! What's hidden is what a browser hides, not what Outlook does: conditional comments
+//! (`<!--[if mso]>…<![endif]-->`) are read as a browser reads them, comments never drawn, so
+//! what Outlook alone hides (`mso-hide: all`) shows. A newsletter's button written twice, in VML
+//! for Outlook inside such a comment and in HTML for the others, shows as the others' then; hiding
+//! that one too, as Outlook does, left neither.
+//!
 //! The HTML is read with html5ever's tokenizer into a small tree of its own (a layout needs no
 //! more than elements, attributes and text); like everything from mail it is hostile input, so
 //! sizes, depth and counts are capped and nothing here panics.
@@ -379,10 +385,10 @@ impl Node {
         self.style("position").is_some_and(|p| p == "relative") && self.kids.iter().any(|k| matches!(k, Kid::El(n) if n.placed() && !n.hidden()))
     }
 
+    /// Whether a browser hides it (not `mso-hide: all`, which only Outlook reads: see the module).
     fn hidden(&self) -> bool {
         self.attr("hidden").is_some()
             || self.style("display").is_some_and(|d| d == "none")
-            || self.style("mso-hide").is_some_and(|d| d == "all")
             || matches!(self.tag.as_str(), "head" | "script" | "style" | "title" | "template" | "noscript")
     }
 

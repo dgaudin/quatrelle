@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Text an HTML message carries but doesn't show. A line of it is ordinary (the preview a
 //! newsletter puts first, `display:none`), but paragraphs of it are a trick: words to get spam
 //! past a filter, a different story for the search index than for the reader, or instructions
@@ -8,7 +9,10 @@
 //!
 //! [`hidden_text`] gathers what's hidden (`display:none`, `visibility:hidden`, `opacity:0`, text
 //! too small to see, a box with no height and its overflow hidden, `hidden`), after the message's
-//! style sheet has been written into each element's `style`.
+//! style sheet has been written into each element's `style`. What only Outlook hides
+//! (`mso-hide: all`) isn't hidden from Quatrelle's reader: Quatrelle reads conditional comments as
+//! a browser does, so it shows the part written for the others (the HTML half of a newsletter's
+//! button, beside the VML one in `<!--[if mso]>`), and its reader sees those words.
 
 /// Fewer hidden words than this is a preview line or a spacer, not worth a word.
 pub const HIDDEN_WORDS_MIN: usize = 25;
@@ -128,7 +132,6 @@ fn hides(tag: &str) -> bool {
     let overflow_hidden = value("overflow").is_some_and(|v| v == "hidden");
     value("display").is_some_and(|v| v == "none")
         || value("visibility").is_some_and(|v| v == "hidden")
-        || value("mso-hide").is_some_and(|v| v == "all")
         || value("opacity").and_then(|v| number(&v)).is_some_and(|n| n < 0.05)
         || value("font-size").and_then(|v| number(&v)).is_some_and(|n| n < 2.0)
         || (overflow_hidden
@@ -182,6 +185,12 @@ mod tests {
         assert_eq!(hidden_text(&html), None);
         // The hidden part ends where its element does, even with unclosed elements inside.
         let html = format!("<div style=\"display:none\"><p>short<b>bold</div><p>{LONG}</p>");
+        assert_eq!(hidden_text(&html), None);
+        // What only Outlook hides (`mso-hide: all`, a newsletter's button for the others) shows,
+        // as in a browser: the reader sees it.
+        let html = format!(
+            "<!--[if mso]><p>{LONG}</p><![endif]--><!--[if !mso]><!-- --><span style=\"display:inline-block;mso-hide:all\">{LONG}</span><!--<![endif]-->"
+        );
         assert_eq!(hidden_text(&html), None);
     }
 
