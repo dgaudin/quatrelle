@@ -389,6 +389,17 @@ fn organizer_of(s: &Session, account: &str) -> quatrelle_model::ical::Attendee {
 /// Why an appointment Exchange Online made a Teams meeting can't be made a plain one again.
 const TEAMS_ONLINE_KEPT: &str = "Microsoft 365 keeps an online meeting once it is made";
 
+/// Whether a conference's link is a Webex room's or a scheduled Webex meeting's.
+fn webex_link(url: &str) -> bool {
+    quatrelle_model::ical::is_webex_link(url) || quatrelle_model::ical::webex_join_host(url).is_some()
+}
+
+/// The Webex an event holds: its scheduled meeting's id, and its conference's link when that is
+/// Webex's.
+fn webex_of(e: &quatrelle_model::ical::CalEvent) -> (Option<String>, Option<String>) {
+    (e.webex_id.clone(), e.conference.as_ref().map(|c| c.url.clone()).filter(|u| webex_link(u)))
+}
+
 /// An event from command params, starting from `e` (what's not given stays).
 pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) -> Result<quatrelle_model::ical::CalEvent, CmdError> {
     let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
@@ -497,6 +508,7 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         e.show_as = quatrelle_model::ical::ShowAs::from_param(x)
             .ok_or_else(|| CmdError::Params(format!("`{x}`: show as free, workingElsewhere, tentative, busy or outOfOffice")))?;
     }
+    let webex_before = webex_of(&e);
     if let Some(id) = p::str(v, "webexId") {
         if !id.is_empty() && !quatrelle_model::ical::valid_webex_id(id) {
             return Err(CmdError::Params("`webexId` is not a Webex meeting id".into()));
@@ -553,11 +565,16 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
     // other unseen. Refused only when the params bring one of them, so that an event read with
     // both can still be changed.
     let brings = |k: &str| v.get(k).is_some_and(|x| !x.is_null() && x.as_str() != Some(""));
-    let webex = e.webex_id.is_some()
-        || e.conference
-            .as_ref()
-            .is_some_and(|c| quatrelle_model::ical::is_webex_link(&c.url) || quatrelle_model::ical::webex_join_host(&c.url).is_some());
+    let webex = e.webex_id.is_some() || e.conference.as_ref().is_some_and(|c| webex_link(&c.url));
     if e.teams_meeting_id.is_some() && webex && ["teamsMeetingId", "webexId", "conference"].into_iter().any(brings) {
+        return Err(CmdError::Params("a Teams meeting and a Webex meeting or room don't go together: remove one first".into()));
+    }
+    // So do the mark for Exchange Online and a Webex meeting or room: refused when the params
+    // bring the mark beside one, or a Webex the marked event didn't have. One read with both (a
+    // tenant may make every meeting a Teams one) is still saved while its Webex stays as it was.
+    let (id, link) = webex_of(&e);
+    let new = |now: Option<String>, was: &Option<String>| now.is_some() && now != *was;
+    if e.teams_online && webex && (marking || new(id, &webex_before.0) || new(link, &webex_before.1)) {
         return Err(CmdError::Params("a Teams meeting and a Webex meeting or room don't go together: remove one first".into()));
     }
     if let Some(b) = p::bool(v, "private") {

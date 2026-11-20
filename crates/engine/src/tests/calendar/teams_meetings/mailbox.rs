@@ -181,6 +181,63 @@ fn a_mark_and_an_id_never_go_together() {
     done(s);
 }
 
+/// A Webex room, as `event.create` and `event.update` take it.
+fn room() -> Value {
+    json!({"url": "https://acme.webex.com/meet/riley"})
+}
+
+/// The mark and a Webex meeting or room exclude each other: the mark brought beside one is
+/// refused, made or changed.
+#[test]
+fn the_mark_brought_beside_webex_is_refused() {
+    let mut s = mailbox("teams-mark-beside-webex");
+    for webex in [json!({"webexId": "w1"}), json!({"conference": room()})] {
+        let mut both = json!({"summary": "x", "start": "2026-10-21T15:00", "account": "sample", "calendar": MAILBOX, "teamsOnline": true});
+        both.as_object_mut().unwrap().extend(webex.as_object().unwrap().clone());
+        assert!(is_params(s.run("event.create", &both)), "{webex}");
+        let uid = made(&mut s, Some(MAILBOX), webex.clone());
+        assert!(is_params(s.run("event.update", &json!({"uid": uid, "teamsOnline": true}))), "{webex}: marked once saved");
+        assert!(!event(&s, &uid).teams_online, "{webex}");
+    }
+    done(s);
+}
+
+/// A Webex meeting or room brought to a marked appointment is refused, and changes nothing.
+#[test]
+fn webex_brought_to_a_marked_event_is_refused() {
+    let mut s = mailbox("teams-webex-to-the-mark");
+    let uid = marked(&mut s);
+    assert!(is_params(s.run("event.update", &json!({"uid": uid, "summary": "Changed", "webexId": "w1"}))), "a Webex meeting");
+    assert!(is_params(s.run("event.update", &json!({"uid": uid, "summary": "Changed", "conference": room()}))), "a Webex room");
+    let e = event(&s, &uid);
+    assert_eq!((e.summary.as_str(), e.teams_online, e.webex_id, e.conference), ("Budget", true, None, None), "a refused save changes nothing");
+    // One given with both by the server: another Webex meeting in place of its own, refused too.
+    set(&mut s, &uid, |e| e.webex_id = Some("w1".into()));
+    assert!(is_params(s.run("event.update", &json!({"uid": uid, "webexId": "w2"}))), "another Webex meeting");
+    assert_eq!(event(&s, &uid).webex_id.as_deref(), Some("w1"));
+    done(s);
+}
+
+/// One the server gives with both (a tenant may make every meeting a Teams one) is still saved
+/// while its Webex stays as it was, and may lose it.
+#[test]
+fn a_marked_event_with_its_webex_unchanged_is_saved() {
+    let mut s = mailbox("teams-mark-webex-unchanged");
+    let uid = marked(&mut s);
+    set(&mut s, &uid, |e| {
+        e.webex_id = Some("w1".into());
+        e.conference = quatrelle_model::ical::Conference::new("https://acme.webex.com/meet/riley", "Webex");
+    });
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget 2", "teamsOnline": true, "webexId": "w1"})).unwrap();
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget 3", "teamsOnline": true, "webexId": "w1", "conference": room()})).unwrap();
+    let e = event(&s, &uid);
+    assert_eq!((e.summary.as_str(), e.teams_online, e.webex_id.as_deref()), ("Budget 3", true, Some("w1")));
+    s.run("event.update", &json!({"uid": uid, "webexId": "", "conference": null})).unwrap();
+    let e = event(&s, &uid);
+    assert_eq!((e.teams_online, e.webex_id, e.conference), (true, None, None), "its Webex taken out");
+    done(s);
+}
+
 /// D15: in a Microsoft 365 mailbox's calendar the option marks the appointment at its first guest,
 /// whether Teams can make meetings or not; never twice, nor beside Webex.
 #[test]
