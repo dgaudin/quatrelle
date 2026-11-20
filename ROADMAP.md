@@ -676,13 +676,15 @@ local-first, media-aware v1); the fuller request is
   placeholder; the list's preview leaves out the words of both kinds; telling tracking pixels apart
   is unchanged.
 - **2026-11-20** — **Teams meetings from the calendar** (`docs/teams.md`): the Teams Meeting button
-  makes a standalone Teams meeting through Microsoft Graph (`/me/onlineMeetings`) for a calendar that
-  isn't a Microsoft 365 mailbox (link as the place, a block in the notes, the conference), with the
-  permission `OnlineMeetings.ReadWrite` asked for apart, at **Authorize Teams meetings**, never at the
-  conversations' sign-in, and an option in File › Options › Calendar that makes every meeting with
-  guests a Teams meeting. The meeting follows its appointment (saved, deleted, a series, a window
-  closed unsaved, Quatrelle closing: 3 seconds); its id rides on the event (`X-QUATRELLE-TEAMS-ID`,
-  an EWS extended property `TeamsMeetingId`), never in an invitation; Teams and Webex exclude each
-  other; the links and values Teams answers with are checked. Not yet confirmed on a real account:
-  a create, an update, a delete, the property on on-premises Exchange. A Microsoft 365 account's own
-  calendar isn't covered yet.
+  makes a standalone Teams meeting through Microsoft Graph (`/me/onlineMeetings`) for a calendar
+  that isn't a Microsoft 365 mailbox (link as the place, a block in the notes, the conference), with
+  the permission `OnlineMeetings.ReadWrite` asked for apart, at **Authorize Teams meetings**, never
+  at the conversations' sign-in, and an option in File › Options › Calendar that makes every meeting
+  with guests a Teams meeting. The meeting follows its appointment (saved, deleted, a series, a
+  window closed unsaved, Quatrelle closing: 3 seconds); its id rides on the event
+  (`X-QUATRELLE-TEAMS-ID`, an EWS extended property `TeamsMeetingId`), never in an invitation; Teams
+  and Webex exclude each other; the links and values Teams answers with are checked. In a
+  Microsoft 365 mailbox's calendar the appointment itself is marked (Graph's `isOnlineMeeting`, with
+  the `teamsForBusiness` provider) and Exchange Online makes the meeting as it's saved, Teams signed
+  in or not. Not yet confirmed on a real account: a create, an update, a delete, the property on
+  on-premises Exchange, and a meeting Exchange Online makes.

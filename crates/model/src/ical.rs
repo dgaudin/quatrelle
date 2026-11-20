@@ -551,7 +551,8 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
             }
         }
     }
-    // An invitation names no Webex meeting of the user's: whatever id it carries is a stranger's.
+    // An invitation names no Webex or Teams meeting of the user's: whatever id it carries is a
+    // stranger's.
     if cal.method.is_some() {
         for e in &mut cal.events {
             e.webex_id = None;

@@ -180,6 +180,18 @@ mod tests {
         ] {
             assert!(!teams_meeting_url(bad), "{bad:?}");
         }
+        // At the bounds: a link of 2,048 bytes is taken, one more byte isn't; the scheme and the
+        // host in capitals are the same link; an empty port, or an empty label, makes no host.
+        let start = "https://teams.microsoft.com/meet/";
+        let at_most = format!("{start}{}", "a".repeat(TEAMS_MEETING_URL_MAX - start.len()));
+        assert_eq!(at_most.len(), TEAMS_MEETING_URL_MAX);
+        assert!(teams_meeting_url(&at_most));
+        assert!(!teams_meeting_url(&format!("{at_most}a")));
+        assert!(teams_meeting_url("HTTPS://TEAMS.MICROSOFT.COM/meet/1"));
+        assert!(teams_meeting_url("https://EMEA.Teams.Microsoft.com/meet/1"));
+        for bad in ["https://teams.microsoft.com:/meet/1", "https://.teams.microsoft.com/meet/1", "https://a..teams.microsoft.com/meet/1"] {
+            assert!(!teams_meeting_url(bad), "{bad}");
+        }
     }
 
     #[test]
@@ -188,6 +200,8 @@ mod tests {
             assert_eq!(teams_meeting_value(ok).as_deref(), Some(ok));
         }
         assert_eq!(teams_meeting_value("  42 ").as_deref(), Some("42"));
+        let longest = "1".repeat(TEAMS_MEETING_VALUE_MAX);
+        assert_eq!(teams_meeting_value(&longest).as_deref(), Some(longest.as_str()), "64 at most");
         for bad in ["", "   ", &"1".repeat(65), "12<b>3", "12\n3", "１２３", "a_b", "é", "1\u{202E}2"] {
             assert_eq!(teams_meeting_value(bad), None, "{bad:?}");
         }

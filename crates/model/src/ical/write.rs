@@ -162,8 +162,8 @@ pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
         }
     }
     for e in events {
-        // An invitation doesn't carry the id of a meeting kept for the organizer's own use, nor
-        // when they dismissed their reminder.
+        // An invitation doesn't carry the id of a Webex or Teams meeting kept for the organizer's
+        // own use, nor when they dismissed their reminder.
         let bare;
         let e = if method.is_some() && (e.webex_id.is_some() || e.teams_meeting_id.is_some() || e.acknowledged.is_some()) {
             bare = CalEvent { webex_id: None, teams_meeting_id: None, acknowledged: None, ..e.clone() };

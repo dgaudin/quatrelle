@@ -654,55 +654,67 @@ labelled "Microsoft Teams".
 
 **Permission, apart.** Quatrelle signs in for the conversations without the meetings permission.
 With Teams off or signed out, the button opens File › Options › Teams. Signed in but without the
-permission, the window says "Teams meetings need your permission" with **Authorize Teams
-meetings**, which opens Microsoft's sign-in page again with `OnlineMeetings.ReadWrite` added
-(File › Options › Teams has the same button on its **Teams meetings** line, which reads "Teams
-meetings are allowed" afterwards). If that page is closed, refused or left for five minutes, the
-sign-in already there stays and the conversations go on. The permission is forgotten when you sign
-out, when Microsoft refuses it at a renewal (the conversations then carry on with their own
-permissions) and when Graph answers 403 saying it is missing; the next click asks again.
+permission, the window says "Teams meetings need your permission" with **Authorize Teams meetings**,
+which opens Microsoft's sign-in page again with `OnlineMeetings.ReadWrite` added (File › Options ›
+Teams has the same button on its **Teams meetings** line, which reads "Teams meetings are allowed"
+afterwards). While that page is open, the conversations pause. Refused there, they go on at once
+from the sign-in already there, without signing in again; a page closed or left unanswered keeps
+them paused until its five minutes are up, then they go on the same way. The permission is forgotten
+when you sign out, when Microsoft refuses it at a renewal (the conversations then carry on with
+their own permissions), when Graph answers 403 saying it is missing, and when a sign-in that asks
+for it is refused with no sign-in to go on from (the next **Sign in** asks for the conversations'
+permissions alone); the next click asks again.
 
 **The option.** File › Options › Calendar has **Make every meeting with guests a Teams meeting**
-(off at first; note: "An appointment you organize gets a Teams meeting with its first guest").
-On, an appointment you organize gets its meeting once it has a title, a start and a guest and
-nothing has been typed for a second, or when Send is pressed, which then waits for the answer.
-It is not added when the appointment already has a Teams meeting, a Webex meeting or room, was
-opened with guests already, belongs to someone else's calendar, or when the meeting was removed
-in this window; each window tries once. In a Microsoft 365 mailbox's calendar the appointment is
-marked, as below, Teams signed in or not, and Send goes at once. Elsewhere, with Teams off,
-signed out or without the permission, nothing is sent and the window says once "Teams meeting not
-added: sign in to Teams", with the button to do so.
+(off at first; note: "An appointment you organize gets a Teams meeting with its first guest"). On,
+an appointment you organize gets its meeting once it has a title, a start and a guest and nothing
+has been typed for a second, or when Send is pressed, which then waits for the answer. It is not
+added when the appointment already has a Teams meeting, a Webex meeting or room, was opened with
+guests already, belongs to someone else's calendar, or when the meeting was removed in this window;
+each window tries once. In a Microsoft 365 mailbox's calendar the appointment is marked, as below,
+Teams signed in or not, and Send goes at once. Elsewhere, with Teams off, signed out or without the
+permission, nothing is sent and the window says once "Teams meeting not added: sign in to Teams",
+with the button to do so; choosing a Microsoft 365 mailbox's calendar after that takes the words
+away, and the appointment is marked there.
 
 **In a Microsoft 365 mailbox's calendar.** There Exchange Online makes the meeting, not Quatrelle:
 **Add a Teams meeting** asks nothing of Teams, and needs neither Teams signed in nor the meetings
 permission. It marks the appointment, the window says "A Teams meeting will be added when the
 appointment is saved", and Save and Send don't wait. The appointment is saved with Graph's
-`isOnlineMeeting` set and `onlineMeetingProvider` `teamsForBusiness`; Exchange Online makes the
-meeting and writes its own text in the notes, and the link to join it comes back with the
-appointment: **Join** takes that link first. Exchange Online follows the appointment itself:
-changing, moving or deleting it asks nothing of Teams. Before the first save, **Remove the Teams
-meeting** takes the mark off. After it, Microsoft 365 keeps the meeting: the entry is grey
+`isOnlineMeeting` set and `onlineMeetingProvider` `teamsForBusiness`, sent again with each change of
+an appointment you organize, never with a change to your copy of someone else's meeting. Exchange
+Online makes the meeting and writes its own text in the notes, and the link to join it comes back
+with the appointment: **Join** takes that link first. Exchange Online follows the appointment
+itself: changing, moving or deleting it asks nothing of Teams. Before the first save, **Remove the
+Teams meeting** takes the mark off. After it, Microsoft 365 keeps the meeting: the entry is grey
 ("Microsoft 365 keeps an online meeting once it is made"), and Quatrelle never sends
-`isOnlineMeeting` as false. Choosing a calendar that isn't a Microsoft 365 mailbox's before the first save takes the
-mark off ("The Teams meeting was removed: add it again for this calendar"). The mark is never
-written in iCalendar, and never goes with a meeting Quatrelle asked Teams for.
+`isOnlineMeeting` as false. Choosing a calendar that isn't a Microsoft 365 mailbox's before the
+first save takes the mark off ("The Teams meeting was removed: add it again for this calendar"). The
+mark is never written in iCalendar, and never goes with a meeting Quatrelle asked Teams for.
 
 **What follows the appointment.** Only for an appointment you organize (or one with no
 organizer, no guests and no answer of yours): an event someone else organized never makes
 Quatrelle touch a meeting, whatever id it carries.
 
 - Saving a changed title, start or end sends what changed (a `PATCH`). A time zone changed alone
-  sends nothing unless it moves the start or the end: the meeting holds only those two instants,
-  in UTC. A new link in the answer replaces the old one in the notes, the place and the
-  conference.
+  sends nothing unless it moves the start or the end: the meeting holds only those two instants, in
+  UTC. A new link in the answer replaces the old one in the notes, the place and the conference.
+- What the meeting was last sent is kept until Quatrelle closes. A change saved while Teams couldn't
+  take it (signed out, switched off, offline) goes with the next save; after a restart that change,
+  or one still waiting to be sent when Quatrelle closed, is no longer known, and the meeting keeps
+  its old title or times until they change again (its link still works).
 - Deleting or cancelling the appointment, or saving it with the meeting removed, deletes the
   meeting. A meeting already gone (404) counts as deleted.
 - A series has one meeting, for all its occurrences, with the times of the first one: moving or
   deleting an occurrence sends nothing.
-- A window closed without saving deletes the meeting it made (when the answer is still on its
-  way, as it arrives). Quitting Quatrelle with such a window open does the same, waiting 3 seconds
-  at most.
-- A crash, or a deletion Teams refuses, can leave a meeting in Teams that no appointment in Quatrelle shows.
+- A window closed without saving deletes the meeting it made (when the answer is still on its way,
+  as it arrives). Quitting Quatrelle with such a window open does the same, waiting 3 seconds at
+  most.
+- A meeting can be left in Teams that no appointment in Quatrelle shows: after a crash; when Teams
+  refuses the deletion; when Teams is signed out, switched off or offline as the appointment is
+  deleted (a notice says so, and nothing tries again later); when the appointment, or its whole
+  calendar, is deleted from another program (Outlook, a phone); and when Teams is switched off while
+  the meeting is being made.
 - Guests get only the calendar's invitation; Teams sends them nothing.
 
 **Where the id lives.**
@@ -710,22 +722,21 @@ Quatrelle touch a meeting, whatever id it carries.
 | Kept in | As |
 |---|---|
 | iCalendar (CalDAV, the local cache) | `X-QUATRELLE-TEAMS-ID` |
-| Exchange, through EWS | an extended property named `TeamsMeetingId`, in Quatrelle's own property set beside Webex's, read with the appointment and written on create and update; removed when the appointment no longer has a meeting |
+| Exchange, through EWS | an extended property named `TeamsMeetingId`, in Quatrelle's own property set beside Webex's, read with the appointment and written on create and update; taken off only when the meeting is taken out of an appointment that had one (nothing is sent about it for one that never had one) |
 
-An invitation never carries it, nor does an appointment attached to a message; one in an
-invitation received is never read, and on an event you don't organize it is never used or
-written. A value that is not a plausible id (1 to 512 bytes of letters, digits, `-`, `_`, `=`, `+`, `/`) is
-dropped; in a request's address it is encoded as one segment.
+An invitation never carries it, nor does an appointment attached to a message; one in an invitation
+received is never read, and on an event you don't organize it is never used or written. A value that
+is not a plausible id (1 to 512 bytes of letters, digits, `-`, `_`, `=`, `+`, `/`) is dropped; in a
+request's address it is encoded as one segment.
 
 **With Webex.** An appointment has a Teams meeting or a Webex meeting or room, not both: a Teams
-meeting (or the mark Exchange Online makes one by) greys the Webex button and rooms, a Webex
-meeting or room greys **Add a Teams meeting**
-("This appointment has a Webex meeting or room: remove it first", "This appointment has a Teams
-meeting: remove it first"), and removing one frees the other. Nothing falls back to Webex by
-itself (see [docs/webex.md](webex.md)). An appointment of someone else's calendar greys the button
-with "A Teams meeting can only be added to an appointment you organize". Moving the appointment
-to a calendar that can't hold a meeting takes the meeting out ("The Teams meeting was removed: add
-it again for this calendar").
+meeting (or the mark Exchange Online makes one by) greys the Webex button and rooms, a Webex meeting
+or room greys **Add a Teams meeting** ("This appointment has a Webex meeting or room: remove it
+first", "This appointment has a Teams meeting: remove it first"), and removing one frees the other.
+Nothing falls back to Webex by itself (see [docs/webex.md](webex.md)). An appointment of someone
+else's calendar greys the button with "A Teams meeting can only be added to an appointment you
+organize". Moving the appointment to a calendar that can't hold a meeting takes the meeting out
+("The Teams meeting was removed: add it again for this calendar").
 
 **When it fails.** The window says why and the appointment is left as it was:
 
@@ -739,13 +750,15 @@ it again for this calendar").
 | no network | "The Teams meeting couldn't be created: no connection" |
 | any other status | "Teams answered 400: BadRequest", Graph's status and its code, never its message, which may quote content |
 
-A failed update or deletion is a notice, "The Teams meeting couldn't be updated: …" or "…
-deleted: …". Requests wait in one queue of 32, served before anything else the worker does, one at
-a time; the 33rd answers "no connection" without a request, as does one that waited two minutes
-and all of them when Work offline turns on. At most 16 requests for a new meeting wait at once.
-A 429 is waited out and sent again, twice at most (three sends in all); a 503 is sent again for an update or a
-deletion, never for a creation, so none is made twice. Nothing is hidden: no failure ever
-becomes a Webex meeting or a room.
+A failed update or deletion is a notice, "The Teams meeting couldn't be updated: …" or "… deleted:
+…". Requests wait in one queue of 32, served before anything else the worker does, one at a time;
+the 33rd answers "no connection" without a request, as does one that waited two minutes and all of
+them when Work offline turns on. At most 16 requests for a new meeting wait at once. A 429 is waited
+out and sent again, twice at most (three sends in all); a 503 is sent again for an update or a
+deletion, never for a creation, so none is made twice. Once Graph says the permission is missing,
+the requests waiting, and those that come until it is given again, get the same answer without
+asking Graph. If the part of Quatrelle that talks to Teams can't start, every request is answered
+"no connection". Nothing is hidden: no failure ever becomes a Webex meeting or a room.
 
 **What is checked in Teams' answer.** It comes from a server, so it is read as hostile:
 
@@ -763,18 +776,18 @@ becomes a Webex meeting or a room.
   out); an end at or before the start becomes half an hour after it. The passcode is never
   written to a log or a file; the log names no title, link or id.
 
-**Not tried on a real account yet** (see `docs/gaps.md`): creating, changing and deleting a
-meeting, the `TeamsMeetingId` property on a real on-premises Exchange, the hosts of the links
-Teams gives, and a meeting Exchange Online makes in a Microsoft 365 mailbox's calendar (tried
-against a fake Graph only).
+**Not tried on a real account yet** (see `docs/gaps.md`): creating, changing and deleting a meeting,
+the `TeamsMeetingId` property on a real on-premises Exchange (set, and taken off an appointment
+whose meeting is taken out), the hosts of the links Teams gives, and a meeting Exchange Online makes
+in a Microsoft 365 mailbox's calendar, with the mark sent again at each change (tried against a fake
+Graph only).
 
 ### Not yet
 
 Channels, teams, the options of a meeting set from Quatrelle (its lobby, who may present),
-co-organizers and delegates, starting a
-conversation with someone outside the directory (an address the directory doesn't know), and
-pictures placed between two paragraphs of a message (they go with the message, not in its text)
-are not there yet. For those, use Open in Teams.
+co-organizers and delegates, starting a conversation with someone outside the directory (an address
+the directory doesn't know), and pictures placed between two paragraphs of a message (they go with
+the message, not in its text) are not there yet. For those, use Open in Teams.
 
 ## 9. Sending the result back
 

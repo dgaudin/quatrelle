@@ -4,7 +4,7 @@
 //! conference is written with its label.
 
 use super::*;
-use crate::pim::teams::{TEAMS_CONFERENCE_LABEL, valid_teams_meeting_id};
+use crate::pim::teams::{TEAMS_CONFERENCE_LABEL, TEAMS_MEETING_ID_MAX, valid_teams_meeting_id};
 
 const ID: &str = "MSpkYzE3Njc0Yy04MWQ5";
 
@@ -36,7 +36,7 @@ fn the_teams_id_round_trips_in_the_events_own_file() {
 
 #[test]
 fn an_invitation_never_carries_or_brings_the_teams_id() {
-    for m in ["REQUEST", "CANCEL"] {
+    for m in ["REQUEST", "REPLY", "CANCEL"] {
         let out = write(&[teams_event(ID)], Some(m), 0);
         assert!(!out.contains("X-QUATRELLE-TEAMS-ID"), "{m}: {out}");
     }
@@ -51,7 +51,7 @@ fn an_invitation_never_carries_or_brings_the_teams_id() {
 
 #[test]
 fn an_implausible_teams_id_is_dropped_when_read() {
-    for junk in ["a b".to_string(), "x".repeat(513), "a?b".to_string()] {
+    for junk in ["a b".to_string(), "x".repeat(TEAMS_MEETING_ID_MAX + 1), "a?b".to_string(), String::new()] {
         let cal = parse(&text_with("", &format!("X-QUATRELLE-TEAMS-ID:{junk}\r\n")), 0);
         let e = cal.events.first().expect("one event");
         assert_eq!(e.teams_meeting_id, None, "{junk}");
@@ -60,6 +60,19 @@ fn an_implausible_teams_id_is_dropped_when_read() {
     assert!(valid_teams_meeting_id("a/b+c="));
     let cal = parse(&text_with("", "X-QUATRELLE-TEAMS-ID:a/b+c=\r\n"), 0);
     assert_eq!(cal.events.first().and_then(|e| e.teams_meeting_id.as_deref()), Some("a/b+c="));
+    // The longest kept.
+    let longest = "x".repeat(TEAMS_MEETING_ID_MAX);
+    let cal = parse(&text_with("", &format!("X-QUATRELLE-TEAMS-ID:{longest}\r\n")), 0);
+    assert_eq!(cal.events.first().and_then(|e| e.teams_meeting_id.as_deref()), Some(longest.as_str()));
+}
+
+/// An id that can't be one is never written, not even in the event's own file.
+#[test]
+fn an_implausible_teams_id_is_never_written() {
+    for junk in ["a b", "a?b", ""] {
+        let text = write(&[teams_event(junk)], None, 0);
+        assert!(!text.contains("X-QUATRELLE-TEAMS-ID"), "{junk:?}: {text}");
+    }
 }
 
 #[test]
