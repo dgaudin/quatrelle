@@ -17,6 +17,7 @@ use super::teams_option::{ZOE, frame_at, now, press_at, saved, type_guest, with_
 use super::webex::{button, open_webex_menu};
 use super::*;
 use crate::i18n::{Lang, tr};
+use crate::pim_dialogs::TeamsPrompt;
 use crate::pim_dialogs::teams_meeting::{TeamsButton, button_state, remove};
 
 /// The mailbox's calendar, and a colleague's the account lists.
@@ -55,7 +56,7 @@ fn meeting_jobs(jobs: &Jobs) -> usize {
 }
 
 /// Whether `said` shows once the pointer rests on the text `label`.
-fn hover_says(ctx: &egui::Context, a: &mut MailApp, label: &str, said: &str) -> bool {
+pub(super) fn hover_says(ctx: &egui::Context, a: &mut MailApp, label: &str, said: &str) -> bool {
     let at = settled_text_at(ctx, a, label, SIZE).unwrap_or_else(|| panic!("{label} isn't drawn"));
     frame_sized(ctx, a, vec![Event::PointerMoved(at)], SIZE);
     (0..60).any(|_| text_at(&frame_shapes(ctx, a, vec![], SIZE), said).is_some())
@@ -264,6 +265,33 @@ fn the_option_marks_it_and_send_goes_at_once() {
     let e = saved(&a, "Review").expect("sent");
     assert!(e.teams_online, "with the mark");
     assert_eq!(e.attendees.iter().map(|x| x.email.as_str()).collect::<Vec<_>>(), [ZOE]);
+    assert_eq!(meeting_jobs(&jobs), 0, "nothing asked of Teams");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// T15: the option's "Teams meeting not added", said for a calendar Quatrelle asks Teams for
+/// (Teams signed out), goes once a Microsoft 365 mailbox's calendar is chosen, where Exchange
+/// Online makes the meeting without Teams; and the option marks the appointment there.
+#[test]
+fn not_added_elsewhere_then_the_mailbox_chosen_marks_it() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-mailbox-not-added", "Budget");
+    a.ui.event_windows.clear();
+    served(&mut a, "sample", true);
+    calendar(&mut a, "sample", MAILBOX, false);
+    a.session.prefs.teams.signed_in = false;
+    open_new(&ctx, &mut a);
+    (form(&mut a).summary, form(&mut a).inviting) = ("Budget".into(), true);
+    choose(&mut a, "sample", quatrelle_engine::model::pim::LOCAL);
+    let t = now(&ctx) + 1.0;
+    type_guest(&ctx, &mut a, ZOE, t);
+    frame_at(&ctx, &mut a, vec![], t + 1.1);
+    assert_eq!(form(&mut a).teams_prompt, Some(TeamsPrompt::NotAdded), "said for this computer's calendar");
+    choose(&mut a, "sample", MAILBOX);
+    frame_at(&ctx, &mut a, vec![], t + 1.2);
+    let f = form(&mut a);
+    assert!(f.teams_prompt.is_none(), "not said where Teams isn't needed");
+    assert!(f.teams_online, "marked there");
+    assert!(settled_text_at(&ctx, &mut a, "Teams meeting not added: sign in to Teams", SIZE).is_none());
     assert_eq!(meeting_jobs(&jobs), 0, "nothing asked of Teams");
     let _ = std::fs::remove_dir_all(dir);
 }

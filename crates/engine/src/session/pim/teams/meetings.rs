@@ -288,7 +288,19 @@ impl Session {
         m.deleting = 0;
     }
 
+    /// What an answer says of Teams itself, taken at once: the worker said it first (the permission
+    /// let go, the sign-in no longer good), but its word may still wait behind others in the
+    /// window's queue (D17), and the window asking for one or the other says so from the answer.
+    fn teams_meeting_says(&mut self, error: Option<&TeamsMeetingError>) {
+        match error {
+            Some(TeamsMeetingError::Consent) => self.prefs.teams.meetings = false,
+            Some(TeamsMeetingError::SignIn) => self.teams.status = Status::SignInAgain,
+            _ => {}
+        }
+    }
+
     pub(super) fn teams_meeting_created(&mut self, ask: u64, meeting: Option<TeamsMeeting>, error: Option<TeamsMeetingError>) {
+        self.teams_meeting_says(error.as_ref());
         let Some(asked) = self.teams_meetings.asks.remove(&ask) else {
             return log::info!("teams: the answer to a meeting nobody asked for was passed over");
         };
@@ -306,6 +318,7 @@ impl Session {
     }
 
     pub(super) fn teams_meeting_updated(&mut self, id: &str, meeting: Option<TeamsMeeting>, error: Option<TeamsMeetingError>) {
+        self.teams_meeting_says(error.as_ref());
         let m = &mut self.teams_meetings;
         let started_from = m.unacknowledged.get_mut(id).and_then(|q| q.pop_front());
         if m.unacknowledged.get(id).is_some_and(|q| q.is_empty()) {
@@ -382,6 +395,7 @@ impl Session {
     }
 
     pub(super) fn teams_meeting_deleted(&mut self, error: Option<TeamsMeetingError>) {
+        self.teams_meeting_says(error.as_ref());
         self.teams_meetings.deleting = self.teams_meetings.deleting.saturating_sub(1);
         if let Some(e) = error {
             self.teams_meeting_failed(true, &e);

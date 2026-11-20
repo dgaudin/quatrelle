@@ -641,7 +641,7 @@ impl Session {
     }
 }
 
-pub(super) fn check_event(e: &CalEvent) -> Result<(), CmdError> {
+pub(crate) fn check_event(e: &CalEvent) -> Result<(), CmdError> {
     if e.summary.trim().is_empty() {
         return Err(CmdError::Params("give the event a title".into()));
     }

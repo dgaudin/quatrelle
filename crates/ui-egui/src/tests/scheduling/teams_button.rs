@@ -13,6 +13,7 @@ use quatrelle_engine::model::pim::teams::{self, TeamsMeeting, TeamsMeetingError}
 use quatrelle_engine::model::{Job, WebexMeeting};
 use quatrelle_engine::{TeamsMeetingPath, WebexRoom};
 
+use super::teams_mailbox::hover_says;
 use super::teams_meeting::{ID, Jobs, LINK, OPTIONS, SIZE, allowed, appointment, backend, click, creates, deletes, meeting, open_new, signed_in};
 use super::webex::{button, open_webex_menu};
 use super::*;
@@ -233,6 +234,9 @@ fn without_the_permission_the_window_offers_to_authorize() {
     allowed(&mut a, true);
     assert!(settled_text_at(&ctx, &mut a, "Teams meetings need your permission", SIZE).is_none());
     assert!(settled_text_at(&ctx, &mut a, "Authorize Teams meetings", SIZE).is_none());
+    // T11: done with once given: the permission lost again later doesn't bring the words back.
+    allowed(&mut a, false);
+    assert!(settled_text_at(&ctx, &mut a, "Teams meetings need your permission", SIZE).is_none(), "not without a click");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -324,15 +328,17 @@ fn each_refusal_says_its_words() {
         (NotSignedIn, "Teams is signed out"),
         (Consent, "Teams meetings need your permission"),
     ];
-    for (ask, (e, words)) in said.into_iter().enumerate() {
+    let asks = said.len();
+    for (e, words) in said {
         assert_eq!(error_text(&e), words);
-        let ask = ask as u64 + 1;
         a.ui.backstage = None;
-        // The worker says the permission went along with its refusal.
+        (form(&mut a).error, form(&mut a).teams_prompt) = (None, None);
+        a.session.prefs.teams.meetings = true;
+        click(&ctx, &mut a, "Teams Meeting");
+        assert!(form(&mut a).teams_wait.is_some(), "{words}: asked of Teams");
+        // Teams' answer, as the worker gives it: the permission went along with its refusal.
         a.session.prefs.teams.meetings = e != Consent;
-        a.session.teams_meetings.answers.insert(ask, Err(e.clone()));
-        (form(&mut a).teams_wait, form(&mut a).error, form(&mut a).teams_prompt) = (Some(ask), None, None);
-        frame_sized(&ctx, &mut a, vec![], SIZE);
+        answer(&ctx, &mut a, None, Some(e.clone()));
         let f = form(&mut a);
         assert_eq!((f.location.as_str(), f.description.as_str(), f.join.as_deref()), ("Room 4", "Agenda", None), "{words}");
         assert!(f.teams_wait.is_none() && f.teams_meeting_id.is_none() && !f.teams_fresh, "{words}");
@@ -359,7 +365,27 @@ fn each_refusal_says_its_words() {
         }
     }
     assert!(a.session.teams_meetings.answers.is_empty(), "each taken once");
-    assert!(creates(&jobs).is_empty());
+    assert_eq!(creates(&jobs).len(), asks, "one request each");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// T11: the window's "Sign in to Teams again" is done with once Teams is signed in again, however
+/// that came (File › Options › Teams, say), and doesn't come back by itself after.
+#[test]
+fn signed_in_again_elsewhere_the_window_no_longer_asks() {
+    let (mut a, dir, ctx, _) = appointment("teams-sign-in-stale", "Budget");
+    a.session.teams.status = teams::Status::UpToDate;
+    click(&ctx, &mut a, "Teams Meeting");
+    // The answer comes before the worker's word that the sign-in no longer holds (D17).
+    answer(&ctx, &mut a, None, Some(TeamsMeetingError::SignIn));
+    settled_text_at(&ctx, &mut a, "Sign in to Teams again", SIZE).expect("asked");
+    a.session.teams.status = teams::Status::SignInAgain;
+    settled_text_at(&ctx, &mut a, "Sign in to Teams again", SIZE).expect("still asked");
+    a.session.teams.status = teams::Status::UpToDate;
+    assert!(settled_text_at(&ctx, &mut a, "Sign in to Teams again", SIZE).is_none(), "done with");
+    assert_eq!(form(&mut a).teams_prompt, None);
+    a.session.teams.status = teams::Status::SignInAgain;
+    assert!(settled_text_at(&ctx, &mut a, "Sign in to Teams again", SIZE).is_none(), "not by itself");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -489,6 +515,7 @@ fn only_an_appointment_of_the_users_takes_one() {
     form(&mut a).can_invite = false;
     assert_eq!(button_state(form(&mut a), TeamsMeetingPath::Standalone), TeamsButton::Off(NOT_YOURS));
     assert_eq!(pressable(&ctx, &mut a, "Teams Meeting"), Some(false));
+    assert!(hover_says(&ctx, &mut a, "Teams Meeting", NOT_YOURS), "its tooltip says why");
     form(&mut a).can_invite = true;
     let uid = saved_and_opened(&ctx, &mut a);
     assert_eq!(pressable(&ctx, &mut a, "Teams Meeting"), Some(true), "a lone appointment of the user's");

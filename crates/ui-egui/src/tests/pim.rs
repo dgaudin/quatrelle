@@ -16,6 +16,7 @@ mod item_files;
 mod new_item_keys;
 mod notes;
 mod pane_width;
+mod teams_queue;
 
 /// People's list and A–Z index were a few pixels wider than the pane, so the pane (shared by
 /// every module) grew each frame to its widest and Mail, Calendar and Notes stayed that wide.

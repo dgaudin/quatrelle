@@ -18,6 +18,7 @@ mod exchange;
 mod follow;
 mod mailbox;
 mod option;
+mod remove;
 
 /// The creation the tests answer.
 const ASK: u64 = 7;

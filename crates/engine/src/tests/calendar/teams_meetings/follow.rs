@@ -77,7 +77,7 @@ fn delete(id: &str) -> teams::Job {
 }
 
 /// The last notice: its template, its values, whether it's an error.
-fn last_notice(s: &Session) -> Option<(&'static str, Vec<(&'static str, String)>, bool)> {
+pub(super) fn last_notice(s: &Session) -> Option<(&'static str, Vec<(&'static str, String)>, bool)> {
     s.notices.last().map(|n| (n.template, n.values.clone(), n.error))
 }
 
@@ -94,6 +94,13 @@ fn adding_needs_a_title_a_start_a_sign_in_and_the_permission() {
     blank["add"]["summary"] = json!("  ");
     assert!(is_params(s.run("event.teamsMeeting", &blank)));
     assert!(is_params(s.run("event.teamsMeeting", &without("start"))));
+    // T9: a start that is none, an end before it, a meeting of more than a year: not an
+    // appointment's times, nothing asked.
+    for (k, v) in [("start", Value::Null), ("end", json!("2026-10-21T14:00")), ("end", json!("2028-01-01T00:00"))] {
+        let mut p = add("sample", LOCAL_CALENDAR);
+        p["add"][k] = v.clone();
+        assert!(is_params(s.run("event.teamsMeeting", &p)), "{k}: {v}");
+    }
     assert!(is_params(s.run("event.teamsMeeting", &json!({}))));
     for (on, signed_in, meetings) in [(false, true, true), (true, false, true), (true, true, false)] {
         let t = &mut s.prefs.teams;
@@ -584,6 +591,9 @@ fn teams_and_webex_ids_never_go_together() {
     assert!(is_params(s.run("event.create", &both)));
     let room = json!({"url": "https://acme.webex.com/meet/riley"});
     assert!(is_params(s.run("event.create", &json!({"summary": "x", "start": "2026-10-21T15:00", "teamsMeetingId": "m1", "conference": room}))));
+    // A scheduled Webex meeting's join page as the conference is Webex too.
+    let scheduled = json!({"url": "https://acme.webex.com/acme/j.php?MTID=m1"});
+    assert!(is_params(s.run("event.create", &json!({"summary": "x", "start": "2026-10-21T15:00", "teamsMeetingId": "m1", "conference": scheduled}))));
     let uid = alone(&mut s);
     assert!(is_params(s.run("event.update", &json!({"uid": uid, "webexId": "w1"}))));
     assert!(is_params(s.run("event.update", &json!({"uid": uid, "conference": room}))));
@@ -623,10 +633,11 @@ fn signed_out_the_appointment_is_saved_and_the_meeting_waits() {
     done(s);
 }
 
-/// A meeting of an earlier session isn't in `sent`: changed while signed out, it goes in with the
-/// fields from before the change, and the next save sends that change with its own.
+/// A meeting of an earlier session isn't in `sent`: changed while the permission is missing, it
+/// goes in with the fields from before the change, and the next save sends that change with its
+/// own.
 #[test]
-fn signed_out_a_meeting_of_an_earlier_session_gets_the_whole_change() {
+fn without_the_permission_a_meeting_of_an_earlier_session_gets_the_whole_change() {
     let mut s = signed_in("teams-signed-out-earlier");
     let uid = alone(&mut s);
     let before = TeamsMeetingFields::of(&event(&s, &uid));
@@ -645,7 +656,7 @@ fn signed_out_a_meeting_of_an_earlier_session_gets_the_whole_change() {
 }
 
 #[test]
-fn signed_out_a_deleted_appointment_says_its_meeting_stays() {
+fn switched_off_a_deleted_appointment_says_its_meeting_stays() {
     let mut s = signed_in("teams-signed-out-delete");
     let uid = alone(&mut s);
     sent_as_now(&mut s, &uid, "m1");

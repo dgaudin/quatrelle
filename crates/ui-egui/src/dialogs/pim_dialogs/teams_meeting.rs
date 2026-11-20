@@ -300,10 +300,11 @@ pub(crate) fn error_text(e: &TeamsMeetingError) -> String {
 /// What the window says of its Teams meeting under its ribbon: that one will be added when the
 /// appointment is saved, while it's marked for Exchange Online and not saved yet. Then what it asks
 /// before Teams can make its meeting: the permission (Authorize Teams meetings), said while it's
-/// missing, or a new sign-in (Sign in, then done with); both open Microsoft's sign-in. Or that the
-/// option's meeting wasn't added, said until Teams can make meetings, with what's missing: the
-/// permission, or Teams switched on and signed in (Sign in opens Options › Teams). The buttons wait
-/// while a sign-in is under way.
+/// missing and done with once it's given, or a new sign-in (Sign in), done with once clicked or
+/// once Teams is signed in and going again, however that came; both open Microsoft's sign-in.
+/// Neither comes back by itself. Or that the option's meeting wasn't added, said until Teams can
+/// make meetings, with what's missing: the permission, or Teams switched on and signed in (Sign in
+/// opens Options › Teams). The buttons wait while a sign-in is under way.
 pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
     if f.teams_online && !f.teams_online_saved {
         ui.label(RichText::new(tl!("A Teams meeting will be added when the appointment is saved")).color(t.dim).small());
@@ -311,12 +312,15 @@ pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, ac
     }
     let sign_in = |meetings: bool| Action::Run("teams.signIn", json!({"meetings": meetings}));
     let (said, button, act) = match f.teams_prompt {
-        // D17: kept while the permission is missing, whichever of Teams' answer and the worker's
-        // word that it went comes first.
+        // The answer that asked for it says it went (D17: the engine takes that at once).
         Some(TeamsPrompt::Consent) if !s.prefs.teams.meetings => {
             (error_text(&TeamsMeetingError::Consent), tl!("Authorize Teams meetings"), sign_in(true))
         }
-        Some(TeamsPrompt::SignIn) => (error_text(&TeamsMeetingError::SignIn), tl!("Sign in"), sign_in(false)),
+        Some(TeamsPrompt::SignIn) if !going(&s.teams.status) => (error_text(&TeamsMeetingError::SignIn), tl!("Sign in"), sign_in(false)),
+        Some(TeamsPrompt::Consent | TeamsPrompt::SignIn) => {
+            f.teams_prompt = None;
+            return;
+        }
         Some(TeamsPrompt::NotAdded) => {
             let said = tl!("Teams meeting not added: sign in to Teams").to_string();
             match s.teams_meetings_usable() {
@@ -340,15 +344,29 @@ pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, ac
     ui.add_space(4.0);
 }
 
+/// Whether Teams is signed in and going (its copy read, up to date, offline for now): a window's
+/// own request to sign in again is done with then.
+fn going(status: &Status) -> bool {
+    matches!(status, Status::Copying { .. } | Status::UpToDate | Status::NoKeychain | Status::Offline)
+}
+
 /// The calendar chosen takes a meeting by another path than the one it was added by (`path`): the
 /// meeting made in this window, or the one on its way, can't stay but in a calendar Quatrelle asks
 /// Teams for, and the mark not saved yet but in a Microsoft 365 mailbox's. It's taken out as
 /// [`remove`] does (the one on its way given up, and a send waiting for it let go), and the window
 /// says to add one again. The calendar took it out, not the user: the option may add one again in
-/// a calendar that takes it. `event.teamsMeeting`'s params for it; none when there's nothing to
-/// delete, or the calendar takes it.
+/// a calendar that takes it. A Microsoft 365 mailbox's calendar chosen after the option said it
+/// couldn't add one lets it try there. `event.teamsMeeting`'s params for it; none when there's
+/// nothing to delete, or the calendar takes it.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn calendar_changed(f: &mut EventForm, path: TeamsMeetingPath) -> Option<Value> {
+    // The option's "not added" was said for a calendar Quatrelle asks Teams for: a Microsoft 365
+    // mailbox's makes the meeting without Teams, and the option, which added nothing in this
+    // window, may mark the appointment there.
+    if path == TeamsMeetingPath::Mailbox && f.teams_prompt == Some(TeamsPrompt::NotAdded) {
+        f.teams_prompt = None;
+        f.teams_auto_tried = false;
+    }
     let moved = tl!("The Teams meeting was removed: add it again for this calendar");
     if f.teams_online && !f.teams_online_saved && path != TeamsMeetingPath::Mailbox {
         f.teams_online = false;

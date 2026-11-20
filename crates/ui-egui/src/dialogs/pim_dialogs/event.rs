@@ -145,10 +145,11 @@ pub struct EventForm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TeamsPrompt {
     /// The permission to make meetings: Authorize Teams meetings opens Microsoft's sign-in for
-    /// it. Said while it's missing, and gone once it's given (D17: whichever of Teams' answer and
-    /// the worker's word comes first).
+    /// it. Said while it's missing (the answer that asked for it says so, D17), and done with once
+    /// it's given.
     Consent,
-    /// Teams refused the sign-in: Sign in asks for it again.
+    /// Teams refused the sign-in: Sign in asks for it again. Done with once clicked, or once Teams
+    /// is signed in and going again.
     SignIn,
     /// File › Options › Calendar's Teams meeting for guests couldn't be made: Teams signed out or
     /// switched off (Sign in opens Options › Teams), or the permission missing (Authorize Teams

@@ -19,7 +19,7 @@ use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 use super::pim::event_from;
 use super::*;
 use crate::mime::Typed;
-use crate::session::pim::Created;
+use crate::session::pim::{Created, check_event};
 use crate::{Module, TEAMS_MEETING_ASKS_MAX, TEAMS_RANGES_MAX, TEAMS_TOO_MANY_FILES, TeamsMeetingAsk, TeamsMeetingPath, TeamsPage};
 
 const OPTIONS: &str = "File › Options › Teams";
@@ -506,12 +506,17 @@ fn meeting(s: &mut Session, v: &Value) -> CmdResult {
 /// asked, and neither Teams' sign-in nor its permission is needed (D15); the window marks the
 /// appointment.
 fn meeting_add(s: &mut Session, v: &Value) -> CmdResult {
-    if p::str(v, "summary").is_none_or(|t| t.trim().is_empty()) || v.get("start").is_none() {
+    // A start that is one: a date, or Unix seconds (`null` is none).
+    let start = p::str(v, "start").is_some() || v.get("start").and_then(Value::as_i64).is_some();
+    if p::str(v, "summary").is_none_or(|t| t.trim().is_empty()) || !start {
         return Err(CmdError::Params("a Teams meeting needs a title and a start".into()));
     }
     let given = |k: &str| p::str(v, k).filter(|x| !x.is_empty()).ok_or_else(|| CmdError::Params(format!("`{k}` (the appointment's) is required")));
     let (account, calendar) = (given("account")?, given("calendar")?);
-    let fields = TeamsMeetingFields::of(&event_from(s, v, CalEvent::default())?);
+    // The times an appointment may have, as its save checks them.
+    let e = event_from(s, v, CalEvent::default())?;
+    check_event(&e)?;
+    let fields = TeamsMeetingFields::of(&e);
     match s.teams_meeting_path(account, calendar) {
         TeamsMeetingPath::Standalone => {}
         TeamsMeetingPath::Mailbox => return Ok(json!({"path": "mailbox"})),
