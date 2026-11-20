@@ -27,7 +27,7 @@ pub(super) fn rooms_menu(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session
         add_room(f, &room, &all);
         return true;
     }
-    let free = f.webex_id.is_none() && f.teams_meeting_id.is_none();
+    let free = f.webex_id.is_none() && !f.has_teams_meeting();
     let scheduled = if f.webex_id.is_some() { tl!("This appointment already has its Webex meeting") } else { teams_holds_it() };
     for room in rooms {
         let name = room.name.trim();
@@ -149,7 +149,7 @@ pub(crate) fn link_refused<'a>(link: &str, others: impl IntoIterator<Item = &'a 
 /// link as the place when that's empty or another room's (one typed is kept); Join; its
 /// conference. Nothing while the appointment has its scheduled Webex meeting, or a Teams meeting.
 pub(crate) fn add_room(f: &mut EventForm, room: &WebexRoom, rooms: &[WebexRoom]) {
-    if f.webex_id.is_some() || f.teams_meeting_id.is_some() {
+    if f.webex_id.is_some() || f.has_teams_meeting() {
         return;
     }
     let url = room.url.trim();

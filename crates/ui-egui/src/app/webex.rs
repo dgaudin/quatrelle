@@ -12,7 +12,7 @@ impl MailApp {
     /// window gone, already waiting for one, or holding a Teams meeting or waiting for one (whatever
     /// asked first in the frame), asks nothing.
     pub(super) fn for_webex(&mut self, w: u64, p: Value) {
-        let free = |f: &crate::pim_dialogs::EventForm| f.webex_wait.is_none() && f.teams_wait.is_none() && f.teams_meeting_id.is_none();
+        let free = |f: &crate::pim_dialogs::EventForm| f.webex_wait.is_none() && f.teams_wait.is_none() && !f.has_teams_meeting();
         let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, f)| *x == w && free(f)) else { return };
         match self.session.run("webex.createMeeting", &p) {
             Ok(v) => f.webex_wait = v.get("ask").and_then(Value::as_u64),

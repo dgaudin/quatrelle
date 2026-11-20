@@ -2416,3 +2416,6 @@ presence	Offline	오프라인
 	Make every meeting with guests a Teams meeting	참석자가 있는 모든 회의를 Teams 회의로 만들기
 	An appointment you organize gets a Teams meeting with its first guest	직접 주최하는 약속에 첫 참석자를 추가하면 Teams 회의가 추가됩니다
 	Teams meeting not added: sign in to Teams	Teams 회의가 추가되지 않았습니다: Teams에 로그인하세요
+# Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
+	A Teams meeting will be added when the appointment is saved	약속을 저장하면 Teams 회의가 추가됩니다
+	Microsoft 365 keeps an online meeting once it is made	Microsoft 365는 한 번 만든 온라인 모임을 유지합니다

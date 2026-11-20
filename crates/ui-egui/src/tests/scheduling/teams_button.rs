@@ -8,8 +8,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use quatrelle_engine::model::pim::CalendarInfo;
 use quatrelle_engine::model::pim::teams::{self, TeamsMeeting, TeamsMeetingError};
-use quatrelle_engine::model::pim::{CalendarInfo, LOCAL};
 use quatrelle_engine::model::{Job, WebexMeeting};
 use quatrelle_engine::{TeamsMeetingPath, WebexRoom};
 
@@ -45,13 +45,13 @@ impl crate::Services for Opening {
 }
 
 /// The pages the app opens from now on.
-fn opening(a: &mut MailApp) -> Rc<RefCell<Vec<String>>> {
+pub(super) fn opening(a: &mut MailApp) -> Rc<RefCell<Vec<String>>> {
     let opened = Rc::new(RefCell::new(Vec::new()));
     a.services = Box::new(Opening(opened.clone()));
     opened
 }
 
-fn form(a: &mut MailApp) -> &mut EventForm {
+pub(super) fn form(a: &mut MailApp) -> &mut EventForm {
     &mut a.ui.event_windows[0].1
 }
 
@@ -68,7 +68,7 @@ pub(super) fn open_menu(ctx: &egui::Context, a: &mut MailApp) {
 }
 
 /// Whether the button `label` can be pressed (`None`: it isn't drawn).
-fn pressable(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<bool> {
+pub(super) fn pressable(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<bool> {
     button(ctx, a, label).map(|b| b.1)
 }
 
@@ -87,7 +87,7 @@ fn made(ctx: &egui::Context, a: &mut MailApp) {
 }
 
 /// The appointment in window 0 saved, and opened again in a window of its own: its uid.
-fn saved_and_opened(ctx: &egui::Context, a: &mut MailApp) -> String {
+pub(super) fn saved_and_opened(ctx: &egui::Context, a: &mut MailApp) -> String {
     let w = a.ui.event_windows[0].0;
     let p = form(a).params();
     a.for_event(w, "event.create", p);
@@ -505,31 +505,6 @@ fn only_an_appointment_of_the_users_takes_one() {
     assert_eq!(pressable(&ctx, &mut a, "Teams Meeting"), Some(false));
     open_menu(&ctx, &mut a);
     assert_eq!(pressable(&ctx, &mut a, "Remove the Teams meeting"), Some(false));
-    assert!(creates(&jobs).is_empty());
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-/// D13: a Microsoft 365 mailbox's calendar is greyed for now (Exchange Online will make its own),
-/// someone else's always; the account's calendar on this computer takes one.
-#[test]
-fn a_graph_mailbox_is_greyed_for_now() {
-    let (mut a, dir, ctx, jobs) = appointment("teams-graph", "Budget");
-    a.ui.event_windows.clear();
-    served(&mut a, "sample", true);
-    calendar(&mut a, "sample", "AAMkAGI2", false);
-    calendar(&mut a, "sample", "AAMkBOSS", true);
-    open_new(&ctx, &mut a);
-    form(&mut a).summary = "Budget".into();
-    assert_eq!(a.session.teams_meeting_path("sample", "AAMkAGI2"), TeamsMeetingPath::Mailbox);
-    assert_eq!(button_state(form(&mut a), TeamsMeetingPath::Mailbox), TeamsButton::Off(""));
-    for (id, path) in [("AAMkAGI2", TeamsMeetingPath::Mailbox), ("AAMkBOSS", TeamsMeetingPath::Unavailable)] {
-        choose(&mut a, "sample", id);
-        assert_eq!(a.session.teams_meeting_path("sample", id), path);
-        assert_eq!(pressable(&ctx, &mut a, "Teams Meeting"), Some(false), "{id}");
-    }
-    assert_eq!(button_state(form(&mut a), TeamsMeetingPath::Unavailable), TeamsButton::Off(NOT_YOURS));
-    choose(&mut a, "sample", LOCAL);
-    assert_eq!(pressable(&ctx, &mut a, "Teams Meeting"), Some(true), "on this computer");
     assert!(creates(&jobs).is_empty());
     let _ = std::fs::remove_dir_all(dir);
 }

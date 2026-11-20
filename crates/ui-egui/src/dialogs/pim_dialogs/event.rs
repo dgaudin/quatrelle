@@ -100,6 +100,11 @@ pub struct EventForm {
     pub teams_allowed: bool,
     /// The Teams meeting it holds, from the event or made here.
     pub teams_meeting_id: Option<String>,
+    /// Marked for Exchange Online to make it a Teams meeting as it's saved (a Microsoft 365
+    /// mailbox's calendar): from the event, or by Add a Teams meeting here.
+    pub teams_online: bool,
+    /// It was saved marked: Microsoft 365 keeps the meeting, and the mark can't be taken off.
+    pub teams_online_saved: bool,
     /// That meeting was made from this window and isn't saved: leaving deletes it.
     pub teams_fresh: bool,
     /// The creation being waited for: Save is off until its answer is in, and the button asks no
@@ -243,6 +248,8 @@ impl EventForm {
             webex_id: e.webex_id.clone(),
             teams_allowed: s.teams_meeting_can_hold(e),
             teams_meeting_id: e.teams_meeting_id.clone(),
+            teams_online: e.teams_online,
+            teams_online_saved: e.teams_online,
             teams_auto_tried: e.attendees.iter().any(|a| !a.is_resource()),
             conference: e.conference.clone(),
             conference_shown: e.conference.as_ref().is_some_and(|c| link_shown(&c.url, &e.location, &e.description)),
@@ -258,6 +265,12 @@ impl EventForm {
             return self.account.clone();
         }
         self.calendars.get(self.calendar).map_or_else(|| self.account.clone(), |c| c.0.clone())
+    }
+
+    /// Whether it has a Teams meeting: one asked of Teams, or the mark for Exchange Online to make
+    /// one. Either keeps Webex out.
+    pub(crate) fn has_teams_meeting(&self) -> bool {
+        self.teams_meeting_id.is_some() || self.teams_online
     }
 
     /// The rooms' names, as the place reads when the meeting is held in them.
@@ -388,6 +401,10 @@ impl EventForm {
         // Its Teams meeting, when one would be the user's: "" takes out the one it had.
         if self.teams_allowed {
             p["teamsMeetingId"] = json!(self.teams_meeting_id.as_deref().unwrap_or(""));
+        }
+        // Exchange Online makes it a Teams meeting: never `false`, which can't take one off.
+        if self.teams_online {
+            p["teamsOnline"] = json!(true);
         }
         // Its conference when a room or a meeting set it; `null` takes out the one whose link was
         // erased, or that went with its Teams meeting. One left as it opened isn't sent: the

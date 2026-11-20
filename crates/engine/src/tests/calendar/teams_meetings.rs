@@ -15,6 +15,7 @@ use super::*;
 use crate::TeamsMeetingAsk;
 
 mod follow;
+mod mailbox;
 mod option;
 
 /// The creation the tests answer.

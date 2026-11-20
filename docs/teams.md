@@ -619,9 +619,9 @@ ending within two minutes.
 A **Teams Meeting** button in the appointment window makes a Teams meeting through Microsoft
 Graph (`/me/onlineMeetings`), for an appointment on a calendar that is not a Microsoft 365
 mailbox (Exchange on premises, CalDAV, a local calendar). The meeting is made at the click, so the
-invitation can be read and changed before it is sent. The button is in the desktop app only. The
-calendar of a Microsoft 365 account is not covered yet: there the button's **Add a Teams
-meeting** stays grey.
+invitation can be read and changed before it is sent. The button is in the desktop app only. On
+the calendar of a Microsoft 365 mailbox, the appointment itself becomes the meeting (see **In a
+Microsoft 365 mailbox's calendar**, below).
 
 **The button.** It sits beside **Join** and **Webex Meeting**; a plain click does the first
 entry of its menu (**Teams Meeting menu**):
@@ -667,10 +667,25 @@ permissions) and when Graph answers 403 saying it is missing; the next click ask
 On, an appointment you organize gets its meeting once it has a title, a start and a guest and
 nothing has been typed for a second, or when Send is pressed, which then waits for the answer.
 It is not added when the appointment already has a Teams meeting, a Webex meeting or room, was
-opened with guests already, belongs to someone else's calendar or a Microsoft 365 account's,
-or when the meeting was removed in this window; each window tries once. With Teams off, signed
-out or without the permission, nothing is sent and the window says once "Teams meeting not added:
-sign in to Teams", with the button to do so.
+opened with guests already, belongs to someone else's calendar, or when the meeting was removed
+in this window; each window tries once. In a Microsoft 365 mailbox's calendar the appointment is
+marked, as below, Teams signed in or not, and Send goes at once. Elsewhere, with Teams off,
+signed out or without the permission, nothing is sent and the window says once "Teams meeting not
+added: sign in to Teams", with the button to do so.
+
+**In a Microsoft 365 mailbox's calendar.** There Exchange Online makes the meeting, not Quatrelle:
+**Add a Teams meeting** asks nothing of Teams, and needs neither Teams signed in nor the meetings
+permission. It marks the appointment, the window says "A Teams meeting will be added when the
+appointment is saved", and Save and Send don't wait. The appointment is saved with Graph's
+`isOnlineMeeting` set and `onlineMeetingProvider` `teamsForBusiness`; Exchange Online makes the
+meeting and writes its own text in the notes, and the link to join it comes back with the
+appointment: **Join** takes that link first. Exchange Online follows the appointment itself:
+changing, moving or deleting it asks nothing of Teams. Before the first save, **Remove the Teams
+meeting** takes the mark off. After it, Microsoft 365 keeps the meeting: the entry is grey
+("Microsoft 365 keeps an online meeting once it is made"), and Quatrelle never sends
+`isOnlineMeeting` as false. Choosing a calendar that isn't a Microsoft 365 mailbox's before the first save takes the
+mark off ("The Teams meeting was removed: add it again for this calendar"). The mark is never
+written in iCalendar, and never goes with a meeting Quatrelle asked Teams for.
 
 **What follows the appointment.** Only for an appointment you organize (or one with no
 organizer, no guests and no answer of yours): an event someone else organized never makes
@@ -703,7 +718,8 @@ written. A value that is not a plausible id (1 to 512 bytes of letters, digits, 
 dropped; in a request's address it is encoded as one segment.
 
 **With Webex.** An appointment has a Teams meeting or a Webex meeting or room, not both: a Teams
-meeting greys the Webex button and rooms, a Webex meeting or room greys **Add a Teams meeting**
+meeting (or the mark Exchange Online makes one by) greys the Webex button and rooms, a Webex
+meeting or room greys **Add a Teams meeting**
 ("This appointment has a Webex meeting or room: remove it first", "This appointment has a Teams
 meeting: remove it first"), and removing one frees the other. Nothing falls back to Webex by
 itself (see [docs/webex.md](webex.md)). An appointment of someone else's calendar greys the button
@@ -748,13 +764,14 @@ becomes a Webex meeting or a room.
   written to a log or a file; the log names no title, link or id.
 
 **Not tried on a real account yet** (see `docs/gaps.md`): creating, changing and deleting a
-meeting, the `TeamsMeetingId` property on a real on-premises Exchange, and the hosts of the links
-Teams gives.
+meeting, the `TeamsMeetingId` property on a real on-premises Exchange, the hosts of the links
+Teams gives, and a meeting Exchange Online makes in a Microsoft 365 mailbox's calendar (tried
+against a fake Graph only).
 
 ### Not yet
 
 Channels, teams, the options of a meeting set from Quatrelle (its lobby, who may present),
-co-organizers and delegates, a meeting made on a Microsoft 365 account's calendar, starting a
+co-organizers and delegates, starting a
 conversation with someone outside the directory (an address the directory doesn't know), and
 pictures placed between two paragraphs of a message (they go with the message, not in its text)
 are not there yet. For those, use Open in Teams.

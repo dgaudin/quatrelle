@@ -2420,3 +2420,6 @@ presence	Offline	離線
 	Make every meeting with guests a Teams meeting	將每個有與會者的會議設為 Teams 會議
 	An appointment you organize gets a Teams meeting with its first guest	由您召集的約會在新增第一位與會者時會獲得 Teams 會議
 	Teams meeting not added: sign in to Teams	未新增 Teams 會議: 請登入 Teams
+# Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
+	A Teams meeting will be added when the appointment is saved	儲存約會時將新增 Teams 會議
+	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 會保留已建立的線上會議

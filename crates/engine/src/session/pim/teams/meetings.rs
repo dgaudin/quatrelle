@@ -9,7 +9,10 @@
 //! meeting, and Teams unusable leaves it waiting for the next save. Meetings may be made while
 //! Teams is on, signed in, and the permission to make them was given, as the worker says
 //! ([`teams::Event::Meetings`]), and only in a calendar of the user's own ([`TeamsMeetingPath`]).
-//! This state is kept apart from [`TeamsState`]: signing out doesn't forget what was sent.
+//! In a Microsoft 365 mailbox's calendar none is asked of Teams: the appointment is marked
+//! ([`CalEvent::teams_online`]), and Exchange Online makes the meeting as it's saved and follows
+//! it, Teams signed in or not (D15). This state is kept apart from [`TeamsState`]: signing out
+//! doesn't forget what was sent.
 //!
 //! What is hostile here: Graph's answers, read and checked by the worker, bounded again here. An
 //! answer to an ask nobody made is dropped (the asks are at most [`TEAMS_MEETING_ASKS_MAX`]). A new
@@ -56,7 +59,8 @@ pub struct TeamsMeetingsState {
 pub enum TeamsMeetingPath {
     /// Quatrelle asks Teams for the meeting, and the meeting follows the appointment.
     Standalone,
-    /// A Microsoft 365 mailbox's calendar: Exchange Online makes the meeting with the appointment.
+    /// A Microsoft 365 mailbox's calendar: the appointment is marked, and Exchange Online makes
+    /// the meeting as it's saved and follows it; nothing is asked of Teams.
     Mailbox,
     /// A calendar Quatrelle doesn't know, or someone else's: no Teams meeting is added there.
     Unavailable,
@@ -72,7 +76,7 @@ pub struct TeamsAutoAsk {
     pub can_hold: bool,
     /// Its guests, required and optional (not its rooms).
     pub guests: usize,
-    /// It has a Teams meeting, or one is on its way.
+    /// It has a Teams meeting, or one is on its way, or Exchange Online is to make it one.
     pub has_teams: bool,
     /// It has a Webex meeting or room.
     pub has_webex: bool,
@@ -164,18 +168,28 @@ impl Session {
         }
     }
 
+    /// Whether an appointment saved in `calendar` of `account` (none: the account's first that
+    /// can be written, where `event.create` puts it) keeps the mark that makes it a Teams meeting
+    /// ([`CalEvent::teams_online`]): only in a Microsoft 365 mailbox's calendar of the user's own,
+    /// where Exchange Online makes the meeting.
+    pub(crate) fn teams_online_kept(&self, account: &str, calendar: Option<&str>) -> bool {
+        let first = || self.pim.get(account).and_then(|p| p.default_calendar()).map(|c| c.id.as_str());
+        calendar.or_else(first).is_some_and(|c| self.teams_meeting_path(account, c) == TeamsMeetingPath::Mailbox)
+    }
+
     /// What File › Options › Calendar's option to make every meeting with guests a Teams meeting
     /// does for an appointment's window: with the option on, an appointment of the user's own that
     /// has a guest, no Teams meeting, no Webex, and no Teams meeting the user removed in this
-    /// window, gets one, once per window, in a calendar Quatrelle makes the meeting for; Teams
-    /// can't make it, the window says so instead, once. Never in someone else's calendar, nor yet
-    /// in a Microsoft 365 mailbox's (D13: Exchange Online is to make its own there).
+    /// window, gets one, once per window. In a calendar Quatrelle makes the meeting for, Teams
+    /// unable to make it, the window says so instead, once; in a Microsoft 365 mailbox's, Exchange
+    /// Online makes it, whether Teams can or not (D15). Never in someone else's calendar.
     pub fn teams_meeting_auto(&self, a: &TeamsAutoAsk) -> TeamsAuto {
         if !self.prefs.teams_meeting_for_guests || !a.can_hold || a.guests == 0 || a.has_teams || a.has_webex || a.removed || a.tried {
             return TeamsAuto::No;
         }
         match a.path {
-            TeamsMeetingPath::Unavailable | TeamsMeetingPath::Mailbox => TeamsAuto::No,
+            TeamsMeetingPath::Unavailable => TeamsAuto::No,
+            TeamsMeetingPath::Mailbox => TeamsAuto::Add,
             TeamsMeetingPath::Standalone if self.teams_meetings_usable().is_ok() => TeamsAuto::Add,
             TeamsMeetingPath::Standalone => TeamsAuto::SayOnce,
         }

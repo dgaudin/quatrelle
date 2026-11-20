@@ -2414,3 +2414,6 @@ presence	Offline	Offline
 	Make every meeting with guests a Teams meeting	Van elke vergadering met gasten een Teams-vergadering maken
 	An appointment you organize gets a Teams meeting with its first guest	Een afspraak die je zelf organiseert, krijgt bij de eerste gast een Teams-vergadering
 	Teams meeting not added: sign in to Teams	Teams-vergadering niet toegevoegd: meld je aan bij Teams
+# Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
+	A Teams meeting will be added when the appointment is saved	Er wordt een Teams-vergadering toegevoegd wanneer de afspraak wordt opgeslagen
+	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 houdt een onlinevergadering zodra die is gemaakt

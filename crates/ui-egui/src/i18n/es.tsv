@@ -2418,3 +2418,6 @@ presence	Offline	Desconectado
 	Make every meeting with guests a Teams meeting	Convertir cada reunión con invitados en una reunión de Teams
 	An appointment you organize gets a Teams meeting with its first guest	Una cita que usted organiza recibe una reunión de Teams con su primer invitado
 	Teams meeting not added: sign in to Teams	Reunión de Teams no agregada: inicie sesión en Teams
+# Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
+	A Teams meeting will be added when the appointment is saved	Se agregará una reunión de Teams al guardar la cita
+	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 conserva una reunión en línea una vez creada

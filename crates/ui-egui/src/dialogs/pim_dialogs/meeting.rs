@@ -209,7 +209,7 @@ fn submit(f: &mut EventForm, acts: &mut Vec<Action>) {
 #[cfg(not(target_arch = "wasm32"))]
 fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, busy: bool, acts: &mut Vec<Action>) {
     use super::webex_rooms::{asking_now, rooms_menu, stop_asking, teams_holds_it};
-    let teams = f.teams_meeting_id.is_some();
+    let teams = f.has_teams_meeting();
     let schedules = !busy && f.webex_id.is_none() && !teams && f.can_invite && f.webex_allowed;
     let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", t, schedules);
     let r = if teams { r.on_hover_text(teams_holds_it()) } else { r };
@@ -245,7 +245,7 @@ fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, _busy: 
     let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", t, true);
     if let [room] = rooms.as_slice()
         && f.webex_id.is_none()
-        && f.teams_meeting_id.is_none()
+        && !f.has_teams_meeting()
     {
         if r.on_hover_text(&room.url).clicked() {
             super::webex_rooms::add_room(f, room, rooms);

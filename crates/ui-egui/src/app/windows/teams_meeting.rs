@@ -2,9 +2,10 @@
 // Copyright (c) 2026 Didier Gaudin
 //! An appointment window's Teams meeting: asked for (one at a time, T5), taken in when Teams
 //! answers or the refusal said, and deleted when the window leaves it unsaved, or Quatrelle closes
-//! with the window open. A save or send waits for the meeting File › Options › Calendar's option
-//! asks for as it goes, and goes once it's in. What each of these does to the form is in
-//! `pim_dialogs/teams_meeting.rs`.
+//! with the window open; in a Microsoft 365 mailbox's calendar, the appointment marked at once for
+//! Exchange Online to make it. A save or send waits for the meeting File › Options › Calendar's
+//! option asks for as it goes, and goes once it's in (with the mark at once). What each of these
+//! does to the form is in `pim_dialogs/teams_meeting.rs`.
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::pim_dialogs::teams_meeting::auto;
@@ -12,12 +13,14 @@ use crate::pim_dialogs::teams_meeting::{leaving, refused, take_meeting};
 use crate::*;
 
 impl MailApp {
-    /// Window `w` asks for a meeting: it waits for the answer, or says why the engine refused. A
-    /// window gone, already waiting for one, or waiting for a Webex meeting, asks nothing.
+    /// Window `w` asks for a meeting: it waits for the answer, or, in a Microsoft 365 mailbox's
+    /// calendar, the appointment is marked; or the window says why the engine refused. A window
+    /// gone, already waiting for one, or waiting for a Webex meeting, asks nothing.
     pub(in crate::app) fn for_teams_meeting(&mut self, w: u64, p: Value) {
         let free = |f: &crate::pim_dialogs::EventForm| f.teams_wait.is_none() && f.webex_wait.is_none();
         let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, f)| *x == w && free(f)) else { return };
         match self.session.run("event.teamsMeeting", &p) {
+            Ok(v) if v.get("path").and_then(Value::as_str) == Some("mailbox") => f.teams_online = true,
             Ok(v) => f.teams_wait = v.get("ask").and_then(Value::as_u64),
             Err(e) => f.error = Some(e.to_string().trim_start_matches("bad parameters: ").to_string()),
         }
@@ -52,7 +55,8 @@ impl MailApp {
     /// Window `w`'s save or send, `id`, about to go: File › Options › Calendar's Teams meeting for
     /// guests asked for now holds it until Teams answers ([`Self::teams_meeting_answers`] sends it
     /// then); one that can't be made stops it, for the window to say why (a second press sends it
-    /// without). `true`: it doesn't go now.
+    /// without). The mark for Exchange Online, put in at once, has nothing to wait for: it goes
+    /// with it. `true`: it doesn't go now.
     #[cfg(not(target_arch = "wasm32"))]
     pub(in crate::app) fn teams_auto_holds(&mut self, w: u64, id: &'static str, now: f64) -> bool {
         let mut acts = Vec::new();
@@ -63,11 +67,14 @@ impl MailApp {
         for a in acts {
             self.act(a);
         }
-        // Asked for: the send waits for its answer. Refused by the engine at once, it said why.
-        if let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, f)| *x == w && f.teams_wait.is_some()) {
+        // Asked for: the send waits for its answer. Marked: it goes now. Refused by the engine at
+        // once, it said why.
+        let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, _)| *x == w) else { return true };
+        if f.teams_wait.is_some() {
             f.teams_send_held = Some(id);
+            return true;
         }
-        true
+        !f.teams_online
     }
 
     /// In the browser, where no Teams meeting is made, nothing holds a save or send.

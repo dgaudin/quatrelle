@@ -2418,3 +2418,6 @@ presence	Offline	Не в сети
 	Make every meeting with guests a Teams meeting	Делать каждое собрание с гостями собранием Teams
 	An appointment you organize gets a Teams meeting with its first guest	Встреча, которую организуете вы, получает собрание Teams вместе с первым гостем
 	Teams meeting not added: sign in to Teams	Собрание Teams не добавлено: войдите в Teams
+# Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
+	A Teams meeting will be added when the appointment is saved	Собрание Teams будет добавлено при сохранении встречи
+	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 сохраняет онлайн-собрание после его создания

@@ -26,7 +26,7 @@ const OPTION: &str = "Make every meeting with guests a Teams meeting";
 const ABOUT: &str = "An appointment you organize gets a Teams meeting with its first guest";
 /// What the window says when Teams can't make the meeting.
 const NOT_ADDED: &str = "Teams meeting not added: sign in to Teams";
-const ZOE: &str = "zoe@studio.example";
+pub(super) const ZOE: &str = "zoe@studio.example";
 const SAM: &str = "sam@studio.example";
 
 fn form(a: &mut MailApp) -> &mut EventForm {
@@ -35,7 +35,7 @@ fn form(a: &mut MailApp) -> &mut EventForm {
 
 /// An appointment called `title` in its window, its guests' lines shown, in a session signed in
 /// to Teams with its meetings allowed and the option on; the jobs kept.
-fn with_the_option(name: &str, title: &str) -> (MailApp, std::path::PathBuf, egui::Context, Jobs) {
+pub(super) fn with_the_option(name: &str, title: &str) -> (MailApp, std::path::PathBuf, egui::Context, Jobs) {
     let (mut a, dir, ctx, jobs) = appointment(name, title);
     a.session.prefs.teams_meeting_for_guests = true;
     form(&mut a).inviting = true;
@@ -44,7 +44,7 @@ fn with_the_option(name: &str, title: &str) -> (MailApp, std::path::PathBuf, egu
 }
 
 /// The clock the frames are drawn at.
-fn now(ctx: &egui::Context) -> f64 {
+pub(super) fn now(ctx: &egui::Context) -> f64 {
     ctx.input(|i| i.time)
 }
 
@@ -55,14 +55,14 @@ fn later(ctx: &egui::Context) -> f64 {
 }
 
 /// A frame at `time` seconds, the clock the quiet second is measured by.
-fn frame_at(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, time: f64) {
+pub(super) fn frame_at(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, time: f64) {
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), time: Some(time), events, ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));
     out.textures_delta.clear();
 }
 
 /// `who` typed at `time` in window 0's Required line, its input given the keyboard just before.
-fn type_guest(ctx: &egui::Context, a: &mut MailApp, who: &str, time: f64) {
+pub(super) fn type_guest(ctx: &egui::Context, a: &mut MailApp, who: &str, time: f64) {
     let w = a.ui.event_windows[0].0;
     ctx.memory_mut(|m| m.request_focus(input_id(egui_id(meeting_field(w, "required")))));
     frame_at(ctx, a, vec![], time - 0.05);
@@ -98,7 +98,7 @@ fn type_title(ctx: &egui::Context, a: &mut MailApp, title: &str, time: f64) {
 }
 
 /// A press at `at` let go at `time`.
-fn press_at(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, time: f64) {
+pub(super) fn press_at(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, time: f64) {
     let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     frame_at(ctx, a, vec![Event::PointerMoved(at)], time - 0.1);
     frame_at(ctx, a, vec![button(true)], time - 0.05);
@@ -118,7 +118,7 @@ fn webex_creates(jobs: &Jobs) -> usize {
 }
 
 /// The appointment called `title` in the calendar.
-fn saved(a: &MailApp, title: &str) -> Option<CalEvent> {
+pub(super) fn saved(a: &MailApp, title: &str) -> Option<CalEvent> {
     let item = a.session.agenda(NOW, NOW + 86_400).into_iter().find(|i| i.summary == title)?;
     a.session.find_event(&item.uid).map(|(_, e)| e.event.clone())
 }

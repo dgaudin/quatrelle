@@ -6,8 +6,11 @@
 //! notes (the link to join, the meeting ID and passcode, the phone, the options page), found again
 //! whatever language the interface had when it was written (D10); the place, Join and the
 //! conference the meeting brings; what removing it takes out, and what the window leaves to delete
-//! when it goes without saving, or its calendar can't hold it any more. File › Options ›
-//! Calendar's option adds one the same way at the first guest, once per window, or says why not.
+//! when it goes without saving, or its calendar can't hold it any more. In a Microsoft 365
+//! mailbox's calendar the appointment is only marked, Teams signed in or not (D15): Exchange
+//! Online makes the meeting as it's saved, and keeps it (the mark can't be taken off after).
+//! File › Options › Calendar's option adds one the same way at the first guest, once per window,
+//! or says why not.
 //!
 //! What is hostile here: the notes, which anyone may have written (an invitation pasted in, a
 //! block edited by hand). A block starts only at a line that is a join line's words followed by
@@ -46,7 +49,8 @@ pub(crate) enum TeamsButton {
     Add,
     /// A creation is on its way: nothing more is asked meanwhile.
     Working,
-    /// The appointment holds its meeting: Remove the Teams meeting, and its options page.
+    /// The appointment holds its meeting, or is marked for Exchange Online to make one: Remove
+    /// the Teams meeting, and its options page.
     Has,
     /// Nothing can be added: why, as the catalogs key it (`""`: nothing to say).
     Off(&'static str),
@@ -62,15 +66,13 @@ pub(crate) fn button_state(f: &EventForm, path: TeamsMeetingPath) -> TeamsButton
     if !f.can_invite || !f.teams_allowed {
         return TeamsButton::Off(NOT_YOURS);
     }
-    if f.teams_meeting_id.is_some() {
+    if f.has_teams_meeting() {
         return TeamsButton::Has;
     }
     match path {
         TeamsMeetingPath::Unavailable => TeamsButton::Off(NOT_YOURS),
-        // D13: Exchange Online is to make its own there, at step 2.
-        TeamsMeetingPath::Mailbox => TeamsButton::Off(""),
-        TeamsMeetingPath::Standalone if has_webex(f) => TeamsButton::Off(WEBEX_FIRST),
-        TeamsMeetingPath::Standalone => TeamsButton::Add,
+        _ if has_webex(f) => TeamsButton::Off(WEBEX_FIRST),
+        TeamsMeetingPath::Standalone | TeamsMeetingPath::Mailbox => TeamsButton::Add,
     }
 }
 
@@ -126,7 +128,11 @@ pub(super) fn teams_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Sessi
             add(f, s, acts);
             ui.close();
         }
-        if ui.add_enabled(state == TeamsButton::Has, egui::Button::new(tl!("Remove the Teams meeting"))).clicked() {
+        // Exchange Online's, once saved: Microsoft 365 keeps it.
+        let kept = f.teams_online && f.teams_online_saved;
+        let r = ui.add_enabled(state == TeamsButton::Has && !kept, egui::Button::new(tl!("Remove the Teams meeting")));
+        let r = if kept { r.on_disabled_hover_text(tl!("Microsoft 365 keeps an online meeting once it is made")) } else { r };
+        if r.clicked() {
             if let Some(p) = remove(f) {
                 acts.push(Action::Run("event.teamsMeeting", p));
             }
@@ -143,9 +149,11 @@ pub(super) fn teams_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Sessi
     });
 }
 
-/// Add a Teams meeting, the button's click or its menu's: a title and a start first; then Teams
-/// switched off or signed out opens Options › Teams, and the permission missing is asked for in
-/// the window ([`refused`]); otherwise the window asks Teams for the meeting.
+/// Add a Teams meeting, the button's click or its menu's: a title and a start first. In a
+/// Microsoft 365 mailbox's calendar the window asks the engine, which marks the appointment
+/// without a word to Teams, signed in or not (D15). Elsewhere, Teams switched off or signed out
+/// opens Options › Teams, and the permission missing is asked for in the window ([`refused`]);
+/// otherwise the window asks Teams for the meeting.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn add(f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
     f.error = None;
@@ -154,6 +162,9 @@ pub(crate) fn add(f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
     if f.summary.trim().is_empty() || f.date.trim().is_empty() {
         f.error = Some(tl!("A meeting needs a title and a start").to_string());
         return;
+    }
+    if chosen_path(f, s) == TeamsMeetingPath::Mailbox {
+        return acts.push(Action::ForTeamsMeeting(f.window, add_params(f)));
     }
     match s.teams_meetings_usable() {
         Ok(()) => acts.push(Action::ForTeamsMeeting(f.window, add_params(f))),
@@ -191,7 +202,7 @@ pub(crate) fn auto(f: &mut EventForm, s: &Session, now: f64, sending: bool, acts
         path: chosen_path(f, s),
         can_hold: f.can_invite && f.teams_allowed,
         guests: entries(&f.guests).saturating_add(entries(&f.optional)),
-        has_teams: f.teams_meeting_id.is_some() || f.teams_wait.is_some(),
+        has_teams: f.has_teams_meeting() || f.teams_wait.is_some(),
         has_webex: has_webex(f),
         removed: f.teams_removed,
         tried: f.teams_auto_tried,
@@ -286,12 +297,18 @@ pub(crate) fn error_text(e: &TeamsMeetingError) -> String {
     }
 }
 
-/// What the window asks before Teams can make its meeting, under its ribbon: the permission
-/// (Authorize Teams meetings), said while it's missing, or a new sign-in (Sign in, then done
-/// with); both open Microsoft's sign-in. Or that the option's meeting wasn't added, said until
-/// Teams can make meetings, with what's missing: the permission, or Teams switched on and signed
-/// in (Sign in opens Options › Teams). The buttons wait while a sign-in is under way.
+/// What the window says of its Teams meeting under its ribbon: that one will be added when the
+/// appointment is saved, while it's marked for Exchange Online and not saved yet. Then what it asks
+/// before Teams can make its meeting: the permission (Authorize Teams meetings), said while it's
+/// missing, or a new sign-in (Sign in, then done with); both open Microsoft's sign-in. Or that the
+/// option's meeting wasn't added, said until Teams can make meetings, with what's missing: the
+/// permission, or Teams switched on and signed in (Sign in opens Options › Teams). The buttons wait
+/// while a sign-in is under way.
 pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
+    if f.teams_online && !f.teams_online_saved {
+        ui.label(RichText::new(tl!("A Teams meeting will be added when the appointment is saved")).color(t.dim).small());
+        ui.add_space(4.0);
+    }
     let sign_in = |meetings: bool| Action::Run("teams.signIn", json!({"meetings": meetings}));
     let (said, button, act) = match f.teams_prompt {
         // D17: kept while the permission is missing, whichever of Teams' answer and the worker's
@@ -323,18 +340,25 @@ pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, ac
     ui.add_space(4.0);
 }
 
-/// The calendar chosen takes a meeting by another path than Quatrelle's own (`path`: a Microsoft
-/// 365 mailbox's, or someone else's): the meeting made in this window, or the one on its way,
-/// can't stay. It's taken out as [`remove`] does (the one on its way given up, and a send waiting
-/// for it let go), and the window says to add one again. The calendar took it out, not the user:
-/// the option may add one again in a calendar that takes it. `event.teamsMeeting`'s params for it;
-/// none when there's no such meeting, or the calendar takes it.
+/// The calendar chosen takes a meeting by another path than the one it was added by (`path`): the
+/// meeting made in this window, or the one on its way, can't stay but in a calendar Quatrelle asks
+/// Teams for, and the mark not saved yet but in a Microsoft 365 mailbox's. It's taken out as
+/// [`remove`] does (the one on its way given up, and a send waiting for it let go), and the window
+/// says to add one again. The calendar took it out, not the user: the option may add one again in
+/// a calendar that takes it. `event.teamsMeeting`'s params for it; none when there's nothing to
+/// delete, or the calendar takes it.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn calendar_changed(f: &mut EventForm, path: TeamsMeetingPath) -> Option<Value> {
+    let moved = tl!("The Teams meeting was removed: add it again for this calendar");
+    if f.teams_online && !f.teams_online_saved && path != TeamsMeetingPath::Mailbox {
+        f.teams_online = false;
+        f.error = Some(moved.to_string());
+        return None;
+    }
     if path == TeamsMeetingPath::Standalone || !(f.teams_fresh || f.teams_wait.is_some()) {
         return None;
     }
-    f.error = Some(tl!("The Teams meeting was removed: add it again for this calendar").to_string());
+    f.error = Some(moved.to_string());
     let removed = f.teams_removed;
     let p = match f.teams_wait.take() {
         Some(ask) => {
@@ -458,9 +482,17 @@ pub(crate) fn take_meeting(f: &mut EventForm, m: &TeamsMeeting) {
 /// stays), Join, its conference (the one the window opened with comes back, unless it was this
 /// meeting's), its id; the user removed it. A meeting made in this window and never saved is
 /// deleted at once: `event.teamsMeeting`'s params for it. The saved appointment's is deleted by
-/// the engine when the appointment is saved without it.
+/// the engine when the appointment is saved without it. The mark for Exchange Online only comes
+/// off before the first save, nothing to delete: Microsoft 365 keeps the meeting after.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn remove(f: &mut EventForm) -> Option<Value> {
+    if f.teams_online {
+        if !f.teams_online_saved {
+            f.teams_online = false;
+            f.teams_removed = true;
+        }
+        return None;
+    }
     let link = meeting_link(f);
     f.description = without_block(&f.description);
     if let Some(link) = &link {

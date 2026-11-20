@@ -13,18 +13,18 @@ use crate::TeamsMeetingPath;
 
 const EWS: &str = "https://mail.contoso.example/EWS/Exchange.asmx";
 const DAV: &str = "https://dav.contoso.example/cal/work/";
-const LOCAL_CALENDAR: &str = quatrelle_model::pim::LOCAL;
+pub(super) const LOCAL_CALENDAR: &str = quatrelle_model::pim::LOCAL;
 
-fn is_params<T: std::fmt::Debug>(r: Result<T, CmdError>) -> bool {
+pub(super) fn is_params<T: std::fmt::Debug>(r: Result<T, CmdError>) -> bool {
     matches!(r, Err(CmdError::Params(_)))
 }
 
-fn is_disabled<T: std::fmt::Debug>(r: Result<T, CmdError>) -> bool {
+pub(super) fn is_disabled<T: std::fmt::Debug>(r: Result<T, CmdError>) -> bool {
     matches!(r, Err(CmdError::Disabled(_)))
 }
 
 /// What `event.teamsMeeting` is asked to add: "Budget", 15:00 to 16:30 on 21 October.
-fn add(account: &str, calendar: &str) -> Value {
+pub(super) fn add(account: &str, calendar: &str) -> Value {
     json!({"add": {"summary": "Budget", "start": "2026-10-21T15:00", "end": "2026-10-21T16:30", "account": account, "calendar": calendar}})
 }
 
@@ -34,7 +34,7 @@ fn at(s: &Session, local: &str) -> i64 {
 
 /// The sample account read as `kind` ("ews", "graph", anything else for as it is), with these
 /// calendars too: (id, someone else's).
-fn calendars(s: &mut Session, kind: &str, more: &[(&str, bool)]) {
+pub(super) fn calendars(s: &mut Session, kind: &str, more: &[(&str, bool)]) {
     let a = s.accounts.iter_mut().find(|a| a.config.id == "sample").unwrap();
     match kind {
         "ews" => a.config.ews = Some(EWS.into()),
@@ -57,7 +57,7 @@ fn alone(s: &mut Session) -> String {
     uid
 }
 
-fn event(s: &Session, uid: &str) -> CalEvent {
+pub(super) fn event(s: &Session, uid: &str) -> CalEvent {
     s.find_event(uid).unwrap().1.event.clone()
 }
 
@@ -135,21 +135,6 @@ fn adding_asks_teams_with_the_appointments_fields() {
         assert_ne!(again["ask"].as_u64().unwrap(), ask, "{kind}");
         done(s);
     }
-}
-
-/// Step 1 makes no Teams meeting in a Microsoft 365 mailbox's calendar: Exchange Online would
-/// make its own.
-#[test]
-fn adding_on_a_graph_mailbox_sends_nothing() {
-    let mut s = signed_in("teams-add-graph");
-    calendars(&mut s, "graph", &[("AAMkAGI2", false)]);
-    assert_eq!(s.teams_meeting_path("sample", "AAMkAGI2"), TeamsMeetingPath::Mailbox);
-    assert!(is_disabled(s.run("event.teamsMeeting", &add("sample", "AAMkAGI2"))));
-    assert!(teams_jobs(&mut s).is_empty());
-    assert!(s.teams_meetings.asks.is_empty());
-    // The account's calendar on this computer is the user's alone.
-    assert_eq!(s.teams_meeting_path("sample", LOCAL_CALENDAR), TeamsMeetingPath::Standalone);
-    done(s);
 }
 
 #[test]

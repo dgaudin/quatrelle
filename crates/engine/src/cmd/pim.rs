@@ -104,6 +104,8 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             if !e.attendees.is_empty() && e.organizer.is_none() {
                 e.organizer = Some(organizer_of(s, &account));
             }
+            // Exchange Online makes a Teams meeting only in a Microsoft 365 mailbox's calendar.
+            e.teams_online &= s.teams_online_kept(&account, p::str(v, "calendar"));
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
             s.webex_follow(None, &e);
             s.teams_meeting_follow(None, &e);
@@ -113,7 +115,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             }
             Ok(r)
         })
-        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer), "teamsMeetingId"?: string ("" removes it), "conference"?: {"url": string, "label"?: string} | null (where to join it online, its calendar's CONFERENCE: a web link; the same link keeps its label unless one is given; null takes it out)}"#),
+        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer), "teamsMeetingId"?: string ("" removes it), "teamsOnline"?: bool (true: Exchange Online makes it a Teams meeting as it's saved, kept only in a Microsoft 365 mailbox's calendar; once there, false is refused), "conference"?: {"url": string, "label"?: string} | null (where to join it online, its calendar's CONFERENCE: a web link; the same link keeps its label unless one is given; null takes it out)}"#),
         CommandSpec::new("reminders.list", "Reminders", "File › Reminders", |s, _| {
             let now = s.clock.now;
             Ok(json!(s
@@ -158,9 +160,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"key": string, "minutes"?: 1…40320 | "beforeStart"?: minutes before the event starts}"#),
         CommandSpec::new("event.update", "Edit event", "Calendar › Event", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
-            let (account, current) =
-                s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.clone())).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+            let (account, current, calendar) = s
+                .find_event(&uid)
+                .map(|(a, e)| (a.to_string(), e.event.clone(), e.calendar.clone()))
+                .ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
             let mut e = event_from(s, v, current.clone())?;
+            // Marked here: only in a Microsoft 365 mailbox's calendar (one read so stays so).
+            if !current.teams_online {
+                e.teams_online &= s.teams_online_kept(&account, Some(&calendar));
+            }
             // A lone appointment given guests is the user's to organize, as a new one is. One read
             // with guests or an answer of the user's is a colleague's, whatever the server left out.
             if !e.attendees.is_empty() && current.organizer.is_none() && current.attendees.is_empty() && current.my_answer.is_empty() {
@@ -378,6 +386,9 @@ fn organizer_of(s: &Session, account: &str) -> quatrelle_model::ical::Attendee {
     quatrelle_model::ical::Attendee { email, name, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new(), role: String::new() }
 }
 
+/// Why an appointment Exchange Online made a Teams meeting can't be made a plain one again.
+const TEAMS_ONLINE_KEPT: &str = "Microsoft 365 keeps an online meeting once it is made";
+
 /// An event from command params, starting from `e` (what's not given stays).
 pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) -> Result<quatrelle_model::ical::CalEvent, CmdError> {
     let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
@@ -498,6 +509,21 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             return Err(CmdError::Params("`teamsMeetingId` is not a Teams meeting id".into()));
         }
         e.teams_meeting_id = Some(id).filter(|id| !id.is_empty()).map(str::to_string);
+    }
+    // Made a Teams meeting by Exchange Online (`true`), which `event.create` and `event.update`
+    // keep only in a Microsoft 365 mailbox's calendar. Once it's there, it can't be taken off.
+    let marking = match v.get("teamsOnline") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(true)) => !e.teams_online,
+        Some(Value::Bool(false)) if e.teams_online => return Err(CmdError::Params(TEAMS_ONLINE_KEPT.into())),
+        Some(Value::Bool(false)) => false,
+        Some(_) => return Err(CmdError::Params("`teamsOnline` is true or false".into())),
+    };
+    e.teams_online |= marking;
+    // Exchange Online's meeting and one asked of Teams never go together: refused when the params
+    // bring either.
+    if e.teams_online && e.teams_meeting_id.is_some() && (marking || p::str(v, "teamsMeetingId").is_some_and(|id| !id.is_empty())) {
+        return Err(CmdError::Params("a Teams meeting Exchange Online makes and one Quatrelle asked for don't go together: remove one first".into()));
     }
     // Where to join it online (RFC 7986 `CONFERENCE`): `null` takes it out. The link it has
     // already keeps the features its calendar named, and its label unless one is given.

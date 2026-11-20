@@ -92,7 +92,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .params("() (the open conversation in Teams, when its link is a Teams chat link)")
             .when(has_teams_link),
         CommandSpec::new("event.teamsMeeting", "Teams meeting", "Appointment › Meeting", meeting)
-            .params(r#"{"add": {"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "account": string, "calendar": string} → {"ask": number}, answered later: see teams_meeting_take_answer} | {"remove": {"id": string (a meeting made in this session and never saved)} | {"ask": number (its window closed before the answer was taken)}}"#),
+            .params(r#"{"add": {"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "account": string, "calendar": string} → {"ask": number}, answered later: see teams_meeting_take_answer; or, in a Microsoft 365 mailbox's calendar, {"path": "mailbox"} at once, nothing asked of Teams, signed in or not, nor its permission: the appointment saved with "teamsOnline": true is made a Teams meeting by Exchange Online} | {"remove": {"id": string (a meeting made in this session and never saved)} | {"ask": number (its window closed before the answer was taken)}}"#),
         CommandSpec::new("teams.next", "Next conversation", MODULE, |s, _| step(s, true)).key("Alt+Down").when(in_module),
         CommandSpec::new("teams.previous", "Previous conversation", MODULE, |s, _| step(s, false)).key("Alt+Up").when(in_module),
     ]
@@ -502,7 +502,9 @@ fn meeting(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// A meeting asked of Teams with the appointment's title and times, in a calendar of the user's
-/// own ([`Session::teams_meeting_path`]: a Microsoft 365 mailbox's makes its own, not yet here).
+/// own ([`Session::teams_meeting_path`]). A Microsoft 365 mailbox's makes its own: nothing is
+/// asked, and neither Teams' sign-in nor its permission is needed (D15); the window marks the
+/// appointment.
 fn meeting_add(s: &mut Session, v: &Value) -> CmdResult {
     if p::str(v, "summary").is_none_or(|t| t.trim().is_empty()) || v.get("start").is_none() {
         return Err(CmdError::Params("a Teams meeting needs a title and a start".into()));
@@ -512,7 +514,7 @@ fn meeting_add(s: &mut Session, v: &Value) -> CmdResult {
     let fields = TeamsMeetingFields::of(&event_from(s, v, CalEvent::default())?);
     match s.teams_meeting_path(account, calendar) {
         TeamsMeetingPath::Standalone => {}
-        TeamsMeetingPath::Mailbox => return Err(CmdError::Disabled("a Teams meeting can't be added in a Microsoft 365 calendar yet".into())),
+        TeamsMeetingPath::Mailbox => return Ok(json!({"path": "mailbox"})),
         TeamsMeetingPath::Unavailable => return Err(CmdError::Disabled("a Teams meeting is added only in a calendar of your own".into())),
     }
     s.teams_meetings_usable().map_err(|e| CmdError::Disabled(e.to_string()))?;

@@ -60,13 +60,11 @@ fn not_without_a_guest_nor_on_someone_elses_event() {
 }
 
 #[test]
-fn not_on_someone_elses_calendar_nor_yet_on_a_graph_mailbox() {
+fn not_on_someone_elses_calendar() {
     let s = with_the_option("teams-option-calendars");
     assert_eq!(s.teams_meeting_auto(&ask()), TeamsAuto::Add, "the same window otherwise");
     assert_eq!(s.teams_meetings_usable(), Ok(()), "signed in, its meetings allowed");
     assert_eq!(s.teams_meeting_auto(&TeamsAutoAsk { path: TeamsMeetingPath::Unavailable, ..ask() }), TeamsAuto::No);
-    // D13: Exchange Online is to make its own there, at step 2.
-    assert_eq!(s.teams_meeting_auto(&TeamsAutoAsk { path: TeamsMeetingPath::Mailbox, ..ask() }), TeamsAuto::No);
     done(s);
 }
 
