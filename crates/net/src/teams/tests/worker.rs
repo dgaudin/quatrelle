@@ -20,7 +20,9 @@ use crate::fake_graph::{FakeChat, FakeMessage, FakeTeams, FakeUser, Server, TOKE
 use crate::oauth::{TEAMS_SCOPE, Tokens, now_unix};
 use crate::teams::chat_of;
 use crate::teams::store::{ChatRecord, Copy, Identity, Opened};
-use crate::teams::worker::{Authority, Emit, Handle, Hooks, REFRESH_KEY, Worker, is_guid, keyring, missing_scope, start_with, with_ids};
+use crate::teams::worker::{
+    Authority, Emit, Handle, Hooks, REFRESH_KEY, Worker, is_guid, keyring, meetings_granted, missing_scope, start_with, with_ids,
+};
 use crate::worker::{Credentials, MemoryCredentials};
 use crate::{NetError, Result};
 
@@ -54,13 +56,25 @@ pub(super) struct Desk {
     pub(super) authorize_fails: Mutex<Option<String>>,
     /// Renewals hand out this newer refresh token.
     pub(super) rotate: Mutex<Option<String>>,
+    /// What it was asked, in order: `"authorize"` or `"refresh"`, and whether with the permission
+    /// to make Teams meetings.
+    pub(super) asked: Mutex<Vec<(&'static str, bool)>>,
+    /// Renewals that ask for the meetings' permission are refused (it was taken back).
+    pub(super) refuse_wide: AtomicBool,
 }
 
 pub(super) struct AtDesk(pub(super) Arc<Desk>);
 
 impl Authority for AtDesk {
-    fn authorize(&self, _client_id: &str, _tenant: &str, open: &mut dyn FnMut(&str) -> std::result::Result<(), String>) -> Result<Tokens> {
+    fn authorize(
+        &self,
+        _client_id: &str,
+        _tenant: &str,
+        meetings: bool,
+        open: &mut dyn FnMut(&str) -> std::result::Result<(), String>,
+    ) -> Result<Tokens> {
         self.0.authorized.fetch_add(1, Ordering::SeqCst);
+        self.0.asked.lock().unwrap().push(("authorize", meetings));
         open(SIGN_IN_PAGE).map_err(NetError::Refused)?;
         if let Some(words) = self.0.authorize_fails.lock().unwrap().clone() {
             return Err(NetError::Auth(words));
@@ -68,14 +82,18 @@ impl Authority for AtDesk {
         Ok(self.0.grant.lock().unwrap().clone())
     }
 
-    fn refresh(&self, _client_id: &str, _tenant: &str, refresh: &str) -> Result<Tokens> {
+    fn refresh(&self, _client_id: &str, _tenant: &str, meetings: bool, refresh: &str) -> Result<Tokens> {
         if self.0.offline.load(Ordering::SeqCst) {
             return Err(NetError::Io(std::io::Error::from(std::io::ErrorKind::ConnectionRefused)));
         }
         self.0.renewed.fetch_add(1, Ordering::SeqCst);
         self.0.presented.lock().unwrap().push(refresh.to_string());
+        self.0.asked.lock().unwrap().push(("refresh", meetings));
         if self.0.refuse.load(Ordering::SeqCst) {
             return Err(NetError::Auth("Microsoft Teams: the sign-in was revoked".into()));
+        }
+        if meetings && self.0.refuse_wide.load(Ordering::SeqCst) {
+            return Err(NetError::Auth("Microsoft Teams: AADSTS65001: consent_required".into()));
         }
         let lasts = if self.0.short.load(Ordering::SeqCst) { 0 } else { 3600 };
         let newer = self.0.rotate.lock().unwrap().clone();
@@ -107,6 +125,8 @@ pub(super) fn desk(tokens: Tokens) -> Arc<Desk> {
         presented: Mutex::new(Vec::new()),
         authorize_fails: Mutex::new(None),
         rotate: Mutex::new(None),
+        asked: Mutex::new(Vec::new()),
+        refuse_wide: AtomicBool::new(false),
     })
 }
 

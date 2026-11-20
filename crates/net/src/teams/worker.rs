@@ -48,10 +48,10 @@ use crate::{NetError, Result};
 
 mod signing;
 
-#[cfg(test)]
-pub(crate) use signing::missing_scope;
 pub(crate) use signing::{Authority, Microsoft, is_guid};
 pub use signing::{REFRESH_KEY, keyring};
+#[cfg(test)]
+pub(crate) use signing::{meetings_granted, missing_scope};
 
 /// How the worker reports: the pool's sink in the app, a list in the tests.
 pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
@@ -201,6 +201,15 @@ fn spawn(w: Worker) -> std::io::Result<Handle> {
     })
 }
 
+/// The sign-in going when "Allow Teams meetings" signs in anew, kept until that sign-in ends: its
+/// page closed or refused, the chats go on from it as before, without another sign-in. The
+/// refresh token is the one the worker held, the only one without a keychain; a [`Secret`], it
+/// never shows in a log or an event.
+pub(super) struct Resume {
+    pub(super) settings: TeamsSettings,
+    pub(super) refresh: Option<Secret>,
+}
+
 /// What the worker's thread owns. The synchronisation, the history, the pictures and the search
 /// are functions on it (`sync.rs`, `backfill.rs`, `pictures.rs`, `search.rs`).
 pub(crate) struct Worker {
@@ -240,6 +249,9 @@ pub(crate) struct Worker {
     pub(crate) sync: SyncState,
     /// The sign-in awaited from the browser (its number), and where its thread answers.
     signing: Option<u64>,
+    /// What that sign-in goes on from if it doesn't end, when it asked for the meetings'
+    /// permission while signed in and going ([`Resume`]).
+    resume: Option<Resume>,
     sign_ins: u64,
     answers: (Sender<signing::Authorized>, Receiver<signing::Authorized>),
     /// What the log's hashes are keyed with: made at start, never written.
@@ -303,6 +315,7 @@ impl Worker {
             transfers: Transfers::default(),
             people: People::default(),
             signing: None,
+            resume: None,
             sign_ins: 0,
             answers: mpsc::channel(),
             key,
@@ -393,7 +406,7 @@ impl Worker {
     pub(crate) fn job(&mut self, job: Job) {
         match job {
             Job::Start { settings } => self.start(settings),
-            Job::SignIn { client_id, tenant, .. } => self.sign_in(&client_id, &tenant),
+            Job::SignIn { client_id, tenant, meetings } => self.sign_in(&client_id, &tenant, meetings),
             Job::SignOut { delete_copy } => self.sign_out(delete_copy),
             // Switched off: nothing asked, no file, no token; the thread stays for what comes
             // next. No status stands (what a start says after is said again).
@@ -481,6 +494,7 @@ impl Worker {
         if on {
             log::info!("teams: working offline");
             let signing = self.signing.take().is_some();
+            self.resume = None;
             self.sync.give_up();
             people::stop(self);
             files::stop(self);
@@ -615,6 +629,7 @@ impl Worker {
         files::stop(self);
         people::stop(self);
         self.signing = None;
+        self.resume = None;
         self.held = None;
         self.not_before = None;
     }

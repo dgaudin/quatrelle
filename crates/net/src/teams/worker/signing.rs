@@ -3,6 +3,10 @@
 //! The Teams worker's sign-in: who signed in and of which organisation, the tokens and their
 //! renewal, going on from a kept sign-in, and signing out.
 //!
+//! The permission to make Teams meetings is asked for apart from the chats' (`oauth.rs`), only
+//! when the user wants meetings: refused or taken back, it is let go, and the chats go on without
+//! a new sign-in.
+//!
 //! What is hostile here: the answers of the sign-in service and of Graph (ids, names, the
 //! permissions said granted), the Options as read back from disk, and a chat's own fields, which
 //! are whoever made the chat's to choose. What it protects: the refresh token (worth every
@@ -16,7 +20,7 @@ use quatrelle_store::{DATA_FILE_EXTENSION, StoreError};
 use super::super::graph::{chat_of, member_of};
 use super::super::store::{Identity, Opened};
 use super::*;
-use crate::oauth::TEAMS_SCOPE;
+use crate::oauth::{TEAMS_MEETINGS_SCOPE, TEAMS_SCOPE};
 
 /// Where the keychain keeps the Teams sign-in: an entry of its own, no account's.
 pub fn keyring() -> AccountConfig {
@@ -43,29 +47,42 @@ const NO_COPY: &str = "The local copy of the conversations couldn't be opened";
 const BAD_IDS: &str = "The application or directory ID in the Options can't be one";
 const INTERRUPTED: &str = "The sign-in stopped unexpectedly; try again";
 
-/// Who signs the account in and renews its tokens: Microsoft, or the tests' own.
+/// Who signs the account in and renews its tokens: Microsoft, or the tests' own. `meetings`: the
+/// permission to make Teams meetings asked for too.
 pub(crate) trait Authority: Send + Sync {
     /// Sign in through the browser (`open` shows the page) to the application `client_id` at the
     /// directory `tenant`.
-    fn authorize(&self, client_id: &str, tenant: &str, open: &mut dyn FnMut(&str) -> std::result::Result<(), String>) -> Result<Tokens>;
+    fn authorize(
+        &self,
+        client_id: &str,
+        tenant: &str,
+        meetings: bool,
+        open: &mut dyn FnMut(&str) -> std::result::Result<(), String>,
+    ) -> Result<Tokens>;
     /// A new access token from a refresh token.
-    fn refresh(&self, client_id: &str, tenant: &str, refresh: &str) -> Result<Tokens>;
+    fn refresh(&self, client_id: &str, tenant: &str, meetings: bool, refresh: &str) -> Result<Tokens>;
 }
 
 /// Microsoft's sign-in, with Teams' permissions.
 pub(crate) struct Microsoft;
 
-fn provider(client_id: &str, tenant: &str) -> Result<oauth::Provider> {
-    oauth::teams_provider(client_id, tenant).ok_or_else(|| NetError::Refused(BAD_IDS.into()))
+fn provider(client_id: &str, tenant: &str, meetings: bool) -> Result<oauth::Provider> {
+    oauth::teams_provider(client_id, tenant, meetings).ok_or_else(|| NetError::Refused(BAD_IDS.into()))
 }
 
 impl Authority for Microsoft {
-    fn authorize(&self, client_id: &str, tenant: &str, open: &mut dyn FnMut(&str) -> std::result::Result<(), String>) -> Result<Tokens> {
-        oauth::authorize(&provider(client_id, tenant)?, "", open, SIGN_IN_WAIT)
+    fn authorize(
+        &self,
+        client_id: &str,
+        tenant: &str,
+        meetings: bool,
+        open: &mut dyn FnMut(&str) -> std::result::Result<(), String>,
+    ) -> Result<Tokens> {
+        oauth::authorize(&provider(client_id, tenant, meetings)?, "", open, SIGN_IN_WAIT)
     }
 
-    fn refresh(&self, client_id: &str, tenant: &str, refresh: &str) -> Result<Tokens> {
-        oauth::refresh(&provider(client_id, tenant)?, refresh)
+    fn refresh(&self, client_id: &str, tenant: &str, meetings: bool, refresh: &str) -> Result<Tokens> {
+        oauth::refresh(&provider(client_id, tenant, meetings)?, refresh)
     }
 }
 
@@ -75,6 +92,7 @@ pub(super) struct Authorized {
     sign_in: u64,
     client_id: String,
     tenant: String,
+    meetings: bool,
     tokens: Result<Tokens>,
 }
 
@@ -103,6 +121,15 @@ pub(crate) fn missing_scope(granted: &str) -> Option<String> {
         granted.iter().any(|g| g.eq_ignore_ascii_case(scope) || g.eq_ignore_ascii_case(short))
     };
     TEAMS_SCOPE.split(' ').filter(|scope| *scope != "offline_access").find(|scope| !has(scope)).map(str::to_string)
+}
+
+/// Whether `granted` (what a sign-in or a renewal says it granted) holds the permission to make
+/// Teams meetings: by its address or by its short name, as a whole permission of the list, in
+/// any case. Granted when it says nothing (not judged, as [`missing_scope`]).
+pub(crate) fn meetings_granted(granted: &str) -> bool {
+    let short = TEAMS_MEETINGS_SCOPE.rsplit('/').next().unwrap_or(TEAMS_MEETINGS_SCOPE);
+    let mut said = granted.split_whitespace().peekable();
+    said.peek().is_none() || said.any(|g| g.eq_ignore_ascii_case(TEAMS_MEETINGS_SCOPE) || g.eq_ignore_ascii_case(short))
 }
 
 /// Why a sign-in in the browser didn't end, as the status says it: the worker's own sentence, with
@@ -154,8 +181,10 @@ impl Worker {
     /// the person; the worker goes on hearing its jobs). The page goes to the engine as Teams'
     /// own ([`teams::Event::SignInPage`]), which opens it only when it's Microsoft's, never as the
     /// mail's `OpenUrl`. Whatever was signed in stops being polled; its copy stays open to read.
-    /// The answer is taken by [`Worker::authorized`].
-    pub(super) fn sign_in(&mut self, client_id: &str, tenant: &str) {
+    /// The answer is taken by [`Worker::authorized`]. `meetings`: the permission to make Teams
+    /// meetings asked for too; asked while signed in and going, what goes is kept ([`Resume`]) to
+    /// go on from if the page is closed or refused.
+    pub(super) fn sign_in(&mut self, client_id: &str, tenant: &str, meetings: bool) {
         let (client_id, tenant) = (client_id.trim().to_string(), tenant.trim().to_string());
         if !quatrelle_model::valid_oauth_client_id(&client_id) || !quatrelle_model::valid_oauth_tenant(&tenant) {
             return self.refuse(BAD_IDS);
@@ -164,7 +193,10 @@ impl Worker {
             log::info!("teams: no sign-in while working offline");
             return self.status(Status::Offline);
         }
+        // Taken before `halt` lets the refresh token go.
+        let resume = (meetings && self.polling).then(|| Resume { settings: self.settings.clone(), refresh: self.refresh.clone() });
         self.halt();
+        self.resume = resume;
         self.sign_ins = self.sign_ins.saturating_add(1);
         let sign_in = self.sign_ins;
         self.status(Status::SigningIn);
@@ -174,8 +206,9 @@ impl Worker {
                 emit(Event::Teams { event: teams::Event::SignInPage { url: url.to_string() } });
                 Ok(())
             };
-            let tokens = fenced(|| authority.authorize(&client_id, &tenant, &mut open)).unwrap_or_else(|| Err(NetError::Refused(INTERRUPTED.into())));
-            let _ = answer.send(Authorized { sign_in, client_id, tenant, tokens });
+            let tokens = fenced(|| authority.authorize(&client_id, &tenant, meetings, &mut open))
+                .unwrap_or_else(|| Err(NetError::Refused(INTERRUPTED.into())));
+            let _ = answer.send(Authorized { sign_in, client_id, tenant, meetings, tokens });
         });
         match spawned {
             Ok(_) => self.signing = Some(sign_in),
@@ -211,15 +244,22 @@ impl Worker {
 
     /// The browser's sign-in ended: what it granted is checked, Graph says who it is, the
     /// organisation is told, the copy is opened for that identity; only then is the refresh token
-    /// kept. A refusal at any step keeps nothing.
+    /// kept. A refusal at any step keeps nothing. One that asked for the meetings' permission
+    /// while signed in and that didn't end goes on from the sign-in before, meetings not allowed.
     fn signed(&mut self, answer: Authorized, now: Instant) {
         #[cfg(test)]
         Hooks::trip_on(&self.hooks.trip_sign_in);
-        let Authorized { client_id, tenant, tokens, .. } = answer;
+        let resume = self.resume.take();
+        let Authorized { client_id, tenant, meetings, tokens, .. } = answer;
         let tokens = match tokens {
             Ok(tokens) => tokens,
             Err(e) => {
                 log::warn!("teams: the sign-in didn't end: {}", kind(&e));
+                if let Some(Resume { settings, refresh }) = resume {
+                    log::info!("teams: the meetings' permission wasn't given; going on from the sign-in before");
+                    self.meetings_lost();
+                    return self.start_with(TeamsSettings { meetings: false, ..settings }, refresh);
+                }
                 return self.refuse(&why_not(&e));
             }
         };
@@ -286,6 +326,11 @@ impl Worker {
             log::warn!("teams: no keychain keeps the sign-in: it lasts until Quatrelle closes");
         }
         let address = if me.mail.trim().is_empty() { me.upn.trim() } else { me.mail.trim() };
+        // Allowed when asked for and not said missing (Microsoft may grant less than asked).
+        let allowed = meetings && meetings_granted(&tokens.granted);
+        if meetings && !allowed {
+            log::warn!("teams: the sign-in didn't grant the meetings' permission");
+        }
         self.settings = TeamsSettings {
             on: true,
             client_id,
@@ -299,7 +344,7 @@ impl Worker {
             notify: self.settings.notify,
             notify_only_direct: self.settings.notify_only_direct,
             show_unreadable: self.settings.show_unreadable,
-            meetings: false,
+            meetings: allowed,
         };
         let s = &self.settings;
         self.say(teams::Event::Account {
@@ -309,6 +354,7 @@ impl Worker {
             tenant_id: s.tenant_id.clone(),
             drive_host: s.drive_host.clone(),
         });
+        self.say(teams::Event::Meetings { allowed });
         self.client = Some(client);
         self.copy = Some(copy);
         self.tokens = Some(tokens);
@@ -395,8 +441,16 @@ impl Worker {
     /// copy is opened at once, to be read with or without a network; Graph is asked at the first
     /// turn ([`Worker::ready`]). No sign-in kept: "sign in again", with the copy open to read;
     /// Options that say nobody: the same, without it. Signing in is the user's own click (the
-    /// browser never opens by itself).
+    /// browser never opens by itself). The renewals ask for the meetings' permission when the
+    /// Options say meetings are allowed.
     pub(super) fn start(&mut self, settings: TeamsSettings) {
+        self.start_with(settings, None);
+    }
+
+    /// [`Worker::start`], going on from `kept` when the keychain holds no sign-in: the refresh
+    /// token the worker held before a sign-in that didn't end ([`Resume`]), the only one there is
+    /// without a keychain. One taken from there lasts until Quatrelle closes, as it did.
+    pub(super) fn start_with(&mut self, settings: TeamsSettings, kept: Option<Secret>) {
         if !settings.on || !settings.signed_in {
             return log::info!("teams: not started: switched off, or nobody signed in");
         }
@@ -412,6 +466,7 @@ impl Worker {
         if self.signing.is_some() || (self.polling && same.iter().all(|(a, b)| a.eq_ignore_ascii_case(b.trim()))) {
             self.settings.notify = settings.notify;
             self.settings.notify_only_direct = settings.notify_only_direct;
+            self.settings.meetings = settings.meetings;
             return;
         }
         self.halt();
@@ -447,12 +502,14 @@ impl Worker {
         // The list as the copy has it, at once, online or not.
         crate::teams::backfill::from_copy(self);
         // No sign-in kept (no keychain last time, or its entry gone): the copy is there to read.
-        let Some(refresh) = self.creds.get_secret(&keyring(), REFRESH_KEY).filter(|r| !r.is_empty()) else {
+        let in_keychain = self.creds.get_secret(&keyring(), REFRESH_KEY).filter(|r| !r.is_empty()).map(Secret);
+        let from_memory = in_keychain.is_none();
+        let Some(refresh) = in_keychain.or_else(|| kept.filter(|r| !r.0.is_empty())) else {
             log::info!("teams: no sign-in is kept to go on from");
             return self.status(Status::SignInAgain);
         };
-        self.refresh = Some(Secret(refresh));
-        self.no_keychain = !self.creds.persists();
+        self.refresh = Some(refresh);
+        self.no_keychain = from_memory || !self.creds.persists();
         // Said once, as at a sign-in; the status goes on from there.
         if self.no_keychain {
             self.status(Status::NoKeychain);
@@ -527,13 +584,24 @@ impl Worker {
     /// A new access token from the refresh token: the one renewal there is, on this thread. A
     /// newer refresh token handed with it replaces the one kept. Refused, it is "sign in again"
     /// (and an error, so that what asked stops); anything else is the network's and tried again.
+    /// Asked with the meetings' permission and refused, it is asked once more without it: given
+    /// then, meetings are no longer allowed and the chats go on.
     pub(super) fn renew(&mut self, now: Instant) -> Result<()> {
         let refused = || NetError::Auth("the Teams sign-in is no longer good; sign in again".into());
         let Some(refresh) = self.refresh.clone() else {
             self.sign_in_again();
             return Err(refused());
         };
-        let tokens = match self.authority.refresh(&self.settings.client_id, &self.settings.tenant, &refresh.0) {
+        let (client_id, tenant, wide) = (self.settings.client_id.clone(), self.settings.tenant.clone(), self.settings.meetings);
+        let mut renewed = self.authority.refresh(&client_id, &tenant, wide, &refresh.0);
+        if wide && matches!(renewed, Err(NetError::Auth(_) | NetError::Refused(_))) {
+            log::warn!("teams: the renewal with the meetings' permission was refused; renewing without it");
+            renewed = self.authority.refresh(&client_id, &tenant, false, &refresh.0);
+            if renewed.is_ok() {
+                self.meetings_lost();
+            }
+        }
+        let tokens = match renewed {
             Ok(tokens) => tokens,
             Err(NetError::Auth(_) | NetError::Refused(_)) => {
                 log::warn!("teams: the renewal was refused");
@@ -557,6 +625,14 @@ impl Worker {
         self.renewed = Some(now);
         log::info!("teams: the access token was renewed");
         Ok(())
+    }
+
+    /// The permission to make Teams meetings is gone (refused, or taken back): the renewals ask for
+    /// the chats' permissions alone from now on, and the engine is told, to offer it again. The
+    /// chats go on.
+    pub(crate) fn meetings_lost(&mut self) {
+        self.settings.meetings = false;
+        self.say(teams::Event::Meetings { allowed: false });
     }
 
     /// Whether `who` is the identity signed in until now (ignoring case).

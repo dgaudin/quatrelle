@@ -98,7 +98,7 @@ fn run_with(args: &[String], env: &dyn Fn(&str) -> Option<String>) -> Result<(),
              or domain>, or set {CLIENT_VAR} and {TENANT_VAR} (see docs/teams.md)"
         ));
     };
-    let provider = oauth::teams_provider(&client, &tenant)
+    let provider = oauth::teams_provider(&client, &tenant, false)
         .ok_or("--client or --tenant isn't one: the client id is a GUID, the tenant a GUID or a domain (see docs/teams.md)")?;
     let tokens = oauth::authorize(&provider, "", &mut sign_in_page, SIGN_IN).map_err(|e| sign_in_error(&e))?;
     errln("signed in; the check starts");
