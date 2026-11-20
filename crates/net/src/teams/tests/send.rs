@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Posting a message's HTML: what goes and what Graph makes of it, the chat's id and the size
-//! checked before any request, a 503 never waited out, and a connection cut after the post.
+//! checked before any request, a 503 never waited out, and a connection cut after the post. A
+//! Teams meeting made, changed and deleted: the bodies sent, its id checked and encoded.
 
 use std::time::{Duration, Instant};
 
-use quatrelle_model::pim::teams::{Mention, SEND_MAX, Sender};
+use quatrelle_model::pim::teams::{Mention, SEND_MAX, Sender, TeamsMeetingFields};
 use serde_json::json;
 
 use super::*;
+use crate::teams::graph::{meeting_body, meeting_id_of, meeting_of, meeting_patch};
 
 /// What the fake holds of `CHAT`'s messages, by HTML.
 fn held(server: &Server) -> Vec<String> {
@@ -313,4 +315,107 @@ fn a_heart_with_or_without_its_selector_is_one_kind() {
     let server = seeded("\u{2764}");
     client(&server).unset_reaction(CHAT, ANA_MSG, "\u{2764}\u{FE0F}").unwrap();
     assert!(message(&server, ANA_MSG).reactions.is_empty());
+}
+
+fn meeting_writes(server: &Server) -> Vec<(String, String, serde_json::Value)> {
+    server.data.lock().unwrap().teams.as_ref().unwrap().meeting_writes.clone()
+}
+
+fn meeting_paths(server: &Server) -> Vec<String> {
+    server.data.lock().unwrap().teams.as_ref().unwrap().meeting_paths.clone()
+}
+
+fn meetings_held(server: &Server) -> usize {
+    server.data.lock().unwrap().teams.as_ref().unwrap().meetings.len()
+}
+
+fn budget() -> TeamsMeetingFields {
+    TeamsMeetingFields { title: "Budget".into(), start: 1_795_165_200, end: 1_795_168_800 }
+}
+
+#[test]
+fn a_meeting_is_made_changed_and_deleted_through_the_client() {
+    let mut t = teams_with(Vec::new());
+    t.audio_conferencing = true;
+    let server = serve_teams(t);
+    let c = client(&server);
+    let before = budget();
+    let m = meeting_of(&c.create_meeting(&before).unwrap()).unwrap();
+    assert!(m.join_url.starts_with("https://teams.microsoft.com/l/meetup-join/19%3ameeting_1%40thread.v2/0?"), "{}", m.join_url);
+    assert_eq!(
+        (m.meeting_id.as_str(), m.passcode.0.as_str(), m.toll_number.as_str(), m.conference_id.as_str()),
+        ("1234567890", "aB3xY9", "+1 323-555-0166", "9999999")
+    );
+    assert!(m.options_url.starts_with("https://teams.microsoft.com/meetingOptions/?organizerId=u-me&"), "{}", m.options_url);
+    let after = TeamsMeetingFields { start: before.start + 3600, ..before.clone() };
+    let changed = c.update_meeting(&m.id, &meeting_patch(&before, &after).unwrap()).unwrap();
+    assert_eq!(changed["startDateTime"], "2026-11-20T10:00:00Z");
+    assert_eq!(meeting_of(&changed).map(|x| x.id), Some(m.id.clone()));
+    c.delete_meeting(&m.id).unwrap();
+    assert_eq!(meetings_held(&server), 0);
+    // Gone already: Graph's 404 is a meeting deleted.
+    c.delete_meeting(&m.id).unwrap();
+    let id = m.id.clone();
+    let route = |r: &str, id: &str, body| (r.to_string(), id.to_string(), body);
+    assert_eq!(
+        meeting_writes(&server),
+        [
+            route("createMeeting", "", json!({"subject": "Budget", "startDateTime": "2026-11-20T09:00:00Z", "endDateTime": "2026-11-20T10:00:00Z"})),
+            route("updateMeeting", &id, json!({"startDateTime": "2026-11-20T10:00:00Z"})),
+            route("deleteMeeting", &id, serde_json::Value::Null),
+            route("deleteMeeting", &id, serde_json::Value::Null),
+        ]
+    );
+    assert_eq!(meeting_writes(&server)[0].2, meeting_body(&before));
+}
+
+#[test]
+fn a_503_after_a_meeting_is_made_is_not_waited_out() {
+    let mut t = teams_with(Vec::new());
+    t.answer_lost.insert("createMeeting".into(), 1);
+    t.lost_retry_after = Some(1);
+    let server = serve_teams(t);
+    let c = client(&server);
+    c.set_waiting(true);
+    let start = Instant::now();
+    let made = c.create_meeting(&budget());
+    assert!(start.elapsed() < Duration::from_millis(500), "{:?}", start.elapsed());
+    assert!(matches!(&made, Err(NetError::Closed(m)) if m.starts_with("HTTP 503")), "{made:?}");
+    assert_eq!((hits(&server, "createMeeting"), meetings_held(&server)), (1, 1), "made once, though the answer was lost");
+}
+
+#[test]
+fn an_id_that_cannot_be_one_sends_nothing() {
+    let server = serve_teams(teams_with(Vec::new()));
+    let c = client(&server);
+    let hits_before = server.data.lock().unwrap().teams.as_ref().unwrap().hits.clone();
+    let long = "a".repeat(513);
+    for id in ["a?b", "", "a b", "..", "a#b", "a%2Fb", "a\nb", long.as_str()] {
+        assert!(matches!(c.update_meeting(id, &json!({"subject": "x"})), Err(NetError::Refused(_))), "{id:?}");
+        assert!(matches!(c.delete_meeting(id), Err(NetError::Refused(_))), "{id:?}");
+    }
+    assert_eq!(server.data.lock().unwrap().teams.as_ref().unwrap().hits, hits_before);
+    assert!(meeting_paths(&server).is_empty() && meeting_writes(&server).is_empty());
+    assert_eq!(c.stats().requests, 1, "/me only");
+}
+
+#[test]
+fn an_id_with_base64_signs_is_sent_encoded() {
+    let server = serve_teams(teams_with(Vec::new()));
+    let c = client(&server);
+    let id = meeting_id_of(&c.create_meeting(&budget()).unwrap()).unwrap();
+    assert!(id.contains('/') && id.contains('+') && id.contains('='), "{id}");
+    let changed = c.update_meeting(&id, &json!({"subject": "Budget 2027"})).unwrap();
+    assert_eq!(changed["subject"], "Budget 2027", "found: 200");
+    c.delete_meeting(&id).unwrap();
+    assert_eq!(meetings_held(&server), 0, "found and deleted: 204, not 404");
+    let encoded = id.replace('/', "%2F").replace('+', "%2B").replace('=', "%3D");
+    let paths = meeting_paths(&server);
+    assert_eq!(paths.len(), 3, "{paths:?}");
+    for path in &paths[1..] {
+        assert!(path.ends_with(&format!("/me/onlineMeetings/{encoded}")), "{path}");
+        assert_eq!(path.matches('/').count(), 3, "{path}");
+    }
+    let ids: Vec<String> = meeting_writes(&server).into_iter().skip(1).map(|w| w.1).collect();
+    assert_eq!(ids, [id.clone(), id], "the fake's own id, decoded");
 }

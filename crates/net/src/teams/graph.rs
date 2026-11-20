@@ -34,10 +34,12 @@ use crate::stream::{self, Stream};
 use crate::{NetError, Result};
 
 mod files;
+mod meetings;
 mod people;
 mod read;
 
 pub use files::*;
+pub use meetings::*;
 pub use people::*;
 pub use read::*;
 

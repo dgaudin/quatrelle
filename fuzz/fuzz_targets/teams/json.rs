@@ -6,16 +6,18 @@
 //! what comes out within its caps: ids, lists, names on one line, bodies. And the answers about
 //! files and people: an upload session's address, a range's answer, a file's item and its eTag, a
 //! share's answer, a person of the directory; every string of the input as a transfer's address.
+//! And a Teams meeting's answer: its id plausible, its links Teams' own, each value plain or empty.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use quatrelle_model::pim::teams::{
     Attachment, Chat, ChatMessage, MAX_ATTACHMENTS, MAX_BODY, MAX_ID, MAX_MEMBERS, MAX_MENTIONS, MAX_REACTION_USERS, MAX_REACTIONS, Member,
-    NAME_CHARS, REACTION_CHARS, SHARE_PEOPLE, Sender, is_bidi, is_object_id, person_ok,
+    NAME_CHARS, REACTION_CHARS, SHARE_PEOPLE, Sender, is_bidi, is_object_id, person_ok, teams_meeting_url, teams_meeting_value,
+    valid_teams_meeting_id,
 };
 use quatrelle_net::teams::graph::{
-    MAX_ROLES, RangeAnswer, chat_of, chat_of_unguarded, drive_item_of, etag_guid, in_upload_folder, member_of, message_of, message_of_unguarded,
-    next_expected_of, person_of, presence_of, range_answer_of, shared_of, transfer_url, upload_url_of,
+    MAX_ROLES, RangeAnswer, chat_of, chat_of_unguarded, drive_item_of, etag_guid, in_upload_folder, meeting_id_of, meeting_of, member_of, message_of,
+    message_of_unguarded, next_expected_of, person_of, presence_of, range_answer_of, shared_of, transfer_url, upload_url_of,
 };
 use serde_json::Value;
 
@@ -131,6 +133,21 @@ fn read_files(v: &Value) {
     }
 }
 
+/// A Teams meeting's answer: its id plausible, its links Teams' own (the options' none too), and
+/// each value empty or plain as it is kept.
+fn read_meeting(v: &Value) {
+    if let Some(id) = meeting_id_of(v) {
+        assert!(valid_teams_meeting_id(&id), "{id:?}");
+    }
+    if let Some(m) = meeting_of(v) {
+        assert!(valid_teams_meeting_id(&m.id) && teams_meeting_url(&m.join_url), "{:?} {:?}", m.id, m.join_url);
+        assert!(m.options_url.is_empty() || teams_meeting_url(&m.options_url), "{:?}", m.options_url);
+        for value in [&m.meeting_id, &m.passcode.0, &m.toll_number, &m.conference_id] {
+            assert!(value.is_empty() || teams_meeting_value(value).as_deref() == Some(value.as_str()), "{value:?}");
+        }
+    }
+}
+
 /// The strings of a value, [`STRINGS`] at most, `depth` levels down.
 fn strings_of<'a>(v: &'a Value, depth: usize, out: &mut Vec<&'a str>) {
     match v {
@@ -154,6 +171,7 @@ fn read(v: &Value) {
         assert!(id_ok(&id));
     }
     read_files(v);
+    read_meeting(v);
 }
 
 fuzz_target!(|data: &[u8]| {
