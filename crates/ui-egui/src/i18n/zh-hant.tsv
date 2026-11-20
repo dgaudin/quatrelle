@@ -2386,5 +2386,9 @@ presence	Offline	離線
 	Teams gave a link Quatrelle doesn't trust	Teams 提供了 Quatrelle 不信任的連結
 	The Teams meeting couldn't be updated: {error}	無法更新 Teams 會議: {error}
 	The Teams meeting couldn't be deleted: {error}	無法刪除 Teams 會議: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	無法更新 Teams 會議: Teams 回應了 {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	無法更新 Teams 會議: Teams 回應了 {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	無法刪除 Teams 會議: Teams 回應了 {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	無法刪除 Teams 會議: Teams 回應了 {status}
 	Teams is signed out	Teams 已登出
 	no connection	無連線

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! UI tests: the Room Finder and the Scheduling Assistant in the event form.
+//! UI tests: the Room Finder and the Scheduling Assistant in the event form, and what an online
+//! meeting's notices say in the interface's language.
 
 use super::*;
 
@@ -362,4 +363,38 @@ fn a_click_shows_a_rooms_day_and_a_double_click_books_it() {
     click_at(&ctx, &mut a, at, 1, size);
     assert!(a.ui.event_windows[0].1.rooms.is_empty());
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A Teams meeting that couldn't be changed or deleted says so in the interface's language:
+/// Quatrelle's words translated, Graph's status and code as they came.
+#[test]
+fn a_teams_meetings_failure_is_said_in_the_interfaces_language() {
+    use quatrelle_engine::model::pim::teams::{self, TeamsMeetingError};
+    let mut s = quatrelle_engine::Session::open(None, quatrelle_engine::model::dates::Clock::default());
+    (s.prefs.teams.on, s.prefs.teams.signed_in) = (true, true);
+    let refused = |status, code: &str| Some(TeamsMeetingError::Refused { status, code: code.into() });
+    let cases = [
+        (
+            teams::Event::MeetingUpdated { id: "m1".into(), meeting: None, error: refused(400, "BadRequest") },
+            "La réunion Teams n’a pas pu être mise à jour : Teams a répondu 400 : BadRequest",
+        ),
+        (
+            teams::Event::MeetingDeleted { id: "m1".into(), error: refused(503, "") },
+            "La réunion Teams n’a pas pu être supprimée : Teams a répondu 503",
+        ),
+        (
+            teams::Event::MeetingDeleted { id: "m1".into(), error: Some(TeamsMeetingError::Offline) },
+            "La réunion Teams n’a pas pu être supprimée : pas de connexion",
+        ),
+        (
+            teams::Event::MeetingUpdated { id: "m1".into(), meeting: None, error: Some(TeamsMeetingError::NotSignedIn) },
+            "La réunion Teams n’a pas pu être mise à jour : Teams est déconnecté",
+        ),
+    ];
+    crate::i18n::set_current(crate::i18n::Lang::from_code("fr").unwrap());
+    for (event, said) in cases {
+        s.apply(quatrelle_engine::model::Event::Teams { event });
+        assert_eq!(s.notices.last().map(crate::i18n::notice).as_deref(), Some(said));
+    }
+    crate::i18n::set_current(crate::i18n::Lang::EN);
 }

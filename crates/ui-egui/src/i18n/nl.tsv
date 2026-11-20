@@ -2380,5 +2380,9 @@ presence	Offline	Offline
 	Teams gave a link Quatrelle doesn't trust	Teams gaf een link die Quatrelle niet vertrouwt
 	The Teams meeting couldn't be updated: {error}	De Teams-vergadering kon niet worden bijgewerkt: {error}
 	The Teams meeting couldn't be deleted: {error}	De Teams-vergadering kon niet worden verwijderd: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	De Teams-vergadering kon niet worden bijgewerkt: Teams antwoordde {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	De Teams-vergadering kon niet worden bijgewerkt: Teams antwoordde {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	De Teams-vergadering kon niet worden verwijderd: Teams antwoordde {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	De Teams-vergadering kon niet worden verwijderd: Teams antwoordde {status}
 	Teams is signed out	Teams is afgemeld
 	no connection	geen verbinding

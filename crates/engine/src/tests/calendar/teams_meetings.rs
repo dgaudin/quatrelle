@@ -194,6 +194,84 @@ fn a_failed_update_or_delete_is_a_notice() {
     done(s);
 }
 
+/// A notice's values as the engine keeps them.
+fn values(pairs: &[(&'static str, &str)]) -> Vec<(&'static str, String)> {
+    pairs.iter().map(|(k, v)| (*k, (*v).to_string())).collect()
+}
+
+/// Graph's refusal has a wording of its own, its status and code put in as they came, so that the
+/// window says the rest in its language; any other error goes in as `{error}`, which the window
+/// translates as Quatrelle's words.
+#[test]
+fn a_refusal_is_said_by_its_status_and_code() {
+    let mut s = signed_in("teams-meeting-refusal");
+    let refused = |code: &str| Some(TeamsMeetingError::Refused { status: 400, code: code.into() });
+    let last = |s: &Session| s.notices.last().map(|n| (n.template, n.values.clone(), n.text.clone(), n.error));
+    let updated = |s: &mut Session, error| teams(s, teams::Event::MeetingUpdated { id: "m1".into(), meeting: None, error });
+    let deleted = |s: &mut Session, error| teams(s, teams::Event::MeetingDeleted { id: "m1".into(), error });
+    updated(&mut s, refused("BadRequest"));
+    assert_eq!(
+        last(&s),
+        Some((
+            "The Teams meeting couldn't be updated: Teams answered {status}: {code}",
+            values(&[("status", "400"), ("code", "BadRequest")]),
+            "The Teams meeting couldn't be updated: Teams answered 400: BadRequest".to_string(),
+            true
+        ))
+    );
+    updated(&mut s, refused(""));
+    assert_eq!(
+        last(&s),
+        Some((
+            "The Teams meeting couldn't be updated: Teams answered {status}",
+            values(&[("status", "400")]),
+            "The Teams meeting couldn't be updated: Teams answered 400".to_string(),
+            true
+        ))
+    );
+    deleted(&mut s, refused("BadRequest"));
+    assert_eq!(
+        last(&s),
+        Some((
+            "The Teams meeting couldn't be deleted: Teams answered {status}: {code}",
+            values(&[("status", "400"), ("code", "BadRequest")]),
+            "The Teams meeting couldn't be deleted: Teams answered 400: BadRequest".to_string(),
+            true
+        ))
+    );
+    deleted(&mut s, refused(""));
+    assert_eq!(
+        last(&s),
+        Some((
+            "The Teams meeting couldn't be deleted: Teams answered {status}",
+            values(&[("status", "400")]),
+            "The Teams meeting couldn't be deleted: Teams answered 400".to_string(),
+            true
+        ))
+    );
+    deleted(&mut s, Some(TeamsMeetingError::Offline));
+    assert_eq!(
+        last(&s),
+        Some((
+            "The Teams meeting couldn't be deleted: {error}",
+            values(&[("error", "no connection")]),
+            "The Teams meeting couldn't be deleted: no connection".to_string(),
+            true
+        ))
+    );
+    updated(&mut s, Some(TeamsMeetingError::NotSignedIn));
+    assert_eq!(
+        last(&s),
+        Some((
+            "The Teams meeting couldn't be updated: {error}",
+            values(&[("error", "Teams is signed out")]),
+            "The Teams meeting couldn't be updated: Teams is signed out".to_string(),
+            true
+        ))
+    );
+    done(s);
+}
+
 /// An update Teams didn't take leaves `sent` as Teams still has it, so that the next save sends
 /// the difference again; the updates still out started from it too.
 #[test]
@@ -255,6 +333,24 @@ fn another_teams_link_in_the_notes_stays() {
     let e = &s.find_event(&uid).unwrap().1.event;
     assert_eq!((e.location.as_str(), e.description.as_str()), ("Room 2", notes(NEW_LINK).as_str()));
     assert_eq!(e.conference, conference(NEW_LINK));
+    done(s);
+}
+
+/// The conference holds the meeting's link: only that link gives way, wherever it still is. Gone
+/// from the notes and the place, it isn't looked for there in another Teams meeting's link the
+/// user typed.
+#[test]
+fn the_meetings_own_link_alone_gives_way() {
+    let mut s = signed_in("teams-meeting-own-link");
+    let notes = format!("Last time: {OTHER_LINK}");
+    let uid = appointment(&mut s, "Room 2", &notes);
+    set(&mut s, &uid, |e| e.conference = conference(LINK));
+    let told = invitations(&s);
+    teams(&mut s, teams::Event::MeetingUpdated { id: "m1".into(), meeting: Some(meeting(NEW_LINK)), error: None });
+    let e = &s.find_event(&uid).unwrap().1.event;
+    assert_eq!((e.location.as_str(), e.description.as_str()), ("Room 2", notes.as_str()), "the user's link stays");
+    assert_eq!(e.conference, conference(NEW_LINK));
+    assert_eq!(invitations(&s), told + 1, "the guests hear of the new link");
     done(s);
 }
 

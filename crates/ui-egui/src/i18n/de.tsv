@@ -2384,5 +2384,9 @@ presence	Offline	Offline
 	Teams gave a link Quatrelle doesn't trust	Teams hat einen Link geliefert, dem Quatrelle nicht vertraut
 	The Teams meeting couldn't be updated: {error}	Die Teams-Besprechung konnte nicht aktualisiert werden: {error}
 	The Teams meeting couldn't be deleted: {error}	Die Teams-Besprechung konnte nicht gelöscht werden: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	Die Teams-Besprechung konnte nicht aktualisiert werden: Teams antwortete {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	Die Teams-Besprechung konnte nicht aktualisiert werden: Teams antwortete {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	Die Teams-Besprechung konnte nicht gelöscht werden: Teams antwortete {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	Die Teams-Besprechung konnte nicht gelöscht werden: Teams antwortete {status}
 	Teams is signed out	Teams ist abgemeldet
 	no connection	keine Verbindung

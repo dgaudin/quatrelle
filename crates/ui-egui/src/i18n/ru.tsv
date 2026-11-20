@@ -2384,5 +2384,9 @@ presence	Offline	Не в сети
 	Teams gave a link Quatrelle doesn't trust	Teams дал ссылку, которой Quatrelle не доверяет
 	The Teams meeting couldn't be updated: {error}	Не удалось обновить собрание Teams: {error}
 	The Teams meeting couldn't be deleted: {error}	Не удалось удалить собрание Teams: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	Не удалось обновить собрание Teams: Teams ответил {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	Не удалось обновить собрание Teams: Teams ответил {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	Не удалось удалить собрание Teams: Teams ответил {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	Не удалось удалить собрание Teams: Teams ответил {status}
 	Teams is signed out	Выполнен выход из Teams
 	no connection	нет соединения

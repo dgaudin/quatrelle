@@ -2382,5 +2382,9 @@ presence	Offline	오프라인
 	Teams gave a link Quatrelle doesn't trust	Teams가 Quatrelle이 신뢰하지 않는 링크를 주었습니다
 	The Teams meeting couldn't be updated: {error}	Teams 회의를 업데이트할 수 없습니다: {error}
 	The Teams meeting couldn't be deleted: {error}	Teams 회의를 삭제할 수 없습니다: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	Teams 회의를 업데이트할 수 없습니다: Teams 응답 {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	Teams 회의를 업데이트할 수 없습니다: Teams 응답 {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	Teams 회의를 삭제할 수 없습니다: Teams 응답 {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	Teams 회의를 삭제할 수 없습니다: Teams 응답 {status}
 	Teams is signed out	Teams에서 로그아웃되었습니다
 	no connection	연결 없음

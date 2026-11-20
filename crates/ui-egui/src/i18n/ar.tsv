@@ -2379,5 +2379,9 @@ presence	Offline	غير متصل
 	Teams gave a link Quatrelle doesn't trust	أعطى Teams رابطاً لا يثق به Quatrelle
 	The Teams meeting couldn't be updated: {error}	تعذّر تحديث اجتماع Teams: {error}
 	The Teams meeting couldn't be deleted: {error}	تعذّر حذف اجتماع Teams: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	تعذّر تحديث اجتماع Teams: ردّ Teams بـ {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	تعذّر تحديث اجتماع Teams: ردّ Teams بـ {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	تعذّر حذف اجتماع Teams: ردّ Teams بـ {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	تعذّر حذف اجتماع Teams: ردّ Teams بـ {status}
 	Teams is signed out	تم تسجيل الخروج من Teams
 	no connection	لا يوجد اتصال

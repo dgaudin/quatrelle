@@ -2379,5 +2379,9 @@ presence	Offline	לא מחובר
 	Teams gave a link Quatrelle doesn't trust	Teams נתן קישור ש-Quatrelle אינו סומך עליו
 	The Teams meeting couldn't be updated: {error}	לא ניתן היה לעדכן את פגישת Teams: {error}
 	The Teams meeting couldn't be deleted: {error}	לא ניתן היה למחוק את פגישת Teams: {error}
+	The Teams meeting couldn't be updated: Teams answered {status}: {code}	לא ניתן היה לעדכן את פגישת Teams: Teams השיב {status}: {code}
+	The Teams meeting couldn't be updated: Teams answered {status}	לא ניתן היה לעדכן את פגישת Teams: Teams השיב {status}
+	The Teams meeting couldn't be deleted: Teams answered {status}: {code}	לא ניתן היה למחוק את פגישת Teams: Teams השיב {status}: {code}
+	The Teams meeting couldn't be deleted: Teams answered {status}	לא ניתן היה למחוק את פגישת Teams: Teams השיב {status}
 	Teams is signed out	Teams מנותק
 	no connection	אין חיבור

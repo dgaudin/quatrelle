@@ -52,17 +52,20 @@ fn teams_meeting_link(url: &str) -> bool {
     ical::is_teams_link(url) && teams_meeting_url(url)
 }
 
-/// The link in an appointment's notes or place that Teams' `link` replaces: a Teams meeting's,
-/// the conference's first (the meeting's own), else the first found. Every answer gives the link,
-/// most often the one the appointment has already, and any other link in it is the user's.
+/// The link in an appointment's notes or place that Teams' `link` replaces: the meeting's own,
+/// its conference's when that is a Teams meeting's link (and only it, wherever it still is: any
+/// other Teams link there is the user's); else, without one, the first Teams meeting's link found.
+/// Every answer gives the link, most often the one the appointment has already.
 fn replaced_link(e: &CalEvent, link: &str) -> Option<String> {
     let links = e.links();
     if links.iter().any(|l| l == link) {
         return None;
     }
-    let held = |l: &str| teams_meeting_link(l) && (e.description.contains(l) || e.location.contains(l));
-    let own = e.conference.as_ref().map(|c| c.url.clone()).filter(|u| held(u));
-    own.or_else(|| links.into_iter().find(|l| held(l)))
+    let held = |l: &str| e.description.contains(l) || e.location.contains(l);
+    if let Some(c) = e.conference.as_ref().filter(|c| teams_meeting_link(&c.url)) {
+        return held(&c.url).then(|| c.url.clone());
+    }
+    links.into_iter().find(|l| teams_meeting_link(l) && held(l))
 }
 
 /// Whether a conference's link gives way to Teams' `link`: another Teams meeting's link (the
@@ -116,7 +119,9 @@ impl Session {
     /// Teams switched off or signed out: nothing on its way will be answered. A window waiting
     /// hears that Teams is signed out, a creation given up is forgotten (nothing can delete its
     /// meeting now), and the updates out count as not taken: what Teams surely has goes back in
-    /// `sent`, for the next save to send the difference again.
+    /// `sent`, for the next save to send the difference again. What this leaves: an update Teams
+    /// did take before the stop, then the appointment given back exactly the fields it had before
+    /// that update — that save sends nothing, and Teams keeps the update's values.
     pub(crate) fn teams_meetings_stopped(&mut self) {
         let m = &mut self.teams_meetings;
         for (ask, asked) in m.asks.drain() {
@@ -164,13 +169,37 @@ impl Session {
             }
             m.sent.insert(id.to_string(), from);
         }
-        let done = match (meeting, error) {
-            (_, Some(e)) => Err(e.to_string()),
-            (Some(made), None) => self.teams_meeting_link_changed(id, &made.join_url).map_err(|e| e.to_string()),
-            (None, None) => Ok(()),
+        match (meeting, error) {
+            (_, Some(e)) => self.teams_meeting_failed(false, &e),
+            (Some(made), None) => {
+                if let Err(e) = self.teams_meeting_link_changed(id, &made.join_url) {
+                    self.notice_with("The Teams meeting couldn't be updated: {error}", &[("error", &e.to_string())], true);
+                }
+            }
+            (None, None) => {}
+        }
+    }
+
+    /// Teams didn't update (or delete) a meeting: a notice the window says in its language. Graph's
+    /// refusal has a wording of its own, its status and code put in as they came (the code is
+    /// Graph's word, never translated); any other error is Quatrelle's words, put in as `{error}`.
+    fn teams_meeting_failed(&mut self, deleting: bool, error: &TeamsMeetingError) {
+        let TeamsMeetingError::Refused { status, code } = error else {
+            let error = error.to_string();
+            if deleting {
+                self.notice_with("The Teams meeting couldn't be deleted: {error}", &[("error", &error)], true);
+            } else {
+                self.notice_with("The Teams meeting couldn't be updated: {error}", &[("error", &error)], true);
+            }
+            return;
         };
-        if let Err(e) = done {
-            self.notice_with("The Teams meeting couldn't be updated: {error}", &[("error", &e)], true);
+        let status = status.to_string();
+        let (status, code) = (("status", status.as_str()), ("code", code.as_str()));
+        match (deleting, code.1.is_empty()) {
+            (false, false) => self.notice_with("The Teams meeting couldn't be updated: Teams answered {status}: {code}", &[status, code], true),
+            (false, true) => self.notice_with("The Teams meeting couldn't be updated: Teams answered {status}", &[status], true),
+            (true, false) => self.notice_with("The Teams meeting couldn't be deleted: Teams answered {status}: {code}", &[status, code], true),
+            (true, true) => self.notice_with("The Teams meeting couldn't be deleted: Teams answered {status}", &[status], true),
         }
     }
 
@@ -204,7 +233,7 @@ impl Session {
     pub(super) fn teams_meeting_deleted(&mut self, error: Option<TeamsMeetingError>) {
         self.teams_meetings.deleting = self.teams_meetings.deleting.saturating_sub(1);
         if let Some(e) = error {
-            self.notice_with("The Teams meeting couldn't be deleted: {error}", &[("error", &e.to_string())], true);
+            self.teams_meeting_failed(true, &e);
         }
     }
 }
