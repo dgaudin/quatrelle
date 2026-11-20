@@ -21,7 +21,7 @@ pub use index_text::{IndexDoc, MAX_INDEX_CHARS, index_doc};
 #[doc(hidden)]
 pub use index_text::{IndexStats, index_doc_stats};
 use parts::sent_bytes;
-pub(crate) use parts::{contents, dmarc_failed, files_of, header_raw};
+pub(crate) use parts::{body_html, body_text, contents, dmarc_failed, files_of, header_raw, part_text};
 pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, part_name, text_first};
 
 /// A part's size: its bytes (`data`), or, with none yet (a message's text that came first), the
@@ -180,7 +180,7 @@ const SHOWN_HTML_MAX: usize = 4 << 20;
 /// A message's real `text/html` bodies, the first [`SHOWN_HTML_MAX`] bytes of them.
 fn message_html(m: &Message<'_>) -> String {
     let mut out = String::new();
-    for t in m.html_body().filter(is_html).filter_map(|b| b.text()) {
+    for t in m.html_body().filter(is_html).filter_map(part_text) {
         push_capped(&mut out, &t);
     }
     out
