@@ -14,6 +14,8 @@ use quatrelle_model::pim::teams::{self, Status, TEAMS_CONFERENCE_LABEL, TeamsMee
 use super::*;
 use crate::TeamsMeetingAsk;
 
+mod follow;
+
 /// The creation the tests answer.
 const ASK: u64 = 7;
 /// The meeting's join link, and the one Teams gives it later.

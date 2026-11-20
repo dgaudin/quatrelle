@@ -4,15 +4,20 @@
 //! Teams worker calls Graph; what comes back waits here for the window that asked, a meeting whose
 //! window has closed is deleted (nothing else will ever hold its id), a change Teams didn't take
 //! is said and left for the next save to send again, and a meeting given another link has it
-//! written where the old one was. Meetings may be made while Teams is on, signed in, and the
-//! permission to make them was given, as the worker says ([`teams::Event::Meetings`]). This
-//! state is kept apart from [`TeamsState`]: signing out doesn't forget what was sent.
+//! written where the old one was. A meeting follows its appointment: a save sends Teams what its
+//! title or times changed, deleting the appointment (or taking the meeting out of it) deletes the
+//! meeting, and Teams unusable leaves it waiting for the next save. Meetings may be made while
+//! Teams is on, signed in, and the permission to make them was given, as the worker says
+//! ([`teams::Event::Meetings`]), and only in a calendar of the user's own ([`TeamsMeetingPath`]).
+//! This state is kept apart from [`TeamsState`]: signing out doesn't forget what was sent.
 //!
 //! What is hostile here: Graph's answers, read and checked by the worker, bounded again here. An
 //! answer to an ask nobody made is dropped (the asks are at most [`TEAMS_MEETING_ASKS_MAX`]). A new
 //! link is written only when it is a Teams meeting's join link ([`ical::is_teams_link`] and
 //! [`teams_meeting_url`]), only into an appointment the user organizes, and only in place of a
-//! Teams meeting's link its notes, place or conference held.
+//! Teams meeting's link its notes, place or conference held. An event the user doesn't organize
+//! may carry any id: it is never acted on (T3); only the ids kept on the user's own appointments,
+//! or made here, are sent (T6).
 
 use quatrelle_model::pim::teams::{TeamsMeeting, TeamsMeetingError, TeamsMeetingFields, teams_meeting_url};
 
@@ -44,6 +49,17 @@ pub struct TeamsMeetingsState {
     pub deleting: usize,
     /// Quatrelle is closing: the open windows were gone through once.
     pub closing: bool,
+}
+
+/// How a Teams meeting is added to an appointment, by the calendar it is in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeamsMeetingPath {
+    /// Quatrelle asks Teams for the meeting, and the meeting follows the appointment.
+    Standalone,
+    /// A Microsoft 365 mailbox's calendar: Exchange Online makes the meeting with the appointment.
+    Mailbox,
+    /// A calendar Quatrelle doesn't know, or someone else's: no Teams meeting is added there.
+    Unavailable,
 }
 
 /// Whether a link joins a meeting Teams made: a link Teams joins by, on one of the hosts its
@@ -98,6 +114,77 @@ impl Session {
     /// carry any id.
     fn teams_meeting_is_mine(&self, e: &CalEvent) -> bool {
         e.teams_meeting_id.is_some() && self.teams_meeting_can_hold(e)
+    }
+
+    /// How a Teams meeting is added in `calendar` (its id, or its name, as `event.create` finds
+    /// it) of `account`: never in a calendar Quatrelle doesn't know, nor in one the account lists
+    /// that isn't the user's (a colleague's shared one, a public folder's, one subscribed to by
+    /// its link), whatever the account; by Exchange Online in a Microsoft 365 mailbox's calendar
+    /// (all but the one on this computer); otherwise by Quatrelle.
+    pub fn teams_meeting_path(&self, account: &str, calendar: &str) -> TeamsMeetingPath {
+        let found = self.pim.get(account).and_then(|p| p.calendars.iter().find(|c| c.id == calendar || c.name.eq_ignore_ascii_case(calendar)));
+        let Some(c) = found.filter(|c| !c.not_own && own_calendar(&c.id)) else { return TeamsMeetingPath::Unavailable };
+        if c.id != LOCAL && self.account(account).is_some_and(|a| a.config.graph.is_some()) {
+            TeamsMeetingPath::Mailbox
+        } else {
+            TeamsMeetingPath::Standalone
+        }
+    }
+
+    /// An appointment saved, from `before` (none: just made) to `after`: its Teams meeting follows
+    /// it, when the meeting is the user's. One the appointment had and no longer has (taken out,
+    /// or another put in its place) is deleted; the one it has is sent what differs from what
+    /// Teams was last sent, or else from what `before` said (D16: its title, and its start and end
+    /// as instants). Teams can't be used: nothing goes, a notice says so, and `sent` keeps what
+    /// Teams still has, for the next save to send the whole change.
+    pub(crate) fn teams_meeting_follow(&mut self, before: Option<&CalEvent>, after: &CalEvent) {
+        let old = before.filter(|b| self.teams_meeting_can_hold(b)).and_then(|b| b.teams_meeting_id.clone());
+        let new = after.teams_meeting_id.clone().filter(|_| self.teams_meeting_can_hold(after));
+        if let Some(old) = old.clone().filter(|o| new.as_ref() != Some(o)) {
+            self.teams_meeting_drop(old);
+        }
+        let Some(id) = new else { return };
+        let last = match self.teams_meetings.sent.get(&id) {
+            Some(sent) => sent.clone(),
+            None => match before.filter(|_| old.as_ref() == Some(&id)) {
+                Some(b) => TeamsMeetingFields::of(b),
+                None => return,
+            },
+        };
+        let now = TeamsMeetingFields::of(after);
+        if now == last {
+            return;
+        }
+        if let Err(e) = self.teams_meetings_usable() {
+            // A meeting of an earlier session goes in with what it had before this change: the
+            // next save sends this change with its own.
+            self.teams_meetings.sent.entry(id).or_insert(last);
+            return self.teams_meeting_failed(false, &e);
+        }
+        self.teams_meetings.sent.insert(id.clone(), now.clone());
+        self.teams_meetings.unacknowledged.entry(id.clone()).or_default().push_back(last.clone());
+        self.jobs.push(Job::Teams { job: teams::Job::MeetingUpdate { id, before: last, after: now } });
+    }
+
+    /// An appointment of the user's deleted (or cancelled): so is its Teams meeting. One
+    /// occurrence of a series leaves the series' meeting alone.
+    pub(crate) fn teams_meeting_gone(&mut self, e: &CalEvent, occurrence: Option<i64>) {
+        let Some(id) = e.teams_meeting_id.clone().filter(|_| self.teams_meeting_can_hold(e)) else { return };
+        if occurrence.is_some() && e.rrule.is_some() {
+            return;
+        }
+        self.teams_meeting_drop(id);
+    }
+
+    /// A meeting nothing holds any more: forgotten, and deleted in Teams. Teams can't be used: a
+    /// notice says the meeting wasn't deleted (it stays in Teams, where it expires).
+    pub(crate) fn teams_meeting_drop(&mut self, id: String) {
+        self.teams_meetings.sent.remove(&id);
+        self.teams_meetings.unacknowledged.remove(&id);
+        match self.teams_meetings_usable() {
+            Ok(()) => self.teams_meeting_delete(id),
+            Err(e) => self.teams_meeting_failed(true, &e),
+        }
     }
 
     /// The answer to a creation, once, for the window that asked.

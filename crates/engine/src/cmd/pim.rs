@@ -106,13 +106,14 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             }
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
             s.webex_follow(None, &e);
+            s.teams_meeting_follow(None, &e);
             // The guests are invited: by the server where it does that, else by mail.
             if let Some(uid) = r.get("uid").and_then(Value::as_str).map(str::to_string) {
                 s.tell_guests(&account, &uid, None, true)?;
             }
             Ok(r)
         })
-        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer), "conference"?: {"url": string, "label"?: string} | null (where to join it online, its calendar's CONFERENCE: a web link; the same link keeps its label unless one is given; null takes it out)}"#),
+        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer), "teamsMeetingId"?: string ("" removes it), "conference"?: {"url": string, "label"?: string} | null (where to join it online, its calendar's CONFERENCE: a web link; the same link keeps its label unless one is given; null takes it out)}"#),
         CommandSpec::new("reminders.list", "Reminders", "File › Reminders", |s, _| {
             let now = s.clock.now;
             Ok(json!(s
@@ -167,6 +168,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             }
             let r = s.update_event(&uid, |x| *x = e.clone())?;
             s.webex_follow(Some(&current), &e);
+            s.teams_meeting_follow(Some(&current), &e);
             // The user's own meeting: the guests hear of the change.
             if let Some((account, real)) = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.uid.clone())) {
                 s.tell_guests(&account, &real, None, p::bool(v, "send").unwrap_or(true))?;
@@ -207,6 +209,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let r = s.delete_event(&uid, occurrence)?;
             if let Some((_, e)) = &before {
                 s.webex_gone(e, occurrence);
+                s.teams_meeting_gone(e, occurrence);
             }
             if let Some((account, mut e)) = before
                 && organized_by_me(s, &e)
@@ -489,6 +492,13 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         }
         e.webex_id = Some(id).filter(|id| !id.is_empty()).map(str::to_string);
     }
+    // The Teams meeting made for it (`event.teamsMeeting`'s answer); "" takes it out.
+    if let Some(id) = p::str(v, "teamsMeetingId") {
+        if !id.is_empty() && !quatrelle_model::pim::teams::valid_teams_meeting_id(id) {
+            return Err(CmdError::Params("`teamsMeetingId` is not a Teams meeting id".into()));
+        }
+        e.teams_meeting_id = Some(id).filter(|id| !id.is_empty()).map(str::to_string);
+    }
     // Where to join it online (RFC 7986 `CONFERENCE`): `null` takes it out. The link it has
     // already keeps the features its calendar named, and its label unless one is given.
     let refused = || CmdError::Params("`conference` is {\"url\": a web link, \"label\"?: string} or null".into());
@@ -512,6 +522,17 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             e.conference = Some(new);
         }
         Some(_) => return Err(refused()),
+    }
+    // A Teams meeting and a Webex meeting or room exclude each other: nothing falls back to the
+    // other unseen. Refused only when the params bring one of them, so that an event read with
+    // both can still be changed.
+    let brings = |k: &str| v.get(k).is_some_and(|x| !x.is_null() && x.as_str() != Some(""));
+    let webex = e.webex_id.is_some()
+        || e.conference
+            .as_ref()
+            .is_some_and(|c| quatrelle_model::ical::is_webex_link(&c.url) || quatrelle_model::ical::webex_join_host(&c.url).is_some());
+    if e.teams_meeting_id.is_some() && webex && ["teamsMeetingId", "webexId", "conference"].into_iter().any(brings) {
+        return Err(CmdError::Params("a Teams meeting and a Webex meeting or room don't go together: remove one first".into()));
     }
     if let Some(b) = p::bool(v, "private") {
         e.private = b;

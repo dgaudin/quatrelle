@@ -58,8 +58,9 @@ fn own_event(e: &mut CalEvent) {
     e.attendees.clear();
     e.no_responses = false;
     e.no_new_times = false;
-    // A file's Webex meeting is not the user's.
+    // A file's Webex or Teams meeting is not the user's.
     e.webex_id = None;
+    e.teams_meeting_id = None;
     let mut depth = 0usize;
     e.extra.retain(|line| {
         let name = line.split([':', ';']).next().unwrap_or_default().trim().to_ascii_uppercase();

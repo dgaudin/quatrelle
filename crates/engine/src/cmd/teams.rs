@@ -1,21 +1,26 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! Commands: Teams (File › Options › Teams and the Conversations module). The engine only asks:
-//! the Teams worker talks to Graph and keeps the copy, and what it reports is applied by
-//! [`Session::teams_apply`]. Every param is checked before anything changes.
+//! Commands: Teams (File › Options › Teams, the Conversations module, and the appointment's
+//! Teams meeting). The engine only asks: the Teams worker talks to Graph and keeps the copy, and
+//! what it reports is applied by [`Session::teams_apply`]. Every param is checked before anything
+//! changes.
 
 use std::collections::HashSet;
 use std::ops::Range;
 
 use quatrelle_model::Job;
 use quatrelle_model::addr::trust::url_host;
-use quatrelle_model::pim::teams::{self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PARTS_MAX, PATH_MAX, PRESENCE_IDS, Part, Picture, Status};
+use quatrelle_model::ical::CalEvent;
+use quatrelle_model::pim::teams::{
+    self, LOCAL_MAX, MAX_ID, MAX_MENTIONS, PARTS_MAX, PATH_MAX, PRESENCE_IDS, Part, Picture, Status, TeamsMeetingFields,
+};
 use quatrelle_model::{valid_oauth_client_id, valid_oauth_tenant};
 
+use super::pim::event_from;
 use super::*;
 use crate::mime::Typed;
 use crate::session::pim::Created;
-use crate::{Module, TEAMS_RANGES_MAX, TEAMS_TOO_MANY_FILES, TeamsPage};
+use crate::{Module, TEAMS_MEETING_ASKS_MAX, TEAMS_RANGES_MAX, TEAMS_TOO_MANY_FILES, TeamsMeetingAsk, TeamsMeetingPath, TeamsPage};
 
 const OPTIONS: &str = "File › Options › Teams";
 const MODULE: &str = "Conversations";
@@ -86,6 +91,8 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("teams.openInTeams", "Open in Teams", MODULE, open_in_teams)
             .params("() (the open conversation in Teams, when its link is a Teams chat link)")
             .when(has_teams_link),
+        CommandSpec::new("event.teamsMeeting", "Teams meeting", "Appointment › Meeting", meeting)
+            .params(r#"{"add": {"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "account": string, "calendar": string} → {"ask": number}, answered later: see teams_meeting_take_answer} | {"remove": {"id": string (a meeting made in this session and never saved)} | {"ask": number (its window closed before the answer was taken)}}"#),
         CommandSpec::new("teams.next", "Next conversation", MODULE, |s, _| step(s, true)).key("Alt+Down").when(in_module),
         CommandSpec::new("teams.previous", "Previous conversation", MODULE, |s, _| step(s, false)).key("Alt+Up").when(in_module),
     ]
@@ -482,6 +489,67 @@ fn picture(s: &mut Session, v: &Value) -> CmdResult {
     }
     s.push_job(Job::Teams { job: teams::Job::Picture { picture } });
     Ok(json!({"asked": true}))
+}
+
+/// A Teams meeting for an appointment: asked of Teams (`add`), or left by its window (`remove`).
+/// Everything is checked before anything is asked.
+fn meeting(s: &mut Session, v: &Value) -> CmdResult {
+    match (v.get("add"), v.get("remove")) {
+        (Some(add), None) => meeting_add(s, add),
+        (None, Some(remove)) => meeting_remove(s, remove),
+        _ => Err(CmdError::Params("`add` or `remove` is required".into())),
+    }
+}
+
+/// A meeting asked of Teams with the appointment's title and times, in a calendar of the user's
+/// own ([`Session::teams_meeting_path`]: a Microsoft 365 mailbox's makes its own, not yet here).
+fn meeting_add(s: &mut Session, v: &Value) -> CmdResult {
+    if p::str(v, "summary").is_none_or(|t| t.trim().is_empty()) || v.get("start").is_none() {
+        return Err(CmdError::Params("a Teams meeting needs a title and a start".into()));
+    }
+    let given = |k: &str| p::str(v, k).filter(|x| !x.is_empty()).ok_or_else(|| CmdError::Params(format!("`{k}` (the appointment's) is required")));
+    let (account, calendar) = (given("account")?, given("calendar")?);
+    let fields = TeamsMeetingFields::of(&event_from(s, v, CalEvent::default())?);
+    match s.teams_meeting_path(account, calendar) {
+        TeamsMeetingPath::Standalone => {}
+        TeamsMeetingPath::Mailbox => return Err(CmdError::Disabled("a Teams meeting can't be added in a Microsoft 365 calendar yet".into())),
+        TeamsMeetingPath::Unavailable => return Err(CmdError::Disabled("a Teams meeting is added only in a calendar of your own".into())),
+    }
+    s.teams_meetings_usable().map_err(|e| CmdError::Disabled(e.to_string()))?;
+    if s.teams_meetings.asks.len() >= TEAMS_MEETING_ASKS_MAX {
+        return Err(CmdError::Disabled(format!("at most {TEAMS_MEETING_ASKS_MAX} Teams meetings are made at once")));
+    }
+    let ask = s.fresh_id();
+    s.teams_meetings.asks.insert(ask, TeamsMeetingAsk { fields: fields.clone(), abandoned: false });
+    s.push_job(Job::Teams { job: teams::Job::MeetingCreate { ask, fields } });
+    Ok(json!({"ask": ask}))
+}
+
+/// What a window leaves: a creation still on its way, deleted when it answers (or at once when
+/// its answer waits, nobody having taken it); or a meeting made here and never saved (T6: only
+/// one of those, never an id taken from an event).
+fn meeting_remove(s: &mut Session, v: &Value) -> CmdResult {
+    if let Some(ask) = v.get("ask") {
+        let ask = ask.as_u64().ok_or_else(|| CmdError::Params("`ask` is a creation's number".into()))?;
+        if let Some(asked) = s.teams_meetings.asks.get_mut(&ask) {
+            asked.abandoned = true;
+            return Ok(json!({}));
+        }
+        return match s.teams_meeting_take_answer(ask) {
+            Some(Ok(m)) => {
+                s.teams_meeting_drop(m.id);
+                Ok(json!({}))
+            }
+            Some(Err(_)) => Ok(json!({})),
+            None => Err(CmdError::Params(format!("no Teams meeting is being made as {ask}"))),
+        };
+    }
+    let id = p::req_str(v, "id")?;
+    if !s.teams_meetings.sent.contains_key(id) {
+        return Err(CmdError::Params("`id` isn't a Teams meeting made here".into()));
+    }
+    s.teams_meeting_drop(id.to_string());
+    Ok(json!({}))
 }
 
 /// The next (or previous) listed conversation opened: the first (or last) when none is open.

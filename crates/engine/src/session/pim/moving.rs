@@ -110,9 +110,10 @@ impl Session {
                     }
                     self.after_pim_change(&account, remote);
                 }
-                // Undo comes through here as well, and Webex's meeting follows it back.
+                // Undo comes through here as well, and the Webex and Teams meetings follow it back.
                 if let Some(after) = self.find_event(&real).map(|(_, e)| e.event.clone()) {
                     self.webex_follow(Some(&before), &after);
+                    self.teams_meeting_follow(Some(&before), &after);
                 }
                 (None, before.start, before.end)
             }
