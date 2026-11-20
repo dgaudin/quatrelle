@@ -2385,3 +2385,10 @@ presence	Offline	לא מחובר
 	The Teams meeting couldn't be deleted: Teams answered {status}	לא ניתן היה למחוק את פגישת Teams: Teams השיב {status}
 	Teams is signed out	Teams מנותק
 	no connection	אין חיבור
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	הצטרפו לפגישת Teams: {link}
+	Meeting ID: {id}	מזהה פגישה: {id}
+	Passcode: {passcode}	קוד גישה: {passcode}
+	By phone: {number}, conference ID {conference}	בטלפון: {number}, מזהה ועידה {conference}
+	By phone: {number}	בטלפון: {number}
+	Meeting options: {link}	אפשרויות הפגישה: {link}

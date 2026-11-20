@@ -3,8 +3,9 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The event and contact forms: what they share (their rows, fields and headings), the event
 //! form in `event` (with its Room Finder in `rooms`, its Scheduling Assistant in `scheduling`,
-//! its address book in `attendees`, its Webex meeting in `webex` and its Webex rooms in
-//! `webex_rooms`), the contact form in `contact`; the files kept with either in `files`.
+//! its address book in `attendees`, its Webex meeting in `webex`, its Webex rooms in
+//! `webex_rooms` and its Teams meeting in `teams_meeting`), the contact form in `contact`; the
+//! files kept with either in `files`.
 
 use egui::{Margin, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
@@ -25,6 +26,8 @@ pub(crate) mod pickers;
 pub(crate) mod recurrence;
 pub(crate) mod rooms;
 pub(crate) mod scheduling;
+#[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
+pub(crate) mod teams_meeting;
 pub(crate) mod webex;
 pub(crate) mod webex_rooms;
 

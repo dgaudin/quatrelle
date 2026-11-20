@@ -2386,3 +2386,10 @@ presence	Offline	オフライン
 	The Teams meeting couldn't be deleted: Teams answered {status}	Teams 会議を削除できませんでした: Teams が {status} で応答しました
 	Teams is signed out	Teams からサインアウトしています
 	no connection	接続がありません
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	Teams 会議に参加: {link}
+	Meeting ID: {id}	会議 ID: {id}
+	Passcode: {passcode}	パスコード: {passcode}
+	By phone: {number}, conference ID {conference}	電話で参加: {number}、電話会議 ID {conference}
+	By phone: {number}	電話で参加: {number}
+	Meeting options: {link}	会議のオプション: {link}

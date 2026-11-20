@@ -2386,3 +2386,10 @@ presence	Offline	Offline
 	The Teams meeting couldn't be deleted: Teams answered {status}	De Teams-vergadering kon niet worden verwijderd: Teams antwoordde {status}
 	Teams is signed out	Teams is afgemeld
 	no connection	geen verbinding
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	Deelnemen aan de Teams-vergadering: {link}
+	Meeting ID: {id}	Vergader-ID: {id}
+	Passcode: {passcode}	Toegangscode: {passcode}
+	By phone: {number}, conference ID {conference}	Telefonisch: {number}, conferentie-ID {conference}
+	By phone: {number}	Telefonisch: {number}
+	Meeting options: {link}	Vergaderopties: {link}

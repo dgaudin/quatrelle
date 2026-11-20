@@ -2392,3 +2392,10 @@ presence	Offline	離線
 	The Teams meeting couldn't be deleted: Teams answered {status}	無法刪除 Teams 會議: Teams 回應了 {status}
 	Teams is signed out	Teams 已登出
 	no connection	無連線
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	加入 Teams 會議: {link}
+	Meeting ID: {id}	會議 ID: {id}
+	Passcode: {passcode}	入會密碼: {passcode}
+	By phone: {number}, conference ID {conference}	電話撥入: {number}，電話會議 ID {conference}
+	By phone: {number}	電話撥入: {number}
+	Meeting options: {link}	會議選項: {link}

@@ -2390,3 +2390,10 @@ presence	Offline	Не в сети
 	The Teams meeting couldn't be deleted: Teams answered {status}	Не удалось удалить собрание Teams: Teams ответил {status}
 	Teams is signed out	Выполнен выход из Teams
 	no connection	нет соединения
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	Присоединиться к собранию Teams: {link}
+	Meeting ID: {id}	Идентификатор собрания: {id}
+	Passcode: {passcode}	Код доступа: {passcode}
+	By phone: {number}, conference ID {conference}	По телефону: {number}, идентификатор конференции {conference}
+	By phone: {number}	По телефону: {number}
+	Meeting options: {link}	Параметры собрания: {link}

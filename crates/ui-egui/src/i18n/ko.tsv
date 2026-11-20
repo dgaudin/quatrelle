@@ -2388,3 +2388,10 @@ presence	Offline	오프라인
 	The Teams meeting couldn't be deleted: Teams answered {status}	Teams 회의를 삭제할 수 없습니다: Teams 응답 {status}
 	Teams is signed out	Teams에서 로그아웃되었습니다
 	no connection	연결 없음
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	Teams 회의 참가: {link}
+	Meeting ID: {id}	회의 ID: {id}
+	Passcode: {passcode}	참가 코드: {passcode}
+	By phone: {number}, conference ID {conference}	전화로 참가: {number}, 전화 회의 ID {conference}
+	By phone: {number}	전화로 참가: {number}
+	Meeting options: {link}	회의 옵션: {link}

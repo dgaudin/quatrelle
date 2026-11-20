@@ -184,18 +184,27 @@ pub(crate) fn without_room_block(notes: &str, rooms: &[WebexRoom]) -> String {
         return notes.to_string();
     }
     let labels = crate::i18n::in_every_language("Join the Webex meeting:");
+    without_blocks(notes, |lines| block_at(lines, &labels, rooms))
+}
+
+/// The notes without every block `block_at` finds (how many lines one takes at the start of the
+/// lines it's given, when one starts there): a room's, a Teams meeting's. The blank lines left
+/// doubled where a block was go, and those at the end of the notes; notes with no block come back
+/// as they were.
+pub(super) fn without_blocks(notes: &str, block_at: impl Fn(&[&str]) -> Option<usize>) -> String {
     let lines: Vec<&str> = notes.split('\n').collect();
     let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
     let mut taken = false;
     let mut at = 0;
     while let Some(&line) = lines.get(at) {
-        let Some(n) = block_at(lines.get(at..).unwrap_or_default(), &labels, rooms) else {
+        let Some(n) = block_at(lines.get(at..).unwrap_or_default()) else {
             kept.push(line);
             at += 1;
             continue;
         };
         taken = true;
-        at += n;
+        // A block takes a line at least: the notes are always read to their end.
+        at += n.max(1);
         // At the start, or after a blank line: the blank lines after it would be doubled.
         if kept.last().is_none_or(|l| l.trim().is_empty()) {
             while lines.get(at).is_some_and(|l| l.trim().is_empty()) {

@@ -7,6 +7,7 @@
 use super::*;
 
 mod room_options;
+mod teams_meeting;
 mod webex;
 mod webex_rooms;
 

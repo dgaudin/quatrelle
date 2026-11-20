@@ -2390,3 +2390,10 @@ presence	Offline	Offline
 	The Teams meeting couldn't be deleted: Teams answered {status}	Die Teams-Besprechung konnte nicht gelöscht werden: Teams antwortete {status}
 	Teams is signed out	Teams ist abgemeldet
 	no connection	keine Verbindung
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	An der Teams-Besprechung teilnehmen: {link}
+	Meeting ID: {id}	Besprechungs-ID: {id}
+	Passcode: {passcode}	Zugangscode: {passcode}
+	By phone: {number}, conference ID {conference}	Per Telefon: {number}, Konferenz-ID {conference}
+	By phone: {number}	Per Telefon: {number}
+	Meeting options: {link}	Besprechungsoptionen: {link}

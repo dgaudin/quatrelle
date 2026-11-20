@@ -2385,3 +2385,10 @@ presence	Offline	غير متصل
 	The Teams meeting couldn't be deleted: Teams answered {status}	تعذّر حذف اجتماع Teams: ردّ Teams بـ {status}
 	Teams is signed out	تم تسجيل الخروج من Teams
 	no connection	لا يوجد اتصال
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	الانضمام إلى اجتماع Teams: {link}
+	Meeting ID: {id}	معرّف الاجتماع: {id}
+	Passcode: {passcode}	رمز الدخول: {passcode}
+	By phone: {number}, conference ID {conference}	عبر الهاتف: {number}، معرّف المؤتمر {conference}
+	By phone: {number}	عبر الهاتف: {number}
+	Meeting options: {link}	خيارات الاجتماع: {link}

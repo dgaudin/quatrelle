@@ -95,6 +95,20 @@ pub struct EventForm {
     pub webex_fresh: bool,
     /// The creation being waited for: Save is off until its answer is in.
     pub webex_wait: Option<u64>,
+    /// A Teams meeting made for it would be the user's to keep: a new one, or what
+    /// [`Session::teams_meeting_can_hold`] says of the event.
+    pub teams_allowed: bool,
+    /// The Teams meeting it holds, from the event or made here.
+    pub teams_meeting_id: Option<String>,
+    /// That meeting was made from this window and isn't saved: leaving deletes it.
+    #[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
+    pub teams_fresh: bool,
+    /// The creation being waited for.
+    #[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
+    pub teams_wait: Option<u64>,
+    /// The user took the Teams meeting out in this window: none comes back by itself.
+    #[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
+    pub teams_removed: bool,
     /// Where it's joined online, as it's saved (its calendar's `CONFERENCE`): the event's, or the
     /// Webex room or meeting put in here.
     pub conference: Option<Conference>,
@@ -136,6 +150,7 @@ impl EventForm {
             responses: true,
             new_times: true,
             webex_allowed: true,
+            teams_allowed: true,
             ..Default::default()
         }
     }
@@ -198,6 +213,8 @@ impl EventForm {
             error: None,
             webex_allowed: s.webex_can_hold(e),
             webex_id: e.webex_id.clone(),
+            teams_allowed: s.teams_meeting_can_hold(e),
+            teams_meeting_id: e.teams_meeting_id.clone(),
             conference: e.conference.clone(),
             conference_shown: e.conference.as_ref().is_some_and(|c| link_shown(&c.url, &e.location, &e.description)),
             conference_opened: e.conference.clone(),
@@ -339,14 +356,23 @@ impl EventForm {
         if let Some(id) = &self.webex_id {
             p["webexId"] = json!(id);
         }
+        // Its Teams meeting, when one would be the user's: "" takes out the one it had.
+        if self.teams_allowed {
+            p["teamsMeetingId"] = json!(self.teams_meeting_id.as_deref().unwrap_or(""));
+        }
         // Its conference when a room or a meeting set it; `null` takes out the one whose link was
-        // erased. One left as it opened isn't sent: the engine keeps it.
-        if let Some(c) = &self.conference {
-            if self.conference_shown && !link_shown(&c.url, &self.location, &self.description) {
-                p["conference"] = Value::Null;
-            } else if self.conference != self.conference_opened {
-                p["conference"] = json!({"url": c.url, "label": c.label});
+        // erased, or that went with its Teams meeting. One left as it opened isn't sent: the
+        // engine keeps it.
+        match &self.conference {
+            Some(c) => {
+                if self.conference_shown && !link_shown(&c.url, &self.location, &self.description) {
+                    p["conference"] = Value::Null;
+                } else if self.conference != self.conference_opened {
+                    p["conference"] = json!({"url": c.url, "label": c.label});
+                }
             }
+            None if self.conference_opened.is_some() => p["conference"] = Value::Null,
+            None => {}
         }
         match &self.uid {
             Some(u) => p["uid"] = json!(u),
@@ -362,7 +388,7 @@ impl EventForm {
 }
 
 /// Whether a conference's link `url` is in the place or the notes (ASCII case aside).
-fn link_shown(url: &str, place: &str, notes: &str) -> bool {
+pub(super) fn link_shown(url: &str, place: &str, notes: &str) -> bool {
     let url = url.trim().to_ascii_lowercase();
     [place, notes].iter().any(|text| text.to_ascii_lowercase().contains(&url))
 }

@@ -2390,3 +2390,10 @@ presence	Offline	Hors ligne
 	The Teams meeting couldn't be deleted: Teams answered {status}	La réunion Teams n’a pas pu être supprimée : Teams a répondu {status}
 	Teams is signed out	Teams est déconnecté
 	no connection	pas de connexion
+# Teams meetings: the block an appointment's notes get, a line for each of the meeting's values.
+	Join the Teams meeting: {link}	Rejoindre la réunion Teams : {link}
+	Meeting ID: {id}	ID de réunion : {id}
+	Passcode: {passcode}	Code secret : {passcode}
+	By phone: {number}, conference ID {conference}	Par téléphone : {number}, ID de conférence {conference}
+	By phone: {number}	Par téléphone : {number}
+	Meeting options: {link}	Options de la réunion : {link}
