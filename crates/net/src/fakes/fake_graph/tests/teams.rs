@@ -362,3 +362,163 @@ fn teams_headers_are_recorded() {
     assert!(messages.contains(&("authorization".to_string(), "Bearer test-token".to_string())), "names lowercased");
     assert!(!t.last_headers["download"].iter().any(|(k, _)| k == "authorization"));
 }
+
+fn send_meeting(server: &Server, method: &str, path: &str, body: &str) -> Resp {
+    send(&format!("{}{path}", server.base), method, &[BEARER, ("Content-Type", "application/json")], body)
+}
+
+const MEETING: &str = r#"{"subject": "Weekly", "startDateTime": "2026-11-20T09:00:00Z", "endDateTime": "2026-11-20T10:00:00Z"}"#;
+
+fn with_fake(server: &Server, f: impl FnOnce(&mut FakeTeams)) {
+    f(server.data.lock().unwrap().teams.as_mut().unwrap());
+}
+
+#[test]
+fn a_meeting_is_created_changed_and_deleted() {
+    let server = serve_teams(teams_with(vec![]));
+    let made = send_meeting(&server, "POST", "/me/onlineMeetings", MEETING);
+    assert_eq!(made.status, 201);
+    let v = made.json();
+    let id = v["id"].as_str().unwrap().to_string();
+    assert!(id.contains('/') && id.contains('+') && id.contains('='), "{id}");
+    assert_eq!((v["subject"].as_str(), v["startDateTime"].as_str()), (Some("Weekly"), Some("2026-11-20T09:00:00Z")));
+    let join = v["joinWebUrl"].as_str().unwrap();
+    assert!(join.starts_with("https://teams.microsoft.com/l/meetup-join/19%3ameeting_1%40thread.v2/0?context="), "{join}");
+    assert_eq!(v["joinMeetingIdSettings"]["joinMeetingId"], "1234567890");
+    assert_eq!(v["joinMeetingIdSettings"]["passcode"], "aB3xY9");
+    assert_eq!(v["joinMeetingIdSettings"]["isPasscodeRequired"], true);
+    assert!(v["meetingOptionsWebUrl"].as_str().unwrap().ends_with("&threadId=19_meeting_1@thread.v2"));
+    assert_eq!(v["joinInformation"]["content"], "<div>Microsoft's own invitation text</div>");
+    assert!(v["chatInfo"].is_object());
+    assert!(v["audioConferencing"].is_null());
+
+    let path = format!("/me/onlineMeetings/{}", id.replace('/', "%2F").replace('+', "%2B").replace('=', "%3D"));
+    let changed = send_meeting(&server, "PATCH", &path, r#"{"subject": "Daily"}"#);
+    assert_eq!(changed.status, 200);
+    assert_eq!(changed.json()["subject"], "Daily");
+    assert_eq!(changed.json()["startDateTime"], "2026-11-20T09:00:00Z");
+    assert_eq!(send_meeting(&server, "DELETE", &path, "").status, 204);
+    let gone = send_meeting(&server, "DELETE", &path, "");
+    assert_eq!(gone.status, 404);
+    assert_eq!(gone.json()["error"]["code"], "NotFound");
+    assert_eq!(send_meeting(&server, "PATCH", &path, "{}").status, 404);
+    assert_eq!(send_meeting(&server, "GET", "/me/onlineMeetings/x", "").status, 404);
+}
+
+#[test]
+fn a_meeting_answers_audio_conferencing_only_when_set() {
+    let server = serve_teams(teams_with(vec![]));
+    with_fake(&server, |t| t.audio_conferencing = true);
+    let v = send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).json();
+    assert_eq!(v["audioConferencing"]["tollNumber"], "+1 323-555-0166");
+    assert!(v["audioConferencing"]["tollFreeNumber"].is_null());
+    assert_eq!(v["audioConferencing"]["conferenceId"], "9999999");
+    assert!(v["audioConferencing"]["dialinUrl"].is_string());
+}
+
+#[test]
+fn a_meeting_without_its_times_is_refused() {
+    let server = serve_teams(teams_with(vec![]));
+    for body in [
+        r#"{"startDateTime": "2026-11-20T09:00:00Z", "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        r#"{"subject": "A", "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        r#"{"subject": "A", "startDateTime": "2026-11-20T09:00:00Z"}"#,
+        r#"{"subject": "A", "startDateTime": 5, "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        r#"{"subject": "A", "startDateTime": "2026-11-20T09:00:00", "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        r#"{"subject": "A", "startDateTime": "2026-11-20T09:00:00+01:00", "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        r#"{"subject": "A", "startDateTime": "soon Z", "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        r#"{"subject": "A", "startDateTime": "2026-13-45T09:00:00Z", "endDateTime": "2026-11-20T10:00:00Z"}"#,
+        "not json",
+    ] {
+        let r = send_meeting(&server, "POST", "/me/onlineMeetings", body);
+        assert_eq!((r.status, r.json()["error"]["code"].as_str().map(str::to_string)), (400, Some("BadRequest".into())), "{body}");
+    }
+    with_fake(&server, |t| assert!(t.meetings.is_empty()));
+    let ok = r#"{"subject": "A", "startDateTime": "2026-11-20T09:00:00.5Z", "endDateTime": "2026-11-20T10:00:00Z"}"#;
+    assert_eq!(send_meeting(&server, "POST", "/me/onlineMeetings", ok).status, 201);
+}
+
+#[test]
+fn a_scripted_refusal_answers_its_status_and_code() {
+    let server = serve_teams(teams_with(vec![]));
+    for (status, code) in [(403, "InsufficientPrivileges"), (403, "Forbidden"), (403, "AccessDenied")] {
+        with_fake(&server, |t| t.meeting_refusal = Some((status, code)));
+        for _ in 0..2 {
+            let r = send_meeting(&server, "POST", "/me/onlineMeetings", MEETING);
+            assert_eq!((r.status, r.json()["error"]["code"].as_str().map(str::to_string)), (status, Some(code.into())));
+        }
+    }
+    with_fake(&server, |t| assert!(t.meetings.is_empty()));
+    with_fake(&server, |t| t.meeting_refusal = None);
+    assert_eq!(send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).status, 201);
+}
+
+#[test]
+fn a_hostile_answer_is_laid_over_once() {
+    let server = serve_teams(teams_with(vec![]));
+    with_fake(&server, |t| t.meeting_answer = Some(json!({"joinWebUrl": "javascript:alert(1)", "id": 7})));
+    let v = send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).json();
+    assert_eq!((v["joinWebUrl"].as_str(), v["id"].as_i64()), (Some("javascript:alert(1)"), Some(7)));
+    assert_eq!(v["subject"], "Weekly");
+    let v = send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).json();
+    assert!(v["joinWebUrl"].as_str().unwrap().starts_with("https://teams.microsoft.com/"));
+    with_fake(&server, |t| assert!(t.meeting_answer.is_none()));
+}
+
+#[test]
+fn a_patch_may_move_the_join_link() {
+    let server = serve_teams(teams_with(vec![]));
+    let v = send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).json();
+    let (id, join) = (v["id"].as_str().unwrap().replace('/', "%2F").replace('+', "%2B").replace('=', "%3D"), v["joinWebUrl"].clone());
+    with_fake(&server, |t| t.meeting_moves = true);
+    let moved = send_meeting(&server, "PATCH", &format!("/me/onlineMeetings/{id}"), r#"{"subject": "B"}"#).json();
+    assert_ne!(moved["joinWebUrl"], join);
+}
+
+#[test]
+fn every_meeting_request_is_kept_and_counted() {
+    let server = serve_teams(teams_with(vec![]));
+    send_meeting(&server, "POST", "/me/onlineMeetings", MEETING);
+    assert_eq!(send_meeting(&server, "PATCH", "/me/onlineMeetings/a%2Fb?x=1", r#"{"subject": "S"}"#).status, 404);
+    assert_eq!(send_meeting(&server, "GET", "/me/onlineMeetings/a/attendanceReports", "").status, 404);
+    assert_eq!(send_meeting(&server, "DELETE", "/me/onlineMeetings/zz", "").status, 404);
+    // Scripted refusals work by route name, as on the others.
+    with_fake(&server, |t| {
+        t.throttle_once = Some("createMeeting");
+        t.refuse_once = Some("updateMeeting");
+        t.fail_next.insert("deleteMeeting".into(), 1);
+    });
+    assert_eq!(send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).status, 429);
+    assert_eq!(send_meeting(&server, "PATCH", "/me/onlineMeetings/q", "{}").status, 401);
+    assert_eq!(send_meeting(&server, "DELETE", "/me/onlineMeetings/q", "").status, 500);
+    with_fake(&server, |t| {
+        t.not_found_next.insert("createMeeting".into(), 1);
+    });
+    assert_eq!(send_meeting(&server, "POST", "/me/onlineMeetings", MEETING).status, 404);
+    with_fake(&server, |t| t.cut_all = true);
+    let cut = TcpStream::connect(server.base.trim_start_matches("http://").split('/').next().unwrap()).and_then(|mut s| {
+        s.write_all(b"POST /me/onlineMeetings HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n")?;
+        let mut raw = Vec::new();
+        s.read_to_end(&mut raw)?;
+        Ok(raw)
+    });
+    assert!(cut.is_ok_and(|raw| raw.is_empty()), "no answer at all");
+    // The server may still be counting it when the connection closes.
+    for _ in 0..100 {
+        if server.data.lock().unwrap().teams.as_ref().unwrap().meeting_paths.len() == 9 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let d = server.data.lock().unwrap();
+    let t = d.teams.as_ref().unwrap();
+    assert_eq!(t.meeting_paths[1], "/me/onlineMeetings/a%2Fb");
+    assert_eq!(t.meeting_paths[2], "/me/onlineMeetings/a/attendanceReports");
+    assert_eq!(t.meeting_paths.len(), 9, "{:?}", t.meeting_paths);
+    let writes: Vec<(&str, &str)> = t.meeting_writes.iter().map(|(r, id, _)| (r.as_str(), id.as_str())).collect();
+    assert_eq!(&writes[..4], [("createMeeting", ""), ("updateMeeting", "a/b"), ("deleteMeeting", "zz"), ("createMeeting", "")]);
+    assert_eq!(t.meeting_writes[1].2["subject"], "S");
+    assert_eq!(t.meeting_writes[0].2["subject"], "Weekly");
+    assert_eq!(t.meeting_writes.len(), 7, "the cut request is counted in hits only");
+    assert_eq!((t.hits["createMeeting"], t.hits["updateMeeting"], t.hits["deleteMeeting"], t.hits["unknown"]), (4, 2, 2, 1));
+}

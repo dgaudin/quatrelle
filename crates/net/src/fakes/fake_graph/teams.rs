@@ -4,13 +4,15 @@
 //! in a `lastModifiedDateTime` range, posted with pictures and files, edited, reacted to,
 //! soft-deleted), marking a chat read, shared files, messages' hosted images, people's photos
 //! and presence, the user's OneDrive (its upload sessions, items and shares: `drive.rs`), the
-//! directory and the chats created (`people.rs`), as Graph v1.0 answers them.
+//! directory and the chats created (`people.rs`), and the online meetings created, changed and
+//! deleted at `/me/onlineMeetings` (`meetings.rs`), as Graph v1.0 answers them.
 //!
 //! Each request is counted in [`FakeTeams::hits`] and its headers kept in
 //! [`FakeTeams::last_headers`] under its route name: `me`, `chats`, `members`, `messages`,
 //! `post`, `edit`, `setReaction`, `unsetReaction`, `softDelete`, `markChatReadForUser`,
 //! `shares`, `download`, `hosted`, `photo`, `presence`, `drive`, `uploadSession`, `upload`,
-//! `item`, `deleteItem`, `invite`, `users`, `createChat`, and `unknown` for a Teams path no
+//! `item`, `deleteItem`, `invite`, `users`, `createChat`, `createMeeting`, `updateMeeting`,
+//! `deleteMeeting`, and `unknown` for a Teams path no
 //! route answers (404).
 
 use std::collections::HashMap;
@@ -19,6 +21,7 @@ use super::*;
 
 mod chats;
 mod drive;
+mod meetings;
 mod people;
 
 /// A Microsoft Entra user, as the fake knows one.
@@ -37,6 +40,16 @@ impl FakeUser {
         let mail = format!("{first}@contoso.example");
         Self { id: id.into(), display_name: name.into(), upn: mail.clone(), mail }
     }
+}
+
+/// An online meeting, as `/me/onlineMeetings` keeps one: the times are UTC (`…Z`).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FakeMeeting {
+    pub(crate) id: String,
+    pub(crate) subject: String,
+    pub(crate) start: String,
+    pub(crate) end: String,
+    pub(crate) join_url: String,
 }
 
 /// A chat: `kind` is Graph's `chatType` (`oneOnOne`, `group` or `meeting`).
@@ -245,6 +258,22 @@ pub(crate) struct FakeTeams {
     pub(crate) forbid_create: bool,
     /// Every `POST /chats` body received, whatever its answer.
     pub(crate) creations: Vec<Value>,
+    /// The online meetings made at `/me/onlineMeetings`.
+    pub(crate) meetings: Vec<FakeMeeting>,
+    /// (route, id decoded or "", JSON body as it came) of each `createMeeting`, `updateMeeting`
+    /// and `deleteMeeting` received, whatever the answer.
+    pub(crate) meeting_writes: Vec<(String, String, Value)>,
+    /// The raw target (encoded as received, without `?…`) of each request whose path starts with
+    /// `me/onlineMeetings`, named or `unknown`: what `teams_request` decodes keeps none of it.
+    pub(crate) meeting_paths: Vec<String>,
+    /// The answer carries `audioConferencing`.
+    pub(crate) audio_conferencing: bool,
+    /// Keys laid over the next meeting answer (a hostile answer), once.
+    pub(crate) meeting_answer: Option<Value>,
+    /// Every meeting request is refused with this status and code (not once).
+    pub(crate) meeting_refusal: Option<(u16, &'static str)>,
+    /// A `PATCH` answers another `joinWebUrl` than the creation's.
+    pub(crate) meeting_moves: bool,
 }
 
 impl FakeTeams {
@@ -347,6 +376,9 @@ fn route_name(method: &str, p: &[&str]) -> Option<&'static str> {
         ("POST", ["me", "drive", "items", _, "invite"]) => "invite",
         ("GET", ["users"]) => "users",
         ("POST", ["chats"]) => "createChat",
+        ("POST", ["me", "onlineMeetings"]) => "createMeeting",
+        ("PATCH", ["me", "onlineMeetings", _]) => "updateMeeting",
+        ("DELETE", ["me", "onlineMeetings", _]) => "deleteMeeting",
         (
             _,
             ["chats", ..]
@@ -354,6 +386,7 @@ fn route_name(method: &str, p: &[&str]) -> Option<&'static str> {
             | ["download", ..]
             | ["upload", ..]
             | ["me", "drive", ..]
+            | ["me", "onlineMeetings", ..]
             | ["communications", ..]
             | ["users", _, "photos", ..],
         ) => "unknown",
@@ -490,6 +523,9 @@ impl FakeTeams {
         if name == "createChat" {
             return self.create_chat(input, base);
         }
+        if let Some(r) = self.meeting_route(name, p, input) {
+            return r;
+        }
         if let Some(r) = self.share_route(name, p, base) {
             return r;
         }
@@ -562,6 +598,9 @@ impl Data {
         *hit += 1;
         let hit = *hit;
         t.last_headers.insert(name.to_string(), headers.to_vec());
+        if matches!(p.as_slice(), ["me", "onlineMeetings", ..]) {
+            t.meeting_paths.push(raw_path.to_string());
+        }
         if t.cut_all {
             return Some(Reply::cut());
         }
@@ -591,6 +630,9 @@ impl Data {
         }
         if name == "createChat" {
             t.creations.push(input.clone());
+        }
+        if matches!(name, "createMeeting" | "updateMeeting" | "deleteMeeting") {
+            t.meeting_writes.push((name.to_string(), p.get(2).copied().unwrap_or_default().to_string(), input.clone()));
         }
         if matches!(name, "post" | "edit" | "setReaction" | "unsetReaction" | "softDelete") {
             let (chat, msg) = (p.get(1).copied().unwrap_or_default(), p.get(3).copied().unwrap_or_default());
@@ -643,6 +685,9 @@ impl FakeTeams {
         }
         if !authorized {
             return Some(Reply::error(401, "InvalidAuthenticationToken", "Access token is empty."));
+        }
+        if let Some((status, code)) = self.meeting_refusal.filter(|_| matches!(name, "createMeeting" | "updateMeeting" | "deleteMeeting")) {
+            return Some(Reply::error(status, code, "Refused, as the test asked."));
         }
         if someone_else {
             return Some(Reply::error(403, "Forbidden", "Only the signed-in user's chats."));
