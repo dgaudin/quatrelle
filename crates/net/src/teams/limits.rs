@@ -64,6 +64,9 @@ pub(crate) enum Route {
     Directory,
     /// A conversation created (`POST /chats`).
     Create,
+    /// A Teams meeting made, changed or deleted (`/me/onlineMeetings`): the user's own asks, no
+    /// cadence and no limit of their own besides the ceiling.
+    Meeting,
 }
 
 impl Route {

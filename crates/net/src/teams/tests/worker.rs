@@ -33,6 +33,8 @@ const REFRESH: &str = "kept-in-the-keychain-only-0001";
 const SIGN_IN_PAGE: &str = "https://login.contoso.example/authorize";
 const NO_ORGANISATION: &str = "Teams couldn't tell which organisation this account belongs to";
 
+/// Teams meetings made, changed and deleted, one request at a time.
+mod meetings;
 /// A session: tokens, starting again, stopping, signing out, the log.
 mod session;
 /// Signing in, and whose account it is.

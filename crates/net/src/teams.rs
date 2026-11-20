@@ -28,12 +28,15 @@
 //!   checked rather than posted again, what wasn't sent said; and the chats to mark read.
 //! * `files`: a file someone shared, downloaded and saved for the user alone, and a file's bytes
 //!   sent up to OneDrive, each on a lane of its own without the token.
+//! * `meetings`: the Teams meetings of the calendar's appointments, made, changed and deleted one
+//!   request at a time, each ask answered once.
 
 pub(crate) mod backfill;
 pub mod check;
 pub(crate) mod files;
 pub mod graph;
 pub(crate) mod limits;
+pub(crate) mod meetings;
 pub(crate) mod outbox;
 pub(crate) mod people;
 pub(crate) mod pictures;

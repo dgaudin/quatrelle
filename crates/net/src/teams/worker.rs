@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 
 use quatrelle_model::Event;
 use quatrelle_model::job::Secret;
-use quatrelle_model::pim::teams::{self, ChatMessage, Job, Status, TeamsSettings};
+use quatrelle_model::pim::teams::{self, ChatMessage, Job, Status, TeamsMeetingError, TeamsSettings};
 use quatrelle_store::Store;
 use sha2::{Digest, Sha256};
 
@@ -35,6 +35,7 @@ use super::backfill::{self, Backfill};
 use super::files::{self, Transfers};
 use super::graph::TeamsClient;
 use super::limits::{Cadence, Limiter, Route, retry_wait};
+use super::meetings::{self, Meetings};
 use super::outbox::{self, Outbox};
 use super::people::{self, People};
 use super::pictures::{self, Pictures};
@@ -48,16 +49,17 @@ use crate::{NetError, Result};
 
 mod signing;
 
+pub(crate) use signing::meetings_granted;
+#[cfg(test)]
+pub(crate) use signing::missing_scope;
 pub(crate) use signing::{Authority, Microsoft, is_guid};
 pub use signing::{REFRESH_KEY, keyring};
-#[cfg(test)]
-pub(crate) use signing::{meetings_granted, missing_scope};
 
 /// How the worker reports: the pool's sink in the app, a list in the tests.
 pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
 
 /// The least between two turns of the loop: whatever a step leaves due, the loop never spins.
-const TURN: Duration = Duration::from_millis(20);
+pub(super) const TURN: Duration = Duration::from_millis(20);
 /// How often the loop looks while a sign-in in the browser is awaited.
 const AWAITING: Duration = Duration::from_millis(200);
 /// After a failure (no network, a server's error): tried again then.
@@ -93,6 +95,8 @@ pub(crate) struct Hooks {
     pub(crate) floor: Option<(u64, Duration)>,
     /// How long a request to Graph may take in all, in place of `graph::DEADLINE`.
     pub(crate) graph_deadline: Option<Duration>,
+    /// The next answers to a meeting's request panic, this many of them, before they are told.
+    pub(crate) trip_meeting: Arc<std::sync::atomic::AtomicU32>,
 }
 
 #[cfg(test)]
@@ -276,6 +280,8 @@ pub(crate) struct Worker {
     pub(crate) transfers: Transfers,
     /// The last directory search and the creation waiting (`people.rs`).
     pub(crate) people: People,
+    /// The Teams meetings asked for, waiting for their request (`meetings.rs`).
+    pub(crate) meetings: Meetings,
     #[cfg(test)]
     pub(crate) hooks: Hooks,
 }
@@ -314,6 +320,7 @@ impl Worker {
             answered: 0,
             transfers: Transfers::default(),
             people: People::default(),
+            meetings: Meetings::default(),
             signing: None,
             resume: None,
             sign_ins: 0,
@@ -362,9 +369,10 @@ impl Worker {
         log::info!("teams: the worker ended");
     }
 
-    /// When the loop looks again, a job apart: the next cadence due, a picture waiting or the next
-    /// message or mark of the outbox, the time a held step may go, the end of a wait after a
-    /// failure; never at once ([`TURN`] at least); soon while a transfer runs or a file waits.
+    /// When the loop looks again, a job apart: the next cadence due, a picture, a search or a
+    /// meeting's request waiting, or the next message or mark of the outbox, the time a held step
+    /// may go, the end of a wait after a failure; a meeting's request out of time whatever holds
+    /// the rest; never at once ([`TURN`] at least); soon while a transfer runs or a file waits.
     /// `None` when there is nothing to look at until a job comes: switched off, signed out, or
     /// waiting to be signed in again, and no sign-in on its way from the browser.
     pub(crate) fn wake(&self, now: Instant) -> Option<Instant> {
@@ -372,7 +380,7 @@ impl Worker {
         let mut wake = None;
         if self.polling && !self.offline {
             let mut at = self.limiter.next_deadline(now);
-            if pictures::waiting(self, now) || people::waiting(self) {
+            if pictures::waiting(self, now) || people::waiting(self) || meetings::waiting(self) {
                 at = now;
             }
             if let Some(due) = outbox::due(self, now) {
@@ -380,6 +388,11 @@ impl Worker {
             }
             for later in [self.held, self.not_before].into_iter().flatten() {
                 at = at.max(later);
+            }
+            // A meeting's request is answered within its two minutes, however long Graph asks to
+            // wait (`meetings::expire`).
+            if let Some(due) = meetings::deadline(self) {
+                at = at.min(due);
             }
             wake = Some(at.max(after(TURN)));
         }
@@ -398,6 +411,7 @@ impl Worker {
         let wait = self.hooks.panic_wait.unwrap_or(wait);
         log::error!("teams: internal error: the step in hand was given up; going on in {} s", wait.as_secs());
         self.sync.give_up();
+        meetings::given_up(self);
         self.held = None;
         self.not_before = now.checked_add(wait);
     }
@@ -431,14 +445,18 @@ impl Worker {
             Job::File { chat, message, created, attachment } => files::open(self, chat, message, created, attachment),
             Job::Directory { query } => people::directory(self, query),
             Job::Create { local, people: who, topic } => people::create(self, local, who, topic),
-            Job::MeetingCreate { .. } | Job::MeetingUpdate { .. } | Job::MeetingDelete { .. } => log::info!("teams: a meeting job was passed over"),
+            Job::MeetingCreate { ask, fields } => meetings::create(self, ask, fields, Instant::now()),
+            Job::MeetingUpdate { id, before, after } => meetings::update(self, id, before, after, Instant::now()),
+            Job::MeetingDelete { id } => meetings::delete(self, id, Instant::now()),
         }
     }
 
-    /// One turn of the loop at `now`: a sign-in's answer taken, a slice of the search's index read
-    /// back, the transfers' words, then, when Teams may be asked, one step of what is due. Working
-    /// offline, nothing is asked: the copy still answers the jobs.
+    /// One turn of the loop at `now`: the meetings' requests out of time answered, a sign-in's
+    /// answer taken, a slice of the search's index read back, the transfers' words, then, when
+    /// Teams may be asked, one step of what is due. Working offline, nothing is asked: the copy
+    /// still answers the jobs.
     pub(crate) fn turn(&mut self, now: Instant) {
+        meetings::expire(self, now);
         self.authorized(now);
         search::load(self);
         files::done(self, now);
@@ -458,11 +476,12 @@ impl Worker {
         }
     }
 
-    /// One step, a request at most: the outbox (`outbox.rs`), a file to open (`files.rs`), the
-    /// presence's minute, then a picture for the screen (unless the open chat's read is due), then
-    /// whatever cadence is due (`sync.rs`), else the history (`backfill.rs`).
+    /// One step, a request at most: a meeting's (`meetings.rs`), the outbox (`outbox.rs`), a file
+    /// to open (`files.rs`), the presence's minute, then a picture for the screen (unless the open
+    /// chat's read is due), then whatever cadence is due (`sync.rs`), else the history
+    /// (`backfill.rs`).
     pub(crate) fn tick(&mut self, now: Instant) {
-        if outbox::step(self, now) || files::step(self, now) || people::step(self, now) {
+        if meetings::step(self, now) || outbox::step(self, now) || files::step(self, now) || people::step(self, now) {
             return;
         }
         if pictures::presence(self, now) || (!self.limiter.due(Cadence::Open, now) && pictures::step(self, now)) {
@@ -484,8 +503,9 @@ impl Worker {
 
     /// "Work offline" turned on or off. On: nothing more is asked of Teams (a sign-in awaited from
     /// the browser is let go), what was under way is given up (the transfers too: the files asked
-    /// for said "Offline", the messages whose files went up waiting again), and "Offline" is said;
-    /// the copy stays open to answer. Off: the cadences go on afresh.
+    /// for said "Offline", the messages whose files went up waiting again; the meetings' requests
+    /// waiting answered "no connection"), and "Offline" is said; the copy stays open to answer.
+    /// Off: the cadences go on afresh.
     pub(crate) fn work_offline(&mut self, on: bool) {
         if self.offline == on {
             return;
@@ -498,6 +518,7 @@ impl Worker {
             self.sync.give_up();
             people::stop(self);
             files::stop(self);
+            meetings::stop(self, TeamsMeetingError::Offline);
             self.held = None;
             if self.polling || signing {
                 self.status(Status::Offline);
@@ -524,6 +545,12 @@ impl Worker {
     #[cfg(test)]
     pub(crate) fn trip_list(&self) {
         self.hooks.trip();
+    }
+
+    /// A test's panic once a meeting's request is answered, when it asked for one.
+    #[cfg(test)]
+    pub(crate) fn trip_meeting(&self) {
+        Hooks::trip_on(&self.hooks.trip_meeting);
     }
 
     /// Whether a request of `route` may go at `now`, by the limiter. When it may not, the loop is
@@ -615,8 +642,8 @@ impl Worker {
         (self.emit)(Event::Teams { event });
     }
 
-    /// Nothing more is asked of Teams: the tokens leave memory, the transfers stop, the copy stays
-    /// as it is.
+    /// Nothing more is asked of Teams: the tokens leave memory, the transfers stop, the meetings'
+    /// requests waiting are answered "signed out", the copy stays as it is.
     fn halt(&mut self) {
         self.polling = false;
         self.client = None;
@@ -628,6 +655,7 @@ impl Worker {
         self.pictures.halt();
         files::stop(self);
         people::stop(self);
+        meetings::stop(self, TeamsMeetingError::NotSignedIn);
         self.signing = None;
         self.resume = None;
         self.held = None;
