@@ -79,10 +79,10 @@ impl MailApp {
     /// settle it waits ([`Self::send_when_resolved`] sends it then, from the form as it is), and
     /// another press meanwhile does nothing. With none, it goes at once, its parameters taken from
     /// the form as the check left it. Its other commands (delete, respond, move) never wait. A
-    /// save does nothing while a Webex meeting is on its way: it would go without it.
+    /// save does nothing while a Webex or Teams meeting is on its way: it would go without it.
     pub(crate) fn for_event(&mut self, w: u64, id: &'static str, p: Value) {
         let invites = matches!(id, "event.create" | "event.update");
-        if invites && self.ui.event_windows.iter().any(|(x, f)| *x == w && f.webex_wait.is_some()) {
+        if invites && self.ui.event_windows.iter().any(|(x, f)| *x == w && (f.webex_wait.is_some() || f.teams_wait.is_some())) {
             return;
         }
         let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, _)| *x == w).filter(|e| invites && e.1.can_invite) else {
@@ -158,8 +158,8 @@ impl MailApp {
         }
     }
 
-    /// Run a command of window `w`'s: done, the window closes (taking a Webex meeting it didn't
-    /// save with it, unless the command saved it); refused, it says why.
+    /// Run a command of window `w`'s: done, the window closes (taking a Webex or Teams meeting it
+    /// didn't save with it, unless the command saved it); refused, it says why.
     pub(super) fn event_command(&mut self, w: u64, id: &'static str, p: Value) {
         match self.session.run(id, &p) {
             Ok(v) => {
@@ -168,6 +168,7 @@ impl MailApp {
                 }
                 if !matches!(id, "event.create" | "event.update") {
                     self.webex_left(w);
+                    self.teams_meeting_left(w);
                 }
                 self.ui.event_windows.retain(|(x, _)| *x != w);
             }

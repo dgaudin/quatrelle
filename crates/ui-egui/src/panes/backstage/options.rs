@@ -604,5 +604,5 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
             },
         );
     }
-    teams::teams(s, &t, ui, acts);
+    teams::teams(s, st, ui, acts);
 }

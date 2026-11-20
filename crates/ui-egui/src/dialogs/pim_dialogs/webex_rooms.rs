@@ -12,8 +12,8 @@ use super::*;
 
 /// The rooms in the Webex Meeting button's open menu, each by its name (its link on hover), then
 /// Add a room…, which asks for a new one in the menu. Greyed while the appointment has its
-/// scheduled Webex meeting, Add a room… also once there are as many rooms as are kept. `true` once
-/// a room is in the appointment: the menu closes.
+/// scheduled Webex meeting or a Teams meeting, Add a room… also once there are as many rooms as
+/// are kept. `true` once a room is in the appointment: the menu closes.
 pub(super) fn rooms_menu(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) -> bool {
     let rooms = &s.prefs.webex_rooms;
     if asking_now(ui, f.window) {
@@ -27,8 +27,8 @@ pub(super) fn rooms_menu(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session
         add_room(f, &room, &all);
         return true;
     }
-    let free = f.webex_id.is_none();
-    let scheduled = tl!("This appointment already has its Webex meeting");
+    let free = f.webex_id.is_none() && f.teams_meeting_id.is_none();
+    let scheduled = if f.webex_id.is_some() { tl!("This appointment already has its Webex meeting") } else { teams_holds_it() };
     for room in rooms {
         let name = room.name.trim();
         let label = if name.is_empty() { tl!("My personal room") } else { name };
@@ -45,6 +45,11 @@ pub(super) fn rooms_menu(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session
         ui.data_mut(|d| d.insert_temp(asking_id(f.window), true));
     }
     false
+}
+
+/// Why Webex is greyed in an appointment with a Teams meeting.
+pub(super) fn teams_holds_it() -> &'static str {
+    tl!("This appointment has a Teams meeting: remove it first")
 }
 
 /// Where window `window`'s menu keeps that it's asking for a new room.
@@ -142,9 +147,9 @@ pub(crate) fn link_refused<'a>(link: &str, others: impl IntoIterator<Item = &'a 
 /// A Webex room in the appointment, as Webex's own add-in puts one: at the end of the notes the
 /// line before the link, the link and the room's lines, in place of any room's block there; its
 /// link as the place when that's empty or another room's (one typed is kept); Join; its
-/// conference. Nothing while the appointment has its scheduled Webex meeting.
+/// conference. Nothing while the appointment has its scheduled Webex meeting, or a Teams meeting.
 pub(crate) fn add_room(f: &mut EventForm, room: &WebexRoom, rooms: &[WebexRoom]) {
-    if f.webex_id.is_some() {
+    if f.webex_id.is_some() || f.teams_meeting_id.is_some() {
         return;
     }
     let url = room.url.trim();

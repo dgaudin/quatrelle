@@ -2392,3 +2392,20 @@ presence	Offline	غير متصل
 	By phone: {number}, conference ID {conference}	عبر الهاتف: {number}، معرّف المؤتمر {conference}
 	By phone: {number}	عبر الهاتف: {number}
 	Meeting options: {link}	خيارات الاجتماع: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	اجتماع Teams
+	Teams Meeting menu	قائمة اجتماع Teams
+	Add a Teams meeting	إضافة اجتماع Teams
+	Remove the Teams meeting	إزالة اجتماع Teams
+	Meeting options	خيارات الاجتماع
+	Creating the Teams meeting…	جارٍ إنشاء اجتماع Teams…
+	Authorize Teams meetings	السماح باجتماعات Teams
+	The Teams meeting couldn't be created: no connection	تعذّر إنشاء اجتماع Teams: لا يوجد اتصال
+	Teams answered {status}: {code}	ردّ Teams بـ {status}: {code}
+	Teams answered {status}	ردّ Teams بـ {status}
+	This appointment has a Webex meeting or room: remove it first	لهذا الموعد اجتماع أو غرفة Webex: أزِلها أولًا
+	This appointment has a Teams meeting: remove it first	لهذا الموعد اجتماع Teams: أزِله أولًا
+	A Teams meeting can only be added to an appointment you organize	لا يمكن إضافة اجتماع Teams إلا إلى موعد تنظّمه أنت
+	The Teams meeting was removed: add it again for this calendar	أُزيل اجتماع Teams: أضِفه من جديد لهذا التقويم
+	Teams meetings	اجتماعات Teams
+	Teams meetings are allowed	اجتماعات Teams مسموح بها

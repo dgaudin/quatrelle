@@ -188,6 +188,8 @@ pub struct UiState {
     pub(super) focus_main: bool,
     /// The Webex card is to be scrolled to as File › Options draws it (read once by the card).
     pub(crate) webex_scroll: std::cell::Cell<bool>,
+    /// The Teams card is to be scrolled to as File › Options draws it (read once by the card).
+    pub(crate) teams_scroll: std::cell::Cell<bool>,
     /// Video attachments written out for the platform to take a frame from, and the frames.
     pub(crate) video_files: HashMap<(MessageKey, usize), PathBuf>,
     pub(crate) video_frames: HashMap<PathBuf, VideoFrame>,

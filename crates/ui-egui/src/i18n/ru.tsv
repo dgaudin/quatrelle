@@ -2397,3 +2397,20 @@ presence	Offline	Не в сети
 	By phone: {number}, conference ID {conference}	По телефону: {number}, идентификатор конференции {conference}
 	By phone: {number}	По телефону: {number}
 	Meeting options: {link}	Параметры собрания: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	Собрание Teams
+	Teams Meeting menu	Меню «Собрание Teams»
+	Add a Teams meeting	Добавить собрание Teams
+	Remove the Teams meeting	Убрать собрание Teams
+	Meeting options	Параметры собрания
+	Creating the Teams meeting…	Создание собрания Teams…
+	Authorize Teams meetings	Разрешить собрания Teams
+	The Teams meeting couldn't be created: no connection	Не удалось создать собрание Teams: нет соединения
+	Teams answered {status}: {code}	Teams ответил {status}: {code}
+	Teams answered {status}	Teams ответил {status}
+	This appointment has a Webex meeting or room: remove it first	У этой встречи есть собрание или комната Webex: сначала уберите его
+	This appointment has a Teams meeting: remove it first	У этой встречи есть собрание Teams: сначала уберите его
+	A Teams meeting can only be added to an appointment you organize	Собрание Teams можно добавить только во встречу, которую организуете вы
+	The Teams meeting was removed: add it again for this calendar	Собрание Teams убрано: добавьте его снова для этого календаря
+	Teams meetings	Собрания Teams
+	Teams meetings are allowed	Собрания Teams разрешены

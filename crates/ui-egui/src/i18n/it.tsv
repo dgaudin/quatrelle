@@ -2395,3 +2395,20 @@ presence	Offline	Offline
 	By phone: {number}, conference ID {conference}	Per telefono: {number}, ID conferenza {conference}
 	By phone: {number}	Per telefono: {number}
 	Meeting options: {link}	Opzioni della riunione: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	Riunione Teams
+	Teams Meeting menu	Menu Riunione Teams
+	Add a Teams meeting	Aggiungi una riunione Teams
+	Remove the Teams meeting	Rimuovi la riunione Teams
+	Meeting options	Opzioni della riunione
+	Creating the Teams meeting…	Creazione della riunione Teams…
+	Authorize Teams meetings	Autorizza le riunioni di Teams
+	The Teams meeting couldn't be created: no connection	Non è stato possibile creare la riunione Teams: nessuna connessione
+	Teams answered {status}: {code}	Teams ha risposto {status}: {code}
+	Teams answered {status}	Teams ha risposto {status}
+	This appointment has a Webex meeting or room: remove it first	Questo appuntamento ha una riunione o una stanza Webex: rimuovila prima
+	This appointment has a Teams meeting: remove it first	Questo appuntamento ha una riunione Teams: rimuovila prima
+	A Teams meeting can only be added to an appointment you organize	Una riunione Teams si può aggiungere solo a un appuntamento che organizzi tu
+	The Teams meeting was removed: add it again for this calendar	La riunione Teams è stata rimossa: aggiungila di nuovo per questo calendario
+	Teams meetings	Riunioni Teams
+	Teams meetings are allowed	Le riunioni Teams sono consentite

@@ -2393,3 +2393,20 @@ presence	Offline	オフライン
 	By phone: {number}, conference ID {conference}	電話で参加: {number}、電話会議 ID {conference}
 	By phone: {number}	電話で参加: {number}
 	Meeting options: {link}	会議のオプション: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	Teams 会議
+	Teams Meeting menu	Teams 会議メニュー
+	Add a Teams meeting	Teams 会議を追加
+	Remove the Teams meeting	Teams 会議を削除
+	Meeting options	会議のオプション
+	Creating the Teams meeting…	Teams 会議を作成しています…
+	Authorize Teams meetings	Teams 会議を許可
+	The Teams meeting couldn't be created: no connection	Teams 会議を作成できませんでした: 接続がありません
+	Teams answered {status}: {code}	Teams が {status} で応答しました: {code}
+	Teams answered {status}	Teams が {status} で応答しました
+	This appointment has a Webex meeting or room: remove it first	この予定には Webex 会議またはルームがあります: 先に削除してください
+	This appointment has a Teams meeting: remove it first	この予定には Teams 会議があります: 先に削除してください
+	A Teams meeting can only be added to an appointment you organize	Teams 会議は自分が開催する予定にのみ追加できます
+	The Teams meeting was removed: add it again for this calendar	Teams 会議を削除しました: この予定表用に追加し直してください
+	Teams meetings	Teams 会議
+	Teams meetings are allowed	Teams 会議は許可されています

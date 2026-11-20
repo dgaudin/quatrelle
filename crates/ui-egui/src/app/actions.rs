@@ -285,9 +285,10 @@ impl MailApp {
             }
             Action::FocusMain => self.ui.focus_main = true,
             Action::Backstage(p) => self.ui.backstage = Some(backstage::Backstage::new(p)),
-            Action::WebexOptions => {
+            card @ (Action::WebexOptions | Action::TeamsOptions) => {
                 self.ui.backstage = Some(backstage::Backstage::new(backstage::Page::Options));
-                self.ui.webex_scroll.set(true);
+                let scroll = if matches!(card, Action::WebexOptions) { &self.ui.webex_scroll } else { &self.ui.teams_scroll };
+                scroll.set(true);
                 // Asked from an appointment's window: Options is behind it.
                 self.ui.focus_main = true;
             }
@@ -393,6 +394,7 @@ impl MailApp {
             | Action::SaveAttachments(_)) => self.attachment_act(a),
             Action::ForEvent(w, id, p) => self.for_event(w, id, p),
             Action::ForWebex(w, p) => self.for_webex(w, p),
+            Action::ForTeamsMeeting(w, p) => self.for_teams_meeting(w, p),
             Action::DialogOk => self.dialog_ok(),
             Action::SaveWithDomain(domain, settings) => match self.session.run("account.trustDomain", &domain) {
                 Ok(_) => {

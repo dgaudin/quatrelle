@@ -2397,3 +2397,20 @@ presence	Offline	Offline
 	By phone: {number}, conference ID {conference}	Per Telefon: {number}, Konferenz-ID {conference}
 	By phone: {number}	Per Telefon: {number}
 	Meeting options: {link}	Besprechungsoptionen: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	Teams-Besprechung
+	Teams Meeting menu	Menü „Teams-Besprechung“
+	Add a Teams meeting	Teams-Besprechung hinzufügen
+	Remove the Teams meeting	Teams-Besprechung entfernen
+	Meeting options	Besprechungsoptionen
+	Creating the Teams meeting…	Teams-Besprechung wird erstellt…
+	Authorize Teams meetings	Teams-Besprechungen erlauben
+	The Teams meeting couldn't be created: no connection	Die Teams-Besprechung konnte nicht erstellt werden: keine Verbindung
+	Teams answered {status}: {code}	Teams antwortete {status}: {code}
+	Teams answered {status}	Teams antwortete {status}
+	This appointment has a Webex meeting or room: remove it first	Dieser Termin hat eine Webex-Besprechung oder einen Webex-Raum: Entfernen Sie sie zuerst
+	This appointment has a Teams meeting: remove it first	Dieser Termin hat eine Teams-Besprechung: Entfernen Sie sie zuerst
+	A Teams meeting can only be added to an appointment you organize	Eine Teams-Besprechung kann nur einem Termin hinzugefügt werden, den Sie organisieren
+	The Teams meeting was removed: add it again for this calendar	Die Teams-Besprechung wurde entfernt: Fügen Sie sie für diesen Kalender erneut hinzu
+	Teams meetings	Teams-Besprechungen
+	Teams meetings are allowed	Teams-Besprechungen sind erlaubt

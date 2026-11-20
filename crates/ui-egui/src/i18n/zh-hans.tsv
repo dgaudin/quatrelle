@@ -2396,3 +2396,20 @@ presence	Offline	离线
 	By phone: {number}, conference ID {conference}	电话接入: {number}，电话会议 ID {conference}
 	By phone: {number}	电话接入: {number}
 	Meeting options: {link}	会议选项: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	Teams 会议
+	Teams Meeting menu	Teams 会议菜单
+	Add a Teams meeting	添加 Teams 会议
+	Remove the Teams meeting	移除 Teams 会议
+	Meeting options	会议选项
+	Creating the Teams meeting…	正在创建 Teams 会议…
+	Authorize Teams meetings	授权 Teams 会议
+	The Teams meeting couldn't be created: no connection	无法创建 Teams 会议: 无连接
+	Teams answered {status}: {code}	Teams 返回了 {status}: {code}
+	Teams answered {status}	Teams 返回了 {status}
+	This appointment has a Webex meeting or room: remove it first	此约会已有 Webex 会议或会议室: 请先将其移除
+	This appointment has a Teams meeting: remove it first	此约会已有 Teams 会议: 请先将其移除
+	A Teams meeting can only be added to an appointment you organize	只能将 Teams 会议添加到由您组织的约会
+	The Teams meeting was removed: add it again for this calendar	已移除 Teams 会议: 请为此日历重新添加
+	Teams meetings	Teams 会议
+	Teams meetings are allowed	已允许 Teams 会议

@@ -26,13 +26,13 @@ pub(crate) mod pickers;
 pub(crate) mod recurrence;
 pub(crate) mod rooms;
 pub(crate) mod scheduling;
-#[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
 pub(crate) mod teams_meeting;
 pub(crate) mod webex;
 pub(crate) mod webex_rooms;
 
 pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};
+pub(crate) use event::TeamsPrompt;
 pub use event::{EventForm, event};
 pub use files::{FilesOf, ItemFile};
 pub use meeting::meeting;

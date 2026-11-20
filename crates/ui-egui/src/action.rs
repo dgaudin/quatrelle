@@ -36,6 +36,10 @@ pub enum Action {
     /// A Webex meeting asked for from an appointment's window (its number), with
     /// `webex.createMeeting`'s params: the window waits for the answer, or says why not.
     ForWebex(u64, Value),
+    /// A Teams meeting asked for from an appointment's window (its number), with
+    /// `event.teamsMeeting`'s params (`{"add": …}`): the window waits for the answer, or says why
+    /// not. A window waiting for one already asks nothing (T5).
+    ForTeamsMeeting(u64, Value),
     OpenAttachment(usize),
     /// Open an attachment whose page or macros `Action::OpenAttachment` asked about first.
     OpenAttachmentNow(usize),
@@ -139,6 +143,8 @@ pub enum Action {
     Backstage(backstage::Page),
     /// Open File › Options, scrolled to the Webex card.
     WebexOptions,
+    /// Open File › Options, scrolled to the Teams card.
+    TeamsOptions,
     /// Read a typeface the message being written uses (Arial, Calibri…) from the system, so
     /// the editor draws it as it will be read.
     LoadTypeface(String),

@@ -101,14 +101,14 @@ pub struct EventForm {
     /// The Teams meeting it holds, from the event or made here.
     pub teams_meeting_id: Option<String>,
     /// That meeting was made from this window and isn't saved: leaving deletes it.
-    #[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
     pub teams_fresh: bool,
-    /// The creation being waited for.
-    #[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
+    /// The creation being waited for: Save is off until its answer is in, and the button asks no
+    /// other meanwhile (T5).
     pub teams_wait: Option<u64>,
     /// The user took the Teams meeting out in this window: none comes back by itself.
-    #[cfg_attr(not(test), allow(dead_code))] // tâche 11 : retiré
     pub teams_removed: bool,
+    /// What the window asks of the user before a Teams meeting can be made, with its button.
+    pub teams_prompt: Option<TeamsPrompt>,
     /// Where it's joined online, as it's saved (its calendar's `CONFERENCE`): the event's, or the
     /// Webex room or meeting put in here.
     pub conference: Option<Conference>,
@@ -121,6 +121,18 @@ pub struct EventForm {
     pub(crate) conference_opened: Option<Conference>,
     /// The files kept with it (a `.pst` import's, a calendar's inline ones), shown as chips.
     pub files: Vec<quatrelle_engine::model::pim::files::KeptFile>,
+}
+
+/// What an appointment's window asks before Teams can make its meeting (`pub`, as the form's
+/// field is).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeamsPrompt {
+    /// The permission to make meetings: Authorize Teams meetings opens Microsoft's sign-in for
+    /// it. Said while it's missing, and gone once it's given (D17: whichever of Teams' answer and
+    /// the worker's word comes first).
+    Consent,
+    /// Teams refused the sign-in: Sign in asks for it again.
+    SignIn,
 }
 
 impl EventForm {

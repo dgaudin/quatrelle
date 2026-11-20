@@ -1,25 +1,242 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! An appointment's Teams meeting, in its form: the block written at the end of its notes (the
-//! link to join, the meeting ID and passcode, the phone, the options page), found again whatever
-//! language the interface had when it was written (D10); the place, Join and the conference the
-//! meeting brings; what removing it takes out, and what the window leaves to delete when it goes
-//! without saving.
+//! An appointment's Teams meeting, in its form: the Teams Meeting button of the window's ribbon
+//! and its menu (add, remove, the options page), what the window asks before one can be made (the
+//! permission, a new sign-in), and why Teams didn't make it; the block written at the end of its
+//! notes (the link to join, the meeting ID and passcode, the phone, the options page), found again
+//! whatever language the interface had when it was written (D10); the place, Join and the
+//! conference the meeting brings; what removing it takes out, and what the window leaves to delete
+//! when it goes without saving, or its calendar can't hold it any more.
 //!
 //! What is hostile here: the notes, which anyone may have written (an invitation pasted in, a
 //! block edited by hand). A block starts only at a line that is a join line's words followed by
 //! nothing but a link of Teams' own ([`teams_meeting_url`]); it goes on for the lines that start
 //! with the words of the block's other lines, [`BLOCK_LINES`] at most, and an options link is
-//! taken from it only when it is Teams' own too. The meeting's values come from the engine, which
-//! keeps only plain ones and Teams' own links.
+//! taken from it only when it is Teams' own too (and checked again as it's opened). The meeting's
+//! values come from the engine, which keeps only plain ones and Teams' own links. The button
+//! asks one meeting at a time (T5), and only for an appointment the user can keep one on.
 
 use std::sync::OnceLock;
 
+#[cfg(not(target_arch = "wasm32"))]
+use quatrelle_engine::TeamsMeetingPath;
 use quatrelle_engine::fill;
 use quatrelle_engine::model::ical::Conference;
-use quatrelle_engine::model::pim::teams::{TEAMS_CONFERENCE_LABEL, TeamsMeeting, teams_meeting_url};
+#[cfg(not(target_arch = "wasm32"))]
+use quatrelle_engine::model::ical::{is_webex_link, links_in};
+use quatrelle_engine::model::pim::teams::{Status, TEAMS_CONFERENCE_LABEL, TeamsMeeting, TeamsMeetingError, teams_meeting_url};
 
 use super::*;
+
+/// Why Add a Teams meeting is off, as the catalogs key it: the appointment holds Webex; it isn't
+/// the user's to keep a meeting on.
+#[cfg(not(target_arch = "wasm32"))]
+const WEBEX_FIRST: &str = "This appointment has a Webex meeting or room: remove it first";
+#[cfg(not(target_arch = "wasm32"))]
+const NOT_YOURS: &str = "A Teams meeting can only be added to an appointment you organize";
+
+/// What the Teams Meeting button offers.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TeamsButton {
+    /// Add a Teams meeting.
+    Add,
+    /// A creation is on its way: nothing more is asked meanwhile.
+    Working,
+    /// The appointment holds its meeting: Remove the Teams meeting, and its options page.
+    Has,
+    /// Nothing can be added: why, as the catalogs key it (`""`: nothing to say).
+    Off(&'static str),
+}
+
+/// What the button offers for the form, its calendar taking a meeting by `path`. Someone else's
+/// event may carry any id: it's never the user's to remove, nor to add to.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn button_state(f: &EventForm, path: TeamsMeetingPath) -> TeamsButton {
+    if f.teams_wait.is_some() {
+        return TeamsButton::Working;
+    }
+    if !f.can_invite || !f.teams_allowed {
+        return TeamsButton::Off(NOT_YOURS);
+    }
+    if f.teams_meeting_id.is_some() {
+        return TeamsButton::Has;
+    }
+    match path {
+        TeamsMeetingPath::Unavailable => TeamsButton::Off(NOT_YOURS),
+        // D13: Exchange Online is to make its own there, at step 2.
+        TeamsMeetingPath::Mailbox => TeamsButton::Off(""),
+        TeamsMeetingPath::Standalone if has_webex(f) => TeamsButton::Off(WEBEX_FIRST),
+        TeamsMeetingPath::Standalone => TeamsButton::Add,
+    }
+}
+
+/// Whether the appointment holds Webex: its scheduled meeting, or a Webex link (a room's, as its
+/// block put it) in its place or notes. Erased from both, a room's gives Teams back.
+#[cfg(not(target_arch = "wasm32"))]
+fn has_webex(f: &EventForm) -> bool {
+    f.webex_id.is_some() || [&f.location, &f.description].into_iter().any(|text| links_in(text).iter().any(|l| is_webex_link(l)))
+}
+
+/// How the calendar chosen in the window takes a meeting. A saved appointment whose own calendar
+/// isn't among those listed (another account's then chosen in its place) takes none.
+#[cfg(not(target_arch = "wasm32"))]
+fn chosen_path(f: &EventForm, s: &Session) -> TeamsMeetingPath {
+    match f.calendars.get(f.calendar) {
+        Some((account, calendar, _)) if *account == f.account_id() => s.teams_meeting_path(account, calendar),
+        _ => TeamsMeetingPath::Unavailable,
+    }
+}
+
+/// Teams Meeting, after Webex Meeting: a click adds a meeting, and the menu beside it offers that,
+/// Remove the Teams meeting and its Meeting options (`busy`: names being checked or a meeting on
+/// its way, and the button waits). A calendar chosen since that can't hold the meeting made here
+/// takes it out first ([`calendar_changed`]). Not in the browser, where Teams isn't signed in to.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn teams_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, busy: bool, acts: &mut Vec<Action>) {
+    let path = chosen_path(f, s);
+    if let Some(p) = calendar_changed(f, path) {
+        acts.push(Action::Run("event.teamsMeeting", p));
+    }
+    let state = button_state(f, path);
+    let why = match state {
+        TeamsButton::Off(key) if !key.is_empty() => Some(tl!(key)),
+        _ => None,
+    };
+    let adds = !busy && state == TeamsButton::Add;
+    let r = widgets::big_button(ui, Icon::Video, "Teams Meeting", t, adds);
+    let r = match why {
+        Some(w) => r.on_hover_text(w),
+        None => r,
+    };
+    if r.clicked() {
+        add(f, s, acts);
+    }
+    let r = ui.add_enabled_ui(!busy, |ui| widgets::big_more(ui, "Teams Meeting menu", t)).inner;
+    egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        let r = ui.add_enabled(adds, egui::Button::new(tl!("Add a Teams meeting")));
+        let r = match why {
+            Some(w) => r.on_disabled_hover_text(w),
+            None => r,
+        };
+        if r.clicked() {
+            add(f, s, acts);
+            ui.close();
+        }
+        if ui.add_enabled(state == TeamsButton::Has, egui::Button::new(tl!("Remove the Teams meeting"))).clicked() {
+            if let Some(p) = remove(f) {
+                acts.push(Action::Run("event.teamsMeeting", p));
+            }
+            ui.close();
+        }
+        // Only a page of Teams' own (T1), the link checked again as it's opened.
+        let page = options_link(&f.description).filter(|l| teams_meeting_url(l));
+        if ui.add_enabled(state == TeamsButton::Has && page.is_some(), egui::Button::new(tl!("Meeting options"))).clicked() {
+            if let Some(page) = page {
+                acts.push(Action::OpenUrl(page));
+            }
+            ui.close();
+        }
+    });
+}
+
+/// Add a Teams meeting, the button's click or its menu's: a title and a start first; then Teams
+/// switched off or signed out opens Options › Teams, and the permission missing is asked for in
+/// the window ([`refused`]); otherwise the window asks Teams for the meeting.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn add(f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
+    f.error = None;
+    f.teams_prompt = None;
+    if f.summary.trim().is_empty() || f.date.trim().is_empty() {
+        f.error = Some(tl!("A meeting needs a title and a start").to_string());
+        return;
+    }
+    match s.teams_meetings_usable() {
+        Ok(()) => acts.push(Action::ForTeamsMeeting(f.window, add_params(f))),
+        Err(e) => refused(f, &e, acts),
+    }
+}
+
+/// `event.teamsMeeting`'s params for the appointment: its title and times, and always its account
+/// and calendar (from `f.calendars.get(f.calendar)`), even for one saved already, whose save names
+/// only its uid.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn add_params(f: &EventForm) -> Value {
+    let p = f.params();
+    let (account, calendar) = f.calendars.get(f.calendar).map(|(a, c, _)| (a.as_str(), c.as_str())).unwrap_or_default();
+    json!({"add": {"summary": p["summary"], "start": p["start"], "end": p["end"], "allDay": p["allDay"], "account": account, "calendar": calendar}})
+}
+
+/// Why Teams didn't make the meeting, or can't now, in the window: Teams switched off or signed
+/// out opens Options › Teams; the permission missing, or the sign-in refused, is asked for with its
+/// button ([`prompt`]); anything else is said. The appointment stays as it was.
+pub(crate) fn refused(f: &mut EventForm, e: &TeamsMeetingError, acts: &mut Vec<Action>) {
+    match e {
+        TeamsMeetingError::NotSignedIn => acts.push(Action::TeamsOptions),
+        TeamsMeetingError::Consent => f.teams_prompt = Some(TeamsPrompt::Consent),
+        TeamsMeetingError::SignIn => f.teams_prompt = Some(TeamsPrompt::SignIn),
+        e => f.error = Some(error_text(e)),
+    }
+}
+
+/// Why Teams didn't make the meeting, in the interface's language: Graph's status and code as
+/// they came (D3), never its message.
+pub(crate) fn error_text(e: &TeamsMeetingError) -> String {
+    match e {
+        TeamsMeetingError::NotSignedIn => tl!("Teams is signed out").to_string(),
+        TeamsMeetingError::Consent => tl!("Teams meetings need your permission").to_string(),
+        TeamsMeetingError::SignIn => tl!("Sign in to Teams again").to_string(),
+        TeamsMeetingError::NotAllowed => tl!("Your Teams account can't create meetings").to_string(),
+        TeamsMeetingError::Offline => tl!("The Teams meeting couldn't be created: no connection").to_string(),
+        TeamsMeetingError::Untrusted => tl!("Teams gave a link Quatrelle doesn't trust").to_string(),
+        TeamsMeetingError::Refused { status, code } if code.is_empty() => tf!("Teams answered {status}", status = status),
+        TeamsMeetingError::Refused { status, code } => tf!("Teams answered {status}: {code}", status = status, code = code),
+    }
+}
+
+/// What the window asks before Teams can make its meeting, under its ribbon: the permission
+/// (Authorize Teams meetings), said while it's missing, or a new sign-in (Sign in, then done
+/// with). Both open Microsoft's sign-in, and wait while one is under way.
+pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
+    let (asked, button, meetings) = match f.teams_prompt {
+        // D17: kept while the permission is missing, whichever of Teams' answer and the worker's
+        // word that it went comes first.
+        Some(TeamsPrompt::Consent) if !s.prefs.teams.meetings => (TeamsMeetingError::Consent, tl!("Authorize Teams meetings"), true),
+        Some(TeamsPrompt::SignIn) => (TeamsMeetingError::SignIn, tl!("Sign in"), false),
+        _ => return,
+    };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(error_text(&asked)).color(t.danger));
+        let signing_in = s.teams.status == Status::SigningIn;
+        if ui.add_enabled(!signing_in, egui::Button::new(button)).clicked() {
+            acts.push(Action::Run("teams.signIn", json!({"meetings": meetings})));
+            if f.teams_prompt == Some(TeamsPrompt::SignIn) {
+                f.teams_prompt = None;
+            }
+        }
+    });
+    ui.add_space(4.0);
+}
+
+/// The calendar chosen takes a meeting by another path than Quatrelle's own (`path`: a Microsoft
+/// 365 mailbox's, or someone else's): the meeting made in this window, or the one on its way,
+/// can't stay. It's taken out as [`remove`] does (the one on its way given up), and the window
+/// says to add one again. `event.teamsMeeting`'s params for it; none when there's no such meeting,
+/// or the calendar takes it.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn calendar_changed(f: &mut EventForm, path: TeamsMeetingPath) -> Option<Value> {
+    if path == TeamsMeetingPath::Standalone || !(f.teams_fresh || f.teams_wait.is_some()) {
+        return None;
+    }
+    f.error = Some(tl!("The Teams meeting was removed: add it again for this calendar").to_string());
+    match f.teams_wait.take() {
+        Some(ask) => {
+            f.teams_removed = true;
+            Some(json!({"remove": {"ask": ask}}))
+        }
+        None => remove(f),
+    }
+}
 
 /// The most lines a meeting's block takes: the link to join; the meeting ID and passcode; the
 /// phone; the options page.
@@ -33,15 +250,19 @@ const OPTIONS: &str = "Meeting options: {link}";
 const FOLLOWING: [&str; 5] =
     ["Meeting ID: {id}", "Passcode: {passcode}", "By phone: {number}, conference ID {conference}", "By phone: {number}", OPTIONS];
 
-/// A meeting's block found in the notes.
+/// A meeting's block found in the notes. Where it is, only the tests read: the window takes its
+/// links, and [`without_block`] its lines.
 pub(crate) struct Block {
     /// The line it starts at (the notes split at each `\n`).
+    #[cfg(test)]
     pub at: usize,
     /// How many lines it takes.
+    #[cfg(test)]
     pub lines: usize,
     /// The link to join the meeting, from its first line.
     pub join: String,
     /// The link to the meeting's options page, when its options line has one of Teams' own.
+    #[cfg_attr(target_arch = "wasm32", expect(dead_code, reason = "the browser has no Teams Meeting button to open it from"))]
     pub options: Option<String>,
 }
 
@@ -79,7 +300,14 @@ pub(crate) fn find_block(notes: &str) -> Option<Block> {
     (0..lines.len()).find_map(|at| {
         let (n, join) = block_at(lines.get(at..).unwrap_or_default())?;
         let options = lines.get(at + 1..at + n).unwrap_or_default().iter().find_map(|l| link_after(l, &labels().options));
-        Some(Block { at, lines: n, join: join.to_string(), options: options.map(str::to_string) })
+        Some(Block {
+            #[cfg(test)]
+            at,
+            #[cfg(test)]
+            lines: n,
+            join: join.to_string(),
+            options: options.map(str::to_string),
+        })
     })
 }
 
@@ -90,6 +318,7 @@ pub(crate) fn without_block(notes: &str) -> String {
 }
 
 /// The link to the options page of the meeting whose block is in `notes`.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn options_link(notes: &str) -> Option<String> {
     find_block(notes).and_then(|b| b.options)
 }
@@ -121,6 +350,7 @@ pub(crate) fn take_meeting(f: &mut EventForm, m: &TeamsMeeting) {
 /// meeting's), its id; the user removed it. A meeting made in this window and never saved is
 /// deleted at once: `event.teamsMeeting`'s params for it. The saved appointment's is deleted by
 /// the engine when the appointment is saved without it.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn remove(f: &mut EventForm) -> Option<Value> {
     let link = meeting_link(f);
     f.description = without_block(&f.description);
@@ -153,6 +383,7 @@ pub(crate) fn leaving(f: &EventForm) -> Option<Value> {
 
 /// The link of the form's meeting: its block's, else its conference's when Quatrelle labelled it
 /// Teams', else Join's; only one of Teams' own.
+#[cfg(not(target_arch = "wasm32"))]
 fn meeting_link(f: &EventForm) -> Option<String> {
     let conference = f.conference.as_ref().filter(|c| c.label == TEAMS_CONFERENCE_LABEL).map(|c| c.url.clone());
     find_block(&f.description).map(|b| b.join).or(conference).or_else(|| f.join.clone()).filter(|l| teams_meeting_url(l))

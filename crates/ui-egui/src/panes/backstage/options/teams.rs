@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The File page: Options › Teams. Teams switched on, the application and directory ids the
 //! organisation registered, the sign-in (Microsoft's page, while it's waited for, to open again or
-//! copy; Sign out saying how many messages not sent it lets go), the announcements, where the copy
-//! stands, and a copy made for another account that was set aside.
+//! copy; Sign out saying how many messages not sent it lets go), the permission to make Teams
+//! meetings from the calendar, the announcements, where the copy stands, and a copy made for
+//! another account that was set aside.
 //!
 //! What is hostile here: the name, address and permission the worker reports came from Graph
 //! (each drawn on one line, cut short); the path of a copy set aside is never shown.
@@ -65,10 +66,15 @@ pub(crate) fn forget_sign_out(ctx: &egui::Context) {
     }
 }
 
-pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+pub(super) fn teams(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     // Signing in needs a browser on this computer: not in the web app.
     if cfg!(target_arch = "wasm32") {
         return;
+    }
+    let t = &st.tokens;
+    // Asked for by `Action::TeamsOptions`, once.
+    if st.teams_scroll.take() {
+        ui.scroll_to_cursor(Some(egui::Align::TOP));
     }
     let p = &s.prefs.teams;
     card(
@@ -95,6 +101,7 @@ pub(super) fn teams(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>
                 }
             });
             account(s, t, ui, acts);
+            meetings(s, t, ui, acts);
             setting_row(ui, t, false, name(t, tl!("Announce new messages")), None, |ui| {
                 let mut on = p.notify;
                 if widgets::switch(ui, t, &mut on, tl!("Announce new messages")).changed() {
@@ -180,6 +187,23 @@ fn account(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
         ui.label(RichText::new(tl!("Your sign-in won't be remembered: no keychain is available")).color(t.dim).size(12.5));
         ui.add_space(4.0);
     }
+}
+
+/// Once signed in, whether Teams meetings can be made from the calendar: Authorize Teams meetings
+/// opens Microsoft's sign-in for that permission (the conversations don't need it), until it's
+/// given.
+fn meetings(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+    let p = &s.prefs.teams;
+    if !(p.on && p.signed_in) {
+        return;
+    }
+    setting_row(ui, t, false, name(t, tl!("Teams meetings")), None, |ui| {
+        if p.meetings {
+            ui.label(RichText::new(tl!("Teams meetings are allowed")).color(t.dim));
+        } else if ui.add_enabled(s.teams.status != Status::SigningIn, egui::Button::new(tl!("Authorize Teams meetings"))).clicked() {
+            acts.push(Action::Run("teams.signIn", json!({"meetings": true})));
+        }
+    });
 }
 
 /// Sign out's question: keep the copy of the conversations on this computer, or delete it too;

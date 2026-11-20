@@ -2392,3 +2392,20 @@ presence	Offline	לא מחובר
 	By phone: {number}, conference ID {conference}	בטלפון: {number}, מזהה ועידה {conference}
 	By phone: {number}	בטלפון: {number}
 	Meeting options: {link}	אפשרויות הפגישה: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	פגישת Teams
+	Teams Meeting menu	תפריט פגישת Teams
+	Add a Teams meeting	הוסף פגישת Teams
+	Remove the Teams meeting	הסר את פגישת Teams
+	Meeting options	אפשרויות הפגישה
+	Creating the Teams meeting…	יוצר פגישת Teams…
+	Authorize Teams meetings	אישור פגישות Teams
+	The Teams meeting couldn't be created: no connection	לא ניתן היה ליצור את פגישת Teams: אין חיבור
+	Teams answered {status}: {code}	Teams השיב {status}: {code}
+	Teams answered {status}	Teams השיב {status}
+	This appointment has a Webex meeting or room: remove it first	לפגישה זו יש פגישה או חדר של Webex: הסירו אותם תחילה
+	This appointment has a Teams meeting: remove it first	לפגישה זו יש פגישת Teams: הסירו אותה תחילה
+	A Teams meeting can only be added to an appointment you organize	ניתן להוסיף פגישת Teams רק לפגישה שאתם מארגנים
+	The Teams meeting was removed: add it again for this calendar	פגישת Teams הוסרה: הוסיפו אותה שוב ללוח השנה הזה
+	Teams meetings	פגישות Teams
+	Teams meetings are allowed	פגישות Teams מותרות

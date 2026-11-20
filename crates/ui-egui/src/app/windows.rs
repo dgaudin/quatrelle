@@ -8,6 +8,7 @@ use crate::*;
 
 mod file_page;
 mod ribbon;
+mod teams_meeting;
 
 impl MailApp {
     /// Make message `id` the one acted on, with its editor (selection, undo) at hand.
@@ -165,6 +166,7 @@ impl MailApp {
 
     pub(crate) fn event_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
         self.webex_answers();
+        self.teams_meeting_answers();
         if matches!(self.ui.dialog, Some(Dialog::Event(_)))
             && let Some(Dialog::Event(mut f)) = self.ui.dialog.take()
         {
@@ -228,6 +230,9 @@ impl MailApp {
                 closed.push(wid);
                 if let Some(p) = pim_dialogs::webex::leaving(f) {
                     acts.push(Action::Run("webex.deleteMeeting", p));
+                }
+                if let Some(p) = pim_dialogs::teams_meeting::leaving(f) {
+                    acts.push(Action::Run("event.teamsMeeting", p));
                 }
             }
         }

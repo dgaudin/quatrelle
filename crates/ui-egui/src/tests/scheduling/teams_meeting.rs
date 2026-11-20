@@ -5,9 +5,13 @@
 //! what removing it takes out, and what the window leaves to delete. The helpers here serve
 //! `teams_button.rs` and `teams_option.rs` too.
 
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use quatrelle_engine::model::Job;
 use quatrelle_engine::model::ical::Conference;
 use quatrelle_engine::model::job::Secret;
-use quatrelle_engine::model::pim::teams::{TEAMS_CONFERENCE_LABEL, TeamsMeeting};
+use quatrelle_engine::model::pim::teams::{self, TEAMS_CONFERENCE_LABEL, TeamsMeeting, TeamsMeetingError};
 use serde_json::Value;
 
 use super::*;
@@ -44,6 +48,99 @@ fn second() -> TeamsMeeting {
 /// A new appointment's form with `notes` and `place`, where a Teams meeting is the user's to keep.
 pub(super) fn form(notes: &str, place: &str) -> EventForm {
     EventForm { teams_allowed: true, description: notes.into(), location: place.into(), ..Default::default() }
+}
+
+/// The size of the window the tests of its button draw.
+pub(super) const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
+
+pub(super) type Jobs = Rc<RefCell<Vec<Job>>>;
+
+/// A backend that keeps the jobs it is given, counts its polls, and answers each meeting's delete
+/// (Teams', with `error`, and Webex's) as the workers do.
+struct Answering {
+    jobs: Jobs,
+    polls: Rc<Cell<usize>>,
+    error: Option<TeamsMeetingError>,
+    answers: Vec<MailEvent>,
+}
+
+impl crate::Backend for Answering {
+    fn submit(&mut self, job: Job) {
+        match &job {
+            Job::Teams { job: teams::Job::MeetingDelete { id } } => {
+                self.answers.push(MailEvent::Teams { event: teams::Event::MeetingDeleted { id: id.clone(), error: self.error.clone() } })
+            }
+            Job::WebexDelete { id, .. } => self.answers.push(MailEvent::WebexDeleted { id: id.clone(), error: None }),
+            _ => {}
+        }
+        self.jobs.borrow_mut().push(job);
+    }
+    fn poll(&mut self) -> Vec<MailEvent> {
+        self.polls.set(self.polls.get() + 1);
+        std::mem::take(&mut self.answers)
+    }
+}
+
+/// The app's jobs from now on, and its polls.
+pub(super) fn backend(a: &mut MailApp, error: Option<TeamsMeetingError>) -> (Jobs, Rc<Cell<usize>>) {
+    let (jobs, polls) = (Rc::new(RefCell::new(Vec::new())), Rc::new(Cell::new(0)));
+    a.backend = Box::new(Answering { jobs: jobs.clone(), polls: polls.clone(), error, answers: Vec::new() });
+    (jobs, polls)
+}
+
+/// Teams on and signed in (an organisation's application), its meetings allowed or not.
+pub(super) fn signed_in(a: &mut MailApp, meetings: bool) {
+    let t = &mut a.session.prefs.teams;
+    (t.on, t.signed_in, t.meetings) = (true, true, meetings);
+    t.client_id = "00000000-0000-0000-0000-00000000c11e".into();
+    t.tenant = "contoso.example".into();
+}
+
+/// A new appointment in a window of its own.
+pub(super) fn open_new(ctx: &egui::Context, a: &mut MailApp) {
+    a.ui.dialog = Some(Dialog::new_event(&a.session, Some(NOW + 2 * 3600)));
+    frame_sized(ctx, a, vec![], SIZE);
+}
+
+/// An appointment called `title` in its window, in a session signed in to Teams with its meetings
+/// allowed; the jobs kept.
+pub(super) fn appointment(name: &str, title: &str) -> (MailApp, std::path::PathBuf, egui::Context, Jobs) {
+    let (mut a, dir) = app(name);
+    let ctx = egui::Context::default();
+    let (jobs, _) = backend(&mut a, None);
+    signed_in(&mut a, true);
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    open_new(&ctx, &mut a);
+    a.ui.event_windows[0].1.summary = title.into();
+    (a, dir, ctx, jobs)
+}
+
+/// The Teams meetings asked for (their asks), and those asked to be deleted (their ids).
+pub(super) fn creates(jobs: &Jobs) -> Vec<u64> {
+    let created = |j: &Job| match j {
+        Job::Teams { job: teams::Job::MeetingCreate { ask, .. } } => Some(*ask),
+        _ => None,
+    };
+    jobs.borrow().iter().filter_map(created).collect()
+}
+
+pub(super) fn deletes(jobs: &Jobs) -> Vec<String> {
+    let deleted = |j: &Job| match j {
+        Job::Teams { job: teams::Job::MeetingDelete { id } } => Some(id.clone()),
+        _ => None,
+    };
+    jobs.borrow().iter().filter_map(deleted).collect()
+}
+
+/// A click on the text `label`.
+pub(super) fn click(ctx: &egui::Context, a: &mut MailApp, label: &str) {
+    let at = settled_text_at(ctx, a, label, SIZE).unwrap_or_else(|| panic!("{label} isn't drawn"));
+    click_at(ctx, a, at, 1, SIZE);
+}
+
+/// What the worker says of the meetings' permission.
+pub(super) fn allowed(a: &mut MailApp, allowed: bool) {
+    a.session.apply(MailEvent::Teams { event: teams::Event::Meetings { allowed } });
 }
 
 /// `m`'s block as the notes end with it.

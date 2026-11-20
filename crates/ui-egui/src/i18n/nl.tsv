@@ -2393,3 +2393,20 @@ presence	Offline	Offline
 	By phone: {number}, conference ID {conference}	Telefonisch: {number}, conferentie-ID {conference}
 	By phone: {number}	Telefonisch: {number}
 	Meeting options: {link}	Vergaderopties: {link}
+# Teams meetings: the Teams Meeting button of an appointment's window, and their permission in Options › Teams.
+	Teams Meeting	Teams-vergadering
+	Teams Meeting menu	Menu Teams-vergadering
+	Add a Teams meeting	Teams-vergadering toevoegen
+	Remove the Teams meeting	Teams-vergadering verwijderen
+	Meeting options	Vergaderopties
+	Creating the Teams meeting…	Teams-vergadering maken…
+	Authorize Teams meetings	Teams-vergaderingen toestaan
+	The Teams meeting couldn't be created: no connection	De Teams-vergadering kon niet worden gemaakt: geen verbinding
+	Teams answered {status}: {code}	Teams antwoordde {status}: {code}
+	Teams answered {status}	Teams antwoordde {status}
+	This appointment has a Webex meeting or room: remove it first	Deze afspraak heeft een Webex-vergadering of -ruimte: verwijder die eerst
+	This appointment has a Teams meeting: remove it first	Deze afspraak heeft een Teams-vergadering: verwijder die eerst
+	A Teams meeting can only be added to an appointment you organize	Een Teams-vergadering kan alleen worden toegevoegd aan een afspraak die je zelf organiseert
+	The Teams meeting was removed: add it again for this calendar	De Teams-vergadering is verwijderd: voeg die opnieuw toe voor deze agenda
+	Teams meetings	Teams-vergaderingen
+	Teams meetings are allowed	Teams-vergaderingen zijn toegestaan

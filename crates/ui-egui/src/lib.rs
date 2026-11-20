@@ -285,6 +285,7 @@ impl MailApp {
                 tray_shown: TrayIcon::default(),
                 focus_main: false,
                 webex_scroll: std::cell::Cell::new(false),
+                teams_scroll: std::cell::Cell::new(false),
                 video_files: HashMap::new(),
                 video_frames: HashMap::new(),
                 videos: reading::Videos::default(),
