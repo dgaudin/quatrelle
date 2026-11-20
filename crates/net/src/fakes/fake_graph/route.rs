@@ -459,6 +459,7 @@ impl Data {
                 e["iCalUId"] = json!(format!("ical-{id}"));
                 e["changeKey"] = json!("ck1");
                 e["calendar"] = json!(cal);
+                exchange_makes_meeting(&mut e, &id);
                 self.events.push(e.clone());
                 (201, e.to_string().into_bytes(), "application/json")
             }
@@ -491,6 +492,7 @@ impl Data {
                         e["iCalUId"] = json!(format!("ical-{id}"));
                         e["changeKey"] = json!("ck1");
                         e["calendar"] = json!(cal);
+                        exchange_makes_meeting(&mut e, &id);
                         self.events.push(e.clone());
                         (201, e.to_string().into_bytes(), "application/json")
                     }
@@ -499,6 +501,7 @@ impl Data {
                             for (k, v) in input.as_object().cloned().unwrap_or_default() {
                                 e[k.as_str()] = v;
                             }
+                            exchange_makes_meeting(e, id);
                             ok(e.clone())
                         }
                         None => not_found(),
@@ -531,6 +534,7 @@ impl Data {
                             e[k.as_str()] = v;
                         }
                         e["changeKey"] = json!("ck2");
+                        exchange_makes_meeting(e, id);
                         ok(e.clone())
                     }
                     None => not_found(),
@@ -704,6 +708,23 @@ fn with_extended(mut events: Vec<Value>, query: &str) -> Vec<Value> {
         }
     }
     events
+}
+
+/// Exchange Online making a Teams meeting for an event marked as one (`isOnlineMeeting` with the
+/// `teamsForBusiness` provider): the link, and a block that joins in its notes, once. A meeting
+/// made stays: an update that says `false` doesn't take it away.
+fn exchange_makes_meeting(e: &mut Value, id: &str) {
+    let made = e["onlineMeeting"]["joinUrl"].is_string();
+    if !made && e["isOnlineMeeting"] == true && e["onlineMeetingProvider"] == "teamsForBusiness" {
+        let url = format!("https://teams.microsoft.com/l/meetup-join/19%3ameeting_{id}%40thread.v2/0");
+        let notes = e["body"]["content"].as_str().unwrap_or_default().to_string();
+        e["body"] = json!({"contentType": "html", "content": format!("{notes}<p><a href=\"{url}\">Join the meeting now</a></p>")});
+        e["onlineMeeting"] = json!({"joinUrl": url});
+    }
+    if e["onlineMeeting"]["joinUrl"].is_string() {
+        e["isOnlineMeeting"] = json!(true);
+        e["onlineMeetingProvider"] = json!("teamsForBusiness");
+    }
 }
 
 /// An event's attachments (`aid`: one's bytes, its `$value`), as Graph gives them: listed without

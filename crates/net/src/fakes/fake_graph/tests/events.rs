@@ -225,3 +225,43 @@ fn an_events_files_come_with_it() {
     let names: Vec<String> = event_files(&stored(&next, "Budget review").event).into_iter().map(|f| f.name).collect();
     assert_eq!(names, ["Deck.pptx", "Minutes.eml"]);
 }
+
+/// Exchange Online makes the Teams meeting: a marked event comes back with its link and a block in
+/// its notes, and a later update that says "not online" does not take it away.
+#[test]
+fn exchange_online_makes_the_meeting_and_keeps_it() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let mut pim = Pim::default();
+    let new = |uid: &str, summary: &str, teams_online: bool| StoredEvent {
+        calendar: LOCAL.into(),
+        event: CalEvent { uid: uid.into(), summary: summary.into(), start: 1_792_000_000, end: 1_792_003_600, teams_online, ..Default::default() },
+        dirty: true,
+        ..Default::default()
+    };
+    pim.events.push(new("t-1", "Online", true));
+    pim.events.push(new("t-2", "Plain", false));
+    let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    let online = stored(&sync, "Online");
+    assert!(online.event.teams_online);
+    assert!(online.event.join_url.starts_with("https://teams.microsoft.com/l/meetup-join/"), "{}", online.event.join_url);
+    assert!(online.event.description.contains("Join"), "{}", online.event.description);
+    let plain = stored(&sync, "Plain");
+    assert!(!plain.event.teams_online && plain.event.join_url.is_empty());
+    {
+        let d = server.data.lock().unwrap();
+        let p = d.events.iter().find(|e| e["subject"] == "Plain").unwrap();
+        assert!(p.get("onlineMeeting").is_none_or(|m| m.is_null()) && p.get("isOnlineMeeting").is_none());
+    }
+    // An update that says it is not online leaves the meeting in place.
+    let id = server.data.lock().unwrap().events.iter().find(|e| e["subject"] == "Online").unwrap()["id"].as_str().unwrap().to_string();
+    c.patch_item(&format!("/me/events/{id}"), json!({"isOnlineMeeting": false, "subject": "Online 2"}).to_string().into_bytes()).unwrap();
+    let d = server.data.lock().unwrap();
+    let e = d.events.iter().find(|e| e["id"] == id.as_str()).unwrap();
+    assert_eq!((&e["subject"], &e["isOnlineMeeting"], &e["onlineMeetingProvider"]), (&json!("Online 2"), &json!(true), &json!("teamsForBusiness")));
+    assert!(e["onlineMeeting"]["joinUrl"].is_string());
+}

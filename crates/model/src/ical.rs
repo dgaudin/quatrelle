@@ -188,6 +188,11 @@ pub struct CalEvent {
     /// Where to join it online, as its calendar says (RFC 7986 `CONFERENCE`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conference: Option<Conference>,
+    /// A Microsoft 365 appointment that is, or is to be made, a Teams meeting by Exchange Online
+    /// itself (Graph's `isOnlineMeeting` with the `teamsForBusiness` provider). Kept with the
+    /// event and never written in iCalendar.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub teams_online: bool,
 }
 
 fn is_zero(n: &i64) -> bool {

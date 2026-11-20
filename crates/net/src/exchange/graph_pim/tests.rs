@@ -114,3 +114,82 @@ fn exchange_gets_no_conference() {
     assert!(with.conference.is_some());
     assert_eq!(event_json(&plain), event_json(&with));
 }
+
+fn teams_graph_event(extra: Value) -> Value {
+    let mut v = json!({"id": "T1", "subject": "Sync", "start": v_start(), "end": v_start()});
+    for (k, x) in extra.as_object().cloned().unwrap_or_default() {
+        v[k.as_str()] = x;
+    }
+    v
+}
+
+#[test]
+fn a_teams_event_is_asked_for_and_read() {
+    assert!(EVENT_FIELDS.contains("isOnlineMeeting") && EVENT_FIELDS.contains("onlineMeetingProvider"));
+    assert!(events_query().contains("isOnlineMeeting,onlineMeetingProvider"));
+    let link = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0";
+    let e = event_of(&teams_graph_event(json!({
+        "isOnlineMeeting": true, "onlineMeetingProvider": "teamsForBusiness", "onlineMeeting": {"joinUrl": link}
+    })))
+    .unwrap();
+    assert!(e.teams_online);
+    assert_eq!(e.join_url, link);
+}
+
+#[test]
+fn another_providers_meeting_is_not_teams() {
+    let link = "https://join.skype.com/abc";
+    let e = event_of(&teams_graph_event(json!({
+        "isOnlineMeeting": true, "onlineMeetingProvider": "skypeForBusiness", "onlineMeeting": {"joinUrl": link}
+    })))
+    .unwrap();
+    assert!(!e.teams_online);
+    assert_eq!(e.join_url, link);
+    for v in [json!({}), json!({"isOnlineMeeting": false, "onlineMeetingProvider": "teamsForBusiness"}), json!({"isOnlineMeeting": true})] {
+        assert!(!event_of(&teams_graph_event(v)).unwrap().teams_online);
+    }
+}
+
+#[test]
+fn a_join_link_that_cannot_be_opened_is_dropped() {
+    let long = format!("https://teams.microsoft.com/l/meetup-join/{}", "a".repeat(8 * 1024));
+    for bad in ["javascript:alert(1)", "https://x.example/a b", long.as_str(), "", "file:///etc/passwd"] {
+        let e = event_of(&teams_graph_event(json!({"onlineMeeting": {"joinUrl": bad}}))).unwrap();
+        assert_eq!(e.join_url, "", "{bad:.40}");
+    }
+    assert_eq!(event_of(&teams_graph_event(json!({"onlineMeeting": {"joinUrl": 7}}))).unwrap().join_url, "");
+    assert_eq!(event_of(&teams_graph_event(json!({"onlineMeeting": "x"}))).unwrap().join_url, "");
+}
+
+#[test]
+fn an_event_marked_is_written_as_a_teams_meeting() {
+    let e = CalEvent { teams_online: true, start: 1_792_000_000, end: 1_792_003_600, ..Default::default() };
+    let v = event_json(&e);
+    assert_eq!(v["isOnlineMeeting"], json!(true));
+    assert_eq!(v["onlineMeetingProvider"], json!("teamsForBusiness"));
+}
+
+#[test]
+fn an_event_not_marked_says_nothing_of_it() {
+    let e = CalEvent {
+        teams_online: false,
+        join_url: "https://teams.microsoft.com/l/meetup-join/x".into(),
+        start: 1_792_000_000,
+        end: 1_792_003_600,
+        ..Default::default()
+    };
+    let v = event_json(&e);
+    assert!(v.get("isOnlineMeeting").is_none() && v.get("onlineMeetingProvider").is_none() && v.get("onlineMeeting").is_none());
+    assert!(!v.to_string().contains("isOnlineMeeting\":false"));
+}
+
+#[test]
+fn join_takes_the_servers_link_first() {
+    let server = "https://teams.microsoft.com/l/meetup-join/server";
+    let e = event_of(&teams_graph_event(json!({
+        "body": {"contentType": "text", "content": "Also https://zoom.us/j/123456789"},
+        "onlineMeeting": {"joinUrl": server}
+    })))
+    .unwrap();
+    assert_eq!(e.join_link().as_deref(), Some(server));
+}

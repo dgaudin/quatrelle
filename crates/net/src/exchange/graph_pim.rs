@@ -21,7 +21,7 @@ use crate::{NetError, Result};
 const MAX_ITEMS: usize = 5000;
 /// The address book Graph's contacts go into.
 pub const CONTACTS: &str = "graph:contacts";
-const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart,sensitivity,showAs,hasAttachments";
+const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isOnlineMeeting,onlineMeetingProvider,isReminderOn,reminderMinutesBeforeStart,sensitivity,showAs,hasAttachments";
 /// Asks each event for Quatrelle's own property too, the Webex id (percent-encoded, as
 /// `graph.rs` writes its own).
 fn events_query() -> String {
@@ -254,6 +254,15 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(Value::as_str).map(str::trim).filter(|c| !c.is_empty()).take(20).map(str::to_string).collect())
             .unwrap_or_default(),
+        teams_online: v.get("isOnlineMeeting").and_then(Value::as_bool) == Some(true) && s(v, "onlineMeetingProvider") == "teamsForBusiness",
+        // The server's own link, only when it can be handed to a browser.
+        join_url: v
+            .get("onlineMeeting")
+            .and_then(|m| m.get("joinUrl"))
+            .and_then(Value::as_str)
+            .filter(|u| quatrelle_model::ical::launchable_link(u))
+            .unwrap_or_default()
+            .to_string(),
         ..Default::default()
     };
     Some(event)
@@ -279,6 +288,12 @@ pub fn event_json(e: &CalEvent) -> Value {
     // Only a meeting that has a Webex id carries the property (an event without one is left as it was).
     if let Some(id) = e.webex_id.as_deref().filter(|id| quatrelle_model::ical::valid_webex_id(id)) {
         v["singleValueExtendedProperties"] = json!([{"id": webex_property_id(), "value": id}]);
+    }
+    // Exchange Online makes the Teams meeting. What is not marked says nothing: `false` would
+    // take away a meeting the server made.
+    if e.teams_online {
+        v["isOnlineMeeting"] = json!(true);
+        v["onlineMeetingProvider"] = json!("teamsForBusiness");
     }
     v
 }

@@ -70,3 +70,13 @@ fn the_conference_of_a_teams_meeting_is_written_with_its_label() {
     let unfolded = text.replace("\r\n ", "");
     assert!(unfolded.contains(&format!("CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Microsoft Teams:{link}\r\n")), "{unfolded}");
 }
+
+/// A Teams meeting that Exchange Online makes is the server's business: nothing of it is written in
+/// a calendar text, and it is not read back from one.
+#[test]
+fn the_online_mark_is_never_written_in_icalendar() {
+    let e = CalEvent { teams_online: true, ..teams_event(ID) };
+    let text = write(&[e], None, 0);
+    assert!(!text.to_ascii_lowercase().contains("online"), "{text}");
+    assert!(!parse(&text, 0).events.iter().any(|e| e.teams_online));
+}
