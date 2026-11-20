@@ -571,3 +571,78 @@ fn a_cell_that_says_not_to_wrap_keeps_it() {
     let Some(Block::Table(t)) = b.first() else { panic!("a table: {b:?}") };
     assert_eq!(t.rows[0].iter().map(|c| c.nowrap).collect::<Vec<_>>(), [true, true, false, false]);
 }
+
+/// A button written twice, as newsletters write one: drawn with VML for Outlook in a conditional
+/// comment (`<!--[if mso]>`), and in HTML for the others, `mso-hide: all` so Outlook draws only
+/// the first. Quatrelle reads conditional comments as a browser does (a comment, never drawn), so
+/// it shows the second, as a browser shows it: the button went missing from both.
+#[test]
+fn a_button_written_for_outlook_and_for_the_others_shows_as_a_browser_shows_it() {
+    let html = r##"<table width="600" align="center" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:20px">
+        <p>Tell us what you think of the studio.</p></td></tr>
+        <tr><td align="center"><!--[if mso]><a href="https://survey.contoso.example/vml" target="_blank" hidden><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="https://survey.contoso.example/vml" style="height:46px;width:225px" arcsize="50%" stroke="f" fillcolor="#3366cc"><w:anchorlock></w:anchorlock><center style="color:#ffffff">Drawn for Outlook</center></v:roundrect></a><![endif]--><!--[if !mso]><!-- --><span class="msohide button-border" style="border-style:solid;border-color:#3366cc;background:#3366cc;border-width:0px;display:inline-block;border-radius:30px;width:auto;mso-hide:all"><a href="https://survey.contoso.example/answer" class="button" target="_blank" style="text-decoration:none;color:#ffffff;font-size:14px;padding:15px 40px;display:inline-block;background:#3366cc;border-radius:30px;font-weight:bold">Share your opinion</a></span><!--<![endif]--></td></tr></table>"##;
+    let button = |spans: &[&crate::Span]| {
+        spans.iter().any(|s| s.text.contains("Share your opinion") && s.link.as_deref() == Some("https://survey.contoso.example/answer"))
+    };
+    // Laid out: the HTML button, a link, in its centred cell; nothing of the VML.
+    let h = inline_css(html);
+    let b = html_layout(&h);
+    let mut spans = Vec::new();
+    for at in all_blocks(&b) {
+        if let Block::Text(lines) = at.block {
+            spans.extend(lines.iter().flatten());
+        }
+    }
+    assert!(button(&spans), "the button's label and link laid out: {b:?}");
+    let all = format!("{b:?}");
+    assert!(!all.contains("Drawn for Outlook") && !all.contains("/vml"), "nothing of the VML: {all}");
+    // As text flowing (no layout): the button too, nothing of the VML.
+    for html in [html.to_string(), html.replace("<table width=\"600\"", "<table")] {
+        let rich = crate::html_to_rich(&inline_css(&html));
+        assert!(button(&rich.iter().flatten().collect::<Vec<_>>()), "the button in the text: {rich:?}");
+        assert!(!format!("{rich:?}").contains("Drawn for Outlook"));
+    }
+    // Not hidden text: the reader sees it.
+    let long = "Share your opinion on the new studio rooms the opening hours the classes and the prices we keep every answer for one year and never pass it on to anyone else at all";
+    assert_eq!(crate::hidden_text(&html.replace("Share your opinion", long)), None);
+}
+
+/// A newsletter's button as most templates write it: a link in a box `inline-block` with a
+/// colour, room around its words and round corners (the link's own box inside a span's, which
+/// adds its colour and corners). Laid out as a browser draws it: one box, as wide as its words
+/// and their room, in the middle of its centred cell, its words the link. What's absurd in it
+/// is capped; a box among the words of a line stays in the line.
+#[test]
+fn a_button_in_a_box_of_its_own_is_a_box_as_wide_as_its_words() {
+    let html = r##"<table width="600" align="center"><tr><td align="center"><span class="button-border" style="border-style:solid;border-color:#3366cc;background:#3366cc;border-width:0px;display:inline-block;border-radius:30px;width:auto"><a href="https://survey.contoso.example/answer" class="button" target="_blank" style="text-decoration:none;color:#ffffff;font-size:14px;padding:15px 40px;display:inline-block;background:#3366cc;border-radius:30px;font-weight:bold">Share your opinion</a></span></td></tr></table>"##;
+    let pill = |html: &str| -> (Table, Cell) {
+        let b = html_layout(&inline_css(html));
+        let Some(Block::Table(outer)) = b.first() else { panic!("{b:?}") };
+        let cell = &outer.rows[0][0];
+        assert_eq!(cell.align, Align::Center);
+        let [Block::Table(button)] = cell.blocks.as_slice() else { panic!("one box: {:?}", cell.blocks) };
+        assert_eq!((button.rows.len(), button.rows.first().map(Vec::len)), (1, Some(1)), "{button:?}");
+        (button.clone(), button.rows[0][0].clone())
+    };
+    let (button, inside) = pill(html);
+    assert_eq!(button.width, None, "as wide as its words");
+    assert_eq!((inside.background, inside.radius, inside.padding), (Some([0x33, 0x66, 0xcc]), 30, Some([15, 40, 15, 40])));
+    let [Block::Text(lines)] = inside.blocks.as_slice() else { panic!("its words: {:?}", inside.blocks) };
+    let words: Vec<&crate::Span> = lines.iter().flatten().filter(|s| !s.text.trim().is_empty()).collect();
+    assert!(
+        !words.is_empty()
+            && words.iter().all(|s| s.link.as_deref() == Some("https://survey.contoso.example/answer") && s.bold && s.background.is_none()),
+        "the link's words, bold, on the box's colour: {words:?}"
+    );
+    // Room and corners out of all measure: capped; less than none is none.
+    let wild = html.replace("padding:15px 40px", "padding:99999px -5px").replace("border-radius:30px", "border-radius:1e9px");
+    let (_, inside) = pill(&wild);
+    assert_eq!((inside.radius, inside.padding), (MAX_RADIUS, Some([MAX_PADDING, 0, MAX_PADDING, 0])));
+    // A box among the words of a line is a word of it, as before.
+    let inline = r#"<table width="600"><tr><td>Then <a href="https://contoso.example/x" style="display:inline-block;padding:4px 8px;background:#3366cc;border-radius:4px">go there</a> today.</td></tr></table>"#;
+    let b = html_layout(&inline_css(inline));
+    let Some(Block::Table(t)) = b.first() else { panic!("{b:?}") };
+    let [Block::Text(lines)] = t.rows[0][0].blocks.as_slice() else { panic!("one line: {:?}", t.rows[0][0].blocks) };
+    let line: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
+    assert_eq!(line.split_whitespace().collect::<Vec<_>>().join(" "), "Then go there today.");
+}

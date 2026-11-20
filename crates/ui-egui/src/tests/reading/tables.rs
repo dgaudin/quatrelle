@@ -398,3 +398,60 @@ fn a_signatures_tiny_icons_not_loaded_keep_its_lines_in_line() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A newsletter's centred cell (`align="center"`) with a short paragraph, then one too long for a
+/// line with a line break in it: each row of the long one is centred, as a browser centres it,
+/// not only a line that fits (the wrapped ones kept to the left). Painted into
+/// `QUATRELLE_FRAME_PNG` when set.
+#[test]
+fn a_centred_paragraph_that_wraps_is_centred_row_by_row() {
+    use super::super::list::follow_up::{Textures, frame_with_size};
+    let long_one =
+        "You are one of the members picked for our yearly survey of the studio's rooms, classes and opening hours: it takes about a minute.";
+    let long_two = "Your answers shape the next season of the studio, and we thank you in advance for the time you give us today.";
+    let html = format!(
+        "<table width=\"600\" align=\"center\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#ffffff\"><tr><td style=\"padding:30px 20px\">\
+         <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\">\
+         <p style=\"margin:0;font-size:14px\">Tell us what you think of the studio!<br></p>\
+         <p style=\"margin:0;font-size:14px\"><br></p>\
+         <p style=\"margin:0;font-size:14px\">{long_one}<br><br> {long_two}</p>\
+         </td></tr></table></td></tr></table>"
+    );
+    let (mut a, dir) = app_with_html("centred-wrap", "Survey", &html);
+    let ctx = egui::Context::default();
+    let mut tex = Textures::default();
+    let size = (1600, 1000);
+    frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size);
+    let k = a.session.list.iter().find(|m| m.subject == "Survey").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shown = Vec::new();
+    for _ in 0..12 {
+        shown = frame_with_size(&ctx, &mut a, &mut tex, vec![], None, size).1;
+    }
+    if let Some(d) = std::env::var_os("QUATRELLE_FRAME_PNG").map(std::path::PathBuf::from) {
+        frame_with_size(&ctx, &mut a, &mut tex, vec![], Some(d.join("centred-wrap.png")), size);
+    }
+    // A text's rows where they're drawn (the text alone: not the list's preview of the message).
+    let rows = |text: &str| -> Vec<egui::Rect> {
+        shown
+            .iter()
+            .find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text().trim() == text => {
+                    Some(t.galley.rows.iter().map(|r| r.rect_without_leading_space().translate(t.pos.to_vec2())).collect())
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{text:?} drawn"))
+    };
+    let short = rows("Tell us what you think of the studio!");
+    assert_eq!(short.len(), 1, "the short paragraph on one line");
+    let middle = short[0].center().x;
+    for text in [long_one, long_two] {
+        let wrapped = rows(text);
+        assert!(wrapped.len() >= 2, "{text:?} too long for a line of the column: {wrapped:?}");
+        for r in &wrapped {
+            assert!((r.center().x - middle).abs() < 6.0, "each row of {text:?} centred on {middle}, as the short one: {wrapped:?}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -51,7 +51,7 @@ pub use attachments::{
 };
 #[doc(hidden)]
 pub use attachments::{IndexStats, index_doc_stats};
-use attachments::{attached, dmarc_failed, files_of, has_real_attachments, header_raw};
+use attachments::{attached, body_html, body_text, dmarc_failed, files_of, has_real_attachments, header_raw};
 use files::attachment_name;
 pub use files::{OpenRisk, alt_code_char, alt_code_pages, alt_code_system_pages, mime_from_name, open_risk, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
@@ -154,9 +154,9 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
     // Mail in HTML only: its text as the reading pane's plain text makes it (mail-parser's own
     // runs one table cell into the next: "BANNERFirst block", issue #41), from its start.
     let html_only = m.text_body().next().is_some_and(|p| is_html(&p));
-    let preview = match m.body_html(0).filter(|_| html_only) {
+    let preview = match body_html(m.root(), 0).filter(|_| html_only) {
         Some(h) => html::html_preview(&h),
-        None => preview(&m.body_text(0).unwrap_or_default()),
+        None => preview(&body_text(m.root(), 0).unwrap_or_default()),
     };
     Summary {
         key,
@@ -358,7 +358,7 @@ fn parse_as(raw: &[u8], read: fn(Option<AddressList<'_>>) -> Vec<EmailAddress>) 
         TnefBody::Html(h) if !real_html => Some(h.as_str()),
         _ => None,
     };
-    let html = m.body_html(0).filter(|_| real_html).or(tnef_html.map(std::borrow::Cow::Borrowed));
+    let html = body_html(m.root(), 0).filter(|_| real_html).or(tnef_html.map(std::borrow::Cow::Borrowed));
     // The pictures as shown, and those of them that report back: asked of each of their tags in
     // the message as it came and once its style sheet is written on its elements, and of each box
     // they're behind (`html::Pictures`).
@@ -386,7 +386,7 @@ fn parse_as(raw: &[u8], read: fn(Option<AddressList<'_>>) -> Vec<EmailAddress>) 
     };
     let tracking = Trackers { pictures: pictures.trackers(), links };
     let images = pictures.images;
-    let (text, had_html) = match (m.text_body().next().is_some(), m.body_text(0), m.body_html(0)) {
+    let (text, had_html) = match (m.text_body().next().is_some(), body_text(m.root(), 0), body_html(m.root(), 0)) {
         _ if let Some(h) = tnef_html => (html_to_text(h), true),
         // Prefer the HTML version when the text part is an auto-generated stub.
         (_, Some(t), Some(h)) if t.trim().is_empty() => (html_to_text(&h), true),
@@ -461,7 +461,7 @@ pub fn html_body(raw: &[u8]) -> Option<String> {
             _ => None,
         };
     }
-    m.body_html(0).map(|h| h.into_owned())
+    body_html(m.root(), 0).map(|h| h.into_owned())
 }
 
 /// A file attached to an outgoing message.

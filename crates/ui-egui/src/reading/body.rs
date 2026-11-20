@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod rows;
 mod shown_as;
 mod table;
 pub(crate) mod text_selection;
@@ -411,28 +412,7 @@ impl Body<'_> {
             // A line with right-to-left text is laid out whole, egui putting it in order (its links
             // show, but as text).
             if line.iter().any(|sp| crate::bidi::has_rtl(&sp.text)) && line.iter().all(|sp| sp.image.is_none()) {
-                let mut job = egui::text::LayoutJob::default();
-                let mut marks: Vec<find::Mark> = Vec::new();
-                for sp in line {
-                    if let Some(f) = &self.find {
-                        let base = job.text.len();
-                        marks.extend(f.marks_of(sp).into_iter().map(|m| find::Mark { range: m.range.start + base..m.range.end + base, ..m }));
-                    }
-                    let (fg, bg) = theme::mail_colors_on(sp.color, sp.background, page, &t, if sp.link.is_some() { t.accent } else { t.text });
-                    let format = egui::TextFormat {
-                        font_id: span_font_in(sp, &self.faces, self.zoom),
-                        color: fg,
-                        background: bg.unwrap_or(Color32::TRANSPARENT),
-                        italics: sp.italic,
-                        strikethrough: if sp.strike { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
-                        underline: if sp.underline { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
-                        ..Default::default()
-                    };
-                    job.append(&sp.text, 0.0, format);
-                }
-                if let Some(f) = &self.find {
-                    f.light(&mut job, &marks);
-                }
+                let (job, marks) = self.line_job(&t, line, page);
                 let len = job.text.len();
                 let r = ui
                     .scope(|ui| {
@@ -447,8 +427,9 @@ impl Body<'_> {
                 rtl_copy_menu(&r, Some(&written), &self.p.text);
                 continue;
             }
-            // Centred or right-aligned: pictures in the middle (or at the end), and a line that
-            // fits moved over (a wrapped line keeps to the left).
+            // Centred or right-aligned: pictures in the middle (or at the end), a line that fits
+            // moved over, and one too long for a row laid out whole, each of its rows moved over as
+            // a browser moves them (one with a link cut into its rows: each link is a run of its own).
             if align != Align::Min {
                 if line.iter().all(|sp| sp.image.is_some() || sp.text.trim().is_empty()) {
                     ui.allocate_ui_with_layout(vec2(width, 0.0), egui::Layout::top_down(align), |ui| {
@@ -474,6 +455,31 @@ impl Body<'_> {
                     });
                     continue;
                 }
+                if line.iter().all(|sp| sp.image.is_none() && sp.link.is_none()) {
+                    let (job, marks) = self.line_job(&t, line, page);
+                    let len = job.text.len();
+                    let r = ui
+                        .allocate_ui_with_layout(vec2(width, 0.0), egui::Layout::top_down(align), |ui| {
+                            ui.set_width(width);
+                            text_selection::run(st, ui, job, None)
+                        })
+                        .inner;
+                    if let Some(m) = marks.iter().find(|m| m.current) {
+                        self.hit = Some(find::place(r.rect, m.range.start, len, 17.0 * self.zoom));
+                    }
+                    continue;
+                }
+                if line.iter().all(|sp| sp.image.is_none()) {
+                    let rows = self.rows_of(&t, ui, line, width, page);
+                    ui.vertical(|ui| {
+                        // The rows of one line, as close as a wrapped line's.
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        for row in &rows {
+                            self.row_of_pieces(st, ui, row, line, width, page, align);
+                        }
+                    });
+                    continue;
+                }
             }
             let layout = egui::Layout::left_to_right(Align::BOTTOM).with_main_wrap(true);
             ui.allocate_ui_with_layout(vec2(width, 0.0), layout, |ui| {
@@ -486,8 +492,42 @@ impl Body<'_> {
         }
     }
 
+    /// A line's text laid out as one, each span in its own format, and the finds in it (bytes of
+    /// the whole), lit: egui puts a right-to-left line in order, and moves each row of a centred one.
+    fn line_job(&self, t: &Tokens, line: &[mime::Span], page: [u8; 3]) -> (egui::text::LayoutJob, Vec<find::Mark>) {
+        let mut job = egui::text::LayoutJob::default();
+        let mut marks: Vec<find::Mark> = Vec::new();
+        for sp in line {
+            if let Some(f) = &self.find {
+                let base = job.text.len();
+                marks.extend(f.marks_of(sp).into_iter().map(|m| find::Mark { range: m.range.start + base..m.range.end + base, ..m }));
+            }
+            let (fg, bg) = theme::mail_colors_on(sp.color, sp.background, page, t, if sp.link.is_some() { t.accent } else { t.text });
+            let format = egui::TextFormat {
+                font_id: span_font_in(sp, &self.faces, self.zoom),
+                color: fg,
+                background: bg.unwrap_or(Color32::TRANSPARENT),
+                italics: sp.italic,
+                strikethrough: if sp.strike { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
+                underline: if sp.underline { egui::Stroke::new(1.0, fg) } else { egui::Stroke::NONE },
+                ..Default::default()
+            };
+            job.append(&sp.text, 0.0, format);
+        }
+        if let Some(f) = &self.find {
+            f.light(&mut job, &marks);
+        }
+        (job, marks)
+    }
+
     /// One span: text (a link when it has one) or a picture.
     pub(super) fn span(&mut self, st: &mut UiState, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3]) {
+        self.span_in(st, ui, sp, None, width, page);
+    }
+
+    /// [`Body::span`], for a piece of another span when `of` says so: that span, and the byte of
+    /// its text the piece starts at (its finds are lit in the piece).
+    pub(super) fn span_in(&mut self, st: &mut UiState, ui: &mut Ui, sp: &mime::Span, of: Option<(&mime::Span, usize)>, width: f32, page: [u8; 3]) {
         let t = st.tokens;
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
@@ -523,8 +563,19 @@ impl Body<'_> {
         if let Some(bg) = bg {
             rt = rt.background_color(bg);
         }
-        // The find bar's finds in it, lit.
-        let marks = self.find.as_ref().map(|f| f.marks_of(sp)).unwrap_or_default();
+        // The find bar's finds in it, lit (in a piece, those of its span on its words).
+        let marks = match (&self.find, of) {
+            (Some(f), Some((whole, from))) => {
+                let to = from.saturating_add(sp.text.len());
+                f.marks_of(whole)
+                    .into_iter()
+                    .filter(|m| m.range.start < to && m.range.end > from)
+                    .map(|m| find::Mark { range: m.range.start.max(from).saturating_sub(from)..m.range.end.min(to).saturating_sub(from), ..m })
+                    .collect()
+            }
+            (Some(f), None) => f.marks_of(sp),
+            (None, _) => Vec::new(),
+        };
         let text = match &self.find {
             Some(f) => f.lit_text(ui, rt.color(fg), &marks),
             None => rt.color(fg).into(),

@@ -323,7 +323,7 @@ impl Walk {
         let whole = self.cut(whole, cap);
         self.stats.decoded_bytes = self.stats.decoded_bytes.saturating_add(whole.len());
         let m = MessageParser::default().parse(whole)?;
-        m.root_part().text().map(Cow::into_owned)
+        super::part_text(m.root_part()).map(Cow::into_owned)
     }
 
     /// A single-part entity's bytes, decoded, its first `cap` bytes only.
