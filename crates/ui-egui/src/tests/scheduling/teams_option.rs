@@ -3,7 +3,9 @@
 //! UI tests: File › Options › Calendar's option to make every meeting with guests a Teams meeting.
 //! Its switch; the meeting asked for once the title and the first guest have been left alone a
 //! second, or at once when Send is pressed (the invitation waiting for it); what the window says
-//! when Teams can't make it; and what keeps it from coming back by itself.
+//! when Teams can't make it; and what keeps it from coming back by itself. The frame where the
+//! quiet second ends is one where Send, or a Webex meeting, may be pressed too: whatever comes
+//! first, one meeting is asked for, and the invitation waits for it.
 
 use egui::accesskit::{Role, Toggled};
 use quatrelle_engine::model::Job;
@@ -12,10 +14,12 @@ use quatrelle_engine::model::pim::teams::{self, TeamsMeetingError};
 
 use super::teams_button::{answer, authorizing, calendar, choose, open_menu, served};
 use super::teams_meeting::{ID, Jobs, LINK, SIZE, allowed, appointment, click, creates, deletes, meeting, open_new};
+use super::webex::{button, open_webex_menu};
 use super::*;
-use crate::dialogs::people_field::{egui_id, meeting_field};
+use crate::dialogs::people_field::{MEETING_WINDOWS, egui_id, meeting_field};
 use crate::look::people_field::input_id;
 use crate::pim_dialogs::{EventForm, TeamsPrompt};
+use crate::tests::writing::{directory_answers, with_exchange};
 
 /// The option, as its row and its switch say it, and the words under it.
 const OPTION: &str = "Make every meeting with guests a Teams meeting";
@@ -44,6 +48,12 @@ fn now(ctx: &egui::Context) -> f64 {
     ctx.input(|i| i.time)
 }
 
+/// A whole second at least a second from the clock now: a quiet second counted from it ends at
+/// exactly one more.
+fn later(ctx: &egui::Context) -> f64 {
+    (now(ctx) + 1.0).ceil()
+}
+
 /// A frame at `time` seconds, the clock the quiet second is measured by.
 fn frame_at(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, time: f64) {
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), time: Some(time), events, ..Default::default() };
@@ -59,6 +69,28 @@ fn type_guest(ctx: &egui::Context, a: &mut MailApp, who: &str, time: f64) {
     frame_at(ctx, a, vec![Event::Text(who.into())], time);
 }
 
+/// Window 0's Required line left at `time` (its entry closed, as a click elsewhere closes it), and
+/// a few frames after: the first frame where the quiet second is up since its lines last changed,
+/// the line no longer changing as a press elsewhere starts.
+fn guests_left(ctx: &egui::Context, a: &mut MailApp, time: f64) -> f64 {
+    let w = a.ui.event_windows[0].0;
+    ctx.memory_mut(|m| m.surrender_focus(input_id(egui_id(meeting_field(w, "required")))));
+    for at in [time, time + 0.05, time + 0.1] {
+        frame_at(ctx, a, vec![], at);
+    }
+    let since = form(a).teams_auto_since.map_or(time, |(_, at)| at);
+    since + crate::pim_dialogs::teams_meeting::TEAMS_AUTO_QUIET + 1e-6
+}
+
+/// A press at `at` begun just before `end` and let go at `end`, nothing asked of Teams before.
+fn press_ending_at(ctx: &egui::Context, a: &mut MailApp, jobs: &Jobs, at: egui::Pos2, end: f64) {
+    let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame_at(ctx, a, vec![Event::PointerMoved(at)], end - 0.1);
+    frame_at(ctx, a, vec![button(true)], end - 0.05);
+    assert!(creates(jobs).is_empty() && form(a).teams_wait.is_none(), "the quiet second isn't up yet");
+    frame_at(ctx, a, vec![button(false)], end);
+}
+
 /// `title` typed at `time` in window 0's empty title, clicked first.
 fn type_title(ctx: &egui::Context, a: &mut MailApp, title: &str, time: f64) {
     click(ctx, a, "Add a title");
@@ -71,6 +103,18 @@ fn press_at(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, time: f64) {
     frame_at(ctx, a, vec![Event::PointerMoved(at)], time - 0.1);
     frame_at(ctx, a, vec![button(true)], time - 0.05);
     frame_at(ctx, a, vec![button(false)], time);
+}
+
+/// Teams' answer to the creation window 0 waits for, at `time`.
+fn answered_at(ctx: &egui::Context, a: &mut MailApp, time: f64) {
+    let ask = form(a).teams_wait.expect("a creation on its way");
+    a.session.apply(MailEvent::Teams { event: teams::Event::MeetingCreated { ask, meeting: Some(meeting()), error: None } });
+    frame_at(ctx, a, vec![], time);
+}
+
+/// What was asked of Webex: its creations.
+fn webex_creates(jobs: &Jobs) -> usize {
+    jobs.borrow().iter().filter(|j| matches!(j, Job::WebexCreate { .. })).count()
 }
 
 /// The appointment called `title` in the calendar.
@@ -365,5 +409,210 @@ fn send_pressed_at_once_waits_for_the_meeting() {
     let e = saved(&a, "Review").expect("sent without Teams");
     assert_eq!(e.teams_meeting_id, None);
     assert_eq!(creates(&jobs).len(), 2, "not asked again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// I1: Send let go in the very frame the quiet second ends: the one meeting asked for comes first,
+/// and the invitation waits for it, then goes with its block and id.
+#[test]
+fn send_let_go_as_the_quiet_second_ends_waits_for_the_meeting() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-send-at-the-second", "Budget");
+    let send = settled_text_at(&ctx, &mut a, "Send", SIZE).expect("the meeting's Send");
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, ZOE, t);
+    let end = guests_left(&ctx, &mut a, t + 0.05);
+    press_ending_at(&ctx, &mut a, &jobs, send, end);
+    assert_eq!(a.ui.event_windows.len(), 1, "no invitation before the answer");
+    assert!(saved(&a, "Budget").is_none());
+    assert_eq!((creates(&jobs).len(), form(&mut a).teams_send_held), (1, Some("event.create")));
+    frame_at(&ctx, &mut a, vec![], end + 1.0);
+    assert_eq!(creates(&jobs).len(), 1, "one request");
+    answered_at(&ctx, &mut a, end + 1.5);
+    let e = saved(&a, "Budget").expect("sent once the meeting is in");
+    assert_eq!(e.teams_meeting_id.as_deref(), Some(ID));
+    assert!(e.description.contains(&format!("Join the Teams meeting: {LINK}")), "{:?}", e.description);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// I1: New Webex meeting chosen in the frame the quiet second ends: only Webex is asked.
+#[test]
+fn a_webex_meeting_chosen_as_the_quiet_second_ends_is_the_only_one() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-webex-at-the-second", "Budget");
+    (a.session.prefs.webex_signed_in, a.session.prefs.webex_site) = (true, "acme.webex.com".into());
+    open_webex_menu(&ctx, &mut a, SIZE);
+    let entry = settled_text_at(&ctx, &mut a, "New Webex meeting", SIZE).expect("its menu's entry");
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, ZOE, t);
+    let end = guests_left(&ctx, &mut a, t + 0.05);
+    press_ending_at(&ctx, &mut a, &jobs, entry, end);
+    for at in [end + 0.5, end + 2.0] {
+        frame_at(&ctx, &mut a, vec![], at);
+    }
+    assert_eq!((webex_creates(&jobs), creates(&jobs).len()), (1, 0), "Webex alone");
+    assert!(form(&mut a).webex_wait.is_some() && form(&mut a).teams_wait.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// I1: the option's meeting on its way leaves Send on; pressed, its names checked meanwhile, the
+/// invitation waits for the meeting once they're found, then goes with it.
+#[test]
+fn names_checked_while_the_meeting_is_on_its_way_wait_for_it() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-names", "Budget");
+    let gal = with_exchange(&mut a);
+    let w = a.ui.event_windows[0].0;
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, "Dupont", t);
+    frame_at(&ctx, &mut a, vec![], t + 1.1);
+    assert_eq!(creates(&jobs).len(), 1, "the option's meeting is on its way");
+    let (send, on) = button(&ctx, &mut a, "Send").expect("the meeting's Send");
+    assert!(on, "Send stays on while the option's meeting is made");
+    let t = later(&ctx);
+    press_at(&ctx, &mut a, send, t);
+    assert!(a.ui.people.holding(MEETING_WINDOWS | w), "its names are checked first");
+    directory_answers(&mut a, &gal, "dupont", &[("Anne Dupont", "anne.dupont@contoso.example")]);
+    for at in [t + 0.1, t + 0.2, t + 0.3] {
+        frame_at(&ctx, &mut a, vec![], at);
+    }
+    assert!(!a.ui.people.holding(MEETING_WINDOWS | w), "found");
+    assert!(saved(&a, "Budget").is_none(), "not before the meeting");
+    assert_eq!(form(&mut a).teams_send_held, Some("event.create"));
+    answered_at(&ctx, &mut a, t + 0.5);
+    let e = saved(&a, "Budget").expect("sent with it");
+    assert_eq!(e.teams_meeting_id.as_deref(), Some(ID));
+    assert_eq!(e.attendees.iter().map(|x| x.email.as_str()).collect::<Vec<_>>(), ["anne.dupont@contoso.example"]);
+    assert_eq!(creates(&jobs).len(), 1);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// m1: Send pressed just before the quiet second ends and let go just after: the press counts, and
+/// the invitation waits for the meeting the option asked for in between.
+#[test]
+fn a_press_across_the_quiet_seconds_end_waits_for_the_meeting() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-press-across", "Budget");
+    let send = settled_text_at(&ctx, &mut a, "Send", SIZE).expect("the meeting's Send");
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, ZOE, t);
+    let press = |pressed| Event::PointerButton { pos: send, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame_at(&ctx, &mut a, vec![Event::PointerMoved(send)], t + 0.9);
+    frame_at(&ctx, &mut a, vec![press(true)], t + 0.95);
+    frame_at(&ctx, &mut a, vec![], t + 1.0);
+    assert_eq!(creates(&jobs).len(), 1, "the option asked for its meeting");
+    frame_at(&ctx, &mut a, vec![press(false)], t + 1.05);
+    assert_eq!(form(&mut a).teams_send_held, Some("event.create"), "the press counted");
+    assert!(saved(&a, "Budget").is_none());
+    answered_at(&ctx, &mut a, t + 1.5);
+    assert_eq!(saved(&a, "Budget").and_then(|e| e.teams_meeting_id).as_deref(), Some(ID));
+    assert_eq!(creates(&jobs).len(), 1);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// m2: a send waiting for the meeting, then a calendar chosen that can't hold it: the send is let
+/// go with the meeting, and nothing goes later by itself, the given-up meeting's answer or another
+/// meeting's.
+#[test]
+fn a_held_send_is_let_go_when_the_calendar_takes_the_meeting_out() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-held-moved", "Budget");
+    a.ui.event_windows.clear();
+    served(&mut a, "sample", false);
+    calendar(&mut a, "sample", "AAMkEWS", false);
+    let added = a.session.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).expect("added");
+    let zoe = added["account"].as_str().expect("its id").to_string();
+    served(&mut a, &zoe, true);
+    calendar(&mut a, &zoe, "AAMkGRAPH", false);
+    open_new(&ctx, &mut a);
+    (form(&mut a).summary, form(&mut a).inviting) = ("Budget".into(), true);
+    choose(&mut a, "sample", "AAMkEWS");
+    let send = settled_text_at(&ctx, &mut a, "Send", SIZE).expect("the meeting's Send");
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, ZOE, t);
+    press_at(&ctx, &mut a, send, t + 0.3);
+    let ask = form(&mut a).teams_wait.expect("asked for at once");
+    assert_eq!(form(&mut a).teams_send_held, Some("event.create"));
+    choose(&mut a, &zoe, "AAMkGRAPH");
+    frame_at(&ctx, &mut a, vec![], t + 0.5);
+    assert_eq!((form(&mut a).teams_wait, form(&mut a).teams_send_held), (None, None), "let go with it");
+    assert!(a.session.teams_meetings.asks.get(&ask).is_some_and(|x| x.abandoned));
+    a.session.apply(MailEvent::Teams { event: teams::Event::MeetingCreated { ask, meeting: Some(meeting()), error: None } });
+    frame_at(&ctx, &mut a, vec![], t + 0.6);
+    assert_eq!(deletes(&jobs), [ID], "the meeting given up is deleted");
+    choose(&mut a, "sample", "AAMkEWS");
+    click(&ctx, &mut a, "Teams Meeting");
+    answer(&ctx, &mut a, Some(meeting()), None);
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert_eq!(a.ui.event_windows.len(), 1, "nothing went by itself");
+    assert!(saved(&a, "Budget").is_none());
+    assert_eq!(creates(&jobs).len(), 2);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// m3 (decision 3): Send pressed with Teams signed out: the first stops, the window saying why;
+/// the second sends without Teams.
+#[test]
+fn send_signed_out_stops_once_then_goes_without_teams() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-send-signed-out", "Budget");
+    a.session.prefs.teams.signed_in = false;
+    let send = settled_text_at(&ctx, &mut a, "Send", SIZE).expect("the meeting's Send");
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, ZOE, t);
+    press_at(&ctx, &mut a, send, t + 0.3);
+    assert_eq!(a.ui.event_windows.len(), 1, "the first press stops");
+    assert!(saved(&a, "Budget").is_none());
+    assert_eq!((form(&mut a).teams_prompt, form(&mut a).teams_send_held), (Some(TeamsPrompt::NotAdded), None));
+    settled_text_at(&ctx, &mut a, NOT_ADDED, SIZE).expect("said in the window");
+    let t = later(&ctx);
+    press_at(&ctx, &mut a, send, t);
+    let e = saved(&a, "Budget").expect("the second sends");
+    assert_eq!((e.teams_meeting_id, a.ui.event_windows.len()), (None, 0));
+    assert!(creates(&jobs).is_empty(), "nothing went to Teams");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// m4: an appointment saved without guests, opened again: its first guest brings the meeting.
+#[test]
+fn a_reopened_appointment_gets_one_with_its_first_guest() {
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-reopened", "Budget");
+    a.ui.event_windows.clear();
+    let made = a.session.run("event.create", &json!({"summary": "Review", "start": "2026-10-21T15:00"})).expect("made");
+    let uid = made["uid"].as_str().expect("its uid").to_string();
+    let start = a.session.find_event(&uid).map(|(_, e)| e.event.start).expect("stored");
+    a.ui.dialog = Dialog::open_event(&a.session, &uid, start);
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert!(!form(&mut a).teams_auto_tried, "no guest yet");
+    form(&mut a).inviting = true;
+    let t = later(&ctx);
+    type_guest(&ctx, &mut a, ZOE, t);
+    frame_at(&ctx, &mut a, vec![], t + 0.5);
+    assert!(creates(&jobs).is_empty());
+    frame_at(&ctx, &mut a, vec![], t + 1.1);
+    assert_eq!(creates(&jobs).len(), 1, "its first guest brought one");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Whatever asks first in a frame, a window waits for one meeting at a time: Webex isn't asked
+/// beside a Teams meeting, nor one on its way; Teams isn't asked beside a Webex meeting on its way.
+#[test]
+fn webex_and_teams_are_never_asked_together() {
+    use crate::pim_dialogs::teams_meeting::add_params;
+    use crate::pim_dialogs::webex::webex_params;
+    let (mut a, dir, ctx, jobs) = with_the_option("teams-option-one-at-a-time", "Budget");
+    (a.session.prefs.webex_signed_in, a.session.prefs.webex_site) = (true, "acme.webex.com".into());
+    let w = a.ui.event_windows[0].0;
+    let (teams, webex) = (add_params(form(&mut a)), webex_params(form(&mut a)));
+    a.act(crate::Action::ForTeamsMeeting(w, teams.clone()));
+    a.act(crate::Action::ForWebex(w, webex.clone()));
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert_eq!((creates(&jobs).len(), webex_creates(&jobs)), (1, 0), "Teams on its way");
+    answer(&ctx, &mut a, Some(meeting()), None);
+    a.act(crate::Action::ForWebex(w, webex.clone()));
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert_eq!(webex_creates(&jobs), 0, "a Teams meeting in it");
+    a.ui.event_windows.clear();
+    open_new(&ctx, &mut a);
+    form(&mut a).summary = "Budget".into();
+    let w = a.ui.event_windows[0].0;
+    a.act(crate::Action::ForWebex(w, webex));
+    a.act(crate::Action::ForTeamsMeeting(w, teams));
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert_eq!((creates(&jobs).len(), webex_creates(&jobs)), (1, 1), "Webex on its way: Teams isn't asked");
     let _ = std::fs::remove_dir_all(dir);
 }

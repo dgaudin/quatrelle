@@ -9,6 +9,7 @@
 use crate::dialogs::people_field::{
     DIALOG_WINDOWS, MEETING_FIELDS, MEETING_WINDOWS, PeopleFields, dialog_field, is_dialog_window, is_meeting_window, meeting_field, places,
 };
+use crate::pim_dialogs::teams_meeting::option_creating;
 use crate::pim_dialogs::{self, EventForm};
 use crate::*;
 
@@ -78,11 +79,13 @@ impl MailApp {
     /// settle it waits ([`Self::send_when_resolved`] sends it then, from the form as it is), and
     /// another press meanwhile does nothing. With none, it goes at once, its parameters taken from
     /// the form as the check left it. Its other commands (delete, respond, move) never wait. A
-    /// save does nothing while a Webex or Teams meeting is on its way: it would go without it; and
-    /// it waits for the one File › Options › Calendar's option asks for as it goes.
+    /// save does nothing while a Webex meeting, or a Teams meeting the button asked for, is on its
+    /// way: it would go without it. It waits for the Teams meeting of File › Options › Calendar's
+    /// option, on its way or asked for as it goes.
     pub(crate) fn for_event(&mut self, w: u64, id: &'static str, p: Value) {
         let invites = matches!(id, "event.create" | "event.update");
-        if invites && self.ui.event_windows.iter().any(|(x, f)| *x == w && (f.webex_wait.is_some() || f.teams_wait.is_some())) {
+        let creating = |f: &EventForm| f.webex_wait.is_some() || (f.teams_wait.is_some() && !option_creating(f));
+        if invites && self.ui.event_windows.iter().any(|(x, f)| *x == w && creating(f)) {
             return;
         }
         let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, _)| *x == w).filter(|e| invites && e.1.can_invite) else {
@@ -99,9 +102,15 @@ impl MailApp {
         self.event_going(w, id, now);
     }
 
-    /// Window `w`'s save or send, `id`, its names settled: it goes, from the form as it is now,
-    /// unless the option's Teams meeting holds it ([`Self::teams_auto_holds`]).
+    /// Window `w`'s save or send, `id`, its names settled (at once, or once they were:
+    /// [`Self::meeting_resolved`]): it goes, from the form as it is now, unless a Teams meeting
+    /// holds it, on its way whichever came first, or asked for now by the option
+    /// ([`Self::teams_auto_holds`]).
     fn event_going(&mut self, w: u64, id: &'static str, now: f64) {
+        if let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, f)| *x == w && f.teams_wait.is_some()) {
+            f.teams_send_held = Some(id);
+            return;
+        }
         if self.teams_auto_holds(w, id, now) {
             return;
         }

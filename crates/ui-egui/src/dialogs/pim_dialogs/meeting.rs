@@ -74,13 +74,15 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleF
     ui.add_space(2.0);
     let mut keep = true;
     // Its Send held while its lines' names are checked, or a Webex or Teams meeting on its way:
-    // Send is off, and the window says so.
+    // Send is off, and the window says so. The Teams meeting File › Options › Calendar's option
+    // asked for leaves Send on, a press waiting for it (D11).
     let checking = people.holding(MEETING_WINDOWS | f.window);
     let creating = f.webex_wait.is_some() || f.teams_wait.is_some();
+    let send_off = checking || (creating && !super::teams_meeting::option_creating(f));
     egui::ScrollArea::horizontal().id_salt("meeting-ribbon").show(ui, |ui| {
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            keep = ribbon(ui, t, f, s, checking || creating, acts);
+            keep = ribbon(ui, t, f, s, checking || creating, send_off, acts);
         });
     });
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
@@ -261,9 +263,10 @@ fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, _busy: 
     }
 }
 
-/// The Appointment (or Meeting) tab's groups (`checking`: its Send is held for its names or a
-/// Webex or Teams meeting, and off meanwhile). `false`: closed from it.
-fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, checking: bool, acts: &mut Vec<Action>) -> bool {
+/// The Appointment (or Meeting) tab's groups (`checking`: its names are checked or a Webex or
+/// Teams meeting is on its way, and the meetings' buttons wait; `send_off`: its Send is held
+/// meanwhile, and off). `false`: closed from it.
+fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, checking: bool, send_off: bool, acts: &mut Vec<Action>) -> bool {
     let t = *t;
     let mut keep = true;
     let mut groups = Groups::new(ui);
@@ -275,7 +278,7 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, checking: boo
             (true, true) => (Icon::Send, "Send Update"),
             _ => (Icon::Calendar, "Save & Close"),
         };
-        if widgets::big_button(ui, icon, label, &t, !f.summary.trim().is_empty() && !checking).clicked() {
+        if widgets::big_button(ui, icon, label, &t, !f.summary.trim().is_empty() && !send_off).clicked() {
             submit(f, acts);
         }
     }

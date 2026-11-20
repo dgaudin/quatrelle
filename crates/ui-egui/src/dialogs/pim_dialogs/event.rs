@@ -118,6 +118,9 @@ pub struct EventForm {
     /// The save or send (its command) waiting for the meeting that option asked for: it goes once
     /// the meeting is in, and not if Teams refuses it.
     pub teams_send_held: Option<&'static str>,
+    /// The creation on its way (`teams_wait`), if any, is that option's, not the button's: Send and
+    /// Save stay on meanwhile, a press waiting for it.
+    pub teams_auto_waiting: bool,
     /// Where it's joined online, as it's saved (its calendar's `CONFERENCE`): the event's, or the
     /// Webex room or meeting put in here.
     pub conference: Option<Conference>,

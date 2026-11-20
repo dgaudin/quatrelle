@@ -9,9 +9,11 @@ use crate::*;
 
 impl MailApp {
     /// Window `w` asks for a meeting: it waits for the answer, or says why the engine refused. A
-    /// window gone, or already waiting for one, asks nothing.
+    /// window gone, already waiting for one, or holding a Teams meeting or waiting for one (whatever
+    /// asked first in the frame), asks nothing.
     pub(super) fn for_webex(&mut self, w: u64, p: Value) {
-        let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, f)| *x == w && f.webex_wait.is_none()) else { return };
+        let free = |f: &crate::pim_dialogs::EventForm| f.webex_wait.is_none() && f.teams_wait.is_none() && f.teams_meeting_id.is_none();
+        let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, f)| *x == w && free(f)) else { return };
         match self.session.run("webex.createMeeting", &p) {
             Ok(v) => f.webex_wait = v.get("ask").and_then(Value::as_u64),
             Err(e) => f.error = Some(e.to_string().trim_start_matches("bad parameters: ").to_string()),

@@ -150,6 +150,7 @@ pub(super) fn teams_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Sessi
 pub(crate) fn add(f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
     f.error = None;
     f.teams_prompt = None;
+    f.teams_auto_waiting = false;
     if f.summary.trim().is_empty() || f.date.trim().is_empty() {
         f.error = Some(tl!("A meeting needs a title and a start").to_string());
         return;
@@ -206,6 +207,7 @@ pub(crate) fn auto(f: &mut EventForm, s: &Session, now: f64, sending: bool, acts
         let said = f.error.take();
         add(f, s, acts);
         f.error = f.error.take().or(said);
+        f.teams_auto_waiting = true;
     } else {
         f.teams_prompt = Some(TeamsPrompt::NotAdded);
     }
@@ -223,16 +225,28 @@ fn typed(f: &EventForm) -> u64 {
 }
 
 /// The window's frame for that option, once its lines took what was typed in them: [`auto`], and
-/// the window drawn again when its quiet second is up (nothing else would draw it).
+/// the window drawn again when its quiet second is up (nothing else would draw it). Not in a frame
+/// where the window's ribbon asked something of its own (`acts`: Send or Save, a Webex or a Teams
+/// meeting): that goes first, and Send asks for the meeting as it goes ([`auto`] `sending`).
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn auto_each_frame(ui: &Ui, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
     let now = ui.input(|i| i.time);
-    auto(f, s, now, false, acts);
+    let asked =
+        acts.iter().any(|a| matches!(a, Action::Submit("event.create" | "event.update", _) | Action::ForWebex(..) | Action::ForTeamsMeeting(..)));
+    if !asked {
+        auto(f, s, now, false, acts);
+    }
     if let Some((_, at)) = f.teams_auto_since.filter(|_| !f.teams_auto_tried)
         && let Ok(left) = std::time::Duration::try_from_secs_f64(at + TEAMS_AUTO_QUIET - now)
     {
         ui.ctx().request_repaint_after(left);
     }
+}
+
+/// Whether the creation on its way is that option's: Send and Save stay on meanwhile, a press
+/// waiting for it (D11); one the button asked keeps them off.
+pub(crate) fn option_creating(f: &EventForm) -> bool {
+    f.teams_wait.is_some() && f.teams_auto_waiting
 }
 
 /// `event.teamsMeeting`'s params for the appointment: its title and times, and always its account
