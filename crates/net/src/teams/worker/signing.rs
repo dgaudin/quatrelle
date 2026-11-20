@@ -193,15 +193,15 @@ impl Worker {
             log::info!("teams: no sign-in while working offline");
             return self.status(Status::Offline);
         }
-        // Taken before `halt` lets the refresh token go.
+        // Taken before `halt` lets the refresh token go; kept only once the page's thread is under
+        // way (a sign-in that never began keeps no token for itself).
         let resume = (meetings && self.polling).then(|| Resume { settings: self.settings.clone(), refresh: self.refresh.clone() });
         self.halt();
-        self.resume = resume;
         self.sign_ins = self.sign_ins.saturating_add(1);
         let sign_in = self.sign_ins;
         self.status(Status::SigningIn);
         let (authority, emit, answer) = (self.authority.clone(), self.emit.clone(), self.answers.0.clone());
-        let spawned = std::thread::Builder::new().name("teams-sign-in".into()).spawn(move || {
+        let page = move || {
             let mut open = |url: &str| -> std::result::Result<(), String> {
                 emit(Event::Teams { event: teams::Event::SignInPage { url: url.to_string() } });
                 Ok(())
@@ -209,9 +209,20 @@ impl Worker {
             let tokens = fenced(|| authority.authorize(&client_id, &tenant, meetings, &mut open))
                 .unwrap_or_else(|| Err(NetError::Refused(INTERRUPTED.into())));
             let _ = answer.send(Authorized { sign_in, client_id, tenant, meetings, tokens });
-        });
+        };
+        #[cfg(test)]
+        let spawned = if self.hooks.no_sign_in_thread {
+            Err(std::io::Error::other("no thread, as the test asked"))
+        } else {
+            std::thread::Builder::new().name("teams-sign-in".into()).spawn(page)
+        };
+        #[cfg(not(test))]
+        let spawned = std::thread::Builder::new().name("teams-sign-in".into()).spawn(page);
         match spawned {
-            Ok(_) => self.signing = Some(sign_in),
+            Ok(_) => {
+                self.signing = Some(sign_in);
+                self.resume = resume;
+            }
             Err(_) => self.refuse(INTERRUPTED),
         }
     }
@@ -245,7 +256,9 @@ impl Worker {
     /// The browser's sign-in ended: what it granted is checked, Graph says who it is, the
     /// organisation is told, the copy is opened for that identity; only then is the refresh token
     /// kept. A refusal at any step keeps nothing. One that asked for the meetings' permission
-    /// while signed in and that didn't end goes on from the sign-in before, meetings not allowed.
+    /// while signed in and that didn't end goes on from the sign-in before, meetings not allowed,
+    /// with the Options as they are now; with nothing to go on from, it lets the permission go
+    /// (D6).
     fn signed(&mut self, answer: Authorized, now: Instant) {
         #[cfg(test)]
         Hooks::trip_on(&self.hooks.trip_sign_in);
@@ -258,7 +271,17 @@ impl Worker {
                 if let Some(Resume { settings, refresh }) = resume {
                     log::info!("teams: the meetings' permission wasn't given; going on from the sign-in before");
                     self.meetings_lost();
-                    return self.start_with(TeamsSettings { meetings: false, ..settings }, refresh);
+                    // The Options as they are now: changed while the page was open, they were
+                    // taken by `start_with` (the announcements), not by the sign-in kept.
+                    let now = &self.settings;
+                    let (notify, notify_only_direct, show_unreadable) = (now.notify, now.notify_only_direct, now.show_unreadable);
+                    let settings = TeamsSettings { meetings: false, notify, notify_only_direct, show_unreadable, ..settings };
+                    return self.start_with(settings, refresh);
+                }
+                // D6: nothing to go on from, the permission asked for is let go with the rest: the
+                // next plain sign-in asks for the chats' permissions alone.
+                if meetings {
+                    self.meetings_lost();
                 }
                 return self.refuse(&why_not(&e));
             }
@@ -447,9 +470,10 @@ impl Worker {
         self.start_with(settings, None);
     }
 
-    /// [`Worker::start`], going on from `kept` when the keychain holds no sign-in: the refresh
-    /// token the worker held before a sign-in that didn't end ([`Resume`]), the only one there is
-    /// without a keychain. One taken from there lasts until Quatrelle closes, as it did.
+    /// [`Worker::start`], going on from `kept` when the keychain holds no sign-in, or when the
+    /// credentials keep nothing past this run: the refresh token the worker held before a sign-in
+    /// that didn't end ([`Resume`]), the only one there is without a keychain, and the newest. One
+    /// taken from there lasts until Quatrelle closes, as it did.
     pub(super) fn start_with(&mut self, settings: TeamsSettings, kept: Option<Secret>) {
         if !settings.on || !settings.signed_in {
             return log::info!("teams: not started: switched off, or nobody signed in");
@@ -504,7 +528,11 @@ impl Worker {
         // No sign-in kept (no keychain last time, or its entry gone): the copy is there to read.
         let in_keychain = self.creds.get_secret(&keyring(), REFRESH_KEY).filter(|r| !r.is_empty()).map(Secret);
         let from_memory = in_keychain.is_none();
-        let Some(refresh) = in_keychain.or_else(|| kept.filter(|r| !r.0.is_empty())) else {
+        let kept = kept.filter(|r| !r.0.is_empty());
+        // Credentials that keep nothing past this run hold the sign-in's token, never the newer
+        // ones the renewals handed out (`renew`): the one the worker held goes first then.
+        let refresh = if self.creds.persists() { in_keychain.or(kept) } else { kept.or(in_keychain) };
+        let Some(refresh) = refresh else {
             log::info!("teams: no sign-in is kept to go on from");
             return self.status(Status::SignInAgain);
         };

@@ -97,6 +97,8 @@ pub(crate) struct Hooks {
     pub(crate) graph_deadline: Option<Duration>,
     /// The next answers to a meeting's request panic, this many of them, before they are told.
     pub(crate) trip_meeting: Arc<std::sync::atomic::AtomicU32>,
+    /// The system gives no thread for a sign-in's page.
+    pub(crate) no_sign_in_thread: bool,
 }
 
 #[cfg(test)]
@@ -545,6 +547,12 @@ impl Worker {
     #[cfg(test)]
     pub(crate) fn trip_list(&self) {
         self.hooks.trip();
+    }
+
+    /// Whether a sign-in is kept to go on from, for one asking for the meetings' permission.
+    #[cfg(test)]
+    pub(crate) fn holds_a_resume(&self) -> bool {
+        self.resume.is_some()
     }
 
     /// A test's panic once a meeting's request is answered, when it asked for one.

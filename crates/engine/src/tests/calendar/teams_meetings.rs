@@ -487,5 +487,11 @@ fn authorizing_asks_the_wider_sign_in() {
     s.prefs.teams.meetings = true;
     assert!(sign_in(&mut s, json!({})), "the settings say they're allowed");
     assert!(sign_in(&mut s, json!({"meetings": false})), "the settings say they're allowed");
+    // D6: signed in before, "sign in again" (the settings still say who), and that sign-in refused
+    // with nothing to go on from: the worker lets the permission go, and the next plain sign-in
+    // asks for the chats' permissions alone.
+    s.prefs.teams.signed_in = true;
+    teams(&mut s, teams::Event::Meetings { allowed: false });
+    assert!(!sign_in(&mut s, json!({})), "a refused wide sign-in isn't asked again by itself");
     done(s);
 }
