@@ -378,3 +378,55 @@ fn an_icon_in_a_link_named_by_its_file_stays_a_link() {
 fn texts(shapes: &[Shape]) -> Vec<String> {
     shapes.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().to_string()) } else { None }).collect()
 }
+
+/// A newsletter's button, a link in a coloured box with round corners (`inline-block`, padding,
+/// `border-radius`), alone in a centred column: drawn as a browser draws it, a box as wide as its
+/// words and their room, its corners round, in the middle of the column (it was only its words on
+/// a strip of colour), and a click anywhere on it, its words or the room around them, opens the
+/// link.
+#[test]
+fn a_newsletters_button_is_a_round_box_that_opens_its_link() {
+    let html = r##"<table width="600" align="center" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:20px">Tell us what you think of the studio.</td></tr>
+        <tr><td align="center"><span style="background:#3366cc;display:inline-block;border-radius:30px;width:auto"><a href="https://survey.contoso.example/answer" style="text-decoration:none;color:#ffffff;font-size:14px;padding:15px 40px;display:inline-block;background:#3366cc;border-radius:30px;font-weight:bold">Share your opinion</a></span></td></tr></table>"##;
+    let (mut a, dir) = app_with_html("button-box", "Your opinion", html);
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    a.services = Box::new(Opening(opened.clone()));
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Your opinion").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..16 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    // The button's colour (give or take what the pane's fading in leaves of it).
+    let blue = |c: egui::Color32| c.a() > 0xf0 && [(c.r(), 0x33), (c.g(), 0x66), (c.b(), 0xcc)].iter().all(|(x, y)| x.abs_diff(*y) <= 4);
+    let boxes: Vec<&egui::epaint::RectShape> =
+        shapes.iter().filter_map(|s| if let Shape::Rect(r) = s { blue(r.fill).then_some(r) } else { None }).collect();
+    let label = shapes
+        .iter()
+        .find_map(|s| match s {
+            Shape::Text(t) if t.galley.text().trim() == "Share your opinion" => Some(t.galley.rect.translate(t.pos.to_vec2())),
+            _ => None,
+        })
+        .expect("the button's words drawn");
+    let [button] = boxes.as_slice() else { panic!("one box of the button's colour: {boxes:?}") };
+    let r = button.rect;
+    assert!(r.contains_rect(label), "the words in the box: {label:?} in {r:?}");
+    assert!((r.width() - (label.width() + 80.0)).abs() < 6.0, "as wide as its words and their room: {r:?} for {label:?}");
+    assert!(r.height() >= label.height() + 28.0, "the room above and below its words: {r:?} for {label:?}");
+    assert!(button.corner_radius.nw > 0, "its corners round: {:?}", button.corner_radius);
+    assert!((r.center().x - label.center().x).abs() < 3.0, "its words in its middle");
+    let middle = shapes.iter().find_map(|s| match s {
+        Shape::Text(t) if t.galley.text().trim() == "Tell us what you think of the studio." => {
+            Some(t.galley.rect.translate(t.pos.to_vec2()).center().x)
+        }
+        _ => None,
+    });
+    assert!(middle.is_some_and(|m| (r.center().x - m).abs() < 4.0), "in the middle of the column, as the line above: {r:?}, {middle:?}");
+    // A click in the room beside its words opens the link.
+    tap(&ctx, &mut a, egui::pos2(r.left() + 12.0, r.center().y));
+    assert_eq!(*opened.borrow(), vec!["https://survey.contoso.example/answer".to_string()], "the box opens its link");
+    let _ = std::fs::remove_dir_all(dir);
+}

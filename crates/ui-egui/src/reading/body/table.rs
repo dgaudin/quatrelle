@@ -273,6 +273,17 @@ impl Body<'_> {
                 if !round {
                     edges(ui, rect, &c.borders, page, &st.tokens);
                 }
+                // A button (a box of one link's words): all of it opens the link, as a browser
+                // makes the link's box one, its room around the words too.
+                if let Some(link) = button_link(c)
+                    && !ui.is_sizing_pass()
+                {
+                    let r = ui.interact(rect, egui::Id::unique(("message-button", this.key.to_id(), n)), Sense::click());
+                    let shown = if this.s.prefs.clean_links { mime::link_destination(link) } else { link.to_string() };
+                    if r.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(shown).clicked() {
+                        this.acts.push(Action::OpenUrl(link.to_string()));
+                    }
+                }
                 // Boxes placed over it; the cell grows to hold any that reach past its end.
                 let mut bottom = rect.bottom();
                 for o in &c.overlays {
@@ -297,6 +308,24 @@ impl Body<'_> {
             });
         }
     }
+}
+
+/// The link a box of one link's words opens all of (a newsletter's button: a box of a colour with
+/// round corners, or room around its words); `None` for any other box.
+fn button_link(c: &mime::layout::Cell) -> Option<&str> {
+    if c.radius == 0 && (c.background.is_none() || c.padding.is_none()) {
+        return None;
+    }
+    let [mime::layout::Block::Text(lines)] = c.blocks.as_slice() else { return None };
+    let mut link = None;
+    for sp in lines.iter().flatten().filter(|s| s.image.is_some() || !s.text.trim().is_empty()) {
+        match (sp.link.as_deref(), link) {
+            (Some(l), None) => link = Some(l),
+            (Some(l), Some(k)) if l == k => {}
+            _ => return None,
+        }
+    }
+    link
 }
 
 /// The reader's own padding in a table cell, when the message sets none.

@@ -322,7 +322,21 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
         }
         pending.clear();
     };
-    for k in kids {
+    // Which parts are a line of their own: between nothing or blocks (a paragraph, a line
+    // break), not among words.
+    let shown: Vec<usize> = kids.iter().enumerate().filter(|(_, k)| shows(k)).map(|(i, _)| i).collect();
+    let apart = |at: Option<&usize>| match at.and_then(|i| kids.get(*i)) {
+        None => true,
+        Some(Kid::El(n)) => block_tag(&n.tag) || n.tag == "br",
+        Some(Kid::Text(_)) => false,
+    };
+    let mut own_line = vec![false; kids.len()];
+    for (at, i) in shown.iter().enumerate() {
+        if let Some(slot) = own_line.get_mut(*i) {
+            *slot = apart(at.checked_sub(1).and_then(|a| shown.get(a))) && apart(shown.get(at + 1));
+        }
+    }
+    for (i, k) in kids.iter().enumerate() {
         match k {
             Kid::El(n) if n.hidden() => {}
             Kid::El(n) if n.tag == "table" && depth < MAX_DEPTH => {
@@ -494,6 +508,13 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     }));
                 }
             }
+            // A box of words on a line of its own (a newsletter's button): a box as wide as its
+            // words, as a browser draws an `inline-block`; among words, it's one of them.
+            Kid::El(n) if depth < MAX_DEPTH && own_line.get(i).copied().unwrap_or(false) && n.button() => {
+                flush(&mut pending, &mut out, ctx, true);
+                ctx.cells += 1;
+                out.push(button_box(n, ctx, depth));
+            }
             // Pictures, or text, centred in a block of their own (a report's charts, a title
             // `text-align: center` in a newsletter's column, upstream issue #41): a centred cell.
             // Laid-out mail only: text that flows has no alignment of its own.
@@ -560,4 +581,103 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     }
     flush(&mut pending, &mut out, ctx, false);
     out
+}
+
+/// Whether a part of a box shows something: words, an element not hidden nor empty, or a line
+/// break (which parts the words around it).
+fn shows(k: &Kid) -> bool {
+    match k {
+        Kid::Text(t) => !t.trim().is_empty(),
+        Kid::El(n) => n.tag == "br" || (!n.hidden() && !n.shows_nothing(0)),
+    }
+}
+
+/// A button's box ([`Node::button`]): one cell as wide as its words and their room, with its
+/// colour, border and round corners. A box in a box (a link's own in a span's, as templates write
+/// a button) is one, their room added up. Its words keep their link, its box taken off them.
+fn button_box(n: &Node, ctx: &mut Ctx, depth: usize) -> Block {
+    let mut boxes = vec![n];
+    while boxes.len() < 4
+        && let Some(inner) = boxes.last().and_then(|b| b.only_element()).filter(|b| b.button())
+    {
+        boxes.push(inner);
+    }
+    let padding = boxes.iter().filter_map(|b| b.padding(None)).reduce(|a, b| {
+        let mut sum = [0u8; 4];
+        for (s, (x, y)) in sum.iter_mut().zip(a.iter().zip(b)) {
+            *s = x.saturating_add(y).min(MAX_PADDING);
+        }
+        sum
+    });
+    let cell = Cell {
+        background: boxes.iter().rev().find_map(|b| b.background()),
+        borders: boxes.iter().map(|b| b.borders(None)).find(|e| !e.is_none()).unwrap_or_default(),
+        radius: boxes.iter().map(|b| b.radius()).max().unwrap_or(0),
+        padding,
+        align: Align::Center,
+        span: 1,
+        blocks: within(ctx, &boxes, depth),
+        ..Default::default()
+    };
+    Block::Table(Table { rows: vec![vec![cell]], width: boxes.iter().find_map(|b| b.width()), ..Default::default() })
+}
+
+/// The words of the innermost of `boxes`, with what each box around them gives its text (its
+/// colour, its font); a link stays one, its box taken off.
+fn within(ctx: &mut Ctx, boxes: &[&Node], depth: usize) -> Vec<Block> {
+    match boxes {
+        [] => Vec::new(),
+        [last] if last.tag == "a" => blocks(&[Kid::El(last.unboxed())], ctx, depth + 1),
+        [last] => inheriting(ctx, last, |ctx| blocks(&last.kids, ctx, depth + 1)),
+        [first, rest @ ..] => inheriting(ctx, first, |ctx| within(ctx, rest, depth)),
+    }
+}
+
+impl Node {
+    /// A box a browser draws around words alone (a newsletter's button): `inline-block`, with a
+    /// colour or a border, room around its words or round corners, and nothing but words in it.
+    pub(super) fn button(&self) -> bool {
+        self.style("display").is_some_and(|d| d == "inline-block")
+            && (self.background().is_some() || !self.borders(None).is_none())
+            && (self.padding(None).is_some() || self.radius() > 0)
+            && self.has_text(0)
+            && !self.has_picture(0)
+            && !self.has_block_inside(0)
+    }
+
+    /// Its one element, when it holds nothing else that shows.
+    fn only_element(&self) -> Option<&Node> {
+        let mut shown = self.kids.iter().filter(|k| shows(k));
+        match (shown.next(), shown.next()) {
+            (Some(Kid::El(n)), None) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// The element without its box (the colour behind it, its room, border, corners, size and
+    /// display): what its words are drawn with in the box it became.
+    fn unboxed(&self) -> Node {
+        const BOX: [&str; 9] = ["background", "padding", "border", "margin", "display", "width", "height", "min-", "max-"];
+        let attrs = self
+            .attrs
+            .iter()
+            .filter(|(k, _)| !matches!(k.as_str(), "background" | "bgcolor" | "width" | "height"))
+            .map(|(k, v)| {
+                if k != "style" {
+                    return (k.clone(), v.clone());
+                }
+                let kept: Vec<&str> = v
+                    .split(';')
+                    .filter(|d| {
+                        d.split_once(':').is_none_or(|(p, _)| {
+                            let p = p.trim().to_ascii_lowercase();
+                            !p.starts_with("mso-") && !BOX.iter().any(|b| p.starts_with(b))
+                        })
+                    })
+                    .collect();
+                (k.clone(), kept.join(";"))
+            })
+            .collect();
+        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
+    }
 }
