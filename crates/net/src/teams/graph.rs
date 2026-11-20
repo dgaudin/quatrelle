@@ -6,7 +6,9 @@
 //! read, a message's hosted images, people's photos and presence, and the host of the user's
 //! OneDrive; its answers are read into the model here too (`read`). OneDrive's uploads, a
 //! file's item and share, a post with pictures and files, and a file shared in a chat (its
-//! address, its bytes counted) are in `files`; the directory and a chat's creation in `people`.
+//! address, its bytes counted) are in `files`; the directory and a chat's creation in `people`;
+//! Teams meetings (`/me/onlineMeetings`: made, changed, deleted, their answer checked) in
+//! `meetings`.
 //!
 //! Every request carries the bearer token and goes on a connection of its own, made and answered
 //! within [`DEADLINE`] (its connection, its TLS handshake and every byte of its answer: a server
@@ -14,8 +16,9 @@
 //! followed with the token: a Graph answer that redirects is an error, except a shared file's
 //! content, whose one redirect (to SharePoint's pre-signed download address, on Microsoft's file
 //! hosts: [`transfer_url`]) is followed by hand without it. A 429 or a 503 is waited out
-//! ([`BUSY_ROUNDS`] rounds at most, `Retry-After` capped at 20 s; a post of a message only on a
-//! 429, as a 503 may come after it was made) and every 429 counted in [`Stats`]; the Teams
+//! ([`BUSY_ROUNDS`] rounds at most, `Retry-After` capped at 20 s; a post of a message, or a
+//! meeting's creation, only on a 429, as a 503 may come after it was made) and every 429 counted
+//! in [`Stats`]; the Teams
 //! worker turns the waits off ([`TeamsClient::set_waiting`]) and keeps to its own limiter, which
 //! reads the last `Retry-After` ([`TeamsClient::retry_after`]). Errors say the HTTP status and
 //! Graph's error code, never its message, which can quote a chat's content.

@@ -675,3 +675,44 @@ fn the_pool_starts_the_teams_worker_at_its_first_job_and_keeps_the_one() {
     assert!(p.teams.is_some());
     assert_eq!(p.teams_test.started, 1, "one worker for the pool's life");
 }
+
+/// F10: the system gives no thread for the Teams worker: each meeting's ask is answered all the
+/// same ("no connection"), for no window to wait for an answer that won't come; the status says it.
+#[test]
+fn a_teams_worker_that_cant_start_still_answers_the_meetings() {
+    use quatrelle_model::pim::teams::{self, Status, TeamsMeetingError, TeamsMeetingFields};
+    let mut p = Pool::new(Store::memory(), Arc::new(MemoryCredentials::default()));
+    p.teams_test.no_thread = true;
+    let fields = TeamsMeetingFields { title: "Budget".into(), start: 1_795_165_200, end: 1_795_168_800 };
+    p.submit(Job::Teams { job: teams::Job::MeetingCreate { ask: 7, fields: fields.clone() } });
+    p.submit(Job::Teams { job: teams::Job::MeetingUpdate { id: "m1".into(), before: fields.clone(), after: fields } });
+    p.submit(Job::Teams { job: teams::Job::MeetingDelete { id: "m1".into() } });
+    let until = Instant::now() + Duration::from_secs(10);
+    let mut seen = Vec::new();
+    let answered = |seen: &[Event]| {
+        seen.iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    Event::Teams {
+                        event: teams::Event::MeetingCreated { .. } | teams::Event::MeetingUpdated { .. } | teams::Event::MeetingDeleted { .. }
+                    }
+                )
+            })
+            .count()
+    };
+    while Instant::now() < until && answered(&seen) < 3 {
+        seen.extend(p.wait(Duration::from_millis(50)));
+    }
+    let offline = Some(TeamsMeetingError::Offline);
+    for event in [
+        teams::Event::MeetingCreated { ask: 7, meeting: None, error: offline.clone() },
+        teams::Event::MeetingUpdated { id: "m1".into(), meeting: None, error: offline.clone() },
+        teams::Event::MeetingDeleted { id: "m1".into(), error: offline },
+    ] {
+        assert!(seen.contains(&Event::Teams { event: event.clone() }), "{event:?}: {seen:?}");
+    }
+    assert_eq!(answered(&seen), 3, "each once");
+    assert!(seen.iter().any(|e| matches!(e, Event::Teams { event: teams::Event::Status { status: Status::Failed { .. } } })), "{seen:?}");
+    assert!(p.teams.is_none());
+}

@@ -270,11 +270,14 @@ fn a_missing_permission_clears_meetings_and_leaves_the_chats() {
     m.r.fake(|t| t.meeting_refusal = Some((403, "InsufficientPrivileges")));
     m.create(1, budget());
     m.r.turns(Duration::from_secs(1));
+    // Given again (a new sign-in with it), then refused under Graph's other code.
+    m.r.w.settings.meetings = true;
     m.r.fake(|t| t.meeting_refusal = Some((403, "Forbidden")));
     m.create(2, budget());
     m.r.turns(Duration::from_secs(1));
     assert_eq!(m.answers(), [created(1, TeamsMeetingError::Consent), created(2, TeamsMeetingError::Consent)]);
     assert_eq!(allowed(&m.r.events()), [true, false, false]);
+    assert_eq!(m.r.hits("createMeeting"), 2);
     assert!(!m.r.w.settings.meetings && m.r.w.polling(), "the chats go on");
     // The list is read again, and the next renewal asks for the chats' permissions alone.
     let listed = m.r.hits("chats");
@@ -282,6 +285,86 @@ fn a_missing_permission_clears_meetings_and_leaves_the_chats() {
     m.r.turns(Duration::from_secs(11));
     assert!(m.r.hits("chats") > listed);
     assert_eq!(m.desk.asked.lock().unwrap().last(), Some(&("refresh", false)));
+}
+
+/// T7: the permission said missing, what waits after it, and what comes until it's given again, is
+/// answered so at once: Graph isn't asked again only to say it once more.
+#[test]
+fn after_a_missing_permission_the_rest_is_answered_without_graph() {
+    let mut m = signed(teams_with(Vec::new()));
+    m.r.fake(|t| t.meeting_refusal = Some((403, "Forbidden")));
+    m.create(1, budget());
+    m.create(2, budget());
+    m.update(SOMEONE, budget(), later());
+    m.delete(SOMEONE);
+    m.r.turns(Duration::from_secs(2));
+    let consent = TeamsMeetingError::Consent;
+    assert_eq!(
+        m.answers(),
+        [created(1, consent.clone()), created(2, consent.clone()), updated(SOMEONE, consent.clone()), deleted(SOMEONE, Some(consent.clone()))]
+    );
+    let asked = |m: &Meet| m.r.hits("createMeeting") + m.r.hits("updateMeeting") + m.r.hits("deleteMeeting");
+    assert_eq!(asked(&m), 1, "the first alone went");
+    assert_eq!(allowed(&m.r.events()), [true, false], "said once");
+    m.create(3, budget());
+    assert_eq!(m.answers().last(), Some(&created(3, consent)));
+    m.r.turns(Duration::from_secs(1));
+    assert_eq!(asked(&m), 1);
+    assert!(!meetings::waiting(&m.r.w));
+}
+
+/// T7: a change or a deletion refused for the permission says so too, and lets it go; the deletion
+/// of a meeting whose answer was refused (D7), refused so, is nobody's to hear of, and isn't tried
+/// again.
+#[test]
+fn a_change_or_a_deletion_refused_for_the_permission_lets_it_go() {
+    for change in [true, false] {
+        let mut m = signed(teams_with(Vec::new()));
+        let made = m.made(1, budget());
+        m.r.fake(|t| t.meeting_refusal = Some((403, "InsufficientPrivileges")));
+        if change {
+            m.update(&made.id, budget(), later());
+        } else {
+            m.delete(&made.id);
+        }
+        m.r.turns(Duration::from_secs(1));
+        let told = if change { updated(&made.id, TeamsMeetingError::Consent) } else { deleted(&made.id, Some(TeamsMeetingError::Consent)) };
+        assert_eq!(m.answers().last(), Some(&told));
+        assert_eq!(allowed(&m.r.events()), [true, false], "{change}");
+        assert!(!m.r.w.settings.meetings && m.r.w.polling(), "the chats go on");
+    }
+    let mut m = signed(teams_with(Vec::new()));
+    m.r.fake(|t| t.meeting_answer = Some(json!({"joinWebUrl": "https://teams.microsoft.com.evil.example/x"})));
+    m.create(9, budget());
+    m.turn_after(STEP);
+    assert_eq!(m.answers(), [created(9, TeamsMeetingError::Untrusted)]);
+    m.r.fake(|t| t.meeting_refusal = Some((403, "Forbidden")));
+    m.r.turns(Duration::from_secs(1));
+    assert_eq!(m.answers().len(), 1, "nobody hears of it");
+    assert_eq!(m.r.hits("deleteMeeting"), 1, "tried once");
+    assert!(!meetings::waiting(&m.r.w));
+}
+
+/// T5, T7: the connection cut once Graph made the meeting, before its answer came. The client never
+/// sends a creation again by itself; the worker waits for the network and sends it once more (the
+/// first meeting may stay in Teams: as many are left as without sending it again), and answers with
+/// the second.
+#[test]
+fn a_creation_cut_after_it_went_is_sent_again_once_the_network_is_back() {
+    let mut m = signed(teams_with(Vec::new()));
+    m.r.fake(|t| t.cut_after.insert("createMeeting".into(), 1));
+    m.create(1, budget());
+    m.turn_after(STEP);
+    assert_eq!(m.r.hits("createMeeting"), 1, "not sent again by the client");
+    assert!(m.answers().is_empty(), "it waits for the network");
+    assert_eq!(m.r.fake(|t| t.meetings.len()), 1, "made, though its answer was lost");
+    m.r.turns(Duration::from_secs(12));
+    assert_eq!(m.r.hits("createMeeting"), 2);
+    let said = m.answers();
+    let [model::Event::MeetingCreated { ask: 1, meeting: Some(made), error: None }] = said.as_slice() else { panic!("{said:?}") };
+    let kept = m.r.fake(|t| t.meetings.clone());
+    assert_eq!(kept.len(), 2, "the first left in Teams");
+    assert_eq!(made.id, kept[1].id, "answered with the second");
 }
 
 /// D4: the token says it carries the permission, so Teams refuses the account itself.
@@ -564,7 +647,7 @@ fn an_error_is_told_by_graphs_status_and_code() {
 fn a_panic_on_the_way_still_answers() {
     let hooks = Hooks { trip_meeting: Arc::new(AtomicU32::new(1)), panic_wait: Some(Duration::from_millis(10)), ..Hooks::default() };
     let r = rig_with(teams_with(Vec::new()), grant(Some(TENANT)), Store::memory(), Arc::new(Kept::default()), hooks);
-    r.sign_in("organizations");
+    r.handle.submit(Job::SignIn { client_id: CLIENT.into(), tenant: "organizations".into(), meetings: true });
     r.wait("the first list", listed);
     r.handle.submit(Job::MeetingCreate { ask: 5, fields: budget() });
     let seen = r.wait("the answer", |seen| !answers(seen).is_empty());

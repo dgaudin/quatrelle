@@ -19,6 +19,8 @@ use crate::teams::worker::{self, Microsoft};
 pub(crate) struct Test {
     pub(crate) at: Option<(String, Box<dyn Fn() -> Box<dyn worker::Authority> + Send>)>,
     pub(crate) started: u32,
+    /// The system gives no thread for the worker.
+    pub(crate) no_thread: bool,
 }
 
 impl Pool {
@@ -40,7 +42,15 @@ impl Pool {
             {
                 self.teams_test.started += 1;
             }
-            match worker::start(self.store.clone(), self.creds.clone(), emit, graph, authority) {
+            #[cfg(test)]
+            let started = if self.teams_test.no_thread {
+                Err(std::io::Error::other("no thread, as the test asked"))
+            } else {
+                worker::start(self.store.clone(), self.creds.clone(), emit, graph, authority)
+            };
+            #[cfg(not(test))]
+            let started = worker::start(self.store.clone(), self.creds.clone(), emit, graph, authority);
+            match started {
                 Ok(handle) => {
                     // Started while working offline: it asks nothing until that's turned off.
                     if self.offline {
@@ -49,15 +59,32 @@ impl Pool {
                     self.teams = Some(handle);
                 }
                 Err(e) => {
-                    // Said, so that nothing waits for an answer that won't come.
+                    // Said, so that nothing waits for an answer that won't come: a meeting's ask
+                    // is answered too, its window waiting on it.
                     log::warn!("teams: the worker didn't start: {e}");
                     let status = teams::Status::Failed { why: "The sign-in stopped unexpectedly; try again".into() };
-                    return self.sink.emit(Event::Teams { event: teams::Event::Status { status } });
+                    self.sink.emit(Event::Teams { event: teams::Event::Status { status } });
+                    if let Some(event) = unanswered(&job) {
+                        self.sink.emit(Event::Teams { event });
+                    }
+                    return;
                 }
             }
         }
         if let Some(handle) = &self.teams {
             handle.submit(job);
         }
+    }
+}
+
+/// The answer to a meeting's ask that no worker will make: Teams said nothing ("no connection").
+/// The other jobs have no answer waited for.
+fn unanswered(job: &teams::Job) -> Option<teams::Event> {
+    let offline = Some(teams::TeamsMeetingError::Offline);
+    match job {
+        teams::Job::MeetingCreate { ask, .. } => Some(teams::Event::MeetingCreated { ask: *ask, meeting: None, error: offline }),
+        teams::Job::MeetingUpdate { id, .. } => Some(teams::Event::MeetingUpdated { id: id.clone(), meeting: None, error: offline }),
+        teams::Job::MeetingDelete { id } => Some(teams::Event::MeetingDeleted { id: id.clone(), error: offline }),
+        _ => None,
     }
 }

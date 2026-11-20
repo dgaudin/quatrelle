@@ -18,7 +18,10 @@
 //!   before it. A meeting already gone counts as deleted.
 //! * The meetings' permission said missing (a 403 `Forbidden` or `InsufficientPrivileges`, the
 //!   token not saying it carries it) is let go ([`Worker::meetings_lost`]): the renewals ask for
-//!   the chats' permissions alone, and the chats go on.
+//!   the chats' permissions alone, and the chats go on. While it's missing, an ask is answered so
+//!   without a request, those waiting as those that come: Graph would only say it again.
+//! * Graph's answer is read while its ask is still the one under way: a bug met reading it is
+//!   given up with an answer ([`given_up`]), never without one.
 //!
 //! What is hostile here: Graph's answers. A meeting is taken only as [`meeting_of`] reads it. A
 //! creation whose answer is refused (a link that isn't Teams' own) is answered "untrusted", and
@@ -31,7 +34,7 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use quatrelle_model::pim::teams::{Event, TeamsMeetingError, TeamsMeetingFields, valid_teams_meeting_id};
+use quatrelle_model::pim::teams::{Event, TeamsMeeting, TeamsMeetingError, TeamsMeetingFields, valid_teams_meeting_id};
 use serde_json::Value;
 
 use super::graph::{meeting_id_of, meeting_of, meeting_patch};
@@ -143,6 +146,8 @@ fn queue(w: &mut Worker, what: What, now: Instant) {
         Some(TeamsMeetingError::NotSignedIn)
     } else if w.offline() {
         Some(TeamsMeetingError::Offline)
+    } else if without_permission(w, &what) {
+        Some(TeamsMeetingError::Consent)
     } else {
         None
     };
@@ -162,6 +167,12 @@ fn queue(w: &mut Worker, what: What, now: Instant) {
     w.meetings.queue.push_back(Waiting { what, asked: now, sends: 0 });
 }
 
+/// Whether `what` would only hear again that the meetings' permission is missing: it is, and
+/// `what` is the user's ask (a meeting of Quatrelle's own to delete is still tried, nobody told).
+fn without_permission(w: &Worker, what: &What) -> bool {
+    !w.settings.meetings && !matches!(what, What::Discard { .. })
+}
+
 /// Whether an ask waits for its request.
 pub(crate) fn waiting(w: &Worker) -> bool {
     !w.meetings.queue.is_empty()
@@ -178,6 +189,13 @@ pub(crate) fn deadline(w: &Worker) -> Option<Instant> {
 /// went.
 pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
     loop {
+        // The permission went while it waited: answered so, without a request.
+        if w.meetings.queue.front().is_some_and(|m| without_permission(w, &m.what)) {
+            if let Some(m) = w.meetings.queue.pop_front() {
+                answer(w, m.what, TeamsMeetingError::Consent);
+            }
+            continue;
+        }
         let Some(request) = w.meetings.queue.front().map(|m| m.what.request()) else { return false };
         let Some(request) = request else {
             if let Some(Waiting { what: What::Update { id, .. }, .. }) = w.meetings.queue.pop_front() {
@@ -193,11 +211,16 @@ pub(crate) fn step(w: &mut Worker, now: Instant) -> bool {
         m.sends = m.sends.saturating_add(1);
         w.meetings.sending = Some(m);
         let result = send(w, &request, now);
-        #[cfg(test)]
-        w.trip_meeting();
+        // Read while its ask is still the one under way ([`given_up`] answers it then).
+        let result = result.map(|v| {
+            let what = w.meetings.sending.as_ref().map(|m| &m.what);
+            #[cfg(test)]
+            w.trip_meeting();
+            what.map(|what| read(what, &v)).unwrap_or_default()
+        });
         if let Some(m) = w.meetings.sending.take() {
             match result {
-                Ok(v) => done(w, m, &v, now),
+                Ok(read) => done(w, m, read, now),
                 Err(e) => failed(w, m, &e, now),
             }
         }
@@ -213,18 +236,43 @@ fn send(w: &mut Worker, request: &Request, now: Instant) -> Result<Value> {
     }
 }
 
-/// Graph's answer to a request: told to its ask as [`meeting_of`] reads it. A creation's that is
-/// refused is "untrusted", and the meeting it made is deleted next, when its id is plausible. A
-/// change's answer that isn't that meeting, or isn't read, is "untrusted" too (nothing of it is
-/// taken); an empty one says the change was made.
-fn done(w: &mut Worker, m: Waiting, v: &Value, now: Instant) {
+/// What Graph's answer to a request says, as [`read`] takes it.
+#[derive(Default)]
+struct Answer {
+    /// The meeting, as [`meeting_of`] reads it: for a change, only when it is that meeting.
+    meeting: Option<TeamsMeeting>,
+    /// A creation's answer refused: the id of the meeting it made, when plausible.
+    made: Option<String>,
+    /// The answer is empty (a change made, said so).
+    empty: bool,
+}
+
+/// Graph's answer to the request of `what`, read: the hostile part, done while its ask is still
+/// the one under way.
+fn read(what: &What, v: &Value) -> Answer {
+    match what {
+        What::Create { .. } => {
+            let meeting = meeting_of(v);
+            let made = if meeting.is_none() { meeting_id_of(v) } else { None };
+            Answer { meeting, made, empty: false }
+        }
+        What::Update { id, .. } => Answer { meeting: meeting_of(v).filter(|meeting| meeting.id == *id), made: None, empty: v.is_null() },
+        What::Delete { .. } | What::Discard { .. } => Answer::default(),
+    }
+}
+
+/// Graph's answer to a request ([`read`]): told to its ask. A creation's that is refused is
+/// "untrusted", and the meeting it made is deleted next, when its id is plausible. A change's
+/// answer that isn't that meeting, or isn't read, is "untrusted" too (nothing of it is taken); an
+/// empty one says the change was made.
+fn done(w: &mut Worker, m: Waiting, a: Answer, now: Instant) {
     match m.what {
         What::Create { ask, .. } => {
-            if let Some(meeting) = meeting_of(v) {
+            if let Some(meeting) = a.meeting {
                 log::info!("teams: a meeting was made: {}", w.hashed(&meeting.id));
                 return w.say(Event::MeetingCreated { ask, meeting: Some(meeting), error: None });
             }
-            let id = meeting_id_of(v).filter(|_| w.polling());
+            let id = a.made.filter(|_| w.polling());
             log::warn!("teams: a meeting was made, but Graph's answer was refused{}", if id.is_some() { "; it is deleted" } else { "" });
             w.say(Event::MeetingCreated { ask, meeting: None, error: Some(TeamsMeetingError::Untrusted) });
             if let Some(id) = id {
@@ -232,8 +280,8 @@ fn done(w: &mut Worker, m: Waiting, v: &Value, now: Instant) {
             }
         }
         What::Update { id, .. } => {
-            let meeting = meeting_of(v).filter(|meeting| meeting.id == id);
-            let error = (meeting.is_none() && !v.is_null()).then_some(TeamsMeetingError::Untrusted);
+            let meeting = a.meeting;
+            let error = (meeting.is_none() && !a.empty).then_some(TeamsMeetingError::Untrusted);
             if error.is_some() {
                 log::warn!("teams: meeting {} was changed, but Graph's answer was refused", w.hashed(&id));
             } else {
