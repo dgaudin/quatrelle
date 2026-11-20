@@ -232,6 +232,8 @@ pub struct UiState {
     pub(crate) cal_drag: Option<calendar::Drag>,
     /// A stretch of half hours being dragged out in the calendar's grid ([`calendar::SlotDrag`]).
     pub(crate) cal_slot_drag: Option<calendar::SlotDrag>,
+    /// Days being dragged out in the Month view ([`calendar::DayDrag`]).
+    pub(crate) cal_day_drag: Option<calendar::DayDrag>,
     /// What the calendar last showed (its view, the days in it and the calendars side by side):
     /// another view, week or day shown, a stretch of half hours selected there goes.
     pub(crate) cal_slot_view: Option<(CalMode, i64, i64, usize)>,

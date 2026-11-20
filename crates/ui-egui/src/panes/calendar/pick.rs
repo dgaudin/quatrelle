@@ -20,6 +20,16 @@ pub enum Pick {
     Slot { day: i64, half: i64, last: i64, pane: usize },
     /// A day of the Month view, clicked on its background.
     Day { day: i64 },
+    /// Several days of the Month view, dragged out from the one pressed to the one under the
+    /// pointer, in reading order (both included).
+    Days { first: i64, last: i64 },
+}
+
+/// Days being dragged out in the Month view, from the one pressed (`anchor`) to the one under
+/// the pointer.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DayDrag {
+    pub(crate) anchor: i64,
 }
 
 /// A stretch of half hours being dragged out, from the half hour pressed (`anchor`) to the one
@@ -51,35 +61,49 @@ pub(super) fn outline(c: Color32, t: &Tokens) -> Color32 {
     Color32::from_rgb(shade(r), shade(g), shade(b))
 }
 
-/// Enter opens the appointment selected, or a meeting over the stretch of half hours selected,
-/// when it's shown (not while a dialog is open or text is typed).
+/// Enter opens the appointment selected, or a meeting over the stretch of half hours or days
+/// selected, when it's shown (not while a dialog is open or text is typed).
 pub(super) fn enter(s: &Session, st: &UiState, ui: &mut Ui, items: &[AgendaItem], acts: &mut Vec<Action>) {
     if let Some(item) = pressed(st, ui, items, Key::Enter) {
         acts.extend(open(s, item));
         return;
     }
-    if let Some((start, end, pane)) = selected_stretch(s, st, ui) {
-        let cals = if s.prefs.calendars_side_by_side { s.shown_calendars() } else { Vec::new() };
-        let cal = cals.get(pane).filter(|_| cals.len() > 1);
-        acts.push(days::new_event_in(s, start, end, true, cal));
+    if st.dialog.is_some() || ui.ctx().text_edit_focused() {
+        return;
+    }
+    let Some(meeting) = new_meeting(s, st.cal_pick.as_ref()) else { return };
+    if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
+        acts.push(meeting);
     }
 }
 
-/// The stretch of half hours selected, when the view still shows it, and Enter is pressed on it.
-fn selected_stretch(s: &Session, st: &UiState, ui: &mut Ui) -> Option<(i64, i64, usize)> {
-    if st.dialog.is_some() || ui.ctx().text_edit_focused() {
-        return None;
+/// The meeting Enter opens over the stretch of half hours or the days selected, when the view
+/// still shows it: an all-day meeting over the days, in their calendar.
+pub(crate) fn new_meeting(s: &Session, pick: Option<&Pick>) -> Option<Action> {
+    match pick {
+        Some(Pick::Slot { day, half, last, pane }) if slot_shown(s, *day, *pane) => {
+            let cals = if s.prefs.calendars_side_by_side { s.shown_calendars() } else { Vec::new() };
+            let cal = cals.get(*pane).filter(|_| cals.len() > 1);
+            let (first, last) = ((*half).min(*last), (*half).max(*last));
+            let midnight = s.local_midnight(*day);
+            Some(days::new_event_in(s, midnight + first * 1800, midnight + (last + 1) * 1800, true, cal))
+        }
+        Some(Pick::Day { day }) if days_shown(s, *day, *day) => Some(days::new_all_day_in(s, *day, *day, true, None)),
+        Some(Pick::Days { first, last }) if days_shown(s, *first, *last) => {
+            let (first, last) = ((*first).min(*last), (*first).max(*last));
+            Some(days::new_all_day_in(s, first, last, true, None))
+        }
+        _ => None,
     }
-    let Some(Pick::Slot { day, half, last, pane }) = st.cal_pick.as_ref() else { return None };
-    if !slot_shown(s, *day, *pane) {
-        return None;
+}
+
+/// Whether the Month view still shows the days `first` to `last`.
+fn days_shown(s: &Session, first: i64, last: i64) -> bool {
+    if s.cal_mode != CalMode::Month {
+        return false;
     }
-    let (first, last) = ((*half).min(*last), (*half).max(*last));
-    if !ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
-        return None;
-    }
-    let midnight = s.local_midnight(*day);
-    Some((midnight + first * 1800, midnight + (last + 1) * 1800, *pane))
+    let (d0, d1) = s.cal_days();
+    first.min(last) >= d0 && first.max(last) < d1
 }
 
 /// Whether the Day, Work week or Week view still shows `day` in the calendar's `pane`.
@@ -130,6 +154,14 @@ pub(crate) fn new_event(s: &Session, pick: Option<&Pick>) -> Action {
             let (first, last) = ((*half).min(*last), (*half).max(*last));
             let midnight = s.local_midnight(*day);
             days::new_event_in(s, midnight + first * 1800, midnight + (last + 1) * 1800, false, cal)
+        }
+        Some(Pick::Days { first, last }) if days_shown(s, *first, *last) => {
+            let (first, last) = ((*first).min(*last), (*first).max(*last));
+            if first == last {
+                Action::Dialog(Dialog::new_event(s, Some(s.local_midnight(first) + 9 * 3600)))
+            } else {
+                days::new_all_day_in(s, first, last, false, None)
+            }
         }
         Some(Pick::Day { day }) => Action::Dialog(Dialog::new_event(s, Some(s.local_midnight(*day) + 9 * 3600))),
         _ => Action::Dialog(Dialog::new_event(s, None)),

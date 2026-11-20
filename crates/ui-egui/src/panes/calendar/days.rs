@@ -25,6 +25,22 @@ pub(super) fn new_event_in(s: &Session, start: i64, end: i64, inviting: bool, ca
     Action::Dialog(d)
 }
 
+/// A new all-day event over the local days `first` to `last` included, in calendar `cal` when it
+/// can take one; `inviting` as a meeting, else an appointment.
+pub(super) fn new_all_day_in(s: &Session, first: i64, last: i64, inviting: bool, cal: Option<&(String, String, String, u8)>) -> Action {
+    let mut d = Dialog::new_event(s, Some(s.local_midnight(first)));
+    if let Dialog::Event(f) = &mut d {
+        f.set_all_day_range(s, first, last);
+        f.inviting = inviting;
+        if let Some((account, id, _, _)) = cal
+            && let Some(i) = f.calendars.iter().position(|(a, c, _)| a == account && c == id)
+        {
+            f.calendar = i;
+        }
+    }
+    Action::Dialog(d)
+}
+
 /// The space between calendars shown side by side.
 const PANE_GAP: f32 = 10.0;
 
@@ -234,6 +250,18 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                         st.cal_pick = Some(Pick::Slot { day, half, last: half, pane: j });
                     }
                 }
+                // A right click on empty time selects the half hour under it when it isn't in
+                // the stretch selected, then opens the small menu: New event, New meeting.
+                if r.secondary_clicked()
+                    && let Some(p) = r.interact_pointer_pos()
+                {
+                    let half = half_at(p.y);
+                    if !inside(st, day, j, half) {
+                        st.cal_pick = Some(Pick::Slot { day, half, last: half, pane: j });
+                    }
+                }
+                let pick = st.cal_pick.clone();
+                r.context_menu(|ui| menu::selection_menu(ui, s, pick.as_ref(), acts));
             }
         }
         // The stretch dragged out: its other end follows the pointer's height, past the day's

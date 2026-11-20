@@ -8,12 +8,14 @@ use quatrelle_engine::model::dates::civil_from_days;
 use quatrelle_engine::sample::STUDIO_CALENDAR;
 
 use super::calendar_clicks::{chip_rect, drawn_away, form};
-use super::calendar_menu::{SIZE, day_view, shown};
+use super::calendar_menu::{SIZE, choose, day_view, right_click_at, shown};
 use super::*;
-use crate::calendar::{HOUR, Pick, chip_id};
+use crate::calendar::{HOUR, Pick, chip_id, month_day_id};
 
 /// A window tall enough for the whole day, so a drag can reach its last half hour.
 const TALL: egui::Vec2 = egui::vec2(1280.0, 1600.0);
+/// A window tall enough for a Month view's days to hold a few appointments.
+const MONTH: egui::Vec2 = egui::vec2(1280.0, 1300.0);
 
 fn press(at: egui::Pos2, pressed: bool) -> Event {
     Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE }
@@ -245,5 +247,216 @@ fn a_click_outside_a_selection_still_takes_one_half_hour() {
         (ymd(day).as_str(), "16:30", ymd(day).as_str(), "17:00"),
         "half an hour"
     );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The sample in the Month view, its days settled.
+fn month_view(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
+    let (mut a, dir, ctx) = day_view(name, 0);
+    a.run("calendar.view", json!({"mode": "month"}));
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], MONTH);
+    }
+    (a, dir, ctx)
+}
+
+/// Where a day's background is drawn in the Month view.
+fn month_cell(ctx: &egui::Context, day: i64) -> egui::Rect {
+    ctx.read_response(month_day_id(day)).map(|r| r.rect).unwrap_or_else(|| panic!("day {day} is drawn"))
+}
+
+/// A press in one day's background, dragged to another's, then let go.
+fn drag_days(ctx: &egui::Context, a: &mut MailApp, from: i64, to: i64) {
+    drag(ctx, a, month_cell(ctx, from).center(), month_cell(ctx, to).center(), MONTH);
+}
+
+/// A press on a Thursday dragged to the next Tuesday selects those six days, lit as one
+/// selection; Enter opens an all-day meeting over them, guests shown.
+#[test]
+fn a_month_drag_selects_the_days_and_enter_opens_an_all_day_meeting() {
+    let (mut a, dir, ctx) = month_view("selection-month-days");
+    let d0 = a.session.cal_days().0;
+    let (thu, tue) = (d0 + 3, d0 + 8);
+    drag_days(&ctx, &mut a, thu, tue);
+    assert_eq!(a.ui.cal_pick, Some(Pick::Days { first: thu, last: tue }), "Thursday to the next Tuesday");
+    // Every day of the stretch is lit, the pointer away.
+    let accent = a.ui.tokens.accent_soft;
+    let shapes = drawn_away(&ctx, &mut a, MONTH);
+    for d in thu..=tue {
+        let cell = month_cell(&ctx, d);
+        assert!(shapes.iter().any(|s| matches!(s, egui::Shape::Rect(x) if x.fill == accent && x.rect == cell)), "day {d} is lit: {shapes:?}");
+    }
+    // Enter: an all-day meeting from the first day to the last, included.
+    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], MONTH);
+    frame_sized(&ctx, &mut a, vec![], MONTH);
+    let f = form(&a).expect("a meeting opened");
+    assert!(f.inviting, "as if Invite Attendees was pressed");
+    assert!(f.all_day, "all day");
+    assert_eq!((f.date.as_str(), f.end_date.as_str()), (ymd(thu).as_str(), ymd(tue).as_str()), "the whole stretch");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Ctrl+N over the days selected opens an all-day appointment over them; so does a double click
+/// inside them. Outside them, a double click still opens a new appointment that day at 9:00.
+#[test]
+fn ctrl_n_and_a_double_click_inside_the_days_keep_their_stretch() {
+    let (mut a, dir, ctx) = month_view("selection-month-keys");
+    let d0 = a.session.cal_days().0;
+    let (thu, tue) = (d0 + 3, d0 + 8);
+    drag_days(&ctx, &mut a, thu, tue);
+    assert_eq!(a.ui.cal_pick, Some(Pick::Days { first: thu, last: tue }));
+    // Ctrl+N: an appointment over the whole stretch, all day.
+    frame_sized(&ctx, &mut a, vec![key(Key::N, Modifiers::COMMAND)], MONTH);
+    for _ in 0..3 {
+        frame_sized(&ctx, &mut a, vec![], MONTH);
+    }
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new appointment");
+    assert!(!f.inviting, "an appointment");
+    assert!(f.all_day, "all day");
+    assert_eq!((f.date.as_str(), f.end_date.as_str()), (ymd(thu).as_str(), ymd(tue).as_str()), "the stretch");
+    (a.ui.dialog, a.ui.event_windows) = (None, Vec::new());
+    // A double click inside it: the same stretch, not the day clicked.
+    frame_sized(&ctx, &mut a, vec![], MONTH);
+    click_at(&ctx, &mut a, month_cell(&ctx, d0 + 5).center(), 2, MONTH);
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new appointment");
+    assert!(f.all_day);
+    assert_eq!((f.date.as_str(), f.end_date.as_str()), (ymd(thu).as_str(), ymd(tue).as_str()), "the selection's stretch");
+    (a.ui.dialog, a.ui.event_windows) = (None, Vec::new());
+    // Outside it: the day clicked, at 9:00, as before.
+    frame_sized(&ctx, &mut a, vec![], MONTH);
+    click_at(&ctx, &mut a, month_cell(&ctx, d0 + 1).center(), 2, MONTH);
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new appointment");
+    assert!(!f.all_day && !f.inviting);
+    assert_eq!((f.date.as_str(), f.start.as_str()), (ymd(d0 + 1).as_str(), "09:00"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A click still selects one day; a double click on it keeps opening an appointment that day at
+/// 9:00.
+#[test]
+fn a_click_in_the_month_still_takes_one_day() {
+    let (mut a, dir, ctx) = month_view("selection-month-single");
+    let day = a.session.cal_days().0 + 1;
+    let at = month_cell(&ctx, day).center();
+    click_at(&ctx, &mut a, at, 1, MONTH);
+    assert_eq!(a.ui.cal_pick, Some(Pick::Day { day }), "one day selected");
+    click_at(&ctx, &mut a, at, 2, MONTH);
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new appointment");
+    assert!(!f.all_day && !f.inviting);
+    assert_eq!((f.date.as_str(), f.start.as_str()), (ymd(day).as_str(), "09:00"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A press on an appointment's chip and a drag still moves it, selecting no days.
+#[test]
+fn an_appointment_dragged_in_the_month_still_moves_and_selects_no_days() {
+    let (mut a, dir, ctx) = month_view("selection-month-appointment");
+    let lunch = shown(&a, "Lunch with Jun");
+    let at = chip_rect(&ctx, &lunch).center();
+    let cw = month_cell(&ctx, a.session.cal_days().0).width();
+    drag(&ctx, &mut a, at, at + egui::vec2(cw, 0.0), MONTH);
+    let moved = shown(&a, "Lunch with Jun");
+    assert_eq!((moved.start, moved.end), (lunch.start + 86_400, lunch.end + 86_400), "moved a day on");
+    assert!(!matches!(a.ui.cal_pick, Some(Pick::Days { .. })), "no days selected: {:?}", a.ui.cal_pick);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The days selected go when another month or another view is shown.
+#[test]
+fn the_days_selected_go_when_another_month_or_view_is_shown() {
+    let (mut a, dir, ctx) = month_view("selection-month-gone");
+    let d0 = a.session.cal_days().0;
+    drag_days(&ctx, &mut a, d0 + 3, d0 + 8);
+    assert!(matches!(a.ui.cal_pick, Some(Pick::Days { .. })));
+    a.run("calendar.goto", json!({"step": 1}));
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], MONTH);
+    }
+    assert_eq!(a.ui.cal_pick, None, "another month: gone");
+    let d0 = a.session.cal_days().0;
+    drag_days(&ctx, &mut a, d0 + 3, d0 + 8);
+    assert!(matches!(a.ui.cal_pick, Some(Pick::Days { .. })));
+    a.run("calendar.view", json!({"mode": "week"}));
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    assert_eq!(a.ui.cal_pick, None, "another view: gone");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A right click on a stretch of half hours offers New event and New meeting, which open what
+/// Ctrl+N and Enter open over it; a right click on a half hour outside it selects that one first.
+#[test]
+fn a_right_click_on_a_stretch_offers_new_event_and_new_meeting() {
+    let (mut a, dir, ctx) = day_view("selection-menu-slot", 0);
+    let day = a.session.cal_days().0;
+    let (top, x) = grid(&ctx, &a);
+    drag(&ctx, &mut a, point(top, x, 16.5), point(top, x, 17.75), SIZE);
+    assert_eq!(stretch(&a), Some((day, 33, 35)));
+    let menu = right_click_at(&ctx, &mut a, point(top, x, 17.0), SIZE);
+    for entry in ["New event", "New meeting"] {
+        assert!(menu.iter().any(|t| t == entry), "no {entry} in {menu:?}");
+    }
+    assert_eq!(stretch(&a), Some((day, 33, 35)), "the stretch stays selected");
+    choose(&ctx, &mut a, &["New meeting"]);
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new meeting");
+    assert!(f.inviting && !f.all_day);
+    assert_eq!((f.date.as_str(), f.start.as_str(), f.end.as_str()), (ymd(day).as_str(), "16:30", "18:00"));
+    (a.ui.dialog, a.ui.event_windows) = (None, Vec::new());
+    // Outside the selection, on a half hour: it is selected first, and the menu opens over it.
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    let menu = right_click_at(&ctx, &mut a, point(top, x, 13.5), SIZE);
+    for entry in ["New event", "New meeting"] {
+        assert!(menu.iter().any(|t| t == entry), "no {entry} in {menu:?}");
+    }
+    assert_eq!(stretch(&a), Some((day, 27, 27)), "the half hour clicked, alone");
+    choose(&ctx, &mut a, &["New event"]);
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new appointment");
+    assert!(!f.inviting && !f.all_day);
+    assert_eq!((f.start.as_str(), f.end.as_str()), ("13:30", "14:00"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A right click on the days selected offers the same menu, over the whole stretch; a right
+/// click on a day outside it selects that day and offers New event there at 9:00.
+#[test]
+fn a_right_click_on_days_offers_new_event_and_new_meeting() {
+    let (mut a, dir, ctx) = month_view("selection-menu-days");
+    let d0 = a.session.cal_days().0;
+    let (thu, tue) = (d0 + 3, d0 + 8);
+    drag_days(&ctx, &mut a, thu, tue);
+    let menu = right_click_at(&ctx, &mut a, month_cell(&ctx, d0 + 5).center(), MONTH);
+    for entry in ["New event", "New meeting"] {
+        assert!(menu.iter().any(|t| t == entry), "no {entry} in {menu:?}");
+    }
+    assert_eq!(a.ui.cal_pick, Some(Pick::Days { first: thu, last: tue }), "the stretch stays selected");
+    choose(&ctx, &mut a, &["New meeting"]);
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], MONTH);
+    }
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new meeting");
+    assert!(f.inviting && f.all_day);
+    assert_eq!((f.date.as_str(), f.end_date.as_str()), (ymd(thu).as_str(), ymd(tue).as_str()));
+    (a.ui.dialog, a.ui.event_windows) = (None, Vec::new());
+    // A day outside the stretch: selected first, then the menu over it.
+    frame_sized(&ctx, &mut a, vec![], MONTH);
+    let menu = right_click_at(&ctx, &mut a, month_cell(&ctx, d0 + 1).center(), MONTH);
+    for entry in ["New event", "New meeting"] {
+        assert!(menu.iter().any(|t| t == entry), "no {entry} in {menu:?}");
+    }
+    assert_eq!(a.ui.cal_pick, Some(Pick::Day { day: d0 + 1 }), "the day clicked, alone");
+    choose(&ctx, &mut a, &["New event"]);
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], MONTH);
+    }
+    let f = form(&a).filter(|f| f.uid.is_none()).expect("a new appointment");
+    assert!(!f.inviting && !f.all_day);
+    assert_eq!((f.date.as_str(), f.start.as_str()), (ymd(d0 + 1).as_str(), "09:00"));
     let _ = std::fs::remove_dir_all(dir);
 }

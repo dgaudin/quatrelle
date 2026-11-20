@@ -307,6 +307,7 @@ impl MailApp {
                 months_drag: 0.0,
                 cal_drag: None,
                 cal_slot_drag: None,
+                cal_day_drag: None,
                 cal_slot_view: None,
                 cal_pick: None,
                 note_selected: None,
