@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod rows;
 mod shown_as;
 mod table;
 pub(crate) mod text_selection;
@@ -428,7 +429,7 @@ impl Body<'_> {
             }
             // Centred or right-aligned: pictures in the middle (or at the end), a line that fits
             // moved over, and one too long for a row laid out whole, each of its rows moved over as
-            // a browser moves them (one with a link keeps to the left: each link is a run of its own).
+            // a browser moves them (one with a link cut into its rows: each link is a run of its own).
             if align != Align::Min {
                 if line.iter().all(|sp| sp.image.is_some() || sp.text.trim().is_empty()) {
                     ui.allocate_ui_with_layout(vec2(width, 0.0), egui::Layout::top_down(align), |ui| {
@@ -466,6 +467,17 @@ impl Body<'_> {
                     if let Some(m) = marks.iter().find(|m| m.current) {
                         self.hit = Some(find::place(r.rect, m.range.start, len, 17.0 * self.zoom));
                     }
+                    continue;
+                }
+                if line.iter().all(|sp| sp.image.is_none()) {
+                    let rows = self.rows_of(&t, ui, line, width, page);
+                    ui.vertical(|ui| {
+                        // The rows of one line, as close as a wrapped line's.
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        for row in &rows {
+                            self.row_of_pieces(st, ui, row, line, width, page, align);
+                        }
+                    });
                     continue;
                 }
             }
@@ -510,6 +522,12 @@ impl Body<'_> {
 
     /// One span: text (a link when it has one) or a picture.
     pub(super) fn span(&mut self, st: &mut UiState, ui: &mut Ui, sp: &mime::Span, width: f32, page: [u8; 3]) {
+        self.span_in(st, ui, sp, None, width, page);
+    }
+
+    /// [`Body::span`], for a piece of another span when `of` says so: that span, and the byte of
+    /// its text the piece starts at (its finds are lit in the piece).
+    pub(super) fn span_in(&mut self, st: &mut UiState, ui: &mut Ui, sp: &mime::Span, of: Option<(&mime::Span, usize)>, width: f32, page: [u8; 3]) {
         let t = st.tokens;
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
@@ -545,8 +563,19 @@ impl Body<'_> {
         if let Some(bg) = bg {
             rt = rt.background_color(bg);
         }
-        // The find bar's finds in it, lit.
-        let marks = self.find.as_ref().map(|f| f.marks_of(sp)).unwrap_or_default();
+        // The find bar's finds in it, lit (in a piece, those of its span on its words).
+        let marks = match (&self.find, of) {
+            (Some(f), Some((whole, from))) => {
+                let to = from.saturating_add(sp.text.len());
+                f.marks_of(whole)
+                    .into_iter()
+                    .filter(|m| m.range.start < to && m.range.end > from)
+                    .map(|m| find::Mark { range: m.range.start.max(from).saturating_sub(from)..m.range.end.min(to).saturating_sub(from), ..m })
+                    .collect()
+            }
+            (Some(f), None) => f.marks_of(sp),
+            (None, _) => Vec::new(),
+        };
         let text = match &self.find {
             Some(f) => f.lit_text(ui, rt.color(fg), &marks),
             None => rt.color(fg).into(),

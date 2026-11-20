@@ -430,3 +430,71 @@ fn a_newsletters_button_is_a_round_box_that_opens_its_link() {
     assert_eq!(*opened.borrow(), vec!["https://survey.contoso.example/answer".to_string()], "the box opens its link");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A centred paragraph too long for a line with a link in it (a newsletter's footer): each of its
+/// rows centred, as a browser centres them, under a short centred line (they kept to the left:
+/// each link is a run of its own), and its link still a link where the paragraph wraps it.
+#[test]
+fn a_centred_paragraph_with_a_link_that_wraps_is_centred_row_by_row() {
+    let before = "You receive this letter because you joined the studio's list of members; to stop receiving it, ";
+    let link = "manage your subscription here";
+    let after = " at any time, in one click and without any question asked of you.";
+    let html = format!(
+        "<table width=\"600\" align=\"center\" cellpadding=\"0\" cellspacing=\"0\"><tr><td style=\"padding:30px 20px\">\
+         <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\">\
+         <p style=\"margin:0;font-size:14px\">Tell us what you think of the studio!</p>\
+         <p style=\"margin:0;font-size:14px\">{before}<a href=\"https://www.contoso.example/subscription\">{link}</a>{after}</p>\
+         </td></tr></table></td></tr></table>"
+    );
+    let whole = format!("{before}{link}{after}");
+    let (mut a, dir) = app_with_html("centred-link-wrap", "Members", &html);
+    let opened = Rc::new(RefCell::new(Vec::new()));
+    a.services = Box::new(Opening(opened.clone()));
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Members").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut shapes = Vec::new();
+    for _ in 0..16 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let short = shapes
+        .iter()
+        .find_map(|s| match s {
+            Shape::Text(t) if t.galley.text().trim() == "Tell us what you think of the studio!" => Some(t.galley.rect.translate(t.pos.to_vec2())),
+            _ => None,
+        })
+        .expect("the short line drawn");
+    // The paragraph's pieces on each row, where they are (the list's preview of it aside).
+    let mut rows: Vec<(f32, f32, f32)> = Vec::new();
+    let mut link_at = None;
+    for s in &shapes {
+        let Shape::Text(t) = s else { continue };
+        let text = t.galley.text().trim();
+        if text.len() < 4 || !whole.contains(text) {
+            continue;
+        }
+        for row in &t.galley.rows {
+            let r = row.rect_without_leading_space().translate(t.pos.to_vec2());
+            if r.top() < short.bottom() || (r.center().x - short.center().x).abs() > 320.0 || r.width() < 1.0 {
+                continue;
+            }
+            if link.contains(text) {
+                link_at = Some(r.center());
+            }
+            match rows.iter_mut().find(|(top, ..)| (top - r.top()).abs() < 3.0) {
+                Some((_, left, right)) => (*left, *right) = (left.min(r.left()), right.max(r.right())),
+                None => rows.push((r.top(), r.left(), r.right())),
+            }
+        }
+    }
+    assert!(rows.len() >= 2, "the paragraph on two rows or more: {rows:?}");
+    for (top, left, right) in &rows {
+        assert!(((left + right) / 2.0 - short.center().x).abs() < 6.0, "the row at {top} centred on {}: {rows:?}", short.center().x);
+    }
+    let at = link_at.expect("the link's words drawn");
+    tap(&ctx, &mut a, at);
+    assert_eq!(*opened.borrow(), vec!["https://www.contoso.example/subscription".to_string()], "the link opens");
+    let _ = std::fs::remove_dir_all(dir);
+}

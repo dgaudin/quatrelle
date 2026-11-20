@@ -323,3 +323,25 @@ fn the_bar_and_its_marks_draw_light_and_dark() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A word found in a centred paragraph too long for a line, in its link (drawn in pieces, one a
+/// row): lit there, on the row it's on, and counted once.
+#[test]
+fn a_word_in_a_centred_paragraph_with_a_link_is_found_and_lit() {
+    let html = "<table width=\"600\" align=\"center\"><tr><td align=\"center\">\
+                <p>You receive this letter because you joined the studio's list of members; to stop receiving it, \
+                <a href=\"https://www.contoso.example/subscription\">manage your Wombat subscription here</a> at any time, \
+                in one click and without any question asked of you.</p></td></tr></table>";
+    let (mut a, dir) = app_with_html("find-centred-link", "Members", html);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "Members").map(|m| m.key.clone()).unwrap();
+    open(&mut a, &ctx, &k);
+    frames(&ctx, &mut a, slash());
+    frame(&ctx, &mut a, vec![Event::Text("wombat".into())]);
+    let shown = frames(&ctx, &mut a, vec![]);
+    assert_eq!(count(&shown).as_deref(), Some("1 of 1"));
+    let (_, now, _) = crate::reading::find_fills(&a.ui.tokens);
+    assert_eq!(lit(&shown, now).iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), ["Wombat"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
