@@ -462,6 +462,7 @@
 	Never	なし
 	New contact	新しい連絡先
 	New event	新しい予定
+	New meeting	新しい会議
 	Next	次へ
 	Next month	翌月
 	No answer yet	未回答
@@ -1000,6 +1001,7 @@ month	May	5月
 	Change the rule	ルールを変更
 	Give the rule a name	ルールに名前を付けてください
 	Quatrelle doesn't know every part of this rule yet	Quatrelle はこのルールのすべてをまだ理解していません
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle はこの種類のファイルを認識できません。開かずに、フォルダーに表示します。
 	Pick a category	カテゴリを選択
 	Pick a folder	フォルダーを選択
 	Say what to look for	検索する文字を入力してください

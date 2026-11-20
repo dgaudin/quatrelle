@@ -462,6 +462,7 @@
 	Never	Никогда
 	New contact	Новый контакт
 	New event	Новое событие
+	New meeting	Новая встреча
 	Next	Вперёд
 	Next month	Следующий месяц
 	No answer yet	Ответа пока нет
@@ -1002,6 +1003,7 @@ month	May	Май
 	Change the rule	Изменить правило
 	Give the rule a name	Дайте правилу имя
 	Quatrelle doesn't know every part of this rule yet	Quatrelle пока не знает всех частей этого правила
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle не знает этот тип файла: он показан в своей папке, а не открыт.
 	Pick a category	Выберите категорию
 	Pick a folder	Выберите папку
 	Say what to look for	Укажите, что искать

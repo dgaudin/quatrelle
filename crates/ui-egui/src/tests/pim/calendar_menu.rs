@@ -49,17 +49,23 @@ pub(super) fn texts(shapes: &[egui::Shape]) -> Vec<String> {
 /// frame draws then that it didn't before (the menu's entries).
 pub(super) fn right_click(ctx: &egui::Context, a: &mut MailApp, item: &AgendaItem) -> Vec<String> {
     let at = ctx.read_response(chip_id(item)).map(|r| r.rect.center()).expect("the chip is drawn");
-    frame(ctx, a, vec![Event::PointerMoved(at)]);
+    right_click_at(ctx, a, at, SIZE)
+}
+
+/// A right click at `at`: the texts the frame draws then that it didn't before (the menu's
+/// entries).
+pub(super) fn right_click_at(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, size: egui::Vec2) -> Vec<String> {
+    frame_sized(ctx, a, vec![Event::PointerMoved(at)], size);
     for _ in 0..60 {
-        frame(ctx, a, vec![]);
+        frame_sized(ctx, a, vec![], size);
     }
-    let mut before = texts(&frame_shapes(ctx, a, vec![], SIZE));
+    let mut before = texts(&frame_shapes(ctx, a, vec![], size));
     let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
-    frame(ctx, a, vec![button(true)]);
-    frame(ctx, a, vec![button(false)]);
+    frame_sized(ctx, a, vec![button(true)], size);
+    frame_sized(ctx, a, vec![button(false)], size);
     let mut after = Vec::new();
     for _ in 0..5 {
-        after = texts(&frame_shapes(ctx, a, vec![], SIZE));
+        after = texts(&frame_shapes(ctx, a, vec![], size));
     }
     after.retain(|t| match before.iter().position(|b| b == t) {
         Some(i) => {
@@ -73,7 +79,7 @@ pub(super) fn right_click(ctx: &egui::Context, a: &mut MailApp, item: &AgendaIte
 
 /// Through the menu open: each of `path` but the last pointed at (a submenu opens), the last
 /// clicked.
-fn choose(ctx: &egui::Context, a: &mut MailApp, path: &[&str]) {
+pub(super) fn choose(ctx: &egui::Context, a: &mut MailApp, path: &[&str]) {
     let Some((last, through)) = path.split_last() else { return };
     for entry in through {
         let at = settled_text_at(ctx, a, entry, SIZE).unwrap_or_else(|| panic!("no {entry} in the menu"));
@@ -104,6 +110,7 @@ fn a_right_click_opens_the_appointments_menu() {
     for entry in ["Open", "Show As", "Categorize", "Private", "Delete"] {
         assert!(menu.iter().any(|t| t == entry), "no {entry} in {menu:?}");
     }
+    assert!(!menu.iter().any(|t| t == "New event" || t == "New meeting"), "the empty time's menu isn't the appointment's: {menu:?}");
     assert!(!menu.iter().any(|t| t == "Accept"), "the user's own appointment has no answer: {menu:?}");
     assert!(a.ui.dialog.is_none(), "nothing opened");
     assert!(a.ui.cal_drag.is_none(), "no drag");

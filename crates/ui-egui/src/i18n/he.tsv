@@ -462,6 +462,7 @@
 	Never	אף פעם
 	New contact	איש קשר חדש
 	New event	אירוע חדש
+	New meeting	פגישה חדשה
 	Next	הבא
 	Next month	החודש הבא
 	No answer yet	עדיין אין תשובה
@@ -999,6 +1000,7 @@ month	May	מאי
 	Change the rule	שינוי הכלל
 	Give the rule a name	תן שם לכלל
 	Quatrelle doesn't know every part of this rule yet	Quatrelle עדיין לא מכיר את כל חלקי הכלל הזה
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle לא מכיר את סוג הקובץ הזה: הוא מוצג בתיקייה שלו ולא נפתח.
 	Pick a category	בחר קטגוריה
 	Pick a folder	בחר תיקייה
 	Say what to look for	ציין מה לחפש

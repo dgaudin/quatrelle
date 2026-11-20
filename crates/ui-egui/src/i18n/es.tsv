@@ -463,6 +463,7 @@
 	Never	Nunca
 	New contact	Contacto nuevo
 	New event	Evento nuevo
+	New meeting	Nueva reunión
 	Next	Siguiente
 	Next month	Mes siguiente
 	No answer yet	Sin respuesta
@@ -1003,6 +1004,7 @@ month	May	mayo
 	Change the rule	Cambiar la regla
 	Give the rule a name	Ponle un nombre a la regla
 	Quatrelle doesn't know every part of this rule yet	Quatrelle aún no conoce todas las partes de esta regla
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle no conoce este tipo de archivo: se muestra en su carpeta, no se abre.
 	Pick a category	Elige una categoría
 	Pick a folder	Elige una carpeta
 	Say what to look for	Di qué buscar

@@ -11,7 +11,8 @@ use quatrelle_model::pim::teams::{Attachment, FileOutcome, FileWhy, Op, OutKind,
 
 use super::*;
 use crate::{
-    CmdResult, TEAMS_ATTACH_AGAIN, TEAMS_FILES_KEPT, TEAMS_TOO_MANY_DOWNLOADS, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsSaved, teams_could_run,
+    CmdResult, TEAMS_ATTACH_AGAIN, TEAMS_FILES_KEPT, TEAMS_TOO_MANY_DOWNLOADS, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsOpen, TeamsSaved,
+    teams_could_run, teams_open,
 };
 
 const CHAT: &str = "19:chat1@thread.v2";
@@ -433,12 +434,107 @@ fn a_legacy_office_file_is_shown_in_its_folder() {
 /// Quatrelle knows, and that can't run, is opened; anything else is shown in its folder.
 #[test]
 fn only_a_type_quatrelle_knows_is_opened() {
-    for name in ["report.pdfx", "page.foo", "draw.qqq", "notes.zzz", "README", "archive.tar.gz", "plan.dwg", "a.b.c"] {
+    for name in ["report.pdfx", "page.foo", "draw.qqq", "notes.zzz", "README", "plan.dwg", "a.b.c"] {
         assert!(teams_could_run(name), "shown in its folder: {name}");
     }
+    for name in ["text.odt", "sheet.ods", "deck.odp"] {
+        assert!(teams_could_run(name), "OpenDocument files can carry macros: {name}");
+    }
     let known = ["report.pdf", "letter.docx", "photo.png", "notes.txt", "PHOTO.JPEG", "sheet.xlsx", "deck.pptx", "data.csv"];
-    for name in known.into_iter().chain(["song.mp3", "clip.mp4", "archive.zip", "invite.ics", "card.vcf", "text.odt", "scan.tiff"]) {
+    for name in known.into_iter().chain(["song.mp3", "clip.mp4", "archive.zip", "invite.ics", "card.vcf", "scan.tiff"]) {
         assert!(!teams_could_run(name), "opened: {name}");
+    }
+}
+
+/// The common types a message shares are opened by their program: mail items, text, Office
+/// without macros, sound, video and archives, whatever their capitals.
+#[test]
+fn the_common_types_are_opened_by_their_program() {
+    let opened = [
+        "mail.msg",
+        "mail.eml",
+        "notes.txt",
+        "server.log",
+        "data.csv",
+        "data.tsv",
+        "readme.md",
+        "letter.dotx",
+        "sheet.xltx",
+        "deck.potx",
+        "show.ppsx",
+        "plan.vsdx",
+        "shapes.vssx",
+        "stencil.vstx",
+        "song.mp3",
+        "clip.m4a",
+        "voice.aac",
+        "sound.wav",
+        "album.flac",
+        "track.ogg",
+        "voice.opus",
+        "film.mp4",
+        "film.m4v",
+        "film.mov",
+        "clip.webm",
+        "film.mkv",
+        "film.avi",
+        "clip.wmv",
+        "files.zip",
+        "files.7z",
+        "logs.gz",
+        "files.tgz",
+        "files.tar",
+    ];
+    for name in opened {
+        assert_eq!(teams_open(name), TeamsOpen::Opened, "{name}");
+        assert_eq!(teams_open(&name.to_ascii_uppercase()), TeamsOpen::Opened, "{}", name.to_ascii_uppercase());
+        assert!(!teams_could_run(name), "opened: {name}");
+    }
+    // A whole archive's name ends in an extension Quatrelle knows, whatever came before it.
+    assert_eq!(teams_open("backup.tar.gz"), TeamsOpen::Opened);
+}
+
+/// The types that could run code are shown in their folder, whatever their capitals: programs,
+/// scripts, shortcuts, installers, pages, macro documents, the old binary Office formats and
+/// rich text, and OpenDocument files, which carry macros too.
+#[test]
+fn the_types_that_could_run_are_shown_in_their_folder() {
+    let run = [
+        "setup.exe",
+        "tool.sh",
+        "run.ps1",
+        "script.vbs",
+        "game.jar",
+        "link.lnk",
+        "site.url",
+        "update.msi",
+        "app.msix",
+        "disk.iso",
+        "tool.app",
+        "install.pkg",
+        "package.deb",
+    ];
+    let documents = [
+        "html", "htm", "xhtml", "shtml", "mht", "mhtml", "svg", "svgz", "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm",
+        "doc", "dot", "xls", "xlt", "ppt", "pot", "pps", "rtf", "odt", "ods", "odp",
+    ];
+    let named = run.into_iter().map(str::to_string).chain(documents.iter().map(|e| format!("file.{e}")));
+    for name in named {
+        assert_eq!(teams_open(&name), TeamsOpen::CouldRun, "{name}");
+        let upper = name.to_ascii_uppercase();
+        assert_eq!(teams_open(&upper), TeamsOpen::CouldRun, "{upper}");
+        assert!(teams_could_run(&name), "shown in its folder: {name}");
+    }
+}
+
+/// A type Quatrelle doesn't know is shown in its folder too, and says so apart from a type that
+/// could run code: no extension, an unknown one, a name without a stem.
+#[test]
+fn a_type_quatrelle_doesnt_know_is_shown_in_its_folder_too() {
+    for name in ["README", "report.pdfx", "page.foo", "plan.xml", "plan.xsl", "archive.", ".profile", "notes v1.2 final"] {
+        assert_eq!(teams_open(name), TeamsOpen::Unknown, "{name}");
+        assert_eq!(teams_open(&name.to_ascii_uppercase()), TeamsOpen::Unknown, "{}", name.to_ascii_uppercase());
+        assert!(teams_could_run(name), "shown in its folder: {name}");
     }
 }
 

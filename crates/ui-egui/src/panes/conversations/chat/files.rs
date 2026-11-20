@@ -12,13 +12,13 @@
 //! and as the window opens it (`parts::openable`); the pointer on "Open in browser" shows where.
 //! "Open" asks the engine, which downloads by the file's id through the user's own sign-in, never
 //! by the link. A file that could run a program says so on its card: it is shown in its folder,
-//! not opened.
+//! not opened; one whose kind Quatrelle doesn't know says that instead.
 
 use egui::{RichText, Sense, Ui, vec2};
 use quatrelle_engine::mime::{self, AttachmentKind};
 use quatrelle_engine::model::addr::trust::url_host;
 use quatrelle_engine::model::pim::teams::{Attachment, ChatMessage, FileWhy, one_line};
-use quatrelle_engine::{TeamsFileState, teams_could_run};
+use quatrelle_engine::{TeamsFileState, TeamsOpen, teams_open};
 use serde_json::json;
 
 use super::Pane;
@@ -91,8 +91,20 @@ pub(super) fn files(p: &Pane, ui: &mut Ui, m: &ChatMessage, width: f32, acts: &m
                     if !ours {
                         ui.label(RichText::new(tl!("Link to another site")).size(11.5).color(t.warn));
                     }
-                    if teams_could_run(name) {
-                        ui.label(RichText::new(tl!("This file could run a program: it is shown in its folder, not opened.")).size(11.5).color(t.dim));
+                    match teams_open(name) {
+                        TeamsOpen::CouldRun => {
+                            ui.label(
+                                RichText::new(tl!("This file could run a program: it is shown in its folder, not opened.")).size(11.5).color(t.dim),
+                            );
+                        }
+                        TeamsOpen::Unknown => {
+                            ui.label(
+                                RichText::new(tl!("Quatrelle doesn't know this kind of file: it is shown in its folder, not opened."))
+                                    .size(11.5)
+                                    .color(t.dim),
+                            );
+                        }
+                        TeamsOpen::Opened => {}
                     }
                     match state {
                         Some(TeamsFileState::Asked) => {

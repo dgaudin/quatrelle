@@ -462,6 +462,7 @@
 	Never	안 함
 	New contact	새 연락처
 	New event	새 일정
+	New meeting	새 모임
 	Next	다음
 	Next month	다음 달
 	No answer yet	아직 응답 없음
@@ -1002,6 +1003,7 @@ month	May	5월
 	Change the rule	규칙 변경
 	Give the rule a name	규칙 이름을 입력하세요
 	Quatrelle doesn't know every part of this rule yet	Quatrelle가 아직 이 규칙의 일부를 이해하지 못합니다
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle는 이 종류의 파일을 알지 못합니다. 열지 않고 폴더에 표시합니다.
 	Pick a category	범주 선택
 	Pick a folder	폴더 선택
 	Say what to look for	찾을 내용을 입력하세요

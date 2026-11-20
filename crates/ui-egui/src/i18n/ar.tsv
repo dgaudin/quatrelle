@@ -462,6 +462,7 @@
 	Never	أبدًا
 	New contact	جهة اتصال جديدة
 	New event	حدث جديد
+	New meeting	اجتماع جديد
 	Next	التالي
 	Next month	الشهر القادم
 	No answer yet	لا رد بعد
@@ -999,6 +1000,7 @@ month	May	مايو
 	Change the rule	تغيير القاعدة
 	Give the rule a name	أعطِ القاعدة اسمًا
 	Quatrelle doesn't know every part of this rule yet	لا يعرف Quatrelle بعد كل أجزاء هذه القاعدة
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	لا يعرف Quatrelle هذا النوع من الملفات: يُعرض في مجلده ولا يُفتح.
 	Pick a category	اختر فئة
 	Pick a folder	اختر مجلدًا
 	Say what to look for	حدّد ما تبحث عنه

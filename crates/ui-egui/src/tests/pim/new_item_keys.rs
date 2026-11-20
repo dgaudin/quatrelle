@@ -63,7 +63,7 @@ fn ctrl_n_in_the_calendar_opens_a_new_appointment() {
 fn ctrl_n_on_a_selected_half_hour_starts_there() {
     let (mut a, dir, ctx) = day_view("new-event-slot", 0);
     let day = a.session.cal_days().0;
-    a.ui.cal_pick = Some(Pick::Slot { day, half: 29, pane: 0 });
+    a.ui.cal_pick = Some(Pick::Slot { day, half: 29, last: 29, pane: 0 });
     ctrl_n(&ctx, &mut a);
     let f = new_event(&a).expect("a new appointment");
     assert_eq!((f.date.clone(), f.start.as_str()), (ymd(day), "14:30"));

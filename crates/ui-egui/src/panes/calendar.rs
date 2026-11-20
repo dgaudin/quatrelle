@@ -27,7 +27,7 @@ pub use drag::Drag;
 pub(crate) use found::open_hit;
 pub(crate) use found::{CalSearch, found};
 pub use pick::Pick;
-pub(crate) use pick::new_event;
+pub(crate) use pick::{DayDrag, SlotDrag, new_event};
 pub use side::{nav, todo_bar};
 
 /// Height of an hour in the day and week views.
@@ -133,6 +133,17 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         });
     });
     let (d0, d1) = s.cal_days();
+    // A stretch of half hours selected goes when the calendar shows another view, week or day
+    // (or another set of calendars side by side).
+    let panes = if s.prefs.calendars_side_by_side { s.shown_calendars().len().max(1) } else { 1 };
+    let shown_view = (s.cal_mode, d0, d1, panes);
+    if st.cal_slot_view.is_some_and(|v| v != shown_view) {
+        if matches!(st.cal_pick, Some(Pick::Slot { .. } | Pick::Days { .. })) {
+            st.cal_pick = None;
+        }
+        st.cal_day_drag = None;
+    }
+    st.cal_slot_view = Some(shown_view);
     let began = web_time::Instant::now();
     let items = s.agenda(s.local_midnight(d0), s.local_midnight(d1));
     let found = began.elapsed();
@@ -146,6 +157,9 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     // A drag whose chip is no longer drawn (the view changed under it) is let go of.
     if st.cal_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
         st.cal_drag = None;
+    }
+    if st.cal_slot_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
+        st.cal_slot_drag = None;
     }
 }
 
@@ -498,11 +512,27 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
         for i in 0..7 {
             let d = d0 + w * 7 + i;
             let r = Rect::from_min_size(pos2(area.min.x + cw * i as f32, area.min.y + head + rh * w as f32), vec2(cw, rh));
-            let bg = ui.interact(r, month_day_id(d), Sense::click());
-            if bg.clicked() || bg.double_clicked() {
-                st.cal_pick = Some(Pick::Day { day: d });
+            let bg = ui.interact(r, month_day_id(d), Sense::click_and_drag());
+            // A press on the background begins a drag over the days: the one under the pointer
+            // is the other end, in reading order. A press on an appointment never comes here:
+            // its chip is drawn above the background.
+            if bg.drag_started_by(egui::PointerButton::Primary) && st.cal_drag.is_none() {
+                st.cal_day_drag = Some(DayDrag { anchor: d });
+                st.cal_pick = Some(Pick::Days { first: d, last: d });
             }
-            if st.cal_pick == Some(Pick::Day { day: d }) {
+            if let Some(drag) = st.cal_day_drag
+                && ui.rect_contains_pointer(r)
+                && ui.input(|i| i.pointer.primary_down())
+            {
+                st.cal_pick = Some(Pick::Days { first: drag.anchor.min(d), last: drag.anchor.max(d) });
+            }
+            let inside = matches!(&st.cal_pick, Some(Pick::Days { first, last }) if d >= (*first).min(*last) && d <= (*first).max(*last));
+            let selected = match &st.cal_pick {
+                Some(Pick::Day { day }) => *day == d,
+                Some(Pick::Days { first, last }) => d >= (*first).min(*last) && d <= (*first).max(*last),
+                _ => false,
+            };
+            if selected {
                 ui.painter().rect_filled(r, 0.0, t.accent_soft);
             } else if ui.rect_contains_pointer(r) {
                 ui.painter().rect_filled(r, 0.0, t.hover_row);
@@ -552,10 +582,35 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
                 }
             }
             if bg.double_clicked() {
-                acts.push(Action::Dialog(Dialog::new_event(s, Some(s.local_midnight(d) + 9 * 3600))));
+                // Inside the days selected: the appointment over the whole stretch, as Ctrl+N
+                // opens it; outside: the day clicked, at 9:00, as before.
+                if inside && matches!(&st.cal_pick, Some(Pick::Days { first, last }) if first != last) {
+                    acts.push(pick::new_event(s, st.cal_pick.as_ref()));
+                } else {
+                    st.cal_pick = Some(Pick::Day { day: d });
+                    acts.push(Action::Dialog(Dialog::new_event(s, Some(s.local_midnight(d) + 9 * 3600))));
+                }
+            } else if bg.clicked() && !inside {
+                st.cal_pick = Some(Pick::Day { day: d });
             }
+            // A right click on empty time selects the day under it when it isn't in the days
+            // selected, then opens the small menu: New event, New meeting.
+            if bg.secondary_clicked() && !inside {
+                st.cal_pick = Some(Pick::Day { day: d });
+            }
+            let pick = st.cal_pick.clone();
+            bg.context_menu(|ui| menu::selection_menu(ui, s, pick.as_ref(), acts));
         }
     }
     drag::paint(ui, st, s, t, &drag_area, 0, &|_| 0);
+    // A drag over one day only is a click on that day, once it's let go.
+    if st.cal_day_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
+        if let Some(Pick::Days { first, last }) = st.cal_pick.clone()
+            && first == last
+        {
+            st.cal_pick = Some(Pick::Day { day: first });
+        }
+        st.cal_day_drag = None;
+    }
     ui.allocate_rect(area, Sense::hover());
 }

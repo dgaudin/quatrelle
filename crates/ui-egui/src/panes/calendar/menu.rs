@@ -10,7 +10,8 @@ use quatrelle_engine::model::ical::ShowAs;
 use quatrelle_engine::{AgendaItem, Session};
 use serde_json::json;
 
-use super::open;
+use super::pick;
+use super::{Pick, open};
 use crate::dialogs::pim_dialogs::{all_categories, show_as_label};
 use crate::icons::Icon;
 use crate::{Action, theme, widgets};
@@ -22,6 +23,22 @@ pub(super) fn changeable(s: &Session, item: &AgendaItem) -> bool {
     let writable = s.pim.get(&item.account).and_then(|p| p.calendars.iter().find(|c| c.id == item.calendar)).is_some_and(|c| !c.read_only);
     let this_one = s.find_event(&item.uid).is_some_and(|(account, e)| account == item.account && e.calendar == item.calendar);
     writable && this_one
+}
+
+/// The menu a right click on empty time opens, over the half hour or the days selected: a new
+/// appointment there (as Ctrl+N opens it), or a new meeting over it (as Enter does).
+pub(super) fn selection_menu(ui: &mut Ui, s: &Session, selection: Option<&Pick>, acts: &mut Vec<Action>) {
+    let Some(selection) = selection.filter(|p| matches!(p, Pick::Slot { .. } | Pick::Day { .. } | Pick::Days { .. })) else { return };
+    if ui.button((widgets::menu_icon(Some(Icon::CalendarAdd)), tl!("New event"))).clicked() {
+        acts.push(pick::new_event(s, Some(selection)));
+        ui.close();
+    }
+    if let Some(meeting) = pick::new_meeting(s, Some(selection))
+        && ui.button((widgets::menu_icon(Some(Icon::Video)), tl!("New meeting"))).clicked()
+    {
+        acts.push(meeting);
+        ui.close();
+    }
 }
 
 /// The menu's entries for `item` (drawn only while it's open: the event is read from here).

@@ -368,6 +368,16 @@ impl EventForm {
         self.end = local_time(end, s);
     }
 
+    /// Make it an all-day event over the local days `first` to `last` included.
+    pub fn set_all_day_range(&mut self, s: &Session, first: i64, last: i64) {
+        let last = last.max(first);
+        self.all_day = true;
+        self.date = local_date(s.local_midnight(first), s);
+        self.end_date = local_date(s.local_midnight(last), s);
+        self.start = "00:00".into();
+        self.end = "00:00".into();
+    }
+
     pub(crate) fn params(&self) -> Value {
         let (start, end) = if self.all_day {
             (self.date.trim().to_string(), self.end_date.trim().to_string())

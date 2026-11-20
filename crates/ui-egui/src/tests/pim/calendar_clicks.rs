@@ -117,7 +117,7 @@ fn a_click_selects_an_empty_half_hour_a_double_click_adds_an_appointment() {
     assert_eq!(a.ui.cal_pick, Some(Pick::of(&lunch)));
     click_at(&ctx, &mut a, at, 1, SIZE);
     assert!(nothing_opened(&a), "a click opens nothing: {:?}", opened(&a));
-    assert_eq!(a.ui.cal_pick, Some(Pick::Slot { day, half, pane: 0 }), "the half hour selected, the appointment not");
+    assert_eq!(a.ui.cal_pick, Some(Pick::Slot { day, half, last: half, pane: 0 }), "the half hour selected, the appointment not");
     let accent_soft = a.ui.tokens.accent_soft;
     let lit = |shapes: &[egui::Shape]| {
         shapes.iter().any(|s| matches!(s, egui::Shape::Rect(x) if x.fill == accent_soft && x.rect.contains(at) && x.rect.height() < HOUR))

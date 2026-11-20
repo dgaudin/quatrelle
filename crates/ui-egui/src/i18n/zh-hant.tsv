@@ -462,6 +462,7 @@
 	Never	永不
 	New contact	新增連絡人
 	New event	新增活動
+	New meeting	新增會議
 	Next	下一個
 	Next month	下個月
 	No answer yet	尚未回覆
@@ -1002,6 +1003,7 @@ month	May	5月
 	Change the rule	變更規則
 	Give the rule a name	為規則命名
 	Quatrelle doesn't know every part of this rule yet	Quatrelle 尚未辨識此規則的所有部分
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle 不認識這種檔案：它會在其資料夾中顯示，而不會開啟。
 	Pick a category	選擇類別
 	Pick a folder	選擇資料夾
 	Say what to look for	指明要尋找的內容
