@@ -37,12 +37,12 @@ const EXTENSION_MAX: usize = 16;
 /// A file's place in a message is written with its GUID: one of the same length stands for it.
 const GUID_PLACE: &str = "00000000-0000-0000-0000-000000000000";
 /// Extensions of files that run code when opened, beyond those of mail's attachments
-/// ([`runs_code`]): web pages and SVGs (their scripts), Office documents with macros, and the
-/// Office formats before 2007 and rich text, which carry them as well (documents, templates,
-/// sheets, decks and shows).
-const ALSO_RUNS: [&str; 25] = [
+/// ([`runs_code`]): web pages and SVGs (their scripts), Office documents with macros, the Office
+/// formats before 2007 and rich text, which carry them as well (documents, templates, sheets,
+/// decks and shows), and OpenDocument files, whose macros run too.
+const ALSO_RUNS: [&str; 28] = [
     "html", "htm", "xhtml", "shtml", "mht", "mhtml", "svg", "svgz", "docm", "dotm", "xlsm", "xltm", "xlsb", "pptm", "potm", "ppsm", "sldm", "doc",
-    "dot", "xls", "xlt", "ppt", "pot", "pps", "rtf",
+    "dot", "xls", "xlt", "ppt", "pot", "pps", "rtf", "odt", "ods", "odp",
 ];
 
 /// Where a file of the open chat asked for stands.
@@ -147,20 +147,47 @@ impl Files {
     }
 }
 
-/// Whether opening a file saved under `name` could run code, so that it's shown in its folder
-/// instead: what [`runs_code`] says of mail's attachments, a web page, an SVG, a document with
-/// macros; and a name whose extension isn't of a type Quatrelle knows (mime's table), or without
-/// one: the system's opener would go by what the file holds (on Linux, a web page saved as
-/// `report.pdfx` opens in the browser).
-pub fn teams_could_run(name: &str) -> bool {
+/// How a file someone shared in Teams is opened: by its program when Quatrelle knows its type
+/// and it can't run code; else its folder is shown, with the reason said.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeamsOpen {
+    /// Opened with the system's app.
+    Opened,
+    /// Its type runs code: shown in its folder.
+    CouldRun,
+    /// Quatrelle doesn't know its type: shown in its folder.
+    Unknown,
+}
+
+/// How the file saved under `name` is opened (see [`TeamsOpen`]): what [`runs_code`] says of
+/// mail's attachments, a web page, an SVG, a document with macros or one of the formats that
+/// carry them ([`ALSO_RUNS`]) could run code; a name whose extension isn't of a type Quatrelle
+/// knows (mime's table), or without one, is of an unknown kind. Either way its folder is shown
+/// rather than the file opened: the system's opener would go by what the file holds (on Linux, a
+/// web page saved as `report.pdfx` opens in the browser).
+pub fn teams_open(name: &str) -> TeamsOpen {
     if runs_code(name) {
-        return true;
+        return TeamsOpen::CouldRun;
     }
     let clean = sanitize_filename(name);
-    let Some((stem, ext)) = clean.rsplit_once('.') else { return true };
+    let Some((stem, ext)) = clean.rsplit_once('.') else { return TeamsOpen::Unknown };
     let extension = !stem.trim().is_empty() && (1..=EXTENSION_MAX).contains(&ext.len()) && ext.bytes().all(|b| b.is_ascii_alphanumeric());
-    let known = mime_from_name(&clean) != "application/octet-stream";
-    !extension || !known || ALSO_RUNS.iter().any(|e| ext.eq_ignore_ascii_case(e))
+    if !extension {
+        return TeamsOpen::Unknown;
+    }
+    if ALSO_RUNS.iter().any(|e| ext.eq_ignore_ascii_case(e)) {
+        return TeamsOpen::CouldRun;
+    }
+    if mime_from_name(&clean) == "application/octet-stream" {
+        return TeamsOpen::Unknown;
+    }
+    TeamsOpen::Opened
+}
+
+/// Whether opening a file saved under `name` could run code or is of a kind Quatrelle doesn't
+/// know, so that it's shown in its folder instead ([`TeamsOpen`]).
+pub fn teams_could_run(name: &str) -> bool {
+    teams_open(name) != TeamsOpen::Opened
 }
 
 /// Whether the parts a message takes can be: at most [`PARTS_MAX`], each by a path that is

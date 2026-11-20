@@ -148,17 +148,44 @@ fn a_program_is_shown_in_its_folder() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// The card of a file that could run says so before it is asked for (the mail's sentence).
+/// The card of a file that could run says so before it is asked for (the mail's sentence); one
+/// whose type Quatrelle doesn't know says that instead.
 #[test]
-fn the_card_of_a_program_says_it_is_shown_in_its_folder() {
+fn the_card_of_a_file_says_why_it_is_shown_in_its_folder() {
+    const COULD: &str = "This file could run a program: it is shown in its folder, not opened.";
+    const UNKNOWN: &str = "Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.";
     let ctx = egui::Context::default();
-    for (name, said) in [("setup.exe", true), ("report.pdf", false), ("notes", true)] {
+    let cases = [
+        ("setup.exe", true, false),
+        ("page.html", true, false),
+        ("text.odt", true, false),
+        ("report.pdf", false, false),
+        ("notes", false, true),
+        ("report.pdfx", false, true),
+    ];
+    for (name, could, unknown) in cases {
         let (mut a, dir, _) = file_app("teams-file-sentence", name);
         let texts = card(&ctx, &mut a);
-        let sentence = "This file could run a program: it is shown in its folder, not opened.";
-        assert_eq!(has_text(&texts, sentence), said, "{name}: {texts:?}");
+        assert_eq!(has_text(&texts, COULD), could, "{name}: {texts:?}");
+        assert_eq!(has_text(&texts, UNKNOWN), unknown, "{name}: {texts:?}");
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+/// A file whose kind Quatrelle doesn't know, shown in its folder: the notice says that, not that
+/// it could run a program.
+#[test]
+fn a_notice_for_an_unknown_kind_says_quatrelle_doesnt_know_it() {
+    let (mut a, dir, opened) = file_app("teams-file-unknown-notice", "report.pdfx");
+    let folder = quatrelle_engine::store::scratch_dir("open").unwrap();
+    let path = saved_file("ui-t11-unknown.pdfx");
+    a.teams_saved(quatrelle_engine::TeamsSaved { path: path.clone(), name: "report.pdfx".into(), open: false });
+    let n = a.session.notices.last().map(|n| n.text.clone()).unwrap_or_default();
+    assert!(n.contains("Quatrelle doesn't know this kind of file: it is shown in its folder, not opened."), "{n:?}");
+    assert!(!n.contains("This file could run a program"), "{n:?}");
+    assert_eq!(*opened.borrow(), vec![folder]);
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]
@@ -169,7 +196,8 @@ fn a_name_in_the_notice_is_drawn_plain() {
     let path = saved_file("ui-t11-notice.exe");
     a.teams_saved(quatrelle_engine::TeamsSaved { path: path.clone(), name, open: false });
     let n = a.session.notices.last().map(|n| n.text.clone()).unwrap_or_default();
-    assert!(n.contains("This file could run a program: it is shown in its folder, not opened."), "{n:?}");
+    // The name is cut so long that its extension is gone: of an unknown kind, and said so.
+    assert!(n.contains("Quatrelle doesn't know this kind of file: it is shown in its folder, not opened."), "{n:?}");
     assert!(!n.contains('\u{202E}'), "{n:?}");
     assert!(n.chars().filter(|c| *c == 'x').count() <= 80, "{n:?}");
     assert_eq!(*opened.borrow(), vec![folder]);

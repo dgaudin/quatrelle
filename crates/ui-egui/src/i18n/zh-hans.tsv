@@ -1001,6 +1001,7 @@ month	May	5月
 	Change the rule	更改规则
 	Give the rule a name	为规则命名
 	Quatrelle doesn't know every part of this rule yet	Quatrelle 尚未识别此规则的所有部分
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle 不认识这种文件：它会在其文件夹中显示，而不会打开。
 	Pick a category	选择类别
 	Pick a folder	选择文件夹
 	Say what to look for	指明要查找的内容

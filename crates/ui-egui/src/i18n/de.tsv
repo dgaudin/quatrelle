@@ -1004,6 +1004,7 @@ month	May	Mai
 	Change the rule	Regel ändern
 	Give the rule a name	Geben Sie der Regel einen Namen
 	Quatrelle doesn't know every part of this rule yet	Quatrelle kennt noch nicht alle Teile dieser Regel
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle kennt diese Art von Datei nicht: Sie wird in ihrem Ordner angezeigt, nicht geöffnet.
 	Pick a category	Wählen Sie eine Kategorie
 	Pick a folder	Wählen Sie einen Ordner
 	Say what to look for	Geben Sie an, wonach gesucht wird

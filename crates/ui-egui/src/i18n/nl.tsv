@@ -1000,6 +1000,7 @@ month	May	mei
 	Change the rule	Regel wijzigen
 	Give the rule a name	Geef de regel een naam
 	Quatrelle doesn't know every part of this rule yet	Quatrelle kent nog niet alle onderdelen van deze regel
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle kent dit soort bestand niet: het wordt in zijn map getoond, niet geopend.
 	Pick a category	Kies een categorie
 	Pick a folder	Kies een map
 	Say what to look for	Geef aan waarnaar gezocht wordt

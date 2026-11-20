@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! What a Teams conversation asks of the window. A file shared in it, once the engine has saved
-//! it: opened with the system's app, or, when its name could run a program, its folder shown
-//! instead. What its box asks for ([`TeamsAct`]): files picked in the system's file dialog, or a
-//! screenshot pasted, to go with the message being written.
+//! it: opened with the system's app, or, when its name could run a program or its kind is
+//! unknown, its folder shown instead. What its box asks for ([`TeamsAct`]): files picked in the
+//! system's file dialog, or a screenshot pasted, to go with the message being written.
 //!
 //! What is hostile here: the file and its name are a stranger's. A program is never started from
 //! here (the engine says which files could run: `teams_could_run`); the path is the engine's,
@@ -15,8 +15,8 @@
 //! screenshot pasted are the user's: looked at, or written to a file of the user's own, by the box
 //! (`writing/attach.rs`).
 
-use quatrelle_engine::TeamsSaved;
 use quatrelle_engine::model::pim::teams::{is_bidi, one_line};
+use quatrelle_engine::{TeamsOpen, TeamsSaved, teams_open};
 
 use super::*;
 use crate::conversations::TeamsAct;
@@ -77,15 +77,19 @@ impl MailApp {
             }
             return;
         }
-        let (target, could_run) = match (saved.open, path.parent()) {
-            (true, _) => (path.clone(), false),
-            (false, Some(folder)) => (folder.to_path_buf(), true),
+        let (target, opens) = match (saved.open, path.parent()) {
+            (true, _) => (path.clone(), TeamsOpen::Opened),
+            (false, Some(folder)) => (folder.to_path_buf(), teams_open(&saved.name)),
             (false, None) => return,
         };
         match self.services.open_path(&target) {
-            Ok(()) if could_run => {
-                // The mail's sentence, the name said apart before it.
-                let said = tl!("This file could run a program: it is shown in its folder, not opened.");
+            Ok(()) if opens != TeamsOpen::Opened => {
+                // The mail's sentence for a file that could run, this one's for a kind Quatrelle
+                // doesn't know; the name said apart before it.
+                let said = match opens {
+                    TeamsOpen::Unknown => tl!("Quatrelle doesn't know this kind of file: it is shown in its folder, not opened."),
+                    _ => tl!("This file could run a program: it is shown in its folder, not opened."),
+                };
                 self.session.notice(format!("{name}: {said}"), false)
             }
             Ok(()) => {}

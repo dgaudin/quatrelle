@@ -1003,6 +1003,7 @@ month	May	maggio
 	Change the rule	Modifica la regola
 	Give the rule a name	Dai un nome alla regola
 	Quatrelle doesn't know every part of this rule yet	Quatrelle non conosce ancora tutte le parti di questa regola
+	Quatrelle doesn't know this kind of file: it is shown in its folder, not opened.	Quatrelle non conosce questo tipo di file: viene mostrato nella sua cartella, non aperto.
 	Pick a category	Scegli una categoria
 	Pick a folder	Scegli una cartella
 	Say what to look for	Indica cosa cercare
