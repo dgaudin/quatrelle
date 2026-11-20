@@ -68,9 +68,10 @@ impl Session {
                 e.dirty &= e.event != x.event;
                 // The server told the guests with that change; a later change asks again.
                 e.notify &= e.dirty;
-                // The server took the Teams meeting's property off with it: whatever changed
-                // since, it has none to take off.
-                e.teams_meeting_taken_off = false;
+                // A copy sent without the Teams meeting's id took its property off (or the server
+                // never had that id): nothing more to take off. One sent with it took nothing
+                // off: a removal made since still waits to go.
+                e.teams_meeting_taken_off &= x.event.teams_meeting_id.is_some();
             }
         }
         // Notes stored on the server: their item there, and no longer to send. One whose size

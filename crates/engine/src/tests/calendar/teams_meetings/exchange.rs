@@ -63,3 +63,23 @@ fn nothing_is_taken_off_on_this_computers_calendar() {
     assert!(!taken_off(&s, &uid), "no server to tell");
     done(s);
 }
+
+/// The meeting taken out while a sync sends the copy from before (which still has it, and so takes
+/// nothing off): the server still holds the property, which stays to take off at the next sync.
+#[test]
+fn a_removal_saved_while_the_copy_before_it_goes_stays_to_send() {
+    let mut s = signed_in("teams-taken-off-meanwhile");
+    calendars(&mut s, "ews", &[(EXCHANGE, false)]);
+    let uid = on_exchange(&mut s, Some("m1"));
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget 2"})).unwrap();
+    // The sync takes this copy, its meeting still in it.
+    let mut sent = s.find_event(&uid).map(|(_, e)| e.clone()).unwrap();
+    assert!(!sent.teams_meeting_taken_off && sent.event.teams_meeting_id.is_some());
+    s.run("event.update", &json!({"uid": uid, "teamsMeetingId": ""})).unwrap();
+    assert!(taken_off(&s, &uid));
+    sent.dirty = false;
+    s.apply_dav("sample", &DavSync { pushed_events: vec![sent], ..Default::default() });
+    let waiting = s.find_event(&uid).map(|(_, e)| (e.dirty, e.teams_meeting_taken_off, e.event.teams_meeting_id.clone()));
+    assert_eq!(waiting, Some((true, true, None)), "the removal still to send");
+    done(s);
+}
