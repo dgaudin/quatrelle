@@ -341,14 +341,8 @@ fn the_webex_id_comes_before_the_appointments_own_fields() {
 /// One the server holds that isn't an id reads as none.
 #[test]
 fn an_appointments_webex_id_round_trips() {
-    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
     use quatrelle_model::pim::StoredEvent;
-    let mut d = Data::default();
-    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
-    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
-    let server = serve(d);
-    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let (_server, c) = calendar_server();
     let new = StoredEvent {
         calendar: CALENDAR.into(),
         event: CalEvent {
@@ -388,21 +382,14 @@ fn an_appointments_webex_id_round_trips() {
     assert_eq!(bad("a b/c"), None);
     assert_eq!(bad(""), None);
     assert_eq!(bad(" ok-1 ").as_deref(), Some("ok-1"));
-    let _ = cal;
 }
 
 /// The id of a Teams meeting made for an appointment is kept by the server with it, as the
 /// Webex id is: created, read back by a first sync and a later one, kept when another field changes.
 #[test]
 fn an_appointments_teams_meeting_id_round_trips() {
-    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
     use quatrelle_model::pim::StoredEvent;
-    let mut d = Data::default();
-    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
-    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
-    let server = serve(d);
-    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let (_server, c) = calendar_server();
     let new = StoredEvent {
         calendar: CALENDAR.into(),
         event: CalEvent {
@@ -431,6 +418,41 @@ fn an_appointments_teams_meeting_id_round_trips() {
     assert_eq!(third.events.iter().find(|e| e.event.summary == "Review (moved)").unwrap().event.teams_meeting_id.as_deref(), Some("abc_123-X="));
 }
 
+/// The fake Exchange with a mailbox's own folders, and a client signed in to it.
+fn calendar_server() -> (crate::fakes::fake_ews::Server, Client) {
+    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    (server, c)
+}
+
+/// The properties of Quatrelle's own the server was asked to take off, in order.
+fn taken_off(server: &crate::fakes::fake_ews::Server) -> Vec<String> {
+    server.data.lock().unwrap().calls.iter().filter(|c| c.starts_with("DeleteItemField ")).cloned().collect()
+}
+
+/// F2: a change to an appointment that never had a Teams meeting takes nothing off: the server is
+/// never asked to delete a property the appointment doesn't have.
+#[test]
+fn an_ordinary_change_takes_no_property_off() {
+    use quatrelle_model::pim::StoredEvent;
+    let (server, c) = calendar_server();
+    let plain = CalEvent { uid: "p-1".into(), summary: "Review".into(), start: 1_792_000_000, end: 1_792_003_600, ..Default::default() };
+    let new = StoredEvent { calendar: CALENDAR.into(), event: plain, dirty: true, ..Default::default() };
+    let first = sync(&c, &Pim { events: vec![new], ..Default::default() }, 1_791_000_000).unwrap();
+    let mut changed = first.events.iter().find(|e| e.event.summary == "Review").unwrap().clone();
+    changed.event.summary = "Review (moved)".into();
+    changed.dirty = true;
+    let second = sync(&c, &Pim { events: vec![changed], ..Default::default() }, 1_791_000_100).unwrap();
+    assert!(second.errors.is_empty(), "{:?}", second.errors);
+    assert!(second.events.iter().any(|e| e.event.summary == "Review (moved)"), "changed");
+    assert_eq!(taken_off(&server), Vec::<String>::new());
+}
+
 /// The Teams id comes right after Webex's, before the appointment's own fields.
 #[test]
 fn the_teams_property_comes_right_after_webexs() {
@@ -451,41 +473,40 @@ fn the_teams_property_comes_right_after_webexs() {
     assert_eq!(fields[at].1, format!("<t:ExtendedProperty>{}<t:Value>tm-1</t:Value></t:ExtendedProperty>", events::TEAMS_MEETING_ID));
 }
 
-/// An organizer's appointment with no Teams id has the property taken off, on the server too.
+/// F2: the meeting taken out of an organizer's appointment that had one takes its property off,
+/// on the server too, once; an appointment without one is sent no deletion of it.
 #[test]
 fn removing_the_teams_meeting_takes_the_property_off() {
-    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
     use quatrelle_model::pim::StoredEvent;
     let delete = format!("<t:DeleteItemField>{}</t:DeleteItemField>", events::TEAMS_MEETING_ID);
     let plain = CalEvent { uid: "t-2".into(), summary: "Review".into(), start: 1_792_000_000, end: 1_792_003_600, ..Default::default() };
-    assert!(push::updates(&plain, "riley@contoso.example").contains(&delete));
+    assert!(push::updates(&plain, "riley@contoso.example", true).contains(&delete));
+    assert!(!push::updates(&plain, "riley@contoso.example", false).contains(&delete), "never had one");
     let with = CalEvent { teams_meeting_id: Some("tm-1".into()), ..plain.clone() };
-    assert!(!push::updates(&with, "riley@contoso.example").contains(&delete));
-    let mut d = Data::default();
-    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
-    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
-    let server = serve(d);
-    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    assert!(!push::updates(&with, "riley@contoso.example", false).contains(&delete));
+    let (server, c) = calendar_server();
     let new = StoredEvent { calendar: CALENDAR.into(), event: with, dirty: true, ..Default::default() };
     let first = sync(&c, &Pim { events: vec![new], ..Default::default() }, 1_791_000_000).unwrap();
     let made = first.events.iter().find(|e| e.event.summary == "Review").unwrap();
     assert_eq!(made.event.teams_meeting_id.as_deref(), Some("tm-1"));
+    assert!(taken_off(&server).is_empty(), "made with it: nothing taken off");
     let mut cleared = made.clone();
-    cleared.event.teams_meeting_id = None;
-    cleared.dirty = true;
+    cleared.change_to(CalEvent { teams_meeting_id: None, ..made.event.clone() }, true);
+    assert!(cleared.teams_meeting_taken_off && cleared.dirty);
     let second = sync(&c, &Pim { events: vec![cleared], ..Default::default() }, 1_791_000_100).unwrap();
     assert!(second.errors.is_empty(), "{:?}", second.errors);
     let after = second.events.iter().find(|e| e.event.summary == "Review").unwrap();
     assert_eq!(after.event.teams_meeting_id, None, "taken off");
+    assert_eq!(taken_off(&server), ["DeleteItemField TeamsMeetingId"]);
     let third = sync(&c, &Pim { events: second.events.clone(), ..Default::default() }, 1_791_000_200).unwrap();
     assert_eq!(third.events.iter().find(|e| e.event.summary == "Review").unwrap().event.teams_meeting_id, None);
 }
 
-/// The user's copy of someone else's meeting keeps its properties: no set, no delete.
+/// The user's copy of someone else's meeting keeps its properties: no set, no delete, even when
+/// its id is gone from it here.
 #[test]
 fn a_guests_copy_keeps_its_properties_as_they_are() {
-    for id in [None, Some("tm-1".to_string())] {
+    for (id, taken_off) in [(None, false), (None, true), (Some("tm-1".to_string()), false)] {
         let e = CalEvent {
             uid: "g".into(),
             summary: "Their meeting".into(),
@@ -495,7 +516,7 @@ fn a_guests_copy_keeps_its_properties_as_they_are() {
             teams_meeting_id: id,
             ..Default::default()
         };
-        let sent = push::updates(&e, "riley@contoso.example");
+        let sent = push::updates(&e, "riley@contoso.example", taken_off);
         assert!(!sent.contains("TeamsMeetingId"), "{sent}");
     }
 }
@@ -572,16 +593,16 @@ fn a_change_to_someone_elses_meeting_leaves_its_zone_and_pattern() {
         ..Default::default()
     };
     let organizers = ["calendar:Recurrence", "calendar:StartTimeZone", "calendar:EndTimeZone"];
-    let sent = push::updates(&own, "riley@contoso.example");
+    let sent = push::updates(&own, "riley@contoso.example", false);
     for uri in organizers {
         assert!(sent.contains(uri), "{uri}: {sent}");
     }
     let single = CalEvent { rrule: None, ..own.clone() };
-    assert!(push::updates(&single, "riley@contoso.example").contains("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/>"));
+    assert!(push::updates(&single, "riley@contoso.example", false).contains("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/>"));
     for answer in ["ACCEPTED", "TENTATIVE", "DECLINED", "NEEDS-ACTION"] {
         for e in [&own, &single] {
             let theirs = CalEvent { my_answer: answer.into(), ..e.clone() };
-            let sent = push::updates(&theirs, "riley@contoso.example");
+            let sent = push::updates(&theirs, "riley@contoso.example", false);
             assert!(organizers.iter().all(|uri| !sent.contains(uri)), "{answer}: {sent}");
             for kept in ["calendar:Start\"", "calendar:End\"", "item:ReminderIsSet", "calendar:LegacyFreeBusyStatus", "item:Sensitivity"] {
                 assert!(sent.contains(kept), "{answer}, {kept}: {sent}");

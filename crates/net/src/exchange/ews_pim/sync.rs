@@ -425,6 +425,7 @@ fn read_appointments(
         notify: false,
         respond: None,
         changed_too: false,
+        teams_meeting_taken_off: false,
     };
     let mut changed: Vec<String> = Vec::new();
     // Each of those as its series says of it, for one the server doesn't give.

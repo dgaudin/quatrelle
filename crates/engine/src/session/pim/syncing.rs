@@ -68,6 +68,9 @@ impl Session {
                 e.dirty &= e.event != x.event;
                 // The server told the guests with that change; a later change asks again.
                 e.notify &= e.dirty;
+                // The server took the Teams meeting's property off with it: whatever changed
+                // since, it has none to take off.
+                e.teams_meeting_taken_off = false;
             }
         }
         // Notes stored on the server: their item there, and no longer to send. One whose size
@@ -245,7 +248,7 @@ fn events_digest(events: &[StoredEvent]) -> u64 {
     for e in events {
         let mut h = std::hash::DefaultHasher::new();
         (&e.calendar, &e.href, &e.etag, &e.event.uid, e.event.recurrence_id, e.event.sequence).hash(&mut h);
-        (e.dirty, e.notify, &e.respond, e.changed_too).hash(&mut h);
+        (e.dirty, e.notify, &e.respond, e.changed_too, e.teams_meeting_taken_off).hash(&mut h);
         sum = sum.wrapping_add(h.finish());
     }
     sum

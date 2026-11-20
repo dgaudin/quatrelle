@@ -267,6 +267,7 @@ impl Session {
                         notify: false,
                         respond: None,
                         changed_too: false,
+                        teams_meeting_taken_off: false,
                     });
                     remote |= calendar != LOCAL;
                 }
@@ -725,6 +726,7 @@ fn put_occurrence(p: &mut Pim, calendar: &str, e: CalEvent) -> bool {
         notify: false,
         respond: None,
         changed_too: false,
+        teams_meeting_taken_off: false,
     });
     remote
 }

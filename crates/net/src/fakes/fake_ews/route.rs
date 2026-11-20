@@ -450,25 +450,20 @@ impl Data {
                             continue;
                         }
                         for u in updates {
-                            // A property of Quatrelle's own, set on an appointment: replaces its namesake.
-                            if u.name == "SetItemField"
+                            // A property of Quatrelle's own, known by its name: set on an appointment, in
+                            // place of its namesake, or taken off it (noted in `calls`, for the tests to
+                            // see what was asked).
+                            if matches!(u.name.as_str(), "SetItemField" | "DeleteItemField")
                                 && el.name == "CalendarItem"
                                 && let Some(name) = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")).map(str::to_string)
                             {
                                 let named = |k: &El| k.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")) == Some(name.as_str());
                                 el.kids.retain(|k| k.name != "ExtendedProperty" || !named(k));
-                                el.kids.extend(u.find("CalendarItem").into_iter().flat_map(|c| c.kids.iter().filter(|k| named(k)).cloned()));
-                                continue;
-                            }
-                            // The same property taken off.
-                            if u.name == "DeleteItemField"
-                                && el.name == "CalendarItem"
-                                && let Some(name) = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")).map(str::to_string)
-                            {
-                                el.kids.retain(|k| {
-                                    k.name != "ExtendedProperty"
-                                        || k.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")) != Some(name.as_str())
-                                });
+                                if u.name == "SetItemField" {
+                                    el.kids.extend(u.find("CalendarItem").into_iter().flat_map(|c| c.kids.iter().filter(|k| named(k)).cloned()));
+                                } else {
+                                    self.calls.push(format!("DeleteItemField {name}"));
+                                }
                                 continue;
                             }
                             let field =

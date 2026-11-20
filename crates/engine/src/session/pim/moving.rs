@@ -174,10 +174,7 @@ impl Session {
         }
         let remote = master.calendar != LOCAL;
         match existing.and_then(|i| p.events.get_mut(i)) {
-            Some(stored) => {
-                stored.event = e;
-                stored.changed_here(remote);
-            }
+            Some(stored) => stored.change_to(e, remote),
             None => p.events.push(StoredEvent {
                 calendar: master.calendar.clone(),
                 href: String::new(),
@@ -187,6 +184,7 @@ impl Session {
                 notify: false,
                 respond: None,
                 changed_too: false,
+                teams_meeting_taken_off: false,
             }),
         }
         self.after_pim_change(&account, remote);

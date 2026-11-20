@@ -55,6 +55,7 @@ fn changed(href: &str, uid: &str, attendees: Vec<Attendee>) -> StoredEvent {
         notify: true,
         respond: None,
         changed_too: false,
+        teams_meeting_taken_off: false,
     }
 }
 

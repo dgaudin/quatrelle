@@ -528,6 +528,7 @@ impl Data {
             }
             // `/me/events` reaches only this mailbox's own events, as Graph's does.
             ("PATCH", ["me", "events", id]) => {
+                self.event_patches.push(((*id).to_string(), input.clone()));
                 match self.events.iter_mut().find(|e| e["id"] == *id && !e["calendar"].as_str().unwrap_or("").starts_with("user:")) {
                     Some(e) => {
                         for (k, v) in input.as_object().cloned().unwrap_or_default() {

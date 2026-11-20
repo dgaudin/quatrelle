@@ -569,6 +569,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         notify: false,
         respond: None,
         changed_too: false,
+        teams_meeting_taken_off: false,
     });
     let second_sync = crate::ews_pim::sync(&c, &pim, 1_792_000_100).unwrap();
     assert!(second_sync.errors.is_empty(), "{:?}", second_sync.errors);
@@ -623,6 +624,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         notify: true,
         respond: None,
         changed_too: false,
+        teams_meeting_taken_off: false,
     });
     let made = crate::ews_pim::sync(&c, &pim, 1_792_000_300).unwrap();
     assert!(made.errors.is_empty(), "{:?}", made.errors);

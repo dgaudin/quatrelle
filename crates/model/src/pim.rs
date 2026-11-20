@@ -132,9 +132,25 @@ pub struct StoredEvent {
     /// it, as any change does. Cleared once the answer is given.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub changed_too: bool,
+    /// The change waiting takes the Teams meeting out of an appointment whose copy known before it
+    /// had one: Exchange is asked to delete the property that held its id then, and only then (an
+    /// appointment that never had one is sent no deletion of it). Cleared once the change is on the
+    /// server.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub teams_meeting_taken_off: bool,
 }
 
 impl StoredEvent {
+    /// `e` takes the place of its event, changed here ([`StoredEvent::changed_here`]): the change
+    /// takes a Teams meeting out when the event had one, or a change still waiting took one out,
+    /// and `e` has none ([`StoredEvent::teams_meeting_taken_off`]).
+    pub fn change_to(&mut self, e: CalEvent, remote: bool) {
+        let had = self.teams_meeting_taken_off || self.event.teams_meeting_id.is_some();
+        self.teams_meeting_taken_off = remote && had && e.teams_meeting_id.is_none();
+        self.event = e;
+        self.changed_here(remote);
+    }
+
     /// Changed here: to go to the server when it lives on one (`remote`), and, with an answer
     /// waiting, once the answer is given ([`StoredEvent::changed_too`]).
     pub fn changed_here(&mut self, remote: bool) {

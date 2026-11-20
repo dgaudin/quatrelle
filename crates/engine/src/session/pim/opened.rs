@@ -123,6 +123,7 @@ impl Session {
                 notify: false,
                 respond: None,
                 changed_too: false,
+                teams_meeting_taken_off: false,
             });
         }
         if n > 0 {

@@ -125,6 +125,7 @@ pub(in crate::exchange::ews_pim) fn public_calendar(c: &Client, pim: &Pim, p: &P
                 notify: false,
                 respond: None,
                 changed_too: false,
+                teams_meeting_taken_off: false,
             });
         }
     }

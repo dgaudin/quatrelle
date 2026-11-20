@@ -774,7 +774,7 @@ use fields::{MICROSOFT_FIELDS, fields_named, flag_xml, take_flag_update, text_fi
 pub use policy::{
     ARCHIVE_DAY, DELETE_DAY, Policy, TAG_DELETE, TAG_FIVE, TAG_HIDDEN, TAG_MARK, TAG_NEVER, TAG_OFF_ARCHIVE, TAG_OFF_DELETE, TAG_WEEK, TAG_YEAR,
 };
-pub use server::serve;
+pub use server::{Server, serve};
 
 #[cfg(test)]
 mod tests;

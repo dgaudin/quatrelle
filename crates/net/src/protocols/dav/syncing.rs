@@ -217,6 +217,7 @@ pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &P
                             notify: false,
                             respond: None,
                             changed_too: false,
+                            teams_meeting_taken_off: false,
                         });
                     }
                 }

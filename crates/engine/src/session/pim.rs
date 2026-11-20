@@ -526,6 +526,7 @@ impl Session {
             notify: false,
             respond: None,
             changed_too: false,
+            teams_meeting_taken_off: false,
         });
         self.after_pim_change(&account, id != LOCAL);
         Ok(serde_json::json!({"uid": uid, "account": account}))
@@ -552,9 +553,8 @@ impl Session {
         if !others {
             e.sequence = e.sequence.saturating_add(1);
         }
-        stored.event = e;
         let remote = stored.calendar != LOCAL;
-        stored.changed_here(remote);
+        stored.change_to(e, remote);
         self.after_pim_change(&account, remote);
         Ok(serde_json::json!({"uid": real}))
     }

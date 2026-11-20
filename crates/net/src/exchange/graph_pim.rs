@@ -268,6 +268,13 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
     Some(event)
 }
 
+/// Whether `e` is someone else's meeting, the user's copy of it: its organizer is named, and
+/// isn't the mailbox's owner (`me`, as Graph names its main calendar's; not known, anyone named
+/// is taken for someone else).
+fn organized_elsewhere(e: &CalEvent, me: Option<&str>) -> bool {
+    e.organizer.as_ref().map(|o| o.email.trim()).filter(|o| !o.is_empty()).is_some_and(|o| me.is_none_or(|me| !o.eq_ignore_ascii_case(me)))
+}
+
 /// An event as Graph's JSON (for creating or changing it).
 pub fn event_json(e: &CalEvent) -> Value {
     let mut v = json!({
@@ -536,6 +543,16 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let from_before = pim.version < quatrelle_model::pim::PIM_VERSION;
     for e in pim.events.iter().filter(|e| e.dirty) {
         let mut body = event_json(&e.event);
+        // The mark that makes it a Teams meeting is its organizer's: it goes with an appointment
+        // made here (the user's) and with a change to one the user organizes, never with a change
+        // to their copy of someone else's meeting.
+        if !e.href.is_empty()
+            && organized_elsewhere(&e.event, me.as_deref())
+            && let Some(fields) = body.as_object_mut()
+        {
+            fields.remove("isOnlineMeeting");
+            fields.remove("onlineMeetingProvider");
+        }
         if from_before
             && !e.href.is_empty()
             && let Some(fields) = body.as_object_mut()
@@ -577,6 +594,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 notify: false,
                 respond: None,
                 changed_too: false,
+                teams_meeting_taken_off: false,
             }),
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
         }
@@ -626,6 +644,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                     notify: false,
                     respond: None,
                     changed_too: false,
+                    teams_meeting_taken_off: false,
                 });
             }
         }
@@ -656,6 +675,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                             notify: false,
                             respond: None,
                             changed_too: false,
+                            teams_meeting_taken_off: false,
                         });
                     }
                 }

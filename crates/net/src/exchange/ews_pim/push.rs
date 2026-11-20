@@ -44,12 +44,13 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
             Some(at) => match series_of(pim, out, &e.event.uid) {
                 Some((master_id, master)) => {
                     item.clone_from(&master_id);
-                    occurrence_item_id(c, &master_id, &master, at).and_then(|(id, key)| update_item(c, &id, &key, &e.event, notify))
+                    occurrence_item_id(c, &master_id, &master, at)
+                        .and_then(|(id, key)| update_item(c, &id, &key, &e.event, notify, e.teams_meeting_taken_off))
                 }
                 None => Err(NetError::No("the series isn't on the server yet".into())),
             },
             None if e.href.is_empty() => create_item(c, owner, own, &e.event, notify),
-            None => update_item(c, &e.href, &e.etag, &e.event, notify),
+            None => update_item(c, &e.href, &e.etag, &e.event, notify, e.teams_meeting_taken_off),
         };
         match r {
             // Deleted on the server meanwhile (a "test" appointment, 03/11, refused at every sync):
@@ -75,6 +76,7 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
                     notify: false,
                     respond: None,
                     changed_too: false,
+                    teams_meeting_taken_off: false,
                 });
             }
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
@@ -262,9 +264,10 @@ fn create_item(c: &Client, owner: Option<&str>, own: Option<&str>, e: &CalEvent,
 /// sends the update to all of them and keeps a copy, as Outlook's "Send update" does — on the
 /// item as last seen (its change key), so a change made meanwhile isn't overwritten unseen;
 /// otherwise the change goes in over whatever is there, telling no one. One the server won't
-/// send for its recipients goes in all the same, telling no one.
-fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: bool) -> Result<Saved> {
-    let updates = updates(e, c.email());
+/// send for its recipients goes in all the same, telling no one. `teams_meeting_taken_off`: the
+/// change takes the Teams meeting out of an appointment that had one ([`updates`]).
+fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: bool, teams_meeting_taken_off: bool) -> Result<Saved> {
+    let updates = updates(e, c.email(), teams_meeting_taken_off);
     let call = |resolution: &str, key: &str, send: &str| {
         call_sending(
             c,
@@ -296,33 +299,34 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
     Ok(Saved { href: if new.is_empty() { id.to_string() } else { new }, etag: key, untold })
 }
 
-/// What only a meeting's organizer sets: its pattern and the zone it's set in.
-const ORGANIZERS_OWN: [&str; 3] = ["calendar:Recurrence", "calendar:StartTimeZone", "calendar:EndTimeZone"];
+/// What the user's copy of someone else's meeting keeps as its organizer made it, neither set nor
+/// taken off here: the meeting's pattern and the zone it's set in, and the id of a Teams meeting of
+/// Quatrelle's own.
+const KEPT_ON_A_GUESTS_COPY: [&str; 4] = ["calendar:Recurrence", "calendar:StartTimeZone", "calendar:EndTimeZone", events::TEAMS_MEETING_ID];
 
 /// The changes [`update_item`] makes, field by field: each field of the appointment set, and
-/// those it no longer has taken off. `me`: this account's address.
+/// those it no longer has taken off. `me`: this account's address. `teams_meeting_taken_off`: the
+/// change takes the Teams meeting out of an appointment that had one, the one time its property
+/// is taken off (an appointment that never had it is sent no deletion of it).
 ///
 /// The user's copy of someone else's meeting (the server keeps the user's answer to it, where
-/// it says "Organizer" of the user's own) keeps the organizer's pattern and zone, neither set nor
-/// taken off: Exchange refuses the zone written on a guest's copy, and the whole change with it
-/// ("Set action is invalid for property.", naming `calendar:StartTimeZone`). Two outside
-/// meetings changed here were refused so at every sync on 04/11, which was taken at
-/// first for a refused answer.
-pub(super) fn updates(e: &CalEvent, me: &str) -> String {
+/// it says "Organizer" of the user's own) keeps [`KEPT_ON_A_GUESTS_COPY`]: Exchange refuses the
+/// zone written on a guest's copy, and the whole change with it ("Set action is invalid for
+/// property.", naming `calendar:StartTimeZone`). Two outside meetings changed here were refused
+/// so at every sync on 04/11, which was taken at first for a refused answer.
+pub(super) fn updates(e: &CalEvent, me: &str, teams_meeting_taken_off: bool) -> String {
     let guests_copy = !e.my_answer.is_empty();
+    let kept = |uri: &str| guests_copy && KEPT_ON_A_GUESTS_COPY.contains(&uri);
     let mut updates: String = event_fields(e, me)
         .iter()
-        .filter(|(uri, _)| !(guests_copy && (ORGANIZERS_OWN.contains(uri) || *uri == events::TEAMS_MEETING_ID)))
+        .filter(|(uri, _)| !kept(uri))
         .map(|(uri, x)| format!("<t:SetItemField>{}<t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>", tasks::path(uri)))
         .collect();
-    // An appointment of the user's with no Teams meeting loses the property (a guest's copy keeps
-    // its own as it is).
-    if e.teams_meeting_id.is_none() && !guests_copy {
-        updates.push_str(&format!("<t:DeleteItemField>{}</t:DeleteItemField>", events::TEAMS_MEETING_ID));
-    }
-    // An appointment that no longer repeats loses its pattern (an occurrence never had one).
-    if e.rrule.is_none() && e.recurrence_id.is_none() && !guests_copy {
-        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");
+    // Taken off: the Teams meeting's id, from an appointment whose meeting was taken out; the
+    // pattern of an appointment that no longer repeats (an occurrence never had one).
+    let off = [(events::TEAMS_MEETING_ID, teams_meeting_taken_off), ("calendar:Recurrence", e.rrule.is_none() && e.recurrence_id.is_none())];
+    for (uri, _) in off.into_iter().filter(|(uri, off)| *off && !kept(uri)) {
+        updates.push_str(&format!("<t:DeleteItemField>{}</t:DeleteItemField>", tasks::path(uri)));
     }
     // A meeting of the user's whose room was taken off loses its resources too (a plain
     // appointment, with no one invited, is left alone: nothing to take off).

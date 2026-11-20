@@ -112,6 +112,7 @@ fn weekly_series(s: &mut Session) -> CalEvent {
         notify: false,
         respond: None,
         changed_too: false,
+        teams_meeting_taken_off: false,
     };
     let sync = DavSync {
         caldav_home: Some("https://dav.example.org/cal/".into()),

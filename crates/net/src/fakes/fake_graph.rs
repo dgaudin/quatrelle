@@ -67,6 +67,8 @@ pub struct Data {
     /// `/me/calendarGroups` fails (HTTP 500).
     pub groups_refused: bool,
     pub events: Vec<Value>,
+    /// The body of each `PATCH` of one of this mailbox's own events, with the event's id.
+    pub event_patches: Vec<(String, Value)>,
     pub contacts: Vec<Value>,
     /// Contacts that carry a picture (their id), as Outlook's do.
     pub contact_photos: Vec<String>,

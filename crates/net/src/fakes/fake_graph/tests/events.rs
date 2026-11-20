@@ -265,3 +265,53 @@ fn exchange_online_makes_the_meeting_and_keeps_it() {
     assert_eq!((&e["subject"], &e["isOnlineMeeting"], &e["onlineMeetingProvider"]), (&json!("Online 2"), &json!(true), &json!("teamsForBusiness")));
     assert!(e["onlineMeeting"]["joinUrl"].is_string());
 }
+
+/// F3: the mark is its organizer's. A change to a Teams meeting someone else organized (its
+/// reminder, on the user's copy) goes without it; one to an appointment the user organizes sends it
+/// again; an appointment made here carries it, whatever address it names as its organizer.
+#[test]
+fn the_mark_goes_only_with_an_appointment_the_user_organizes() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    for (id, subject, organizer) in [("E-THEIRS", "Theirs", "ana@contoso.example"), ("E-MINE", "Mine", "me@contoso.example")] {
+        d.events.push(json!({"id": id, "calendar": "CAL1", "iCalUId": id, "subject": subject,
+            "start": {"dateTime": "2026-11-20T09:00:00.0000000"}, "end": {"dateTime": "2026-11-20T10:00:00.0000000"},
+            "organizer": {"emailAddress": {"address": organizer, "name": subject}},
+            "isOnlineMeeting": true, "onlineMeetingProvider": "teamsForBusiness",
+            "onlineMeeting": {"joinUrl": format!("https://teams.microsoft.com/l/meetup-join/19%3ameeting_{id}%40thread.v2/0")}}));
+    }
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let first = crate::graph_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+    let mut pim = Pim::default();
+    for summary in ["Theirs", "Mine"] {
+        let mut e = stored(&first, summary);
+        assert!(e.event.teams_online, "{summary}");
+        e.event.reminder = Some(30);
+        e.dirty = true;
+        pim.events.push(e);
+    }
+    let alias = quatrelle_model::ical::Attendee { email: "riley.alias@contoso.example".into(), ..Default::default() };
+    let event = CalEvent {
+        uid: "t-new".into(),
+        summary: "New".into(),
+        start: 1_792_000_000,
+        end: 1_792_003_600,
+        teams_online: true,
+        organizer: Some(alias),
+        ..Default::default()
+    };
+    pim.events.push(StoredEvent { calendar: LOCAL.into(), event, dirty: true, ..Default::default() });
+    let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_100).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    let d = server.data.lock().unwrap();
+    let patch = |id: &str| d.event_patches.iter().find(|(e, _)| e == id).map(|(_, body)| body.clone()).unwrap_or_else(|| panic!("{id} not changed"));
+    let theirs = patch("E-THEIRS");
+    assert!(theirs.get("isOnlineMeeting").is_none() && theirs.get("onlineMeetingProvider").is_none(), "{theirs}");
+    assert_eq!(theirs["reminderMinutesBeforeStart"], 30, "the change itself goes");
+    let mine = patch("E-MINE");
+    assert_eq!((&mine["isOnlineMeeting"], &mine["onlineMeetingProvider"]), (&json!(true), &json!("teamsForBusiness")));
+    let new = d.events.iter().find(|e| e["subject"] == "New").expect("made");
+    assert!(new["onlineMeeting"]["joinUrl"].is_string(), "made a Teams meeting: {new}");
+}
