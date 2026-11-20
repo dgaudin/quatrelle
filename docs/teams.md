@@ -62,6 +62,12 @@ Done by an administrator of the Microsoft 365 tenant, in the
    | `openid`, `email` | who signed in (an ID token), under *OpenId permissions* |
 
    **Add permissions**. Quatrelle asks for exactly these at sign-in, nothing more.
+
+   **Teams meetings (optional).** To let Quatrelle make Teams meetings from the calendar (section
+   8, Teams meetings), also add the delegated permission `OnlineMeetings.ReadWrite`, and give
+   admin consent for it (step 4) when the organisation requires it. Quatrelle never asks for it
+   with the rest: it is asked for only when someone clicks **Authorize Teams meetings**, never
+   when signing in for the conversations. Without it everything above works as before.
 4. Optional: **Grant admin consent for \<your organisation\>** on the same page, then **Yes**.
    Microsoft documents `Chat.ReadWrite` as not needing admin consent; the others normally don't
    either, so without this step each person approves them once on Microsoft's consent page. If
@@ -608,12 +614,150 @@ again later). Switching Teams off or signing out stops all of it, once what was 
 ended: a step may make a few requests in a row (reading a long list of members, signing in), each
 ending within two minutes.
 
+### Teams meetings
+
+A **Teams Meeting** button in the appointment window makes a Teams meeting through Microsoft
+Graph (`/me/onlineMeetings`), for an appointment on a calendar that is not a Microsoft 365
+mailbox (Exchange on premises, CalDAV, a local calendar). The meeting is made at the click, so the
+invitation can be read and changed before it is sent. The button is in the desktop app only. The
+calendar of a Microsoft 365 account is not covered yet: there the button's **Add a Teams
+meeting** stays grey.
+
+**The button.** It sits beside **Join** and **Webex Meeting**; a plain click does the first
+entry of its menu (**Teams Meeting menu**):
+
+- **Add a Teams meeting** needs a title and a start ("A meeting needs a title and a start"
+  otherwise, and nothing is sent). While the request is out the button shows
+  "Creating the Teams meeting…", and Save and Send wait for the answer. Only one request goes at
+  a time from a window.
+- **Remove the Teams meeting** takes the block and the place (when it is the meeting's link) out
+  of the appointment at once; the meeting itself is deleted when the appointment is saved.
+- **Meeting options** opens the meeting's own options page in the browser, once the meeting
+  exists and its address passed the checks below. The options are set there, not in Quatrelle.
+
+**What the answer writes.** The place becomes the link to join, unless a place was typed. The
+notes get a block of up to four lines, in the language of the interface, each value as Teams gave
+it (a line with no value is left out):
+
+```text
+Join the Teams meeting: <link>
+Meeting ID: <id>   Passcode: <passcode>
+By phone: <number>, conference ID <conference>
+Meeting options: <link>
+```
+
+The lines already in the notes stay. Adding a meeting again replaces the block, found whatever
+language the interface had when it was written; only the button writes it. **Join** works on the
+meeting: it takes the appointment's conference first, then a meeting link in the place or the
+notes, and a Teams link opens in the browser, as other meeting links do. The conference is
+labelled "Microsoft Teams".
+
+**Permission, apart.** Quatrelle signs in for the conversations without the meetings permission.
+With Teams off or signed out, the button opens File › Options › Teams. Signed in but without the
+permission, the window says "Teams meetings need your permission" with **Authorize Teams
+meetings**, which opens Microsoft's sign-in page again with `OnlineMeetings.ReadWrite` added
+(File › Options › Teams has the same button on its **Teams meetings** line, which reads "Teams
+meetings are allowed" afterwards). If that page is closed, refused or left for five minutes, the
+sign-in already there stays and the conversations go on. The permission is forgotten when you sign
+out, when Microsoft refuses it at a renewal (the conversations then carry on with their own
+permissions) and when Graph answers 403 saying it is missing; the next click asks again.
+
+**The option.** File › Options › Calendar has **Make every meeting with guests a Teams meeting**
+(off at first; note: "An appointment you organize gets a Teams meeting with its first guest").
+On, an appointment you organize gets its meeting once it has a title, a start and a guest and
+nothing has been typed for a second, or when Send is pressed, which then waits for the answer.
+It is not added when the appointment already has a Teams meeting, a Webex meeting or room, was
+opened with guests already, belongs to someone else's calendar or a Microsoft 365 account's,
+or when the meeting was removed in this window; each window tries once. With Teams off, signed
+out or without the permission, nothing is sent and the window says once "Teams meeting not added:
+sign in to Teams", with the button to do so.
+
+**What follows the appointment.** Only for an appointment you organize (or one with no
+organizer, no guests and no answer of yours): an event someone else organized never makes
+Quatrelle touch a meeting, whatever id it carries.
+
+- Saving a changed title, start or end sends what changed (a `PATCH`). A time zone changed alone
+  sends nothing unless it moves the start or the end: the meeting holds only those two instants,
+  in UTC. A new link in the answer replaces the old one in the notes, the place and the
+  conference.
+- Deleting or cancelling the appointment, or saving it with the meeting removed, deletes the
+  meeting. A meeting already gone (404) counts as deleted.
+- A series has one meeting, for all its occurrences, with the times of the first one: moving or
+  deleting an occurrence sends nothing.
+- A window closed without saving deletes the meeting it made (when the answer is still on its
+  way, as it arrives). Quitting Quatrelle with such a window open does the same, waiting 3 seconds
+  at most.
+- A crash, or a deletion Teams refuses, can leave a meeting in Teams. It does no harm and expires.
+- Guests get only the calendar's invitation; Teams sends them nothing.
+
+**Where the id lives.**
+
+| Kept in | As |
+|---|---|
+| iCalendar (CalDAV, the local cache) | `X-QUATRELLE-TEAMS-ID` |
+| Exchange, through EWS | an extended property named `TeamsMeetingId`, in Quatrelle's own property set beside Webex's, read with the appointment and written on create and update; removed when the appointment no longer has a meeting |
+
+An invitation never carries it, nor does an appointment attached to a message; one in an
+invitation received is never read, and on an event you don't organize it is never used or
+written. A value that is not a plausible id (1 to 512 letters, digits, `-`, `_`, `=`, `+`, `/`) is
+dropped; in a request's address it is encoded as one segment.
+
+**With Webex.** An appointment has a Teams meeting or a Webex meeting or room, not both: a Teams
+meeting greys the Webex button and rooms, a Webex meeting or room greys **Add a Teams meeting**
+("This appointment has a Webex meeting or room: remove it first", "This appointment has a Teams
+meeting: remove it first"), and removing one frees the other. Nothing falls back to Webex by
+itself (see [docs/webex.md](webex.md)). An appointment of someone else's calendar greys the button
+with "A Teams meeting can only be added to an appointment you organize". Moving the appointment
+to a calendar that can't hold a meeting takes the meeting out ("The Teams meeting was removed: add
+it again for this calendar").
+
+**When it fails.** The window says why and the appointment is left as it was:
+
+| Teams | The window says |
+|---|---|
+| signed out, or Teams off | "Teams is signed out" (the button opens Options › Teams) |
+| 403 `Forbidden` or `InsufficientPrivileges` without the permission | "Teams meetings need your permission" |
+| 403 though the token holds the permission, or another 403 (licence, policy) | "Your Teams account can't create meetings" |
+| 401 after a renewal | "Sign in to Teams again" |
+| a link Quatrelle doesn't trust | "Teams gave a link Quatrelle doesn't trust" (the meeting is deleted again) |
+| no network | "The Teams meeting couldn't be created: no connection" |
+| any other status | "Teams answered 400: BadRequest", Graph's status and its code, never its message, which may quote content |
+
+A failed update or deletion is a notice, "The Teams meeting couldn't be updated: …" or "…
+deleted: …". Requests wait in one queue of 32, served before anything else the worker does, one at
+a time; the 33rd answers "no connection" without a request, as does one that waited two minutes
+and all of them when Work offline turns on. At most 16 requests for a new meeting wait at once.
+A 429 is waited out and sent again, three times at most; a 503 is sent again for an update or a
+deletion, never for a creation, so none is made twice. Nothing is hidden: no failure ever
+becomes a Webex meeting or a room.
+
+**What is checked in Teams' answer.** It comes from a server, so it is read as hostile:
+
+- A link to join or to the options is kept only if it is `https` on port 443, with no `@` before
+  the path, no space, control, bidirectional or `\` character, at most 2,048 characters, and a
+  host that is `teams.microsoft.com` or ends in `.teams.microsoft.com`, or one of the government
+  clouds' (`teams.microsoft.us`, `gov.teams.microsoft.us`, `dod.teams.microsoft.us`):
+  `teams.microsoft.com.contoso.example` and `evilteams.microsoft.com` are refused. A bad link to
+  join refuses the whole answer; a bad options link too, when one is given.
+- The meeting ID, passcode, phone number and conference ID are kept only as at most 64 letters,
+  digits, spaces and `+ - ( )`; any other stays out of the block. Teams' own invitation text is
+  never read.
+- The meeting's own id must be a plausible one, or the answer is refused.
+- The title is sent as one line of 255 characters at most (control and bidirectional characters
+  out); an end at or before the start becomes half an hour after it. The passcode is never
+  written to a log or a file; the log names no title, link or id.
+
+**Not tried on a real account yet** (see `docs/gaps.md`): creating, changing and deleting a
+meeting, the `TeamsMeetingId` property on a real on-premises Exchange, and the hosts of the links
+Teams gives.
+
 ### Not yet
 
-Channels, teams, scheduling a meeting, starting a conversation with someone outside the
-directory (an address the directory doesn't know), and pictures placed between two paragraphs of
-a message (they go with the message, not in its text) are not there yet. For those, use Open in
-Teams.
+Channels, teams, the options of a meeting set from Quatrelle (its lobby, who may present),
+co-organizers and delegates, a meeting made on a Microsoft 365 account's calendar, starting a
+conversation with someone outside the directory (an address the directory doesn't know), and
+pictures placed between two paragraphs of a message (they go with the message, not in its text)
+are not there yet. For those, use Open in Teams.
 
 ## 9. Sending the result back
 
