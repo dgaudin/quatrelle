@@ -152,6 +152,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"rooms": s.prefs.webex_rooms}))
         })
         .params(r#"{"url": "https://<site>.webex.com/meet/<name>", "was"?: string (the link it had: that room's link changes, in its place), "name"?: string (required for a new room; at most 80 characters), "details"?: string ("\n" between its lines) | [string] (at most 20 lines of 200 characters, copied into the notes after the link), "remove"?: bool (takes the room with that link out)} → {"rooms": [{"name", "url", "details"}]} (adds a room at the end, changes the one with that link, or removes it; the rooms the appointment window's Webex Meeting button offers)"#),
+        CommandSpec::new("calendar.teamsMeetingForGuests", "Make every meeting with guests a Teams meeting", "File › Options › Calendar", |s, v| {
+            s.prefs.teams_meeting_for_guests = p::bool(v, "on").unwrap_or(!s.prefs.teams_meeting_for_guests);
+            Ok(json!({"on": s.prefs.teams_meeting_for_guests}))
+        })
+        .params(r#"{"on"?: bool} → {"on": bool} (an appointment you organize gets a Teams meeting with its first guest, in its window; without `on`, it switches)"#),
         CommandSpec::new("assistant.settings", "Assistant", "File › Options › Assistant", |s, v| {
             s.set_assistant(p::str(v, "url").unwrap_or_default(), p::str(v, "model").unwrap_or_default(), p::str(v, "key"))
         })

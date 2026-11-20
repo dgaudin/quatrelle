@@ -38,7 +38,7 @@ mod window;
 pub use announce::TeamsAnnouncement;
 pub use changes::ShownReaction;
 pub use files::{TEAMS_FILES_KEPT, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsSaved, teams_could_run};
-pub use meetings::{TEAMS_MEETING_ASKS_MAX, TeamsMeetingAsk, TeamsMeetingPath, TeamsMeetingsState};
+pub use meetings::{TEAMS_MEETING_ASKS_MAX, TeamsAuto, TeamsAutoAsk, TeamsMeetingAsk, TeamsMeetingPath, TeamsMeetingsState};
 pub use members::ChatMembers;
 pub use outbox::{
     TEAMS_ATTACH_AGAIN, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY,

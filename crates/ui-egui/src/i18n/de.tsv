@@ -2414,3 +2414,7 @@ presence	Offline	Offline
 	The Teams meeting was removed: add it again for this calendar	Die Teams-Besprechung wurde entfernt: Fügen Sie sie für diesen Kalender erneut hinzu
 	Teams meetings	Teams-Besprechungen
 	Teams meetings are allowed	Teams-Besprechungen sind erlaubt
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	Jede Besprechung mit Gästen zu einer Teams-Besprechung machen
+	An appointment you organize gets a Teams meeting with its first guest	Ein Termin, den Sie organisieren, erhält mit seinem ersten Gast eine Teams-Besprechung
+	Teams meeting not added: sign in to Teams	Teams-Besprechung nicht hinzugefügt: Melden Sie sich bei Teams an

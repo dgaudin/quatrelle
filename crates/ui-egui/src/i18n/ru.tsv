@@ -2414,3 +2414,7 @@ presence	Offline	Не в сети
 	The Teams meeting was removed: add it again for this calendar	Собрание Teams убрано: добавьте его снова для этого календаря
 	Teams meetings	Собрания Teams
 	Teams meetings are allowed	Собрания Teams разрешены
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	Делать каждое собрание с гостями собранием Teams
+	An appointment you organize gets a Teams meeting with its first guest	Встреча, которую организуете вы, получает собрание Teams вместе с первым гостем
+	Teams meeting not added: sign in to Teams	Собрание Teams не добавлено: войдите в Teams

@@ -2416,3 +2416,7 @@ presence	Offline	離線
 	The Teams meeting was removed: add it again for this calendar	已移除 Teams 會議: 請為此行事曆重新新增
 	Teams meetings	Teams 會議
 	Teams meetings are allowed	已允許 Teams 會議
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	將每個有與會者的會議設為 Teams 會議
+	An appointment you organize gets a Teams meeting with its first guest	由您召集的約會在新增第一位與會者時會獲得 Teams 會議
+	Teams meeting not added: sign in to Teams	未新增 Teams 會議: 請登入 Teams

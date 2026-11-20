@@ -109,6 +109,15 @@ pub struct EventForm {
     pub teams_removed: bool,
     /// What the window asks of the user before a Teams meeting can be made, with its button.
     pub teams_prompt: Option<TeamsPrompt>,
+    /// File › Options › Calendar's Teams meeting for guests was asked for in this window, or why
+    /// it couldn't be said: never again here. An event opened with guests had its first already.
+    pub teams_auto_tried: bool,
+    /// What the title and the guests' lines last were (a hash of them), and when they changed:
+    /// that option waits for them to be left alone.
+    pub teams_auto_since: Option<(u64, f64)>,
+    /// The save or send (its command) waiting for the meeting that option asked for: it goes once
+    /// the meeting is in, and not if Teams refuses it.
+    pub teams_send_held: Option<&'static str>,
     /// Where it's joined online, as it's saved (its calendar's `CONFERENCE`): the event's, or the
     /// Webex room or meeting put in here.
     pub conference: Option<Conference>,
@@ -133,6 +142,10 @@ pub enum TeamsPrompt {
     Consent,
     /// Teams refused the sign-in: Sign in asks for it again.
     SignIn,
+    /// File › Options › Calendar's Teams meeting for guests couldn't be made: Teams signed out or
+    /// switched off (Sign in opens Options › Teams), or the permission missing (Authorize Teams
+    /// meetings). Said until Teams can make meetings.
+    NotAdded,
 }
 
 impl EventForm {
@@ -227,6 +240,7 @@ impl EventForm {
             webex_id: e.webex_id.clone(),
             teams_allowed: s.teams_meeting_can_hold(e),
             teams_meeting_id: e.teams_meeting_id.clone(),
+            teams_auto_tried: e.attendees.iter().any(|a| !a.is_resource()),
             conference: e.conference.clone(),
             conference_shown: e.conference.as_ref().is_some_and(|c| link_shown(&c.url, &e.location, &e.description)),
             conference_opened: e.conference.clone(),

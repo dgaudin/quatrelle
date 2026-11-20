@@ -2412,3 +2412,7 @@ presence	Offline	오프라인
 	The Teams meeting was removed: add it again for this calendar	Teams 회의가 제거되었습니다: 이 일정에 다시 추가하세요
 	Teams meetings	Teams 회의
 	Teams meetings are allowed	Teams 회의가 허용되었습니다
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	참석자가 있는 모든 회의를 Teams 회의로 만들기
+	An appointment you organize gets a Teams meeting with its first guest	직접 주최하는 약속에 첫 참석자를 추가하면 Teams 회의가 추가됩니다
+	Teams meeting not added: sign in to Teams	Teams 회의가 추가되지 않았습니다: Teams에 로그인하세요

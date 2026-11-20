@@ -169,6 +169,10 @@ pub struct Prefs {
     /// settings saved before it came: it was always on.
     #[serde(default = "yes")]
     pub tidy_answered_invites: bool,
+    /// An appointment the user organizes gets a Teams meeting with its first guest, in its window
+    /// (File › Options › Calendar). Off unless chosen.
+    #[serde(default)]
+    pub teams_meeting_for_guests: bool,
     /// Quick Steps: actions done to the selection in one go ([`quick_steps`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quick_steps: Vec<quick_steps::QuickStep>,
@@ -351,6 +355,7 @@ impl Default for Prefs {
             spell_check: true,
             signature_dashes: false,
             tidy_answered_invites: true,
+            teams_meeting_for_guests: false,
             pane_order: Vec::new(),
         }
     }

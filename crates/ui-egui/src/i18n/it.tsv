@@ -2412,3 +2412,7 @@ presence	Offline	Offline
 	The Teams meeting was removed: add it again for this calendar	La riunione Teams è stata rimossa: aggiungila di nuovo per questo calendario
 	Teams meetings	Riunioni Teams
 	Teams meetings are allowed	Le riunioni Teams sono consentite
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	Rendi ogni riunione con invitati una riunione Teams
+	An appointment you organize gets a Teams meeting with its first guest	Un appuntamento che organizzi tu riceve una riunione Teams con il suo primo invitato
+	Teams meeting not added: sign in to Teams	Riunione Teams non aggiunta: accedi a Teams

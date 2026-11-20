@@ -2410,3 +2410,7 @@ presence	Offline	Offline
 	The Teams meeting was removed: add it again for this calendar	De Teams-vergadering is verwijderd: voeg die opnieuw toe voor deze agenda
 	Teams meetings	Teams-vergaderingen
 	Teams meetings are allowed	Teams-vergaderingen zijn toegestaan
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	Van elke vergadering met gasten een Teams-vergadering maken
+	An appointment you organize gets a Teams meeting with its first guest	Een afspraak die je zelf organiseert, krijgt bij de eerste gast een Teams-vergadering
+	Teams meeting not added: sign in to Teams	Teams-vergadering niet toegevoegd: meld je aan bij Teams

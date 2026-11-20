@@ -283,7 +283,7 @@ fn the_safety_rows() {
     let ctx = egui::Context::default();
     a.ui.language = "fr".into();
     a.act(crate::Action::Backstage(crate::backstage::Page::Options));
-    let size = egui::vec2(1100.0, 3800.0);
+    let size = egui::vec2(1100.0, 4200.0);
     let drawn = |ctx: &egui::Context, a: &mut MailApp| -> Vec<String> {
         frame_shapes(ctx, a, vec![], size)
             .into_iter()

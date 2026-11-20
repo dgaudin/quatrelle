@@ -2409,3 +2409,7 @@ presence	Offline	غير متصل
 	The Teams meeting was removed: add it again for this calendar	أُزيل اجتماع Teams: أضِفه من جديد لهذا التقويم
 	Teams meetings	اجتماعات Teams
 	Teams meetings are allowed	اجتماعات Teams مسموح بها
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	اجعل كل اجتماع يضم مدعوين اجتماع Teams
+	An appointment you organize gets a Teams meeting with its first guest	يحصل الموعد الذي تنظّمه على اجتماع Teams مع أول مدعو إليه
+	Teams meeting not added: sign in to Teams	لم يُضَف اجتماع Teams: سجّل الدخول إلى Teams

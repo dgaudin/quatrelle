@@ -155,6 +155,13 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleF
     if f.attendees_book.is_none() {
         people.choice_dialog(ui.ctx(), t, s, MEETING_WINDOWS | f.window, &MEETING_FIELDS, acts);
     }
+    // File › Options › Calendar's Teams meeting for guests, the lines above having taken what was
+    // typed in them; not while its Send is held or a meeting is on its way (the held Send asks for
+    // it as it goes), nor in the browser, where no Teams meeting is made.
+    #[cfg(not(target_arch = "wasm32"))]
+    if !f.read_only && !checking && !creating {
+        super::teams_meeting::auto_each_frame(ui, f, s, acts);
+    }
     keep
 }
 

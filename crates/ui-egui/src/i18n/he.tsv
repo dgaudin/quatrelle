@@ -2409,3 +2409,7 @@ presence	Offline	לא מחובר
 	The Teams meeting was removed: add it again for this calendar	פגישת Teams הוסרה: הוסיפו אותה שוב ללוח השנה הזה
 	Teams meetings	פגישות Teams
 	Teams meetings are allowed	פגישות Teams מותרות
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	הפוך כל פגישה עם מוזמנים לפגישת Teams
+	An appointment you organize gets a Teams meeting with its first guest	פגישה שאתם מארגנים מקבלת פגישת Teams עם המוזמן הראשון שלה
+	Teams meeting not added: sign in to Teams	פגישת Teams לא נוספה: התחברו ל-Teams

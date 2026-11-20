@@ -56,12 +56,12 @@ fn form(a: &mut MailApp) -> &mut EventForm {
 }
 
 /// Whether Teams' sign-in was asked for with the meetings' permission.
-fn authorizing(jobs: &Jobs) -> bool {
+pub(super) fn authorizing(jobs: &Jobs) -> bool {
     jobs.borrow().iter().any(|j| matches!(j, Job::Teams { job: teams::Job::SignIn { meetings: true, .. } }))
 }
 
 /// The menu beside Teams Meeting opened.
-fn open_menu(ctx: &egui::Context, a: &mut MailApp) {
+pub(super) fn open_menu(ctx: &egui::Context, a: &mut MailApp) {
     settled_text_at(ctx, a, "Teams Meeting", SIZE).expect("the button");
     let (at, _) = button(ctx, a, "Teams Meeting menu").expect("its menu's button");
     click_at(ctx, a, at, 1, SIZE);
@@ -73,7 +73,7 @@ fn pressable(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<bool> 
 }
 
 /// The creation window 0 waits for, answered.
-fn answer(ctx: &egui::Context, a: &mut MailApp, meeting: Option<TeamsMeeting>, error: Option<TeamsMeetingError>) {
+pub(super) fn answer(ctx: &egui::Context, a: &mut MailApp, meeting: Option<TeamsMeeting>, error: Option<TeamsMeetingError>) {
     let ask = form(a).teams_wait.expect("a creation on its way");
     a.session.apply(MailEvent::Teams { event: teams::Event::MeetingCreated { ask, meeting, error } });
     frame_sized(ctx, a, vec![], SIZE);
@@ -118,19 +118,19 @@ fn kept_id(a: &MailApp, uid: &str) -> Option<String> {
 }
 
 /// Calendar `id` added to `account` (someone else's when `not_own`).
-fn calendar(a: &mut MailApp, account: &str, id: &str, not_own: bool) {
+pub(super) fn calendar(a: &mut MailApp, account: &str, id: &str, not_own: bool) {
     let info = CalendarInfo { id: id.into(), name: format!("Calendar {id}"), not_own, ..Default::default() };
     a.session.pim_mut(account).calendars.push(info);
 }
 
 /// Window 0's calendar made `account`'s `id`.
-fn choose(a: &mut MailApp, account: &str, id: &str) {
+pub(super) fn choose(a: &mut MailApp, account: &str, id: &str) {
     let f = form(a);
     f.calendar = f.calendars.iter().position(|c| c.0 == account && c.1 == id).expect("listed");
 }
 
 /// Account `id` made a Microsoft 365 mailbox, or an Exchange one.
-fn served(a: &mut MailApp, id: &str, graph: bool) {
+pub(super) fn served(a: &mut MailApp, id: &str, graph: bool) {
     let config = &mut a.session.accounts.iter_mut().find(|x| x.config.id == id).expect("the account").config;
     if graph {
         config.graph = Some(quatrelle_engine::model::GRAPH_URL.into());

@@ -321,7 +321,8 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         );
     });
 
-    // Online meetings: the Webex rooms the appointment window's Webex Meeting offers, each box
+    // Online meetings: a Teams meeting for every meeting with guests (not in the browser, where
+    // none is made), and the Webex rooms the appointment window's Webex Meeting offers, each box
     // saved once it's left (a link that isn't one says why and stays to be corrected).
     group(ui, tl!("Calendar"), None, &mut |ui| {
         let about = tl!("Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.");
@@ -334,6 +335,18 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                 acts,
             );
         });
+        if !cfg!(target_arch = "wasm32") {
+            let about = tl!("An appointment you organize gets a Teams meeting with its first guest");
+            setting(ui, false, tl!("Make every meeting with guests a Teams meeting"), Some(about), &mut |ui| {
+                switch(
+                    ui,
+                    s.prefs.teams_meeting_for_guests,
+                    tl!("Make every meeting with guests a Teams meeting"),
+                    "calendar.teamsMeetingForGuests",
+                    acts,
+                );
+            });
+        }
         webex_rooms::webex_rooms(ui, s, &t, acts);
     });
 

@@ -67,8 +67,7 @@ impl MailApp {
                     return;
                 }
                 let id = if f.uid.is_some() { "event.update" } else { "event.create" };
-                let p = f.params();
-                self.event_command(wid, id, p);
+                self.event_going(wid, id, now);
             }
             Err(why) => f.error = Some(why),
         }
@@ -79,7 +78,8 @@ impl MailApp {
     /// settle it waits ([`Self::send_when_resolved`] sends it then, from the form as it is), and
     /// another press meanwhile does nothing. With none, it goes at once, its parameters taken from
     /// the form as the check left it. Its other commands (delete, respond, move) never wait. A
-    /// save does nothing while a Webex or Teams meeting is on its way: it would go without it.
+    /// save does nothing while a Webex or Teams meeting is on its way: it would go without it; and
+    /// it waits for the one File › Options › Calendar's option asks for as it goes.
     pub(crate) fn for_event(&mut self, w: u64, id: &'static str, p: Value) {
         let invites = matches!(id, "event.create" | "event.update");
         if invites && self.ui.event_windows.iter().any(|(x, f)| *x == w && (f.webex_wait.is_some() || f.teams_wait.is_some())) {
@@ -96,7 +96,16 @@ impl MailApp {
         if check_and_take(f, &mut self.session, people, now) {
             return;
         }
-        let p = f.params();
+        self.event_going(w, id, now);
+    }
+
+    /// Window `w`'s save or send, `id`, its names settled: it goes, from the form as it is now,
+    /// unless the option's Teams meeting holds it ([`Self::teams_auto_holds`]).
+    fn event_going(&mut self, w: u64, id: &'static str, now: f64) {
+        if self.teams_auto_holds(w, id, now) {
+            return;
+        }
+        let Some(p) = self.ui.event_windows.iter().find(|(x, _)| *x == w).map(|(_, f)| f.params()) else { return };
         self.event_command(w, id, p);
     }
 

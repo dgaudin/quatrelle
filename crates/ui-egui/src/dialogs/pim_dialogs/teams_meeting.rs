@@ -6,7 +6,8 @@
 //! notes (the link to join, the meeting ID and passcode, the phone, the options page), found again
 //! whatever language the interface had when it was written (D10); the place, Join and the
 //! conference the meeting brings; what removing it takes out, and what the window leaves to delete
-//! when it goes without saving, or its calendar can't hold it any more.
+//! when it goes without saving, or its calendar can't hold it any more. File › Options ›
+//! Calendar's option adds one the same way at the first guest, once per window, or says why not.
 //!
 //! What is hostile here: the notes, which anyone may have written (an invitation pasted in, a
 //! block edited by hand). A block starts only at a line that is a join line's words followed by
@@ -18,13 +19,15 @@
 
 use std::sync::OnceLock;
 
-#[cfg(not(target_arch = "wasm32"))]
-use quatrelle_engine::TeamsMeetingPath;
 use quatrelle_engine::fill;
+#[cfg(not(target_arch = "wasm32"))]
+use quatrelle_engine::model::addr;
 use quatrelle_engine::model::ical::Conference;
 #[cfg(not(target_arch = "wasm32"))]
 use quatrelle_engine::model::ical::{is_webex_link, links_in};
 use quatrelle_engine::model::pim::teams::{Status, TEAMS_CONFERENCE_LABEL, TeamsMeeting, TeamsMeetingError, teams_meeting_url};
+#[cfg(not(target_arch = "wasm32"))]
+use quatrelle_engine::{TeamsAuto, TeamsAutoAsk, TeamsMeetingPath};
 
 use super::*;
 
@@ -157,6 +160,81 @@ pub(crate) fn add(f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
     }
 }
 
+/// How long the title and the guests' lines are left alone, in seconds, before File › Options ›
+/// Calendar's Teams meeting for guests is asked for: the guest being typed is done with.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const TEAMS_AUTO_QUIET: f64 = 1.0;
+
+/// File › Options › Calendar's Teams meeting for guests, for the form at `now` (each frame, and as
+/// it's saved or sent: `sending`), as the engine decides it ([`Session::teams_meeting_auto`]). A
+/// meeting is asked for as Add a Teams meeting asks ([`add`]) once the title and the guests' lines
+/// have been left alone [`TEAMS_AUTO_QUIET`], or at once when `sending`; one that can't be made is
+/// said, with its button ([`prompt`]); either once in the window. Without a title or a start it
+/// waits, saying nothing. `true`: the save or send doesn't go now, waiting for the meeting asked
+/// for, or for the words to be read.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn auto(f: &mut EventForm, s: &Session, now: f64, sending: bool, acts: &mut Vec<Action>) -> bool {
+    if !s.prefs.teams_meeting_for_guests {
+        return false;
+    }
+    let typed = typed(f);
+    let since = match f.teams_auto_since {
+        Some((was, at)) if was == typed => at,
+        _ => {
+            f.teams_auto_since = Some((typed, now));
+            now
+        }
+    };
+    let entries = |line: &str| addr::split_entries(line).len();
+    let ask = TeamsAutoAsk {
+        path: chosen_path(f, s),
+        can_hold: f.can_invite && f.teams_allowed,
+        guests: entries(&f.guests).saturating_add(entries(&f.optional)),
+        has_teams: f.teams_meeting_id.is_some() || f.teams_wait.is_some(),
+        has_webex: has_webex(f),
+        removed: f.teams_removed,
+        tried: f.teams_auto_tried,
+    };
+    let then = s.teams_meeting_auto(&ask);
+    let untitled = f.summary.trim().is_empty() || f.date.trim().is_empty();
+    if then == TeamsAuto::No || untitled || (!sending && now - since < TEAMS_AUTO_QUIET) {
+        return false;
+    }
+    f.teams_auto_tried = true;
+    if then == TeamsAuto::Add {
+        // Not a click: what the window said of something else (a name not found) stays.
+        let said = f.error.take();
+        add(f, s, acts);
+        f.error = f.error.take().or(said);
+    } else {
+        f.teams_prompt = Some(TeamsPrompt::NotAdded);
+    }
+    sending
+}
+
+/// What the title and the guests' lines hold now, hashed: a change to any of them starts the
+/// quiet second again.
+#[cfg(not(target_arch = "wasm32"))]
+fn typed(f: &EventForm) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::hash::DefaultHasher::new();
+    (&f.summary, &f.guests, &f.optional).hash(&mut h);
+    h.finish()
+}
+
+/// The window's frame for that option, once its lines took what was typed in them: [`auto`], and
+/// the window drawn again when its quiet second is up (nothing else would draw it).
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn auto_each_frame(ui: &Ui, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
+    let now = ui.input(|i| i.time);
+    auto(f, s, now, false, acts);
+    if let Some((_, at)) = f.teams_auto_since.filter(|_| !f.teams_auto_tried)
+        && let Ok(left) = std::time::Duration::try_from_secs_f64(at + TEAMS_AUTO_QUIET - now)
+    {
+        ui.ctx().request_repaint_after(left);
+    }
+}
+
 /// `event.teamsMeeting`'s params for the appointment: its title and times, and always its account
 /// and calendar (from `f.calendars.get(f.calendar)`), even for one saved already, whose save names
 /// only its uid.
@@ -196,20 +274,33 @@ pub(crate) fn error_text(e: &TeamsMeetingError) -> String {
 
 /// What the window asks before Teams can make its meeting, under its ribbon: the permission
 /// (Authorize Teams meetings), said while it's missing, or a new sign-in (Sign in, then done
-/// with). Both open Microsoft's sign-in, and wait while one is under way.
+/// with); both open Microsoft's sign-in. Or that the option's meeting wasn't added, said until
+/// Teams can make meetings, with what's missing: the permission, or Teams switched on and signed
+/// in (Sign in opens Options › Teams). The buttons wait while a sign-in is under way.
 pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
-    let (asked, button, meetings) = match f.teams_prompt {
+    let sign_in = |meetings: bool| Action::Run("teams.signIn", json!({"meetings": meetings}));
+    let (said, button, act) = match f.teams_prompt {
         // D17: kept while the permission is missing, whichever of Teams' answer and the worker's
         // word that it went comes first.
-        Some(TeamsPrompt::Consent) if !s.prefs.teams.meetings => (TeamsMeetingError::Consent, tl!("Authorize Teams meetings"), true),
-        Some(TeamsPrompt::SignIn) => (TeamsMeetingError::SignIn, tl!("Sign in"), false),
+        Some(TeamsPrompt::Consent) if !s.prefs.teams.meetings => {
+            (error_text(&TeamsMeetingError::Consent), tl!("Authorize Teams meetings"), sign_in(true))
+        }
+        Some(TeamsPrompt::SignIn) => (error_text(&TeamsMeetingError::SignIn), tl!("Sign in"), sign_in(false)),
+        Some(TeamsPrompt::NotAdded) => {
+            let said = tl!("Teams meeting not added: sign in to Teams").to_string();
+            match s.teams_meetings_usable() {
+                Ok(()) => return,
+                Err(TeamsMeetingError::Consent) => (said, tl!("Authorize Teams meetings"), sign_in(true)),
+                Err(_) => (said, tl!("Sign in"), Action::TeamsOptions),
+            }
+        }
         _ => return,
     };
     ui.horizontal(|ui| {
-        ui.label(RichText::new(error_text(&asked)).color(t.danger));
+        ui.label(RichText::new(said).color(t.danger));
         let signing_in = s.teams.status == Status::SigningIn;
         if ui.add_enabled(!signing_in, egui::Button::new(button)).clicked() {
-            acts.push(Action::Run("teams.signIn", json!({"meetings": meetings})));
+            acts.push(act);
             if f.teams_prompt == Some(TeamsPrompt::SignIn) {
                 f.teams_prompt = None;
             }
@@ -220,22 +311,26 @@ pub(super) fn prompt(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, ac
 
 /// The calendar chosen takes a meeting by another path than Quatrelle's own (`path`: a Microsoft
 /// 365 mailbox's, or someone else's): the meeting made in this window, or the one on its way,
-/// can't stay. It's taken out as [`remove`] does (the one on its way given up), and the window
-/// says to add one again. `event.teamsMeeting`'s params for it; none when there's no such meeting,
-/// or the calendar takes it.
+/// can't stay. It's taken out as [`remove`] does (the one on its way given up, and a send waiting
+/// for it let go), and the window says to add one again. The calendar took it out, not the user:
+/// the option may add one again in a calendar that takes it. `event.teamsMeeting`'s params for it;
+/// none when there's no such meeting, or the calendar takes it.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn calendar_changed(f: &mut EventForm, path: TeamsMeetingPath) -> Option<Value> {
     if path == TeamsMeetingPath::Standalone || !(f.teams_fresh || f.teams_wait.is_some()) {
         return None;
     }
     f.error = Some(tl!("The Teams meeting was removed: add it again for this calendar").to_string());
-    match f.teams_wait.take() {
+    let removed = f.teams_removed;
+    let p = match f.teams_wait.take() {
         Some(ask) => {
-            f.teams_removed = true;
+            f.teams_send_held = None;
             Some(json!({"remove": {"ask": ask}}))
         }
         None => remove(f),
-    }
+    };
+    f.teams_removed = removed;
+    p
 }
 
 /// The most lines a meeting's block takes: the link to join; the meeting ID and passcode; the

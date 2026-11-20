@@ -2410,3 +2410,7 @@ presence	Offline	オフライン
 	The Teams meeting was removed: add it again for this calendar	Teams 会議を削除しました: この予定表用に追加し直してください
 	Teams meetings	Teams 会議
 	Teams meetings are allowed	Teams 会議は許可されています
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	出席者のいる会議をすべて Teams 会議にする
+	An appointment you organize gets a Teams meeting with its first guest	自分が開催する予定に最初の出席者を追加すると、Teams 会議が追加されます
+	Teams meeting not added: sign in to Teams	Teams 会議は追加されませんでした: Teams にサインインしてください

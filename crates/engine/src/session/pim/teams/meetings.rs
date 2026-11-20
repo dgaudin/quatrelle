@@ -62,6 +62,39 @@ pub enum TeamsMeetingPath {
     Unavailable,
 }
 
+/// What an appointment's window says of it, for the option to make every meeting with guests a
+/// Teams meeting ([`Session::teams_meeting_auto`]). Made by the window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TeamsAutoAsk {
+    /// How its calendar takes a meeting.
+    pub path: TeamsMeetingPath,
+    /// A meeting made for it would be the user's to keep: an appointment they organize.
+    pub can_hold: bool,
+    /// Its guests, required and optional (not its rooms).
+    pub guests: usize,
+    /// It has a Teams meeting, or one is on its way.
+    pub has_teams: bool,
+    /// It has a Webex meeting or room.
+    pub has_webex: bool,
+    /// The user removed a Teams meeting in this window (a calendar that couldn't hold one taking
+    /// it out isn't the user's).
+    pub removed: bool,
+    /// The option already added one in this window, or said why it couldn't.
+    pub tried: bool,
+}
+
+/// What the option does for the window now.
+#[derive(Debug, PartialEq, Eq)]
+pub enum TeamsAuto {
+    /// Nothing.
+    No,
+    /// A Teams meeting is added, as Add a Teams meeting does.
+    Add,
+    /// None can be made (Teams signed out, switched off, or the permission missing): the window
+    /// says so, once.
+    SayOnce,
+}
+
 /// Whether a link joins a meeting Teams made: a link Teams joins by, on one of the hosts its
 /// meetings are on.
 fn teams_meeting_link(url: &str) -> bool {
@@ -128,6 +161,23 @@ impl Session {
             TeamsMeetingPath::Mailbox
         } else {
             TeamsMeetingPath::Standalone
+        }
+    }
+
+    /// What File › Options › Calendar's option to make every meeting with guests a Teams meeting
+    /// does for an appointment's window: with the option on, an appointment of the user's own that
+    /// has a guest, no Teams meeting, no Webex, and no Teams meeting the user removed in this
+    /// window, gets one, once per window, in a calendar Quatrelle makes the meeting for; Teams
+    /// can't make it, the window says so instead, once. Never in someone else's calendar, nor yet
+    /// in a Microsoft 365 mailbox's (D13: Exchange Online is to make its own there).
+    pub fn teams_meeting_auto(&self, a: &TeamsAutoAsk) -> TeamsAuto {
+        if !self.prefs.teams_meeting_for_guests || !a.can_hold || a.guests == 0 || a.has_teams || a.has_webex || a.removed || a.tried {
+            return TeamsAuto::No;
+        }
+        match a.path {
+            TeamsMeetingPath::Unavailable | TeamsMeetingPath::Mailbox => TeamsAuto::No,
+            TeamsMeetingPath::Standalone if self.teams_meetings_usable().is_ok() => TeamsAuto::Add,
+            TeamsMeetingPath::Standalone => TeamsAuto::SayOnce,
         }
     }
 

@@ -2413,3 +2413,7 @@ presence	Offline	离线
 	The Teams meeting was removed: add it again for this calendar	已移除 Teams 会议: 请为此日历重新添加
 	Teams meetings	Teams 会议
 	Teams meetings are allowed	已允许 Teams 会议
+# Teams meetings: File › Options › Calendar's option that makes every meeting with guests one, and what the window says when it can't.
+	Make every meeting with guests a Teams meeting	将每个有与会者的会议设为 Teams 会议
+	An appointment you organize gets a Teams meeting with its first guest	由您组织的约会在添加第一位与会者时会获得 Teams 会议
+	Teams meeting not added: sign in to Teams	未添加 Teams 会议: 请登录 Teams

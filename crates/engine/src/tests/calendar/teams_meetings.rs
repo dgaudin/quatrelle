@@ -15,6 +15,7 @@ use super::*;
 use crate::TeamsMeetingAsk;
 
 mod follow;
+mod option;
 
 /// The creation the tests answer.
 const ASK: u64 = 7;
