@@ -687,7 +687,7 @@ Quatrelle touch a meeting, whatever id it carries.
 - A window closed without saving deletes the meeting it made (when the answer is still on its
   way, as it arrives). Quitting Quatrelle with such a window open does the same, waiting 3 seconds
   at most.
-- A crash, or a deletion Teams refuses, can leave a meeting in Teams. It does no harm and expires.
+- A crash, or a deletion Teams refuses, can leave a meeting in Teams that no appointment in Quatrelle shows.
 - Guests get only the calendar's invitation; Teams sends them nothing.
 
 **Where the id lives.**
@@ -699,7 +699,7 @@ Quatrelle touch a meeting, whatever id it carries.
 
 An invitation never carries it, nor does an appointment attached to a message; one in an
 invitation received is never read, and on an event you don't organize it is never used or
-written. A value that is not a plausible id (1 to 512 letters, digits, `-`, `_`, `=`, `+`, `/`) is
+written. A value that is not a plausible id (1 to 512 bytes of letters, digits, `-`, `_`, `=`, `+`, `/`) is
 dropped; in a request's address it is encoded as one segment.
 
 **With Webex.** An appointment has a Teams meeting or a Webex meeting or room, not both: a Teams
@@ -727,14 +727,14 @@ A failed update or deletion is a notice, "The Teams meeting couldn't be updated:
 deleted: …". Requests wait in one queue of 32, served before anything else the worker does, one at
 a time; the 33rd answers "no connection" without a request, as does one that waited two minutes
 and all of them when Work offline turns on. At most 16 requests for a new meeting wait at once.
-A 429 is waited out and sent again, three times at most; a 503 is sent again for an update or a
+A 429 is waited out and sent again, twice at most (three sends in all); a 503 is sent again for an update or a
 deletion, never for a creation, so none is made twice. Nothing is hidden: no failure ever
 becomes a Webex meeting or a room.
 
 **What is checked in Teams' answer.** It comes from a server, so it is read as hostile:
 
 - A link to join or to the options is kept only if it is `https` on port 443, with no `@` before
-  the path, no space, control, bidirectional or `\` character, at most 2,048 characters, and a
+  the path, no space, control, bidirectional or `\` character, at most 2,048 bytes, and a
   host that is `teams.microsoft.com` or ends in `.teams.microsoft.com`, or one of the government
   clouds' (`teams.microsoft.us`, `gov.teams.microsoft.us`, `dod.teams.microsoft.us`):
   `teams.microsoft.com.contoso.example` and `evilteams.microsoft.com` are refused. A bad link to
