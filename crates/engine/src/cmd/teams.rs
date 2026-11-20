@@ -29,7 +29,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("teams.settings", "Teams settings", OPTIONS, settings).params(
             r#"{"on"?: bool (use Teams in Quatrelle), "clientId"?: string (the application (client) ID; "" for none), "tenant"?: string (the directory (tenant) ID or domain; "" for none), "notify"?: bool, "notifyOnlyDirect"?: bool, "showUnreadable"?: bool (list the conversations whose messages Teams refuses)}"#,
         ),
-        CommandSpec::new("teams.signIn", "Sign in to Teams", OPTIONS, sign_in).params("(opens the browser to sign in)").when(on),
+        CommandSpec::new("teams.signIn", "Sign in to Teams", OPTIONS, sign_in)
+            .params(r#"{"meetings"?: bool (ask for the permission to make Teams meetings too; asked anyway once it was given)} (opens the browser to sign in)"#)
+            .when(on),
         CommandSpec::new("teams.reopenSignIn", "Reopen the sign-in page", OPTIONS, reopen_sign_in)
             .params("() (while signing in: Microsoft's page opened again)")
             .when(has_sign_in_page),
@@ -165,11 +167,14 @@ fn settings(s: &mut Session, v: &Value) -> CmdResult {
     }
     let t = &s.prefs.teams;
     Ok(
-        json!({"on": t.on, "clientId": t.client_id, "tenant": t.tenant, "notify": t.notify, "notifyOnlyDirect": t.notify_only_direct, "showUnreadable": t.show_unreadable, "signedIn": t.signed_in}),
+        json!({"on": t.on, "clientId": t.client_id, "tenant": t.tenant, "notify": t.notify, "notifyOnlyDirect": t.notify_only_direct, "showUnreadable": t.show_unreadable, "signedIn": t.signed_in, "meetings": t.meetings}),
     )
 }
 
-fn sign_in(s: &mut Session, _: &Value) -> CmdResult {
+/// The sign-in asks for the meetings' permission when it's asked for (Authorize), and when the
+/// settings say it was given: a plain sign-in keeps it.
+fn sign_in(s: &mut Session, v: &Value) -> CmdResult {
+    let asked = p::bool(v, "meetings").unwrap_or(false);
     let t = &s.prefs.teams;
     if t.client_id.is_empty() || t.tenant.is_empty() {
         return Err(CmdError::Disabled("set the application (client) ID and the directory (tenant) ID in File › Options › Teams first".into()));
@@ -177,7 +182,7 @@ fn sign_in(s: &mut Session, _: &Value) -> CmdResult {
     if s.teams.status == Status::SigningIn {
         return Err(CmdError::Disabled("already signing in to Teams".into()));
     }
-    let job = teams::Job::SignIn { client_id: t.client_id.clone(), tenant: t.tenant.clone(), meetings: false };
+    let job = teams::Job::SignIn { client_id: t.client_id.clone(), tenant: t.tenant.clone(), meetings: asked || t.meetings };
     s.teams.status = Status::SigningIn;
     s.push_job(Job::Teams { job });
     Ok(json!({}))

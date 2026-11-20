@@ -2379,3 +2379,12 @@ presence	Offline	離線
 	It can run macros: open it only if you trust the sender.	它可能會執行巨集：僅在信任寄件者時開啟。
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	檔名看不出這是哪種檔案：開啟它的程式可能會執行其中的內容。
 	Send without a file?	要不附檔案傳送嗎?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Teams 會議需要您的許可
+	Sign in to Teams again	請重新登入 Teams
+	Your Teams account can't create meetings	您的 Teams 帳號無法建立會議
+	Teams gave a link Quatrelle doesn't trust	Teams 提供了 Quatrelle 不信任的連結
+	The Teams meeting couldn't be updated: {error}	無法更新 Teams 會議: {error}
+	The Teams meeting couldn't be deleted: {error}	無法刪除 Teams 會議: {error}
+	Teams is signed out	Teams 已登出
+	no connection	無連線

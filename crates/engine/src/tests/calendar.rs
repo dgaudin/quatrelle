@@ -16,6 +16,7 @@ mod kept_files;
 mod reminders;
 mod removing;
 mod showing;
+mod teams_meetings;
 mod web;
 mod webex;
 mod webex_rooms;

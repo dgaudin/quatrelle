@@ -2375,3 +2375,12 @@ presence	Offline	오프라인
 	It can run macros: open it only if you trust the sender.	매크로가 실행될 수 있습니다. 보낸 사람을 신뢰하는 경우에만 여십시오.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	이름만으로는 어떤 파일인지 알 수 없습니다. 파일을 여는 프로그램이 그 안의 내용을 실행할 수 있습니다.
 	Send without a file?	파일 없이 보낼까요?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Teams 회의를 사용하려면 허가가 필요합니다
+	Sign in to Teams again	Teams에 다시 로그인하세요
+	Your Teams account can't create meetings	Teams 계정으로는 회의를 만들 수 없습니다
+	Teams gave a link Quatrelle doesn't trust	Teams가 Quatrelle이 신뢰하지 않는 링크를 주었습니다
+	The Teams meeting couldn't be updated: {error}	Teams 회의를 업데이트할 수 없습니다: {error}
+	The Teams meeting couldn't be deleted: {error}	Teams 회의를 삭제할 수 없습니다: {error}
+	Teams is signed out	Teams에서 로그아웃되었습니다
+	no connection	연결 없음

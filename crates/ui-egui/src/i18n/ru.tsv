@@ -2377,3 +2377,12 @@ presence	Offline	Не в сети
 	It can run macros: open it only if you trust the sender.	Он может выполнять макросы: открывайте его, только если доверяете отправителю.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	Имя не говорит, что это за файл: программа, которая его откроет, может выполнить его содержимое.
 	Send without a file?	Отправить без файла?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Для собраний Teams нужно ваше разрешение
+	Sign in to Teams again	Войдите в Teams снова
+	Your Teams account can't create meetings	Ваша учётная запись Teams не может создавать собрания
+	Teams gave a link Quatrelle doesn't trust	Teams дал ссылку, которой Quatrelle не доверяет
+	The Teams meeting couldn't be updated: {error}	Не удалось обновить собрание Teams: {error}
+	The Teams meeting couldn't be deleted: {error}	Не удалось удалить собрание Teams: {error}
+	Teams is signed out	Выполнен выход из Teams
+	no connection	нет соединения

@@ -2372,3 +2372,12 @@ presence	Offline	غير متصل
 	It can run macros: open it only if you trust the sender.	قد يشغّل وحدات ماكرو: افتحه فقط إذا كنت تثق بالمرسل.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	اسمه لا يبيّن نوع الملف: قد يشغّل البرنامج الذي يفتحه ما يحتويه.
 	Send without a file?	إرسال بلا ملف؟
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	تحتاج اجتماعات Teams إلى إذنك
+	Sign in to Teams again	سجّل الدخول إلى Teams مرة أخرى
+	Your Teams account can't create meetings	لا يستطيع حساب Teams الخاص بك إنشاء اجتماعات
+	Teams gave a link Quatrelle doesn't trust	أعطى Teams رابطاً لا يثق به Quatrelle
+	The Teams meeting couldn't be updated: {error}	تعذّر تحديث اجتماع Teams: {error}
+	The Teams meeting couldn't be deleted: {error}	تعذّر حذف اجتماع Teams: {error}
+	Teams is signed out	تم تسجيل الخروج من Teams
+	no connection	لا يوجد اتصال

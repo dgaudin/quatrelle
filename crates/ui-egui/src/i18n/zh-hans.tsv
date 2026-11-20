@@ -2376,3 +2376,12 @@ presence	Offline	离线
 	It can run macros: open it only if you trust the sender.	它可能会运行宏：仅在信任发件人时打开。
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	文件名看不出这是什么类型的文件：打开它的程序可能会运行其中的内容。
 	Send without a file?	不附文件发送?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Teams 会议需要您的许可
+	Sign in to Teams again	请重新登录 Teams
+	Your Teams account can't create meetings	您的 Teams 帐户无法创建会议
+	Teams gave a link Quatrelle doesn't trust	Teams 给出了 Quatrelle 不信任的链接
+	The Teams meeting couldn't be updated: {error}	无法更新 Teams 会议: {error}
+	The Teams meeting couldn't be deleted: {error}	无法删除 Teams 会议: {error}
+	Teams is signed out	Teams 已退出登录
+	no connection	无连接

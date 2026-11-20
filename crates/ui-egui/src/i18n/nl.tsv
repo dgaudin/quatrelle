@@ -2373,3 +2373,12 @@ presence	Offline	Offline
 	It can run macros: open it only if you trust the sender.	Het kan macro’s uitvoeren: open het alleen als u de afzender vertrouwt.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	De naam zegt niet wat voor bestand het is: het programma dat het opent, kan uitvoeren wat erin zit.
 	Send without a file?	Verzenden zonder bestand?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Teams-vergaderingen hebben je toestemming nodig
+	Sign in to Teams again	Meld je opnieuw aan bij Teams
+	Your Teams account can't create meetings	Je Teams-account kan geen vergaderingen maken
+	Teams gave a link Quatrelle doesn't trust	Teams gaf een link die Quatrelle niet vertrouwt
+	The Teams meeting couldn't be updated: {error}	De Teams-vergadering kon niet worden bijgewerkt: {error}
+	The Teams meeting couldn't be deleted: {error}	De Teams-vergadering kon niet worden verwijderd: {error}
+	Teams is signed out	Teams is afgemeld
+	no connection	geen verbinding

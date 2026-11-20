@@ -433,6 +433,7 @@ pub struct Session {
     /// Webex's sign-in and the meetings on their way.
     pub webex: pim::WebexState,
     pub teams: pim::TeamsState,
+    pub teams_meetings: pim::TeamsMeetingsState,
     /// The rooms each account offers for meetings, once asked for (Outlook's Room Finder).
     pub rooms: HashMap<String, scheduling::Fetched<scheduling::RoomFinder>>,
     /// When people and rooms are busy, by (account, address, from, to), once asked for (the
@@ -611,6 +612,7 @@ impl Session {
             mail_tips_ask: 0,
             webex: pim::WebexState::default(),
             teams: pim::TeamsState::default(),
+            teams_meetings: pim::TeamsMeetingsState::default(),
             module: pim::Module::Mail,
             cal_mode: pim::CalMode::Week,
             cal_day: None,

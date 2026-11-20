@@ -5,7 +5,8 @@
 //! `files.rs`) and the changes to them going out, shown at once over them (`changes.rs`: edits,
 //! deletions, reactions), the files shared asked for and saved (`files.rs`), presence, search
 //! hits and pictures waiting for the window, what is announced of new messages (`announce.rs`),
-//! and the Teams pages the window opens in the meetings browser's window ([`TeamsPage`]). Only
+//! the Teams pages the window opens in the meetings browser's window ([`TeamsPage`]), and the
+//! Teams meetings made from the calendar (`meetings.rs`, kept apart from [`TeamsState`]). Only
 //! the Teams worker (`net::teams`) talks to Graph and holds the copy and the outbox; the engine
 //! sends it jobs and applies what it reports, in windows that never grow with the copy
 //! (`window.rs`).
@@ -28,6 +29,7 @@ use super::*;
 mod announce;
 mod changes;
 mod files;
+mod meetings;
 mod members;
 mod outbox;
 mod people;
@@ -36,6 +38,7 @@ mod window;
 pub use announce::TeamsAnnouncement;
 pub use changes::ShownReaction;
 pub use files::{TEAMS_FILES_KEPT, TEAMS_TOO_MANY_FILES, TeamsFileState, TeamsSaved, teams_could_run};
+pub use meetings::{TEAMS_MEETING_ASKS_MAX, TeamsMeetingAsk, TeamsMeetingsState};
 pub use members::ChatMembers;
 pub use outbox::{
     TEAMS_ATTACH_AGAIN, TEAMS_LEFT, TEAMS_MAY_BE_IN_TEAMS, TEAMS_NOTHING_LEFT, TEAMS_RANGES_MAX, TEAMS_TOO_LONG, TEAMS_TOO_MANY,
@@ -450,18 +453,21 @@ impl Session {
         }
     }
 
-    /// Teams switched off: the worker stops, nothing of the copy is kept in memory.
+    /// Teams switched off: the worker stops, nothing of the copy is kept in memory, and the
+    /// meetings on their way won't be answered ([`Session::teams_meetings_stopped`]).
     pub(crate) fn teams_off(&mut self) {
         self.prefs.teams.on = false;
         // The copy set aside stays offered for deletion (the worker deletes it, on or off).
         let set_aside = self.teams.set_aside.take();
         self.teams = TeamsState { set_aside, ..TeamsState::default() };
+        self.teams_meetings_stopped();
         self.jobs.push(Job::Teams { job: teams::Job::Stop });
         self.teams_fallback();
     }
 
-    /// Signed out (asked, or said by the worker): who it was forgotten, nothing of the copy kept
-    /// (a copy set aside stays offered for deletion), and Mail shown instead of Conversations.
+    /// Signed out (asked, or said by the worker): who it was forgotten (the meetings' permission
+    /// too), nothing of the copy kept (a copy set aside stays offered for deletion), the meetings on
+    /// their way answered, and Mail shown instead of Conversations.
     pub(crate) fn teams_signed_out(&mut self) {
         let t = &mut self.prefs.teams;
         *t = TeamsSettings {
@@ -475,6 +481,7 @@ impl Session {
         };
         let set_aside = self.teams.set_aside.take();
         self.teams = TeamsState { set_aside, ..TeamsState::default() };
+        self.teams_meetings_stopped();
         self.teams_fallback();
     }
 
@@ -541,11 +548,10 @@ impl Session {
             teams::Event::NotCreated { local, why, code } => self.teams_not_created(&local, why, code),
             // A picture not to be had in this run: for the window to show so, and not asked again.
             teams::Event::NoPicture { picture } => self.teams.take_no_picture(picture),
-            // Teams meetings: nothing asks for them yet.
-            teams::Event::MeetingCreated { .. }
-            | teams::Event::MeetingUpdated { .. }
-            | teams::Event::MeetingDeleted { .. }
-            | teams::Event::Meetings { .. } => {}
+            teams::Event::MeetingCreated { ask, meeting, error } => self.teams_meeting_created(ask, meeting, error),
+            teams::Event::MeetingUpdated { id, meeting, error } => self.teams_meeting_updated(&id, meeting, error),
+            teams::Event::MeetingDeleted { error, .. } => self.teams_meeting_deleted(error),
+            teams::Event::Meetings { allowed } => self.prefs.teams.meetings = allowed,
         }
     }
 

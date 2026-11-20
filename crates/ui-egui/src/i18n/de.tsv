@@ -2377,3 +2377,12 @@ presence	Offline	Offline
 	It can run macros: open it only if you trust the sender.	Es kann Makros ausführen: Öffnen Sie es nur, wenn Sie dem Absender vertrauen.
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	Sein Name verrät nicht, um welche Art Datei es sich handelt: Das Programm, das sie öffnet, kann ausführen, was sie enthält.
 	Send without a file?	Ohne Datei senden?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Teams-Besprechungen brauchen Ihre Erlaubnis
+	Sign in to Teams again	Erneut bei Teams anmelden
+	Your Teams account can't create meetings	Ihr Teams-Konto kann keine Besprechungen erstellen
+	Teams gave a link Quatrelle doesn't trust	Teams hat einen Link geliefert, dem Quatrelle nicht vertraut
+	The Teams meeting couldn't be updated: {error}	Die Teams-Besprechung konnte nicht aktualisiert werden: {error}
+	The Teams meeting couldn't be deleted: {error}	Die Teams-Besprechung konnte nicht gelöscht werden: {error}
+	Teams is signed out	Teams ist abgemeldet
+	no connection	keine Verbindung

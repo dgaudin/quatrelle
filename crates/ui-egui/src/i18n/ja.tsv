@@ -2373,3 +2373,12 @@ presence	Offline	オフライン
 	It can run macros: open it only if you trust the sender.	マクロが実行されることがあります。送信者を信頼できる場合にのみ開いてください。
 	Its name doesn't say what kind of file it is: the program that opens it can run what's in it.	名前からはファイルの種類がわかりません。開くプログラムが中身を実行する可能性があります。
 	Send without a file?	ファイルなしで送信しますか?
+# Teams meetings: what the calendar says of them, and why one wasn't made, changed or deleted.
+	Teams meetings need your permission	Teams 会議を使うには許可が必要です
+	Sign in to Teams again	Teams に再度サインインしてください
+	Your Teams account can't create meetings	お使いの Teams アカウントでは会議を作成できません
+	Teams gave a link Quatrelle doesn't trust	Teams から Quatrelle が信頼しないリンクが返されました
+	The Teams meeting couldn't be updated: {error}	Teams 会議を更新できませんでした: {error}
+	The Teams meeting couldn't be deleted: {error}	Teams 会議を削除できませんでした: {error}
+	Teams is signed out	Teams からサインアウトしています
+	no connection	接続がありません
