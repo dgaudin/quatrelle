@@ -460,6 +460,17 @@ impl Data {
                                 el.kids.extend(u.find("CalendarItem").into_iter().flat_map(|c| c.kids.iter().filter(|k| named(k)).cloned()));
                                 continue;
                             }
+                            // The same property taken off.
+                            if u.name == "DeleteItemField"
+                                && el.name == "CalendarItem"
+                                && let Some(name) = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")).map(str::to_string)
+                            {
+                                el.kids.retain(|k| {
+                                    k.name != "ExtendedProperty"
+                                        || k.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")) != Some(name.as_str())
+                                });
+                                continue;
+                            }
                             let field =
                                 u.find("FieldURI").and_then(|f| f.attr("FieldURI")).and_then(|f| f.split(':').nth(1)).unwrap_or("").to_string();
                             el.kids.retain(|k| k.name != field);

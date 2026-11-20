@@ -312,9 +312,14 @@ pub(super) fn updates(e: &CalEvent, me: &str) -> String {
     let guests_copy = !e.my_answer.is_empty();
     let mut updates: String = event_fields(e, me)
         .iter()
-        .filter(|(uri, _)| !(guests_copy && ORGANIZERS_OWN.contains(uri)))
+        .filter(|(uri, _)| !(guests_copy && (ORGANIZERS_OWN.contains(uri) || *uri == events::TEAMS_MEETING_ID)))
         .map(|(uri, x)| format!("<t:SetItemField>{}<t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>", tasks::path(uri)))
         .collect();
+    // An appointment of the user's with no Teams meeting loses the property (a guest's copy keeps
+    // its own as it is).
+    if e.teams_meeting_id.is_none() && !guests_copy {
+        updates.push_str(&format!("<t:DeleteItemField>{}</t:DeleteItemField>", events::TEAMS_MEETING_ID));
+    }
     // An appointment that no longer repeats loses its pattern (an occurrence never had one).
     if e.rrule.is_none() && e.recurrence_id.is_none() && !guests_copy {
         updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");

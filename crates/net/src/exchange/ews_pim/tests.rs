@@ -391,6 +391,130 @@ fn an_appointments_webex_id_round_trips() {
     let _ = cal;
 }
 
+/// The id of a Teams meeting made for an appointment is kept by the server with it, as the
+/// Webex id is: created, read back by a first sync and a later one, kept when another field changes.
+#[test]
+fn an_appointments_teams_meeting_id_round_trips() {
+    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
+    use quatrelle_model::pim::StoredEvent;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let new = StoredEvent {
+        calendar: CALENDAR.into(),
+        event: CalEvent {
+            uid: "t-1".into(),
+            summary: "Review".into(),
+            start: 1_792_000_000,
+            end: 1_792_003_600,
+            teams_meeting_id: Some("abc_123-X=".into()),
+            ..Default::default()
+        },
+        dirty: true,
+        ..Default::default()
+    };
+    let first = sync(&c, &Pim { events: vec![new], ..Default::default() }, 1_791_000_000).unwrap();
+    assert!(first.errors.is_empty(), "{:?}", first.errors);
+    let made = first.events.iter().find(|e| e.event.summary == "Review").unwrap();
+    assert_eq!(made.event.teams_meeting_id.as_deref(), Some("abc_123-X="), "read back by the first sync");
+    let mut changed = made.clone();
+    changed.event.summary = "Review (moved)".into();
+    changed.dirty = true;
+    let second = sync(&c, &Pim { events: vec![changed], ..Default::default() }, 1_791_000_100).unwrap();
+    assert!(second.errors.is_empty(), "{:?}", second.errors);
+    let again = second.events.iter().find(|e| e.event.summary == "Review (moved)").unwrap();
+    assert_eq!(again.event.teams_meeting_id.as_deref(), Some("abc_123-X="), "kept when another field changes");
+    let third = sync(&c, &Pim { events: second.events.clone(), ..Default::default() }, 1_791_000_200).unwrap();
+    assert_eq!(third.events.iter().find(|e| e.event.summary == "Review (moved)").unwrap().event.teams_meeting_id.as_deref(), Some("abc_123-X="));
+}
+
+/// The Teams id comes right after Webex's, before the appointment's own fields.
+#[test]
+fn the_teams_property_comes_right_after_webexs() {
+    let e = CalEvent {
+        uid: "w".into(),
+        summary: "Review".into(),
+        start: 1_792_000_000,
+        end: 1_792_003_600,
+        webex_id: Some("abc123".into()),
+        teams_meeting_id: Some("tm-1".into()),
+        ..Default::default()
+    };
+    let fields = event_fields(&e, "riley@contoso.example");
+    let names: Vec<&str> = fields.iter().map(|(uri, _)| *uri).collect();
+    let at = names.iter().position(|u| *u == events::TEAMS_MEETING_ID).unwrap();
+    assert_eq!(names.get(at.wrapping_sub(1)), Some(&events::WEBEX_ID));
+    assert_eq!(names.get(at + 1), Some(&"calendar:Start"));
+    assert_eq!(fields[at].1, format!("<t:ExtendedProperty>{}<t:Value>tm-1</t:Value></t:ExtendedProperty>", events::TEAMS_MEETING_ID));
+}
+
+/// An organizer's appointment with no Teams id has the property taken off, on the server too.
+#[test]
+fn removing_the_teams_meeting_takes_the_property_off() {
+    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
+    use quatrelle_model::pim::StoredEvent;
+    let delete = format!("<t:DeleteItemField>{}</t:DeleteItemField>", events::TEAMS_MEETING_ID);
+    let plain = CalEvent { uid: "t-2".into(), summary: "Review".into(), start: 1_792_000_000, end: 1_792_003_600, ..Default::default() };
+    assert!(push::updates(&plain, "riley@contoso.example").contains(&delete));
+    let with = CalEvent { teams_meeting_id: Some("tm-1".into()), ..plain.clone() };
+    assert!(!push::updates(&with, "riley@contoso.example").contains(&delete));
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let new = StoredEvent { calendar: CALENDAR.into(), event: with, dirty: true, ..Default::default() };
+    let first = sync(&c, &Pim { events: vec![new], ..Default::default() }, 1_791_000_000).unwrap();
+    let made = first.events.iter().find(|e| e.event.summary == "Review").unwrap();
+    assert_eq!(made.event.teams_meeting_id.as_deref(), Some("tm-1"));
+    let mut cleared = made.clone();
+    cleared.event.teams_meeting_id = None;
+    cleared.dirty = true;
+    let second = sync(&c, &Pim { events: vec![cleared], ..Default::default() }, 1_791_000_100).unwrap();
+    assert!(second.errors.is_empty(), "{:?}", second.errors);
+    let after = second.events.iter().find(|e| e.event.summary == "Review").unwrap();
+    assert_eq!(after.event.teams_meeting_id, None, "taken off");
+    let third = sync(&c, &Pim { events: second.events.clone(), ..Default::default() }, 1_791_000_200).unwrap();
+    assert_eq!(third.events.iter().find(|e| e.event.summary == "Review").unwrap().event.teams_meeting_id, None);
+}
+
+/// The user's copy of someone else's meeting keeps its properties: no set, no delete.
+#[test]
+fn a_guests_copy_keeps_its_properties_as_they_are() {
+    for id in [None, Some("tm-1".to_string())] {
+        let e = CalEvent {
+            uid: "g".into(),
+            summary: "Their meeting".into(),
+            start: 1_792_000_000,
+            end: 1_792_003_600,
+            my_answer: "ACCEPTED".into(),
+            teams_meeting_id: id,
+            ..Default::default()
+        };
+        let sent = push::updates(&e, "riley@contoso.example");
+        assert!(!sent.contains("TeamsMeetingId"), "{sent}");
+    }
+}
+
+#[test]
+fn an_implausible_teams_id_from_exchange_is_dropped() {
+    let read = |v: &str| {
+        let xml = format!(
+            "<t:CalendarItem><t:ItemId Id=\"B\"/><t:Subject>S</t:Subject><t:Start>2026-10-16T10:00:00Z</t:Start>\
+             <t:ExtendedProperty>{}<t:Value>{v}</t:Value></t:ExtendedProperty></t:CalendarItem>",
+            events::TEAMS_MEETING_ID
+        );
+        event_of(parse(&xml).find("CalendarItem").unwrap()).unwrap().teams_meeting_id
+    };
+    assert_eq!(read("a b"), None);
+    assert_eq!(read(""), None);
+    assert_eq!(read(" ok-1 ").as_deref(), Some("ok-1"));
+}
+
 /// A change here (a title, say) sends the item's whole sensitivity back: Personal went as Normal
 /// and Confidential as Private. Each stays what it is until the lock is taken off.
 #[test]

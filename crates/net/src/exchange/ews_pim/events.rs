@@ -17,6 +17,10 @@ pub(crate) const WEBEX_SET: &str = webex_set!();
 /// `ExtendedFieldURI` calls it in a read, a create and an update.
 pub(crate) const WEBEX_ID: &str =
     concat!("<t:ExtendedFieldURI PropertySetId=\"", webex_set!(), "\" PropertyName=\"WebexId\" PropertyType=\"String\"/>");
+/// The id of the Teams meeting made for an appointment (a string named `TeamsMeetingId`, in the
+/// same set), what `ExtendedFieldURI` calls it in a read, a create, an update and a removal.
+pub(crate) const TEAMS_MEETING_ID: &str =
+    concat!("<t:ExtendedFieldURI PropertySetId=\"", webex_set!(), "\" PropertyName=\"TeamsMeetingId\" PropertyType=\"String\"/>");
 
 /// What the organizer meant the meeting to show as for a guest who accepts
 /// ([MS-OXOCAL] `PidLidIntendedBusyStatus`, valued as `PidLidBusyStatus`: 0 free, 1 tentative,
@@ -341,6 +345,10 @@ fn appointment(it: &El) -> Option<CalEvent> {
             .map(str::trim)
             .filter(|id| quatrelle_model::ical::valid_webex_id(id))
             .map(str::to_string),
+        teams_meeting_id: crate::ews::extended_named(it, WEBEX_SET, "TeamsMeetingId")
+            .map(str::trim)
+            .filter(|id| quatrelle_model::pim::teams::valid_teams_meeting_id(id))
+            .map(str::to_string),
         // Its version: Outlook raises it at each change of the organizer's.
         sequence: it.text_of("AppointmentSequenceNumber").and_then(|n| n.trim().parse::<u32>().ok()).unwrap_or(0),
         no_responses: it.text_of("IsResponseRequested").map(str::trim) == Some("false"),
@@ -396,6 +404,9 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     // a meeting that has a Webex id (an event without one is written, and left, as it was).
     if let Some(id) = e.webex_id.as_deref().filter(|id| quatrelle_model::ical::valid_webex_id(id)) {
         f.push((WEBEX_ID, format!("<t:ExtendedProperty>{WEBEX_ID}<t:Value>{}</t:Value></t:ExtendedProperty>", esc(id))));
+    }
+    if let Some(id) = e.teams_meeting_id.as_deref().filter(|id| quatrelle_model::pim::teams::valid_teams_meeting_id(id)) {
+        f.push((TEAMS_MEETING_ID, format!("<t:ExtendedProperty>{TEAMS_MEETING_ID}<t:Value>{}</t:Value></t:ExtendedProperty>", esc(id))));
     }
     f.extend([
         ("calendar:Start", format!("<t:Start>{}</t:Start>", utc(start))),
