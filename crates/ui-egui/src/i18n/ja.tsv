@@ -2489,3 +2489,4 @@ presence	Offline	オフライン
 	Add Reminder…	リマインダーの追加…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	リマインダーは日付 (YYYY-MM-DD) と時刻 (HH:MM) です
 	`{name}` is a day, YYYY-MM-DD	「{name}」は日付です (YYYY-MM-DD)
+	Remove from List	一覧から削除

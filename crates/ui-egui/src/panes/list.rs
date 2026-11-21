@@ -736,7 +736,7 @@ fn row_input(
             tl!(if flags.seen { "Mark as unread" } else { "Mark as read" }),
             Action::Run(if flags.seen { "mail.markUnread" } else { "mail.markRead" }, json!({})),
         );
-        ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| crate::organize::follow_up_menu(ui, s, t, acts));
+        ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| crate::organize::follow_up_menu(ui, s, t, acts, None));
         ui.menu_button((widgets::menu_icon(Some(Icon::Steps)), tl!("Quick steps")), |ui| crate::quick_steps_menu(ui, s, acts));
         super::policy::policy_menu(ui, s, acts, super::policy::PolicyFor::Mail(&key));
         ui.separator();

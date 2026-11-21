@@ -196,12 +196,12 @@ impl DueGroup {
     }
 }
 
-/// The group a task falls in on `today`.
-pub fn due_group(t: &Task, today: i64) -> DueGroup {
-    if t.is_complete() {
+/// The group a follow-up falls in on `today`: a task's, or a flagged message's due day.
+pub fn due_group_for(due: Option<i64>, complete: bool, today: i64) -> DueGroup {
+    if complete {
         return DueGroup::Completed;
     }
-    let Some(due) = t.due else { return DueGroup::NoDate };
+    let Some(due) = due else { return DueGroup::NoDate };
     // Monday of this week (1970-01-01 was a Thursday).
     let monday = today - (today + 3).rem_euclid(7);
     match due - today {
@@ -212,6 +212,11 @@ pub fn due_group(t: &Task, today: i64) -> DueGroup {
         _ if due < monday + 14 => DueGroup::NextWeek,
         _ => DueGroup::Later,
     }
+}
+
+/// The group a task falls in on `today`.
+pub fn due_group(t: &Task, today: i64) -> DueGroup {
+    due_group_for(t.due, t.is_complete(), today)
 }
 
 /// Tasks in the To-Do List's order: by group, then by due day, the higher priority first, then

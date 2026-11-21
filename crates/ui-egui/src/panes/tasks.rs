@@ -8,8 +8,8 @@
 
 use egui::{Margin, RichText, Sense, Ui, pos2, vec2};
 use quatrelle_engine::model::dates::{self, civil_from_days};
-use quatrelle_engine::model::pim::tasks::{DueGroup, due_group};
-use quatrelle_engine::{Session, TaskRef};
+use quatrelle_engine::model::pim::tasks::DueGroup;
+use quatrelle_engine::{Session, TaskRef, TodoRef};
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -43,8 +43,8 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, _acts: &mut Vec<Action>) 
     }
     ui.add_space(8.0);
     let today = dates::today(&s.clock);
-    let open = s.tasks("", false);
-    let late = open.iter().filter(|r| r.task.is_overdue(today)).count();
+    let open = s.todo("", false);
+    let late = open.iter().filter(|r| !r.is_complete() && r.due().is_some_and(|d| d < today)).count();
     ui.label(RichText::new(tf!("{n} tasks to do", n = open.len())).color(t.faint).small());
     if late > 0 {
         ui.label(RichText::new(tf!("{n} overdue", n = late)).color(t.danger).small());
@@ -61,24 +61,32 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
         st.tasks.focus_new = true;
     }
     groups.end(ui, &t, "New");
-    let picked = st.tasks.selected.as_deref().and_then(|u| s.find_task(u));
-    if widgets::big_button(ui, Icon::Delete, "Delete", &t, picked.is_some()).clicked()
+    let picked = st.tasks.selected.as_deref().and_then(|u| s.find_todo(u, st.tasks.completed));
+    let delete_label = if matches!(picked, Some(TodoRef::Mail(_))) { "Remove from List" } else { "Delete" };
+    if widgets::big_button(ui, Icon::Delete, delete_label, &t, picked.is_some()).clicked()
         && let Some(p) = &picked
     {
         st.tasks.selected = None;
-        acts.push(Action::Run("task.delete", json!({"uid": p.task.uid})));
+        match p {
+            TodoRef::Task(t) => acts.push(Action::Run("task.delete", json!({"uid": t.task.uid}))),
+            // A flagged message leaves the list (its flag is cleared); it stays in its folder.
+            TodoRef::Mail(m) => acts.push(Action::Run("mail.flag", json!({"key": m.key.to_id(), "on": false}))),
+        }
     }
-    let done = picked.as_ref().is_some_and(|p| p.task.is_complete());
+    let done = picked.as_ref().is_some_and(|p| p.is_complete());
     if widgets::big_toggle(ui, Icon::Complete, "Mark Complete", &t, done).clicked()
         && let Some(p) = &picked
     {
-        acts.push(Action::Run("task.complete", json!({"uid": p.task.uid, "done": !done})));
+        match p {
+            TodoRef::Task(t) => acts.push(Action::Run("task.complete", json!({"uid": t.task.uid, "done": !done}))),
+            TodoRef::Mail(m) => acts.push(Action::Run("mail.flag", json!({"key": m.key.to_id(), "complete": !done, "on": done}))),
+        }
     }
     groups.end(ui, &t, "Manage Task");
-    let importance = picked.as_ref().map_or(0, |p| p.task.importance);
+    let importance = picked.as_ref().and_then(TodoRef::task).map_or(0, |p| p.task.importance);
     for (icon, label, level) in [(Icon::Important, "High Importance", 1), (Icon::LowImportance, "Low Importance", -1)] {
-        if widgets::big_toggle(ui, icon, label, &t, picked.is_some() && importance == level).clicked()
-            && let Some(p) = &picked
+        if widgets::big_toggle(ui, icon, label, &t, picked.as_ref().is_some_and(|p| p.task().is_some()) && importance == level).clicked()
+            && let Some(TodoRef::Task(p)) = &picked
         {
             let to = if importance == level { 0 } else { level };
             acts.push(Action::Run("task.update", json!({"uid": p.task.uid, "importance": to})));
@@ -95,14 +103,15 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
 pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     let today = dates::today(&s.clock);
-    let list = s.tasks(&st.tasks.query, st.tasks.completed);
+    let list = s.todo(&st.tasks.query, st.tasks.completed);
     // The one picked went (deleted, or done with the completed ones hidden): none is.
-    let picked = st.tasks.selected.as_deref().and_then(|u| list.iter().find(|r| r.task.uid == u)).cloned();
+    let picked = st.tasks.selected.as_deref().and_then(|u| list.iter().find(|r| r.uid() == u)).cloned();
     if picked.is_none() {
         st.tasks.selected = None;
         st.tasks.form = None;
     }
-    if let Some(p) = &picked {
+    // A task is written on beside the list; a flagged message opens in its own (a double click).
+    if let Some(TodoRef::Task(p)) = &picked {
         let end = if i18n::current().rtl() { egui::Panel::left("task-form") } else { egui::Panel::right("task-form") };
         end.resizable(true)
             .default_size(380.0)
@@ -114,7 +123,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
 }
 
 /// The box to type a new task in, then the tasks under their groups' headings.
-fn list_pane(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: &[TaskRef], today: i64, acts: &mut Vec<Action>) {
+fn list_pane(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: &[TodoRef], today: i64, acts: &mut Vec<Action>) {
     egui::Frame::new().inner_margin(Margin::symmetric(14, 10)).show(ui, |ui| {
         let r = ui.add_enabled(
             !s.accounts.is_empty(),
@@ -151,10 +160,10 @@ fn list_pane(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: &[Tas
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("tasks").show(ui, |ui| {
         let mut group: Option<DueGroup> = None;
         for r in list {
-            let g = due_group(&r.task, today);
+            let g = r.group(today);
             if group != Some(g) {
                 group = Some(g);
-                let n = list.iter().filter(|x| due_group(&x.task, today) == g).count();
+                let n = list.iter().filter(|x| x.group(today) == g).count();
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
@@ -177,10 +186,126 @@ pub(crate) fn short_day(day: i64) -> String {
     tf!("{weekday} {day}/{month}", weekday = tl!(name), day = d, month = format!("{m:02}"))
 }
 
+/// One row of the To-Do List: a task, or a flagged message (an envelope, its follow-up).
+fn row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TodoRef, today: i64, acts: &mut Vec<Action>) {
+    match r {
+        TodoRef::Task(task) => task_row(s, tu, t, ui, task, today, acts),
+        TodoRef::Mail(mail) => mail_row(s, tu, t, ui, mail, today, acts),
+    }
+}
+
+/// A flagged message: an envelope in place of the task's circle, a tick to mark its follow-up
+/// complete, its subject (or the follow-up's title, struck through once done) and its due day
+/// with the red flag. A click picks it, a double click opens it; right-click gives Follow Up,
+/// Mark Complete, Remove from List and Open.
+fn mail_row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, mail: &quatrelle_engine::FlaggedMail, today: i64, acts: &mut Vec<Action>) {
+    let rtl = i18n::current().rtl();
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+    let id = mail.key.to_id();
+    let picked = tu.selected.as_deref() == Some(id.as_str());
+    if picked || resp.hovered() {
+        ui.painter().rect_filled(rect.shrink2(vec2(6.0, 1.0)), 4.0, if picked { t.accent_soft } else { t.hover });
+    }
+    let at = |from: f32| if rtl { rect.right() - from } else { rect.left() + from };
+    let done = mail.complete;
+    let late = !done && mail.due.is_some_and(|d| d < today);
+    // The envelope, where a task has its circle.
+    let mail_icon = egui::Rect::from_center_size(pos2(at(26.0), rect.center().y), vec2(18.0, 18.0));
+    icons::paint(ui.painter(), mail_icon, Icon::Unread, if done { t.faint } else { t.dim });
+    // Its tick: a ring, filled once its follow-up is done.
+    let tick = egui::Rect::from_center_size(pos2(at(50.0), rect.center().y), vec2(16.0, 16.0));
+    let tick_resp = ui.interact(tick.expand(3.0), ui.scope_id().with(("mail-tick", &id)), Sense::click()).on_hover_text(tl!(if done {
+        "Mark as not complete"
+    } else {
+        "Mark Complete"
+    }));
+    if done {
+        ui.painter().circle_filled(tick.center(), 8.0, t.accent);
+        icons::paint(ui.painter(), tick.shrink(3.0), Icon::Read, t.on_accent);
+    } else {
+        ui.painter().circle_stroke(tick.center(), 7.5, egui::Stroke::new(1.5, if late { t.danger } else { t.dim }));
+        if tick_resp.hovered() {
+            icons::paint(ui.painter(), tick.shrink(3.0), Icon::Read, t.faint);
+        }
+    }
+    if tick_resp.clicked() {
+        let p = if done { json!({"key": id, "on": true}) } else { json!({"key": id, "complete": true}) };
+        acts.push(Action::Run("mail.flag", p));
+    }
+    // The far side: the due day, then the red flag.
+    let mut edge = 18.0;
+    let side = |from: f32, w: f32| {
+        let x = if rtl { rect.left() + from } else { rect.right() - from - w };
+        egui::Rect::from_min_size(pos2(x, rect.center().y - 9.0), vec2(w, 18.0))
+    };
+    if let Some(due) = mail.due {
+        let text = short_day(due);
+        let color = if late {
+            t.danger
+        } else if done {
+            t.faint
+        } else {
+            t.dim
+        };
+        let g = widgets::one_line(ui, &text, theme::regular(12.0), color, 110.0);
+        let w = g.size().x;
+        ui.painter().galley(side(edge, w).left_center() - vec2(0.0, g.size().y / 2.0), g, color);
+        edge += w + 12.0;
+    }
+    let flag = side(edge, 16.0);
+    icons::paint(ui.painter(), flag, Icon::Flag, t.flag);
+    ui.interact(flag, ui.scope_id().with(("mail-flag", &id)), Sense::hover()).on_hover_text(tl!("Follow up"));
+    edge += 22.0;
+    // The subject (its follow-up's title when one was set), in what's left.
+    let room = (rect.width() - 72.0 - edge).max(40.0);
+    let color = if done {
+        t.faint
+    } else if late {
+        t.danger
+    } else {
+        t.text
+    };
+    let g = widgets::one_line(ui, &mail.subject, theme::regular(14.0), color, room);
+    let size = g.size();
+    let x = if rtl { at(72.0) - size.x } else { at(72.0) };
+    let top = pos2(x, rect.center().y - size.y / 2.0);
+    if done {
+        ui.painter().line_segment([pos2(top.x, rect.center().y), pos2(top.x + size.x, rect.center().y)], egui::Stroke::new(1.0, t.faint));
+    }
+    ui.painter().galley(top, g, color);
+    if resp.clicked() {
+        tu.selected = Some(id.clone());
+    }
+    if resp.double_clicked() {
+        acts.push(Action::Open(mail.key.clone()));
+    }
+    resp.context_menu(|ui| {
+        if ui.button((widgets::menu_icon(Some(Icon::Unread)), tl!("Open"))).clicked() {
+            acts.push(Action::Open(mail.key.clone()));
+            ui.close();
+        }
+        ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| {
+            crate::organize::follow_up_menu(ui, s, t, acts, Some(&id));
+        });
+        if ui.button((widgets::menu_icon(Some(Icon::Complete)), tl!(if done { "Mark as not complete" } else { "Mark Complete" }))).clicked() {
+            let p = if done { json!({"key": id, "on": true}) } else { json!({"key": id, "complete": true}) };
+            acts.push(Action::Run("mail.flag", p));
+            ui.close();
+        }
+        if ui.button((widgets::menu_icon(Some(Icon::Delete)), tl!("Remove from List"))).clicked() {
+            if picked {
+                tu.selected = None;
+            }
+            acts.push(Action::Run("mail.flag", json!({"key": id, "on": false})));
+            ui.close();
+        }
+    });
+}
+
 /// One task: its tick, its subject (struck through once done, red once late), and on the far
 /// side its due day, priority, reminder and categories. A click picks it; right-click gives
 /// Mark Complete and Delete.
-fn row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TaskRef, today: i64, acts: &mut Vec<Action>) {
+fn task_row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TaskRef, today: i64, acts: &mut Vec<Action>) {
     let task = &r.task;
     let rtl = i18n::current().rtl();
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());

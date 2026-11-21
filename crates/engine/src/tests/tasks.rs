@@ -12,6 +12,68 @@ fn uid_of(r: &Value) -> String {
 }
 
 /// A task made, changed as Outlook changes one, ticked and unticked, listed and deleted.
+/// The To-Do List: flagged mail beside the tasks, grouped by due day, done with or removed
+/// from the list by its key, and across accounts.
+#[test]
+fn the_todo_list_holds_the_flagged_mail_and_the_tasks() {
+    let mut s = sample_session("todo-list");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let due = |subject: &str| {
+        s.cache
+            .values()
+            .find_map(|st| st.messages.iter().find(|m| m.subject == subject))
+            .map(|m| m.key.to_id())
+            .unwrap_or_else(|| panic!("no {subject}"))
+    };
+    let a = due("Character turnarounds");
+    let b = due("Sound mix, version 3");
+    // Flagged for today, and tomorrow, without being in the list's selection at all.
+    s.run("mail.flag", &json!({"key": a, "due": "today"})).unwrap();
+    s.run("mail.flag", &json!({"key": b, "due": "tomorrow"})).unwrap();
+    let uid = uid_of(&s.run("task.create", &json!({"subject": "Devis Martin", "due": quatrelle_model::dates::day_string(today + 3)})).unwrap());
+    // Its follow-up title, when one was set (`PidLidFlagRequest`), is the row's subject.
+    {
+        let key = MessageKey::from_id(&a).unwrap();
+        let st = s.cache.get_mut(&(key.account.clone(), key.folder.clone())).unwrap();
+        let m = st.messages.iter_mut().find(|m| m.key == key).unwrap();
+        std::sync::Arc::make_mut(m).flags.follow_up.title = "Send the report".into();
+    }
+    let list = s.todo("", false);
+    let mail = |id: &str| list.iter().find(|r| r.uid() == id).cloned();
+    let row = mail(&a).expect("the flagged message");
+    assert_eq!(row.subject(), "Send the report");
+    assert_eq!((row.due(), row.is_complete()), (Some(today), false));
+    assert!(row.task().is_none() && row.mail().is_some());
+    assert!(mail(&b).is_some());
+    assert!(list.iter().any(|r| r.task().is_some_and(|t| t.task.uid == uid)), "the task too");
+    // Grouped by due day: today's before tomorrow's, the task (in three days) after both.
+    let at = |id: &str| list.iter().position(|r| r.uid() == id).unwrap();
+    assert!(at(&a) < at(&b) && at(&b) < at(&uid), "{:?}", list.iter().map(|r| (r.uid(), r.group(today))).collect::<Vec<_>>());
+
+    // Ticked from the To-Do List: done, out of what's to do, still there with the completed.
+    s.run("mail.flag", &json!({"key": a, "complete": true})).unwrap();
+    assert!(s.todo("", false).iter().all(|r| r.uid() != a), "done: out");
+    let row_done = s.todo("", true).into_iter().find(|r| r.uid() == a).expect("shown with the completed");
+    assert!(row_done.is_complete() && row_done.group(today) == quatrelle_model::pim::tasks::DueGroup::Completed);
+    // Ticked again (not done): back among the flagged, a fresh flag (its old due day gone,
+    // as flagging one again after Mark Complete always leaves it).
+    s.run("mail.flag", &json!({"key": a, "on": true})).unwrap();
+    assert!(s.todo("", false).iter().any(|r| r.uid() == a && !r.is_complete() && r.due().is_none()));
+
+    // Removed from the list (the flag cleared): neither list has it.
+    s.run("mail.flag", &json!({"key": a, "on": false})).unwrap();
+    assert!(s.todo("", true).iter().all(|r| r.uid() != a));
+
+    // Another account's task is there too.
+    let other =
+        s.run("account.add", &json!({"email": "zoe@studio.example", "local": true, "name": "Zoe"})).unwrap()["account"].as_str().unwrap().to_string();
+    s.run("task.create", &json!({"subject": "Zoe's task", "account": other})).unwrap();
+    let list = s.todo("", false);
+    assert!(list.iter().any(|r| r.task().is_some_and(|t| t.account == other && t.task.subject == "Zoe's task")), "{list:?}");
+    assert!(list.iter().any(|r| r.task().is_some_and(|t| t.account == "sample")), "the first account's too");
+    done(s);
+}
+
 #[test]
 fn a_task_goes_through_its_life() {
     let mut s = sample_session("tasks-life");

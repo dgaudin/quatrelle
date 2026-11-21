@@ -190,7 +190,7 @@ fn groups(ui: &mut Ui, s: &Session, tokens: &Tokens, w: &quatrelle_engine::Readi
     let r = widgets::big_button(ui, Icon::Tag, "Categorize", &t, on("mail.categorize"));
     egui::Popup::menu(&r).show(|ui| organize::categorize_menu(ui, s, &t, acts));
     let r = widgets::big_button(ui, Icon::Flag, "Follow up", &t, on("mail.flag"));
-    egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts));
+    egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts, None));
     groups.end(ui, &t, "Tags");
 
     if widgets::big_button(ui, Icon::Search, "Find", &t, p.is_some()).on_hover_text(tl!("Find in message")).clicked() {

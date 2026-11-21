@@ -150,6 +150,54 @@ fn people_lay_out_as_a_list_cards_or_a_phone_list() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Flagged mail in the To-Do List: its row (the subject, its due day and the red flag), a
+/// double click opening it, its tick marking the follow-up complete and its right-click menu
+/// with Follow Up and Remove from List.
+#[test]
+fn flagged_mail_shows_in_the_todo_list_and_opens_there() {
+    let (mut a, dir) = app("todo-ui");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let m = (*a.session.list[1]).clone();
+    a.run("list.select", json!({"key": m.key.to_id()}));
+    a.run("mail.flag", json!({"due": "today"}));
+    a.run("view.module", json!({"name": "tasks"}));
+    frame(&ctx, &mut a, vec![]);
+    let row =
+        a.session.todo("", false).into_iter().find(|r| r.mail().is_some_and(|f| f.key == m.key)).expect("the flagged message is in the To-Do List");
+    assert_eq!((row.subject(), row.due()), (m.subject.as_str(), Some(quatrelle_engine::model::dates::today(&a.session.clock))));
+    let at = settled_text_at(&ctx, &mut a, &m.subject, size).expect("the flagged message's row is drawn");
+    // A double click opens it.
+    click_at(&ctx, &mut a, at, 2, size);
+    assert_eq!(a.session.reading.as_ref().map(|r| r.key.clone()), Some(m.key.clone()), "opened from the To-Do List");
+
+    // Its tick (the command the row's tick runs) marks its follow-up complete: out of the
+    // list of what's to do, back with the completed ones.
+    a.run("view.module", json!({"name": "tasks"}));
+    a.act(crate::Action::Run("mail.flag", json!({"key": m.key.to_id(), "complete": true})));
+    assert!(a.session.todo("", false).iter().all(|r| r.uid() != m.key.to_id()), "done: out");
+    a.ui.tasks.completed = true;
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, &m.subject, size).is_some(), "shown with the completed ones");
+
+    // Right-click gives Follow Up and Remove from List; the latter clears the flag.
+    a.run("mail.flag", json!({"key": m.key.to_id(), "on": true})); // flagged again, a fresh flag
+    a.ui.tasks.completed = false;
+    frame(&ctx, &mut a, vec![]);
+    let at = settled_text_at(&ctx, &mut a, &m.subject, size).expect("the flagged row again");
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(at)], size);
+    let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![press(true)], size);
+    frame_sized(&ctx, &mut a, vec![press(false)], size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Remove from List").is_some(), "the row's menu");
+    assert!(text_at(&shapes, "Follow up").is_some());
+    a.act(crate::Action::Run("mail.flag", json!({"key": m.key.to_id(), "on": false})));
+    assert!(a.session.todo("", true).iter().all(|r| r.uid() != m.key.to_id()), "removed from the list");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Tasks: Ctrl+4 opens them; a task typed in the box at the top is added with Enter; the one
 /// picked shows its form beside the list; ticked, it goes (and comes back with the completed
 /// ones); its reminder's Open Item shows it.

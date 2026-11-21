@@ -128,13 +128,18 @@ impl Session {
         if complete {
             return self.complete_selection();
         }
-        let sel = self.selected();
+        self.follow_up_for(&self.selected(), due)
+    }
+
+    /// [`Self::follow_up_selection`] on these messages (the To-Do List's own rows, by key:
+    /// `mail.flag` with `key`).
+    pub fn follow_up_for(&mut self, sel: &[Arc<Summary>], due: Option<i64>) -> CmdResult {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
-        let was = self.follow_up_days_of(&sel);
-        let undo = self.set_flagged(&sel, true);
-        self.set_follow_up_fields(&sel, None, Some(due), None, was, undo);
+        let was = self.follow_up_days_of(sel);
+        let undo = self.set_flagged(sel, true);
+        self.set_follow_up_fields(sel, None, Some(due), None, was, undo);
         Ok(serde_json::json!({ "flagged": true, "due": due.map(quatrelle_model::dates::day_string), "count": sel.len() }))
     }
 
@@ -147,13 +152,23 @@ impl Session {
 
     /// The follow-up fields named (`None`: leave as it is; `Some(None)`: take it off), flagged.
     pub fn follow_up_set(&mut self, start: Option<Option<i64>>, due: Option<Option<i64>>, reminder: Option<Option<i64>>) -> CmdResult {
-        let sel = self.selected();
+        self.follow_up_set_for(&self.selected(), start, due, reminder)
+    }
+
+    /// [`Self::follow_up_set`] on these messages (a row of the To-Do List, by key).
+    pub fn follow_up_set_for(
+        &mut self,
+        sel: &[Arc<Summary>],
+        start: Option<Option<i64>>,
+        due: Option<Option<i64>>,
+        reminder: Option<Option<i64>>,
+    ) -> CmdResult {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
-        let was = self.follow_up_days_of(&sel);
-        let undo = self.set_flagged(&sel, true);
-        self.set_follow_up_fields(&sel, start, due, reminder, was, undo);
+        let was = self.follow_up_days_of(sel);
+        let undo = self.set_flagged(sel, true);
+        self.set_follow_up_fields(sel, start, due, reminder, was, undo);
         Ok(serde_json::json!({
             "flagged": true,
             "start": start.flatten().map(quatrelle_model::dates::day_string),
@@ -166,14 +181,7 @@ impl Session {
     /// Add Reminder… (`Some` a time) or take the selection's reminder off (`None`), keeping its
     /// dates and flagging it.
     pub fn follow_up_set_reminder(&mut self, reminder: Option<i64>) -> CmdResult {
-        let sel = self.selected();
-        if sel.is_empty() {
-            return Err(CmdError::Disabled("no message selected".into()));
-        }
-        let was = self.follow_up_days_of(&sel);
-        let undo = self.set_flagged(&sel, true);
-        self.set_follow_up_fields(&sel, None, None, Some(reminder), was, undo);
-        Ok(serde_json::json!({ "flagged": true, "reminder": reminder, "count": sel.len() }))
+        self.follow_up_set_for(&self.selected(), None, None, Some(reminder))
     }
 
     /// Set the follow-up fields the caller named (outer `None`: leave it as it is; inner `None`:
@@ -264,15 +272,19 @@ impl Session {
     /// [`FOLLOW_UP_COMPLETE`] keyword, and the day it was done kept (as Outlook keeps it). Its
     /// due day stays; Undo puts the flag and both days back as they were, in one step.
     pub fn complete_selection(&mut self) -> CmdResult {
-        let sel = self.selected();
+        self.complete_for(&self.selected())
+    }
+
+    /// [`Self::complete_selection`] on these messages (a row of the To-Do List, by key).
+    pub fn complete_for(&mut self, sel: &[Arc<Summary>]) -> CmdResult {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
-        let was = self.follow_up_days_of(&sel);
+        let was = self.follow_up_days_of(sel);
         let today = quatrelle_model::dates::today(&self.clock);
         let mut flagged: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         let mut marked: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
-        for m in &sel {
+        for m in sel {
             if m.flags.flagged {
                 flagged.entry(m.key.account.clone()).or_default().push(m.key.clone());
             }
@@ -312,10 +324,22 @@ impl Session {
         if !m.flags.flagged {
             return None;
         }
+        self.follow_up_due_any(m)
+    }
+
+    /// When the follow-up is due whether or not it's still flagged: a completed one is still
+    /// due, as the To-Do List shows it.
+    pub fn follow_up_due_any(&self, m: &Summary) -> Option<i64> {
         if m.flags.follow_up.due > 0 {
             return Some(self.clock.local_day(m.flags.follow_up.due));
         }
         self.prefs.follow_up.get(&follow_up_id(m)).copied()
+    }
+
+    /// A kept message by its id ([`MessageKey::to_id`]), as the To-Do List's rows name one.
+    pub fn message_by_id(&self, id: &str) -> Option<Arc<Summary>> {
+        let key = MessageKey::from_id(id)?;
+        self.cache.get(&(key.account.clone(), key.folder.clone()))?.messages.iter().find(|m| m.key == key).cloned()
     }
 
     /// When a flag's follow-up starts: the server's own, else the day kept here.

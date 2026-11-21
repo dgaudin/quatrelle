@@ -313,7 +313,7 @@ impl MailApp {
                         {
                             acts.push(Action::Run("mail.toggleRead", json!({})));
                         }
-                        if widgets::big_button(ui, Icon::Flag, "Flag", &t, enabled("mail.flag"))
+                        if widgets::big_button(ui, Icon::Flag, "Flag", &t, enabled("mail.flag") && !s.selection.is_empty())
                             .on_hover_text(tl!("Flag / Unflag (Insert)"))
                             .clicked()
                         {
@@ -321,7 +321,7 @@ impl MailApp {
                         }
                         // Follow Up: when it's due, as Outlook's flag drop-down.
                         let r = widgets::big_more(ui, "Follow up", &t);
-                        egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts));
+                        egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts, None));
                         let sel = !s.selection.is_empty();
                         let r = widgets::big_button(ui, Icon::Tag, "Categorize", &t, sel);
                         egui::Popup::menu(&r).show(|ui| organize::categorize_menu(ui, s, &t, acts));

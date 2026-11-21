@@ -66,8 +66,15 @@ pub fn snooze_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>)
 }
 
 /// The Follow Up menu, as Outlook's: flag for today, tomorrow, this week, next week or no day
-/// (each with its date), Mark complete, Clear flag.
-pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
+/// (each with its date), Mark complete, Clear flag. `key`: the message a To-Do List row names
+/// (the list's selection when none).
+pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>, key: Option<&str>) {
+    let params = |mut p: serde_json::Value| {
+        if let (Some(k), Some(o)) = (key, p.as_object_mut()) {
+            o.insert("key".into(), json!(k));
+        }
+        p
+    };
     for f in dates::FollowUp::ALL {
         let label = crate::i18n::date(&dates::day_label(f.due(&s.clock)));
         let clicked = ui
@@ -78,12 +85,12 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
             })
             .inner;
         if clicked {
-            acts.push(Action::Run("mail.flag", json!({"due": f.code()})));
+            acts.push(Action::Run("mail.flag", params(json!({"due": f.code()}))));
             ui.close();
         }
     }
     if ui.selectable_label(false, tl!("No date")).clicked() {
-        acts.push(Action::Run("mail.flag", json!({"due": "none"})));
+        acts.push(Action::Run("mail.flag", params(json!({"due": "none"}))));
         ui.close();
     }
     if ui.button(tl!("Custom…")).clicked() {
@@ -95,13 +102,16 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
         ui.close();
     }
     ui.separator();
-    let flagged = s.selected_iter().any(|m| m.flags.flagged);
+    let flagged = match key {
+        Some(k) => s.message_by_id(k).is_some_and(|m| m.flags.flagged),
+        None => s.selected_iter().any(|m| m.flags.flagged),
+    };
     if ui.add_enabled(flagged, egui::Button::new(tl!("Mark complete"))).clicked() {
-        acts.push(Action::Run("mail.flag", json!({"complete": true})));
+        acts.push(Action::Run("mail.flag", params(json!({"complete": true}))));
         ui.close();
     }
     if ui.add_enabled(flagged, egui::Button::new(tl!("Clear flag"))).clicked() {
-        acts.push(Action::Run("mail.flag", json!({"on": false})));
+        acts.push(Action::Run("mail.flag", params(json!({"on": false}))));
         ui.close();
     }
 }

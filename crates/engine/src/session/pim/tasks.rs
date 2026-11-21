@@ -8,6 +8,9 @@ use quatrelle_model::pim::{DavSync, HeldKind, StoredTask, Task, TaskStatus};
 
 use super::*;
 
+mod todo;
+pub use todo::{FlaggedMail, TodoRef};
+
 /// A task with the account it's in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskRef {
