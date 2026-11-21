@@ -263,6 +263,17 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"account": account, "calendar": calendar, "shown": shown}))
         })
         .params(r#"{"account": string, "calendar": string, "shown"?: bool (default: the other way)}"#),
+        CommandSpec::new("calendar.groupFold", "Fold or unfold a calendar group", "Calendar › Calendars", |s, v| {
+            let group = p::req_str(v, "group")?.to_string();
+            let folded = p::bool(v, "folded").unwrap_or(!s.prefs.folded_calendar_groups.contains(&group));
+            if folded {
+                s.prefs.folded_calendar_groups.insert(group.clone());
+            } else {
+                s.prefs.folded_calendar_groups.remove(&group);
+            }
+            Ok(json!({"group": group, "folded": folded}))
+        })
+        .params(r#"{"group": string, "folded"?: bool (default: the other way)} (kept on this computer)"#),
         CommandSpec::new("calendar.sideBySide", "Side by side", "Calendar › View", |s, v| {
             s.prefs.calendars_side_by_side = p::bool(v, "on").unwrap_or(!s.prefs.calendars_side_by_side);
             Ok(json!({"on": s.prefs.calendars_side_by_side}))

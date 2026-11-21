@@ -190,6 +190,7 @@ fn a_removed_calendar_is_listed_and_its_events_never_asked_for() {
     let pim = quatrelle_model::pim::Pim { removed: vec!["CAL2".into(), "SC1".into()], ..Default::default() };
     let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
     assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    assert_eq!(sync.calendar_groups.as_deref(), Some(&["Team".to_string()][..]), "My Calendars isn't a group of its own");
     let listed = sync.calendars.clone().unwrap_or_default();
     assert!(["CAL1", "CAL2", "SC1"].iter().all(|id| listed.iter().any(|x| x.id == *id)), "each listed: {listed:?}");
     for id in ["CAL2", "SC1"] {

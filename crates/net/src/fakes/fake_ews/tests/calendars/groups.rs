@@ -183,6 +183,29 @@ fn a_group_keeps_the_calendars_whose_addresses_resolve() {
     );
 }
 
+/// A group's header names it; the order of the groups is the ordinals' ([MS-OXOCFG] 2.2.9.7).
+#[test]
+fn groups_come_in_the_order_their_headers_give() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let ordinal = |b: u8| crate::imap::base64(&[b]);
+    let season = guid(0x20);
+    let rooms = guid(0x10);
+    d.wlinks = vec![
+        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "CLSID", season.clone()), ("0x684B", "Binary", ordinal(0x20))]),
+        wlink_of(link, 3, 4, "Salles", &[("0x6842", "CLSID", rooms.clone()), ("0x684B", "Binary", ordinal(0x10))]),
+        wlink_of(link, 3, 2, "Ana Lima", &[("0x6850", "CLSID", season), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana"))))]),
+    ];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
+    assert_eq!(shortcuts.groups, ["Salles", "Équipe"], "the smaller ordinal comes first");
+    assert_eq!(shortcuts.links.len(), 1);
+}
+
 /// A group of the account's own calendars: the main one stays in My Calendars, the others are
 /// filed under the group's name as Outlook shows them.
 #[test]
@@ -218,6 +241,7 @@ fn the_accounts_own_calendars_are_filed_under_their_group() {
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
     let sync = crate::ews_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+    assert_eq!(sync.calendar_groups, Some(vec!["Équipe".to_string()]), "My Calendars isn't a group of its own");
     let cals = sync.calendars.clone().unwrap_or_default();
     let main = cals.iter().find(|c| c.main).unwrap_or_else(|| panic!("the main calendar is listed"));
     assert_eq!(main.group, "", "My Calendars is the account's own, not a group");

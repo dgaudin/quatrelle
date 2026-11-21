@@ -371,6 +371,10 @@ pub const MAX_HELD: usize = 200;
 pub struct Pim {
     #[serde(default)]
     pub calendars: Vec<CalendarInfo>,
+    /// The calendar groups the server keeps, in its order (empty: none, or a server without
+    /// them): the pane lists them between My Calendars and Shared Calendars.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calendar_groups: Vec<String>,
     #[serde(default)]
     pub events: Vec<StoredEvent>,
     #[serde(default)]
@@ -486,6 +490,11 @@ pub struct DavSync {
     pub untrusted: Option<String>,
     /// The server's calendars (`None`: no CalDAV).
     pub calendars: Option<Vec<CalendarInfo>>,
+    /// The calendar groups the server keeps, in its order (Exchange's navigation shortcuts,
+    /// Microsoft Graph's `calendarGroups`); `None`: not read (a partial sync), so those kept
+    /// stay. Empty: the server has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calendar_groups: Option<Vec<String>>,
     /// The events of the calendars read in full (`synced_calendars`), except those unchanged
     /// (`kept`, by href).
     pub events: Vec<StoredEvent>,

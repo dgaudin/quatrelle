@@ -22,10 +22,11 @@ pub(crate) struct CalendarLink {
     pub group: String,
 }
 
-/// What the Common Views folder says of the Calendar pane: the calendars kept in groups (the
-/// account's own ones have no address).
+/// What the Common Views folder says of the Calendar pane: its groups in Outlook's order, and the
+/// calendars kept in them (the account's own ones have no address).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Shortcuts {
+    pub groups: Vec<String>,
     pub links: Vec<CalendarLink>,
 }
 
@@ -218,12 +219,12 @@ fn read_shortcuts(c: &Client, views: &str) -> Result<Shortcuts> {
             break;
         }
     }
-    Ok(Shortcuts { links: shape(c, &items, pages) })
+    Ok(shape(c, &items, pages))
 }
 
 /// The shortcuts of a section, grouped and ordered. The counts the log line says are taken from
 /// all of them, the calendar ones only kept.
-fn shape(c: &Client, items: &[El], pages: usize) -> Vec<CalendarLink> {
+fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
     let mut by_section: BTreeMap<(i64, i64), usize> = BTreeMap::new();
     let mut wlinks: Vec<Wlink> = Vec::new();
     for it in items {
@@ -260,6 +261,30 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Vec<CalendarLink> {
     }
     // The ordinals order the shortcuts, lexicographically ([MS-OXOCFG] 2.2.9.7).
     wlinks.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
+    // The groups, in Outlook's order: the headers by their ordinals, then a group a member
+    // names without a header (it may hold only an entry that doesn't resolve).
+    let group_of = |w: &Wlink| w.group_id.as_ref().and_then(|id| headers.get(id)).cloned().unwrap_or_else(|| w.group_name.clone());
+    let mut group_headers: Vec<(String, Vec<u8>)> = wlinks
+        .iter()
+        .filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty())
+        .map(|w| (w.name.clone(), w.ordinal.clone()))
+        .collect();
+    group_headers.sort_by(|a, b| a.1.cmp(&b.1));
+    let mut groups: Vec<String> = Vec::new();
+    for (name, _) in group_headers {
+        if !groups.iter().any(|g| g.eq_ignore_ascii_case(&name)) {
+            groups.push(name);
+        }
+    }
+    for w in &wlinks {
+        if w.section != Some(CALENDAR_SECTION) || !matches!(w.kind, Some(WLINK_OWN | WLINK_SHARED)) {
+            continue;
+        }
+        let group = group_of(w);
+        if !group.is_empty() && !groups.iter().any(|g| g.eq_ignore_ascii_case(&group)) {
+            groups.push(group);
+        }
+    }
     let mut out: Vec<CalendarLink> = Vec::new();
     let mut resolved: HashMap<String, Option<String>> = HashMap::new();
     let (mut found, mut unresolved, mut not_looked) = (0usize, 0usize, 0usize);
@@ -301,7 +326,7 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Vec<CalendarLink> {
             let Some(email) = email.filter(|e| !e.eq_ignore_ascii_case(c.email())) else { continue };
             email
         };
-        let group = w.group_id.as_ref().and_then(|id| headers.get(id)).cloned().unwrap_or_else(|| w.group_name.clone());
+        let group = group_of(w);
         let name = if w.name.is_empty() { email.clone() } else { w.name.clone() };
         let duplicate = if own {
             out.iter().any(|l| l.email.is_empty() && l.name.eq_ignore_ascii_case(&name) && l.group == group)
@@ -318,10 +343,10 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Vec<CalendarLink> {
         items.len(),
         sections(&by_section),
         wlinks.len(),
-        headers.len(),
+        groups.len(),
         out.len(),
     );
-    out
+    Shortcuts { groups, links: out }
 }
 
 /// The section and type counts, as `section/type: n`, for the log line (never a name or an id).

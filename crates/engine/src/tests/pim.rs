@@ -381,6 +381,25 @@ fn dav_results_merge_without_losing_local_changes() {
     done(s2);
 }
 
+/// The calendar groups read from the server are kept in its order; one not read (a partial sync)
+/// leaves them as they were, and an empty list says the server has none.
+#[test]
+fn calendar_groups_follow_the_server_and_stay_when_not_read() {
+    use quatrelle_model::pim::DavSync;
+    let mut s = Session::open(Some(temp("dav-groups")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let read = DavSync { calendar_groups: Some(vec!["Équipe".into(), "Salles".into()]), checked: NOW, ..Default::default() };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(read) });
+    assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"]);
+    // A partial sync (this account's own calendar only) doesn't name the groups: kept.
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(DavSync { checked: NOW + 1, ..Default::default() }) });
+    assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"]);
+    // The server says it has none.
+    let none = DavSync { calendar_groups: Some(Vec::new()), checked: NOW + 2, ..Default::default() };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(none) });
+    assert!(s.pim.get(&id).unwrap().calendar_groups.is_empty());
+    done(s);
+}
 /// Issue #1: a signature goes into the message being written from the message itself.
 #[test]
 fn a_signature_goes_in_from_the_message() {
