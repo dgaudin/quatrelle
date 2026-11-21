@@ -8,6 +8,79 @@ use quatrelle_model::pim::tasks::{DueGroup, due_group_for};
 
 use super::*;
 
+/// A list in the Tasks module's My Tasks pane: the To-Do List (everything), an account's tasks,
+/// the online archive's (read on the server, never changed here), or a shared mailbox's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskList {
+    /// `todo`; an account id; `<account>|archive`; `<account>|mailbox:<address>`.
+    pub id: String,
+    pub name: String,
+    /// The account tasks typed in it go to (none for the To-Do List, which takes the first).
+    pub account: Option<String>,
+    /// Read on the server and never changed here (the online archive).
+    pub read_only: bool,
+    pub archive: bool,
+    /// A shared mailbox's, opened in the account.
+    pub mailbox: Option<String>,
+}
+
+impl Session {
+    /// The My Tasks pane's lists, in Outlook's order: the To-Do List, then each account's tasks
+    /// (with its online archive's read-only list, and those of the shared mailboxes opened in
+    /// it).
+    pub fn task_lists(&self) -> Vec<TaskList> {
+        let mut out = vec![TaskList { id: "todo".into(), name: "To-Do List".into(), account: None, read_only: false, archive: false, mailbox: None }];
+        for a in &self.accounts {
+            let name = if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() };
+            out.push(TaskList { id: a.config.id.clone(), name, account: Some(a.config.id.clone()), read_only: false, archive: false, mailbox: None });
+            if a.config.ews.is_some() {
+                out.push(TaskList {
+                    id: format!("{}|archive", a.config.id),
+                    name: "Online Archive".into(),
+                    account: Some(a.config.id.clone()),
+                    read_only: true,
+                    archive: true,
+                    mailbox: None,
+                });
+            }
+            let mut shared: Vec<&str> = a.folders.iter().filter_map(|f| f.mailbox.as_deref()).collect();
+            shared.sort_unstable();
+            shared.dedup();
+            for mailbox in shared {
+                out.push(TaskList {
+                    id: format!("{}|mailbox:{mailbox}", a.config.id),
+                    name: mailbox.to_string(),
+                    account: Some(a.config.id.clone()),
+                    read_only: false,
+                    archive: false,
+                    mailbox: Some(mailbox.to_string()),
+                });
+            }
+        }
+        out
+    }
+
+    /// The list named by `id`, when it's one of [`Self::task_lists`].
+    pub fn task_list(&self, id: &str) -> Option<TaskList> {
+        self.task_lists().into_iter().find(|l| l.id == id)
+    }
+
+    /// What a list holds: the To-Do List's tasks and flagged mail, or an account's tasks.
+    /// The archive's and a shared mailbox's tasks aren't kept here (the first is read on the
+    /// server and changes refused, the other's sync isn't here yet): those lists are empty.
+    pub fn todo_for(&self, list: &str, query: &str, completed: bool) -> Vec<TodoRef> {
+        let Some(list) = self.task_list(list) else { return Vec::new() };
+        if list.id == "todo" {
+            return self.todo(query, completed);
+        }
+        if list.archive || list.mailbox.is_some() {
+            return Vec::new();
+        }
+        let Some(account) = &list.account else { return Vec::new() };
+        self.tasks(query, completed).into_iter().filter(|t| &t.account == account).map(TodoRef::Task).collect()
+    }
+}
+
 /// A flagged message in the To-Do List: the message, and how its follow-up stands.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FlaggedMail {

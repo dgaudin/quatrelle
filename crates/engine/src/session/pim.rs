@@ -47,7 +47,7 @@ pub(crate) use opened::FromFile;
 pub use opened::{MAX_FILE_CARDS, MAX_FILE_EVENTS};
 pub use people::Person;
 pub use reminders::DueReminder;
-pub use tasks::{FlaggedMail, TaskChange, TaskRef, TodoRef};
+pub use tasks::{FlaggedMail, TaskChange, TaskList, TaskRef, TodoRef};
 pub(crate) use teams::Created;
 pub(crate) use teams::default_settings as default_teams_settings;
 #[cfg(test)]

@@ -196,6 +196,36 @@ fn the_todo_bar_stacks_the_parts_ticked() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The Tasks module's My Tasks pane: the To-Do List, the account's tasks, and (for an Exchange
+/// account) its read-only online archive; a task typed in a list goes to that list's account.
+#[test]
+fn task_lists_choose_where_a_new_task_goes() {
+    let (mut a, dir) = app("task-lists-ui");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.module", json!({"name": "tasks"}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "My Tasks", size).is_some(), "the pane's heading");
+    assert!(settled_text_at(&ctx, &mut a, "To-Do List", size).is_some(), "the To-Do List");
+    // The account's own list: a task typed there goes to it.
+    a.ui.tasks.list = "sample".into();
+    frame(&ctx, &mut a, vec![]);
+    a.ui.tasks.focus_new = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("Call the printer".into())]);
+    frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    let made = a.session.todo_for("sample", "printer", false);
+    assert_eq!(made.len(), 1, "added in the account's list");
+    assert!(made[0].task().is_some_and(|t| t.account == "sample"));
+    // The read-only archive's list shows nothing to type in, and says why.
+    a.ui.tasks.list = "sample|archive".into();
+    frame(&ctx, &mut a, vec![]);
+    // (The sample account has no archive, so the list isn't one: the pane falls back to nothing.)
+    assert!(a.session.task_list("sample|archive").is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Flagged mail in the To-Do List: its row (the subject, its due day and the red flag), a
 /// double click opening it, its tick marking the follow-up complete and its right-click menu
 /// with Follow Up and Remove from List.

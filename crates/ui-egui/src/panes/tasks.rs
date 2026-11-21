@@ -23,6 +23,9 @@ mod form;
 pub struct TasksUi {
     /// The search (from the box at the top of the window).
     pub query: String,
+    /// The My Tasks list shown (`todo`, an account's, its archive, a shared mailbox's): empty is
+    /// the To-Do List.
+    pub list: String,
     /// The task picked (its uid).
     pub selected: Option<String>,
     /// What's typed in the box at the top of the list, and whether it's to get the keyboard
@@ -35,15 +38,39 @@ pub struct TasksUi {
     form: Option<form::Form>,
 }
 
-/// The side pane: New Task, how many are left to do (and late), Show completed tasks.
+/// The My Tasks list Tasks shows (empty: the To-Do List).
+fn list_of(tu: &TasksUi) -> &str {
+    if tu.list.is_empty() { "todo" } else { &tu.list }
+}
+
+/// The side pane: My Tasks (the To-Do List, each account's, its archive and shared mailboxes),
+/// New Task, how many are left to do (and late), Show completed tasks.
 pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, _acts: &mut Vec<Action>) {
     let t = st.tokens;
-    if widgets::accent_button(ui, Icon::Plus, "New task", &t, !s.accounts.is_empty()).clicked() {
+    ui.label(RichText::new(tl!("My Tasks")).font(theme::bold(12.0)).color(t.dim));
+    ui.add_space(2.0);
+    let lists = s.task_lists();
+    let chosen = list_of(&st.tasks).to_string();
+    for list in &lists {
+        let picked = list.id == chosen;
+        let resp = ui.selectable_label(picked, RichText::new(&list.name).color(t.text));
+        if resp.clicked() {
+            st.tasks.list = list.id.clone();
+            st.tasks.selected = None;
+            st.tasks.form = None;
+        }
+        if list.read_only {
+            resp.on_hover_text(tl!("Read-only: this list is read on the server"));
+        }
+    }
+    ui.add_space(8.0);
+    if widgets::accent_button(ui, Icon::Plus, "New task", &t, !s.accounts.is_empty() && !s.task_list(&chosen).is_some_and(|l| l.read_only)).clicked()
+    {
         st.tasks.focus_new = true;
     }
     ui.add_space(8.0);
     let today = dates::today(&s.clock);
-    let open = s.todo("", false);
+    let open = s.todo_for(&chosen, "", false);
     let late = open.iter().filter(|r| !r.is_complete() && r.due().is_some_and(|d| d < today)).count();
     ui.label(RichText::new(tf!("{n} tasks to do", n = open.len())).color(t.faint).small());
     if late > 0 {
@@ -61,7 +88,8 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
         st.tasks.focus_new = true;
     }
     groups.end(ui, &t, "New");
-    let picked = st.tasks.selected.as_deref().and_then(|u| s.find_todo(u, st.tasks.completed));
+    let list = list_of(&st.tasks).to_string();
+    let picked = st.tasks.selected.as_deref().and_then(|u| s.todo_for(&list, "", st.tasks.completed).into_iter().find(|r| r.uid() == u));
     let delete_label = if matches!(picked, Some(TodoRef::Mail(_))) { "Remove from List" } else { "Delete" };
     if widgets::big_button(ui, Icon::Delete, delete_label, &t, picked.is_some()).clicked()
         && let Some(p) = &picked
@@ -103,7 +131,9 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
 pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     let today = dates::today(&s.clock);
-    let list = s.todo(&st.tasks.query, st.tasks.completed);
+    let list_id = list_of(&st.tasks).to_string();
+    let list_ref = s.task_list(&list_id);
+    let list = s.todo_for(&list_id, &st.tasks.query, st.tasks.completed);
     // The one picked went (deleted, or done with the completed ones hidden): none is.
     let picked = st.tasks.selected.as_deref().and_then(|u| list.iter().find(|r| r.uid() == u)).cloned();
     if picked.is_none() {
@@ -119,12 +149,28 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             .frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(16)).stroke(egui::Stroke::new(1.0, t.border)))
             .show(ui, |ui| form::show(s, &mut st.tasks, &t, ui, p, today, acts));
     }
-    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| list_pane(s, &mut st.tasks, &t, ui, &list, today, acts));
+    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
+        list_pane(s, &mut st.tasks, &t, ui, &list, list_ref.as_ref(), today, acts);
+    });
 }
 
 /// The box to type a new task in, then the tasks under their groups' headings.
-fn list_pane(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: &[TodoRef], today: i64, acts: &mut Vec<Action>) {
+fn list_pane(
+    s: &Session,
+    tu: &mut TasksUi,
+    t: &Tokens,
+    ui: &mut Ui,
+    list: &[TodoRef],
+    list_ref: Option<&quatrelle_engine::TaskList>,
+    today: i64,
+    acts: &mut Vec<Action>,
+) {
+    let read_only = list_ref.is_some_and(|l| l.read_only);
     egui::Frame::new().inner_margin(Margin::symmetric(14, 10)).show(ui, |ui| {
+        if read_only {
+            ui.label(RichText::new(tl!("Read-only: this list is read on the server")).color(t.faint).small());
+            return;
+        }
         let r = ui.add_enabled(
             !s.accounts.is_empty(),
             egui::TextEdit::singleline(&mut tu.new_text).hint_text(tl!("Type a new task")).desired_width(f32::INFINITY),
@@ -136,7 +182,11 @@ fn list_pane(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: &[Tod
         if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             let subject = tu.new_text.trim().to_string();
             if !subject.is_empty() {
-                acts.push(Action::Run("task.create", json!({"subject": subject})));
+                let mut p = json!({"subject": subject});
+                if let Some(l) = list_ref {
+                    p["list"] = json!(l.id);
+                }
+                acts.push(Action::Run("task.create", p));
                 tu.new_text.clear();
                 r.request_focus();
             }
@@ -152,7 +202,14 @@ fn list_pane(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: &[Tod
                 icons::paint(ui.painter(), r, Icon::Tasks, t.border);
                 ui.add_space(8.0);
                 let empty = tu.query.trim().is_empty();
-                ui.label(RichText::new(tl!(if empty { "Nothing to do: type a new task above." } else { "No task matches." })).color(t.faint));
+                let text = if read_only {
+                    "Nothing is kept here: this list is read on the server."
+                } else if empty {
+                    "Nothing to do: type a new task above."
+                } else {
+                    "No task matches."
+                };
+                ui.label(RichText::new(tl!(text)).color(t.faint));
             });
         });
         return;

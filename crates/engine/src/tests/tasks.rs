@@ -12,6 +12,46 @@ fn uid_of(r: &Value) -> String {
 }
 
 /// A task made, changed as Outlook changes one, ticked and unticked, listed and deleted.
+/// The My Tasks lists: the To-Do List, each account's tasks, its online archive's (read-only:
+/// every change refused) and the shared mailboxes opened in it; a task typed in a list goes to
+/// its account.
+#[test]
+fn task_lists_are_per_account_with_the_archive_read_only() {
+    let mut s = sample_session("task-lists");
+    let lists = s.task_lists();
+    assert_eq!(lists.first().map(|l| l.id.as_str()), Some("todo"));
+    assert!(lists.iter().any(|l| l.id == "sample" && !l.read_only), "{lists:?}");
+    assert!(!lists.iter().any(|l| l.archive), "no archive on this computer's account");
+    // An Exchange account has its online archive's list, read-only, and a shared mailbox's.
+    s.accounts[0].config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    let shared = quatrelle_model::Folder {
+        account: "sample".into(),
+        path: "Team/Inbox".into(),
+        delimiter: Some('/'),
+        role: quatrelle_model::FolderRole::Inbox,
+        selectable: true,
+        mailbox: Some("team@contoso.example".into()),
+        ..Default::default()
+    };
+    s.accounts[0].folders.push(shared);
+    let lists = s.task_lists();
+    let archive = lists.iter().find(|l| l.archive).expect("the online archive");
+    assert!(archive.read_only && archive.id == "sample|archive" && archive.account.as_deref() == Some("sample"));
+    assert!(lists.iter().any(|l| l.mailbox.as_deref() == Some("team@contoso.example")), "{lists:?}");
+    // Its changes are refused first, as the archive's mail is.
+    let refused = s.run("task.create", &json!({"subject": "Archived", "list": archive.id})).unwrap_err();
+    assert!(refused.to_string().contains("online archive"), "{refused}");
+    // Typed in an account's list: there, and only there.
+    let uid = uid_of(&s.run("task.create", &json!({"subject": "Zoe's task", "list": "sample"})).unwrap());
+    assert!(s.find_task(&uid).unwrap().account == "sample");
+    assert!(s.todo_for("sample", "", false).iter().any(|r| r.task().is_some_and(|t| t.task.uid == uid)));
+    assert!(s.todo_for("todo", "", false).iter().any(|r| r.task().is_some_and(|t| t.task.uid == uid)));
+    assert!(s.todo_for("sample|archive", "", false).is_empty());
+    let listed = s.run("task.lists", &json!({})).unwrap();
+    assert!(listed.as_array().is_some_and(|a| a.iter().any(|l| l["archive"] == true && l["readOnly"] == true)), "{listed}");
+    done(s);
+}
+
 /// The To-Do List: flagged mail beside the tasks, grouped by due day, done with or removed
 /// from the list by its key, and across accounts.
 #[test]
