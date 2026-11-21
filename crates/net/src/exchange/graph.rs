@@ -529,13 +529,20 @@ fn flags(m: &Value) -> Flags {
         _ => false,
     };
     let mut f = Flags::from_imap(names);
+    // A time Graph gives (a `dateTimeTimeZone`), in UTC (asked so: `PREFER`); one in another
+    // zone is left out, as the completion's.
+    let time = |key: &str| {
+        let t = flag?.get(key)?;
+        t.get("timeZone").and_then(Value::as_str).is_none_or(|z| z.eq_ignore_ascii_case("UTC")).then_some(t)?;
+        t.get("dateTime").and_then(Value::as_str).and_then(jmap::utc_date).filter(|t| *t > 0)
+    };
     // When it was done, in UTC (asked so: `PREFER`); a time in another zone is left out.
-    if complete
-        && let Some(done) = flag.and_then(|f| f.get("completedDateTime"))
-        && done.get("timeZone").and_then(Value::as_str).is_none_or(|z| z.eq_ignore_ascii_case("UTC"))
-    {
-        f.completed = done.get("dateTime").and_then(Value::as_str).and_then(jmap::utc_date).filter(|t| *t > 0).unwrap_or(0);
+    if complete {
+        f.completed = time("completedDateTime").unwrap_or(0);
     }
+    // Its follow-up dates (Graph's `message.flag`): no reminder, which Graph has nowhere for.
+    f.follow_up =
+        quatrelle_model::FollowUp { start: time("startDateTime").unwrap_or(0), due: time("dueDateTime").unwrap_or(0), ..Default::default() };
     // Replied to (102, 103 to all, with the keyword that says so) or forwarded (104), the last of
     // them, and when, read as EWS reads them.
     let prop = |tag: &str| extended(m, tag);
@@ -561,6 +568,21 @@ fn flag_patch(op: &Op) -> Option<Value> {
         Op::SetFlag { flag: Flag::Flagged, on, .. } => Some(json!({"flag": {"flagStatus": if *on { "flagged" } else { "notFlagged" }}})),
         Op::SetKeyword { keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
             Some(json!({"flag": {"flagStatus": if *on { "complete" } else { "notFlagged" }}}))
+        }
+        // Its follow-up dates (Graph's `message.flag.startDateTime`/`dueDateTime`, in UTC): a
+        // date taken off is nulled. Graph has no reminder on a flag.
+        Op::SetFollowUp { start, due, .. } => {
+            let time = |t: Option<i64>| match t {
+                Some(t) => json!({"dateTime": utc(t).trim_end_matches('Z'), "timeZone": "UTC"}),
+                None => Value::Null,
+            };
+            let mut flag = json!({"startDateTime": time(*start), "dueDateTime": time(*due)});
+            // Its dates with the flag still on: it stays flagged (clearing them all leaves the
+            // flag as it was).
+            if start.is_some() || due.is_some() {
+                flag["flagStatus"] = json!("flagged");
+            }
+            Some(json!({ "flag": flag }))
         }
         // Replied to or forwarded here: the original marked as Outlook marks it (as over EWS:
         // `crate::ews` says where the values come from). Taken off, nothing: the next one

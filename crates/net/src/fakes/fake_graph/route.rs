@@ -287,6 +287,20 @@ impl Data {
                         m.flagged = f == "flagged";
                         // Exchange notes when it was done (here, a fixed time).
                         m.complete = (f == "complete").then(|| "2026-11-05T10:00:00.0000000".to_string());
+                        if f == "notFlagged" {
+                            m.start = None;
+                            m.due = None;
+                        }
+                    }
+                    // Its follow-up dates: a time given, or null for none.
+                    for (key, field) in [("startDateTime", &mut m.start), ("dueDateTime", &mut m.due)] {
+                        match &input["flag"][key] {
+                            Value::Null => *field = None,
+                            Value::Object(_) => {
+                                *field = input["flag"][key]["dateTime"].as_str().map(str::to_string);
+                            }
+                            _ => {}
+                        }
                     }
                     if let Some(subject) = input["subject"].as_str() {
                         let text = String::from_utf8_lossy(&m.raw).into_owned();

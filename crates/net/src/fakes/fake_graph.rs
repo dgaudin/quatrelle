@@ -33,6 +33,10 @@ pub struct Msg {
     /// Its follow-up marked complete (`flagStatus` "complete"), and when (`completedDateTime`'s
     /// `dateTime`, in UTC; empty: not said).
     pub complete: Option<String>,
+    /// Its follow-up's start and due dates (`flag.startDateTime`, `flag.dueDateTime`), in UTC.
+    /// Graph has no reminder on a flag.
+    pub start: Option<String>,
+    pub due: Option<String>,
     /// The last thing done with it, as Exchange keeps it: `PidTagLastVerbExecuted` (`Integer
     /// 0x1081`), `PidTagLastVerbExecutionTime` (`SystemTime 0x1082`), `PidTagIconIndex`
     /// (`Integer 0x1080`); given only when asked for (`$expand`).
@@ -194,6 +198,8 @@ impl Data {
             read,
             flagged: false,
             complete: None,
+            start: None,
+            due: None,
             verb: None,
             verb_time: None,
             icon: None,
@@ -232,14 +238,22 @@ impl Data {
     fn message_json(&self, m: &Msg) -> Value {
         let p = quatrelle_mime::parse(&m.raw);
         let addr = |a: &quatrelle_model::EmailAddress| json!({"emailAddress": {"name": a.name, "address": a.email}});
+        let mut flag = match (&m.complete, m.flagged) {
+            (_, true) => json!({"flagStatus": "flagged"}),
+            (Some(t), false) if !t.is_empty() => json!({"flagStatus": "complete", "completedDateTime": {"dateTime": t, "timeZone": "UTC"}}),
+            (Some(_), false) => json!({"flagStatus": "complete"}),
+            (None, false) => json!({"flagStatus": "notFlagged"}),
+        };
+        // Its dates, when it has them; null is what Graph says for none.
+        let time = |t: &Option<String>| match t {
+            Some(t) if !t.is_empty() => json!({"dateTime": t, "timeZone": "UTC"}),
+            _ => Value::Null,
+        };
+        flag["startDateTime"] = time(&m.start);
+        flag["dueDateTime"] = time(&m.due);
         let mut v = json!({
             "id": if self.asked_immutable { m.id.clone() } else { format!("{REGULAR}{}", m.id) }, "parentFolderId": m.folder, "isRead": m.read, "isDraft": m.draft,
-            "flag": match (&m.complete, m.flagged) {
-                (_, true) => json!({"flagStatus": "flagged"}),
-                (Some(t), false) if !t.is_empty() => json!({"flagStatus": "complete", "completedDateTime": {"dateTime": t, "timeZone": "UTC"}}),
-                (Some(_), false) => json!({"flagStatus": "complete"}),
-                (None, false) => json!({"flagStatus": "notFlagged"}),
-            },
+            "flag": flag,
             "subject": p.as_ref().map(|p| p.subject.clone()),
             "from": p.as_ref().map(|p| addr(&p.from)),
             "toRecipients": p.as_ref().map(|p| p.to.iter().map(addr).collect::<Vec<_>>()),

@@ -2482,3 +2482,9 @@ presence	Offline	غير متصل
 	Maximize	تكبير
 	Use the system title bar	استخدام شريط عنوان النظام
 	Applies when Quatrelle starts again	يسري عند بدء تشغيل Quatrelle مرة أخرى
+	Custom Follow Up	متابعة مخصصة
+	Add Reminder	إضافة تذكير
+	Custom…	مخصص…
+	Add Reminder…	إضافة تذكير…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	التذكير هو يوم (YYYY-MM-DD) ووقت (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	«{name}» هو يوم، YYYY-MM-DD

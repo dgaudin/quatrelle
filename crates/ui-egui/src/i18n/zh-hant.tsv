@@ -2489,3 +2489,9 @@ presence	Offline	離線
 	Maximize	最大化
 	Use the system title bar	使用系統標題列
 	Applies when Quatrelle starts again	於 Quatrelle 下次啟動時生效
+	Custom Follow Up	自訂後續旗標
+	Add Reminder	新增提醒
+	Custom…	自訂…
+	Add Reminder…	新增提醒…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	提醒是一個日期 (YYYY-MM-DD) 和時間 (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	「{name}」是一個日期，YYYY-MM-DD

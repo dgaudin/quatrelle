@@ -163,9 +163,18 @@ pub struct Prefs {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pane_order: Vec<String>,
     /// When flagged messages are due (Follow Up › Today, Tomorrow…): Message-ID → local day.
-    /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts.
+    /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts; a
+    /// server that keeps it (Exchange, Graph) wins over it (`Session::follow_up_due`).
     #[serde(default, deserialize_with = "checked_days")]
     pub follow_up: BTreeMap<String, i64>,
+    /// When a follow-up starts: Message-ID → local day. Kept here where the server has nowhere
+    /// for it, as the due day is; Exchange's own wins.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_days")]
+    pub follow_up_start: BTreeMap<String, i64>,
+    /// When a follow-up's reminder rings: Message-ID → Unix seconds. Exchange keeps it on the
+    /// item and its own wins; Graph has no reminder on a flag, so it stays here.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_days")]
+    pub follow_up_reminder: BTreeMap<String, i64>,
     /// When follow-ups were marked complete (Follow Up › Mark Complete): Message-ID → local day.
     /// The mark itself is the message's [`FOLLOW_UP_COMPLETE`](quatrelle_model::FOLLOW_UP_COMPLETE)
     /// keyword; Exchange keeps the day too, and its own wins (`Session::follow_up_done`).
@@ -343,6 +352,8 @@ impl Default for Prefs {
             work_offline: false,
             ignored: BTreeSet::new(),
             follow_up: BTreeMap::new(),
+            follow_up_start: BTreeMap::new(),
+            follow_up_reminder: BTreeMap::new(),
             follow_up_done: BTreeMap::new(),
             reminders: BTreeMap::new(),
             search_folders: Vec::new(),

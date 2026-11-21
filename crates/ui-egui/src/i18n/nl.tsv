@@ -2483,3 +2483,9 @@ presence	Offline	Offline
 	Maximize	Maximaliseren
 	Use the system title bar	De titelbalk van het systeem gebruiken
 	Applies when Quatrelle starts again	Geldt bij de volgende start van Quatrelle
+	Custom Follow Up	Aangepaste follow-up
+	Add Reminder	Herinnering toevoegen
+	Custom…	Aangepast…
+	Add Reminder…	Herinnering toevoegen…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	De herinnering is een dag (YYYY-MM-DD) en een tijd (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	'{name}' is een dag, YYYY-MM-DD

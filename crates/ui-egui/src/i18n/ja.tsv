@@ -2483,3 +2483,9 @@ presence	Offline	オフライン
 	Maximize	最大化
 	Use the system title bar	システムのタイトルバーを使う
 	Applies when Quatrelle starts again	次回 Quatrelle を起動したときに反映されます
+	Custom Follow Up	カスタム フォローアップ
+	Add Reminder	リマインダーの追加
+	Custom…	カスタム…
+	Add Reminder…	リマインダーの追加…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	リマインダーは日付 (YYYY-MM-DD) と時刻 (HH:MM) です
+	`{name}` is a day, YYYY-MM-DD	「{name}」は日付です (YYYY-MM-DD)

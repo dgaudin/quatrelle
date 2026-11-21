@@ -272,6 +272,31 @@ impl MessageKey {
     }
 }
 
+/// A follow-up's start and due days, its reminder and its title, as Exchange and Graph keep
+/// them (MS-OXOFLAG 2.2.1: `PidLidTaskStartDate`, `PidLidTaskDueDate`, `PidLidReminderSet`,
+/// `PidLidReminderTime` and `PidLidReminderSignalTime`, and `PidLidFlagRequest` the title).
+/// Unix seconds; 0 when the server says none. A server that keeps no follow-up dates (IMAP,
+/// JMAP, POP) leaves all of it 0, and the preferences hold them instead.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FollowUp {
+    #[serde(default, skip_serializing_if = "is_zero_time")]
+    pub start: i64,
+    #[serde(default, skip_serializing_if = "is_zero_time")]
+    pub due: i64,
+    /// When the reminder rings (Exchange's signal time, else its reminder time).
+    #[serde(default, skip_serializing_if = "is_zero_time")]
+    pub reminder: i64,
+    /// What the follow-up asks for (`Follow up`, or a title Outlook wrote).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+}
+
+impl FollowUp {
+    pub fn is_none(&self) -> bool {
+        self.start == 0 && self.due == 0 && self.reminder == 0 && self.title.is_empty()
+    }
+}
+
 /// System flags (RFC 3501 §2.3.2). Keywords other than these are kept as strings.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Flags {
@@ -291,6 +316,11 @@ pub struct Flags {
     /// Other keywords (RFC 3501 §2.3.2): categories (`$label1`, `work`…), `$Pinned`, `$Junk`…
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
+    /// The follow-up's start and due days and its reminder, as the server keeps them
+    /// ([`FollowUp`]); what a server that has nowhere for them (IMAP, POP) leaves out is kept
+    /// in the preferences instead.
+    #[serde(default, skip_serializing_if = "FollowUp::is_none")]
+    pub follow_up: FollowUp,
     /// When the server says its follow-up was marked complete (Unix seconds; 0: not said):
     /// Exchange keeps the time (`PidTagFlagCompleteTime`, Graph's `completedDateTime`); IMAP and
     /// JMAP have nowhere for it, and the day is kept in the preferences. Setting or taking off

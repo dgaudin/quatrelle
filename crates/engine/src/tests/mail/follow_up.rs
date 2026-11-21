@@ -149,6 +149,68 @@ fn a_flag_set_again_elsewhere_wins_over_a_stale_complete_mark() {
     done(s);
 }
 
+/// Follow Up › Custom… sets a start day, a due day and a reminder; the reminder rings in the
+/// reminders list with the message to open, and is dismissed or snoozed as an appointment's.
+#[test]
+fn a_flag_s_reminder_rings_and_is_dismissed_or_snoozed() {
+    let mut s = sample_session("follow-up-reminder");
+    let k = key_of(&s, "Character turnarounds");
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    let start = quatrelle_model::dates::days_from_civil(2026, 11, 20);
+    let now = s.clock.now;
+    s.run("list.select", &k).unwrap();
+    let r = s.run("mail.flag", &json!({"start": "2026-11-20", "due": "2026-12-01", "reminder": now - 60})).unwrap();
+    assert_eq!(r["flagged"], true);
+    let m = turnaround(&s);
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    assert_eq!((s.follow_up_start(&m), s.follow_up_due(&m), s.follow_up_reminder(&m)), (Some(start), Some(day), Some(now - 60)));
+
+    // Due: listed with the message to open.
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("the flag's reminder is due");
+    assert_eq!(due.summary, m.subject);
+    assert!(!due.task);
+    s.run("reminders.dismiss", &json!({"key": due.key})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "dismissed");
+
+    // Set again: it rings again (a dismissal doesn't outlive a new reminder), and a snooze
+    // waits.
+    s.run("mail.flag", &json!({"reminder": now - 30})).unwrap();
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("set anew, due again");
+    s.run("reminders.snooze", &json!({"key": due.key, "minutes": 5})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "snoozed");
+    assert!(s.due_reminders(now + 301).iter().any(|r| r.message.as_ref() == Some(&m.key)), "back after the snooze");
+
+    // Add Reminder… takes it off (`false`), and the flag stays.
+    s.run("mail.flag", &json!({"reminder": false})).unwrap();
+    let m = turnaround(&s);
+    assert_eq!(s.follow_up_reminder(&m), None);
+    assert!(m.flags.flagged);
+    done(s);
+}
+
+/// What Exchange keeps wins over what's kept here: its start, due day and reminder are the
+/// follow-up's, the preferences only the fallback for what it doesn't have.
+#[test]
+fn the_server_s_follow_up_dates_win_over_the_preferences() {
+    let mut s = sample_session("follow-up-server-wins");
+    let mut m = turnaround(&s);
+    let id = id(&m);
+    let day = |y, mo, d| quatrelle_model::dates::days_from_civil(y, mo, d);
+    let server_due = s.clock.midnight(day(2026, 12, 3));
+    m.flags.flagged = true;
+    m.flags.follow_up.start = s.clock.midnight(day(2026, 11, 30));
+    m.flags.follow_up.due = s.clock.midnight(day(2026, 12, 3));
+    m.flags.follow_up.reminder = s.clock.now + 3600;
+    s.prefs.follow_up_start.insert(id.clone(), day(2020, 1, 1));
+    s.prefs.follow_up.insert(id.clone(), day(2020, 1, 2));
+    s.prefs.follow_up_reminder.insert(id, s.clock.now + 60);
+    assert_eq!(s.follow_up_start(&m), Some(day(2026, 11, 30)));
+    assert_eq!(s.follow_up_due(&m), Some(day(2026, 12, 3)));
+    assert_eq!(s.follow_up_reminder(&m), Some(s.clock.now + 3600));
+    assert_eq!(m.flags.follow_up.due, server_due, "a moment at that day's midnight");
+    done(s);
+}
+
 /// The days kept in the preferences come from disk: what isn't a day (out of range, as a
 /// damaged or hostile file has it, a key too long or empty) is left out as they're read, so
 /// the reading pane never labels it.

@@ -233,7 +233,7 @@ async fn remote(sh: &Rcs, id: &str, op: Op) {
                 Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } => {
                     relist(sh, id).await;
                 }
-                Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
+                Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::SetFollowUp { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
                 // Refused by JMAP: never here.
                 Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {}
             }

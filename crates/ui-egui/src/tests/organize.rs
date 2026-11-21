@@ -12,6 +12,54 @@ use crate::dialogs::{RuleCond, RuleTest, rule_field};
 use crate::look::people_field::{Piece, input_id};
 
 #[test]
+fn the_follow_up_dialog_sets_start_due_and_reminder() {
+    let (mut a, dir) = app("follow-up-dialog");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list[1].key.clone();
+    a.run("list.select", json!({"key": k.to_id()}));
+    // Follow Up › Custom…: the form as the message's follow-up has it (none, here).
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true);
+    assert!(f.start.is_empty() && f.due.is_empty() && !f.remind, "{f:?}");
+    // Drawn, then filled in as typed.
+    a.ui.dialog = Some(Dialog::FollowUp(Box::new(f.clone())));
+    frame(&ctx, &mut a, vec![]);
+    f.start = "2026-11-20".into();
+    f.due = "2026-12-01".into();
+    f.remind = true;
+    f.remind_day = "2026-12-01".into();
+    f.remind_time = "09:30".into();
+    assert_eq!(f.check(), None);
+    a.act(crate::Action::Run("mail.flag", f.params()));
+    let m = a.session.list.iter().find(|m| m.key == k).cloned().unwrap();
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    let day = |y, mo, d| quatrelle_engine::model::dates::days_from_civil(y, mo, d);
+    assert_eq!(a.session.follow_up_start(&m), Some(day(2026, 11, 20)));
+    assert_eq!(a.session.follow_up_due(&m), Some(day(2026, 12, 1)));
+    assert!(a.session.follow_up_reminder(&m).is_some());
+
+    // What isn't a day or a time is said, and nothing is set.
+    let mut bad = crate::dialogs::FollowUpForm::of(&a.session, true);
+    bad.start = "20/11/2026".into();
+    assert!(bad.check().is_some(), "not a day");
+    bad.start = "2026-11-20".into();
+    bad.remind = true;
+    bad.remind_day = "2026-12-01".into();
+    bad.remind_time = "9:30".into();
+    assert!(bad.check().is_some(), "not a time");
+
+    // Add Reminder… alone: the dates stay as they are.
+    let mut r = crate::dialogs::FollowUpForm::of(&a.session, false);
+    assert!(!r.dates && r.remind);
+    r.remind_time = "10:15".into();
+    a.act(crate::Action::Run("mail.flag", r.params()));
+    let m = a.session.list.iter().find(|m| m.key == k).cloned().unwrap();
+    assert_eq!(a.session.follow_up_start(&m), Some(day(2026, 11, 20)), "the start is kept");
+    assert_eq!(a.session.follow_up_due(&m), Some(day(2026, 12, 1)), "the due day is kept");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn organising_renders_and_rules_save() {
     let (mut a, dir) = app("organise");
     let ctx = egui::Context::default();

@@ -44,6 +44,9 @@ impl Session {
                 keyword.eq_ignore_ascii_case(PINNED),
                 false,
             ),
+            // A follow-up's dates and reminder: the row shows them, the filter and the
+            // arrangement leave them alone.
+            Op::SetFollowUp { keys, .. } => (keys, false, false, false, false),
             _ => return false,
         };
         if self.search.is_some() || self.view == View::Outbox || !self.nav_fresh() {

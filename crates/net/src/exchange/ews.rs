@@ -550,6 +550,12 @@ const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x1082\" PropertyType=\"SystemTime\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33028\" PropertyType=\"SystemTime\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33029\" PropertyType=\"SystemTime\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34051\" PropertyType=\"Boolean\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34050\" PropertyType=\"SystemTime\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34144\" PropertyType=\"SystemTime\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34096\" PropertyType=\"String\"/>\
 <t:FieldURI FieldURI=\"item:Categories\"/>";
 /// Most categories taken from one item.
 const ITEM_CATEGORIES: usize = 50;
@@ -616,6 +622,34 @@ fn extended_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
     it.children("ExtendedProperty")
         .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| is_tag(t, tag)))
         .and_then(|p| p.text_of("Value"))
+}
+
+/// The values of a named property of Exchange's own property sets (PSETID_Task, PSETID_Common),
+/// by its `PropertyId` ([MS-OXPROPS] 1.3.2). Exchange may answer with the set's distinguished
+/// name (`Task`, `Common`) or its GUID, so both count.
+fn extended_lid<'a>(it: &'a El, set: &str, id: u32) -> Option<&'a str> {
+    let guid = match set {
+        "Task" => "00062003-0000-0000-C000-000000000046",
+        "Common" => "00062008-0000-0000-C000-000000000046",
+        _ => return None,
+    };
+    let id = id.to_string();
+    it.children("ExtendedProperty")
+        .find(|p| {
+            p.child("ExtendedFieldURI").is_some_and(|u| {
+                let this = u.attr("PropertyId").map(str::trim) == Some(id.as_str());
+                this && (u.attr("DistinguishedPropertySetId").is_some_and(|s| s.trim().eq_ignore_ascii_case(set))
+                    || u.attr("PropertySetId").is_some_and(|s| s.trim().eq_ignore_ascii_case(guid)))
+            })
+        })
+        .and_then(|p| p.text_of("Value"))
+}
+
+/// A `SystemTime` property as Unix seconds: one that isn't a time, before 1970 or past MAPI's
+/// "none" (4501) is none, as a follow-up date that isn't one is ignored.
+fn lid_time(it: &El, set: &str, id: u32) -> i64 {
+    let none = quatrelle_model::dates::days_from_civil(4501, 1, 1).saturating_mul(86_400);
+    extended_lid(it, set, id).and_then(jmap::utc_date).filter(|t| *t > 0 && *t < none).unwrap_or(0)
 }
 
 /// An extended property's text, named as Quatrelle's own are: by its property set (a GUID, in

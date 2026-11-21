@@ -35,6 +35,21 @@ pub(super) fn flags(it: &El) -> Flags {
         keywords.push(quatrelle_model::REPLIED_ALL.to_string());
         keywords.sort_by_key(|k| k.to_ascii_lowercase());
     }
+    // Its follow-up dates and reminder, when Outlook or Quatrelle set them ([MS-OXOFLAG]
+    // 2.2.1): the signal time is when it rings, the reminder time the day it is due, either
+    // being the one time Quatrelle keeps.
+    let reminder = (extended_lid(it, "Common", 34051).is_some_and(|v| v.trim().eq_ignore_ascii_case("true")))
+        .then(|| {
+            let signal = lid_time(it, "Common", 34144);
+            if signal > 0 { signal } else { lid_time(it, "Common", 34050) }
+        })
+        .filter(|t| *t > 0);
+    let follow_up = quatrelle_model::FollowUp {
+        start: lid_time(it, "Task", 33028),
+        due: lid_time(it, "Task", 33029),
+        reminder: reminder.unwrap_or(0),
+        title: extended_lid(it, "Common", 34096).unwrap_or_default().trim().chars().take(255).collect(),
+    };
     Flags {
         seen: it.text_of("IsRead").is_some_and(|v| v == "true"),
         flagged: status == Some(2),
@@ -42,6 +57,7 @@ pub(super) fn flags(it: &El) -> Flags {
         forwarded,
         draft: extended(it, "0x0E07").is_some_and(|f| f & 8 != 0),
         keywords,
+        follow_up,
         completed,
         acted,
         ..Default::default()
@@ -100,6 +116,8 @@ pub(super) fn take_marks(m: &mut Flags, server: &Flags) -> bool {
         next.set_keyword(k, true);
     }
     next.completed = server.completed;
+    // The server's follow-up wins, as the rest of its marks do: a date it doesn't have is none.
+    next.follow_up = server.follow_up.clone();
     if server.answered || server.forwarded {
         next.answered = server.answered;
         next.forwarded = server.forwarded;

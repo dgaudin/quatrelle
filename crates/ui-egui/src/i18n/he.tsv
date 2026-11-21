@@ -2482,3 +2482,9 @@ presence	Offline	לא מחובר
 	Maximize	הגדלה
 	Use the system title bar	שימוש בשורת הכותרת של המערכת
 	Applies when Quatrelle starts again	יחול בהפעלה הבאה של Quatrelle
+	Custom Follow Up	מעקב מותאם אישית
+	Add Reminder	הוספת תזכורת
+	Custom…	מותאם אישית…
+	Add Reminder…	הוספת תזכורת…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	התזכורת היא יום (YYYY-MM-DD) ושעה (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	"{name}" הוא יום, YYYY-MM-DD

@@ -23,6 +23,8 @@ pub struct DueReminder {
     pub due: i64,
     /// A task's (`uid` names the task; `start` is the day it's due, or its reminder's time).
     pub task: bool,
+    /// A flagged message's reminder: the message to open.
+    pub message: Option<MessageKey>,
 }
 
 /// How long after an event has ended its reminder still waits to be answered.
@@ -97,6 +99,7 @@ impl Session {
                         all_day: e.all_day,
                         due,
                         task: false,
+                        message: None,
                     });
                 }
             }
@@ -131,6 +134,41 @@ impl Session {
                     all_day,
                     due,
                     task: true,
+                    message: None,
+                });
+            }
+        }
+        // A flagged message's reminder, as the server or this computer keeps it (MS-OXOFLAG
+        // 2.2.1): its title (else its subject) and the folder it's in. Not one done or no longer
+        // flagged; dismissed and snoozed as the others (`reminders.dismiss`, `.snooze`).
+        for ((account, folder), st) in &self.cache {
+            if self.account(account).is_none() {
+                continue;
+            }
+            for m in st.messages.iter().filter(|m| m.flags.flagged && !m.flags.follow_up_complete()) {
+                let Some(at) = self.follow_up_reminder(m).filter(|t| *t > 0) else { continue };
+                let key = format!("{account}|mail|{}", m.key.to_id());
+                let due = match self.prefs.reminders.get(&key) {
+                    Some(0) => continue,
+                    Some(until) => *until,
+                    None => at,
+                };
+                if due > now {
+                    continue;
+                }
+                out.push(DueReminder {
+                    key,
+                    account: account.clone(),
+                    uid: m.message_id.clone(),
+                    occurrence: at,
+                    summary: self.follow_up_title(m).map(str::to_string).unwrap_or_else(|| m.subject.clone()),
+                    location: folder.clone(),
+                    start: at,
+                    end: at,
+                    all_day: false,
+                    due,
+                    task: false,
+                    message: Some(m.key.clone()),
                 });
             }
         }

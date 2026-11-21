@@ -67,6 +67,69 @@ fn a_follow_up_marked_complete_goes_both_ways() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A follow-up's start and due dates, as Graph keeps them (`message.flag.startDateTime`,
+/// `dueDateTime`), read and written; Graph has no reminder on a flag, so none is sent.
+#[test]
+fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"));
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for m in d.messages.iter_mut().filter(|m| m.id == id) {
+        m.flagged = true;
+        m.start = Some("2026-11-02T00:00:00.0000000".into());
+        m.due = Some("2026-11-06T00:00:00.0000000".into());
+    }
+    let server = serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-graph-follow-up-dates-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let mut st = crate::jmap::State::default();
+    crate::graph::list_folders(&c, &mut st, "a1", &[]).unwrap();
+    let opts = crate::sync::SyncOptions { prefetch: 0, ..Default::default() };
+    let at = |text: &str| crate::jmap::utc_date(text).unwrap();
+
+    // As Outlook set it.
+    crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert_eq!(
+        (m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder),
+        (at("2026-11-02T00:00:00Z"), at("2026-11-06T00:00:00Z"), 0),
+        "{:?}",
+        m.flags.follow_up
+    );
+
+    // Set here: Graph gets both, and no reminder (it has nowhere for one).
+    let start = at("2026-12-01T00:00:00Z");
+    let due = at("2026-12-04T00:00:00Z");
+    let keys = vec![m.key];
+    crate::graph::apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys: keys.clone(), start: Some(start), due: Some(due), reminder: Some(at("2026-12-04T08:30:00Z")) },
+    )
+    .unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let m = d.message(&id).unwrap();
+        assert_eq!(
+            (m.start.as_deref().and_then(crate::jmap::utc_date), m.due.as_deref().and_then(crate::jmap::utc_date)),
+            (Some(start), Some(due)),
+            "{m:?}"
+        );
+    }
+    crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder), (start, due, 0), "{:?}", m.flags.follow_up);
+
+    // Taken off here: Graph has none.
+    crate::graph::apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: None }).unwrap();
+    let d = server.data.lock().unwrap();
+    let m = d.message(&id).unwrap();
+    assert!(m.start.is_none() && m.due.is_none(), "{m:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Marked complete in Outlook before this version read Graph's `complete`: Graph lists every
 /// kept message's flag at each sync, so the next ordinary sync ticks it, with no pass of its own.
 #[test]

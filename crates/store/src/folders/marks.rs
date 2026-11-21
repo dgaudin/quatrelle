@@ -59,6 +59,11 @@ impl Store {
                 match op {
                     Op::SetFlag { flag, on, all, .. } => flag.apply(flags, *on, *all),
                     Op::SetKeyword { keyword, on, name, .. } => flags.set_category(keyword, name.as_deref(), *on),
+                    Op::SetFollowUp { start, due, reminder, .. } => {
+                        flags.follow_up.start = start.unwrap_or(0);
+                        flags.follow_up.due = due.unwrap_or(0);
+                        flags.follow_up.reminder = reminder.unwrap_or(0);
+                    }
                     _ => {}
                 }
             }

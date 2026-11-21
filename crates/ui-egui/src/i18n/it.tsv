@@ -2485,3 +2485,9 @@ presence	Offline	Offline
 	Maximize	Ingrandisci
 	Use the system title bar	Usa la barra del titolo del sistema
 	Applies when Quatrelle starts again	Si applica al prossimo avvio di Quatrelle
+	Custom Follow Up	Follow-up personalizzato
+	Add Reminder	Aggiungi promemoria
+	Custom…	Personalizzato…
+	Add Reminder…	Aggiungi promemoria…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Il promemoria è un giorno (YYYY-MM-DD) e un'ora (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	"{name}" è un giorno, YYYY-MM-DD

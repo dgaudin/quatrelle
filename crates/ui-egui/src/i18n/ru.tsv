@@ -2487,3 +2487,9 @@ presence	Offline	Не в сети
 	Maximize	Развернуть
 	Use the system title bar	Использовать системную строку заголовка
 	Applies when Quatrelle starts again	Применится при следующем запуске Quatrelle
+	Custom Follow Up	Настраиваемое отслеживание
+	Add Reminder	Добавить напоминание
+	Custom…	Настроить…
+	Add Reminder…	Добавить напоминание…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Напоминание — это день (YYYY-MM-DD) и время (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	«{name}» — это день, YYYY-MM-DD

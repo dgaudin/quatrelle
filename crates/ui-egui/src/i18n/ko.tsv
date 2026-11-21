@@ -2485,3 +2485,9 @@ presence	Offline	오프라인
 	Maximize	최대화
 	Use the system title bar	시스템 제목 표시줄 사용
 	Applies when Quatrelle starts again	Quatrelle을 다시 시작할 때 적용됩니다
+	Custom Follow Up	사용자 지정 후속 조치
+	Add Reminder	미리 알림 추가
+	Custom…	사용자 지정…
+	Add Reminder…	미리 알림 추가…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	미리 알림은 날짜(YYYY-MM-DD)와 시간(HH:MM)입니다
+	`{name}` is a day, YYYY-MM-DD	'{name}'은(는) 날짜입니다(YYYY-MM-DD)

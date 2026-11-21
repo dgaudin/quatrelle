@@ -98,6 +98,9 @@ pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, o
         Op::EmptyFolder { path } => c.empty(path),
         // An archive policy is Exchange's.
         Op::SetArchiveTag { .. } => Ok(()),
+        // IMAP has nowhere for a follow-up's dates and reminder: the engine keeps them in the
+        // preferences, nothing is written on the server.
+        Op::SetFollowUp { .. } => Ok(()),
         // IMAP keeps no calendars (the engine never asks): refused, the change goes.
         Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => Err(NetError::No(crate::CALENDARS_NOT_HERE.into())),
     }

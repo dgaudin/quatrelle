@@ -100,7 +100,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("mail.toggleRead", "Read / Unread", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, None)).when(has_selection),
         CommandSpec::new("mail.flag", "Flag / Unflag", "Home › Tags", flag)
             .key("Insert")
-            .params(r#"{"on"?: bool, "due"?: "today"|"tomorrow"|"thisWeek"|"nextWeek"|"none"|"YYYY-MM-DD" (Follow Up: flag, due then), "complete"?: true (Mark Complete: unflag, mark it done today; flagging again or "on": false clears that)}"#)
+            .params(r#"{"on"?: bool, "due"?: "today"|"tomorrow"|"thisWeek"|"nextWeek"|"none"|"YYYY-MM-DD" (Follow Up: flag, due then), "start"?: "YYYY-MM-DD"|"none" (the follow-up's start), "reminder"?: "YYYY-MM-DDTHH:MM"|unix seconds|false|"none" (when it rings), "complete"?: true (Mark Complete: unflag, mark it done today; flagging again or "on": false clears that)}"#)
             .when(has_selection),
         CommandSpec::new("mail.markAllRead", "Mark all as read", "Folder", mark_all_read).when(has_account),
         CommandSpec::new("mail.categorize", "Categorize", "Home › Tags", |s, v| s.categorize_selection(p::req_str(v, "category")?, p::bool(v, "on")))
@@ -261,21 +261,41 @@ pub(super) fn flag(s: &mut Session, v: &Value) -> CmdResult {
     if p::bool(v, "complete") == Some(true) {
         return s.follow_up_selection(None, true);
     }
-    match p::str(v, "due") {
-        None => s.flag_selection(Flag::Flagged, p::bool(v, "on")),
-        Some(d) if d.eq_ignore_ascii_case("none") => s.follow_up_selection(None, false),
-        Some(d) => {
-            let day = match quatrelle_model::dates::FollowUp::from_code(d) {
-                Some(f) => f.due(&s.clock),
+    // A day given (`none` or null: taken off); absent: left as it is.
+    let day = |key: &str| -> Result<Option<Option<i64>>, CmdError> {
+        match v.get(key) {
+            None => Ok(None),
+            Some(Value::Null) => Ok(Some(None)),
+            Some(Value::String(d)) if d.trim().eq_ignore_ascii_case("none") || d.trim().is_empty() => Ok(Some(None)),
+            Some(Value::String(d)) => match quatrelle_model::dates::FollowUp::from_code(d) {
+                Some(f) => Ok(Some(Some(f.due(&s.clock)))),
                 None if quatrelle_model::job::is_day(d) => {
                     let num = |a: usize, z: usize| d.get(a..z).and_then(|x| x.parse::<u32>().ok()).unwrap_or(1);
-                    quatrelle_model::dates::days_from_civil(i64::from(num(0, 4)), num(5, 7), num(8, 10))
+                    Ok(Some(Some(quatrelle_model::dates::days_from_civil(i64::from(num(0, 4)), num(5, 7), num(8, 10)))))
                 }
-                None => return Err(CmdError::Params(format!("`due`: not today, tomorrow, thisWeek, nextWeek, none or a date: `{d}`"))),
-            };
-            s.follow_up_selection(Some(day), false)
+                None => Err(CmdError::Params(format!("`{key}`: not today, tomorrow, thisWeek, nextWeek, none or a date: `{d}`"))),
+            },
+            Some(_) => Err(CmdError::Params(format!("`{key}` is a date (YYYY-MM-DD), or none"))),
         }
+    };
+    // A reminder's time (`false`, `none` or null: taken off); absent: left as it is.
+    let reminder = match v.get("reminder") {
+        None => None,
+        Some(Value::Bool(false)) | Some(Value::Null) => Some(None),
+        Some(Value::String(x)) if matches!(x.trim(), "" | "none") => Some(None),
+        Some(x) => {
+            let text = x.as_str().map(str::trim).map(|t| if t.len() == 10 { format!("{t}T08:00") } else { t.to_string() });
+            match text.as_deref().and_then(|t| crate::parse_local(t, &s.clock)).or_else(|| x.as_i64().map(|n| (n, false))) {
+                Some((t, false)) => Some(Some(t)),
+                _ => return Err(CmdError::Params("`reminder` is YYYY-MM-DDTHH:MM, Unix seconds, false or none".into())),
+            }
+        }
+    };
+    let (start, due) = (day("start")?, day("due")?);
+    if start.is_none() && due.is_none() && reminder.is_none() {
+        return s.flag_selection(Flag::Flagged, p::bool(v, "on"));
     }
+    s.follow_up_set(start, due, reminder)
 }
 
 pub(super) fn mark_all_read(s: &mut Session, _: &Value) -> CmdResult {

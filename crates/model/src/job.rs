@@ -65,6 +65,18 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
     },
+    /// A flagged message's follow-up dates and reminder, as Exchange and Graph keep them
+    /// (MS-OXOFLAG 2.2.1). Each is Unix seconds, or none to take it off; a server with nowhere
+    /// for them leaves the change to the preferences (the network layer passes it over).
+    SetFollowUp {
+        keys: Vec<MessageKey>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        start: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        due: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reminder: Option<i64>,
+    },
     /// Move to another folder of the same account.
     Move { keys: Vec<MessageKey>, to: String },
     /// Delete permanently (`\Deleted` + `UID EXPUNGE`).
@@ -200,6 +212,7 @@ impl Op {
         match self {
             Op::SetFlag { keys, .. }
             | Op::SetKeyword { keys, .. }
+            | Op::SetFollowUp { keys, .. }
             | Op::Move { keys, .. }
             | Op::Expunge { keys, .. }
             | Op::SetArchiveTag { keys, .. } => keys,
@@ -214,6 +227,7 @@ impl Op {
         let (kind, folder) = match self {
             Op::SetFlag { .. } => ("SetFlag", None),
             Op::SetKeyword { .. } => ("SetKeyword", None),
+            Op::SetFollowUp { .. } => ("SetFollowUp", None),
             Op::Move { .. } => ("Move", None),
             Op::Expunge { .. } => ("Expunge", None),
             Op::CreateFolder { path } => ("CreateFolder", Some(path.as_str())),

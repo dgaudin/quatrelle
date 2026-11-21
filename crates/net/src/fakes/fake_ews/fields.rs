@@ -122,10 +122,55 @@ pub struct Verb {
     pub icon: Option<String>,
 }
 
+/// A message's follow-up as Exchange keeps it ([MS-OXOFLAG] 2.2.1): its start and due dates
+/// (`PidLidTaskStartDate`, `PidLidTaskDueDate`), its reminder (`PidLidReminderSet`,
+/// `PidLidReminderTime`, `PidLidReminderSignalTime`) and its title (`PidLidFlagRequest`), each
+/// as Exchange writes it (`2026-10-30T09:12:00Z`) when it has one.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FollowUp {
+    pub start: Option<String>,
+    pub due: Option<String>,
+    pub reminder_set: bool,
+    pub reminder_time: Option<String>,
+    pub reminder_signal: Option<String>,
+    pub request: Option<String>,
+}
+
+/// A message's follow-up as Exchange gives it, with the last thing done with it ([`Verb`]).
+pub(super) fn follow_up_xml(f: &FollowUp) -> String {
+    let mut x = String::new();
+    let lid = |set: &str, id: u32, kind: &str, value: &str| {
+        format!(
+            "<t:ExtendedProperty><t:ExtendedFieldURI DistinguishedPropertySetId=\"{set}\" PropertyId=\"{id}\" PropertyType=\"{kind}\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+            esc(value)
+        )
+    };
+    if let Some(v) = &f.start {
+        x.push_str(&lid("Task", 33028, "SystemTime", v));
+    }
+    if let Some(v) = &f.due {
+        x.push_str(&lid("Task", 33029, "SystemTime", v));
+    }
+    if f.reminder_set {
+        x.push_str(&lid("Common", 34051, "Boolean", "true"));
+    }
+    if let Some(v) = &f.reminder_time {
+        x.push_str(&lid("Common", 34050, "SystemTime", v));
+    }
+    if let Some(v) = &f.reminder_signal {
+        x.push_str(&lid("Common", 34144, "SystemTime", v));
+    }
+    if let Some(v) = &f.request {
+        x.push_str(&lid("Common", 34096, "String", v));
+    }
+    x
+}
+
 /// A message's follow-up flag as Exchange gives it: `PidTagFlagStatus` (2 flagged, 1 complete)
 /// and `PidTagFlagCompleteTime` when it has one; with the last thing done with it ([`Verb`]) and
-/// when. Its icon comes only when asked for ([`kind_xml`]).
-pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: &Verb) -> String {
+/// when, and the follow-up's dates and reminder ([`FollowUp`]). Its icon comes only when asked
+/// for ([`kind_xml`]).
+pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: &Verb, follow_up: &FollowUp) -> String {
     let status = if flagged { Some(2) } else { complete.then_some(1) };
     let mut x = status
         .map(|v| {
@@ -148,6 +193,7 @@ pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: 
             ));
         }
     }
+    x.push_str(&follow_up_xml(follow_up));
     x
 }
 
@@ -155,6 +201,23 @@ pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: 
 /// `0x1090` or `0x1091`), or to the last thing done with it (`0x1081`, `0x1082`, `0x1080`).
 pub(super) fn take_flag_update(it: &mut It, u: &El) {
     let set = u.name == "SetItemField";
+    // The follow-up's dates, reminder and title, by the property set and id Exchange names
+    // them ([MS-OXPROPS] 1.3.2).
+    if let Some(uri) = u.find("ExtendedFieldURI")
+        && let (Some(id), Some(set_name)) = (uri.attr("PropertyId"), uri.attr("DistinguishedPropertySetId"))
+    {
+        let v = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set);
+        match (set_name, id) {
+            ("Task", "33028") => it.follow_up.start = v,
+            ("Task", "33029") => it.follow_up.due = v,
+            ("Common", "34051") => it.follow_up.reminder_set = set && v.as_deref() == Some("true"),
+            ("Common", "34050") => it.follow_up.reminder_time = v,
+            ("Common", "34144") => it.follow_up.reminder_signal = v,
+            ("Common", "34096") => it.follow_up.request = v,
+            _ => {}
+        }
+        return;
+    }
     match u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) {
         Some("0x1090") => {
             let v = u.find("Value").map(|v| v.text.trim().to_string());

@@ -26,7 +26,7 @@ pub enum Undo {
     /// Follow-ups changed (flagged, cleared, marked complete): the flag and keyword changes that
     /// put them back, by account, and each message's due and done days as they were, by its
     /// follow-up id.
-    FollowUp { ops: Vec<(String, Vec<Op>)>, days: Vec<(String, Option<i64>, Option<i64>)> },
+    FollowUp { ops: Vec<(String, Vec<Op>)>, days: super::mailboxes::FollowUpDays },
     /// An appointment moved (or one occurrence of it, `occurrence`): where it was, and whether
     /// its guests were told (they're told of its return the same way).
     EventMove { uid: String, occurrence: Option<i64>, start: i64, end: i64, send: bool },
@@ -53,6 +53,9 @@ impl Session {
             Op::SetKeyword { keys, keyword, on, name } => {
                 Op::SetKeyword { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), keyword, on, name }
             }
+            Op::SetFollowUp { keys, start, due, reminder } => {
+                Op::SetFollowUp { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), start, due, reminder }
+            }
             Op::Move { keys, to } => Op::Move { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), to },
             Op::Expunge { keys, tidy } => Op::Expunge { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), tidy },
             other => other,
@@ -64,7 +67,7 @@ impl Session {
         // Marking mail read or filing it in a category leaves the words where they were; moving
         // or deleting messages changes what the folders hold. Either way the search index stays:
         // it adds what came into a folder, and its answer looks again at what it found there.
-        let words_change = !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. });
+        let words_change = !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::SetFollowUp { .. });
         let folder_op = op.is_folder_op();
         let mut touched: Vec<String> = op.keys().iter().map(|k| k.folder.clone()).collect();
         match &op {
@@ -141,6 +144,14 @@ impl Session {
                 Op::SetKeyword { keyword, on, name, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
                         Arc::make_mut(m).flags.set_category(keyword, name.as_deref(), *on);
+                    }
+                }
+                Op::SetFollowUp { start, due, reminder, .. } => {
+                    for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
+                        let m = Arc::make_mut(m);
+                        m.flags.follow_up.start = start.unwrap_or(0);
+                        m.flags.follow_up.due = due.unwrap_or(0);
+                        m.flags.follow_up.reminder = reminder.unwrap_or(0);
                     }
                 }
                 Op::Move { to, .. } if to == f => {}
@@ -306,6 +317,7 @@ impl Session {
                 Op::DeleteFolder { path } => a.folders.retain(|f| !quatrelle_model::is_within(&f.path, path, f.delimiter.or(delimiter))),
                 Op::SetFlag { .. }
                 | Op::SetKeyword { .. }
+                | Op::SetFollowUp { .. }
                 | Op::Move { .. }
                 | Op::Expunge { .. }
                 | Op::EmptyFolder { .. }
@@ -350,6 +362,7 @@ impl Session {
             }
             Op::SetFlag { .. }
             | Op::SetKeyword { .. }
+            | Op::SetFollowUp { .. }
             | Op::Move { .. }
             | Op::Expunge { .. }
             | Op::EmptyFolder { .. }

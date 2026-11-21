@@ -2487,3 +2487,9 @@ presence	Offline	Offline
 	Maximize	Maximieren
 	Use the system title bar	Die Titelleiste des Systems verwenden
 	Applies when Quatrelle starts again	Gilt beim nächsten Start von Quatrelle
+	Custom Follow Up	Benutzerdefinierte Nachverfolgung
+	Add Reminder	Erinnerung hinzufügen
+	Custom…	Benutzerdefiniert…
+	Add Reminder…	Erinnerung hinzufügen…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Die Erinnerung ist ein Tag (YYYY-MM-DD) und eine Uhrzeit (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	„{name}“ ist ein Tag, YYYY-MM-DD

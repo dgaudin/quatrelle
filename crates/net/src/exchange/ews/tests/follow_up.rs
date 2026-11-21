@@ -91,6 +91,107 @@ fn a_follow_up_marked_complete_goes_both_ways_with_its_day() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A follow-up's start and due dates and its reminder, as Outlook keeps them ([MS-OXOFLAG]
+/// 2.2.1): read from Exchange, written to it, and cleared with the flag. Flagging sets the plain
+/// red flag's icon and title ([MS-OXOFLAG] 3.1.4.1).
+#[test]
+fn follow_up_dates_and_its_reminder_go_both_ways() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp {
+            start: Some("2026-11-02T00:00:00Z".into()),
+            due: Some("2026-11-06T00:00:00Z".into()),
+            reminder_set: true,
+            reminder_time: Some("2026-11-06T09:00:00Z".into()),
+            reminder_signal: Some("2026-11-06T09:00:00Z".into()),
+            request: Some("Follow up".into()),
+        };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-follow-up-dates-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let at = |text: &str| jmap::utc_date(text).unwrap();
+
+    // As Outlook set it: start, due, reminder and title.
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    assert_eq!(m.flags.follow_up.start, at("2026-11-02T00:00:00Z"), "{:?}", m.flags.follow_up);
+    assert_eq!(m.flags.follow_up.due, at("2026-11-06T00:00:00Z"), "{:?}", m.flags.follow_up);
+    assert_eq!(m.flags.follow_up.reminder, at("2026-11-06T09:00:00Z"), "{:?}", m.flags.follow_up);
+    assert_eq!(m.flags.follow_up.title, "Follow up");
+
+    // Set here: Exchange gets the dates and the reminder (both its times).
+    let keys = vec![m.key];
+    let start = at("2026-12-01T00:00:00Z");
+    let due = at("2026-12-04T00:00:00Z");
+    let reminder = at("2026-12-04T08:30:00Z");
+    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: Some(start), due: Some(due), reminder: Some(reminder) }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+        assert_eq!(f.start.as_deref().and_then(jmap::utc_date), Some(start), "{f:?}");
+        assert_eq!(f.due.as_deref().and_then(jmap::utc_date), Some(due), "{f:?}");
+        assert!(f.reminder_set, "{f:?}");
+        assert_eq!(f.reminder_time.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
+        assert_eq!(f.reminder_signal.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
+    }
+    // The next sync reads them back.
+    server.data.lock().unwrap().items.iter_mut().for_each(|i| i.follow_up.request = Some("Send the report".into()));
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder), (start, due, reminder), "{:?}", m.flags.follow_up);
+    assert_eq!(m.flags.follow_up.title, "Send the report");
+
+    // Taken off here: Exchange has no reminder and no dates.
+    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: None, due: None, reminder: None }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+        assert!(!f.reminder_set && f.start.is_none() && f.due.is_none() && f.reminder_time.is_none(), "{f:?}");
+    }
+
+    // Flagged here: the plain red flag's icon and title ([MS-OXOFLAG] 3.1.4.1).
+    apply_remote(&c, &st, &Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: false, all: false }).unwrap();
+    apply_remote(&c, &st, &Op::SetFlag { keys, flag: Flag::Flagged, on: true, all: false }).unwrap();
+    let d = server.data.lock().unwrap();
+    let i = d.items.iter().find(|i| i.id == id).unwrap();
+    assert!(i.flagged && i.follow_up.request.as_deref() == Some("Follow up"), "{i:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A follow-up date Exchange sends that isn't one, or is MAPI's "none", is ignored rather than
+/// kept as a day in 1601.
+#[test]
+fn a_follow_up_date_that_isnt_one_is_ignored() {
+    let item = |props: &str| {
+        let doc = parse(&format!("<t:Message><t:IsRead>true</t:IsRead>{props}</t:Message>"));
+        doc.find("Message").map(flags).unwrap_or_default()
+    };
+    let lid = |set: &str, id: u32, kind: &str, v: &str| {
+        format!(
+            "<t:ExtendedProperty><t:ExtendedFieldURI DistinguishedPropertySetId=\"{set}\" PropertyId=\"{id}\" PropertyType=\"{kind}\"/><t:Value>{v}</t:Value></t:ExtendedProperty>"
+        )
+    };
+    let f = item(&format!(
+        "{}{}{}{}",
+        lid("Task", 33028, "SystemTime", "not a time"),
+        lid("Task", 33029, "SystemTime", "1601-01-01T00:00:00Z"),
+        lid("Common", 34051, "Boolean", "true"),
+        lid("Common", 34144, "SystemTime", "4501-01-01T00:00:00Z")
+    ));
+    assert_eq!(f.follow_up, Default::default(), "{f:?}");
+}
+
 /// What the server says of a follow-up is read with care: a status other than 1 or 2, a time
 /// that isn't one, or a time without the status.
 #[test]

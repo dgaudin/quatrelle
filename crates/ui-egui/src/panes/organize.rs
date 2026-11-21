@@ -9,6 +9,7 @@ use quatrelle_engine::model::dates;
 use quatrelle_engine::model::organize::SnoozeUntil;
 use serde_json::json;
 
+use crate::dialogs::FollowUpForm;
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog};
 
@@ -83,6 +84,14 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
     }
     if ui.selectable_label(false, tl!("No date")).clicked() {
         acts.push(Action::Run("mail.flag", json!({"due": "none"})));
+        ui.close();
+    }
+    if ui.button(tl!("Custom…")).clicked() {
+        acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, true)))));
+        ui.close();
+    }
+    if ui.button(tl!("Add Reminder…")).clicked() {
+        acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, false)))));
         ui.close();
     }
     ui.separator();
