@@ -688,3 +688,20 @@ local-first, media-aware v1); the fuller request is
   the `teamsForBusiness` provider) and Exchange Online makes the meeting as it's saved, Teams signed
   in or not. Not yet confirmed on a real account: a create, an update, a delete, the property on
   on-premises Exchange, and a meeting Exchange Online makes.
+- **2026-11-21** — **Calendar groups, as Outlook keeps them**: an on-premises Exchange user's
+  "Équipe" group (the team's calendars) never showed. The Common Views folder was found by its
+  English name alone, so a French mailbox never found its shortcuts; only the shared-calendar
+  shortcuts were read, so the group headers, the account's own calendars in a group, the order
+  and everything past the first 300 were lost. The folder is now found by the shortcuts it holds,
+  kept for the session; the shortcuts are read page by page, grouped by their headers, ordered by
+  their ordinals, and the account's own calendars are filed under their group. One privacy-safe
+  log line says what the folder held. The pane lists the server's groups in its order, between My
+  Calendars and Shared Calendars; a header folds and unfolds (remembered), its tick shows or hides
+  all the group's calendars side by side, and a calendar dragged onto a header moves there. The
+  group header's menu makes, renames, deletes and moves groups; a calendar's menu moves it to a
+  group. On Exchange the navigation shortcuts are written in Common Views, read back after each
+  write, and only the Calendar section's fully read shortcuts are touched. Microsoft 365's groups
+  are made, renamed and deleted through Graph; Graph v1.0 can't move a calendar between groups or
+  order them, so those entries are greyed with the reason. The EWS writes have been tried on the
+  fake Exchange only: `gaps.md` #14 says what the owner's first check should be, and that adding a
+  brand-new shared calendar to a group is still to come.
