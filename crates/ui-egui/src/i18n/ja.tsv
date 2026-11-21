@@ -2483,3 +2483,15 @@ presence	Offline	オフライン
 	Maximize	最大化
 	Use the system title bar	システムのタイトルバーを使う
 	Applies when Quatrelle starts again	次回 Quatrelle を起動したときに反映されます
+	New calendar group…	新しい予定表グループ…
+	Rename group…	グループの名前を変更…
+	Delete group…	グループを削除…
+	Move to group	グループへ移動
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	予定表グループ {name} を削除しますか? その中の予定表は自分の予定表に戻ります。
+	New calendar group	新しい予定表グループ
+	Rename calendar group	予定表グループの名前を変更
+	Delete calendar group	予定表グループを削除
+	This account's server doesn't keep calendar groups	このアカウントのサーバーは予定表グループを保持しません
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 は予定表グループの順序を保持しません
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 は予定表をグループ間で移動できません
+	Group name	グループ名

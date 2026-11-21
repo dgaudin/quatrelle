@@ -2485,3 +2485,15 @@ presence	Offline	오프라인
 	Maximize	최대화
 	Use the system title bar	시스템 제목 표시줄 사용
 	Applies when Quatrelle starts again	Quatrelle을 다시 시작할 때 적용됩니다
+	New calendar group…	새 일정 그룹…
+	Rename group…	그룹 이름 바꾸기…
+	Delete group…	그룹 삭제…
+	Move to group	그룹으로 이동
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	일정 그룹 {name}을(를) 삭제하시겠습니까? 그 안의 일정은 내 일정으로 돌아갑니다.
+	New calendar group	새 일정 그룹
+	Rename calendar group	일정 그룹 이름 바꾸기
+	Delete calendar group	일정 그룹 삭제
+	This account's server doesn't keep calendar groups	이 계정의 서버는 일정 그룹을 보관하지 않습니다
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365는 일정 그룹의 순서를 보관하지 않습니다
+	Microsoft 365 can't move a calendar between groups	Microsoft 365는 일정을 그룹 간에 이동할 수 없습니다
+	Group name	그룹 이름

@@ -321,6 +321,13 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                 r => r.map(drop),
             }
         }
+        // Outlook's calendar groups: navigation shortcuts in the Common Views folder
+        // ([MS-OXOCFG] 2.2.9), read back after each write.
+        Op::CreateCalendarGroup { name } => crate::ews_pim::create_calendar_group(c, name),
+        Op::RenameCalendarGroup { group, name } => crate::ews_pim::rename_calendar_group(c, group, name),
+        Op::DeleteCalendarGroup { group } => crate::ews_pim::delete_calendar_group(c, group),
+        Op::MoveCalendarGroup { group, up } => crate::ews_pim::move_calendar_group(c, group, *up),
+        Op::MoveCalendarToGroup { calendar, name, group } => crate::ews_pim::move_calendar_to_group(c, calendar, name, group),
     }
 }
 

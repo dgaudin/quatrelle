@@ -2482,3 +2482,15 @@ presence	Offline	غير متصل
 	Maximize	تكبير
 	Use the system title bar	استخدام شريط عنوان النظام
 	Applies when Quatrelle starts again	يسري عند بدء تشغيل Quatrelle مرة أخرى
+	New calendar group…	مجموعة تقويمات جديدة…
+	Rename group…	إعادة تسمية المجموعة…
+	Delete group…	حذف المجموعة…
+	Move to group	نقل إلى المجموعة
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	هل تريد حذف مجموعة التقويمات {name}؟ ستعود التقويمات التي فيها إلى تقويماتي.
+	New calendar group	مجموعة تقويمات جديدة
+	Rename calendar group	إعادة تسمية مجموعة التقويمات
+	Delete calendar group	حذف مجموعة التقويمات
+	This account's server doesn't keep calendar groups	خادم هذا الحساب لا يحتفظ بمجموعات التقويمات
+	Microsoft 365 keeps no order for calendar groups	لا يحتفظ Microsoft 365 بترتيب لمجموعات التقويمات
+	Microsoft 365 can't move a calendar between groups	لا يمكن لـ Microsoft 365 نقل تقويم بين المجموعات
+	Group name	اسم المجموعة

@@ -12,6 +12,10 @@ use std::fmt::Write as _;
 use crate::Result;
 use crate::ews::{Client, El, esc};
 
+mod write;
+
+pub(crate) use write::{create_calendar_group, delete_calendar_group, move_calendar_group, move_calendar_to_group, rename_calendar_group};
+
 /// A calendar Outlook keeps in a group of its Calendar pane (a colleague's in a team's group, a
 /// room's…): whose it is, the name shown, and the group's name. One kept by the account itself
 /// in a group has no address to open it by (`own`).
@@ -89,13 +93,17 @@ const MAX_BINARY: usize = 8192;
 /// A displayed name's most characters.
 const MAX_NAME: usize = 255;
 /// The properties a shortcut carries that this reads: class, name, header id, type, ordinal,
-/// group id, group name, section and address book entry id ([MS-OXOCFG] 2.2.9.1–2.2.9.16).
-const PROPS: [(&str, &str); 9] = [
+/// entry and store ids, folder type, group id, group name, section and address book entry id
+/// ([MS-OXOCFG] 2.2.9.1–2.2.9.16).
+const PROPS: [(&str, &str); 12] = [
     ("0x001A", "String"),
     ("0x0E1D", "String"),
     ("0x6842", "CLSID"),
     ("0x6849", "Integer"),
     ("0x684B", "Binary"),
+    ("0x684C", "Binary"),
+    ("0x684E", "Binary"),
+    ("0x684F", "Binary"),
     ("0x6850", "CLSID"),
     ("0x6851", "String"),
     ("0x6852", "Integer"),
@@ -115,7 +123,7 @@ pub(crate) fn calendar_links(c: &Client) -> Result<Shortcuts> {
 /// 3.1.4.1), and EWS has no distinguished id for it, so a mailbox without the English name is
 /// asked which of its root's folders holds shortcuts. Kept for the session: the answer doesn't
 /// change under us.
-fn common_views(c: &Client) -> Result<Option<String>> {
+pub(super) fn common_views(c: &Client) -> Result<Option<String>> {
     if let Some(found) = c.common_views() {
         return Ok(found);
     }

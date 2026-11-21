@@ -2487,3 +2487,15 @@ presence	Offline	Не в сети
 	Maximize	Развернуть
 	Use the system title bar	Использовать системную строку заголовка
 	Applies when Quatrelle starts again	Применится при следующем запуске Quatrelle
+	New calendar group…	Новая группа календарей…
+	Rename group…	Переименовать группу…
+	Delete group…	Удалить группу…
+	Move to group	Переместить в группу
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	Удалить группу календарей {name}? Её календари вернутся в Мои календари.
+	New calendar group	Новая группа календарей
+	Rename calendar group	Переименовать группу календарей
+	Delete calendar group	Удалить группу календарей
+	This account's server doesn't keep calendar groups	Сервер этой учётной записи не хранит группы календарей
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 не хранит порядок групп календарей
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 не может переместить календарь между группами
+	Group name	Название группы

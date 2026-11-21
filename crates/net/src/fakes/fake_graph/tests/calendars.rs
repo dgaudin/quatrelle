@@ -201,3 +201,28 @@ fn a_removed_calendar_is_listed_and_its_events_never_asked_for() {
     assert!(asked.iter().all(|c| !c.contains("CAL2") && !c.contains("SC1")), "{asked:?}");
     assert!(asked.iter().any(|c| c.contains("CAL1")), "{asked:?}");
 }
+
+/// Microsoft 365's calendar groups are made, renamed and deleted as Graph has them; moving a
+/// calendar between groups, and ordering the groups, are refused with the reason (Graph v1.0
+/// can't do either), so the pane can grey them.
+#[test]
+fn calendar_groups_are_made_renamed_and_deleted_on_microsoft_365() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.groups.push(("G1".into(), "My Calendars".into(), vec!["CAL1".into()]));
+    d.groups.push(("G2".into(), "Team".into(), Vec::new()));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let st = crate::jmap::State::default();
+    let names = || server.data.lock().unwrap().groups.iter().map(|(_, n, _)| n.clone()).collect::<Vec<_>>();
+    crate::graph::apply_remote(&c, &st, &Op::CreateCalendarGroup { name: "Rooms".into() }).unwrap();
+    assert!(names().iter().any(|n| n == "Rooms"), "{:?}", names());
+    crate::graph::apply_remote(&c, &st, &Op::RenameCalendarGroup { group: "Rooms".into(), name: "Salles".into() }).unwrap();
+    assert!(names().iter().any(|n| n == "Salles"), "{:?}", names());
+    crate::graph::apply_remote(&c, &st, &Op::DeleteCalendarGroup { group: "Salles".into() }).unwrap();
+    assert!(!names().iter().any(|n| n == "Salles"), "{:?}", names());
+    let refused = |op: Op| crate::graph::apply_remote(&c, &st, &op).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(refused(Op::MoveCalendarGroup { group: "Team".into(), up: true }).contains("keeps no order"));
+    assert!(refused(Op::MoveCalendarToGroup { calendar: "CAL1".into(), name: "Calendar".into(), group: "Team".into() }).contains("can't move"));
+}

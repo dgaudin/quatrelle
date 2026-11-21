@@ -2482,3 +2482,15 @@ presence	Offline	לא מחובר
 	Maximize	הגדלה
 	Use the system title bar	שימוש בשורת הכותרת של המערכת
 	Applies when Quatrelle starts again	יחול בהפעלה הבאה של Quatrelle
+	New calendar group…	קבוצת יומנים חדשה…
+	Rename group…	שינוי שם הקבוצה…
+	Delete group…	מחיקת הקבוצה…
+	Move to group	העברה לקבוצה
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	למחוק את קבוצת היומנים {name}? היומנים שבה יחזרו ליומנים שלי.
+	New calendar group	קבוצת יומנים חדשה
+	Rename calendar group	שינוי שם קבוצת יומנים
+	Delete calendar group	מחיקת קבוצת יומנים
+	This account's server doesn't keep calendar groups	השרת של חשבון זה אינו שומר קבוצות יומנים
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 אינו שומר סדר לקבוצות יומנים
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 אינו יכול להעביר יומן בין קבוצות
+	Group name	שם הקבוצה

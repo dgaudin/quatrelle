@@ -508,6 +508,7 @@ pub(crate) use files::{MAX_EVENT_FILES, MAX_FILE};
 pub(crate) use links::address_book_dn;
 pub(crate) use links::calendar_links;
 pub use links::shortcuts_listed;
+pub(crate) use links::{create_calendar_group, delete_calendar_group, move_calendar_group, move_calendar_to_group, rename_calendar_group};
 #[cfg(test)]
 pub(crate) use push::item_gone_code;
 use push::{answer_pending, push_events};

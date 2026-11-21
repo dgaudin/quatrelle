@@ -5,8 +5,10 @@
 
 use quatrelle_engine::model::pim::CalendarInfo;
 
-use super::calendar_list_menu::{SIZE, calendars, click_text};
+use super::calendar_list_menu::{SIZE, calendars, click_text, point_at, right_click};
+use super::calendar_menu::texts;
 use super::*;
+use crate::dialogs::GroupAsk;
 
 /// The sample's calendar with two of the server's groups, each with a colleague's calendar.
 fn with_groups(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
@@ -85,5 +87,93 @@ fn a_group_header_tick_shows_or_hides_all_its_calendars() {
     click_at(&ctx, &mut a, tick);
     assert!(a.session.calendar_shown(&account, "AAMkAna="), "shown all at once");
     assert!(a.session.prefs.calendars_side_by_side, "shown together side by side");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The sample's groups on an Exchange account: the same calendars, the server groups kept there.
+fn with_ews_groups(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
+    let (mut a, dir, ctx) = with_groups(name);
+    a.session.accounts[0].config.ews = Some("https://ews.contoso.example/EWS/Exchange.asmx".into());
+    for _ in 0..5 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    (a, dir, ctx)
+}
+
+#[test]
+fn a_group_header_menu_renames_and_deletes_the_group() {
+    let (mut a, dir, ctx) = with_groups("calendar-groups-group-menu");
+    let menu = right_click(&ctx, &mut a, "Équipe");
+    for entry in ["New calendar group…", "Rename group…", "Delete group…", "Move up", "Move down"] {
+        assert!(menu.iter().any(|t| t == entry), "no {entry} in {menu:?}");
+    }
+    click_text(&ctx, &mut a, "Rename group…");
+    match a.ui.dialog.as_mut() {
+        Some(Dialog::CalendarGroupChange(f)) => {
+            assert!(matches!(f.ask, GroupAsk::Rename { .. }));
+            f.name = "Team".into();
+        }
+        other => panic!("{other:?}"),
+    }
+    click_text(&ctx, &mut a, "Rename");
+    assert!(a.session.pim.values().any(|p| p.calendar_groups.iter().any(|g| g == "Team")));
+    assert!(a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Team")));
+    // Delete asks first, then takes the group out of the pane.
+    right_click(&ctx, &mut a, "Team");
+    click_text(&ctx, &mut a, "Delete group…");
+    assert!(matches!(&a.ui.dialog, Some(Dialog::CalendarGroupChange(f)) if f.deleting()));
+    click_text(&ctx, &mut a, "Delete");
+    assert!(!a.session.pim.values().any(|p| p.calendar_groups.iter().any(|g| g == "Team")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_group_moves_its_calendar_to_another_group_on_exchange() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-move-calendar");
+    right_click(&ctx, &mut a, "Ana Lima");
+    point_at(&ctx, &mut a, "Move to group");
+    click_text(&ctx, &mut a, "Salles");
+    assert!(
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Salles")),
+        "Ana's calendar moved to Salles"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_group_moves_up_and_down_on_exchange_but_not_on_microsoft_365() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-order-ews");
+    right_click(&ctx, &mut a, "Salles");
+    click_text(&ctx, &mut a, "Move down");
+    let order = a.session.pim.values().next().map(|p| p.calendar_groups.clone()).unwrap_or_default();
+    assert_eq!(order, ["Équipe", "Salles"]);
+    let _ = std::fs::remove_dir_all(dir);
+
+    let (mut a, dir, ctx) = with_groups("calendar-groups-order-graph");
+    right_click(&ctx, &mut a, "Salles");
+    point_at(&ctx, &mut a, "Move down");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "Microsoft 365 keeps no order for calendar groups"), "{shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dragging_a_calendar_onto_a_groups_header_moves_it() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag");
+    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let to = settled_text_at(&ctx, &mut a, "Salles", SIZE).expect("Salles in the pane");
+    let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(from, true)], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(12.0, 0.0))], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(to)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(to, false)], SIZE);
+    for _ in 0..6 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    assert!(
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Salles")),
+        "Ana's calendar moved onto Salles"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -115,6 +115,18 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             if header.inner.0.clicked() || header.inner.1.clicked() {
                 acts.push(Action::Run("calendar.groupFold", json!({"group": title, "folded": open})));
             }
+            // A calendar dragged onto a group's header moves there; the header says it will take
+            // it. Only the server's groups take a calendar: My and Shared calendars are theirs.
+            if from_server {
+                if header.response.dnd_hover_payload::<DragCalendar>().is_some() {
+                    ui.painter().rect_stroke(header.response.rect, 4.0, egui::Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+                }
+                if let Some(d) = dropped::<DragCalendar>(&header.response)
+                    && !d.group.eq_ignore_ascii_case(title)
+                {
+                    acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": title})));
+                }
+            }
             if open {
                 ui.indent(("calendar-group", title), |ui| {
                     let mut last: Option<String> = None;
@@ -143,6 +155,13 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 header.response.context_menu(|ui| menu::account_menu(ui, s, a, acts));
                 header.inner.1.context_menu(|ui| menu::account_menu(ui, s, a, acts));
             }
+            // A group the server keeps has its own menu.
+            if let Some(a) =
+                s.accounts.iter().find(|a| s.pim.get(&a.config.id).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(title))))
+            {
+                header.response.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
+                header.inner.1.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
+            }
         }
         // Each in a column of its own, or all together (Outlook's side-by-side view).
         if several {
@@ -167,6 +186,19 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
         }
     });
+}
+
+/// What a calendar dragged in the side pane carries.
+struct DragCalendar {
+    account: String,
+    calendar: String,
+    group: String,
+}
+
+/// What was dropped on `resp`, if it is a `T` (asking for the wrong type loses a drop for the
+/// right one, as egui's `dnd_release_payload` takes the payload before trying its type).
+fn dropped<T: std::any::Any + Send + Sync>(resp: &egui::Response) -> Option<std::sync::Arc<T>> {
+    if egui::DragAndDrop::has_payload_of_type::<T>(&resp.ctx) { resp.dnd_release_payload::<T>() } else { None }
 }
 
 /// A tick for a group's header: all its calendars shown, some, or none. A click shows them all,
@@ -305,7 +337,11 @@ pub(super) fn calendar_row(
     // Opened by hand from its owner's address (a shared mailbox's comes with the mailbox).
     let opened = shared.filter(|email| s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(email))));
     let extra = menu::Extra { web: web.is_some(), opened };
-    row.response.interact(Sense::click()).context_menu(|ui| menu::calendar_menu(ui, s, a, c, &extra, acts));
+    let resp = row.response.interact(Sense::click_and_drag());
+    if resp.drag_started() {
+        resp.dnd_set_drag_payload(DragCalendar { account: a.config.id.clone(), calendar: c.id.clone(), group: c.group.clone() });
+    }
+    resp.context_menu(|ui| menu::calendar_menu(ui, s, a, c, &extra, acts));
 }
 
 /// The months of the side pane, one under another (Outlook's date navigator, pulled down for

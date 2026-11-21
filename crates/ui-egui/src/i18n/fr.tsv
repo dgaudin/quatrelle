@@ -2487,3 +2487,15 @@ presence	Offline	Hors ligne
 	Maximize	Agrandir
 	Use the system title bar	Utiliser la barre de titre du système
 	Applies when Quatrelle starts again	S’applique au prochain démarrage de Quatrelle
+	New calendar group…	Nouveau groupe de calendriers…
+	Rename group…	Renommer le groupe…
+	Delete group…	Supprimer le groupe…
+	Move to group	Déplacer vers le groupe
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	Supprimer le groupe de calendriers {name} ? Ses calendriers reviennent dans Mes calendriers.
+	New calendar group	Nouveau groupe de calendriers
+	Rename calendar group	Renommer le groupe de calendriers
+	Delete calendar group	Supprimer le groupe de calendriers
+	This account's server doesn't keep calendar groups	Le serveur de ce compte ne garde pas de groupes de calendriers
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 ne garde aucun ordre pour les groupes de calendriers
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 ne peut pas déplacer un calendrier entre groupes
+	Group name	Nom du groupe

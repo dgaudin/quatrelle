@@ -2489,3 +2489,15 @@ presence	Offline	離線
 	Maximize	最大化
 	Use the system title bar	使用系統標題列
 	Applies when Quatrelle starts again	於 Quatrelle 下次啟動時生效
+	New calendar group…	新增行事曆群組…
+	Rename group…	重新命名群組…
+	Delete group…	刪除群組…
+	Move to group	移至群組
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	刪除行事曆群組 {name}? 其中的行事曆將回到「我的行事曆」。
+	New calendar group	新增行事曆群組
+	Rename calendar group	重新命名行事曆群組
+	Delete calendar group	刪除行事曆群組
+	This account's server doesn't keep calendar groups	此帳戶的伺服器不保留行事曆群組
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 不保留行事曆群組的順序
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 無法在群組之間移動行事曆
+	Group name	群組名稱

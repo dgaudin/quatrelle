@@ -2486,3 +2486,15 @@ presence	Offline	Offline
 	Maximize	Maximizar
 	Use the system title bar	Usar a barra de título do sistema
 	Applies when Quatrelle starts again	Aplica-se na próxima vez que o Quatrelle for iniciado
+	New calendar group…	Novo grupo de agendas…
+	Rename group…	Renomear grupo…
+	Delete group…	Excluir grupo…
+	Move to group	Mover para o grupo
+	Delete the calendar group {name}? Its calendars go back to My Calendars.	Excluir o grupo de agendas {name}? As agendas nele voltam para Minhas agendas.
+	New calendar group	Novo grupo de agendas
+	Rename calendar group	Renomear grupo de agendas
+	Delete calendar group	Excluir grupo de agendas
+	This account's server doesn't keep calendar groups	O servidor desta conta não mantém grupos de agendas
+	Microsoft 365 keeps no order for calendar groups	O Microsoft 365 não mantém uma ordem para grupos de agendas
+	Microsoft 365 can't move a calendar between groups	O Microsoft 365 não pode mover uma agenda entre grupos
+	Group name	Nome do grupo

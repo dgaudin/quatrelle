@@ -156,7 +156,12 @@ impl Session {
                 | Op::SetArchiveTag { .. }
                 | Op::CreateCalendar { .. }
                 | Op::RenameCalendar { .. }
-                | Op::DeleteCalendar { .. } => {}
+                | Op::DeleteCalendar { .. }
+                | Op::CreateCalendarGroup { .. }
+                | Op::RenameCalendarGroup { .. }
+                | Op::DeleteCalendarGroup { .. }
+                | Op::MoveCalendarGroup { .. }
+                | Op::MoveCalendarToGroup { .. } => {}
             }
         }
         if let Some(a) = self.account_mut(account) {
@@ -312,7 +317,12 @@ impl Session {
                 | Op::SetArchiveTag { .. }
                 | Op::CreateCalendar { .. }
                 | Op::RenameCalendar { .. }
-                | Op::DeleteCalendar { .. } => {}
+                | Op::DeleteCalendar { .. }
+                | Op::CreateCalendarGroup { .. }
+                | Op::RenameCalendarGroup { .. }
+                | Op::DeleteCalendarGroup { .. }
+                | Op::MoveCalendarGroup { .. }
+                | Op::MoveCalendarToGroup { .. } => {}
             }
             sort_folders(&mut a.folders);
         }
@@ -356,7 +366,12 @@ impl Session {
             | Op::SetArchiveTag { .. }
             | Op::CreateCalendar { .. }
             | Op::RenameCalendar { .. }
-            | Op::DeleteCalendar { .. } => {}
+            | Op::DeleteCalendar { .. }
+            | Op::CreateCalendarGroup { .. }
+            | Op::RenameCalendarGroup { .. }
+            | Op::DeleteCalendarGroup { .. }
+            | Op::MoveCalendarGroup { .. }
+            | Op::MoveCalendarToGroup { .. } => {}
         }
         // A Favorite public folder renamed or deleted: its sync follows.
         if matches!(op, Op::RenameFolder { .. } | Op::DeleteFolder { .. }) {

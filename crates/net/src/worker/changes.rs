@@ -592,6 +592,11 @@ impl Worker {
                         Op::EmptyFolder { path } => destinations.push(path.clone()),
                         Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
                         Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => calendars = true,
+                        Op::CreateCalendarGroup { .. }
+                        | Op::RenameCalendarGroup { .. }
+                        | Op::DeleteCalendarGroup { .. }
+                        | Op::MoveCalendarGroup { .. }
+                        | Op::MoveCalendarToGroup { .. } => calendars = true,
                     }
                     if let Err(e) = self.store.remove_op(&self.acc.id, &op) {
                         self.notice(e.to_string());

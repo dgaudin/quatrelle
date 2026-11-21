@@ -178,3 +178,111 @@ impl Dialog {
         Dialog::OpenSharedCalendar(Box::new(CalendarsForm { search: AddressSearch::new(), ..Default::default() }))
     }
 }
+
+/// What's asked of a calendar group from its menu in the side pane.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GroupAsk {
+    /// A new group in the account.
+    New,
+    /// This group's new name.
+    Rename { group: String },
+    /// Whether to delete this group.
+    Delete { group: String },
+}
+
+/// A calendar group made, renamed or deleted: the account, what's asked, the name typed (the
+/// group's own when it's deleted) and what the server or the engine said against it.
+#[derive(Clone, Debug)]
+pub struct CalendarGroupForm {
+    pub account: String,
+    pub ask: GroupAsk,
+    pub name: String,
+    pub error: Option<String>,
+}
+
+impl CalendarGroupForm {
+    /// A question to answer before going on (read as an alert).
+    pub fn deleting(&self) -> bool {
+        matches!(self.ask, GroupAsk::Delete { .. })
+    }
+}
+
+impl Dialog {
+    pub fn new_calendar_group(account: &str) -> Dialog {
+        Dialog::CalendarGroupChange(Box::new(CalendarGroupForm {
+            account: account.to_string(),
+            ask: GroupAsk::New,
+            name: String::new(),
+            error: None,
+        }))
+    }
+
+    /// Rename a group, its name made plain to start from.
+    pub fn rename_calendar_group(account: &str, group: &str) -> Dialog {
+        let mut name = quatrelle_engine::model::pim::plain_name(group);
+        if let Some((cut, _)) = name.char_indices().nth(quatrelle_engine::model::pim::MAX_CALENDAR_NAME) {
+            name.truncate(cut);
+        }
+        let ask = GroupAsk::Rename { group: group.to_string() };
+        Dialog::CalendarGroupChange(Box::new(CalendarGroupForm { account: account.to_string(), ask, name, error: None }))
+    }
+
+    /// Whether to delete a group, named on one line as the side pane shows it.
+    pub fn delete_calendar_group(account: &str, group: &str) -> Dialog {
+        let name = quatrelle_engine::model::pim::teams::one_line(group);
+        let ask = GroupAsk::Delete { group: group.to_string() };
+        Dialog::CalendarGroupChange(Box::new(CalendarGroupForm { account: account.to_string(), ask, name, error: None }))
+    }
+}
+
+/// New, Rename or Delete a calendar group.
+pub(super) fn draw_group_change(ui: &mut Ui, f: &mut CalendarGroupForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+    if let GroupAsk::Delete { group } = &f.ask {
+        ui.set_width(400.0);
+        title(ui, t, "Delete calendar group");
+        let text = tf!("Delete the calendar group {name}? Its calendars go back to My Calendars.", name = f.name);
+        ui.add(egui::Label::new(RichText::new(text).color(t.dim)).wrap());
+        if let Some(e) = &f.error {
+            ui.label(RichText::new(e.as_str()).color(t.danger).small());
+        }
+        let (ok, cancel) = buttons(ui, t, "Delete", true);
+        if ok {
+            f.error = None;
+            acts.push(Action::Submit("calendar.group.delete", json!({"account": f.account, "group": group})));
+        }
+        return !cancel;
+    }
+    let renaming = matches!(f.ask, GroupAsk::Rename { .. });
+    ui.set_width(380.0);
+    title(ui, t, if renaming { "Rename calendar group" } else { "New calendar group" });
+    if !renaming {
+        let who = s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default();
+        ui.label(RichText::new(tf!("Made in {account}", account = who)).color(t.dim).small());
+        ui.add_space(4.0);
+    }
+    let edit = egui::TextEdit::singleline(&mut f.name)
+        .hint_text(tl!("Group name"))
+        .char_limit(quatrelle_engine::model::pim::MAX_CALENDAR_NAME)
+        .desired_width(f32::INFINITY);
+    let r = ui.add(edit);
+    if ui.memory(|m| m.focused().is_none()) {
+        r.request_focus();
+    }
+    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    if let Some(e) = &f.error {
+        ui.label(RichText::new(e.as_str()).color(t.danger).small());
+    }
+    let ready = !f.name.trim().is_empty();
+    let (ok, cancel) = buttons(ui, t, if renaming { "Rename" } else { "Create" }, ready);
+    if (ok || enter) && ready {
+        f.error = None;
+        let name = f.name.trim();
+        match &f.ask {
+            GroupAsk::Rename { group } => {
+                acts.push(Action::Submit("calendar.group.rename", json!({"account": f.account, "group": group, "name": name})));
+            }
+            _ => acts.push(Action::Submit("calendar.group.create", json!({"account": f.account, "name": name}))),
+        }
+    }
+    !cancel
+}
