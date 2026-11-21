@@ -39,6 +39,52 @@ pub enum CtrlEnter {
     Nothing,
 }
 
+/// What the To-Do bar beside the mail holds: the calendar, People and Tasks, each on or off
+/// (`View › To-Do Bar`). `{"on": true}` from before it had parts reads as the calendar alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoBar {
+    pub calendar: bool,
+    pub people: bool,
+    pub tasks: bool,
+}
+
+impl Default for TodoBar {
+    fn default() -> Self {
+        TodoBar { calendar: true, people: false, tasks: false }
+    }
+}
+
+impl TodoBar {
+    /// Any part shown.
+    pub fn any(&self) -> bool {
+        self.calendar || self.people || self.tasks
+    }
+}
+
+impl<'de> Deserialize<'de> for TodoBar {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            /// `true`: the calendar, as the bar was before it had parts; `false`: off.
+            On(bool),
+            Parts {
+                #[serde(default)]
+                calendar: bool,
+                #[serde(default)]
+                people: bool,
+                #[serde(default)]
+                tasks: bool,
+            },
+        }
+        Ok(match Raw::deserialize(d)? {
+            Raw::On(on) => TodoBar { calendar: on, people: false, tasks: false },
+            Raw::Parts { calendar, people, tasks } => TodoBar { calendar, people, tasks },
+        })
+    }
+}
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -77,6 +123,10 @@ pub struct Prefs {
     /// `all` (everyone written to or heard from, and contacts), `people` (every contact), or
     /// one address book (`book:<account>:<book id>`).
     pub address_book: String,
+    /// The people in the To-Do bar's People part (Outlook's favorite people): their addresses,
+    /// in the order shown. Kept on this computer (the contacts themselves are in the books).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub favorite_people: Vec<String>,
     /// Mail received in the last this many days kept on this computer, whole (0: all of it), as
     /// Outlook's "Mail to keep offline" in Cached Exchange Mode; older mail is read on the server.
     pub keep_days: u32,
@@ -88,8 +138,9 @@ pub struct Prefs {
     pub compact: bool,
     /// Cards, a table, or whichever suits where the reading pane is.
     pub list_layout: ListLayout,
-    /// The month and the coming appointments beside the mail (Outlook's To-Do bar).
-    pub todo_bar: bool,
+    /// What the To-Do bar beside the mail holds (Outlook's): the calendar, People, Tasks, or
+    /// none of them; `{"on": true}` from before it had parts means the calendar alone.
+    pub todo_bar: TodoBar,
     /// Ask before deleting permanently.
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
@@ -321,12 +372,13 @@ impl Default for Prefs {
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),
+            favorite_people: Vec::new(),
             keep_days: KEEP_DAYS,
             read_after_secs: 0,
             show_preview: true,
             compact: false,
             list_layout: ListLayout::Auto,
-            todo_bar: true,
+            todo_bar: TodoBar::default(),
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,

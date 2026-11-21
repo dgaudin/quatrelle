@@ -61,7 +61,7 @@ pub use opening::{BodyWork, HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, Prepare
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     CtrlEnter, ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
-    WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
+    TodoBar, WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
 use searching::SearchIndex;
 pub use searching::{IndexWork, SearchClock, SearchScope, ServerSearch};

@@ -2489,3 +2489,6 @@ presence	Offline	לא מחובר
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	התזכורת היא יום (YYYY-MM-DD) ושעה (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	"{name}" הוא יום, YYYY-MM-DD
 	Remove from List	הסרה מהרשימה
+	Add to Favorites	הוספה למועדפים
+	Open contact	פתיחת איש קשר
+	No favorite people yet: right-click a contact or a sender to add one.	אין עדיין אנשים מועדפים: לחצו עם מקש ימני על איש קשר או שולח כדי להוסיף.

@@ -2494,3 +2494,6 @@ presence	Offline	Hors ligne
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Le rappel est un jour (YYYY-MM-DD) et une heure (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	« {name} » est un jour, YYYY-MM-DD
 	Remove from List	Retirer de la liste
+	Add to Favorites	Ajouter aux favoris
+	Open contact	Ouvrir le contact
+	No favorite people yet: right-click a contact or a sender to add one.	Aucune personne favorite : cliquez avec le bouton droit sur un contact ou un expéditeur pour en ajouter une.

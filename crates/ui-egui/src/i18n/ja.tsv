@@ -2490,3 +2490,6 @@ presence	Offline	オフライン
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	リマインダーは日付 (YYYY-MM-DD) と時刻 (HH:MM) です
 	`{name}` is a day, YYYY-MM-DD	「{name}」は日付です (YYYY-MM-DD)
 	Remove from List	一覧から削除
+	Add to Favorites	お気に入りに追加
+	Open contact	連絡先を開く
+	No favorite people yet: right-click a contact or a sender to add one.	お気に入りの人物はまだいません。連絡先または送信者を右クリックして追加してください。

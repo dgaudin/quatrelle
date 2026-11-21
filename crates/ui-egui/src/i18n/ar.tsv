@@ -2489,3 +2489,6 @@ presence	Offline	غير متصل
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	التذكير هو يوم (YYYY-MM-DD) ووقت (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	«{name}» هو يوم، YYYY-MM-DD
 	Remove from List	إزالة من القائمة
+	Add to Favorites	إضافة إلى المفضلة
+	Open contact	فتح جهة الاتصال
+	No favorite people yet: right-click a contact or a sender to add one.	لا يوجد أشخاص مفضلون بعد: انقر بزر الماوس الأيمن على جهة اتصال أو مرسل لإضافة واحد.

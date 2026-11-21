@@ -41,10 +41,29 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"on"?: bool}"#),
         CommandSpec::new("view.todoBar", "To-Do bar", "View › Layout", |s, v| {
-            s.prefs.todo_bar = p::bool(v, "on").unwrap_or(!s.prefs.todo_bar);
-            Ok(json!({"on": s.prefs.todo_bar}))
+            let bar = &mut s.prefs.todo_bar;
+            if p::bool(v, "on").is_some() || p::bool(v, "calendar").is_some() || p::bool(v, "people").is_some() || p::bool(v, "tasks").is_some() {
+                if let Some(on) = p::bool(v, "on") {
+                    // What before it had parts meant: on, the calendar alone; off, nothing.
+                    *bar = crate::session::TodoBar { calendar: on, people: false, tasks: false };
+                }
+                if let Some(on) = p::bool(v, "calendar") {
+                    bar.calendar = on;
+                }
+                if let Some(on) = p::bool(v, "people") {
+                    bar.people = on;
+                }
+                if let Some(on) = p::bool(v, "tasks") {
+                    bar.tasks = on;
+                }
+            } else if bar.any() {
+                *bar = crate::session::TodoBar { calendar: false, people: false, tasks: false };
+            } else {
+                *bar = crate::session::TodoBar { calendar: true, people: false, tasks: false };
+            }
+            Ok(json!({"on": bar.any(), "calendar": bar.calendar, "people": bar.people, "tasks": bar.tasks}))
         })
-        .params(r#"{"on"?: bool}"#),
+        .params(r#"{"on"?: bool (the old switch: on, the calendar part alone; off, none), "calendar"?: bool, "people"?: bool, "tasks"?: bool (the parts shown, each remembered); none: switch the bar on (the calendar) or off}"#),
         CommandSpec::new("view.listLayout", "Message list layout", "View › Layout", |s, v| {
             let value = p::req_str(v, "value")?;
             s.prefs.list_layout =

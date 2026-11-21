@@ -150,6 +150,52 @@ fn people_lay_out_as_a_list_cards_or_a_phone_list() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The To-Do Bar's three parts, stacked in View › To-Do Bar's order: the calendar (as before),
+/// People (a favorite contact, opened by a click) and the To-Do List small (a task, a flagged
+/// message with its follow-up's title, opened by a double click).
+#[test]
+fn the_todo_bar_stacks_the_parts_ticked() {
+    let (mut a, dir) = app("todo-bar-parts");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.readingPane", json!({"value": "off"}));
+    frame(&ctx, &mut a, vec![]);
+    // Calendar off, People and Tasks on (each remembered).
+    a.run("view.todoBar", json!({"calendar": false, "people": true, "tasks": true}));
+    assert_eq!((a.session.prefs.todo_bar.calendar, a.session.prefs.todo_bar.people, a.session.prefs.todo_bar.tasks), (false, true, true));
+    // A favorite person and a task, then a flagged message named by its follow-up title.
+    a.run("contact.create", json!({"name": "Zoe Martin", "emails": "zoe@studio.example"}));
+    a.run("contact.favorite", json!({"email": "zoe@studio.example"}));
+    a.run("task.create", json!({"subject": "Call the printer"}));
+    // A message of another folder, flagged there and not drawn in the list meanwhile: only the
+    // bar shows it (its subject finds the bar's row, not the list's).
+    a.run("folder.open", json!({"account": "sample", "folder": "Projects/Short film"}));
+    let m = a.session.list.iter().find(|x| x.subject == "Shot list v2").map(|x| (**x).clone()).expect("the sample's shot list");
+    a.run("mail.flag", json!({"key": m.key.to_id(), "due": "today"}));
+    a.run("folder.open", json!({"account": "sample", "folder": "INBOX"}));
+    frame(&ctx, &mut a, vec![]);
+    let zoe = settled_text_at(&ctx, &mut a, "Zoe Martin", size).expect("the favorite person");
+    assert!(settled_text_at(&ctx, &mut a, "Call the printer", size).is_some(), "the task");
+    assert!(settled_text_at(&ctx, &mut a, "Shot list v2", size).is_some(), "the flagged message's row");
+    assert!(settled_text_at(&ctx, &mut a, "Type a new task", size).is_some(), "the box to type one in");
+    // A click opens the contact in People.
+    click_at(&ctx, &mut a, zoe, 1, size);
+    assert_eq!(a.session.module, quatrelle_engine::Module::People);
+    assert!(a.ui.person.is_some(), "the contact picked");
+    // A double click on the flagged message opens it.
+    a.run("view.module", json!({"name": "mail"}));
+    frame(&ctx, &mut a, vec![]);
+    let report = settled_text_at(&ctx, &mut a, "Shot list v2", size).expect("the row again");
+    click_at(&ctx, &mut a, report, 2, size);
+    assert_eq!(a.session.reading.as_ref().map(|r| r.key.clone()), Some(m.key), "opened from the bar");
+    // Off: no part at all.
+    a.run("view.todoBar", json!({"calendar": false, "people": false, "tasks": false}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "Zoe Martin", size).is_none());
+    assert!(settled_text_at(&ctx, &mut a, "Call the printer", size).is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Flagged mail in the To-Do List: its row (the subject, its due day and the red flag), a
 /// double click opening it, its tick marking the follow-up complete and its right-click menu
 /// with Follow Up and Remove from List.

@@ -2493,3 +2493,6 @@ presence	Offline	离线
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	提醒是一个日期 (YYYY-MM-DD) 和时间 (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	“{name}”是一个日期，YYYY-MM-DD
 	Remove from List	从列表中删除
+	Add to Favorites	添加到收藏夹
+	Open contact	打开联系人
+	No favorite people yet: right-click a contact or a sender to add one.	还没有收藏联系人：右键单击联系人或发件人以添加。

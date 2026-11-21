@@ -2493,3 +2493,6 @@ presence	Offline	Offline
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	O lembrete é um dia (YYYY-MM-DD) e um horário (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	"{name}" é um dia, YYYY-MM-DD
 	Remove from List	Remover da lista
+	Add to Favorites	Adicionar aos favoritos
+	Open contact	Abrir contato
+	No favorite people yet: right-click a contact or a sender to add one.	Nenhuma pessoa favorita ainda: clique com o botão direito em um contato ou remetente para adicionar uma.

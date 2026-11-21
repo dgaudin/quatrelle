@@ -256,9 +256,7 @@ impl MailApp {
                     self.ui.scroll_to_focus = true;
                 }
             }
-            Action::Open(k) => {
-                self.run("list.open", json!({"key": k.to_id()}));
-            }
+            Action::Open(k) => self.session.open_any(&k),
             Action::Dialog(d) => self.ui.dialog = Some(d),
             Action::DeleteMail { for_good } => self.delete_mail(for_good),
             Action::Refuse(why) => self.session.notice(why, true),
@@ -273,6 +271,11 @@ impl MailApp {
                 }
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            Action::OpenPerson(uid) => {
+                self.session.module = quatrelle_engine::Module::People;
+                self.ui.people_query.clear();
+                self.ui.person = Some(uid);
+            }
             Action::OpenTask(uid) => {
                 self.session.module = Module::Tasks;
                 self.ui.tasks.query.clear();

@@ -2494,3 +2494,6 @@ presence	Offline	Desconectado
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	El recordatorio es un día (YYYY-MM-DD) y una hora (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	«{name}» es un día, YYYY-MM-DD
 	Remove from List	Quitar de la lista
+	Add to Favorites	Agregar a favoritos
+	Open contact	Abrir contacto
+	No favorite people yet: right-click a contact or a sender to add one.	Aún no hay personas favoritas: haz clic con el botón derecho en un contacto o remitente para agregar una.

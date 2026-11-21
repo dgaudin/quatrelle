@@ -113,6 +113,15 @@ impl Session {
         self.show_message(key, true);
     }
 
+    /// Open a message wherever it's kept: one from another folder (a To-Do List row, a reminder)
+    /// takes the view to that folder first, so the reading pane and the list agree.
+    pub fn open_any(&mut self, key: &MessageKey) {
+        if self.summary(key).is_none() && self.folder(&key.account, &key.folder).is_some() {
+            self.open_view(View::Folder { account: key.account.clone(), folder: key.folder.clone() });
+        }
+        self.open_message(key);
+    }
+
     /// Select one message and show it; `mark`: as the reading options say (else left as it is).
     pub(super) fn show_message(&mut self, key: &MessageKey, mark: bool) {
         self.shown = self.shown.wrapping_add(1);

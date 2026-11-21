@@ -2494,3 +2494,6 @@ presence	Offline	Не в сети
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Напоминание — это день (YYYY-MM-DD) и время (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	«{name}» — это день, YYYY-MM-DD
 	Remove from List	Удалить из списка
+	Add to Favorites	Добавить в избранное
+	Open contact	Открыть контакт
+	No favorite people yet: right-click a contact or a sender to add one.	Избранных людей пока нет: щёлкните правой кнопкой мыши контакт или отправителя, чтобы добавить.

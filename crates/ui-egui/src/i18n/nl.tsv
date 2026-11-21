@@ -2490,3 +2490,6 @@ presence	Offline	Offline
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	De herinnering is een dag (YYYY-MM-DD) en een tijd (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	'{name}' is een dag, YYYY-MM-DD
 	Remove from List	Uit de lijst verwijderen
+	Add to Favorites	Toevoegen aan favorieten
+	Open contact	Contact openen
+	No favorite people yet: right-click a contact or a sender to add one.	Nog geen favoriete personen: rechtsklik op een contact of afzender om er een toe te voegen.

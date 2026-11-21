@@ -2492,3 +2492,6 @@ presence	Offline	Offline
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Il promemoria è un giorno (YYYY-MM-DD) e un'ora (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	"{name}" è un giorno, YYYY-MM-DD
 	Remove from List	Rimuovi dall'elenco
+	Add to Favorites	Aggiungi ai preferiti
+	Open contact	Apri contatto
+	No favorite people yet: right-click a contact or a sender to add one.	Nessuna persona preferita: fai clic con il tasto destro su un contatto o un mittente per aggiungerne una.

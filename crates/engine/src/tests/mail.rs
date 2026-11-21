@@ -853,10 +853,43 @@ fn the_list_is_a_table_where_it_has_room() {
 #[test]
 fn the_todo_bar_is_on_until_turned_off() {
     let mut s = sample_session("todo-bar");
-    assert!(s.prefs.todo_bar);
+    assert!(s.prefs.todo_bar.any() && s.prefs.todo_bar.calendar, "on, the calendar, as before");
     s.run("view.todoBar", &json!({})).unwrap();
-    assert!(!s.prefs.todo_bar);
+    assert!(!s.prefs.todo_bar.any());
     s.run("view.todoBar", &json!({"on": true})).unwrap();
-    assert!(s.prefs.todo_bar);
+    assert!(s.prefs.todo_bar.calendar && !s.prefs.todo_bar.people && !s.prefs.todo_bar.tasks, "the old switch: the calendar alone");
+    // Each part: People alone, then Tasks beside it; Off; and what's remembered.
+    let r = s.run("view.todoBar", &json!({"calendar": false, "people": true})).unwrap();
+    assert_eq!((r["on"].as_bool(), r["calendar"].as_bool(), r["people"].as_bool()), (Some(true), Some(false), Some(true)));
+    s.run("view.todoBar", &json!({"tasks": true})).unwrap();
+    assert!(s.prefs.todo_bar.people && s.prefs.todo_bar.tasks && !s.prefs.todo_bar.calendar);
+    s.run("view.todoBar", &json!({"calendar": false, "people": false, "tasks": false})).unwrap();
+    assert!(!s.prefs.todo_bar.any());
+    // The old settings file's `todoBar: true` reads as the calendar alone, false as off.
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBar": true})).unwrap();
+    assert!(p.todo_bar.calendar && !p.todo_bar.people && !p.todo_bar.tasks);
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBar": false})).unwrap();
+    assert!(!p.todo_bar.any());
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBar": {"people": true}})).unwrap();
+    assert!(p.todo_bar.people && !p.todo_bar.calendar, "parts named alone");
+    done(s);
+}
+
+/// The To-Do bar's favorite people: added and taken off by address (any case), at most 200,
+/// kept in the preferences; an address that isn't one is refused.
+#[test]
+fn favorite_people_are_kept_here() {
+    let mut s = sample_session("todo-favorites");
+    assert!(!s.is_favorite_person("zoe@studio.example"));
+    s.run("contact.favorite", &json!({"email": " Zoe@Studio.example "})).unwrap();
+    assert!(s.is_favorite_person("zoe@studio.example") && s.prefs.favorite_people == ["Zoe@Studio.example"]);
+    s.run("contact.favorite", &json!({"email": "zoe@studio.example"})).unwrap();
+    assert!(s.prefs.favorite_people.is_empty(), "a second click takes them off");
+    s.run("contact.favorite", &json!({"email": "zoe@studio.example", "on": true})).unwrap();
+    s.run("contact.favorite", &json!({"email": "zoe@studio.example", "on": true})).unwrap();
+    assert_eq!(s.prefs.favorite_people.len(), 1, "added once");
+    s.run("contact.favorite", &json!({"email": "zoe@studio.example", "on": false})).unwrap();
+    assert!(!s.is_favorite_person("zoe@studio.example"));
+    assert!(s.run("contact.favorite", &json!({"email": "not an address"})).is_err());
     done(s);
 }

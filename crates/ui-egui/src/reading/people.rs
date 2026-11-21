@@ -88,6 +88,7 @@ pub(super) fn person_menus(s: &Session, t: &Tokens, r: &egui::Response, a: &Emai
                 }
             }
         }
+        crate::people::favorite_menu(ui, s, &a.email, acts);
         ui.separator();
         if ui.button(tl!("Copy address")).clicked() {
             ui.ctx().copy_text(a.email.clone());
