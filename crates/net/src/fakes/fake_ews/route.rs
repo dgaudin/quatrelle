@@ -56,8 +56,20 @@ impl Data {
             }
             "FindItem" if op.attr("Traversal") == Some("Associated") => {
                 let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
-                let items = if folder == "COMMON-VIEWS" { self.wlinks.concat() } else { String::new() };
-                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>")));
+                let mut items: Vec<&String> = if folder == "COMMON-VIEWS" { self.wlinks.iter().collect() } else { Vec::new() };
+                // A restriction on the message class is honored, as a client looking for the
+                // navigation shortcuts asks ([MS-OXOCFG] 2.2.9).
+                if let Some(class) = class_wanted(op) {
+                    items.retain(|w| wlink_class(w).as_deref() == Some(class.as_str()));
+                }
+                // One page, and whether more follow, as Exchange answers an indexed page.
+                let view = op.child("IndexedPageItemView");
+                let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
+                let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
+                let total = items.len();
+                let page: String = items.iter().skip(offset).take(max).map(|w| w.as_str()).collect();
+                let last = offset.saturating_add(max) >= total;
+                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"{last}\"><t:Items>{page}</t:Items></m:RootFolder>")));
             }
             "ResolveNames" => return self.resolve_names(op),
             "ExpandDL" => return self.expand_dl(op),
@@ -688,4 +700,24 @@ impl Data {
         }
         (format!("{}Response", op.name), out)
     }
+}
+
+/// The message class a `FindItem` restriction asks for, when it asks for one (`IsEqualTo` on
+/// `message:MessageClass`).
+fn class_wanted(op: &El) -> Option<String> {
+    let eq = op.child("Restriction")?.child("IsEqualTo")?;
+    if eq.find("FieldURI")?.attr("FieldURI")? != "message:MessageClass" {
+        return None;
+    }
+    Some(eq.find("Constant")?.attr("Value")?.to_string())
+}
+
+/// A navigation shortcut's message class (`0x001A`), as it was kept.
+fn wlink_class(w: &str) -> Option<String> {
+    let e = parse(w);
+    let m = e.kids.first()?;
+    m.children("ExtendedProperty")
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, "0x001A")))
+        .and_then(|p| p.text_of("Value"))
+        .map(str::to_string)
 }

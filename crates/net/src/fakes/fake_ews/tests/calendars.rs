@@ -7,6 +7,7 @@ use super::*;
 
 mod contacts;
 mod files;
+mod groups;
 mod notes;
 mod refused_delete;
 mod removed;
@@ -362,23 +363,37 @@ fn calendars_are_read_from_six_months_back() {
 
 /// An Outlook navigation shortcut to someone's calendar, in a group of the Calendar pane.
 fn wlink(class: &str, section: i64, kind: i64, group: &str, name: &str, dn: &str) -> String {
+    wlink_of(class, section, kind, name, &[("0x6851", "String", group.into()), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(dn)))])
+}
+
+/// An address book entry id for an X.500 name ([MS-OXCDATA] 2.2.5.2): flags, the Exchange
+/// provider's UID, version and type, then the name, ending in a zero byte.
+fn address_book_eid(dn: &str) -> Vec<u8> {
     let mut eid = vec![0u8; 4];
     eid.extend([0xDC, 0xA7, 0x40, 0xC8, 0xC0, 0x42, 0x10, 0x1A, 0xB4, 0xB9, 0x08, 0x00, 0x2B, 0x2F, 0xE1, 0x82]);
     eid.extend([1, 0, 0, 0, 0, 0, 0, 0]);
     eid.extend(dn.as_bytes());
     eid.push(0);
+    eid
+}
+
+/// A navigation shortcut with the properties a test gives it.
+fn wlink_of(class: &str, section: i64, kind: i64, name: &str, props: &[(&str, &str, String)]) -> String {
     let p = |tag: &str, kind: &str, v: &str| {
         format!("<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{v}</t:Value></t:ExtendedProperty>")
     };
-    format!(
-        "<t:Message><t:ItemId Id=\"W{name}\"/>{}{}{}{}{}{}</t:Message>",
+    let mut out = format!(
+        "<t:Message><t:ItemId Id=\"W{name}\"/>{}{}{}{}",
         p("0x1a", "String", class),
         p("0xe1d", "String", name),
         p("0x6849", "Integer", &kind.to_string()),
-        p("0x6851", "String", group),
-        p("0x6852", "Integer", &section.to_string()),
-        p("0x6854", "Binary", &crate::imap::base64(&eid)),
-    )
+        p("0x6852", "Integer", &section.to_string())
+    );
+    for (tag, kind, v) in props {
+        out.push_str(&p(tag, kind, v));
+    }
+    out.push_str("</t:Message>");
+    out
 }
 
 /// The calendars Outlook keeps in groups of its Calendar pane come in under those groups,
@@ -412,12 +427,12 @@ fn outlook_calendar_groups_come_in_with_their_calendars() {
         // This account's own calendar, a mail folder shortcut, a group header, someone unknown.
         wlink(link, 3, 2, "Mes calendriers", "Riley", &dn("riley")),
         wlink(link, 1, 2, "Favorites", "Ana's Inbox", &dn("ana")),
-        wlink(link, 3, 4, "Salles", "", ""),
+        wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", crate::imap::base64(&[0xCD; 16]))]),
         wlink(link, 3, 2, "Salles", "Ghost", &dn("ghost")),
     ];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let links = crate::ews_pim::calendar_links(&c).unwrap();
+    let links = crate::ews_pim::calendar_links(&c).unwrap().links;
     assert_eq!(
         links.iter().map(|l| (l.email.as_str(), l.name.as_str(), l.group.as_str())).collect::<Vec<_>>(),
         [("ana@contoso.example", "Ana Lima", "Équipe : Studio"), ("room.lyon@contoso.example", "Salle Lyon", "Salles")]

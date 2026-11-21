@@ -191,6 +191,9 @@ pub struct Data {
     pub source_routes: Vec<String>,
     /// Outlook's navigation shortcuts, as items of the Common Views folder (hidden ones).
     pub wlinks: Vec<String>,
+    /// The name the server gives its Common Views folder, in the mailbox's language (empty:
+    /// "Common Views", as [MS-OXOSFLD] 2.2.1 names it).
+    pub common_views_name: String,
     /// The directory: (X.500 name, address).
     pub directory: Vec<(String, String)>,
     /// The Global Address List: (name, address), found by the start of a name or an address.
@@ -411,6 +414,7 @@ impl Default for Data {
             anchored_items: false,
             source_routes: Vec::new(),
             wlinks: Vec::new(),
+            common_views_name: String::new(),
             directory: Vec::new(),
             people: Vec::new(),
             mailbox_types: Vec::new(),
