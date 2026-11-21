@@ -2497,3 +2497,14 @@ presence	Offline	オフライン
 	To-Do List	To Do リスト
 	Read-only: this list is read on the server	読み取り専用: この一覧はサーバーから読み取ります
 	Nothing is kept here: this list is read on the server.	ここには何も保存されません: この一覧はサーバーから読み取ります。
+	Simple List	簡易一覧
+	Detailed	詳細
+	Active	アクティブ
+	Next 7 Days	今後 7 日間
+	Prioritized	優先順位
+	Arrange By	並べ替え
+	Importance	重要度
+	Type	種類
+	No category	カテゴリなし
+	Flagged messages	フラグ付きメッセージ
+	In folder	フォルダー内

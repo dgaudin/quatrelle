@@ -28,6 +28,25 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             ))
         })
         .params("(the My Tasks lists: the To-Do List, then each account's, its archive and shared mailboxes)"),
+        CommandSpec::new("task.view", "Current View", "Tasks › View", |s, v| {
+            let list = p::str(v, "list").unwrap_or("todo").to_string();
+            if s.task_list(&list).is_none() {
+                return Err(CmdError::Params(format!("no task list `{list}`")));
+            }
+            if let Some(code) = p::str(v, "view") {
+                let view = quatrelle_model::pim::tasks::TaskView::from_code(code)
+                    .ok_or_else(|| CmdError::Params(format!("`{code}` isn't a task view")))?;
+                s.prefs.task_views.insert(list.clone(), view);
+            }
+            if let Some(code) = p::str(v, "arrange") {
+                let arrange = quatrelle_model::pim::tasks::TaskArrange::from_code(code)
+                    .ok_or_else(|| CmdError::Params(format!("`{code}` isn't a task arrangement")))?;
+                s.prefs.task_arranges.insert(list.clone(), arrange);
+            }
+            let (view, arrange) = s.task_view(&list);
+            Ok(json!({"list": list, "view": view.code(), "arrange": arrange.code()}))
+        })
+        .params(r#"{"list"?: string (a task.lists id; default the To-Do List), "view"?: "simple"|"detailed"|"active"|"completed"|"next7"|"overdue"|"prioritized", "arrange"?: "due"|"start"|"importance"|"categories"|"folder"|"type"}"#),
         CommandSpec::new("task.list", "Tasks", "Tasks", |s, v| {
             let list = p::str(v, "list").unwrap_or("todo");
             if s.task_list(list).is_none() {

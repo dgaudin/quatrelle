@@ -196,6 +196,106 @@ impl DueGroup {
     }
 }
 
+/// The Tasks module's views (Outlook's View › Current View).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskView {
+    #[default]
+    SimpleList,
+    Detailed,
+    Active,
+    Completed,
+    NextSevenDays,
+    Overdue,
+    Prioritized,
+}
+
+impl TaskView {
+    pub const ALL: [TaskView; 7] = [
+        TaskView::SimpleList,
+        TaskView::Detailed,
+        TaskView::Active,
+        TaskView::Completed,
+        TaskView::NextSevenDays,
+        TaskView::Overdue,
+        TaskView::Prioritized,
+    ];
+
+    /// As the preferences (and the commands) name it.
+    pub fn code(self) -> &'static str {
+        match self {
+            TaskView::SimpleList => "simple",
+            TaskView::Detailed => "detailed",
+            TaskView::Active => "active",
+            TaskView::Completed => "completed",
+            TaskView::NextSevenDays => "next7",
+            TaskView::Overdue => "overdue",
+            TaskView::Prioritized => "prioritized",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<TaskView> {
+        TaskView::ALL.into_iter().find(|v| v.code().eq_ignore_ascii_case(code.trim()))
+    }
+
+    /// As the interface says it (a key of the interface's catalogs).
+    pub fn label(self) -> &'static str {
+        match self {
+            TaskView::SimpleList => "Simple List",
+            TaskView::Detailed => "Detailed",
+            TaskView::Active => "Active",
+            TaskView::Completed => "Completed",
+            TaskView::NextSevenDays => "Next 7 Days",
+            TaskView::Overdue => "Overdue",
+            TaskView::Prioritized => "Prioritized",
+        }
+    }
+}
+
+/// How the Tasks module arranges a list (Outlook's View › Arrange By).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskArrange {
+    #[default]
+    DueDate,
+    StartDate,
+    Importance,
+    Categories,
+    Folder,
+    Type,
+}
+
+impl TaskArrange {
+    pub const ALL: [TaskArrange; 6] =
+        [TaskArrange::DueDate, TaskArrange::StartDate, TaskArrange::Importance, TaskArrange::Categories, TaskArrange::Folder, TaskArrange::Type];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            TaskArrange::DueDate => "due",
+            TaskArrange::StartDate => "start",
+            TaskArrange::Importance => "importance",
+            TaskArrange::Categories => "categories",
+            TaskArrange::Folder => "folder",
+            TaskArrange::Type => "type",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<TaskArrange> {
+        TaskArrange::ALL.into_iter().find(|v| v.code().eq_ignore_ascii_case(code.trim()))
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TaskArrange::DueDate => "Due date",
+            TaskArrange::StartDate => "Start date",
+            TaskArrange::Importance => "Importance",
+            TaskArrange::Categories => "Categories",
+            TaskArrange::Folder => "Folder",
+            TaskArrange::Type => "Type",
+        }
+    }
+}
+
 /// The group a follow-up falls in on `today`: a task's, or a flagged message's due day.
 pub fn due_group_for(due: Option<i64>, complete: bool, today: i64) -> DueGroup {
     if complete {

@@ -123,6 +123,12 @@ pub struct Prefs {
     /// `all` (everyone written to or heard from, and contacts), `people` (every contact), or
     /// one address book (`book:<account>:<book id>`).
     pub address_book: String,
+    /// The Tasks module's view and arrangement, by My Tasks list (Outlook remembers them per
+    /// list).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_views: BTreeMap<String, quatrelle_model::pim::tasks::TaskView>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_arranges: BTreeMap<String, quatrelle_model::pim::tasks::TaskArrange>,
     /// The people in the To-Do bar's People part (Outlook's favorite people): their addresses,
     /// in the order shown. Kept on this computer (the contacts themselves are in the books).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -372,6 +378,8 @@ impl Default for Prefs {
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),
+            task_views: BTreeMap::new(),
+            task_arranges: BTreeMap::new(),
             favorite_people: Vec::new(),
             keep_days: KEEP_DAYS,
             read_after_secs: 0,

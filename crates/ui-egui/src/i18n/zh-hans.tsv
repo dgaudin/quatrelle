@@ -2500,3 +2500,14 @@ presence	Offline	离线
 	To-Do List	待办事项列表
 	Read-only: this list is read on the server	只读：此列表在服务器上读取
 	Nothing is kept here: this list is read on the server.	此处不保存任何内容：此列表在服务器上读取。
+	Simple List	简单列表
+	Detailed	详细信息
+	Active	活动
+	Next 7 Days	未来 7 天
+	Prioritized	按优先级
+	Arrange By	排列依据
+	Importance	重要性
+	Type	类型
+	No category	无类别
+	Flagged messages	已标记邮件
+	In folder	所在文件夹

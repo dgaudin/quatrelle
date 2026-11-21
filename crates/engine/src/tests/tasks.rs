@@ -12,6 +12,75 @@ fn uid_of(r: &Value) -> String {
 }
 
 /// A task made, changed as Outlook changes one, ticked and unticked, listed and deleted.
+/// The Tasks module's views and arrangements: Active, Completed, the next seven days, Overdue
+/// and Prioritized filter or order the list; Arrange By orders it by start, importance,
+/// categories, folder or type, remembered per list.
+#[test]
+fn task_views_filter_and_arrange() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("task-views");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let day = |n| quatrelle_model::dates::day_string(today + n);
+    let make = |s: &mut Session, subject: &str, due: Option<&str>, importance: &str| -> String {
+        let mut p = json!({"subject": subject, "importance": importance});
+        if let Some(d) = due {
+            p["due"] = json!(d);
+        }
+        uid_of(&s.run("task.create", &p).unwrap())
+    };
+    let overdue = make(&mut s, "Overdue one", Some(&day(-2)), "normal");
+    let soon = make(&mut s, "Due soon", Some(&day(2)), "normal");
+    let far = make(&mut s, "Due far", Some(&day(40)), "high");
+    let finished = make(&mut s, "Done one", Some(&day(2)), "low");
+    s.run("task.complete", &json!({"uid": finished})).unwrap();
+    let no_date = make(&mut s, "No date", None, "normal");
+    let subjects = |s: &Session, view: TaskView, arrange: TaskArrange| -> Vec<String> {
+        s.todo_view("todo", "", true, view, arrange).iter().map(|r| r.subject().to_string()).collect()
+    };
+
+    // Active leaves the done one out; Completed keeps it alone; Overdue only the late one.
+    let active = subjects(&s, TaskView::Active, TaskArrange::DueDate);
+    assert!(!active.contains(&"Done one".to_string()) && active.contains(&"Overdue one".to_string()));
+    let completed = subjects(&s, TaskView::Completed, TaskArrange::DueDate);
+    assert!(completed.contains(&"Done one".to_string()) && !completed.contains(&"Overdue one".to_string()), "{completed:?}");
+    let overdue_view = subjects(&s, TaskView::Overdue, TaskArrange::DueDate);
+    assert!(overdue_view.contains(&"Overdue one".to_string()), "{overdue_view:?}");
+    // The next seven days: due soon, and the done one if completed is shown with the view, but
+    // not the far one or one with no date.
+    let week = subjects(&s, TaskView::NextSevenDays, TaskArrange::DueDate);
+    assert!(week.contains(&"Due soon".to_string()) && !week.contains(&"Due far".to_string()) && !week.contains(&"No date".to_string()), "{week:?}");
+    // Prioritized: high first, then by due day.
+    let prioritized = subjects(&s, TaskView::Prioritized, TaskArrange::DueDate);
+    let at = |subject: &str| prioritized.iter().position(|x| x == subject).unwrap_or_else(|| panic!("{subject} in {prioritized:?}"));
+    assert!(at("Due far") < at("Overdue one"), "{prioritized:?}");
+    // Arrange by importance, categories, start date and type.
+    let by_importance = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::Importance);
+    let at = |subject: &str| by_importance.iter().position(|r| r.subject() == subject).unwrap_or_else(|| panic!("{subject}"));
+    assert!(at("Due far") < at("Overdue one"), "high first");
+    let by_start = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::StartDate);
+    assert!(by_start.iter().position(|r| r.uid() == no_date).is_some());
+    s.run("task.view", &json!({"list": "todo", "view": "overdue", "arrange": "importance"})).unwrap();
+    assert_eq!(s.task_view("todo"), (TaskView::Overdue, TaskArrange::Importance));
+    let listed = s.run("task.list", &json!({"list": "todo", "completed": true})).unwrap();
+    let names: Vec<&str> = listed["tasks"].as_array().unwrap().iter().filter_map(|t| t["subject"].as_str()).collect();
+    assert!(names.contains(&"Overdue one"));
+    // Views are remembered per list: another list keeps its own (Simple, by due day).
+    assert_eq!(s.task_view("sample"), (TaskView::SimpleList, TaskArrange::DueDate));
+    // Each of the ids is a view, and one that isn't is refused.
+    for v in TaskView::ALL {
+        assert_eq!(TaskView::from_code(v.code()), Some(v));
+    }
+    for a in TaskArrange::ALL {
+        assert_eq!(TaskArrange::from_code(a.code()), Some(a));
+    }
+    assert!(s.run("task.view", &json!({"view": "nope"})).is_err());
+    // (The rows made here are the sample's task list; the overdue one is still incomplete.)
+    assert!(s.find_task(&overdue).is_some());
+    assert!(s.find_task(&soon).is_some_and(|t| t.task.due.is_some()));
+    assert!(s.find_task(&far).is_some());
+    done(s);
+}
+
 /// The My Tasks lists: the To-Do List, each account's tasks, its online archive's (read-only:
 /// every change refused) and the shared mailboxes opened in it; a task typed in a list goes to
 /// its account.

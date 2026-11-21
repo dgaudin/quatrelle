@@ -2503,3 +2503,14 @@ presence	Offline	離線
 	To-Do List	待辦事項清單
 	Read-only: this list is read on the server	唯讀：此清單在伺服器上讀取
 	Nothing is kept here: this list is read on the server.	此處不保留任何內容：此清單在伺服器上讀取。
+	Simple List	簡易清單
+	Detailed	詳細資料
+	Active	作用中
+	Next 7 Days	未來 7 天
+	Prioritized	依優先順序
+	Arrange By	排列依據
+	Importance	重要性
+	Type	類型
+	No category	無類別
+	Flagged messages	已加上旗標的郵件
+	In folder	所在資料夾

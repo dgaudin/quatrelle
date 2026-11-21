@@ -8,7 +8,7 @@
 
 use egui::{Margin, RichText, Sense, Ui, pos2, vec2};
 use quatrelle_engine::model::dates::{self, civil_from_days};
-use quatrelle_engine::model::pim::tasks::DueGroup;
+use quatrelle_engine::model::pim::tasks::{DueGroup, TaskArrange, TaskView};
 use quatrelle_engine::{Session, TaskRef, TodoRef};
 use serde_json::json;
 
@@ -121,6 +121,26 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
         }
     }
     groups.end(ui, &t, "Tags");
+    let list = list_of(&st.tasks).to_string();
+    let (view, arrange) = s.task_view(&list);
+    let r = widgets::big_more(ui, "Current View", &t);
+    egui::Popup::menu(&r).show(|ui| {
+        for v in TaskView::ALL {
+            if ui.selectable_label(view == v, tl!(v.label())).clicked() {
+                acts.push(Action::Run("task.view", json!({"list": list, "view": v.code()})));
+                ui.close();
+            }
+        }
+    });
+    let r = widgets::big_more(ui, "Arrange By", &t);
+    egui::Popup::menu(&r).show(|ui| {
+        for a in TaskArrange::ALL {
+            if ui.selectable_label(arrange == a, tl!(a.label())).clicked() {
+                acts.push(Action::Run("task.view", json!({"list": list, "arrange": a.code()})));
+                ui.close();
+            }
+        }
+    });
     if widgets::big_toggle(ui, Icon::Funnel, "Show completed", &t, st.tasks.completed).clicked() {
         st.tasks.completed = !st.tasks.completed;
     }
@@ -133,7 +153,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     let today = dates::today(&s.clock);
     let list_id = list_of(&st.tasks).to_string();
     let list_ref = s.task_list(&list_id);
-    let list = s.todo_for(&list_id, &st.tasks.query, st.tasks.completed);
+    let (view, arrange) = s.task_view(&list_id);
+    let list = s.todo_view(&list_id, &st.tasks.query, st.tasks.completed, view, arrange);
     // The one picked went (deleted, or done with the completed ones hidden): none is.
     let picked = st.tasks.selected.as_deref().and_then(|u| list.iter().find(|r| r.uid() == u)).cloned();
     if picked.is_none() {
@@ -150,7 +171,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             .show(ui, |ui| form::show(s, &mut st.tasks, &t, ui, p, today, acts));
     }
     egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-        list_pane(s, &mut st.tasks, &t, ui, &list, list_ref.as_ref(), today, acts);
+        list_pane(s, &mut st.tasks, &t, ui, &list, list_ref.as_ref(), view, arrange, today, acts);
     });
 }
 
@@ -162,6 +183,8 @@ fn list_pane(
     ui: &mut Ui,
     list: &[TodoRef],
     list_ref: Option<&quatrelle_engine::TaskList>,
+    view: TaskView,
+    arrange: TaskArrange,
     today: i64,
     acts: &mut Vec<Action>,
 ) {
@@ -215,21 +238,31 @@ fn list_pane(
         return;
     }
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("tasks").show(ui, |ui| {
-        let mut group: Option<DueGroup> = None;
+        if view == TaskView::Detailed {
+            detail_header(ui, t);
+        }
+        let mut group: Option<String> = None;
         for r in list {
-            let g = r.group(today);
-            if group != Some(g) {
-                group = Some(g);
-                let n = list.iter().filter(|x| x.group(today) == g).count();
+            // Headings by what the list is arranged by (none by start date: the order says it).
+            let heading = heading_of(s, r, arrange, today);
+            if let Some((label, danger)) = heading
+                && group.as_deref() != Some(label.as_str())
+            {
+                group = Some(label.clone());
+                let n = list.iter().filter(|x| heading_of(s, x, arrange, today).is_some_and(|(l, _)| l == label)).count();
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    let color = if g == DueGroup::Overdue { t.danger } else { t.dim };
-                    ui.label(RichText::new(format!("{}  {n}", tl!(g.label()))).font(theme::bold(12.5)).color(color));
+                    let color = if danger { t.danger } else { t.dim };
+                    ui.label(RichText::new(format!("{label}  {n}")).font(theme::bold(12.5)).color(color));
                 });
                 ui.add_space(2.0);
             }
-            row(s, tu, t, ui, r, today, acts);
+            if view == TaskView::Detailed {
+                detail_row(s, tu, t, ui, r, today, acts);
+            } else {
+                row(s, tu, t, ui, r, today, acts);
+            }
         }
         ui.add_space(12.0);
     });
@@ -241,6 +274,137 @@ pub(crate) fn short_day(day: i64) -> String {
     let wd = usize::try_from((day + 3).rem_euclid(7)).unwrap_or(0);
     let name = crate::calendar::DAYS.get(wd).copied().unwrap_or("");
     tf!("{weekday} {day}/{month}", weekday = tl!(name), day = d, month = format!("{m:02}"))
+}
+
+/// The heading a row falls under, as the list is arranged (none by start date: the order says
+/// it), and whether it's the overdue one.
+fn heading_of(s: &Session, r: &TodoRef, arrange: TaskArrange, today: i64) -> Option<(String, bool)> {
+    match arrange {
+        TaskArrange::StartDate => None,
+        TaskArrange::DueDate => {
+            let g = r.group(today);
+            Some((tl!(g.label()).to_string(), g == DueGroup::Overdue))
+        }
+        TaskArrange::Importance => Some((
+            match r.importance() {
+                i if i > 0 => tl!("High Importance"),
+                i if i < 0 => tl!("Low Importance"),
+                _ => tl!("Normal"),
+            }
+            .to_string(),
+            false,
+        )),
+        TaskArrange::Categories => {
+            Some((r.task().and_then(|t| t.task.categories.first()).cloned().unwrap_or_else(|| tl!("No category").to_string()), false))
+        }
+        TaskArrange::Folder => Some((
+            match r {
+                TodoRef::Task(t) => s
+                    .account(&t.account)
+                    .map(|a| if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() })
+                    .unwrap_or_else(|| t.account.clone()),
+                TodoRef::Mail(m) => m.key.folder.clone(),
+            },
+            false,
+        )),
+        TaskArrange::Type => Some((if r.mail().is_some() { tl!("Flagged messages") } else { tl!("Tasks") }.to_string(), false)),
+    }
+}
+
+/// The columns of the Detailed view (Outlook's): subject, status, due date, % complete,
+/// categories and the folder it's in.
+fn detail_header(ui: &mut Ui, t: &Tokens) {
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.add_space(30.0);
+        for (label, width) in
+            [("Subject", 220.0), ("Status", 120.0), ("Due date", 90.0), ("% Complete", 76.0), ("Categories", 120.0), ("In folder", 130.0)]
+        {
+            ui.add_sized(vec2(width, 18.0), egui::Label::new(RichText::new(tl!(label)).font(theme::bold(12.0)).color(t.dim)).truncate());
+        }
+    });
+    let line = ui.available_rect_before_wrap();
+    ui.painter().line_segment([line.left_top(), line.right_top()], egui::Stroke::new(1.0, t.border));
+}
+
+/// A row of the Detailed view: its tick and the columns, a click picking it.
+fn detail_row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TodoRef, today: i64, acts: &mut Vec<Action>) {
+    let id = r.uid();
+    let done = r.is_complete();
+    let late = !done && r.due().is_some_and(|d| d < today);
+    let sink = ui.push_id(("task-detail", &id), |ui| {
+        ui.horizontal(|ui| {
+            let tick = egui::Rect::from_min_size(ui.cursor().min, vec2(18.0, 18.0));
+            let tick_resp = ui.interact(tick, ui.scope_id().with(("task-detail-tick", &id)), Sense::click());
+            if done {
+                ui.painter().circle_filled(tick.center(), 7.0, t.accent);
+                icons::paint(ui.painter(), tick.shrink(2.0), Icon::Read, t.on_accent);
+            } else {
+                ui.painter().circle_stroke(tick.center(), 6.5, egui::Stroke::new(1.3, if late { t.danger } else { t.dim }));
+            }
+            if tick_resp.clicked() {
+                match r {
+                    TodoRef::Task(task) => acts.push(Action::Run("task.complete", json!({"uid": task.task.uid, "done": !done}))),
+                    TodoRef::Mail(mail) => acts.push(Action::Run("mail.flag", json!({"key": mail.key.to_id(), "complete": !done, "on": done}))),
+                }
+            }
+            ui.add_space(4.0);
+            ui.add_sized(vec2(220.0, 18.0), egui::Label::new(RichText::new(r.subject()).color(if done { t.faint } else { t.text })).truncate());
+            let status = match r {
+                TodoRef::Task(task) => tl!(task.task.status.label()).to_string(),
+                TodoRef::Mail(mail) => if mail.complete { tl!("Completed") } else { tl!("Flagged") }.to_string(),
+            };
+            ui.add_sized(vec2(120.0, 18.0), egui::Label::new(RichText::new(status).color(t.dim).small()).truncate());
+            let due = r.due().map(short_day).unwrap_or_default();
+            ui.add_sized(vec2(90.0, 18.0), egui::Label::new(RichText::new(due).color(if late { t.danger } else { t.dim }).small()).truncate());
+            let percent = r.task().map(|task| format!("{} %", task.task.percent)).unwrap_or_default();
+            ui.add_sized(vec2(76.0, 18.0), egui::Label::new(RichText::new(percent).color(t.dim).small()).truncate());
+            let categories = r.task().map(|task| task.task.categories.join(", ")).unwrap_or_default();
+            ui.add_sized(vec2(120.0, 18.0), egui::Label::new(RichText::new(categories).color(t.dim).small()).truncate());
+            let folder = match r {
+                TodoRef::Task(task) => s
+                    .account(&task.account)
+                    .map(|a| if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() })
+                    .unwrap_or_else(|| task.account.clone()),
+                TodoRef::Mail(mail) => mail.key.folder.clone(),
+            };
+            ui.add_sized(vec2(130.0, 18.0), egui::Label::new(RichText::new(folder).color(t.dim).small()).truncate());
+        })
+        .response
+        .interact(Sense::click())
+    });
+    let resp = sink.inner;
+    if resp.clicked() {
+        tu.selected = Some(id.clone());
+    }
+    if resp.double_clicked()
+        && let TodoRef::Mail(mail) = r
+    {
+        acts.push(Action::Open(mail.key.clone()));
+    }
+    resp.context_menu(|ui| match r {
+        TodoRef::Task(task) => {
+            if ui.button(tl!(if done { "Mark as not complete" } else { "Mark Complete" })).clicked() {
+                acts.push(Action::Run("task.complete", json!({"uid": task.task.uid, "done": !done})));
+                ui.close();
+            }
+            if ui.button(tl!("Delete")).clicked() {
+                acts.push(Action::Run("task.delete", json!({"uid": task.task.uid})));
+                ui.close();
+            }
+        }
+        TodoRef::Mail(mail) => {
+            if ui.button(tl!("Open")).clicked() {
+                acts.push(Action::Open(mail.key.clone()));
+                ui.close();
+            }
+            ui.menu_button(tl!("Follow up"), |ui| crate::organize::follow_up_menu(ui, s, t, acts, Some(&mail.key.to_id())));
+            if ui.button(tl!("Remove from List")).clicked() {
+                acts.push(Action::Run("mail.flag", json!({"key": mail.key.to_id(), "on": false})));
+                ui.close();
+            }
+        }
+    });
 }
 
 /// One row of the To-Do List: a task, or a flagged message (an envelope, its follow-up).

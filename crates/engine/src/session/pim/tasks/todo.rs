@@ -4,7 +4,7 @@
 //! Outlook's Tasks module opens on it.
 
 use quatrelle_model::MessageKey;
-use quatrelle_model::pim::tasks::{DueGroup, due_group_for};
+use quatrelle_model::pim::tasks::{DueGroup, TaskArrange, TaskView, due_group_for};
 
 use super::*;
 
@@ -63,6 +63,56 @@ impl Session {
     /// The list named by `id`, when it's one of [`Self::task_lists`].
     pub fn task_list(&self, id: &str) -> Option<TaskList> {
         self.task_lists().into_iter().find(|l| l.id == id)
+    }
+
+    /// The view and arrangement remembered for a list (Simple List, by due day, when none is).
+    pub fn task_view(&self, list: &str) -> (TaskView, TaskArrange) {
+        (self.prefs.task_views.get(list).copied().unwrap_or_default(), self.prefs.task_arranges.get(list).copied().unwrap_or_default())
+    }
+
+    /// A list as a view shows it: its items filtered (Active, Completed, the next seven days,
+    /// Overdue) and arranged (by due or start date, importance, categories, folder or type).
+    /// `completed` also shows the done ones where the view keeps them.
+    pub fn todo_view(&self, list: &str, query: &str, completed: bool, view: TaskView, arrange: TaskArrange) -> Vec<TodoRef> {
+        let today = quatrelle_model::dates::today(&self.clock);
+        let mut items = self.todo_for(list, query, completed || view == TaskView::Completed);
+        match view {
+            TaskView::Active => items.retain(|r| !r.is_complete()),
+            TaskView::Completed => items.retain(|r| r.is_complete()),
+            TaskView::NextSevenDays => items.retain(|r| r.due().is_some_and(|d| (today..=today.saturating_add(7)).contains(&d)) && !r.is_complete()),
+            TaskView::Overdue => items.retain(|r| !r.is_complete() && r.due().is_some_and(|d| d < today)),
+            TaskView::SimpleList | TaskView::Detailed | TaskView::Prioritized => {}
+        }
+        let due = |r: &TodoRef| r.due().unwrap_or(i64::MAX);
+        // Prioritized is by importance, whatever the arrangement (as Outlook's view says).
+        let arrange = if view == TaskView::Prioritized { TaskArrange::Importance } else { arrange };
+        match arrange {
+            TaskArrange::DueDate => items.sort_by_cached_key(|r| (r.group(today), due(r), -r.importance(), r.subject().to_lowercase(), r.uid())),
+            TaskArrange::StartDate => items.sort_by_cached_key(|r| {
+                let start = match r {
+                    TodoRef::Task(t) => t.task.start,
+                    TodoRef::Mail(m) => m.start,
+                };
+                (start.unwrap_or(i64::MAX), due(r), r.subject().to_lowercase(), r.uid())
+            }),
+            TaskArrange::Importance => items.sort_by_cached_key(|r| (-r.importance(), due(r), r.subject().to_lowercase(), r.uid())),
+            TaskArrange::Categories => items.sort_by_cached_key(|r| {
+                let category = match r {
+                    TodoRef::Task(t) => t.task.categories.first().map(|c| c.to_lowercase()).unwrap_or_default(),
+                    TodoRef::Mail(_) => String::new(),
+                };
+                (category, due(r), r.subject().to_lowercase(), r.uid())
+            }),
+            TaskArrange::Folder => items.sort_by_cached_key(|r| {
+                let folder = match r {
+                    TodoRef::Task(t) => t.account.to_lowercase(),
+                    TodoRef::Mail(m) => format!("{}/{}", m.account, m.key.folder).to_lowercase(),
+                };
+                (folder, due(r), r.subject().to_lowercase(), r.uid())
+            }),
+            TaskArrange::Type => items.sort_by_cached_key(|r| (r.mail().is_some(), due(r), r.subject().to_lowercase(), r.uid())),
+        }
+        items
     }
 
     /// What a list holds: the To-Do List's tasks and flagged mail, or an account's tasks.

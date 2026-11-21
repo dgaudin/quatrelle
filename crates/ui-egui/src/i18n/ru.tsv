@@ -2501,3 +2501,14 @@ presence	Offline	Не в сети
 	To-Do List	Список задач
 	Read-only: this list is read on the server	Только чтение: этот список читается на сервере
 	Nothing is kept here: this list is read on the server.	Здесь ничего не хранится: этот список читается на сервере.
+	Simple List	Простой список
+	Detailed	Подробно
+	Active	Активные
+	Next 7 Days	Следующие 7 дней
+	Prioritized	По важности
+	Arrange By	Упорядочить по
+	Importance	Важность
+	Type	Тип
+	No category	Без категории
+	Flagged messages	Помеченные сообщения
+	In folder	В папке

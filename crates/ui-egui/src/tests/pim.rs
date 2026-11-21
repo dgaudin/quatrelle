@@ -196,6 +196,69 @@ fn the_todo_bar_stacks_the_parts_ticked() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The Tasks module's views and arrangements: Current View filters (Overdue, Completed,
+/// Detailed's columns) and Arrange By orders (importance, type), remembered per list.
+#[test]
+fn task_views_filter_and_arrange_in_the_module() {
+    use quatrelle_engine::model::pim::tasks::{TaskArrange, TaskView};
+    let (mut a, dir) = app("task-views-ui");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.module", json!({"name": "tasks"}));
+    let today = quatrelle_engine::model::dates::today(&a.session.clock);
+    let day = |n| quatrelle_engine::model::dates::day_string(today + n);
+    let make = |a: &mut MailApp, subject: &str, due: &str, importance: &str| {
+        a.run("task.create", json!({"subject": subject, "due": due, "importance": importance, "list": "sample"}));
+    };
+    make(&mut a, "Overdue probe", &day(-2), "normal");
+    make(&mut a, "Future probe", &day(20), "normal");
+    make(&mut a, "High probe", &day(1), "high");
+    a.ui.tasks.list = "sample".into();
+    frame(&ctx, &mut a, vec![]);
+
+    // Overdue: the late one, not the future one.
+    a.run("task.view", json!({"list": "sample", "view": "overdue"}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "Overdue probe", size).is_some(), "the overdue one");
+    assert!(settled_text_at(&ctx, &mut a, "Future probe", size).is_none(), "not the future one");
+    // Completed: the one done, and not the one still to do.
+    let uid = a.session.todo_view("sample", "Overdue probe", false, TaskView::SimpleList, TaskArrange::DueDate)[0].uid();
+    a.run("task.complete", json!({"uid": uid}));
+    a.run("task.view", json!({"list": "sample", "view": "completed"}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "Overdue probe", size).is_some());
+    assert!(settled_text_at(&ctx, &mut a, "Future probe", size).is_none());
+    // Detailed: its columns.
+    a.run("task.view", json!({"list": "sample", "view": "detailed"}));
+    frame(&ctx, &mut a, vec![]);
+    for column in ["Subject", "Status", "Due date", "% Complete", "Categories", "In folder"] {
+        assert!(settled_text_at(&ctx, &mut a, column, size).is_some(), "{column}");
+    }
+    // Arranged by importance: High first.
+    a.run("task.view", json!({"list": "sample", "view": "simple", "arrange": "importance"}));
+    frame(&ctx, &mut a, vec![]);
+    let high = settled_text_at(&ctx, &mut a, "High probe", size).expect("the high one");
+    let normal = settled_text_at(&ctx, &mut a, "Future probe", size).expect("the normal one");
+    assert!(high.y < normal.y, "high above normal: {high:?} {normal:?}");
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(shapes.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text().starts_with("High Importance"))), "its heading");
+    // Arranged by type: the flagged mail under its own heading.
+    let m = (*a.session.list.first().expect("a message")).clone();
+    a.run("mail.flag", json!({"key": m.key.to_id(), "due": "today"}));
+    a.run("task.view", json!({"list": "sample", "view": "simple", "arrange": "type"}));
+    frame(&ctx, &mut a, vec![]);
+    // (The account's own list holds tasks; the To-Do List holds the flagged message.)
+    a.ui.tasks.list = "todo".into();
+    a.ui.tasks.query = m.subject.clone();
+    a.run("task.view", json!({"list": "todo", "view": "simple", "arrange": "type"}));
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(
+        shapes.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text().starts_with("Flagged messages"))),
+        "the flagged mail's heading"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The Tasks module's My Tasks pane: the To-Do List, the account's tasks, and (for an Exchange
 /// account) its read-only online archive; a task typed in a list goes to that list's account.
 #[test]
