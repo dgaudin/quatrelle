@@ -527,8 +527,9 @@ fn is_hidden(f: &El) -> bool {
 
 /// The read, flag and draft state, asked for with every item.
 /// A change in a folder, as `SyncFolderItems` tells it.
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Change {
+pub enum Change {
     Created(String, Flags),
     Updated(String, Flags),
     Deleted(String),
@@ -779,6 +780,37 @@ mod sync;
 mod text_first;
 mod xml;
 
+#[doc(hidden)]
+pub use mailbox::{changes_listed, items_listed, mailboxes_listed};
+
+/// An item's list entry from its details (its marks, its header block, its received time), read
+/// as hostile XML. For the fuzz target.
+#[doc(hidden)]
+pub fn summary_listed(it: &El) -> Summary {
+    sync::item_summary(it, MessageKey::default())
+}
+
+/// The people in a `ResolveNames` answer (at most a hundred, each once) and whether there are
+/// more. For the fuzz target.
+#[doc(hidden)]
+pub fn people_listed(doc: &El) -> (Vec<quatrelle_model::Addressee>, bool) {
+    directory::people_of(doc)
+}
+
+/// The members in an `ExpandDL` answer (five hundred at most, each once), whether there are more
+/// and how many the list says it has. For the fuzz target.
+#[doc(hidden)]
+pub fn members_listed(doc: &El) -> (Vec<quatrelle_model::Addressee>, bool, usize) {
+    directory::members_of(doc)
+}
+
+/// The certificates in a `ResolveNames` answer for an address, each at most 64 KB. For the fuzz
+/// target.
+#[doc(hidden)]
+pub fn certificates_listed(doc: &El, email: &str) -> Vec<Vec<u8>> {
+    directory::certificates_of(doc, email)
+}
+
 pub use super::ews_pim::mailtips::mail_tips_read;
 #[cfg(test)]
 pub(crate) use autodiscover::TEST_BASES;
@@ -787,6 +819,7 @@ pub use autodiscover::{archive_named, autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};
+pub use rules::{rule_written, rules_listed};
 #[cfg(test)]
 pub(crate) use shared::tags_read;
 pub use shared::{ItemPolicy, tags_listed};

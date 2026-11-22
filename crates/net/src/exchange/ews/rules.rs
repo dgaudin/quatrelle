@@ -362,3 +362,26 @@ impl Client {
         Ok(out)
     }
 }
+
+/// The rules a `GetInboxRules` answer lists, as the server keeps them, at most [`MAX_RULES`]. For
+/// the fuzz target.
+#[doc(hidden)]
+pub fn rules_listed(doc: &El) -> Vec<quatrelle_model::organize::ForeignRule> {
+    let mut out = Vec::new();
+    for m in messages(doc) {
+        if let Some(list) = m.find("InboxRules") {
+            out.extend(list.children("Rule").take(MAX_RULES.saturating_sub(out.len())).map(server_rule));
+            if out.len() >= MAX_RULES {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// A rule as Exchange's XML holds it, written from Quatrelle's (the writer the server takes), to
+/// read back. For the fuzz target.
+#[doc(hidden)]
+pub fn rule_written(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&str>) -> String {
+    inbox_rule_xml(r, folder, priority, id)
+}
