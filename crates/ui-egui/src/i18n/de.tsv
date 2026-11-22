@@ -2427,3 +2427,9 @@ presence	Offline	Offline
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} Nachrichten importiert, aber die Ordnerliste konnte nicht erneut gelesen werden: Quatrelle liest sie beim nächsten Start erneut
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Die zu synchronisierenden öffentlichen Ordner konnten nicht gelesen werden und werden daher nicht geändert: {error}
+	Send this message?	Diese Nachricht senden?
+	Don't Send	Nicht senden
+	Don't ask again	Nicht mehr fragen
+	What Ctrl+Enter does in a message	Was Strg+Eingabe in einer Nachricht bewirkt
+	Ask first	Zuerst fragen
+	Does nothing	Tut nichts

@@ -30,6 +30,8 @@ pub enum Action {
     /// An action from one message's window: done to that message (several can be written at
     /// once, each in a window of its own).
     ForCompose(u64, Box<Action>),
+    /// The message being written is to be sent: the question Ctrl+Enter asked was answered Send.
+    SendConfirmed,
     /// A command from an appointment's window (its number): the window closes once it's done,
     /// or says why it couldn't be.
     ForEvent(u64, &'static str, Value),

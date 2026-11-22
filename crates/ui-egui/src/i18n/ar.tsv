@@ -2422,3 +2422,9 @@ presence	Offline	غير متصل
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّرت إعادة قراءة قائمة المجلدات: سيعيد Quatrelle قراءتها عند تشغيله التالي
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	تعذّرت قراءة المجلدات العامة المطلوب مزامنتها، لذا لم تُغيَّر: {error}
+	Send this message?	هل تريد إرسال هذه الرسالة؟
+	Don't Send	عدم الإرسال
+	Don't ask again	عدم السؤال مرة أخرى
+	What Ctrl+Enter does in a message	ما يفعله Ctrl+Enter في الرسالة
+	Ask first	اسأل أولاً
+	Does nothing	لا يفعل شيئًا

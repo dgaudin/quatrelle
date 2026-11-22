@@ -2426,3 +2426,9 @@ presence	Offline	Offline
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} mensagens importadas, mas não foi possível ler de novo a lista de pastas: o Quatrelle vai lê-la de novo na próxima vez que for iniciado
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Não foi possível ler as pastas públicas a sincronizar, então elas não são alteradas: {error}
+	Send this message?	Enviar esta mensagem?
+	Don't Send	Não enviar
+	Don't ask again	Não perguntar novamente
+	What Ctrl+Enter does in a message	O que Ctrl+Enter faz em uma mensagem
+	Ask first	Perguntar primeiro
+	Does nothing	Não faz nada

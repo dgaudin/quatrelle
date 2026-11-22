@@ -2425,3 +2425,9 @@ presence	Offline	오프라인
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 메시지 {messages}개를 가져왔지만 폴더 목록을 다시 읽을 수 없습니다: Quatrelle가 다음에 시작할 때 다시 읽습니다
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	동기화할 공용 폴더를 읽지 못해 변경하지 않습니다: {error}
+	Send this message?	이 메시지를 보낼까요?
+	Don't Send	보내지 않음
+	Don't ask again	다시 묻지 않음
+	What Ctrl+Enter does in a message	메시지에서 Ctrl+Enter의 동작
+	Ask first	먼저 묻기
+	Does nothing	아무것도 안 함

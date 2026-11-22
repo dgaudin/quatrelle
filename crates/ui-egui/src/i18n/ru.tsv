@@ -2427,3 +2427,9 @@ presence	Offline	Не в сети
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: импортировано писем: {messages}, но список папок не удалось прочитать снова: Quatrelle прочитает его снова при следующем запуске
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Не удалось прочитать список общедоступных папок для синхронизации, поэтому он не изменён: {error}
+	Send this message?	Отправить это сообщение?
+	Don't Send	Не отправлять
+	Don't ask again	Больше не спрашивать
+	What Ctrl+Enter does in a message	Что делает Ctrl+Enter в сообщении
+	Ask first	Сначала спрашивать
+	Does nothing	Ничего не делает

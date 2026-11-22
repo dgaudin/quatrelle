@@ -41,6 +41,30 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people
             }
             !cancel
         }
+        Dialog::CtrlEnter { remember } => {
+            ui.set_width(380.0);
+            title(ui, t, "Send this message?");
+            ui.checkbox(remember, tl!("Don't ask again"));
+            ui.add_space(10.0);
+            let (mut send, mut not) = (false, false);
+            // Right to left: Send rightmost, as each dialog's main button.
+            button_row(ui, |ui| {
+                send = widgets::accent_button(ui, Icon::Send, "Send", t, true).clicked();
+                not = ui.button(tl!("Don't Send")).clicked();
+            });
+            if send || not {
+                if *remember {
+                    acts.push(Action::Run("options.ctrlEnter", json!({"does": if send { "send" } else { "nothing" }})));
+                }
+                if send {
+                    // Sent as its Send button sends it (a missing subject asked about, names
+                    // still being looked up waited for).
+                    acts.push(Action::SendConfirmed);
+                }
+                return false;
+            }
+            true
+        }
         Dialog::Spelling(f) => {
             ui.set_width(460.0);
             title(ui, t, "Spelling");

@@ -2427,3 +2427,9 @@ presence	Offline	Desconectado
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} mensajes importados, pero no se pudo volver a leer su lista de carpetas: Quatrelle la volverá a leer la próxima vez que se inicie
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	No se pudieron leer las carpetas públicas que se sincronizan, así que no se cambian: {error}
+	Send this message?	¿Enviar este mensaje?
+	Don't Send	No enviar
+	Don't ask again	No volver a preguntar
+	What Ctrl+Enter does in a message	Qué hace Ctrl+Intro en un mensaje
+	Ask first	Preguntar primero
+	Does nothing	No hace nada

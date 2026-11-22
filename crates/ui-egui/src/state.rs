@@ -83,6 +83,9 @@ pub struct UiState {
     /// drawing sends it, as its Send button does (names still being looked up, the encryption
     /// refused).
     pub send_asked: Option<(u64, u64)>,
+    /// The message (its id) whose question "Send this message?" was answered Send: its drawing
+    /// sends it, as Send does.
+    pub send_confirmed: Option<u64>,
     /// The attachment shown in place of its message's text (a click on its chip), as Outlook
     /// previews attachments in the reading pane.
     pub attachment_view: Option<(MessageKey, usize)>,

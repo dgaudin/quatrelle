@@ -2426,3 +2426,9 @@ presence	Offline	离线
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 已导入 {messages} 封邮件，但无法重新读取其文件夹列表: Quatrelle 将在下次启动时重新读取
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	无法读取要同步的公用文件夹，因此不作更改: {error}
+	Send this message?	发送此邮件?
+	Don't Send	不发送
+	Don't ask again	不再询问
+	What Ctrl+Enter does in a message	邮件中 Ctrl+Enter 的作用
+	Ask first	先询问
+	Does nothing	不执行任何操作

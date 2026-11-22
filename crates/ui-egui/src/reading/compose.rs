@@ -363,6 +363,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     };
     // A key the main window took for this message (Ctrl+Enter or Alt+S, the keyboard in it).
     let pass = ui.ctx().cumulative_pass_nr();
+    let confirmed = st.send_confirmed.take_if(|id| *id == c.id).is_some();
     let keyed = match st.send_asked {
         Some((id, at)) if id == c.id => {
             st.send_asked = None;
@@ -381,8 +382,13 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 i.consume_key(egui::Modifiers::NONE, egui::Key::F7),
             )
         });
-        if alt_s || send_key || keyed {
+        // Ctrl+Enter in a window of its own asks first, or does nothing, as set (the main window
+        // does the same for a message beside the list); Alt+S sends as ever.
+        let ctrl_enter = s.prefs.ctrl_enter;
+        if alt_s || keyed || confirmed || (send_key && ctrl_enter == quatrelle_engine::CtrlEnter::Send) {
             send(c, &mut st.compose_alert, acts);
+        } else if send_key && ctrl_enter == quatrelle_engine::CtrlEnter::Ask {
+            acts.push(Action::Dialog(crate::Dialog::CtrlEnter { remember: false }));
         }
         if save_key {
             acts.push(Action::Run("compose.saveDraft", json!({})));

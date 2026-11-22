@@ -2422,3 +2422,9 @@ presence	Offline	לא מחובר
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} הודעות יובאו, אך לא ניתן היה לקרוא שוב את רשימת התיקיות: Quatrelle יקרא אותה שוב בהפעלה הבאה
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	לא ניתן היה לקרוא את התיקיות הציבוריות לסנכרון, ולכן הן לא שונו: {error}
+	Send this message?	לשלוח הודעה זו?
+	Don't Send	אל תשלח
+	Don't ask again	אל תשאל שוב
+	What Ctrl+Enter does in a message	מה Ctrl+Enter עושה בהודעה
+	Ask first	שאל קודם
+	Does nothing	לא עושה דבר

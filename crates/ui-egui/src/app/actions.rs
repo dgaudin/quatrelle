@@ -185,6 +185,7 @@ impl MailApp {
                     self.act(*inner);
                 }
             }
+            Action::SendConfirmed => self.ui.send_confirmed = self.session.compose.as_ref().map(|c| c.id),
             Action::Quit => self.quit(),
             Action::CloseAnyway => {
                 // What becomes of an update is still said before Quatrelle goes; its answer closes

@@ -208,7 +208,7 @@ impl MailApp {
                     continue;
                 }
                 if id == "compose.send" {
-                    self.send_by_key(ctx);
+                    self.send_by_key(ctx, &combo);
                     continue;
                 }
                 // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
@@ -276,7 +276,7 @@ impl MailApp {
     /// no dialog over it, not with the search box's keys, and with the keyboard in the message
     /// or nowhere (a box beside it has it for its own). From the Calendar, Contacts, a search
     /// being typed, a half-written message went.
-    fn send_by_key(&mut self, ctx: &egui::Context) {
+    fn send_by_key(&mut self, ctx: &egui::Context, combo: &str) {
         let pass = ctx.cumulative_pass_nr();
         let area = self.ui.compose_area.filter(|(at, _)| at.saturating_add(3) > pass).map(|(_, r)| r);
         let in_it = ctx.memory(|m| m.focused()).is_none_or(|id| match (area, ctx.read_response(id)) {
@@ -284,9 +284,19 @@ impl MailApp {
             _ => false,
         });
         let here = self.session.module == Module::Mail && !self.ui.search_focused && self.ui.dialog.is_none() && in_it;
-        if let Some(c) = self.session.compose.as_ref().filter(|c| here && !c.sending && compose_inline(c, ctx)) {
-            self.ui.send_asked = Some((c.id, pass));
+        let Some(id) = self.session.compose.as_ref().filter(|c| here && !c.sending && compose_inline(c, ctx)).map(|c| c.id) else { return };
+        // Ctrl+Enter asks first, or does nothing, as set; Alt+S sends as ever.
+        if combo == "Mod+Enter" {
+            match self.session.prefs.ctrl_enter {
+                quatrelle_engine::CtrlEnter::Ask => {
+                    self.ui.dialog = Some(Dialog::CtrlEnter { remember: false });
+                    return;
+                }
+                quatrelle_engine::CtrlEnter::Nothing => return,
+                quatrelle_engine::CtrlEnter::Send => {}
+            }
         }
+        self.ui.send_asked = Some((id, pass));
     }
 
     /// The shown module's new item (Ctrl+N), as its ribbon's New button makes it: a message, an

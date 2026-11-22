@@ -2429,3 +2429,9 @@ presence	Offline	離線
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 已匯入 {messages} 封郵件，但無法重新讀取其資料夾清單: Quatrelle 將在下次啟動時重新讀取
 # The public folders to keep in sync, a list damaged or that can't be read: left as it is.
 	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	無法讀取要同步的公用資料夾，因此不作變更: {error}
+	Send this message?	要傳送此郵件嗎?
+	Don't Send	不傳送
+	Don't ask again	不再詢問
+	What Ctrl+Enter does in a message	郵件中 Ctrl+Enter 的作用
+	Ask first	先詢問
+	Does nothing	不執行任何動作

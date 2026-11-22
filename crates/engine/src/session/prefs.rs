@@ -26,6 +26,18 @@ pub fn is_profile_dir(dir: &str) -> bool {
     (1..=255).contains(&dir.len()) && dir != "." && dir != ".." && dir.trim() == dir && !dir.chars().any(|c| c == '/' || c == '\\' || c.is_control())
 }
 
+/// What Ctrl+Enter does in a message being written: it sent at once, and a slip of the keys
+/// sent a message unfinished. It asks first, as Outlook does the first time, until the answer is
+/// kept ("Don't ask again", or File › Options › Mail); Alt+S and Send are as ever.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CtrlEnter {
+    #[default]
+    Ask,
+    Send,
+    Nothing,
+}
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -124,6 +136,8 @@ pub struct Prefs {
     /// Replies and forwards open in a window of their own too, not in the reading pane (issue
     /// #11: Pop out each time).
     pub reply_window: bool,
+    /// What Ctrl+Enter does in a message being written.
+    pub ctrl_enter: CtrlEnter,
     /// The folder pane shows Favorites at its top (issue #11: it could only be collapsed).
     pub show_favorites: bool,
     /// How the message list is arranged (View › Arrange by), and turned the other way round.
@@ -312,6 +326,7 @@ impl Default for Prefs {
             safe_senders: BTreeSet::new(),
             new_mail_window: true,
             reply_window: false,
+            ctrl_enter: CtrlEnter::Ask,
             show_favorites: true,
             arrange: Arrange::Date,
             reverse_sort: false,

@@ -129,6 +129,10 @@ pub enum Dialog {
         filter: String,
     },
     EmptySubject,
+    /// Ctrl+Enter pressed in a message: send it? `remember`: "Don't ask again".
+    CtrlEnter {
+        remember: bool,
+    },
     /// What `compose.send` held the message for (a lookalike recipient, many people seeing each
     /// other's addresses).
     SendCheck(Vec<quatrelle_engine::SendCheck>),
@@ -318,6 +322,7 @@ impl Dialog {
                     | Dialog::TrustDomain { .. }
                     | Dialog::ImportChanged { .. }
                     | Dialog::EmptySubject
+                    | Dialog::CtrlEnter { .. }
                     | Dialog::SaveChanges
                     | Dialog::SendCheck(_)
                     | Dialog::RiskyAttachment { .. }
@@ -351,6 +356,7 @@ impl Dialog {
                 | Dialog::AttachItem(_)
                 | Dialog::SaveChanges
                 | Dialog::EmptySubject
+                | Dialog::CtrlEnter { .. }
                 | Dialog::SendCheck(_)
                 | Dialog::NoAttachment
                 | Dialog::Spelling(_)
@@ -516,6 +522,7 @@ fn body(
         | Dialog::AttachItem(..)
         | Dialog::SaveChanges
         | Dialog::EmptySubject
+        | Dialog::CtrlEnter { .. }
         | Dialog::SendCheck(_)
         | Dialog::NoAttachment
         | Dialog::WordCount(..)
