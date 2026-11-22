@@ -154,8 +154,12 @@ impl Store {
         let mut items = Vec::new();
         // What's held of folders never written (an online archive's) stays behind.
         for p in from.walk(&dir).into_iter().filter(|p| !self.files.in_held_folder(p)) {
-            if let Ok(bytes) = from.read(&p) {
-                items.push((p, bytes));
+            match from.read(&p) {
+                Ok(bytes) => items.push((p, bytes)),
+                // Gone since the folder was listed: nothing of it to carry over.
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                // Left behind, its only copy would go with the rest below: nothing is switched.
+                Err(e) => return Err(io_err(&p)(e)),
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
