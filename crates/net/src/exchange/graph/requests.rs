@@ -74,7 +74,6 @@ impl Client {
 
     /// Every item of a listing, following `@odata.nextLink` (on the same server only).
     pub(crate) fn all(&self, path: &str, limit: usize) -> Result<Vec<Value>> {
-        let origin = http::Url::parse(&self.base)?.origin();
         let mut out = Vec::new();
         let mut url = format!("{}{path}", self.base);
         for _ in 0..MAX_PAGES {
@@ -84,9 +83,9 @@ impl Client {
                 out.truncate(limit);
                 break;
             }
-            match v.get("@odata.nextLink").and_then(Value::as_str) {
-                Some(next) if http::Url::parse(next).is_ok_and(|u| u.origin() == origin) => url = next.to_string(),
-                _ => break,
+            match next_link(&self.base, &v) {
+                Some(next) => url = next,
+                None => break,
             }
         }
         Ok(out)

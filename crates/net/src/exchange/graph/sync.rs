@@ -128,7 +128,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
 }
 
 /// A message's list entry from its details.
-fn message_summary(m: &Value, key: MessageKey) -> Summary {
+pub(super) fn message_summary(m: &Value, key: MessageKey) -> Summary {
     let received = m.get("receivedDateTime").and_then(Value::as_str).and_then(jmap::utc_date).unwrap_or(0);
     let mut s = mime::summary_from_header(&header_block(m), key, flags(m), 0, received);
     s.preview = m.get("bodyPreview").and_then(Value::as_str).map(mime::preview).unwrap_or_default();

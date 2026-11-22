@@ -403,6 +403,22 @@ pub mod mailtips;
 mod reminders;
 pub mod scheduling;
 
+/// The calendars or calendar groups a Graph listing carries (`value`): each one's id, name and
+/// whether this account may change it, at most 200. For the fuzz target.
+#[doc(hidden)]
+pub fn calendars_listed(v: &Value) -> Vec<(String, String, bool)> {
+    v.get("value")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(200)
+        .filter_map(|x| {
+            let id = s(x, "id");
+            (!id.is_empty()).then(|| (id, s(x, "name"), x.get("canEdit").and_then(Value::as_bool).unwrap_or(false)))
+        })
+        .collect()
+}
+
 pub use files::attachment;
 
 /// Where a calendar's events live: `/me`, or `/users/<address>` for someone else's.
