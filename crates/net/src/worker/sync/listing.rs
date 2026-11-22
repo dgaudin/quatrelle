@@ -256,9 +256,22 @@ impl Worker {
         if self.read_online(path) {
             // While the list of public folders followed can't be read, this one may be one: what
             // it keeps isn't cut to an opened folder's newest few, with their sources (downloaded
-            // again once the list is read), nor is it read as followed (nothing downloaded ahead,
-            // no state followed).
-            let window = if self.followed_unread && is_public_folder(path) { more.max(self.opts.window) } else { more.max(ONLINE_WINDOW) };
+            // again once the list is read), and a few more are listed, no more (the app keeps every
+            // message: a window of a followed folder listed up to 100,000 of one not followed at
+            // each opening). Nor is it read as followed (nothing downloaded ahead, no state
+            // followed). What it keeps that can't be read counts none: no more than a few are
+            // listed, and the sync, reading it next, stops on it with nothing let go of.
+            let window = if self.followed_unread && is_public_folder(path) {
+                let held = self
+                    .store
+                    .load_folder(&self.acc.id, path)
+                    .map(|f| f.messages.len())
+                    .inspect_err(|e| log::warn!("{}: a public folder's list couldn't be read to list it: {e}", self.acc.id))
+                    .unwrap_or(0);
+                more.max(ONLINE_WINDOW).max(held.saturating_add(ONLINE_WINDOW)).min(self.opts.window.max(ONLINE_WINDOW))
+            } else {
+                more.max(ONLINE_WINDOW)
+            };
             return SyncOptions { window, prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
         }
         SyncOptions { window: more.max(self.opts.window), ..self.opts }

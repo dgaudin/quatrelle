@@ -308,30 +308,25 @@ fn a_folder_gone_whose_cache_cant_be_cleared_is_looked_at_again() {
     assert!(w.gone_meanwhile.is_empty());
 }
 
-/// The public folders followed can't be read at the start, nor when one of them is opened: taken
-/// for a folder read on the server, it was listed as an opened one is, its newest few, and what
-/// it kept beyond them let go of with their sources (downloaded again once the list was read).
-/// It's listed with nothing let go of, and not as one followed; read again, one not followed is
-/// listed as an opened one is, as ever.
-#[test]
-fn a_public_folder_opened_while_those_followed_cant_be_read_keeps_its_mail() {
-    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
+/// What the app syncs with: every message kept (`SetSync { messages: 0 }`), of any age.
+fn app_options() -> SyncOptions {
+    SyncOptions { window: usize::MAX, ..SyncOptions::default() }
+}
+
+/// An Exchange account whose public folder `Reports` holds `n` messages on the server.
+fn public_reports(n: usize) -> (crate::fakes::fake_ews::Server, AccountConfig) {
+    use crate::fakes::fake_ews::{DOMAIN, Data, USER, serve};
     let mut d = Data::default();
     d.pf_mailbox = Some("PFContent@contoso.example".into());
     d.pf_hierarchy = Some("PFHierarchy@contoso.example".into());
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
     let reports = d.folder("Reports", Some(&root), None, "IPF.Note");
-    let n = ONLINE_WINDOW + 5;
     for i in 0..n {
         let raw = format!("From: backup@contoso.example\r\nSubject: Report {i}\r\nMessage-ID: <r{i}@contoso.example>\r\n\r\nDone.\r\n");
         d.deliver(&reports, raw.as_bytes(), true, &format!("2026-09-{:02}T09:{:02}:00Z", 1 + i % 28, i % 60));
     }
     let server = serve(d);
-    let store = Store::failing();
-    let path = "Public Folders/Reports";
-    store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, &[path]).unwrap();
-    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
     let acc = AccountConfig {
         id: "a1".into(),
         email: "riley@contoso.example".into(),
@@ -339,18 +334,42 @@ fn a_public_folder_opened_while_those_followed_cant_be_read_keeps_its_mail() {
         ews: Some(server.url.clone()),
         ..Default::default()
     };
+    (server, acc)
+}
+
+/// A worker for `acc` with the app's options, connected, its folders listed: the list of public
+/// folders followed can't be read as it starts (and after, till `store.fail(None, None)`).
+fn started_unread(acc: &AccountConfig, store: &Store, pool: &Pool) -> Worker {
+    use crate::fakes::fake_ews::PASSWORD;
+    store.fail(Some(FOLLOWED_PUBLIC_DOC), None);
+    let mut w = Worker::new(acc.clone(), Auth::shared(PASSWORD), store.clone(), pool.sink.clone(), app_options());
+    w.connect().unwrap();
+    assert!(w.relist());
+    w
+}
+
+/// The public folders followed can't be read at the start, nor when one of them is opened: taken
+/// for a folder read on the server, it was listed as an opened one is, its newest few, and what
+/// it kept beyond them let go of with their sources (downloaded again once the list was read).
+/// It's listed with nothing let go of, and not as one followed; read again, one not followed is
+/// listed as an opened one is, as ever.
+#[test]
+fn a_public_folder_opened_while_those_followed_cant_be_read_keeps_its_mail() {
+    let n = ONLINE_WINDOW + 5;
+    let (_server, acc) = public_reports(n);
+    let store = Store::failing();
+    let path = "Public Folders/Reports";
+    store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, &[path]).unwrap();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
     let sources = || store.load_folder("a1", path).map(|f| f.messages.iter().filter(|m| store.has_body(&m.key)).count()).unwrap_or(0);
     // Followed: kept, with its sources.
-    let mut w = worker(acc.clone(), PASSWORD, &store, &pool);
+    let mut w = Worker::new(acc.clone(), Auth::shared(crate::fakes::fake_ews::PASSWORD), store.clone(), pool.sink.clone(), app_options());
     w.connect().unwrap();
     assert!(w.relist());
     w.sync_one(path);
     assert_eq!((cached(&store, path), sources()), (n, n));
     // The list can't be read at the start, nor when the folder is opened.
-    store.fail(Some(FOLLOWED_PUBLIC_DOC), None);
-    let mut w = worker(acc, PASSWORD, &store, &pool);
-    w.connect().unwrap();
-    assert!(w.relist());
+    let mut w = started_unread(&acc, &store, &pool);
     w.handle(Job::SyncFolder { account: "a1".into(), folder: path.into() });
     store.fail(None, None);
     assert_eq!((cached(&store, path), sources()), (n, n), "let go of, with their sources");
@@ -358,4 +377,35 @@ fn a_public_folder_opened_while_those_followed_cant_be_read_keeps_its_mail() {
     store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, &Vec::<String>::new()).unwrap();
     w.handle(Job::SyncFolder { account: "a1".into(), folder: path.into() });
     assert_eq!(cached(&store, path), ONLINE_WINDOW);
+}
+
+/// The public folders followed can't be read: a public folder not followed, kept nowhere here,
+/// was listed whole when opened (the app keeps every message: up to 100,000 of any age at each
+/// opening). It's listed as an opened one is, its newest few.
+#[test]
+fn a_public_folder_not_followed_opened_while_those_followed_cant_be_read_lists_its_newest_few() {
+    let (_server, acc) = public_reports(ONLINE_WINDOW + 5);
+    let store = Store::failing();
+    let path = "Public Folders/Reports";
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = started_unread(&acc, &store, &pool);
+    w.handle(Job::SyncFolder { account: "a1".into(), folder: path.into() });
+    store.fail(None, None);
+    assert_eq!(cached(&store, path), ONLINE_WINDOW, "listed whole");
+}
+
+/// Show more on a public folder while those followed can't be read: what it was to keep was
+/// written as a million (the window of a folder kept whole), kept after: the folder, not
+/// followed once the list was read, was listed whole at each opening and never let go of. It's
+/// what it lists, and the few asked for.
+#[test]
+fn show_more_while_those_followed_cant_be_read_asks_for_a_few_more() {
+    let (_server, acc) = public_reports(ONLINE_WINDOW + 5);
+    let store = Store::failing();
+    let path = "Public Folders/Reports";
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = started_unread(&acc, &store, &pool);
+    w.handle(Job::MoreMail { account: "a1".into(), folder: path.into(), more: 10 });
+    store.fail(None, None);
+    assert_eq!(w.windows.get(path).copied(), Some(ONLINE_WINDOW + 10), "what it is to keep");
 }
