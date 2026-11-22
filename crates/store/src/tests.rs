@@ -9,6 +9,7 @@ mod held;
 mod journal;
 mod listing;
 mod noted;
+mod online_only;
 mod scratch;
 
 /// A big folder's list is kept in pages by number: read back newest first as it was; a flag
@@ -765,26 +766,4 @@ fn a_listing_that_fails_is_an_error() {
     for fine in ["CONSOLE.old", "COM10.old", "Teams-1a2b3c4d.quatrelle.old"] {
         assert!(Store::memory().set_aside_data_file("a1", fine).is_ok(), "{fine}");
     }
-}
-
-/// Turning online-only on with one of the account's files unreadable leaves it all where it was,
-/// and says so. That file was left behind unread and its only copy removed with the rest (its
-/// changes waiting for the server among what could go).
-#[test]
-fn online_only_with_a_file_that_cant_be_read_keeps_it() {
-    let s = Store::failing();
-    s.save_folder("a1", "INBOX", &FolderState { validity: 3, uid_next: 2, messages: vec![msg(1, false)], ..Default::default() }).unwrap();
-    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true }).unwrap();
-    let waiting = s.account_files("a1", "ops").unwrap();
-    assert_eq!(waiting.len(), 1, "one change waiting");
-    let name = waiting[0].clone();
-    assert!(s.files.main.walk(&s.account_dir("a1")).unwrap().iter().any(|p| p.ends_with(&name)), "the walk lists the file");
-    s.fail(Some(&name), None);
-    assert!(s.set_online_only("a1", true).is_err());
-    s.fail(None, None);
-    assert!(!s.is_online_only("a1"));
-    assert_eq!((s.load_ops("a1").unwrap().len(), s.load_folder("a1", "INBOX").unwrap().messages.len()), (1, 1), "still there");
-    // Readable again, all of it goes over.
-    s.set_online_only("a1", true).unwrap();
-    assert_eq!((s.load_ops("a1").unwrap().len(), s.load_folder("a1", "INBOX").unwrap().messages.len()), (1, 1));
 }

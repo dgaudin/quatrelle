@@ -133,6 +133,23 @@ fn same(a: &Path, b: &Path) -> bool {
     }
 }
 
+/// The files directly in a folder; none when it isn't there, an error when it can't be read.
+fn files_in(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let rd = match fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut out = Vec::new();
+    for e in rd {
+        let e = e?;
+        if e.file_type()?.is_file() {
+            out.push(e.path());
+        }
+    }
+    Ok(out)
+}
+
 /// Carry out a move asked for (call before anything opens the data files). `Ok(Some(folder))`
 /// when they moved; on an error nothing has changed and the move is no longer pending.
 pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
@@ -142,10 +159,9 @@ pub fn apply_pending_move(base: &Path) -> Result<Option<PathBuf>, String> {
     if to == from {
         return Ok(Some(to));
     }
-    let list: Vec<PathBuf> = match fs::read_dir(&from) {
-        Ok(rd) => rd.flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_file())).map(|e| e.path()).collect(),
-        Err(_) => Vec::new(),
-    };
+    // A folder or an entry that can't be read stops the move before anything is copied: a list
+    // short of what's there would move part of the files and leave the rest, taken for absent.
+    let list = files_in(&from).map_err(|e| format!("{}: {e}", from.display()))?;
     let created = !to.exists();
     // The files this move makes, each noted before it's written: on failure only they go, never
     // one that was there already.
@@ -286,6 +302,38 @@ mod tests {
         assert!(!target.join("zoe@studio.example.quatrelle").exists(), "what the move copied goes");
         assert_eq!(files_dir(&base), files);
         assert!(files.join("old.quatrelle").exists() && files.join("zoe@studio.example.quatrelle").exists(), "nothing moved");
+        let _ = fs::remove_dir_all(t);
+    }
+
+    /// A source folder that can't be read stops the move before anything is copied, and leaves
+    /// the pointer, the files and the target as they were: it was taken for an empty folder, the
+    /// move "succeeded" and the pointer went to a target without the files.
+    #[cfg(unix)]
+    #[test]
+    fn a_move_from_a_folder_that_cant_be_read_changes_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        struct Access(PathBuf);
+        impl Drop for Access {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o700));
+            }
+        }
+        let t = temp("unreadable");
+        let (base, files, target) = (t.join("app"), t.join("C").join(FILES_FOLDER), t.join("D").join("Mail"));
+        seed(&base, &files);
+        assert_eq!(schedule_move(&base, &target).unwrap(), target);
+        let _access = Access(files.clone());
+        fs::set_permissions(&files, fs::Permissions::from_mode(0o000)).unwrap();
+        if fs::read_dir(&files).is_ok() {
+            log::warn!("this account reads any folder (root): nothing is asserted");
+            let _ = fs::remove_dir_all(t);
+            return;
+        }
+        assert!(apply_pending_move(&base).is_err(), "a source it can't read stops the move");
+        fs::set_permissions(&files, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(files_dir(&base), files, "the pointer didn't move");
+        assert!(files.join("old.quatrelle").exists() && files.join("zoe@studio.example.quatrelle").exists(), "the files are all there");
+        assert!(!target.exists(), "nothing made in the target");
         let _ = fs::remove_dir_all(t);
     }
 }

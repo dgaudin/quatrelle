@@ -292,8 +292,8 @@ impl Files {
         }
     }
 
-    /// Every file under a folder, at any depth. A folder or file that can't be read is an error
-    /// (one that isn't there is nothing), never a shorter list.
+    /// Every file under a folder, down to eight levels. A folder or file that can't be read, or a
+    /// folder below that, is an error (one that isn't there is nothing), never a shorter list.
     pub(super) fn walk(&self, dir: &Path) -> io::Result<Vec<PathBuf>> {
         fn disk(p: &Path, depth: usize, out: &mut Vec<PathBuf>) -> io::Result<()> {
             let rd = match fs::read_dir(p) {
@@ -304,7 +304,9 @@ impl Files {
             for e in rd {
                 let e = e?;
                 match e.file_type()? {
-                    t if t.is_dir() && depth < 8 => disk(&e.path(), depth + 1, out)?,
+                    // Deeper than the walk goes: said, not skipped (it would be removed unread).
+                    t if t.is_dir() && depth >= 8 => return Err(io::Error::other("folders nested too deep")),
+                    t if t.is_dir() => disk(&e.path(), depth + 1, out)?,
                     t if t.is_file() => out.push(e.path()),
                     _ => {}
                 }
@@ -320,7 +322,10 @@ impl Files {
             #[cfg(not(target_arch = "wasm32"))]
             Files::Packed(x) => x.walk(dir),
             Files::Memory(m, _) => Ok(Files::with(m, |m| under(m, dir).cloned().collect())),
-            Files::Failing(f) => f.files.walk(dir),
+            Files::Failing(f) => {
+                Faults::check(&f.reads, dir)?;
+                f.files.walk(dir)
+            }
         }
     }
 
