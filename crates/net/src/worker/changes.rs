@@ -451,7 +451,13 @@ impl Worker {
     /// Whether an edit still waiting to go out touches the folder `path`; edits that can't be read
     /// (the disk failing) may, and aren't taken for none.
     pub(super) fn waiting_in(&self, path: &str) -> bool {
-        self.store.load_ops(&self.acc.id).map_or(true, |ops| ops.iter().any(|op| touches(op, path)))
+        match self.store.load_ops(&self.acc.id) {
+            Ok(ops) => ops.iter().any(|op| touches(op, path)),
+            Err(e) => {
+                log::warn!("{}: the edits waiting couldn't be read, taken as touching a folder read: {e}", self.acc.id);
+                true
+            }
+        }
     }
 
     /// The account's folder list read again from disk (a folder made, renamed or deleted here);

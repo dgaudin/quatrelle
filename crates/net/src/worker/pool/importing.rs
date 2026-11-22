@@ -69,7 +69,13 @@ pub(in crate::worker) fn kept(store: &Store, account: &str, resume: Option<bool>
         Ok(folders) => folders.iter().fold(0usize, |n, f| n.saturating_add(usize::try_from(f.total).unwrap_or(usize::MAX))),
         Err(e) => {
             log::warn!("{account}: the folder list couldn't be read, the import's journal says what came in: {e}");
-            store.load_account_doc_strict::<quatrelle_model::ImportJournal>(account, quatrelle_model::IMPORT_DOC).map_or(0, |j| j.messages)
+            match store.load_account_doc_strict::<quatrelle_model::ImportJournal>(account, quatrelle_model::IMPORT_DOC) {
+                Ok(journal) => journal.messages,
+                Err(e) => {
+                    log::warn!("{account}: the import's journal couldn't be read either: {e}");
+                    0
+                }
+            }
         }
     }
 }

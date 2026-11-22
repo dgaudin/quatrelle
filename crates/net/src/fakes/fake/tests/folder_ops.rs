@@ -53,15 +53,22 @@ fn a_folder_renamed_twice_offline_keeps_its_mail() {
         std::thread::sleep(Duration::from_millis(50));
     }
     st.lock().unwrap().log.clear();
-    // What was told before is passed over: an Online told then isn't the one after the renames.
-    pool.poll();
+    // What was told before is kept for the notices, and passed over by the waits: an Online told
+    // then isn't the one after the renames.
+    let mut seen = pool.poll();
     pool.submit(Job::WorkOffline { on: false });
-    let mut seen = until(&pool, "syncing", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { .. }, .. }));
+    seen.extend(until(&pool, "syncing", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { .. }, .. })));
     seen.extend(until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. })));
     let names = || st.lock().unwrap().boxes.iter().map(|b| b.name.clone()).collect::<Vec<String>>();
-    eventually("the renames sent and the folder gone let go of", || {
+    // The mail's source kept too: what the log says of downloads is read once they're done.
+    let source = || store.load_folder("a1", "Done").ok().and_then(|f| f.messages.first().map(|m| store.has_body(&m.key))).unwrap_or(false);
+    eventually("the renames sent, the folder gone let go of, the source kept", || {
         let names = names();
-        names.iter().any(|n| n == "Done") && !names.iter().any(|n| n == "Archive" || n == "Plans") && cached("Done") == 1 && cached("Other") == 0
+        names.iter().any(|n| n == "Done")
+            && !names.iter().any(|n| n == "Archive" || n == "Plans")
+            && cached("Done") == 1
+            && cached("Other") == 0
+            && source()
     });
     seen.extend(pool.poll());
     let notices: Vec<&String> = seen

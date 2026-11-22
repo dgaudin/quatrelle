@@ -7,7 +7,9 @@ use quatrelle_store::CompactStep;
 
 use super::*;
 
-pub(super) mod importing;
+mod importing;
+#[cfg(test)]
+pub(super) use importing::{kept, said_copied};
 mod llm;
 pub(super) mod teams;
 

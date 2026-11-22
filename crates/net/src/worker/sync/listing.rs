@@ -254,7 +254,12 @@ impl Worker {
             return SyncOptions { window: ONLINE_WINDOW, prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
         }
         if self.read_online(path) {
-            return SyncOptions { window: more.max(ONLINE_WINDOW), prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
+            // While the list of public folders followed can't be read, this one may be one: what
+            // it keeps isn't cut to an opened folder's newest few, with their sources (downloaded
+            // again once the list is read), nor is it read as followed (nothing downloaded ahead,
+            // no state followed).
+            let window = if self.followed_unread && is_public_folder(path) { more.max(self.opts.window) } else { more.max(ONLINE_WINDOW) };
+            return SyncOptions { window, prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
         }
         SyncOptions { window: more.max(self.opts.window), ..self.opts }
     }

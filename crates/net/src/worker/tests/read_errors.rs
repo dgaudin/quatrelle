@@ -280,3 +280,82 @@ fn followed_public_folders_that_cant_be_read_keep_their_cache() {
     w.let_go_of_online();
     assert_eq!(cached(&store, reports), 0);
 }
+
+/// A folder gone from the server whose cache can't be cleared (the disk failing) is looked at
+/// again at the next listing: passed over, it kept its cache for good.
+#[test]
+fn a_folder_gone_whose_cache_cant_be_cleared_is_looked_at_again() {
+    let st = crate::fake::State::new();
+    let port = crate::fake::serve_tcp(&st);
+    let store = Store::failing();
+    store.save_folders("a1", &[folder("INBOX"), folder("Plans")]).unwrap();
+    cache(&store, "Plans", 1);
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = worker(imap_account(port), "pw", &store, &pool);
+    w.connect().unwrap();
+    // The folder's own place in the cache, which clearing it takes away.
+    let key = MessageKey { account: "a1".into(), folder: "Plans".into(), validity: 7, uid: 1 };
+    let body = store.body_path(&key);
+    let place = body.parent().and_then(std::path::Path::parent).and_then(std::path::Path::file_name).unwrap().to_string_lossy().into_owned();
+    store.fail(None, Some(&place));
+    assert!(w.relist());
+    store.fail(None, None);
+    assert_eq!(cached(&store, "Plans"), 1);
+    assert_eq!(w.gone_meanwhile, ["Plans"], "passed over, its cache left for good");
+    // It can be now: cleared, as ever.
+    assert!(w.relist());
+    assert_eq!(cached(&store, "Plans"), 0);
+    assert!(w.gone_meanwhile.is_empty());
+}
+
+/// The public folders followed can't be read at the start, nor when one of them is opened: taken
+/// for a folder read on the server, it was listed as an opened one is, its newest few, and what
+/// it kept beyond them let go of with their sources (downloaded again once the list was read).
+/// It's listed with nothing let go of, and not as one followed; read again, one not followed is
+/// listed as an opened one is, as ever.
+#[test]
+fn a_public_folder_opened_while_those_followed_cant_be_read_keeps_its_mail() {
+    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
+    let mut d = Data::default();
+    d.pf_mailbox = Some("PFContent@contoso.example".into());
+    d.pf_hierarchy = Some("PFHierarchy@contoso.example".into());
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
+    let reports = d.folder("Reports", Some(&root), None, "IPF.Note");
+    let n = ONLINE_WINDOW + 5;
+    for i in 0..n {
+        let raw = format!("From: backup@contoso.example\r\nSubject: Report {i}\r\nMessage-ID: <r{i}@contoso.example>\r\n\r\nDone.\r\n");
+        d.deliver(&reports, raw.as_bytes(), true, &format!("2026-09-{:02}T09:{:02}:00Z", 1 + i % 28, i % 60));
+    }
+    let server = serve(d);
+    let store = Store::failing();
+    let path = "Public Folders/Reports";
+    store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, &[path]).unwrap();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    let sources = || store.load_folder("a1", path).map(|f| f.messages.iter().filter(|m| store.has_body(&m.key)).count()).unwrap_or(0);
+    // Followed: kept, with its sources.
+    let mut w = worker(acc.clone(), PASSWORD, &store, &pool);
+    w.connect().unwrap();
+    assert!(w.relist());
+    w.sync_one(path);
+    assert_eq!((cached(&store, path), sources()), (n, n));
+    // The list can't be read at the start, nor when the folder is opened.
+    store.fail(Some(FOLLOWED_PUBLIC_DOC), None);
+    let mut w = worker(acc, PASSWORD, &store, &pool);
+    w.connect().unwrap();
+    assert!(w.relist());
+    w.handle(Job::SyncFolder { account: "a1".into(), folder: path.into() });
+    store.fail(None, None);
+    assert_eq!((cached(&store, path), sources()), (n, n), "let go of, with their sources");
+    // Read, and not followed: listed as an opened one is, its newest few.
+    store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, &Vec::<String>::new()).unwrap();
+    w.handle(Job::SyncFolder { account: "a1".into(), folder: path.into() });
+    assert_eq!(cached(&store, path), ONLINE_WINDOW);
+}

@@ -80,14 +80,14 @@ fn a_copy_whose_folder_list_cant_be_read_back_says_so() {
     store.save_folders("m1", std::slice::from_ref(&inbox)).unwrap();
     let p = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
     store.fail(Some("folders.json"), None);
-    let end = pool::importing::said_copied(&store, &p.sink, "m1", 4);
+    let end = pool::said_copied(&store, &p.sink, "m1", 4);
     store.fail(None, None);
     let seen = p.poll();
     assert!(!seen.iter().any(|e| matches!(e, Event::Folders { .. })), "no list said: {seen:?}");
     let Event::Imported { messages: 4, error: Some(error), done: true, .. } = &end else { panic!("{end:?}") };
     assert_eq!(error, quatrelle_model::job::IMPORT_FOLDERS_UNREAD, "said as the engine knows it");
     // Read back, it's said with the import's end.
-    let end = pool::importing::said_copied(&store, &p.sink, "m1", 4);
+    let end = pool::said_copied(&store, &p.sink, "m1", 4);
     let seen = p.poll();
     assert!(seen.iter().any(|e| matches!(e, Event::Folders { folders, .. } if *folders == [inbox.clone()])), "{seen:?}");
     assert!(matches!(end, Event::Imported { messages: 4, error: None, done: true, .. }), "{end:?}");
@@ -103,11 +103,11 @@ fn a_failed_import_whose_folder_list_cant_be_read_says_what_came_in() {
     store.save_folders("m1", &[inbox]).unwrap();
     let journal = quatrelle_model::ImportJournal { messages: 7, ..Default::default() };
     store.save_account_doc("m1", quatrelle_model::IMPORT_DOC, &journal).unwrap();
-    assert_eq!(pool::importing::kept(&store, "m1", Some(false)), 7);
+    assert_eq!(pool::kept(&store, "m1", Some(false)), 7);
     store.fail(Some("folders.json"), None);
-    let kept = pool::importing::kept(&store, "m1", Some(false));
+    let kept = pool::kept(&store, "m1", Some(false));
     store.fail(None, None);
     assert_eq!(kept, 7, "taken for none");
     // A first import has nothing from before.
-    assert_eq!(pool::importing::kept(&store, "m1", None), 0);
+    assert_eq!(pool::kept(&store, "m1", None), 0);
 }
