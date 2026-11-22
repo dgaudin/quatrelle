@@ -611,15 +611,17 @@ impl Packs {
         Ok(self.children(&a, &k)?.0.into_iter().map(|name| (name.clone(), dir.join(name))).collect())
     }
 
-    /// Every file under a folder (an account's: all of its data file), at any depth.
-    pub(crate) fn walk(&self, dir: &Path) -> Vec<PathBuf> {
+    /// Every file under a folder (an account's: all of its data file), at any depth. A data file
+    /// that can't be opened or read is an error, never an empty list: what's carried over by this
+    /// list is all that's kept of a file about to be removed.
+    pub(crate) fn walk(&self, dir: &Path) -> io::Result<Vec<PathBuf>> {
         let (a, k) = match self.place(dir) {
             Place::In(a, k) => (a, k),
             Place::Account(a) => (a, String::new()),
-            Place::Disk => return Vec::new(),
+            Place::Disk => return Ok(Vec::new()),
         };
         let base = self.root.join(&a);
-        self.keys(&a, &k).unwrap_or_default().into_iter().map(|(key, _)| key.split('/').fold(base.clone(), |p, seg| p.join(seg))).collect()
+        Ok(self.keys(&a, &k)?.into_iter().map(|(key, _)| key.split('/').fold(base.clone(), |p, seg| p.join(seg))).collect())
     }
 
     /// Bytes under a folder: an account's is its data file's size.

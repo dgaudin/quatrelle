@@ -153,7 +153,8 @@ impl Store {
         let (from, to) = if on { (&self.files.main, &self.files.held) } else { (&self.files.held, &self.files.main) };
         let mut items = Vec::new();
         // What's held of folders never written (an online archive's) stays behind.
-        for p in from.walk(&dir).into_iter().filter(|p| !self.files.in_held_folder(p)) {
+        // A list that can't be made stops here too: nothing is switched or removed unread.
+        for p in from.walk(&dir).map_err(io_err(&dir))?.into_iter().filter(|p| !self.files.in_held_folder(p)) {
             match from.read(&p) {
                 Ok(bytes) => items.push((p, bytes)),
                 // Gone since the folder was listed: nothing of it to carry over.

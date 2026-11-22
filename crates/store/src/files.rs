@@ -292,27 +292,34 @@ impl Files {
         }
     }
 
-    /// Every file under a folder, at any depth.
-    pub(super) fn walk(&self, dir: &Path) -> Vec<PathBuf> {
-        fn disk(p: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-            let Ok(rd) = fs::read_dir(p) else { return };
-            for e in rd.filter_map(|e| e.ok()) {
-                match e.file_type() {
-                    Ok(t) if t.is_dir() && depth < 8 => disk(&e.path(), depth + 1, out),
-                    Ok(t) if t.is_file() => out.push(e.path()),
+    /// Every file under a folder, at any depth. A folder or file that can't be read is an error
+    /// (one that isn't there is nothing), never a shorter list.
+    pub(super) fn walk(&self, dir: &Path) -> io::Result<Vec<PathBuf>> {
+        fn disk(p: &Path, depth: usize, out: &mut Vec<PathBuf>) -> io::Result<()> {
+            let rd = match fs::read_dir(p) {
+                Ok(rd) => rd,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(e) => return Err(e),
+            };
+            for e in rd {
+                let e = e?;
+                match e.file_type()? {
+                    t if t.is_dir() && depth < 8 => disk(&e.path(), depth + 1, out)?,
+                    t if t.is_file() => out.push(e.path()),
                     _ => {}
                 }
             }
+            Ok(())
         }
         match self {
             Files::Disk => {
                 let mut out = Vec::new();
-                disk(dir, 0, &mut out);
-                out
+                disk(dir, 0, &mut out)?;
+                Ok(out)
             }
             #[cfg(not(target_arch = "wasm32"))]
             Files::Packed(x) => x.walk(dir),
-            Files::Memory(m, _) => Files::with(m, |m| under(m, dir).cloned().collect()),
+            Files::Memory(m, _) => Ok(Files::with(m, |m| under(m, dir).cloned().collect())),
             Files::Failing(f) => f.files.walk(dir),
         }
     }

@@ -170,6 +170,43 @@ fn an_online_only_account_leaves_nothing_on_disk() {
     let _ = std::fs::remove_dir_all(t);
 }
 
+/// Turning online-only on never removes a data file it couldn't open: with the file held by
+/// another copy of Quatrelle, the walk of what's in it said "nothing", nothing was copied, and the
+/// file went with the changes waiting for the server and the Outbox in it. It fails, and the file
+/// stays as it was.
+#[test]
+fn online_only_never_deletes_a_data_file_it_couldnt_open() {
+    let t = temp("online-only-held");
+    let (app, files) = (t.join("app"), t.join("Quatrelle Files"));
+    let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k, b"Subject: hi\r\n\r\nWAITING-BODY").unwrap();
+    s.add_op("a1", quatrelle_model::Op::Expunge { keys: vec![k.clone()], tidy: false }).unwrap();
+    let file = s.data_file("a1").unwrap();
+    drop(s);
+
+    // Another holder has the data file open.
+    let holder = redb::Database::create(&file).unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert!(s.set_online_only("a1", true).is_err(), "a file it can't open stops the switch");
+    assert!(!s.is_online_only("a1"));
+    assert!(file.exists(), "the file is still there");
+    drop(s);
+    drop(holder);
+
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert!(file.exists() && s.data_file("a1").is_some());
+    assert_eq!(s.load_ops("a1").unwrap().len(), 1, "the change waiting is still in it");
+    assert_eq!(s.read_body(&k).unwrap(), b"Subject: hi\r\n\r\nWAITING-BODY");
+    // Closed by the other holder, it switches, and all of it comes over.
+    s.set_online_only("a1", true).unwrap();
+    assert!(s.is_online_only("a1") && !file.exists());
+    assert_eq!(s.load_ops("a1").unwrap().len(), 1);
+    assert_eq!(s.read_body(&k).unwrap(), b"Subject: hi\r\n\r\nWAITING-BODY");
+    let _ = std::fs::remove_dir_all(t);
+}
+
 /// An account's data file opened by several threads at once (the account's own and its sync
 /// connections, at start) opens once: two that both found it not open yet both opened it, and
 /// the second heard "open in another copy of Quatrelle" — a sync that failed for nothing.

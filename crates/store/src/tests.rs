@@ -667,7 +667,7 @@ fn a_memory_folder_lists_only_its_own_files() {
     let dir = s.folder_dir("a1", "INBOX");
     assert!(s.files.exists(&dir) && s.files.exists(&dir.join("70")));
     assert!(!s.files.exists(&dir.join("8")) && !s.files.exists(&s.folder_dir("a1", "Other")));
-    assert_eq!(s.files.main.walk(&dir).len(), 3);
+    assert_eq!(s.files.main.walk(&dir).unwrap().len(), 3);
 }
 
 /// A message's page of a big list read alone, with the marks kept beside the pages; a small list
@@ -778,7 +778,7 @@ fn online_only_with_a_file_that_cant_be_read_keeps_it() {
     let waiting = s.account_files("a1", "ops").unwrap();
     assert_eq!(waiting.len(), 1, "one change waiting");
     let name = waiting[0].clone();
-    assert!(s.files.main.walk(&s.account_dir("a1")).iter().any(|p| p.ends_with(&name)), "the walk lists the file");
+    assert!(s.files.main.walk(&s.account_dir("a1")).unwrap().iter().any(|p| p.ends_with(&name)), "the walk lists the file");
     s.fail(Some(&name), None);
     assert!(s.set_online_only("a1", true).is_err());
     s.fail(None, None);
