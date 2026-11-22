@@ -26,6 +26,7 @@ use crate::{Result, StoreError, io_err, write_atomic};
 
 mod kept;
 mod meta;
+mod names;
 mod recompress;
 use kept::*;
 use meta::*;
@@ -161,10 +162,7 @@ impl Packs {
             }
         }
         if renamed {
-            let names = Packs::lock(&self.names);
-            if let Ok(json) = serde_json::to_vec_pretty(&*names) {
-                let _ = write_atomic(&self.root.join(NAMES), &json);
-            }
+            names::save(&self.root, &Packs::lock(&self.names));
         }
     }
 
@@ -199,24 +197,7 @@ impl Packs {
         if let Some(n) = Packs::lock(&self.names).get(account) {
             return n.clone();
         }
-        let email = fs::read(self.root.join("accounts.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice::<Vec<quatrelle_model::AccountConfig>>(&b).ok())
-            .and_then(|list| list.into_iter().find(|a| crate::safe_segment(&a.id) == account).map(|a| a.email));
-        let stem = email.as_deref().map(str::trim).filter(|e| !e.is_empty()).unwrap_or(account);
-        let stem = stem
-            .strip_suffix(".pst")
-            .or_else(|| stem.strip_suffix(".ost"))
-            .or_else(|| stem.strip_suffix(".quatrelle"))
-            .or_else(|| stem.strip_suffix(&format!(".{}", crate::legacy::OLD_EXTENSION)))
-            .unwrap_or(stem);
-        let stem: String = stem
-            .chars()
-            .map(|c| if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') { '_' } else { c })
-            .take(80)
-            .collect();
-        let stem = stem.trim_matches(|c: char| c == '.' || c.is_whitespace());
-        let stem = if stem.is_empty() { account } else { stem };
+        let stem = names::stem(&self.root, account);
         let mut names = Packs::lock(&self.names);
         let taken = |n: &str| names.values().any(|v| v.eq_ignore_ascii_case(n)) || self.dir.join(n).exists();
         let mut name = format!("{stem}.{EXTENSION}");
@@ -226,9 +207,7 @@ impl Packs {
             i += 1;
         }
         names.insert(account.to_string(), name.clone());
-        if let Ok(json) = serde_json::to_vec_pretty(&*names) {
-            let _ = write_atomic(&self.root.join(NAMES), &json);
-        }
+        names::save(&self.root, &names);
         name
     }
 
@@ -537,9 +516,7 @@ impl Packs {
     /// the same address added again gets a file of its own beside it. Returns the file.
     pub(crate) fn let_go(&self, account: &str) -> Option<PathBuf> {
         let (_, name) = self.close_and_forget(account);
-        if let Ok(json) = serde_json::to_vec_pretty(&*Packs::lock(&self.names)) {
-            let _ = write_atomic(&self.root.join(NAMES), &json);
-        }
+        names::save(&self.root, &Packs::lock(&self.names));
         name.map(|n| self.dir.join(n)).filter(|f| f.exists())
     }
 
@@ -548,9 +525,7 @@ impl Packs {
             // The account goes: its data file with it.
             Place::Account(a) => {
                 let (had, name) = self.close_and_forget(&a);
-                if let Ok(json) = serde_json::to_vec_pretty(&*Packs::lock(&self.names)) {
-                    let _ = write_atomic(&self.root.join(NAMES), &json);
-                }
+                names::save(&self.root, &Packs::lock(&self.names));
                 let legacy = fs::remove_dir_all(p).is_ok();
                 match name.map(|n| fs::remove_file(self.dir.join(n))) {
                     Some(r) => r.or(Ok(())),
