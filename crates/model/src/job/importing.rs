@@ -17,6 +17,9 @@ pub const MAX_IMPORT_FOLDERS: usize = 10_000;
 /// The error of [`crate::Event::Imported`] when the file isn't the one the import began with (its
 /// size or its date changed) and bringing in what is new wasn't asked: nothing was imported.
 pub const IMPORT_FILE_CHANGED: &str = "the data file has changed since this import began";
+/// The error of [`crate::Event::Imported`] when a data file was copied in whole (all of it came in)
+/// and its folder list couldn't be read back (the disk failing): nothing is to be imported again.
+pub const IMPORT_FOLDERS_UNREAD: &str = "the data file was copied in whole, but its folder list couldn't be read back";
 /// The error when an import can't go on for want of its journal (none, or a damaged one set
 /// aside): it can only be started over.
 pub const IMPORT_NO_JOURNAL: &str =

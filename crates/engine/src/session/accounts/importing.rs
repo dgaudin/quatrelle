@@ -5,6 +5,7 @@
 //! never started again by itself: only `account.resumeImport` does.
 
 use super::*;
+use quatrelle_model::job::IMPORT_FOLDERS_UNREAD;
 use quatrelle_model::{IMPORT_DOC, IMPORT_FILE_CHANGED, IMPORT_NO_JOURNAL, ImportJournal};
 
 /// An import running now.
@@ -191,6 +192,10 @@ impl Session {
             }
             return;
         }
+        // A data file copied in whole whose folder list couldn't be read back: all of it is here,
+        // nothing to import again (it was said to be, and the account went with nothing come in).
+        let folders_unread = error.as_deref() == Some(IMPORT_FOLDERS_UNREAD);
+        let error = error.filter(|_| !folders_unread);
         if has_held
             && let Some(e) = &error
             && !came_in
@@ -238,6 +243,12 @@ impl Session {
                             true,
                         );
                     }
+                } else if folders_unread {
+                    self.notice_with(
+                        "{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again",
+                        &[("name", &name), ("messages", &counted)],
+                        true,
+                    );
                 } else if stopped {
                     match total {
                         Some(total) => {

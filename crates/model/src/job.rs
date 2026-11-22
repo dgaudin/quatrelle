@@ -709,7 +709,9 @@ impl SyncStatus {
 mod events;
 pub use events::{Event, HeldKey, ListChange, Revocation};
 mod importing;
-pub use importing::{IMPORT_DOC, IMPORT_FILE_CHANGED, IMPORT_NO_JOURNAL, ImportJournal, ImportedFolder, MAX_IMPORT_FOLDERS, MAX_IMPORT_IDS};
+pub use importing::{
+    IMPORT_DOC, IMPORT_FILE_CHANGED, IMPORT_FOLDERS_UNREAD, IMPORT_NO_JOURNAL, ImportJournal, ImportedFolder, MAX_IMPORT_FOLDERS, MAX_IMPORT_IDS,
+};
 
 mod pgp;
 mod policy;

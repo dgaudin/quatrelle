@@ -237,3 +237,27 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("disk full")));
     done(s);
 }
+
+/// A data file copied in whole whose folder list couldn't be read back (the disk failing): all of
+/// it came in, yet the notice said the last of it couldn't be saved and to import the file again.
+/// It says the mail is here and the folders show at the next start; the account stays.
+#[test]
+fn a_copy_whose_folder_list_cant_be_read_back_isnt_imported_again() {
+    let store = Store::failing();
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.importPst", &json!({"path": "C:/Mail/old.quatrelle"})).unwrap()["account"].as_str().unwrap().to_string();
+    s.apply(Event::Imported {
+        account: id.clone(),
+        messages: 4,
+        skipped: 0,
+        total: None,
+        folder: String::new(),
+        stopped: false,
+        done: true,
+        error: Some(quatrelle_model::job::IMPORT_FOLDERS_UNREAD.into()),
+    });
+    assert!(s.account(&id).is_some(), "what came in is kept");
+    let Some(n) = s.notices.last() else { panic!("nothing said") };
+    assert!(!n.text.contains("Import the file again") && !n.text.contains("could not be saved"), "{n:?}");
+    assert!(n.text.contains("4 messages imported") && n.text.contains("folder list"), "{n:?}");
+}

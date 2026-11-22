@@ -4,6 +4,7 @@
 use std::collections::BTreeSet;
 
 use super::*;
+mod imports;
 
 /// The Rust files under `dir`, read from disk: tests and the catalogs' own code left out.
 fn rust_sources(dir: &std::path::Path) -> Vec<String> {

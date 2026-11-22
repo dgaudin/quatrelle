@@ -4,6 +4,8 @@
 //! The pool: a data file read into an account on a thread of its own, told as it goes, stopped
 //! when asked and gone on with later.
 
+use quatrelle_model::job::IMPORT_FOLDERS_UNREAD;
+
 use super::*;
 
 /// An import's end.
@@ -122,8 +124,9 @@ fn read_in(store: &Store, sink: &Sink, account: &str, path: &str, resume: Option
 }
 
 /// A data file copied in whole (`messages` of them): its folders told, and the import's end. Its
-/// folder list read back can fail (the disk failing): that's said with the end, and no list is
-/// told (found in review: the account showed no folders, and the import said all was well).
+/// folder list read back can fail (the disk failing): that's said with the end, as the engine
+/// knows it ([`IMPORT_FOLDERS_UNREAD`]: all of it is here, nothing to import again), and no list
+/// is told (found in review: the account showed no folders, and the import said all was well).
 pub(in crate::worker) fn said_copied(store: &Store, sink: &Sink, account: &str, messages: usize) -> Event {
     match store.load_folders(account) {
         Ok(folders) => {
@@ -134,6 +137,9 @@ pub(in crate::worker) fn said_copied(store: &Store, sink: &Sink, account: &str, 
             }
             ended(account, messages, 0, None)
         }
-        Err(e) => ended(account, messages, 0, Some(format!("its folder list couldn't be read: {e}"))),
+        Err(e) => {
+            log::warn!("{account}: the folder list of the data file copied couldn't be read back: {e}");
+            ended(account, messages, 0, Some(IMPORT_FOLDERS_UNREAD.into()))
+        }
     }
 }

@@ -85,7 +85,7 @@ fn a_copy_whose_folder_list_cant_be_read_back_says_so() {
     let seen = p.poll();
     assert!(!seen.iter().any(|e| matches!(e, Event::Folders { .. })), "no list said: {seen:?}");
     let Event::Imported { messages: 4, error: Some(error), done: true, .. } = &end else { panic!("{end:?}") };
-    assert!(error.contains("folder list"), "{error}");
+    assert_eq!(error, quatrelle_model::job::IMPORT_FOLDERS_UNREAD, "said as the engine knows it");
     // Read back, it's said with the import's end.
     let end = pool::importing::said_copied(&store, &p.sink, "m1", 4);
     let seen = p.poll();

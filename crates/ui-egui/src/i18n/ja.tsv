@@ -2419,3 +2419,5 @@ presence	Offline	オフライン
 # Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
 	A Teams meeting will be added when the appointment is saved	予定を保存すると Teams 会議が追加されます
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 では、一度作成したオンライン会議は保持されます
+# A data file copied in whole whose folder list couldn't be read back (the disk failing).
+	{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again	{name}: {messages} 件のメッセージをインポートしましたが、フォルダー一覧を読み直せませんでした: Quatrelle を次に起動したときに表示されます

@@ -2418,3 +2418,5 @@ presence	Offline	לא מחובר
 # Teams meetings in a Microsoft 365 mailbox's calendar: Exchange Online makes them as the appointment is saved, and keeps them.
 	A Teams meeting will be added when the appointment is saved	פגישת Teams תתווסף בעת שמירת הפגישה
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 שומר ישיבה מקוונת לאחר שנוצרה
+# A data file copied in whole whose folder list couldn't be read back (the disk failing).
+	{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again	{name}: {messages} הודעות יובאו, אך לא ניתן היה לקרוא שוב את רשימת התיקיות: היא תוצג בהפעלה הבאה של Quatrelle
