@@ -579,3 +579,79 @@ fn a_damaged_list_with_a_list_of_accounts_that_cant_be_read_touches_neither() {
     assert!(matches!(&opened, Err(crate::StoreError::NamesUnreadable { path, .. }) if *path == said), "{:?}", opened.map(drop));
     let _ = std::fs::remove_dir_all(t);
 }
+
+/// The Teams copy is kept as a data file of its own under a pseudo-account no list of accounts
+/// names: with the list damaged it's found again by its name too. Left out, it started again in
+/// `Teams (2).quatrelle`, and the messages waiting to go in the old one never went.
+#[test]
+fn a_damaged_list_finds_the_teams_copy_again() {
+    use quatrelle_model::pim::teams::TEAMS_ACCOUNT;
+    let t = temp("names-teams");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_account_files(TEAMS_ACCOUNT, &[("outbox/1.json".into(), b"{\"waiting\": true}".to_vec())]).unwrap();
+    let copy = s.data_file(TEAMS_ACCOUNT).unwrap();
+    drop(s);
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!(s.data_file(TEAMS_ACCOUNT), Some(copy), "the Teams copy found again");
+    assert_eq!(s.account_file(TEAMS_ACCOUNT, "outbox/1.json").unwrap().as_deref(), Some(&b"{\"waiting\": true}"[..]), "what waits to go");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// Two accounts with one address, added together before either wrote anything (neither was
+/// numbered then), and only the first wrote: one file of that name, but two accounts it could be
+/// for. Neither is given it, and it stays as it was.
+#[test]
+fn a_damaged_list_never_gives_one_file_to_either_of_two_accounts_of_its_name() {
+    let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let t = temp("names-one-file-two");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "zoe@studio.example")]).unwrap();
+    s.write_body(&k, b"Subject: of a1\r\n\r\nx").unwrap();
+    let file = s.data_file("a1").unwrap();
+    assert_eq!(s.data_file("a2"), None, "a2 wrote nothing");
+    drop(s);
+    let before = std::fs::read(&file).unwrap();
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!((s.data_file("a1"), s.data_file("a2")), (None, None), "not guessed");
+    drop(s);
+    assert_eq!(std::fs::read(&file).unwrap(), before, "the file stays as it was");
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// A damaged list with the data files' folder not there (a drive not plugged in, a share not
+/// mounted) stops the opening while there's an account to find a file for, and nothing is written:
+/// taken for a folder with none, the list was written again empty and the files there forgotten
+/// for good. With the folder back, they're found again. With no account to find one for, a folder
+/// not there has none.
+#[test]
+fn a_damaged_list_with_the_folder_not_there_stops_the_opening() {
+    let t = temp("names-no-folder");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+    let file = s.data_file("a1");
+    drop(s);
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let away = t.join("Elsewhere");
+    std::fs::rename(&files, &away).unwrap();
+    let before = snapshot(&t);
+    let opened = Store::open_packed(&app, &files);
+    assert_eq!(snapshot(&t), before, "nothing is written");
+    let folder = files.display().to_string();
+    assert!(matches!(&opened, Err(crate::StoreError::NamesUnreadable { path, .. }) if *path == folder), "{:?}", opened.map(drop));
+    std::fs::rename(&away, &files).unwrap();
+    assert_eq!(Store::open_packed(&app, &files).unwrap().data_file("a1"), file, "found again with the folder back");
+    // No account to find a file for: nothing to find.
+    std::fs::remove_dir_all(&files).unwrap();
+    std::fs::write(app.join("accounts.json"), b"[]").unwrap();
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    assert!(Store::open_packed(&app, &files).is_ok_and(|s| s.data_file("a1").is_none()));
+    let _ = std::fs::remove_dir_all(t);
+}

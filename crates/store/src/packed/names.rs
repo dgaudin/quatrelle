@@ -101,7 +101,7 @@ pub(super) fn read(root: &Path, dir: &Path) -> Result<BTreeMap<String, String>> 
     // nothing, and a list that can't be written after stays as it was, found again next time.
     let aside = aside(&path);
     write_atomic(&aside, &bytes).map_err(|e| unreadable(&path, source_of(e)))?;
-    log::warn!("{}: damaged, kept as {}; {} of {} accounts' data files found again", path.display(), aside.display(), names.len(), accounts.len());
+    log::warn!("{}: damaged, kept as {}; {} data files found again for {} accounts", path.display(), aside.display(), names.len(), accounts.len());
     save(root, &names);
     Ok(names)
 }
@@ -122,11 +122,14 @@ fn aside(path: &Path) -> PathBuf {
 /// its name (an account removed, its file kept, and the account added again beside it), or two
 /// accounts of one address: only the list said which was which, so none is guessed (an account
 /// read another's mail). One left without starts a new file; the old ones stay where they are.
-/// One kept online only has none. A folder that can't be listed is an error.
-fn found_again(accounts: &[Listed], dir: &Path) -> Result<BTreeMap<String, String>> {
+/// One kept online only has none. The Teams copy's pseudo-account, which no list of accounts
+/// names, is looked for the same way. A folder that can't be listed is an error, and so is one
+/// not there while an account is to have a file (a drive not plugged in, a share not mounted):
+/// taken for one with none, the list was written again empty and its files forgotten for good.
+fn found_again(listed: &[Listed], dir: &Path) -> Result<BTreeMap<String, String>> {
     let rd = match fs::read_dir(dir) {
         Ok(rd) => rd,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound && listed.iter().all(|a| a.online) => return Ok(BTreeMap::new()),
         Err(e) => return Err(unreadable(dir, e)),
     };
     // The data files there, by their names as the disk has them, and whether each is a file.
@@ -141,6 +144,8 @@ fn found_again(accounts: &[Listed], dir: &Path) -> Result<BTreeMap<String, Strin
         }
         files.push((name, e.path().is_file()));
     }
+    let teams = Listed { account: crate::safe_segment(quatrelle_model::pim::teams::TEAMS_ACCOUNT), email: String::new(), online: false };
+    let accounts: Vec<&Listed> = listed.iter().chain(Some(&teams).filter(|t| listed.iter().all(|a| a.account != t.account))).collect();
     let stems: Vec<(&str, String)> = accounts.iter().map(|a| (a.account.as_str(), stem_of(Some(&a.email), &a.account))).collect();
     let mut names = BTreeMap::new();
     let mut unsure = 0usize;
@@ -187,14 +192,22 @@ impl Packs {
     /// there already (an account removed, its file kept, and the account added again): numbered
     /// beside it from the start. Made at its first write, until then the old file was the only
     /// one of that name, and a list damaged meanwhile gave it to the account ([`found_again`]).
+    /// A folder that can't be looked through is an error (no folder has no file of its name).
     pub(crate) fn number_beside_its_name(&self, account: &str, email: &str) -> io::Result<()> {
         if Packs::lock(&self.names).contains_key(account) {
             return Ok(());
         }
         let stem = stem_of(Some(email), account);
-        let Ok(rd) = fs::read_dir(&self.dir) else { return Ok(()) };
-        if rd.flatten().any(|e| e.file_name().to_str().is_some_and(|n| of_stem(n, &stem))) {
-            self.open_db(account, true, true)?;
+        let rd = match fs::read_dir(&self.dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        for e in rd {
+            if e?.file_name().to_str().is_some_and(|n| of_stem(n, &stem)) {
+                self.open_db(account, true, true)?;
+                break;
+            }
         }
         Ok(())
     }
