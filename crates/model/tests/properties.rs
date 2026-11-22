@@ -9,7 +9,7 @@ use quatrelle_model::addr::trust::{site, url_host};
 use quatrelle_model::dates::Clock;
 use quatrelle_model::search::{Advanced, Doc, Index, MAX_TOKEN_CHARS, Query, fold_word, tokens};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
-use quatrelle_model::{EmailAddress, ical, lookalike, utf7};
+use quatrelle_model::{EmailAddress, addr, ical, lookalike, utf7};
 
 /// Words the search box reads as plain words (no `field:`, no leading `-` or quote).
 fn words() -> impl Strategy<Value = String> {
@@ -235,6 +235,87 @@ proptest! {
     fn reading_any_answer_never_panics(text in "(?s).{0,65536}") {
         if let Some((score, reasons)) = quatrelle_model::scam::read_answer(&text) {
             prop_assert!(score <= 100 && reasons.len() <= 3 && reasons.iter().all(|r| r.chars().count() <= 120));
+        }
+    }
+}
+
+/// An entry of a recipient field as people write it: bare, named, named with a comma, with a
+/// quote left open or closed wrong, with another entry's separator or none after it.
+fn typed_entry() -> impl Strategy<Value = String> {
+    let name = prop::sample::select(vec!["", "Jo ", "\"Park, Zoe\" ", "Jo 6\" Doe ", "\"Jo Doe ", "Jo\" ", "\"Lee\" ", "Bob, ", "\""]);
+    let local = "[a-z]{1,4}";
+    let sep = prop::sample::select(vec!["; ", ", ", " ", "\n", ";", "", " ; "]);
+    (name, local, any::<bool>(), sep).prop_map(|(name, local, chevrons, sep)| {
+        let a = format!("{local}@x.example");
+        if chevrons { format!("{name}<{a}>{sep}") } else { format!("{name}{a}{sep}") }
+    })
+}
+
+/// Every `<x@y>` of the text, with whether it is in a name: a pair of quotes that opens where an
+/// entry starts (the text's start, or after `;`, `,` or `>`) and closes. A quote anywhere else is
+/// an inch mark, and an address after it is no one's name.
+fn chevron_addresses(text: &str) -> Vec<(String, bool)> {
+    let mut found = Vec::new();
+    // The span now open: where its quote began an entry, and the addresses seen in it.
+    let mut span: Option<(bool, Vec<usize>)> = None;
+    let mut last = None;
+    let mut from: Option<usize> = None;
+    for (i, c) in text.char_indices() {
+        match c {
+            '"' => match span.take() {
+                Some((starts_entry, held)) => {
+                    for at in held {
+                        if let Some((_, excused)) = found.get_mut(at) {
+                            *excused = starts_entry;
+                        }
+                    }
+                }
+                None => span = Some((last.is_none_or(|l: char| matches!(l, ';' | ',' | '>')), Vec::new())),
+            },
+            '<' => from = Some(i),
+            '>' => {
+                if let Some(at) = from.take() {
+                    let inside = text.get(at + 1..i).unwrap_or_default();
+                    if inside.contains('@') {
+                        if let Some((_, held)) = span.as_mut() {
+                            held.push(found.len());
+                        }
+                        found.push((inside.to_string(), false));
+                    }
+                }
+            }
+            _ => {}
+        }
+        if !c.is_whitespace() {
+            last = Some(c);
+        }
+    }
+    found
+}
+
+proptest! {
+    /// A list that reads gives no address that isn't in the text and loses none that is written
+    /// between `<` and `>` outside a name in closed quotes (whatever the quotes around are, and
+    /// whatever ends the entries): either it says what it couldn't read, or it has everyone.
+    #[test]
+    fn parse_list_never_invents_nor_silently_drops(entries in prop::collection::vec(typed_entry(), 1..6)) {
+        let text = entries.concat();
+        if let Ok(read) = addr::parse_list(&text) {
+            for a in &read {
+                prop_assert!(text.contains(a.email.as_str()), "{} is not in {:?}", a.email, text);
+            }
+            // One in a name (a closed pair of quotes from an entry's start) may be left out of the
+            // reading; any other is in it, or the list wouldn't have read.
+            for (email, in_a_name) in chevron_addresses(&text) {
+                if in_a_name {
+                    continue;
+                }
+                prop_assert!(read.iter().any(|a| a.email == email), "{} was lost from {:?}: {:?}", email, text, read);
+            }
+        }
+        // What a draft keeps is read from the text too.
+        for a in addr::parse_valid(&text) {
+            prop_assert!(text.contains(a.email.as_str()));
         }
     }
 }

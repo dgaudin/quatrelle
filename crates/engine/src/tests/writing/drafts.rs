@@ -344,5 +344,13 @@ fn a_draft_keeps_every_whole_address_and_a_name_with_a_comma() {
     let m = s.list.iter().find(|m| m.subject == "Whole").unwrap();
     let to: Vec<(&str, &str)> = m.to.iter().map(|a| (a.name.as_str(), a.email.as_str())).collect();
     assert_eq!(to, [("Park, Zoe", "z@x.example"), ("Ann", "a@b.example"), ("Bob", "c@d.example")]);
+    // A quote left open (`6"`) hides the next address from the reading of the whole text; it
+    // is kept all the same, being whole.
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "Jo 6\" Doe <jo@x.example>; bob@y.example", "subject": "Open quote"})).unwrap();
+    assert_eq!(s.run("compose.close", &json!({})).unwrap()["saved"], true);
+    s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
+    let m = s.list.iter().find(|m| m.subject == "Open quote").unwrap();
+    assert!(m.to.iter().any(|a| a.email == "bob@y.example"), "{:?}", m.to);
     done(s);
 }
