@@ -183,7 +183,7 @@ pub(super) fn save(root: &Path, names: &BTreeMap<String, String>) {
 fn source_of(e: StoreError) -> io::Error {
     match e {
         StoreError::Io { source, .. } | StoreError::NamesUnreadable { source, .. } => source,
-        StoreError::Json { .. } => io::Error::from(io::ErrorKind::InvalidData),
+        StoreError::Json { .. } | StoreError::Damaged { .. } => io::Error::from(io::ErrorKind::InvalidData),
     }
 }
 

@@ -76,7 +76,7 @@ impl Worker {
             // Already in the cache and the journal (the pool wrote them): push the queue.
             Job::Apply { op, .. } if self.acc.pop.is_none() => {
                 if op.is_folder_op() {
-                    self.folders = self.store.load_folders(&self.acc.id).unwrap_or_default();
+                    self.reload_folders();
                 }
                 if self.conn.is_some() {
                     self.replay();
@@ -105,8 +105,7 @@ impl Worker {
                 };
                 match applied {
                     Ok(changed) => {
-                        if op.is_folder_op() {
-                            self.folders = self.store.load_folders(&self.acc.id).unwrap_or_default();
+                        if op.is_folder_op() && self.reload_folders() {
                             self.publish_folders();
                         }
                         for folder in changed {
@@ -425,9 +424,17 @@ impl Worker {
     /// (`Store::save_folder`, one pass), all but emptying the folder, made here. Each was made
     /// again here too, the list read and written whole for each move: five minutes after a
     /// burst of 1,000 changes on a folder of 50,000.
+    /// Edits that can't be read (the disk failing) may touch it: `true`, none made again.
     pub(super) fn reapply_waiting(&mut self, path: &str) -> bool {
+        let ops = match self.store.load_ops(&self.acc.id) {
+            Ok(ops) => ops,
+            Err(e) => {
+                log::warn!("{}: the edits waiting couldn't be read to be made again: {e}", self.acc.id);
+                return true;
+            }
+        };
         let mut any = false;
-        for op in self.store.load_ops(&self.acc.id).unwrap_or_default() {
+        for op in ops {
             if !touches(&op, path) {
                 continue;
             }
@@ -441,9 +448,27 @@ impl Worker {
         any
     }
 
-    /// Whether an edit still waiting to go out touches the folder `path`.
+    /// Whether an edit still waiting to go out touches the folder `path`; edits that can't be read
+    /// (the disk failing) may, and aren't taken for none.
     pub(super) fn waiting_in(&self, path: &str) -> bool {
-        self.store.load_ops(&self.acc.id).unwrap_or_default().iter().any(|op| touches(op, path))
+        self.store.load_ops(&self.acc.id).map_or(true, |ops| ops.iter().any(|op| touches(op, path)))
+    }
+
+    /// The account's folder list read again from disk (a folder made, renamed or deleted here);
+    /// `false` when it can't be read (the disk failing), this worker's left as it was: left with
+    /// none, the next list it kept (Sent Items made for a message sent, a POP account's change)
+    /// was written over the one on disk, every other folder gone from it.
+    pub(super) fn reload_folders(&mut self) -> bool {
+        match self.store.load_folders(&self.acc.id) {
+            Ok(folders) => {
+                self.folders = folders;
+                true
+            }
+            Err(e) => {
+                log::warn!("{}: the folder list wasn't read again, the one before is kept: {e}", self.acc.id);
+                false
+            }
+        }
     }
 
     /// Whether a change refused for now is due to be tried again.

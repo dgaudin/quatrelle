@@ -53,9 +53,16 @@ fn a_folder_renamed_twice_offline_keeps_its_mail() {
         std::thread::sleep(Duration::from_millis(50));
     }
     st.lock().unwrap().log.clear();
+    // What was told before is passed over: an Online told then isn't the one after the renames.
+    pool.poll();
     pool.submit(Job::WorkOffline { on: false });
-    let mut seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
-    std::thread::sleep(Duration::from_millis(500));
+    let mut seen = until(&pool, "syncing", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { .. }, .. }));
+    seen.extend(until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. })));
+    let names = || st.lock().unwrap().boxes.iter().map(|b| b.name.clone()).collect::<Vec<String>>();
+    eventually("the renames sent and the folder gone let go of", || {
+        let names = names();
+        names.iter().any(|n| n == "Done") && !names.iter().any(|n| n == "Archive" || n == "Plans") && cached("Done") == 1 && cached("Other") == 0
+    });
     seen.extend(pool.poll());
     let notices: Vec<&String> = seen
         .iter()

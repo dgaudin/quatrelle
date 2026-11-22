@@ -162,7 +162,11 @@ fn archive_batch_with(
 /// nothing is deleted there: the messages are kept, with the reason.
 pub(crate) fn settle(store: &Store, sink: &Sink, acc: &AccountConfig, to_account: &str, mut batch: Batch, no_trash_on_gmail: bool) -> Event {
     if !batch.folders.is_empty() {
-        sink.emit(Event::Folders { account: to_account.to_string(), folders: store.load_folders(to_account).unwrap_or_default() });
+        // Told only as read (the disk failing): taken for none, Archives showed no folders.
+        match store.load_folders(to_account) {
+            Ok(folders) => sink.emit(Event::Folders { account: to_account.to_string(), folders }),
+            Err(e) => log::warn!("{to_account}: the folder list wasn't read back: {e}"),
+        }
         for folder in &batch.folders {
             sink.emit(Event::FolderChanged { account: to_account.to_string(), folder: folder.clone() });
         }
@@ -418,5 +422,31 @@ mod tests {
         assert_eq!(fetched, 0);
         assert!(store.load_folders("a9").unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Mail archived whose Archives folder list couldn't be read back (the disk failing) told the
+    /// window Archives had no folders. No list is told then; the folders written to are, as ever.
+    #[test]
+    fn an_archives_list_that_cant_be_read_back_isnt_told_empty() {
+        let store = Store::failing();
+        let archives = AccountConfig { id: "a9".into(), role: Some(AccountRole::Archives), ..Default::default() };
+        store.save_accounts(std::slice::from_ref(&archives)).unwrap();
+        let imap = quatrelle_model::ServerConfig { host: "imap.example".into(), ..Default::default() };
+        let acc = AccountConfig { id: "a1".into(), email: "me@studio.example".into(), imap, ..Default::default() };
+        let raw = b"From: zoe@studio.example\r\nSubject: kept\r\nMessage-ID: <kept@studio.example>\r\n\r\nHi.\r\n".to_vec();
+        let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+        let mut st = FolderState { validity: 1, ..Default::default() };
+        st.messages.push(quatrelle_model::Summary { key: key.clone(), size: 80, ..Default::default() });
+        store.save_folder("a1", "INBOX", &st).unwrap();
+        let pool = Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+        let batch = archive_batch(&store, &acc, vec![key], "a9", &mut |_| Ok(raw.clone()));
+        assert_eq!(batch.moved.len(), 1, "{:?}", batch.kept);
+        store.fail(Some("a9/folders.json"), None);
+        let done = settle(&store, &pool.sink, &acc, "a9", batch, false);
+        store.fail(None, None);
+        let seen = pool.poll();
+        assert!(!seen.iter().any(|e| matches!(e, Event::Folders { account, .. } if account == "a9")), "{seen:?}");
+        assert!(seen.iter().any(|e| matches!(e, Event::FolderChanged { account, .. } if account == "a9")), "{seen:?}");
+        assert!(matches!(&done, Event::Archived { moved, .. } if moved.len() == 1), "{done:?}");
     }
 }

@@ -47,3 +47,13 @@ fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bo
     }
     panic!("timed out waiting for {what}; saw {seen:?}");
 }
+
+/// Wait until `f` holds: a state the pool's work leaves (the server's, the cache's), looked at
+/// every few milliseconds, at most twenty seconds.
+fn eventually(what: &str, mut f: impl FnMut() -> bool) {
+    let end = Instant::now() + Duration::from_secs(20);
+    while !f() {
+        assert!(Instant::now() < end, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

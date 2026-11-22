@@ -11,6 +11,7 @@ mod listing;
 mod noted;
 mod online_only;
 mod scratch;
+mod strict;
 
 /// A big folder's list is kept in pages by number: read back newest first as it was; a flag
 /// change writes one page, new mail the last one; shrunk, the pages go; and a list kept whole

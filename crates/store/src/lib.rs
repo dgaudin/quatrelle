@@ -56,6 +56,10 @@ pub enum StoreError {
         #[source]
         source: io::Error,
     },
+    /// A file that must not be taken for an empty one is there and can't be read as what it is.
+    /// It stays where it is, as it is.
+    #[error("a file Quatrelle keeps is damaged: {path}")]
+    Damaged { path: String },
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
@@ -494,6 +498,17 @@ impl Store {
         }
     }
 
+    /// As `read_json`, but a damaged file is an error and is neither renamed nor replaced. One that
+    /// isn't there is empty.
+    fn read_json_strict<T: DeserializeOwned + Default>(&self, path: &Path) -> Result<T> {
+        match self.files.read(path) {
+            // Not what serde says: it quotes the file.
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| StoreError::Damaged { path: path.display().to_string() }),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(T::default()),
+            Err(e) => Err(io_err(path)(e)),
+        }
+    }
+
     fn write_json<T: Serialize + ?Sized>(&self, path: &Path, value: &T) -> Result<()> {
         let bytes = serde_json::to_vec(value).map_err(|source| StoreError::Json { path: path.display().to_string(), source })?;
         self.files.write(path, &bytes)
@@ -512,6 +527,13 @@ impl Store {
     /// A small document kept with an account's cache (removed with it).
     pub fn load_account_doc<T: DeserializeOwned + Default>(&self, account: &str, name: &str) -> Result<T> {
         self.read_json(&self.account_dir(account).join(safe_doc(name)))
+    }
+
+    /// As [`Store::load_account_doc`], for a document that must never be taken for an empty one
+    /// (the public folders followed: taken for none, every one kept lost its cache): a damaged
+    /// one is [`StoreError::Damaged`], left as it is.
+    pub fn load_account_doc_strict<T: DeserializeOwned + Default>(&self, account: &str, name: &str) -> Result<T> {
+        self.read_json_strict(&self.account_dir(account).join(safe_doc(name)))
     }
 
     pub fn save_account_doc<T: Serialize + ?Sized>(&self, account: &str, name: &str, value: &T) -> Result<()> {

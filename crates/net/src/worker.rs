@@ -269,9 +269,12 @@ fn make_edit(store: &Store, sink: &Sink, account: &str, op: &Op) {
     }
     match store.apply_op(&account, op) {
         Ok(changed) => {
+            // Told only as read (the disk failing): taken for none, the account showed no folders.
             if op.is_folder_op() {
-                let folders = store.load_folders(&account).unwrap_or_default();
-                sink.emit(Event::Folders { account: account.clone(), folders });
+                match store.load_folders(&account) {
+                    Ok(folders) => sink.emit(Event::Folders { account: account.clone(), folders }),
+                    Err(e) => log::warn!("{account}: the folder list wasn't read back: {e}"),
+                }
             }
             for folder in changed {
                 sink.emit(Event::FolderChanged { account: account.clone(), folder });
@@ -415,6 +418,9 @@ struct Worker {
     /// The public folders kept in sync (the user's Favorites among them, written by the session
     /// as [`FOLLOWED_PUBLIC_DOC`]); the others are listed only when opened.
     followed: BTreeSet<String>,
+    /// That list couldn't be read, or is damaged: `followed` is the one before (none at the
+    /// start), and no public folder is let go of till it's read.
+    followed_unread: bool,
     /// Folders whose kept messages are still to be downloaded whole (Cached Exchange Mode's
     /// offline file), a few at a time while nothing else is asked; and the last one's count
     /// still missing, to let go of a folder that no longer gets anywhere.
@@ -481,7 +487,7 @@ impl Worker {
         // when it's opened, and is held in memory only.
         let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, full: false, ..opts } } else { opts };
         let windows = store.load_account_doc(&acc.id, WINDOWS).unwrap_or_default();
-        let followed = store.load_account_doc(&acc.id, FOLLOWED_PUBLIC_DOC).unwrap_or_default();
+        let followed = Worker::followed_doc(&store, &acc.id);
         let rest = Arc::new(rest::Rest::new(store.clone(), sink.clone()));
         Worker {
             acc,
@@ -495,7 +501,8 @@ impl Worker {
             search_numbers: Vec::new(),
             folders,
             windows,
-            followed,
+            followed_unread: followed.is_none(),
+            followed: followed.unwrap_or_default(),
             ahead: VecDeque::new(),
             ahead_left: None,
             ahead_todo: crate::ews::AheadTodo::default(),

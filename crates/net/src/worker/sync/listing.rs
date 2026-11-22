@@ -39,18 +39,21 @@ impl Worker {
                 // folder renamed twice offline, listed after the first rename, lost its cache,
                 // and its mail was downloaded again). That one's looked at again at the next
                 // listing, once they're sent (one deleted on the server meanwhile would keep its
-                // cache for good otherwise).
-                let waiting = self.store.load_ops(&id).unwrap_or_default().iter().any(Op::is_folder_op);
-                let here = if waiting { self.store.load_folders(&id).unwrap_or_default() } else { Vec::new() };
+                // cache for good otherwise). Changes or a list that can't be read (the disk
+                // failing) can't say which those are: every one keeps its cache till the next
+                // listing, as does one whose cache couldn't be cleared (taken for nothing
+                // waiting, they lost it all).
+                let here = self.kept_while_waiting(&id);
                 let mut gone: Vec<String> = self.folders.iter().map(|f| f.path.clone()).chain(std::mem::take(&mut self.gone_meanwhile)).collect();
                 gone.retain(|p| !list.iter().any(|f| f.path == *p));
                 gone.sort_unstable();
                 gone.dedup();
                 for path in gone {
-                    if here.iter().any(|f| f.path == path) {
+                    if here.as_ref().is_none_or(|here| here.iter().any(|f| f.path == path)) {
                         self.gone_meanwhile.push(path);
-                    } else {
-                        let _ = self.store.clear_folder(&id, &path);
+                    } else if let Err(e) = self.store.clear_folder(&id, &path) {
+                        log::warn!("{id}: a folder gone from the server keeps its cache for now: {e}");
+                        self.gone_meanwhile.push(path);
                     }
                 }
                 self.folders = list;
@@ -68,6 +71,15 @@ impl Worker {
                 false
             }
         }
+    }
+
+    /// The folders the list on disk has while folder changes wait (none when none wait); `None`,
+    /// logged, when either can't be read.
+    fn kept_while_waiting(&self, id: &str) -> Option<Vec<Folder>> {
+        let read = || -> std::result::Result<Vec<Folder>, quatrelle_store::StoreError> {
+            if self.store.load_ops(id)?.iter().any(Op::is_folder_op) { self.store.load_folders(id) } else { Ok(Vec::new()) }
+        };
+        read().inspect_err(|e| log::warn!("{id}: the folders gone from the server keep their cache for now: {e}")).ok()
     }
 
     pub(in crate::worker) fn sync_all(&mut self, rx: &Receiver<Job>) {
@@ -156,31 +168,60 @@ impl Worker {
     }
 
     /// Forget the numbers of JMAP messages no longer cached (nor waiting in a change, nor found
-    /// by a search).
+    /// by a search). Not when the changes or a folder can't be read (the disk failing): their
+    /// numbers would be lost, and the changes never sent. The next full sync tries again.
     pub(in crate::worker) fn prune_jmap_numbers(&mut self) {
         if !matches!(self.conn, Some(Conn::Jmap(_) | Conn::Graph(_) | Conn::Ews(_))) {
             return;
         }
-        let ops = self.store.load_ops(&self.acc.id).unwrap_or_default();
-        let mut keep: std::collections::HashSet<u32> = ops.iter().flat_map(|o| o.keys().iter().map(|k| k.uid).collect::<Vec<_>>()).collect();
-        for f in &self.folders {
-            if let Ok(st) = self.store.load_folder(&self.acc.id, &f.path) {
-                keep.extend(st.messages.iter().map(|m| m.key.uid));
+        let read = || -> std::result::Result<std::collections::HashSet<u32>, quatrelle_store::StoreError> {
+            let ops = self.store.load_ops(&self.acc.id)?;
+            let mut keep: std::collections::HashSet<u32> = ops.iter().flat_map(|o| o.keys().iter().map(|k| k.uid).collect::<Vec<_>>()).collect();
+            for f in &self.folders {
+                keep.extend(self.store.load_folder(&self.acc.id, &f.path)?.messages.iter().map(|m| m.key.uid));
             }
+            Ok(keep)
+        };
+        match read() {
+            Ok(mut keep) => {
+                keep.extend(self.search_numbers.iter().copied());
+                self.jstate.prune(&keep);
+                self.save_jstate();
+            }
+            Err(e) => log::warn!("{}: the server's message numbers are all kept for now: {e}", self.acc.id),
         }
-        keep.extend(self.search_numbers.iter().copied());
-        self.jstate.prune(&keep);
-        self.save_jstate();
     }
 
+    /// The worker's folder list kept, then told; told only once kept: the list told and not
+    /// kept (the disk failing) was the window's till the next start, which found the one before.
     pub(in crate::worker) fn publish_folders(&self) {
-        let _ = self.store.save_folders(&self.acc.id, &self.folders);
-        self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() });
+        match self.store.save_folders(&self.acc.id, &self.folders) {
+            Ok(()) => self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() }),
+            Err(e) => log::warn!("{}: the folder list wasn't kept: {e}", self.acc.id),
+        }
     }
 
-    /// The public folders the session asks to follow, as it last wrote them.
+    /// The public folders the session asks to follow, as it last wrote them. A list that can't be
+    /// read or is damaged leaves the one before, and no public folder is let go of till it's read
+    /// (`followed_unread`): taken for none followed, every one kept here lost its cache, and its
+    /// mail was downloaded again once the list was read.
     pub(in crate::worker) fn read_followed(&mut self) {
-        self.followed = self.store.load_account_doc(&self.acc.id, quatrelle_model::FOLLOWED_PUBLIC_DOC).unwrap_or_default();
+        match Worker::followed_doc(&self.store, &self.acc.id) {
+            Some(followed) => {
+                self.followed = followed;
+                self.followed_unread = false;
+            }
+            None => self.followed_unread = true,
+        }
+    }
+
+    /// The public folders followed as the session wrote them ([`FOLLOWED_PUBLIC_DOC`]); `None`,
+    /// logged, when the list can't be read or is damaged (it's left as it is).
+    pub(in crate::worker) fn followed_doc(store: &Store, account: &str) -> Option<BTreeSet<String>> {
+        store
+            .load_account_doc_strict(account, FOLLOWED_PUBLIC_DOC)
+            .inspect_err(|e| log::warn!("{account}: the public folders followed couldn't be read, none is let go of: {e}"))
+            .ok()
     }
 
     /// Whether a folder is read on the server when it's opened rather than kept here, as
@@ -220,9 +261,12 @@ impl Worker {
 
     /// What earlier passes kept of folders now read on the server (a public folder held up to a
     /// hundred thousand messages, most of a big mailbox's cache) is let go: they keep what they
-    /// show when opened. Their message numbers go at the end of the pass.
+    /// show when opened. Their message numbers go at the end of the pass. No public folder is
+    /// while the list of those followed can't be read (`followed_unread`): it may be one.
     pub(in crate::worker) fn let_go_of_online(&mut self) {
-        let paths: Vec<String> = self.folders.iter().filter(|f| self.read_online(&f.path)).map(|f| f.path.clone()).collect();
+        let unread = self.followed_unread;
+        let paths: Vec<String> =
+            self.folders.iter().filter(|f| self.read_online(&f.path) && !(unread && is_public_folder(&f.path))).map(|f| f.path.clone()).collect();
         for path in paths {
             let window = self.options_for(&path).window;
             let kept = self.store.load_folder(&self.acc.id, &path).map(|f| f.messages.len()).unwrap_or(0);

@@ -172,7 +172,7 @@ fn shown(text: &str, max: usize) -> String {
 fn store_kind(e: &StoreError) -> String {
     match e {
         StoreError::Io { source, .. } | StoreError::NamesUnreadable { source, .. } => format!("{:?}", source.kind()),
-        StoreError::Json { .. } => "damaged".into(),
+        StoreError::Json { .. } | StoreError::Damaged { .. } => "damaged".into(),
     }
 }
 

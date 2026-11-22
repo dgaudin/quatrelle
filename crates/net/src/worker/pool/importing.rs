@@ -56,13 +56,20 @@ impl Pool {
 }
 
 /// The messages an account's folders hold when an import that was to go on with it fails: said
-/// with the error, so what an earlier run brought in isn't taken for nothing.
-fn kept(store: &Store, account: &str, resume: Option<bool>) -> usize {
+/// with the error, so what an earlier run brought in isn't taken for nothing. Its folder list
+/// that can't be read (the disk failing) isn't taken for none either: what the import's journal
+/// noted is said then, read as it is (a damaged one is left for the import to say).
+pub(in crate::worker) fn kept(store: &Store, account: &str, resume: Option<bool>) -> usize {
     if resume.is_none() {
         return 0;
     }
-    let folders = store.load_folders(account).unwrap_or_default();
-    folders.iter().fold(0usize, |n, f| n.saturating_add(usize::try_from(f.total).unwrap_or(usize::MAX)))
+    match store.load_folders(account) {
+        Ok(folders) => folders.iter().fold(0usize, |n, f| n.saturating_add(usize::try_from(f.total).unwrap_or(usize::MAX))),
+        Err(e) => {
+            log::warn!("{account}: the folder list couldn't be read, the import's journal says what came in: {e}");
+            store.load_account_doc_strict::<quatrelle_model::ImportJournal>(account, quatrelle_model::IMPORT_DOC).map_or(0, |j| j.messages)
+        }
+    }
 }
 
 /// Read the data file in, telling how it goes: how it ended.
@@ -73,15 +80,7 @@ fn read_in(store: &Store, sink: &Sink, account: &str, path: &str, resume: Option
             return ended(account, kept(store, account, resume), 0, Some(quatrelle_model::IMPORT_NO_JOURNAL.into()));
         }
         return match store.import_data_file(account, std::path::Path::new(path)) {
-            Ok(messages) => {
-                let folders = store.load_folders(account).unwrap_or_default();
-                let paths: Vec<String> = folders.iter().map(|f| f.path.clone()).collect();
-                sink.emit(Event::Folders { account: account.to_string(), folders });
-                for folder in paths {
-                    sink.emit(Event::FolderChanged { account: account.to_string(), folder });
-                }
-                ended(account, messages, 0, None)
-            }
+            Ok(messages) => said_copied(store, sink, account, messages),
             Err(e) => ended(account, 0, 0, Some(e.to_string())),
         };
     }
@@ -119,5 +118,22 @@ fn read_in(store: &Store, sink: &Sink, account: &str, path: &str, resume: Option
             }
         }
         Err(e) => ended(account, kept(store, account, resume), 0, Some(e)),
+    }
+}
+
+/// A data file copied in whole (`messages` of them): its folders told, and the import's end. Its
+/// folder list read back can fail (the disk failing): that's said with the end, and no list is
+/// told (found in review: the account showed no folders, and the import said all was well).
+pub(in crate::worker) fn said_copied(store: &Store, sink: &Sink, account: &str, messages: usize) -> Event {
+    match store.load_folders(account) {
+        Ok(folders) => {
+            let paths: Vec<String> = folders.iter().map(|f| f.path.clone()).collect();
+            sink.emit(Event::Folders { account: account.to_string(), folders });
+            for folder in paths {
+                sink.emit(Event::FolderChanged { account: account.to_string(), folder });
+            }
+            ended(account, messages, 0, None)
+        }
+        Err(e) => ended(account, messages, 0, Some(format!("its folder list couldn't be read: {e}"))),
     }
 }

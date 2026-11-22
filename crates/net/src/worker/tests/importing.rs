@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Tests: the pool's import of a data file is told with its total and its folder, stops when
 //! asked and is gone on with.
@@ -67,4 +68,46 @@ fn an_import_is_stopped_and_gone_on_with() {
     let end = until_done(&p, &mut Vec::new(), |_| {});
     assert!(matches!(&end, Event::Imported { messages: 0, error: Some(e), .. } if e == quatrelle_model::IMPORT_NO_JOURNAL), "{end:?}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Found in review: a data file copied in whole whose folder list couldn't be read back (the disk
+/// failing) was said to have no folders, and the import said all was well. No list is said, and
+/// the import says why.
+#[test]
+fn a_copy_whose_folder_list_cant_be_read_back_says_so() {
+    let store = Store::failing();
+    let inbox = Folder { account: "m1".into(), path: "INBOX".into(), role: quatrelle_model::FolderRole::Inbox, ..Folder::default() };
+    store.save_folders("m1", std::slice::from_ref(&inbox)).unwrap();
+    let p = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    store.fail(Some("folders.json"), None);
+    let end = pool::importing::said_copied(&store, &p.sink, "m1", 4);
+    store.fail(None, None);
+    let seen = p.poll();
+    assert!(!seen.iter().any(|e| matches!(e, Event::Folders { .. })), "no list said: {seen:?}");
+    let Event::Imported { messages: 4, error: Some(error), done: true, .. } = &end else { panic!("{end:?}") };
+    assert!(error.contains("folder list"), "{error}");
+    // Read back, it's said with the import's end.
+    let end = pool::importing::said_copied(&store, &p.sink, "m1", 4);
+    let seen = p.poll();
+    assert!(seen.iter().any(|e| matches!(e, Event::Folders { folders, .. } if *folders == [inbox.clone()])), "{seen:?}");
+    assert!(matches!(end, Event::Imported { messages: 4, error: None, done: true, .. }), "{end:?}");
+}
+
+/// An import to go on with that fails says what the account holds; a folder list that can't be
+/// read then (the disk failing) was taken for none, and what an earlier run brought in for
+/// nothing. What the import's journal noted is said.
+#[test]
+fn a_failed_import_whose_folder_list_cant_be_read_says_what_came_in() {
+    let store = Store::failing();
+    let inbox = Folder { account: "m1".into(), path: "INBOX".into(), total: 7, ..Folder::default() };
+    store.save_folders("m1", &[inbox]).unwrap();
+    let journal = quatrelle_model::ImportJournal { messages: 7, ..Default::default() };
+    store.save_account_doc("m1", quatrelle_model::IMPORT_DOC, &journal).unwrap();
+    assert_eq!(pool::importing::kept(&store, "m1", Some(false)), 7);
+    store.fail(Some("folders.json"), None);
+    let kept = pool::importing::kept(&store, "m1", Some(false));
+    store.fail(None, None);
+    assert_eq!(kept, 7, "taken for none");
+    // A first import has nothing from before.
+    assert_eq!(pool::importing::kept(&store, "m1", None), 0);
 }
