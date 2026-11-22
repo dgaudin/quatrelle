@@ -230,6 +230,11 @@ pub fn compose_window(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
 
 pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, in_window: bool) {
     let t = st.tokens;
+    // Where this message is drawn, for the keys that send it (its own, not those of a box beside
+    // it): only the one in the window, never one in a window of its own.
+    if !in_window {
+        st.compose_area = Some((ui.ctx().cumulative_pass_nr(), ui.max_rect()));
+    }
     attach_dropped(ui, &t, acts);
     // Where there are no windows of their own (the browser), the other messages being written
     // are a click away above this one.
@@ -356,6 +361,15 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             acts.push(Action::Run("compose.send", json!({})));
         }
     };
+    // A key the main window took for this message (Ctrl+Enter or Alt+S, the keyboard in it).
+    let pass = ui.ctx().cumulative_pass_nr();
+    let keyed = match st.send_asked {
+        Some((id, at)) if id == c.id => {
+            st.send_asked = None;
+            at.saturating_add(3) > pass
+        }
+        _ => false,
+    };
     // Alt+S sends, as in Outlook; in a window of its own the main window's shortcuts don't reach
     // it, so Ctrl+Enter and Ctrl+S are the message's own there.
     if !c.sending {
@@ -367,7 +381,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 i.consume_key(egui::Modifiers::NONE, egui::Key::F7),
             )
         });
-        if alt_s || send_key {
+        if alt_s || send_key || keyed {
             send(c, &mut st.compose_alert, acts);
         }
         if save_key {

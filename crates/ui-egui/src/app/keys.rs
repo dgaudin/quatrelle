@@ -207,6 +207,10 @@ impl MailApp {
                 if !mail_send && id == "compose.send" {
                     continue;
                 }
+                if id == "compose.send" {
+                    self.send_by_key(ctx);
+                    continue;
+                }
                 // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
                 // messages still selected in Mail don't (Delete in the Calendar is the grid's).
                 if self.session.module != Module::Mail && acts_on_mail(id) {
@@ -264,8 +268,24 @@ impl MailApp {
                 }
             }
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) && self.session.compose.is_some() && mail_send {
-            self.run("compose.send", json!({}));
+    }
+
+    /// Ctrl+Enter and Alt+S send the message being written beside the list, as its Send button
+    /// does (the message's own drawing sends it: names still being looked up, an encryption
+    /// that can't be, a missing subject asked about), and only from the message: in Mail, with
+    /// no dialog over it, not with the search box's keys, and with the keyboard in the message
+    /// or nowhere (a box beside it has it for its own). From the Calendar, Contacts, a search
+    /// being typed, a half-written message went.
+    fn send_by_key(&mut self, ctx: &egui::Context) {
+        let pass = ctx.cumulative_pass_nr();
+        let area = self.ui.compose_area.filter(|(at, _)| at.saturating_add(3) > pass).map(|(_, r)| r);
+        let in_it = ctx.memory(|m| m.focused()).is_none_or(|id| match (area, ctx.read_response(id)) {
+            (Some(area), Some(r)) => area.contains(r.rect.center()),
+            _ => false,
+        });
+        let here = self.session.module == Module::Mail && !self.ui.search_focused && self.ui.dialog.is_none() && in_it;
+        if let Some(c) = self.session.compose.as_ref().filter(|c| here && !c.sending && compose_inline(c, ctx)) {
+            self.ui.send_asked = Some((c.id, pass));
         }
     }
 

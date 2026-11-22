@@ -131,3 +131,118 @@ fn send_from_an_account_that_can_shows_nothing_more() {
     assert!(!nodes.iter().any(|(_, name, ..)| name.contains("Add an account")));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A backend that keeps the jobs handed to it, so that a test sees what went out.
+#[derive(Default)]
+struct Kept(std::rc::Rc<std::cell::RefCell<Vec<quatrelle_engine::model::Job>>>);
+
+impl crate::Backend for Kept {
+    fn submit(&mut self, job: quatrelle_engine::model::Job) {
+        self.0.borrow_mut().push(job);
+    }
+
+    fn poll(&mut self) -> Vec<MailEvent> {
+        Vec::new()
+    }
+}
+
+type Sent = std::rc::Rc<std::cell::RefCell<Vec<quatrelle_engine::model::Job>>>;
+
+/// How many messages went out so far.
+fn went(jobs: &Sent) -> usize {
+    jobs.borrow().iter().filter(|j| matches!(j, quatrelle_engine::model::Job::Send { .. })).count()
+}
+
+/// The app with a message being written beside the list, and what it hands its backend.
+fn writing(name: &str, subject: &str) -> (MailApp, std::path::PathBuf, egui::Context, Sent) {
+    let (mut a, dir) = app(name);
+    let kept = Kept::default();
+    let jobs = kept.0.clone();
+    a.backend = Box::new(kept);
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    // An account that sends through its server: the backend is handed a `Job::Send`.
+    let account = with_exchange(&mut a);
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"account": account, "to": "ann@studio.example", "subject": subject, "body": "See you"}));
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    (a, dir, ctx, jobs)
+}
+
+/// Ctrl+Enter pressed and let go.
+fn ctrl_enter(ctx: &egui::Context, a: &mut MailApp) {
+    let m = Modifiers::COMMAND;
+    frame(ctx, a, vec![Event::ModifiersChanged(m), key(Key::Enter, m)]);
+    frame(ctx, a, vec![Event::ModifiersChanged(Modifiers::NONE)]);
+    frame(ctx, a, vec![]);
+}
+
+/// Ctrl+Enter sent the message being written from wherever the keyboard was: with a search
+/// typed, in the Calendar or Contacts, with a dialog open, a message half written went. It goes
+/// only from the message (or with the keyboard nowhere), in Mail, with no dialog over it. (The
+/// To-Do bar has no box to type in: only the search box can hold the keyboard beside the message.)
+#[test]
+fn ctrl_enter_from_elsewhere_sends_nothing() {
+    // The search box has the keyboard.
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-search", "Plans");
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.search_focused, "the search box has the keyboard");
+    ctrl_enter(&ctx, &mut a);
+    assert_eq!(went(&jobs), 0, "not from the search box");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending), "the message is as it was");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn ctrl_enter_in_another_module_sends_nothing() {
+    use quatrelle_engine::Module;
+    for module in [Module::Calendar, Module::People, Module::Tasks, Module::Notes] {
+        let (mut a, dir, ctx, jobs) = writing("ctrl-enter-module", "Plans");
+        a.session.module = module;
+        for _ in 0..2 {
+            frame(&ctx, &mut a, vec![]);
+        }
+        ctrl_enter(&ctx, &mut a);
+        assert_eq!(went(&jobs), 0, "not from {module:?}");
+        assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending), "{module:?}: the message is as it was");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[test]
+fn ctrl_enter_with_a_dialog_open_sends_nothing() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-dialog", "Plans");
+    a.ui.dialog = Some(Dialog::Rules);
+    frame(&ctx, &mut a, vec![]);
+    ctrl_enter(&ctx, &mut a);
+    assert_eq!(went(&jobs), 0, "not with a dialog open");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Sent as the button sends it: a message with no subject asks first (the engine's own words,
+/// `allowEmptySubject` and all, came up as a notice).
+#[test]
+fn ctrl_enter_with_no_subject_asks_as_send_does() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-no-subject", "");
+    ctrl_enter(&ctx, &mut a);
+    assert!(matches!(a.ui.dialog, Some(Dialog::EmptySubject)), "asked about the subject");
+    assert_eq!(went(&jobs), 0, "not sent yet");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The keyboard in the message, a subject filled in: it goes, as ever.
+#[test]
+fn ctrl_enter_in_the_message_still_sends() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-sends", "Plans");
+    ctrl_enter(&ctx, &mut a);
+    assert_eq!(went(&jobs), 1, "sent once");
+    assert!(a.ui.dialog.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -233,6 +233,8 @@ impl MailApp {
                 search_due: None,
                 search_drop: SearchDrop::None,
                 compose_alert: None,
+                compose_area: None,
+                send_asked: None,
                 attachment_view: None,
                 shown_as: Default::default(),
                 attachment_click: None,

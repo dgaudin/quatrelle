@@ -75,6 +75,14 @@ pub struct UiState {
     pub(super) search_drop: SearchDrop,
     /// Why the message being written couldn't be sent or saved, shown over it until dismissed.
     pub compose_alert: Option<String>,
+    /// Where the message being written beside the list was drawn, and in which pass: the keys
+    /// that send it are its own only while the keyboard is in it (or nowhere), not in a box
+    /// beside it. Set only for a message in the window (never one in a window of its own).
+    pub compose_area: Option<(u64, egui::Rect)>,
+    /// The message (its id) a key asked to send, and the pass it was asked in: the message's own
+    /// drawing sends it, as its Send button does (names still being looked up, the encryption
+    /// refused).
+    pub send_asked: Option<(u64, u64)>,
     /// The attachment shown in place of its message's text (a click on its chip), as Outlook
     /// previews attachments in the reading pane.
     pub attachment_view: Option<(MessageKey, usize)>,
