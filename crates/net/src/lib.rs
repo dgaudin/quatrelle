@@ -64,6 +64,8 @@ pub(crate) fn picture_media(data: &[u8]) -> &'static str {
 use data_files::pst_pim;
 pub use data_files::{msg, pst, pst_export};
 use exchange::ews_pim;
+#[doc(hidden)]
+pub use exchange::ews_pim::{card_of, event_of, exception_of, note_of, own_organizer, shortcuts_listed};
 pub use exchange::{ews, graph, graph_pim, ntlm};
 #[cfg(feature = "fakes")]
 pub use fakes::{TeamsSample, teams_sample};
