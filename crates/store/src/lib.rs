@@ -49,6 +49,13 @@ pub enum StoreError {
     Io { path: String, source: io::Error },
     #[error("{path}: {source}")]
     Json { path: String, source: serde_json::Error },
+    /// The list of data files (`datafiles.json`) couldn't be read at all: nothing is opened.
+    #[error("the list of data files couldn't be read: {path}")]
+    NamesUnreadable {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
@@ -307,11 +314,12 @@ impl Store {
 
     /// A cache whose accounts are each one data file in `files` (as Outlook keeps a `.pst` per
     /// account), with the account list and the app's own files in `root`. Account folders a
-    /// cache at `root` had from before are brought into data files.
+    /// cache at `root` had from before are brought into data files. A list of which data file is
+    /// whose that can't be read is [`StoreError::NamesUnreadable`], with nothing made: `root` is
+    /// made once it's read.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open_packed(root: impl Into<PathBuf>, files: impl AsRef<Path>) -> Result<Store> {
         let root = root.into();
-        private_dir(&root)?;
         let packs = packed::Packs::open(&root, files.as_ref())?;
         Ok(Store {
             files: Routed::new(&root, Files::Packed(Arc::new(packs))),
@@ -524,8 +532,20 @@ impl Store {
         self.read_json(&self.root.join("accounts.json"))
     }
 
+    /// The list of accounts kept. An account added beside a data file of its name (one removed,
+    /// its file kept) gets its own file now, numbered beside it; one kept online only has none.
     pub fn save_accounts(&self, accounts: &[AccountConfig]) -> Result<()> {
-        self.write_json(&self.root.join("accounts.json"), accounts)
+        self.write_json(&self.root.join("accounts.json"), accounts)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Files::Packed(x) = &self.files.main {
+            for a in accounts.iter().filter(|a| !a.keeps_online() && !self.is_online_only(&a.id)) {
+                // Not made now: made at its first write, as before.
+                if let Err(e) = x.number_beside_its_name(&safe_segment(&a.id), &a.email) {
+                    log::warn!("an account's data file wasn't made yet: {:?}", e.kind());
+                }
+            }
+        }
+        Ok(())
     }
 
     /// An account's folder list. The folders of its online archive (`Folder::archive`) are held

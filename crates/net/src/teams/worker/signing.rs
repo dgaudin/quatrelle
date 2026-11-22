@@ -171,7 +171,7 @@ fn shown(text: &str, max: usize) -> String {
 /// A failure of the local copy as the log may say it (not its path: it names a chat's hash).
 fn store_kind(e: &StoreError) -> String {
     match e {
-        StoreError::Io { source, .. } => format!("{:?}", source.kind()),
+        StoreError::Io { source, .. } | StoreError::NamesUnreadable { source, .. } => format!("{:?}", source.kind()),
         StoreError::Json { .. } => "damaged".into(),
     }
 }

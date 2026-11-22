@@ -335,7 +335,7 @@ impl Copy {
             Err(e) => {
                 // Not the path: it names the chat's hash.
                 let why = match &e {
-                    StoreError::Io { source, .. } => format!("{:?}", source.kind()),
+                    StoreError::Io { source, .. } | StoreError::NamesUnreadable { source, .. } => format!("{:?}", source.kind()),
                     StoreError::Json { .. } => "damaged".to_string(),
                 };
                 log::warn!("Teams copy: a record couldn't be read: {why}");

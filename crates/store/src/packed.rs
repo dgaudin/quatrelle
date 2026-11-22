@@ -111,7 +111,11 @@ impl std::fmt::Debug for Packs {
 
 impl Packs {
     /// Data files for the store at `root`, kept in `dir`; folders from before are brought in.
+    /// The list of which is whose is read first: one that can't be read stops the opening with
+    /// nothing made, neither the app's folder nor the data files' ([`names::read`]).
     pub(crate) fn open(root: &Path, dir: &Path) -> Result<Packs> {
+        let names = names::read(root, dir)?;
+        crate::atomic::private_dir(root)?;
         // The mail is in there: a folder that is Quatrelle's (made now, or under its name) is
         // its owner's alone, as the app folder is. One of the user's own keeps the access they
         // gave it; the data files in it are closed one by one ([`open_file`]).
@@ -120,7 +124,6 @@ impl Packs {
         } else {
             fs::create_dir_all(dir).map_err(io_err(dir))?;
         }
-        let names: BTreeMap<String, String> = fs::read(root.join(NAMES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let p = Packs {
             root: root.to_path_buf(),
             dir: dir.to_path_buf(),

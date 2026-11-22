@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Opening data files: from an existing one, damaged, online only, by threads at once, after a crash.
+//! Opening data files: from an existing one, damaged, online only, by threads at once, after a crash,
+//! with the list of which is whose damaged or unreadable.
 
 use super::*;
 
@@ -371,5 +372,210 @@ fn data_files_are_the_owners_alone() {
     s.save_account_doc("b1", "pim.json", &serde_json::json!({})).unwrap();
     assert_eq!((mode(&own), mode(&s.data_file("b1").unwrap())), (0o755, 0o600));
     drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// Every path under `dir` and, for a file, its bytes.
+fn snapshot(dir: &std::path::Path) -> std::collections::BTreeMap<std::path::PathBuf, Option<Vec<u8>>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p.clone());
+                out.insert(p, None);
+            } else {
+                out.insert(p.clone(), std::fs::read(&p).ok());
+            }
+        }
+    }
+    out
+}
+
+/// A damaged list of which data file is each account's is set aside, and each account's file is
+/// found again by the name it was given (adapted from upstream f6f9f10). It was taken for an
+/// empty list: the account showed no mail, and the next write gave it a second file beside the
+/// first, which was forgotten.
+#[test]
+fn a_damaged_list_of_data_files_finds_them_again() {
+    let k = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let t = temp("names-damaged");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k(1), b"Subject: kept\r\n\r\nkept").unwrap();
+    let file = s.data_file("a1").unwrap();
+    drop(s);
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!(s.data_file("a1"), Some(file.clone()), "found again");
+    assert_eq!(s.read_body(&k(1)).unwrap(), b"Subject: kept\r\n\r\nkept");
+    s.write_body(&k(2), b"Subject: more\r\n\r\nmore").unwrap();
+    let data_files = std::fs::read_dir(&files).unwrap().flatten().filter(|e| e.path().extension().is_some_and(|x| x == super::super::EXTENSION));
+    assert_eq!(data_files.count(), 1, "no second file");
+    assert_eq!(std::fs::read(app.join("datafiles.json.bad")).ok().as_deref(), Some(&b"{\"a1\": "[..]), "the damaged list is set aside");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// Two accounts with one address, their data files `<address>` and `<address> (2)`, with the
+/// accounts listed the other way round by then; and `ana`, an address of her own.
+fn two_of_one_address(name: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf, Vec<std::path::PathBuf>) {
+    let k = |a: &str| MessageKey { account: a.into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let t = temp(name);
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "zoe@studio.example"), account("a3", "ana@studio.example")]).unwrap();
+    for a in ["a1", "a2", "a3"] {
+        s.write_body(&k(a), format!("Subject: of {a}\r\n\r\nx").as_bytes()).unwrap();
+    }
+    let made: Vec<_> = ["a1", "a2", "a3"].iter().map(|a| s.data_file(a).unwrap()).collect();
+    assert!(made[1].to_string_lossy().ends_with("zoe@studio.example (2).quatrelle"));
+    s.save_accounts(&[account("a3", "ana@studio.example"), account("a2", "zoe@studio.example"), account("a1", "zoe@studio.example")]).unwrap();
+    (t, app, files, made)
+}
+
+/// With the list of data files damaged, files are found again by their names alone (a data file
+/// doesn't say whose it is): an account whose address is its own is found by its file's name; of
+/// two with one address neither is taken for the other (each read the other's mail, by the order
+/// the accounts are listed in). Each starts a new file, and the old ones stay (adapted from
+/// upstream f6f9f10).
+#[test]
+fn a_damaged_list_never_guesses_between_accounts_of_one_address() {
+    let k = |a: &str| MessageKey { account: a.into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let (t, app, files, made) = two_of_one_address("names-not-guessed");
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!(s.data_file("a3").as_ref(), made.get(2), "found by its name");
+    assert_eq!(s.read_body(&k("a3")).unwrap(), b"Subject: of a3\r\n\r\nx");
+    assert_eq!((s.data_file("a1"), s.data_file("a2")), (None, None), "not guessed");
+    s.write_body(&k("a2"), b"Subject: new\r\n\r\ny").unwrap();
+    let new = s.data_file("a2").unwrap();
+    assert!(!made.contains(&new), "{}", new.display());
+    assert!(made.iter().all(|f| f.is_file()), "the old files stay");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// An account removed keeps its data file, no one's, and the same account added again (its id,
+/// its address) writes in a file of its own beside it. With the list damaged then, the old file
+/// is never given to the account added again: by its name alone it was that address's file,
+/// and the account came back reading the removed one's mail.
+#[test]
+fn a_damaged_list_never_gives_a_removed_accounts_file_to_the_account_added_again() {
+    let k = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let t = temp("names-removed");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k(1), b"Subject: removed\r\n\r\nold").unwrap();
+    let old = s.remove_account("a1").unwrap().unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k(2), b"Subject: new\r\n\r\nnew").unwrap();
+    assert_ne!(s.data_file("a1").as_ref(), Some(&old));
+    drop(s);
+    let before = std::fs::read(&old).unwrap();
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_ne!(s.data_file("a1").as_ref(), Some(&old), "the removed account's file is given to the account added again");
+    assert!(s.read_body(&k(1)).is_none(), "the removed account's mail reads as the new one's");
+    drop(s);
+    assert_eq!(std::fs::read(&old).unwrap(), before, "the old file stays as it was");
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// An account added beside a data file of its name (an account removed, its file kept) gets its
+/// own file at once, numbered beside the other: made only at its first write, until then the old
+/// file was the only one of that name, and a list damaged meanwhile gave it to the account added
+/// again.
+#[test]
+fn an_account_added_beside_an_old_file_is_numbered_at_once() {
+    let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let t = temp("names-numbered");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k, b"Subject: removed\r\n\r\nold").unwrap();
+    let old = s.remove_account("a1").unwrap().unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    let mine = s.data_file("a1");
+    assert!(mine.as_ref().is_some_and(|f| f.to_string_lossy().ends_with("zoe@studio.example (2).quatrelle") && f.is_file()), "{mine:?}");
+    drop(s);
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    // Two files of its name: neither is guessed, and the old one is no one's.
+    assert_eq!(s.data_file("a1"), None);
+    assert!(s.read_body(&k).is_none(), "the removed account's mail");
+    assert!(old.is_file() && mine.is_some_and(|f| f.is_file()), "both files stay");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// A list of data files that can't be read at all (a folder in its place, as a file another
+/// program holds would be) stops the opening, and nothing is made: not the data files' folder,
+/// nothing in the app's. Taken for an empty one, every account's file was forgotten and a second
+/// one made beside it at its next write.
+#[test]
+fn a_list_of_data_files_that_cant_be_read_at_all_stops_the_opening() {
+    let t = temp("names-unreadable");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    std::fs::create_dir_all(app.join(super::super::NAMES)).unwrap();
+    std::fs::write(app.join("accounts.json"), serde_json::to_vec(&[account("a1", "zoe@studio.example")]).unwrap()).unwrap();
+    let before = snapshot(&t);
+    let opened = Store::open_packed(&app, &files);
+    assert_eq!(snapshot(&t), before, "nothing is made");
+    let list = app.join(super::super::NAMES).display().to_string();
+    assert!(matches!(&opened, Err(crate::StoreError::NamesUnreadable { path, .. }) if *path == list), "{:?}", opened.map(drop));
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// A damaged list set aside twice keeps both: the second went over the first.
+#[test]
+fn a_damaged_list_set_aside_twice_keeps_both() {
+    let t = temp("names-twice");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+    let file = s.data_file("a1");
+    drop(s);
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    drop(Store::open_packed(&app, &files).unwrap());
+    std::fs::write(app.join(super::super::NAMES), b"[\"second\"").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!(std::fs::read(app.join("datafiles.json.bad")).ok().as_deref(), Some(&b"{\"a1\": "[..]), "the first");
+    assert_eq!(std::fs::read(app.join("datafiles.json.bad.2")).ok().as_deref(), Some(&b"[\"second\""[..]), "the second");
+    assert_eq!(s.data_file("a1"), file, "found again both times");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// A damaged list is made again from the list of accounts: one that can't be read, or is damaged,
+/// stops the opening, and neither list is set aside or written. Read as no accounts, the list of
+/// data files was set aside and written again empty.
+#[test]
+fn a_damaged_list_with_a_list_of_accounts_that_cant_be_read_touches_neither() {
+    let t = temp("names-no-accounts");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let accounts = app.join("accounts.json");
+    let said = accounts.display().to_string();
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+    drop(s);
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    std::fs::write(&accounts, b"[{\"id\": ").unwrap();
+    let before = snapshot(&t);
+    let opened = Store::open_packed(&app, &files);
+    assert_eq!(snapshot(&t), before, "a damaged list of accounts: neither list is set aside or written");
+    assert!(matches!(&opened, Err(crate::StoreError::NamesUnreadable { path, .. }) if *path == said), "{:?}", opened.map(drop));
+    // One that can't be read at all: the same.
+    std::fs::remove_file(&accounts).unwrap();
+    std::fs::create_dir(&accounts).unwrap();
+    let before = snapshot(&t);
+    let opened = Store::open_packed(&app, &files);
+    assert_eq!(snapshot(&t), before, "an unreadable list of accounts: neither list is set aside or written");
+    assert!(matches!(&opened, Err(crate::StoreError::NamesUnreadable { path, .. }) if *path == said), "{:?}", opened.map(drop));
     let _ = std::fs::remove_dir_all(t);
 }

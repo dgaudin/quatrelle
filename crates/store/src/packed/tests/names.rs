@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Names: the fork's old notes and extension, each account's data file named after it, folders from before.
+//! Names: the fork's old notes and extension, each account's data file named after it and found again
+//! by it, folders from before.
 
 use super::*;
 
@@ -168,5 +169,142 @@ fn folders_from_before_come_into_the_data_file() {
     assert_eq!(s.read_body(&k).unwrap(), b"Subject: kept\r\n\r\nbody");
     assert_eq!(s.load_account_doc::<Vec<String>>("a1", "pop-seen.json").unwrap(), vec!["u1".to_string()]);
     assert!(t.join("Files").join("zoe@studio.example.quatrelle").is_file());
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// With the list damaged, an account's data file is found again by its name as the disk has it,
+/// in whatever case: the name the account would be given now names no file on a disk that tells
+/// cases apart, and its mail read as gone.
+#[test]
+fn a_damaged_list_finds_a_file_by_its_name_as_the_disk_has_it() {
+    let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let t = temp("names-case");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k, b"Subject: kept\r\n\r\nkept").unwrap();
+    let made = s.data_file("a1").unwrap();
+    drop(s);
+    let cased = files.join("Zoe@Studio.example.quatrelle");
+    std::fs::rename(&made, &cased).unwrap();
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!(s.data_file("a1"), Some(cased));
+    assert_eq!(s.read_body(&k).unwrap(), b"Subject: kept\r\n\r\nkept");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// What finding data files again looks at is bounded in data files, not in the folder's other
+/// entries: a file is found among more of those than the bound, and among as many data files as
+/// the bound; past it, none is guessed (one of an account's name could be among those not looked
+/// at).
+#[test]
+fn a_damaged_list_looks_at_so_many_data_files() {
+    use super::super::names::FILES_MAX;
+    let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let t = temp("names-many");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k, b"Subject: kept\r\n\r\nkept").unwrap();
+    let file = s.data_file("a1").unwrap();
+    drop(s);
+    let damaged_then_opened = || {
+        std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+        Store::open_packed(&app, &files).unwrap().data_file("a1")
+    };
+    for i in 0..=FILES_MAX {
+        std::fs::write(files.join(format!("note {i}.txt")), b"").unwrap();
+    }
+    assert_eq!(damaged_then_opened(), Some(file.clone()), "other entries aren't counted");
+    for i in 1..FILES_MAX {
+        std::fs::write(files.join(format!("other {i}.quatrelle")), b"").unwrap();
+    }
+    assert_eq!(damaged_then_opened(), Some(file.clone()), "as many data files as the bound");
+    std::fs::write(files.join(format!("other {FILES_MAX}.quatrelle")), b"").unwrap();
+    assert_eq!(damaged_then_opened(), None, "past the bound none is guessed");
+    assert!(file.is_file());
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// Damaged lists are kept nine at most (`.bad`, `.bad.2`… `.bad.9`): one more replaces the one
+/// kept longest, never another.
+#[test]
+fn a_damaged_list_kept_with_nine_others_replaces_the_oldest() {
+    let t = temp("names-aside");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+    drop(s);
+    let slot = |i: u64| app.join(if i == 1 { "datafiles.json.bad".to_string() } else { format!("datafiles.json.bad.{i}") });
+    let now = std::time::SystemTime::now();
+    for i in 1..=9 {
+        std::fs::write(slot(i), format!("kept {i}")).unwrap();
+        // The fourth is the one kept longest.
+        let age = if i == 4 { 86_400 } else { 60 * i };
+        std::fs::File::options().write(true).open(slot(i)).unwrap().set_modified(now - std::time::Duration::from_secs(age)).unwrap();
+    }
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    drop(Store::open_packed(&app, &files).unwrap());
+    for i in 1..=9 {
+        let kept = std::fs::read(slot(i)).unwrap();
+        let want = if i == 4 { b"{\"a1\": ".to_vec() } else { format!("kept {i}").into_bytes() };
+        assert_eq!(kept, want, "{}", slot(i).display());
+    }
+    assert!(!app.join("datafiles.json.bad.10").exists());
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// An account kept online only has no data file: none is made for it beside an old file of its
+/// name, and none is found again for it when the list is damaged. Given the old file, it held its
+/// mail in memory as it opened and removed it: a removed account's kept file gone.
+#[test]
+fn an_online_only_account_is_given_no_data_file_of_its_name() {
+    let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
+    let t = temp("names-online-only");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.write_body(&k, b"Subject: removed\r\n\r\nold").unwrap();
+    let old = s.remove_account("a1").unwrap().unwrap();
+    let imap = quatrelle_model::ServerConfig { host: "imap.studio.example".into(), ..Default::default() };
+    let online = AccountConfig { online_only: true, imap, ..account("a1", "zoe@studio.example") };
+    assert!(online.keeps_online());
+    s.set_online_only("a1", true).unwrap();
+    s.save_accounts(std::slice::from_ref(&online)).unwrap();
+    let data_files = std::fs::read_dir(&files).unwrap().flatten().filter(|e| e.path().extension().is_some_and(|x| x == super::super::EXTENSION));
+    assert_eq!(data_files.count(), 1, "none made beside the old one");
+    drop(s);
+    let before = std::fs::read(&old).unwrap();
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let s = Store::open_packed(&app, &files).unwrap();
+    assert_eq!(s.data_file("a1"), None, "none found again for it");
+    s.set_online_only("a1", true).unwrap();
+    drop(s);
+    assert_eq!(std::fs::read(&old).unwrap(), before, "the old file stays as it was");
+    let _ = std::fs::remove_dir_all(t);
+}
+
+/// A damaged list that can't be kept aside (every place for it taken by a folder) is left as it
+/// was, and the opening stops: nothing is written in its place.
+#[test]
+fn a_damaged_list_that_cant_be_kept_aside_is_left_as_it_was() {
+    let t = temp("names-not-aside");
+    let (app, files) = (t.join("app"), t.join("Files"));
+    let s = Store::open_packed(&app, &files).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+    drop(s);
+    std::fs::create_dir(app.join("datafiles.json.bad")).unwrap();
+    for i in 2..=9 {
+        std::fs::create_dir(app.join(format!("datafiles.json.bad.{i}"))).unwrap();
+    }
+    std::fs::write(app.join(super::super::NAMES), b"{\"a1\": ").unwrap();
+    let opened = Store::open_packed(&app, &files);
+    assert_eq!(std::fs::read(app.join(super::super::NAMES)).unwrap(), b"{\"a1\": ", "the list is left as it was");
+    let list = app.join(super::super::NAMES).display().to_string();
+    assert!(matches!(&opened, Err(crate::StoreError::NamesUnreadable { path, .. }) if *path == list), "{:?}", opened.map(drop));
     let _ = std::fs::remove_dir_all(t);
 }
