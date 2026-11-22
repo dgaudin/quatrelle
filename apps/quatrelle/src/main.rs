@@ -69,7 +69,7 @@ mod windows_manifest;
 mod xdnd;
 
 use desktop::{Desktop, drag_out, read_clipboard, system_fonts};
-use desktop::{appearance, keychain::Keychain};
+use desktop::{appearance, keychain::Keychain, opening};
 
 struct PoolBackend(Pool);
 
@@ -333,7 +333,7 @@ fn main() -> eframe::Result {
     if let Some(dir) = quatrelle_engine::store::scratch_dir("teams") {
         quatrelle_engine::store::remove_older(&dir, quatrelle_engine::store::PASTED_KEPT, std::time::SystemTime::now());
     }
-    let mut moved = match base.as_deref().map(location::apply_pending_move) {
+    let moved = match base.as_deref().map(location::apply_pending_move) {
         Some(Ok(Some(to))) => Some(Ok(to)),
         Some(Err(e)) => Some(Err(e)),
         _ => None,
@@ -358,23 +358,10 @@ fn main() -> eframe::Result {
     }
 
     let (now, offset) = Desktop::default().clock();
-    let store = root.as_ref().and_then(|r| {
-        let opened = match &files {
-            Some(f) => Store::open_packed(r, f).or_else(|e| {
-                // Folders from before that couldn't come into data files stay as they are.
-                moved = Some(Err(e.to_string()));
-                Store::open(r)
-            }),
-            None => Store::open(r),
-        };
-        match opened {
-            Ok(s) => Some(s),
-            Err(e) => {
-                say(&format!("the mail cache can't be opened ({e}); running without one"));
-                None
-            }
-        }
-    });
+    let opening::Opened { store, moved } = match opening::open_store(root.as_deref(), files.as_deref(), moved) {
+        Ok(o) => o,
+        Err(stop) => opening::stop(&stop),
+    };
     if sample
         && let Some(s) = &store
         && let Err(e) = quatrelle_engine::sample::seed_if_empty_at(s, now, i64::from(offset))
