@@ -49,15 +49,21 @@ const ATTACHMENT_PHRASES: &[(&str, Edge)] = &[
     // out.
     ("вложени", Edge::Start),
     ("вложенн", Edge::Start),
-    ("прилагаю", Edge::Whole),
+    ("прилага", Edge::Start),
+    ("приложил", Edge::Start),
     ("прикрепл", Edge::Start),
     // Arabic.
     ("مرفق", Edge::Prefixed(ARABIC_PREFIXES)),
     ("مرفقات", Edge::Prefixed(ARABIC_PREFIXES)),
+    ("مرفقة", Edge::Prefixed(ARABIC_PREFIXES)),
+    ("مرفقه", Edge::Prefixed(ARABIC_PREFIXES)),
     ("أرفق", Edge::PrefixedOpen(ARABIC_PREFIXES)),
     ("ارفق", Edge::PrefixedOpen(ARABIC_PREFIXES)),
-    // Hebrew.
-    ("מצترف", Edge::Prefixed(HEBREW_PREFIXES)),
+    ("نرفق", Edge::PrefixedOpen(ARABIC_PREFIXES)),
+    ("طيه", Edge::Prefixed(ARABIC_PREFIXES)),
+    // Hebrew. The verb has both finals ("צירף" ends in ף, "צירפתי" goes on with פ),
+    // so both stems are listed.
+    ("מצורף", Edge::Prefixed(HEBREW_PREFIXES)),
     ("מצורפים", Edge::Prefixed(HEBREW_PREFIXES)),
     ("מצורפת", Edge::Prefixed(HEBREW_PREFIXES)),
     ("מצורפות", Edge::Prefixed(HEBREW_PREFIXES)),
@@ -73,6 +79,9 @@ const ATTACHMENT_PHRASES: &[(&str, Edge)] = &[
     // Chinese, simplified and traditional: no boundary; 附 alone is too short.
     ("附件", Edge::Free),
     ("附上", Edge::Free),
+    ("随附", Edge::Free),
+    ("隨附", Edge::Free),
+    ("附有", Edge::Free),
 ];
 
 /// The one-letter prefixes Arabic glues in front of a word: the conjunctions and prepositions
