@@ -14,6 +14,7 @@ mod markdown;
 mod people_field;
 mod pgp;
 mod quote;
+mod recipients;
 mod reminder;
 mod rewrite;
 mod sending;

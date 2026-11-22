@@ -364,8 +364,9 @@ impl Dialog {
         ) || matches!(self, Dialog::Signature(f) if f.insert)
     }
 
-    /// Set the error shown in the add-account form.
-    pub fn set_error(&mut self, e: String) {
+    /// Show a refused submit's error on the dialog's own error line. False when it has none
+    /// (Select Names, a question such as Ctrl+Enter's): the caller says it some other way.
+    pub fn set_error(&mut self, e: String) -> bool {
         match self {
             Dialog::AddAccount(f) => f.error = Some(e),
             Dialog::FolderName { error, .. }
@@ -383,8 +384,9 @@ impl Dialog {
             Dialog::OpenSharedCalendar(f) => f.error = Some(e),
             Dialog::CalendarChange(f) => f.error = Some(e),
             Dialog::SubscribeCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
-            _ => {}
+            _ => return false,
         }
+        true
     }
 }
 
