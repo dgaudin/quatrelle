@@ -97,6 +97,14 @@ fn events_and_contacts_both_ways() {
     );
     let back = card_json(&card);
     assert_eq!((back["mobilePhone"].as_str(), back["businessPhones"][0].as_str()), (Some("+1 555 0101"), Some("+1 555 0100")));
+    // The whole name: Graph's middle name, title (the prefix) and generation (the suffix).
+    let named = card_of(&json!({"id": "C2", "displayName": "Dr. Zoe Marie Park Jr.", "givenName": "Zoe", "middleName": "Marie", "surname": "Park",
+        "title": "Dr.", "generation": "Jr."}))
+    .unwrap();
+    assert_eq!(named.name_rest, "Marie;Dr.;Jr.");
+    let sent = card_json(&named);
+    assert_eq!((sent["middleName"].as_str(), sent["title"].as_str(), sent["generation"].as_str()), (Some("Marie"), Some("Dr."), Some("Jr.")));
+    assert_eq!((sent["givenName"].as_str(), sent["surname"].as_str()), (Some("Zoe"), Some("Park")));
 }
 
 #[test]

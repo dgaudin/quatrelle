@@ -6,11 +6,16 @@
 //! The fields Quatrelle shows and edits are read into a [`Card`]; every other property is kept
 //! as written so editing a card from a server loses nothing.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 mod written;
 
-use written::{charset_of, components, kind, quoted_printable, quoted_printable_line, reread_head};
+use written::{
+    after_components, charset_of, components, keep_written, kind, params_of, quoted_printable, quoted_printable_line, reread_head, separators,
+    split_line, written_again, written_key,
+};
 
 /// The longest input read: as much as an address book file opened is (one written with its cards'
 /// files, as a `.pst` import keeps them, reads back whole).
@@ -92,6 +97,10 @@ pub fn birthday_for_exchange(v: &str) -> Option<String> {
     })
 }
 
+/// The longest rest of `N` kept (a name's other parts are a few words): a longer one is read
+/// without it rather than growing the cache by what a stranger's card carries.
+const MAX_NAME_REST: usize = 1024;
+
 /// A person or organisation.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Card {
@@ -102,6 +111,10 @@ pub struct Card {
     pub given: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub family: String,
+    /// The rest of `N` as written (additional names; prefixes; suffixes: `Marie;Dr.;Jr.`),
+    /// written back after the family and given names.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name_rest: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub emails: Vec<Typed>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -150,6 +163,11 @@ pub struct Card {
     /// Other properties, as written (unfolded content lines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<String>,
+    /// The addresses' and numbers' lines as written (`item1.TEL;TYPE=WORK,FAX;PREF=1:…`), by
+    /// property and value (`TEL:+1 555 0100`): written back so, with all their types, their
+    /// preference and their group, while they're of the kind read from them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub as_written: BTreeMap<String, String>,
 }
 
 /// A contact's picture, as `PHOTO` carries it: base64 (the form a vCard line holds), and what
@@ -270,6 +288,27 @@ impl Card {
         self.emails.first().map(|e| e.value.clone()).unwrap_or_default()
     }
 
+    /// The parts of the name beyond the first and family names, as plain text: the additional
+    /// names (a middle name), the prefix (`Dr.`) and the suffix (`Jr.`).
+    pub fn name_extras(&self) -> [String; 3] {
+        let mut parts = components(&self.name_rest).into_iter();
+        std::array::from_fn(|_| parts.next().unwrap_or_default())
+    }
+
+    /// Forget the lines kept as written of the addresses and numbers no longer on the card.
+    pub fn drop_unused_lines(&mut self) {
+        let (emails, phones) = (&self.emails, &self.phones);
+        self.as_written
+            .retain(|k, _| emails.iter().any(|e| *k == written_key("EMAIL", &e.value)) || phones.iter().any(|p| *k == written_key("TEL", &p.value)));
+    }
+
+    /// Set the additional names, prefix and suffix (what Exchange and Graph keep in fields of
+    /// their own), as [`Card::name_rest`] writes them.
+    pub fn set_name_extras(&mut self, additional: &str, prefix: &str, suffix: &str) {
+        let parts = [additional, prefix, suffix].map(|p| esc(&p.trim().chars().take(MAX_NAME_REST / 3).collect::<String>()));
+        self.name_rest = if parts.iter().all(String::is_empty) { String::new() } else { parts.join(";") };
+    }
+
     /// Whether the card matches a search (name, organisation or any address, case-insensitive,
     /// accents read away as the mail search reads them).
     pub fn matches(&self, q: &str) -> bool {
@@ -319,16 +358,7 @@ pub fn parse(text: &str) -> Vec<Card> {
     let mut cards = Vec::new();
     let mut cur: Option<Card> = None;
     for raw in unfolded {
-        let mut quoted = false;
-        let Some(colon) = raw.char_indices().find(|(_, c)| {
-            if *c == '"' {
-                quoted = !quoted;
-            }
-            *c == ':' && !quoted
-        }) else {
-            continue;
-        };
-        let (head, value) = (raw.get(..colon.0).unwrap_or(""), raw.get(colon.0 + 1..).unwrap_or(""));
+        let Some((head, value)) = split_line(&raw) else { continue };
         let decoded;
         let value = if quoted_printable_line(head) {
             decoded = quoted_printable(value, charset_of(head));
@@ -336,14 +366,9 @@ pub fn parse(text: &str) -> Vec<Card> {
         } else {
             value
         };
-        let mut parts = head.split(';');
         // Properties may carry a group prefix (`item1.EMAIL`).
-        let name = parts.next().unwrap_or("").rsplit('.').next().unwrap_or("").trim().to_ascii_uppercase();
-        let params: Vec<(String, String)> = parts
-            .map(|p| {
-                p.split_once('=').map_or((p.trim().to_ascii_uppercase(), String::new()), |(k, v)| (k.trim().to_ascii_uppercase(), v.to_string()))
-            })
-            .collect();
+        let name = head.split(';').next().unwrap_or("").rsplit('.').next().unwrap_or("").trim().to_ascii_uppercase();
+        let params = params_of(head);
         match name.as_str() {
             "BEGIN" if value.trim().eq_ignore_ascii_case("VCARD") => cur = Some(Card::default()),
             "END" if value.trim().eq_ignore_ascii_case("VCARD") => {
@@ -364,12 +389,19 @@ pub fn parse(text: &str) -> Vec<Card> {
                         let n = components(value);
                         c.family = n.first().cloned().unwrap_or_default();
                         c.given = n.get(1).cloned().unwrap_or_default();
+                        let rest = after_components(value, 2).unwrap_or("");
+                        c.name_rest = if rest.len() > MAX_NAME_REST || rest.chars().all(|ch| ch == ';') { String::new() } else { rest.to_string() };
                     }
-                    "EMAIL" if c.emails.len() < 50 => c.emails.push(Typed { value: value.trim().to_string(), kind: kind(&params) }),
+                    "EMAIL" if c.emails.len() < 50 => {
+                        let t = Typed { value: value.trim().to_string(), kind: kind(&params) };
+                        keep_written(c, "EMAIL", &t.value, &raw, &params);
+                        c.emails.push(t);
+                    }
                     "TEL" if c.phones.len() < 50 => {
                         let v = value.trim();
-                        let v = v.strip_prefix("tel:").unwrap_or(v);
-                        c.phones.push(Typed { value: v.to_string(), kind: kind(&params) });
+                        let t = Typed { value: v.strip_prefix("tel:").unwrap_or(v).to_string(), kind: kind(&params) };
+                        keep_written(c, "TEL", &t.value, &raw, &params);
+                        c.phones.push(t);
                     }
                     "ORG" => {
                         let parts: Vec<String> = components(value).into_iter().filter(|x| !x.is_empty()).collect();
@@ -446,10 +478,15 @@ pub fn write(c: &Card) -> String {
     let mut lines: Vec<String> = vec!["BEGIN:VCARD".into(), "VERSION:4.0".into(), "PRODID:-//Quatrelle//Quatrelle//EN".into()];
     lines.push(format!("UID:{}", c.uid.replace(['\r', '\n'], "")));
     lines.push(format!("FN:{}", esc(&c.display())));
-    lines.push(format!("N:{};{};;;", esc(&c.family), esc(&c.given)));
+    // Five components: the rest as written, made up to three.
+    let rest = c.name_rest.replace(['\r', '\n'], "");
+    let pad = ";".repeat(2usize.saturating_sub(separators(&rest).len()));
+    lines.push(format!("N:{};{};{rest}{pad}", esc(&c.family), esc(&c.given)));
     let typed = |prop: &str, t: &Typed| {
         let kind = t.kind.replace(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-', "");
-        if kind.is_empty() {
+        if let Some(line) = c.as_written.get(&written_key(prop, &t.value)).and_then(|l| written_again(l, prop, &kind)) {
+            line
+        } else if kind.is_empty() {
             format!("{prop}:{}", t.value.replace(['\r', '\n'], ""))
         } else {
             format!("{prop};TYPE={kind}:{}", t.value.replace(['\r', '\n'], ""))
@@ -594,7 +631,9 @@ BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:ann\r\nEMAIL:ann@x.example\r\nEND:VCA
         assert_eq!(cards[1].display(), "ann@x.example");
         let back = parse(&write(z));
         assert_eq!(back.len(), 1);
-        assert_eq!(back[0], z.clone());
+        let unkept = |c: &Card| Card { as_written: BTreeMap::new(), ..c.clone() };
+        assert_eq!(unkept(&back[0]), unkept(z));
+        assert!(z.as_written.iter().all(|(k, v)| back[0].as_written.get(k) == Some(v)), "lines kept as they were read: {:?}", back[0].as_written);
         assert!(z.matches("lantern") && z.matches("ZOE@home") && z.matches("+49151") && !z.matches("ann"));
     }
 

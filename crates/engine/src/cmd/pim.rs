@@ -620,10 +620,14 @@ pub(super) fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Resul
             _ => None,
         }
     };
-    if let Some(n) = p::str(v, "name") {
+    // The name as shown, sent back unchanged (the contact form always sends it), keeps its parts.
+    if let Some(n) = p::str(v, "name")
+        && n.trim() != c.display()
+    {
         c.name = n.trim().chars().take(300).collect();
         c.given.clear();
         c.family.clear();
+        c.name_rest.clear();
     }
     use quatrelle_model::vcard::{PostalAddress, Typed};
     // A list of values, each a string or {"value", "kind"} (a phone's kind: work, home, cell,
@@ -653,11 +657,25 @@ pub(super) fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Resul
         }
     };
     if let Some(e) = typed("emails") {
-        c.emails = e.into_iter().take(20).collect();
+        // Given as text (the contact form's), an address keeps the kind it had.
+        let bare = matches!(v.get("emails"), Some(Value::String(_)))
+            || v.get("emails").and_then(Value::as_array).is_some_and(|a| a.iter().all(Value::is_string));
+        let had = std::mem::take(&mut c.emails);
+        c.emails = e
+            .into_iter()
+            .take(20)
+            .map(|mut t| {
+                if bare && let Some(old) = had.iter().find(|o| o.value == t.value) {
+                    t.kind.clone_from(&old.kind);
+                }
+                t
+            })
+            .collect();
     }
     if let Some(ph) = typed("phones") {
         c.phones = ph.into_iter().take(20).collect();
     }
+    c.drop_unused_lines();
     if let Some(list) = v.get("addresses").and_then(Value::as_array) {
         let field = |a: &Value, k: &str| p::str(a, k).unwrap_or_default().trim().chars().take(500).collect::<String>();
         c.addresses = list

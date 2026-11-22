@@ -49,12 +49,15 @@ fn card() -> impl Strategy<Value = Card> {
         prop::collection::vec(typed(r"\+?[0-9 ]{3,15}"), 0..3),
         prop::collection::vec((field(), field(), field(), field(), field()), 0..2),
         prop::sample::select(vec!["", "1990-04-01", "--12-31"]),
+        // The rest of `N` as a server writes it: additional names, prefixes, suffixes.
+        prop::sample::select(vec!["", "Marie;Dr.;Jr.", ";Dr.;", ";;Jr.", "Ann\\, Lee;;", "Marie;;"]),
     )
-        .prop_map(|(uid, name, (given, family, org, title, note), emails, phones, addresses, birthday)| Card {
+        .prop_map(|(uid, name, (given, family, org, title, note), emails, phones, addresses, birthday, name_rest)| Card {
             uid,
             name,
             given: given.replace('\n', " "),
             family: family.replace('\n', " "),
+            name_rest: name_rest.to_string(),
             emails: emails.into_iter().map(|t| Typed { value: t.value.trim().to_string(), kind: t.kind }).collect(),
             phones: phones.into_iter().map(|t| Typed { value: t.value.trim().to_string(), kind: t.kind }).collect(),
             org: org.replace('\n', " "),
@@ -167,7 +170,10 @@ proptest! {
         let text = vcard::write(&c);
         let back = vcard::parse(&text);
         prop_assert_eq!(back.len(), 1, "{}", text);
-        prop_assert_eq!(&back[0], &c, "{}", text);
+        // The card, its lines kept as written beside it ([`Card::as_written`]); written again,
+        // the same text.
+        prop_assert_eq!(&Card { as_written: Default::default(), ..back[0].clone() }, &c, "{}", text);
+        prop_assert_eq!(vcard::write(&back[0]), text);
     }
 
     /// Any folder name survives IMAP's modified UTF-7, and the wire form is ASCII.

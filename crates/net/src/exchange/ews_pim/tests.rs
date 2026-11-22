@@ -83,7 +83,6 @@ fn contacts_both_ways() {
             PostalAddress { kind: "home".into(), street: "Rue Haute 9".into(), city: "Gent".into(), ..Default::default() },
         ],
         birthday: "1990-07-12".into(),
-        extra: Vec::new(),
         ..Card::default()
     };
     let xml = contact_xml(&card).replace("<t:Contact>", "<t:Contact><t:ItemId Id=\"C1\" ChangeKey=\"k\"/>");
@@ -101,6 +100,28 @@ fn contacts_both_ways() {
     // Exchange's own: a birthday kept as the start of that day in Brussels, in UTC.
     let theirs = "<t:Contact><t:ItemId Id=\"C2\"/><t:Birthday>1990-07-11T22:00:00Z</t:Birthday></t:Contact>";
     assert_eq!(card_of(parse(theirs).find("Contact").unwrap()).unwrap().birthday, "1990-07-12");
+}
+
+/// A contact's whole name goes to Exchange: its middle name and suffix in their fields, its
+/// prefix as the property Outlook keeps it in (EWS has no field to set it), and comes back: the
+/// prefix from the complete name Exchange makes.
+#[test]
+fn a_contacts_whole_name_goes_to_exchange_and_comes_back() {
+    let mut card = Card { uid: "x".into(), name: "Dr. Zoe Marie Park Jr.".into(), given: "Zoe".into(), family: "Park".into(), ..Card::default() };
+    card.set_name_extras("Marie", "Dr.", "Jr.");
+    let xml = contact_xml(&card);
+    assert!(xml.contains("<t:MiddleName>Marie</t:MiddleName>") && xml.contains("<t:Generation>Jr.</t:Generation>"), "{xml}");
+    assert!(xml.contains("PropertyTag=\"0x3A45\"") && xml.contains("<t:Value>Dr.</t:Value>"), "{xml}");
+    assert!(xml.find("<t:ExtendedProperty>") < xml.find("<t:DisplayName>"), "after the body, before the name's fields");
+    // What the server gives back for it.
+    let theirs = xml
+        .replace("<t:Contact>", "<t:Contact><t:ItemId Id=\"C1\" ChangeKey=\"k\"/>")
+        .replace("</t:Contact>", "<t:CompleteName><t:Title>Dr.</t:Title><t:FirstName>Zoe</t:FirstName></t:CompleteName></t:Contact>");
+    let back = card_of(parse(&theirs).find("Contact").unwrap()).unwrap();
+    assert_eq!((back.given.as_str(), back.family.as_str(), back.name_rest.as_str()), ("Zoe", "Park", "Marie;Dr.;Jr."));
+    // A contact with a plain name writes nothing more.
+    let plain = contact_xml(&Card { name: "Ana Lima".into(), given: "Ana".into(), family: "Lima".into(), ..Card::default() });
+    assert!(!plain.contains("MiddleName") && !plain.contains("Generation") && !plain.contains("ExtendedProperty"), "{plain}");
 }
 
 /// Appointments Exchange keeps as separate items under one series' UID (seen on an Exchange

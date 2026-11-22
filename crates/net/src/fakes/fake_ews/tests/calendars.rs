@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod contacts;
 mod files;
 mod notes;
 mod removed;

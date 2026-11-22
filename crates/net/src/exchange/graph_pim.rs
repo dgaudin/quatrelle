@@ -33,7 +33,7 @@ fn webex_property_id() -> String {
     format!("String {{{}}} Name WebexId", crate::ews_pim::events::WEBEX_SET)
 }
 
-const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,department,jobTitle,profession,officeLocation,manager,assistantName,businessHomePage,imAddresses,nickName,spouseName,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
+const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,middleName,surname,generation,title,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,department,jobTitle,profession,officeLocation,manager,assistantName,businessHomePage,imAddresses,nickName,spouseName,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
 
 fn seg(id: &str) -> String {
     quatrelle_jmap::pct(id)
@@ -319,7 +319,7 @@ pub fn card_of(v: &Value) -> Option<Card> {
     if let Some(m) = v.get("mobilePhone").and_then(Value::as_str).filter(|m| !m.is_empty()) {
         phones.push(typed(m.to_string(), "cell"));
     }
-    Some(Card {
+    let mut card = Card {
         uid: id,
         name: s(v, "displayName"),
         given: s(v, "givenName"),
@@ -375,13 +375,16 @@ pub fn card_of(v: &Value) -> Option<Card> {
             })
             .and_then(|b| quatrelle_model::vcard::birthday_of(&b))
             .unwrap_or_default(),
-        extra: Vec::new(),
         ..Card::default()
-    })
+    };
+    // The name's other parts: Graph's `title` is the prefix (`Dr.`), `generation` the suffix.
+    card.set_name_extras(&s(v, "middleName"), &s(v, "title"), &s(v, "generation"));
+    Some(card)
 }
 
 /// A card as Graph's JSON.
 pub fn card_json(c: &Card) -> Value {
+    let [middle, prefix, suffix] = c.name_extras();
     let phones = |kind: &str| c.phones.iter().filter(|p| p.kind.to_ascii_lowercase().contains(kind)).map(|p| p.value.clone()).collect::<Vec<_>>();
     let mut work = phones("work");
     let other: Vec<String> = c.phones.iter().filter(|p| p.kind.is_empty()).map(|p| p.value.clone()).collect();
@@ -396,7 +399,10 @@ pub fn card_json(c: &Card) -> Value {
     json!({
         "displayName": c.display(),
         "givenName": c.given,
+        "middleName": middle,
         "surname": c.family,
+        "generation": suffix,
+        "title": prefix,
         "emailAddresses": c.emails.iter().map(|e| json!({"address": e.value, "name": c.display()})).collect::<Vec<_>>(),
         "businessPhones": work,
         "homePhones": phones("home"),
