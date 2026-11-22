@@ -329,3 +329,20 @@ fn a_draft_keeps_its_html_signature() {
     assert_eq!(pictures.iter().filter(|p| p.cid == "photo@sig").count(), 1);
     done(s);
 }
+
+/// A draft keeps what reads whole in To: a name with a comma in it (`"Park, Zoe"`, as a reply
+/// writes it) stays one recipient, not cut at the comma, and two addresses pasted with only a space
+/// between them are two, not the first taken for the second's name.
+#[test]
+fn a_draft_keeps_every_whole_address_and_a_name_with_a_comma() {
+    let mut s = sample_session("draft-whole-addresses");
+    s.run("mail.new", &json!({})).unwrap();
+    let to = "\"Park, Zoe\" <z@x.example>, Ann <a@b.example> Bob <c@d.example>, half@";
+    s.run("compose.update", &json!({"to": to, "subject": "Whole"})).unwrap();
+    assert_eq!(s.run("compose.close", &json!({})).unwrap()["saved"], true);
+    s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
+    let m = s.list.iter().find(|m| m.subject == "Whole").unwrap();
+    let to: Vec<(&str, &str)> = m.to.iter().map(|a| (a.name.as_str(), a.email.as_str())).collect();
+    assert_eq!(to, [("Park, Zoe", "z@x.example"), ("Ann", "a@b.example"), ("Bob", "c@d.example")]);
+    done(s);
+}

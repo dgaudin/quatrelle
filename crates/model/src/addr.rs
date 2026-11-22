@@ -96,6 +96,12 @@ pub fn parse_list(input: &str) -> Result<Vec<EmailAddress>, String> {
     if bad.is_empty() { Ok(out) } else { Err(bad.join(", ")) }
 }
 
+/// The addresses of [`parse_list`]'s reading that are whole: for a draft, which may hold one
+/// still being typed.
+pub fn parse_valid(input: &str) -> Vec<EmailAddress> {
+    split_entries(input).into_iter().take(MAX_ENTRIES).filter_map(parse_one).collect()
+}
+
 /// One entry typed (`zoe@x`, `Zoe Park <zoe@x>`, `"Park, Zoe" <zoe@x>`) as an address; `None`
 /// when it isn't one (a contact group's reference included).
 pub fn parse_one(s: &str) -> Option<EmailAddress> {
@@ -142,6 +148,17 @@ mod tests {
         assert_eq!(parse_list("  ; ,").unwrap(), vec![]);
         assert_eq!(parse_list("good@x.org, not an address").unwrap_err(), "not an address");
         assert!(parse_list("a@b.c <").is_err());
+    }
+
+    /// Two addresses with nothing but a space or a line end between them (pasted from a list)
+    /// are two: the first was taken for the second's name and never got the message.
+    #[test]
+    fn addresses_run_together_are_each_read() {
+        let got = parse_list("Ann <a@b.example>\nBob <c@d.example> e@f.example; \"Park, Zoe\" <z@x.example>").unwrap();
+        let got: Vec<(&str, &str)> = got.iter().map(|a| (a.name.as_str(), a.email.as_str())).collect();
+        assert_eq!(got, [("Ann", "a@b.example"), ("Bob", "c@d.example"), ("", "e@f.example"), ("Park, Zoe", "z@x.example")]);
+        assert_eq!(parse_valid("\"Park, Zoe\" <z@x.example>, half@").len(), 1);
+        assert_eq!(parse_valid("Ann <a@b.example> Bob <c@d.example>").len(), 2);
     }
 
     #[test]
