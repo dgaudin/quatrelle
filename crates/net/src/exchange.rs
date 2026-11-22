@@ -7,4 +7,5 @@ pub mod ews;
 pub(crate) mod ews_pim;
 pub mod graph;
 pub mod graph_pim;
+pub mod missed;
 pub mod ntlm;

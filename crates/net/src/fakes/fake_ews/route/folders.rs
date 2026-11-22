@@ -3,9 +3,53 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server's folder operations: a folder asked for, the folders listed (the mailbox's
 //! root, a public folder's, a shared mailbox's, the archive's, the whole tree in pages), and a
-//! folder made, moved, renamed, deleted or emptied.
+//! folder made, moved, renamed, deleted or emptied; and what a test scripts on those lists.
 
 use super::*;
+
+/// What a test scripts on the lists of folders beyond the account's own — a shared mailbox's, the
+/// public folders', the online archive's — and on what finds them (Autodiscover, the directory):
+/// a list refused, answered with no folder, in pages, not answered.
+#[derive(Clone, Debug, Default)]
+pub struct ZoneScript {
+    /// Shared mailboxes (by address) whose folders' list is refused (`ErrorAccessDenied`): their
+    /// folders and items are answered still.
+    pub refused: Vec<String>,
+    /// Shared mailboxes (by address) whose folders' list comes back with none.
+    pub emptied: Vec<String>,
+    /// A shared mailbox's folders come in pages of this many at most (as many as asked, without).
+    pub shared_page: Option<usize>,
+    /// Shared mailboxes (by address) whose list's pages after the first come back with no
+    /// response message.
+    pub unanswered_pages: Vec<String>,
+    /// The public folders' root is refused (`ErrorAccessDenied`), routed or not.
+    pub public_refused: bool,
+    /// The public folders' root has no folder under it.
+    pub public_emptied: bool,
+    /// The online archive's list comes back with no folder (refused: `ArchiveBox::refused`).
+    pub archive_emptied: bool,
+    /// The next Autodiscover requests about the account fail (HTTP 500), this many.
+    pub discoveries_failing: usize,
+    /// The Autodiscover requests about the account seen, failed or answered.
+    pub discoveries: usize,
+    /// `ResolveNames` goes unanswered (HTTP 500).
+    pub directory_silent: bool,
+}
+
+impl ZoneScript {
+    /// An Autodiscover request about the account, counted: whether it fails.
+    pub(in crate::fakes::fake_ews) fn discovery_fails(&mut self) -> bool {
+        self.discoveries = self.discoveries.saturating_add(1);
+        let fails = self.discoveries_failing > 0;
+        self.discoveries_failing = self.discoveries_failing.saturating_sub(1);
+        fails
+    }
+}
+
+/// Whether `list` names this mailbox.
+fn names(list: &[String], address: &str) -> bool {
+    list.iter().any(|a| a.eq_ignore_ascii_case(address))
+}
 
 impl Data {
     /// A folder operation answered; `None` for any other, which `route` answers.
@@ -39,6 +83,10 @@ impl Data {
                         continue;
                     }
                     let root = f.attr("Id") == Some("publicfoldersroot");
+                    if root && self.zones.public_refused {
+                        out.push(err("ErrorAccessDenied"));
+                        continue;
+                    }
                     match self.folder_id(&f).and_then(|id| self.folders.iter().find(|x| x.id == id).cloned()) {
                         // The root is the hierarchy's; any other public folder, its content's.
                         Some(fo) if root && self.unrouted_hierarchy(&fo.id) => out.push(err("ErrorFolderNotFound")),
@@ -65,10 +113,12 @@ impl Data {
                     out.push(err("ErrorFolderNotFound"));
                     return Some(out);
                 }
+                let emptied =
+                    self.zones.public_emptied && self.folders.iter().any(|f| f.id == parent && f.known.as_deref() == Some("publicfoldersroot"));
                 let kids: Vec<String> = self
                     .folders
                     .iter()
-                    .filter(|f| f.parent == parent)
+                    .filter(|f| !emptied && f.parent == parent)
                     .map(|f| {
                         let n = self.folders.iter().filter(|x| x.parent == f.id).count();
                         self.folder_xml(f)
@@ -83,13 +133,25 @@ impl Data {
                     out.push(err("ErrorAccessDenied"));
                     return Some(out);
                 };
-                let all: Vec<String> = self
-                    .folders
-                    .iter()
-                    .filter(|f| f.owner == owner && f.known.as_deref() != Some("msgfolderroot"))
-                    .map(|f| self.folder_xml(f))
-                    .collect();
-                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", all.concat())));
+                if names(&self.zones.refused, &owner) {
+                    out.push(err("ErrorAccessDenied"));
+                    return Some(out);
+                }
+                // In the pages asked for (or scripted); a later one scripted unanswered has no
+                // response message at all.
+                let view = op.child("IndexedPageFolderView");
+                let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
+                if offset > 0 && names(&self.zones.unanswered_pages, &owner) {
+                    return Some(out);
+                }
+                let asked: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
+                let max = asked.min(self.zones.shared_page.unwrap_or(usize::MAX)).max(1);
+                let emptied = names(&self.zones.emptied, &owner);
+                let all: Vec<&Fo> =
+                    self.folders.iter().filter(|f| !emptied && f.owner == owner && f.known.as_deref() != Some("msgfolderroot")).collect();
+                let page: String = all.iter().skip(offset).take(max).map(|f| self.folder_xml(f)).collect();
+                let last = offset.saturating_add(max) >= all.len();
+                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"{last}\"><t:Folders>{page}</t:Folders></m:RootFolder>")));
             }
             // Deep, in the online archive: refused without one, or by one that refuses.
             "FindFolder"
@@ -97,6 +159,9 @@ impl Data {
             {
                 match op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.archive_error(f)) {
                     Some(code) => out.push(err(code)),
+                    None if self.zones.archive_emptied => {
+                        out.push(ok("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders></t:Folders></m:RootFolder>".into()))
+                    }
                     None => out.push(self.archive_tree(op)),
                 }
             }

@@ -7,6 +7,7 @@ use super::*;
 
 mod catch_up;
 mod listing;
+pub use crate::exchange::missed::{Missed, PublicMissed};
 use catch_up::{catch_up_once, take_found};
 pub use listing::list_folders;
 

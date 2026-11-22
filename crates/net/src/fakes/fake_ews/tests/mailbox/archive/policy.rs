@@ -119,7 +119,7 @@ fn a_server_without_tags_offers_none() {
     let server = serve(d);
     let c = client(&server);
     assert!(c.archive_tags().unwrap().is_empty());
-    let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap().folders;
     assert!(folders.iter().all(|f| f.archive_tag.is_none()));
     assert_eq!(server.data.lock().unwrap().policy.list_reads.load(Ordering::Relaxed), 0, "no tag asked of a server that has none");
 

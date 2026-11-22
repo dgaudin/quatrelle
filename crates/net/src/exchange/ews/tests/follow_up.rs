@@ -230,7 +230,7 @@ fn shared_and_public_folders_have_their_ticks_read_where_they_live() {
     c.set_shared(&["team@contoso.example".to_string()]);
     let store = crate::fake::tests_store("ews-ticks-shared-public");
     let mut st = State::default();
-    let listed = list_folders(&c, &mut st, "a1").unwrap();
+    let listed = list_folders(&c, &mut st, "a1").unwrap().folders;
     let news_path = listed.iter().find(|f| f.path.ends_with("Announcements")).map(|f| f.path.clone()).unwrap();
     let folders = [news_path.as_str(), "Team/Inbox"];
     let opts = SyncOptions { prefetch: 0, ..Default::default() };

@@ -19,8 +19,13 @@ enum Only {
 pub(super) const SYSTEM_FOLDERS: [&str; 5] = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
 
 impl Client {
-    /// The account's mail folders, with their roles and counts.
-    pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {
+    /// The account's mail folders, with their roles and counts, and what of them couldn't be
+    /// listed this time (a shared mailbox, the public folders, the online archive): the account's
+    /// own folders list whole, or the listing fails.
+    pub fn mailboxes(&self) -> Result<(Vec<Mailbox>, Missed)> {
+        // An Autodiscover that didn't answer is asked again, once for this listing.
+        self.forget_failed_discovery();
+        let mut missed = Missed::default();
         let roles = SPECIAL;
         let hidden = ["msgfolderroot", "outbox", "conversationhistory", "syncissues"];
         let ids: String = roles.iter().map(|(n, _)| *n).chain(hidden).map(|n| distinguished(n, None)).collect();
@@ -96,7 +101,13 @@ impl Client {
         keep_rooted(&mut out);
         // Exchange's public folders, under a folder of their own (a server without them, or
         // one that won't show them, just has none).
-        match self.public_folders() {
+        let public = self.public_folders();
+        // None listed (refused, empty, or the mailbox holding their list couldn't be asked for):
+        // whatever was under them may be there still.
+        if !public.as_ref().is_ok_and(|pf| !pf.is_empty()) {
+            missed.public = PublicMissed::All;
+        }
+        match public {
             Ok(pf) => out.extend(pf),
             Err(e) => log::info!("no public folders: {e}"),
         }
@@ -104,10 +115,17 @@ impl Client {
         // of the account's folders).
         let mut open = Vec::new();
         self.shared_roles.borrow_mut().clear();
-        for sm in self.shared_mailboxes() {
+        let (boxes, untold) = self.shared_mailboxes_told();
+        missed.shared_unknown = untold;
+        for sm in boxes {
             let taken = |n: &str| out.iter().any(|m| m.parent.is_none() && m.name.eq_ignore_ascii_case(n));
             let top = if taken(&sm.name) { format!("{} ({})", sm.name, sm.address) } else { sm.name.clone() };
-            match self.shared_folders(&sm, &top) {
+            let listed = self.shared_folders(&sm, &top);
+            // Refused, cut, or nothing under the folder named for it: its folders didn't list.
+            if !listed.as_ref().is_ok_and(|f| f.len() > 1) {
+                missed.shared.push(sm.address.clone());
+            }
+            match listed {
                 Ok(f) if !f.is_empty() => {
                     log::info!("shared mailbox {}: {} folders", sm.address, f.len().saturating_sub(1));
                     open.push(sm.address.clone());
@@ -121,10 +139,19 @@ impl Client {
         // taken for a folder or a shared mailbox of the account). One that refuses, or whose
         // server is down, is passed over: the account's own folders are listed all the same.
         *self.archive.borrow_mut() = Default::default();
+        // Autodiscover didn't answer: whether the account has an archive can't be told.
+        if self.discovery().is_none() {
+            missed.archive = true;
+        }
         if let Some((name, address)) = self.online_archive() {
             let taken = out.iter().any(|m| m.parent.is_none() && m.name.eq_ignore_ascii_case(&name));
             let top = if taken { format!("{name} ({})", address.as_deref().unwrap_or(&self.email)) } else { name };
-            match self.archive_folders(&top) {
+            let listed = self.archive_folders(&top);
+            // Refused, or nothing under the folder named for it.
+            if !listed.as_ref().is_ok_and(|f| f.len() > 1) {
+                missed.archive = true;
+            }
+            match listed {
                 Ok(f) if !f.is_empty() => {
                     log::info!("online archive: {} folders", f.len().saturating_sub(1));
                     // What isn't found in the account's own mailbox is asked for there too.
@@ -136,7 +163,7 @@ impl Client {
             }
         }
         *self.shared_open.borrow_mut() = open;
-        Ok(out)
+        Ok((out, missed))
     }
 
     /// A folder's (total, unread).

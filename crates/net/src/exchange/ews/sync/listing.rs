@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! EWS: the folder list — the account's own folders, and those of the mailboxes it opens.
+//! EWS: the folder list — the account's own folders, and those of the mailboxes it opens — and
+//! what of it couldn't be listed.
 
 use super::*;
+use crate::exchange::missed::Listed;
 
-/// Refresh the folder list (and the folder ids behind it).
-pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
-    let boxes = c.mailboxes()?;
+/// Refresh the folder list (and the folder ids behind it), with what of it couldn't be listed
+/// this time ([`Listed::missed`]: a shared mailbox, the public folders, the online archive).
+pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Listed> {
+    let (boxes, missed) = c.mailboxes()?;
     let mut found = jmap::folders(account, &boxes);
     st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
     jmap::name_special(&mut found, &boxes);
@@ -34,5 +37,5 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Fol
             f.archive = true;
         }
     }
-    Ok(found.into_iter().map(|(f, _)| f).collect())
+    Ok(Listed { folders: found.into_iter().map(|(f, _)| f).collect(), missed })
 }

@@ -15,8 +15,8 @@ impl Worker {
         let listed = match self.conn.as_mut() {
             Some(Conn::Imap(c)) => c.list(&id),
             Some(Conn::Jmap(c)) => jmap::list_folders(c, &mut self.jstate, &id),
-            Some(Conn::Graph(c)) => crate::graph::list_folders(c, &mut self.jstate, &id, &self.acc.shared_mailboxes),
-            Some(Conn::Ews(c)) => crate::ews::list_folders(c, &mut self.jstate, &id),
+            Some(Conn::Graph(c)) => crate::graph::list_folders(c, &mut self.jstate, &id, &self.acc.shared_mailboxes).map(|l| folders_of(&id, l)),
+            Some(Conn::Ews(c)) => crate::ews::list_folders(c, &mut self.jstate, &id).map(|l| folders_of(&id, l)),
             Some(Conn::Pop) => crate::pop::folders(&self.store, &id),
             None => Err(NetError::Closed("not connected".into())),
         };
@@ -301,4 +301,26 @@ impl Worker {
             }
         }
     }
+}
+
+/// An Exchange listing's folders. What it couldn't list is said in the log, in counts (never an
+/// address, a name or an id), and nothing more: the folders it doesn't name are taken for gone,
+/// as from any listing.
+fn folders_of(account: &str, listed: crate::exchange::missed::Listed) -> Vec<Folder> {
+    let m = &listed.missed;
+    if m.any() {
+        let public = match &m.public {
+            crate::exchange::missed::PublicMissed::None => "none".to_string(),
+            crate::exchange::missed::PublicMissed::All => "all".to_string(),
+            crate::exchange::missed::PublicMissed::Under(parents) => format!("{} branches", parents.len()),
+        };
+        log::info!(
+            "{account}: {} zones didn't list: shared mailboxes {}, mapped mailboxes untold {}, public folders {public}, online archive {}",
+            m.zones(),
+            m.shared.len(),
+            m.shared_unknown,
+            m.archive
+        );
+    }
+    listed.folders
 }

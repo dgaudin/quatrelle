@@ -470,7 +470,7 @@ fn basic_sign_in_when_that_is_what_the_server_offers() {
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    assert_eq!(c.mailboxes().unwrap().len(), 1);
+    assert_eq!(c.mailboxes().unwrap().0.len(), 1);
     assert!(matches!(crate::ews::Client::connect(&server.url, "x", "y", "e"), Err(crate::NetError::Auth(_))));
 }
 
@@ -662,7 +662,7 @@ fn a_server_that_lets_in_only_known_clients() {
     }
     assert!(server.data.lock().unwrap().agents.iter().all(|a| a.starts_with("Quatrelle/")));
     let c = crate::ews::Client::connect_as(&server.url, &user, PASSWORD, "riley@contoso.example", Some(EVOLUTION)).unwrap();
-    assert_eq!(c.mailboxes().unwrap().len(), 1);
+    assert_eq!(c.mailboxes().unwrap().0.len(), 1);
     assert_eq!(
         crate::ews::autodiscover_as("riley@contoso.example", &user, PASSWORD, Some(&server.url), Some(EVOLUTION), &trusting(&["127.0.0.1"])).unwrap(),
         server.url

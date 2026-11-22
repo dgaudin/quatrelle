@@ -28,10 +28,44 @@ pub(super) struct ArchiveListed {
 /// few hundred at most).
 const MAX_WITHOUT_CALENDAR: usize = 500;
 
+/// The shared mailboxes added to the account by hand (their addresses), and the name each shared
+/// mailbox was listed under before, by its address in lower case ([`Client::set_known_shared`]).
+#[derive(Clone, Debug, Default)]
+pub(super) struct Added {
+    pub(super) addresses: Vec<String>,
+    pub(super) names: HashMap<String, String>,
+}
+
+/// Names of shared mailboxes remembered at most, and the characters of each kept.
+const MAX_KNOWN_NAMES: usize = 200;
+const NAME_CHARS: usize = 120;
+
 impl Client {
     /// The shared mailboxes added to the account by hand.
     pub fn set_shared(&self, addresses: &[String]) {
-        *self.shared_added.borrow_mut() = addresses.iter().map(|a| a.trim().to_string()).filter(|a| a.contains('@')).take(MAX_SHARED).collect();
+        self.shared_added.borrow_mut().addresses =
+            addresses.iter().map(|a| a.trim().to_string()).filter(|a| a.contains('@')).take(MAX_SHARED).collect();
+    }
+
+    /// The name each shared mailbox was listed under before (by address), so that a directory that
+    /// doesn't answer never renames it: a mailbox added by hand is named as the directory says, and
+    /// while it doesn't answer it keeps that name rather than taking its address (which changed
+    /// the path of every one of its folders). Its top folder's name will do: an address added to
+    /// tell it from another folder (`Sales (sales@…)`) is taken off.
+    pub fn set_known_shared(&self, names: HashMap<String, String>) {
+        let known = names
+            .into_iter()
+            .filter_map(|(address, name)| {
+                let address = address.trim().to_ascii_lowercase();
+                let told = format!(" ({address})");
+                let name = name.trim();
+                let cut = name.len().checked_sub(told.len()).filter(|at| name.get(*at..).is_some_and(|end| end.eq_ignore_ascii_case(&told)));
+                let name: String = cut.and_then(|at| name.get(..at)).unwrap_or(name).trim().chars().take(NAME_CHARS).collect();
+                (address.contains('@') && !name.is_empty()).then_some((address, name))
+            })
+            .take(MAX_KNOWN_NAMES)
+            .collect();
+        self.shared_added.borrow_mut().names = known;
     }
 
     /// Whether shared mailbox `address` was found without a calendar this session.
@@ -66,7 +100,10 @@ impl Client {
         self.pf_mailboxes.borrow().get(guid).cloned()
     }
 
-    /// The account's Autodiscover answer, asked once.
+    /// The account's Autodiscover answer, asked once and kept for the session. One that didn't
+    /// come is kept only till the next folder listing asks again
+    /// ([`Client::forget_failed_discovery`]): kept for the session, it kept the mailboxes it maps
+    /// to the account, the online archive and the public folders it names out of every listing.
     pub(super) fn discovery(&self) -> Option<String> {
         if let Some(known) = self.discovered.borrow().clone() {
             return known;
@@ -76,10 +113,26 @@ impl Client {
         found
     }
 
+    /// An Autodiscover answer that didn't come is asked for again (by the next [`Client::discovery`]):
+    /// at the start of each folder listing, so once for it.
+    pub(super) fn forget_failed_discovery(&self) {
+        let mut known = self.discovered.borrow_mut();
+        if matches!(*known, Some(None)) {
+            *known = None;
+        }
+    }
+
     /// The mailboxes this account opens besides its own: those added by hand, then those the
     /// server maps to it (Autodiscover's `AlternativeMailbox`, the mailboxes it has full access
     /// to, as Outlook opens them by itself). Its own address isn't one; each is there once.
     pub fn shared_mailboxes(&self) -> Vec<SharedMailbox> {
+        self.shared_mailboxes_told().0
+    }
+
+    /// [`Client::shared_mailboxes`], and whether some may be missing from them because they
+    /// couldn't be told this time: Autodiscover didn't answer, or the directory didn't answer for
+    /// the address of one Autodiscover names by its Exchange address only.
+    pub(super) fn shared_mailboxes_told(&self) -> (Vec<SharedMailbox>, bool) {
         let mut out: Vec<SharedMailbox> = Vec::new();
         let add = |out: &mut Vec<SharedMailbox>, address: String, name: String| {
             let a = address.trim().to_string();
@@ -92,36 +145,60 @@ impl Client {
                 out.push(SharedMailbox { address: a, name });
             }
         };
-        // Added by hand: named as the server knows it (its address when it doesn't say).
-        for a in self.shared_added.borrow().clone() {
-            let name = self.resolve(&a).map(|(_, name)| name).unwrap_or_default();
+        // Added by hand: named as the server knows it (its address when it knows no such name);
+        // while the directory doesn't answer, as it was listed before.
+        let added = self.shared_added.borrow().clone();
+        for a in added.addresses {
+            let name = match self.resolve(&a) {
+                Ok(found) => found.map(|(_, name)| name).unwrap_or_default(),
+                Err(_) => {
+                    log::info!("the directory didn't answer for a shared mailbox added by hand: named as last listed, or by its address");
+                    added.names.get(&a.to_ascii_lowercase()).cloned().unwrap_or_default()
+                }
+            };
             add(&mut out, a, name);
         }
-        if let Some(xml) = self.discovery() {
-            for alt in alternative_mailboxes(&xml) {
-                // An older server names it by its Exchange address only: asked for its email address.
-                let address = alt.smtp.or_else(|| alt.legacy_dn.as_deref().and_then(|dn| self.resolve(dn)).map(|(a, _)| a));
-                match address {
-                    Some(a) => add(&mut out, a, alt.name),
-                    None => log::info!("shared mailbox {}: no address for it", alt.name),
-                }
+        let Some(xml) = self.discovery() else { return (out, true) };
+        let mut untold = false;
+        for alt in alternative_mailboxes(&xml) {
+            // An older server names it by its Exchange address only: asked for its email address.
+            let address = match (alt.smtp, alt.legacy_dn.as_deref()) {
+                (Some(a), _) => Some(a),
+                (None, Some(dn)) => match self.resolve(dn) {
+                    Ok(found) => found.map(|(a, _)| a),
+                    // The directory didn't answer: this one may be there still.
+                    Err(_) => {
+                        untold = true;
+                        None
+                    }
+                },
+                (None, None) => None,
+            };
+            match address {
+                Some(a) => add(&mut out, a, alt.name),
+                None => log::info!("shared mailbox {}: no address for it", alt.name),
             }
         }
-        out
+        (out, untold)
     }
 
     /// A mailbox the server knows by an address (an email address, or an Exchange address
-    /// `/o=…`): its email address and name.
-    pub(super) fn resolve(&self, entry: &str) -> Option<(String, String)> {
-        let m = self
-            .call_one(&format!(
-                "<m:ResolveNames ReturnFullContactData=\"false\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
-                esc(entry)
-            ))
-            .ok()?;
-        let b = m.find("Mailbox")?;
-        let address = b.text_of("EmailAddress").map(|a| a.trim().to_string()).filter(|a| a.contains('@'))?;
-        Some((address, b.text_of("Name").unwrap_or("").trim().to_string()))
+    /// `/o=…`): its email address and name. `None` when the directory has no one so (or no
+    /// address for them); `Err` when it didn't answer, which says nothing of the mailbox.
+    pub(super) fn resolve(&self, entry: &str) -> Result<Option<(String, String)>> {
+        let doc = self.call(&format!(
+            "<m:ResolveNames ReturnFullContactData=\"false\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
+            esc(entry)
+        ))?;
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        // It found no one so; any other refusal isn't an answer about the name.
+        if m.attr("ResponseClass") == Some("Error") && m.text_of("ResponseCode").is_some_and(|c| c.trim().starts_with("ErrorNameResolution")) {
+            return Ok(None);
+        }
+        check_message(m)?;
+        let Some(b) = m.find("Mailbox") else { return Ok(None) };
+        let address = b.text_of("EmailAddress").map(|a| a.trim().to_string()).filter(|a| a.contains('@'));
+        Ok(address.map(|a| (a, b.text_of("Name").unwrap_or("").trim().to_string())))
     }
 
     /// Run `f` with every request routed to another mailbox (a shared one).
@@ -193,7 +270,7 @@ impl Client {
         let mut out = vec![Mailbox { id: root_id.to_string(), name: top.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 }];
         let mut offset = 0;
         loop {
-            let m = self.call_one(&format!(
+            let doc = self.call(&format!(
                 "<m:FindFolder Traversal=\"Deep\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
                  <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:ParentFolderId\"/>\
                  <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
@@ -201,6 +278,10 @@ impl Client {
                  <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
                  <m:ParentFolderIds>{root}</m:ParentFolderIds></m:FindFolder>"
             ))?;
+            // An answer without a response message ends the list, as the account's own folders'
+            // does, rather than failing the mailbox: the folders before it are listed.
+            let Some(m) = messages(&doc).first().copied() else { break };
+            check_message(m)?;
             let Some(rf) = m.child("RootFolder") else { break };
             let folders = rf.folders();
             let n = folders.len();
@@ -367,13 +448,14 @@ impl Client {
         Err(last)
     }
 
-    /// The account's public folder hierarchy mailbox, from Autodiscover (asked once): where
-    /// listing public folders is routed on Exchange 2013 and later.
+    /// The account's public folder hierarchy mailbox, from Autodiscover (asked once it answered):
+    /// where listing public folders is routed on Exchange 2013 and later.
     pub(crate) fn public_hierarchy_mailbox(&self) -> Option<String> {
         if let Some(known) = self.pf_hierarchy.borrow().clone() {
             return known;
         }
-        let found = self.discovery().as_deref().and_then(autodiscover_public);
+        // Not kept while Autodiscover doesn't answer: asked again with it.
+        let found = autodiscover_public(&self.discovery()?);
         *self.pf_hierarchy.borrow_mut() = Some(found.clone());
         found
     }

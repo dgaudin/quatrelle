@@ -15,7 +15,7 @@ fn connect(server: &super::super::super::server::Server) -> crate::ews::Client {
 }
 
 fn listed(server: &super::super::super::server::Server) -> Vec<Folder> {
-    crate::ews::list_folders(&connect(server), &mut crate::jmap::State::default(), "a1").unwrap()
+    crate::ews::list_folders(&connect(server), &mut crate::jmap::State::default(), "a1").unwrap().folders
 }
 
 /// Riley's mailbox (Inbox, Sent Items) and an archive "Online Archive - Riley" holding `Inbox`,
@@ -42,7 +42,7 @@ fn the_online_archive_lists_under_its_own_top_folder() {
     let (d, ..) = with_archive();
     let server = serve(d);
     let c = connect(&server);
-    let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap().folders;
     let paths: Vec<&str> = folders.iter().map(|f| f.path.as_str()).collect();
     let top = "Online Archive - Riley";
     let want = [top.to_string(), format!("{top}/Inbox"), format!("{top}/2019"), format!("{top}/2019/Projects"), format!("{top}/Deleted Items")];
@@ -100,15 +100,15 @@ fn an_archive_that_refuses_lists_the_rest() {
     let server = serve(d);
     let c = connect(&server);
     let mut st = crate::jmap::State::default();
-    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap().folders;
     assert_eq!(folders.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["INBOX", "Sent Items"]);
     assert!(folders.iter().all(|f| !f.archive));
     server.data.lock().unwrap().archive.as_mut().unwrap().refused = false;
-    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap().folders;
     assert_eq!(folders.iter().filter(|f| f.archive).count(), 5);
     // And gone again: none of its folders stays marked.
     server.data.lock().unwrap().archive.as_mut().unwrap().refused = true;
-    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap().folders;
     assert_eq!(folders.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["INBOX", "Sent Items"]);
 }
 
