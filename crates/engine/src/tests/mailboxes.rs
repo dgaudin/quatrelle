@@ -576,3 +576,35 @@ fn recover_deleted_items_lists_restores_and_purges() {
     assert_eq!(s.recover_block(&imap), Some(RecoverBlock::NoServer));
     assert!(matches!(s.run("folder.recoverDeleted", &json!({"account": imap})), Err(CmdError::Disabled(_))));
 }
+
+/// The list of public folders to keep in sync, damaged: read leniently, it was set aside (`.bad`)
+/// and taken for none, and the account's sync, finding it gone, followed none and let go of every
+/// public folder it kept. It's left as it is, byte for byte, still damaged for the sync to read
+/// (which then lets none go); the Favorite made stays, and the list isn't written, as said.
+#[test]
+fn a_damaged_list_of_public_folders_followed_is_left_as_it_is() {
+    use quatrelle_model::{AccountConfig, FOLLOWED_PUBLIC_DOC, Folder};
+    let store = Store::failing();
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        public_favorites_kept: true,
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    let damaged = b"[\"Public Folders/Rep".to_vec();
+    store.write_account_files(&id, &[(FOLLOWED_PUBLIC_DOC.to_string(), damaged.clone())]).unwrap();
+    let f = |path: &str| Folder { account: id.clone(), path: path.into(), delimiter: Some('/'), selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![f("INBOX"), f("Public Folders"), f("Public Folders/Team")] });
+    s.take_jobs();
+    s.run("folder.favorite", &json!({"account": id, "folder": "Public Folders/Team", "on": true})).unwrap();
+    assert_eq!(store.account_file(&id, FOLLOWED_PUBLIC_DOC).unwrap(), Some(damaged), "written over");
+    assert_eq!(store.account_file(&id, "public-followed.json.bad").unwrap(), None, "set aside");
+    let read = store.load_account_doc_strict::<Vec<String>>(&id, FOLLOWED_PUBLIC_DOC);
+    assert!(matches!(read, Err(quatrelle_store::StoreError::Damaged { .. })), "the sync reads none followed: {read:?}");
+    assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("couldn't be read")), "{:?}", s.notices.last());
+    assert!(s.follows_public(&id, "Public Folders/Team"), "the Favorite made stays");
+}

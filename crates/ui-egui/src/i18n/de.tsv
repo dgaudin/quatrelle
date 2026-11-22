@@ -2424,4 +2424,6 @@ presence	Offline	Offline
 	A Teams meeting will be added when the appointment is saved	Eine Teams-Besprechung wird beim Speichern des Termins hinzugefügt
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 behält eine Onlinebesprechung, sobald sie erstellt ist
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
-	{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again	{name}: {messages} Nachrichten importiert, aber die Ordnerliste konnte nicht erneut gelesen werden: Sie erscheint beim nächsten Start von Quatrelle
+	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} Nachrichten importiert, aber die Ordnerliste konnte nicht erneut gelesen werden: Quatrelle liest sie beim nächsten Start erneut
+# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
+	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Die zu synchronisierenden öffentlichen Ordner konnten nicht gelesen werden und werden daher nicht geändert: {error}

@@ -2422,4 +2422,6 @@ presence	Offline	오프라인
 	A Teams meeting will be added when the appointment is saved	약속을 저장하면 Teams 회의가 추가됩니다
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365는 한 번 만든 온라인 모임을 유지합니다
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
-	{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again	{name}: 메시지 {messages}개를 가져왔지만 폴더 목록을 다시 읽을 수 없습니다: Quatrelle를 다시 시작하면 표시됩니다
+	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 메시지 {messages}개를 가져왔지만 폴더 목록을 다시 읽을 수 없습니다: Quatrelle가 다음에 시작할 때 다시 읽습니다
+# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
+	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	동기화할 공용 폴더를 읽지 못해 변경하지 않습니다: {error}

@@ -10,12 +10,9 @@ use super::*;
 fn a_copy_whose_folder_list_cant_be_read_back_is_said_in_french() {
     set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
     let said = tfmt(
-        "{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again",
+        "{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts",
         &[("name", "Old"), ("messages", "4")],
     );
     set_current(Lang::EN);
-    assert_eq!(
-        said,
-        "Old : 4 messages importés, mais la liste de ses dossiers n’a pas pu être relue : elle s’affichera au prochain démarrage de Quatrelle"
-    );
+    assert_eq!(said, "Old : 4 messages importés, mais la liste de ses dossiers n’a pas pu être relue : Quatrelle la relira à son prochain démarrage");
 }

@@ -230,7 +230,21 @@ impl Session {
             if self.followed_public.get(&id) == Some(&list) {
                 continue;
             }
-            let before: Vec<String> = store.load_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC).unwrap_or_default();
+            // Read as it is: one that can't be read, or is damaged, is left so and never written
+            // over (set aside and read as none, the sync found it gone, none followed, and let go
+            // of every public folder it kept). Said once, till the Favorites change.
+            let before: Vec<String> = match store.load_account_doc_strict(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC) {
+                Ok(before) => before,
+                Err(e) => {
+                    self.notice_with(
+                        "the public folders to keep in sync couldn't be read, so they aren't changed: {error}",
+                        &[("error", &e.to_string())],
+                        true,
+                    );
+                    self.followed_public.insert(id, list);
+                    continue;
+                }
+            };
             if before != list {
                 if let Err(e) = store.save_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC, &list) {
                     self.notice_with("the public folders to keep in sync couldn't be saved: {error}", &[("error", &e.to_string())], true);

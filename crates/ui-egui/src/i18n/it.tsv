@@ -2422,4 +2422,6 @@ presence	Offline	Offline
 	A Teams meeting will be added when the appointment is saved	Una riunione Teams verrà aggiunta al salvataggio dell'appuntamento
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 mantiene una riunione online una volta creata
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
-	{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again	{name}: {messages} messaggi importati, ma non è stato possibile rileggere l’elenco delle cartelle: comparirà al prossimo avvio di Quatrelle
+	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} messaggi importati, ma non è stato possibile rileggere l’elenco delle cartelle: Quatrelle lo rileggerà al prossimo avvio
+# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
+	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Non è stato possibile leggere le cartelle pubbliche da sincronizzare, quindi non vengono modificate: {error}

@@ -245,7 +245,7 @@ impl Session {
                     }
                 } else if folders_unread {
                     self.notice_with(
-                        "{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again",
+                        "{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts",
                         &[("name", &name), ("messages", &counted)],
                         true,
                     );

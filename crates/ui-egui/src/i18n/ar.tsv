@@ -2419,4 +2419,6 @@ presence	Offline	غير متصل
 	A Teams meeting will be added when the appointment is saved	سيُضاف اجتماع Teams عند حفظ الموعد
 	Microsoft 365 keeps an online meeting once it is made	يحتفظ Microsoft 365 بالاجتماع عبر الإنترنت بعد إنشائه
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
-	{name}: {messages} messages imported, but its folder list couldn't be read back: it shows when Quatrelle starts again	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّرت إعادة قراءة قائمة المجلدات: ستظهر عند تشغيل Quatrelle مجددًا
+	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّرت إعادة قراءة قائمة المجلدات: سيعيد Quatrelle قراءتها عند تشغيله التالي
+# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
+	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	تعذّرت قراءة المجلدات العامة المطلوب مزامنتها، لذا لم تُغيَّر: {error}
