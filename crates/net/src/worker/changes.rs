@@ -7,6 +7,7 @@ use super::*;
 
 mod archive;
 mod filing;
+mod pending_drafts;
 mod recovering;
 mod rules;
 
@@ -26,6 +27,7 @@ pub(super) struct Waiting {
 
 pub(super) use archive::archive_here;
 pub(super) use filing::{file_here, file_name};
+pub(super) use pending_drafts::{PENDING_DRAFTS, PendingDraft, forget_draft, keep_draft};
 
 impl Worker {
     pub(super) fn handle(&mut self, job: Job) {
