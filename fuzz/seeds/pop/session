@@ -1,0 +1,25 @@
++OK POP3 ready
++OK user accepted
++OK signed in
++OK
++OK 2 messages
+1 u1
+2 u2
+.
++OK 120 octets
+From: Ana <ana@pop.example>
+To: me@pop.example
+Subject: One
+Message-ID: <one@studio.example>
+
+Hello.
+..a line whose first dot is stuffed
+.
++OK 80 octets
+From: Bo <bo@pop.example>
+Subject: Two
+
+Bye.
+.
++OK deleted
++OK bye
