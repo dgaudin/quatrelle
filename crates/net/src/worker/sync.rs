@@ -2,12 +2,14 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! An account's worker: syncing folders, and waiting for new mail; listing the folders and the
-//! full sync are in `sync/listing.rs`, searching the server in `sync/searching.rs`.
+//! full sync are in `sync/listing.rs`, what a listing that missed a zone keeps in
+//! `sync/zones.rs`, searching the server in `sync/searching.rs`.
 
 use super::*;
 
 mod listing;
 mod searching;
+pub(super) mod zones;
 
 impl Worker {
     /// How often the Inbox is looked at, on a server that can't say when mail comes.

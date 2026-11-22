@@ -277,11 +277,11 @@ fn nothing_of_the_archive_is_kept() {
 }
 
 /// Review focus 3: the archive goes away between two listings (turned off, its server down)
-/// while one of its folders was open: its folders leave the list, what was held of them goes,
-/// the account stays online and its own folders are as they were; a read asked for the folder
-/// that went is said once and changes nothing. It shows again when it answers.
+/// while one of its folders was open: its folders stay as they were in the list, what was held
+/// of them stays, the account stays online and its own folders are as they were; a read asked
+/// for a folder of it is said once and changes nothing. It's read again when it answers.
 #[test]
-fn an_archive_that_goes_away_leaves_the_view() {
+fn an_archive_that_goes_away_stays_as_it_was() {
     let (mut d, inbox, _, projects) = with_archive();
     d.deliver(&inbox, &mail("Own", "o1"), false, "2026-10-19T08:00:00Z");
     for i in 0..10 {
@@ -295,15 +295,15 @@ fn an_archive_that_goes_away_leaves_the_view() {
     until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: PROJECTS.into() });
     eventually("its mail", || store.load_folder("a1", PROJECTS).is_ok_and(|f| f.messages.len() == 10));
+    let before: Vec<String> = store.load_folders("a1").unwrap().into_iter().map(|f| f.path).collect();
     data.lock().unwrap().archive.as_mut().unwrap().refused = true;
     let seen = full_sync(&mut pool);
     let listed = seen.iter().rev().find_map(|e| if let Event::Folders { folders, .. } = e { Some(folders.clone()) } else { None }).unwrap();
-    assert_eq!(listed.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["INBOX", "Sent Items"]);
+    assert_eq!(listed.iter().map(|f| f.path.clone()).collect::<Vec<_>>(), before);
     assert!(!seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::Error { .. } | SyncStatus::NeedsPassword { .. }, .. })), "{seen:?}");
-    assert!(store.load_folder("a1", PROJECTS).unwrap().messages.is_empty(), "what was held of it goes");
+    assert_eq!(store.load_folder("a1", PROJECTS).unwrap().messages.len(), 10, "what was held of it goes");
     assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 1);
-    // A read of the folder that went, asked for before the list came: no loop, the account
-    // stays online.
+    // A read of a folder of it while it doesn't answer: no loop, the account stays online.
     let calls = data.lock().unwrap().calls.len();
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: PROJECTS.into() });
     let seen = full_sync(&mut pool);
