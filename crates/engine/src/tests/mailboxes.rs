@@ -577,14 +577,10 @@ fn recover_deleted_items_lists_restores_and_purges() {
     assert!(matches!(s.run("folder.recoverDeleted", &json!({"account": imap})), Err(CmdError::Disabled(_))));
 }
 
-/// The list of public folders to keep in sync, damaged: read leniently, it was set aside (`.bad`)
-/// and taken for none, and the account's sync, finding it gone, followed none and let go of every
-/// public folder it kept. It's left as it is, byte for byte, still damaged for the sync to read
-/// (which then lets none go); the Favorite made stays, and the list isn't written, as said.
-#[test]
-fn a_damaged_list_of_public_folders_followed_is_left_as_it_is() {
-    use quatrelle_model::{AccountConfig, FOLLOWED_PUBLIC_DOC, Folder};
-    let store = Store::failing();
+/// An Exchange account keeping its public Favorites (two of them), its list of public folders to
+/// keep in sync damaged, as a session starts: what the sync reads, and the folders it's asked for.
+fn damaged_public_favorites(store: &Store) -> (Session, String) {
+    use quatrelle_model::{AccountConfig, FOLLOWED_PUBLIC_DOC};
     let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let config = AccountConfig {
         name: "Riley".into(),
@@ -595,16 +591,54 @@ fn a_damaged_list_of_public_folders_followed_is_left_as_it_is() {
         ..Default::default()
     };
     let id = s.add_account(config, Some("pw".into())).unwrap();
-    let damaged = b"[\"Public Folders/Rep".to_vec();
-    store.write_account_files(&id, &[(FOLLOWED_PUBLIC_DOC.to_string(), damaged.clone())]).unwrap();
-    let f = |path: &str| Folder { account: id.clone(), path: path.into(), delimiter: Some('/'), selectable: true, ..Default::default() };
-    s.apply(Event::Folders { account: id.clone(), folders: vec![f("INBOX"), f("Public Folders"), f("Public Folders/Team")] });
+    store.write_account_files(&id, &[(FOLLOWED_PUBLIC_DOC.to_string(), DAMAGED.to_vec())]).unwrap();
+    let favorite = |folder: &str| crate::FolderRef { account: id.clone(), folder: folder.into() };
+    s.prefs.favorites = Some(vec![favorite("Public Folders/Team"), favorite("Public Folders/Reports")]);
     s.take_jobs();
-    s.run("folder.favorite", &json!({"account": id, "folder": "Public Folders/Team", "on": true})).unwrap();
-    assert_eq!(store.account_file(&id, FOLLOWED_PUBLIC_DOC).unwrap(), Some(damaged), "written over");
-    assert_eq!(store.account_file(&id, "public-followed.json.bad").unwrap(), None, "set aside");
+    (s, id)
+}
+
+/// Not JSON: the list of public folders to keep in sync, damaged.
+const DAMAGED: &[u8] = b"[\"Public Folders/Rep";
+
+/// The folders a session asks the account's sync to read now.
+fn synced(s: &mut Session) -> Vec<String> {
+    s.take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            Job::SyncFolder { folder, .. } => Some(folder),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The list of public folders to keep in sync, damaged: read leniently, it was set aside (`.bad`)
+/// and taken for none, and the sync, finding it gone, followed none and let go of every public
+/// folder it kept. It comes from the Favorites alone: written again from them, over it in one
+/// write, and each folder in it read at once (which were followed before isn't known).
+#[test]
+fn a_damaged_list_of_public_folders_followed_is_written_again_from_the_favorites() {
+    use quatrelle_model::FOLLOWED_PUBLIC_DOC;
+    let store = Store::failing();
+    let (mut s, id) = damaged_public_favorites(&store);
+    s.follow_public_favorites();
     let read = store.load_account_doc_strict::<Vec<String>>(&id, FOLLOWED_PUBLIC_DOC);
-    assert!(matches!(read, Err(quatrelle_store::StoreError::Damaged { .. })), "the sync reads none followed: {read:?}");
-    assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("couldn't be read")), "{:?}", s.notices.last());
-    assert!(s.follows_public(&id, "Public Folders/Team"), "the Favorite made stays");
+    assert_eq!(read.ok(), Some(vec!["Public Folders/Team".to_string(), "Public Folders/Reports".to_string()]), "what the sync reads");
+    assert_eq!(store.account_file(&id, "public-followed.json.bad").unwrap(), None, "set aside");
+    assert_eq!(synced(&mut s), ["Public Folders/Team", "Public Folders/Reports"]);
+}
+
+/// The same list damaged, and the disk refusing to write it: it's said, and the damaged list stays
+/// as it is, byte for byte, for the sync to read as such (it then lets no public folder go).
+#[test]
+fn a_damaged_list_of_public_folders_followed_that_cant_be_written_stays_as_it_is() {
+    use quatrelle_model::FOLLOWED_PUBLIC_DOC;
+    let store = Store::failing();
+    let (mut s, id) = damaged_public_favorites(&store);
+    store.fail(None, Some(FOLLOWED_PUBLIC_DOC));
+    s.follow_public_favorites();
+    store.fail(None, None);
+    assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("couldn't be saved")), "{:?}", s.notices.last());
+    assert_eq!(store.account_file(&id, FOLLOWED_PUBLIC_DOC).unwrap().as_deref(), Some(DAMAGED), "written over");
+    assert!(synced(&mut s).is_empty());
 }

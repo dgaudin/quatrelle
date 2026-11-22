@@ -2421,5 +2421,3 @@ presence	Offline	オフライン
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 では、一度作成したオンライン会議は保持されます
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} 件のメッセージをインポートしましたが、フォルダー一覧を読み直せませんでした: Quatrelle は次回の起動時に読み直します
-# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
-	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	同期するパブリック フォルダーを読み取れなかったため、変更しません: {error}

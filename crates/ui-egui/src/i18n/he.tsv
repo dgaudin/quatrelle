@@ -2420,5 +2420,3 @@ presence	Offline	לא מחובר
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 שומר ישיבה מקוונת לאחר שנוצרה
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} הודעות יובאו, אך לא ניתן היה לקרוא שוב את רשימת התיקיות: Quatrelle יקרא אותה שוב בהפעלה הבאה
-# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
-	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	לא ניתן היה לקרוא את התיקיות הציבוריות לסנכרון, ולכן הן לא שונו: {error}

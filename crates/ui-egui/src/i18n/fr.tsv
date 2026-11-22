@@ -2425,5 +2425,3 @@ presence	Offline	Hors ligne
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 garde une réunion en ligne une fois créée
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name} : {messages} messages importés, mais la liste de ses dossiers n’a pas pu être relue : Quatrelle la relira à son prochain démarrage
-# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
-	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Les dossiers publics à synchroniser n’ont pas pu être lus, ils ne sont donc pas modifiés : {error}

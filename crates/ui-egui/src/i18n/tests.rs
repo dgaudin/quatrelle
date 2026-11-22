@@ -4,7 +4,6 @@
 use std::collections::BTreeSet;
 
 use super::*;
-mod followed;
 mod imports;
 
 /// The Rust files under `dir`, read from disk: tests and the catalogs' own code left out.

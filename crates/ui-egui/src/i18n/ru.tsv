@@ -2425,5 +2425,3 @@ presence	Offline	Не в сети
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 сохраняет онлайн-собрание после его создания
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: импортировано писем: {messages}, но список папок не удалось прочитать снова: Quatrelle прочитает его снова при следующем запуске
-# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
-	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	Не удалось прочитать список общедоступных папок для синхронизации, поэтому он не изменён: {error}
