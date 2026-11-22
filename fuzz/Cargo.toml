@@ -9,15 +9,23 @@ workspace = { members = ["."] }
 # One binary per target, each kept out of `cargo test`, `cargo doc` and `cargo bench`.
 bin = [
     { name = "data_file", bench = false, test = false, doc = false, path = "fuzz_targets/data_file.rs" }, # an account's data file, compressed again by Compact Now
+    { name = "dns", bench = false, test = false, doc = false, path = "fuzz_targets/net/dns.rs" }, # MX and SRV answers in the wire format, and queries
     { name = "html", bench = false, test = false, doc = false, path = "fuzz_targets/html.rs" }, # received HTML bodies and our own markup
+    { name = "ews", bench = false, test = false, doc = false, path = "fuzz_targets/net/ews.rs" }, # Exchange's folder list, changes, directory, rules and answers
+    { name = "ews_pim", bench = false, test = false, doc = false, path = "fuzz_targets/net/ews_pim.rs" }, # Exchange's appointments, contacts, notes and calendar shortcuts
     { name = "ical", bench = false, test = false, doc = false, path = "fuzz_targets/ical.rs" }, # calendar files and WebDAV replies
     { name = "http", bench = false, test = false, doc = false, path = "fuzz_targets/http.rs" }, # HTTP answers, downloads' ranges, GitHub's release list
     { name = "imap", bench = false, test = false, doc = false, path = "fuzz_targets/imap.rs" }, # a whole IMAP session from the server side
+    { name = "graph", bench = false, test = false, doc = false, path = "fuzz_targets/net/graph.rs" }, # Graph's folder pages, changed pages, messages, events and contacts
     { name = "index_text", bench = false, test = false, doc = false, path = "fuzz_targets/index_text.rs" }, # raw message sources read for search
     { name = "jmap", bench = false, test = false, doc = false, path = "fuzz_targets/jmap.rs" }, # JMAP replies, push events and URLs
     { name = "mime_parse", bench = false, test = false, doc = false, path = "fuzz_targets/mime_parse.rs" }, # raw message sources
+    { name = "ntlm", bench = false, test = false, doc = false, path = "fuzz_targets/net/ntlm.rs" }, # a server's NTLMv2 challenge and the answer to it
+    { name = "oauth", bench = false, test = false, doc = false, path = "fuzz_targets/net/oauth.rs" }, # a token endpoint's answer and the redirect's query string
     { name = "pgp", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp.rs" }, # OpenPGP keys, messages, signatures, Autocrypt
     { name = "pgp_mime", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp_mime.rs" }, # PGP/MIME, inline PGP, a message's keys; written for sending
+    { name = "pop", bench = false, test = false, doc = false, path = "fuzz_targets/net/pop.rs" }, # a whole POP3 session from the server side
+    { name = "webex", bench = false, test = false, doc = false, path = "fuzz_targets/net/webex.rs" }, # Webex's meeting answers and refusals
     { name = "msg", bench = false, test = false, doc = false, path = "fuzz_targets/pst/msg.rs" }, # Outlook message files (.msg)
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst/import.rs" }, # Outlook data file import
     { name = "pst_append", bench = false, test = false, doc = false, path = "fuzz_targets/pst/append.rs" }, # mail added to a damaged data file, and taken out again
@@ -26,10 +34,12 @@ bin = [
     { name = "pst_recurrence", bench = false, test = false, doc = false, path = "fuzz_targets/pst/recurrence.rs" }, # a .pst appointment's recurrence and its changed occurrences
     { name = "pst_pim_text", bench = false, test = false, doc = false, path = "fuzz_targets/pst/pim_text.rs" }, # what an export keeps in a contact's and a task's text, and a task's rule as a pattern
     { name = "archive_tags", bench = false, test = false, doc = false, path = "fuzz_targets/archive_tags.rs" }, # Exchange's list of archive policy tags, read as hostile XML
+    { name = "autoconfig", bench = false, test = false, doc = false, path = "fuzz_targets/net/autoconfig.rs" }, # a config file found on the network, and hostile lookups' answers
     { name = "import_journal", bench = false, test = false, doc = false, path = "fuzz_targets/pst/journal.rs" }, # a data file import's journal, read back as a hostile cache file
     { name = "search", bench = false, test = false, doc = false, path = "fuzz_targets/search.rs" }, # the search box and its filters
     { name = "signature", bench = false, test = false, doc = false, path = "fuzz_targets/signature.rs" }, # the signature read against the sender
     { name = "scam_answer", bench = false, test = false, doc = false, path = "fuzz_targets/scam_answer.rs" }, # the scam check: a model's answer read as hostile text, the request built from the same bytes, the local signs
+    { name = "sieve", bench = false, test = false, doc = false, path = "fuzz_targets/net/sieve.rs" }, # ManageSieve's answers and the script read back
     { name = "text_first", bench = false, test = false, doc = false, path = "fuzz_targets/text_first.rs" }, # Exchange's and Graph's answers, read as a message's text
     { name = "tnef", bench = false, test = false, doc = false, path = "fuzz_targets/tnef.rs" }, # Outlook's winmail.dat and compressed RTF
     { name = "markdown", bench = false, test = false, doc = false, path = "fuzz_targets/notes/markdown.rs" }, # a note's Markdown, and the edits its window makes
