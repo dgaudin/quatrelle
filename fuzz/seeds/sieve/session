@@ -1,0 +1,26 @@
+"IMPLEMENTATION" "StudioSieve"
+"SIEVE" "fileinto vacation include imap4flags date relational"
+"STARTTLS"
+OK "ready"
+OK "signed in"
+"quatrelle" ACTIVE
+"theirs"
+OK "listed"
+{254}
+# quatrelle-vacation {"enabled":true,"subject":"Away","text":"Back soon"}
+# quatrelle-rules [{"name":"From Ana","conditions":[{"From":"ana@studio.example"}],"actions":["MarkRead"]}]
+require ["vacation"];
+vacation :days 1 :subject "Away" "Back soon";
+
+OK "here"
+"quatrelle" ACTIVE
+"theirs"
+OK "listed"
+{254}
+# quatrelle-vacation {"enabled":true,"subject":"Away","text":"Back soon"}
+# quatrelle-rules [{"name":"From Ana","conditions":[{"From":"ana@studio.example"}],"actions":["MarkRead"]}]
+require ["vacation"];
+vacation :days 1 :subject "Away" "Back soon";
+
+OK "here"
+OK "bye"

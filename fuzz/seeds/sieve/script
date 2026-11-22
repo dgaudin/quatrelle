@@ -1,0 +1,4 @@
+# quatrelle-vacation {"enabled":true,"subject":"Away","text":"Back soon"}
+# quatrelle-rules [{"name":"From Ana","conditions":[{"From":"ana@studio.example"}],"actions":["MarkRead"]}]
+require ["vacation"];
+vacation :days 1 :subject "Away" "Back soon";
