@@ -22,6 +22,10 @@ impl Data {
         let not_found =
             || (404, json!({"error": {"code": "ErrorItemNotFound", "message": "Not found."}}).to_string().into_bytes(), "application/json");
         let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+        if self.forbid.iter().any(|f| format!("{method} {path}").contains(f.as_str())) {
+            let e = json!({"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}});
+            return (403, e.to_string().into_bytes(), "application/json");
+        }
         // As Graph answers a Microsoft account with no mailbox (one made with a Gmail address).
         if self.no_mailbox && matches!(parts.as_slice(), ["me", "mailFolders" | "messages" | "sendMail" | "mailboxSettings", ..]) {
             let e = json!({"error": {"code": "MailboxNotEnabledForRESTAPI", "message": "The mailbox is either inactive, soft-deleted, or is hosted on-premise."}});
@@ -542,6 +546,9 @@ impl Data {
                 }
             }
             ("DELETE", ["me", "events", id]) => {
+                if !self.events.iter().any(|e| e["id"] == *id) {
+                    return not_found();
+                }
                 self.events.retain(|e| e["id"] != *id || e["calendar"].as_str().unwrap_or("").starts_with("user:"));
                 (204, Vec::new(), "text/plain")
             }
@@ -669,6 +676,9 @@ impl Data {
                 (201, c.to_string().into_bytes(), "application/json")
             }
             ("DELETE", ["me", "contacts", id]) => {
+                if !self.contacts.iter().any(|c| c["id"] == *id) {
+                    return not_found();
+                }
                 self.contacts.retain(|c| c["id"] != *id);
                 (204, Vec::new(), "text/plain")
             }

@@ -20,6 +20,8 @@ pub struct Reminders {
     pub raw: Option<String>,
     /// The connection is dropped when they're asked (offline).
     pub unreachable: bool,
+    /// `PerformReminderAction` is refused (access denied), whatever the reminder.
+    pub refuse: bool,
 }
 
 /// The reminders' operations.
@@ -71,7 +73,11 @@ impl Data {
             ("Success", format!("<m:ResponseCode>NoError</m:ResponseCode>{list}"))
         } else {
             let mut answer = ("Success", "<m:ResponseCode>NoError</m:ResponseCode><m:UpdatedItemIds/>".to_string());
-            for a in op.find("ReminderItemActions").map(|l| l.kids.clone()).unwrap_or_default() {
+            if self.reminders.refuse {
+                answer = ("Error", "<m:MessageText>Access is denied.</m:MessageText><m:ResponseCode>ErrorAccessDenied</m:ResponseCode>".into());
+            }
+            let actions = if self.reminders.refuse { Vec::new() } else { op.find("ReminderItemActions").map(|l| l.kids.clone()).unwrap_or_default() };
+            for a in actions {
                 let id = a.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string();
                 if !self.reminders.listed.iter().any(|(i, _, _)| *i == id) {
                     answer = ("Error", "<m:MessageText>The specified object was not found in the store.</m:MessageText><m:ResponseCode>ErrorItemNotFound</m:ResponseCode>".into());

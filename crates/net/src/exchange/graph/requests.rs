@@ -72,6 +72,16 @@ impl Client {
         self.request_as(r, true)
     }
 
+    /// An item deleted (`DELETE`): one that isn't on the server (HTTP 404) is `NetError::Gone`.
+    pub(crate) fn delete_item(&self, path: &str) -> Result<Value> {
+        gone_on_404(self.send_raw("DELETE", path, "application/json", Vec::new()))
+    }
+
+    /// A `GET` about one item (`path`): one that isn't on the server (HTTP 404) is `NetError::Gone`.
+    pub(crate) fn get_item(&self, path: &str) -> Result<Value> {
+        gone_on_404(self.get(path))
+    }
+
     /// Every item of a listing, following `@odata.nextLink` (on the same server only).
     pub(crate) fn all(&self, path: &str, limit: usize) -> Result<Vec<Value>> {
         let origin = http::Url::parse(&self.base)?.origin();
@@ -192,4 +202,12 @@ pub(super) fn send_through_limits(r: &Request) -> Result<Response> {
 pub(crate) fn backoff_secs(hint: Option<&str>, round: u32) -> u64 {
     let fallback = 2 * u64::from(round.max(1));
     hint.and_then(|h| h.trim().parse().ok()).unwrap_or(fallback).clamp(1, BUSY_WAIT_CAP)
+}
+
+/// An answer about one item (or calendar) whose HTTP 404 says it isn't on the server: `Gone`.
+fn gone_on_404(r: Result<Value>) -> Result<Value> {
+    match r {
+        Err(NetError::No(why)) if why.starts_with("HTTP 404") => Err(NetError::Gone(why)),
+        r => r,
+    }
 }

@@ -562,6 +562,19 @@ impl Data {
                         out.push(err("ErrorAccessDenied"));
                         continue;
                     }
+                    // Not now: the server is busy with it (until the test clears `delete_busy`).
+                    if self.delete_busy.contains(&id) {
+                        out.push(err("ErrorServerBusy"));
+                        continue;
+                    }
+                    // One the server doesn't have (deleted in Outlook meanwhile).
+                    if !self.items.iter().any(|i| i.id == id)
+                        && !self.recoverable.iter().any(|i| i.id == id)
+                        && !self.pim.iter().any(|(i, _, _)| *i == id)
+                    {
+                        out.push(err("ErrorItemNotFound"));
+                        continue;
+                    }
                     // A task goes only when told which of its occurrences do.
                     let task = self.pim.iter().any(|(i, _, el)| *i == id && el.name == "Task");
                     if task && op.attr("AffectedTaskOccurrences").is_none() {
