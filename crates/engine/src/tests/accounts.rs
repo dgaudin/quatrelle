@@ -248,7 +248,7 @@ fn remote_accounts_go_through_jobs_and_events() {
     assert_eq!(recipients, &vec!["a@b.example".to_string()]);
     assert!(String::from_utf8_lossy(raw).contains("In-Reply-To: <h@b>"));
     assert!(s.compose.as_ref().unwrap().sending);
-    s.apply(Event::SendFailed { account: id.clone(), id: *send_id, error: "timeout".into() });
+    s.apply(Event::SendFailed { account: id.clone(), id: *send_id, error: "timeout".into(), unconfirmed: false });
     assert_eq!(s.compose.as_ref().unwrap().error.as_deref(), Some("timeout"));
     s.run("compose.send", &json!({})).unwrap();
     let send_id = match s.take_jobs().into_iter().find(|j| matches!(j, Job::Send { .. })) {

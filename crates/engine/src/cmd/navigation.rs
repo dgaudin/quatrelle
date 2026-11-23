@@ -40,7 +40,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Some(k) => s.send_outbox_now(&k),
             None => s.send_outbox(),
         })
-        .params(r#"{"key"?: string (one message, even one held back to be sent later; else all that are due)}"#)
+        .params(r#"{"key"?: string (one message, even one held back to be sent later or one that may have gone already; else all that are due)}"#)
         .when(|s| if s.outbox.is_empty() { Some("the Outbox is empty") } else { None }),
         CommandSpec::new("outbox.edit", "Edit queued message", "Outbox", |s, v| {
             let k = parse_key(v).or_else(|| s.reading.as_ref().map(|r| r.key.clone())).ok_or_else(|| CmdError::Params("`key` is required".into()))?;

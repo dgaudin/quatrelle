@@ -625,7 +625,7 @@ fn message_row(
     let subj_right = right - icons_w.max(if hovered { 70.0 } else { 0.0 }) - 4.0;
     let subj_x = if subj_rtl { (subj_right - subj_g.size().x).max(subj_left) } else { subj_left };
     p.with_clip_rect(Rect::from_x_y_ranges(subj_left..=subj_right, r.y_range())).galley(egui::pos2(subj_x, line2), subj_g, subj_color);
-    let preview = s.preview_of(m);
+    let preview = preview_shown(s, m);
     if previews && (draft || !preview.is_empty()) {
         let mut pv_left = x;
         if draft {
@@ -633,7 +633,7 @@ fn message_row(
             pv_left += g.size().x + 5.0;
             p.galley(egui::pos2(x, line2 + 19.0), g, t.danger);
         }
-        let (preview, pv_rtl) = crate::bidi::shown(preview);
+        let (preview, pv_rtl) = crate::bidi::shown(&preview);
         let pv = p.layout_no_wrap(preview.into_owned(), theme::regular(12.5), t.dim);
         let pv_x = if pv_rtl { (right - pv.size().x).max(pv_left) } else { pv_left };
         p.with_clip_rect(Rect::from_x_y_ranges(pv_left..=right, r.y_range())).galley(egui::pos2(pv_x, line2 + 19.0), pv, t.dim);

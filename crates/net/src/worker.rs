@@ -632,7 +632,10 @@ fn log_event(e: &Event) {
         Event::Status { account, status } => log::info!("{account}: {status:?}"),
         Event::Folders { account, folders } => log::info!("{account}: {} folders", folders.len()),
         Event::Sent { account, id } => log::info!("{account}: message {id} sent"),
-        Event::SendFailed { account, id, error } => log::warn!("{account}: message {id} not sent: {error}"),
+        Event::SendFailed { account, id, error, unconfirmed } => {
+            let what = if *unconfirmed { "may have gone" } else { "not sent" };
+            log::warn!("{account}: message {id} {what}: {error}")
+        }
         Event::Queued { account, id, error } => log::warn!("{account}: message {id} waits in the Outbox: {error}"),
         Event::OpFailed { account, op, error } => log::warn!("{account}: a change failed ({}): {error}", op.summary()),
         Event::OpsSetAside { account, count } => log::warn!("{account}: {count} changes waiting kept aside, never sent"),

@@ -154,14 +154,15 @@ impl Worker {
                 if let Some(m) = &self.main
                     && m.send(job.clone()).is_err()
                 {
-                    self.sink.emit(Event::SendFailed { account: self.id(), id: *id, error: e.to_string() });
+                    self.sink.emit(Event::SendFailed { account: self.id(), id: *id, error: e.to_string(), unconfirmed: false });
                 }
             }
             Err(e) => {
                 if matches!(e, NetError::Closed(_) | NetError::Io(_)) {
                     self.conn = None;
                 }
-                self.sink.emit(Event::SendFailed { account: self.id(), id: *id, error: e.to_string() });
+                let unconfirmed = matches!(e, NetError::Unconfirmed(_));
+                self.sink.emit(Event::SendFailed { account: self.id(), id: *id, error: e.to_string(), unconfirmed });
             }
         }
     }
@@ -393,12 +394,16 @@ impl Worker {
                 };
                 match self.store.outbox_add(&self.acc.id, &item, raw) {
                     Ok(()) => self.sink.emit(Event::Queued { account: self.id(), id, error: e.to_string() }),
-                    Err(se) => {
-                        self.sink.emit(Event::SendFailed { account: self.id(), id, error: format!("{e} (and the Outbox couldn't keep it: {se})") })
-                    }
+                    Err(se) => self.sink.emit(Event::SendFailed {
+                        account: self.id(),
+                        id,
+                        error: format!("{e} (and the Outbox couldn't keep it: {se})"),
+                        unconfirmed: false,
+                    }),
                 }
             } else {
-                self.sink.emit(Event::SendFailed { account: self.id(), id, error: e.to_string() });
+                let unconfirmed = matches!(e, NetError::Unconfirmed(_));
+                self.sink.emit(Event::SendFailed { account: self.id(), id, error: e.to_string(), unconfirmed });
             }
             return;
         }
@@ -466,7 +471,8 @@ impl Worker {
                         self.sink.emit(Event::Queued { account: self.id(), id: item.id, error: e.to_string() });
                         return;
                     }
-                    self.sink.emit(Event::SendFailed { account: self.id(), id: item.id, error: e.to_string() });
+                    let unconfirmed = matches!(e, NetError::Unconfirmed(_));
+                    self.sink.emit(Event::SendFailed { account: self.id(), id: item.id, error: e.to_string(), unconfirmed });
                 }
             }
         }
@@ -592,9 +598,10 @@ mod tests {
         }
     }
 
-    /// Whether `seen` says message `id` may have gone.
+    /// Whether `seen` says message `id` may have gone, for the engine to say it so.
     fn said_maybe_gone(seen: &[Event], id: u64) -> bool {
-        seen.iter().any(|e| matches!(e, Event::SendFailed { id: i, error, .. } if *i == id && error.contains("didn't say whether")))
+        seen.iter()
+            .any(|e| matches!(e, Event::SendFailed { id: i, error, unconfirmed: true, .. } if *i == id && error.contains("didn't say whether")))
     }
 
     /// The second connection sends; the server takes the whole message and drops the connection

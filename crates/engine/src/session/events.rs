@@ -370,14 +370,20 @@ impl Session {
                 }
                 self.after_outbox_change();
             }
-            Event::SendFailed { id, error, .. } => {
+            Event::SendFailed { id, error, unconfirmed, .. } => {
                 // Closed while it was being sent: open again, to be sent again or kept.
                 self.back_from_sent_away(id);
                 if let Some(c) = self.compose.iter_mut().chain(self.composes.iter_mut()).find(|c| c.id == id) {
                     c.sending = false;
                     c.error = Some(error.clone());
+                    c.maybe_sent = unconfirmed;
                 }
-                self.notice_with("Not sent: {error}", &[("error", &error)], true);
+                // The server never said whether it took it: it may have gone, never "Not sent".
+                if unconfirmed {
+                    self.notice_with("It may have been sent: {error}", &[("error", &error)], true);
+                } else {
+                    self.notice_with("Not sent: {error}", &[("error", &error)], true);
+                }
                 self.after_outbox_change();
             }
             Event::DraftReturned { account, raw, error } => self.draft_returned(&account, &raw, &error),

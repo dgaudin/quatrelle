@@ -11,6 +11,10 @@ const NOT_DELETED: &str = "a message couldn't be taken out of the Outbox; it's s
 /// Said, before what went wrong, when a message to change couldn't be taken out of the Outbox:
 /// opened all the same, it would go twice (as it was, and as changed).
 const NOT_TAKEN_BACK: &str = "the message couldn't be taken out of the Outbox to be changed";
+/// What the worker puts before why an Outbox message wasn't sent when the server never said
+/// whether it took it (it may have gone), and when it refused it: neither goes again by itself.
+const MAYBE_GONE: &str = "unconfirmed: ";
+const REFUSED: &str = "refused: ";
 
 impl Session {
     /// Re-read the Outbox from disk.
@@ -64,14 +68,29 @@ impl Session {
             let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
             let flags = quatrelle_model::Flags { seen: true, ..Default::default() };
             let mut m = mime::summary_from_full(&raw, key, flags, size, item.queued);
-            m.preview = match &item.error {
-                Some(e) if e != "offline" => format!("Not sent yet: {e}"),
-                _ if item.not_before > self.clock.now => format!("Will be sent {}", quatrelle_model::dates::full_time(item.not_before, &self.clock)),
-                _ => "Waiting to be sent".to_string(),
+            m.preview = match Self::outbox_trouble(item) {
+                // The server never said whether it took it: it may have gone, never "Not sent".
+                Some((true, e)) => format!("May have been sent: {e}"),
+                Some((false, e)) => format!("Not sent yet: {e}"),
+                None if item.not_before > self.clock.now => {
+                    format!("Will be sent {}", quatrelle_model::dates::full_time(item.not_before, &self.clock))
+                }
+                None => "Waiting to be sent".to_string(),
             };
             out.push(m);
         }
         out
+    }
+
+    /// What went wrong the last time an Outbox message was tried, as the user is told it: `None`
+    /// when nothing did (or it was only offline); else whether it may have gone already (the
+    /// server never said whether it took it), and why, without the worker's mark.
+    pub fn outbox_trouble(item: &OutboxItem) -> Option<(bool, &str)> {
+        let e = item.error.as_deref().filter(|e| *e != "offline")?;
+        Some(match e.strip_prefix(MAYBE_GONE) {
+            Some(why) => (true, why),
+            None => (false, e.strip_prefix(REFUSED).unwrap_or(e)),
+        })
     }
 
     /// The Outbox entry behind an Outbox key.
@@ -83,12 +102,19 @@ impl Session {
         self.outbox.get(n).filter(|(a, _)| *a == key.account).cloned()
     }
 
-    /// Send one held-back Outbox message now (Delay Delivery off), as its Send now button.
+    /// Send one held-back Outbox message now (Delay Delivery off), as its Send now button. One
+    /// that may have gone already waits for the user's word, and this is it (its row and the
+    /// reading pane over its button say it may have gone, and how to find out first): it's sent
+    /// again.
     pub fn send_outbox_now(&mut self, key: &MessageKey) -> CmdResult {
         let (account, mut item) = self.outbox_entry(key).ok_or_else(|| CmdError::Params("not an Outbox message".into()))?;
         self.can_send(&account)?;
-        if item.not_before != 0 {
+        let again = Self::outbox_trouble(&item).is_some_and(|(maybe_gone, _)| maybe_gone);
+        if item.not_before != 0 || again {
             item.not_before = 0;
+            if again {
+                item.error = None;
+            }
             if let Some(store) = &self.store {
                 store.outbox_update(&account, &item).map_err(|e| CmdError::Failed(e.to_string()))?;
             }

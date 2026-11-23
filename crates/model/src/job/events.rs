@@ -94,6 +94,10 @@ pub enum Event {
         account: String,
         id: u64,
         error: String,
+        /// The server was handed the whole message and never said whether it took it: it may
+        /// have gone, so it isn't said "Not sent", and nothing sends it again by itself.
+        #[serde(default)]
+        unconfirmed: bool,
     },
     /// The message couldn't be sent yet (offline, or the server asked to try later): it waits in
     /// the Outbox and goes out when the account is back online.

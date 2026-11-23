@@ -351,18 +351,25 @@ pub(super) fn table_row(
         }
     }
     // The preview under the sender and subject.
-    let preview = s.preview_of(m);
+    let preview = preview_shown(s, m);
     if two_lines && !preview.is_empty() {
         let span = cols
             .iter()
             .filter(|(c, _, _)| matches!(c, Col::Who | Col::Subject))
             .fold((f32::MAX, 0.0f32), |(a, b), (_, x0, x1)| (a.min(*x0), b.max(*x1)));
         let inner = Rect::from_x_y_ranges(r.min.x + span.0 + 6.0..=r.min.x + span.1 - 6.0, r.y_range());
-        let (preview, _) = crate::bidi::shown(preview);
+        let (preview, _) = crate::bidi::shown(&preview);
         let g = p.layout_no_wrap(preview.into_owned(), theme::regular(12.0), t.dim);
         p.with_clip_rect(inner).galley(egui::pos2(inner.min.x, r.min.y + 20.0), g, t.dim);
     }
     row_input(s, t, ui, &resp, id, m, selected, clicked_action, acts);
+}
+
+/// A row's preview as drawn: an Outbox message's says what became of it in the interface's
+/// language (« Peut-être parti : … »); any other's is the message's own words.
+pub(super) fn preview_shown<'a>(s: &'a Session, m: &'a Summary) -> std::borrow::Cow<'a, str> {
+    let preview = s.preview_of(m);
+    if s.outbox_entry(&m.key).is_some() { crate::i18n::error(preview).into() } else { preview.into() }
 }
 
 #[cfg(test)]

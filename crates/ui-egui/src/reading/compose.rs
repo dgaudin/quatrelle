@@ -441,9 +441,24 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         }
         if let Some(e) = &c.error {
             ui.add_space(4.0);
-            egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
-                ui.label(RichText::new(tf!("Not sent: {error}", error = e)).color(t.danger));
-            });
+            let error = crate::i18n::error(e);
+            if c.maybe_sent {
+                // The server never said whether it took it: it may have gone (never "Not sent"),
+                // and how to find out before sending it again.
+                egui::Frame::new().fill(t.warn.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
+                    ui.label(RichText::new(tf!("It may have been sent: {error}", error = error)).color(t.text));
+                    ui.label(
+                        RichText::new(tl!(
+                            "Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there"
+                        ))
+                        .color(t.text),
+                    );
+                });
+            } else {
+                egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
+                    ui.label(RichText::new(tf!("Not sent: {error}", error = error)).color(t.danger));
+                });
+            }
         }
         // Ctrl+K: Outlook's Check Names on every field, anywhere but in the text (where it makes
         // a link) and a contacts field, From's other address among them (which checks itself).

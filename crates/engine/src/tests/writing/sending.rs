@@ -298,7 +298,7 @@ fn a_message_set_aside_as_it_goes_hears_what_became_of_it() {
     assert_eq!(sending(&s), 1, "gone from those being sent");
     assert!(s.all_composes().all(|c| c.id != delivered && c.id != later));
 
-    s.apply(Event::SendFailed { account: id.clone(), id: refused, error: "no such person".into() });
+    s.apply(Event::SendFailed { account: id.clone(), id: refused, error: "no such person".into(), unconfirmed: false });
     assert_eq!(sending(&s), 0);
     let back = s.all_composes().find(|c| c.id == refused).expect("kept, to be put right");
     assert_eq!(back.error.as_deref(), Some("no such person"));
@@ -383,7 +383,7 @@ fn a_message_closed_as_it_goes_comes_back_if_refused() {
         s.run("mail.new", &json!({"account": id})).unwrap();
         s.run("compose.update", &json!({"subject": "Still writing"})).unwrap();
         let writing = s.compose.as_ref().map(|c| c.id);
-        s.apply(Event::SendFailed { account: id.clone(), id: sent, error: "no such person".into() });
+        s.apply(Event::SendFailed { account: id.clone(), id: sent, error: "no such person".into(), unconfirmed: false });
         let back = s.all_composes().find(|c| c.id == sent).cloned();
         assert!(back.is_some(), "{close} {params}: open again");
         let back = back.unwrap_or_default();
@@ -435,4 +435,78 @@ fn messages_closed_as_they_go_are_kept_64_at_most() {
     assert_eq!(s.still_sending(), 64);
     s.run("account.remove", &json!({"account": id})).unwrap();
     assert_eq!(s.still_sending(), 0, "its account gone");
+}
+
+/// What the server never said whether it took (it may have gone).
+const MAYBE_GONE: &str = "the server didn't say whether it took the message, which may have gone: response error: incomplete response";
+
+/// The server never said whether it took the message: it may have gone, which the notice and
+/// the message say, never "Not sent". Nothing sends it again by itself; Send, the user's word,
+/// does. One closed as it went comes back saying so too. A refusal is still "Not sent".
+#[test]
+fn a_send_the_server_never_confirmed_says_it_may_have_gone() {
+    let (mut s, id) = server_session("send-unconfirmed");
+    let (sent, _) = send_one(&mut s, &id, "Maybe", 60);
+    s.apply(Event::SendFailed { account: id.clone(), id: sent, error: MAYBE_GONE.into(), unconfirmed: true });
+    let said = s.notices.last().map(|n| n.text.clone()).unwrap_or_default();
+    assert!(said.starts_with("It may have been sent: the server didn't say whether"), "{said}");
+    assert!(!said.contains("Not sent"), "{said}");
+    let c = s.compose.clone().unwrap_or_default();
+    assert_eq!((c.id, c.sending, c.maybe_sent, c.error.as_deref()), (sent, false, true, Some(MAYBE_GONE)));
+    assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::Send { .. })), "not sent again by itself");
+    // Sent again by the user: on its way, no longer said to have gone.
+    s.run("compose.send", &json!({})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Send { id: i, .. } if *i == sent)), "sent again when asked");
+    let c = s.compose.clone().unwrap_or_default();
+    assert!(c.sending && !c.maybe_sent && c.error.is_none(), "{c:?}");
+    // Refused for good this time: "Not sent", as ever.
+    s.apply(Event::SendFailed { account: id.clone(), id: sent, error: "no such person".into(), unconfirmed: false });
+    let said = s.notices.last().map(|n| n.text.clone()).unwrap_or_default();
+    assert_eq!(said, "Not sent: no such person");
+    assert!(s.compose.as_ref().is_some_and(|c| !c.maybe_sent && c.error.as_deref() == Some("no such person")));
+    s.run("compose.discard", &json!({})).unwrap();
+    // Closed as it went: back, saying it may have gone.
+    let (sent, _) = send_one(&mut s, &id, "Closed", 61);
+    s.run("compose.close", &json!({"save": false})).unwrap();
+    s.apply(Event::SendFailed { account: id.clone(), id: sent, error: MAYBE_GONE.into(), unconfirmed: true });
+    let back = s.all_composes().find(|c| c.id == sent).cloned().unwrap_or_default();
+    assert!(back.window && back.maybe_sent && !back.sending, "{back:?}");
+}
+
+/// An Outbox message that may have gone (the server never said whether it took it) reads so in
+/// its row, never "Not sent", and the worker's marks aren't shown. Sending all that wait leaves
+/// it as it is; its own Send now, the user's word, sends it again.
+#[test]
+fn an_outbox_message_that_may_have_gone_says_so_and_goes_again_only_when_asked() {
+    let (mut s, id) = server_session("outbox-unconfirmed");
+    let store = s.store.clone().unwrap();
+    let maybe_gone = format!("unconfirmed: {MAYBE_GONE}");
+    for (n, subject, error) in [(7u64, "Maybe", maybe_gone.as_str()), (8, "Refused", "refused: the server refused: 550 no such user")] {
+        let raw = format!("From: riley@studio.example\r\nTo: ann@studio.example\r\nSubject: {subject}\r\n\r\nhi\r\n");
+        let item = quatrelle_store::OutboxItem {
+            id: n,
+            recipients: vec!["ann@studio.example".into()],
+            queued: NOW + n as i64,
+            attempts: 1,
+            error: Some(error.into()),
+            ..Default::default()
+        };
+        store.outbox_add(&id, &item, raw.as_bytes()).unwrap();
+    }
+    s.run("folder.outbox", &json!({})).unwrap();
+    let row =
+        |s: &Session, subject: &str| s.list.iter().find(|m| m.subject == subject).map(|m| (m.key.to_id(), m.preview.clone())).unwrap_or_default();
+    assert_eq!(row(&s, "Maybe").1, format!("May have been sent: {MAYBE_GONE}"));
+    assert_eq!(row(&s, "Refused").1, "Not sent yet: the server refused: 550 no such user");
+    let mark = |n: u64| store.outbox(&id).into_iter().find(|i| i.id == n).and_then(|i| i.error);
+    // All that wait: not this one, which waits for the user's word.
+    s.take_jobs();
+    s.run("outbox.send", &json!({})).unwrap();
+    assert_eq!(mark(7), Some(maybe_gone.clone()), "left as it was");
+    // Its own Send now: the mark is lifted, and the worker sends it.
+    s.run("outbox.send", &json!({"key": row(&s, "Maybe").0})).unwrap();
+    assert_eq!(mark(7), None, "sent again when asked");
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::FlushOutbox { account } if *account == id)));
+    assert_eq!(row(&s, "Maybe").1, "Waiting to be sent");
+    assert_eq!(mark(8).as_deref(), Some("refused: the server refused: 550 no such user"), "the refused one untouched");
 }

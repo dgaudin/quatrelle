@@ -161,3 +161,81 @@ fn closing_quatrelle_counts_a_message_closed_as_it_goes() {
     assert!(matches!(a.ui.dialog, Some(Dialog::LostOnClose { sending: 1, unsent: 0, changes: 0 })), "{:?}", a.ui.dialog);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The text drawn by a frame, every piece of it.
+fn drawn_texts(ctx: &egui::Context, a: &mut MailApp) -> Vec<String> {
+    let shapes = frame_shapes(ctx, a, vec![], egui::vec2(1280.0, 800.0));
+    shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = s { Some(t.galley.text().to_string()) } else { None }).collect()
+}
+
+/// A message the server never said it took (it may have gone), in French: its window says so
+/// and how to find out before sending it again, never « Non envoyé » ; its row in the Outbox
+/// and the reading pane over it say so too, without the worker's mark; a refused one's reading
+/// pane says why without it.
+#[test]
+fn the_window_and_the_outbox_say_may_have_gone_never_not_sent() {
+    let (mut a, dir) = app("send-may-have-gone");
+    a.session.prefs.new_mail_window = false;
+    a.ui.language = "fr".into();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let id =
+        a.session.run("account.add", &json!({"email": "zoe@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    a.run("mail.new", json!({"account": id}));
+    a.run("compose.update", json!({"to": "ann@studio.example", "subject": "Plans", "body": "See you"}));
+    a.run("compose.send", json!({}));
+    let sent = a.session.compose.as_ref().filter(|c| c.sending).map(|c| c.id).unwrap_or_default();
+    let error = "the server didn't say whether it took the message, which may have gone: response error: incomplete response";
+    a.session.apply(quatrelle_engine::model::Event::SendFailed { account: id.clone(), id: sent, error: error.into(), unconfirmed: true });
+    let gone = "le serveur n’a pas dit s’il a pris le message, qui est peut-être parti : response error: incomplete response";
+    // The notice, as it's drawn; then the window alone.
+    let notice = a.session.notices.pop();
+    a.session.notices.clear();
+    for _ in 0..2 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert_eq!(notice.as_ref().map(crate::i18n::notice), Some(format!("Il est peut-être parti : {gone}")));
+    let texts = drawn_texts(&ctx, &mut a);
+    assert!(texts.iter().any(|t| *t == format!("Il est peut-être parti : {gone}")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Avant de le renvoyer, demandez à son destinataire")), "{texts:?}");
+    assert!(!texts.iter().any(|t| t.contains("Non envoyé") || t.contains("Not sent")), "{texts:?}");
+    a.run("compose.discard", json!({}));
+    // In the Outbox.
+    let store = a.session.store.clone().unwrap();
+    for (n, subject, mark) in
+        [(7u64, "Maybe", format!("unconfirmed: {error}")), (8, "Refused", "refused: the server refused: 550 no such user".into())]
+    {
+        let raw = format!("From: zoe@studio.example\r\nTo: ann@studio.example\r\nSubject: {subject}\r\n\r\nhi\r\n");
+        let item = quatrelle_engine::store::OutboxItem {
+            id: n,
+            recipients: vec!["ann@studio.example".into()],
+            queued: NOW + n as i64,
+            attempts: 1,
+            error: Some(mark),
+            ..Default::default()
+        };
+        store.outbox_add(&id, &item, raw.as_bytes()).unwrap();
+    }
+    a.run("folder.outbox", json!({}));
+    let key = |a: &MailApp, subject: &str| a.session.list.iter().find(|m| m.subject == subject).map(|m| m.key.clone()).unwrap_or_default();
+    let maybe = key(&a, "Maybe");
+    a.session.open_message(&maybe);
+    for _ in 0..2 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let texts = drawn_texts(&ctx, &mut a);
+    assert!(texts.iter().any(|t| *t == format!("Peut-être parti : {gone}")), "the row: {texts:?}");
+    assert!(texts.iter().any(|t| *t == format!("Il est peut-être parti : {gone}")), "the reading pane: {texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Avant de le renvoyer, demandez à son destinataire")), "{texts:?}");
+    assert!(!texts.iter().any(|t| t.contains("Non envoyé") || t.contains("unconfirmed")), "{texts:?}");
+    let refused = key(&a, "Refused");
+    a.session.open_message(&refused);
+    for _ in 0..2 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let texts = drawn_texts(&ctx, &mut a);
+    let pane = texts.iter().find(|t| t.starts_with("En attente dans la boîte d’envoi. Dernière tentative :")).cloned().unwrap_or_default();
+    assert_eq!(pane, "En attente dans la boîte d’envoi. Dernière tentative : le serveur a refusé : 550 no such user", "{texts:?}");
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+}

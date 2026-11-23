@@ -491,7 +491,7 @@ impl Pool {
                 let item = OutboxItem { id, from, recipients, sent_folder, queued: now(), attempts: 0, error: Some("offline".into()), not_before: 0 };
                 match self.store.outbox_add(&account, &item, &raw) {
                     Ok(()) => self.sink.emit(Event::Queued { account, id, error: "offline".into() }),
-                    Err(e) => self.sink.emit(Event::SendFailed { account, id, error: e.to_string() }),
+                    Err(e) => self.sink.emit(Event::SendFailed { account, id, error: e.to_string(), unconfirmed: false }),
                 }
             }
             // Offline: changes wait in the cache for the next sync.

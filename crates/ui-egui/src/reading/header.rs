@@ -334,14 +334,23 @@ pub(super) fn actions(
 ) {
     if let Some((_, item)) = s.outbox_entry(&r.key) {
         egui::Frame::new().fill(t.warn.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
-            let why = match item.error.as_deref() {
-                Some(e) if e != "offline" => tf!("Waiting in the Outbox. Last try: {error}", error = widgets::shorten(e, 140)),
-                _ if item.not_before > s.clock.now => {
+            let why = match Session::outbox_trouble(&item) {
+                // The server never said whether it took it: it may have gone, and Send now sends it
+                // again once that's known.
+                Some((true, e)) => tf!("It may have been sent: {error}", error = widgets::shorten(&crate::i18n::error(e), 140)),
+                Some((false, e)) => tf!("Waiting in the Outbox. Last try: {error}", error = widgets::shorten(&crate::i18n::error(e), 140)),
+                None if item.not_before > s.clock.now => {
                     tf!("Held in the Outbox: it will be sent {when}.", when = crate::i18n::date(&dates::full_time(item.not_before, &s.clock)))
                 }
-                _ => tl!("Waiting in the Outbox: it will be sent when you're back online.").to_string(),
+                None => tl!("Waiting in the Outbox: it will be sent when you're back online.").to_string(),
             };
             ui.label(RichText::new(why).color(t.text));
+            if Session::outbox_trouble(&item).is_some_and(|(maybe_gone, _)| maybe_gone) {
+                ui.label(
+                    RichText::new(tl!("Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there"))
+                        .color(t.text),
+                );
+            }
         });
         ui.add_space(6.0);
         ui.horizontal(|ui| {

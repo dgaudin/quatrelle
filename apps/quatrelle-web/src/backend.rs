@@ -307,7 +307,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         }
         Job::Send { id: msg, raw, from, recipients, sent_folder: sent, .. } => {
             let Some(c) = client(sh, id) else {
-                return emit(sh, Event::SendFailed { account: id.to_string(), id: msg, error: "the account is offline".into() });
+                return emit(sh, Event::SendFailed { account: id.to_string(), id: msg, error: "the account is offline".into(), unconfirmed: false });
             };
             let sent = sent_folder(sh, id, sent);
             match quatrelle_jmap::send(&c, &state(sh, id), sent.as_deref(), &raw, &from, &recipients).await {
@@ -317,7 +317,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
                         sync_one(sh, id, &f).await;
                     }
                 }
-                Err(e) => emit(sh, Event::SendFailed { account: id.to_string(), id: msg, error: e.to_string() }),
+                Err(e) => emit(sh, Event::SendFailed { account: id.to_string(), id: msg, error: e.to_string(), unconfirmed: false }),
             }
         }
         // The browser has no closing to keep a draft through: it's filed as any other.
@@ -758,7 +758,7 @@ impl Backend for WebBackend {
                         Err(e) => notice(sh, &account, e.to_string()),
                     }
                 } else if let Job::Send { account, id, .. } = other {
-                    emit(sh, Event::SendFailed { account, id, error: "this mailbox has no server to send through".into() });
+                    emit(sh, Event::SendFailed { account, id, error: "this mailbox has no server to send through".into(), unconfirmed: false });
                 }
             }
         }

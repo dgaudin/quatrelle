@@ -513,6 +513,7 @@ impl Session {
         for cm in self.compose.iter_mut().chain(self.composes.iter_mut()).filter(|x| x.id == id) {
             cm.sending = true;
             cm.error = None;
+            cm.maybe_sent = false;
         }
     }
 

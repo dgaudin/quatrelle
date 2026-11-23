@@ -35,6 +35,10 @@ pub struct Compose {
     pub source: Option<MessageKey>,
     pub sending: bool,
     pub error: Option<String>,
+    /// [`Compose::error`] says the server never said whether it took the message: it may have
+    /// gone, so it isn't said "Not sent", and only the user sends it again.
+    #[serde(default)]
+    pub maybe_sent: bool,
     /// The copy saved in Drafts, replaced on the next save.
     pub draft: Option<MessageKey>,
     /// The `Message-ID` every copy saved in Drafts goes by: a server account's copy is found

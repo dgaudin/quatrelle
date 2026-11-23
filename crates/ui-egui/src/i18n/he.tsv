@@ -2441,3 +2441,7 @@ presence	Offline	לא מחובר
 	the message can't be read	לא ניתן לקרוא את ההודעה
 	no mail cache	אין מטמון דואר
 	not an Outbox message	זו לא הודעה מהדואר היוצא
+# A message the server never said it took: its window, the notice and the Outbox say it may have gone (never "Not sent"), and how to find out before sending it again.
+	It may have been sent: {error}	ייתכן שההודעה כבר נשלחה: {error}
+	May have been sent: {error}	ייתכן שנשלחה: {error}
+	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	לפני ששולחים אותה שוב, שאלו את הנמען, או חפשו אותה בפריטים שנשלחו אם השרת שלכם שומר שם עותק

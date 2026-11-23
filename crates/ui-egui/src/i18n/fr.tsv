@@ -2446,3 +2446,7 @@ presence	Offline	Hors ligne
 	the message can't be read	le message ne peut pas être lu
 	no mail cache	aucun cache de courrier
 	not an Outbox message	ce n’est pas un message de la boîte d’envoi
+# A message the server never said it took: its window, the notice and the Outbox say it may have gone (never "Not sent"), and how to find out before sending it again.
+	It may have been sent: {error}	Il est peut-être parti : {error}
+	May have been sent: {error}	Peut-être parti : {error}
+	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Avant de le renvoyer, demandez à son destinataire, ou cherchez-le dans Éléments envoyés si votre serveur y range une copie

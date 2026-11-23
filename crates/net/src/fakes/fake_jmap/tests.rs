@@ -289,7 +289,7 @@ fn a_jmap_account_syncs_changes_and_sends() {
     // Refused by the server: reported, and no copy left in Sent.
     let sent_before = data.lock().unwrap().emails.len();
     pool.submit(send(8, "nobody@studio.example"));
-    until(&pool, "refused", |e| matches!(e, Event::SendFailed { id: 8, error, .. } if error.contains("no such recipient")));
+    until(&pool, "refused", |e| matches!(e, Event::SendFailed { id: 8, error, unconfirmed: false, .. } if error.contains("no such recipient")));
     assert_eq!(data.lock().unwrap().emails.len(), sent_before);
 
     // A draft replaces its earlier copy.
