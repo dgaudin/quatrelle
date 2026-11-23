@@ -542,6 +542,7 @@
 	Font color	Schriftfarbe
 	No color	Keine Farbe
 	Automatic	Automatisch
+	Bullets	Aufzählungszeichen
 	Bullets (Ctrl+Shift+L)	Aufzählungszeichen (Strg+Umschalt+L)
 	Numbering	Nummerierung
 	Decrease indent (Ctrl+Shift+T)	Einzug verkleinern (Strg+Umschalt+T)

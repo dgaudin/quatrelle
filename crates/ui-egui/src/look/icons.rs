@@ -151,6 +151,14 @@ pub enum Icon {
     Color,
     /// A pencil: edit (one's own message in Conversations).
     Edit,
+    /// A rounded square with a tick, over an offset outline (Select all).
+    SelectAll,
+    /// A chain link with a pencil (Edit link).
+    LinkEdit,
+    /// A chain link with a cross (Remove link).
+    LinkDismiss,
+    /// An open book with a plus (Add to dictionary).
+    BookAdd,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -270,6 +278,10 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Rename => f!("rename"),
         Icon::Color => f!("color"),
         Icon::Edit => f!("edit"),
+        Icon::SelectAll => f!("select_all_on"),
+        Icon::LinkEdit => f!("link_edit"),
+        Icon::LinkDismiss => f!("link_dismiss"),
+        Icon::BookAdd => f!("book_add"),
     }
 }
 
@@ -434,6 +446,10 @@ mod tests {
             Rename,
             Color,
             Edit,
+            SelectAll,
+            LinkEdit,
+            LinkDismiss,
+            BookAdd,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

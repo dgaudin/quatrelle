@@ -542,6 +542,7 @@
 	Font color	Color de fuente
 	No color	Sin color
 	Automatic	Automático
+	Bullets	Viñetas
 	Bullets (Ctrl+Shift+L)	Viñetas (Ctrl+Mayús+L)
 	Numbering	Numeración
 	Decrease indent (Ctrl+Shift+T)	Disminuir sangría (Ctrl+Mayús+T)

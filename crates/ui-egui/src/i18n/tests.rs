@@ -200,7 +200,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
     // Every UI source file, wherever it sits (a file split into a folder stays covered); tests
     // and the catalogs' own code left out.
     let sources = ui_sources();
-    let prefixes: [(&str, &[usize]); 28] = [
+    let prefixes: [(&str, &[usize]); 29] = [
         ("big_button(ui, Icon::", &[0]),
         ("big_toggle(ui, Icon::", &[0]),
         ("big_accent(ui, Icon::", &[0]),
@@ -231,6 +231,9 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         ("(Icon::", &[0]),
         // The emoji picker's tabs: `(Group::Flags, "Flags")`.
         ("(Group::", &[0]),
+        // The editor menu's items: `item(ui, Some(Icon::Cut), "Cut", …)` — the label is the
+        // first string literal after the prefix.
+        ("item(ui, ", &[0]),
     ];
     let mut out = literals_after(&sources, &prefixes);
     // The text the desktop app draws itself (its file dialogs' titles and filters), by its own

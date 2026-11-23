@@ -6,7 +6,8 @@
 use super::*;
 
 /// The right-click menu on the text, as Outlook's: what could take a misspelt word; Cut, Copy,
-/// Paste and Select all; the link (insert, edit, open, remove); and clearing the formatting.
+/// Paste with its options and Select all; the link (insert, edit, open, remove); clearing the
+/// formatting; and the lists. Each command that has one shows its icon before its label.
 pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>, at_pointer: Option<usize>) {
     let n = c.body.chars().count();
     let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
@@ -27,7 +28,7 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
         if let Some((range, word)) = ed.menu_word.clone() {
             let mut picked: Option<String> = None;
             for sug in &ed.suggestions {
-                if ui.add_enabled(!c.sending, egui::Button::new(RichText::new(sug).strong())).clicked() {
+                if ui.add_enabled(!c.sending, egui::Button::new((crate::widgets::menu_icon(None), RichText::new(sug).strong()))).clicked() {
                     picked = Some(sug.clone());
                 }
             }
@@ -44,26 +45,34 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
             ui.separator();
             // Let be in this message, or the writer's own dictionary (this word in it, or back
             // out).
-            if ui.button(tl!("Ignore all")).on_hover_text(tl!("Let this word be, here and elsewhere in this message")).clicked() {
+            if ui
+                .button((crate::widgets::menu_icon(None), tl!("Ignore all")))
+                .on_hover_text(tl!("Let this word be, here and elsewhere in this message"))
+                .clicked()
+            {
                 crate::spellcheck::ignore_all(c.id, &word);
                 ed.refocus = Some(sel.clone());
                 ui.close();
             }
             if crate::spellcheck::added(&word) {
-                if ui.button(tf!("Remove “{word}” from the dictionary", word = word)).clicked() {
+                if ui.button((crate::widgets::menu_icon(None), tf!("Remove “{word}” from the dictionary", word = word))).clicked() {
                     acts.push(Action::Run("spelling.remove", serde_json::json!({"word": word.clone()})));
                     crate::spellcheck::remove_word(&word);
                     ui.close();
                 }
-            } else if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
+            } else if ui
+                .button((crate::widgets::menu_icon(Some(Icon::BookAdd)), tl!("Add to dictionary")))
+                .on_hover_text(tl!("Stop underlining this word, here and in other messages"))
+                .clicked()
+            {
                 acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
                 crate::spellcheck::add_word(&word);
                 ui.close();
             }
             ui.separator();
         }
-        let item = |ui: &mut Ui, label: &str, keys: &str, enabled: bool| -> bool {
-            let b = egui::Button::new(tl!(label)).shortcut_text(keys);
+        let item = |ui: &mut Ui, icon: Option<Icon>, label: &str, keys: &str, enabled: bool, selected: bool| -> bool {
+            let b = egui::Button::new((crate::widgets::menu_icon(icon), tl!(label))).shortcut_text(keys).selected(selected);
             let clicked = ui.add_enabled(enabled, b).clicked();
             if clicked {
                 ui.close();
@@ -71,37 +80,67 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
             clicked
         };
         let some = !sel.is_empty();
-        if item(ui, "Cut", "Ctrl+X", some && !c.sending) {
+        if item(ui, Some(Icon::Cut), "Cut", "Ctrl+X", some && !c.sending, false) {
             cut(ui, ed, c, &sel);
         }
-        if item(ui, "Copy", "Ctrl+C", some) {
+        if item(ui, Some(Icon::Copy), "Copy", "Ctrl+C", some, false) {
             copy_selection(ui, c, &sel);
             ed.refocus = Some(sel.clone());
         }
-        if item(ui, "Paste", "Ctrl+V", !c.sending) {
+        if item(ui, Some(Icon::Paste), "Paste", "Ctrl+V", !c.sending, false) {
             ed.paste_here(sel.clone());
         }
+        // The paste option, as the ribbon's: text only, with its help.
+        if ui
+            .add_enabled(!c.sending, egui::Button::new((crate::widgets::menu_icon(None), tl!("Keep text only"))))
+            .on_hover_text(tl!("Paste without the look it has where it was copied"))
+            .clicked()
+        {
+            ed.paste_text_only(sel.clone());
+            ui.close();
+        }
         ui.separator();
-        if item(ui, "Select all", "Ctrl+A", n > 0) {
+        if item(ui, Some(Icon::SelectAll), "Select all", "Ctrl+A", n > 0, false) {
             ed.refocus = Some(0..n);
         }
         if !c.plain {
             ui.separator();
-            if item(ui, if link.is_some() { "Edit link…" } else { "Link…" }, "Ctrl+K", !c.sending) {
+            if item(
+                ui,
+                Some(if link.is_some() { Icon::LinkEdit } else { Icon::Link }),
+                if link.is_some() { "Edit link…" } else { "Link…" },
+                "Ctrl+K",
+                !c.sending,
+                false,
+            ) {
                 ed.link = Some(LinkForm::open(c, sel.clone()));
             }
             if let Some(url) = &link {
-                if item(ui, "Open link", "", true) {
+                if item(ui, Some(Icon::PopOut), "Open link", "", true, false) {
                     acts.push(Action::OpenUrl(url.clone()));
                 }
-                if item(ui, "Remove link", "", !c.sending) {
+                if item(ui, Some(Icon::LinkDismiss), "Remove link", "", !c.sending, false) {
                     apply(ed, c, Op::Unlink);
                     ed.refocus = Some(sel.clone());
                 }
             }
             ui.separator();
-            if item(ui, "Clear formatting", "Ctrl+Space", some && !c.sending) {
+            if item(ui, Some(Icon::ClearFormat), "Clear formatting", "Ctrl+Space", some && !c.sending, false) {
                 apply(ed, c, Op::Clear);
+                ed.refocus = Some(sel.clone());
+            }
+            ui.separator();
+            // Lists over the selection's paragraphs, selected (as the calendar's menus mark
+            // their checked entries) while the selection is already one.
+            let (first, last) = rich::lines_of(&c.body, sel.clone());
+            let bullets_on = (first..=last).all(|l| c.styles.para(l).list == List::Bullet);
+            let numbers_on = (first..=last).all(|l| c.styles.para(l).list == List::Number);
+            if item(ui, Some(Icon::ListBullet), "Bullets", "Ctrl+Shift+L", !c.sending, bullets_on) {
+                apply(ed, c, Op::Bullets);
+                ed.refocus = Some(sel.clone());
+            }
+            if item(ui, Some(Icon::ListNumber), "Numbering", "", !c.sending, numbers_on) {
+                apply(ed, c, Op::Numbers);
                 ed.refocus = Some(sel.clone());
             }
         }

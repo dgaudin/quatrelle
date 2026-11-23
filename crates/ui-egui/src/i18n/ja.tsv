@@ -544,6 +544,7 @@ month	May	5月
 	Font color	フォントの色
 	No color	色なし
 	Automatic	自動
+	Bullets	箇条書き
 	Bullets (Ctrl+Shift+L)	箇条書き (Ctrl+Shift+L)
 	Numbering	段落番号
 	Decrease indent (Ctrl+Shift+T)	インデントを減らす (Ctrl+Shift+T)

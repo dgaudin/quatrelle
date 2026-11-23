@@ -541,6 +541,7 @@
 	Font color	글꼴 색
 	No color	색 없음
 	Automatic	자동
+	Bullets	글머리 기호
 	Bullets (Ctrl+Shift+L)	글머리 기호(Ctrl+Shift+L)
 	Numbering	번호 매기기
 	Decrease indent (Ctrl+Shift+T)	내어쓰기(Ctrl+Shift+T)

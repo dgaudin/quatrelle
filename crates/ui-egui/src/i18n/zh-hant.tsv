@@ -541,6 +541,7 @@
 	Font color	字型色彩
 	No color	無色彩
 	Automatic	自動
+	Bullets	項目符號
 	Bullets (Ctrl+Shift+L)	項目符號 (Ctrl+Shift+L)
 	Numbering	編號
 	Decrease indent (Ctrl+Shift+T)	減少縮排 (Ctrl+Shift+T)

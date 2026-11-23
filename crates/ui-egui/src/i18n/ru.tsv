@@ -541,6 +541,7 @@
 	Font color	Цвет шрифта
 	No color	Нет цвета
 	Automatic	Авто
+	Bullets	Маркеры
 	Bullets (Ctrl+Shift+L)	Маркеры (Ctrl+Shift+L)
 	Numbering	Нумерация
 	Decrease indent (Ctrl+Shift+T)	Уменьшить отступ (Ctrl+Shift+T)

@@ -11,6 +11,7 @@ mod file_dialogs;
 mod lost_gpu;
 mod mail_tips;
 mod markdown;
+mod menu;
 mod people_field;
 mod pgp;
 mod quote;

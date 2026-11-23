@@ -115,6 +115,8 @@ fn watch(ui: &Ui, ed: &mut Editor, came: bool) {
     {
         p.asked = None;
         p.missed = p.missed.saturating_add(1);
+        // A "Keep text only" whose paste never came doesn't stick to the next Ctrl+V.
+        ed.paste_plain = false;
         log::info!("paste into the message: {what} brought no paste in that frame or the next (the clipboard couldn't be read)");
     }
     let recent = p.last.is_some_and(|t| t.elapsed() < SHORTCUT_HELD);
