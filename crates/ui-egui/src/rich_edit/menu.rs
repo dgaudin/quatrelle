@@ -71,8 +71,8 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
             }
             ui.separator();
         }
-        let item = |ui: &mut Ui, icon: Option<Icon>, label: &str, keys: &str, enabled: bool| -> bool {
-            let b = egui::Button::new((crate::widgets::menu_icon(icon), tl!(label))).shortcut_text(keys);
+        let item = |ui: &mut Ui, icon: Option<Icon>, label: &str, keys: &str, enabled: bool, selected: bool| -> bool {
+            let b = egui::Button::new((crate::widgets::menu_icon(icon), tl!(label))).shortcut_text(keys).selected(selected);
             let clicked = ui.add_enabled(enabled, b).clicked();
             if clicked {
                 ui.close();
@@ -80,25 +80,27 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
             clicked
         };
         let some = !sel.is_empty();
-        if item(ui, Some(Icon::Cut), "Cut", "Ctrl+X", some && !c.sending) {
+        if item(ui, Some(Icon::Cut), "Cut", "Ctrl+X", some && !c.sending, false) {
             cut(ui, ed, c, &sel);
         }
-        if item(ui, Some(Icon::Copy), "Copy", "Ctrl+C", some) {
+        if item(ui, Some(Icon::Copy), "Copy", "Ctrl+C", some, false) {
             copy_selection(ui, c, &sel);
             ed.refocus = Some(sel.clone());
         }
-        if item(ui, Some(Icon::Paste), "Paste", "Ctrl+V", !c.sending) {
+        if item(ui, Some(Icon::Paste), "Paste", "Ctrl+V", !c.sending, false) {
             ed.paste_here(sel.clone());
         }
-        // The paste options, under Paste: with the look the clipboard has, or as text alone.
-        if item(ui, None, "Keep source formatting", "", !c.sending) {
-            ed.paste_here(sel.clone());
-        }
-        if item(ui, None, "Keep text only", "", !c.sending) {
+        // The paste option, as the ribbon's: text only, with its help.
+        if ui
+            .add_enabled(!c.sending, egui::Button::new((crate::widgets::menu_icon(None), tl!("Keep text only"))))
+            .on_hover_text(tl!("Paste without the look it has where it was copied"))
+            .clicked()
+        {
             ed.paste_text_only(sel.clone());
+            ui.close();
         }
         ui.separator();
-        if item(ui, Some(Icon::SelectAll), "Select all", "Ctrl+A", n > 0) {
+        if item(ui, Some(Icon::SelectAll), "Select all", "Ctrl+A", n > 0, false) {
             ed.refocus = Some(0..n);
         }
         if !c.plain {
@@ -109,34 +111,35 @@ pub(super) fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose,
                 if link.is_some() { "Edit link…" } else { "Link…" },
                 "Ctrl+K",
                 !c.sending,
+                false,
             ) {
                 ed.link = Some(LinkForm::open(c, sel.clone()));
             }
             if let Some(url) = &link {
-                if item(ui, Some(Icon::PopOut), "Open link", "", true) {
+                if item(ui, Some(Icon::PopOut), "Open link", "", true, false) {
                     acts.push(Action::OpenUrl(url.clone()));
                 }
-                if item(ui, Some(Icon::LinkDismiss), "Remove link", "", !c.sending) {
+                if item(ui, Some(Icon::LinkDismiss), "Remove link", "", !c.sending, false) {
                     apply(ed, c, Op::Unlink);
                     ed.refocus = Some(sel.clone());
                 }
             }
             ui.separator();
-            if item(ui, Some(Icon::ClearFormat), "Clear formatting", "Ctrl+Space", some && !c.sending) {
+            if item(ui, Some(Icon::ClearFormat), "Clear formatting", "Ctrl+Space", some && !c.sending, false) {
                 apply(ed, c, Op::Clear);
                 ed.refocus = Some(sel.clone());
             }
             ui.separator();
-            // Lists over the selection's paragraphs, checked (a tick for the icon) while the
-            // selection is already one.
+            // Lists over the selection's paragraphs, selected (as the calendar's menus mark
+            // their checked entries) while the selection is already one.
             let (first, last) = rich::lines_of(&c.body, sel.clone());
             let bullets_on = (first..=last).all(|l| c.styles.para(l).list == List::Bullet);
             let numbers_on = (first..=last).all(|l| c.styles.para(l).list == List::Number);
-            if item(ui, Some(if bullets_on { Icon::Done } else { Icon::ListBullet }), "Bullets", "Ctrl+Shift+L", !c.sending) {
+            if item(ui, Some(Icon::ListBullet), "Bullets", "Ctrl+Shift+L", !c.sending, bullets_on) {
                 apply(ed, c, Op::Bullets);
                 ed.refocus = Some(sel.clone());
             }
-            if item(ui, Some(if numbers_on { Icon::Done } else { Icon::ListNumber }), "Numbering", "", !c.sending) {
+            if item(ui, Some(Icon::ListNumber), "Numbering", "", !c.sending, numbers_on) {
                 apply(ed, c, Op::Numbers);
                 ed.refocus = Some(sel.clone());
             }

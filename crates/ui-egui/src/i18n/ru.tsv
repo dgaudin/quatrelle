@@ -541,7 +541,7 @@
 	Font color	Цвет шрифта
 	No color	Нет цвета
 	Automatic	Авто
-	Bullets	Маркированный список
+	Bullets	Маркеры
 	Bullets (Ctrl+Shift+L)	Маркеры (Ctrl+Shift+L)
 	Numbering	Нумерация
 	Decrease indent (Ctrl+Shift+T)	Уменьшить отступ (Ctrl+Shift+T)
@@ -1216,7 +1216,6 @@ month	May	Май
 	Font	Шрифт
 	Proofing	Правописание
 	Paste options	Параметры вставки
-	Keep source formatting	Сохранить исходное форматирование
 	Keep text only	Сохранить только текст
 	Paste without the look it has where it was copied	Вставить без форматирования источника
 	Check Names	Проверить имена
