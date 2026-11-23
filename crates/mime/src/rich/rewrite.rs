@@ -361,7 +361,9 @@ pub fn base_style(text: &str, styles: &Styles) -> Style {
 /// markers put back as their pictures, one it lost at the end of its paragraph, and the colours,
 /// typefaces and sizes Markdown doesn't carry taken from `base`.
 pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &str, before_styles: &Styles) -> (String, Styles) {
-    let answer: String = answer.trim().to_string();
+    // The model's answer is hostile: its own copy of Quatrelle's internal marks (a signature
+    // standing, a rule) and of a picture would be read as ours. None may pass.
+    let answer: String = answer.trim().chars().filter(|c| *c != PICTURE && !('\u{E000}'..='\u{E06F}').contains(c)).collect();
     // One reader, the Markdown one: its backslash escapes are what the outbound writer wrote.
     let Some((mut text, mut styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
     // The HTML reader draws a strikethrough with a combining mark over each character; the

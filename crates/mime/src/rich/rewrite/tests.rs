@@ -206,3 +206,12 @@ proptest! {
         }
     }
 }
+
+/// Quatrelle's own marks and a bare picture in the model's answer are not read as ours.
+#[test]
+fn an_answer_cannot_forge_an_internal_mark_or_a_picture() {
+    let answer = "Salut\u{E002}\u{E041}\u{E06F}\u{FFFC}";
+    let (back, _) = inbound(answer, Style::default(), &[], "Salut", &Styles::plain("Salut"));
+    assert_eq!(back, "Salut");
+    assert!(!back.chars().any(|c| c == PICTURE || ('\u{E000}'..='\u{E06F}').contains(&c)), "{back:?}");
+}
