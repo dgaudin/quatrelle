@@ -48,9 +48,8 @@ fn a_line_break_the_model_normalises_stays_a_line() {
     let text = "Cordialement,\nZoé Martin";
     let styles = Styles::plain(text);
     let (sent, images) = outbound(text, &styles, 7);
-    assert!(sent.contains("  \n"), "the writer says where the line ends: {sent:?}");
     let (back, _) = inbound(&sent.replace("  \n", "\n"), Style::default(), &images, 24_000);
-    assert_eq!(back, text);
+    assert_eq!(back, text, "sent {sent:?}");
 }
 
 /// A paragraph wider than the renderer's old 2000 columns is not cut in two.
@@ -62,4 +61,37 @@ fn a_long_paragraph_comes_back_on_one_line() {
     let (back, _) = inbound(&sent, Style::default(), &images, 24_000);
     assert!(!back.contains('\n'), "one line: {:?}", back.chars().take(80).collect::<String>());
     assert_eq!(back, text);
+}
+
+/// A line of ordinary text that would start a list, a quote, a code block or a heading stays
+/// ordinary text; `&amp;` written out stays written out.
+#[test]
+fn text_that_looks_like_markdown_stays_text() {
+    for text in ["- pas une liste", "+ plus", "• puce tapée", "3. Troisième point", "3) trois", "> pas une citation", "&amp; reste"] {
+        let styles = Styles::plain(text);
+        let (back, _) = there_and_back(text, &styles);
+        assert_eq!(back, text, "sent {:?}", outbound(text, &styles, 7).0);
+    }
+    // Indented lines (up to three spaces) are read as their text, without the indent.
+    let text = "- pas une liste";
+    let styles = Styles::plain(text);
+    let (sent, images) = outbound(text, &styles, 7);
+    let (back, _) = inbound(&format!("  {sent}"), Style::default(), &images, 24_000);
+    assert_eq!(back, text, "no indent left: {back:?}");
+}
+
+/// A rule stays a rule between the paragraph before and the one after, with no line added or
+/// lost; a line of box-drawing characters is still text.
+#[test]
+fn a_rule_stays_a_rule_and_box_lines_stay_text() {
+    let text = "Texte\n\nSuite";
+    let mut styles = Styles::plain(text);
+    styles.paras.get_mut(1).map(|p| p.rule = true);
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text, "sent {:?}, paras {:?}", outbound(text, &styles, 7).0, back_styles.paras);
+    assert!(back_styles.para(1).rule, "the line across is still one: {:?}", back_styles.paras);
+    let box_line = "────────";
+    let styles = Styles::plain(box_line);
+    let (back, _) = there_and_back(box_line, &styles);
+    assert_eq!(back, box_line, "sent {:?}", outbound(box_line, &styles, 7).0);
 }

@@ -142,14 +142,14 @@ pub(super) fn word_paragraphs(html: &str) -> String {
 /// page) as text and styles to put into a message: its formatting and links, without pictures
 /// (they'd point at the other program's files or the web) or the empty lines around it.
 pub fn pasted_html(html: &str) -> (String, rich::Styles) {
-    pasted_html_at(html, 2000)
+    pasted_html_at(html, 2000, false)
 }
 
 /// [`pasted_html`] at a given render width: 2000 columns keeps its paragraphs on one line, and a
 /// rewrite's reader passes more so that no paragraph is ever cut in two.
-pub(crate) fn pasted_html_at(html: &str, width: usize) -> (String, rich::Styles) {
+pub(crate) fn pasted_html_at(html: &str, width: usize, keep_box_lines: bool) -> (String, rich::Styles) {
     // Sizes and typefaces come with the spans (`html_to_rich` reads them).
-    let mut lines = html_to_rich_at(&word_paragraphs(html), width);
+    let mut lines = html_to_rich_at(&word_paragraphs(html), width, keep_box_lines);
     for line in &mut lines {
         line.retain(|sp| sp.image.is_none());
     }
@@ -288,11 +288,12 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
 /// laid out as text, and pictures by reference. No scripts, styles or remote loads: what comes
 /// out is plain data. Never panics; empty when conversion fails.
 pub fn html_to_rich(html: &str) -> RichText {
-    html_to_rich_at(html, 2000)
+    html_to_rich_at(html, 2000, false)
 }
 
-/// [`html_to_rich`] rendered at `width` columns.
-fn html_to_rich_at(html: &str, width: usize) -> RichText {
+/// [`html_to_rich`] rendered at `width` columns, keeping a line made only of box-drawing
+/// characters as text (`keep_box_lines`) rather than taking it for a table's border.
+fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
     let html = match html.char_indices().nth(HTML_MAX) {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
@@ -427,7 +428,7 @@ fn html_to_rich_at(html: &str, width: usize) -> RichText {
         // Tables come laid out with box-drawing borders. A layout table (one column) only adds
         // rules around its text: drop those. A data table's rows line up only in a monospace font.
         let whole: String = spans.iter().map(|s| s.text.as_str()).collect();
-        if !whole.trim().is_empty() && whole.chars().all(|c| matches!(c, '─' | '━' | '═' | ' ')) {
+        if !keep_box_lines && !whole.trim().is_empty() && whole.chars().all(|c| matches!(c, '─' | '━' | '═' | ' ')) {
             spans.clear();
         } else if whole.contains(['│', '┼', '┬', '┴']) {
             for sp in &mut spans {

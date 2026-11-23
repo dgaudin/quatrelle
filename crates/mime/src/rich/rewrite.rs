@@ -8,7 +8,6 @@
 //! Markdown reader within its cap, its own internal marks are dropped, and only the markers of
 //! pictures actually sent become pictures.
 
-use crate::Span;
 use crate::rich::{List, PICTURE, Style, Styles};
 
 /// The form of a picture's marker: no Markdown character, and a nonce no text holds.
@@ -67,69 +66,216 @@ pub fn outbound(text: &str, styles: &Styles, nonce: u64) -> (String, Vec<Rewrite
     (markdown_of(&marked, &marked_styles), images)
 }
 
-/// A written text as Markdown: emphasis, code, lists, headings and links, with its paragraphs
-/// and rules; pictures are already markers in `text`. Markdown carries no colour, typeface or
-/// size, so those are left for the answer's base style.
+/// A written text as Markdown, guided by its paragraphs rather than by what the text looks
+/// like: lists from their paragraphs, headings from a whole line in bold at a heading's size,
+/// an unambiguous rule of its own, and every character that would start a block or open a mark
+/// escaped. Pictures are already markers in `text`.
 fn markdown_of(text: &str, styles: &Styles) -> String {
-    let mut lines: Vec<Vec<Span>> = Vec::new();
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut out = String::with_capacity(text.len() + text.len() / 4);
     let mut start = 0usize;
-    for (n, line) in text.split('\n').enumerate() {
+    for (n, line) in lines.iter().enumerate() {
+        if n > 0 {
+            out.push('\n');
+        }
         let para = styles.para(n);
-        if para.rule {
-            lines.push(vec![Span { rule: true, ..Span::default() }]);
-            start += line.chars().count() + 1;
+        let chars: Vec<char> = line.chars().collect();
+        let heading = heading_level(&chars, start, styles);
+        if para.rule && chars.iter().all(|c| c.is_whitespace()) {
+            out.push_str("***");
+            start += chars.len() + 1;
             continue;
         }
-        let mut spans = Vec::new();
-        let mark = match para.list {
-            List::None => String::new(),
-            List::Bullet => "- ".to_string(),
-            List::Number => "1. ".to_string(),
-        };
         let indent = "    ".repeat(usize::from(para.indent));
-        if !mark.is_empty() {
-            spans.push(Span { text: format!("{indent}{mark}"), ..Span::default() });
-        }
-        // A heading the editor keeps as bold text of one of the heading sizes.
-        let first = styles.style(start);
-        let heading = if first.bold && first.size == Some(20) {
-            1
-        } else if first.bold && first.size == Some(16) {
-            2
-        } else if first.bold && first.size == Some(14) {
-            3
-        } else {
-            0
-        };
-        let chars: Vec<char> = line.chars().collect();
-        let mut i = 0usize;
-        while i < chars.len() {
-            let style = styles.style(start + i);
-            let mut j = i + 1;
-            while j < chars.len() && styles.style(start + j) == style {
-                j += 1;
+        let mut content_started = false;
+        match para.list {
+            List::Bullet if heading == 0 => {
+                out.push_str(&indent);
+                out.push_str("- ");
+                content_started = true;
             }
-            spans.push(Span {
-                text: chars.get(i..j).map(|c| c.iter().collect()).unwrap_or_default(),
-                bold: style.bold && heading == 0,
-                italic: style.italic,
-                strike: style.strike,
-                underline: style.underline,
-                code: style.mono,
-                link: style.link.clone(),
-                heading,
-                color: style.color,
-                background: style.highlight,
-                size: style.size,
-                font: style.font.clone(),
-                ..Span::default()
-            });
-            i = j;
+            List::Number if heading == 0 => {
+                out.push_str(&indent);
+                out.push_str("1. ");
+                content_started = true;
+            }
+            _ => {}
         }
-        lines.push(spans);
+        if heading > 0 {
+            out.push_str(&"#".repeat(usize::from(heading)));
+            out.push(' ');
+            content_started = true;
+        }
+        let mut esc = Escaping { at_line_start: !content_started, digits: 0 };
+        let runs = runs_of(&chars, start, heading > 0, styles);
+        write_runs(&runs, &mut out, &mut esc);
         start += chars.len() + 1;
     }
-    crate::rich_markdown(&lines, false)
+    out
+}
+
+/// A line's heading level when every non-blank character is in bold at the same heading size
+/// (20, 16 or 14 points): 0 for ordinary text.
+fn heading_level(chars: &[char], start: usize, styles: &Styles) -> u8 {
+    let mut level = 0u8;
+    for (i, ch) in chars.iter().enumerate() {
+        if ch.is_whitespace() {
+            continue;
+        }
+        let style = styles.style(start + i);
+        let one = match (style.bold, style.size) {
+            (true, Some(20)) => 1,
+            (true, Some(16)) => 2,
+            (true, Some(14)) => 3,
+            _ => 0,
+        };
+        if one == 0 || (level != 0 && level != one) {
+            return 0;
+        }
+        level = one;
+    }
+    level
+}
+
+/// A run of characters with one Markdown look: the attributes Markdown carries, not colour,
+/// typeface or size.
+fn runs_of(chars: &[char], start: usize, heading: bool, styles: &Styles) -> Vec<(String, Style)> {
+    let mut runs: Vec<(String, Style)> = Vec::new();
+    for (i, ch) in chars.iter().enumerate() {
+        let style = styles.style(start + i);
+        let look = Style {
+            bold: style.bold && !heading,
+            italic: style.italic,
+            strike: style.strike,
+            mono: style.mono,
+            link: style.link.clone().filter(|l| super::safe_link(l)),
+            ..Style::default()
+        };
+        match runs.last_mut() {
+            Some((text, last)) if *last == look => text.push(*ch),
+            _ => runs.push((ch.to_string(), look)),
+        }
+    }
+    runs
+}
+
+/// What a line's next character would start, as Markdown reads the line's beginning.
+struct Escaping {
+    at_line_start: bool,
+    digits: usize,
+}
+
+/// A run's text escaped, keeping only the white space at its ends outside any emphasis.
+fn write_runs(runs: &[(String, Style)], out: &mut String, esc: &mut Escaping) {
+    let mut i = 0usize;
+    while let Some((_, style)) = runs.get(i) {
+        let link = style.link.clone();
+        let end = runs.iter().skip(i + 1).position(|(_, s)| s.link != link).map_or(runs.len(), |p| p + i + 1);
+        let group = runs.get(i..end).unwrap_or_default();
+        match &link {
+            Some(url) => {
+                let plain: String = group.iter().map(|(t, _)| t.as_str()).collect();
+                let bare = group.iter().all(|(_, s)| !(s.bold || s.italic || s.strike || s.mono))
+                    && (plain.trim() == url.trim() || url.strip_prefix("mailto:").is_some_and(|m| m == plain.trim()));
+                if bare {
+                    write_plain(group, out, esc);
+                } else {
+                    out.push('[');
+                    write_plain(group, out, esc);
+                    out.push_str("](");
+                    out.push_str(&destination(url));
+                    out.push(')');
+                }
+            }
+            None => write_plain(group, out, esc),
+        }
+        i = end;
+    }
+}
+
+/// Text runs with their emphasis and code, no link around them.
+fn write_plain(runs: &[(String, Style)], out: &mut String, esc: &mut Escaping) {
+    for (text, style) in runs {
+        if text.is_empty() {
+            continue;
+        }
+        if style.mono {
+            write_code(text, out);
+            if text.chars().any(|c| !c.is_whitespace()) {
+                esc.at_line_start = false;
+                esc.digits = 0;
+            }
+            continue;
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let lead = chars.iter().take_while(|c| c.is_whitespace()).count();
+        let trail = chars.iter().rev().take_while(|c| c.is_whitespace()).count().min(chars.len().saturating_sub(lead));
+        let core_end = chars.len().saturating_sub(trail);
+        for c in chars.get(..lead).unwrap_or_default() {
+            escape_into(*c, out, esc);
+        }
+        let core = chars.get(lead..core_end).unwrap_or_default();
+        if !core.is_empty() {
+            let open =
+                format!("{}{}{}", if style.bold { "**" } else { "" }, if style.italic { "*" } else { "" }, if style.strike { "~~" } else { "" });
+            out.push_str(&open);
+            for c in core {
+                escape_into(*c, out, esc);
+            }
+            let close: String = open.chars().rev().collect();
+            out.push_str(&close);
+        }
+        for c in chars.get(core_end..).unwrap_or_default() {
+            escape_into(*c, out, esc);
+        }
+    }
+}
+
+/// Code as a code span, in enough backticks for its own, with breathing space when it starts or
+/// ends with a backtick or a space.
+fn write_code(text: &str, out: &mut String) {
+    let mut longest = 0usize;
+    let mut now = 0usize;
+    for c in text.chars() {
+        now = if c == '`' { now + 1 } else { 0 };
+        longest = longest.max(now);
+    }
+    let fence = "`".repeat(longest.saturating_add(1).max(1));
+    let pad = if text.starts_with(['`', ' ']) || text.ends_with(['`', ' ']) { " " } else { "" };
+    out.push_str(&fence);
+    out.push_str(pad);
+    out.push_str(text);
+    out.push_str(pad);
+    out.push_str(&fence);
+}
+
+/// A character outside code, escaped when Markdown would read it as a mark or a block's start.
+fn escape_into(c: char, out: &mut String, esc: &mut Escaping) {
+    let start = esc.at_line_start;
+    let mark = match c {
+        '\\' | '`' | '*' | '_' | '[' | ']' | '~' | '<' | '>' | '&' | '|' | '=' => true,
+        '#' | '-' | '+' if start => true,
+        '.' | ')' if esc.digits > 0 => true,
+        _ => false,
+    };
+    if mark {
+        out.push('\\');
+    }
+    out.push(c);
+    if c.is_whitespace() {
+        return;
+    }
+    esc.at_line_start = false;
+    esc.digits = if esc.digits > 0 || c.is_ascii_digit() { esc.digits.saturating_add(1) } else { 0 };
+    if !c.is_ascii_digit() {
+        esc.digits = 0;
+    }
+}
+
+/// An address as a link destination: between angle brackets when it has spaces or brackets.
+fn destination(url: &str) -> String {
+    let url = url.trim().replace(['\n', '\r'], "");
+    if url.contains([' ', '(', ')', '<', '>']) { format!("<{}>", url.replace('<', "%3C").replace('>', "%3E")) } else { url }
 }
 
 /// The model's answer as the editor's text and styles: its Markdown read back (bounded), its

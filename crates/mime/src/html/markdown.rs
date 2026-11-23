@@ -180,9 +180,55 @@ fn read_markdown_with(text: &str, soft_lines: bool, width: usize) -> Option<(Str
         return None;
     }
     let html = written_with(text, true, soft_lines)?;
-    let (text, styles) = pasted_html_at(&html, width);
+    let (text, styles) = pasted_html_at(&html, width, soft_lines);
     let (text, styles) = lay_out(&text, &styles);
+    let (text, styles) = if soft_lines { tight_rules(&text, &styles) } else { (text, styles) };
     (!text.trim().is_empty()).then_some((text, styles))
+}
+
+/// A rule's own line, with the empty lines html2text puts around every paragraph taken off
+/// either side: the editor's rule is that line, and reading the answer must not add lines.
+fn tight_rules(text: &str, styles: &rich::Styles) -> (String, rich::Styles) {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut drop = vec![false; lines.len()];
+    for (n, _) in lines.iter().enumerate().filter(|(n, _)| styles.para(*n).rule) {
+        if n > 0 && lines.get(n - 1).is_some_and(|l| l.trim().is_empty()) {
+            drop[n - 1] = true;
+        }
+        if lines.get(n + 1).is_some_and(|l| l.trim().is_empty()) {
+            drop[n + 1] = true;
+        }
+    }
+    if !drop.iter().any(|d| *d) {
+        return (text.to_string(), styles.clone());
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut kept = rich::Styles {
+        chars: Vec::with_capacity(styles.chars.len()),
+        palette: styles.palette.clone(),
+        paras: Vec::with_capacity(styles.paras.len()),
+    };
+    if kept.palette.is_empty() {
+        kept.palette.push(rich::Style::default());
+    }
+    let mut at = 0usize;
+    for (n, line) in lines.iter().enumerate() {
+        let len = line.chars().count();
+        if !drop[n] {
+            if !kept.paras.is_empty() {
+                out.push('\n');
+                kept.chars.push(styles.chars.get(at.saturating_sub(1)).copied().unwrap_or(0));
+            }
+            for k in 0..len {
+                out.push(line.chars().nth(k).unwrap_or(' '));
+                kept.chars.push(styles.chars.get(at + k).copied().unwrap_or(0));
+            }
+            kept.paras.push(styles.para(n));
+        }
+        at = at.saturating_add(len).saturating_add(1);
+    }
+    kept.fit(&out);
+    (out, kept)
 }
 
 /// How many table cells pulldown-cmark could make of `md`, counted generously (past
