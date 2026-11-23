@@ -507,3 +507,205 @@ fn a_folder_list_known_short_isnt_kept_over_the_one_before() {
     let now = on_disk(&store);
     assert!(now.iter().any(|p| p == "Projects") && now.iter().any(|p| p == SALES_INBOX), "{now:?}");
 }
+
+/// Riley's Inbox and the public folders' root holding `Projects` (its id), which holds `n`
+/// folders, `Project 001`… (their ids), a message in each.
+fn public_projects(n: usize) -> (Data, String, Vec<String>) {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, &mail("Own", "o1"), false, "2026-10-19T08:00:00Z");
+    let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
+    let projects = d.folder("Projects", Some(&root), None, "IPF.Note");
+    let mut kids = Vec::new();
+    for i in 1..=n {
+        let id = d.folder(&format!("Project {i:03}"), Some(&projects), None, "IPF.Note");
+        d.deliver(&id, &mail(&format!("Plan {i}"), &format!("p{i}")), true, "2026-10-19T09:00:00Z");
+        kids.push(id);
+    }
+    (d, projects, kids)
+}
+
+fn project(i: usize) -> String {
+    format!("Public Folders/Projects/Project {i:03}")
+}
+
+/// A worker on the fake server, connected, following these public folders, its folders listed.
+fn following(server: &fake_ews::Server, store: &Store, pool: &Pool, followed: &[String]) -> Worker {
+    store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, followed).unwrap();
+    let mut w = connected(server, store, pool);
+    assert!(w.relist());
+    w
+}
+
+/// Found in review: a public folder's page past the first that failed ended its listing there
+/// without a word: what was past it was taken for gone, and lost its cache. The pages read are
+/// listed as the server has them now, and what was past them is kept as it was.
+#[test]
+fn a_page_that_fails_keeps_the_pages_read_and_what_was_cached_past_them() {
+    let (d, projects, kids) = public_projects(250);
+    let server = fake_ews::serve(d);
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let all: Vec<String> = (1..=250).map(project).collect();
+    let mut w = following(&server, &store, &pool, &all);
+    let listed = paths(&w.folders);
+    assert!(all.iter().all(|p| listed.contains(p)), "{} of them listed", all.iter().filter(|p| listed.contains(p)).count());
+    for p in &all {
+        w.sync_one(p);
+    }
+    let caches: Vec<Vec<Summary>> = all.iter().map(|p| cached(&store, p)).collect();
+    assert!(caches.iter().all(|c| c.len() == 1));
+    // A message more in each on the server; the second page of Projects' folders fails.
+    {
+        let mut d = server.data.lock().unwrap();
+        for (i, k) in kids.iter().enumerate() {
+            d.deliver(k, &mail(&format!("Update {i}"), &format!("u{i}")), true, "2026-10-20T09:00:00Z");
+        }
+        d.zones.public_failing.push((projects.clone(), 2));
+    }
+    assert!(w.relist());
+    let total = |p: &str| w.folders.iter().find(|f| f.path == p).map(|f| f.total);
+    for (n, (p, cache)) in all.iter().zip(&caches).enumerate() {
+        assert_eq!(&cached(&store, p), cache, "{p}: its cache");
+        assert_eq!(total(p), Some(if n < 200 { 2 } else { 1 }), "{p}: as the server has it now, or as it was");
+    }
+    assert_eq!(on_disk(&store), paths(&w.folders), "the list on disk");
+}
+
+/// Found in review: a public folder whose own folders wouldn't list (a level under the root
+/// refused) was passed over: its branch, every folder under it, was taken for gone, and lost its
+/// place, its cache and its numbers. All are kept as they were till it lists; then read as ever.
+#[test]
+fn a_public_branch_that_fails_keeps_what_was_under_it() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
+    let team = d.folder("Team", Some(&root), None, "IPF.Note");
+    let projects = d.folder("Projects", Some(&team), None, "IPF.Note");
+    let year = d.folder("2025", Some(&projects), None, "IPF.Note");
+    d.folder("News", Some(&root), None, "IPF.Note");
+    d.deliver(&projects, &mail("Plans", "p1"), false, "2026-10-19T08:00:00Z");
+    d.deliver(&year, &mail("Old plans", "y1"), true, "2025-01-02T08:00:00Z");
+    let server = fake_ews::serve(d);
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let followed = ["Public Folders/Team/Projects".to_string(), "Public Folders/Team/Projects/2025".to_string()];
+    let mut w = following(&server, &store, &pool, &followed);
+    for p in &followed {
+        w.sync_one(p);
+    }
+    let (folders, disk) = (paths(&w.folders), on_disk(&store));
+    let held: Vec<(Vec<Summary>, MessageKey, String)> = followed
+        .iter()
+        .map(|p| {
+            let messages = cached(&store, p);
+            let key = messages.first().map(|m| m.key.clone()).unwrap_or_else(|| panic!("nothing read in {p}"));
+            let id = w.jstate.id(key.uid).unwrap();
+            (messages, key, id)
+        })
+        .collect();
+    assert!(held.iter().all(|(_, key, _)| store.has_body(key)));
+    let given_before = (given(&server, &projects), given(&server, &year));
+    server.data.lock().unwrap().zones.public_failing.push((team.clone(), 1));
+    assert!(w.relist());
+    w.prune_jmap_numbers();
+    assert_eq!(paths(&w.folders), folders, "its place in the pane");
+    assert_eq!(on_disk(&store), disk, "its place in the list on disk");
+    for (p, (messages, key, id)) in followed.iter().zip(&held) {
+        assert_eq!(&cached(&store, p), messages, "{p}: its messages");
+        assert!(store.has_body(key), "{p}: its source");
+        assert_eq!(w.jstate.id(key.uid), Some(id.clone()), "{p}: its number");
+    }
+    // It lists again: read as it was, nothing given again.
+    mend(&mut server.data.lock().unwrap());
+    assert!(w.relist());
+    for p in &followed {
+        w.sync_one(p);
+    }
+    for (p, (_, key, _)) in followed.iter().zip(&held) {
+        assert!(cached(&store, p).iter().any(|m| m.key == *key), "{p}: listed again, its message has another key");
+    }
+    assert_eq!((given(&server, &projects), given(&server, &year)), given_before, "their mail given again");
+}
+
+/// Counter-probe: a public folder deleted on the server, kept while a page of its parent failed,
+/// goes with its cache once its parent lists whole (in two pages here), while another branch
+/// still doesn't list.
+#[test]
+fn a_public_folder_deleted_on_the_server_goes_once_its_parent_lists_whole() {
+    let (mut d, projects, kids) = public_projects(250);
+    let root = d.folders.iter().find(|f| f.known.as_deref() == Some("publicfoldersroot")).map(|f| f.id.clone()).unwrap();
+    let team = d.folder("Team", Some(&root), None, "IPF.Note");
+    d.folder("Minutes", Some(&team), None, "IPF.Note");
+    let server = fake_ews::serve(d);
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let gone = project(10);
+    let mut w = following(&server, &store, &pool, std::slice::from_ref(&gone));
+    w.sync_one(&gone);
+    assert_eq!(cached(&store, &gone).len(), 1);
+    {
+        let mut d = server.data.lock().unwrap();
+        d.folders.retain(|f| f.id != kids[9]);
+        d.zones.public_failing.push((projects.clone(), 2));
+    }
+    assert!(w.relist());
+    // Projects lists whole; Team doesn't.
+    server.data.lock().unwrap().zones.public_failing = vec![(team, 1)];
+    assert!(w.relist());
+    assert!(!w.folders.iter().any(|f| f.path == gone), "{gone} still listed");
+    assert!(cached(&store, &gone).is_empty(), "its cache kept");
+}
+
+/// Found in review: the cap on the public folders listed (500) cut the walk, and what was past it
+/// was taken for gone: 50 folders kept here lost their cache. What the cap leaves out is kept as
+/// it was, the folder whose folders it cut said not listed whole.
+#[test]
+fn the_cap_on_public_folders_takes_nothing_from_the_cache() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
+    let [a, b, c] = ["A", "B", "C"].map(|n| d.folder(n, Some(&root), None, "IPF.Note"));
+    // 500 public folders: these three, and 150, 150 and 197 in them; C's last 50 followed.
+    let mut in_c = Vec::new();
+    for (parent, n) in [(&a, 150), (&b, 150), (&c, 197)] {
+        for i in 1..=n {
+            let id = d.folder(&format!("Folder {i:03}"), Some(parent), None, "IPF.Note");
+            if *parent == c {
+                in_c.push(id);
+            }
+        }
+    }
+    for (i, id) in in_c.iter().enumerate().skip(147) {
+        d.deliver(id, &mail(&format!("Minutes {i}"), &format!("c{i}")), true, "2026-10-19T09:00:00Z");
+    }
+    let last: Vec<String> = (148..=197).map(|i| format!("Public Folders/C/Folder {i:03}")).collect();
+    let server = fake_ews::serve(d);
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = following(&server, &store, &pool, &last);
+    assert_eq!(w.folders.iter().filter(|f| is_public_folder(&f.path)).count(), 501, "every one listed, and Public Folders");
+    for p in &last {
+        w.sync_one(p);
+    }
+    let caches: Vec<Vec<Summary>> = last.iter().map(|p| cached(&store, p)).collect();
+    assert!(caches.iter().all(|m| m.len() == 1));
+    // 100 more, in A and B: 600, and the cap cuts C's folders after its 97th.
+    {
+        let mut d = server.data.lock().unwrap();
+        for parent in [&a, &b] {
+            for i in 151..=200 {
+                d.folder(&format!("Folder {i:03}"), Some(parent), None, "IPF.Note");
+            }
+        }
+    }
+    assert!(w.relist());
+    let listed = paths(&w.folders);
+    for p in ["Public Folders/A/Folder 200", "Public Folders/B/Folder 200", "Public Folders/C/Folder 097"] {
+        assert!(listed.iter().any(|l| l == p), "{p} listed");
+    }
+    for (p, cache) in last.iter().zip(&caches) {
+        assert_eq!(&cached(&store, p), cache, "{p}: its cache");
+        assert!(listed.contains(p), "{p}: its place in the pane");
+    }
+}

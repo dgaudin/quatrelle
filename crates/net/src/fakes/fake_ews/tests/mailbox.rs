@@ -6,6 +6,7 @@
 use super::*;
 
 mod archive;
+mod public_pages;
 mod zones;
 
 /// Gap #7: searching Exchange through EWS (`QueryString`, and a `Restriction` for the read

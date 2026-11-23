@@ -34,6 +34,21 @@ pub struct ZoneScript {
     pub discoveries: usize,
     /// `ResolveNames` goes unanswered (HTTP 500).
     pub directory_silent: bool,
+    /// A public folder's folders come in pages of this many at most (as many as asked, without).
+    pub public_page: Option<usize>,
+    /// Public folders (by id) whose folders' list answers its first page at every `Offset`,
+    /// never saying it's the last.
+    pub public_repeated: Vec<String>,
+    /// Public folders (by id) whose folders' list ignores `Offset`: every page is the first, said
+    /// to be the last where the one asked for would be.
+    pub public_offset_ignored: Vec<String>,
+    /// Public folders (by id) whose folders' list is refused from its page `n` on (1: the first).
+    pub public_failing: Vec<(String, usize)>,
+    /// Public folders (by id) whose folders' list never ends: each page brings folders never
+    /// seen, and says more follow.
+    pub public_endless: Vec<String>,
+    /// The pages of public folders' folders asked for: the folder (by id), and the `Offset`.
+    pub public_asked: Vec<(String, usize)>,
 }
 
 impl ZoneScript {
@@ -106,26 +121,21 @@ impl Data {
                      </t:Folder></t:Folders></m:RootFolder>"
                     .into()));
             }
-            // Shallow (public folders): the folders right under the one asked for.
+            // Shallow (public folders): the folders right under the one asked for, in the pages
+            // asked for (or scripted).
             "FindFolder" if op.attr("Traversal") == Some("Shallow") => {
                 let parent = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 if self.unrouted_hierarchy(&parent) {
                     out.push(err("ErrorFolderNotFound"));
                     return Some(out);
                 }
-                let emptied =
-                    self.zones.public_emptied && self.folders.iter().any(|f| f.id == parent && f.known.as_deref() == Some("publicfoldersroot"));
-                let kids: Vec<String> = self
-                    .folders
-                    .iter()
-                    .filter(|f| !emptied && f.parent == parent)
-                    .map(|f| {
-                        let n = self.folders.iter().filter(|x| x.parent == f.id).count();
-                        self.folder_xml(f)
-                            .replace("<t:ChildFolderCount>0</t:ChildFolderCount>", &format!("<t:ChildFolderCount>{n}</t:ChildFolderCount>"))
-                    })
-                    .collect();
-                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", kids.concat())));
+                let view = op.child("IndexedPageFolderView");
+                let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
+                let asked: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
+                match self.public_page(&parent, offset, asked) {
+                    Ok(page) => out.push(ok(page)),
+                    Err(code) => out.push(err(code)),
+                }
             }
             "FindFolder" if op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.shared_of(f)).is_some() => {
                 // Deep, in a shared mailbox: refused without access to it.
@@ -220,5 +230,48 @@ impl Data {
             _ => return None,
         }
         Some(out)
+    }
+}
+
+impl Data {
+    /// A page of the folders right under a public folder (`parent`, by id), from `offset`, `asked`
+    /// at most: the answer's `RootFolder`, or the code it's refused with. As scripted: pages of
+    /// [`ZoneScript::public_page`], one repeated, `Offset` ignored, a page refused, no end.
+    fn public_page(&mut self, parent: &str, offset: usize, asked: usize) -> std::result::Result<String, &'static str> {
+        self.zones.public_asked.push((parent.to_string(), offset));
+        let max = asked.min(self.zones.public_page.unwrap_or(usize::MAX)).max(1);
+        let page_number = (offset / max).saturating_add(1);
+        if self.zones.public_failing.iter().any(|(p, from)| p == parent && page_number >= *from) {
+            return Err("ErrorAccessDenied");
+        }
+        let folders =
+            |page: String, last: bool| format!("<m:RootFolder IncludesLastItemInRange=\"{last}\"><t:Folders>{page}</t:Folders></m:RootFolder>");
+        if self.zones.public_endless.iter().any(|p| p == parent) {
+            let page: String = (offset..offset.saturating_add(max))
+                .map(|n| {
+                    format!(
+                        "<t:Folder><t:FolderId Id=\"{parent}-E{n}\"/><t:ParentFolderId Id=\"{parent}\"/><t:FolderClass>IPF.Note</t:FolderClass>\
+                         <t:DisplayName>Endless {n}</t:DisplayName><t:TotalCount>0</t:TotalCount><t:ChildFolderCount>0</t:ChildFolderCount>\
+                         <t:UnreadCount>0</t:UnreadCount></t:Folder>"
+                    )
+                })
+                .collect();
+            return Ok(folders(page, false));
+        }
+        let emptied = self.zones.public_emptied && self.folders.iter().any(|f| f.id == parent && f.known.as_deref() == Some("publicfoldersroot"));
+        let kids: Vec<&Fo> = self.folders.iter().filter(|f| !emptied && f.parent == parent).collect();
+        let repeated = self.zones.public_repeated.iter().any(|p| p == parent);
+        let from = if repeated || self.zones.public_offset_ignored.iter().any(|p| p == parent) { 0 } else { offset };
+        let page: String = kids
+            .iter()
+            .skip(from)
+            .take(max)
+            .map(|f| {
+                let n = self.folders.iter().filter(|x| x.parent == f.id).count();
+                self.folder_xml(f).replace("<t:ChildFolderCount>0</t:ChildFolderCount>", &format!("<t:ChildFolderCount>{n}</t:ChildFolderCount>"))
+            })
+            .collect();
+        let last = !repeated && offset.saturating_add(max) >= kids.len();
+        Ok(folders(page, last))
     }
 }

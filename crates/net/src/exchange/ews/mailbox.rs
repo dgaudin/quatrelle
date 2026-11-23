@@ -101,15 +101,19 @@ impl Client {
         keep_rooted(&mut out);
         // Exchange's public folders, under a folder of their own (a server without them, or
         // one that won't show them, just has none).
-        let public = self.public_folders();
-        // None listed (refused, empty, or the mailbox holding their list couldn't be asked for):
-        // whatever was under them may be there still.
-        if !public.as_ref().is_ok_and(|pf| !pf.is_empty()) {
-            missed.public = PublicMissed::All;
-        }
-        match public {
-            Ok(pf) => out.extend(pf),
-            Err(e) => log::info!("no public folders: {e}"),
+        match self.public_folders() {
+            // A folder whose own didn't list whole: what was under it may be there still.
+            Ok((pf, under)) if !pf.is_empty() => {
+                missed.public = under;
+                out.extend(pf);
+            }
+            // None listed (refused, empty, or the mailbox holding their list couldn't be asked
+            // for): whatever was under them may be there still.
+            Ok(_) => missed.public = PublicMissed::All,
+            Err(e) => {
+                missed.public = PublicMissed::All;
+                log::info!("no public folders: {e}");
+            }
         }
         // Shared mailboxes, each under a folder of its own (named so it can't be taken for one
         // of the account's folders).
