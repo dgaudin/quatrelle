@@ -369,11 +369,11 @@ impl Store {
             let mut marked: Option<HashSet<u32>> = None;
             let in_folder = |k: &MessageKey| k.account == account && &k.folder == folder && k.validity == st.validity;
             match op {
-                Op::SetFlag { keys, flag, on } => {
+                Op::SetFlag { keys, flag, on, all } => {
                     // A set: every message of a folder may change at once (looked up in a list, that was quadratic).
                     let uids: HashSet<u32> = keys.iter().filter(|k| in_folder(k)).map(|k| k.uid).collect();
                     for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
-                        flag.set(&mut m.flags, *on);
+                        flag.apply(&mut m.flags, *on, *all);
                     }
                     marked = Some(uids);
                 }
@@ -483,7 +483,7 @@ impl Store {
 
 /// What an edit waiting does to one message.
 enum Effect<'o> {
-    Flag(&'o quatrelle_model::Flag, bool),
+    Flag(&'o quatrelle_model::Flag, bool, bool),
     Category(&'o str, Option<&'o str>, bool),
     /// Moved away or deleted.
     Gone,
@@ -505,7 +505,7 @@ pub(crate) fn reapply<'a>(
     let mut effects: HashMap<u32, Vec<Effect<'_>>> = HashMap::new();
     for op in ops {
         let effect = match op {
-            Op::SetFlag { flag, on, .. } => Effect::Flag(flag, *on),
+            Op::SetFlag { flag, on, all, .. } => Effect::Flag(flag, *on, *all),
             Op::SetKeyword { keyword, on, name, .. } => Effect::Category(keyword, name.as_deref(), *on),
             Op::Move { .. } | Op::Expunge { .. } => Effect::Gone,
             _ => continue,
@@ -516,7 +516,7 @@ pub(crate) fn reapply<'a>(
         for uid in uids {
             let list = effects.entry(uid).or_default();
             list.push(match &effect {
-                Effect::Flag(f, on) => Effect::Flag(f, *on),
+                Effect::Flag(f, on, all) => Effect::Flag(f, *on, *all),
                 Effect::Category(k, n, on) => Effect::Category(k, *n, *on),
                 Effect::Gone => Effect::Gone,
             });
@@ -534,7 +534,7 @@ pub(crate) fn reapply<'a>(
         for e in list {
             let before = flags.clone();
             match e {
-                Effect::Flag(f, on) => f.set(&mut flags, *on),
+                Effect::Flag(f, on, all) => f.apply(&mut flags, *on, *all),
                 Effect::Category(k, n, on) => flags.set_category(k, *n, *on),
                 Effect::Gone => {
                     gone = true;

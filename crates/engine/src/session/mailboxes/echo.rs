@@ -42,7 +42,7 @@ impl Echoes {
                 continue;
             }
             match op {
-                Op::SetFlag { flag, on, .. } => flag.set(&mut m.flags, *on),
+                Op::SetFlag { flag, on, all, .. } => flag.apply(&mut m.flags, *on, *all),
                 Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
                 _ => {}
             }
@@ -125,7 +125,7 @@ impl Session {
         for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
             let m = Arc::make_mut(m);
             match &op {
-                Op::SetFlag { flag, on, .. } => flag.set(&mut m.flags, *on),
+                Op::SetFlag { flag, on, all, .. } => flag.apply(&mut m.flags, *on, *all),
                 Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
                 _ => {}
             }

@@ -37,8 +37,8 @@ fn a_damaged_change_waiting_is_never_skipped_over() {
     let port = crate::fake::serve_tcp(&st);
     let store = Store::failing();
     let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 100, uid };
-    store.add_op("a1", Op::SetFlag { keys: vec![key(a)], flag: Flag::Seen, on: true }).unwrap();
-    store.add_op("a1", Op::SetFlag { keys: vec![key(b)], flag: Flag::Flagged, on: true }).unwrap();
+    store.add_op("a1", Op::SetFlag { keys: vec![key(a)], flag: Flag::Seen, on: true, all: false }).unwrap();
+    store.add_op("a1", Op::SetFlag { keys: vec![key(b)], flag: Flag::Flagged, on: true, all: false }).unwrap();
     store.add_op("a1", Op::Move { keys: vec![key(b)], to: "Archive".into() }).unwrap();
     let mut names = store.account_files("a1", "ops").unwrap();
     names.sort();

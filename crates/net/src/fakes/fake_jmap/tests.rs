@@ -204,7 +204,7 @@ fn a_jmap_account_syncs_changes_and_sends() {
     until(&pool, "body", |e| matches!(e, Event::Body { key: k, raw } if *k == key && raw.starts_with(b"From:")));
 
     // Mark read, then move: the cache at once, the server right after.
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false } });
     eventually("the server has the flag", || data.lock().unwrap().email(&second).unwrap().keywords.contains("$seen"));
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key.clone()], to: "Projects".into() } });
     eventually("moved on the server", || data.lock().unwrap().email(&second).unwrap().mailboxes == [projects.clone()].into());

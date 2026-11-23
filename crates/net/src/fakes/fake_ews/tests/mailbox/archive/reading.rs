@@ -231,7 +231,7 @@ fn nothing_of_the_archive_is_kept() {
     pool.submit(Job::SearchServer { account: "a1".into(), folders: vec![PROJECTS.into()], query: "harbour".into(), search: 1 });
     until(&pool, "the server's search", |e| matches!(e, Event::ServerSearched { done: true, .. }));
     // Marked read: the mark reaches the server (the archive takes that change).
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false } });
     eventually("the read mark on the server", || data.lock().unwrap().items.iter().any(|i| i.folder == projects && i.read));
     assert_eq!(data.lock().unwrap().items.iter().filter(|i| i.folder == projects).count(), 60, "nothing moved or deleted");
 

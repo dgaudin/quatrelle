@@ -717,7 +717,7 @@ mod tests {
         assert_eq!(inbox.messages.len(), 2);
         // Changes stay here.
         let k = inbox.messages[0].key.clone();
-        pool.submit(Job::Apply { account: "p1".into(), op: Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true } });
+        pool.submit(Job::Apply { account: "p1".into(), op: Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true, all: false } });
         pool.submit(Job::Apply { account: "p1".into(), op: Op::Move { keys: vec![k], to: "Deleted Items".into() } });
         let here = |folder: &str, n: usize| {
             let end = Instant::now() + Duration::from_secs(10);

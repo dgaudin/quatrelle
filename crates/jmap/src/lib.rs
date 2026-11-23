@@ -487,7 +487,7 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
         ids(keys).into_iter().map(|(id, _)| (id, json!({ field: value.clone() }))).collect()
     };
     match op {
-        Op::SetFlag { keys, flag, on } => match flag_keyword(*flag) {
+        Op::SetFlag { keys, flag, on, .. } => match flag_keyword(*flag) {
             Some(k) => c.set_emails(patch_all(keys, &format!("keywords/{k}"), *on), Vec::new()).await,
             None => Ok(()),
         },

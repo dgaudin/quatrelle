@@ -48,7 +48,7 @@ fn a_follow_up_marked_complete_goes_both_ways_with_its_day() {
 
     // Mark Complete here (the flag off, then the keyword on): status 1 and the time.
     let keys = vec![msg("flagged").key];
-    let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on };
+    let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false };
     let complete = |on| Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on, name: None };
     for op in [flag(false), complete(true)] {
         apply_remote(&c, &st, &op).unwrap();

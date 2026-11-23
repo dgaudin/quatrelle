@@ -356,7 +356,7 @@ fn a_shared_mailbox_opens_under_the_account_and_keeps_its_mail() {
     pool.submit(Job::FetchBody { key: key.clone() });
     until(&pool, "their message", |e| matches!(e, Event::Body { key: k, .. } if *k == key));
     // Read there, and deleted to its own Deleted Items.
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false } });
     eventually("read in their mailbox", || data.lock().unwrap().message(&ticket).is_some_and(|m| m.read));
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key], to: "support@contoso.example/Deleted Items".into() } });
     eventually("in their Deleted Items", || data.lock().unwrap().message(&ticket).is_some_and(|m| m.folder == their_trash));
@@ -485,9 +485,9 @@ fn an_exchange_account_syncs_changes_and_sends_through_graph() {
     until(&pool, "body", |e| matches!(e, Event::Body { key: k, raw } if *k == key && raw.starts_with(b"From:")));
 
     // Read, flag, move: the same message keeps its number.
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false } });
     eventually("read on the server", || data.lock().unwrap().message(&second).unwrap().read);
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true, all: false } });
     eventually("flagged on the server", || data.lock().unwrap().message(&second).unwrap().flagged);
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key.clone()], to: "Projects".into() } });
     eventually("moved on the server", || data.lock().unwrap().message(&second).unwrap().folder == projects);

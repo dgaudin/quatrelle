@@ -643,7 +643,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 7 };
-        let op = Op::SetFlag { keys: vec![key], flag: Flag::Flagged, on: true };
+        let op = Op::SetFlag { keys: vec![key], flag: Flag::Flagged, on: true, all: false };
         let jobs = vec![Job::Apply { account: "a1".into(), op: op.clone() }, Job::SyncAll { account: "a1".into() }];
         assert_eq!(keep_changes(&store, jobs).unwrap(), (1, 1));
         assert_eq!(store.load_ops("a1").unwrap(), vec![op]);

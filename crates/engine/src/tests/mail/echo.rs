@@ -182,7 +182,7 @@ fn a_change_from_the_server_among_echoes_is_read() {
 fn an_echo_puts_the_change_in_a_folder_read_before_it() {
     let (mut s, id) = server_inbox(300);
     let k = s.row_keys()[3].clone();
-    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true });
+    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true, all: false });
     assert!(s.summary(&k).unwrap().flags.flagged);
     // Read from disk again, where it isn't flagged yet.
     s.cache.remove(&(id.clone(), "INBOX".to_string()));
@@ -203,8 +203,8 @@ fn every_waiting_change_gets_into_a_folder_read_before_them() {
     let (mut s, id) = server_inbox(300);
     let rows = s.row_keys();
     let (a, b) = (rows[3].clone(), rows[5].clone());
-    s.apply_op(&id, Op::SetFlag { keys: vec![a.clone()], flag: Flag::Flagged, on: true });
-    s.apply_op(&id, Op::SetFlag { keys: vec![b.clone()], flag: Flag::Flagged, on: true });
+    s.apply_op(&id, Op::SetFlag { keys: vec![a.clone()], flag: Flag::Flagged, on: true, all: false });
+    s.apply_op(&id, Op::SetFlag { keys: vec![b.clone()], flag: Flag::Flagged, on: true, all: false });
     s.cache.remove(&(id.clone(), "INBOX".to_string()));
     s.refresh_list();
     let built = s.nav_structure();
@@ -223,10 +223,10 @@ fn every_waiting_change_gets_into_a_folder_read_before_them() {
 fn a_later_waiting_change_says_how_it_ends() {
     let (mut s, id) = server_inbox(30);
     let k = s.row_keys()[2].clone();
-    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true });
+    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true, all: false });
     s.cache.remove(&(id.clone(), "INBOX".to_string()));
     s.refresh_list();
-    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: false });
+    s.apply_op(&id, Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: false, all: false });
     made_on_disk(&mut s);
     inbox_changed(&mut s, &id);
     assert!(!s.summary(&k).unwrap().flags.flagged, "not flagged again on the way");
@@ -290,7 +290,7 @@ fn a_folder_count_reported_again_unchanged_keeps_the_one_counted_here() {
     // the refusal, then the folder synced as the server has it, with no count reported (it's the
     // pool's last, unchanged). The count is the server's (found in review: the folder pane said 2
     // while the list showed 3 unread, until the next full sync).
-    let read = Op::SetFlag { keys: vec![first.clone()], flag: quatrelle_model::Flag::Seen, on: true };
+    let read = Op::SetFlag { keys: vec![first.clone()], flag: quatrelle_model::Flag::Seen, on: true, all: false };
     s.apply(Event::FolderChanged { account: id.clone(), folder: "INBOX".into() });
     // A change on disk of something else meanwhile doesn't lose the count to go back to.
     s.apply(Event::FolderChanged { account: id.clone(), folder: "INBOX".into() });

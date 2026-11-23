@@ -51,7 +51,7 @@ fn sent(s: &mut Session, id: &str, key: &MessageKey, command: &str, queued: bool
     s.take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            Job::Apply { op: Op::SetFlag { keys, flag, on }, .. } if keys.contains(key) && flag != Flag::Seen => Some((flag, on)),
+            Job::Apply { op: Op::SetFlag { keys, flag, on, .. }, .. } if keys.contains(key) && flag != Flag::Seen => Some((flag, on)),
             _ => None,
         })
         .collect()

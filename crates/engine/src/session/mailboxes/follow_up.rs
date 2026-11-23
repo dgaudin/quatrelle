@@ -42,7 +42,7 @@ impl Session {
             self.apply_op(a, Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on: false, name: None });
         }
         for (a, keys) in by_account {
-            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on });
+            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on, all: false });
         }
         for m in sel {
             let id = follow_up_id(m);
@@ -55,7 +55,7 @@ impl Session {
         }
         let mut undo: BTreeMap<String, Vec<Op>> = BTreeMap::new();
         for (a, keys) in changed {
-            undo.entry(a).or_default().push(Op::SetFlag { keys, flag: Flag::Flagged, on: !on });
+            undo.entry(a).or_default().push(Op::SetFlag { keys, flag: Flag::Flagged, on: !on, all: false });
         }
         for (a, keys) in completed {
             undo.entry(a).or_default().push(Op::SetKeyword { keys, keyword: FOLLOW_UP_COMPLETE.into(), on: true, name: None });
@@ -157,11 +157,11 @@ impl Session {
             undo.entry(a.clone()).or_default().push(Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on: false, name: None });
         }
         for (a, keys) in &flagged {
-            undo.entry(a.clone()).or_default().push(Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: true });
+            undo.entry(a.clone()).or_default().push(Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: true, all: false });
         }
         // The flag off before the keyword goes on: Exchange keeps both in one status.
         for (a, keys) in flagged {
-            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on: false });
+            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on: false, all: false });
         }
         for (a, keys) in marked {
             self.apply_op(&a, Op::SetKeyword { keys, keyword: FOLLOW_UP_COMPLETE.into(), on: true, name: None });

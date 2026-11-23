@@ -142,14 +142,14 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         Ok(())
     };
     match op {
-        Op::SetFlag { keys, flag: Flag::Seen, on } => update(
+        Op::SetFlag { keys, flag: Flag::Seen, on, .. } => update(
             keys,
             &format!("<t:SetItemField><t:FieldURI FieldURI=\"message:IsRead\"/><t:Message><t:IsRead>{on}</t:IsRead></t:Message></t:SetItemField>"),
         ),
         // Flagged: status 2, and no time done (a follow-up completed and flagged again).
-        Op::SetFlag { keys, flag: Flag::Flagged, on: true } => update(keys, &format!("{}{}", flag_status(2), delete(COMPLETE_TIME))),
+        Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. } => update(keys, &format!("{}{}", flag_status(2), delete(COMPLETE_TIME))),
         // Cleared, or marked complete (the engine takes the flag off first): neither.
-        Op::SetFlag { keys, flag: Flag::Flagged, on: false } => update(keys, &format!("{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME))),
+        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => update(keys, &format!("{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME))),
         // Outlook's Mark Complete: status 1 and the time it was done, the flag's icon gone
         // ([MS-OXOFLAG] 3.1.4.2); taken off (Undo, or flagged again): none of it.
         Op::SetKeyword { keys, keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
@@ -166,7 +166,7 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         }
         Op::SetKeyword { keys, on, name: Some(name), .. } => set_category(c, &ids(keys), name, *on),
         // Replied to or forwarded here: the original marked as Outlook marks it.
-        Op::SetFlag { keys, flag: flag @ (Flag::Answered | Flag::Forwarded), on: true } => update(keys, &replied(*flag == Flag::Forwarded)),
+        Op::SetFlag { keys, flag: flag @ (Flag::Answered | Flag::Forwarded), on: true, .. } => update(keys, &replied(*flag == Flag::Forwarded)),
         // Exchange keeps the last thing done, which the next one replaces (the engine takes one
         // arrow off before it puts the other on); other keywords (`$Pinned`) are this computer's.
         Op::SetFlag { .. } | Op::SetKeyword { .. } => Ok(()),

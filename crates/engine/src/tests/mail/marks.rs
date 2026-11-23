@@ -28,7 +28,7 @@ fn a_mark_read_in_a_big_folder_writes_under_64_kib() {
     s.run("folder.open", &json!({"account": "sample", "folder": "Projects"})).unwrap();
     store.track_changes();
     let k = s.list.get(5000).map(|m| m.key.clone()).unwrap();
-    s.apply_op("sample", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true });
+    s.apply_op("sample", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true, all: false });
     let written = store.take_changes();
     let bytes: usize = written.iter().map(|(_, b)| b.as_ref().map_or(0, Vec::len)).sum();
     assert!(bytes < 64 << 10, "{bytes} bytes in {} files", written.len());
@@ -84,7 +84,7 @@ fn local_marks_are_written_on_their_thread_in_order() {
     // A mark left waiting as the session ends is written.
     let k = s.list.iter().find(|m| !m.flags.seen).map(|m| m.key.clone());
     if let Some(k) = k {
-        s.apply_op("sample", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true });
+        s.apply_op("sample", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true, all: false });
         assert!(!store.load_folder("sample", "INBOX").unwrap().find(k.uid).unwrap().flags.seen);
         drop(s);
         assert!(store.load_folder("sample", "INBOX").unwrap().find(k.uid).unwrap().flags.seen, "written as it ended");
@@ -104,7 +104,7 @@ fn a_local_mark_writes_the_list_and_the_counts_alone() {
     s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
     let k = s.list.iter().find(|m| !m.flags.seen).map(|m| m.key.clone()).unwrap();
     store.track_changes();
-    s.apply_op("sample", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true });
+    s.apply_op("sample", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Seen, on: true, all: false });
     let mut names: Vec<String> = store.take_changes().into_iter().map(|(p, _)| p.rsplit('/').next().unwrap_or_default().to_string()).collect();
     names.sort_unstable();
     assert_eq!(names, ["folders.json", "state.json"]);

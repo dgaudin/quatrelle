@@ -116,7 +116,7 @@ fn jmap_numbers_are_kept_when_the_changes_cant_be_read() {
     let (cached, waiting) = (w.jstate.number("M-cached"), w.jstate.number("M-waiting"));
     assert_eq!((cached, waiting), (1, 2));
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid: waiting };
-    store.add_op("a1", Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true }).unwrap();
+    store.add_op("a1", Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true, all: false }).unwrap();
     for unreadable in ["ops.json", "state.json"] {
         store.fail(Some(unreadable), None);
         w.prune_jmap_numbers();

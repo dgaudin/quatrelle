@@ -447,7 +447,7 @@ fn worker_pool_end_to_end_over_tcp() {
     until(&pool, "body", |e| matches!(e, Event::Body { key: k, raw } if *k == key && raw.starts_with(b"From:")));
 
     // Mark read: cache at once, server right after.
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false } });
     until(&pool, "flag change", |e| matches!(e, Event::FolderChanged { .. } | Event::FolderSynced { .. }));
     assert!(store.load_folder("a1", "INBOX").unwrap().find(1).unwrap().flags.seen);
     let end = Instant::now() + Duration::from_secs(10);

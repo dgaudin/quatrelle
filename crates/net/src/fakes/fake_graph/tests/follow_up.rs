@@ -41,7 +41,7 @@ fn a_follow_up_marked_complete_goes_both_ways() {
     assert!(msg("flagged").flags.flagged);
 
     let keys = vec![msg("flagged").key];
-    let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on };
+    let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false };
     let complete = |on| Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on, name: None };
     let apply = |st: &crate::jmap::State, op: Op| crate::graph::apply_remote(&c, st, &op).unwrap();
     apply(&st, flag(false));

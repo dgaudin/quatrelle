@@ -639,22 +639,22 @@ mod tests {
     fn follow_up_changes_as_graph_keeps_them() {
         let keys = vec![MessageKey::default()];
         let status = |op: Op| flag_patch(&op).and_then(|p| p["flag"]["flagStatus"].as_str().map(str::to_string));
-        let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on };
+        let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false };
         let complete = |on| Op::SetKeyword { keys: keys.clone(), keyword: quatrelle_model::FOLLOW_UP_COMPLETE.into(), on, name: None };
         // Mark Complete: the flag off, then complete.
         assert_eq!([status(flag(false)), status(complete(true))], [Some("notFlagged".into()), Some("complete".into())]);
         // Its Undo, or flagged again: the keyword off, then the flag on.
         assert_eq!([status(complete(false)), status(flag(true))], [Some("notFlagged".into()), Some("flagged".into())]);
         assert_eq!(flag_patch(&Op::SetKeyword { keys: keys.clone(), keyword: "work".into(), on: true, name: None }), None);
-        assert_eq!(flag_patch(&Op::SetFlag { keys: keys.clone(), flag: Flag::Seen, on: true }), Some(json!({"isRead": true})));
+        assert_eq!(flag_patch(&Op::SetFlag { keys: keys.clone(), flag: Flag::Seen, on: true, all: false }), Some(json!({"isRead": true})));
         // Replied to: the verb, its time and the icon, as Outlook writes them; an arrow taken
         // off (before the other is put on) writes nothing.
-        let p = flag_patch(&Op::SetFlag { keys: keys.clone(), flag: Flag::Answered, on: true }).unwrap();
+        let p = flag_patch(&Op::SetFlag { keys: keys.clone(), flag: Flag::Answered, on: true, all: false }).unwrap();
         let props = p["singleValueExtendedProperties"].as_array().unwrap();
         assert_eq!((props[0]["id"].as_str(), props[0]["value"].as_str()), (Some("Integer 0x1081"), Some("102")));
         assert!(props[1]["value"].as_str().and_then(jmap::utc_date).is_some_and(|t| t > 1_790_000_000), "{p}");
         assert_eq!((props[2]["id"].as_str(), props[2]["value"].as_str()), (Some("Integer 0x1080"), Some("261")));
-        assert_eq!(flag_patch(&Op::SetFlag { keys, flag: Flag::Forwarded, on: false }), None);
+        assert_eq!(flag_patch(&Op::SetFlag { keys, flag: Flag::Forwarded, on: false, all: false }), None);
     }
 
     #[test]

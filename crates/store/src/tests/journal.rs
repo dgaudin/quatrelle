@@ -41,8 +41,8 @@ fn burst_op(i: u32, n: u32) -> Op {
         0 => Op::Move { keys: vec![key(uid)], to: "Archive".into() },
         1 => Op::Expunge { keys: vec![key(uid)], tidy: false },
         2 | 3 => Op::SetKeyword { keys: vec![key(uid)], keyword: "$label1".into(), on: i % 4 == 2, name: Some("Red".into()) },
-        4 => Op::SetFlag { keys: vec![key(uid)], flag: Flag::Flagged, on: true },
-        _ => Op::SetFlag { keys: vec![key(uid)], flag: Flag::Seen, on: !i.is_multiple_of(3) },
+        4 => Op::SetFlag { keys: vec![key(uid)], flag: Flag::Flagged, on: true, all: false },
+        _ => Op::SetFlag { keys: vec![key(uid)], flag: Flag::Seen, on: !i.is_multiple_of(3), all: false },
     }
 }
 
@@ -123,11 +123,11 @@ fn reapply_each(st: &mut FolderState, account: &str, folder: &str, ops: &[Op]) -
     };
     for op in ops {
         match op {
-            Op::SetFlag { keys, flag, on } => {
+            Op::SetFlag { keys, flag, on, all } => {
                 let wanted = uids(keys);
                 for m in st.messages.iter_mut().filter(|m| wanted.contains(&m.key.uid)) {
                     let before = m.flags.clone();
-                    flag.set(&mut m.flags, *on);
+                    flag.apply(&mut m.flags, *on, *all);
                     if m.flags != before {
                         touched.insert(m.key.uid);
                     }
@@ -171,8 +171,8 @@ fn any_op() -> impl Strategy<Value = Op> {
             .collect::<Vec<_>>()
     });
     (keys, 0u8..6, any::<bool>()).prop_map(|(keys, kind, on)| match kind {
-        0 => Op::SetFlag { keys, flag: Flag::Seen, on },
-        1 => Op::SetFlag { keys, flag: Flag::Flagged, on },
+        0 => Op::SetFlag { keys, flag: Flag::Seen, on, all: false },
+        1 => Op::SetFlag { keys, flag: Flag::Flagged, on, all: false },
         2 => Op::SetKeyword { keys, keyword: "$label1".into(), on, name: Some("Red".into()) },
         3 => Op::SetKeyword { keys, keyword: "$label2".into(), on, name: None },
         4 => Op::Move { keys, to: "Archive".into() },
@@ -217,7 +217,7 @@ fn the_journal_keeps_a_file_a_change_in_order() {
     assert_eq!(s.load_ops("a1").unwrap(), ops);
     assert_eq!(s.first_op("a1").unwrap().as_ref(), Some(&ops[0]));
     // The first equal taken out: a change made twice leaves its later copy.
-    let twice = Op::SetFlag { keys: vec![key(7)], flag: Flag::Seen, on: true };
+    let twice = Op::SetFlag { keys: vec![key(7)], flag: Flag::Seen, on: true, all: false };
     let s = Store::memory();
     for op in [twice.clone(), ops[1].clone(), twice.clone()] {
         s.add_op("a1", op).unwrap();
@@ -260,7 +260,7 @@ fn an_ops_json_from_before_is_read_first_and_empties() {
     let st = folder(10);
     f.save_folder("a1", "INBOX", &st).unwrap();
     let fpath = f.account_dir("a1").join("ops.json");
-    let seen = Op::SetFlag { keys: vec![key(3)], flag: Flag::Seen, on: true };
+    let seen = Op::SetFlag { keys: vec![key(3)], flag: Flag::Seen, on: true, all: false };
     f.files.write(&fpath, &serde_json::to_vec(std::slice::from_ref(&seen)).unwrap()).unwrap();
     f.add_op("a1", Op::Expunge { keys: vec![key(5)], tidy: false }).unwrap();
     f.save_folder("a1", "INBOX", &st).unwrap();
@@ -302,8 +302,8 @@ fn damaged_at<T>(r: &Result<T>, path: &Path) -> bool {
 /// files with their bytes.
 fn three_the_second_damaged(s: &Store) -> (Vec<Op>, Vec<(PathBuf, Vec<u8>)>) {
     let ops = vec![
-        Op::SetFlag { keys: vec![key(1)], flag: Flag::Seen, on: true },
-        Op::SetFlag { keys: vec![key(2)], flag: Flag::Flagged, on: true },
+        Op::SetFlag { keys: vec![key(1)], flag: Flag::Seen, on: true, all: false },
+        Op::SetFlag { keys: vec![key(2)], flag: Flag::Flagged, on: true, all: false },
         Op::Move { keys: vec![key(2)], to: "Archive".into() },
     ];
     for op in &ops {

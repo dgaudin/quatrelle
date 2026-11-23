@@ -365,7 +365,7 @@ fn a_message_marked_unread_answers_is_unread() {
     assert_eq!(s.list.len(), 6 * 12);
     // Here: a message of the Inbox, read and indexed already, marked unread.
     let here = MessageKey { account: "a1".into(), folder: folder_path(0), validity: 1, uid: 5 };
-    s.apply_op("a1", Op::SetFlag { keys: vec![here.clone()], flag: Flag::Seen, on: false });
+    s.apply_op("a1", Op::SetFlag { keys: vec![here.clone()], flag: Flag::Seen, on: false, all: false });
     // On the server: one of another folder, synced.
     let there = MessageKey { account: "a1".into(), folder: folder_path(3), validity: 1, uid: 7 };
     let mut st = store.load_folder("a1", &there.folder).unwrap();
@@ -374,7 +374,7 @@ fn a_message_marked_unread_answers_is_unread() {
     s.apply(Event::FolderChanged { account: "a1".into(), folder: there.folder.clone() });
     // And a needle marked read.
     let read = MessageKey { account: "a1".into(), folder: folder_path(1), validity: 1, uid: 100 };
-    s.apply_op("a1", Op::SetFlag { keys: vec![read.clone()], flag: Flag::Seen, on: true });
+    s.apply_op("a1", Op::SetFlag { keys: vec![read.clone()], flag: Flag::Seen, on: true, all: false });
     assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some());
     let found = listed(&s);
     assert!(found.contains(&here), "marked unread here: found");

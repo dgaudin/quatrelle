@@ -509,7 +509,7 @@ fn a_parallel_sync_keeps_the_numbers_and_takes_marks_at_once() {
     assert!(old.flags.seen, "the read mark made elsewhere came in");
     // Read here while the slow folder is still being read: on the server before the sync ends.
     let came = messages.iter().find(|m| m.subject == "Sound mix").unwrap().key.clone();
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![came], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![came], flag: Flag::Seen, on: true, all: false } });
     let read_there = || data.lock().unwrap().items.iter().any(|i| i.id == new && i.read);
     let end = Instant::now() + Duration::from_secs(20);
     while !read_there() {

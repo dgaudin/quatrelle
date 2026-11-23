@@ -9,7 +9,7 @@ use quatrelle_model::addr::trust::{site, url_host};
 use quatrelle_model::dates::Clock;
 use quatrelle_model::search::{Advanced, Doc, Index, MAX_TOKEN_CHARS, Query, fold_word, tokens};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
-use quatrelle_model::{EmailAddress, MessageKey, MessageKind, Smime, Summary, addr, ical, lookalike, utf7};
+use quatrelle_model::{EmailAddress, Flag, MessageKey, MessageKind, Op, Smime, Summary, addr, ical, lookalike, utf7};
 
 /// Words the search box reads as plain words (no `field:`, no leading `-` or quote).
 fn words() -> impl Strategy<Value = String> {
@@ -398,5 +398,37 @@ proptest! {
         if let Ok(m) = read {
             prop_assert_eq!((m.kind, m.key.uid, m.subject.as_str()), (named, 7, "s"));
         }
+    }
+}
+
+/// A flag change as 1.5.0 knows it: what it writes, and all it reads of a change kept for the
+/// server.
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "op", rename_all = "camelCase")]
+enum Before {
+    SetFlag { keys: Vec<MessageKey>, flag: Flag, on: bool },
+}
+
+proptest! {
+    /// A flag change comes back from the changes kept for the server as it was made; one that
+    /// isn't to all is written byte for byte as 1.5.0 writes it, and 1.5.0 reads any of them.
+    #[test]
+    fn flag_changes_round_trip(
+        flag in prop::sample::select(vec![Flag::Seen, Flag::Flagged, Flag::Answered, Flag::Forwarded, Flag::Deleted]),
+        on in any::<bool>(),
+        all in any::<bool>(),
+        uid in any::<u32>(),
+    ) {
+        let keys = vec![MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid }];
+        let op = Op::SetFlag { keys: keys.clone(), flag, on, all };
+        let json = serde_json::to_string(&op).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        let back: Op = serde_json::from_str(&json).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        prop_assert_eq!(back, op);
+        let before = Before::SetFlag { keys, flag, on };
+        if !all {
+            prop_assert_eq!(&json, &serde_json::to_string(&before).map_err(|e| TestCaseError::fail(e.to_string()))?);
+        }
+        let read: Before = serde_json::from_str(&json).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        prop_assert_eq!(read, before);
     }
 }

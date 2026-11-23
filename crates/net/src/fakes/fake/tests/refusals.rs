@@ -103,7 +103,7 @@ fn three_passing_refusals_drop_the_change_and_the_next_one_goes_through() {
     st.lock().unwrap().refuse_command("UID MOVE", "System Error (Failure)", 3);
     let keys = inbox_keys(&store);
     make(&mut pool, Op::Move { keys: vec![keys[0].clone()], to: TRASH.into() });
-    make(&mut pool, Op::SetFlag { keys: vec![keys[1].clone()], flag: Flag::Seen, on: true });
+    make(&mut pool, Op::SetFlag { keys: vec![keys[1].clone()], flag: Flag::Seen, on: true, all: false });
     let seen = settle(&pool, "the flag set", || {
         store.load_ops("a1").unwrap().is_empty()
             && st.lock().unwrap().mailbox("INBOX").is_some_and(|m| m.msgs.iter().any(|m| m.flags.iter().any(|f| f == "\\Seen")))
@@ -122,7 +122,7 @@ fn a_refusal_with_no_perm_is_dropped_at_once() {
     let (mut pool, store) = online(&st, "refusal-noperm", 1);
     st.lock().unwrap().refuse_command("UID STORE", "[NOPERM] you may not", 1);
     let first = inbox_keys(&store).remove(0);
-    make(&mut pool, Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true });
+    make(&mut pool, Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true, all: false });
     let stores = |st: &Arc<Mutex<State>>| st.lock().unwrap().log.iter().filter(|l| l.to_ascii_uppercase().starts_with("UID STORE")).count();
     let seen = settle(&pool, "the change dropped", || store.load_ops("a1").unwrap().is_empty() && stores(&st) >= 1);
     assert_eq!(failed(&seen), 1, "{seen:?}");

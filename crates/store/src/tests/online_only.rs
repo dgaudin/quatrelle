@@ -12,7 +12,7 @@ use super::*;
 fn online_only_with_a_file_that_cant_be_read_keeps_it() {
     let s = Store::failing();
     s.save_folder("a1", "INBOX", &FolderState { validity: 3, uid_next: 2, messages: vec![msg(1, false)], ..Default::default() }).unwrap();
-    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true }).unwrap();
+    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true, all: false }).unwrap();
     let waiting = s.account_files("a1", "ops").unwrap();
     assert_eq!(waiting.len(), 1, "one change waiting");
     let name = waiting[0].clone();
@@ -47,7 +47,7 @@ fn online_only_on_disk_with_a_folder_that_cant_be_read_keeps_it() {
     use std::os::unix::fs::PermissionsExt;
     let s = temp_store("online-only-disk");
     s.save_folder("a1", "INBOX", &FolderState { validity: 3, uid_next: 2, messages: vec![msg(1, false)], ..Default::default() }).unwrap();
-    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true }).unwrap();
+    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true, all: false }).unwrap();
     let ops = s.account_dir("a1").join("ops");
     let _access = Access(ops.clone());
     fs::set_permissions(&ops, fs::Permissions::from_mode(0o000)).unwrap();
@@ -86,7 +86,7 @@ fn online_only_with_a_tree_deeper_than_the_walk_goes_keeps_it() {
 fn online_only_with_a_folder_that_fails_to_list_keeps_it() {
     let s = Store::failing();
     s.save_folder("a1", "INBOX", &FolderState { validity: 3, uid_next: 2, messages: vec![msg(1, false)], ..Default::default() }).unwrap();
-    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true }).unwrap();
+    s.add_op("a1", Op::SetFlag { keys: vec![msg(1, false).key], flag: Flag::Seen, on: true, all: false }).unwrap();
     s.fail(Some("a1"), None);
     assert!(s.set_online_only("a1", true).is_err());
     s.fail(None, None);

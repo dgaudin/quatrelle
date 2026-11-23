@@ -49,7 +49,7 @@ impl Session {
     pub(super) fn apply_op_checked(&mut self, account: &str, op: Op) -> Result<(), quatrelle_store::StoreError> {
         // Outbox entries aren't on a server: mail commands leave them alone.
         let op = match op {
-            Op::SetFlag { keys, flag, on } => Op::SetFlag { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), flag, on },
+            Op::SetFlag { keys, flag, on, all } => Op::SetFlag { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), flag, on, all },
             Op::SetKeyword { keys, keyword, on, name } => {
                 Op::SetKeyword { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), keyword, on, name }
             }
@@ -129,13 +129,13 @@ impl Session {
                 continue;
             }
             match op {
-                Op::SetFlag { flag, on, .. } => {
+                Op::SetFlag { flag, on, all, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
                         let m = Arc::make_mut(m);
                         if *flag == Flag::Seen && m.flags.seen != *on {
                             *unread_delta.entry(f.clone()).or_default() += if *on { -1 } else { 1 };
                         }
-                        flag.set(&mut m.flags, *on);
+                        flag.apply(&mut m.flags, *on, *all);
                     }
                 }
                 Op::SetKeyword { keyword, on, name, .. } => {

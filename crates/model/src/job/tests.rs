@@ -10,7 +10,7 @@ fn a_change_is_summed_up_without_a_subject_or_an_address() {
     let key = |folder: &str, uid: u32| MessageKey { account: "me@studio.example".into(), folder: folder.into(), validity: 1, uid };
     let mv = Op::Move { keys: vec![key("INBOX", 1), key("INBOX", 2), key("Sent", 3)], to: "Archive".into() };
     assert_eq!(mv.summary(), "Move of 3 messages in INBOX, Sent");
-    let flag = Op::SetFlag { keys: vec![key("INBOX", 1)], flag: Flag::Seen, on: true };
+    let flag = Op::SetFlag { keys: vec![key("INBOX", 1)], flag: Flag::Seen, on: true, all: false };
     assert_eq!(flag.summary(), "SetFlag of 1 message in INBOX");
     assert_eq!(Op::EmptyFolder { path: "Trash".into() }.summary(), "EmptyFolder of Trash");
     assert!(!mv.summary().contains("studio.example"));
@@ -84,4 +84,15 @@ fn jobs_serialize_tagged() {
     assert_eq!(v["job"], "syncFolder");
     assert_eq!(serde_json::from_value::<Job>(v).unwrap(), j);
     assert_eq!(j.account(), "a1");
+}
+
+#[test]
+fn a_flag_change_reads_and_writes_as_before_unless_it_is_to_all() {
+    let old = r#"{"op":"setFlag","keys":[{"account":"a","folder":"INBOX","validity":1,"uid":7}],"flag":"answered","on":true}"#;
+    let op: Op = serde_json::from_str(old).unwrap();
+    assert!(matches!(op, Op::SetFlag { all: false, .. }));
+    assert_eq!(serde_json::to_string(&op).unwrap(), old, "written byte for byte as 1.5.0 writes it");
+    let Op::SetFlag { keys, flag, on, .. } = op else { panic!() };
+    let all = serde_json::to_string(&Op::SetFlag { keys, flag, on, all: true }).unwrap();
+    assert!(all.ends_with(r#""on":true,"all":true}"#), "{all}");
 }

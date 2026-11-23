@@ -429,7 +429,7 @@ fn remote_changes_flags_moves_deletes_and_appends() {
     }
     let mut c = login(&st);
     let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 100, uid };
-    apply_remote(&mut c, &Op::SetFlag { keys: vec![key(1), key(2)], flag: Flag::Seen, on: true }).unwrap();
+    apply_remote(&mut c, &Op::SetFlag { keys: vec![key(1), key(2)], flag: Flag::Seen, on: true, all: false }).unwrap();
     apply_remote(&mut c, &Op::Move { keys: vec![key(2)], to: "Archive".into() }).unwrap();
     apply_remote(&mut c, &Op::Expunge { keys: vec![key(3)], tidy: false }).unwrap();
     // A stale key (old UIDVALIDITY) is skipped, not applied to whatever has that UID now.
@@ -552,7 +552,7 @@ fn keywords_round_trip_with_the_server() {
     // set again (the keyword off, then the flag on) comes back flagged.
     let key = m.key.clone();
     let complete = |on| Op::SetKeyword { keys: vec![key.clone()], keyword: quatrelle_model::FOLLOW_UP_COMPLETE.into(), on, name: None };
-    let flag = |on| Op::SetFlag { keys: vec![key.clone()], flag: quatrelle_model::Flag::Flagged, on };
+    let flag = |on| Op::SetFlag { keys: vec![key.clone()], flag: quatrelle_model::Flag::Flagged, on, all: false };
     for op in [flag(true), flag(false), complete(true)] {
         apply_remote(&mut c, &op).unwrap();
     }

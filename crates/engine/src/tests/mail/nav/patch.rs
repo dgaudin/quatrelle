@@ -179,7 +179,7 @@ proptest! {
         for (at, st) in steps.iter().enumerate() {
             let keys = |u: &[u32]| u.iter().map(|&u| key_in_inbox(u % n)).collect::<Vec<_>>();
             match st {
-                Step::Flag(u, flag, on) => s.apply_op("a", Op::SetFlag { keys: keys(u), flag: *flag, on: *on }),
+                Step::Flag(u, flag, on) => s.apply_op("a", Op::SetFlag { keys: keys(u), flag: *flag, on: *on, all: false }),
                 Step::Keyword(u, k, on) => s.apply_op("a", Op::SetKeyword { keys: keys(u), keyword: (*k).to_string(), on: *on, name: None }),
                 Step::Open(u) => {
                     let k = key_in_inbox(u % n);
@@ -265,7 +265,7 @@ fn flag_and_pin_move_their_rows() {
     let mut s = unread_folder(500);
     s.run("view.arrange", &json!({"by": "flag"})).unwrap();
     let k = s.list.iter().rev().find(|m| !m.flags.flagged).map(|m| m.key.clone()).unwrap();
-    s.apply_op("a", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true });
+    s.apply_op("a", Op::SetFlag { keys: vec![k.clone()], flag: Flag::Flagged, on: true, all: false });
     assert!(s.index_of(&k).unwrap() < s.list.iter().filter(|m| m.flags.flagged).count(), "among the flagged");
     let patched = shown(&s);
     s.refresh_list();

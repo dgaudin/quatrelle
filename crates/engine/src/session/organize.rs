@@ -209,7 +209,7 @@ impl Session {
         } else {
             self.account(&s.account).and_then(|a| a.folder(FolderRole::Inbox)).map(|f| f.path.clone()).unwrap_or_else(|| "INBOX".into())
         };
-        self.apply_op(&s.account, Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: false });
+        self.apply_op(&s.account, Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: false, all: false });
         self.apply_op(&s.account, Op::Move { keys: vec![key], to: back });
     }
 
@@ -392,10 +392,10 @@ impl Session {
             for act in actions {
                 match act {
                     RuleAction::MarkRead => {
-                        self.apply_op(&a, Op::SetFlag { keys: keys.clone(), flag: Flag::Seen, on: true });
+                        self.apply_op(&a, Op::SetFlag { keys: keys.clone(), flag: Flag::Seen, on: true, all: false });
                         quiet.push(m.key.clone());
                     }
-                    RuleAction::Flag => self.apply_op(&a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: true }),
+                    RuleAction::Flag => self.apply_op(&a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: true, all: false }),
                     RuleAction::Pin => self.apply_op(&a, Op::SetKeyword { keys: keys.clone(), keyword: PINNED.into(), on: true, name: None }),
                     RuleAction::Categorize(c) => {
                         if let Some(c) = self.category(&c).cloned() {

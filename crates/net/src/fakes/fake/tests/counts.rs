@@ -46,7 +46,7 @@ fn the_inbox_count_reported_after_a_read_mark_and_a_draft_never_goes_back_up() {
     assert_eq!(inbox_counts(&before).last().copied(), Some(3), "{before:?}");
     // Read here (the cache first, as the engine's command does), then sent.
     let first = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
-    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true };
+    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true, all: false };
     store.add_op("a1", read.clone()).unwrap();
     store.apply_op("a1", &read).unwrap();
     pool.submit(Job::Apply { account: "a1".into(), op: read });

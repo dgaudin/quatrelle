@@ -60,7 +60,7 @@ fn a_reply_or_a_forward_goes_both_ways_with_its_time() {
 
     // Replied to here: the verb, the time and the icon, as Outlook writes them.
     let keys = vec![msg("plain").key];
-    let set = |flag, on| Op::SetFlag { keys: keys.clone(), flag, on };
+    let set = |flag, on| Op::SetFlag { keys: keys.clone(), flag, on, all: false };
     apply_remote(&c, &st, &set(Flag::Answered, true)).unwrap();
     let v = on_server(&plain);
     assert_eq!((v.last.as_deref(), v.icon.as_deref()), (Some("102"), Some("261")), "{v:?}");
@@ -109,7 +109,7 @@ fn an_arrow_kept_here_survives_the_syncs_that_say_nothing_of_it() {
     let opts = SyncOptions { prefetch: 0, ..Default::default() };
     sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let key = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
-    store.apply_op("a1", &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true }).unwrap();
+    store.apply_op("a1", &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true, all: false }).unwrap();
     let answered = || store.load_folder("a1", "INBOX").unwrap().messages[0].flags.answered;
     // Read in Outlook: the change comes in, the arrow stays.
     if let Some(i) = server.data.lock().unwrap().items.iter_mut().find(|i| i.id == id) {

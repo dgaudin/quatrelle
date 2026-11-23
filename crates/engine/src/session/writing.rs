@@ -593,9 +593,9 @@ impl Session {
         let exchange = self.account(&key.account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some());
         let other = if flag == Flag::Forwarded { Flag::Answered } else { Flag::Forwarded };
         if exchange && self.summary(&key).is_some_and(|m| other.get(&m.flags)) {
-            self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key.clone()], flag: other, on: false });
+            self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key.clone()], flag: other, on: false, all: false });
         }
-        self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key], flag, on: true });
+        self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key], flag, on: true, all: false });
     }
 
     /// Save the message being written to Drafts.

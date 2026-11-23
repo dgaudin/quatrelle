@@ -152,9 +152,9 @@ fn an_on_premises_exchange_account_works_through_ews() {
     until(&pool, "body", |e| matches!(e, Event::Body { key: k, raw } if *k == key && raw.starts_with(b"From:")));
 
     // Read, flag, move (Exchange gives the moved message a new id).
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false } });
     eventually("read on the server", || data.lock().unwrap().items.iter().any(|i| i.id == second && i.read));
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true, all: false } });
     eventually("flagged on the server", || data.lock().unwrap().items.iter().any(|i| i.id == second && i.flagged));
     pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key.clone()], to: "Projects".into() } });
     eventually("moved on the server", || {
@@ -341,7 +341,7 @@ fn a_flag_set_mid_sync_is_not_lost() {
     data.lock().unwrap().hold = Some(Duration::from_secs(2));
     pool.submit(Job::SyncAll { account: "a1".into() });
     std::thread::sleep(Duration::from_millis(300));
-    let op = Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true };
+    let op = Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true, all: false };
     pool.submit(Job::Apply { account: "a1".into(), op: op.clone() });
     let flagged = || store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key == key && m.flags.flagged);
     // Written by the edit writer at once, not after the sync (which is held for seconds).
@@ -780,7 +780,7 @@ fn the_exchange_inbox_count_reported_after_a_read_mark_and_a_draft_never_goes_ba
             .collect()
     };
     let first = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
-    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true };
+    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true, all: false };
     store.add_op("a1", read.clone()).unwrap();
     store.apply_op("a1", &read).unwrap();
     pool.submit(Job::Apply { account: "a1".into(), op: read });

@@ -136,7 +136,7 @@ fn mail_told_of_to_a_change_after_the_inbox_was_read_elsewhere_shows_before_idle
     st.lock().unwrap().add("INBOX", "Late", &[]);
     // Read here, as the engine's command does, then sent on the main connection.
     let first = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
-    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true };
+    let read = Op::SetFlag { keys: vec![first], flag: Flag::Seen, on: true, all: false };
     store.add_op("a1", read.clone()).unwrap();
     store.apply_op("a1", &read).unwrap();
     pool.submit(Job::Apply { account: "a1".into(), op: read });

@@ -50,6 +50,10 @@ pub enum Op {
         keys: Vec<MessageKey>,
         flag: Flag,
         on: bool,
+        /// A reply to all (with `Flag::Answered` on): what Exchange keeps as its own verb, and IMAP
+        /// and JMAP as `$RepliedAll`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        all: bool,
     },
     /// Add or remove a keyword (a category, `$Pinned`).
     SetKeyword {
@@ -62,10 +66,7 @@ pub enum Op {
         name: Option<String>,
     },
     /// Move to another folder of the same account.
-    Move {
-        keys: Vec<MessageKey>,
-        to: String,
-    },
+    Move { keys: Vec<MessageKey>, to: String },
     /// Delete permanently (`\Deleted` + `UID EXPUNGE`).
     Expunge {
         keys: Vec<MessageKey>,
@@ -77,23 +78,14 @@ pub enum Op {
         tidy: bool,
     },
     /// Create a folder (`CREATE`, then `SUBSCRIBE`). `path` is the server's name for it.
-    CreateFolder {
-        path: String,
-    },
+    CreateFolder { path: String },
     /// Rename or move a folder; folders inside it move with it (`RENAME`).
-    RenameFolder {
-        from: String,
-        to: String,
-    },
+    RenameFolder { from: String, to: String },
     /// Delete a folder and the mail in it (`DELETE`). The engine deletes subfolders first.
-    DeleteFolder {
-        path: String,
-    },
+    DeleteFolder { path: String },
     /// Delete every message in a folder for good (Deleted Items, Junk Email), including those
     /// not downloaded.
-    EmptyFolder {
-        path: String,
-    },
+    EmptyFolder { path: String },
     /// Give messages (`keys`) or a folder's mail (`folder`) one of the server's policy tags of
     /// `kind` (archive or retention), or take theirs off (`tag` none: the folder's applies
     /// again). Exchange only. A change kept without `kind` is an archive one.
@@ -109,19 +101,12 @@ pub enum Op {
     },
     /// Make a calendar called `name` in the account's own mailbox; the calendars are read again
     /// after, which brings it in.
-    CreateCalendar {
-        name: String,
-    },
+    CreateCalendar { name: String },
     /// Rename one of the account's calendars (`calendar`: its id, as the server gave it).
-    RenameCalendar {
-        calendar: String,
-        name: String,
-    },
+    RenameCalendar { calendar: String, name: String },
     /// Delete one of the account's calendars and its events (into Deleted Items, where the
     /// server keeps one).
-    DeleteCalendar {
-        calendar: String,
-    },
+    DeleteCalendar { calendar: String },
 }
 
 /// Automatic replies (out of office): sent once per sender while on, between the dates when

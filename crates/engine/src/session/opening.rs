@@ -72,7 +72,7 @@ impl Session {
     /// Mark a message read (when it's there and isn't yet).
     pub(super) fn mark_seen(&mut self, key: &MessageKey) {
         if key.folder != OUTBOX && self.summary(key).is_some_and(|m| !m.flags.seen) {
-            self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true });
+            self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false });
         }
     }
 

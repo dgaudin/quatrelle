@@ -492,7 +492,7 @@ fn changes_waiting_for_a_removed_account_are_dropped() {
     let mut pool = Pool::new(s.clone(), Arc::new(MemoryCredentials::default()));
     for uid in 1..=300 {
         let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid };
-        pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true } });
+        pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true, all: false } });
     }
     s.delete_account("a1").unwrap();
     pool.submit(Job::Remove { account: "a1".into() });
@@ -503,7 +503,7 @@ fn changes_waiting_for_a_removed_account_are_dropped() {
     fill(&s, 3);
     let mut pool = Pool::new(s.clone(), Arc::new(MemoryCredentials::default()));
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid: 2 };
-    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true, all: false } });
     pool.shutdown();
     assert!(s.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key.uid == 2 && m.flags.seen));
 }
@@ -581,7 +581,7 @@ fn an_export_has_the_marks_made_just_before_it() {
         None
     };
     let held = pool::HOLD_EDITS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    pool.submit(Job::Apply { account: account.into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true } });
+    pool.submit(Job::Apply { account: account.into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true, all: false } });
     pool.submit(Job::ExportPst { account: account.into(), path: file.to_string_lossy().into(), name: "Riley".into(), marks: Default::default() });
     let early = exported(&pool, Duration::from_secs(3));
     drop(held);

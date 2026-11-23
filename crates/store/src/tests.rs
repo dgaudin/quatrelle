@@ -139,7 +139,7 @@ fn ops_apply_locally_and_persist() {
     let k9 = st.messages[0].key.clone();
     let k4 = st.messages[1].key.clone();
 
-    let changed = s.apply_op("a1", &Op::SetFlag { keys: vec![k9.clone()], flag: Flag::Seen, on: true }).unwrap();
+    let changed = s.apply_op("a1", &Op::SetFlag { keys: vec![k9.clone()], flag: Flag::Seen, on: true, all: false }).unwrap();
     assert_eq!(changed, vec!["INBOX".to_string()]);
     assert!(s.load_folder("a1", "INBOX").unwrap().find(9).unwrap().flags.seen);
 
@@ -176,7 +176,9 @@ fn a_folder_saved_from_an_older_read_keeps_the_edits_waiting() {
     // What the sync read, before the edits.
     let read_by_sync = s.load_folder("a1", "INBOX").unwrap();
     let (k9, k4) = (st.messages[0].key.clone(), st.messages[1].key.clone());
-    for op in [Op::SetFlag { keys: vec![k9.clone()], flag: Flag::Seen, on: true }, Op::Move { keys: vec![k4.clone()], to: "Archive".into() }] {
+    for op in
+        [Op::SetFlag { keys: vec![k9.clone()], flag: Flag::Seen, on: true, all: false }, Op::Move { keys: vec![k4.clone()], to: "Archive".into() }]
+    {
         s.add_op("a1", op.clone()).unwrap();
         s.apply_op("a1", &op).unwrap();
     }
@@ -366,7 +368,7 @@ hi",
 hi"
     );
     assert!(s.load_folder("a1", "Projects/Film").unwrap().messages.is_empty());
-    s.apply_op("a1", &Op::SetFlag { keys: vec![MessageKey { uid: 2, ..moved.clone() }], flag: Flag::Seen, on: true }).unwrap();
+    s.apply_op("a1", &Op::SetFlag { keys: vec![MessageKey { uid: 2, ..moved.clone() }], flag: Flag::Seen, on: true, all: false }).unwrap();
     assert!(s.load_folder("a1", "Work/Film").unwrap().messages.iter().all(|m| m.flags.seen));
 
     let item = OutboxItem { id: 5, from: "z@x".into(), recipients: vec!["a@y".into()], ..Default::default() };
@@ -510,7 +512,7 @@ fn one_mark_in_a_big_folder_writes_under_64_kib_and_survives_a_reopen() {
     let mut st = big_inbox(&s, 10_941);
     s.track_changes();
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 5000 };
-    let op = Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true };
+    let op = Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false };
     s.add_op("a1", op.clone()).unwrap();
     s.take_changes();
     let version = s.folder_version("a1", "INBOX");
@@ -547,7 +549,7 @@ fn a_completed_follow_up_and_its_time_survive_the_marks() {
     }
     d.save_folder("a1", "INBOX", &st).unwrap();
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 5000 };
-    d.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true }).unwrap();
+    d.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false }).unwrap();
     let root = d.root().to_path_buf();
     drop(d);
     let again = Store::open(&root).unwrap();
@@ -615,6 +617,7 @@ fn marks_made_offline_dont_make_the_waiting_ones_again() {
             keys: vec![MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: uid * 50 }],
             flag: Flag::Seen,
             on: true,
+            all: false,
         };
         s.add_op("a1", op.clone()).unwrap();
         s.apply_op("a1", &op).unwrap();
@@ -638,8 +641,12 @@ fn a_mark_in_a_list_kept_before_reads_it_whole() {
     assert!(file.as_object_mut().unwrap().remove("firsts").is_some());
     s.files.write(&head, &serde_json::to_vec(&file).unwrap()).unwrap();
     s.track_changes();
-    let op =
-        Op::SetFlag { keys: vec![MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 9_000 }], flag: Flag::Seen, on: true };
+    let op = Op::SetFlag {
+        keys: vec![MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 9_000 }],
+        flag: Flag::Seen,
+        on: true,
+        all: false,
+    };
     s.apply_op("a1", &op).unwrap();
     assert_eq!(written(&s).0, ["state-marks.json"]);
     assert!(s.load_folder("a1", "INBOX").unwrap().find(9_000).unwrap().flags.seen);
@@ -680,7 +687,7 @@ fn the_page_a_message_is_in_is_read_alone() {
     let messages: Vec<Summary> = (1..=10_000).rev().map(|u| msg(u, false)).collect();
     s.save_folder("a1", "INBOX", &FolderState { validity: 3, messages, ..Default::default() }).unwrap();
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 5_000 };
-    s.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: quatrelle_model::Flag::Seen, on: true }).unwrap();
+    s.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: quatrelle_model::Flag::Seen, on: true, all: false }).unwrap();
     let page = s.load_page_of("a1", "INBOX", 5_000).unwrap();
     assert_eq!(page.len(), PAGE_MESSAGES);
     assert!(page.iter().all(|m| (4_097..=8_192).contains(&m.key.uid)), "the second page");

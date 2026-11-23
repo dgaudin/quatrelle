@@ -47,8 +47,12 @@ fn going_on_keeps_the_marks_made_since() {
     w.push(&s, (1..=page + 4).map(|uid| msg(uid, false)).collect()).unwrap();
     w.finish(&s, &head(page + 4)).unwrap();
     for uid in [7, page + 2] {
-        let op =
-            Op::SetFlag { keys: vec![MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid }], flag: Flag::Seen, on: true };
+        let op = Op::SetFlag {
+            keys: vec![MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid }],
+            flag: Flag::Seen,
+            on: true,
+            all: false,
+        };
         s.apply_op("a1", &op).unwrap();
     }
     let mut w = s.list_writer_from("a1", "INBOX", page + 5).unwrap();

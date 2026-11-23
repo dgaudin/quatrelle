@@ -46,7 +46,7 @@ fn a_reply_or_a_forward_goes_both_ways_over_graph() {
 
     // Forwarded here: the verb, the time and the icon, as Outlook writes them.
     let keys = vec![msg("plain").key];
-    crate::graph::apply_remote(&c, &st, &Op::SetFlag { keys, flag: Flag::Forwarded, on: true }).unwrap();
+    crate::graph::apply_remote(&c, &st, &Op::SetFlag { keys, flag: Flag::Forwarded, on: true, all: false }).unwrap();
     let (verb, time, icon) = server.data.lock().unwrap().message(&plain).map(|m| (m.verb.clone(), m.verb_time.clone(), m.icon.clone())).unwrap();
     assert_eq!((verb.as_deref(), icon.as_deref()), (Some("104"), Some("262")));
     assert!(time.as_deref().and_then(crate::jmap::utc_date).is_some_and(|t| t > at("2026-01-01T00:00:00Z")), "{time:?}");

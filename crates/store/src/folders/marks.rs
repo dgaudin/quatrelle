@@ -57,7 +57,7 @@ impl Store {
                 // Marked before: as the marks have it, not the page.
                 let flags = marks.entry(m.key.uid).or_insert(m.flags);
                 match op {
-                    Op::SetFlag { flag, on, .. } => flag.set(flags, *on),
+                    Op::SetFlag { flag, on, all, .. } => flag.apply(flags, *on, *all),
                     Op::SetKeyword { keyword, on, name, .. } => flags.set_category(keyword, name.as_deref(), *on),
                     _ => {}
                 }

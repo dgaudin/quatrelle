@@ -75,7 +75,7 @@ fn marks_beside_the_pages_are_the_list() {
     let s = Store::memory();
     s.save_folder("a1", "INBOX", &list(1..=9_000)).unwrap();
     let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 5_000 };
-    s.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true }).unwrap();
+    s.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true, all: false }).unwrap();
     assert!(s.has_marks(&s.folder_dir("a1", "INBOX").join(MARKS)), "kept beside the pages");
     let before = kept(&s);
     // The sync read the list (the mark in it) and brought a message.
@@ -173,7 +173,7 @@ proptest! {
                 if let Some(b) = before.get_mut(&key.uid) {
                     b.flags.answered = true;
                 }
-                s.apply_op("a1", &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true }).unwrap();
+                s.apply_op("a1", &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true, all: false }).unwrap();
                 st = s.load_folder("a1", "INBOX").unwrap();
             }
             for (i, t) in touch.iter().enumerate() {

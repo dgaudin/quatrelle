@@ -448,10 +448,10 @@ impl Session {
             }
         }
         for (a, keys) in changed {
-            self.remember(Undo::Ops { account: a, ops: vec![Op::SetFlag { keys, flag, on: !on }] });
+            self.remember(Undo::Ops { account: a, ops: vec![Op::SetFlag { keys, flag, on: !on, all: false }] });
         }
         for (a, keys) in by_account {
-            self.apply_op(&a, Op::SetFlag { keys, flag, on });
+            self.apply_op(&a, Op::SetFlag { keys, flag, on, all: false });
         }
         Ok(serde_json::json!({ "on": on, "count": sel.len() }))
     }

@@ -286,7 +286,7 @@ pub(super) fn mark_all_read(s: &mut Session, _: &Value) -> CmdResult {
         by_account.entry(k.account.clone()).or_default().push(k);
     }
     for (a, keys) in by_account {
-        s.apply_op(&a, quatrelle_model::Op::SetFlag { keys, flag: Flag::Seen, on: true });
+        s.apply_op(&a, quatrelle_model::Op::SetFlag { keys, flag: Flag::Seen, on: true, all: false });
     }
     Ok(json!({"count": n}))
 }
