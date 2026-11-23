@@ -452,8 +452,9 @@ struct Worker {
     /// The folders of a zone the last listing couldn't list (a shared mailbox, public folders,
     /// the online archive), kept as they were ([`Worker::kept_unlisted`]).
     unlisted_kept: HashSet<String>,
-    /// The folder list before couldn't be read: a zone a listing misses may have folders here the
-    /// worker doesn't know of; no number is pruned, nor the list kept, till one misses none.
+    /// The folder list before couldn't be read, or is damaged: a zone a listing misses may have
+    /// folders here the worker doesn't know of; no number is pruned, nor the list kept, till one
+    /// misses none (whose save sets a damaged one aside first).
     folders_unread: bool,
     /// Why the account's numbering couldn't be read, while it can't: its mail is set aside.
     numbering_unread: Option<String>,

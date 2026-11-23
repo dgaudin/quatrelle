@@ -1,14 +1,23 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! The session's documents, read as it opens: the rules and the snoozed mail, the contacts, the
-//! marks still due, and the list of accounts.
+//! marks still due, the list of accounts and each account's folders.
 
 use super::*;
+
+/// What an account whose folder list is damaged says (the file is left as it is): its server's
+/// next listing makes it again.
+pub(crate) const FOLDERS_DAMAGED: &str = "this account's list of folders is damaged and is read again from the server";
+/// What an account with no server (POP, on this computer) whose folder list is damaged says before
+/// why: nothing makes it again, and nothing is written over it.
+pub(crate) const FOLDERS_DAMAGED_HERE: &str = "this account's list of folders is damaged, so nothing is filed in it for now";
 
 impl Session {
     /// Reads what the data folder keeps for the session, as it opens.
     pub(in crate::session) fn load_documents(&mut self) {
         let mut why = None;
+        // The accounts whose folder list is damaged: who, what was said, and whether a server lists.
+        let mut damaged: Vec<(String, String, bool)> = Vec::new();
         self.load_rules_and_snoozes();
         if let Some(store) = &self.store {
             self.contacts = Contacts::load(store);
@@ -35,7 +44,19 @@ impl Session {
                 {
                     log::warn!("{}: couldn't be kept online only: {e}", config.id);
                 }
-                let mut folders = store.load_folders(&config.id).unwrap_or_default();
+                // Never taken for none: the account opens with no folders shown, its file left as
+                // it is, and it's said.
+                let mut folders = match store.load_folders(&config.id) {
+                    Ok(folders) => folders,
+                    Err(e) => {
+                        log::warn!("{}: the folder list can't be read: {}", config.id, kind_of(&e));
+                        if matches!(e, quatrelle_store::StoreError::Damaged { .. }) {
+                            let who = if config.email.is_empty() { config.id.clone() } else { config.email.clone() };
+                            damaged.push((who, e.to_string(), config.is_local() || config.pop.is_some()));
+                        }
+                        Vec::new()
+                    }
+                };
                 // A folder belongs to the account it's kept with (a data file brought in from
                 // another account once kept that one's name).
                 for f in &mut folders {
@@ -50,6 +71,10 @@ impl Session {
         if let Some(why) = why {
             self.notice_with("the list of accounts couldn't be read, so it isn't saved: {error}", &[("error", &why)], true);
             self.accounts_unread = Some(why);
+        }
+        for (who, e, here) in damaged {
+            let said = if here { format!("{FOLDERS_DAMAGED_HERE}: {e}") } else { FOLDERS_DAMAGED.to_string() };
+            self.notice_with("{who}: {error}", &[("who", &who), ("error", &said)], true);
         }
     }
 }

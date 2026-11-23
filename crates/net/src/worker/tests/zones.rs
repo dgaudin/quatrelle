@@ -15,13 +15,13 @@ use crate::exchange::missed::{Missed, PublicMissed};
 use crate::fakes::fake_ews::{self, DOMAIN, Data, PASSWORD, SharedBox, USER};
 use crate::worker::sync::zones::keep_missed;
 
-const SALES: &str = "sales@contoso.example";
-const SALES_INBOX: &str = "Sales/Inbox";
+pub(super) const SALES: &str = "sales@contoso.example";
+pub(super) const SALES_INBOX: &str = "Sales/Inbox";
 const QUOTES: &str = "Sales/Inbox/Quotes";
 const TEAM: &str = "Public Folders/Team";
 const YEAR: &str = "Online Archive - Riley/2019";
 
-fn mail(subject: &str, id: &str) -> Vec<u8> {
+pub(super) fn mail(subject: &str, id: &str) -> Vec<u8> {
     format!(
         "From: Zoe Park <zoe@contoso.example>\r\nTo: riley@contoso.example\r\nSubject: {subject}\r\nMessage-ID: <{id}@contoso.example>\r\n\r\nAbout {subject}.\r\n"
     )
@@ -29,7 +29,7 @@ fn mail(subject: &str, id: &str) -> Vec<u8> {
 }
 
 /// The fake's ids of the folders read.
-struct Ids {
+pub(super) struct Ids {
     sales_inbox: String,
     quotes: String,
     team: String,
@@ -38,7 +38,7 @@ struct Ids {
 
 /// Riley's Inbox; Sales, a shared mailbox Autodiscover maps to the account (its Inbox, `Quotes`
 /// in it); the public folders (`Team`); the online archive (`2019`). Mail in each.
-fn zones() -> (Data, Ids) {
+pub(super) fn zones() -> (Data, Ids) {
     let mut d = Data::default();
     d.pf_mailbox = Some("PFContent@contoso.example".into());
     d.pf_hierarchy = Some("PFHierarchy@contoso.example".into());
@@ -68,14 +68,14 @@ fn account(server: &fake_ews::Server) -> AccountConfig {
 }
 
 /// A worker on the fake server, connected.
-fn connected(server: &fake_ews::Server, store: &Store, pool: &Pool) -> Worker {
+pub(super) fn connected(server: &fake_ews::Server, store: &Store, pool: &Pool) -> Worker {
     let mut w = Worker::new(account(server), Auth::shared(PASSWORD), store.clone(), pool.sink.clone(), SyncOptions::default());
     w.connect().unwrap();
     w
 }
 
 /// A worker on the fake server, connected, its folders listed; `Team` followed.
-fn listed(server: &fake_ews::Server, store: &Store, pool: &Pool) -> Worker {
+pub(super) fn listed(server: &fake_ews::Server, store: &Store, pool: &Pool) -> Worker {
     store.save_account_doc("a1", FOLLOWED_PUBLIC_DOC, &[TEAM]).unwrap();
     let mut w = connected(server, store, pool);
     assert!(w.relist());
@@ -92,7 +92,7 @@ fn on_disk(store: &Store) -> Vec<String> {
     paths(&store.load_folders("a1").unwrap())
 }
 
-fn cached(store: &Store, path: &str) -> Vec<Summary> {
+pub(super) fn cached(store: &Store, path: &str) -> Vec<Summary> {
     store.load_folder("a1", path).map(|f| f.messages).unwrap_or_default()
 }
 
@@ -102,7 +102,7 @@ fn given(server: &fake_ews::Server, folder: &str) -> usize {
 }
 
 /// The script mended: every zone lists.
-fn mend(d: &mut Data) {
+pub(super) fn mend(d: &mut Data) {
     d.zones = Default::default();
     if let Some(a) = d.archive.as_mut() {
         a.refused = false;

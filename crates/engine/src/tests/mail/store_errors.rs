@@ -6,6 +6,7 @@
 
 use super::*;
 
+use quatrelle_model::Folder;
 use quatrelle_store::FolderState;
 
 const SHORT_FILM: &str = "Projects/Short film";
@@ -304,4 +305,81 @@ fn changes_kept_aside_are_said_and_their_folders_read_again() {
     assert_eq!(said.map(|n| n.values), Some(vec![("count", "2".to_string())]));
     let now = s.folder_state(account, "INBOX").messages.iter().find(|m| m.key == held.0).map(|m| m.flags.flagged);
     assert_eq!(now, Some(!held.1), "the folder in memory wasn't read again");
+}
+
+/// What a damaged folder list's file holds.
+const DAMAGED_LIST: &[u8] = b"[{\"account\":\"a1\",\"path\":\"Pla";
+
+/// An account's file as text (the damaged list is plain ASCII: the same text is the same bytes).
+fn file_text(store: &Store, account: &str, name: &str) -> Option<String> {
+    store.account_file(account, name).unwrap().map(|b| String::from_utf8_lossy(&b).into_owned())
+}
+
+fn damaged_text() -> Option<String> {
+    Some(String::from_utf8_lossy(DAMAGED_LIST).into_owned())
+}
+
+/// An Exchange account, `a2`, opening these other mailboxes.
+fn exchange(shared: &[&str]) -> quatrelle_model::AccountConfig {
+    quatrelle_model::AccountConfig {
+        id: "a2".into(),
+        email: "kim@contoso.example".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        shared_mailboxes: shared.iter().map(|m| m.to_string()).collect(),
+        ..Default::default()
+    }
+}
+
+/// Found in review: an account's folder list whose file was damaged was renamed `.json.bad` and
+/// read as none, without a word: the account opened with no folders. It's said (its server lists
+/// them again; with no server, nothing is filed in it), the account opens with none shown, and the
+/// file stays as it is.
+#[test]
+fn a_damaged_folder_list_is_said_when_quatrelle_opens() {
+    let cache = Store::failing();
+    let local = quatrelle_model::AccountConfig { id: "a1".into(), email: "zoe@studio.example".into(), ..Default::default() };
+    cache.save_accounts(&[local, exchange(&[])]).unwrap();
+    for id in ["a1", "a2"] {
+        cache.save_folders(id, &[Folder { account: id.into(), path: "INBOX".into(), ..Default::default() }]).unwrap();
+        cache.write_account_files(id, &[("folders.json".into(), DAMAGED_LIST.to_vec())]).unwrap();
+    }
+    let s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let said: Vec<&str> = s.notices.iter().filter(|n| n.error).map(|n| n.text.as_str()).collect();
+    assert!(said.contains(&"kim@contoso.example: this account's list of folders is damaged and is read again from the server"), "{said:?}");
+    let here =
+        "zoe@studio.example: this account's list of folders is damaged, so nothing is filed in it for now: a file Quatrelle keeps is damaged: ";
+    assert!(said.iter().any(|t| t.starts_with(here) && t.ends_with("folders.json")), "{said:?}");
+    for id in ["a1", "a2"] {
+        assert!(s.account(id).is_some_and(|a| a.folders.is_empty()), "{id}: folders shown");
+        assert_eq!(file_text(&cache, id, "folders.json"), damaged_text(), "{id}: not left as it is");
+    }
+}
+
+/// The sample mailbox whose folder list is damaged isn't made again over it: taken for empty, it
+/// was, the damaged list written over.
+#[test]
+fn a_damaged_sample_isnt_made_again_over_its_folder_list() {
+    let store = Store::failing();
+    assert!(sample::seed_if_empty(&store, NOW).unwrap());
+    store.write_account_files(sample::SAMPLE_ACCOUNT, &[("folders.json".into(), DAMAGED_LIST.to_vec())]).unwrap();
+    assert!(!sample::seed_if_empty(&store, NOW).unwrap(), "made again");
+    assert_eq!(file_text(&store, sample::SAMPLE_ACCOUNT, "folders.json"), damaged_text());
+}
+
+/// Closing another mailbox while the account's list on disk is damaged writes nothing over it: the
+/// list shown is a listing's, which may have missed a zone kept here; the account's next listing
+/// that misses none writes it.
+#[test]
+fn closing_a_mailbox_writes_no_list_over_a_damaged_one() {
+    let cache = Store::failing();
+    cache.save_accounts(&[exchange(&["support@contoso.example"])]).unwrap();
+    cache.write_account_files("a2", &[("folders.json".into(), DAMAGED_LIST.to_vec())]).unwrap();
+    let mut s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let _ = s.take_jobs();
+    let f = |path: &str| Folder { account: "a2".into(), path: path.into(), delimiter: Some('/'), selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: "a2".into(), folders: vec![f("INBOX"), f("support@contoso.example"), f("support@contoso.example/Inbox")] });
+    s.run("account.closeMailbox", &json!({"email": "support@contoso.example"})).unwrap();
+    assert!(s.account("a2").is_some_and(|a| a.folders.iter().all(|f| f.path == "INBOX")), "its folders still shown");
+    assert_eq!(file_text(&cache, "a2", "folders.json"), damaged_text(), "written over");
+    assert_eq!(cache.account_file("a2", "folders.json.bad").unwrap(), None);
 }

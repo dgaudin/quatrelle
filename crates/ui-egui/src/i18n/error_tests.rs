@@ -76,3 +76,42 @@ fn the_accounts_notice_is_translated() {
     assert!(said.contains(file), "the path was changed: {said}");
     assert!(!said.contains("list of accounts") && !said.contains("damaged"), "left in English: {said}");
 }
+
+/// What an account whose folder list is damaged says as Quatrelle opens: its server's listing makes
+/// it again; with no server, what goes wrong follows (`engine/src/session/opening/docs.rs`).
+const FOLDERS: &str = "this account's list of folders is damaged and is read again from the server";
+const FOLDERS_HERE: &str = "this account's list of folders is damaged, so nothing is filed in it for now: {error}";
+
+/// The damaged folder list's two notices: their wording is the engine's, and every catalog has a
+/// line for each.
+#[test]
+fn the_damaged_folder_list_notices_have_a_line_in_every_catalog() {
+    let engine = include_str!("../../../engine/src/session/opening/docs.rs");
+    let head = FOLDERS_HERE.trim_end_matches(": {error}");
+    assert!(engine.contains(&format!("pub(crate) const FOLDERS_DAMAGED: &str = \"{FOLDERS}\";")), "not in the engine any more");
+    assert!(engine.contains(&format!("pub(crate) const FOLDERS_DAMAGED_HERE: &str = \"{head}\";")), "not in the engine any more");
+    assert!(!head.contains(": "), "the head must be free of ': ': `i18n::error` cuts at the first");
+    for lang in LANGUAGES.iter().filter(|l| l.code != "en") {
+        assert!(lang.catalog().get(FOLDERS).is_some(), "{}: no line for {FOLDERS}", lang.code);
+        let line = lang.catalog().get(FOLDERS_HERE).unwrap_or_else(|| panic!("{}: no line for {FOLDERS_HERE}", lang.code));
+        assert!(line.ends_with("{error}"), "{}: the value goes at the end: {line}", lang.code);
+    }
+}
+
+/// Both are said in the interface's language, after the account's address, and the file named
+/// stays as it came.
+#[test]
+fn the_damaged_folder_list_notices_are_translated() {
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    let file = "/home/studio/.local/share/quatrelle/a1/folders.json";
+    let server = error(FOLDERS);
+    let here = error(&format!("{}: a file Quatrelle keeps is damaged: {file}", FOLDERS_HERE.trim_end_matches(": {error}")));
+    set_current(Lang::EN);
+    assert!(server.contains("liste des dossiers") && server.contains("relue"), "{server}");
+    assert!(here.contains("liste des dossiers") && here.contains("rangé") && here.contains("abîmé"), "{here}");
+    assert!(here.ends_with(file), "the path was changed: {here}");
+    assert!(
+        !server.contains("list of folders") && !here.contains("list of folders") && !here.contains("damaged"),
+        "left in English: {server} / {here}"
+    );
+}

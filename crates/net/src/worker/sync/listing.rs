@@ -260,9 +260,9 @@ impl Worker {
 
     /// The worker's folder list kept, then told; told only once kept: the list told and not
     /// kept (the disk failing) was the window's till the next start, which found the one before.
-    /// While the list before couldn't be read (`folders_unread`), the worker's may lack a zone a
-    /// listing missed: told for the folder pane, not kept over the one on disk (the archive's
-    /// folders held in memory all the same).
+    /// While the list before couldn't be read or is damaged (`folders_unread`), the worker's may
+    /// lack a zone a listing missed: told for the folder pane, not kept over the one on disk (the
+    /// archive's folders held in memory all the same).
     pub(in crate::worker) fn publish_folders(&self) {
         if self.folders_unread {
             let archive: Vec<&str> = self.folders.iter().filter(|f| f.archive).map(|f| f.path.as_str()).collect();

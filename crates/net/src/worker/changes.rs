@@ -26,6 +26,8 @@ pub(super) struct Waiting {
 }
 
 pub(super) use archive::archive_here;
+#[cfg(test)]
+pub(super) use archive::copy_checked;
 pub(super) use filing::{file_here, file_name};
 pub(super) use pending_drafts::{PENDING_DRAFTS, PendingDraft, forget_draft, keep_draft};
 

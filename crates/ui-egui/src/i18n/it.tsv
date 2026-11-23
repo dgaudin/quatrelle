@@ -2429,3 +2429,6 @@ presence	Offline	Offline
 	the list of accounts couldn't be read, so it isn't saved: {error}	l’elenco degli account non ha potuto essere letto, quindi non viene salvato: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
 	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	{count} modifiche fatte su questo computer non hanno potuto essere lette e non sono state inviate; sono conservate a parte, e viene mostrato lo stato del server
+# An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
+	this account's list of folders is damaged and is read again from the server	l’elenco delle cartelle di questo account è danneggiato e viene riletto dal server
+	this account's list of folders is damaged, so nothing is filed in it for now: {error}	l’elenco delle cartelle di questo account è danneggiato, quindi per ora non vi viene archiviato nulla: {error}

@@ -2427,3 +2427,6 @@ presence	Offline	Offline
 	the list of accounts couldn't be read, so it isn't saved: {error}	de lijst met accounts kon niet worden gelezen en wordt daarom niet opgeslagen: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
 	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	{count} wijzigingen die op deze computer zijn gemaakt konden niet worden gelezen en zijn niet verzonden; ze worden apart bewaard, en de toestand van de server wordt getoond
+# An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
+	this account's list of folders is damaged and is read again from the server	de mappenlijst van dit account is beschadigd en wordt opnieuw van de server gelezen
+	this account's list of folders is damaged, so nothing is filed in it for now: {error}	de mappenlijst van dit account is beschadigd, dus er wordt voorlopig niets in opgeborgen: {error}

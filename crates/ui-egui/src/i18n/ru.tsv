@@ -2431,3 +2431,6 @@ presence	Offline	Не в сети
 	the list of accounts couldn't be read, so it isn't saved: {error}	не удалось прочитать список учётных записей, поэтому он не сохраняется: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
 	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	Изменения, сделанные на этом компьютере, не удалось прочитать, и они не отправлены (их: {count}); они хранятся отдельно, а показывается состояние сервера
+# An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
+	this account's list of folders is damaged and is read again from the server	список папок этой учётной записи повреждён и заново читается с сервера
+	this account's list of folders is damaged, so nothing is filed in it for now: {error}	список папок этой учётной записи повреждён, поэтому пока в него ничего не раскладывается: {error}

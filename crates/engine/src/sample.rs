@@ -511,7 +511,8 @@ pub fn seed_if_empty(store: &Store, now: i64) -> Result<bool, StoreError> {
 /// working hours.
 pub fn seed_if_empty_at(store: &Store, now: i64, offset: i64) -> Result<bool, StoreError> {
     let accounts = store.load_accounts()?;
-    let hollow = matches!(accounts.as_slice(), [a] if a.id == SAMPLE_ACCOUNT) && store.load_folders(SAMPLE_ACCOUNT).unwrap_or_default().is_empty();
+    // Not one whose folder list can't be read or is damaged: made again, it was written over.
+    let hollow = matches!(accounts.as_slice(), [a] if a.id == SAMPLE_ACCOUNT) && store.load_folders(SAMPLE_ACCOUNT).is_ok_and(|f| f.is_empty());
     if !accounts.is_empty() && !hollow {
         return Ok(false);
     }

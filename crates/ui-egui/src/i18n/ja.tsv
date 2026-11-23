@@ -2427,3 +2427,6 @@ presence	Offline	オフライン
 	the list of accounts couldn't be read, so it isn't saved: {error}	アカウントの一覧を読み取れなかったため、保存されません: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
 	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	このコンピューターで行った変更 {count} 件を読み取れなかったため、送信されていません。これらは別に保管され、サーバーの状態が表示されます
+# An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
+	this account's list of folders is damaged and is read again from the server	このアカウントのフォルダー一覧が壊れているため、サーバーから読み直します
+	this account's list of folders is damaged, so nothing is filed in it for now: {error}	このアカウントのフォルダー一覧が壊れているため、当面は何も整理されません: {error}

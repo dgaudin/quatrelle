@@ -64,6 +64,9 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+/// How many damaged copies of one file are kept aside ([`Store::set_aside`]: `.bad`, `.bad.2`…).
+const ASIDE_COPIES: u32 = 9;
+
 impl StoreError {
     /// Whether a file was refused for its length ([`Store::account_file_within`]).
     pub fn too_large(&self) -> bool {
@@ -514,10 +517,59 @@ impl Store {
         self.files.write(path, &bytes)
     }
 
+    /// A damaged file set aside under a name of its own (`.bad`, `.bad.2`… the oldest replaced past
+    /// 9): a copy written whole, the file left where it is for what replaces it to be written after
+    /// (a copy that can't be written is an error, and then nothing should be). None there, none.
+    pub(crate) fn set_aside(&self, path: &Path) -> Result<()> {
+        let bytes = match self.files.read(path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(io_err(path)(e)),
+        };
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let slot = |i: u32| path.with_file_name(if i == 1 { format!("{name}.bad") } else { format!("{name}.bad.{i}") });
+        let to = match (1..=ASIDE_COPIES).map(slot).find(|p| !self.files.exists(p)) {
+            Some(free) => free,
+            // All taken: the oldest (`.bad`) goes, each other moves down one, this one last.
+            None => {
+                let oldest = slot(1);
+                match self.files.remove_file(&oldest) {
+                    Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(io_err(&oldest)(e)),
+                    _ => {}
+                }
+                for i in 2..=ASIDE_COPIES {
+                    let from = slot(i);
+                    self.files.rename(&from, &slot(i - 1)).map_err(io_err(&from))?;
+                }
+                slot(ASIDE_COPIES)
+            }
+        };
+        self.files.write(&to, &bytes)?;
+        log::warn!("{}: damaged, a copy kept as {}", path.display(), to.display());
+        Ok(())
+    }
+
     /// A small document at the top of the data folder (`rules.json`, `snoozes.json`); empty when
     /// missing or damaged. `name` is a plain file name.
     pub fn load_doc<T: DeserializeOwned + Default>(&self, name: &str) -> Result<T> {
         self.read_json(&self.root.join(safe_doc(name)))
+    }
+
+    /// As [`Store::load_doc`], for a document that must never be taken for an empty one: a damaged
+    /// one is [`StoreError::Damaged`], left as it is ([`Store::set_doc_aside`] takes it away).
+    pub fn load_doc_strict<T: DeserializeOwned + Default>(&self, name: &str) -> Result<T> {
+        self.read_json_strict(&self.root.join(safe_doc(name)))
+    }
+
+    /// A damaged document at the top of the data folder set aside ([`Store::set_aside`]), then gone
+    /// from its place: read next, it's none, and saved anew.
+    pub fn set_doc_aside(&self, name: &str) -> Result<()> {
+        let path = self.root.join(safe_doc(name));
+        self.set_aside(&path)?;
+        match self.files.remove_file(&path) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(io_err(&path)(e)),
+            _ => Ok(()),
+        }
     }
 
     pub fn save_doc<T: Serialize + ?Sized>(&self, name: &str, value: &T) -> Result<()> {
@@ -573,19 +625,27 @@ impl Store {
         Ok(())
     }
 
-    /// An account's folder list. The folders of its online archive (`Folder::archive`) are held
-    /// in memory from here on ([`Store::hold_folders`]): a new run knows them before it reads one.
+    /// An account's folder list; none there is an empty one. A damaged one is an error that names
+    /// it ([`StoreError::Damaged`]), left where it is: taken for none, every folder kept here was
+    /// taken for gone, and the next list saved (one folder touched) was written over the others.
+    /// The folders of its online archive (`Folder::archive`) are held in memory from here on
+    /// ([`Store::hold_folders`]): a new run knows them before it reads one.
     pub fn load_folders(&self, account: &str) -> Result<Vec<Folder>> {
-        let folders: Vec<Folder> = self.read_json(&self.account_dir(account).join("folders.json"))?;
+        let folders: Vec<Folder> = self.read_json_strict(&self.account_dir(account).join("folders.json"))?;
         self.hold_archive(account, &folders);
         Ok(folders)
     }
 
     /// Keep an account's folder list; the folders of its online archive are held in memory from
-    /// here on, never written ([`Store::hold_folders`]).
+    /// here on, never written ([`Store::hold_folders`]). A damaged list it replaces is set aside
+    /// first ([`Store::set_aside`]): one that can't be is left as it was, nothing saved.
     pub fn save_folders(&self, account: &str, folders: &[Folder]) -> Result<()> {
+        let path = self.account_dir(account).join("folders.json");
+        if matches!(self.read_json_strict::<Vec<Folder>>(&path), Err(StoreError::Damaged { .. })) {
+            self.set_aside(&path)?;
+        }
         self.hold_archive(account, folders);
-        self.write_json(&self.account_dir(account).join("folders.json"), folders)
+        self.write_json(&path, folders)
     }
 
     fn hold_archive(&self, account: &str, folders: &[Folder]) {

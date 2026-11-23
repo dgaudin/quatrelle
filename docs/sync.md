@@ -393,12 +393,16 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   a listing lists the zone: only a listing that succeeds and no longer names a folder
   (Autodiscover answering without the mailbox, a mailbox taken out of the settings, a parent
   read whole without it) lets it go with its cache. The log says how many folders were kept and
-  how many zones didn't list, never which. While the folder list before couldn't be read
-  (`Worker::folders_unread`), what such a zone had here isn't known: the ids the numbering had of
-  folders that may be in a zone missed are kept, no message number is pruned, and the worker's
-  list is told for the folder pane but not written over the one on disk, till a listing misses
+  how many zones didn't list, never which. While the folder list before couldn't be read or was
+  damaged (`Worker::folders_unread`; a damaged one is left where it is), what such a zone had here
+  isn't known: the ids the numbering had of folders that may be in a zone missed are kept, no
+  message number is pruned, and the worker's list is told for the folder pane but not written
+  over the one on disk, till a listing misses
   no zone with something here (one with nothing here, such as the public folders of a server
-  that has none, doesn't hold it back).
+  that has none, doesn't hold it back). That listing's save replaces a damaged list after a copy
+  of it is written whole beside it (`folders.json.bad`, then `.bad.2`…, the oldest going past
+  nine). An account with no server (POP, on this computer) has nothing to make its damaged list
+  again: it's said as Quatrelle opens, and nothing is written over it.
 - **Told of changes as they happen** (`worker/listening.rs`, `ews/listening.rs`), as Outlook's
   Cached Exchange Mode is: the account's main connection subscribes to every folder of its
   mailbox (`Subscribe`, `SubscribeToAllFolders`) and to the folders of each shared mailbox kept

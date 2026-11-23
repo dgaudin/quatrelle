@@ -97,7 +97,13 @@ impl Session {
             for path in &gone {
                 let _ = store.clear_folder(&account, path);
             }
-            let _ = store.save_folders(&account, &self.account(&account).map(|a| a.folders.clone()).unwrap_or_default());
+            // Not over a list on disk that can't be read or is damaged: the one shown is a listing's,
+            // which may have missed a zone kept here; the next listing that misses none writes it.
+            if store.load_folders(&account).is_ok()
+                && let Some(a) = self.account(&account)
+            {
+                let _ = store.save_folders(&account, &a.folders);
+            }
         }
         self.save_accounts()?;
         if matches!(&self.view, View::Folder { account: va, folder } if *va == account && gone.contains(folder)) {
