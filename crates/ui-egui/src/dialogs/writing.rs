@@ -150,17 +150,21 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people
             let mut exposed = false;
             // The file said attached has its own question, asked once these are looked at.
             let missing = found.contains(&SendCheck::MissingAttachment);
-            for f in found.iter() {
-                let line = match f {
-                    SendCheck::Lookalike { address, like } => {
-                        tf!("{address} looks like an address at {like}, but isn't one. Is it the right one?", address = address, like = like)
-                    }
-                    SendCheck::Exposed { count } => {
-                        exposed = true;
-                        tf!("{n} people who may not know each other will all see each other's addresses.", n = count)
-                    }
-                    SendCheck::MissingAttachment => continue,
-                };
+            // What was found can't be shown (see `MailApp::run_now`): that there is something.
+            let unread = found.is_empty().then(|| {
+                tl!("Something about the recipients was found to look at, but it can't be shown. Look them over before sending.").to_string()
+            });
+            let lines = found.iter().filter_map(|f| match f {
+                SendCheck::Lookalike { address, like } => {
+                    Some(tf!("{address} looks like an address at {like}, but isn't one. Is it the right one?", address = address, like = like))
+                }
+                SendCheck::Exposed { count } => {
+                    exposed = true;
+                    Some(tf!("{n} people who may not know each other will all see each other's addresses.", n = count))
+                }
+                SendCheck::MissingAttachment => None,
+            });
+            for line in unread.into_iter().chain(lines) {
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), egui::Sense::hover());
                     crate::icons::paint(ui.painter(), r, crate::icons::Icon::Warning, t.warn);

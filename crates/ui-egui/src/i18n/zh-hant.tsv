@@ -1286,6 +1286,7 @@ month	May	5月
 	Check before sending	傳送前檢查
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} 看起來像 {like} 的地址，但其實不是。地址正確嗎？
 	{n} people who may not know each other will all see each other's addresses.	{n} 位可能互不相識的人都會看到彼此的地址。
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	發現收件人有需要查看的內容，但無法顯示。請在傳送前檢查收件人。
 	Put everyone in Bcc	把所有人放進密件副本
 	Each of them gets the message without seeing who else did; you're in To	每個人收到郵件時都看不到其他收件人；你在收件者欄
 	Open links without their tracking	開啟連結時移除追蹤

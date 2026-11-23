@@ -385,3 +385,21 @@ fn alt_s_and_send_never_ask() {
     assert_eq!(went(&jobs), 2, "Send sent it");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A check before sending whose findings can't be read still says there is something, not only
+/// "Send anyway".
+#[test]
+fn a_check_before_sending_that_cant_be_shown_still_says_so() {
+    let (mut a, dir) = app("send-check-unshown");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    a.ui.dialog = Some(Dialog::SendCheck(Vec::new()));
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let nodes = shown(&ctx, &mut a);
+    let said = "Something about the recipients was found to look at, but it can't be shown. Look them over before sending.";
+    assert!(nodes.iter().any(|(_, name, ..)| name == said), "the dialog says there is something: {nodes:?}");
+    assert!(nodes.iter().any(|(role, name, ..)| *role == Role::Button && name == "Send anyway"));
+    let _ = std::fs::remove_dir_all(dir);
+}
