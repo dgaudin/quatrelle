@@ -250,3 +250,25 @@ fn a_base_look_takes_the_common_colour() {
     s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
     assert_eq!(s.compose.as_ref().unwrap().styles.style(0).color, Some([0, 0, 0]));
 }
+
+/// A bold word at a title's size is no title when the rest of the line is ordinary: only a
+/// whole line in bold at a heading size goes as `#`.
+#[test]
+fn a_bold_word_at_a_heading_size_is_no_title() {
+    let mut s = sample_session("rewrite-heading-whole-line");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Urgent : la réunion est avancée".into();
+        c.styles = Styles::plain(&c.body);
+        c.styles.restyle(&c.body, 0..6, |st| quatrelle_mime::rich::Style { bold: true, size: Some(14), ..st.clone() });
+    }
+    let (id, sent) = ask(&mut s, "formal", None);
+    assert!(!sent.contains("###"), "not a title: {sent}");
+    s.apply(Event::LlmAnswered { id, text: sent, error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert!(c.styles.style(0).bold && c.styles.style(0).size == Some(14));
+    assert!(!c.styles.style(20).bold && c.styles.style(20).size.is_none(), "the rest is ordinary: {:?}", c.body);
+}

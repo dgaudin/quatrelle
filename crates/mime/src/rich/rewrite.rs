@@ -455,6 +455,9 @@ fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Sty
         }
     }
     let answer: Vec<(char, Style)> = text.chars().enumerate().filter(|(_, c)| *c != '\n').map(|(i, c)| (c, styles.style(i))).collect();
+    // The characters' own look (colour, typeface, size, highlight, underline) as it was: what
+    // Markdown does not carry stays exactly where it was when the text did not change.
+    let before_chars: Vec<Style> = before.chars().enumerate().filter(|(_, c)| *c != '\n').map(|(i, _)| before_styles.style(i)).collect();
     let line_count = before.split('\n').count();
     let mut out = String::with_capacity(before.len());
     let mut kept =
@@ -476,6 +479,8 @@ fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Sty
         kept.paras.push(para);
         for _ in line.chars() {
             let (ch, style) = answer.get(next).cloned().unwrap_or((' ', Style::default()));
+            let was = before_chars.get(next).cloned().unwrap_or_default();
+            let style = Style { color: was.color, font: was.font, size: was.size, highlight: was.highlight, underline: was.underline, ..style };
             out.push(ch);
             next += 1;
             let id = kept.intern(style);
