@@ -352,9 +352,9 @@ impl Session {
                     self.notice("Message sent", false);
                 }
                 // Delivered from the Outbox: set the flag it owed.
-                if let Some((key, flag)) = self.pending_marks.remove(&id) {
+                if let Some((key, flag, all)) = self.pending_marks.remove(&id) {
                     self.save_pending_marks();
-                    self.mark_original(key, flag);
+                    self.mark_original(key, flag, all);
                 }
                 self.after_outbox_change();
             }

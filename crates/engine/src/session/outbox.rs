@@ -214,11 +214,15 @@ impl Session {
         let id = c.id;
         self.open_compose(c);
         // Pulled back for editing: the owed flag moves onto the compose, for its delivery.
-        if let Some((src, flag)) = self.pending_marks.remove(&item.id) {
+        if let Some((src, flag, all)) = self.pending_marks.remove(&item.id) {
             self.save_pending_marks();
             if let Some(c) = self.compose.as_mut() {
                 c.source = Some(src);
-                c.mode = Some(if flag == Flag::Forwarded { ReplyMode::Forward } else { ReplyMode::Reply });
+                c.mode = Some(match flag {
+                    Flag::Forwarded => ReplyMode::Forward,
+                    _ if all => ReplyMode::ReplyAll,
+                    _ => ReplyMode::Reply,
+                });
             }
         }
         self.reading = None;

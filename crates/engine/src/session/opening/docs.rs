@@ -4,6 +4,7 @@
 //! marks still due, the list of accounts and each account's folders.
 
 use super::*;
+use crate::session::writing::PENDING_REPLY_ALL;
 
 /// What an account whose folder list is damaged says (the file is left as it is): its server's
 /// next listing makes it again.
@@ -23,7 +24,7 @@ impl Session {
         if let Some(store) = &self.store {
             self.contacts = Contacts::load(store);
             match store.load_doc_strict::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS) {
-                Ok(marks) => self.pending_marks = marks.into_iter().map(|(id, k, f)| (id, (k, f))).collect(),
+                Ok(marks) => self.pending_marks = marks.into_iter().map(|(id, k, f)| (id, (k, f, false))).collect(),
                 Err(e) => {
                     // The Replied and Forwarded flags replies in the Outbox owe: ones owed from
                     // now on are set if they go before Quatrelle closes. A damaged file is kept
@@ -36,6 +37,23 @@ impl Session {
                         self.docs_unread.insert(PENDING_MARKS);
                     }
                     marks_unread = true;
+                }
+            }
+            // Which of those marks are replies to all, kept beside (1.5.0 reads the marks alone):
+            // read leniently, a damaged list set aside and read as none, ids no longer owed left
+            // out. Either way the original is marked replied to. One that can't be read isn't
+            // saved over.
+            match store.load_doc::<Vec<u64>>(PENDING_REPLY_ALL) {
+                Ok(ids) => {
+                    for id in ids.iter().take(1000) {
+                        if let Some((_, Flag::Answered, all)) = self.pending_marks.get_mut(id) {
+                            *all = true;
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("the replies to all owed by replies in the Outbox couldn't be read: {}", kind_of(&e));
+                    self.docs_unread.insert(PENDING_REPLY_ALL);
                 }
             }
             // Never taken for none: with none shown, the first change saved would write one

@@ -39,6 +39,11 @@ const EXPOSED_FROM: usize = 8;
 /// ([`Session::sent_away`]); past it the oldest goes.
 const SENT_AWAY_MAX: usize = 64;
 
+/// Beside `pending-marks.json`, which keeps the shape 1.5.0 reads strictly: the Outbox ids
+/// (`Vec<u64>`) whose owed mark is a reply to all (the `bool` of `Session::pending_marks`). Read
+/// leniently (`opening/docs.rs`): damaged or gone, those marks go as replies.
+pub(super) const PENDING_REPLY_ALL: &str = "pending-reply-all.json";
+
 /// Something to look at before a message goes (`compose.send` holds it and says what).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -553,24 +558,31 @@ impl Session {
         if self.docs_unread.contains(PENDING_MARKS) {
             return;
         }
-        let list: Vec<(u64, &MessageKey, &Flag)> = self.pending_marks.iter().map(|(id, (k, f))| (*id, k, f)).collect();
-        if let Some(store) = &self.store
-            && let Err(e) = store.save_doc(PENDING_MARKS, &list)
-        {
+        let Some(store) = &self.store else { return };
+        let list: Vec<(u64, &MessageKey, &Flag)> = self.pending_marks.iter().map(|(id, (k, f, _))| (*id, k, f)).collect();
+        if let Err(e) = store.save_doc(PENDING_MARKS, &list) {
             log::warn!("{PENDING_MARKS}: {e}");
+        }
+        if self.docs_unread.contains(PENDING_REPLY_ALL) {
+            return;
+        }
+        let to_all: Vec<u64> = self.pending_marks.iter().filter(|(_, (_, f, all))| *all && *f == Flag::Answered).map(|(id, _)| *id).collect();
+        if let Err(e) = store.save_doc(PENDING_REPLY_ALL, &to_all) {
+            log::warn!("{PENDING_REPLY_ALL}: {e}");
         }
     }
 
     /// The compose is finished. `delivered`: the server accepted it, so the original gets its
-    /// Replied or Forwarded flag now; otherwise it sits in the Outbox and the flag is owed until
-    /// delivery.
+    /// Replied (to all) or Forwarded flag now; otherwise it sits in the Outbox and the flag is
+    /// owed until delivery.
     pub(super) fn finish_sent(&mut self, c: &Compose, delivered: bool) {
         if let (Some(src), Some(mode)) = (&c.source, c.mode) {
             let flag = if mode == ReplyMode::Forward { Flag::Forwarded } else { Flag::Answered };
+            let all = mode == ReplyMode::ReplyAll;
             if delivered {
-                self.mark_original(src.clone(), flag);
+                self.mark_original(src.clone(), flag, all);
             } else if self.pending_marks.len() < 1000 {
-                self.pending_marks.insert(c.id, (src.clone(), flag));
+                self.pending_marks.insert(c.id, (src.clone(), flag, all));
                 self.save_pending_marks();
             }
         }
@@ -588,14 +600,22 @@ impl Session {
     /// A reply or forward delivered: its original marked replied to or forwarded. Exchange keeps
     /// the last thing done with a message, and Outlook shows that one: there the other arrow
     /// goes first (the server, told the new one, has no use for that change). IMAP and JMAP keep
-    /// both marks, each a fact of its own.
-    pub(super) fn mark_original(&mut self, key: MessageKey, flag: Flag) {
+    /// both marks, each a fact of its own. `all`: a reply to all (`\Answered` with
+    /// `$RepliedAll`); on Exchange a reply after one takes Answered off first, for the reply to
+    /// all's mark to go with it (the server makes nothing of that either).
+    pub(super) fn mark_original(&mut self, key: MessageKey, flag: Flag, all: bool) {
         let exchange = self.account(&key.account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some());
         let other = if flag == Flag::Forwarded { Flag::Answered } else { Flag::Forwarded };
-        if exchange && self.summary(&key).is_some_and(|m| other.get(&m.flags)) {
-            self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key.clone()], flag: other, on: false, all: false });
+        let all = all && flag == Flag::Answered;
+        let (other_on, to_all) = self.summary(&key).map_or((false, false), |m| (other.get(&m.flags), m.flags.replied_all()));
+        let account = key.account.clone();
+        if exchange && other_on {
+            self.apply_op(&account, Op::SetFlag { keys: vec![key.clone()], flag: other, on: false, all: false });
         }
-        self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key], flag, on: true, all: false });
+        if exchange && flag == Flag::Answered && !all && to_all {
+            self.apply_op(&account, Op::SetFlag { keys: vec![key.clone()], flag, on: false, all: false });
+        }
+        self.apply_op(&account, Op::SetFlag { keys: vec![key], flag, on: true, all });
     }
 
     /// Save the message being written to Drafts.

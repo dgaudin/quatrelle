@@ -340,7 +340,7 @@ pub struct Session {
     previews: HashMap<MessageKey, Preview>,
     /// Flags owed to originals, keyed by the Outbox id of the reply or forward that earns them:
     /// set when the server accepts that message. Saved to disk so a restart keeps them.
-    pending_marks: BTreeMap<u64, (MessageKey, Flag)>,
+    pending_marks: BTreeMap<u64, (MessageKey, Flag, bool)>,
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
     /// Folders' lists read from the cache on disk, the messages read, and the pages of lists read
