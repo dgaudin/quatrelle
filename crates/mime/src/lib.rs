@@ -51,6 +51,7 @@ pub use attachments::{
 };
 #[doc(hidden)]
 pub use attachments::{IndexStats, index_doc_stats};
+pub use attachments::{MAX_KIND_PART, MeetingMail, Report, meeting_mail, message_kind, report_of_status};
 use attachments::{attached, body_html, body_text, dmarc_failed, files_of, has_real_attachments, header_raw};
 use files::attachment_name;
 pub use files::{OpenRisk, alt_code_char, alt_code_pages, alt_code_system_pages, mime_from_name, open_risk, runs_code, sanitize_filename};
@@ -189,7 +190,7 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         voting: Vec::new(),
         voted: String::new(),
         forward_of: forward_of(m),
-        kind: quatrelle_model::MessageKind::Unknown,
+        kind: attachments::from_header(m),
     }
 }
 

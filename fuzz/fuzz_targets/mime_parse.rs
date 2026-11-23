@@ -2,7 +2,8 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A message source as it comes from a server or a file: parsed for reading, for the message
 //! list and for search, and its attachments taken out; told signed or encrypted from its header
-//! alone, never wrongly told it isn't; and as an export to a data file takes it.
+//! alone, never wrongly told it isn't; told a report, meeting mail or automatic reply from its
+//! source; and as an export to a data file takes it.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -16,6 +17,7 @@ fuzz_target!(|raw: &[u8]| {
     let _ = mime::summary_from_full(raw, key, Flags::default(), size, 0);
     let _ = mime::search_text(raw);
     let _ = mime::html_body(raw);
+    let _ = mime::message_kind(raw);
     // One its header says isn't protected is not, whatever its body.
     if !mime::smime::is_protected(raw) {
         assert_eq!(mime::smime::protection(raw), mime::smime::Protection::None);

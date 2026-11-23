@@ -30,14 +30,13 @@ pub(super) struct Meeting {
 
 /// The class of meeting mail for a calendar's `method`, and the answer it carries (`partstat`).
 fn class(method: &str, partstat: &str) -> Option<&'static str> {
-    match (method.trim().to_ascii_uppercase().as_str(), partstat.trim().to_ascii_uppercase().as_str()) {
-        ("REQUEST", _) => Some("IPM.Schedule.Meeting.Request"),
-        ("CANCEL", _) => Some("IPM.Schedule.Meeting.Canceled"),
-        ("REPLY", "ACCEPTED") => Some("IPM.Schedule.Meeting.Resp.Pos"),
-        ("REPLY", "DECLINED") => Some("IPM.Schedule.Meeting.Resp.Neg"),
-        ("REPLY", "TENTATIVE") => Some("IPM.Schedule.Meeting.Resp.Tent"),
-        _ => None,
-    }
+    Some(match mime::meeting_mail(method, partstat)? {
+        mime::MeetingMail::Request => "IPM.Schedule.Meeting.Request",
+        mime::MeetingMail::Cancel => "IPM.Schedule.Meeting.Canceled",
+        mime::MeetingMail::Accepted => "IPM.Schedule.Meeting.Resp.Pos",
+        mime::MeetingMail::Declined => "IPM.Schedule.Meeting.Resp.Neg",
+        mime::MeetingMail::Tentative => "IPM.Schedule.Meeting.Resp.Tent",
+    })
 }
 
 /// The meeting a message (`raw`, parsed as `p`) carries, when its calendar asks or answers one;

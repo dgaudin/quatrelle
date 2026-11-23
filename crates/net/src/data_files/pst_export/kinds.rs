@@ -81,39 +81,16 @@ pub(super) fn report(headers: &str, raw: &[u8], p: &mime::Parsed) -> Option<&'st
     class_of(&kind, &String::from_utf8_lossy(status.get(..MAX_STATUS.min(status.len()))?))
 }
 
-/// A report's class from its `report-type` (lower case) and its status's text.
+/// A report's class from its `report-type` (lower case) and its status's text, read as the
+/// message list reads it (`mime::report_of_status`).
 fn class_of(kind: &str, status: &str) -> Option<&'static str> {
-    // The status's fields (one block for the message, one for each recipient), unfolded.
-    let values = |name: &str| {
-        let mut out = Vec::new();
-        for block in status.replace("\r\n", "\n").split("\n\n") {
-            if let Some(v) = item::header_value(block, name) {
-                out.push(v.to_ascii_lowercase());
-            }
-        }
-        out
-    };
-    if kind == "delivery-status" {
-        let actions = values("Action");
-        let any = |a: &[&str]| actions.iter().any(|x| a.contains(&x.split_whitespace().next().unwrap_or_default()));
-        return if any(&["failed"]) {
-            Some("REPORT.IPM.Note.NDR")
-        } else if any(&["delayed"]) {
-            Some("REPORT.IPM.Note.DelayedDR")
-        } else if any(&["delivered", "relayed", "expanded"]) {
-            Some("REPORT.IPM.Note.DR")
-        } else {
-            None
-        };
-    }
-    // `Disposition: mode; type/modifier` (RFC 8098 §3.2.6).
-    let disposition = values("Disposition").into_iter().next()?;
-    let (_, kind) = disposition.split_once(';')?;
-    match kind.split('/').next().unwrap_or_default().trim() {
-        "displayed" => Some("REPORT.IPM.Note.IPNRN"),
-        "deleted" => Some("REPORT.IPM.Note.IPNNRN"),
-        _ => None,
-    }
+    Some(match mime::report_of_status(kind, status)? {
+        mime::Report::Failed => "REPORT.IPM.Note.NDR",
+        mime::Report::Delayed => "REPORT.IPM.Note.DelayedDR",
+        mime::Report::Delivered => "REPORT.IPM.Note.DR",
+        mime::Report::Displayed => "REPORT.IPM.Note.IPNRN",
+        mime::Report::Deleted => "REPORT.IPM.Note.IPNNRN",
+    })
 }
 
 #[cfg(test)]

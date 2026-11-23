@@ -1,0 +1,19 @@
+From: postmaster@mx.studio.example
+To: pat@studio.example
+Subject: Undelivered mail
+Content-Type: multipart/report; report-type=delivery-status; boundary=bnd
+
+--bnd
+Content-Type: text/plain
+
+Your message could not be delivered.
+--bnd
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; mx.studio.example
+
+Final-Recipient: rfc822; rosa@studio.example
+Action: failed
+Status: 5.1.1
+
+--bnd--

@@ -14,12 +14,15 @@ pub use tnef::{
 };
 
 mod index_text;
+mod kind;
 mod parts;
 mod text_first;
 mod tnef;
 pub use index_text::{IndexDoc, MAX_INDEX_CHARS, index_doc};
 #[doc(hidden)]
 pub use index_text::{IndexStats, index_doc_stats};
+pub(crate) use kind::from_header;
+pub use kind::{MAX_KIND_PART, MeetingMail, Report, meeting_mail, message_kind, report_of_status};
 use parts::sent_bytes;
 pub(crate) use parts::{body_html, body_text, contents, dmarc_failed, files_of, header_raw, part_text};
 pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, part_name, text_first};

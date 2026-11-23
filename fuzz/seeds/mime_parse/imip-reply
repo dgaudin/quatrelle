@@ -1,0 +1,17 @@
+From: rosa@studio.example
+To: quinn@studio.example
+Subject: Accepted: Planning
+Content-Type: text/calendar; method=REPLY; charset=utf-8
+
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REPLY
+BEGIN:VEVENT
+UID:plan-1@studio.example
+DTSTAMP:20261120T090000Z
+DTSTART:20261201T100000Z
+DTEND:20261201T110000Z
+ORGANIZER:mailto:quinn@studio.example
+ATTENDEE;PARTSTAT=ACCEPTED:mailto:rosa@studio.example
+END:VEVENT
+END:VCALENDAR
