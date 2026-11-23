@@ -104,7 +104,7 @@ pub(super) fn panel(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, acts
 }
 
 /// The text written, rewritten by the language model: to put in its place, or let go.
-pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compose, acts: &mut Vec<Action>) {
+pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compose, ed: &mut crate::rich_edit::Editor, acts: &mut Vec<Action>) {
     let Some(r) = &c.rewrite else { return };
     ui.add_space(6.0);
     egui::Frame::new().fill(t.accent_soft).corner_radius(8).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
@@ -125,12 +125,16 @@ pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compo
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if widgets::pill_button(ui, Icon::Complete, "Use this text", t)
-                        .on_hover_text(tl!("In place of what you wrote (its formatting goes)"))
+                        .on_hover_text(tl!("In place of what you wrote, with its formatting and pictures"))
                         .clicked()
                     {
+                        // One step to undo, and the text keeps the keyboard to undo it with.
+                        ed.remember(c, ed.sel.end);
+                        ed.refocus = Some(ed.sel.clone());
                         acts.push(Action::Run("assistant.endRewrite", json!({"use": true})));
                     }
                     if widgets::pill_button(ui, Icon::Close, "Keep mine", t).clicked() {
+                        ed.refocus = Some(ed.sel.clone());
                         acts.push(Action::Run("assistant.endRewrite", json!({"use": false})));
                     }
                 });
@@ -138,6 +142,7 @@ pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compo
             Some(Err(e)) => {
                 ui.label(RichText::new(tf!("The language model couldn't answer: {error}", error = e)).color(t.warn));
                 if widgets::pill_button(ui, Icon::Close, "Close", t).clicked() {
+                    ed.refocus = Some(ed.sel.clone());
                     acts.push(Action::Run("assistant.endRewrite", json!({"use": false})));
                 }
             }

@@ -207,7 +207,9 @@ impl Editor {
         self.paste_plain = true;
     }
 
-    fn remember(&mut self, c: &Compose, cursor: usize) {
+    /// Keep the message as it is now as one undo step (the assistant's rewritten text is put in
+    /// from outside the text box, where its own change detection can't see it).
+    pub(crate) fn remember(&mut self, c: &Compose, cursor: usize) {
         self.undo.push(Snap { text: c.body.clone(), styles: c.styles.clone(), cursor });
         if self.undo.len() > UNDO_MAX {
             self.undo.remove(0);

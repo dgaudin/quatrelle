@@ -1645,7 +1645,7 @@ month	May	5月
 	In English	英語で
 	Rewritten text	書き直した文章
 	Use this text	この文章を使う
-	In place of what you wrote (its formatting goes)	書いた文章の代わりに使います (書式は失われます)
+	In place of what you wrote, with its formatting and pictures	書いた文章の代わりに使います (書式と画像もそのまま)
 	Keep mine	自分の文章を残す
 	File it	整理
 	Ask the language model set in Options which of your folders and categories this message belongs in	オプションで設定した言語モデルに、このメッセージを入れるフォルダーと分類を尋ねます

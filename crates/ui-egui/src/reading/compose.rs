@@ -447,7 +447,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                         let r = widgets::menu_pill(ui, Icon::Drafts, "Rewrite", &t, rich_edit::rewrite_on(c, written), false)
                             .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
                         let r = if written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
-                        egui::Popup::menu(&r).show(|ui| rich_edit::rewrite_choices(ui, acts));
+                        let mut asked = false;
+                        egui::Popup::menu(&r).show(|ui| asked = rich_edit::rewrite_choices(ui, acts, &ed.sel));
+                        if asked {
+                            ed.refocus = Some(ed.sel.clone());
+                        }
                     }
                 });
                 ui.add_space(6.0);
@@ -460,7 +464,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                     rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
                 }
             });
-            super::assistant::rewrite_panel(&t, ui, c, acts);
+            super::assistant::rewrite_panel(&t, ui, c, &mut ed, acts);
             if let Some(b) = blocked {
                 ui.add_space(4.0);
                 send_block_bar(ui, &t, b, acts);
