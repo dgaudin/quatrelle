@@ -614,3 +614,37 @@ fn a_jmap_message_waits_in_the_outbox_while_the_numbering_cant_be_read() {
     q.send(8, raw, USER, &["zoe@studio.example".to_string()], Some("Sent".into()));
     assert_eq!(server.data.lock().unwrap().submissions.len(), 1, "not sent once the numbering was read");
 }
+
+/// A folder change made while the folder list can't be read says no empty list, or the account
+/// would show no folders until the next listing. (A guard, not a probe: `apply_op` reads the list
+/// first and fails with the same fault, so the change never reaches the line that says it.)
+#[test]
+fn a_folder_change_made_with_an_unreadable_list_says_no_empty_list() {
+    let store = Store::failing();
+    store.save_folders("a1", &[folder("INBOX"), folder("Plans")]).unwrap();
+    let mut pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    // The change is written on a thread of its own: wait for what it says, then look.
+    let said = |pool: &Pool, wanted: fn(&Event) -> bool| {
+        let mut seen = Vec::new();
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while !seen.iter().any(wanted) && std::time::Instant::now() < end {
+            seen.extend(pool.poll());
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        seen
+    };
+    store.fail(Some("folders.json"), None);
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::RenameFolder { from: "Plans".into(), to: "Done".into() } });
+    let seen = said(&pool, |e| matches!(e, Event::Notice { .. }));
+    store.fail(None, None);
+    assert!(seen.iter().any(|e| matches!(e, Event::Notice { .. })), "the change wasn't tried: {seen:?}");
+    assert!(!seen.iter().any(|e| matches!(e, Event::Folders { .. })), "a list said that wasn't read: {seen:?}");
+    // Read, the list is said, with the change in it.
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::CreateFolder { path: "Notes".into() } });
+    let seen = said(&pool, |e| matches!(e, Event::Folders { .. }));
+    let listed = seen.iter().find_map(|e| match e {
+        Event::Folders { folders, .. } => Some(folders.iter().map(|f| f.path.clone()).collect::<Vec<_>>()),
+        _ => None,
+    });
+    assert!(listed.is_some_and(|l| l.iter().any(|p| p == "Notes")), "{seen:?}");
+}

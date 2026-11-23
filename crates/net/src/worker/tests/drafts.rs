@@ -132,3 +132,29 @@ fn a_draft_the_server_and_the_disk_refuse_comes_back() {
     let events = pool.poll();
     assert!(events.iter().any(|e| matches!(e, Event::DraftReturned { raw, error, .. } if *raw == one && !error.is_empty())), "{events:?}");
 }
+
+/// Drafts kept that can't be read at the connection are left as they are: none is filed this
+/// time, nothing is written over them, and they're read again at the next connection. (A guard,
+/// not a probe: `connect_and_sync` writes nothing and `keep_draft` returns its error already.)
+#[test]
+fn drafts_waiting_that_cant_be_read_arent_written_over() {
+    let (st, port) = server();
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = worker_on(port, &store, &pool.sink);
+    keep_draft(&store, "a1", "Drafts", None, draft("one", "to finish")).unwrap();
+    keep_draft(&store, "a1", "Drafts", None, draft("two", "to finish too")).unwrap();
+    let before: serde_json::Value = store.load_account_doc("a1", PENDING_DRAFTS).unwrap();
+    store.fail(Some(PENDING_DRAFTS), None);
+    w.connect_and_sync();
+    // Another draft kept meanwhile is refused, not saved as the only one.
+    assert!(keep_draft(&store, "a1", "Drafts", None, draft("three", "later")).is_err());
+    store.fail(None, None);
+    assert!(w.queue.is_empty(), "drafts filed that weren't read");
+    assert_eq!(kept(&store).len(), 2, "the drafts kept were written over");
+    assert_eq!(store.load_account_doc::<serde_json::Value>("a1", PENDING_DRAFTS).unwrap(), before, "the file changed");
+    // Read again, each is filed.
+    w.connect_and_sync();
+    run_queue(&mut w);
+    assert_eq!(on_server(&st), 2);
+}

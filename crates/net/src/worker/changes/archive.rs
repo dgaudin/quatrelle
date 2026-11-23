@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! The local archive in an account's worker: IMAP mail copied into the Archives account on this
 //! computer, checked, and only then deleted on the server. The deletion is the user's own delete
@@ -101,8 +102,18 @@ fn archive_batch_with(
         out.kept.extend(batch.kept);
         return out;
     }
-    let delimiters: HashMap<String, Option<char>> =
-        store.load_folders(&acc.id).unwrap_or_default().into_iter().map(|f| (f.path, f.delimiter)).collect();
+    // A list that can't be read gives no separators: the Archives folder is named with the
+    // server's own, one level instead of several, and every message is still copied and read
+    // back before any is deleted.
+    let delimiters: HashMap<String, Option<char>> = store
+        .load_folders(&acc.id)
+        .unwrap_or_else(|e| {
+            log::warn!("{}: the folders' separators couldn't be read, the server's are used: {e}", acc.id);
+            Vec::new()
+        })
+        .into_iter()
+        .map(|f| (f.path, f.delimiter))
+        .collect();
     // Each account under its address, as the folder pane shows it: the sender name is often the
     // same on every account, and would put them all in one folder.
     let name = if acc.email.trim().is_empty() { acc.name.as_str() } else { acc.email.as_str() };
@@ -187,7 +198,11 @@ pub(crate) fn settle(store: &Store, sink: &Sink, acc: &AccountConfig, to_account
 fn has_trash(store: &Store, acc: &AccountConfig, folders: &[quatrelle_model::Folder]) -> bool {
     let listed;
     let folders = if folders.is_empty() {
-        listed = store.load_folders(&acc.id).unwrap_or_default();
+        // None read means no Trash: the mail stays on the server (and is said to), nothing is deleted.
+        listed = store.load_folders(&acc.id).unwrap_or_else(|e| {
+            log::warn!("{}: the folder list couldn't be read to look for a Trash: {e}", acc.id);
+            Vec::new()
+        });
         &listed
     } else {
         folders

@@ -20,12 +20,18 @@ pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &s
     if url != crate::ews::AUTODISCOVER {
         return Ok(url.clone());
     }
-    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND_DOC).unwrap_or_default();
+    // One that can't be read is found again (and kept anew: it's only the address).
+    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND_DOC).unwrap_or_else(|e| {
+        log::warn!("{}: the Exchange server found before couldn't be read: {e}", acc.id);
+        String::new()
+    });
     if !kept.is_empty() && !withdrawn(acc, &kept) {
         return Ok(kept);
     }
     let found = crate::ews::autodiscover_as(&acc.email, user, secret, None, acc.user_agent.as_deref(), &Trust::of(acc, &[]))?;
-    let _ = store.save_account_doc(&acc.id, EWS_FOUND_DOC, &found);
+    if let Err(e) = store.save_account_doc(&acc.id, EWS_FOUND_DOC, &found) {
+        log::warn!("{}: the Exchange server found isn't kept, and is looked for again next time: {e}", acc.id);
+    }
     Ok(found)
 }
 
@@ -452,7 +458,12 @@ impl Worker {
         self.flush_outbox();
         // Drafts kept while offline go to the server first. They stay on disk until each one is
         // filed ([`forget_draft`]): a worker given up or a connection lost before then loses none.
-        let kept: Vec<PendingDraft> = self.store.load_account_doc(&self.acc.id, PENDING_DRAFTS).unwrap_or_default();
+        // One that can't be read files none this time and is left as it is (nothing is written
+        // here): they stay kept, and are read again at the next connection.
+        let kept: Vec<PendingDraft> = self.store.load_account_doc(&self.acc.id, PENDING_DRAFTS).unwrap_or_else(|e| {
+            log::warn!("{}: the drafts kept on this computer couldn't be read: {e}", self.acc.id);
+            Vec::new()
+        });
         for d in kept.into_iter().rev() {
             // Not queued twice by a connection made again before the queue was done.
             if self.queue.iter().any(|j| matches!(j, Job::SaveDraft { raw, .. } if *raw == d.raw)) {
