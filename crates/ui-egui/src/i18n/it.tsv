@@ -2435,3 +2435,12 @@ presence	Offline	Offline
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	l’elenco delle cartelle di questo account è danneggiato, quindi per ora non vi viene archiviato nulla: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	il server non ha detto se ha preso il messaggio, che forse è già partito: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	non è stato possibile togliere un messaggio da Posta in uscita; è ancora lì e potrebbe ancora essere inviato: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	non è stato possibile togliere il messaggio da Posta in uscita per modificarlo: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	un messaggio è stato inviato ma non è stato possibile toglierlo da Posta in uscita; finché Quatrelle è aperto non viene inviato di nuovo, e viene tolto appena possibile: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	il messaggio non c’è più
+	the message can't be read	il messaggio non può essere letto
+	no mail cache	nessuna cache della posta
+	not an Outbox message	non è un messaggio di Posta in uscita

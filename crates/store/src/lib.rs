@@ -374,8 +374,8 @@ impl Store {
 
     /// From now on, a [`Store::failing`] cache fails to read the files whose path ends with
     /// `reads` (`state.json`, `.eml`), and to write, rename or remove those ending with `writes`;
-    /// `None` lets them work again; a leading `!` makes them damaged rather than failing. Other
-    /// caches ignore it.
+    /// `None` lets them work again; a leading `!` makes them damaged rather than failing; `|`
+    /// separates several endings (`7.json|7.eml`). Other caches ignore it.
     #[doc(hidden)]
     pub fn fail(&self, reads: Option<&str>, writes: Option<&str>) {
         if let Files::Failing(f) = &self.files.main {
@@ -386,7 +386,8 @@ impl Store {
 
     /// From now on, a [`Store::failing`] cache answers `Ok` to a removal of the files or folders
     /// whose path ends with `removals`, and removes nothing: what a data file does when it can't
-    /// look whether they're there. `None` lets them go again. Other caches ignore it.
+    /// look whether they're there; `|` separates several endings. `None` lets them go again.
+    /// Other caches ignore it.
     #[doc(hidden)]
     pub fn fail_quietly(&self, removals: Option<&str>) {
         if let Files::Failing(f) = &self.files.main {

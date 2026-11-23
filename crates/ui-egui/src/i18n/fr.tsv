@@ -2437,3 +2437,12 @@ presence	Offline	Hors ligne
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	la liste des dossiers de ce compte est abîmée, rien n’y est donc rangé pour l’instant : {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	le serveur n’a pas dit s’il a pris le message, qui est peut-être parti : {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	un message n’a pas pu être retiré de la boîte d’envoi ; il y est toujours, et peut encore partir : {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	le message n’a pas pu être retiré de la boîte d’envoi pour être modifié : {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	un message est parti mais n’a pas pu être retiré de la boîte d’envoi ; tant que Quatrelle est ouvert, il n’est pas renvoyé, et il en est retiré dès que possible : {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	le message n’est plus là
+	the message can't be read	le message ne peut pas être lu
+	no mail cache	aucun cache de courrier
+	not an Outbox message	ce n’est pas un message de la boîte d’envoi

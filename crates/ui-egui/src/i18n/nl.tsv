@@ -2433,3 +2433,12 @@ presence	Offline	Offline
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	de mappenlijst van dit account is beschadigd, dus er wordt voorlopig niets in opgeborgen: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	de server heeft niet gezegd of hij het bericht heeft aangenomen, dat misschien al verzonden is: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	een bericht kon niet uit Postvak UIT worden gehaald; het staat er nog en kan nog worden verzonden: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	het bericht kon niet uit Postvak UIT worden gehaald om het te wijzigen: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	een bericht is verzonden maar kon niet uit Postvak UIT worden gehaald; zolang Quatrelle open is, wordt het niet opnieuw verzonden, en het wordt eruit gehaald zodra dat kan: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	het bericht is er niet meer
+	the message can't be read	het bericht kan niet worden gelezen
+	no mail cache	geen e-mailcache
+	not an Outbox message	geen bericht uit Postvak UIT

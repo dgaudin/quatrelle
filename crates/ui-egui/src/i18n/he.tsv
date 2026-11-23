@@ -2432,3 +2432,12 @@ presence	Offline	לא מחובר
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	רשימת התיקיות של החשבון הזה פגומה, ולכן בינתיים לא נשמר בה דבר: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	השרת לא אמר אם קיבל את ההודעה, וייתכן שהיא כבר נשלחה: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	לא ניתן היה להוציא הודעה מהדואר היוצא; היא עדיין שם ועשויה להישלח: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	לא ניתן היה להוציא את ההודעה מהדואר היוצא כדי לשנות אותה: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	הודעה נשלחה אך לא ניתן היה להוציא אותה מהדואר היוצא; כל עוד Quatrelle פתוח היא לא תישלח שוב, והיא תוצא ברגע שאפשר: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	ההודעה כבר לא קיימת
+	the message can't be read	לא ניתן לקרוא את ההודעה
+	no mail cache	אין מטמון דואר
+	not an Outbox message	זו לא הודעה מהדואר היוצא

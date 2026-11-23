@@ -2436,3 +2436,12 @@ presence	Offline	离线
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	此账户的文件夹列表已损坏，因此暂时不会向其中归档任何内容: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	服务器没有说明是否已收下这封邮件，它可能已经发出: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	无法将一封邮件移出发件箱；它仍在那里，可能仍会被发送: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	无法将这封邮件移出发件箱以进行修改: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	一封邮件已发出，但无法移出发件箱；Quatrelle 打开期间不会再次发送，并会尽快将其移出: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	这封邮件已不在
+	the message can't be read	无法读取这封邮件
+	no mail cache	没有邮件缓存
+	not an Outbox message	不是发件箱中的邮件

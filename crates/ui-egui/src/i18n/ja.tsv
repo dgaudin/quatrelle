@@ -2433,3 +2433,12 @@ presence	Offline	オフライン
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	このアカウントのフォルダー一覧が壊れているため、当面は何も整理されません: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	サーバーはメッセージを受け取ったかどうかを伝えていません。すでに送信された可能性があります: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	送信トレイからメッセージを取り出せませんでした。まだ残っていて、送信されることがあります: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	変更するために送信トレイからメッセージを取り出せませんでした: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	メッセージは送信されましたが、送信トレイから取り出せませんでした。Quatrelle を開いている間は再送されず、できしだい取り出されます: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	メッセージがもうありません
+	the message can't be read	メッセージを読み取れません
+	no mail cache	メールのキャッシュがありません
+	not an Outbox message	送信トレイのメッセージではありません

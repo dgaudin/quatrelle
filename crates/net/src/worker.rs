@@ -474,6 +474,11 @@ struct Worker {
     /// later (Sent Items read again) ends with it, rather than keep a stopped account's main
     /// thread waiting for its jobs.
     alive: Arc<()>,
+    /// Outbox messages that went, were refused for good or may have gone, and that the Outbox
+    /// couldn't be told of (what says so couldn't be written there): not sent again while this
+    /// runs, told again at each round and forgotten once told ([`Worker::flush_outbox`]). What
+    /// the Outbox keeps on disk is what a worker started again goes by.
+    outbox_done: HashMap<u64, send::Untold>,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -581,6 +586,7 @@ impl Worker {
             numbering_unread,
             removals,
             alive: Arc::default(),
+            outbox_done: HashMap::new(),
         }
     }
 

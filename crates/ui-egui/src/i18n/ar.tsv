@@ -2432,3 +2432,12 @@ presence	Offline	غير متصل
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	قائمة مجلدات هذا الحساب تالفة، لذا لا يُحفَظ فيها شيء في الوقت الحالي: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	لم يذكر الخادم ما إذا كان قد استلم الرسالة، وربما تكون قد أُرسلت: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	تعذّر إخراج رسالة من علبة الصادر؛ ما زالت هناك وقد تُرسَل: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	تعذّر إخراج الرسالة من علبة الصادر لتعديلها: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	أُرسلت رسالة لكن تعذّر إخراجها من علبة الصادر؛ ما دام Quatrelle مفتوحًا فلن تُرسَل مرة أخرى، وستُخرَج حالما يمكن ذلك: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	لم تعد الرسالة موجودة
+	the message can't be read	تتعذّر قراءة الرسالة
+	no mail cache	لا توجد ذاكرة تخزين مؤقت للبريد
+	not an Outbox message	ليست رسالة من علبة الصادر

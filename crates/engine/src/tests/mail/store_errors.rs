@@ -448,3 +448,93 @@ fn closing_a_mailbox_writes_no_list_over_a_damaged_one() {
     assert_eq!(file_text(&cache, "a2", "folders.json"), damaged_text(), "written over");
     assert_eq!(cache.account_file("a2", "folders.json.bad").unwrap(), None);
 }
+
+/// An Outbox message whose files can't be taken out stays, and that's said: deleted, it went all
+/// the same; taken back to be changed, it went twice (as it was, and as changed).
+#[test]
+fn an_outbox_message_that_cant_be_taken_out_says_so() {
+    let mut s = failing_session();
+    let item = quatrelle_store::OutboxItem {
+        id: 71,
+        from: "riley@studio.example".into(),
+        recipients: vec!["ana@contoso.example".into()],
+        queued: NOW,
+        ..Default::default()
+    };
+    let raw = b"From: riley@studio.example\r\nTo: ana@contoso.example\r\nSubject: Waiting\r\n\r\nhi\r\n";
+    store(&s).outbox_add(sample::SAMPLE_ACCOUNT, &item, raw).unwrap();
+    s.run("folder.outbox", &json!({})).unwrap();
+    let key = s.list[0].key.clone();
+    store(&s).fail(None, Some("outbox/71.json|outbox/71.eml|outbox/71.gone"));
+    let r = s.run("outbox.edit", &json!({"key": key.to_id()}));
+    assert!(matches!(r, Err(CmdError::Failed(_))), "{r:?}");
+    assert!(s.compose.is_none(), "not opened to be sent again");
+    s.run("list.select", &json!({"key": key.to_id()})).unwrap();
+    let r = s.run("mail.delete", &json!({}));
+    assert!(matches!(r, Err(CmdError::Failed(_))), "{r:?}");
+    assert_eq!(store(&s).outbox(sample::SAMPLE_ACCOUNT).len(), 1);
+    assert_eq!(s.outbox.len(), 1, "still shown");
+    // Its files held, but a mark beside them can be written: out of the Outbox.
+    store(&s).fail(None, Some("outbox/71.json|outbox/71.eml"));
+    s.run("list.select", &json!({"key": key.to_id()})).unwrap();
+    s.run("mail.delete", &json!({})).unwrap();
+    store(&s).fail(None, None);
+    assert!(store(&s).outbox(sample::SAMPLE_ACCOUNT).is_empty() && s.outbox.is_empty());
+}
+
+/// Two Outbox messages deleted together, one of which can't be taken out (its files held, or
+/// their removal answering as if done and leaving them, and no mark beside them): the other goes
+/// with the flag it owed, and the one held is said, still shown, its flag still owed. Taken back
+/// to be changed, it isn't opened while it can't be taken out; once it can, it opens with what
+/// it owes, out of the Outbox.
+#[test]
+fn deleting_and_editing_in_the_outbox_say_what_failed() {
+    for quietly in [false, true] {
+        let cache = Store::failing();
+        assert!(sample::seed_if_empty(&cache, NOW).unwrap());
+        let original = cache.load_folder(sample::SAMPLE_ACCOUNT, "INBOX").unwrap().messages[0].key.clone();
+        for (id, subject) in [(71u64, "Held"), (72, "Free")] {
+            let item = quatrelle_store::OutboxItem {
+                id,
+                from: "riley@studio.example".into(),
+                recipients: vec!["ana@contoso.example".into()],
+                queued: NOW,
+                ..Default::default()
+            };
+            let raw = format!("From: riley@studio.example\r\nTo: ana@contoso.example\r\nSubject: {subject}\r\n\r\nhi\r\n");
+            cache.outbox_add(sample::SAMPLE_ACCOUNT, &item, raw.as_bytes()).unwrap();
+        }
+        // Both answer the same message, and owe it its Replied flag.
+        let owed = vec![(71u64, original.clone(), Flag::Answered), (72, original.clone(), Flag::Answered)];
+        cache.save_doc("pending-marks.json", &owed).unwrap();
+        let mut s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+        let _ = s.take_jobs();
+        s.run("folder.outbox", &json!({})).unwrap();
+        if quietly {
+            cache.fail_quietly(Some("outbox/71.json|outbox/71.eml"));
+            cache.fail(None, Some("outbox/71.gone"));
+        } else {
+            cache.fail(None, Some("outbox/71.json|outbox/71.eml|outbox/71.gone"));
+        }
+        s.run("list.selectAll", &json!({})).unwrap();
+        let r = s.run("mail.delete", &json!({}));
+        let deleting = "a message couldn't be taken out of the Outbox; it's still there, and may still be sent: ";
+        assert!(matches!(&r, Err(CmdError::Failed(m)) if m.starts_with(deleting)), "quietly {quietly}: {r:?}");
+        let left: Vec<u64> = cache.outbox(sample::SAMPLE_ACCOUNT).iter().map(|i| i.id).collect();
+        assert_eq!(left, [71], "quietly {quietly}");
+        assert_eq!(s.list.iter().map(|m| m.subject.as_str()).collect::<Vec<_>>(), ["Held"], "quietly {quietly}: still shown");
+        let still: Vec<(u64, MessageKey, Flag)> = cache.load_doc("pending-marks.json").unwrap();
+        assert_eq!(still.iter().map(|(id, ..)| *id).collect::<Vec<_>>(), [71], "quietly {quietly}: the flags owed");
+        let key = s.list[0].key.clone();
+        let r = s.run("outbox.edit", &json!({"key": key.to_id()}));
+        let changing = "the message couldn't be taken out of the Outbox to be changed: ";
+        assert!(matches!(&r, Err(CmdError::Failed(m)) if m.starts_with(changing)), "quietly {quietly}: {r:?}");
+        assert!(s.compose.is_none(), "quietly {quietly}: opened, and it would go twice");
+        assert_eq!(cache.outbox(sample::SAMPLE_ACCOUNT).len(), 1, "quietly {quietly}");
+        cache.fail(None, None);
+        cache.fail_quietly(None);
+        s.run("outbox.edit", &json!({"key": key.to_id()})).unwrap();
+        assert!(s.compose.as_ref().is_some_and(|c| c.source.as_ref() == Some(&original)), "quietly {quietly}: what it owes");
+        assert!(cache.outbox(sample::SAMPLE_ACCOUNT).is_empty() && s.outbox.is_empty(), "quietly {quietly}");
+    }
+}

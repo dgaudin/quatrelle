@@ -5,6 +5,13 @@
 
 use crate::*;
 
+#[cfg(test)]
+mod tests;
+
+/// The end of the mark a message taken out of the Outbox has beside its files while any of them
+/// is left ([`Store::outbox_remove`]).
+const GONE: &str = ".gone";
+
 impl Store {
     pub fn read_body(&self, key: &MessageKey) -> Option<Vec<u8>> {
         self.reads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -87,9 +94,15 @@ impl Store {
         self.account_dir(account).join("outbox")
     }
 
-    /// Queue a message to send when the account is back online.
+    /// Queue a message to send when the account is back online. A mark an earlier message of the
+    /// id left ([`Store::outbox_remove`]) goes first: left, it would hide this one, which would
+    /// then never go and never be seen; one that can't go is an error, and nothing is queued.
     pub fn outbox_add(&self, account: &str, item: &OutboxItem, raw: &[u8]) -> Result<()> {
         let dir = self.outbox_dir(account);
+        let mark = dir.join(format!("{}{GONE}", item.id));
+        if let Some(e) = self.left_after_removal(&mark) {
+            return Err(io_err(&mark)(e));
+        }
         self.files.write(&dir.join(format!("{}.eml", item.id)), raw)?;
         self.write_json(&dir.join(format!("{}.json", item.id)), item)
     }
@@ -99,17 +112,17 @@ impl Store {
         self.write_json(&self.outbox_dir(account).join(format!("{}.json", item.id)), item)
     }
 
-    /// Queued messages, oldest first.
+    /// Queued messages, oldest first: each with its source, and not taken out
+    /// ([`Store::outbox_remove`]).
     pub fn outbox(&self, account: &str) -> Vec<OutboxItem> {
-        let dir = self.outbox_dir(account);
-        let mut items: Vec<OutboxItem> = self
-            .files
-            .list(&dir)
-            .into_iter()
+        let files = self.files.list(&self.outbox_dir(account));
+        let there: HashSet<&str> = files.iter().map(|(name, _)| name.as_str()).collect();
+        let mut items: Vec<OutboxItem> = files
+            .iter()
             .filter(|(name, _)| name.ends_with(".json"))
-            .filter_map(|(_, p)| self.files.read(&p).ok())
+            .filter_map(|(_, p)| self.files.read(p).ok())
             .filter_map(|b| serde_json::from_slice::<OutboxItem>(&b).ok())
-            .filter(|i| self.files.is_file(&dir.join(format!("{}.eml", i.id))))
+            .filter(|i| there.contains(format!("{}.eml", i.id).as_str()) && !there.contains(format!("{}{GONE}", i.id).as_str()))
             .collect();
         items.sort_by_key(|i| (i.queued, i.id));
         items
@@ -119,10 +132,77 @@ impl Store {
         self.files.read(&self.outbox_dir(account).join(format!("{id}.eml"))).ok()
     }
 
-    pub fn outbox_remove(&self, account: &str, id: u64) {
+    /// A message taken out of the Outbox (sent, deleted, or taken back to be changed): never
+    /// listed again, so never sent again. A mark (`<id>.gone`) is written beside it first, then its
+    /// files are removed, then the mark once none is left: whatever stops on the way (a file
+    /// another program holds, a failing disk, a removal that answers as if done and leaves the
+    /// file), the mark keeps the message out of the list, and [`Store::outbox_sweep`] removes what
+    /// is left later. Only [`Store::outbox_add`] of the same id lists one again. An error only when
+    /// the message may still be listed: the mark couldn't be written, and neither file went.
+    pub fn outbox_remove(&self, account: &str, id: u64) -> Result<()> {
         let dir = self.outbox_dir(account);
-        let _ = self.files.remove_file(&dir.join(format!("{id}.json")));
-        let _ = self.files.remove_file(&dir.join(format!("{id}.eml")));
+        let mark = dir.join(format!("{id}{GONE}"));
+        let marked = self.files.write(&mark, b"");
+        let mut left: Vec<(PathBuf, io::Error)> = Vec::new();
+        for name in [format!("{id}.json"), format!("{id}.eml")] {
+            let path = dir.join(name);
+            if let Some(e) = self.left_after_removal(&path) {
+                left.push((path, e));
+            }
+        }
+        match (marked, left.len()) {
+            // Nothing left to hide: the mark goes too (left, the sweep takes it).
+            (Ok(()), 0) => {
+                let _ = self.files.remove_file(&mark);
+                Ok(())
+            }
+            (Ok(()), n) => {
+                log::warn!("{account}: an Outbox message taken out left {n} of its files; its mark keeps it out");
+                Ok(())
+            }
+            (Err(_), 0) => Ok(()),
+            // Without one of its files it isn't listed: what's left is litter, not mail to send.
+            (Err(_), 1) => {
+                log::warn!("{account}: an Outbox message taken out left one of its files, and no mark");
+                Ok(())
+            }
+            (Err(e), _) => {
+                log::warn!("{account}: an Outbox message couldn't be taken out: neither its files nor a mark could be changed");
+                Err(left.into_iter().next().map_or(e, |(path, why)| io_err(&path)(why)))
+            }
+        }
+    }
+
+    /// What [`Store::outbox_remove`] left of the messages taken out, removed now where it can be:
+    /// a marked message's files, then its mark once neither of them is left. One pass over the
+    /// Outbox's files, each mark tried once.
+    pub fn outbox_sweep(&self, account: &str) {
+        let dir = self.outbox_dir(account);
+        let (mut swept, mut held) = (0usize, 0usize);
+        for (name, mark) in self.files.list(&dir) {
+            let Some(id) = name.strip_suffix(GONE).filter(|id| id.parse::<u64>().is_ok()) else { continue };
+            // Both tried, each time.
+            let left = [".json", ".eml"].iter().filter(|ext| self.left_after_removal(&dir.join(format!("{id}{ext}"))).is_some()).count();
+            if left > 0 {
+                held += 1;
+            } else if self.left_after_removal(&mark).is_none() {
+                swept += 1;
+            }
+        }
+        if swept > 0 || held > 0 {
+            log::info!("{account}: Outbox: {swept} messages taken out earlier cleared away, {held} still have files left");
+        }
+    }
+
+    /// Removes a file of the Outbox, and says why it's still there when it is: its removal failed,
+    /// or answered as if done and left it (a data file that couldn't look whether it was there).
+    /// One that wasn't there is gone.
+    fn left_after_removal(&self, path: &Path) -> Option<io::Error> {
+        match self.files.remove_file(path) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Some(e),
+            _ if self.files.is_file(path) => Some(io::Error::other("still there after its removal")),
+            _ => None,
+        }
     }
 
     /// Cached sources across all folders of an account, as (key, path) pairs, for indexing.

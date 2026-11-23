@@ -2439,3 +2439,12 @@ presence	Offline	離線
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	此帳戶的資料夾清單已損毀，因此暫時不會向其中歸檔任何內容: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	伺服器沒有說明是否已收下這封郵件，它可能已經寄出: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	無法將一封郵件移出寄件匣；它仍在那裡，可能仍會被寄出: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	無法將這封郵件移出寄件匣以進行修改: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	一封郵件已寄出，但無法移出寄件匣；Quatrelle 開啟期間不會再次寄出，並會盡快將其移出: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	這封郵件已不在
+	the message can't be read	無法讀取這封郵件
+	no mail cache	沒有郵件快取
+	not an Outbox message	不是寄件匣中的郵件

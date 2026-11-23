@@ -139,3 +139,55 @@ fn the_wording_of_an_unconfirmed_send_is_translated() {
         assert!(line.ends_with("{error}"), "{}: the value goes at the end: {line}", lang.code);
     }
 }
+
+/// What the Outbox says when a message can't be taken out of it: deleted
+/// (`engine/src/session/outbox.rs`), taken back to be changed (same), sent
+/// (`net/src/worker/send.rs`).
+const NOT_DELETED: &str = "a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}";
+const NOT_TAKEN_BACK: &str = "the message couldn't be taken out of the Outbox to be changed: {error}";
+const SENT_NOT_TAKEN_OUT: &str = "a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}";
+/// What the Outbox's commands say whole (`engine/src/session/outbox.rs`).
+const OUTBOX_WHOLE: [&str; 4] = ["the message is gone", "the message can't be read", "no mail cache", "not an Outbox message"];
+
+/// A message the Outbox couldn't be told of is said in the interface's language, what the disk
+/// said staying as it came; the wording is the engine's and the worker's, and every catalog has a
+/// line for it, as for the Outbox commands' other words.
+#[test]
+fn what_the_outbox_couldnt_do_is_translated() {
+    let engine = include_str!("../../../engine/src/session/outbox.rs");
+    let worker = include_str!("../../../net/src/worker/send.rs");
+    let head = |t: &str| t.trim_end_matches(": {error}").to_string();
+    assert!(engine.contains(&format!("const NOT_DELETED: &str = \"{}\";", head(NOT_DELETED))), "not in the engine any more");
+    assert!(engine.contains(&format!("const NOT_TAKEN_BACK: &str = \"{}\";", head(NOT_TAKEN_BACK))), "not in the engine any more");
+    assert!(
+        worker.contains("const SENT_NOT_TAKEN_OUT: &str =") && worker.contains(&format!("\"{}\";", head(SENT_NOT_TAKEN_OUT))),
+        "not in the worker any more"
+    );
+    for whole in OUTBOX_WHOLE {
+        assert!(engine.contains(&format!("\"{whole}\"")), "not in the engine any more: {whole}");
+    }
+    let wordings = [NOT_DELETED, NOT_TAKEN_BACK, SENT_NOT_TAKEN_OUT];
+    for t in wordings {
+        assert!(!head(t).contains(": "), "the head must be free of ': ': `i18n::error` cuts at the first: {t}");
+    }
+    let disk = "/home/studio/.local/share/quatrelle/a1/outbox/7.json: Permission denied (os error 13)";
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    let said: Vec<String> = wordings.iter().map(|t| error(&format!("{}: {disk}", head(t)))).collect();
+    let gone = error(OUTBOX_WHOLE[0]);
+    set_current(Lang::EN);
+    for s in &said {
+        assert!(s.contains("boîte d’envoi"), "{s}");
+        assert!(s.ends_with(disk), "what the disk said changed: {s}");
+        assert!(!s.contains("Outbox") && !s.contains("couldn't"), "left in English: {s}");
+    }
+    assert_eq!(gone, "le message n’est plus là");
+    for lang in LANGUAGES.iter().filter(|l| l.code != "en") {
+        for key in wordings {
+            let line = lang.catalog().get(key).unwrap_or_else(|| panic!("{}: no line for {key}", lang.code));
+            assert!(line.ends_with("{error}"), "{}: the value goes at the end: {line}", lang.code);
+        }
+        for key in OUTBOX_WHOLE {
+            assert!(lang.catalog().get(key).is_some(), "{}: no line for {key}", lang.code);
+        }
+    }
+}

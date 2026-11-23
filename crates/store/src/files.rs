@@ -35,11 +35,18 @@ impl Faults {
     /// can't look whether the file is there ([`Store::fail_quietly`]).
     fn silent(&self, p: &Path) -> bool {
         let rule = self.quiet.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        rule.as_deref().is_some_and(|end| p.to_string_lossy().replace('\\', "/").ends_with(end))
+        rule.as_deref().is_some_and(|ends| Faults::named(ends, p))
+    }
+
+    /// Whether `p` ends with one of `ends`, separated by `|` (`7.json|7.eml`).
+    fn named(ends: &str, p: &Path) -> bool {
+        let path = p.to_string_lossy().replace('\\', "/");
+        ends.split('|').any(|end| path.ends_with(end))
     }
 
     /// An error when `rule` names how `p` ends: never "not found", which the store reads as an
     /// empty file. A rule starting with `!` is a damaged file (invalid data), not a failing disk.
+    /// Several endings are separated by `|`.
     fn check(rule: &Mutex<Option<String>>, p: &Path) -> io::Result<()> {
         let rule = rule.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(rule) = rule.as_deref() else { return Ok(()) };
@@ -47,7 +54,7 @@ impl Faults {
             Some(end) => (true, end),
             None => (false, rule),
         };
-        if !p.to_string_lossy().replace('\\', "/").ends_with(end) {
+        if !Faults::named(end, p) {
             return Ok(());
         }
         Err(if damaged { io::Error::new(io::ErrorKind::InvalidData, "damaged on purpose") } else { io::Error::other("failed on purpose") })

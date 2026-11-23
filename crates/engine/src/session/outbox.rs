@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: the Outbox.
 
 use super::*;
+
+/// Said, before what went wrong, when a message deleted from the Outbox couldn't be taken out of
+/// it: it's still there, and may still go (unless it was refused, or may have gone already).
+const NOT_DELETED: &str = "a message couldn't be taken out of the Outbox; it's still there, and may still be sent";
+/// Said, before what went wrong, when a message to change couldn't be taken out of the Outbox:
+/// opened all the same, it would go twice (as it was, and as changed).
+const NOT_TAKEN_BACK: &str = "the message couldn't be taken out of the Outbox to be changed";
 
 impl Session {
     /// Re-read the Outbox from disk.
@@ -101,13 +109,19 @@ impl Session {
         Ok(serde_json::json!({ "accounts": accounts.len(), "messages": self.outbox.len() }))
     }
 
-    /// Delete the selected Outbox messages (they are never sent).
+    /// Delete the selected Outbox messages (they are never sent). One that can't be taken out is
+    /// said: it's still there, to be sent, with the flag it owes.
     pub fn delete_outbox_selection(&mut self) -> CmdResult {
-        let gone: Vec<(String, OutboxItem)> = self.selection.iter().filter_map(|k| self.outbox_entry(k)).collect();
+        let mut gone: Vec<(String, OutboxItem)> = self.selection.iter().filter_map(|k| self.outbox_entry(k)).collect();
+        let mut kept = None;
         if let Some(store) = &self.store {
-            for (a, i) in &gone {
-                store.outbox_remove(a, i.id);
-            }
+            gone.retain(|(a, i)| match store.outbox_remove(a, i.id) {
+                Ok(()) => true,
+                Err(e) => {
+                    kept = Some(e);
+                    false
+                }
+            });
         }
         // Removed from the Outbox undelivered: whatever flags they owed are dropped.
         let before = self.pending_marks.len();
@@ -119,6 +133,9 @@ impl Session {
         self.selection.clear();
         self.focus = None;
         self.after_outbox_change();
+        if let Some(e) = kept {
+            return Err(CmdError::Failed(format!("{NOT_DELETED}: {e}")));
+        }
         Ok(serde_json::json!({ "deleted": gone.len() }))
     }
 
@@ -139,6 +156,8 @@ impl Session {
         // What it answers comes with what the Outbox owed it, below; it's no copy in Drafts.
         (c.source, c.mode) = (None, None);
         c.saved_id.clear();
+        // Out of the Outbox before it opens: left there, it would go as well as the changed one.
+        store.outbox_remove(&account, item.id).map_err(|e| CmdError::Failed(format!("{NOT_TAKEN_BACK}: {e}")))?;
         let id = c.id;
         self.open_compose(c);
         // Pulled back for editing: the owed flag moves onto the compose, for its delivery.
@@ -149,7 +168,6 @@ impl Session {
                 c.mode = Some(if flag == Flag::Forwarded { ReplyMode::Forward } else { ReplyMode::Reply });
             }
         }
-        store.outbox_remove(&account, item.id);
         self.reading = None;
         self.selection.clear();
         self.after_outbox_change();

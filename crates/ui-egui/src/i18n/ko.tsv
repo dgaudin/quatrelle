@@ -2435,3 +2435,12 @@ presence	Offline	오프라인
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	이 계정의 폴더 목록이 손상되어 당분간 아무것도 정리되지 않습니다: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	서버가 메시지를 받았는지 알려 주지 않았습니다. 이미 보내졌을 수 있습니다: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	보낼 편지함에서 메시지를 빼낼 수 없습니다. 아직 남아 있으며 보내질 수 있습니다: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	변경하려고 보낼 편지함에서 메시지를 빼낼 수 없습니다: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	메시지를 보냈지만 보낼 편지함에서 빼낼 수 없습니다. Quatrelle가 열려 있는 동안에는 다시 보내지 않으며, 가능해지는 대로 빼냅니다: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	메시지가 더 이상 없습니다
+	the message can't be read	메시지를 읽을 수 없습니다
+	no mail cache	메일 캐시가 없습니다
+	not an Outbox message	보낼 편지함의 메시지가 아닙니다

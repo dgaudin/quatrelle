@@ -2437,3 +2437,12 @@ presence	Offline	Не в сети
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	список папок этой учётной записи повреждён, поэтому пока в него ничего не раскладывается: {error}
 # A message whose whole text went to the server, which never said whether it took it.
 	the server didn't say whether it took the message, which may have gone: {error}	сервер не сообщил, принял ли он сообщение, которое, возможно, уже отправлено: {error}
+# A message that couldn't be taken out of the Outbox: deleted or taken back, it stays; sent, it isn't sent again.
+	a message couldn't be taken out of the Outbox; it's still there, and may still be sent: {error}	не удалось убрать сообщение из «Исходящих»; оно всё ещё там и может быть отправлено: {error}
+	the message couldn't be taken out of the Outbox to be changed: {error}	не удалось убрать сообщение из «Исходящих», чтобы изменить его: {error}
+	a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be: {error}	сообщение отправлено, но его не удалось убрать из «Исходящих»; пока Quatrelle открыт, оно не будет отправлено снова и будет убрано, как только это станет возможно: {error}
+# What the Outbox's commands say when a message can't be changed or isn't one of the Outbox's.
+	the message is gone	сообщения больше нет
+	the message can't be read	не удаётся прочитать сообщение
+	no mail cache	нет кэша почты
+	not an Outbox message	это не сообщение из «Исходящих»

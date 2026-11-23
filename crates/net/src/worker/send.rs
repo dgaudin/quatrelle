@@ -21,6 +21,17 @@ fn next_quick(waiting: &mut VecDeque<Job>) -> Option<Job> {
 /// Said when a sent message's copy has nowhere to go.
 const NO_SENT: &str = "sent, but no copy was saved: the server has no Sent Items folder, and one couldn't be made";
 
+/// Said, before what went wrong, when a message sent from the Outbox couldn't be taken out of it.
+const SENT_NOT_TAKEN_OUT: &str = "a message was sent but couldn't be taken out of the Outbox; while Quatrelle is open it isn't sent again, and it's taken out as soon as it can be";
+
+/// What the Outbox couldn't be told of one of its messages ([`Worker::outbox_done`]).
+pub(super) enum Untold {
+    /// It went: to take out of the Outbox.
+    Sent,
+    /// Refused for good, or maybe gone: its bookkeeping, saying so, to write.
+    Marked(Box<OutboxItem>),
+}
+
 impl Worker {
     /// The account's second connection: sends mail, reads or changes the automatic replies, and
     /// answers for rooms, free/busy and MailTips, whatever the main connection is doing. It connects when
@@ -398,8 +409,19 @@ impl Worker {
     /// up later (still offline); a message refused for good stays, marked `refused:` with the
     /// error, and one that may have gone (`Unconfirmed`) stays marked `unconfirmed:`: neither is
     /// sent again by itself.
+    ///
+    /// What was taken out of it before and left files is cleared away first
+    /// ([`Store::outbox_sweep`]); a message the Outbox couldn't be told of
+    /// ([`Worker::outbox_done`]) is told again, and doesn't go in this round either way.
     pub(super) fn flush_outbox(&mut self) {
+        self.store.outbox_sweep(&self.acc.id);
+        let untold: HashSet<u64> = self.outbox_done.keys().copied().collect();
+        self.tell_outbox_again();
         for mut item in self.store.outbox(&self.acc.id) {
+            // Sent, refused or maybe gone already: the Outbox couldn't be told.
+            if untold.contains(&item.id) {
+                continue;
+            }
             // Held back (Delay Delivery) until its time; then dated when it goes.
             if item.not_before > now() {
                 continue;
@@ -413,9 +435,17 @@ impl Worker {
             let sent = self.deliver(&raw, &item.from, &item.recipients, item.sent_folder.as_deref());
             match sent {
                 Ok(()) => {
-                    self.store.outbox_remove(&self.acc.id, item.id);
+                    // Left in the Outbox, it would go again.
+                    let kept = self.store.outbox_remove(&self.acc.id, item.id).err();
+                    if kept.is_some() {
+                        self.outbox_done.insert(item.id, Untold::Sent);
+                    }
                     let folder = item.sent_folder.take();
                     self.after_sent(item.id, &raw, folder);
+                    if let Some(e) = kept {
+                        log::error!("{}: message {} sent, but the Outbox couldn't be told", self.acc.id, item.id);
+                        self.notice(format!("{SENT_NOT_TAKEN_OUT}: {e}"));
+                    }
                 }
                 Err(e) => {
                     let retry = e.is_retryable();
@@ -425,7 +455,13 @@ impl Worker {
                         NetError::Unconfirmed(_) => format!("unconfirmed: {e}"),
                         _ => format!("refused: {e}"),
                     });
-                    let _ = self.store.outbox_update(&self.acc.id, &item);
+                    if self.store.outbox_update(&self.acc.id, &item).is_err() {
+                        log::warn!("{}: message {}: why it wasn't sent couldn't be kept in the Outbox", self.acc.id, item.id);
+                        // Refused for good or maybe gone: never tried again for want of a mark.
+                        if !retry {
+                            self.outbox_done.insert(item.id, Untold::Marked(Box::new(item.clone())));
+                        }
+                    }
                     if retry {
                         self.sink.emit(Event::Queued { account: self.id(), id: item.id, error: e.to_string() });
                         return;
@@ -434,6 +470,27 @@ impl Worker {
                 }
             }
         }
+    }
+
+    /// Tells the Outbox again what it couldn't be told ([`Worker::outbox_done`]): a message that
+    /// went is taken out, a refused one marked so, each forgotten once that's done. A refused one
+    /// no longer there (deleted, or taken back to be changed) is forgotten, nothing written.
+    fn tell_outbox_again(&mut self) {
+        if self.outbox_done.is_empty() {
+            return;
+        }
+        let (store, account) = (&self.store, &self.acc.id);
+        let there: HashSet<u64> = store.outbox(account).iter().map(|i| i.id).collect();
+        self.outbox_done.retain(|id, untold| {
+            let told = match untold {
+                Untold::Sent => store.outbox_remove(account, *id).is_ok(),
+                Untold::Marked(item) => !there.contains(id) || store.outbox_update(account, item).is_ok(),
+            };
+            if told {
+                log::info!("{account}: message {id}: the Outbox is told of it now");
+            }
+            !told
+        });
     }
 
     /// A message went out: tell the engine and file a copy in Sent.
