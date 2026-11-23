@@ -541,6 +541,7 @@
 	Font color	لون الخط
 	No color	بلا لون
 	Automatic	تلقائي
+	Bullets	قائمة نقطية
 	Bullets (Ctrl+Shift+L)	تعداد نقطي (Ctrl+Shift+L)
 	Numbering	ترقيم
 	Decrease indent (Ctrl+Shift+T)	إنقاص المسافة البادئة (Ctrl+Shift+T)
@@ -1212,6 +1213,7 @@ month	May	مايو
 	Font	الخط
 	Proofing	التدقيق
 	Paste options	خيارات اللصق
+	Keep source formatting	الاحتفاظ بالتنسيق الأصلي
 	Keep text only	الاحتفاظ بالنص فقط
 	Paste without the look it has where it was copied	لصق بدون تنسيق المصدر
 	Check Names	التحقق من الأسماء

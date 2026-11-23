@@ -541,6 +541,7 @@
 	Font color	צבע גופן
 	No color	ללא צבע
 	Automatic	אוטומטי
+	Bullets	תבליטים
 	Bullets (Ctrl+Shift+L)	תבליטים (Ctrl+Shift+L)
 	Numbering	מספור
 	Decrease indent (Ctrl+Shift+T)	הקטן כניסה (Ctrl+Shift+T)
@@ -1212,6 +1213,7 @@ month	May	מאי
 	Font	גופן
 	Proofing	הגהה
 	Paste options	אפשרויות הדבקה
+	Keep source formatting	שמירת העיצוב המקורי
 	Keep text only	שמירת הטקסט בלבד
 	Paste without the look it has where it was copied	הדבקה ללא העיצוב מהמקור
 	Check Names	בדיקת שמות

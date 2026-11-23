@@ -541,6 +541,7 @@
 	Font color	글꼴 색
 	No color	색 없음
 	Automatic	자동
+	Bullets	글머리 기호
 	Bullets (Ctrl+Shift+L)	글머리 기호(Ctrl+Shift+L)
 	Numbering	번호 매기기
 	Decrease indent (Ctrl+Shift+T)	내어쓰기(Ctrl+Shift+T)
@@ -1215,6 +1216,7 @@ month	May	5월
 	Font	글꼴
 	Proofing	교정
 	Paste options	붙여넣기 옵션
+	Keep source formatting	원본 서식 유지
 	Keep text only	텍스트만 유지
 	Paste without the look it has where it was copied	원본 서식 없이 붙여넣기
 	Check Names	이름 확인

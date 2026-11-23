@@ -541,6 +541,7 @@
 	Font color	Colore carattere
 	No color	Nessun colore
 	Automatic	Automatico
+	Bullets	Elenco puntato
 	Bullets (Ctrl+Shift+L)	Elenco puntato (Ctrl+Maiusc+L)
 	Numbering	Numerazione
 	Decrease indent (Ctrl+Shift+T)	Riduci rientro (Ctrl+Maiusc+T)
@@ -1215,6 +1216,7 @@ month	May	maggio
 	Font	Carattere
 	Proofing	Strumenti di correzione
 	Paste options	Opzioni incolla
+	Keep source formatting	Mantieni la formattazione di origine
 	Keep text only	Mantieni solo il testo
 	Paste without the look it has where it was copied	Incolla senza la formattazione di origine
 	Check Names	Controlla nomi

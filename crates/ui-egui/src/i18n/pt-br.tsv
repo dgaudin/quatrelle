@@ -542,6 +542,7 @@
 	Font color	Cor da fonte
 	No color	Sem cor
 	Automatic	Automático
+	Bullets	Marcadores
 	Bullets (Ctrl+Shift+L)	Marcadores (Ctrl+Shift+L)
 	Numbering	Numeração
 	Decrease indent (Ctrl+Shift+T)	Diminuir recuo (Ctrl+Shift+T)
@@ -1216,6 +1217,7 @@ month	May	maio
 	Font	Fonte
 	Proofing	Revisão de texto
 	Paste options	Opções de colagem
+	Keep source formatting	Manter a formatação original
 	Keep text only	Manter somente o texto
 	Paste without the look it has where it was copied	Colar sem a formatação de origem
 	Check Names	Verificar nomes

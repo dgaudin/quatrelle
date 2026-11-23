@@ -542,6 +542,7 @@
 	Font color	Couleur de police
 	No color	Aucune couleur
 	Automatic	Automatique
+	Bullets	Puces
 	Bullets (Ctrl+Shift+L)	Puces (Ctrl+Maj+L)
 	Numbering	Numérotation
 	Decrease indent (Ctrl+Shift+T)	Diminuer le retrait (Ctrl+Maj+T)
@@ -1216,6 +1217,7 @@ month	May	mai
 	Font	Police
 	Proofing	Vérification
 	Paste options	Options de collage
+	Keep source formatting	Conserver la mise en forme
 	Keep text only	Conserver uniquement le texte
 	Paste without the look it has where it was copied	Coller sans la mise en forme d’origine
 	Check Names	Vérifier les noms
