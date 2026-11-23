@@ -31,7 +31,7 @@ pub mod url;
 use std::collections::{BTreeMap, HashMap};
 
 use quatrelle_mime as mime;
-use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
+use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, MessageKind, Op, Summary, sort_newest_first, utf7};
 use quatrelle_store::{FolderState, Store, StoreError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};

@@ -323,3 +323,58 @@ fn load_says_when_it_cant_read() {
     assert_eq!(store.account_file("a1", "jmap.json").unwrap(), Some(damaged), "left as it is");
     assert_eq!(store.account_file("a1", "jmap.json.bad").unwrap(), None, "not set aside");
 }
+
+fn report_source() -> Vec<u8> {
+    "From: postmaster@y.example\r\nTo: a@x.example\r\nContent-Type: multipart/report; report-type=delivery-status; boundary=b\r\n\r\n\
+     --b\r\nContent-Type: text/plain\r\n\r\nNot delivered.\r\n\
+     --b\r\nContent-Type: message/delivery-status\r\n\r\nReporting-MTA: dns; mx.example\r\n\r\nFinal-Recipient: rfc822; a@x.example\r\nAction: failed\r\nStatus: 5.0.0\r\n\r\n--b--\r\n"
+        .as_bytes()
+        .to_vec()
+}
+
+fn ordinary_source() -> Vec<u8> {
+    b"From: a@x.example\r\nTo: b@y.example\r\n\r\nHello\r\n".to_vec()
+}
+
+fn opaque_signed_source() -> Vec<u8> {
+    b"From: a@x.example\r\nTo: b@y.example\r\nContent-Type: application/pkcs7-mime; smime-type=signed-data; name=smime.p7m\r\nContent-Transfer-Encoding: base64\r\n\r\nAAAA\r\n".to_vec()
+}
+
+#[test]
+fn a_source_settles_what_a_message_is() {
+    use quatrelle_model::Smime;
+    // IMAP, header only: not settled yet.
+    let mut m = Summary::default();
+    fill_from_source(&mut m, &report_source());
+    assert_eq!(m.kind, MessageKind::NotDelivered);
+    // Seen at the header as an automatic reply: the source says more.
+    let mut m = Summary { kind: MessageKind::AutoReply, ..Default::default() };
+    fill_from_source(&mut m, &report_source());
+    assert_eq!(m.kind, MessageKind::NotDelivered);
+    // Said by Exchange: stays.
+    let mut m = Summary { kind: MessageKind::MeetingRequest, ..Default::default() };
+    fill_from_source(&mut m, &ordinary_source());
+    assert_eq!(m.kind, MessageKind::MeetingRequest);
+    let mut m = Summary::default();
+    fill_from_source(&mut m, &ordinary_source());
+    assert_eq!(m.kind, MessageKind::Plain, "settled: never looked at again");
+    // Exchange says encrypted for an ambiguous class; the source says opaque signed: it decides.
+    let mut m = Summary { smime: Smime::Encrypted, ..Default::default() };
+    fill_from_source(&mut m, &opaque_signed_source());
+    assert_eq!(m.smime, Smime::Signed);
+    let mut m = Summary { smime: Smime::Encrypted, ..Default::default() };
+    fill_from_source(&mut m, &ordinary_source());
+    assert_eq!(m.smime, Smime::Encrypted);
+}
+
+#[test]
+fn a_huge_source_is_not_read_for_its_kind() {
+    let mut raw = report_source();
+    raw.resize(MAX_KIND_SOURCE + 1, b' ');
+    let mut m = Summary::default();
+    fill_from_source(&mut m, &raw);
+    assert_eq!(m.kind, MessageKind::Plain, "too big to look at: settled as ordinary");
+    let mut m = Summary { kind: MessageKind::MeetingRequest, ..Default::default() };
+    fill_from_source(&mut m, &raw);
+    assert_eq!(m.kind, MessageKind::MeetingRequest);
+}

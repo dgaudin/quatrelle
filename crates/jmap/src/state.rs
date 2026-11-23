@@ -379,6 +379,9 @@ impl SyncReport {
     }
 }
 
+/// Past this many bytes a source isn't read for what kind of message it is.
+pub(super) const MAX_KIND_SOURCE: usize = 8 * 1024 * 1024;
+
 /// Fill in what only the full source tells (preview, attachments, size).
 pub fn fill_from_source(m: &mut Summary, raw: &[u8]) {
     let full = mime::summary_from_full(raw, m.key.clone(), m.flags.clone(), m.size, m.date);
@@ -395,6 +398,16 @@ pub fn fill_from_source(m: &mut Summary, raw: &[u8]) {
         m.forward_of = full.forward_of;
     }
     m.importance = if m.importance != 0 { m.importance } else { full.importance };
+    // What the source says it is: its own S/MIME word beats the server's class, which can be
+    // ambiguous; saying nothing removes nothing. A huge source isn't read for its kind.
+    if !full.smime.is_none() {
+        m.smime = full.smime;
+    }
+    m.kind = if raw.len() > MAX_KIND_SOURCE {
+        if m.kind == MessageKind::Unknown { MessageKind::Plain } else { m.kind }
+    } else {
+        m.kind.settled_by_source(mime::message_kind(raw))
+    };
     if m.size == 0 {
         m.size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
     }
