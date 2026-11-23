@@ -348,6 +348,12 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         let sync_of = op.child("SyncFolderId").and_then(|f| f.kids.first());
         let pim_changes = op.name == "SyncFolderItems"
             && (d.pim_folder(sync_of) || sync_of.and_then(|f| f.attr("Id")).is_some_and(|id| matches!(id, "calendar" | "contacts")));
+        if op.name == "SyncFolderItems"
+            && d.synced.len() < 100_000
+            && let Some(folder) = sync_of.and_then(|f| d.folder_id(f))
+        {
+            d.synced.push(folder);
+        }
         d.calls.push(if pim_changes { "SyncFolderItems pim".into() } else { op.name.clone() });
         // The directory scripted not to answer.
         if op.name == "ResolveNames" && d.zones.directory_silent {

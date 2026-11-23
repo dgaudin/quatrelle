@@ -464,6 +464,53 @@ fn sending_and_automatic_replies_dont_wait_for_a_long_sync() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// After a message is sent, a thread asks the main connection to read Sent Items again a moment
+/// later (`SENT_SOON`, `SENT_LATER`). A stopped account's later look ends with its connection:
+/// it kept the main thread, and its writes, alive up to `SENT_LATER` after.
+#[test]
+fn a_stopped_accounts_later_look_at_sent_items_ends_with_it() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let sent_box = d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
+    let server = serve(d);
+    let data = server.data.clone();
+    let reads = move || {
+        let d = data.lock().unwrap();
+        d.found_in.iter().filter(|(f, _, _)| *f == sent_box).count() + d.synced.iter().filter(|f| **f == sent_box).count()
+    };
+    let store = crate::fake::tests_store("ews-sent-later");
+    let mut pool = crate::worker::Pool::new(store, Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let before = reads();
+    // Taken before the send: the later looks are counted from it, not from the wait for them.
+    let sending = Instant::now();
+    pool.submit(Job::Send {
+        account: "a1".into(),
+        id: 7,
+        raw: b"From: riley@contoso.example\r\nTo: zoe@contoso.example\r\nSubject: Later\r\nMessage-ID: <l1@x>\r\n\r\nx\r\n".to_vec(),
+        from: "riley@contoso.example".into(),
+        recipients: vec!["zoe@contoso.example".into()],
+        sent_folder: Some("Sent Items".into()),
+    });
+    until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
+    // The look made at once, then the account's end, before the later ones (2 s and 6 s here).
+    eventually("the first look at Sent Items", || reads() > before);
+    std::thread::sleep(Duration::from_millis(300));
+    let at_stop = reads();
+    pool.shutdown_and_wait();
+    let took = sending.elapsed();
+    assert!(took < Duration::from_secs(4), "the account's threads ended {took:?} after the send, with the later look at 6 s");
+    assert_eq!(reads(), at_stop, "Sent Items was read again after the account was stopped");
+}
+
 #[test]
 fn basic_sign_in_when_that_is_what_the_server_offers() {
     let mut d = Data { basic: true, ..Default::default() };

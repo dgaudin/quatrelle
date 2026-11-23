@@ -291,6 +291,8 @@ pub struct Data {
     pub found_in: Vec<(String, usize, usize)>,
     /// The folders whose items' properties or sources were given (`GetItem`), one for each item.
     pub given_from: Vec<String>,
+    /// The folders asked for their changes (`SyncFolderItems`), one for each request.
+    pub synced: Vec<String>,
     /// What a test scripts on the lists of shared mailboxes, public folders and the archive (`route/folders.rs`).
     pub zones: route::folders::ZoneScript,
     next: u32,
@@ -443,6 +445,7 @@ impl Default for Data {
             policy: Policy::default(),
             found_in: Vec::new(),
             given_from: Vec::new(),
+            synced: Vec::new(),
             zones: Default::default(),
             next: 0,
         };

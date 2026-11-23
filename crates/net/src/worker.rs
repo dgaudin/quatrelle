@@ -333,8 +333,16 @@ const POLL_EVERY: Duration = Duration::from_secs(120);
 const EWS_POLL_EVERY: Duration = Duration::from_secs(30);
 /// When Sent Items is read again after Graph or Exchange took a message (its copy is filed a
 /// moment later), and once more in case that was too soon.
+#[cfg(not(test))]
 const SENT_SOON: Duration = Duration::from_secs(3);
+#[cfg(not(test))]
 const SENT_LATER: Duration = Duration::from_secs(15);
+#[cfg(test)]
+const SENT_SOON: Duration = Duration::from_secs(2);
+#[cfg(test)]
+const SENT_LATER: Duration = Duration::from_secs(6);
+/// How often the wait for those looks whether its connection has ended.
+const SENT_LATER_SLICE: Duration = Duration::from_millis(250);
 /// An account's second connection lets go after this long with nothing to do.
 const QUICK_IDLE: Duration = Duration::from_secs(5 * 60);
 
@@ -461,6 +469,10 @@ struct Worker {
     /// How many times the account was removed when this worker was made: what it writes waits for
     /// a removal and isn't written after one ([`Store::while_kept`]).
     removals: u64,
+    /// Held while this worker lives: a thread it starts to ask something of the main connection
+    /// later (Sent Items read again) ends with it, rather than keep a stopped account's main
+    /// thread waiting for its jobs.
+    alive: Arc<()>,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -567,6 +579,7 @@ impl Worker {
             folders_unread,
             numbering_unread,
             removals,
+            alive: Arc::default(),
         }
     }
 

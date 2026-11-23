@@ -753,6 +753,25 @@ impl Pool {
     }
 }
 
+#[cfg(test)]
+impl Pool {
+    /// Shut down as [`Pool::shutdown`] does, then wait for every account's threads to end (by a
+    /// deadline): nothing writes in the test's folder after, when it's removed.
+    pub(crate) fn shutdown_and_wait(mut self) {
+        drop(self.edits.take());
+        if let Some(t) = self.edits_thread.take() {
+            let _ = t.join();
+        }
+        let ids: Vec<String> = self.workers.keys().cloned().collect();
+        let threads: Vec<JoinHandle<()>> = ids.iter().flat_map(|id| self.stopping(id)).collect();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while threads.iter().any(|t| !t.is_finished()) {
+            assert!(Instant::now() < deadline, "the pool's account threads didn't end");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
 impl Drop for Pool {
     fn drop(&mut self) {
         self.shutdown();
