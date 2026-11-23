@@ -70,8 +70,8 @@ fn a_rewrite_keeps_bold_lists_and_its_picture() {
     assert!(c.styles.style(0).bold && c.styles.style(0).size == Some(20), "the heading came back");
     assert!(c.body.contains("Salut") && c.body.contains("le studio"), "{:?}", c.body);
     assert!((0..c.body.chars().count()).any(|i| c.styles.style(i).link.as_deref() == Some("https://studio.example")), "the link came back");
-    assert_eq!(c.styles.para(4).list, quatrelle_mime::rich::List::Bullet);
-    assert_eq!(c.styles.para(5).list, quatrelle_mime::rich::List::Bullet);
+    assert_eq!(c.styles.para(4).list, quatrelle_mime::rich::List::Bullet, "{:?} {:?}", c.body, c.styles.paras);
+    assert_eq!(c.styles.para(5).list, quatrelle_mime::rich::List::Bullet, "{:?} {:?}", c.body, c.styles.paras);
     let at = c.body.chars().position(|ch| ch == PICTURE).unwrap_or(usize::MAX);
     assert!(at < c.body.chars().count(), "the picture is still in the text: {:?}", c.body);
     assert_eq!(c.styles.style(at).picture.as_deref(), Some("logo@studio.example"));

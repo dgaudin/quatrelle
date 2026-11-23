@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc eb81a8f44a4311c0375d1b33a90247676921686c560446b60e66eddaace4f848 # shrinks to lines = [(0, [])]
+cc 430ec9235e01f3030e79b8fd7ac344a789c1186eb0c2f59b8490f8be462d7391 # shrinks to lines = [(3, [])]
+cc 194938d9b9dd301ffe39fcecb03dcb989c6292bea63e710f15703d8b0e488671 # shrinks to lines = [(0, ['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', ' ', 'a'])]
+cc 72c8d79fabc5bc687b66c8cdae390016add5a3db7319711f77906b3aeb8974c2 # shrinks to lines = [(0, ['a', ' ', ' ', 'a'])]
+cc cfac2162674998b26689be474fc688024a13460105b7cc41bed486d9d1676f72 # shrinks to lines = [(1, []), (0, ['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', ' ', 'a'])]

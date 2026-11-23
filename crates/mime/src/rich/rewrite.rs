@@ -8,7 +8,7 @@
 //! Markdown reader within its cap, its own internal marks are dropped, and only the markers of
 //! pictures actually sent become pictures.
 
-use crate::rich::{List, PICTURE, Style, Styles};
+use crate::rich::{List, PICTURE, Para, Style, Styles};
 
 /// The form of a picture's marker: no Markdown character, and a nonce no text holds.
 pub const MARKER: &str = "QUATRELLE-IMAGE";
@@ -195,12 +195,23 @@ fn write_runs(runs: &[(String, Style)], out: &mut String, esc: &mut Escaping) {
 
 /// Text runs with their emphasis and code, no link around them.
 fn write_plain(runs: &[(String, Style)], out: &mut String, esc: &mut Escaping) {
-    for (text, style) in runs {
+    for (n, (text, style)) in runs.iter().enumerate() {
         if text.is_empty() {
             continue;
         }
+        // White space has no look Markdown can mark on its own (a code span of only spaces is
+        // no code span): it goes as it is.
+        if text.chars().all(char::is_whitespace) {
+            out.push_str(text);
+            continue;
+        }
         if style.mono {
+            let (open, close) = emphasis(style);
+            boundary(&open, text, out);
+            out.push_str(&open);
             write_code(text, out);
+            out.push_str(&close);
+            after_close(runs, n, out);
             if text.chars().any(|c| !c.is_whitespace()) {
                 esc.at_line_start = false;
                 esc.digits = 0;
@@ -216,19 +227,50 @@ fn write_plain(runs: &[(String, Style)], out: &mut String, esc: &mut Escaping) {
         }
         let core = chars.get(lead..core_end).unwrap_or_default();
         if !core.is_empty() {
-            let open =
-                format!("{}{}{}", if style.bold { "**" } else { "" }, if style.italic { "*" } else { "" }, if style.strike { "~~" } else { "" });
+            let (open, close) = emphasis(style);
+            let first: String = core.iter().collect();
+            boundary(&open, &first, out);
             out.push_str(&open);
             for c in core {
                 escape_into(*c, out, esc);
             }
-            let close: String = open.chars().rev().collect();
             out.push_str(&close);
+            after_close(runs, n, out);
         }
         for c in chars.get(core_end..).unwrap_or_default() {
             escape_into(*c, out, esc);
         }
     }
+}
+
+/// After closing marks that another run's text follows: an empty HTML comment keeps the closing
+/// run from touching a word, which would stop it closing (its last mark is punctuation).
+fn after_close(runs: &[(String, Style)], n: usize, out: &mut String) {
+    if runs.iter().skip(n + 1).any(|(t, _)| t.chars().any(|c| !c.is_whitespace())) {
+        out.push_str("<!-- -->");
+    }
+}
+
+/// Where a run's opening marks would touch a word, with punctuation after them, Markdown would
+/// not read them as emphasis: an empty HTML comment gives the word boundary without adding a
+/// character to the text (the reader drops raw HTML).
+fn boundary(open: &str, text: &str, out: &mut String) {
+    let touched = out.chars().next_back().is_some_and(char::is_alphanumeric);
+    let first = open.chars().next();
+    // A second kind of mark right after the first is punctuation to Markdown's delimiter run,
+    // whatever the text begins with.
+    let more_marks = first.is_some_and(|f| open.chars().any(|c| c != f));
+    let starts_with_punctuation = text.chars().next().is_some_and(|c| !c.is_alphanumeric() && !c.is_whitespace());
+    if touched && (more_marks || starts_with_punctuation) {
+        out.push_str("<!-- -->");
+    }
+}
+
+/// The marks around a run's emphasis (none for plain text), and the marks that close them.
+fn emphasis(style: &Style) -> (String, String) {
+    let open = format!("{}{}{}", if style.bold { "**" } else { "" }, if style.italic { "*" } else { "" }, if style.strike { "~~" } else { "" });
+    let close: String = open.chars().rev().collect();
+    (open, close)
 }
 
 /// Code as a code span, in enough backticks for its own, with breathing space when it starts or
@@ -281,10 +323,13 @@ fn destination(url: &str) -> String {
 /// The model's answer as the editor's text and styles: its Markdown read back (bounded), its
 /// markers put back as their pictures, one it lost at the end of its paragraph, and the colours,
 /// typefaces and sizes Markdown doesn't carry taken from `base`.
-pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: usize) -> (String, Styles) {
+pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: usize, before: &str, before_styles: &Styles) -> (String, Styles) {
     let answer: String = answer.trim().chars().take(max_chars).collect();
     // One reader, the Markdown one: its backslash escapes are what the outbound writer wrote.
-    let Some((text, styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
+    let Some((mut text, mut styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
+    // The HTML reader draws a strikethrough with a combining mark over each character; the
+    // editor keeps the style instead.
+    crate::rich::retain(&mut text, &mut styles, |c, _| c != '\u{336}');
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
     let mut out_styles = Styles::default();
@@ -312,7 +357,8 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: 
             continue;
         }
         out.push(ch);
-        let id = out_styles.intern(styles.style(i - 1));
+        // A line's break has no look of its own (the reader marks it with the line before it).
+        let id = if ch == '\n' { out_styles.intern(Style::default()) } else { out_styles.intern(styles.style(i - 1)) };
         out_styles.chars.push(id);
     }
     out_styles.paras = styles.paras.clone();
@@ -333,6 +379,7 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: 
         out_styles.chars.insert(at, id);
     }
     out_styles.fit(&out);
+    let (out, mut out_styles) = restore_breaks(&out, &out_styles, before, before_styles);
     out_styles.restyle(&out, 0..out.chars().count(), |s| {
         if s.picture.is_some() {
             return s.clone();
@@ -347,6 +394,60 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: 
         }
     });
     (out, out_styles)
+}
+
+/// The answer with the line breaks of the text sent, when its characters (all but the breaks)
+/// are the same: the Markdown reader separates blocks with empty lines of its own, and a model
+/// that kept the text must not add or lose a line. Paragraph layouts follow the answer's lines,
+/// in order.
+fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Styles) -> (String, Styles) {
+    let chars = |s: &str| s.chars().filter(|c| *c != '\n').collect::<Vec<_>>();
+    if chars(text) != chars(before) {
+        return (text.to_string(), styles.clone());
+    }
+    // The answer's paragraphs that hold text or a rule, in order.
+    let mut answer_paras = Vec::new();
+    for (n, line) in text.split('\n').enumerate() {
+        let para = styles.para(n);
+        if !line.trim().is_empty() || para.rule {
+            answer_paras.push(para);
+        }
+    }
+    let answer: Vec<(char, Style)> = text.chars().enumerate().filter(|(_, c)| *c != '\n').map(|(i, c)| (c, styles.style(i))).collect();
+    let line_count = before.split('\n').count();
+    let mut out = String::with_capacity(before.len());
+    let mut kept =
+        Styles { chars: Vec::with_capacity(before.chars().count()), palette: styles.palette.clone(), paras: Vec::with_capacity(line_count) };
+    if kept.palette.is_empty() {
+        kept.palette.push(Style::default());
+    }
+    let mut next = 0usize;
+    let mut next_para = 0usize;
+    for (n, line) in before.split('\n').enumerate() {
+        let ours = !line.trim().is_empty() || before_styles.para(n).rule;
+        let para = if ours {
+            let p = answer_paras.get(next_para).copied().unwrap_or_default();
+            next_para += 1;
+            p
+        } else {
+            Para::default()
+        };
+        kept.paras.push(para);
+        for _ in line.chars() {
+            let (ch, style) = answer.get(next).cloned().unwrap_or((' ', Style::default()));
+            out.push(ch);
+            next += 1;
+            let id = kept.intern(style);
+            kept.chars.push(id);
+        }
+        if n + 1 < line_count {
+            out.push('\n');
+            let id = kept.intern(Style::default());
+            kept.chars.push(id);
+        }
+    }
+    kept.fit(&out);
+    (out, kept)
 }
 
 #[cfg(test)]

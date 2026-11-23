@@ -65,9 +65,10 @@ pub struct Rewrite {
     pub id: u64,
     /// `None` while it's working; the new text, or why there's none.
     pub answer: Option<Result<String, String>>,
-    /// The characters sent (and to replace), and the text they held when they were sent.
+    /// The characters sent (and to replace), and the text and look they held when they were sent.
     range: std::ops::Range<usize>,
     before: String,
+    before_styles: quatrelle_mime::rich::Styles,
     /// The look at the start of the part rewritten: what Markdown doesn't carry keeps it.
     base: quatrelle_mime::rich::Style,
     /// The pictures in the part sent, each with the marker the model saw.
@@ -375,7 +376,7 @@ impl Session {
         );
         let range = start..start + text.chars().count();
         if let Some(c) = self.compose.as_mut() {
-            c.rewrite = Some(Rewrite { id, answer: None, range, before: text.clone(), base, images });
+            c.rewrite = Some(Rewrite { id, answer: None, range, before: text.clone(), before_styles: styles, base, images });
         }
         self.jobs.push(Job::AskLlm {
             id,
@@ -408,7 +409,7 @@ impl Session {
         if now != r.before {
             return Err(CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()));
         }
-        let (add, add_styles) = quatrelle_mime::rich::inbound(text, r.base.clone(), &r.images, MAX_TEXT);
+        let (add, add_styles) = quatrelle_mime::rich::inbound(text, r.base.clone(), &r.images, MAX_TEXT, &r.before, &r.before_styles);
         let end = r.range.start + r.before.chars().count();
         let start = r.range.start;
         c.rewrite = None;

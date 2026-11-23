@@ -183,7 +183,7 @@ fn read_markdown_with(text: &str, soft_lines: bool, width: usize) -> Option<(Str
     let (text, styles) = pasted_html_at(&html, width, soft_lines);
     let (text, styles) = lay_out(&text, &styles);
     let (text, styles) = if soft_lines { tight_rules(&text, &styles) } else { (text, styles) };
-    (!text.trim().is_empty()).then_some((text, styles))
+    (!text.trim().is_empty() || styles.paras.iter().any(|p| p.rule)).then_some((text, styles))
 }
 
 /// A rule's own line, with the empty lines html2text puts around every paragraph taken off

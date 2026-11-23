@@ -153,7 +153,7 @@ pub(crate) fn pasted_html_at(html: &str, width: usize, keep_box_lines: bool) -> 
     for line in &mut lines {
         line.retain(|sp| sp.image.is_none());
     }
-    let blank = |l: &Vec<Span>| l.iter().all(|sp| sp.text.trim().is_empty());
+    let blank = |l: &Vec<Span>| !l.iter().any(|sp| sp.rule) && l.iter().all(|sp| sp.text.trim().is_empty());
     while lines.last().is_some_and(blank) {
         lines.pop();
     }
@@ -207,7 +207,7 @@ pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<Inlin
         }
         *line = kept;
     }
-    let blank = |l: &Vec<Span>| l.iter().all(|sp| sp.text.trim().is_empty());
+    let blank = |l: &Vec<Span>| !l.iter().any(|sp| sp.rule) && l.iter().all(|sp| sp.text.trim().is_empty());
     while lines.last().is_some_and(blank) {
         lines.pop();
     }
