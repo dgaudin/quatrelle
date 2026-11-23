@@ -3,6 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Outlook's Notes: each account's, kept with its calendar and address book.
 
+use quatrelle_model::pim::HeldKind;
+
 use super::*;
 
 /// A note with the account it's in.
@@ -105,11 +107,17 @@ impl Session {
 
     pub fn delete_note(&mut self, uid: &str) -> CmdResult {
         let account = self.note_account(uid)?;
+        let synced = self.notes_sync(&account);
         let p = self.pim_mut(&account);
         let mut remote = false;
-        for n in p.notes.iter().filter(|n| n.note.uid == uid && !n.href.is_empty()) {
-            remote = true;
-            p.deleted.push(Tombstone { href: n.href.clone(), etag: n.etag.clone(), ..Default::default() });
+        for n in p.notes.iter().filter(|n| n.note.uid == uid) {
+            if !n.href.is_empty() {
+                remote = true;
+                p.deleted.push(Tombstone { href: n.href.clone(), etag: n.etag.clone(), ..Default::default() });
+            } else if synced {
+                // Held until a sync that may be making it says where (see `Pim::held`).
+                deleting::hold_other(&mut p.held, HeldKind::Note, uid);
+            }
         }
         p.notes.retain(|n| n.note.uid != uid);
         self.after_pim_change(&account, remote);

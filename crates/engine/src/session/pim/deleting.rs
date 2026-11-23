@@ -4,6 +4,8 @@
 //! Deleting appointments, in the calendar they're in, and the occurrences changed here whose
 //! series is gone.
 
+use quatrelle_model::pim::{HeldDeletion, HeldKind, MAX_HELD};
+
 use super::*;
 
 impl Session {
@@ -104,14 +106,23 @@ impl Session {
 }
 
 /// An appointment deleted here with no item on the server, held ([`Pim::held`]): once, at most
-/// [`quatrelle_model::pim::MAX_HELD`] of them (the oldest go first).
+/// [`MAX_HELD`] of them (the oldest go first).
 fn hold(p: &mut Pim, e: &StoredEvent) {
     let (uid, recurrence_id) = (&e.event.uid, e.event.recurrence_id);
-    if !p.held.iter().any(|h| h.uid == *uid && h.recurrence_id == recurrence_id) {
-        p.held.push(quatrelle_model::pim::HeldDeletion { uid: uid.clone(), recurrence_id });
+    hold_item(&mut p.held, HeldDeletion { uid: uid.clone(), recurrence_id, kind: HeldKind::Event });
+}
+
+/// A task, note or contact deleted here with no item on the server ([`Pim::held`]).
+pub(super) fn hold_other(held: &mut Vec<HeldDeletion>, kind: HeldKind, uid: &str) {
+    hold_item(held, HeldDeletion { uid: uid.to_string(), recurrence_id: None, kind });
+}
+
+fn hold_item(held: &mut Vec<HeldDeletion>, h: HeldDeletion) {
+    if !held.contains(&h) {
+        held.push(h);
     }
-    let over = p.held.len().saturating_sub(quatrelle_model::pim::MAX_HELD);
-    p.held.drain(..over);
+    let over = held.len().saturating_sub(MAX_HELD);
+    held.drain(..over);
 }
 
 /// What a sync made on the server that was deleted here meanwhile ([`Pim::held`]): deleted
@@ -124,13 +135,40 @@ pub(super) fn settle_held(p: &mut Pim, made: &[StoredEvent]) -> Vec<usize> {
     for (at, x) in made.iter().enumerate() {
         let same = |uid: &str, rid: Option<i64>| uid == x.event.uid && rid == x.event.recurrence_id;
         // (Made where the server didn't say: still held.)
-        let Some(h) = p.held.iter().position(|h| same(&h.uid, h.recurrence_id)).filter(|_| !x.href.is_empty()) else { continue };
+        let Some(h) = p.held.iter().position(|h| h.kind.is_event() && same(&h.uid, h.recurrence_id)).filter(|_| !x.href.is_empty()) else { continue };
         p.held.remove(h);
         if p.events.iter().any(|e| same(&e.event.uid, e.event.recurrence_id) && (e.href.is_empty() || e.href == x.href)) {
             continue;
         }
         if !p.deleted.iter().any(|t| t.href == x.href) {
             p.deleted.push(Tombstone { href: x.href.clone(), etag: x.etag.clone(), calendar: x.calendar.clone() });
+        }
+        deleted.push(at);
+    }
+    deleted
+}
+
+/// What a sync made on the server that was a task, note or contact deleted here meanwhile
+/// ([`Pim::held`]): deleted there as anything deleted here, now that the server says where it is
+/// (`made`: each one's name here, its item and its version there). Made here again since under
+/// the same name (no item yet, or that one), it stays. The places in `made` of those deleted.
+pub(super) fn settle_held_other<'a>(p: &mut Pim, kind: HeldKind, made: impl Iterator<Item = (&'a str, &'a str, &'a str)>) -> Vec<usize> {
+    let mut deleted = Vec::new();
+    for (at, (uid, href, etag)) in made.enumerate() {
+        // (Made where the server didn't say: still held.)
+        let Some(h) = p.held.iter().position(|h| h.kind == kind && h.uid == uid).filter(|_| !href.is_empty()) else { continue };
+        p.held.remove(h);
+        let again = match kind {
+            HeldKind::Task => p.tasks.iter().any(|t| t.task.uid == uid && (t.href.is_empty() || t.href == href)),
+            HeldKind::Note => p.notes.iter().any(|n| n.note.uid == uid && (n.href.is_empty() || n.href == href)),
+            HeldKind::Card => p.cards.iter().any(|c| c.card.uid == uid && (c.href.is_empty() || c.href == href)),
+            HeldKind::Event => false,
+        };
+        if again {
+            continue;
+        }
+        if !p.deleted.iter().any(|t| t.href == href) {
+            p.deleted.push(Tombstone { href: href.to_string(), etag: etag.to_string(), ..Default::default() });
         }
         deleted.push(at);
     }

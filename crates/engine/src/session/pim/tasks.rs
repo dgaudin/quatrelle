@@ -4,7 +4,7 @@
 //! Outlook's Tasks: each account's, kept with its calendar and address book (Exchange's Tasks
 //! folder), or on this computer.
 
-use quatrelle_model::pim::{DavSync, StoredTask, Task, TaskStatus};
+use quatrelle_model::pim::{DavSync, HeldKind, StoredTask, Task, TaskStatus};
 
 use super::*;
 
@@ -125,11 +125,18 @@ impl Session {
 
     pub fn delete_task(&mut self, uid: &str) -> CmdResult {
         let account = self.task_account(uid)?;
+        let synced = self.tasks_sync(&account);
         let p = self.pim_mut(&account);
         let mut remote = false;
-        for t in p.tasks.iter().filter(|t| t.task.uid == uid && !t.href.is_empty()) {
-            remote = true;
-            p.deleted.push(Tombstone { href: t.href.clone(), etag: t.etag.clone(), ..Default::default() });
+        for t in p.tasks.iter().filter(|t| t.task.uid == uid) {
+            if !t.href.is_empty() {
+                remote = true;
+                p.deleted.push(Tombstone { href: t.href.clone(), etag: t.etag.clone(), ..Default::default() });
+            } else if synced {
+                // Not on the server as far as this computer knows, but a sync may be making it
+                // there now: held until a result says where (see `Pim::held`).
+                deleting::hold_other(&mut p.held, HeldKind::Task, uid);
+            }
         }
         p.tasks.retain(|t| t.task.uid != uid);
         self.after_pim_change(&account, remote);
@@ -190,9 +197,15 @@ fn apply(t: &mut Task, c: TaskChange, today: i64) {
 
 /// Merge the tasks a sync found: those stored on the server get their item there and are no
 /// longer to send; the server's list replaces the rest, those changed here (and those never
-/// sent) staying, and the state it was read up to is kept with it.
-pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) {
-    for x in &sync.pushed_tasks {
+/// sent) staying, and the state it was read up to is kept with it. A task made on the server as
+/// it was deleted here is deleted there next (`Pim::held`): how many.
+pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) -> usize {
+    let buried =
+        deleting::settle_held_other(p, HeldKind::Task, sync.pushed_tasks.iter().map(|x| (x.task.uid.as_str(), x.href.as_str(), x.etag.as_str())));
+    for (at, x) in sync.pushed_tasks.iter().enumerate() {
+        if buried.contains(&at) {
+            continue;
+        }
         for t in p.tasks.iter_mut().filter(|t| t.task.uid == x.task.uid) {
             t.href = x.href.clone();
             t.etag = x.etag.clone();
@@ -210,4 +223,5 @@ pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) {
             }
         }
     }
+    buried.len()
 }

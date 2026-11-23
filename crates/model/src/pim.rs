@@ -334,13 +334,33 @@ pub struct Tombstone {
     pub calendar: String,
 }
 
-/// An appointment deleted here before the server said where it made it ([`Pim::held`]): by its
-/// UID, and its place in its series for an occurrence changed on its own.
+/// What a deletion held ([`Pim::held`]) was: an appointment (the one the field's name says), a
+/// task, a note or a contact.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HeldKind {
+    #[default]
+    Event,
+    Task,
+    Note,
+    Card,
+}
+
+impl HeldKind {
+    pub fn is_event(&self) -> bool {
+        *self == HeldKind::Event
+    }
+}
+
+/// An item deleted here before the server said where it made it ([`Pim::held`]): by its UID
+/// (the name it has here), and its place in its series for an occurrence changed on its own.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HeldDeletion {
     pub uid: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recurrence_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "HeldKind::is_event")]
+    pub kind: HeldKind,
 }
 
 /// The most deletions [`Pim::held`] keeps (the oldest go first).
@@ -359,10 +379,10 @@ pub struct Pim {
     pub cards: Vec<StoredCard>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deleted: Vec<Tombstone>,
-    /// Appointments deleted here that the server hadn't stored yet as far as this computer knew:
-    /// a sync that read one still new may be making it there. Deleted there once a sync's result
-    /// says where it was made (it then joins `deleted`), never brought back by it; one no sync
-    /// was making never goes.
+    /// Appointments, tasks, notes and contacts deleted here that the server hadn't stored yet as
+    /// far as this computer knew: a sync that read one still new may be making it there. Deleted
+    /// there once a sync's result says where it was made (it then joins `deleted`), never brought
+    /// back by it; one no sync was making never goes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub held: Vec<HeldDeletion>,
     /// Other people's calendars opened from this account (their addresses, lower-case), as

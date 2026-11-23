@@ -13,7 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use quatrelle_model::pim::is_web_calendar;
+use quatrelle_model::pim::{HeldKind, is_web_calendar};
 
 use super::*;
 
@@ -82,7 +82,12 @@ impl Session {
         }
         // Notes stored on the server: their item there, and no longer to send. One whose size
         // the server refused has the server's size back (none).
-        for x in &sync.pushed_notes {
+        let buried_notes =
+            deleting::settle_held_other(p, HeldKind::Note, sync.pushed_notes.iter().map(|x| (x.note.uid.as_str(), x.href.as_str(), x.etag.as_str())));
+        for (at, x) in sync.pushed_notes.iter().enumerate() {
+            if buried_notes.contains(&at) {
+                continue;
+            }
             let sized = !sync.notes_size_refused.contains(&x.note.uid);
             for n in p.notes.iter_mut().filter(|n| n.note.uid == x.note.uid) {
                 n.href = x.href.clone();
@@ -116,8 +121,13 @@ impl Session {
                 }
             }
         }
-        tasks::merge_tasks(p, sync);
-        for x in &sync.pushed_cards {
+        let buried_tasks = tasks::merge_tasks(p, sync);
+        let buried_cards =
+            deleting::settle_held_other(p, HeldKind::Card, sync.pushed_cards.iter().map(|x| (x.card.uid.as_str(), x.href.as_str(), x.etag.as_str())));
+        for (at, x) in sync.pushed_cards.iter().enumerate() {
+            if buried_cards.contains(&at) {
+                continue;
+            }
             for c in p.cards.iter_mut().filter(|c| c.card.uid == x.card.uid) {
                 c.href = x.href.clone();
                 c.etag = x.etag.clone();
@@ -219,8 +229,9 @@ impl Session {
         } else if events_changed || rest_changed {
             self.write_pim(account);
         }
-        if !buried.is_empty() {
-            log::info!("{account}: {} appointments made on the server as they were deleted here, to delete there", buried.len());
+        let buried_all = buried.len() + buried_notes.len() + buried_tasks + buried_cards.len();
+        if buried_all > 0 {
+            log::info!("{account}: {buried_all} items made on the server as they were deleted here, to delete there");
             self.ask_pim_sync(account);
         }
     }
@@ -362,6 +373,8 @@ fn merge_cards(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
     let synced: HashSet<&str> = sync.synced_books.iter().map(String::as_str).collect();
     let kept: HashSet<&str> = sync.kept.iter().map(String::as_str).collect();
     let read: HashSet<&str> = sync.cards.iter().map(|x| x.card.uid.as_str()).collect();
+    // Deleted here, the server not told yet (a sync read it before it went): it stays deleted.
+    let deleting: HashSet<&str> = p.deleted.iter().map(|t| t.href.as_str()).filter(|h| !h.is_empty()).collect();
     p.cards.retain(|c| {
         !synced.contains(c.book.as_str()) || c.dirty || c.href.is_empty() || kept.contains(c.href.as_str()) || read.contains(c.card.uid.as_str())
     });
@@ -377,7 +390,7 @@ fn merge_cards(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
         for book in &sync.synced_books {
             for x in sync.cards.iter().filter(|x| &x.book == book) {
                 let uid = x.card.uid.as_str();
-                if edited.contains(uid) {
+                if edited.contains(uid) || deleting.contains(x.href.as_str()) {
                     continue;
                 }
                 if let Some(slot) = added.remove(uid).and_then(|a| add.get_mut(a)) {

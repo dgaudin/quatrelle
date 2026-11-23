@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod deleting;
 mod notes;
 mod server_cards;
 mod teams;

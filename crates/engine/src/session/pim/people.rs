@@ -3,6 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! People: each account's address books, and the pictures the directory keeps of people.
 
+use quatrelle_model::pim::HeldKind;
+
 use super::*;
 
 /// A person in an address book.
@@ -179,9 +181,14 @@ impl Session {
         }
         let p = self.pim_mut(&account);
         let mut remote = false;
-        for c in p.cards.iter().filter(|c| c.card.uid == uid && !c.href.is_empty()) {
-            remote = true;
-            p.deleted.push(Tombstone { href: c.href.clone(), etag: c.etag.clone(), ..Default::default() });
+        for c in p.cards.iter().filter(|c| c.card.uid == uid) {
+            if !c.href.is_empty() {
+                remote = true;
+                p.deleted.push(Tombstone { href: c.href.clone(), etag: c.etag.clone(), ..Default::default() });
+            } else if c.book != LOCAL {
+                // Held until a sync that may be making it says where (see `Pim::held`).
+                deleting::hold_other(&mut p.held, HeldKind::Card, uid);
+            }
         }
         p.cards.retain(|c| c.card.uid != uid);
         self.after_pim_change(&account, remote);
