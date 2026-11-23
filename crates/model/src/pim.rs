@@ -334,6 +334,18 @@ pub struct Tombstone {
     pub calendar: String,
 }
 
+/// An appointment deleted here before the server said where it made it ([`Pim::held`]): by its
+/// UID, and its place in its series for an occurrence changed on its own.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeldDeletion {
+    pub uid: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recurrence_id: Option<i64>,
+}
+
+/// The most deletions [`Pim::held`] keeps (the oldest go first).
+pub const MAX_HELD: usize = 200;
+
 /// An account's calendars and address books.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pim {
@@ -347,6 +359,12 @@ pub struct Pim {
     pub cards: Vec<StoredCard>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deleted: Vec<Tombstone>,
+    /// Appointments deleted here that the server hadn't stored yet as far as this computer knew:
+    /// a sync that read one still new may be making it there. Deleted there once a sync's result
+    /// says where it was made (it then joins `deleted`), never brought back by it; one no sync
+    /// was making never goes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub held: Vec<HeldDeletion>,
     /// Other people's calendars opened from this account (their addresses, lower-case), as
     /// Outlook's Open Calendar › From Address Book: read from Exchange with the rest.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

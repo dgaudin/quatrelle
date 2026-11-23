@@ -52,6 +52,9 @@ impl Session {
             p.dav_untrusted.clone_from(&sync.untrusted);
         }
         p.deleted.retain(|t| !sync.deleted.contains(&t.href));
+        // Made by this sync, deleted here meanwhile: deleted there by the next one, as anything
+        // deleted here, and what this one read of them not taken in (`merge_events`).
+        let buried = deleting::settle_held(p, &sync.pushed_events);
         // Reminder answers the server took (one given again meanwhile still waits).
         p.reminder_answers.retain(|a| !sync.answered.contains(a));
         // Dropped, the server no longer having them: a copy of each is kept (below).
@@ -59,7 +62,10 @@ impl Session {
         gone.extend(conflicts::drop_gone_tasks(p, &sync.gone_tasks, now));
         // What was stored: its address and version, and no longer to send (unless it changed
         // again meanwhile).
-        for x in &sync.pushed_events {
+        for (at, x) in sync.pushed_events.iter().enumerate() {
+            if buried.contains(&at) {
+                continue;
+            }
             for e in p.events.iter_mut().filter(|e| e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id) {
                 e.href = x.href.clone();
                 e.etag = x.etag.clone();
@@ -213,6 +219,10 @@ impl Session {
         } else if events_changed || rest_changed {
             self.write_pim(account);
         }
+        if !buried.is_empty() {
+            log::info!("{account}: {} appointments made on the server as they were deleted here, to delete there", buried.len());
+            self.ask_pim_sync(account);
+        }
     }
 }
 
@@ -267,6 +277,8 @@ fn merge_events(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
     type Key<'a> = (&'a str, Option<i64>);
     let synced: HashSet<&str> = sync.synced_calendars.iter().map(String::as_str).collect();
     let kept: HashSet<&str> = sync.kept.iter().map(String::as_str).collect();
+    // Deleted here, the server not told yet (a sync read it before it went): it stays deleted.
+    let deleting: HashSet<&str> = p.deleted.iter().map(|t| t.href.as_str()).filter(|h| !h.is_empty()).collect();
     // Read again (a whole calendar read): weighed against what came below, rather than taken out
     // and put back.
     let read: HashSet<Key<'_>> = sync.events.iter().filter(|x| !x.href.is_empty()).map(|x| (x.href.as_str(), x.event.recurrence_id)).collect();
@@ -301,7 +313,7 @@ fn merge_events(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
         let mut add: Vec<Option<&StoredEvent>> = Vec::new();
         let mut added_href: HashMap<Key<'_>, usize> = HashMap::new();
         let mut added_unsent: HashMap<Key<'_>, usize> = HashMap::new();
-        for x in sync.events.iter().filter(|x| synced.contains(x.calendar.as_str())) {
+        for x in sync.events.iter().filter(|x| synced.contains(x.calendar.as_str()) && !deleting.contains(x.href.as_str())) {
             if edited_href.contains(x.href.as_str()) || edited_uid.contains(x.event.uid.as_str()) {
                 continue;
             }

@@ -22,6 +22,7 @@ impl Session {
             return Err(CmdError::Params("this calendar can't be changed".into()));
         }
         let others = self.find_event(&real).is_some_and(|(_, e)| self.organized_by_other(&e.event));
+        let synced = self.account(&account).is_some_and(|a| !a.is_local());
         let p = self.pim_mut(&account);
         let here = |e: &StoredEvent| e.calendar == calendar && e.event.uid == real;
         let mut remote = false;
@@ -42,9 +43,16 @@ impl Session {
             }
             _ => {
                 let gone: Vec<StoredEvent> = p.events.iter().filter(|e| here(e)).cloned().collect();
-                for g in gone.iter().filter(|g| !g.href.is_empty()) {
-                    remote = true;
-                    p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
+                for g in &gone {
+                    if !g.href.is_empty() {
+                        remote = true;
+                        p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
+                    } else if synced && g.calendar != LOCAL && !quatrelle_model::pim::is_web_calendar(&g.calendar) {
+                        // Not on the server as far as this computer knows, but a sync may be
+                        // making it there now (made, then deleted at once), and its result would
+                        // bring it back: held until a result says where it was made.
+                        hold(p, g);
+                    }
                 }
                 p.events.retain(|e| !here(e));
             }
@@ -93,4 +101,38 @@ impl Session {
             );
         }
     }
+}
+
+/// An appointment deleted here with no item on the server, held ([`Pim::held`]): once, at most
+/// [`quatrelle_model::pim::MAX_HELD`] of them (the oldest go first).
+fn hold(p: &mut Pim, e: &StoredEvent) {
+    let (uid, recurrence_id) = (&e.event.uid, e.event.recurrence_id);
+    if !p.held.iter().any(|h| h.uid == *uid && h.recurrence_id == recurrence_id) {
+        p.held.push(quatrelle_model::pim::HeldDeletion { uid: uid.clone(), recurrence_id });
+    }
+    let over = p.held.len().saturating_sub(quatrelle_model::pim::MAX_HELD);
+    p.held.drain(..over);
+}
+
+/// What a sync made on the server that was deleted here meanwhile ([`Pim::held`]): deleted
+/// there as anything deleted here, now that the server says where it is, and that sync's
+/// copy of it not taken in. One made here again since under the same UID (no item yet, or
+/// that one) is what the server made: it stays, and takes its item as usual. The places in
+/// `made` of those deleted.
+pub(super) fn settle_held(p: &mut Pim, made: &[StoredEvent]) -> Vec<usize> {
+    let mut deleted = Vec::new();
+    for (at, x) in made.iter().enumerate() {
+        let same = |uid: &str, rid: Option<i64>| uid == x.event.uid && rid == x.event.recurrence_id;
+        // (Made where the server didn't say: still held.)
+        let Some(h) = p.held.iter().position(|h| same(&h.uid, h.recurrence_id)).filter(|_| !x.href.is_empty()) else { continue };
+        p.held.remove(h);
+        if p.events.iter().any(|e| same(&e.event.uid, e.event.recurrence_id) && (e.href.is_empty() || e.href == x.href)) {
+            continue;
+        }
+        if !p.deleted.iter().any(|t| t.href == x.href) {
+            p.deleted.push(Tombstone { href: x.href.clone(), etag: x.etag.clone(), calendar: x.calendar.clone() });
+        }
+        deleted.push(at);
+    }
+    deleted
 }

@@ -9,6 +9,7 @@ mod answering;
 mod arranging;
 mod changes;
 mod conflicts;
+mod deleting;
 mod find;
 mod gone;
 mod guests;
