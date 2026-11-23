@@ -151,7 +151,7 @@ pub enum Icon {
     Color,
     /// A pencil: edit (one's own message in Conversations).
     Edit,
-    /// A dashed square with a cursor (Select all).
+    /// A rounded square with a tick, over an offset outline (Select all).
     SelectAll,
     /// A chain link with a pencil (Edit link).
     LinkEdit,
