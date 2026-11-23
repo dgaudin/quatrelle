@@ -150,7 +150,8 @@ fn using_a_rewrite_is_one_undo_step() {
     frame(&ctx, &mut a, vec![key(Key::Z, Modifiers::COMMAND)]);
     let back = a.session.compose.as_ref().unwrap();
     assert_eq!((back.body.clone(), back.styles.clone()), (original.body.clone(), original.styles.clone()), "one step back");
-    assert_eq!(back.inline, original.inline, "the picture is the same");
+    let at = back.body.chars().position(|ch| ch == quatrelle_engine::mime::rich::PICTURE).expect("the picture came back");
+    assert_eq!(back.styles.style(at).picture.as_deref(), Some("logo@studio.example"), "the picture is the same");
     // Ctrl+Y: the rewrite again.
     frame(&ctx, &mut a, vec![key(Key::Y, Modifiers::COMMAND)]);
     let again = a.session.compose.as_ref().unwrap();
@@ -377,5 +378,40 @@ fn using_a_rewrite_leaves_an_empty_cursor() {
     frame(&ctx, &mut a, vec![Event::Text("!".into())]);
     let body = &a.session.compose.as_ref().unwrap().body;
     assert!(body.starts_with("!Salut tout le monde"), "the rewrite is not replaced: {body:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Asking a rewrite from a window's Message tab takes the keyboard to the menu; the text must
+/// get it back there too.
+#[test]
+fn asking_a_rewrite_from_a_windows_ribbon_leaves_the_editor_alive() {
+    let (mut a, dir) = app("rewrite-window-ribbon");
+    a.session.prefs.reply_window = false;
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 900.0);
+    a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3"}));
+    a.run("list.open", json!({"key": "sample:1:1:INBOX"}));
+    a.run("mail.reply", json!({}));
+    for _ in 0..2 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    a.run("compose.popOut", json!({}));
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    if let Some(c) = a.session.compose.as_mut() {
+        c.body = format!("Thanks, noted\n\n{}", c.body);
+        c.styles = quatrelle_engine::mime::rich::Styles::plain(&c.body);
+    }
+    frame(&ctx, &mut a, vec![]);
+    let id = crate::rich_edit::body_id(a.session.compose.as_ref().unwrap());
+    ctx.memory_mut(|m| m.request_focus(id));
+    frame(&ctx, &mut a, vec![]);
+    let rewrite = ribbon_rewrite(&ctx, &mut a, size);
+    click_at(&ctx, &mut a, rewrite, 1, size);
+    let shorter = settled_text_at(&ctx, &mut a, "Shorter", size).expect("Shorter");
+    click_at(&ctx, &mut a, shorter, 1, size);
+    frame(&ctx, &mut a, vec![]);
+    assert!(ctx.memory(|m| m.has_focus(id)), "the text has the keyboard after the window's Rewrite");
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -110,7 +110,8 @@ fn an_image_the_model_lost_goes_back_at_its_paragraphs_end() {
     let c = s.compose.as_ref().unwrap();
     let count = c.body.chars().filter(|ch| *ch == PICTURE).count();
     assert_eq!(count, 1, "the picture is never dropped: {:?}", c.body);
-    // It stood in the paragraph "Last", and comes back at its end.
+    // The picture was in its own paragraph, the third; the answer kept the same paragraphs,
+    // so it comes back at the end of the paragraph of the same rank.
     assert!(c.body.starts_with("First\n\nLast"), "{:?}", c.body);
     assert!(
         c.body.chars().position(|ch| ch == PICTURE).is_some_and(|at| !c.body[..].chars().skip(at + 1).take(2).any(|ch| ch == '\n')),
@@ -462,4 +463,89 @@ fn a_picture_without_a_cid_is_kept() {
     let c = s.compose.as_ref().unwrap();
     assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1, "{:?}", c.body);
     assert!(!c.body.contains("QUATRELLE-IMAGE"), "{:?}", c.body);
+}
+
+/// A selection after accented text and an emoji replaces only those characters, and the bold,
+/// link and picture outside it stay exactly as they were, text and styles.
+#[test]
+fn a_selection_keeps_everything_around_it_in_text_and_style() {
+    let mut s = sample_session("rewrite-selection-around");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    let marked = "é😀 **Keep this.** Change this. [Keep that](https://studio.example) ![logo](cid:logo@studio.example)";
+    written(&mut s, marked, "logo@studio.example");
+    let c = s.compose.as_ref().unwrap();
+    let at = c.body.find("Change this.").unwrap_or(0);
+    let from = c.body.get(..at).map_or(0, |t| t.chars().count());
+    let to = from + "Change this.".chars().count();
+    let before = c.body.clone();
+    let before_styles = c.styles.clone();
+    let (id, sent) = ask(&mut s, "formal", Some((from, to)));
+    assert_eq!(sent, "Change this.");
+    s.apply(Event::LlmAnswered { id, text: "Change that.".into(), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    let after_at = c.body.find("Change that.").unwrap_or(0);
+    let after = c.body.get(..after_at).map_or(0, |t| t.chars().count());
+    let left = quatrelle_mime::rich::slice(&before, &before_styles, 0..from);
+    let left_now = quatrelle_mime::rich::slice(&c.body, &c.styles, 0..after);
+    assert_eq!(left_now.0, left.0, "the text before is untouched");
+    for i in 0..left.0.chars().count() {
+        assert_eq!(left_now.1.style(i), left.1.style(i), "style {i} before");
+    }
+    let right = quatrelle_mime::rich::slice(&before, &before_styles, to..before.chars().count());
+    let right_now = quatrelle_mime::rich::slice(&c.body, &c.styles, after + "Change that.".chars().count()..c.body.chars().count());
+    assert_eq!(right_now.0, right.0, "the text after is untouched");
+    for i in 0..right.0.chars().count() {
+        assert_eq!(right_now.1.style(i), right.1.style(i), "style {i} after");
+    }
+    assert!(c.body.contains(PICTURE));
+    assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1);
+}
+
+/// A picture whose paragraph was merged into the one before comes at the end of the paragraph
+/// that remains, never lost.
+#[test]
+fn a_picture_whose_paragraph_was_merged_comes_at_its_end() {
+    let mut s = sample_session("rewrite-merged-paragraph");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    written(&mut s, "First\n\n![logo](cid:logo@studio.example)\n\nLast", "logo@studio.example");
+    let (id, _) = ask(&mut s, "shorter", None);
+    s.apply(Event::LlmAnswered { id, text: "First and Last".into(), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1, "{:?}", c.body);
+    let at = c.body.chars().position(|ch| ch == PICTURE).unwrap();
+    assert_eq!(at + 1, c.body.chars().count(), "at the end of the one paragraph: {:?}", c.body);
+}
+
+/// Absurd selections with a model set don't panic; each is either accepted as the whole text
+/// or refused, as said.
+#[test]
+fn absurd_selections_are_safe_and_said() {
+    let mut s = sample_session("rewrite-absurd-selection");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Bonjour".into();
+        c.styles = Styles::plain("Bonjour");
+    }
+    let cases: [(serde_json::Value, bool); 8] = [
+        (json!({"how": "fix", "from": 10, "to": 2}), true),
+        (json!({"how": "fix", "from": 2, "to": 2}), true),
+        (json!({"how": "fix", "from": 999999999u64, "to": 999999999u64}), true),
+        (json!({"how": "fix", "from": 999999999u64, "to": 1000000000u64}), false),
+        (json!({"how": "fix", "from": -1, "to": -2}), true),
+        (json!({"how": "fix", "from": 1.5, "to": 2.5}), true),
+        (json!({"how": "fix", "from": "1", "to": "2"}), true),
+        (json!({"how": "fix", "from": u64::MAX, "to": u64::MAX}), true),
+    ];
+    for (params, ok) in cases {
+        let r = s.run("assistant.rewrite", &params);
+        assert_eq!(r.is_ok(), ok, "{params}: {r:?}");
+        s.take_jobs();
+        if let Some(c) = s.compose.as_mut() {
+            c.rewrite = None;
+        }
+    }
 }
