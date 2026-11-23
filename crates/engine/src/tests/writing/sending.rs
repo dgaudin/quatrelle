@@ -335,3 +335,104 @@ fn an_outbox_selection_follows_its_message() {
     assert_eq!(store.outbox(&id).iter().map(|i| i.id).collect::<Vec<_>>(), [9]);
     done(s);
 }
+
+/// A session with an account that sends through its server (the jobs are only looked at), its
+/// Inbox and Drafts in.
+fn server_session(name: &str) -> (Session, String) {
+    let mut s = Session::open(Some(temp(name)), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "riley@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let folder = |path: &str, role| quatrelle_model::Folder { account: id.clone(), path: path.into(), role, selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![folder("INBOX", FolderRole::Inbox), folder("Drafts", FolderRole::Drafts)] });
+    s.take_jobs();
+    (s, id)
+}
+
+/// A message to Ben written and sent, its copy in Drafts at `uid` (kept there before it was
+/// sent): its id, and that copy.
+fn send_one(s: &mut Session, account: &str, subject: &str, uid: u32) -> (u64, MessageKey) {
+    s.run("mail.new", &json!({"account": account})).unwrap();
+    s.run("compose.update", &json!({"to": "ben@studio.example", "subject": subject, "body": "hi"})).unwrap();
+    let draft = MessageKey { account: account.to_string(), folder: "Drafts".into(), validity: 1, uid };
+    if let Some(c) = s.compose.as_mut() {
+        c.draft = Some(draft.clone());
+    }
+    s.run("compose.send", &json!({})).unwrap();
+    let id = s.compose.as_ref().filter(|c| c.sending).map(|c| c.id).unwrap_or_default();
+    s.take_jobs();
+    (id, draft)
+}
+
+/// Whether the jobs asked for since the last look take `key` out of its folder.
+fn expunged(s: &mut Session, key: &MessageKey) -> bool {
+    s.take_jobs().iter().any(|j| matches!(j, Job::Apply { op: Op::Expunge { keys, .. }, .. } if keys.contains(key)))
+}
+
+/// A message closed (or discarded) while it's being sent isn't lost when the server then
+/// refuses it: it was in neither Drafts nor the Outbox, with only "Not sent" said. It opens
+/// again in a window of its own with the reason, beside the message being written, which is
+/// left alone; its copy in Drafts stays while it goes.
+#[test]
+fn a_message_closed_as_it_goes_comes_back_if_refused() {
+    let (mut s, id) = server_session("closed-sending");
+    for (close, params) in [("compose.close", json!({"save": false})), ("compose.close", json!({"save": true})), ("compose.discard", json!({}))] {
+        let (sent, draft) = send_one(&mut s, &id, "Refused", 40);
+        s.run(close, &params).unwrap();
+        assert!(s.all_composes().next().is_none(), "{close} {params}: off the screen");
+        assert!(!expunged(&mut s, &draft), "{close} {params}: its copy in Drafts is kept while it goes");
+        assert_eq!(s.still_sending(), 1, "{close} {params}: still on its way");
+        s.run("mail.new", &json!({"account": id})).unwrap();
+        s.run("compose.update", &json!({"subject": "Still writing"})).unwrap();
+        let writing = s.compose.as_ref().map(|c| c.id);
+        s.apply(Event::SendFailed { account: id.clone(), id: sent, error: "no such person".into() });
+        let back = s.all_composes().find(|c| c.id == sent).cloned();
+        assert!(back.is_some(), "{close} {params}: open again");
+        let back = back.unwrap_or_default();
+        assert_eq!(
+            (back.sending, back.window, back.error.as_deref(), back.subject.as_str(), back.draft.as_ref()),
+            (false, true, Some("no such person"), "Refused", Some(&draft)),
+            "{close} {params}"
+        );
+        assert_eq!(s.compose.as_ref().map(|c| c.id), writing, "{close} {params}: the one being written is left alone");
+        assert_eq!(s.still_sending(), 0, "{close} {params}");
+        assert!(!expunged(&mut s, &draft), "{close} {params}: its copy in Drafts is still there");
+        s.compose = None;
+        s.composes.clear();
+    }
+}
+
+/// A message closed as it goes that is sent after all, or kept in the Outbox to go later: nothing
+/// is kept of it, and its copy in Drafts goes then.
+#[test]
+fn a_message_closed_as_it_goes_and_delivered_leaves_nothing_behind() {
+    let (mut s, id) = server_session("closed-sent");
+    for queued in [false, true] {
+        let (sent, draft) = send_one(&mut s, &id, "Fine", 41);
+        s.run("compose.discard", &json!({})).unwrap();
+        s.take_jobs();
+        if queued {
+            s.apply(Event::Queued { account: id.clone(), id: sent, error: "offline".into() });
+        } else {
+            s.apply(Event::Sent { account: id.clone(), id: sent });
+        }
+        assert!(s.sent_away.is_empty() && s.all_composes().next().is_none(), "queued {queued}: nothing kept");
+        assert_eq!(s.still_sending(), 0, "queued {queued}");
+        assert!(expunged(&mut s, &draft), "queued {queued}: its copy in Drafts goes once it's done");
+    }
+}
+
+/// Messages closed as they go are kept 64 at most: past that the oldest goes, the newest stays.
+/// Their account removed, they no longer count as on their way (no word of them will come).
+#[test]
+fn messages_closed_as_they_go_are_kept_64_at_most() {
+    let (mut s, id) = server_session("closed-many");
+    let mut last = 0;
+    for n in 0..70 {
+        (last, _) = send_one(&mut s, &id, &format!("Message {n}"), 50 + n);
+        s.run("compose.close", &json!({"save": false})).unwrap();
+    }
+    assert_eq!(s.sent_away.len(), 64);
+    assert!(s.sent_away.iter().any(|c| c.id == last), "the last one closed is kept");
+    assert_eq!(s.still_sending(), 64);
+    s.run("account.remove", &json!({"account": id})).unwrap();
+    assert_eq!(s.still_sending(), 0, "its account gone");
+}

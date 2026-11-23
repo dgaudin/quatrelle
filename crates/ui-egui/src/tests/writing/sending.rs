@@ -131,3 +131,33 @@ fn send_from_an_account_that_can_shows_nothing_more() {
     assert!(!nodes.iter().any(|(_, name, ..)| name.contains("Add an account")));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Closing Quatrelle while a message closed as it went is still on its way asks first, as for
+/// one still open: it's in neither Drafts nor the Outbox yet.
+#[test]
+fn closing_quatrelle_counts_a_message_closed_as_it_goes() {
+    let (mut a, dir) = app("close-closed-sending");
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let id =
+        a.session.run("account.add", &json!({"email": "zoe@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    a.run("mail.new", json!({"account": id}));
+    a.run("compose.update", json!({"to": "ann@studio.example", "subject": "On its way", "body": "See you"}));
+    a.run("compose.send", json!({}));
+    assert!(a.session.compose.as_ref().is_some_and(|c| c.sending), "on its way");
+    // Its window closed, as closing it does.
+    a.run("compose.close", json!({"save": false}));
+    assert!(a.session.all_composes().next().is_none(), "off the screen");
+    frame(&ctx, &mut a, vec![]);
+    let close = RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+        viewports: std::iter::once((egui::ViewportId::ROOT, egui::ViewportInfo { events: vec![egui::ViewportEvent::Close], ..Default::default() }))
+            .collect(),
+        ..Default::default()
+    };
+    let mut out = ctx.run_ui(close, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    assert!(matches!(a.ui.dialog, Some(Dialog::LostOnClose { sending: 1, unsent: 0, changes: 0 })), "{:?}", a.ui.dialog);
+    let _ = std::fs::remove_dir_all(dir);
+}

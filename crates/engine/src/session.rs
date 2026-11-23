@@ -250,6 +250,10 @@ pub struct Session {
     /// open): starting another sets the current one aside here rather than losing it.
     /// [`Session::activate_compose`] brings one back to act on.
     pub composes: Vec<Compose>,
+    /// Messages closed or discarded while they were being sent, kept out of sight until word of
+    /// the send comes: one that isn't sent after all opens again, being in neither Drafts nor
+    /// the Outbox, and each counts as still being sent when Quatrelle closes (64 at most).
+    pub(crate) sent_away: Vec<Compose>,
     /// Replies written in the reading pane and left for another message, as Outlook leaves them:
     /// kept in Drafts, and back in the pane when their message is read again (oldest first).
     pub set_aside: Vec<Compose>,
@@ -524,6 +528,7 @@ impl Session {
             sources: Vec::new(),
             compose: None,
             composes: Vec::new(),
+            sent_away: Vec::new(),
             set_aside: Vec::new(),
             interactive: false,
             drafted: HashSet::new(),

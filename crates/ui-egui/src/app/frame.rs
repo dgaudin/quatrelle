@@ -163,7 +163,7 @@ impl MailApp {
             let written = self.session.all_composes().filter(|c| self.session.written(c) && !c.sending).count();
             let (unsent, changes) = self.session.lost_on_close();
             // Messages still on their way: not in the Outbox yet, so closing now would lose them.
-            let sending = self.session.all_composes().filter(|c| c.sending).count();
+            let sending = self.session.still_sending();
             let asked = if self.ui.closing_anyway {
                 false
             } else if written > 0 {

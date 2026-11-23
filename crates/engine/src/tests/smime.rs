@@ -197,6 +197,26 @@ fn sending_signs_and_encrypts_to_known_people_only() {
     done(s);
 }
 
+/// A message closed while it's being signed, which then can't be: it opens again with why, in a
+/// window of its own, rather than being gone (it's in neither Drafts nor the Outbox).
+#[test]
+fn a_message_closed_as_it_is_signed_comes_back_if_it_cant_be() {
+    let mut s = with_certificate("smime-closed-signing");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@posteo.example", "subject": "Signed"})).unwrap();
+    let sent = s.run("compose.send", &json!({})).unwrap();
+    assert!(sent.get("protecting").is_some(), "{sent}");
+    let id = s.compose.as_ref().map(|c| c.id).unwrap_or_default();
+    s.run("compose.close", &json!({"save": false})).unwrap();
+    assert_eq!(s.still_sending(), 1, "still on its way");
+    s.apply(Event::Protected { account: "sample".into(), id, raw: None, error: Some("the key is gone".into()) });
+    let back = s.all_composes().find(|c| c.id == id).cloned();
+    assert!(back.is_some(), "open again");
+    assert!(back.is_some_and(|c| !c.sending && c.window && c.error.as_deref().is_some_and(|e| e.contains("the key is gone"))));
+    assert_eq!(s.still_sending(), 0);
+    done(s);
+}
+
 #[test]
 fn the_certificate_can_be_forgotten() {
     let mut s = with_certificate("smime-forget");

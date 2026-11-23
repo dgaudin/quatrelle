@@ -745,6 +745,8 @@ impl Session {
 
     /// The message being written (or set aside) `id` couldn't go: said over it.
     fn send_problem(&mut self, id: u64, error: String) {
+        // Closed while it was being signed or encrypted: open again, to be sent again or kept.
+        self.back_from_sent_away(id);
         let mut found = false;
         for c in self.compose.iter_mut().chain(self.composes.iter_mut()).filter(|c| c.id == id) {
             c.sending = false;

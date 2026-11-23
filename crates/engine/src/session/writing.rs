@@ -35,6 +35,10 @@ pub use sending::SendBlock;
 /// and Cc asks first.
 const EXPOSED_FROM: usize = 8;
 
+/// At most this many messages closed as they went are kept for word of them
+/// ([`Session::sent_away`]); past it the oldest goes.
+const SENT_AWAY_MAX: usize = 64;
+
 /// Something to look at before a message goes (`compose.send` holds it and says what).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -192,9 +196,40 @@ impl Session {
         self.compose.iter().chain(self.composes.iter())
     }
 
-    /// Message `id`, the one on screen or one set aside: news of a send may come for either.
+    /// Message `id`: the one on screen, one set aside, or one closed as it went
+    /// ([`Session::sent_away`]): news of a send may come for any of them.
     pub(super) fn compose_by_id(&self, id: u64) -> Option<Compose> {
-        self.all_composes().find(|c| c.id == id).cloned()
+        self.all_composes().chain(self.sent_away.iter()).find(|c| c.id == id).cloned()
+    }
+
+    /// The message being written leaves the screen (closed or discarded). One being sent is kept
+    /// out of sight until word of it comes ([`Session::sent_away`]).
+    pub(crate) fn let_go_compose(&mut self) -> Option<Compose> {
+        let c = self.compose.take()?;
+        if c.sending {
+            if self.sent_away.len() >= SENT_AWAY_MAX {
+                self.sent_away.remove(0);
+            }
+            self.sent_away.push(c.clone());
+        }
+        Some(c)
+    }
+
+    /// A message closed as it went and not sent after all opens again in a window of its own,
+    /// beside the one being written: it's in neither Drafts nor the Outbox.
+    pub(super) fn back_from_sent_away(&mut self, id: u64) {
+        if let Some(at) = self.sent_away.iter().position(|c| c.id == id) {
+            let c = self.sent_away.remove(at);
+            self.composes.push(Compose { window: true, ..c });
+        }
+    }
+
+    /// How many messages are still on their way and not in the Outbox yet: those being written
+    /// that are being sent, and those closed as they went (but an account removed since, whose
+    /// word won't come).
+    pub fn still_sending(&self) -> usize {
+        let open = self.all_composes().filter(|c| c.sending).count();
+        open + self.sent_away.iter().filter(|c| self.account(&c.account).is_some()).count()
     }
 
     pub fn new_compose(&mut self, account: Option<&str>) -> Result<&mut Compose, CmdError> {
@@ -543,6 +578,7 @@ impl Session {
             self.compose = None;
         }
         self.composes.retain(|x| x.id != c.id);
+        self.sent_away.retain(|x| x.id != c.id);
         self.set_aside.retain(|x| x.id != c.id);
         self.mail_tips.remove(&c.id);
         self.notice("Message sent", false);

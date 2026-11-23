@@ -489,7 +489,7 @@ pub(super) fn close_compose(s: &mut Session, v: &Value) -> CmdResult {
     } else {
         false
     };
-    s.compose = None;
+    s.let_go_compose();
     s.mail_tips.remove(&c.id);
     if saved {
         s.notice("Saved in Drafts", false);
@@ -498,11 +498,14 @@ pub(super) fn close_compose(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// Discard the message being written, as Outlook's Discard: the copies kept in Drafts go too.
+/// One being sent keeps them until it's gone: refused, it opens again as it was.
 pub(super) fn discard(s: &mut Session, _: &Value) -> CmdResult {
-    let c = s.compose.take();
+    let c = s.let_go_compose();
     if let Some(c) = &c {
         s.mail_tips.remove(&c.id);
-        s.remove_saved_copies(c);
+        if !c.sending {
+            s.remove_saved_copies(c);
+        }
     }
     Ok(json!({"discarded": c.map(|c| c.id)}))
 }
