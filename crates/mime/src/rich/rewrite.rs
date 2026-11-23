@@ -360,8 +360,8 @@ pub fn base_style(text: &str, styles: &Styles) -> Style {
 /// The model's answer as the editor's text and styles: its Markdown read back (bounded), its
 /// markers put back as their pictures, one it lost at the end of its paragraph, and the colours,
 /// typefaces and sizes Markdown doesn't carry taken from `base`.
-pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: usize, before: &str, before_styles: &Styles) -> (String, Styles) {
-    let answer: String = answer.trim().chars().take(max_chars).collect();
+pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &str, before_styles: &Styles) -> (String, Styles) {
+    let answer: String = answer.trim().to_string();
     // One reader, the Markdown one: its backslash escapes are what the outbound writer wrote.
     let Some((mut text, mut styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
     // The HTML reader draws a strikethrough with a combining mark over each character; the

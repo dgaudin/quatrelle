@@ -344,3 +344,37 @@ fn a_bold_word_at_a_heading_size_is_no_title() {
     assert!(c.styles.style(0).bold && c.styles.style(0).size == Some(14));
     assert!(!c.styles.style(20).bold && c.styles.style(20).size.is_none(), "the rest is ordinary: {:?}", c.body);
 }
+
+/// A part too long for one rewrite is refused before a model is asked, with a way out.
+#[test]
+fn a_too_long_part_is_not_sent_to_the_model() {
+    let mut s = sample_session("rewrite-too-long-part");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "a".repeat(30_000);
+        c.styles = Styles::plain(&c.body);
+    }
+    let r = s.run("assistant.rewrite", &json!({"how": "fix"}));
+    assert!(r.is_err(), "a part this long is refused");
+    assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::AskLlm { .. })), "nothing was asked");
+}
+
+/// An answer far longer than the part sent is not cut: Use refuses and the text stays intact.
+#[test]
+fn a_too_long_answer_is_refused_rather_than_cut() {
+    let mut s = sample_session("rewrite-too-long-answer");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Bonjour".into();
+        c.styles = Styles::plain("Bonjour");
+    }
+    let (id, _) = ask(&mut s, "fix", None);
+    s.apply(Event::LlmAnswered { id, text: "a".repeat(30_000), error: None });
+    let r = s.run("assistant.endRewrite", &json!({"use": true}));
+    assert!(r.is_err(), "the answer is too long");
+    assert_eq!(s.compose.as_ref().unwrap().body, "Bonjour");
+}

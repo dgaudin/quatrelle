@@ -8,6 +8,9 @@ use super::*;
 /// The most of a message's text sent to the model: its start, where mail says what it wants.
 const MAX_TEXT: usize = 24_000;
 
+/// The most a rewrite sends in one go: a longer part is asked to be selected shorter, never cut.
+const REWRITE_MAX: usize = 24_000;
+
 /// How the model is asked for a summary.
 const SUMMARY_PROMPT: &str = "You summarize an email for the person who received it. Write in {lang}, whatever language the email is written in. \
 Give the gist in at most five short bullet points starting with \"- \": who wants what, by when, and what is expected of the reader. \
@@ -71,6 +74,9 @@ pub struct Rewrite {
     before_styles: quatrelle_mime::rich::Styles,
     /// The look at the start of the part rewritten: what Markdown doesn't carry keeps it.
     base: quatrelle_mime::rich::Style,
+    /// The most characters an answer may hold, from the size sent (and no more than Markdown's
+    /// own bound).
+    answer_max: usize,
     /// The pictures in the part sent, each with the marker the model saw.
     images: Vec<quatrelle_mime::rich::RewritePicture>,
 }
@@ -369,6 +375,10 @@ impl Session {
             nonce = nonce.wrapping_add(1);
         }
         let (marked, images) = quatrelle_mime::rich::outbound(&text, &styles, nonce);
+        if marked.chars().count() > REWRITE_MAX {
+            return Err(CmdError::Params("the text to rewrite is too long; select a shorter part".into()));
+        }
+        let answer_max = marked.chars().count().saturating_mul(3).saturating_add(1000).min(quatrelle_mime::MARKDOWN_MAX);
         let base = quatrelle_mime::rich::base_style(&text, &styles);
         let prompt = format!(
             "{prompt} It is part of an email: keep its greeting and closing if it has them. Write the new text as Markdown, keeping its formatting: **bold**, *italic*, lists with - or 1., headings with #, and links as [text](url). Tokens of the form {marker}-…-END stand for pictures: keep each one exactly once, unchanged, in its place, and write no other token of that form. Write only the new text, with no comment.",
@@ -376,7 +386,7 @@ impl Session {
         );
         let range = start..start + text.chars().count();
         if let Some(c) = self.compose.as_mut() {
-            c.rewrite = Some(Rewrite { id, answer: None, range, before: text.clone(), before_styles: styles, base, images });
+            c.rewrite = Some(Rewrite { id, answer: None, range, before: text.clone(), before_styles: styles, base, answer_max, images });
         }
         self.jobs.push(Job::AskLlm {
             id,
@@ -404,12 +414,15 @@ impl Session {
         let Some(Ok(text)) = &r.answer else {
             return Err(CmdError::Disabled("the rewritten text hasn't come yet".into()));
         };
+        if text.chars().count() > r.answer_max {
+            return Err(CmdError::Failed("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into()));
+        }
         // What is under the range must still be what was sent: the user may have typed since.
         let now: String = c.body.chars().skip(r.range.start).take(r.before.chars().count()).collect();
         if now != r.before {
             return Err(CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()));
         }
-        let (add, add_styles) = quatrelle_mime::rich::inbound(text, r.base.clone(), &r.images, MAX_TEXT, &r.before, &r.before_styles);
+        let (add, add_styles) = quatrelle_mime::rich::inbound(text, r.base.clone(), &r.images, &r.before, &r.before_styles);
         let end = r.range.start + r.before.chars().count();
         let start = r.range.start;
         c.rewrite = None;

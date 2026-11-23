@@ -9,7 +9,7 @@ use crate::rich::{Para, Styles};
 /// reader.
 fn there_and_back(text: &str, styles: &Styles) -> (String, Styles) {
     let (sent, images) = outbound(text, styles, 7);
-    inbound(&sent, Style::default(), &images, 24_000, text, styles)
+    inbound(&sent, Style::default(), &images, text, styles)
 }
 
 /// A plain text sent and copied back is the same text.
@@ -48,7 +48,7 @@ fn a_line_break_the_model_normalises_stays_a_line() {
     let text = "Cordialement,\nZoé Martin";
     let styles = Styles::plain(text);
     let (sent, images) = outbound(text, &styles, 7);
-    let (back, _) = inbound(&sent.replace("  \n", "\n"), Style::default(), &images, 24_000, text, &styles);
+    let (back, _) = inbound(&sent.replace("  \n", "\n"), Style::default(), &images, text, &styles);
     assert_eq!(back, text, "sent {sent:?}");
 }
 
@@ -58,7 +58,7 @@ fn a_long_paragraph_comes_back_on_one_line() {
     let text = vec!["mot"; 750].join(" ");
     let styles = Styles::plain(&text);
     let (sent, images) = outbound(&text, &styles, 7);
-    let (back, _) = inbound(&sent, Style::default(), &images, 24_000, &text, &styles);
+    let (back, _) = inbound(&sent, Style::default(), &images, &text, &styles);
     assert!(!back.contains('\n'), "one line: {:?}", back.chars().take(80).collect::<String>());
     assert_eq!(back, text);
 }
@@ -76,7 +76,7 @@ fn text_that_looks_like_markdown_stays_text() {
     let text = "- pas une liste";
     let styles = Styles::plain(text);
     let (sent, images) = outbound(text, &styles, 7);
-    let (back, _) = inbound(&format!("  {sent}"), Style::default(), &images, 24_000, text, &styles);
+    let (back, _) = inbound(&format!("  {sent}"), Style::default(), &images, text, &styles);
     assert_eq!(back, text, "no indent left: {back:?}");
 }
 
