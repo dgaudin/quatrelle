@@ -160,7 +160,18 @@ pub fn markdown_html(md: &str) -> String {
 /// editor writes them; its code is in the monospace font on [`rich::CODE_SHADE`], its tables in
 /// columns in that font.
 pub fn pasted_markdown(text: &str) -> Option<(String, rich::Styles)> {
-    if text.len() > MARKDOWN_MAX || !looks_like_markdown(text) {
+    if !looks_like_markdown(text) {
+        return None;
+    }
+    read_markdown(text)
+}
+
+/// Markdown known to be Markdown (a language model's answer, asked to keep the marks), as text
+/// and styles: the same reader as [`pasted_markdown`], without the signs it looks for in a
+/// clipboard. `None` past [`MARKDOWN_MAX`] bytes, when the reader failed, or when it holds no
+/// text.
+pub fn read_markdown(text: &str) -> Option<(String, rich::Styles)> {
+    if text.len() > MARKDOWN_MAX {
         return None;
     }
     let html = written(text, true)?;

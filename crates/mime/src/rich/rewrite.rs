@@ -137,9 +137,8 @@ fn markdown_of(text: &str, styles: &Styles) -> String {
 /// typefaces and sizes Markdown doesn't carry taken from `base`.
 pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: usize) -> (String, Styles) {
     let answer: String = answer.trim().chars().take(max_chars).collect();
-    // The paste path the Markdown fuzz target reads; a single sign it doesn't call Markdown
-    // (one bold word) still goes through the editor's lighter reader.
-    let (text, styles) = crate::pasted_markdown(&answer).unwrap_or_else(|| crate::rich::from_markup(&answer));
+    // One reader, the Markdown one: its backslash escapes are what the outbound writer wrote.
+    let Some((text, styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
     let mut out_styles = Styles::default();
@@ -203,6 +202,9 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: 
     });
     (out, out_styles)
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Where a paragraph ends in `text` (the character before its newline, or the text's end).
 fn line_end(text: &str, line: usize) -> usize {
