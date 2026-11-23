@@ -58,7 +58,10 @@ impl Worker {
                 self.read_followed();
                 let now = self.options_for(&folder).window.max(kept);
                 self.windows.insert(folder.clone(), now.saturating_add(more as usize).min(1_000_000));
-                if let Err(e) = self.store.save_account_doc(&self.acc.id, WINDOWS, &self.windows) {
+                let windows = &self.windows;
+                if let Some(Err(e)) =
+                    self.store.while_kept(&self.acc.id, self.removals, || self.store.save_account_doc(&self.acc.id, WINDOWS, windows))
+                {
                     log::warn!("{}: {WINDOWS}: {e}", self.acc.id);
                 }
                 if self.conn.is_none() {
@@ -87,9 +90,12 @@ impl Worker {
             Job::Vote { key, choice } => self.vote(key, choice),
             Job::ReadArchiveTag { key } => self.read_archive_tag(key),
             Job::Apply { op, .. } => {
-                // POP: a move is carried out here (there's no server copy to come back); what's
-                // deleted for good is noted, for removing the server's copy when the account says.
-                {
+                // Made while the account is kept ([`Store::while_kept`]): one removed meanwhile has
+                // nothing of it written again (its files would come back). (Waits for a removal in
+                // progress, which is bounded.)
+                let made = self.store.while_kept(&self.acc.id, self.removals, || {
+                    // POP: a move is carried out here (there's no server copy to come back); what's
+                    // deleted for good is noted, for removing the server's copy when the account says.
                     let gone: Vec<quatrelle_model::MessageKey> = match &op {
                         Op::Expunge { keys, .. } => keys.clone(),
                         Op::EmptyFolder { path } => {
@@ -97,14 +103,17 @@ impl Worker {
                         }
                         _ => Vec::new(),
                     };
-                    if let Err(e) = crate::pop::deleted_for_good(&self.store, &self.acc.id, &gone) {
-                        self.notice(e.to_string());
-                    }
+                    let noted = crate::pop::deleted_for_good(&self.store, &self.acc.id, &gone);
+                    let applied = match &op {
+                        Op::Move { keys, to } if self.acc.pop.is_some() => crate::pop::move_locally(&self.store, &self.acc.id, keys, to),
+                        _ => self.store.apply_op(&self.acc.id, &op).map_err(NetError::from),
+                    };
+                    (noted, applied)
+                });
+                let Some((noted, applied)) = made else { return };
+                if let Err(e) = noted {
+                    self.notice(e.to_string());
                 }
-                let applied = match &op {
-                    Op::Move { keys, to } if self.acc.pop.is_some() => crate::pop::move_locally(&self.store, &self.acc.id, keys, to),
-                    _ => self.store.apply_op(&self.acc.id, &op).map_err(NetError::from),
-                };
                 match applied {
                     Ok(changed) => {
                         if op.is_folder_op() && self.reload_folders() {
@@ -116,7 +125,7 @@ impl Worker {
                     }
                     Err(e) => self.notice(e.to_string()),
                 }
-                if let Err(e) = self.store.add_op(&self.acc.id, op) {
+                if let Some(Err(e)) = self.store.while_kept(&self.acc.id, self.removals, || self.store.add_op(&self.acc.id, op)) {
                     self.notice(e.to_string());
                 }
                 if self.conn.is_some() {
@@ -620,12 +629,15 @@ impl Worker {
                     let mut folders: Vec<String> = op.keys().iter().map(|k| k.folder.clone()).collect();
                     folders.dedup();
                     for f in &folders {
-                        if let Ok(mut st) = self.store.load_folder(&self.acc.id, f) {
+                        // Not once the account was removed: its files would come back.
+                        let marked = self.store.while_kept(&self.acc.id, self.removals, || {
+                            let mut st = self.store.load_folder(&self.acc.id, f).ok()?;
                             st.highest_modseq = 0;
                             st.uid_next = 0;
-                            if let Err(e) = self.store.save_folder(&self.acc.id, f, &st) {
-                                log::warn!("{}: a folder isn't marked to be read in full again: {e}", self.acc.id);
-                            }
+                            Some(self.store.save_folder(&self.acc.id, f, &st))
+                        });
+                        if let Some(Some(Err(e))) = marked {
+                            log::warn!("{}: a folder isn't marked to be read in full again: {e}", self.acc.id);
                         }
                     }
                     relist |= op.is_folder_op();

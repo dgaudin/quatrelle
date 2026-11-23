@@ -9,6 +9,11 @@ use quatrelle_model::utf7;
 use super::*;
 use crate::exchange::missed::{Listed, Missed};
 
+// Run once, on this thread, as [`Worker::publish_folders`] is about to write the folder list: a
+// test's way to come between deciding to write it and writing it.
+#[cfg(test)]
+thread_local!(pub(in crate::worker) static BEFORE_FOLDERS_SAVED: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) });
+
 impl Worker {
     /// The folder list, then every folder (Inbox first), staying responsive to opened messages.
     /// Refresh the folder list from the server; `false` when that failed.
@@ -262,17 +267,26 @@ impl Worker {
     /// kept (the disk failing) was the window's till the next start, which found the one before.
     /// While the list before couldn't be read or is damaged (`folders_unread`), the worker's may
     /// lack a zone a listing missed: told for the folder pane, not kept over the one on disk (the
-    /// archive's folders held in memory all the same).
+    /// archive's folders held in memory all the same). Written while the account is kept
+    /// ([`Store::while_kept`]): a removal coming as it's written waits for it, and one before it
+    /// is seen; neither the list nor the telling is made for an account gone (not an error).
     pub(in crate::worker) fn publish_folders(&self) {
-        if self.folders_unread {
-            let archive: Vec<&str> = self.folders.iter().filter(|f| f.archive).map(|f| f.path.as_str()).collect();
-            self.store.hold_folders(&self.acc.id, &archive);
-            self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() });
-            return;
+        #[cfg(test)]
+        if let Some(before) = BEFORE_FOLDERS_SAVED.with(|b| b.borrow_mut().take()) {
+            before();
         }
-        match self.store.save_folders(&self.acc.id, &self.folders) {
-            Ok(()) => self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() }),
-            Err(e) => log::warn!("{}: the folder list wasn't kept: {e}", self.acc.id),
+        let kept = self.store.while_kept(&self.acc.id, self.removals, || {
+            if self.folders_unread {
+                let archive: Vec<&str> = self.folders.iter().filter(|f| f.archive).map(|f| f.path.as_str()).collect();
+                self.store.hold_folders(&self.acc.id, &archive);
+                return Ok(());
+            }
+            self.store.save_folders(&self.acc.id, &self.folders)
+        });
+        match kept {
+            Some(Ok(())) => self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() }),
+            Some(Err(e)) => log::warn!("{}: the folder list wasn't kept: {e}", self.acc.id),
+            None => {}
         }
     }
 

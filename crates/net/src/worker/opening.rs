@@ -147,11 +147,13 @@ pub(super) struct ImapCopy {
     acc: AccountConfig,
     secret: String,
     store: Store,
+    /// The account's removals when its worker was made ([`Worker::removals`]).
+    seen: u64,
 }
 
 impl ImapCopy {
     fn connect(&self) -> Result<Client<Stream>> {
-        match connect_for_sync(&self.acc, &self.store, &self.secret)? {
+        match connect_for_sync(&self.acc, &self.store, &self.secret, self.seen)? {
             Conn::Imap(c) => Ok(c),
             _ => Err(NetError::No("not an IMAP account".into())),
         }
@@ -534,7 +536,7 @@ impl Worker {
                     None => auth.secret.clone(),
                     Some(_) => auth.access.as_ref().filter(|t| !t.expired()).map(|t| t.access.clone())?,
                 };
-                Some(Copy::Imap(Box::new(ImapCopy { acc: self.acc.clone(), secret, store: self.store.clone() })))
+                Some(Copy::Imap(Box::new(ImapCopy { acc: self.acc.clone(), secret, store: self.store.clone(), seen: self.removals })))
             }
             _ => None,
         }

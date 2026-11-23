@@ -9,6 +9,7 @@ mod damaged;
 mod drafts;
 mod importing;
 mod read_errors;
+mod removed;
 mod zones;
 
 /// A full sync walks the Inbox first, then what mail is about, then the rest, the archive and

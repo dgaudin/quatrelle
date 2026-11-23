@@ -8,6 +8,11 @@ use super::*;
 use quatrelle_model::EWS_FOUND_DOC;
 use quatrelle_model::addr::trust::withdrawn;
 
+// Run once, on this thread, once autodiscovery has found the server and before it is kept: a
+// test's way to come between the two.
+#[cfg(test)]
+thread_local!(pub(super) static AUTODISCOVER_IN_TEST: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) });
+
 /// An Exchange account's EWS address: the one set, or for `autodiscover` the one found the first
 /// time, then kept ([`EWS_FOUND_DOC`]). A kept address is used as it is, asking nothing: it is in
 /// service, and the credentials have gone there all along (an on-premises server is often on
@@ -15,7 +20,7 @@ use quatrelle_model::addr::trust::withdrawn;
 /// counts for nothing, even saved after the removal by a connection already on its way, so
 /// Autodiscover runs again, and it asks before it follows an answer to a site the account doesn't
 /// trust (`Untrusted`).
-pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &str) -> Result<String> {
+pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &str, seen: u64) -> Result<String> {
     let Some(url) = &acc.ews else { return Err(NetError::No("not an Exchange account".into())) };
     if url != crate::ews::AUTODISCOVER {
         return Ok(url.clone());
@@ -29,7 +34,12 @@ pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &s
         return Ok(kept);
     }
     let found = crate::ews::autodiscover_as(&acc.email, user, secret, None, acc.user_agent.as_deref(), &Trust::of(acc, &[]))?;
-    if let Err(e) = store.save_account_doc(&acc.id, EWS_FOUND_DOC, &found) {
+    #[cfg(test)]
+    if let Some(then) = AUTODISCOVER_IN_TEST.with(|a| a.borrow_mut().take()) {
+        then();
+    }
+    // Not once the account was removed (as autodiscovery went on): its files would come back.
+    if let Some(Err(e)) = store.while_kept(&acc.id, seen, || store.save_account_doc(&acc.id, EWS_FOUND_DOC, &found)) {
         log::warn!("{}: the Exchange server found isn't kept, and is looked for again next time: {e}", acc.id);
     }
     Ok(found)
@@ -357,7 +367,7 @@ impl Worker {
             return Ok(());
         }
         if self.acc.ews.is_some() {
-            let url = ews_url(&self.acc, &self.store, &user, &secret)?;
+            let url = ews_url(&self.acc, &self.store, &user, &secret, self.removals)?;
             let c = crate::ews::Client::connect_as(&url, &user, &secret, &self.acc.email, self.acc.user_agent.as_deref())?;
             c.set_shared(&self.acc.shared_mailboxes);
             self.conn = Some(Conn::Ews(Box::new(c)));
@@ -531,7 +541,7 @@ pub(super) enum SyncDone {
 }
 
 /// Open a connection like the account's main one, for a folder reader of its own.
-pub(super) fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str) -> Result<Conn> {
+pub(super) fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str, seen: u64) -> Result<Conn> {
     let user = if acc.username.is_empty() { acc.email.clone() } else { acc.username.clone() };
     if let Some(url) = &acc.graph {
         return Ok(Conn::Graph(crate::graph::Client::connect(url, secret)?));
@@ -540,7 +550,7 @@ pub(super) fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str)
         return Err(NetError::No("POP accounts read mail on one connection".into()));
     }
     if acc.ews.is_some() {
-        let url = connect::ews_url(acc, store, &user, secret)?;
+        let url = connect::ews_url(acc, store, &user, secret, seen)?;
         let c = crate::ews::Client::connect(&url, &user, secret, &acc.email)?;
         c.set_shared(&acc.shared_mailboxes);
         return Ok(Conn::Ews(Box::new(c)));
@@ -565,8 +575,9 @@ pub(super) fn sync_folders(
     mut state: jmap::State,
     queue: Arc<Mutex<VecDeque<(String, SyncOptions)>>>,
     tx: Sender<SyncDone>,
+    seen: u64,
 ) {
-    let mut conn = match connect_for_sync(&acc, &store, &secret) {
+    let mut conn = match connect_for_sync(&acc, &store, &secret, seen) {
         Ok(c) => c,
         Err(e) => {
             log::info!("{}: a second connection wasn't taken ({e}): the rest syncs on the first", acc.id);

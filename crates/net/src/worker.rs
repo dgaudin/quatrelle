@@ -458,6 +458,9 @@ struct Worker {
     folders_unread: bool,
     /// Why the account's numbering couldn't be read, while it can't: its mail is set aside.
     numbering_unread: Option<String>,
+    /// How many times the account was removed when this worker was made: what it writes waits for
+    /// a removal and isn't written after one ([`Store::while_kept`]).
+    removals: u64,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -490,6 +493,8 @@ impl Worker {
     /// Exchange), which an Exchange account's second connection (sending, automatic replies)
     /// never uses — read for it too, a big mailbox's was held in memory twice.
     fn with_numbering(acc: AccountConfig, auth: Arc<Mutex<Auth>>, store: Store, sink: Sink, opts: SyncOptions, numbering: bool) -> Worker {
+        // Counted before anything is read: a removal after it is seen.
+        let removals = store.removals(&acc.id);
         // Not read: a zone a listing misses may have folders here this worker doesn't know of.
         let (folders, folders_unread) = match store.load_folders(&acc.id) {
             Ok(folders) => (folders, false),
@@ -561,6 +566,7 @@ impl Worker {
             unlisted_kept: HashSet::new(),
             folders_unread,
             numbering_unread,
+            removals,
         }
     }
 

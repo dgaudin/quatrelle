@@ -8,6 +8,8 @@
 use super::*;
 
 mod listing;
+#[cfg(test)]
+pub(super) use listing::BEFORE_FOLDERS_SAVED;
 mod searching;
 pub(super) mod zones;
 
@@ -320,8 +322,12 @@ impl Worker {
             // The numbers it may give, kept apart from this connection's (see `State::reserve`).
             let state = self.jstate.reserve(1_000_000, &numbering);
             let (acc, store) = (self.acc.clone(), self.store.clone());
-            let (secret, q, tx) = (secret.clone(), queue.clone(), tx.clone());
-            if std::thread::Builder::new().name(format!("{} sync", acc.id)).spawn(move || sync_folders(acc, store, secret, state, q, tx)).is_err() {
+            let (secret, q, tx, seen) = (secret.clone(), queue.clone(), tx.clone(), self.removals);
+            if std::thread::Builder::new()
+                .name(format!("{} sync", acc.id))
+                .spawn(move || sync_folders(acc, store, secret, state, q, tx, seen))
+                .is_err()
+            {
                 break;
             }
             running += 1;
