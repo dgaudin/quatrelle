@@ -14,10 +14,12 @@
 //! `$batch` (four per batch; see [`BATCH`]).
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use quatrelle_mime as mime;
 use quatrelle_model::organize::{Condition, Rule, RuleAction};
-use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
+use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, MessageKind, Op, Smime, Summary, sort_newest_first, utf7, voting};
 use quatrelle_store::{FolderState, Store};
 use serde_json::{Value, json};
 
@@ -52,10 +54,17 @@ const HEADER_FIELDS: &str = "id,isRead,isDraft,flag,subject,from,sender,toRecipi
 /// thing done with it ([`VERB_EXPAND`]).
 const VOTING_EXPAND: &str = "$expand=singleValueExtendedProperties($filter=id%20eq%20'Binary%20%7B00062008-0000-0000-C000-000000000046%7D%20Id%200x8520'\
      %20or%20id%20eq%20'Integer%200x1081'%20or%20id%20eq%20'SystemTime%200x1082')";
+/// What a message is, as Exchange keeps it: its class (`PidTagMessageClass`) and its icon
+/// (`PidTagIconIndex`), asked for with the verb ([`KINDS_VOTING_EXPAND`], [`KINDS_VERB_EXPAND`]).
+const KINDS_VOTING_EXPAND: &str = "$expand=singleValueExtendedProperties($filter=id%20eq%20'Binary%20%7B00062008-0000-0000-C000-000000000046%7D%20Id%200x8520'\
+     %20or%20id%20eq%20'Integer%200x1081'%20or%20id%20eq%20'SystemTime%200x1082'%20or%20id%20eq%20'Integer%200x1080'%20or%20id%20eq%20'String%200x001A')";
 /// The last thing done with a message, as Outlook keeps it and Graph has no field for: replied
 /// to or forwarded (`PidTagLastVerbExecuted`), and when (`PidTagLastVerbExecutionTime`), asked
 /// for wherever its marks are.
 const VERB_EXPAND: &str = "$expand=singleValueExtendedProperties($filter=id%20eq%20'Integer%200x1081'%20or%20id%20eq%20'SystemTime%200x1082')";
+/// [`VERB_EXPAND`] with what the message is ([`KINDS_VOTING_EXPAND`]): a folder's listing asks for it.
+const KINDS_VERB_EXPAND: &str = "$expand=singleValueExtendedProperties($filter=id%20eq%20'Integer%200x1081'%20or%20id%20eq%20'SystemTime%200x1082'\
+     %20or%20id%20eq%20'Integer%200x1080'%20or%20id%20eq%20'String%200x001A')";
 /// The choice a vote carries (`PidLidVerbResponse`), as Graph names the property.
 const VERB_RESPONSE_ID: &str = "String {00062008-0000-0000-C000-000000000046} Id 0x8524";
 /// `$select` for folder listings. `internetMessageHeaders` is left out on purpose: it is
@@ -134,6 +143,9 @@ pub fn header_block_of(m: &Value) -> Vec<u8> {
 pub struct Client {
     base: String,
     auth: String,
+    /// The server refused the longer `$expand` (what a message is): the shorter one is asked from
+    /// then on, for as long as this session lasts, and its copies share it.
+    plain_expand: Arc<AtomicBool>,
 }
 
 /// Where a mailbox is in Graph: this account's (`/me`), or another opened in it.
@@ -186,7 +198,7 @@ impl Client {
         if !url.https && !matches!(url.host.as_str(), "127.0.0.1" | "localhost") {
             return Err(NetError::Tls("the Graph address isn't https".into()));
         }
-        let c = Client { base, auth: format!("Bearer {token}") };
+        let c = Client { base, auth: format!("Bearer {token}"), plain_expand: Arc::default() };
         c.get("/me/mailFolders/inbox?$select=id")?;
         Ok(c)
     }
@@ -200,7 +212,7 @@ impl Client {
     /// something on a thread of its own (a message's whole source, while the main session goes
     /// on). A token renewed here later isn't known to the copy.
     pub(crate) fn sibling(&self) -> Client {
-        Client { base: self.base.clone(), auth: self.auth.clone() }
+        Client { base: self.base.clone(), auth: self.auth.clone(), plain_expand: self.plain_expand.clone() }
     }
 
     /// The mail folders, with roles for the well-known ones; the Outbox and Exchange's own
@@ -298,13 +310,29 @@ impl Client {
         // time is both. A time before 1970 asks for all of it.
         let since = since.filter(|t| *t > 0);
         let filter = since.map(|t| format!("$filter={}&", http::pct(&format!("receivedDateTime ge {}", utc(t))))).unwrap_or_default();
-        let mut entries = self.all(
-            &format!(
-                "{me}/mailFolders/{}/messages?{filter}$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}&{VERB_EXPAND}",
-                seg(folder)
-            ),
-            window.min(100_000),
-        )?;
+        let list = |expand: &str| {
+            self.all(
+                &format!(
+                    "{me}/mailFolders/{}/messages?{filter}$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}&{expand}",
+                    seg(folder)
+                ),
+                window.min(100_000),
+            )
+        };
+        // A server that refuses the longer `$expand` still lists the mail, by the shorter one.
+        let mut entries = if self.plain_expand.load(Ordering::Relaxed) {
+            list(VERB_EXPAND)?
+        } else {
+            match list(KINDS_VERB_EXPAND) {
+                Err(NetError::No(_)) => {
+                    let entries = list(VERB_EXPAND)?;
+                    self.plain_expand.store(true, Ordering::Relaxed);
+                    log::warn!("Graph refused asking what messages are; not asked again in this session");
+                    entries
+                }
+                r => r?,
+            }
+        };
         // Measured here as the server measures it, should it list older mail all the same: one
         // whose received time can't be read is older than any (its summary would have none).
         entries.retain(|m| m["id"].is_string() && since.is_none_or(|t| received(m).is_some_and(|r| r >= t)));
@@ -331,9 +359,18 @@ impl Client {
     /// Messages' details, for the list.
     fn headers(&self, ids: &[String], owner: Option<&str>) -> Result<Vec<Value>> {
         let me = who(owner);
-        let reqs: Vec<(&str, String, Option<Value>)> =
-            ids.iter().map(|id| ("GET", format!("{me}/messages/{}?$select={HEADER_FIELDS}&{VOTING_EXPAND}", seg(id)), None)).collect();
-        Ok(self.batch(&reqs)?.into_iter().filter(|(s, _)| *s == 200).map(|(_, b)| b).collect())
+        let ask = |expand: &str| {
+            let reqs: Vec<(&str, String, Option<Value>)> =
+                ids.iter().map(|id| ("GET", format!("{me}/messages/{}?$select={HEADER_FIELDS}&{expand}", seg(id)), None)).collect();
+            self.batch(&reqs)
+        };
+        let mut answers = if self.plain_expand.load(Ordering::Relaxed) { ask(VOTING_EXPAND)? } else { ask(KINDS_VOTING_EXPAND)? };
+        // Refused for the longer `$expand` (not found, or gone, is another answer): asked again by the shorter.
+        if !self.plain_expand.load(Ordering::Relaxed) && answers.iter().any(|(s, _)| *s == 400) {
+            answers = ask(VOTING_EXPAND)?;
+            self.plain_expand.store(true, Ordering::Relaxed);
+        }
+        Ok(answers.into_iter().filter(|(s, _)| *s == 200).map(|(_, b)| b).collect())
     }
 
     /// A message's MIME source.
@@ -449,6 +486,26 @@ pub(crate) fn utc(t: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
 }
 
+/// An extended property of a message by its tag (`0x1081`), as Graph spells it in the property's
+/// id (`Integer 0x1081`), whatever its case.
+fn extended<'a>(m: &'a Value, tag: &str) -> Option<&'a str> {
+    m.get("singleValueExtendedProperties")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|p| p.get("id").and_then(Value::as_str).and_then(|id| id.trim().rsplit_once(' ')).is_some_and(|(_, t)| crate::ews::is_tag(t, tag)))?
+        .get("value")?
+        .as_str()
+}
+
+/// What a message is, as Exchange says it ([`KINDS_VERB_EXPAND`]): its kind
+/// ([`MessageKind::from_exchange`], by its class then its icon) and what protects it
+/// ([`Smime::from_class`]). Neither asked for, or neither said, it is ordinary mail.
+fn kind_of(m: &Value) -> (MessageKind, Smime) {
+    let class = extended(m, "0x001A").unwrap_or_default();
+    let icon = extended(m, "0x1080").and_then(|i| i.trim().parse::<i64>().ok());
+    (MessageKind::from_exchange(class, icon), Smime::from_class(class))
+}
+
 /// A message's flags as the model knows them.
 fn flags(m: &Value) -> Flags {
     let mut names: Vec<&str> = Vec::new();
@@ -481,14 +538,7 @@ fn flags(m: &Value) -> Flags {
     }
     // Replied to (102, 103 to all, with the keyword that says so) or forwarded (104), the last of
     // them, and when, read as EWS reads them.
-    let prop = |tag: &str| {
-        m.get("singleValueExtendedProperties")
-            .and_then(Value::as_array)?
-            .iter()
-            .find(|p| p.get("id").and_then(Value::as_str).and_then(|id| id.trim().rsplit_once(' ')).is_some_and(|(_, t)| crate::ews::is_tag(t, tag)))?
-            .get("value")?
-            .as_str()
-    };
+    let prop = |tag: &str| extended(m, tag);
     let verb = prop("0x1081").and_then(|v| v.trim().parse::<i64>().ok());
     f.answered = matches!(verb, Some(crate::ews::VERB_REPLY | crate::ews::VERB_REPLY_ALL));
     f.forwarded = verb == Some(crate::ews::VERB_FORWARD);

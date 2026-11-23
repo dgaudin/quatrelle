@@ -16,6 +16,7 @@ mod calendars;
 mod events;
 mod filing;
 mod follow_up;
+mod kinds;
 mod listing;
 mod mailtips;
 mod refused_deletes;

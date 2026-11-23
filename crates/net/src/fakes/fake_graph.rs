@@ -39,6 +39,8 @@ pub struct Msg {
     pub verb: Option<String>,
     pub verb_time: Option<String>,
     pub icon: Option<String>,
+    /// `PidTagMessageClass` (`String 0x001A`), given with the icon when asked for.
+    pub class: Option<String>,
     pub draft: bool,
     pub received: String,
     /// The voting buttons (`PidLidVerbStream`), when it has some.
@@ -128,6 +130,11 @@ pub struct Data {
     asked_immutable: bool,
     /// Set per request: its `$expand` names the last verb (`0x1081`).
     pub(super) asked_verbs: bool,
+    /// Set per request: its `$expand` names the message class (`0x001A`).
+    pub(super) asked_kinds: bool,
+    /// A request whose `$expand` names the message class is refused (HTTP 400), as a server that
+    /// takes no filter so long would.
+    pub refuse_kinds: bool,
     /// A folder's messages listed at most this many a page (`None`: all of `$top` at once), the
     /// rest through `@odata.nextLink`.
     pub page_messages: Option<usize>,
@@ -190,6 +197,7 @@ impl Data {
             verb: None,
             verb_time: None,
             icon: None,
+            class: None,
             draft: false,
             received: received.into(),
             voting: Vec::new(),
@@ -250,6 +258,13 @@ impl Data {
         }
         if self.asked_verbs {
             for (id, value) in [("Integer 0x1081", &m.verb), ("SystemTime 0x1082", &m.verb_time)] {
+                if let Some(value) = value {
+                    props.push(json!({"id": id, "value": value}));
+                }
+            }
+        }
+        if self.asked_kinds {
+            for (id, value) in [("String 0x001A", &m.class), ("Integer 0x1080", &m.icon)] {
                 if let Some(value) = value {
                     props.push(json!({"id": id, "value": value}));
                 }

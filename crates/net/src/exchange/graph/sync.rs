@@ -63,6 +63,8 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     }
     fs.validity = VALIDITY;
     let mut wanted: HashMap<u32, Flags> = newest.iter().map(|(id, f)| (st.number(id), f.clone())).collect();
+    // What each says it is (nothing, when the server wasn't asked or refused to say).
+    let said: HashMap<u32, (MessageKind, Smime)> = listed.iter().filter_map(|m| Some((st.known(m.get("id")?.as_str()?)?, kind_of(m)))).collect();
     // Found by a search of the server past the window: kept while still in the folder.
     let extra = st.found_outside(folder, &fs.messages, &wanted);
     for (found, f) in c.still_in(&id, &extra)? {
@@ -107,6 +109,14 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
                 report.changed += 1;
             }
         }
+        // What it is, said at last for mail kept from before; ordinary, or not said, never undoes one.
+        if let Some((kind, smime)) = said.get(&m.key.uid) {
+            let (kind, smime) = (m.kind.told_by_server(*kind), if m.smime.is_none() { *smime } else { m.smime });
+            if (kind, smime) != (m.kind, m.smime) {
+                (m.kind, m.smime) = (kind, smime);
+                report.changed += 1;
+            }
+        }
     }
     let missing: Vec<String> = newest.iter().filter(|(id, _)| fs.find(st.number(id)).is_none()).map(|(id, _)| id.clone()).collect();
     // Small gap: per-message GETs with internet headers. Big gap: reuse the listing entries.
@@ -142,6 +152,11 @@ pub(super) fn message_summary(m: &Value, key: MessageKey) -> Summary {
     s.preview = m.get("bodyPreview").and_then(Value::as_str).map(mime::preview).unwrap_or_default();
     s.has_attachments = m.get("hasAttachments").and_then(Value::as_bool).unwrap_or(false);
     s.voting = voting_choices(m);
+    let (kind, smime) = kind_of(m);
+    s.kind = kind;
+    if s.smime.is_none() {
+        s.smime = smime;
+    }
     s
 }
 

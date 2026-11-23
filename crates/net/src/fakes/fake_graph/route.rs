@@ -16,6 +16,11 @@ impl Data {
         }
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
         self.asked_verbs = query.contains("$expand=singleValueExtendedProperties") && query.contains("0x1081");
+        self.asked_kinds = query.contains("$expand=singleValueExtendedProperties") && query.contains("0x001A");
+        if self.refuse_kinds && self.asked_kinds {
+            let e = json!({"error": {"code": "BadRequest", "message": "The filter is too long."}});
+            return (400, e.to_string().into_bytes(), "application/json");
+        }
         let q = |k: &str| query.split('&').find_map(|kv| kv.strip_prefix(&format!("{k}=")).map(str::to_string));
         let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         let ok = |v: Value| (200, v.to_string().into_bytes(), "application/json");
