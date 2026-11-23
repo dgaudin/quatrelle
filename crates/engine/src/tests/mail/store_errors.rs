@@ -231,6 +231,30 @@ fn owed_flags_that_cant_be_read_arent_written_over() {
     assert_eq!(owed(), before, "the owed flags aren't saved over");
 }
 
+/// A damaged `pending-marks.json` isn't read as none: it's set aside whole (kept beside, never
+/// written over) and that's said, and the owed flags start again from an empty list that is saved.
+/// When it can't be set aside it stays where it is, said, and nothing is saved over it.
+#[test]
+fn damaged_owed_flags_are_set_aside_and_said() {
+    let said = |s: &Session| s.notices.iter().any(|n| n.error && n.text.contains("Outbox"));
+    let cache = Store::failing();
+    cache.save_doc("pending-marks.json", "not a list").unwrap();
+    let s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert!(said(&s), "{:?}", s.notices);
+    assert_eq!(cache.load_doc_strict::<Value>("pending-marks.json.bad").unwrap(), json!("not a list"), "not set aside as it was");
+    assert!(cache.load_doc_strict::<Vec<Value>>("pending-marks.json").unwrap().is_empty(), "left in its place");
+    assert!(!s.docs_unread.contains("pending-marks.json"), "saved over only once set aside");
+    // A copy that can't be written: the file stays, whole, and isn't saved over.
+    let cache = Store::failing();
+    cache.save_doc("pending-marks.json", "not a list").unwrap();
+    cache.fail(None, Some("pending-marks.json.bad"));
+    let s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    cache.fail(None, None);
+    assert!(said(&s), "{:?}", s.notices);
+    assert!(s.docs_unread.contains("pending-marks.json"), "saved over");
+    assert_eq!(cache.load_doc_strict::<Value>("pending-marks.json").unwrap(), json!("not a list"), "the file changed");
+}
+
 /// Two accounts on this computer, kept in a cache whose files can be made to fail.
 fn two_accounts_kept() -> (Store, Vec<serde_json::Value>) {
     let cache = Store::failing();

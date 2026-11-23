@@ -22,15 +22,19 @@ impl Session {
         self.load_rules_and_snoozes();
         if let Some(store) = &self.store {
             self.contacts = Contacts::load(store);
-            match store.load_doc::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS) {
+            match store.load_doc_strict::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS) {
                 Ok(marks) => self.pending_marks = marks.into_iter().map(|(id, k, f)| (id, (k, f))).collect(),
                 Err(e) => {
                     // The Replied and Forwarded flags replies in the Outbox owe: ones owed from
-                    // now on are set if they go before Quatrelle closes, but never saved over it.
-                    // Said, as for the rules and the snoozed mail: what they answer may never show
-                    // as answered.
+                    // now on are set if they go before Quatrelle closes. A damaged file is kept
+                    // whole beside (`.bad`) and the list starts again, saved as it grows; one that
+                    // can't be read, or can't be kept aside, is never saved over. Said either
+                    // way: what they answer may never show as answered.
                     log::warn!("the flags owed by replies in the Outbox couldn't be read: {}", kind_of(&e));
-                    self.docs_unread.insert(PENDING_MARKS);
+                    let damaged = matches!(e, quatrelle_store::StoreError::Damaged { .. });
+                    if !damaged || store.set_doc_aside(PENDING_MARKS).is_err() {
+                        self.docs_unread.insert(PENDING_MARKS);
+                    }
                     marks_unread = true;
                 }
             }
