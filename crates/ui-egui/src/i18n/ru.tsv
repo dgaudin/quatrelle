@@ -2435,3 +2435,5 @@ presence	Offline	Не в сети
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	список папок этой учётной записи повреждён и заново читается с сервера
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	список папок этой учётной записи повреждён, поэтому пока в него ничего не раскладывается: {error}
+# A message whose whole text went to the server, which never said whether it took it.
+	the server didn't say whether it took the message, which may have gone: {error}	сервер не сообщил, принял ли он сообщение, которое, возможно, уже отправлено: {error}

@@ -43,6 +43,7 @@ impl From<NetError> for quatrelle_jmap::Error {
             NetError::Auth(m) => E::Auth(m),
             NetError::Closed(m) => E::Closed(m),
             NetError::Smtp(m) | NetError::Later(m) => E::Send(m),
+            e @ NetError::Unconfirmed(_) => E::Send(e.to_string()),
             NetError::Store(e) => E::Store(e),
             NetError::Untrusted { site } => E::Untrusted { site },
         }

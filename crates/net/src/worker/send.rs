@@ -126,7 +126,9 @@ impl Worker {
 
     /// Send on the second connection. Sent: a copy filed in Sent Items (IMAP), and the main
     /// connection told to look there. Not sent for now (offline, asked to wait): handed to the
-    /// main connection, which keeps it in the Outbox; refused: said.
+    /// main connection, which keeps it in the Outbox; refused, or maybe gone (the server never
+    /// answered once it had the whole of it, `Unconfirmed`): said, and never handed on, which
+    /// would send it again.
     pub(super) fn send_quick(&mut self, job: Job) {
         let Job::Send { id, raw, from, recipients, sent_folder, .. } = &job else { return };
         match self.deliver(raw, from, recipients, sent_folder.as_deref()) {
@@ -361,6 +363,8 @@ impl Worker {
         })
     }
 
+    /// Send on the main connection. Not sent for now: kept in the Outbox; refused, or maybe gone
+    /// (`Unconfirmed`, which the Outbox would send again): said.
     pub(super) fn send(&mut self, id: u64, raw: &[u8], from: &str, recipients: &[String], sent_folder: Option<String>) {
         let sent = self.deliver(raw, from, recipients, sent_folder.as_deref());
         if let Err(e) = sent {
@@ -391,7 +395,9 @@ impl Worker {
     }
 
     /// Send what waits in the Outbox, oldest first. Stops at the first failure that may clear
-    /// up later (still offline); a message refused for good stays, marked with the error.
+    /// up later (still offline); a message refused for good stays, marked `refused:` with the
+    /// error, and one that may have gone (`Unconfirmed`) stays marked `unconfirmed:`: neither is
+    /// sent again by itself.
     pub(super) fn flush_outbox(&mut self) {
         for mut item in self.store.outbox(&self.acc.id) {
             // Held back (Delay Delivery) until its time; then dated when it goes.
@@ -400,8 +406,8 @@ impl Worker {
             }
             let Some(raw) = self.store.outbox_raw(&self.acc.id, item.id) else { continue };
             let raw = if item.not_before > 0 { quatrelle_mime::with_date(&raw, now()) } else { raw };
-            if item.error.as_deref().is_some_and(|e| e.starts_with("refused:")) {
-                // Refused for good: waits for the user to edit or delete it.
+            if item.error.as_deref().is_some_and(|e| e.starts_with("refused:") || e.starts_with("unconfirmed:")) {
+                // Refused for good, or maybe sent already: waits for the user's word.
                 continue;
             }
             let sent = self.deliver(&raw, &item.from, &item.recipients, item.sent_folder.as_deref());
@@ -414,7 +420,11 @@ impl Worker {
                 Err(e) => {
                     let retry = e.is_retryable();
                     item.attempts = item.attempts.saturating_add(1);
-                    item.error = Some(if retry { e.to_string() } else { format!("refused: {e}") });
+                    item.error = Some(match &e {
+                        _ if retry => e.to_string(),
+                        NetError::Unconfirmed(_) => format!("unconfirmed: {e}"),
+                        _ => format!("refused: {e}"),
+                    });
                     let _ = self.store.outbox_update(&self.acc.id, &item);
                     if retry {
                         self.sink.emit(Event::Queued { account: self.id(), id: item.id, error: e.to_string() });
@@ -496,5 +506,109 @@ mod tests {
         assert!(matches!(next_quick(&mut waiting), Some(Job::GetMailTips { ask: 1, .. })));
         assert!(matches!(next_quick(&mut waiting), Some(Job::GetMailTips { ask: 2, .. })));
         assert!(next_quick(&mut waiting).is_none());
+    }
+
+    /// A message to send.
+    const RAW: &[u8] = b"From: me@studio.example\r\nTo: zoe@studio.example\r\nSubject: once\r\n\r\nOnly once.\r\n";
+
+    /// A worker of an IMAP account sending through the scripted server at `port`, its events in
+    /// `pool`.
+    fn sender(port: u16, store: &Store, pool: &Pool) -> Worker {
+        let acc = AccountConfig {
+            id: "a1".into(),
+            email: "me@studio.example".into(),
+            username: "me@studio.example".into(),
+            smtp: quatrelle_model::ServerConfig { host: "127.0.0.1".into(), port, security: quatrelle_model::Security::None },
+            ..Default::default()
+        };
+        Worker::new(acc, Auth::shared("pw"), store.clone(), pool.sink.clone(), SyncOptions::default())
+    }
+
+    fn send_job(id: u64) -> Job {
+        Job::Send {
+            account: "a1".into(),
+            id,
+            raw: RAW.to_vec(),
+            from: "me@studio.example".into(),
+            recipients: vec!["zoe@studio.example".into()],
+            sent_folder: None,
+        }
+    }
+
+    /// Whether `seen` says message `id` may have gone.
+    fn said_maybe_gone(seen: &[Event], id: u64) -> bool {
+        seen.iter().any(|e| matches!(e, Event::SendFailed { id: i, error, .. } if *i == id && error.contains("didn't say whether")))
+    }
+
+    /// The second connection sends; the server takes the whole message and drops the connection
+    /// without a word. Taken for "offline", the message was handed to the main connection, which
+    /// sent it again: the recipient had it twice. It's said, and goes nowhere by itself.
+    #[test]
+    fn the_second_connection_never_hands_an_unconfirmed_send_on() {
+        let (port, heard) = crate::smtp::tests::scripted_heard(crate::smtp::tests::cut_after_the_message);
+        let store = Store::memory();
+        let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+        let (mut quick, mut main) = (sender(port, &store, &pool), sender(port, &store, &pool));
+        let (to_main, handed) = mpsc::channel();
+        quick.main = Some(to_main);
+        quick.send_quick(send_job(5));
+        // The main connection's part: what was handed to it, sent as it sends.
+        for job in handed.try_iter() {
+            main.handle(job);
+        }
+        assert_eq!(heard.messages(), 1, "the message went twice");
+        assert!(said_maybe_gone(&pool.poll(), 5));
+        assert!(store.outbox("a1").is_empty(), "{:?}", store.outbox("a1"));
+    }
+
+    /// The main connection sends with no answer after the whole message: said, and not kept in
+    /// the Outbox, which would send it again.
+    #[test]
+    fn a_send_that_may_have_gone_isnt_kept_in_the_outbox() {
+        let (port, heard) = crate::smtp::tests::scripted_heard(crate::smtp::tests::cut_after_the_message);
+        let store = Store::memory();
+        let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+        let mut w = sender(port, &store, &pool);
+        w.send(6, RAW, "me@studio.example", &["zoe@studio.example".to_string()], None);
+        assert!(store.outbox("a1").is_empty(), "{:?}", store.outbox("a1"));
+        assert!(said_maybe_gone(&pool.poll(), 6));
+        assert_eq!(heard.messages(), 1);
+    }
+
+    /// One from the Outbox with no answer after the whole of it: marked as maybe gone (never as
+    /// refused), said, and not sent again by the next round. One the server asks to wait for still
+    /// goes again.
+    #[test]
+    fn an_outbox_message_that_may_have_gone_isnt_sent_again() {
+        let (port, heard) = crate::smtp::tests::scripted_heard(crate::smtp::tests::cut_after_the_message);
+        let store = Store::memory();
+        let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+        let mut w = sender(port, &store, &pool);
+        let item = OutboxItem { id: 7, from: "me@studio.example".into(), recipients: vec!["zoe@studio.example".into()], ..Default::default() };
+        store.outbox_add("a1", &item, RAW).unwrap();
+        w.flush_outbox();
+        w.flush_outbox();
+        assert_eq!(heard.messages(), 1, "sent again");
+        let kept = store.outbox("a1");
+        let marked = kept.first().and_then(|i| i.error.clone()).unwrap_or_default();
+        assert!(marked.starts_with("unconfirmed: the server didn't say whether"), "{kept:?}");
+        let seen = pool.poll();
+        assert!(said_maybe_gone(&seen, 7), "{seen:?}");
+        assert!(!seen.iter().any(|e| matches!(e, Event::Queued { id: 7, .. })), "{seen:?}");
+        // Asked to wait: kept for the next round, as ever.
+        let (port, heard) = crate::smtp::tests::scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
+            "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+            "AUTH" => "235 2.7.0 welcome\r\n",
+            "MAIL" => "451 4.3.0 try again in a moment\r\n",
+            "QUIT" => "221 2.0.0 closing\r\n",
+            _ => "250 2.0.0 fine\r\n",
+        });
+        let store = Store::memory();
+        let mut w = sender(port, &store, &pool);
+        store.outbox_add("a1", &OutboxItem { id: 8, ..item }, RAW).unwrap();
+        w.flush_outbox();
+        w.flush_outbox();
+        assert_eq!(heard.said().iter().filter(|l| l.starts_with("MAIL FROM")).count(), 2, "not tried again");
+        assert!(store.outbox("a1").first().and_then(|i| i.error.as_deref()).is_some_and(|e| e.contains("try again later")));
     }
 }

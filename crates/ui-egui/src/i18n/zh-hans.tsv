@@ -2434,3 +2434,5 @@ presence	Offline	离线
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	此账户的文件夹列表已损坏，将从服务器重新读取
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	此账户的文件夹列表已损坏，因此暂时不会向其中归档任何内容: {error}
+# A message whose whole text went to the server, which never said whether it took it.
+	the server didn't say whether it took the message, which may have gone: {error}	服务器没有说明是否已收下这封邮件，它可能已经发出: {error}

@@ -115,3 +115,27 @@ fn the_damaged_folder_list_notices_are_translated() {
         "left in English: {server} / {here}"
     );
 }
+
+/// What a message the server never said it took says (`net/src/lib.rs`, `NetError::Unconfirmed`).
+const UNCONFIRMED: &str = "the server didn't say whether it took the message, which may have gone: {error}";
+
+/// A message that may have gone is said in the interface's language, what the connection said
+/// staying as it came; the wording is the network crate's, and every catalog has a line for it.
+#[test]
+fn the_wording_of_an_unconfirmed_send_is_translated() {
+    let net = include_str!("../../../net/src/lib.rs");
+    let head = UNCONFIRMED.trim_end_matches(": {error}");
+    assert!(net.contains(&format!("#[error(\"{head}: {{0}}\")]")), "not in the network crate any more");
+    assert!(!head.contains(": "), "the head must be free of ': ': `i18n::error` cuts at the first");
+    let cut = "network error: Connection reset by peer (os error 104)";
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    let said = error(&format!("{head}: {cut}"));
+    set_current(Lang::EN);
+    assert!(said.contains("peut-être parti"), "{said}");
+    assert!(said.ends_with(cut), "what the connection said changed: {said}");
+    assert!(!said.contains("didn't say"), "left in English: {said}");
+    for lang in LANGUAGES.iter().filter(|l| l.code != "en") {
+        let line = lang.catalog().get(UNCONFIRMED).unwrap_or_else(|| panic!("{}: no line for {UNCONFIRMED}", lang.code));
+        assert!(line.ends_with("{error}"), "{}: the value goes at the end: {line}", lang.code);
+    }
+}

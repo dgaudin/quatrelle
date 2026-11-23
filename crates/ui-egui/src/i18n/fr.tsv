@@ -2435,3 +2435,5 @@ presence	Offline	Hors ligne
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	la liste des dossiers de ce compte est abîmée et est relue du serveur
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	la liste des dossiers de ce compte est abîmée, rien n’y est donc rangé pour l’instant : {error}
+# A message whose whole text went to the server, which never said whether it took it.
+	the server didn't say whether it took the message, which may have gone: {error}	le serveur n’a pas dit s’il a pris le message, qui est peut-être parti : {error}

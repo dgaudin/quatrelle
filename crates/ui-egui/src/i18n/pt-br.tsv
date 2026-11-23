@@ -2434,3 +2434,5 @@ presence	Offline	Offline
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	a lista de pastas desta conta está danificada e é lida de novo do servidor
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	a lista de pastas desta conta está danificada, então nada é guardado nela por enquanto: {error}
+# A message whose whole text went to the server, which never said whether it took it.
+	the server didn't say whether it took the message, which may have gone: {error}	o servidor não disse se recebeu a mensagem, que talvez já tenha sido enviada: {error}

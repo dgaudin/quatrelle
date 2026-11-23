@@ -112,6 +112,10 @@ pub enum NetError {
     /// sent there.
     #[error("{site} isn't allowed for this account")]
     Untrusted { site: String },
+    /// The whole message went to the server, which never said whether it took it. Never sent again
+    /// unless the user says so.
+    #[error("the server didn't say whether it took the message, which may have gone: {0}")]
+    Unconfirmed(String),
 }
 
 impl NetError {
@@ -122,6 +126,8 @@ impl NetError {
 
     /// Whether sending may work later (keep the message in the Outbox rather than give up): a
     /// refused sign-in is the account's problem, not the message's, and clears once signed in.
+    /// A message that may have gone already (`Unconfirmed`) never is: sent again unasked, it
+    /// arrives twice.
     pub fn is_retryable(&self) -> bool {
         self.is_fatal() || matches!(self, NetError::Later(_) | NetError::Auth(_) | NetError::Untrusted { .. })
     }
