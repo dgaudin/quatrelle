@@ -243,7 +243,10 @@ impl<S: Read + Write> Client<S> {
             .take(MAX_MESSAGES)
             .filter_map(|l| {
                 let (n, id) = l.trim().split_once(' ')?;
-                Some((n.parse().ok()?, id.trim().chars().take(70).collect()))
+                let n: u32 = n.parse().ok()?;
+                // RFC 1939 numbers messages from 1; a 0 would make RETR 0 fail and stop the
+                // whole download before the messages after it.
+                (n > 0).then(|| (n, id.trim().chars().take(70).collect()))
             })
             .collect())
     }
@@ -769,6 +772,14 @@ mod tests {
         assert_eq!(sync().unwrap().new, 0);
         assert_eq!(store.load_folder("p1", "INBOX").unwrap().messages.len(), 2);
         assert_eq!(local_counts(&store, "p1", "INBOX").unwrap().total, 2);
+    }
+
+    /// A message number starts at 1 (RFC 1939): `UIDL` line 0 is not a message, and must not
+    /// stop the messages after it.
+    #[test]
+    fn a_message_number_starts_at_one() {
+        let mut c = Client::greet(canned(b"+OK\r\n+OK\r\n0 a\r\n1 b\r\n.\r\n")).unwrap();
+        assert_eq!(c.uidl().unwrap(), vec![(1, "b".to_string())]);
     }
 
     #[test]

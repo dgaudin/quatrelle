@@ -40,7 +40,8 @@ impl Write for Server<'_> {
 /// What `UIDL` listed, within their caps.
 fn check_listed(list: &[(u32, String)]) {
     assert!(list.len() <= 200_000, "{} messages", list.len());
-    for (_n, id) in list {
+    for (n, id) in list {
+        assert!(*n > 0, "a message numbered 0");
         assert!(id.chars().count() <= 70, "{} characters in an id", id.chars().count());
     }
 }
