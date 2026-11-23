@@ -10,7 +10,7 @@ use super::*;
 mod ids;
 mod ticks;
 pub(crate) use ids::Ids;
-pub use ticks::Ticks;
+pub use ticks::{TICKS_TRIES, Ticks};
 
 /// What an account keeps between syncs: the numbers given to message ids, and the mailbox id
 /// behind each folder path.
@@ -272,12 +272,12 @@ impl State {
             }
         }
         // The folders it gave the passes for completed follow-ups, for replies and forwards, and
-        // for what mail is; and those the last failed in.
+        // for what mail is; and those the last failed in (counted there, not again here).
         self.ticks.absorb(other.ticks);
         self.replies.absorb(other.replies);
         self.kinds.absorb(other.kinds);
         for f in other.kinds_put_off {
-            self.kinds_failed(&f);
+            self.put_off_kinds(&f);
         }
     }
 

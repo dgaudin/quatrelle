@@ -337,7 +337,9 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   folder's read, the third after it, so its new mail never waits on that search. A kind the
   server calls ordinary never replaces one kept. A server that refuses that search has the pass
   noted done; one that fails it (a timeout, a connection cut) has the folder read all the same
-  and is asked again only when Quatrelle next starts, once a folder a run.
+  and is asked again only when Quatrelle next starts, once a folder a run; failed at three
+  starts (counted in `kinds`), it's given up there, that folder's mail kept before left to its
+  source.
 - **Mail kept, as Outlook's Cached Exchange Mode** (the owner's rule): what came in the time
   chosen in Options (`Prefs::keep_days`, two years unless chosen; `SyncOptions::since_days`).
   The listing asks only for mail received since then (`FindItem` restricted on

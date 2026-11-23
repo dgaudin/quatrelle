@@ -4,6 +4,8 @@
 //! listed again (minutes on a big mailbox): the follow-ups marked complete, the messages replied
 //! to or forwarded, and what mail kept before is (a meeting message, a report…).
 
+use quatrelle_jmap::TICKS_TRIES;
+
 use super::*;
 
 /// Messages asked for in one request at most (a page; more come in the next ones).
@@ -47,7 +49,9 @@ pub(super) fn catch_up_once(
 /// once the folder is read (`report`): its new mail is in first, not kept waiting on a search
 /// of the whole folder. `kept`: whether it kept anything before that read (if not, all of it came
 /// with its kind). The pass never stops the folder's sync: failed, it waits for Quatrelle's next
-/// start. The report, with what the pass changed.
+/// start, and is given up there at the [`TICKS_TRIES`]th start it failed at (a folder whose search
+/// always times out, a big public folder, isn't searched at every start for ever: its mail kept
+/// before is told by its sources alone). The report, with what the pass changed.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn kinds_after_read(
     c: &Client,
@@ -74,10 +78,16 @@ pub(super) fn kinds_after_read(
             st.kinds_read(folder);
         }
         // A big folder timing out, a connection cut: asked again when Quatrelle next starts, not
-        // at every sync.
+        // at every sync; the log names no folder.
         Err(e) => {
-            log::warn!("{account}: what messages kept are couldn't be asked of a folder ({}); asked again at the next start", failure(&e));
-            st.kinds_failed(folder);
+            if st.kinds_failed(folder) {
+                log::warn!(
+                    "{account}: what messages kept are couldn't be asked of a folder ({}) at {TICKS_TRIES} starts; given up there",
+                    failure(&e)
+                );
+            } else {
+                log::warn!("{account}: what messages kept are couldn't be asked of a folder ({}); asked again at the next start", failure(&e));
+            }
         }
     }
     report

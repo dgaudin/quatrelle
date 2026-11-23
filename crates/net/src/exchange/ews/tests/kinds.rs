@@ -201,3 +201,33 @@ fn a_kinds_pass_cut_short_doesnt_stop_the_folder_being_read() {
     assert!(!st.kinds_wanted("INBOX"));
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A folder whose pass fails at every start (a big public folder whose search always times out)
+/// has it tried at three starts, then given up there: never asked again, its mail kept before told
+/// by its sources alone. The folder is read every time, its new mail in.
+#[test]
+fn a_kinds_pass_failing_at_every_start_is_given_up_at_the_third() {
+    let (server, store, c, mut st) = synced("ews-kinds-given-up", |d| d.kinds_cut = true);
+    as_before(&store, &mut st);
+    let tried = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "FindItem kinds cut").count();
+    let mut at_start = Vec::new();
+    for n in 1..=4 {
+        // Quatrelle started again: the numbering read back from the cache.
+        st.save(&store, "a1").unwrap();
+        st = State::load(&store, "a1").unwrap();
+        {
+            let mut d = server.data.lock().unwrap();
+            let inbox = d.by_name("Inbox").map(|f| f.id.clone()).unwrap();
+            let raw = format!("From: b@y.example\r\nSubject: new {n}\r\n\r\nx\r\n");
+            d.deliver(&inbox, raw.as_bytes(), false, &format!("2024-06-0{n}T09:00:00Z"));
+        }
+        let before = tried();
+        let r = sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts());
+        assert!(r.as_ref().is_ok_and(|r| r.new == 1), "read at start {n}: {r:?}");
+        at_start.push(tried() > before);
+    }
+    assert_eq!(at_start, [true, true, true, false], "tried at three starts, then given up");
+    assert!(!st.kinds_wanted("INBOX"), "noted done");
+    assert_eq!(kept(&store, "request"), Some((K::Unknown, Smime::None, false)), "left to its source");
+    let _ = std::fs::remove_dir_all(store.root());
+}

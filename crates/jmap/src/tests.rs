@@ -426,3 +426,81 @@ fn a_huge_source_is_not_read_for_its_kind() {
     fill_from_source(&mut m, &raw);
     assert_eq!(m.kind, MessageKind::MeetingRequest);
 }
+
+/// The kinds pass failed at a start is counted with what it did, written and read back, once a
+/// run (a reader's failure taken back counts once): at the third start it failed at, it's given up
+/// there, taken as had. A success forgets the count.
+#[test]
+fn a_kinds_pass_failed_at_three_starts_is_given_up() {
+    // Quatrelle started again: the state written and read back.
+    let start = |st: &State| -> State { serde_json::from_value(serde_json::to_value(st).unwrap()).unwrap() };
+    let mut st = State::default();
+    let mut reader = st.reserve(10, &st.numbering());
+    assert!(!reader.kinds_failed("Public"), "a first start it failed at");
+    st.absorb(reader);
+    assert!(!st.kinds_due("Public") && !st.kinds_failed("Public"), "counted once a run, a reader's too");
+    let mut st = start(&st);
+    assert!(st.kinds_due("Public") && !st.kinds_failed("Public"), "a second");
+    let mut st = start(&st);
+    assert!(st.kinds_failed("Public"), "given up at the third start");
+    assert!(!st.kinds_wanted("Public") && st.kinds.failed.is_empty());
+    assert!(!st.kinds_failed("Archive"));
+    let mut st = start(&st);
+    st.kinds_read("Archive");
+    assert!(st.kinds.failed.is_empty() && !st.kinds_wanted("Archive"), "a success forgets the count");
+}
+
+/// The state as the version before the count wrote and read it (1.5.0's is the same without
+/// `kinds`, an unknown field it leaves aside, as this copy does): strict here where it was lenient,
+/// so that what it couldn't read fails rather than goes.
+#[derive(Debug, Deserialize)]
+struct Before {
+    #[serde(default)]
+    next: u32,
+    #[serde(default)]
+    ids: Value,
+    #[serde(default)]
+    mailboxes: BTreeMap<String, String>,
+    #[serde(default)]
+    ticks: BeforeTicks,
+    #[serde(default)]
+    replies: BeforeTicks,
+    #[serde(default)]
+    kinds: BeforeTicks,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+struct BeforeTicks {
+    #[serde(default)]
+    done: bool,
+    #[serde(default)]
+    folders: std::collections::BTreeSet<String>,
+}
+
+/// A state written before the count reads, the pass due where it was; one whose count can't be
+/// read keeps the rest. What this version writes, the version before reads without loss.
+#[test]
+fn the_kinds_count_reads_before_and_is_read_before() {
+    let before: State = serde_json::from_value(json!({ "next": 2, "mailboxes": { "INBOX": "mb1" }, "kinds": { "folders": ["INBOX"] } })).unwrap();
+    assert!(before.kinds_due("Public") && !before.kinds_wanted("INBOX") && before.kinds.failed.is_empty());
+    let damaged = json!({ "kinds": { "folders": ["INBOX"], "failed": { "Public": "two", "Big": -1, "Huge": 900, "Archive": 2 } } });
+    let damaged: State = serde_json::from_value(damaged).unwrap();
+    assert!(!damaged.kinds_wanted("INBOX"), "a count it can't read keeps the rest");
+    assert_eq!(damaged.kinds.failed, BTreeMap::from([("Archive".to_string(), 2)]));
+    let damaged: State = serde_json::from_value(json!({ "kinds": { "folders": ["INBOX"], "failed": [1, 2] } })).unwrap();
+    assert!(!damaged.kinds_wanted("INBOX") && damaged.kinds.failed.is_empty());
+
+    let mut now = State::default();
+    now.number("m1");
+    now.mailboxes.insert("INBOX".into(), "mb1".into());
+    now.ticks_read("INBOX");
+    now.replies_read("INBOX");
+    now.kinds_read("INBOX");
+    now.kinds_failed("Public");
+    let written = serde_json::to_value(&now).unwrap();
+    assert_eq!(written["kinds"]["failed"], json!({ "Public": 1 }), "{written}");
+    let read: Before = serde_json::from_value(written.clone()).unwrap();
+    assert_eq!((read.next, &read.ids, &read.mailboxes), (now.next, &written["ids"], &now.mailboxes));
+    let inbox = BeforeTicks { done: false, folders: ["INBOX".to_string()].into() };
+    assert_eq!((read.ticks, read.replies, read.kinds), (inbox.clone(), inbox.clone(), inbox));
+}
