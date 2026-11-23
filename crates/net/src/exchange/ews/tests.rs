@@ -9,6 +9,7 @@ use super::sync::aqs_of;
 use super::*;
 
 mod follow_up;
+mod kinds;
 mod listing;
 mod refusals;
 mod replied;

@@ -7,11 +7,13 @@ use super::*;
 
 /// Which of a folder's messages [`Client::newest_where`] lists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Only {
+pub(super) enum Only {
     All,
     Categorized,
     Completed,
     Replied,
+    /// What may be more than mail, or was replied to all ([`Client::kinds`]).
+    Kinds,
 }
 
 /// The folders Exchange makes itself at the top of a mailbox, by name: some servers don't mark
@@ -146,7 +148,12 @@ pub(super) fn changes_of(m: &El) -> Result<(Vec<Change>, String, bool)> {
 
 /// The items a `FindItem` answer lists: each one's id and marks, those without an id left out.
 pub(super) fn items_of(items: &El) -> Vec<(String, Flags)> {
-    items.kids.iter().filter_map(|it| Some((it.child("ItemId")?.attr("Id")?.to_string(), flags(it)))).collect()
+    items.kids.iter().filter_map(id_and_flags).collect()
+}
+
+/// An item's id and marks (none without an id).
+fn id_and_flags(it: &El) -> Option<(String, Flags)> {
+    Some((it.child("ItemId")?.attr("Id")?.to_string(), flags(it)))
 }
 
 impl Client {
@@ -305,27 +312,36 @@ impl Client {
     /// pages by offset; it says when the last page is in); with `since`, only those received
     /// since then (Unix seconds), as Outlook keeps mail offline in Cached Exchange Mode.
     pub(super) fn newest(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
-        self.newest_where(folder, limit, since, Only::All, 1000)
+        self.newest_where(folder, limit, since, Only::All, 1000, id_and_flags)
     }
 
     /// [`Client::newest`], those carrying categories only (what Outlook put on them).
     pub(super) fn categorized(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
-        self.newest_where(folder, limit, since, Only::Categorized, 1000)
+        self.newest_where(folder, limit, since, Only::Categorized, 1000, id_and_flags)
     }
 
     /// [`Client::newest`], the follow-ups marked complete only (`PidTagFlagStatus` 1), a page of
     /// `page` at a time.
     pub(super) fn completed(&self, folder: &str, limit: usize, since: Option<i64>, page: usize) -> Result<Vec<(String, Flags)>> {
-        self.newest_where(folder, limit, since, Only::Completed, page)
+        self.newest_where(folder, limit, since, Only::Completed, page, id_and_flags)
     }
 
     /// [`Client::newest`], those replied to or forwarded only (`PidTagLastVerbExecuted` from 102
     /// to 104: a reply, to all, a forward), a page of `page` at a time.
     pub(super) fn replied(&self, folder: &str, limit: usize, since: Option<i64>, page: usize) -> Result<Vec<(String, Flags)>> {
-        self.newest_where(folder, limit, since, Only::Replied, page)
+        self.newest_where(folder, limit, since, Only::Replied, page, id_and_flags)
     }
 
-    fn newest_where(&self, folder: &str, limit: usize, since: Option<i64>, only: Only, page_max: usize) -> Result<Vec<(String, Flags)>> {
+    /// [`Client::newest`], `only` those, each read by `read` (one it reads nothing of is left out).
+    pub(super) fn newest_where<T>(
+        &self,
+        folder: &str,
+        limit: usize,
+        since: Option<i64>,
+        only: Only,
+        page_max: usize,
+        read: impl Fn(&El) -> Option<T>,
+    ) -> Result<Vec<T>> {
         let limit = limit.clamp(1, MAX_KEPT);
         let page_max = page_max.clamp(1, 1000);
         let mut conditions = String::new();
@@ -344,6 +360,7 @@ impl Client {
                 super::VERB_REPLY,
                 super::VERB_FORWARD
             )),
+            Only::Kinds => conditions.push_str(&super::marks::kinds_condition()),
         }
         if let Some(t) = since {
             conditions.push_str(&format!(
@@ -354,14 +371,16 @@ impl Client {
         // One condition alone, two or more under an `And` (a range is two).
         let restriction = match (only, since.is_some()) {
             (Only::All, false) => String::new(),
-            (Only::Categorized | Only::Completed, false) | (Only::All, true) => format!("<m:Restriction>{conditions}</m:Restriction>"),
+            (Only::Categorized | Only::Completed | Only::Kinds, false) | (Only::All, true) => format!("<m:Restriction>{conditions}</m:Restriction>"),
             _ => format!("<m:Restriction><t:And>{conditions}</t:And></m:Restriction>"),
         };
-        let mut out: Vec<(String, Flags)> = Vec::new();
+        // What a message is, for the pass that reads it alone.
+        let kind = if matches!(only, Only::Kinds) { KIND_FIELDS } else { "" };
+        let mut out: Vec<T> = Vec::new();
         while out.len() < limit {
             let page = (limit - out.len()).min(page_max);
             let m = self.call_one(&format!(
-                "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}</t:AdditionalProperties></m:ItemShape>\
+                "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}{kind}</t:AdditionalProperties></m:ItemShape>\
                  <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{}\" BasePoint=\"Beginning\"/>{restriction}\
                  <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
                  <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
@@ -371,7 +390,7 @@ impl Client {
             ))?;
             let last = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")) != Some("false");
             let Some(items) = m.find("Items") else { break };
-            let got = items_of(items);
+            let got: Vec<T> = items.kids.iter().filter_map(&read).collect();
             let n = got.len();
             out.extend(got);
             if last || n == 0 || n < page {

@@ -324,6 +324,19 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   A folder too big for its state to be taken (more than 200 pages of changes) is listed without
   one, and the mark says so (`too_big`): it isn't asked again for a week (asked at every pass,
   two public folders of 100,000 reports each took a quarter of an hour).
+  What a message is (a meeting message, a report, an automatic reply, a recall, S/MIME) comes
+  with its details: its class (`item:ItemClass`) and icon (`PidTagIconIndex`), read by
+  `MessageKind::from_exchange` and `Smime::from_class`. Marks and kinds of mail kept before this
+  version read them are asked for once per folder, beside the folder's read (`ews/sync/catch_up.rs`;
+  the numbering's `ticks`, `replies` and `kinds`): the follow-ups marked complete, the messages
+  replied to or forwarded, and, third, those whose class starts `IPM.Schedule.Meeting`,
+  `REPORT.`, `IPM.Note.SMIME`, `IPM.Note.Rules.OofTemplate`, `IPM.Outlook.Recall` or
+  `IPM.Recall.Report`, or replied to all (`PidTagLastVerbExecuted` 103): an `IdOnly` `FindItem`
+  of their ids, marks, class and icon, a thousand a page within the window and time kept,
+  nothing downloaded; ordinary mail is left to its source. A kind the server calls ordinary
+  never replaces one kept. A server that refuses that search has the pass noted done; one that
+  fails it (a timeout, a connection cut) has the folder read all the same and is asked again
+  only when Quatrelle next starts, once a folder a run.
 - **Mail kept, as Outlook's Cached Exchange Mode** (the owner's rule): what came in the time
   chosen in Options (`Prefs::keep_days`, two years unless chosen; `SyncOptions::since_days`).
   The listing asks only for mail received since then (`FindItem` restricted on

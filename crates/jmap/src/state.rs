@@ -46,6 +46,14 @@ pub struct State {
     /// here ([`Ticks`] too).
     #[serde(default, skip_serializing_if = "Ticks::is_new", deserialize_with = "ticks::lenient")]
     pub replies: Ticks,
+    /// Exchange: the one pass reading what mail kept before this version read it is (meeting
+    /// messages, reports, S/MIME…: [`Ticks`] too).
+    #[serde(default, skip_serializing_if = "Ticks::is_new", deserialize_with = "ticks::lenient")]
+    pub kinds: Ticks,
+    /// Exchange: the folders that pass failed in this run, not asked again before Quatrelle
+    /// next starts ([`State::kinds_failed`]); never written.
+    #[serde(skip)]
+    kinds_put_off: std::collections::BTreeSet<String>,
     /// What was last written ([`State::fingerprint`]): the same isn't written again.
     #[serde(skip)]
     saved: std::cell::Cell<u64>,
@@ -136,6 +144,7 @@ impl State {
         }
         self.ticks.hash(&mut h);
         self.replies.hash(&mut h);
+        self.kinds.hash(&mut h);
         h.finish()
     }
 
@@ -220,6 +229,8 @@ impl State {
             marks: self.marks.clone(),
             ticks: self.ticks.clone(),
             replies: self.replies.clone(),
+            kinds: self.kinds.clone(),
+            kinds_put_off: self.kinds_put_off.clone(),
             saved: std::cell::Cell::new(0),
             base: Some(numbering.clone()),
             given: Vec::new(),
@@ -260,9 +271,14 @@ impl State {
                 self.marks.insert(folder, m);
             }
         }
-        // The folders it gave the passes for completed follow-ups, and for replies and forwards.
+        // The folders it gave the passes for completed follow-ups, for replies and forwards, and
+        // for what mail is; and those the last failed in.
         self.ticks.absorb(other.ticks);
         self.replies.absorb(other.replies);
+        self.kinds.absorb(other.kinds);
+        for f in other.kinds_put_off {
+            self.kinds_failed(&f);
+        }
     }
 
     /// Put the counter back after the numbers kept by [`State::reserve`], so a long run of

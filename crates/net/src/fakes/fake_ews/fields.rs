@@ -123,7 +123,8 @@ pub struct Verb {
 }
 
 /// A message's follow-up flag as Exchange gives it: `PidTagFlagStatus` (2 flagged, 1 complete)
-/// and `PidTagFlagCompleteTime` when it has one; with the last thing done with it ([`Verb`]).
+/// and `PidTagFlagCompleteTime` when it has one; with the last thing done with it ([`Verb`]) and
+/// when. Its icon comes only when asked for ([`kind_xml`]).
 pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: &Verb) -> String {
     let status = if flagged { Some(2) } else { complete.then_some(1) };
     let mut x = status
@@ -139,7 +140,7 @@ pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: 
             esc(t)
         ));
     }
-    for (tag, kind, v) in [("0x1081", "Integer", &verb.last), ("0x1082", "SystemTime", &verb.time), ("0x1080", "Integer", &verb.icon)] {
+    for (tag, kind, v) in [("0x1081", "Integer", &verb.last), ("0x1082", "SystemTime", &verb.time)] {
         if let Some(v) = v {
             x.push_str(&format!(
                 "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
@@ -184,4 +185,75 @@ pub(super) fn verb_range(restriction: &El) -> Option<(i64, i64)> {
             .and_then(|c| c.find("Constant").and_then(|k| k.attr("Value")).and_then(|v| v.parse().ok()))
     };
     Some((bound("IsGreaterThanOrEqualTo")?, bound("IsLessThanOrEqualTo")?))
+}
+
+/// Whether a request's shape asks for what a message is: its class (`item:ItemClass`) and its
+/// icon (`PidTagIconIndex`, `0x1080`).
+pub(super) fn kind_asked(op: &El) -> (bool, bool) {
+    let Some(shape) = op.find("AdditionalProperties") else { return (false, false) };
+    let class = shape.kids.iter().any(|f| f.attr("FieldURI") == Some("item:ItemClass"));
+    let icon = shape.kids.iter().any(|f| f.name == "ExtendedFieldURI" && f.attr("PropertyTag") == Some("0x1080"));
+    (class, icon)
+}
+
+/// A message's class and icon, as far as they're asked for (its icon only when it has one).
+pub(super) fn kind_xml(it: &It, class: bool, icon: bool) -> String {
+    let mut x = if class { format!("<t:ItemClass>{}</t:ItemClass>", esc(&it.class)) } else { String::new() };
+    if let Some(v) = it.verb.icon.as_deref().filter(|_| icon) {
+        x.push_str(&format!(
+            "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1080\" PropertyType=\"Integer\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+            esc(v)
+        ));
+    }
+    x
+}
+
+/// An item's answer (`<t:Message>…</t:Message>`) with its class and icon, as far as `op` asks for
+/// them; the class not again when the text's fields carry it (`text`).
+pub(super) fn with_kind(x: String, it: &It, op: &El, text: bool) -> String {
+    let (class, icon) = kind_asked(op);
+    let more = kind_xml(it, class && !text, icon);
+    match x.rfind("</t:Message>") {
+        Some(at) if !more.is_empty() => format!("{}{more}{}", x.get(..at).unwrap_or_default(), x.get(at..).unwrap_or_default()),
+        _ => x,
+    }
+}
+
+/// The search for what messages are (`FindItem` restricted to an `Or` of classes by their start,
+/// `Contains` `Prefixed` on `item:ItemClass`, and of last verbs, `IsEqualTo` on `0x1081`).
+pub(super) struct KindsSearch {
+    starts: Vec<String>,
+    verbs: Vec<String>,
+}
+
+impl KindsSearch {
+    /// Whether a message is one the search finds: its class starts with one of them (without
+    /// case), or its last verb is one of them.
+    pub(super) fn admits(&self, it: &It) -> bool {
+        let class = it.class.to_ascii_lowercase();
+        self.starts.iter().any(|s| class.starts_with(s.as_str())) || it.verb.last.as_ref().is_some_and(|v| self.verbs.contains(v))
+    }
+}
+
+/// The search for what messages are, if a restriction is one.
+pub(super) fn kinds_search(restriction: &El) -> Option<KindsSearch> {
+    let or = restriction.find("Or")?;
+    let mut contains = Vec::new();
+    or.all("Contains", &mut contains);
+    let starts: Vec<String> = contains
+        .iter()
+        .filter(|c| c.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:ItemClass"))
+        .filter_map(|c| c.find("Constant").and_then(|k| k.attr("Value")).map(str::to_ascii_lowercase))
+        .collect();
+    if starts.is_empty() {
+        return None;
+    }
+    let mut equal = Vec::new();
+    or.all("IsEqualTo", &mut equal);
+    let verbs = equal
+        .iter()
+        .filter(|c| c.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) == Some("0x1081"))
+        .filter_map(|c| c.find("Constant").and_then(|k| k.attr("Value")).map(str::to_string))
+        .collect();
+    Some(KindsSearch { starts, verbs })
 }

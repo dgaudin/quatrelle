@@ -303,6 +303,54 @@ fn the_completed_follow_ups_pass_is_kept_per_account() {
     assert!(!damaged.ticks_wanted("INBOX") && damaged.replies_wanted("INBOX"));
 }
 
+/// The pass reading what mail kept before is goes as the others: a reader's folders come back,
+/// it's done once every folder followed had it, a state without it or with a value it can't read
+/// starts it, and it's written when it moved on. A folder it failed in waits for the next start
+/// (readers know it, and give theirs back), which isn't written.
+#[test]
+fn the_kinds_pass_is_kept_per_account_and_a_failure_waits_for_the_next_start() {
+    let mut main = State::default();
+    assert!(main.kinds_wanted("INBOX") && main.kinds_due("INBOX"));
+    main.kinds_read("INBOX");
+    main.kinds_failed("Archive");
+    let mut reader = main.reserve(10, &main.numbering());
+    assert!(!reader.kinds_wanted("INBOX"), "a reader knows what was done");
+    assert!(reader.kinds_wanted("Archive") && !reader.kinds_due("Archive"), "and what failed in this run");
+    reader.kinds_read("Projects");
+    reader.kinds_failed("Public");
+    main.absorb(reader);
+    assert!(!main.kinds_wanted("Projects") && main.kinds_wanted("Public") && !main.kinds_due("Public"), "and gives back both");
+    let followed = ["INBOX", "Projects", "Archive"].map(str::to_string);
+    assert!(!main.finish_kinds(&followed), "a folder it failed in isn't done");
+
+    // Written and read back, as Quatrelle starts again: the failures are forgotten.
+    let v = serde_json::to_value(&main).unwrap();
+    assert_eq!(v["kinds"]["folders"], json!(["INBOX", "Projects"]), "{v}");
+    let mut again: State = serde_json::from_value(v).unwrap();
+    assert!(again.kinds_due("Archive") && again.kinds_due("Public") && !again.kinds_due("INBOX"));
+    again.kinds_read("Archive");
+    assert!(again.finish_kinds(&followed) && again.kinds.done && again.kinds.folders.is_empty());
+    assert!(!again.kinds_due("A folder made later"), "done: nothing more is asked");
+    // Written when it moved on, whatever else changed.
+    let dir = std::env::temp_dir().join(format!("quatrelle-jmap-kinds-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let mut st = State::default();
+    st.number("m1");
+    st.save(&store, "a1").unwrap();
+    st.kinds_read("INBOX");
+    st.save(&store, "a1").unwrap();
+    assert!(!State::load(&store, "a1").unwrap().kinds_wanted("INBOX"), "written");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // A state from before has none; one it can't read starts it, the other passes kept.
+    assert!(serde_json::to_value(State::default()).unwrap().get("kinds").is_none(), "nothing written before it's begun");
+    let old: State = serde_json::from_value(json!({ "next": 3, "mailboxes": {} })).unwrap();
+    assert!(old.kinds_wanted("INBOX"));
+    let damaged: State = serde_json::from_value(json!({ "ticks": { "done": true }, "kinds": 3, "mailboxes": { "INBOX": "mb1" } })).unwrap();
+    assert!(damaged.kinds_wanted("INBOX") && !damaged.ticks_wanted("INBOX") && damaged.mailbox("INBOX").is_ok());
+}
+
 /// A numbering that can't be read, or is damaged, is an error that leaves the file where it is:
 /// taken for an empty one, every message of the account was numbered again and downloaded again.
 #[test]

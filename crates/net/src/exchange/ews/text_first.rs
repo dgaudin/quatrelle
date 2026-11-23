@@ -8,11 +8,11 @@ use quatrelle_model::EmailAddress;
 
 use super::*;
 
-/// What's asked beyond the list's headers, every name from Microsoft's list: Exchange checks them
-/// all against its schema, and one it doesn't know refuses the whole request. No `BodyType`:
-/// grommunio sends the whole source with one.
+/// What's asked beyond the list's headers (the class is among them), every name from Microsoft's
+/// list: Exchange checks them all against its schema, and one it doesn't know refuses the whole
+/// request. No `BodyType`: grommunio sends the whole source with one.
 const TEXT_FIELDS: &str = "<t:FieldURI FieldURI=\"item:Body\"/><t:FieldURI FieldURI=\"item:Attachments\"/>\
-<t:FieldURI FieldURI=\"item:ItemClass\"/><t:FieldURI FieldURI=\"item:Importance\"/>";
+<t:FieldURI FieldURI=\"item:Importance\"/>";
 
 /// Item classes whose real content isn't in their body: signed or encrypted mail, invitations.
 const LEFT_WHOLE: [&str; 2] = ["ipm.note.smime", "ipm.schedule.meeting"];

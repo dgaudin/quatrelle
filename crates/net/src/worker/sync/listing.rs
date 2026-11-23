@@ -193,13 +193,19 @@ impl Worker {
         }
         // "Online" is said once the mail is current: the calendars and contacts can take far
         // longer, and shouldn't hold the status bar on the last folder's name.
-        // Every folder followed asked once for its follow-ups marked complete, and its messages
-        // replied to or forwarded, in Outlook before they were read here: each pass is done (one
-        // cut short goes on at the next sync).
+        // Every folder followed asked once for its follow-ups marked complete, its messages
+        // replied to or forwarded in Outlook before they were read here, and what its mail kept
+        // before is: each pass is done (one cut short goes on at the next sync; the last, at the
+        // next start where it failed).
         if matches!(self.conn, Some(Conn::Ews(_))) {
             let (ticks, replies) = (self.jstate.finish_ticks(&followed), self.jstate.finish_replies(&followed));
-            if ticks || replies {
-                log::info!("{}: in all {} folders, read: completed follow-ups {ticks}, replies {replies}", self.acc.id, followed.len());
+            let kinds = self.jstate.finish_kinds(&followed);
+            if ticks || replies || kinds {
+                log::info!(
+                    "{}: in all {} folders, read: completed follow-ups {ticks}, replies {replies}, kinds {kinds}",
+                    self.acc.id,
+                    followed.len()
+                );
                 self.save_jstate();
             }
         }

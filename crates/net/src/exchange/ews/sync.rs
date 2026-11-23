@@ -468,6 +468,9 @@ pub(super) fn item_summary(it: &El, key: MessageKey) -> Summary {
     let received = it.text_of("DateTimeReceived").and_then(jmap::utc_date).unwrap_or(0);
     let size = it.text_of("Size").and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(0);
     let mut s = mime::summary_from_header(&header_block(it), key, flags(it), size, received);
+    let (kind, smime) = kind_of(it);
+    s.kind = kind;
+    s.smime = if s.smime.is_none() { smime } else { s.smime };
     s.has_attachments = it.text_of("HasAttachments").is_some_and(|v| v == "true");
     s.voting = voting_choices(it);
     s

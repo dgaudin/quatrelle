@@ -133,6 +133,16 @@ impl Data {
                         let since = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default().to_string();
                         list.retain(|i| i.received.as_str() >= since.as_str());
                     }
+                    // What may be more than mail, or was replied to all (an `Or` of classes by
+                    // their start and of last verbs): refused, or the messages it finds.
+                    if let Some(kinds) = super::fields::kinds_search(restriction) {
+                        self.calls.push("FindItem kinds".into());
+                        if self.kinds_refused {
+                            out.push(err("ErrorInvalidRestriction"));
+                            return ("FindItemResponse".into(), out);
+                        }
+                        list.retain(|i| kinds.admits(i));
+                    }
                     // Replied to or forwarded (`PidTagLastVerbExecuted` within a range).
                     if let Some((lo, hi)) = super::fields::verb_range(restriction) {
                         list.retain(|i| i.verb.last.as_deref().and_then(|v| v.parse::<i64>().ok()).is_some_and(|v| (lo..=hi).contains(&v)));
@@ -157,7 +167,7 @@ impl Data {
                         if cond.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("message:IsRead") {
                             let want = value == "true";
                             list.retain(|i| i.read == want);
-                        } else if cond.find("ExtendedFieldURI").is_some() {
+                        } else if cond.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) == Some("0x1090") {
                             // `PidTagFlagStatus`: 1 complete, 2 flagged.
                             let negated = restriction.find("Not").is_some();
                             if value == "1" {
@@ -177,6 +187,7 @@ impl Data {
                 let asked = |u: &str| uris.iter().any(|f| f.attr("FieldURI") == Some(u));
                 let with_fields = asked("item:Subject");
                 let with_parent = asked("item:ParentFolderId");
+                let kind_asked = super::fields::kind_asked(op);
                 let last = offset + max >= list.len();
                 let items: String = list
                     .iter()
@@ -184,18 +195,19 @@ impl Data {
                     .take(max)
                     .map(|i| {
                         if with_fields {
-                            let mut x = self.item_xml(i, false, false);
+                            let mut x = super::fields::with_kind(self.item_xml(i, false, false), i, op, false);
                             if with_parent {
                                 x = x.replace("</t:Message>", &format!("<t:ParentFolderId Id=\"{}\"/></t:Message>", i.folder));
                             }
                             return x;
                         }
                         format!(
-                            "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}{}</t:Message>",
+                            "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}{}{}</t:Message>",
                             i.id,
                             i.read,
                             super::flag_xml(i.flagged, i.complete, i.complete_time.as_deref(), &i.verb),
-                            super::categories_xml(&i.categories)
+                            super::categories_xml(&i.categories),
+                            super::fields::kind_xml(i, kind_asked.0, kind_asked.1)
                         )
                     })
                     .collect();
@@ -287,7 +299,10 @@ impl Data {
                              <m:ResponseCode>ErrorInvalidPropertyRequest</m:ResponseCode></m:R>"
                                 .to_string(),
                         ),
-                        Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.with_item_policy(op, &i.id, self.item_xml(i, mime, text))))),
+                        Some(i) => {
+                            let x = super::fields::with_kind(self.item_xml(i, mime, text), i, op, text);
+                            out.push(ok(format!("<m:Items>{}</m:Items>", self.with_item_policy(op, &i.id, x))))
+                        }
                         None => out.push(err("ErrorItemNotFound")),
                     }
                 }

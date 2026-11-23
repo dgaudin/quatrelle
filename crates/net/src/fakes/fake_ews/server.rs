@@ -355,6 +355,13 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             d.synced.push(folder);
         }
         d.calls.push(if pim_changes { "SyncFolderItems pim".into() } else { op.name.clone() });
+        // The search for what messages are, cut short: the connection closed, unanswered.
+        if d.kinds_cut && op.name == "FindItem" && op.find("Restriction").and_then(super::fields::kinds_search).is_some() {
+            d.calls.push("FindItem kinds cut".into());
+            drop(d);
+            let _ = s.shutdown(std::net::Shutdown::Both);
+            return;
+        }
         // The directory scripted not to answer.
         if op.name == "ResolveNames" && d.zones.directory_silent {
             drop(d);

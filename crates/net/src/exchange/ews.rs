@@ -553,13 +553,26 @@ const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:FieldURI FieldURI=\"item:Categories\"/>";
 /// Most categories taken from one item.
 const ITEM_CATEGORIES: usize = 50;
-const HEADER_FIELDS: &str = "<t:FieldURI FieldURI=\"item:Subject\"/><t:FieldURI FieldURI=\"message:From\"/>\
+/// What a message is, as Exchange says it: its class (`item:ItemClass`, [MS-OXCMSG] 2.2.1.3) and
+/// the icon Outlook's list draws for it (`PidTagIconIndex`, [MS-OXOMSG] 2.2.1.10). Asked with every
+/// message's details ([`HEADER_FIELDS`]) and by the pass reading what mail kept before is.
+macro_rules! kind_fields {
+    () => {
+        "<t:FieldURI FieldURI=\"item:ItemClass\"/><t:ExtendedFieldURI PropertyTag=\"0x1080\" PropertyType=\"Integer\"/>"
+    };
+}
+const KIND_FIELDS: &str = kind_fields!();
+/// A message's details for the list, what it is with them ([`KIND_FIELDS`]).
+const HEADER_FIELDS: &str = concat!(
+    "<t:FieldURI FieldURI=\"item:Subject\"/><t:FieldURI FieldURI=\"message:From\"/>\
 <t:FieldURI FieldURI=\"message:ToRecipients\"/><t:FieldURI FieldURI=\"message:CcRecipients\"/>\
 <t:FieldURI FieldURI=\"message:ReplyTo\"/><t:FieldURI FieldURI=\"item:DateTimeReceived\"/>\
 <t:FieldURI FieldURI=\"item:DateTimeSent\"/><t:FieldURI FieldURI=\"message:InternetMessageId\"/>\
 <t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/>\
 <t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34080\" PropertyType=\"Binary\"/>\
-<t:ExtendedFieldURI PropertyTag=\"0x5D01\" PropertyType=\"String\"/>";
+<t:ExtendedFieldURI PropertyTag=\"0x5D01\" PropertyType=\"String\"/>",
+    kind_fields!()
+);
 
 /// The voting buttons on an item (`PidLidVerbStream`, asked for with its details).
 fn voting_choices(it: &El) -> Vec<String> {
@@ -703,8 +716,8 @@ pub use autodiscover::{archive_named, autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 pub use marks::marks_listed;
+use marks::{Found, flags, kind_of, take_marks};
 pub(crate) use marks::{VERB_FORWARD, VERB_REPLY, VERB_REPLY_ALL, replied_verb, verb_time};
-use marks::{flags, take_marks};
 pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};
 pub use rules::{rule_written, rules_listed};
 #[cfg(test)]

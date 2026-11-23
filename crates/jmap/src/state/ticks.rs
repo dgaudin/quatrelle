@@ -8,7 +8,9 @@
 //! ([`State::ticks_wanted`], [`State::replies_wanted`]), the folders done kept here, so a pass
 //! cut short (offline, the app closed) goes on at the next sync where it stopped; once every
 //! folder followed has had it, the account's pass is done ([`State::finish_ticks`],
-//! [`State::finish_replies`]).
+//! [`State::finish_replies`]). What mail kept before is (a meeting message, a report…) is asked
+//! for the same way ([`State::kinds_wanted`]), except that a folder it failed in waits for the
+//! next start ([`State::kinds_due`]): a big folder that times out isn't searched at every sync.
 
 use std::collections::BTreeSet;
 
@@ -107,5 +109,34 @@ impl State {
     /// The pass for messages replied to or forwarded done once every folder `followed` had it.
     pub fn finish_replies(&mut self, followed: &[String]) -> bool {
         self.replies.finish(followed)
+    }
+
+    /// Whether this folder is still to be asked what its messages are.
+    pub fn kinds_wanted(&self, folder: &str) -> bool {
+        self.kinds.wanted(folder)
+    }
+
+    /// Whether this folder is to be asked what its messages are now: still to be, and not failed
+    /// in this run.
+    pub fn kinds_due(&self, folder: &str) -> bool {
+        self.kinds.wanted(folder) && !self.kinds_put_off.contains(folder)
+    }
+
+    /// This folder had the pass for what its messages are.
+    pub fn kinds_read(&mut self, folder: &str) {
+        self.kinds.read(folder);
+    }
+
+    /// The pass for what this folder's messages are failed (a timeout, a connection cut): still
+    /// to be, it isn't asked again before Quatrelle next starts (at most one try a folder a run).
+    pub fn kinds_failed(&mut self, folder: &str) {
+        if self.kinds_put_off.len() < TICKS_FOLDERS_MAX {
+            self.kinds_put_off.insert(folder.to_string());
+        }
+    }
+
+    /// The pass for what messages are done once every folder `followed` had it.
+    pub fn finish_kinds(&mut self, followed: &[String]) -> bool {
+        self.kinds.finish(followed)
     }
 }

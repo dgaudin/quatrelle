@@ -104,6 +104,10 @@ pub struct Data {
     pub drop_kept: usize,
     /// The next requests are answered "busy" (`ErrorServerBusy`, back off 10 ms), this many times.
     pub busy: usize,
+    /// The search for what messages are (`FindItem` on `item:ItemClass`): refused
+    /// (`ErrorInvalidRestriction`), or met with the connection closed, unanswered, while set.
+    pub kinds_refused: bool,
+    pub kinds_cut: bool,
     /// The EWS address, for Autodiscover's answer.
     pub url: String,
     /// People whose calendars this account may change (delegates with editor rights).
@@ -366,6 +370,8 @@ impl Default for Data {
             outlook_rules: false,
             sync_page: None,
             busy: 0,
+            kinds_refused: false,
+            kinds_cut: false,
             url: String::new(),
             editors: Vec::new(),
             send_as: Vec::new(),

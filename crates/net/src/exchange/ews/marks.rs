@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! An item's marks as Exchange keeps them, and what Outlook writes when it replies or forwards.
+//! An item's marks as Exchange keeps them, and what Outlook writes when it replies or forwards;
+//! what a message is, as Exchange says it.
+
+use quatrelle_model::{MessageKind, Smime};
 
 use super::*;
 
@@ -106,4 +109,64 @@ pub(super) fn take_marks(m: &mut Flags, server: &Flags) -> bool {
     let changed = next != *m;
     *m = next;
     changed
+}
+
+/// What a message is, as Exchange says it ([`KIND_FIELDS`]): its kind
+/// ([`MessageKind::from_exchange`], by its class then its icon) and what protects it
+/// ([`Smime::from_class`]). A class or an icon said wrong, or not said, is ordinary mail.
+pub(super) fn kind_of(it: &El) -> (MessageKind, Smime) {
+    let class = it.text_of("ItemClass").unwrap_or_default();
+    (MessageKind::from_exchange(class, extended(it, "0x1080")), Smime::from_class(class))
+}
+
+/// A message the pass reading what mail kept before is finds: its id, its marks, what it is and
+/// what protects it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Found {
+    pub id: String,
+    pub flags: Flags,
+    pub kind: MessageKind,
+    pub smime: Smime,
+}
+
+/// The starts of the classes of messages that may be more than mail ([MS-OXCMSG] 2.2.1.3, compared
+/// without case): meeting messages ([MS-OXOCAL] 2.2.6.1, 2.2.7.1, 2.2.8.1), reports ([MS-OXOMSG]
+/// 2.2.2.1), S/MIME ([MS-OXOSMIME] 2.1.3.1.2.2), automatic replies, recalls and their reports
+/// (Microsoft Learn, Outlook's "Item Types and Message Classes"). What each is, is
+/// [`MessageKind::from_exchange`]'s to say.
+const KIND_CLASSES: [&str; 6] =
+    ["IPM.Schedule.Meeting", "REPORT.", "IPM.Note.SMIME", "IPM.Note.Rules.OofTemplate", "IPM.Outlook.Recall", "IPM.Recall.Report"];
+
+/// What [`Client::kinds`] asks for: the classes above by their start, without case (`IPM.Note` is
+/// mail, and so are the posts of public folders: neither is asked for), or replied to all
+/// (`PidTagLastVerbExecuted` 103, which this version reads as a reply to all and the version
+/// before as a reply).
+pub(super) fn kinds_condition() -> String {
+    let start = |class: &str| {
+        format!(
+            "<t:Contains ContainmentMode=\"Prefixed\" ContainmentComparison=\"IgnoreCase\"><t:FieldURI FieldURI=\"item:ItemClass\"/>\
+             <t:Constant Value=\"{class}\"/></t:Contains>"
+        )
+    };
+    let classes: String = KIND_CLASSES.iter().map(|c| start(c)).collect();
+    format!(
+        "<t:Or>{classes}<t:IsEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>\
+         <t:FieldURIOrConstant><t:Constant Value=\"{VERB_REPLY_ALL}\"/></t:FieldURIOrConstant></t:IsEqualTo></t:Or>"
+    )
+}
+
+/// What the pass finds of an item: nothing without an id.
+fn found_of(it: &El) -> Option<Found> {
+    let (kind, smime) = kind_of(it);
+    Some(Found { id: it.child("ItemId")?.attr("Id")?.to_string(), flags: flags(it), kind, smime })
+}
+
+impl Client {
+    /// [`Client::newest`], those that may be more than mail (meeting messages, reports, S/MIME,
+    /// automatic replies, recalls and their reports, by the start of their class) or were replied
+    /// to all (`PidTagLastVerbExecuted` 103): their ids, marks and kinds only, a page of `page` at
+    /// a time.
+    pub(super) fn kinds(&self, folder: &str, limit: usize, since: Option<i64>, page: usize) -> Result<Vec<Found>> {
+        self.newest_where(folder, limit, since, mailbox::Only::Kinds, page, found_of)
+    }
 }
