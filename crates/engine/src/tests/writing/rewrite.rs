@@ -199,3 +199,54 @@ fn a_base_style_markdown_cannot_carry_is_kept() {
     let st = s.compose.as_ref().unwrap().styles.style(0);
     assert_eq!((st.color, st.font.as_deref(), st.size), (Some([0x12, 0x34, 0x56]), Some("Aptos"), Some(14)));
 }
+
+/// The look Markdown cannot carry comes from the part's common text, not from its title: a
+/// title's 20 points must not become the size of every line.
+#[test]
+fn a_base_look_is_the_common_one_not_the_titles() {
+    let mut s = sample_session("rewrite-base-heading");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        let (text, styles) = quatrelle_mime::rich::from_markup("# Titre\n\nBonjour Zoé");
+        c.body = text;
+        c.styles = styles;
+        let at = c.body.find("Bonjour Zoé").unwrap_or(0);
+        let start = c.body.get(..at).map_or(0, |t| t.chars().count());
+        c.styles.restyle(&c.body, start..start + "Bonjour Zoé".chars().count(), |st| quatrelle_mime::rich::Style {
+            color: Some([0x12, 0x34, 0x56]),
+            font: Some("Aptos".into()),
+            size: Some(14),
+            ..st.clone()
+        });
+    }
+    let (id, _) = ask(&mut s, "formal", None);
+    s.apply(Event::LlmAnswered { id, text: "# Salut\n\nSalut Zoé".into(), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.styles.style(0).size, Some(20), "the title keeps its size: {:?}", c.body);
+    let at = c.body.find("Salut Zoé").unwrap_or(0);
+    let start = c.body.get(..at).map_or(0, |t| t.chars().count());
+    let st = c.styles.style(start);
+    assert_eq!((st.color, st.font.as_deref(), st.size), (Some([0x12, 0x34, 0x56]), Some("Aptos"), Some(14)), "{:?}", c.body);
+}
+
+/// A red first word does not colour the rest: the common black wins.
+#[test]
+fn a_base_look_takes_the_common_colour() {
+    let mut s = sample_session("rewrite-base-colour");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Rouge et le reste".into();
+        c.styles = Styles::plain(&c.body);
+        c.styles.restyle(&c.body, 0..6, |st| quatrelle_mime::rich::Style { color: Some([0xCC, 0, 0]), ..st.clone() });
+        c.styles.restyle(&c.body, 6..c.body.chars().count(), |st| quatrelle_mime::rich::Style { color: Some([0, 0, 0]), ..st.clone() });
+    }
+    let (id, _) = ask(&mut s, "formal", None);
+    s.apply(Event::LlmAnswered { id, text: "Salut".into(), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().styles.style(0).color, Some([0, 0, 0]));
+}

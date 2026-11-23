@@ -369,7 +369,7 @@ impl Session {
             nonce = nonce.wrapping_add(1);
         }
         let (marked, images) = quatrelle_mime::rich::outbound(&text, &styles, nonce);
-        let base = styles.style(0).for_typing();
+        let base = quatrelle_mime::rich::base_style(&text, &styles);
         let prompt = format!(
             "{prompt} It is part of an email: keep its greeting and closing if it has them. Write the new text as Markdown, keeping its formatting: **bold**, *italic*, lists with - or 1., headings with #, and links as [text](url). Tokens of the form {marker}-…-END stand for pictures: keep each one exactly once, unchanged, in its place, and write no other token of that form. Write only the new text, with no comment.",
             marker = quatrelle_mime::rich::MARKER

@@ -753,7 +753,7 @@ pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &St
 }
 
 mod rewrite;
-pub use rewrite::{MARKER, RewritePicture, inbound, outbound};
+pub use rewrite::{MARKER, RewritePicture, base_style, inbound, outbound};
 
 #[cfg(test)]
 mod tests;

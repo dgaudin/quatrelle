@@ -9,6 +9,7 @@
 //! pictures actually sent become pictures.
 
 use crate::rich::{List, PICTURE, Para, Style, Styles};
+use std::collections::HashMap;
 
 /// The form of a picture's marker: no Markdown character, and a nonce no text holds.
 pub const MARKER: &str = "QUATRELLE-IMAGE";
@@ -320,6 +321,45 @@ fn destination(url: &str) -> String {
     if url.contains([' ', '(', ')', '<', '>']) { format!("<{}>", url.replace('<', "%3C").replace('>', "%3E")) } else { url }
 }
 
+/// The look Markdown cannot carry (colour, typeface, size, highlight, underline) that most of
+/// the text's characters have, leaving out title lines, links, code and pictures: what the
+/// rewritten text takes where Markdown says nothing.
+pub fn base_style(text: &str, styles: &Styles) -> Style {
+    type Look = (Option<[u8; 3]>, Option<String>, Option<u8>, Option<[u8; 3]>, bool);
+    let mut counts: HashMap<Look, usize> = HashMap::new();
+    let mut order: Vec<Look> = Vec::new();
+    let mut start = 0usize;
+    for line in text.split('\n') {
+        let chars: Vec<char> = line.chars().collect();
+        if heading_level(&chars, start, styles) == 0 {
+            for i in 0..chars.len() {
+                let s = styles.style(start + i);
+                if s.link.is_some() || s.mono || s.picture.is_some() {
+                    continue;
+                }
+                let look = (s.color, s.font.clone(), s.size, s.highlight, s.underline);
+                let n = counts.entry(look.clone()).or_insert(0);
+                if *n == 0 {
+                    order.push(look);
+                }
+                *n = n.saturating_add(1);
+            }
+        }
+        start = start.saturating_add(chars.len()).saturating_add(1);
+    }
+    let mut best: Option<(Look, usize)> = None;
+    for look in order {
+        let n = counts.get(&look).copied().unwrap_or(0);
+        if best.as_ref().is_none_or(|(_, most)| n > *most) {
+            best = Some((look, n));
+        }
+    }
+    match best {
+        Some(((color, font, size, highlight, underline), _)) => Style { color, font, size, highlight, underline, ..Style::default() },
+        None => Style::default(),
+    }
+}
+
 /// The model's answer as the editor's text and styles: its Markdown read back (bounded), its
 /// markers put back as their pictures, one it lost at the end of its paragraph, and the colours,
 /// typefaces and sizes Markdown doesn't carry taken from `base`.
@@ -384,10 +424,11 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: 
         if s.picture.is_some() {
             return s.clone();
         }
+        let heading = s.bold && matches!(s.size, Some(20 | 16 | 14));
         Style {
             color: s.color.or(base.color),
             font: s.font.clone().or(base.font.clone()),
-            size: s.size.or(base.size),
+            size: if heading { s.size } else { s.size.or(base.size) },
             highlight: s.highlight.or(base.highlight),
             underline: s.underline || base.underline,
             ..s.clone()
