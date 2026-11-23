@@ -59,13 +59,220 @@ fn rewrite_prompt(how: &str) -> Option<&'static str> {
     })
 }
 
+/// The part of a message sent for a rewrite, with each picture replaced by a marker no text
+/// holds (the marker's characters take the picture's look without being one).
+fn mark_pictures(text: &str, styles: &quatrelle_mime::rich::Styles, nonce: u64) -> (String, Vec<RewriteImage>) {
+    let mut out = String::with_capacity(text.len());
+    let mut marked = quatrelle_mime::rich::Styles::default();
+    marked.palette.push(quatrelle_mime::rich::Style::default());
+    let mut images = Vec::new();
+    let mut para = 0usize;
+    for (i, ch) in text.chars().enumerate() {
+        if ch == quatrelle_mime::rich::PICTURE {
+            let style = styles.style(i);
+            if let Some(cid) = style.picture.clone().filter(|c| !c.is_empty()) {
+                let marker = format!("{MARKER}-{nonce}-{}-END", images.len() + 1);
+                let look = style.for_typing();
+                let id = marked.intern(look.clone());
+                for c in marker.chars() {
+                    out.push(c);
+                    marked.chars.push(id);
+                }
+                images.push(RewriteImage { marker, cid, style, para });
+            }
+            continue;
+        }
+        if ch == '\n' {
+            para += 1;
+        }
+        out.push(ch);
+        let id = marked.intern(styles.style(i));
+        marked.chars.push(id);
+    }
+    marked.paras = styles.paras.clone();
+    marked.fit(&out);
+    (markdown_of(&out, &marked), images)
+}
+
+/// A written text as Markdown: emphasis, code, lists, headings and links, with its paragraphs
+/// and rules; pictures are already markers in `text`. Markdown carries no colour, typeface or
+/// size, so those are left for the answer's base style.
+fn markdown_of(text: &str, styles: &quatrelle_mime::rich::Styles) -> String {
+    use quatrelle_mime::Span;
+    let mut lines: Vec<Vec<Span>> = Vec::new();
+    let mut start = 0usize;
+    for (n, line) in text.split('\n').enumerate() {
+        let para = styles.para(n);
+        if para.rule {
+            lines.push(vec![Span { rule: true, ..Span::default() }]);
+            start += line.chars().count() + 1;
+            continue;
+        }
+        let mut spans = Vec::new();
+        let mark = match para.list {
+            quatrelle_mime::rich::List::None => String::new(),
+            quatrelle_mime::rich::List::Bullet => "- ".to_string(),
+            quatrelle_mime::rich::List::Number => "1. ".to_string(),
+        };
+        let indent = "    ".repeat(usize::from(para.indent));
+        if !mark.is_empty() {
+            spans.push(Span { text: format!("{indent}{mark}"), ..Span::default() });
+        }
+        // A heading the editor keeps as bold text of one of the heading sizes.
+        let first = styles.style(start);
+        let heading = if first.bold && first.size == Some(20) {
+            1
+        } else if first.bold && first.size == Some(16) {
+            2
+        } else if first.bold && first.size == Some(14) {
+            3
+        } else {
+            0
+        };
+        let chars: Vec<char> = line.chars().collect();
+        let mut i = 0usize;
+        while i < chars.len() {
+            let style = styles.style(start + i);
+            let mut j = i + 1;
+            while j < chars.len() && styles.style(start + j) == style {
+                j += 1;
+            }
+            spans.push(Span {
+                text: chars.get(i..j).map(|c| c.iter().collect()).unwrap_or_default(),
+                bold: style.bold && heading == 0,
+                italic: style.italic,
+                strike: style.strike,
+                underline: style.underline,
+                code: style.mono,
+                link: style.link.clone(),
+                heading,
+                color: style.color,
+                background: style.highlight,
+                size: style.size,
+                font: style.font.clone(),
+                ..Span::default()
+            });
+            i = j;
+        }
+        lines.push(spans);
+        start += chars.len() + 1;
+    }
+    quatrelle_mime::rich_markdown(&lines, false)
+}
+
+/// The model's answer as the editor's text and styles: its Markdown read back (bounded), its
+/// markers put back as their pictures, one it lost at the end of its paragraph, and the colours,
+/// typefaces and sizes Markdown doesn't carry taken from `base`.
+fn rewritten(answer: &str, base: quatrelle_mime::rich::Style, images: &[RewriteImage]) -> (String, quatrelle_mime::rich::Styles) {
+    let answer: String = answer.trim().chars().take(MAX_TEXT).collect();
+    // The paste path the Markdown fuzz target reads; a single sign it doesn't call Markdown
+    // (one bold word) still goes through the editor's lighter reader.
+    let (text, styles) = quatrelle_mime::pasted_markdown(&answer).unwrap_or_else(|| quatrelle_mime::rich::from_markup(&answer));
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut out_styles = quatrelle_mime::rich::Styles::default();
+    out_styles.palette.push(quatrelle_mime::rich::Style::default());
+    let mut seen = vec![false; images.len()];
+    let mut i = 0usize;
+    while i < chars.len() {
+        let found = images
+            .iter()
+            .enumerate()
+            .position(|(k, im)| !seen[k] && chars.get(i..i + im.marker.chars().count()).is_some_and(|s| s.iter().copied().eq(im.marker.chars())));
+        if let Some(k) = found {
+            let image = &images[k];
+            seen[k] = true;
+            out.push(quatrelle_mime::rich::PICTURE);
+            let id = out_styles.intern(image.style.clone());
+            out_styles.chars.push(id);
+            i += image.marker.chars().count();
+            continue;
+        }
+        let ch = chars[i];
+        i += 1;
+        // A picture the model made up is no picture: only our markers carry one back.
+        if ch == quatrelle_mime::rich::PICTURE {
+            continue;
+        }
+        out.push(ch);
+        let id = out_styles.intern(styles.style(i - 1));
+        out_styles.chars.push(id);
+    }
+    out_styles.paras = styles.paras.clone();
+    // A picture whose marker was lost goes at the end of the paragraph it was in (never away).
+    let mut missing: Vec<(usize, usize, quatrelle_mime::rich::Style)> = Vec::new();
+    for (k, image) in images.iter().enumerate() {
+        if !seen[k] {
+            let line = image.para.min(out_styles.paras.len().saturating_sub(1));
+            missing.push((line_end(&out, line), k, image.style.clone()));
+        }
+    }
+    // From the end: inserting at an index moves the characters after it.
+    missing.sort_by_key(|(at, k, _)| (std::cmp::Reverse(*at), std::cmp::Reverse(*k)));
+    for (at, _, style) in missing {
+        let byte = out.char_indices().nth(at).map_or(out.len(), |(b, _)| b);
+        out.insert(byte, quatrelle_mime::rich::PICTURE);
+        let id = out_styles.intern(style);
+        out_styles.chars.insert(at, id);
+    }
+    out_styles.fit(&out);
+    out_styles.restyle(&out, 0..out.chars().count(), |s| {
+        if s.picture.is_some() {
+            return s.clone();
+        }
+        quatrelle_mime::rich::Style {
+            color: s.color.or(base.color),
+            font: s.font.clone().or(base.font.clone()),
+            size: s.size.or(base.size),
+            highlight: s.highlight.or(base.highlight),
+            underline: s.underline || base.underline,
+            ..s.clone()
+        }
+    });
+    (out, out_styles)
+}
+
+/// Where a paragraph ends in `text` (the character before its newline, or the text's end).
+fn line_end(text: &str, line: usize) -> usize {
+    let mut seen = 0usize;
+    for (i, ch) in text.chars().enumerate() {
+        if ch == '\n' {
+            if seen == line {
+                return i;
+            }
+            seen += 1;
+        }
+    }
+    text.chars().count()
+}
+
 /// The language model's rewrite of the text written in a message, once it came.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rewrite {
     pub id: u64,
     /// `None` while it's working; the new text, or why there's none.
     pub answer: Option<Result<String, String>>,
+    /// The characters sent (and to replace), and the text they held when they were sent.
+    range: std::ops::Range<usize>,
+    before: String,
+    /// The look at the start of the part rewritten: what Markdown doesn't carry keeps it.
+    base: quatrelle_mime::rich::Style,
+    /// The pictures in the part sent, each with the marker the model saw.
+    images: Vec<RewriteImage>,
 }
+
+/// A picture in a rewrite: the marker sent in its place, the `cid:` it stands for, its own look
+/// and the paragraph it was in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RewriteImage {
+    marker: String,
+    cid: String,
+    style: quatrelle_mime::rich::Style,
+    para: usize,
+}
+
+/// The form of a picture's marker: no Markdown character, and a nonce no text holds.
+const MARKER: &str = "QUATRELLE-IMAGE";
 
 /// Where the text the user wrote ends in a message being written: before its signature, or for
 /// a reply or a forward without one, before the message quoted: its `From:` line, in `from`,
@@ -333,28 +540,47 @@ impl Session {
     /// Ask the language model to rewrite the text written in the message being written (up to
     /// its signature or the message quoted): `how` is `fix`, `shorter`, `formal`, `friendly` or
     /// `english`. The new text is offered beside it, to put in place or not.
-    pub fn rewrite(&mut self, how: &str) -> CmdResult {
+    pub fn rewrite(&mut self, how: &str, selection: Option<(usize, usize)>) -> CmdResult {
         let url = self.prefs.llm_url.trim().to_string();
         if url.is_empty() {
             return Err(CmdError::Disabled("set a language model in File › Options › Assistant first".into()));
         }
         let prompt = rewrite_prompt(how).ok_or_else(|| CmdError::Params(format!("no rewrite `{how}`")))?;
         let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
-        let text: String = c.body.chars().take(own_text_end(c, &self.quote_words.from)).collect();
+        let end = own_text_end(c, &self.quote_words.from);
+        let (start, stop) = match selection {
+            Some((a, b)) if b > a => {
+                let (start, stop) = (a.min(end), b.min(end));
+                if start >= stop {
+                    return Err(CmdError::Params("select the text you wrote, above the signature and the message quoted".into()));
+                }
+                (start, stop)
+            }
+            _ => (0, end),
+        };
+        let (text, styles) = quatrelle_mime::rich::slice(&c.body, &c.styles, start..stop);
         if text.trim().is_empty() {
             return Err(CmdError::Params("write something first".into()));
         }
-        let prompt =
-            format!("{prompt} It is part of an email: keep its greeting and closing if it has them. Write only the new text, with no comment.");
         let id = self.fresh_id();
+        let mut nonce = id;
+        while text.contains(&format!("{MARKER}-{nonce}-")) {
+            nonce = nonce.wrapping_add(1);
+        }
+        let (marked, images) = mark_pictures(&text, &styles, nonce);
+        let base = styles.style(0).for_typing();
+        let prompt = format!(
+            "{prompt} It is part of an email: keep its greeting and closing if it has them. Write the new text as Markdown, keeping its formatting: **bold**, *italic*, lists with - or 1., headings with #, and links as [text](url). Tokens of the form {MARKER}-…-END stand for pictures: keep each one exactly once, unchanged, in its place, and write no other token of that form. Write only the new text, with no comment."
+        );
+        let range = start..start + text.chars().count();
         if let Some(c) = self.compose.as_mut() {
-            c.rewrite = Some(Rewrite { id, answer: None });
+            c.rewrite = Some(Rewrite { id, answer: None, range, before: text.clone(), base, images });
         }
         self.jobs.push(Job::AskLlm {
             id,
             url,
             model: self.prefs.llm_model.trim().to_string(),
-            messages: vec![("system".into(), prompt), ("user".into(), text)],
+            messages: vec![("system".into(), prompt), ("user".into(), marked)],
         });
         Ok(serde_json::json!({ "asked": id }))
     }
@@ -368,18 +594,24 @@ impl Session {
     /// Put the rewritten text in place of the text written (`use`), or let it go.
     pub fn end_rewrite(&mut self, use_it: bool) -> CmdResult {
         let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
-        let text = match c.rewrite.take() {
-            Some(Rewrite { answer: Some(Ok(text)), .. }) => text,
-            _ if !use_it => return Ok(serde_json::json!({ "dropped": true })),
-            _ => return Err(CmdError::Disabled("the rewritten text hasn't come yet".into())),
-        };
+        let Some(r) = c.rewrite.as_ref() else { return Ok(serde_json::json!({ "dropped": true })) };
         if !use_it {
+            c.rewrite = None;
             return Ok(serde_json::json!({ "dropped": true }));
         }
-        let end = own_text_end(c, &self.quote_words.from);
-        let add = text.trim().to_string();
-        let add_styles = quatrelle_mime::rich::Styles::plain(&add);
-        quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, 0..end, &add, &add_styles);
+        let Some(Ok(text)) = &r.answer else {
+            return Err(CmdError::Disabled("the rewritten text hasn't come yet".into()));
+        };
+        // What is under the range must still be what was sent: the user may have typed since.
+        let now: String = c.body.chars().skip(r.range.start).take(r.before.chars().count()).collect();
+        if now != r.before {
+            return Err(CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()));
+        }
+        let (add, add_styles) = rewritten(text, r.base.clone(), &r.images);
+        let end = r.range.start + r.before.chars().count();
+        let start = r.range.start;
+        c.rewrite = None;
+        quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, start..end, &add, &add_styles);
         Ok(serde_json::json!({ "replaced": end }))
     }
 

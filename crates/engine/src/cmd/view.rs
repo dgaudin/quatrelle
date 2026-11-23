@@ -171,8 +171,14 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(|s| if s.prefs.llm_url.trim().is_empty() { Some("set a language model in File › Options › Assistant first") } else { None }),
         CommandSpec::new("assistant.replyWithSuggestion", "Reply with this text", "Reading pane", |s, _| s.reply_with_suggestion()),
         CommandSpec::new("assistant.close", "Close", "Reading pane", |s, _| s.close_assistant()),
-        CommandSpec::new("assistant.rewrite", "Rewrite", "Message › Review", |s, v| s.rewrite(p::str(v, "how").unwrap_or("fix")))
-            .params(r#"{"how": "fix"|"shorter"|"formal"|"friendly"|"english"} (the text written, up to the signature or the message quoted)"#),
+        CommandSpec::new("assistant.rewrite", "Rewrite", "Message › Review", |s, v| {
+            let from = p::u64(v, "from").and_then(|n| usize::try_from(n).ok());
+            let to = p::u64(v, "to").and_then(|n| usize::try_from(n).ok());
+            s.rewrite(p::str(v, "how").unwrap_or("fix"), from.zip(to))
+        })
+        .params(
+            r#"{"how": "fix"|"shorter"|"formal"|"friendly"|"english", "from"?: number, "to"?: number} (a selection to rewrite; without one, the text written up to the signature or the message quoted)"#,
+        ),
         CommandSpec::new("assistant.endRewrite", "Use the rewritten text", "Message › Review", |s, v| s.end_rewrite(p::bool(v, "use").unwrap_or(false)))
             .params(r#"{"use": bool} (true: in place of the text written; false: let it go)"#),
         CommandSpec::new("assistant.scamCheck", "Spot scams in external mail", "File › Options › Assistant", |s, v| {
