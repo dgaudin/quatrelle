@@ -2461,3 +2461,7 @@ presence	Offline	Hors ligne
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Avant de le renvoyer, demandez à son destinataire, ou cherchez-le dans Éléments envoyés si votre serveur y range une copie
 	[picture]	[image]
 	The rewritten text couldn't be read	Le texte reformulé n'a pas pu être lu
+	The text changed while it was being rewritten; ask again or keep yours.	Le texte a changé pendant sa reformulation ; demandez à nouveau ou gardez le vôtre.
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	Le texte reformulé est bien plus long que la partie envoyée ; choisissez une partie plus courte ou gardez le vôtre.
+	The rewritten text is empty; ask again or keep yours.	Le texte reformulé est vide ; demandez à nouveau ou gardez le vôtre.
+	The rewritten text couldn't be read; ask again or keep yours.	Le texte reformulé n’a pas pu être lu ; demandez à nouveau ou gardez le vôtre.

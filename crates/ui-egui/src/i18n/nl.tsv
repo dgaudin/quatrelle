@@ -2457,3 +2457,7 @@ presence	Offline	Offline
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Vraag het de ontvanger voordat u het opnieuw verzendt, of zoek het in Verzonden items als uw server daar een kopie bewaart
 	[picture]	[afbeelding]
 	The rewritten text couldn't be read	De herschreven tekst kon niet worden gelezen
+	The text changed while it was being rewritten; ask again or keep yours.	De tekst is veranderd terwijl hij werd herschreven; vraag opnieuw of houd de uwe.
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	De herschreven tekst is veel langer dan het verzonden deel; kies een korter deel of houd de uwe.
+	The rewritten text is empty; ask again or keep yours.	De herschreven tekst is leeg; vraag opnieuw of houd de uwe.
+	The rewritten text couldn't be read; ask again or keep yours.	De herschreven tekst kon niet worden gelezen; vraag opnieuw of houd de uwe.

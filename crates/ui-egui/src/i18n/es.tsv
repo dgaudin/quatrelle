@@ -2461,3 +2461,7 @@ presence	Offline	Desconectado
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Antes de volver a enviarlo, pregunte a su destinatario o búsquelo en Elementos enviados si su servidor guarda allí una copia
 	[picture]	[imagen]
 	The rewritten text couldn't be read	No se pudo leer el texto reescrito
+	The text changed while it was being rewritten; ask again or keep yours.	El texto cambió mientras se reescribía; vuelve a preguntar o conserva el tuyo.
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	El texto reescrito es mucho más largo que la parte enviada; elige una parte más corta o conserva el tuyo.
+	The rewritten text is empty; ask again or keep yours.	El texto reescrito está vacío; vuelve a preguntar o conserva el tuyo.
+	The rewritten text couldn't be read; ask again or keep yours.	No se pudo leer el texto reescrito; vuelve a preguntar o conserva el tuyo.

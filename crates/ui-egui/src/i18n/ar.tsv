@@ -2456,3 +2456,7 @@ presence	Offline	غير متصل
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	قبل إرسالها مرة أخرى، اسأل من كانت موجهة إليه، أو ابحث عنها في العناصر المرسلة إن كان خادمك يحفظ نسخة فيها
 	[picture]	[صورة]
 	The rewritten text couldn't be read	تعذّرت قراءة النص المعاد صياغته
+	The text changed while it was being rewritten; ask again or keep yours.	تغيّر النص أثناء إعادة صياغته؛ اطلب مرة أخرى أو احتفظ بنصك.
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	النص المعاد صياغته أطول بكثير من الجزء المرسل؛ اختر جزءًا أقصر أو احتفظ بنصك.
+	The rewritten text is empty; ask again or keep yours.	النص المعاد صياغته فارغ؛ اطلب مرة أخرى أو احتفظ بنصك.
+	The rewritten text couldn't be read; ask again or keep yours.	تعذّرت قراءة النص المعاد صياغته؛ اطلب مرة أخرى أو احتفظ بنصك.

@@ -280,3 +280,59 @@ fn a_rewrite_preview_shows_no_marks_or_tokens() {
     assert!(drawn.contains("[picture]") || drawn.contains("[image]"), "the picture as a word: {drawn}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// When the part changed, Use is refused where it is seen, the offer stays, and no undo step is
+/// made for the refusal: Ctrl+Z goes straight to the step before.
+#[test]
+fn a_refused_use_says_why_and_leaves_the_undo_history_alone() {
+    let (mut a, dir) = app("rewrite-refused");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3"}));
+    a.session.prefs.reply_window = false;
+    a.run("list.open", json!({"key": "sample:1:1:INBOX"}));
+    a.run("mail.reply", json!({}));
+    if let Some(c) = a.session.compose.as_mut() {
+        c.body = format!("Hello Ann\n\n{}", c.body);
+        c.styles = quatrelle_engine::mime::rich::Styles::plain(&c.body);
+    }
+    frame(&ctx, &mut a, vec![]);
+    let id = crate::rich_edit::body_id(a.session.compose.as_ref().unwrap());
+    ctx.memory_mut(|m| m.request_focus(id));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("!".into())]);
+    assert!(a.session.compose.as_ref().unwrap().body.contains('!'), "typed");
+    a.run("assistant.rewrite", json!({"how": "fix"}));
+    let ask = a.session.take_jobs().into_iter().find_map(|j| match j {
+        quatrelle_engine::model::Job::AskLlm { id, .. } => Some(id),
+        _ => None,
+    });
+    let ask = ask.expect("the rewrite was asked");
+    a.session.apply(quatrelle_engine::model::Event::LlmAnswered { id: ask, text: "Salut Ann".into(), error: None });
+    frame(&ctx, &mut a, vec![]);
+    let before_edit = a.session.compose.as_ref().unwrap().body.clone();
+    // Change the part under the offer: select all and type.
+    ctx.memory_mut(|m| m.request_focus(id));
+    frame(&ctx, &mut a, vec![key(Key::A, Modifiers::COMMAND)]);
+    frame(&ctx, &mut a, vec![Event::Text("Changed".into())]);
+    assert_eq!(a.session.compose.as_ref().unwrap().body, "Changed");
+    let use_it = settled_text_at(&ctx, &mut a, "Use this text", size).expect("Use this text");
+    click_at(&ctx, &mut a, use_it, 1, size);
+    assert_eq!(a.session.compose.as_ref().unwrap().body, "Changed", "the offer did not overwrite it");
+    assert!(a.session.compose.as_ref().unwrap().rewrite.is_some(), "the offer stays");
+    let drawn: String = frame_shapes(&ctx, &mut a, vec![], size)
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(drawn.contains("changed while it was being rewritten"), "{drawn}");
+    // Ctrl+Z undoes the typing, not a dead step pushed by the refused Use.
+    ctx.memory_mut(|m| m.request_focus(id));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![key(Key::Z, Modifiers::COMMAND)]);
+    assert_eq!(a.session.compose.as_ref().unwrap().body, before_edit, "one step back is the typing");
+    let _ = std::fs::remove_dir_all(dir);
+}

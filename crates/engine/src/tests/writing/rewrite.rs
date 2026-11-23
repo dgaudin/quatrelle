@@ -378,3 +378,50 @@ fn a_too_long_answer_is_refused_rather_than_cut() {
     assert!(r.is_err(), "the answer is too long");
     assert_eq!(s.compose.as_ref().unwrap().body, "Bonjour");
 }
+
+/// A word made bold in the part sent is a change too: Use refuses rather than overwrite it.
+#[test]
+fn a_style_changed_in_the_part_is_not_overwritten() {
+    let mut s = sample_session("rewrite-style-changed");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Hello Ann".into();
+        c.styles = Styles::plain(&c.body);
+    }
+    let (id, _) = ask(&mut s, "fix", None);
+    s.apply(Event::LlmAnswered { id, text: "Salut Ann".into(), error: None });
+    if let Some(c) = s.compose.as_mut() {
+        c.styles.fit(&c.body);
+        let text = c.body.clone();
+        c.styles.restyle(&text, 0..5, |st| quatrelle_mime::rich::Style { bold: true, ..st.clone() });
+    }
+    assert!(s.run("assistant.endRewrite", &json!({"use": true})).is_err(), "the style changed under it");
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Hello Ann");
+    assert!(c.styles.style(0).bold, "the user's change stays");
+    assert!(c.rewrite.is_some(), "the offer stays");
+}
+
+/// A letter typed before the part moves it: Use replaces the part where it is now and keeps the
+/// letter.
+#[test]
+fn a_letter_typed_before_the_part_is_kept() {
+    let mut s = sample_session("rewrite-before-letter");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Bonjour".into();
+        c.styles = Styles::plain("Bonjour");
+    }
+    let (id, _) = ask(&mut s, "fix", None);
+    s.apply(Event::LlmAnswered { id, text: "Salut".into(), error: None });
+    if let Some(c) = s.compose.as_mut() {
+        c.body.insert(0, 'X');
+        c.styles = Styles::plain(&c.body);
+    }
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().body, "XSalut");
+}

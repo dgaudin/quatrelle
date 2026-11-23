@@ -62,6 +62,16 @@ fn rewrite_prompt(how: &str) -> Option<&'static str> {
     })
 }
 
+/// Why Use can't put the rewritten text in: the text under it changed, the answer is too long,
+/// empty, or can't be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RewriteProblem {
+    Changed,
+    TooLong,
+    Empty,
+    Unreadable,
+}
+
 /// The language model's rewrite of the text written in a message, once it came.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rewrite {
@@ -80,7 +90,7 @@ pub struct Rewrite {
     /// The pictures in the part sent, each with the marker the model saw.
     images: Vec<quatrelle_mime::rich::RewritePicture>,
     /// What Use would put in, read once when the answer came; an error says why there's none.
-    preview: Option<Result<(String, quatrelle_mime::rich::Styles), String>>,
+    preview: Option<Result<(String, quatrelle_mime::rich::Styles), RewriteProblem>>,
 }
 
 impl Compose {
@@ -89,21 +99,72 @@ impl Compose {
     pub fn rewrite_preview(&self) -> Option<&(String, quatrelle_mime::rich::Styles)> {
         self.rewrite.as_ref()?.preview.as_ref()?.as_ref().ok()
     }
+
+    /// Why Use can't put the text in, once the answer came: the part changed under it, or the
+    /// answer is too long, empty or unreadable. `None` while the model works, or when Use can.
+    pub fn rewrite_problem(&self) -> Option<RewriteProblem> {
+        let r = self.rewrite.as_ref()?;
+        if r.answer.is_none() {
+            return None;
+        }
+        match &r.preview {
+            Some(Ok(_)) => r.locate(self).err(),
+            Some(Err(p)) => Some(*p),
+            None => Some(RewriteProblem::Unreadable),
+        }
+    }
 }
 
 impl Rewrite {
     /// The answer as the editor will hold it, or why it can't be used.
-    fn preview_now(&self) -> Result<(String, quatrelle_mime::rich::Styles), String> {
-        let Some(Ok(text)) = &self.answer else { return Err("the rewritten text hasn't come yet".into()) };
+    fn preview_now(&self) -> Result<(String, quatrelle_mime::rich::Styles), RewriteProblem> {
+        let Some(Ok(text)) = &self.answer else { return Err(RewriteProblem::Unreadable) };
         if text.chars().count() > self.answer_max {
-            return Err("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into());
+            return Err(RewriteProblem::TooLong);
         }
         let (text, styles) = quatrelle_mime::rich::inbound(text, self.base.clone(), &self.images, &self.before, &self.before_styles);
         if text.trim().is_empty() {
-            return Err("the rewritten text is empty; ask again or keep yours".into());
+            return Err(RewriteProblem::Empty);
         }
         Ok((text, styles))
     }
+
+    /// Where the part is now: its old place if it still holds what was sent, or the one place it
+    /// moved to (a letter typed before it); otherwise it changed and can't be used.
+    fn locate(&self, c: &Compose) -> Result<std::ops::Range<usize>, RewriteProblem> {
+        if same_part(c, self.range.start, &self.before, &self.before_styles) {
+            return Ok(self.range.start..self.range.start + self.before.chars().count());
+        }
+        let mut found: Option<usize> = None;
+        let mut matches = 0usize;
+        for (byte, _) in c.body.match_indices(&self.before) {
+            let at = c.body.get(..byte).map_or(0, |t| t.chars().count());
+            if same_part(c, at, &self.before, &self.before_styles) {
+                matches += 1;
+                if matches > 1 {
+                    return Err(RewriteProblem::Changed);
+                }
+                found = Some(at);
+            }
+        }
+        found.map(|at| at..at + self.before.chars().count()).ok_or(RewriteProblem::Changed)
+    }
+}
+
+/// Whether the characters at `at` in `c` are `text` with exactly `styles` (a style for each
+/// character, a paragraph for each line).
+fn same_part(c: &Compose, at: usize, text: &str, styles: &quatrelle_mime::rich::Styles) -> bool {
+    let len = text.chars().count();
+    let (now, now_styles) = quatrelle_mime::rich::slice(&c.body, &c.styles, at..at + len);
+    if now != text {
+        return false;
+    }
+    let chars = len.max(now_styles.chars.len());
+    if (0..chars).any(|i| now_styles.style(i) != styles.style(i)) {
+        return false;
+    }
+    let lines = text.split('\n').count().max(now_styles.paras.len());
+    (0..lines).all(|n| now_styles.para(n) == styles.para(n))
 }
 
 /// Where the text the user wrote ends in a message being written: before its signature, or for
@@ -439,23 +500,35 @@ impl Session {
             c.rewrite = None;
             return Ok(serde_json::json!({ "dropped": true }));
         }
-        let Some(Ok(text)) = &r.answer else {
+        let Some(Ok(_)) = &r.answer else {
             return Err(CmdError::Disabled("the rewritten text hasn't come yet".into()));
         };
-        if text.chars().count() > r.answer_max {
-            return Err(CmdError::Failed("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into()));
-        }
-        // What is under the range must still be what was sent: the user may have typed since.
-        let now: String = c.body.chars().skip(r.range.start).take(r.before.chars().count()).collect();
-        if now != r.before {
-            return Err(CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()));
-        }
-        let (add, add_styles) = quatrelle_mime::rich::inbound(text, r.base.clone(), &r.images, &r.before, &r.before_styles);
-        let end = r.range.start + r.before.chars().count();
-        let start = r.range.start;
+        let (add, add_styles) = match &r.preview {
+            Some(Ok((text, styles))) => (text.clone(), styles.clone()),
+            Some(Err(RewriteProblem::TooLong)) => {
+                return Err(CmdError::Failed("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into()));
+            }
+            Some(Err(RewriteProblem::Empty)) => return Err(CmdError::Failed("the rewritten text is empty; ask again or keep yours".into())),
+            Some(Err(RewriteProblem::Unreadable)) | None => {
+                return Err(CmdError::Failed("the rewritten text couldn't be read; ask again or keep yours".into()));
+            }
+            Some(Err(RewriteProblem::Changed)) => {
+                return Err(CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()));
+            }
+        };
+        let range = r.locate(c).map_err(|p| match p {
+            RewriteProblem::Changed => CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()),
+            RewriteProblem::TooLong => {
+                CmdError::Failed("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into())
+            }
+            RewriteProblem::Empty => CmdError::Failed("the rewritten text is empty; ask again or keep yours".into()),
+            RewriteProblem::Unreadable => CmdError::Failed("the rewritten text couldn't be read; ask again or keep yours".into()),
+        })?;
+        let start = range.start;
+        let end = range.end;
         c.rewrite = None;
         quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, start..end, &add, &add_styles);
-        Ok(serde_json::json!({ "replaced": end }))
+        Ok(serde_json::json!({ "replaced": start, "end": start + add.chars().count() }))
     }
 
     /// Set the language model: an OpenAI-compatible server's address (`…/v1`; empty: none) and

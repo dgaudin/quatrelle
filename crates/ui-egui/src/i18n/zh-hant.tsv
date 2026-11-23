@@ -2463,3 +2463,7 @@ presence	Offline	離線
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	再次寄出之前，請詢問收件者；如果你的伺服器在寄件備份中保留副本，也可以在那裡尋找
 	[picture]	[圖片]
 	The rewritten text couldn't be read	無法讀取改寫後的文字
+	The text changed while it was being rewritten; ask again or keep yours.	改寫期間文字發生了變化；請重新請求，或保留您的內容。
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	改寫後的文字比傳送的部分長得多；請選擇更短的部分，或保留您的內容。
+	The rewritten text is empty; ask again or keep yours.	改寫後的文字為空；請重新請求，或保留您的內容。
+	The rewritten text couldn't be read; ask again or keep yours.	無法讀取改寫後的文字；請重新請求，或保留您的內容。

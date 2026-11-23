@@ -2461,3 +2461,7 @@ presence	Offline	Offline
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Bevor Sie sie noch einmal senden, fragen Sie den Empfänger, oder suchen Sie sie unter Gesendete Elemente, falls Ihr Server dort eine Kopie ablegt
 	[picture]	[Bild]
 	The rewritten text couldn't be read	Der umgeschriebene Text konnte nicht gelesen werden
+	The text changed while it was being rewritten; ask again or keep yours.	Der Text hat sich während der Umformulierung geändert; fragen Sie erneut oder behalten Sie Ihren.
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	Der umgeschriebene Text ist viel länger als der gesendete Teil; wählen Sie einen kürzeren Teil oder behalten Sie Ihren.
+	The rewritten text is empty; ask again or keep yours.	Der umgeschriebene Text ist leer; fragen Sie erneut oder behalten Sie Ihren.
+	The rewritten text couldn't be read; ask again or keep yours.	Der umgeschriebene Text konnte nicht gelesen werden; fragen Sie erneut oder behalten Sie Ihren.

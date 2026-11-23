@@ -103,6 +103,19 @@ pub(super) fn panel(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, acts
     ui.add_space(8.0);
 }
 
+/// Why Use can't put the text in, in the interface's language.
+fn rewrite_problem_text(p: quatrelle_engine::RewriteProblem) -> String {
+    match p {
+        quatrelle_engine::RewriteProblem::Changed => tl!("The text changed while it was being rewritten; ask again or keep yours."),
+        quatrelle_engine::RewriteProblem::TooLong => {
+            tl!("The rewritten text is much longer than the part sent; select a shorter part or keep yours.")
+        }
+        quatrelle_engine::RewriteProblem::Empty => tl!("The rewritten text is empty; ask again or keep yours."),
+        quatrelle_engine::RewriteProblem::Unreadable => tl!("The rewritten text couldn't be read; ask again or keep yours."),
+    }
+    .to_string()
+}
+
 /// The text written, rewritten by the language model: to put in its place, or let go.
 pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compose, ed: &mut crate::rich_edit::Editor, acts: &mut Vec<Action>) {
     let Some(r) = &c.rewrite else { return };
@@ -130,11 +143,16 @@ pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compo
                     }
                 });
                 ui.add_space(4.0);
+                let problem = c.rewrite_problem();
+                let can = problem.is_none();
                 ui.horizontal(|ui| {
-                    if widgets::pill_button(ui, Icon::Complete, "Use this text", t)
-                        .on_hover_text(tl!("In place of what you wrote, with its formatting and pictures"))
-                        .clicked()
-                    {
+                    let use_it = ui.add_enabled_ui(can, |ui| widgets::pill_button(ui, Icon::Complete, "Use this text", t)).inner;
+                    let use_it = use_it.on_hover_text(tl!("In place of what you wrote, with its formatting and pictures"));
+                    if let Some(p) = problem {
+                        let why = rewrite_problem_text(p);
+                        use_it.clone().on_disabled_hover_text(why.clone());
+                    }
+                    if can && use_it.clicked() {
                         // One step to undo, and the text keeps the keyboard to undo it with.
                         ed.remember(c, ed.sel.end);
                         ed.refocus = Some(ed.sel.clone());
@@ -145,6 +163,9 @@ pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compo
                         acts.push(Action::Run("assistant.endRewrite", json!({"use": false})));
                     }
                 });
+                if let Some(p) = problem {
+                    ui.label(RichText::new(rewrite_problem_text(p)).color(t.warn));
+                }
             }
             Some(Err(e)) => {
                 ui.label(RichText::new(tf!("The language model couldn't answer: {error}", error = e)).color(t.warn));
