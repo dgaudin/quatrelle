@@ -69,7 +69,7 @@ const PREFER: &str = "IdType=\"ImmutableId\", outlook.timezone=\"UTC\"";
 /// id. For the fuzz target.
 #[doc(hidden)]
 pub fn mailbox_of(f: &Value) -> Option<Mailbox> {
-    let id = f.get("id").and_then(Value::as_str).map(str::to_string)?;
+    let id = f.get("id").and_then(Value::as_str).filter(|id| !id.trim().is_empty()).map(str::to_string)?;
     let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
     Some(Mailbox {
         name: f.get("displayName").and_then(Value::as_str).unwrap_or_default().chars().take(255).collect(),
@@ -663,6 +663,14 @@ mod tests {
         assert_eq!(utc(t), "2026-10-23T09:05:07Z");
         assert_eq!(received(&json!({"receivedDateTime": "2026-10-23T09:05:07Z"})), Some(t));
         assert_eq!(received(&json!({"receivedDateTime": "soon"})), None);
+    }
+
+    /// A folder whose id is empty can't be opened and would be the same as another empty one.
+    #[test]
+    fn a_folder_without_an_id_is_left_out() {
+        assert!(mailbox_of(&json!({"id": "", "displayName": "Ghost"})).is_none());
+        assert!(mailbox_of(&json!({"id": "  ", "displayName": "Ghost"})).is_none());
+        assert!(mailbox_of(&json!({"displayName": "Ghost"})).is_none());
     }
 
     #[test]

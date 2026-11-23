@@ -20,6 +20,7 @@ fn check_folders(v: &Value, limit: usize) {
     let folders = graph::mailboxes_listed(v, limit);
     assert!(folders.len() <= limit, "{} folders", folders.len());
     for f in &folders {
+        assert!(!f.id.is_empty());
         assert!(f.name.chars().count() <= 255, "{:?}", f.name);
     }
 }
