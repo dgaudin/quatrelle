@@ -550,8 +550,11 @@ impl Store {
         }
     }
 
+    /// The list of accounts kept. None yet is no account; one that can't be read is the disk's
+    /// error, and a damaged one [`StoreError::Damaged`], left as it is: never taken for none, which
+    /// the next save would have written over.
     pub fn load_accounts(&self) -> Result<Vec<AccountConfig>> {
-        self.read_json(&self.root.join("accounts.json"))
+        self.read_json_strict(&self.root.join("accounts.json"))
     }
 
     /// The list of accounts kept. An account added beside a data file of its name (one removed,

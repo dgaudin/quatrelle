@@ -42,7 +42,7 @@ mod security;
 mod writing;
 // The list's, the settings', the message being written's and organizing mail's own parts,
 // named here as before.
-pub use accounts::{AccountState, ImportState, UnfinishedImport, UpdateCheck, VacationState, newer_release};
+pub use accounts::{ACCOUNTS_UNREAD, AccountState, ImportState, UnfinishedImport, UpdateCheck, VacationState, newer_release};
 use changing::UNDO_DEPTH;
 pub use changing::{MarkWork, Undo};
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
@@ -430,6 +430,8 @@ pub struct Session {
     /// The documents (`rules.json`, `snoozes.json`) that couldn't be read at start: never saved
     /// over with what's shown in their place.
     pub(crate) docs_unread: HashSet<&'static str>,
+    /// Why the list of accounts couldn't be read: while set, it is never saved.
+    pub accounts_unread: Option<String>,
     /// Webex's sign-in and the meetings on their way.
     pub webex: pim::WebexState,
     pub teams: pim::TeamsState,
@@ -606,6 +608,7 @@ impl Session {
             pim: HashMap::new(),
             pim_unread: HashSet::new(),
             docs_unread: HashSet::new(),
+            accounts_unread: None,
             rooms: HashMap::new(),
             free_busy: HashMap::new(),
             mail_tips: HashMap::new(),

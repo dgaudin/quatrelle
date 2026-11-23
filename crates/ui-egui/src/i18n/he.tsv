@@ -2423,3 +2423,4 @@ presence	Offline	לא מחובר
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	לא ניתן היה לקרוא את מספור ההודעות של החשבון הזה, ולכן הדואר שלו אינו מסונכרן בינתיים: {error}
 	a file Quatrelle keeps is damaged: {error}	קובץ ש-Quatrelle שומר פגום: {error}
+	the list of accounts couldn't be read, so it isn't saved: {error}	לא ניתן היה לקרוא את רשימת החשבונות, ולכן היא לא נשמרת: {error}

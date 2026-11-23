@@ -230,6 +230,12 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
     let mut s = Session::open(Some(store.clone()), clock());
+    // The list of accounts couldn't be read: none shown, and nothing that changes them goes on.
+    if cmd != "commands"
+        && let Some(why) = &s.accounts_unread
+    {
+        return Err(format!("{}: {why}", quatrelle_engine::ACCOUNTS_UNREAD));
+    }
     // An account's data file the app has open can't be read here: say so, where its folders came
     // out empty (found testing issue #20).
     for a in &s.accounts {

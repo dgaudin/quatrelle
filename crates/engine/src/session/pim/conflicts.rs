@@ -126,7 +126,9 @@ impl Session {
             .account(account)
             .map(|a| (if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() }, a.config.email.clone()))
             .unwrap_or_else(|| (account.to_string(), String::new()));
-        self.ensure_sync_issues();
+        if !self.ensure_sync_issues() {
+            return false;
+        }
         let now = self.clock.now;
         let words = self.conflict_words.clone();
         let place = if d.place.is_empty() { words.tasks.as_str() } else { d.place.as_str() };
@@ -180,9 +182,13 @@ impl Session {
     /// Sync Issues and its Conflicts folder, made the first time (an account on this computer,
     /// as a data file opened here is: no server, never synced), the folder made again if the
     /// user deleted it.
-    fn ensure_sync_issues(&mut self) {
+    /// Whether it is there: not made while the list of accounts wasn't read (it can't be saved).
+    fn ensure_sync_issues(&mut self) -> bool {
         let folder = Folder { account: SYNC_ISSUES.into(), path: CONFLICTS.into(), selectable: true, ..Default::default() };
         if self.account(SYNC_ISSUES).is_none() {
+            if self.accounts_writable().is_err() {
+                return false;
+            }
             let config = AccountConfig {
                 id: SYNC_ISSUES.into(),
                 name: "Sync Issues".into(),
@@ -198,11 +204,11 @@ impl Session {
                 quota: None,
                 vacation: VacationState::Unknown,
             });
-            self.save_accounts();
+            let _ = self.save_accounts();
         }
-        let Some(a) = self.account_mut(SYNC_ISSUES) else { return };
+        let Some(a) = self.account_mut(SYNC_ISSUES) else { return false };
         if a.folders.iter().any(|f| f.path == CONFLICTS) {
-            return;
+            return true;
         }
         a.folders.push(folder);
         let folders = a.folders.clone();
@@ -213,5 +219,6 @@ impl Session {
         {
             log::warn!("Sync Issues: its folder not saved: {e}");
         }
+        true
     }
 }

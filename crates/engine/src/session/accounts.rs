@@ -6,8 +6,10 @@
 use super::*;
 
 mod importing;
+mod unread;
 pub(in crate::session) use importing::ImportReport;
 pub use importing::{ImportState, UnfinishedImport};
+pub use unread::ACCOUNTS_UNREAD;
 
 impl Session {
     /// Add an account (the password goes to the keychain through the `Start` job).
@@ -27,6 +29,7 @@ impl Session {
     }
 
     pub fn add_account(&mut self, mut config: AccountConfig, password: Option<String>) -> Result<String, CmdError> {
+        self.accounts_writable()?;
         config.email = config.email.trim().to_string();
         if !addr::is_valid_email(&config.email) {
             return Err(CmdError::Params(format!("`{}` is not an email address", config.email)));
@@ -63,7 +66,7 @@ impl Session {
             quota: None,
             vacation: VacationState::Unknown,
         });
-        self.save_accounts();
+        self.save_accounts()?;
         self.move_to_sending_account();
         if config.oauth.is_some() {
             self.jobs.push(Job::SignIn { account: config });
@@ -88,6 +91,7 @@ impl Session {
     /// Open an Outlook data file (`.pst`): a new account on this computer, named after the file,
     /// that the import fills.
     pub fn import_pst(&mut self, path: &str) -> CmdResult {
+        self.accounts_writable()?;
         let path = path.trim();
         if path.is_empty() {
             return Err(CmdError::Params("`path` is required".into()));
@@ -110,7 +114,7 @@ impl Session {
             quota: None,
             vacation: VacationState::Unknown,
         });
-        self.save_accounts();
+        self.save_accounts()?;
         self.begin_import(&id, false, 0, None);
         self.jobs.push(Job::ImportPst { account: id.clone(), path: path.to_string() });
         Ok(serde_json::json!({ "account": id, "importing": true }))
@@ -245,6 +249,7 @@ impl Session {
     /// Move a mailbox in the folder pane `by` places (an account's own order follows, as the
     /// accounts' order is theirs everywhere else). Returns where it is now.
     pub fn move_pane_section(&mut self, key: &str, by: i64) -> Result<usize, CmdError> {
+        self.accounts_writable()?;
         let mut order: Vec<String> = self.pane_sections().into_iter().map(|s| s.key).collect();
         let from = order.iter().position(|k| k == key).ok_or_else(|| CmdError::Params(format!("no mailbox `{key}` in the folder pane")))?;
         let last = order.len().saturating_sub(1);
@@ -257,7 +262,7 @@ impl Session {
             accounts.sort_by_key(|a| ids.iter().position(|id| *id == a.config.id).unwrap_or(usize::MAX));
             self.accounts = accounts;
             self.prefs.pane_order = order;
-            self.save_accounts();
+            self.save_accounts()?;
             self.revision = self.revision.wrapping_add(1);
         }
         Ok(to)
@@ -272,6 +277,7 @@ impl Session {
     /// An account gone; `keep` keeps its data file (an account the user removes), otherwise the
     /// file goes too (one that never held anyone's mail, or an account starting again).
     pub(super) fn drop_account(&mut self, id: &str, keep: bool) -> CmdResult {
+        self.accounts_writable()?;
         let Some(email) = self.account(id).map(|a| a.config.email.clone()) else {
             return Err(CmdError::Params(format!("no account `{id}`")));
         };
@@ -300,7 +306,7 @@ impl Session {
         if let Some(f) = &kept {
             self.notice_with("{email} removed. Its data file stays at {path}", &[("email", &email), ("path", &f.display().to_string())], false);
         }
-        self.save_accounts();
+        self.save_accounts()?;
         self.jobs.push(Job::Remove { account: id.to_string() });
         if self.compose.as_ref().is_some_and(|c| c.account == id) {
             self.compose = None;
@@ -316,6 +322,7 @@ impl Session {
     /// Sign in with Microsoft, keeping its mail: the browser opens, and the token replaces the
     /// password in the keychain.
     pub fn use_microsoft_sign_in(&mut self, id: &str) -> CmdResult {
+        self.accounts_writable()?;
         let a = self.account_mut(id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
         if !quatrelle_model::microsoft_password_account(&a.config) {
             return Err(CmdError::Params("this account doesn't sign in to Microsoft with a password".into()));
@@ -329,7 +336,7 @@ impl Session {
         }
         a.status = SyncStatus::Connecting;
         let config = a.config.clone();
-        self.save_accounts();
+        self.save_accounts()?;
         self.jobs.push(Job::SignIn { account: config });
         Ok(serde_json::json!({ "account": id, "signingIn": true }))
     }
@@ -339,6 +346,7 @@ impl Session {
     /// it starts again as a new account in the same place: its mail comes down from the server,
     /// and what was only on this computer for it (unsent mail in the Outbox) goes.
     pub fn use_graph(&mut self, id: &str) -> CmdResult {
+        self.accounts_writable()?;
         let a = self.account(id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
         let c = a.config.clone();
         let microsoft = c.oauth.as_deref() == Some("microsoft") || quatrelle_model::microsoft_password_account(&c);
@@ -370,7 +378,7 @@ impl Session {
             let mut moved = self.accounts.remove(from);
             moved.config.color = c.color;
             self.accounts.insert(at.min(self.accounts.len()), moved);
-            self.save_accounts();
+            self.save_accounts()?;
         }
         self.open_view(View::Folder { account: new.clone(), folder: "INBOX".into() });
         Ok(serde_json::json!({ "account": new, "graph": true }))
@@ -577,6 +585,7 @@ impl Session {
     }
 
     pub fn update_account(&mut self, config: AccountConfig, password: Option<String>) -> CmdResult {
+        self.accounts_writable()?;
         let id = config.id.clone();
         let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
         // `trusted_domains` is normalised and capped only by the trust commands: the settings UI goes through them.
@@ -615,7 +624,7 @@ impl Session {
         if shared_changed {
             self.contacts.changed();
         }
-        self.save_accounts();
+        self.save_accounts()?;
         if reconnect && !local {
             self.jobs.push(Job::Start { account: config, password: password.map(Secret) });
         }
@@ -624,13 +633,18 @@ impl Session {
         Ok(serde_json::json!({ "updated": id }))
     }
 
-    pub(super) fn save_accounts(&mut self) {
+    /// The list of accounts kept, refused while it wasn't read (the second barrier: what changes
+    /// the accounts asks [`Session::accounts_writable`] first). A store that can't write it is
+    /// said in a notice.
+    pub(super) fn save_accounts(&mut self) -> Result<(), CmdError> {
+        self.accounts_writable()?;
         let configs: Vec<AccountConfig> = self.accounts.iter().map(|a| a.config.clone()).collect();
         if let Some(store) = &self.store
             && let Err(e) = store.save_accounts(&configs)
         {
             self.notice_with("account settings could not be saved: {error}", &[("error", &e.to_string())], true);
         }
+        Ok(())
     }
 
     /// Ask every account to sync now.

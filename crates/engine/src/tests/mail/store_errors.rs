@@ -188,3 +188,94 @@ fn rules_and_snoozes_that_cant_be_read_arent_written_over() {
         }
     }
 }
+
+/// Two accounts on this computer, kept in a cache whose files can be made to fail.
+fn two_accounts_kept() -> (Store, Vec<serde_json::Value>) {
+    let cache = Store::failing();
+    let account = |id: &str, email: &str| quatrelle_model::AccountConfig { id: id.into(), email: email.into(), ..Default::default() };
+    cache.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "kim@contoso.example")]).unwrap();
+    let kept = cache.load_accounts().unwrap().iter().map(|a| serde_json::to_value(a).unwrap()).collect();
+    (cache, kept)
+}
+
+fn kept_accounts(cache: &Store) -> Vec<serde_json::Value> {
+    cache.load_accounts().unwrap().iter().map(|a| serde_json::to_value(a).unwrap()).collect()
+}
+
+/// A list of accounts that can't be read is never taken for none: the session opens with no
+/// account, says so, and refuses to change the accounts, instead of writing one account over the
+/// others (whose data files were then nobody's).
+#[test]
+fn accounts_that_cant_be_read_are_never_saved_over() {
+    for damaged in [false, true] {
+        let (cache, before) = two_accounts_kept();
+        if damaged {
+            // Not a list of accounts: kept as it is.
+            cache.save_doc("accounts.json", "not a list").unwrap();
+        } else {
+            cache.fail(Some("accounts.json"), None);
+        }
+        let raw = cache.load_doc::<serde_json::Value>("accounts.json").ok();
+        let mut s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+        cache.fail(None, None);
+        assert!(s.accounts_unread.is_some(), "damaged {damaged}: the list wasn't read, and the session says so");
+        assert!(s.accounts.is_empty() && s.notices.iter().any(|n| n.error), "damaged {damaged}: no account shown, an error said");
+        let r = s.run("account.add", &json!({"email": "new@studio.example", "local": true}));
+        let said = match &r {
+            Err(CmdError::Failed(m)) => m.clone(),
+            other => panic!("damaged {damaged}: the command must fail, not {other:?}"),
+        };
+        assert!(said.starts_with("the list of accounts couldn't be read, so it isn't saved: "), "{said}");
+        assert!(s.accounts.is_empty(), "damaged {damaged}: nothing added in memory");
+        if damaged {
+            assert_eq!(cache.load_doc::<serde_json::Value>("accounts.json").ok(), raw, "left as it is");
+            assert!(cache.load_accounts().is_err());
+        } else {
+            assert_eq!(kept_accounts(&cache), before, "the two accounts are still kept");
+        }
+    }
+}
+
+/// A list read again (a new session) works as before: accounts are added and kept.
+#[test]
+fn accounts_that_could_be_read_are_changed_and_saved_as_before() {
+    let (cache, before) = two_accounts_kept();
+    let mut s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert!(s.accounts_unread.is_none() && s.accounts.len() == 2);
+    s.run("account.add", &json!({"email": "new@studio.example", "local": true})).unwrap();
+    assert_eq!(kept_accounts(&cache).len(), before.len() + 1);
+}
+
+/// A refused change to the accounts leaves them as they were in memory: nothing to undo, and no
+/// account shown that isn't kept.
+#[test]
+fn a_refused_change_to_the_accounts_changes_nothing_in_memory() {
+    let cache = Store::failing();
+    let ews = quatrelle_model::AccountConfig {
+        id: "a2".into(),
+        email: "kim@contoso.example".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let local = quatrelle_model::AccountConfig { id: "a1".into(), email: "zoe@studio.example".into(), ..Default::default() };
+    cache.save_accounts(&[local, ews]).unwrap();
+    let mut s = Session::open(Some(cache.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let _ = s.take_jobs();
+    assert_eq!(s.accounts.len(), 2);
+    s.accounts_unread = Some("test".into());
+    let shown = |s: &Session| s.accounts.iter().map(|a| serde_json::to_value(&a.config).unwrap()).collect::<Vec<_>>();
+    let before = shown(&s);
+    let kept = kept_accounts(&cache);
+    for (id, params) in [
+        ("account.add", json!({"email": "new@studio.example", "local": true})),
+        ("account.setSignature", json!({"account": "a1", "signature": "Zoe", "newMessages": false})),
+        ("account.openMailbox", json!({"account": "a2", "email": "shared@contoso.example"})),
+        ("account.remove", json!({"account": "a1"})),
+    ] {
+        let r = s.run(id, &params);
+        assert!(matches!(&r, Err(CmdError::Failed(m)) if m.contains("isn't saved")), "{id}: {r:?}");
+        assert_eq!(shown(&s), before, "{id}: the accounts in memory are as they were");
+        assert_eq!(kept_accounts(&cache), kept, "{id}: and the ones kept");
+    }
+    assert!(s.take_jobs().is_empty(), "nothing started, nothing removed");
+}

@@ -28,3 +28,47 @@ fn a_document_read_strictly_is_never_taken_for_an_empty_one() {
     assert!(matches!(&read, Err(StoreError::Io { .. })), "{read:?}");
     assert_eq!(s.account_file("a1", "followed.json").unwrap(), Some(damaged), "left as it is");
 }
+
+fn two_accounts() -> Vec<quatrelle_model::AccountConfig> {
+    let account = |id: &str, email: &str| quatrelle_model::AccountConfig { id: id.into(), email: email.into(), ..Default::default() };
+    vec![account("a1", "zoe@studio.example"), account("a2", "kim@contoso.example")]
+}
+
+/// A list of accounts that is damaged is an error that names it, and stays where it is, byte for
+/// byte: not set aside and read as none, which the next save would have written over.
+#[test]
+fn a_damaged_list_of_accounts_is_an_error_and_stays_where_it_is() {
+    let s = temp_store("accounts-damaged");
+    s.save_accounts(&two_accounts()).unwrap();
+    let list = s.root().join("accounts.json");
+    let damaged = b"[{\"id\": \"a1\", \"email\": \"zoe@stu".to_vec();
+    fs::write(&list, &damaged).unwrap();
+    let read = s.load_accounts();
+    assert!(matches!(&read, Err(StoreError::Damaged { path }) if path.ends_with("accounts.json")), "{read:?}");
+    assert_eq!(fs::read(&list).unwrap(), damaged, "left as it is");
+    assert!(!s.root().join("accounts.json.bad").exists(), "not set aside");
+    let _ = fs::remove_dir_all(s.root());
+}
+
+/// A list of accounts that can't be read (here a folder in its place) is the disk's error, and is
+/// left alone.
+#[test]
+fn an_unreadable_list_of_accounts_is_an_error_and_stays_where_it_is() {
+    let s = temp_store("accounts-unreadable");
+    let list = s.root().join("accounts.json");
+    fs::create_dir(&list).unwrap();
+    let read = s.load_accounts();
+    assert!(matches!(&read, Err(StoreError::Io { path, .. }) if path.ends_with("accounts.json")), "{read:?}");
+    assert!(list.is_dir() && !s.root().join("accounts.json.bad").exists());
+    let _ = fs::remove_dir_all(s.root());
+}
+
+/// Guard: no list of accounts yet is no account; one that is there is read.
+#[test]
+fn no_list_of_accounts_is_no_account() {
+    let s = temp_store("accounts-none");
+    assert!(s.load_accounts().unwrap().is_empty());
+    s.save_accounts(&two_accounts()).unwrap();
+    assert_eq!(s.load_accounts().unwrap().len(), 2);
+    let _ = fs::remove_dir_all(s.root());
+}

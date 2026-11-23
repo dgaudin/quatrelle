@@ -125,9 +125,9 @@ fn accounts_folders_and_state_round_trip() {
 #[test]
 fn damaged_files_start_fresh() {
     let s = temp_store("bad");
-    fs::write(s.root().join("accounts.json"), b"{not json").unwrap();
-    assert!(s.load_accounts().unwrap().is_empty());
-    assert!(s.root().join("accounts.json.bad").exists());
+    fs::write(s.root().join("rules.json"), b"{not json").unwrap();
+    assert!(s.load_doc::<Vec<String>>("rules.json").unwrap().is_empty());
+    assert!(s.root().join("rules.json.bad").exists());
     let _ = fs::remove_dir_all(s.root());
 }
 

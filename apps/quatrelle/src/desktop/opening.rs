@@ -19,6 +19,7 @@ pub(crate) struct Opened {
 /// Why Quatrelle must stop on these data.
 pub(crate) enum Stop {
     Names { path: String, why: String },
+    Accounts { path: String, why: String },
 }
 
 /// The cache opened as the app opens it. `moved`: what the pending move of the data files gave
@@ -28,6 +29,12 @@ pub(crate) fn open_store(root: Option<&Path>, files: Option<&Path>, moved: Optio
     let mut moved = moved;
     let opened = match files {
         Some(f) => match Store::open_packed(r, f) {
+            // The list of accounts is what it read to remake the list of data files: it is the
+            // one named, not the other.
+            Err(StoreError::NamesUnreadable { path, source }) if is_the_list_of_accounts(&path) => {
+                let why = if source.kind() == std::io::ErrorKind::InvalidData { DAMAGED.to_string() } else { source.kind().to_string() };
+                return Err(Stop::Accounts { path, why });
+            }
             // What says which data file is which account's can't be read: with the list taken for
             // none, every account's file would be forgotten and its mail downloaded again.
             Err(StoreError::NamesUnreadable { path, source }) => return Err(Stop::Names { path, why: source.kind().to_string() }),
@@ -47,7 +54,23 @@ pub(crate) fn open_store(root: Option<&Path>, files: Option<&Path>, moved: Optio
             None
         }
     };
+    // The list of accounts read before anything else: taken for none, the first account added or
+    // changed would be written over the others, whose data files would then be nobody's.
+    if let Some(s) = &store
+        && let Err(e) = s.load_accounts()
+    {
+        return Err(match e {
+            StoreError::Io { path, source } => Stop::Accounts { path, why: source.kind().to_string() },
+            StoreError::Damaged { path } => Stop::Accounts { path, why: DAMAGED.into() },
+            _ => Stop::Accounts { path: r.join("accounts.json").display().to_string(), why: "unreadable".into() },
+        });
+    }
     Ok(Opened { store, moved })
+}
+
+/// Whether `path` is the list of accounts (what the list of data files is remade from).
+fn is_the_list_of_accounts(path: &str) -> bool {
+    Path::new(path).file_name().is_some_and(|n| n == "accounts.json")
 }
 
 /// What the message box says when the list of data files can't be read: `path` is the list, or the
@@ -57,6 +80,25 @@ pub(crate) fn cant_read_names(path: &str, why: &str) -> String {
         "Quatrelle couldn't read what tells it which data file is which account's:\n{path}\n({why})\n\n\
          Nothing has been changed. Once that file or folder can be read again, or is back where it was (a drive plugged \
          in again, a share mounted), start Quatrelle again.\n\nThe details are in quatrelle.log, in Quatrelle's data folder."
+    )
+}
+
+/// What `why` says of a list of accounts whose contents can't be read as one.
+const DAMAGED: &str = "damaged";
+
+/// What the message box says when the list of accounts can't be read: `path` is the list, and `why`
+/// the kind of error (or that it is damaged).
+pub(crate) fn cant_read_accounts(path: &str, why: &str) -> String {
+    let damaged = if why == DAMAGED {
+        "\n\nIf that file can't be mended, renaming it makes Quatrelle start with no account; the accounts' data files stay \
+         where they are."
+    } else {
+        ""
+    };
+    format!(
+        "Quatrelle couldn't read the list of accounts:\n{path}\n({why})\n\n\
+         Nothing has been changed. Once that file can be read again, or is back where it was (a drive plugged in again, a \
+         share mounted), start Quatrelle again.{damaged}\n\nThe details are in quatrelle.log, in Quatrelle's data folder."
     )
 }
 
@@ -70,6 +112,16 @@ pub(crate) fn stop(why: &Stop) -> ! {
                 .set_level(rfd::MessageLevel::Error)
                 .set_title("Quatrelle")
                 .set_description(cant_read_names(path, why))
+                .set_buttons(rfd::MessageButtons::Ok)
+                .show();
+        }
+        Stop::Accounts { path, why } => {
+            log::error!("the list of accounts can't be read ({why})");
+            log::logger().flush();
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("Quatrelle")
+                .set_description(cant_read_accounts(path, why))
                 .set_buttons(rfd::MessageButtons::Ok)
                 .show();
         }
@@ -108,22 +160,25 @@ mod tests {
         out
     }
 
-    /// A root with one account and its data file, as an earlier run left them.
+    /// A root with two accounts and their data files, as an earlier run left them.
     fn with_an_account(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
         let t = temp(tag);
         let (app, files) = (t.join("app"), t.join("Files"));
         let s = Store::open_packed(&app, &files).unwrap();
-        let account = AccountConfig { id: "a1".into(), email: "zoe@studio.example".into(), ..Default::default() };
-        s.save_accounts(&[account]).unwrap();
-        s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
+        let account = |id: &str, email: &str| AccountConfig { id: id.into(), email: email.into(), ..Default::default() };
+        s.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "kim@contoso.example")]).unwrap();
+        for id in ["a1", "a2"] {
+            s.save_account_doc(id, "pim.json", &serde_json::json!({"notes": []})).unwrap();
+        }
         drop(s);
         (t, app, files)
     }
 
-    /// What `open_store` stopped on, as (path, why).
-    fn stopped(r: Result<Opened, Stop>) -> Option<(String, String)> {
+    /// What `open_store` stopped on, as (which list, path, why).
+    fn stopped(r: Result<Opened, Stop>) -> Option<(&'static str, String, String)> {
         match r {
-            Err(Stop::Names { path, why }) => Some((path, why)),
+            Err(Stop::Names { path, why }) => Some(("names", path, why)),
+            Err(Stop::Accounts { path, why }) => Some(("accounts", path, why)),
             Ok(_) => None,
         }
     }
@@ -138,7 +193,8 @@ mod tests {
         std::fs::remove_file(app.join("datafiles.json")).unwrap();
         std::fs::create_dir(app.join("datafiles.json")).unwrap();
         let before = (snapshot(&app), snapshot(&files));
-        let (path, why) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
+        let (list, path, why) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
+        assert_eq!(list, "names");
         assert!(path.ends_with("datafiles.json"), "{path}");
         assert!(!why.is_empty(), "the kind of error is said");
         assert_eq!((snapshot(&app), snapshot(&files)), before, "nothing made, nothing written, nothing set aside");
@@ -153,8 +209,8 @@ mod tests {
         std::fs::write(app.join("datafiles.json"), b"{\"a1\": ").unwrap();
         std::fs::rename(&files, t.join("Elsewhere")).unwrap();
         let before = snapshot(&t);
-        let (path, _) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
-        assert_eq!(path, files.display().to_string());
+        let (list, path, _) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
+        assert_eq!((list, path), ("names", files.display().to_string()));
         assert_eq!(snapshot(&t), before, "nothing made, nothing written, nothing set aside");
         let _ = std::fs::remove_dir_all(t);
     }
@@ -186,5 +242,91 @@ mod tests {
         assert!(m.contains("/x/datafiles.json") && m.contains("permission denied"), "{m}");
         assert!(m.contains("Nothing has been changed") && m.contains("start Quatrelle again"), "{m}");
         assert!(!m.to_lowercase().contains("moved") && !m.to_lowercase().contains("graphics") && !m.contains("  "), "{m}");
+    }
+
+    /// A list of accounts that can't be read (here a folder in its place, then a damaged file)
+    /// stops Quatrelle: taken for none, it opened with no account, and the first account added
+    /// was written over the others, whose data files were then nobody's. Nothing is made, in the
+    /// app's folder or the data files', and the list is neither renamed nor written.
+    #[test]
+    fn an_unreadable_list_of_accounts_stops_quatrelle_on_these_data() {
+        let (t, app, files) = with_an_account("accounts-unreadable");
+        let list = app.join("accounts.json");
+        let good = std::fs::read(&list).unwrap();
+        std::fs::remove_file(&list).unwrap();
+        std::fs::create_dir(&list).unwrap();
+        let before = (snapshot(&app), snapshot(&files));
+        let (which, path, why) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
+        assert_eq!(which, "accounts");
+        assert!(path.ends_with("accounts.json"), "{path}");
+        assert!(!why.is_empty(), "the kind of error is said");
+        assert_eq!((snapshot(&app), snapshot(&files)), before, "nothing made, nothing written, nothing set aside");
+        // The same in the plain layout (the sample mailbox's, or a cache that can't have data files).
+        assert_eq!(stopped(open_store(Some(&app), None, None)).map(|s| s.0), Some("accounts"));
+        std::fs::remove_dir(&list).unwrap();
+        // Damaged: the file stays as it is.
+        let damaged = b"[{\"id\": \"a1\", ".to_vec();
+        std::fs::write(&list, &damaged).unwrap();
+        let before = (snapshot(&app), snapshot(&files));
+        let (which, path, why) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
+        assert_eq!((which, why.as_str()), ("accounts", DAMAGED));
+        assert!(path.ends_with("accounts.json"), "{path}");
+        assert_eq!((snapshot(&app), snapshot(&files)), before, "nothing made, nothing written, nothing set aside");
+        assert_eq!(std::fs::read(&list).unwrap(), damaged);
+        // With the list of data files damaged too, it is still this list that is named.
+        std::fs::write(app.join("datafiles.json"), b"{\"a1\": ").unwrap();
+        let before = (snapshot(&app), snapshot(&files));
+        let (which, path, _) = stopped(open_store(Some(&app), Some(&files), None)).expect("stops on these data");
+        assert_eq!(which, "accounts", "{path}");
+        assert!(path.ends_with("accounts.json"), "{path}");
+        assert_eq!((snapshot(&app), snapshot(&files)), before, "nothing made, nothing written, nothing set aside");
+        // Read again, it opens, with its two accounts.
+        std::fs::write(&list, &good).unwrap();
+        std::fs::write(app.join("datafiles.json"), b"{}").unwrap();
+        let Ok(opened) = open_store(Some(&app), Some(&files), None) else { panic!("stopped") };
+        assert_eq!(opened.store.map(|s| s.load_accounts().map(|a| a.len()).ok()), Some(Some(2)));
+        let _ = std::fs::remove_dir_all(t);
+    }
+
+    /// `--sample` opens its own folder, whose list of accounts `seed_if_empty_at` takes for none
+    /// when it is damaged and writes the sample mailbox over: the opening stops before it.
+    #[test]
+    fn the_sample_mailbox_is_never_seeded_over_accounts_that_cant_be_read() {
+        let t = temp("sample-accounts");
+        let root = t.join("sample");
+        let s = Store::open(&root).unwrap();
+        let account = |id: &str, email: &str| AccountConfig { id: id.into(), email: email.into(), ..Default::default() };
+        s.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "kim@contoso.example")]).unwrap();
+        drop(s);
+        std::fs::write(root.join("accounts.json"), b"{not json").unwrap();
+        let before = snapshot(&t);
+        let (which, path, _) = stopped(open_store(Some(&root), None, None)).expect("stops on these data");
+        assert_eq!(which, "accounts");
+        assert!(path.ends_with("accounts.json"), "{path}");
+        assert_eq!(snapshot(&t), before, "nothing seeded, nothing set aside");
+        let _ = std::fs::remove_dir_all(t);
+    }
+
+    /// Guard: a data folder with no list of accounts (a new one) is no unreadable list.
+    #[test]
+    fn a_data_folder_with_no_list_of_accounts_still_opens() {
+        let t = temp("no-list");
+        let (app, files) = (t.join("app"), t.join("Files"));
+        assert!(matches!(open_store(Some(&app), Some(&files), None), Ok(Opened { store: Some(_), .. })));
+        let plain = t.join("plain");
+        assert!(matches!(open_store(Some(&plain), None, None), Ok(Opened { store: Some(_), .. })));
+        let _ = std::fs::remove_dir_all(t);
+    }
+
+    /// The box names the list, says nothing was changed; for a damaged one, what renaming it does.
+    #[test]
+    fn the_box_for_an_unreadable_list_of_accounts_names_the_file() {
+        let m = cant_read_accounts("/x/accounts.json", "permission denied");
+        assert!(m.contains("/x/accounts.json") && m.contains("permission denied"), "{m}");
+        assert!(m.contains("Nothing has been changed") && m.contains("start Quatrelle again"), "{m}");
+        assert!(!m.contains("renam") && !m.contains("  "), "{m}");
+        let m = cant_read_accounts("/x/accounts.json", DAMAGED);
+        assert!(m.contains("Nothing has been changed") && m.contains("no account") && m.contains("data files"), "{m}");
+        assert!(m.contains("renaming") && m.contains("where they are"), "{m}");
     }
 }

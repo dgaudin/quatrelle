@@ -10,6 +10,9 @@ use super::*;
 const DAMAGED: &str = "a file Quatrelle keeps is damaged: {error}";
 /// What an account says when its numbering of messages can't be read (`jmap/src/state.rs`).
 const NUMBERING: &str = "this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}";
+/// What the session says when the list of accounts couldn't be read and isn't saved
+/// (`engine/src/session/accounts/unread.rs`).
+const ACCOUNTS: &str = "the list of accounts couldn't be read, so it isn't saved: {error}";
 
 /// The wording is still the code's, and every catalog has a line for it.
 #[test]
@@ -45,4 +48,31 @@ fn the_numbering_notice_is_translated() {
     set_current(Lang::EN);
     assert!(said.contains("numérotation"), "{said}");
     assert!(said.ends_with(&format!("{file}: Permission denied (os error 13)")), "the system's words changed: {said}");
+}
+
+/// The list of accounts that couldn't be read: its wording is the engine's, and every catalog has
+/// a line for it.
+#[test]
+fn the_accounts_notice_has_a_line_in_every_catalog() {
+    let engine = include_str!("../../../engine/src/session/accounts/unread.rs");
+    let head = ACCOUNTS.trim_end_matches(": {error}");
+    assert!(engine.contains(&format!("pub const ACCOUNTS_UNREAD: &str = \"{head}\";")), "not in the engine any more");
+    assert!(!head.contains(": "), "the head must be free of ': ': `i18n::error` cuts at the first");
+    for lang in LANGUAGES.iter().filter(|l| l.code != "en") {
+        let line = lang.catalog().get(ACCOUNTS).unwrap_or_else(|| panic!("{}: no line for {ACCOUNTS}", lang.code));
+        assert!(line.ends_with("{error}"), "{}: the value goes at the end: {line}", lang.code);
+    }
+}
+
+/// The command's error is said in the interface's language, and the file it names stays as it came.
+#[test]
+fn the_accounts_notice_is_translated() {
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    let file = "/home/studio/.local/share/quatrelle/accounts.json";
+    let head = ACCOUNTS.trim_end_matches(": {error}");
+    let said = error(&format!("{head}: a file Quatrelle keeps is damaged: {file}"));
+    set_current(Lang::EN);
+    assert!(said.contains("liste des comptes") && said.contains("abîmé"), "{said}");
+    assert!(said.contains(file), "the path was changed: {said}");
+    assert!(!said.contains("list of accounts") && !said.contains("damaged"), "left in English: {said}");
 }

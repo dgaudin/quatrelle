@@ -89,6 +89,7 @@ impl Session {
     /// `archive.settings`: whether *Archive* files into the Archives account, and the age (in
     /// months, 1 to 120, or none) after which mail is offered for archiving. IMAP accounts only.
     pub fn archive_settings(&mut self, account: &str, local: Option<bool>, after_months: Option<Option<u32>>) -> CmdResult {
+        self.accounts_writable()?;
         if self.account(account).is_none() {
             return Err(CmdError::Params(format!("no account `{account}`")));
         }
@@ -106,7 +107,7 @@ impl Session {
                 a.config.archive_after_months = m;
             }
         }
-        self.save_accounts();
+        self.save_accounts()?;
         if after_months.is_some() {
             self.age_settings_changed(account);
         }
@@ -120,6 +121,7 @@ impl Session {
         if let Some(id) = self.archives_id() {
             return Ok(id);
         }
+        self.accounts_writable()?;
         let id = self.new_account_id();
         let config = AccountConfig {
             id: id.clone(),
@@ -131,7 +133,7 @@ impl Session {
             ..Default::default()
         };
         self.accounts.push(AccountState { config, folders: Vec::new(), status: SyncStatus::Offline, quota: None, vacation: VacationState::Unknown });
-        self.save_accounts();
+        self.save_accounts()?;
         Ok(id)
     }
 

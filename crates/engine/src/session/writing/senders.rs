@@ -102,6 +102,10 @@ impl Session {
     /// unless it's a mailbox the account opens (offered anyway).
     pub(super) fn remember_sender(&mut self, c: &Compose) {
         let Some(email) = one_address(&c.from).map(|a| a.email) else { return };
+        // Only a convenience: not remembered while the list of accounts can't be saved.
+        if self.accounts_writable().is_err() {
+            return;
+        }
         let Some(a) = self.account_mut(&c.account) else { return };
         let opened = a
             .config
@@ -116,6 +120,6 @@ impl Session {
         a.config.send_from.retain(|f| one_address(f).is_none_or(|x| !x.email.eq_ignore_ascii_case(&email)));
         a.config.send_from.insert(0, c.from.clone());
         a.config.send_from.truncate(KEPT_SENDERS);
-        self.save_accounts();
+        let _ = self.save_accounts();
     }
 }

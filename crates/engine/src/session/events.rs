@@ -408,14 +408,23 @@ impl Session {
                 // Who the browser signed in as, kept when it isn't the account's address: tried
                 // when the mailbox won't open under that, and named when it still won't.
                 let user = user.map(|u| u.trim().to_string()).filter(|u| !u.is_empty() && u.len() < 320);
+                // A hint kept with the account: left as it was while the list of accounts can't be saved.
+                let writable = self.accounts_writable();
                 if let Some(a) = self.account_mut(&account) {
                     let other = user.filter(|u| !u.eq_ignore_ascii_case(&a.config.email));
                     let changed = a.config.oauth_user != other;
-                    a.config.oauth_user = other.clone();
+                    if changed && writable.is_ok() {
+                        a.config.oauth_user = other.clone();
+                    }
                     let config = a.config.clone();
                     let who = config.email.clone();
                     if changed {
-                        self.save_accounts();
+                        match writable {
+                            Ok(()) => {
+                                let _ = self.save_accounts();
+                            }
+                            Err(e) => self.notice(e.to_string(), true),
+                        }
                     }
                     self.jobs.push(Job::Start { account: config, password: None });
                     match other {

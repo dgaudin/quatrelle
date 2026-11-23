@@ -2430,3 +2430,4 @@ presence	Offline	離線
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	無法讀取此帳戶的郵件編號，因此暫時不同步其郵件: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle 保存的檔案已損毀: {error}
+	the list of accounts couldn't be read, so it isn't saved: {error}	無法讀取帳戶清單，因此不會儲存: {error}

@@ -2424,3 +2424,4 @@ presence	Offline	Offline
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	de nummering van de berichten van dit account kon niet worden gelezen, dus de post wordt voorlopig niet gesynchroniseerd: {error}
 	a file Quatrelle keeps is damaged: {error}	een bestand dat Quatrelle bewaart is beschadigd: {error}
+	the list of accounts couldn't be read, so it isn't saved: {error}	de lijst met accounts kon niet worden gelezen en wordt daarom niet opgeslagen: {error}

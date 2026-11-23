@@ -29,6 +29,7 @@ impl Session {
 
     /// Open another mailbox in an Exchange account (and its calendar, with `calendar`).
     pub fn open_shared_mailbox(&mut self, account: Option<&str>, email: &str, calendar: bool) -> CmdResult {
+        self.accounts_writable()?;
         let account = self.exchange_account(account)?;
         let email = email.trim().to_ascii_lowercase();
         let ok =
@@ -53,7 +54,7 @@ impl Session {
             a.config.shared_mailboxes.push(email.clone());
         }
         let config = a.config.clone();
-        self.save_accounts();
+        self.save_accounts()?;
         // Suggested from now on.
         self.contacts.changed();
         // The worker starts again with the mailbox in its list, and lists its folders.
@@ -71,6 +72,7 @@ impl Session {
     /// Close another mailbox opened in an account: its folders (and its calendar, when open)
     /// go from this computer.
     pub fn close_shared_mailbox(&mut self, account: Option<&str>, email: &str) -> CmdResult {
+        self.accounts_writable()?;
         let email = email.trim().to_ascii_lowercase();
         let account = match account {
             Some(a) => a.to_string(),
@@ -97,7 +99,7 @@ impl Session {
             }
             let _ = store.save_folders(&account, &self.account(&account).map(|a| a.folders.clone()).unwrap_or_default());
         }
-        self.save_accounts();
+        self.save_accounts()?;
         if matches!(&self.view, View::Folder { account: va, folder } if *va == account && gone.contains(folder)) {
             let inbox = self.account(&account).and_then(|a| a.folder(FolderRole::Inbox)).map(|f| f.path.clone()).unwrap_or_else(|| "INBOX".into());
             self.open_view(View::Folder { account: account.clone(), folder: inbox });

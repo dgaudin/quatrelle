@@ -44,6 +44,7 @@ impl Session {
     /// yes to a server's proposal, or added it in the account's settings). Kept as its site; the
     /// account starts again, and the question can be asked again after it is withdrawn.
     pub fn trust_domain(&mut self, account: &str, domain: &str) -> CmdResult {
+        self.accounts_writable()?;
         let (id, site) = self.trust_target(account, domain)?;
         let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
         if !a.config.trusted_domains.contains(&site) {
@@ -57,7 +58,7 @@ impl Session {
         self.asked_trust.remove(&pair);
         self.refused_trust.remove(&pair);
         self.ask_trust.retain(|p| *p != pair);
-        self.save_accounts();
+        self.save_accounts()?;
         self.restart_account(&id);
         Ok(serde_json::json!({ "account": id, "trusted": site }))
     }
@@ -75,6 +76,7 @@ impl Session {
     /// other saved URL stays as it is: an Exchange address in `ews.json` is touched only when its
     /// very site is removed.
     pub fn distrust_domain(&mut self, account: &str, domain: &str) -> CmdResult {
+        self.accounts_writable()?;
         let (id, site) = self.trust_target(account, domain)?;
         let on_site = |url: &str| url_host(url).is_some_and(|h| site_of(&h) == site);
         let ews: String = self.store.as_ref().and_then(|s| s.load_account_doc(&id, EWS_FOUND_DOC).ok()).unwrap_or_default();
@@ -93,7 +95,7 @@ impl Session {
         self.asked_trust.remove(&pair);
         self.ask_trust.retain(|p| *p != pair);
         if removed || forget {
-            self.save_accounts();
+            self.save_accounts()?;
         }
         if forget {
             self.forget_found_on(&id, &site, ews_there);
