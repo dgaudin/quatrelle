@@ -696,6 +696,8 @@
 	Replied on {date}.	Beantwoord op {date}.
 	Forwarded on {date}.	Doorgestuurd op {date}.
 	Replied	Beantwoord
+	Replied to all	Beantwoord aan allen
+	Replied to all on {date}.	Beantwoord aan allen op {date}.
 	Forwarded	Doorgestuurd
 	This message was sent with high importance.	Dit bericht is verzonden met hoge urgentie.
 	This message was sent with low importance.	Dit bericht is verzonden met lage urgentie.

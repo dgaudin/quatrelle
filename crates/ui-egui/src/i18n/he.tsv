@@ -698,6 +698,8 @@ month	May	מאי
 	Replied on {date}.	נענתה ב-{date}.
 	Forwarded on {date}.	הועברה ב-{date}.
 	Replied	נענתה
+	Replied to all	נענתה לכולם
+	Replied to all on {date}.	נענתה לכולם ב-{date}.
 	Forwarded	הועברה
 	This message was sent with high importance.	הודעה זו נשלחה בחשיבות גבוהה.
 	This message was sent with low importance.	הודעה זו נשלחה בחשיבות נמוכה.

@@ -18,27 +18,38 @@ fn a_message_replied_to_or_forwarded_shows_its_arrow_and_when() {
     let picture = |name: &str| pictures.as_ref().map(|d| d.join(format!("{name}.png")));
     frame_kept(&ctx, &mut a, &mut tex, None);
     let when = a.session.clock.now - 26 * 3600;
-    let marks = [(true, false, when), (false, true, when - 3600), (true, false, 0)];
+    let marks = [
+        (true, false, when, false),
+        (false, true, when - 3600, false),
+        (true, false, 0, false),
+        (true, false, when - 7200, true),
+        (true, false, 0, true),
+    ];
     // As a sync leaves them in the cache.
-    let first: Vec<quatrelle_engine::model::MessageKey> = a.session.list.iter().take(3).map(|m| m.key.clone()).collect();
+    let first: Vec<quatrelle_engine::model::MessageKey> = a.session.list.iter().take(5).map(|m| m.key.clone()).collect();
     let (account, folder) = (first[0].account.clone(), first[0].folder.clone());
     if let Some(store) = a.session.store.as_ref() {
         let mut fs = store.load_folder(&account, &folder).unwrap();
-        for (key, (answered, forwarded, acted)) in first.iter().zip(marks) {
+        for (key, (answered, forwarded, acted, all)) in first.iter().zip(marks) {
             if let Some(m) = fs.messages.iter_mut().find(|m| m.key == *key) {
                 (m.flags.answered, m.flags.forwarded, m.flags.acted) = (answered, forwarded, acted);
+                if all {
+                    m.flags.keywords.push(quatrelle_engine::model::REPLIED_ALL.to_string());
+                }
             }
         }
         store.save_folder(&account, &folder, &fs).unwrap();
     }
     a.session.apply(quatrelle_engine::model::Event::FolderChanged { account, folder });
     let shown_rows: Vec<Summary> = first.iter().filter_map(|k| a.session.summary(k).cloned()).collect();
-    assert_eq!(shown_rows.len(), 3);
+    assert_eq!(shown_rows.len(), 5);
     let date = |t: i64| crate::i18n::date(&quatrelle_engine::model::dates::full_time(t, &a.session.clock));
     let said = [
         (format!("Replied on {}.", date(when)), "Replied", "replied"),
         (format!("Forwarded on {}.", date(when - 3600)), "Forwarded", "forwarded"),
         ("Replied".to_string(), "Replied", "replied-no-day"),
+        (format!("Replied to all on {}.", date(when - 7200)), "Replied", "replied-all"),
+        ("Replied to all".to_string(), "Replied", "replied-all-no-day"),
     ];
     for (m, (line, word, name)) in shown_rows.iter().zip(said) {
         a.run("list.open", json!({"key": m.key.to_id()}));

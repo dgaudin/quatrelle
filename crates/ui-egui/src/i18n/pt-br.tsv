@@ -697,6 +697,8 @@
 	Replied on {date}.	Respondida em {date}.
 	Forwarded on {date}.	Encaminhada em {date}.
 	Replied	Respondida
+	Replied to all	Respondida a todos
+	Replied to all on {date}.	Respondida a todos em {date}.
 	Forwarded	Encaminhada
 	This message was sent with high importance.	Esta mensagem foi enviada com alta prioridade.
 	This message was sent with low importance.	Esta mensagem foi enviada com baixa prioridade.

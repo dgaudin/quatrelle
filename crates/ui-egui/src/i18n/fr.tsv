@@ -697,6 +697,8 @@
 	Replied on {date}.	Répondu le {date}.
 	Forwarded on {date}.	Transféré le {date}.
 	Replied	Répondu
+	Replied to all	Répondu à tous
+	Replied to all on {date}.	Répondu à tous le {date}.
 	Forwarded	Transféré
 	This message was sent with high importance.	Ce message a été envoyé avec une importance haute.
 	This message was sent with low importance.	Ce message a été envoyé avec une importance faible.

@@ -219,11 +219,14 @@ pub(super) fn header(
 }
 
 /// The line saying a message was replied to or forwarded, with its arrow: when, where the server
-/// says (Exchange keeps the time of the last); both kept (IMAP), the reply, as the list shows it.
+/// says (Exchange keeps the time of the last); both kept (IMAP), the reply (to all, or not), as the
+/// list shows it.
 /// Worded as the follow-up's "Completed on …", in Quatrelle's own words (clean room).
 fn acted_line(s: &Session, f: &quatrelle_engine::model::Flags) -> Option<(Icon, String)> {
     let when = (f.acted > 0).then(|| crate::i18n::date(&dates::full_time(f.acted, &s.clock)));
-    if f.answered {
+    if f.replied_all() {
+        Some((Icon::ReplyAll, when.map_or_else(|| tl!("Replied to all").to_string(), |date| tf!("Replied to all on {date}.", date = date))))
+    } else if f.answered {
         Some((Icon::Reply, when.map_or_else(|| tl!("Replied").to_string(), |date| tf!("Replied on {date}.", date = date))))
     } else if f.forwarded {
         Some((Icon::Forward, when.map_or_else(|| tl!("Forwarded").to_string(), |date| tf!("Forwarded on {date}.", date = date))))

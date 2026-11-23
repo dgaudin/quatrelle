@@ -698,6 +698,8 @@ month	May	مايو
 	Replied on {date}.	تم الرد في {date}.
 	Forwarded on {date}.	تمت إعادة التوجيه في {date}.
 	Replied	تم الرد
+	Replied to all	تم الرد على الكل
+	Replied to all on {date}.	تم الرد على الكل في {date}.
 	Forwarded	تمت إعادة التوجيه
 	This message was sent with high importance.	أُرسلت هذه الرسالة بأهمية عالية.
 	This message was sent with low importance.	أُرسلت هذه الرسالة بأهمية منخفضة.

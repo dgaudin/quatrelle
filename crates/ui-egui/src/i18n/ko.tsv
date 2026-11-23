@@ -696,6 +696,8 @@
 	Replied on {date}.	{date}에 회신함.
 	Forwarded on {date}.	{date}에 전달함.
 	Replied	회신함
+	Replied to all	전체 회신함
+	Replied to all on {date}.	{date}에 전체 회신함.
 	Forwarded	전달함
 	This message was sent with high importance.	이 메시지는 높은 중요도로 보낸 것입니다.
 	This message was sent with low importance.	이 메시지는 낮은 중요도로 보낸 것입니다.

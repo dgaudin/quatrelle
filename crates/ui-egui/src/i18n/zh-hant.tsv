@@ -696,6 +696,8 @@
 	Replied on {date}.	已於 {date} 回覆。
 	Forwarded on {date}.	已於 {date} 轉寄。
 	Replied	已回覆
+	Replied to all	已全部回覆
+	Replied to all on {date}.	已於 {date} 全部回覆。
 	Forwarded	已轉寄
 	This message was sent with high importance.	此郵件以高重要性傳送。
 	This message was sent with low importance.	此郵件以低重要性傳送。

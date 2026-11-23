@@ -699,6 +699,8 @@ month	May	5月
 	Replied on {date}.	已于 {date} 答复。
 	Forwarded on {date}.	已于 {date} 转发。
 	Replied	已答复
+	Replied to all	已全部答复
+	Replied to all on {date}.	已于 {date} 全部答复。
 	Forwarded	已转发
 	This message was sent with high importance.	此邮件以高重要性发送。
 	This message was sent with low importance.	此邮件以低重要性发送。

@@ -699,6 +699,8 @@ month	May	5月
 	Replied on {date}.	{date} に返信済み。
 	Forwarded on {date}.	{date} に転送済み。
 	Replied	返信済み
+	Replied to all	全員に返信済み
+	Replied to all on {date}.	{date} に全員へ返信済み。
 	Forwarded	転送済み
 	This message was sent with high importance.	このメッセージは重要度 - 高で送信されました。
 	This message was sent with low importance.	このメッセージは重要度 - 低で送信されました。

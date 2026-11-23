@@ -697,6 +697,8 @@
 	Replied on {date}.	Beantwortet am {date}.
 	Forwarded on {date}.	Weitergeleitet am {date}.
 	Replied	Beantwortet
+	Replied to all	Allen beantwortet
+	Replied to all on {date}.	Allen beantwortet am {date}.
 	Forwarded	Weitergeleitet
 	This message was sent with high importance.	Diese Nachricht wurde mit hoher Wichtigkeit gesendet.
 	This message was sent with low importance.	Diese Nachricht wurde mit niedriger Wichtigkeit gesendet.

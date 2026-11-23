@@ -696,6 +696,8 @@
 	Replied on {date}.	Risposto il {date}.
 	Forwarded on {date}.	Inoltrato il {date}.
 	Replied	Risposto
+	Replied to all	Risposto a tutti
+	Replied to all on {date}.	Risposto a tutti il {date}.
 	Forwarded	Inoltrato
 	This message was sent with high importance.	Questo messaggio è stato inviato con priorità alta.
 	This message was sent with low importance.	Questo messaggio è stato inviato con priorità bassa.

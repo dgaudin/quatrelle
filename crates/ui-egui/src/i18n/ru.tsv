@@ -696,6 +696,8 @@
 	Replied on {date}.	Отвечено {date}.
 	Forwarded on {date}.	Переслано {date}.
 	Replied	Отвечено
+	Replied to all	Отвечено всем
+	Replied to all on {date}.	Отвечено всем {date}.
 	Forwarded	Переслано
 	This message was sent with high importance.	Это сообщение отправлено с высокой важностью.
 	This message was sent with low importance.	Это сообщение отправлено с низкой важностью.
