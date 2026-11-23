@@ -94,3 +94,42 @@ fn a_server_contact_saved_from_the_form_keeps_what_it_had() {
     assert!(vcard::write(c).lines().any(|l| l == "N:;;;;"), "{}", vcard::write(c));
     done(s);
 }
+
+/// A contact whose lines are as many as a card is read with (the most): renamed from the form,
+/// which sends all of them back, it goes to the server with every one, not cut at fewer.
+#[test]
+fn a_contact_with_the_most_lines_is_written_back_with_all_of_them() {
+    let (e, p, a) = (vcard::MAX_CARD_EMAILS, vcard::MAX_CARD_PHONES, vcard::MAX_CARD_ADDRESSES);
+    let mut text = String::from("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:zoe-server\r\nFN:Zoe Park\r\n");
+    (0..e + 5).for_each(|i| text.push_str(&format!("EMAIL:zoe{i}@studio.example\r\n")));
+    (0..p + 5).for_each(|i| text.push_str(&format!("TEL:+1 555 {i:04}\r\n")));
+    (0..a + 5).for_each(|i| text.push_str(&format!("ADR;TYPE=work:;;{i} Studio Row;Ghent;;9000;BE\r\n")));
+    text.push_str("END:VCARD\r\n");
+    let (mut s, id) = account_with_server_card("server-card-most");
+    let card = vcard::parse(&text).remove(0);
+    assert_eq!((card.emails.len(), card.phones.len(), card.addresses.len()), (e, p, a), "read at the most");
+    s.pim_mut(&id).cards.retain(|k| k.card.uid != "zoe-server");
+    s.pim_mut(&id).cards.push(StoredCard {
+        book: "ews:contacts".into(),
+        href: "contact:C2".into(),
+        etag: "k".into(),
+        card: card.clone(),
+        dirty: false,
+    });
+    let mut sent = form("");
+    sent["name"] = json!("Zoe Park-Marie");
+    sent["emails"] = json!(card.emails.iter().map(|t| &t.value).collect::<Vec<_>>());
+    sent["phones"] = json!(card.phones.iter().map(|t| json!({"value": t.value, "kind": t.kind})).collect::<Vec<_>>());
+    sent["addresses"] = json!(
+        card.addresses
+            .iter()
+            .map(|x| json!({"kind": x.kind, "street": x.street, "city": x.city, "region": x.region, "postcode": x.postcode, "country": x.country}))
+            .collect::<Vec<_>>()
+    );
+    s.run("contact.update", &sent).unwrap();
+    let c = &s.pim[&id].cards.iter().find(|k| k.card.uid == "zoe-server").unwrap().card;
+    assert_eq!(c.name, "Zoe Park-Marie");
+    assert_eq!((c.emails.len(), c.phones.len(), c.addresses.len()), (e, p, a), "written back whole");
+    assert_eq!(c.emails.last().map(|t| t.value.as_str()), card.emails.last().map(|t| t.value.as_str()));
+    done(s);
+}

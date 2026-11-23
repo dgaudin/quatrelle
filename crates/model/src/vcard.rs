@@ -101,6 +101,13 @@ pub fn birthday_for_exchange(v: &str) -> Option<String> {
 /// without it rather than growing the cache by what a stranger's card carries.
 const MAX_NAME_REST: usize = 1024;
 
+/// The most e-mail addresses, phone numbers and postal addresses a card keeps: what is read from
+/// a file or a server, and what is written back by the contact form, so a card read in full is
+/// never written back cut short.
+pub const MAX_CARD_EMAILS: usize = 50;
+pub const MAX_CARD_PHONES: usize = 50;
+pub const MAX_CARD_ADDRESSES: usize = 20;
+
 /// A person or organisation.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Card {
@@ -392,12 +399,12 @@ pub fn parse(text: &str) -> Vec<Card> {
                         let rest = after_components(value, 2).unwrap_or("");
                         c.name_rest = if rest.len() > MAX_NAME_REST || rest.chars().all(|ch| ch == ';') { String::new() } else { rest.to_string() };
                     }
-                    "EMAIL" if c.emails.len() < 50 => {
+                    "EMAIL" if c.emails.len() < MAX_CARD_EMAILS => {
                         let t = Typed { value: value.trim().to_string(), kind: kind(&params) };
                         keep_written(c, "EMAIL", &t.value, &raw, &params);
                         c.emails.push(t);
                     }
-                    "TEL" if c.phones.len() < 50 => {
+                    "TEL" if c.phones.len() < MAX_CARD_PHONES => {
                         let v = value.trim();
                         let t = Typed { value: v.strip_prefix("tel:").unwrap_or(v).to_string(), kind: kind(&params) };
                         keep_written(c, "TEL", &t.value, &raw, &params);
@@ -433,7 +440,7 @@ pub fn parse(text: &str) -> Vec<Card> {
                         }
                     }
                     "NOTE" => c.note = components(value).join(";"),
-                    "ADR" if c.addresses.len() < 20 => {
+                    "ADR" if c.addresses.len() < MAX_CARD_ADDRESSES => {
                         let a = components(value);
                         let part = |i: usize| a.get(i).map(|x| x.trim().to_string()).unwrap_or_default();
                         let street = [part(0), part(1), part(2)].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("\n");

@@ -663,7 +663,7 @@ pub(super) fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Resul
         let had = std::mem::take(&mut c.emails);
         c.emails = e
             .into_iter()
-            .take(20)
+            .take(quatrelle_model::vcard::MAX_CARD_EMAILS)
             .map(|mut t| {
                 if bare && let Some(old) = had.iter().find(|o| o.value == t.value) {
                     t.kind.clone_from(&old.kind);
@@ -673,7 +673,7 @@ pub(super) fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Resul
             .collect();
     }
     if let Some(ph) = typed("phones") {
-        c.phones = ph.into_iter().take(20).collect();
+        c.phones = ph.into_iter().take(quatrelle_model::vcard::MAX_CARD_PHONES).collect();
     }
     c.drop_unused_lines();
     if let Some(list) = v.get("addresses").and_then(Value::as_array) {
@@ -690,7 +690,7 @@ pub(super) fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Resul
                 country: field(a, "country"),
             })
             .filter(|a| !a.is_empty())
-            .take(10)
+            .take(quatrelle_model::vcard::MAX_CARD_ADDRESSES)
             .collect();
     }
     if let Some(b) = p::str(v, "birthday") {
