@@ -86,3 +86,16 @@ fn the_log_names_a_setting_and_never_its_value() {
     assert!(said.iter().all(|l| !l.contains("zoe@studio.example") && !l.contains("studio")), "no value in the log: {said:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A list with one item this version can't read (a newer version's) keeps the others, and what
+/// is saved next still has that item, as it was, in its place.
+#[test]
+fn a_list_with_an_unreadable_item_is_saved_whole() {
+    let (mut a, dir) = app("saved-list-unread-item");
+    let newer = json!({"name": "Later", "keyword": "later", "color": {"a": "newer"}, "icon": "star"});
+    a.restore_state(&json!({"prefs": {"categories": [{"name": "Plans", "keyword": "plans", "color": 3}, newer.clone()]}}));
+    assert_eq!(a.session.prefs.categories.len(), 1);
+    let again = a.saved_state();
+    assert_eq!(again["prefs"]["categories"], json!([{"name": "Plans", "keyword": "plans", "color": 3}, newer]));
+    let _ = std::fs::remove_dir_all(dir);
+}

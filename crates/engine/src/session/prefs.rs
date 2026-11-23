@@ -286,6 +286,11 @@ pub struct Prefs {
     /// File › Options › Teams. Read from the settings as saved; at first (none saved), off with
     /// the ids of a local build. Always saved: ids the user erased stay erased.
     pub teams: quatrelle_model::pim::teams::TeamsSettings,
+    /// The items of saved lists that this version couldn't read (written by a newer one), as
+    /// they were, by list name and place: put back where they were when the settings are saved
+    /// again ([`Prefs::to_saved`]), so what a newer version saved isn't lost. Never saved itself.
+    #[serde(skip)]
+    pub(crate) unread_items: BTreeMap<String, Vec<(usize, Value)>>,
 }
 
 impl Default for Prefs {
@@ -363,6 +368,7 @@ impl Default for Prefs {
             scam_accounts: BTreeSet::new(),
             scam_daily_cap: crate::session::DEFAULT_CAP,
             teams: super::pim::default_teams_settings(),
+            unread_items: BTreeMap::new(),
             quick_steps: Vec::new(),
             quick_steps_seeded: false,
             folder_pane_minimized: false,

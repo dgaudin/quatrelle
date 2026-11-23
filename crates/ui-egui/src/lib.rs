@@ -599,7 +599,7 @@ impl MailApp {
 
     /// Preferences and theme for the app to save.
     pub fn saved_state(&self) -> Value {
-        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns, "envelope": self.session.envelope_keys() })
+        json!({ "prefs": self.session.prefs.to_saved(), "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns, "envelope": self.session.envelope_keys() })
     }
 
     pub fn restore_state(&mut self, v: &Value) {
@@ -608,7 +608,11 @@ impl MailApp {
         // serde's words about it, could be an address.
         if let Some((p, unread)) = v.get("prefs").and_then(quatrelle_engine::Prefs::from_saved) {
             if !unread.is_empty() {
-                log::warn!("{} saved settings couldn't be read and start from their defaults: {}", unread.len(), unread.join(", "));
+                log::warn!(
+                    "{} saved settings or list items couldn't be read (a setting starts from its default, a list item is kept as it was and saved again): {}",
+                    unread.len(),
+                    unread.join(", ")
+                );
             }
             let offline = p.work_offline;
             self.session.prefs = p;
