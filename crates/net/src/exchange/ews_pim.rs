@@ -442,8 +442,9 @@ fn shortcut_of(it: &El) -> Option<(String, String, String)> {
         return None;
     }
     let dn = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b))?;
-    let name = text("0x0E1D").map(str::trim).filter(|n| !n.is_empty()).unwrap_or_default().to_string();
-    let group = text("0x6851").unwrap_or_default().trim().to_string();
+    // As a folder's name: a length the Calendar pane can show.
+    let name = text("0x0E1D").map(str::trim).filter(|n| !n.is_empty()).unwrap_or_default().chars().take(255).collect::<String>();
+    let group = text("0x6851").unwrap_or_default().trim().chars().take(255).collect::<String>();
     Some((dn, name, group))
 }
 
@@ -638,6 +639,7 @@ use push::{answer_pending, push_events};
 use sync::read_calendar;
 pub use sync::{sync, sync_calendars, sync_changes, sync_tasks};
 use tasks::read_tasks;
+pub use tasks::task_of;
 
 #[cfg(test)]
 mod tests;

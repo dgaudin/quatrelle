@@ -62,10 +62,13 @@ fuzz_target!(|data: &[u8]| {
         let _ = c.dele(1);
         let _ = c.quit();
     }
-    // A whole download: the same answers, read by the session the account opens.
+    // A whole download: the same answers, read by the session the account opens. The download
+    // is quadratic by design (the folder and its state are saved after every message), so it
+    // gets the first 16 KiB only; the session above already reads all of the input.
     let store = Store::memory();
     let _ = pop::folders(&store, "p1");
-    if let Ok(mut c) = Client::greet(Server { data }) {
+    let download = &data[..data.len().min(16 << 10)];
+    if let Ok(mut c) = Client::greet(Server { data: download }) {
         let keep = Keep { remove_now: false, days: Some(14), with_trash: true };
         let _ = pop::fetch_new(&mut c, &store, "p1", "INBOX", &keep, 1_000_000);
         let _ = c.quit();

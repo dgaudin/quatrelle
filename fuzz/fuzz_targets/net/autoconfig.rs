@@ -8,6 +8,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use quatrelle_model::Security;
+use quatrelle_model::addr::trust::site;
 use quatrelle_net::autoconfig::{at_microsoft_365, base_domain, discover_with, parse_config, Lookups};
 
 /// A host name, as the account settings may carry one.
@@ -43,15 +44,46 @@ fuzz_target!(|data: &[u8]| {
             );
         }
     }
-    // The lookups a network hands back: the same file for every address asked, mail exchangers
-    // and services named by the input. The address is made up; nothing leaves this process.
+    // The lookups a network hands back: mail exchangers and services named by the input, and
+    // the file answered only for the families the first byte selects (1: the domain's own
+    // HTTPS, 2: the ISP database about the domain, 4: the provider's own configuration,
+    // 8: the Autodiscover host). The address is made up; nothing leaves this process.
+    let selector = data.first().copied().unwrap_or(0);
     let hosts: Vec<String> = text.lines().take(64).map(|l| l.trim().chars().take(253).collect::<String>()).filter(|l| !l.is_empty()).collect();
-    let mut fetch = |_: &str| Some(text.to_string());
+    let family = |url: &str| -> u8 {
+        if url.starts_with("https://autoconfig.studio.example/") || url.starts_with("https://studio.example/.well-known/") {
+            1
+        } else if url.starts_with("https://autoconfig.thunderbird.net/") {
+            2
+        } else if url.starts_with("https://autoconfig.") {
+            4
+        } else {
+            8
+        }
+    };
+    let mut fetch = |url: &str| (selector & family(url) != 0).then(|| text.to_string());
     let mut mx = |_: &str| hosts.clone();
     let mut srv = |_: &str| hosts.first().map(|h| (h.clone(), 993));
     let found = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut mx, srv: &mut srv });
     if let Some(found) = &found {
         check_found(found);
+        // A server reached through a DNS answer (the mail exchanger, a service, Autodiscover)
+        // is marked unless it is on the address's own site; what the domain itself serves over
+        // HTTPS, or the ISP database about the domain, is not. Microsoft 365 keeps the mark of
+        // the IMAP settings it keeps beside it.
+        let own_site = site("studio.example");
+        let off_site = [Some(&found.config.imap), Some(&found.config.smtp), found.config.pop.as_ref()]
+            .into_iter()
+            .flatten()
+            .any(|s| site(&s.host) != own_site);
+        let direct = (selector & 1 != 0 && found.source == "studio.example") || (selector & 2 != 0 && found.source == "the ISP database");
+        if found.source.contains("Microsoft 365") {
+            if selector & 1 == 0 && site(&found.config.imap.host) != own_site {
+                assert!(found.unverified, "{found:?}");
+            }
+        } else if !direct && off_site {
+            assert!(found.unverified, "{found:?}");
+        }
         // What a provider's own answer says of Microsoft 365 is Microsoft's alone.
         let _ = at_microsoft_365(&hosts, Some(found.config.imap.host.as_str()));
     }

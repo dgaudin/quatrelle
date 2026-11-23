@@ -10,7 +10,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use quatrelle_net::ews;
-use quatrelle_net::{card_of, event_of, exception_of, note_of, own_organizer, shortcuts_listed};
+use quatrelle_net::{card_of, event_of, exception_of, note_of, own_organizer, shortcuts_listed, task_of};
 
 fuzz_target!(|data: &[u8]| {
     let text = String::from_utf8_lossy(data);
@@ -35,6 +35,10 @@ fuzz_target!(|data: &[u8]| {
         }
         let _ = card_of(it);
         let _ = note_of(it);
+        if let Some(t) = task_of(it) {
+            assert!(t.href.starts_with("task:"));
+            assert!(t.task.categories.len() <= 64 * 1024);
+        }
         // The account's own response as the organizer of its meetings.
         if let Some(mut e) = event_of(it) {
             own_organizer(&mut e, it, "zoe@studio.example");

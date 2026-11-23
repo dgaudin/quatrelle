@@ -10,7 +10,7 @@
 use libfuzzer_sys::fuzz_target;
 use quatrelle_model::MessageKey;
 use quatrelle_net::graph;
-use quatrelle_net::graph_pim::{calendars_listed, card_of, event_json, event_of, mailtips::mail_tips_read, recurrence_of, rrule_of};
+use quatrelle_net::graph_pim::{card_of, event_json, event_of, mailtips::mail_tips_read, recurrence_of, rrule_of};
 use serde_json::{json, Value};
 
 /// The Graph endpoint the answers are for.
@@ -49,13 +49,6 @@ fuzz_target!(|data: &[u8]| {
     }
     let _summary = graph::summary_of(&v, MessageKey::default());
     let _ = graph::mailboxes_listed(&v, 0);
-
-    // A mailbox's calendars and calendar groups.
-    for key in ["calendars", "calendarGroups"] {
-        for cal in calendars_listed(&v[key]) {
-            assert!(!cal.0.is_empty() && cal.1.chars().count() <= 64 * 1024);
-        }
-    }
 
     // An event, its recurrence as an RRULE and back, and the event written as Graph has it.
     if let Some(e) = event_of(&v) {

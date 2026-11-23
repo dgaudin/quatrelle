@@ -707,3 +707,9 @@ impl Client {
         Ok((crate::picture_media(&bytes).to_string(), bytes))
     }
 }
+/// An item's list entry from its details (its marks, its header block, its received time), read
+/// as hostile XML. For the fuzz target.
+#[doc(hidden)]
+pub fn summary_listed(it: &El) -> Summary {
+    super::sync::item_summary(it, MessageKey::default())
+}
