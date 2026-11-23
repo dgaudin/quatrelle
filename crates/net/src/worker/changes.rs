@@ -9,6 +9,7 @@ mod archive;
 mod filing;
 mod pending_drafts;
 mod recovering;
+mod remote;
 mod rules;
 
 /// How many times in all an IMAP change is tried when the server keeps refusing it for now
@@ -30,6 +31,8 @@ pub(super) use archive::archive_here;
 pub(super) use archive::copy_checked;
 pub(super) use filing::{file_here, file_name};
 pub(super) use pending_drafts::{PENDING_DRAFTS, PendingDraft, forget_draft, keep_draft};
+use remote::expunge_keys;
+pub use remote::{apply_remote, apply_remote_with};
 
 impl Worker {
     pub(super) fn handle(&mut self, job: Job) {
