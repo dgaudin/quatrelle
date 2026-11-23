@@ -10,6 +10,7 @@ use quatrelle_model::{AccountConfig, EmailAddress, Flags, Folder, FolderRole, Me
 use quatrelle_store::{FolderState, Store, StoreError};
 
 pub mod big;
+mod kinds;
 mod pim;
 pub use pim::sample_pim;
 
@@ -639,6 +640,16 @@ pub fn seed_if_empty_at(store: &Store, now: i64, offset: i64) -> Result<bool, St
             summary.voting = VOTE_CHOICES.iter().map(|c| (*c).to_string()).collect();
         }
         st.messages.push(summary);
+    }
+    // Reports, receipts, an automatic reply and meeting mail in Projects: what a row says it is.
+    for (n, (raw, flags)) in kinds::mails().into_iter().enumerate() {
+        let Some((path, st)) = states.iter_mut().find(|(p, _)| p == "Projects") else { break };
+        let key = MessageKey { account: SAMPLE_ACCOUNT.into(), folder: path.clone(), validity: 1, uid: st.uid_next };
+        st.uid_next += 1;
+        let date = now - 60 * 60 * 24 * 3 - i64::try_from(n).unwrap_or(0) * 60;
+        let raw = raw.into_bytes();
+        store.write_body(&key, &raw)?;
+        st.messages.push(mime::summary_from_full(&raw, key, flags, u32::try_from(raw.len()).unwrap_or(u32::MAX), date));
     }
     let mut folders = folders;
     for (path, st) in &mut states {

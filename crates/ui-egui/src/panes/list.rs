@@ -231,7 +231,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 }
                 Row::Message { index, count, unread } => {
                     let Some(m) = s.list.get(*index) else { continue };
-                    if previews && s.preview_wanted(m) {
+                    if previews && s.source_wanted(m) {
                         st.want_previews.push(m.key.clone());
                     }
                     let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, mh));

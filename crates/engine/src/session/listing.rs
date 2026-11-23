@@ -4,6 +4,7 @@
 //! The message list: what it shows, its filters, how it's arranged, and its rows.
 
 use super::*;
+use quatrelle_model::{ListIcon, MessageKind};
 
 /// What the message list shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,10 +272,15 @@ const PREVIEWS_KEPT: usize = 5_000;
 /// brings it meanwhile).
 const PREVIEW_AGAIN_SECS: i64 = 60;
 
-/// A list row's preview, worked out from its source.
+/// The longest source read for the kind it tells; a bigger one is taken as a plain message
+/// (as the transports do).
+const KIND_SOURCE_MAX: usize = 8 << 20;
+
+/// What a list row's source on this computer gave: its preview, and what kind of message it is.
 #[derive(Clone, Debug)]
 pub(super) enum Preview {
-    Text(String),
+    /// The preview (empty when the row came with one) and the kind of message.
+    Read { text: String, kind: MessageKind },
     /// No source on this computer when looked (at that time).
     Missing(i64),
 }
@@ -287,26 +293,62 @@ impl Session {
             return &m.preview;
         }
         match self.previews.get(&m.key) {
-            Some(Preview::Text(p)) => p,
+            Some(Preview::Read { text, .. }) => text,
             _ => "",
         }
     }
 
     /// Whether a row's preview is still to be worked out from its source.
     pub fn preview_wanted(&self, m: &Summary) -> bool {
-        m.preview.is_empty()
+        m.preview.is_empty() && self.source_wanted(m)
+    }
+
+    /// Whether a row's source is still to be read, for its preview or for its kind (a message
+    /// kept as it came, with nothing said of what it is): never the Outbox's, nor a row read
+    /// already; one whose source wasn't here is looked at again after a minute.
+    pub fn source_wanted(&self, m: &Summary) -> bool {
+        (m.preview.is_empty() || m.kind.is_unknown())
             && m.key.folder != OUTBOX
             && match self.previews.get(&m.key) {
                 None => true,
-                Some(Preview::Text(_)) => false,
+                Some(Preview::Read { .. }) => false,
                 Some(Preview::Missing(at)) => self.clock.now.saturating_sub(*at) >= PREVIEW_AGAIN_SECS,
             }
     }
 
-    /// Work out the previews of rows shown without one from their sources here, as Outlook
+    /// What kind of message a row is: the one its list entry has, else the one read from its
+    /// source here ([`Session::fill_previews`]), else [`MessageKind::Unknown`].
+    pub fn kind_of(&self, m: &Summary) -> MessageKind {
+        if !m.kind.is_unknown() {
+            return m.kind;
+        }
+        match self.previews.get(&m.key) {
+            Some(Preview::Read { kind, .. }) => *kind,
+            _ => MessageKind::Unknown,
+        }
+    }
+
+    /// The one icon a row shows (`with_smime` as in [`Summary::list_icon`]).
+    pub fn list_icon(&self, m: &Summary, with_smime: bool) -> Option<ListIcon> {
+        quatrelle_model::list_icon(&m.flags, self.kind_of(m), m.smime, with_smime)
+    }
+
+    /// Everything true of a row, by priority (what its icon's tooltip says).
+    pub fn list_said(&self, m: &Summary) -> Vec<ListIcon> {
+        quatrelle_model::list_said(&m.flags, self.kind_of(m), m.smime)
+    }
+
+    /// How many rows' sources were looked at, found or not (what the tests of the cost count).
+    #[cfg(test)]
+    pub(crate) fn sources_looked_at(&self) -> usize {
+        self.previews.len()
+    }
+
+    /// Work out the previews and kinds of rows shown from their sources here, as Outlook
     /// writes a message's preview from its offline copy for the rows it draws: mail downloaded
-    /// ahead comes without one (a big folder's list isn't written again for it). A few at a
-    /// time; whether some of `keys` are left.
+    /// ahead comes without one (a big folder's list isn't written again for it), and mail kept
+    /// as it came says nothing of what it is. In memory only, a few at a time; whether some of
+    /// `keys` are left.
     pub fn fill_previews(&mut self, keys: &[MessageKey]) -> bool {
         let Some(store) = self.store.clone() else { return false };
         if self.previews.len() >= PREVIEWS_KEPT {
@@ -328,8 +370,22 @@ impl Session {
             };
             done += 1;
             bytes = bytes.saturating_add(raw.len());
+            // The row as listed: with a preview it keeps it, with a kind it keeps it.
+            let (has_preview, said) = match self.list.iter().find(|m| m.key.uid == key.uid && m.key == *key) {
+                Some(m) => (!m.preview.is_empty(), m.kind),
+                None => (false, MessageKind::Unknown),
+            };
             // As its summary would have it, had it come whole: not a full parse (laid out).
-            self.previews.insert(key.clone(), Preview::Text(mime::preview_from_source(&raw)));
+            let text = if has_preview { String::new() } else { mime::preview_from_source(&raw) };
+            let kind = if !said.is_unknown() {
+                said
+            } else if raw.len() > KIND_SOURCE_MAX {
+                MessageKind::Plain
+            } else {
+                // A parser of strangers' bytes, kept from taking the window down.
+                std::panic::catch_unwind(|| mime::message_kind(&raw)).unwrap_or(MessageKind::Plain)
+            };
+            self.previews.insert(key.clone(), Preview::Read { text, kind });
         }
         false
     }

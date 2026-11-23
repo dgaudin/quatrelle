@@ -361,6 +361,144 @@ fn rows_downloaded_ahead_get_their_preview_from_the_source() {
     done(s);
 }
 
+/// A report, an invitation, an ordinary message: the sources the rows below are read from.
+fn kind_source(what: &str) -> String {
+    match what {
+        "failed" => "From: postmaster@studio.example\r\nTo: me@studio.example\r\nContent-Type: multipart/report; report-type=delivery-status; boundary=b\r\n\r\n\
+            --b\r\nContent-Type: text/plain\r\n\r\nNot delivered.\r\n\
+            --b\r\nContent-Type: message/delivery-status\r\n\r\nReporting-MTA: dns; mx.studio.example\r\n\r\nFinal-Recipient: rfc822; a@x.example\r\nAction: failed\r\nStatus: 5.0.0\r\n\r\n--b--\r\n"
+            .to_string(),
+        "request" => "From: zoe@studio.example\r\nTo: me@studio.example\r\nContent-Type: text/calendar; method=REQUEST\r\n\r\n\
+            BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:1@studio.example\r\nDTSTART:20261201T100000Z\r\nDTEND:20261201T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+            .to_string(),
+        _ => "From: a@x.example\r\nSubject: Hello\r\n\r\nThe figures.\r\n".to_string(),
+    }
+}
+
+/// Mail already on this computer comes without saying what it is (a vintage IMAP message, a
+/// `.msg`): the rows drawn say it from their sources, a few at a time, in memory only; a row that
+/// is known already is never read.
+#[test]
+fn rows_shown_take_their_kind_from_their_source_a_few_at_a_time() {
+    use quatrelle_model::{ListIcon, MessageKind};
+    let store = temp("row-kinds");
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    let inbox =
+        quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    store.save_folders("a1", &[inbox]).unwrap();
+    let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let mut st = quatrelle_store::FolderState { validity: 1, uid_next: 13, ..Default::default() };
+    for uid in 1..=12u32 {
+        let kind = match uid {
+            3 => MessageKind::Plain,
+            4 => MessageKind::MeetingCanceled,
+            _ => MessageKind::Unknown,
+        };
+        st.messages.push(Summary {
+            key: key(uid),
+            subject: format!("Row {uid}"),
+            date: NOW - i64::from(uid),
+            preview: "Listed".into(),
+            kind,
+            ..Default::default()
+        });
+        let what = match uid {
+            1 => "failed",
+            2 => "request",
+            // The two without a source, and the two settled rows (whose source would say another thing).
+            9 | 12 => continue,
+            3 | 4 => "failed",
+            _ => "plain",
+        };
+        store.write_body(&key(uid), kind_source(what).as_bytes()).unwrap();
+    }
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.run("folder.open", &json!({"account": "a1", "folder": "INBOX"})).unwrap();
+    let row = |s: &Session, uid| s.list.iter().find(|m| m.key == key(uid)).map(|m| (**m).clone()).unwrap_or_default();
+    let wanted = |s: &Session| s.list.iter().filter(|m| s.source_wanted(m)).map(|m| m.key.clone()).collect::<Vec<_>>();
+    assert_eq!(wanted(&s).len(), 10, "those already settled are never read");
+    assert!(s.fill_previews(&wanted(&s)), "six at a time: some are left");
+    assert!(!s.fill_previews(&wanted(&s)));
+    assert!(wanted(&s).is_empty(), "the two without a source wait a minute");
+    assert_eq!(s.sources_looked_at(), 10, "the two settled rows weren't looked at");
+    assert_eq!(s.list_icon(&row(&s, 1), true), Some(ListIcon::Kind(MessageKind::NotDelivered)));
+    assert_eq!(s.list_icon(&row(&s, 2), true), Some(ListIcon::Kind(MessageKind::MeetingRequest)));
+    assert_eq!((s.kind_of(&row(&s, 3)), s.list_icon(&row(&s, 3), true)), (MessageKind::Plain, None));
+    assert_eq!(s.kind_of(&row(&s, 4)), MessageKind::MeetingCanceled);
+    assert_eq!(s.kind_of(&row(&s, 5)), MessageKind::Plain);
+    assert_eq!(s.kind_of(&row(&s, 9)), MessageKind::Unknown);
+    // Nothing was written: the cache still says "not worked out yet".
+    assert!(store.load_folder("a1", "INBOX").unwrap().messages.iter().filter(|m| m.kind.is_unknown()).count() == 10);
+    s.set_clock(NOW + 61, 0);
+    assert_eq!(wanted(&s).len(), 2);
+    done(s);
+}
+
+/// A source bigger than 8 MB isn't read for its kind: the row is taken as a plain message.
+#[test]
+fn a_huge_source_is_not_read_for_its_kind() {
+    use quatrelle_model::MessageKind;
+    let store = temp("row-kinds-huge");
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    let inbox =
+        quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    store.save_folders("a1", &[inbox]).unwrap();
+    let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let mut st = quatrelle_store::FolderState { validity: 1, uid_next: 3, ..Default::default() };
+    for uid in 1..=2u32 {
+        st.messages.push(Summary { key: key(uid), subject: format!("Row {uid}"), date: NOW, preview: "Listed".into(), ..Default::default() });
+    }
+    // The same report, padded: 9 MB for one, a few bytes for the other.
+    let small = kind_source("failed");
+    let big = small.replacen("Not delivered.", &"x".repeat(9 << 20), 1);
+    store.write_body(&key(1), big.as_bytes()).unwrap();
+    store.write_body(&key(2), small.as_bytes()).unwrap();
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.run("folder.open", &json!({"account": "a1", "folder": "INBOX"})).unwrap();
+    let row = |s: &Session, uid| s.list.iter().find(|m| m.key == key(uid)).map(|m| (**m).clone()).unwrap_or_default();
+    for _ in 0..4 {
+        let keys: Vec<_> = s.list.iter().filter(|m| s.source_wanted(m)).map(|m| m.key.clone()).collect();
+        s.fill_previews(&keys);
+    }
+    assert_eq!(s.kind_of(&row(&s, 2)), MessageKind::NotDelivered);
+    assert_eq!(s.kind_of(&row(&s, 1)), MessageKind::Plain, "too big to be read for its kind");
+    done(s);
+}
+
+/// The sample Projects folder holds a message of every kind a source can say, and one replied to all: the
+/// rows read from their sources show each of them.
+#[test]
+fn the_sample_mailbox_shows_every_kind() {
+    use quatrelle_model::{ListIcon, MessageKind as K};
+    let mut s = sample_session("sample-kinds");
+    s.run("folder.open", &json!({"account": "sample", "folder": "Projects"})).unwrap();
+    for _ in 0..100 {
+        let keys: Vec<_> = s.list.iter().filter(|m| s.source_wanted(m)).map(|m| m.key.clone()).collect();
+        if !s.fill_previews(&keys) {
+            break;
+        }
+    }
+    let icons: Vec<_> = s.list.iter().filter_map(|m| s.list_icon(m, true)).collect();
+    for k in [
+        K::NotDelivered,
+        K::Delayed,
+        K::Delivered,
+        K::ReadReceipt,
+        K::NotRead,
+        K::AutoReply,
+        K::MeetingCanceled,
+        K::MeetingAccepted,
+        K::MeetingTentative,
+        K::MeetingDeclined,
+    ] {
+        assert!(icons.contains(&ListIcon::Kind(k)), "{k:?}");
+    }
+    assert!(icons.contains(&ListIcon::RepliedAll));
+    done(s);
+}
+
 /// Outlook's Folder Size: each side is asked for where it can be answered (Exchange tells each
 /// folder's size, an IMAP server doesn't), and each answer fills its own side; one for an
 /// account no longer looked at is dropped.
