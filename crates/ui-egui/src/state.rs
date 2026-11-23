@@ -16,6 +16,11 @@ pub struct UiState {
     /// The window's GPU device is gone: nothing is drawn any more, and Quatrelle closes
     /// ([`MailApp::graphics_lost`]).
     pub graphics_lost: bool,
+    /// How the frames run under the guard have gone ([`MailApp::frame_part_ended`]).
+    pub(crate) caught: app::FrameGuard,
+    /// Where the drawing is made to panic (the guard's tests).
+    #[cfg(test)]
+    pub(crate) test_panic: Option<app::PanicAt>,
     pub close_now: bool,
     /// The window was closed while Compact Now had a data file to itself: it closes once that's
     /// done (stopped then, the file would be gone through whole at the next start).

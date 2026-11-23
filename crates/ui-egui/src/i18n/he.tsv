@@ -2428,3 +2428,5 @@ presence	Offline	לא מחובר
 	What Ctrl+Enter does in a message	מה Ctrl+Enter עושה בהודעה
 	Ask first	שאל קודם
 	Does nothing	לא עושה דבר
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	אירעה שגיאה בחלון, ו-Quatrelle המשיך לפעול. ייתכן שיהיה צורך לבצע שוב את מה שעשית
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle צריך להיסגר לאחר שגיאה שלא הצליח לעבור. מה שכתבת נשמר בטיוטות

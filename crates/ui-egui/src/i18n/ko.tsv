@@ -2431,3 +2431,5 @@ presence	Offline	오프라인
 	What Ctrl+Enter does in a message	메시지에서 Ctrl+Enter의 동작
 	Ask first	먼저 묻기
 	Does nothing	아무것도 안 함
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	창에서 문제가 발생했지만 Quatrelle은 계속 실행되었습니다. 하던 작업을 다시 해야 할 수 있습니다
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle이 해결할 수 없는 오류가 발생하여 종료해야 합니다. 작성 중이던 내용은 임시 보관함에 저장되어 있습니다

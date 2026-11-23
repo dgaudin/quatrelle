@@ -2435,3 +2435,5 @@ presence	Offline	離線
 	What Ctrl+Enter does in a message	郵件中 Ctrl+Enter 的作用
 	Ask first	先詢問
 	Does nothing	不執行任何動作
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	視窗中發生問題，Quatrelle 已繼續執行。您正在進行的操作可能需要重做
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle 遇到無法越過的錯誤，必須關閉。您正在撰寫的內容已保存在草稿中

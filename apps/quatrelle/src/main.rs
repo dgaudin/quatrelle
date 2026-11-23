@@ -46,7 +46,7 @@ use quatrelle_engine::model::dates::Clock;
 use quatrelle_engine::model::{Event, Job};
 use quatrelle_engine::store::{Store, location};
 use quatrelle_net::worker::{Credentials, Pool};
-use quatrelle_ui_egui::{Backend, MailApp, Services};
+use quatrelle_ui_egui::{Backend, FramePart, MailApp, Services};
 
 #[cfg(target_os = "macos")]
 mod apple_events;
@@ -167,10 +167,40 @@ impl App {
     }
 }
 
+// Each part of a frame runs under the guard: a panic in it is said and Quatrelle goes on, rather
+// than ending with the messages being written (`MailApp::frame_part_ended`).
 impl eframe::App for App {
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.app.frame_part_starts(FramePart::Logic);
+        let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.logic_unguarded(ctx, frame)));
+        if self.app.frame_part_ended(ctx, FramePart::Logic, ran) {
+            self.end_after_panics();
+        }
+    }
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.app.frame_part_starts(FramePart::Ui);
+        let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.ui_unguarded(ui, frame)));
+        if self.app.frame_part_ended(ui.ctx(), FramePart::Ui, ran) {
+            self.end_after_panics();
+        }
+    }
+    fn on_exit(&mut self) {
+        self.exiting();
+    }
+}
+
+impl App {
+    /// Frames panicked three in a row and what's being written is kept in Drafts: closing as
+    /// usual, then ending here, as the window can't be drawn (or closed) any more.
+    fn end_after_panics(&mut self) -> ! {
+        log::error!("the window panicked in frame after frame: ending");
+        self.exiting();
+        std::process::exit(1)
+    }
+
     // Every frame, the window minimized or hidden too (when eframe runs no `ui`): started again,
     // this window comes forward instead of a second one, and opens what that launch handed over.
-    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic_unguarded(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.pacing.frame(ctx);
         // The GPU device is gone (a driver reset after a sleep): what's being written is kept as
         // drafts and Quatrelle closes, as nothing can be drawn any more.
@@ -194,7 +224,7 @@ impl eframe::App for App {
         #[cfg(target_os = "macos")]
         MailApp::quit_instead_of_close(ctx, apple_events::quit);
     }
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+    fn ui_unguarded(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         // Nothing is drawn with a lost device (egui-wgpu would panic making its buffers).
         if self.app.ui.graphics_lost {
             return;
@@ -219,11 +249,11 @@ impl eframe::App for App {
         {
             // The window wouldn't close by itself: end here, the state kept as closing keeps it.
             log::warn!("the window didn't close once its picture was saved: ending");
-            self.on_exit();
+            self.exiting();
             std::process::exit(0);
         }
     }
-    fn on_exit(&mut self) {
+    fn exiting(&mut self) {
         // A Webex or Teams meeting an open appointment window leaves unsaved goes first; with none,
         // this adds no wait. Past the limit it stays there, as after a crash: harmless. Teams first,
         // as Webex takes the windows; `|` asks both each turn.

@@ -2433,3 +2433,5 @@ presence	Offline	Не в сети
 	What Ctrl+Enter does in a message	Что делает Ctrl+Enter в сообщении
 	Ask first	Сначала спрашивать
 	Does nothing	Ничего не делает
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	В окне произошла ошибка, но Quatrelle продолжил работу. Возможно, то, что вы делали, придётся повторить
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle должен закрыться из-за ошибки, которую не удалось преодолеть. То, что вы писали, сохранено в черновиках

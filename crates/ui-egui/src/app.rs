@@ -24,6 +24,12 @@ pub(crate) use actions::cleaned_on_written_host;
 pub use alt_code::{alt_code_pages, alt_codes};
 pub(crate) use costs::Merging;
 pub(crate) use file_dialogs::FileDialogs;
+pub(crate) use frame::FrameGuard;
+pub use frame::FramePart;
+#[cfg(test)]
+pub(crate) use frame::PanicAt;
+#[cfg(test)]
+pub(crate) use frame::guarded_window;
 pub(crate) use keys::delete_from_window;
 #[cfg(test)]
 pub(crate) use meetings::{PageOutcome, ProfileKind, page_line};

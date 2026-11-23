@@ -7,6 +7,14 @@ use crate::*;
 
 use super::ribbon::RIBBON_H;
 
+mod guard;
+pub(crate) use guard::FrameGuard;
+pub use guard::FramePart;
+#[cfg(test)]
+pub(crate) use guard::PanicAt;
+#[cfg(test)]
+pub(crate) use guard::guarded_window;
+
 impl MailApp {
     /// Every wake, the window shown or not. eframe runs no `ui` while the window is minimized,
     /// hidden or covered, only this: the workers' news is taken in, new mail and reminders are
@@ -14,6 +22,8 @@ impl MailApp {
     /// announced nothing (and synced nothing new into view) until it was shown again.
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.ui.logic_ran = true;
+        #[cfg(test)]
+        self.panic_at(PanicAt::Logic);
         // An update ready while the window is minimized or behind others: the system says so
         // (and a close below says what becomes of it).
         self.follow_update(ctx);
@@ -117,16 +127,23 @@ impl MailApp {
         }
         self.ui.graphics_lost = true;
         log::error!("graphics: the window can't be drawn any more; keeping what's being written as drafts and closing");
-        match self.session.run("compose.keepAll", &json!({})) {
-            Ok(v) => log::info!("graphics: {} message(s) being written kept as drafts", v["kept"]),
+        match self.keep_written_now() {
+            Ok(kept) => log::info!("graphics: {kept} message(s) being written kept as drafts"),
             Err(e) => log::error!("graphics: the messages being written couldn't be kept as drafts: {e}"),
         }
-        // Handed over now: a draft kept is written to the disk as the job is taken.
-        self.flush_jobs();
         self.ui.dialog = None;
         self.ui.closing_anyway = true;
         self.ui.close_now = true;
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    /// Every message being written kept as a draft the way a close keeps it (`compose.keepAll`),
+    /// and its jobs handed over now: a draft kept is written to the disk as the job is taken. How
+    /// many were kept.
+    fn keep_written_now(&mut self) -> Result<u64, String> {
+        let kept = self.session.run("compose.keepAll", &json!({})).map(|v| v["kept"].as_u64().unwrap_or(0));
+        self.flush_jobs();
+        kept.map_err(|e| e.to_string())
     }
 
     /// Closing with messages being written, online-only accounts' unsent mail or changes held in
@@ -604,6 +621,10 @@ impl MailApp {
         }
         // A message window's own dialogs show in that window.
         let in_window = self.session.compose.as_ref().is_some_and(|c| !compose_inline(c, &ctx));
+        #[cfg(test)]
+        if self.ui.dialog.is_some() {
+            self.panic_at(PanicAt::Dialog);
+        }
         if let Some(mut d) = self.ui.dialog.take() {
             if in_window && d.for_compose() {
                 self.ui.dialog = Some(d);

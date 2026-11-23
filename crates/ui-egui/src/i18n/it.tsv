@@ -2431,3 +2431,5 @@ presence	Offline	Offline
 	What Ctrl+Enter does in a message	Cosa fa Ctrl+Invio in un messaggio
 	Ask first	Chiedi prima
 	Does nothing	Non fa nulla
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	Si è verificato un errore nella finestra e Quatrelle è andato avanti. Potrebbe essere necessario ripetere ciò che stavi facendo
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle deve chiudersi dopo un errore che non è riuscito a superare. Quello che stavi scrivendo è conservato in Bozze

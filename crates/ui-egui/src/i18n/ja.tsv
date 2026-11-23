@@ -2429,3 +2429,5 @@ presence	Offline	オフライン
 	What Ctrl+Enter does in a message	メッセージ内での Ctrl+Enter の動作
 	Ask first	最初に確認する
 	Does nothing	何もしない
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	ウィンドウでエラーが発生しましたが、Quatrelle は動作を続けました。実行していた操作をやり直す必要があるかもしれません
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle は回避できないエラーのため終了する必要があります。作成中の内容は下書きに保存されています
