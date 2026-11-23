@@ -6,6 +6,8 @@
 use super::*;
 
 mod archive;
+mod public_pages;
+mod zones;
 
 /// Gap #7: searching Exchange through EWS (`QueryString`, and a `Restriction` for the read
 /// state) for mail past the window.
@@ -61,7 +63,7 @@ fn exchanges_own_folders_are_left_out_of_the_list() {
     d.flagged_hidden.push(working);
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let mut names: Vec<String> = c.mailboxes().unwrap().into_iter().map(|m| m.name).collect();
+    let mut names: Vec<String> = c.mailboxes().unwrap().0.into_iter().map(|m| m.name).collect();
     names.sort();
     assert_eq!(names, ["2024", "Inbox", "Projects"]);
 }
@@ -115,7 +117,7 @@ fn hidden_folders_stay_out_and_an_alias_finds_the_calendar() {
     d.directory = vec![("ana@contoso.example".into(), "Ana.Lima@contoso.example".into())];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let names: Vec<String> = c.mailboxes().unwrap().into_iter().map(|m| m.name).collect();
+    let names: Vec<String> = c.mailboxes().unwrap().0.into_iter().map(|m| m.name).collect();
     assert!(names.contains(&"Projects".to_string()) && names.contains(&"Inbox".to_string()), "{names:?}");
     assert!(!names.iter().any(|n| n == "Working Set" || n == "Yammer Root"), "{names:?}");
     let pim = Pim { shared: vec!["ana@contoso.example".into()], ..Default::default() };
@@ -160,7 +162,7 @@ fn public_folders_list_under_their_own_folder_and_sync() {
     );
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let boxes = c.mailboxes().unwrap();
+    let boxes = c.mailboxes().unwrap().0;
     let names: Vec<&str> = boxes.iter().map(|m| m.name.as_str()).collect();
     assert_eq!(names, ["Inbox", "Public Folders", "Team", "Announcements"], "the room calendar isn't mail");
     let pf = boxes.iter().find(|m| m.name == "Public Folders").unwrap();
@@ -170,7 +172,7 @@ fn public_folders_list_under_their_own_folder_and_sync() {
     // Their mail syncs as any folder's.
     let store = crate::fake::tests_store("public-folders");
     let mut st = crate::jmap::State::default();
-    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap().folders;
     let news_path = folders.iter().find(|f| f.path.ends_with("Announcements")).map(|f| f.path.clone()).unwrap();
     crate::ews::sync_folder(&c, &mut st, &store, "a1", &news_path, &crate::sync::SyncOptions::default()).unwrap();
     let fs = store.load_folder("a1", &news_path).unwrap();
@@ -192,7 +194,7 @@ fn public_folders_list_under_their_own_folder_and_sync() {
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    assert_eq!(c.mailboxes().unwrap().len(), 1);
+    assert_eq!(c.mailboxes().unwrap().0.len(), 1);
 }
 
 /// A message whose source the server won't give doesn't stop the folder: the others
@@ -310,7 +312,7 @@ fn special_folders_keep_the_names_exchange_gives_them() {
     d.folder("Afgehandeld", None, None, "IPF.Note");
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap().folders;
     let named = |role: quatrelle_model::FolderRole| folders.iter().find(|f| f.role == role).map(|f| (f.path.clone(), f.display_name())).unwrap();
     assert_eq!(named(quatrelle_model::FolderRole::Inbox), ("INBOX".to_string(), "Postvak IN".to_string()));
     assert_eq!(named(quatrelle_model::FolderRole::Sent).1, "Verzonden items");
@@ -401,7 +403,7 @@ fn shared_mailboxes_open_by_themselves_or_by_hand() {
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
     c.set_shared(&["team@contoso.example".to_string(), "riley@contoso.example".to_string()]);
     let mut st = crate::jmap::State::default();
-    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap().folders;
     let paths: Vec<&str> = folders.iter().map(|f| f.path.as_str()).collect();
     // Sales collides with the account's own folder: named with its address.
     let sales_top = "Sales (sales@contoso.example)";

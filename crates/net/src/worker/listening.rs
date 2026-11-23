@@ -140,7 +140,8 @@ impl Worker {
         if self.acc.shared_online {
             return out;
         }
-        for f in &self.folders {
+        // Not one kept as it was while its mailbox doesn't list: it isn't read till it lists.
+        for f in self.folders.iter().filter(|f| !self.kept_unlisted(&f.path)) {
             // Not the online archive: it's read when opened, never listened to.
             let (Some(address), Some(id)) = (f.shared_mailbox(), self.jstate.mailboxes.get(&f.path)) else { continue };
             match out.iter_mut().find(|(a, _)| a == address) {

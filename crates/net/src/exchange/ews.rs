@@ -20,7 +20,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use quatrelle_mime as mime;
-use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
+use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
 use quatrelle_store::{FolderState, Store};
 
 use crate::http::{self, Conn, Request, Response};
@@ -134,8 +134,8 @@ pub struct Client {
     pf_replicas: RefCell<Vec<String>>,
     /// The mailbox requests are routed to (`X-AnchorMailbox`) while working in a shared mailbox.
     anchor: RefCell<Option<String>>,
-    /// Shared mailboxes added to the account by hand (their addresses).
-    shared_added: RefCell<Vec<String>>,
+    /// Shared mailboxes added to the account by hand, and the names shared ones were listed under.
+    shared_added: RefCell<shared::Added>,
     /// The shared mailboxes whose folders were listed: a request not found in this one is
     /// tried routed to them.
     shared_open: RefCell<Vec<String>>,
@@ -401,7 +401,7 @@ impl Client {
             pf_hierarchy: RefCell::new(None),
             pf_replicas: RefCell::new(Vec::new()),
             anchor: RefCell::new(None),
-            shared_added: RefCell::new(Vec::new()),
+            shared_added: RefCell::default(),
             shared_open: RefCell::new(Vec::new()),
             discovered: RefCell::new(None),
             shared_roles: RefCell::new(HashMap::new()),
@@ -792,8 +792,8 @@ pub(crate) use shared::tags_read;
 pub use shared::{ItemPolicy, tags_listed};
 use sync::restriction;
 pub use sync::{
-    AheadTodo, download_ahead, fetch_body, find_by_message_id, find_lost, find_on_server, list_folders, older, read_archive_tag, read_online, search,
-    sync_folder, sync_folder_then,
+    AheadTodo, Missed, PublicMissed, download_ahead, fetch_body, find_by_message_id, find_lost, find_on_server, list_folders, older,
+    read_archive_tag, read_online, search, sync_folder, sync_folder_then,
 };
 pub use text_first::{fetch_text, text_first};
 pub use xml::{El, esc, parse, unb64};

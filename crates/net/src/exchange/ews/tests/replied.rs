@@ -224,7 +224,7 @@ fn replies_made_before_this_version_get_their_arrow_once() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages.into_iter().find(|m| m.subject == "answered").unwrap();
     assert_eq!(m.flags.acted, jmap::utc_date("2026-10-30T09:12:00Z").unwrap(), "at the time Outlook noted");
     st.save(&store, "a1").unwrap();
-    let mut st = State::load(&store, "a1");
+    let mut st = State::load(&store, "a1").unwrap();
 
     // Started again: the Inbox isn't asked again, the other folder is (two pages).
     for f in folders {

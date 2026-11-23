@@ -632,38 +632,7 @@ impl Session {
             build_sha: None,
             update: UpdateCheck::NotAsked,
         };
-        s.load_rules_and_snoozes();
-        if let Some(store) = &s.store {
-            s.contacts = Contacts::load(store);
-            s.pending_marks = store
-                .load_doc::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(id, k, f)| (id, (k, f)))
-                .collect();
-            let accounts = store.load_accounts().unwrap_or_else(|e| {
-                log::warn!("accounts: {e}");
-                Vec::new()
-            });
-            for config in accounts {
-                // Online only: held in memory from the start (anything left on disk goes).
-                if config.keeps_online()
-                    && let Err(e) = store.set_online_only(&config.id, true)
-                {
-                    log::warn!("{}: couldn't be kept online only: {e}", config.id);
-                }
-                let mut folders = store.load_folders(&config.id).unwrap_or_default();
-                // A folder belongs to the account it's kept with (a data file brought in from
-                // another account once kept that one's name).
-                for f in &mut folders {
-                    if f.account != config.id {
-                        f.account.clone_from(&config.id);
-                    }
-                }
-                sort_folders(&mut folders);
-                s.accounts.push(AccountState { config, folders, status: SyncStatus::Offline, quota: None, vacation: VacationState::Unknown });
-            }
-        }
+        s.load_documents();
         let mut local = Vec::new();
         for a in &s.accounts {
             if a.is_local() {

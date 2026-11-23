@@ -198,7 +198,12 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 respond(&mut s, 200, &[], answer.as_bytes());
                 continue;
             }
-            // The account's: its server, and its public folder hierarchy mailbox.
+            // The account's (unless scripted to fail): its server, and its public folder hierarchy
+            // mailbox.
+            if shared.lock().unwrap().zones.discovery_fails() {
+                respond(&mut s, 500, &[], b"");
+                continue;
+            }
             let public =
                 hierarchy.map(|h| format!("<PublicFolderInformation><SmtpAddress>{h}</SmtpAddress></PublicFolderInformation>")).unwrap_or_default();
             // Mailboxes mapped to the account (full access, automapped), as Outlook is told.
@@ -344,6 +349,12 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         let pim_changes = op.name == "SyncFolderItems"
             && (d.pim_folder(sync_of) || sync_of.and_then(|f| f.attr("Id")).is_some_and(|id| matches!(id, "calendar" | "contacts")));
         d.calls.push(if pim_changes { "SyncFolderItems pim".into() } else { op.name.clone() });
+        // The directory scripted not to answer.
+        if op.name == "ResolveNames" && d.zones.directory_silent {
+            drop(d);
+            respond(&mut s, 500, &[], b"");
+            continue;
+        }
         // Reminders (Exchange 2013 and later), under the version the request asked for.
         if super::reminders::is_reminders(&op.name) {
             let version = doc.find("RequestServerVersion").and_then(|v| v.attr("Version")).unwrap_or_default().to_string();

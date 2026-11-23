@@ -409,3 +409,208 @@ fn show_more_while_those_followed_cant_be_read_asks_for_a_few_more() {
     store.fail(None, None);
     assert_eq!(w.windows.get(path).copied(), Some(ONLINE_WINDOW + 10), "what it is to keep");
 }
+
+/// An Exchange account with two folders on the server, two messages in each.
+fn two_folders() -> (crate::fakes::fake_ews::Server, AccountConfig) {
+    use crate::fakes::fake_ews::{DOMAIN, Data, USER, serve};
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let plans = d.folder("Plans", None, None, "IPF.Note");
+    for (folder, name) in [(&plans, "plan"), (&inbox, "mail")] {
+        for i in 0..2 {
+            let raw = format!(
+                "From: zoe@studio.example\r\nTo: riley@contoso.example\r\nSubject: {name} {i}\r\nMessage-ID: <{name}{i}@studio.example>\r\n\r\nHi.\r\n"
+            );
+            d.deliver(folder, raw.as_bytes(), false, &format!("2026-10-1{i}T09:00:00Z"));
+        }
+    }
+    let server = serve(d);
+    let acc = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    (server, acc)
+}
+
+/// What the server gave of its messages so far (details or sources).
+fn downloads(server: &crate::fakes::fake_ews::Server) -> usize {
+    server.data.lock().unwrap().given_from.len()
+}
+
+/// An account read in full by a worker that is then let go: Plans first (its messages take the
+/// numbers 1 and 2, the Inbox's 3 and 4: a numbering made again would give the Inbox's other
+/// ones), a source in the Inbox downloaded.
+struct Read {
+    server: crate::fakes::fake_ews::Server,
+    acc: AccountConfig,
+    store: Store,
+    pool: Pool,
+    /// An Inbox message, its server id, and how many messages the server gave by then.
+    key: MessageKey,
+    id: String,
+    given: usize,
+}
+
+fn read_in_full() -> Read {
+    let (server, acc) = two_folders();
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = worker(acc.clone(), crate::fakes::fake_ews::PASSWORD, &store, &pool);
+    w.connect().unwrap();
+    assert!(w.relist());
+    w.sync_one("Plans");
+    w.sync_one("INBOX");
+    let key = store.load_folder("a1", "INBOX").unwrap().messages.first().map(|m| m.key.clone()).unwrap();
+    assert!(key.uid > 2, "the Inbox's numbers come after Plans': {}", key.uid);
+    assert!(store.has_body(&key), "a source of the Inbox is here");
+    let id = w.jstate.id(key.uid).unwrap();
+    let given = downloads(&server);
+    Read { server, acc, store, pool, key, id, given }
+}
+
+impl Read {
+    /// A new worker for the account, as when Quatrelle starts again.
+    fn restarted(&self) -> Worker {
+        worker(self.acc.clone(), crate::fakes::fake_ews::PASSWORD, &self.store, &self.pool)
+    }
+
+    /// Nothing of the account was numbered again, nor downloaded again.
+    fn assert_as_it_was(&self, why: &str) {
+        let uids: Vec<u32> = self.store.load_folder("a1", "INBOX").unwrap().messages.iter().map(|m| m.key.uid).collect();
+        assert!(uids.contains(&self.key.uid), "{why}: the Inbox's message was numbered again: {uids:?}");
+        assert!(self.store.has_body(&self.key), "{why}: its source went");
+        assert_eq!(downloads(&self.server), self.given, "{why}: the server gave messages again");
+    }
+}
+
+/// The account's numbering (`jmap.json`) that can't be read was taken for an empty one: at the
+/// first folder read, every message got a new number, the cache kept under the old ones was taken
+/// for gone and the whole account was downloaded again (an old number could even stand for
+/// another message). It's set aside, as it is: nothing is asked of the server, listed, read or
+/// written.
+#[test]
+fn a_numbering_that_cant_be_read_is_never_started_over() {
+    let read = read_in_full();
+    read.store.fail(Some("jmap.json"), None);
+    let mut w = read.restarted();
+    // What a worker that connected would go on to do.
+    let connected = w.connect();
+    if connected.is_ok() {
+        w.relist();
+        w.sync_one("INBOX");
+    }
+    read.store.fail(None, None);
+    read.assert_as_it_was("unreadable");
+    assert!(matches!(&connected, Err(NetError::Refused(m)) if m.contains("numbering")), "{connected:?}");
+    assert!(w.conn.is_none());
+    // Nothing is listed or read while it can't be.
+    assert!(!w.relist());
+    w.sync_one("INBOX");
+    w.prune_jmap_numbers();
+    w.let_go_of_online();
+    read.assert_as_it_was("set aside");
+    assert_eq!(downloads(&read.server), read.given);
+}
+
+/// Read again, the numbering is the account's again: its numbers, its cache and its sources are
+/// what they were.
+#[test]
+fn a_numbering_read_again_lets_the_account_go_on() {
+    let read = read_in_full();
+    read.store.fail(Some("jmap.json"), None);
+    let mut w = read.restarted();
+    assert!(w.connect().is_err());
+    read.store.fail(None, None);
+    w.connect().unwrap();
+    assert!(w.relist());
+    w.sync_one("INBOX");
+    assert_eq!(w.jstate.id(read.key.uid).as_deref(), Some(read.id.as_str()));
+    read.assert_as_it_was("read again");
+}
+
+/// A damaged numbering stays where it is, byte for byte (it was set aside as `jmap.json.bad`
+/// and started over): the way out is the user's.
+#[test]
+fn a_damaged_numbering_stays_where_it_is_and_sets_the_account_aside() {
+    let read = read_in_full();
+    let damaged = b"{\"next\":4,\"ids\":[".to_vec();
+    read.store.write_account_files("a1", &[("jmap.json".to_string(), damaged.clone())]).unwrap();
+    let mut w = read.restarted();
+    let connected = w.connect();
+    if connected.is_ok() {
+        w.relist();
+        w.sync_one("INBOX");
+    }
+    assert_eq!(read.store.account_file("a1", "jmap.json").unwrap(), Some(damaged), "the file was replaced");
+    assert_eq!(read.store.account_file("a1", "jmap.json.bad").unwrap(), None, "the file was set aside");
+    read.assert_as_it_was("damaged");
+    assert!(matches!(&connected, Err(NetError::Refused(m)) if m.contains("numbering") && m.contains("jmap.json")), "{connected:?}");
+    // Tried again at each connection, and still refused.
+    assert!(matches!(w.connect(), Err(NetError::Refused(_))));
+    assert_eq!(read.store.account_file("a1", "jmap.json.bad").unwrap(), None);
+}
+
+/// A numbering that wasn't read is never saved over the one that couldn't be: the guard of an
+/// empty one (`State::save`) lapses at the first number given.
+#[test]
+fn nothing_is_saved_over_a_numbering_that_wasnt_read() {
+    let read = read_in_full();
+    read.store.fail(Some("jmap.json"), None);
+    let mut w = read.restarted();
+    w.jstate.number("x");
+    w.save_jstate();
+    read.store.fail(None, None);
+    let kept = jmap::State::load(&read.store, "a1").unwrap();
+    assert_eq!(kept.id(read.key.uid).as_deref(), Some(read.id.as_str()), "the numbering on disk was written over");
+    assert_eq!(kept.known("x"), None);
+}
+
+/// The second connection has no numbering: it sends whatever `jmap.json` is.
+#[test]
+fn the_second_connection_still_sends_without_the_numbering() {
+    let read = read_in_full();
+    let damaged = b"{\"next\":4,\"ids\":[".to_vec();
+    read.store.write_account_files("a1", &[("jmap.json".to_string(), damaged.clone())]).unwrap();
+    let auth = Auth::shared(crate::fakes::fake_ews::PASSWORD);
+    let mut q = Worker::with_numbering(read.acc.clone(), auth, read.store.clone(), read.pool.sink.clone(), SyncOptions::default(), false);
+    assert!(q.numbering_unread.is_none());
+    let raw = b"From: riley@contoso.example\r\nTo: zoe@studio.example\r\nSubject: sent\r\nMessage-ID: <sent@studio.example>\r\n\r\nHi.\r\n";
+    q.deliver(raw, "riley@contoso.example", &["zoe@studio.example".to_string()], None).unwrap();
+    assert_eq!(read.server.data.lock().unwrap().sent.len(), 1);
+    assert_eq!(read.store.account_file("a1", "jmap.json").unwrap(), Some(damaged), "read or written by the second connection");
+}
+
+/// A JMAP message is filed in the Sent folder by its number: with the numbering unread, it waits
+/// in the Outbox, asking nothing of the server, rather than failing for want of a Sent folder; read
+/// again, the numbering is the account's again.
+#[test]
+fn a_jmap_message_waits_in_the_outbox_while_the_numbering_cant_be_read() {
+    use crate::fakes::fake_jmap::{Data, PASSWORD, USER, serve};
+    let mut d = Data::default();
+    d.mailbox("Inbox", None, Some("inbox"));
+    d.mailbox("Sent", None, Some("sent"));
+    let server = serve(d);
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig { id: "a1".into(), email: USER.into(), username: USER.into(), jmap: Some(server.base.clone()), ..Default::default() };
+    let mut w = worker(acc.clone(), PASSWORD, &store, &pool);
+    w.connect().unwrap();
+    assert!(w.relist());
+    // A numbering with a message in it is kept (an empty one is not: `State::save`).
+    w.jstate.number("M-kept");
+    w.save_jstate();
+    drop(w);
+    store.fail(Some("jmap.json"), None);
+    let mut q = worker(acc, PASSWORD, &store, &pool);
+    let raw = b"From: me@studio.example\r\nTo: zoe@studio.example\r\nSubject: kept\r\nMessage-ID: <kept@studio.example>\r\n\r\nHi.\r\n";
+    q.send(7, raw, USER, &["zoe@studio.example".to_string()], Some("Sent".into()));
+    store.fail(None, None);
+    assert_eq!(store.outbox("a1").iter().map(|i| i.id).collect::<Vec<_>>(), [7], "not kept in the Outbox");
+    assert!(server.data.lock().unwrap().submissions.is_empty(), "asked of the server");
+    // Read again: it goes.
+    q.send(8, raw, USER, &["zoe@studio.example".to_string()], Some("Sent".into()));
+    assert_eq!(server.data.lock().unwrap().submissions.len(), 1, "not sent once the numbering was read");
+}

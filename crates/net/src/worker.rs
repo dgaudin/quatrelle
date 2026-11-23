@@ -9,7 +9,7 @@
 //! take the app down: a broken connection is retried with exponential back-off, a refused
 //! password stops retrying until the user enters a new one.
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
@@ -449,6 +449,14 @@ struct Worker {
     /// Folders gone from the server whose cache was kept as changes to the folders waited to be
     /// sent ([`Worker::relist`]): it goes once they're sent.
     gone_meanwhile: Vec<String>,
+    /// The folders of a zone the last listing couldn't list (a shared mailbox, public folders,
+    /// the online archive), kept as they were ([`Worker::kept_unlisted`]).
+    unlisted_kept: HashSet<String>,
+    /// The folder list before couldn't be read: a zone a listing misses may have folders here the
+    /// worker doesn't know of; no number is pruned, nor the list kept, till one misses none.
+    folders_unread: bool,
+    /// Why the account's numbering couldn't be read, while it can't: its mail is set aside.
+    numbering_unread: Option<String>,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -481,8 +489,27 @@ impl Worker {
     /// Exchange), which an Exchange account's second connection (sending, automatic replies)
     /// never uses — read for it too, a big mailbox's was held in memory twice.
     fn with_numbering(acc: AccountConfig, auth: Arc<Mutex<Auth>>, store: Store, sink: Sink, opts: SyncOptions, numbering: bool) -> Worker {
-        let folders = store.load_folders(&acc.id).unwrap_or_default();
-        let jstate = if acc.is_api() && numbering { jmap::State::load(&store, &acc.id) } else { jmap::State::default() };
+        // Not read: a zone a listing misses may have folders here this worker doesn't know of.
+        let (folders, folders_unread) = match store.load_folders(&acc.id) {
+            Ok(folders) => (folders, false),
+            Err(e) => {
+                log::warn!("{}: the folder list couldn't be read, nothing is let go of till a listing tells: {e}", acc.id);
+                (Vec::new(), true)
+            }
+        };
+        // Not read: the account's mail is set aside (nothing numbered from nothing, nothing saved),
+        // and read again at each connection ([`Worker::reread_numbering`]).
+        let (jstate, numbering_unread) = if acc.is_api() && numbering {
+            match jmap::State::load(&store, &acc.id) {
+                Ok(state) => (state, None),
+                Err(e) => {
+                    log::warn!("{}: the message numbering couldn't be read, the account's mail is set aside: {e}", acc.id);
+                    (jmap::State::default(), Some(e.to_string()))
+                }
+            }
+        } else {
+            (jmap::State::default(), None)
+        };
         // Online only (issue #4): nothing downloaded in full ahead of reading; a message comes
         // when it's opened, and is held in memory only.
         let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, full: false, ..opts } } else { opts };
@@ -530,6 +557,9 @@ impl Worker {
             rest,
             opened: None,
             gone_meanwhile: Vec::new(),
+            unlisted_kept: HashSet::new(),
+            folders_unread,
+            numbering_unread,
         }
     }
 

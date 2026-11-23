@@ -349,7 +349,7 @@ fn serve_for_the_browser() {
 }
 
 fn jmap_number(store: &Store, id: &str) -> Option<u32> {
-    let mut st = crate::jmap::State::load(store, "a1");
+    let mut st = crate::jmap::State::load(store, "a1").unwrap();
     let known = st.id(1).is_some() || st.id(2).is_some();
     known.then(|| st.number(id))
 }

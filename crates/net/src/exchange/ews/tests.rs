@@ -9,6 +9,7 @@ use super::sync::aqs_of;
 use super::*;
 
 mod follow_up;
+mod listing;
 mod refusals;
 mod replied;
 
@@ -143,7 +144,7 @@ fn a_search_finds_a_message_whose_text_is_only_on_the_server() {
     let user = format!("{}\\{}", crate::fakes::fake_ews::DOMAIN, crate::fakes::fake_ews::USER);
     let c = Client::connect(&server.url, &user, crate::fakes::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
     let mut st = State::default();
-    let folders: Vec<String> = list_folders(&c, &mut st, "a1").unwrap().into_iter().map(|f| f.path).collect();
+    let folders: Vec<String> = list_folders(&c, &mut st, "a1").unwrap().folders.into_iter().map(|f| f.path).collect();
     assert!(folders.len() >= 2, "{folders:?}");
     // The word is in a body that was never downloaded: the server answers anyway, with the
     // headers the list shows.
@@ -397,7 +398,7 @@ fn a_connection_whose_sign_in_was_forgotten_signs_in_again() {
     // once, and the account must sign in again rather than hear its password was refused.
     server.data.lock().unwrap().forget_sign_in = true;
     let mut st = State::default();
-    let folders = list_folders(&c, &mut st, "a1").unwrap();
+    let folders = list_folders(&c, &mut st, "a1").unwrap().folders;
     assert!(!folders.is_empty());
     assert!(server.data.lock().unwrap().handshakes > before, "signed in again");
 }
@@ -416,7 +417,7 @@ fn a_connection_the_server_closed_signs_in_again_on_a_new_one() {
     let mut st = State::default();
     // Closed by the server between two requests: sent again, unnoticed.
     server.data.lock().unwrap().drop_kept = 1;
-    assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty(), "a closed kept connection is no failure");
+    assert!(!list_folders(&c, &mut st, "a1").unwrap().folders.is_empty(), "a closed kept connection is no failure");
     // Closed twice in a row: the second time it's said, as a network failure, not a password.
     server.data.lock().unwrap().drop_kept = 2;
     let e = list_folders(&c, &mut st, "a1").unwrap_err();
@@ -424,7 +425,7 @@ fn a_connection_the_server_closed_signs_in_again_on_a_new_one() {
     assert!(e.is_fatal(), "{e}");
     // The next request signs in on its new connection.
     let before = server.data.lock().unwrap().handshakes;
-    assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty(), "the next request works");
+    assert!(!list_folders(&c, &mut st, "a1").unwrap().folders.is_empty(), "the next request works");
     assert!(server.data.lock().unwrap().handshakes > before, "signed in on the new connection");
 }
 
@@ -439,13 +440,13 @@ fn a_busy_server_is_asked_again_after_its_back_off() {
     let c = Client::connect(&server.url, &user, crate::fakes::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
     let mut st = State::default();
     server.data.lock().unwrap().busy = 1;
-    assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty(), "asked again once the back-off passed");
+    assert!(!list_folders(&c, &mut st, "a1").unwrap().folders.is_empty(), "asked again once the back-off passed");
     server.data.lock().unwrap().busy = 5;
     let e = list_folders(&c, &mut st, "a1").unwrap_err();
     assert!(matches!(e, NetError::Later(_)), "still busy: for later, {e}");
     assert!(!e.is_fatal(), "the connection is fine: {e}");
     server.data.lock().unwrap().busy = 0;
-    assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty());
+    assert!(!list_folders(&c, &mut st, "a1").unwrap().folders.is_empty());
 }
 
 /// A rule goes to Exchange as its schema has it: the yes-or-no actions saying `true`, each

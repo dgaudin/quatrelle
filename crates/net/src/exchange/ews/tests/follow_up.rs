@@ -170,7 +170,7 @@ fn follow_ups_completed_before_this_version_are_ticked_once() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages.into_iter().find(|m| m.subject == "done").unwrap();
     assert_eq!(m.flags.completed, jmap::utc_date("2026-10-30T09:12:00Z").unwrap(), "on the day Outlook noted");
     st.save(&store, "a1").unwrap();
-    let mut st = State::load(&store, "a1");
+    let mut st = State::load(&store, "a1").unwrap();
 
     // Started again: the Inbox isn't asked again, the other folder is (two pages).
     for f in folders {
@@ -230,7 +230,7 @@ fn shared_and_public_folders_have_their_ticks_read_where_they_live() {
     c.set_shared(&["team@contoso.example".to_string()]);
     let store = crate::fake::tests_store("ews-ticks-shared-public");
     let mut st = State::default();
-    let listed = list_folders(&c, &mut st, "a1").unwrap();
+    let listed = list_folders(&c, &mut st, "a1").unwrap().folders;
     let news_path = listed.iter().find(|f| f.path.ends_with("Announcements")).map(|f| f.path.clone()).unwrap();
     let folders = [news_path.as_str(), "Team/Inbox"];
     let opts = SyncOptions { prefetch: 0, ..Default::default() };

@@ -213,6 +213,13 @@ method calls, signed in with Basic authentication or an OAuth bearer token.
   them as it first sees them (`<account>/jmap.json`, numbers never reused) and uses the number as
   the UID, with a constant UIDVALIDITY of 1, so the cache, the engine and offline changes are the
   same as for IMAP. Numbers no cached message or pending change uses are pruned after a full sync.
+  A numbering that can't be read (the disk failing) or is damaged is never taken for an empty one,
+  which would number every message again and download the account again: the file stays where it
+  is, as it is, and the account is set aside for its mail (its cache shows, nothing is listed, read
+  or written, its changes waiting are kept, and the account says why) until it can be read at a
+  connection; a damaged one is cured by removing the account and adding it again. Sending by
+  the second connection (EWS, SMTP), which has no numbering, goes on; a JMAP message waits in the
+  Outbox. In the browser such an account isn't started.
 - **Folders** are named by their path of mailbox names joined by `/` (the Inbox is `INBOX`); the
   mailbox id behind each path is kept with the numbers. Roles come from the mailbox `role`.
 - **A folder sync** is two requests: `Email/query` (newest first, up to the window) with an
@@ -256,7 +263,8 @@ switched IMAP off.
 - **Folders** come from `/me/mailFolders` and each one's `childFolders`, following
   `@odata.nextLink` pages on the same server only. The well-known folders (`inbox`, `sentitems`,
   `deleteditems`…) are looked up in one JSON batch for their roles; the Outbox and Exchange's own
-  bookkeeping folders are left out.
+  bookkeeping folders are left out. Another mailbox opened in the account that won't open is
+  kept as it was, as on EWS (a zone that doesn't list).
 - **A folder sync** pages through `/mailFolders/{id}/messages` with the summary fields
   (`LIST_FIELDS`; `internetMessageHeaders` excluded because it slows listings to the point of
   gateway timeouts). If at most 20 messages are new, each is then fetched with its internet
@@ -351,8 +359,8 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   role in the account, so its Inbox or Sent Items are never the account's: no new-mail notice,
   no rule, nothing sent from it, a reply's copy in the account's own Sent Items
   (`Folder::shared_mailbox` is what tells a shared mailbox from it). An archive that refuses, or
-  whose server is down, is logged and passed over; its folders leave the list until a later
-  listing succeeds, and a view on one goes to the Inbox.
+  whose server is down, is logged, and its folders stay as they were till a listing lists it
+  (a zone that doesn't list, below).
   `Worker::read_online` and `Session::read_on_server` are true for it, whatever the settings:
   the full pass never walks it (`sync_order` leaves it out whoever asks), nothing of it is
   downloaded ahead, it isn't subscribed to (`shared_to_listen`), and a search of the whole
@@ -367,6 +375,26 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   search index and documents are there while Quatrelle runs and never reach the data file,
   whatever path asked for them to be kept. The folder list itself (names and counts) and the
   numbering of the items seen (opaque ids) are kept with the account's.
+- **A zone that doesn't list** (`worker/sync/zones.rs`; EWS and Graph): each shared mailbox, the
+  public folders (or a branch of them) and the online archive are zones. A listing that can't
+  list one says so beside the folders it lists (`exchange::missed::Missed`: its list refused or
+  answered with no folder, Autodiscover or the directory not answering, a branch not read
+  whole), and the folders the listing before had there are kept as they were
+  (`zones::keep_missed`): in the folder pane and in `folders.json`, with their cache, their
+  sources and their ids in the numbering, so that their messages keep their numbers; an archive
+  folder's list stays held in memory. Nothing of them is read, written nor let go of meanwhile
+  (`Worker::kept_unlisted`: the full pass, the readers of their own, downloading ahead,
+  listening and `let_go_of_online` pass them over), and a folder of such a zone the listing
+  before took for gone is looked at again once its zone lists. This lasts, with no limit, till
+  a listing lists the zone: only a listing that succeeds and no longer names a folder
+  (Autodiscover answering without the mailbox, a mailbox taken out of the settings, a parent
+  read whole without it) lets it go with its cache. The log says how many folders were kept and
+  how many zones didn't list, never which. While the folder list before couldn't be read
+  (`Worker::folders_unread`), what such a zone had here isn't known: the ids the numbering had of
+  folders that may be in a zone missed are kept, no message number is pruned, and the worker's
+  list is told for the folder pane but not written over the one on disk, till a listing misses
+  no zone with something here (one with nothing here, such as the public folders of a server
+  that has none, doesn't hold it back).
 - **Told of changes as they happen** (`worker/listening.rs`, `ews/listening.rs`), as Outlook's
   Cached Exchange Mode is: the account's main connection subscribes to every folder of its
   mailbox (`Subscribe`, `SubscribeToAllFolders`) and to the folders of each shared mailbox kept

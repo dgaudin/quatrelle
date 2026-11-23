@@ -6,7 +6,7 @@
 use super::*;
 
 mod availability;
-mod folders;
+pub(super) mod folders;
 mod mailtips;
 mod rules;
 mod schema;

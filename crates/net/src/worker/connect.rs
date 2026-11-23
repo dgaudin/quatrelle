@@ -314,7 +314,9 @@ impl Worker {
             return Ok(());
         }
         self.status(SyncStatus::Connecting);
-        let r = self.open_connection();
+        // Before anything is asked of the server: an account whose numbering can't be read goes
+        // no further (the second connection has none to read, or doesn't depend on it).
+        let r = if self.main.is_none() { self.reread_numbering().and_then(|()| self.open_connection()) } else { self.open_connection() };
         // Connected for something asked (a message, a picture, the rules) rather than by the
         // sync: "Connecting…" said so far must not stay up — the sync, if it's due, says
         // "Syncing" next; otherwise the account is as current as before.
@@ -468,9 +470,36 @@ impl Worker {
         }
     }
 
-    /// Save the JMAP / Graph numbering after it changed.
+    /// While the account's numbering couldn't be read ([`Worker::numbering_unread`]), read it
+    /// again: read, the account goes on with it; otherwise it's refused, saying why, and nothing
+    /// is asked of the server. A refusal isn't a failure of the connection: the account waits until
+    /// it is asked to sync again (it isn't tried again in a tight loop), and that reads it again.
+    pub(super) fn reread_numbering(&mut self) -> Result<()> {
+        if self.numbering_unread.is_none() {
+            return Ok(());
+        }
+        match jmap::State::load(&self.store, &self.acc.id) {
+            Ok(state) => {
+                log::info!("{}: the message numbering can be read again, the account goes on", self.acc.id);
+                self.jstate = state;
+                self.numbering_unread = None;
+                Ok(())
+            }
+            Err(e) => {
+                log::warn!("{}: the message numbering still can't be read: {e}", self.acc.id);
+                let why = e.to_string();
+                self.numbering_unread = Some(why.clone());
+                Err(NetError::Refused(format!("{}: {why}", jmap::NUMBERING_UNREAD)))
+            }
+        }
+    }
+
+    /// Save the JMAP / Graph numbering after it changed: never while it wasn't read, over the one
+    /// that couldn't be (the guard of an empty one in [`jmap::State::save`] lapses at the first
+    /// number given).
     pub(super) fn save_jstate(&self) {
         if self.acc.is_api()
+            && self.numbering_unread.is_none()
             && let Err(e) = self.jstate.save(&self.store, &self.acc.id)
         {
             log::warn!("{}: {e}", self.acc.id);

@@ -313,6 +313,9 @@ impl Worker {
             return crate::ews::send(c, raw, recipients);
         }
         if self.acc.jmap.is_some() {
+            // Its copy goes in the Sent folder the numbering knows: while that can't be read, the
+            // message waits in the Outbox (nothing is asked of the server).
+            self.reread_numbering().map_err(|e| NetError::Later(e.to_string()))?;
             if self.conn.is_none() {
                 self.connect()?;
             }

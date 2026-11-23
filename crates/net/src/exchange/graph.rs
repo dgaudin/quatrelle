@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use quatrelle_mime as mime;
 use quatrelle_model::organize::{Condition, Rule, RuleAction};
-use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
+use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
 use quatrelle_store::{FolderState, Store};
 use serde_json::{Value, json};
 
@@ -536,6 +536,7 @@ mod rules;
 mod sync;
 mod text_first;
 
+pub use super::missed::{Listed, Missed, PublicMissed};
 pub(crate) use requests::backoff_secs;
 use requests::send_through_limits;
 pub(crate) use sync::download_ahead;

@@ -2422,8 +2422,6 @@ presence	Offline	Offline
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 houdt een onlinevergadering zodra die is gemaakt
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} berichten geïmporteerd, maar de mappenlijst kon niet opnieuw worden gelezen: Quatrelle leest die opnieuw bij de volgende start
-# The public folders to keep in sync, a list damaged or that can't be read: left as it is.
-	the public folders to keep in sync couldn't be read, so they aren't changed: {error}	De openbare mappen om te synchroniseren konden niet worden gelezen en worden dus niet gewijzigd: {error}
 	Send this message?	Dit bericht verzenden?
 	Don't Send	Niet verzenden
 	Don't ask again	Niet meer vragen
@@ -2432,3 +2430,6 @@ presence	Offline	Offline
 	Does nothing	Doet niets
 	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	Er ging iets mis in het venster en Quatrelle is doorgegaan. Wat u aan het doen was, moet misschien opnieuw gedaan worden
 	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle moet sluiten na een fout die het niet kon oplossen. Wat u aan het schrijven was, is bewaard in Concepten
+# A numbering or another file Quatrelle keeps that can't be read is never started over.
+	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	de nummering van de berichten van dit account kon niet worden gelezen, dus de post wordt voorlopig niet gesynchroniseerd: {error}
+	a file Quatrelle keeps is damaged: {error}	een bestand dat Quatrelle bewaart is beschadigd: {error}

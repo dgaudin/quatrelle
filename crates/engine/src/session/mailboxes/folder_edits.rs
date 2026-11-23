@@ -230,27 +230,21 @@ impl Session {
             if self.followed_public.get(&id) == Some(&list) {
                 continue;
             }
-            // Read as it is: one that can't be read, or is damaged, is left so and never written
-            // over (set aside and read as none, the sync found it gone, none followed, and let go
-            // of every public folder it kept). Said once, till the Favorites change.
-            let before: Vec<String> = match store.load_account_doc_strict(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC) {
-                Ok(before) => before,
-                Err(e) => {
-                    self.notice_with(
-                        "the public folders to keep in sync couldn't be read, so they aren't changed: {error}",
-                        &[("error", &e.to_string())],
-                        true,
-                    );
-                    self.followed_public.insert(id, list);
-                    continue;
-                }
-            };
-            if before != list {
+            // Read as it is. It comes from the Favorites alone: one that can't be read, or is
+            // damaged, is written again from them, in one write over it, never set aside first
+            // (read as none, the sync found it gone, followed none, and let go of every public
+            // folder it kept); which were followed isn't known, so each is read now. One that
+            // can't be written stays as it was, which the sync reads as such.
+            let before: Option<Vec<String>> = store
+                .load_account_doc_strict(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC)
+                .inspect_err(|e| log::warn!("{id}: the public folders to keep in sync are written again from the Favorites: {e}"))
+                .ok();
+            if before.as_ref() != Some(&list) {
                 if let Err(e) = store.save_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC, &list) {
                     self.notice_with("the public folders to keep in sync couldn't be saved: {error}", &[("error", &e.to_string())], true);
                     continue;
                 }
-                for folder in list.iter().filter(|f| !before.contains(f)) {
+                for folder in list.iter().filter(|f| before.as_ref().is_none_or(|b| !b.contains(f))) {
                     self.jobs.push(Job::SyncFolder { account: id.clone(), folder: folder.clone() });
                 }
             }

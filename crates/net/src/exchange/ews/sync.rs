@@ -6,7 +6,10 @@
 use super::*;
 
 mod catch_up;
+mod listing;
+pub use crate::exchange::missed::{Missed, PublicMissed};
 use catch_up::{catch_up_once, take_found};
+pub use listing::list_folders;
 
 /// The query in Exchange's own syntax (`QueryString`, its Advanced Query Syntax): the words, and
 /// the fields Quatrelle's queries name that Exchange knows too. A clause it has no word for
@@ -150,38 +153,6 @@ pub fn read_archive_tag(c: &Client, st: &mut State, store: &Store, key: &Message
         Some(id) => c.item_policy(&id),
         None => Ok(super::ItemPolicy::default()),
     }
-}
-
-/// Refresh the folder list (and the folder ids behind it).
-pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
-    let boxes = c.mailboxes()?;
-    let mut found = jmap::folders(account, &boxes);
-    st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
-    jmap::name_special(&mut found, &boxes);
-    // A shared mailbox's folders say whose they are, and what each is there.
-    let shared = c.shared_roles.borrow();
-    for (f, id) in &mut found {
-        if let Some((address, role)) = shared.get(id.as_str()) {
-            f.mailbox = Some(address.clone());
-            f.mailbox_role = *role;
-        }
-    }
-    // The archive and retention policy tags a folder carries of its own.
-    let tagged = c.folder_tags.borrow();
-    for (f, id) in &mut found {
-        (f.archive_tag, f.retention_tag) = tagged.get(id.as_str()).cloned().unwrap_or_default();
-    }
-    // The online archive's folders say so: read on the server, never synced nor kept.
-    let archive = c.archive.borrow();
-    for (f, id) in &mut found {
-        if let Some(role) = archive.roles.get(id.as_str()) {
-            f.mailbox = Some(archive.mailbox.clone());
-            f.mailbox_role = *role;
-            f.role = FolderRole::Other;
-            f.archive = true;
-        }
-    }
-    Ok(found.into_iter().map(|(f, _)| f).collect())
 }
 
 /// Bring one folder's cache up to date.

@@ -7,14 +7,21 @@ use std::collections::HashSet;
 
 use super::*;
 
-/// Refresh the folder list (and the folder ids behind it).
-pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]) -> Result<Vec<Folder>> {
+/// Refresh the folder list (and the folder ids behind it), with the mailboxes of `shared` that
+/// couldn't be listed this time ([`Listed::missed`]).
+pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]) -> Result<Listed> {
     let mut boxes = c.mailboxes()?;
+    let mut missed = Missed::default();
     // Other mailboxes opened here, each under a folder named after it. One this account can't
-    // open (no right to it, or gone) is left out; the others still list.
+    // open (no right to it, or gone) is left out, and said; the others still list.
     let mut owner_of_box: HashMap<String, String> = HashMap::new();
     for owner in shared {
-        match c.shared_mailbox(owner) {
+        let theirs = c.shared_mailbox(owner);
+        // Refused, or nothing under the folder named for it: its folders didn't list.
+        if !theirs.as_ref().is_ok_and(|t| t.len() > 1) {
+            missed.shared.push(owner.clone());
+        }
+        match theirs {
             Ok(theirs) => {
                 for b in &theirs {
                     owner_of_box.insert(b.id.clone(), owner.clone());
@@ -28,7 +35,7 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]
     st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
     st.owners = found.iter().filter_map(|(f, id)| Some((f.path.clone(), owner_of_box.get(id)?.clone()))).collect();
     jmap::name_special(&mut found, &boxes);
-    Ok(found.into_iter().map(|(f, _)| f).collect())
+    Ok(Listed { folders: found.into_iter().map(|(f, _)| f).collect(), missed })
 }
 
 /// Now, in Unix seconds.

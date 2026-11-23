@@ -4,28 +4,69 @@
 //! An account's worker: the folder list read from the server and kept, and what of each folder
 //! is kept here (the public folders followed, what is read on the server, what is let go of).
 
+use quatrelle_model::utf7;
+
 use super::*;
+use crate::exchange::missed::{Listed, Missed};
 
 impl Worker {
     /// The folder list, then every folder (Inbox first), staying responsive to opened messages.
     /// Refresh the folder list from the server; `false` when that failed.
     pub(in crate::worker) fn relist(&mut self) -> bool {
+        // Nothing is listed while the numbering couldn't be read (the account is set aside).
+        if self.numbering_unread.is_some() {
+            return false;
+        }
         let _at_work = self.at_work();
         let id = self.id();
+        // What the numbering knew before: the folders of a zone the listing misses keep their ids.
+        let (ids_before, owners_before) = (self.jstate.mailboxes.clone(), self.jstate.owners.clone());
+        if let Some(Conn::Ews(c)) = &self.conn {
+            // A mailbox added by hand keeps the name it's listed under while the directory is silent.
+            c.set_known_shared(
+                self.folders
+                    .iter()
+                    .filter(|f| f.depth() == 0)
+                    .filter_map(|f| Some((f.shared_mailbox()?.to_string(), utf7::decode(&f.path))))
+                    .collect(),
+            );
+        }
+        let whole = |folders| Listed { folders, missed: Missed::default() };
         let listed = match self.conn.as_mut() {
-            Some(Conn::Imap(c)) => c.list(&id),
-            Some(Conn::Jmap(c)) => jmap::list_folders(c, &mut self.jstate, &id),
+            Some(Conn::Imap(c)) => c.list(&id).map(whole),
+            Some(Conn::Jmap(c)) => jmap::list_folders(c, &mut self.jstate, &id).map(whole),
             Some(Conn::Graph(c)) => crate::graph::list_folders(c, &mut self.jstate, &id, &self.acc.shared_mailboxes),
             Some(Conn::Ews(c)) => crate::ews::list_folders(c, &mut self.jstate, &id),
-            Some(Conn::Pop) => crate::pop::folders(&self.store, &id),
+            Some(Conn::Pop) => crate::pop::folders(&self.store, &id).map(whole),
             None => Err(NetError::Closed("not connected".into())),
         };
+        // A zone that didn't list keeps its folders as they were, with their ids: the numbering
+        // saved next must have them (taken for gone, the zone's numbers went, and its mail was
+        // downloaded again once it listed).
+        let listed = listed.map(|Listed { folders: mut list, missed }| {
+            let kept = zones::keep_missed(
+                &self.folders,
+                &ids_before,
+                &owners_before,
+                &mut list,
+                &mut self.jstate.mailboxes,
+                &mut self.jstate.owners,
+                &missed,
+            );
+            let unread = if self.folders_unread {
+                zones::keep_unread_ids(&ids_before, &owners_before, &mut self.jstate.mailboxes, &mut self.jstate.owners, &missed)
+            } else {
+                HashSet::new()
+            };
+            zones::log_missed(&id, kept.len(), &missed);
+            (list, missed, kept, unread)
+        });
         let jmap = matches!(self.conn, Some(Conn::Jmap(_) | Conn::Graph(_) | Conn::Ews(_)));
         if jmap {
             self.save_jstate();
         }
         match listed {
-            Ok(mut list) => {
+            Ok((mut list, missed, kept, unread)) => {
                 // JMAP lists the counts; IMAP's come from each folder's sync.
                 for f in list.iter_mut().filter(|_| !jmap) {
                     if let Some(old) = self.folders.iter().find(|o| o.path == f.path) {
@@ -43,18 +84,34 @@ impl Worker {
                 // failing) can't say which those are: every one keeps its cache till the next
                 // listing, as does one whose cache couldn't be cleared (taken for nothing
                 // waiting, they lost it all).
+                // One in a zone the listing missed can't be told gone either: looked at again once
+                // it lists.
                 let here = self.kept_while_waiting(&id);
                 let mut gone: Vec<String> = self.folders.iter().map(|f| f.path.clone()).chain(std::mem::take(&mut self.gone_meanwhile)).collect();
                 gone.retain(|p| !list.iter().any(|f| f.path == *p));
                 gone.sort_unstable();
                 gone.dedup();
                 for path in gone {
-                    if here.as_ref().is_none_or(|here| here.iter().any(|f| f.path == path)) {
+                    if zones::in_missed_zone(&path, &kept, &self.jstate.mailboxes, &missed)
+                        || here.as_ref().is_none_or(|here| here.iter().any(|f| f.path == path))
+                    {
                         self.gone_meanwhile.push(path);
                     } else if let Err(e) = self.store.clear_folder(&id, &path) {
                         log::warn!("{id}: a folder gone from the server keeps its cache for now: {e}");
                         self.gone_meanwhile.push(path);
                     }
+                }
+                // Nothing of a zone kept is read, written nor let go of till it lists again.
+                self.ahead.retain(|p| !kept.contains(p));
+                self.unlisted_kept = kept;
+                // The list before is known again once a listing misses no zone with something
+                // here: one with nothing here (a server without public folders misses them at
+                // every listing) has nothing to lose.
+                if self.folders_unread && self.unlisted_kept.is_empty() && unread.is_empty() {
+                    log::info!("{id}: the folder list is whole again: kept, and numbers pruned, from now on");
+                    self.folders_unread = false;
+                } else if self.folders_unread {
+                    log::info!("{id}: the folder list before couldn't be read: {} folders may be in a zone that didn't list", unread.len());
                 }
                 self.folders = list;
                 self.publish_folders();
@@ -96,7 +153,7 @@ impl Worker {
         }
         self.read_followed();
         self.let_go_of_online();
-        let mut paths = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path));
+        let mut paths = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path) && !self.kept_unlisted(&f.path));
         let followed = paths.clone();
         if self.opts.parallel > 0 && paths.len() > 2 {
             paths = self.sync_parallel(paths, rx);
@@ -152,7 +209,7 @@ impl Worker {
             // Then the messages kept are downloaded whole, folder after folder, while nothing
             // else is asked.
             if self.opts.full {
-                self.ahead = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path)).into_iter().collect();
+                self.ahead = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path) && !self.kept_unlisted(&f.path)).into_iter().collect();
                 self.ahead_left = None;
                 // Worked out again: what the server wouldn't give gets another try.
                 self.ahead_todo = crate::ews::AheadTodo::default();
@@ -169,9 +226,18 @@ impl Worker {
 
     /// Forget the numbers of JMAP messages no longer cached (nor waiting in a change, nor found
     /// by a search). Not when the changes or a folder can't be read (the disk failing): their
-    /// numbers would be lost, and the changes never sent. The next full sync tries again.
+    /// numbers would be lost, and the changes never sent. The next full sync tries again. Nor
+    /// while the folder list before couldn't be read (`folders_unread`): a zone the listings miss
+    /// may have folders here the worker doesn't know of.
     pub(in crate::worker) fn prune_jmap_numbers(&mut self) {
+        if self.numbering_unread.is_some() {
+            return;
+        }
         if !matches!(self.conn, Some(Conn::Jmap(_) | Conn::Graph(_) | Conn::Ews(_))) {
+            return;
+        }
+        if self.folders_unread {
+            log::info!("{}: the server's message numbers are all kept till the folder list is whole", self.acc.id);
             return;
         }
         let read = || -> std::result::Result<std::collections::HashSet<u32>, quatrelle_store::StoreError> {
@@ -194,7 +260,16 @@ impl Worker {
 
     /// The worker's folder list kept, then told; told only once kept: the list told and not
     /// kept (the disk failing) was the window's till the next start, which found the one before.
+    /// While the list before couldn't be read (`folders_unread`), the worker's may lack a zone a
+    /// listing missed: told for the folder pane, not kept over the one on disk (the archive's
+    /// folders held in memory all the same).
     pub(in crate::worker) fn publish_folders(&self) {
+        if self.folders_unread {
+            let archive: Vec<&str> = self.folders.iter().filter(|f| f.archive).map(|f| f.path.as_str()).collect();
+            self.store.hold_folders(&self.acc.id, &archive);
+            self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() });
+            return;
+        }
         match self.store.save_folders(&self.acc.id, &self.folders) {
             Ok(()) => self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() }),
             Err(e) => log::warn!("{}: the folder list wasn't kept: {e}", self.acc.id),
@@ -280,11 +355,19 @@ impl Worker {
     /// What earlier passes kept of folders now read on the server (a public folder held up to a
     /// hundred thousand messages, most of a big mailbox's cache) is let go: they keep what they
     /// show when opened. Their message numbers go at the end of the pass. No public folder is
-    /// while the list of those followed can't be read (`followed_unread`): it may be one.
+    /// while the list of those followed can't be read (`followed_unread`): it may be one. Nor a
+    /// folder kept as it was while its zone doesn't list ([`Worker::kept_unlisted`]).
     pub(in crate::worker) fn let_go_of_online(&mut self) {
+        if self.numbering_unread.is_some() {
+            return;
+        }
         let unread = self.followed_unread;
-        let paths: Vec<String> =
-            self.folders.iter().filter(|f| self.read_online(&f.path) && !(unread && is_public_folder(&f.path))).map(|f| f.path.clone()).collect();
+        let paths: Vec<String> = self
+            .folders
+            .iter()
+            .filter(|f| self.read_online(&f.path) && !(unread && is_public_folder(&f.path)) && !self.kept_unlisted(&f.path))
+            .map(|f| f.path.clone())
+            .collect();
         for path in paths {
             let window = self.options_for(&path).window;
             let kept = self.store.load_folder(&self.acc.id, &path).map(|f| f.messages.len()).unwrap_or(0);
