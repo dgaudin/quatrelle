@@ -2428,3 +2428,5 @@ presence	Offline	离线
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	无法读取此账户的邮件编号，因此暂时不同步其邮件: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle 保存的文件已损坏: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	无法读取账户列表，因此不会保存它: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	无法读取在此电脑上所做的 {count} 项更改，因此未发送；这些更改已另行保存，显示的是服务器的状态

@@ -2427,3 +2427,5 @@ presence	Offline	오프라인
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	이 계정의 메시지 번호를 읽을 수 없어 당분간 메일이 동기화되지 않습니다: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle이 보관하는 파일이 손상되었습니다: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	계정 목록을 읽을 수 없어 저장되지 않습니다: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	이 컴퓨터에서 한 변경 {count}개를 읽을 수 없어 보내지 않았습니다. 따로 보관되며 서버의 상태가 표시됩니다

@@ -399,6 +399,21 @@ impl Session {
                 }
                 self.notice_with("A change wasn't kept: {error}", &[("error", &error)], true);
             }
+            Event::OpsSetAside { account, count } => {
+                // What they made here isn't the server's: none is waited on as an echo, and the
+                // account's folders held in memory are read again.
+                self.forget_echoes(&account);
+                let count = count.to_string();
+                self.notice_with(
+                    "{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows",
+                    &[("count", &count)],
+                    true,
+                );
+                let held: Vec<String> = self.cache.keys().filter(|(a, _)| *a == account).map(|(_, f)| f.clone()).collect();
+                for folder in held {
+                    self.folder_changed(&account, &folder);
+                }
+            }
             Event::OpenUrl { url } => {
                 if self.open_urls.len() < 8 {
                     self.open_urls.push(url);

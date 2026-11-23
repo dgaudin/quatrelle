@@ -2431,3 +2431,5 @@ presence	Offline	離線
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	無法讀取此帳戶的郵件編號，因此暫時不同步其郵件: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle 保存的檔案已損毀: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	無法讀取帳戶清單，因此不會儲存: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	無法讀取在這部電腦上所做的 {count} 項變更，因此未傳送；這些變更已另行保存，顯示的是伺服器的狀態

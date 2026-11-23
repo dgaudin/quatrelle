@@ -2424,3 +2424,5 @@ presence	Offline	غير متصل
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	تعذّرت قراءة ترقيم رسائل هذا الحساب، لذا لا يُزامَن بريده في الوقت الحالي: {error}
 	a file Quatrelle keeps is damaged: {error}	ملف يحتفظ به Quatrelle تالف: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	تعذّرت قراءة قائمة الحسابات، لذا لا تُحفظ: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	تعذّرت قراءة تغييرات أُجريت على هذا الكمبيوتر فلم تُرسل (عددها: {count})؛ وهي محفوظة جانبًا، وتظهر حالة الخادم

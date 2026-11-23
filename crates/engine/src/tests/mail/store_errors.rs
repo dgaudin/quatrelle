@@ -279,3 +279,29 @@ fn a_refused_change_to_the_accounts_changes_nothing_in_memory() {
     }
     assert!(s.take_jobs().is_empty(), "nothing started, nothing removed");
 }
+
+/// Changes waiting that couldn't be read, kept aside by the worker, are said: how many, and that
+/// the server's state shows; the account's folders held in memory are read again (what the
+/// session made of them is the cache's, not the server's).
+#[test]
+fn changes_kept_aside_are_said_and_their_folders_read_again() {
+    let mut s = failing_session();
+    let account = sample::SAMPLE_ACCOUNT;
+    let held = s.folder_state(account, "INBOX").messages.first().map(|m| (m.key.clone(), m.flags.flagged)).unwrap();
+    // The cache changed behind the session's back, as the worker keeps it.
+    let mut st = folder(&s, "INBOX");
+    if let Some(m) = st.messages.iter_mut().find(|m| m.key == held.0) {
+        m.flags.flagged = !held.1;
+    }
+    store(&s).save_folder(account, "INBOX", &st).unwrap();
+    s.apply(Event::OpsSetAside { account: account.into(), count: 2 });
+    let said = s.notices.last().cloned();
+    assert!(said.as_ref().is_some_and(|n| n.error), "not said: {said:?}");
+    assert_eq!(
+        said.as_ref().map(|n| n.template),
+        Some("{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows")
+    );
+    assert_eq!(said.map(|n| n.values), Some(vec![("count", "2".to_string())]));
+    let now = s.folder_state(account, "INBOX").messages.iter().find(|m| m.key == held.0).map(|m| m.flags.flagged);
+    assert_eq!(now, Some(!held.1), "the folder in memory wasn't read again");
+}

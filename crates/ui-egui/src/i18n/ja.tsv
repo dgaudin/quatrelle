@@ -2425,3 +2425,5 @@ presence	Offline	オフライン
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	このアカウントのメッセージ番号を読み取れなかったため、メールは当面同期されません: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle が保管しているファイルが壊れています: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	アカウントの一覧を読み取れなかったため、保存されません: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	このコンピューターで行った変更 {count} 件を読み取れなかったため、送信されていません。これらは別に保管され、サーバーの状態が表示されます

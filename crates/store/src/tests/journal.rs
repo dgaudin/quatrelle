@@ -199,8 +199,8 @@ proptest! {
 }
 
 /// The journal keeps the changes in the order made, a file each: adding one writes it alone;
-/// the oldest is read alone; one taken out is the first equal to it; a damaged one is set aside
-/// (that change lost, not the queue).
+/// the oldest is read alone; one taken out is the first equal to it; a damaged one is never passed
+/// over (see `a_damaged_change_is_an_error_and_stays_where_it_is`).
 #[test]
 fn the_journal_keeps_a_file_a_change_in_order() {
     let s = Store::memory();
@@ -226,12 +226,13 @@ fn the_journal_keeps_a_file_a_change_in_order() {
     assert_eq!(s.load_ops("a1").unwrap(), [ops[1].clone(), twice.clone()]);
     s.remove_op("a1", &ops[2]).unwrap();
     assert_eq!(s.load_ops("a1").unwrap().len(), 2, "not there: nothing taken out");
-    // A damaged change: set aside, the others kept, the next numbered after it all the same.
+    // A damaged change: the queue reads as an error, the next is numbered after it all the same,
+    // and a queue saved afresh replaces it.
     let dir = s.account_dir("a1").join("ops");
     s.files.write(&dir.join("00000000000000000002.json"), b"{not json").unwrap();
-    assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&twice));
+    assert!(matches!(s.load_ops("a1"), Err(StoreError::Damaged { .. })));
     s.add_op("a1", ops[3].clone()).unwrap();
-    assert_eq!(s.load_ops("a1").unwrap(), [twice.clone(), ops[3].clone()]);
+    assert!(s.files.is_file(&dir.join("00000000000000000004.json")), "numbered after it");
     s.save_ops("a1", &[]).unwrap();
     assert!(s.load_ops("a1").unwrap().is_empty() && s.first_op("a1").unwrap().is_none());
 }
@@ -290,4 +291,113 @@ fn a_deletion_written_before_tidying_was_told_apart_reads_as_the_users() {
     s.remove_op("a1", &users).unwrap();
     assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&tidy), "the old ones taken out once done");
     assert_eq!(serde_json::to_vec(&users).unwrap(), old.to_vec(), "the user's written as before");
+}
+
+/// Whether `r` says the file at `path` is damaged.
+fn damaged_at<T>(r: &Result<T>, path: &Path) -> bool {
+    matches!(r, Err(StoreError::Damaged { path: p }) if Path::new(p) == path)
+}
+
+/// Three changes waiting for `a1`, the second's file damaged: the changes, and the journal's three
+/// files with their bytes.
+fn three_the_second_damaged(s: &Store) -> (Vec<Op>, Vec<(PathBuf, Vec<u8>)>) {
+    let ops = vec![
+        Op::SetFlag { keys: vec![key(1)], flag: Flag::Seen, on: true },
+        Op::SetFlag { keys: vec![key(2)], flag: Flag::Flagged, on: true },
+        Op::Move { keys: vec![key(2)], to: "Archive".into() },
+    ];
+    for op in &ops {
+        s.add_op("a1", op.clone()).unwrap();
+    }
+    let dir = s.account_dir("a1").join("ops");
+    let files: Vec<PathBuf> = (1..=3u64).map(|n| dir.join(format!("{n:020}.json"))).collect();
+    s.files.write(&files[1], b"{\"op\":\"setFlag\",\"ke").unwrap();
+    let kept = files.iter().map(|p| (p.clone(), s.files.read(p).unwrap())).collect();
+    (ops, kept)
+}
+
+/// Found in review: a change waiting whose file was damaged was renamed `.json.bad` and passed
+/// over, and the changes made after it were sent as if it had never been made. The queue reads as
+/// an error that names that file, and every file stays where it is, byte for byte.
+#[test]
+fn a_damaged_change_is_an_error_and_stays_where_it_is() {
+    let s = Store::memory();
+    let (ops, files) = three_the_second_damaged(&s);
+    let read = s.load_ops("a1");
+    assert!(damaged_at(&read, &files[1].0), "{read:?}");
+    for (p, bytes) in &files {
+        assert_eq!(s.files.read(p).ok().as_ref(), Some(bytes), "{}: moved or changed", p.display());
+    }
+    // The head is read alone; once it's taken out, the damaged one is the head: an error too.
+    assert_eq!(s.first_op("a1").unwrap().as_ref(), Some(&ops[0]));
+    s.remove_op("a1", &ops[0]).unwrap();
+    let first = s.first_op("a1");
+    assert!(damaged_at(&first, &files[1].0), "{first:?}");
+    for (p, bytes) in &files[1..] {
+        assert_eq!(s.files.read(p).ok().as_ref(), Some(bytes), "{}: moved or changed", p.display());
+    }
+    assert!(!s.files.exists(&files[1].0.with_extension("json.bad")), "renamed");
+}
+
+/// The damaged change and every change made after it go aside as they are, into the account's
+/// `ops-aside/`: the queue is what came before it, and nothing aside is read as a change again. A
+/// second time goes in a folder of its own, nothing set aside before written over.
+#[test]
+fn changes_from_a_damaged_one_on_are_kept_apart() {
+    let s = Store::memory();
+    let (ops, files) = three_the_second_damaged(&s);
+    // A change that reads is never kept from the server.
+    assert_eq!(s.set_ops_aside_from("a1", &files[0].0).unwrap(), 0);
+    assert!(files.iter().all(|(p, _)| s.files.is_file(p)));
+    assert_eq!(s.set_ops_aside_from("a1", &files[1].0).unwrap(), 2);
+    assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&ops[0]));
+    assert_eq!(s.files.read(&files[0].0).ok().as_ref(), Some(&files[0].1), "the one before stays");
+    let aside = s.account_dir("a1").join("ops-aside");
+    let name = |p: &Path| p.file_name().map(PathBuf::from).unwrap_or_default();
+    for (p, bytes) in &files[1..] {
+        assert_eq!(s.files.read(&aside.join(name(p))).ok().as_ref(), Some(bytes), "{}: not aside as it was", p.display());
+        assert!(!s.files.exists(p), "{}: still in the queue", p.display());
+    }
+    // What isn't a file of the queue moves nothing.
+    assert_eq!(s.set_ops_aside_from("a1", &s.account_dir("a1").join("folders.json")).unwrap(), 0);
+    assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&ops[0]));
+    // A second time: the changes take the same numbers again, and go in a folder of their own.
+    s.add_op("a1", ops[1].clone()).unwrap();
+    s.files.write(&files[1].0, b"[1,").unwrap();
+    s.add_op("a1", ops[2].clone()).unwrap();
+    assert_eq!(s.set_ops_aside_from("a1", &files[1].0).unwrap(), 2);
+    let again = aside.join("2");
+    assert_eq!(s.files.read(&again.join(name(&files[1].0))).ok(), Some(b"[1,".to_vec()));
+    assert!(s.files.is_file(&again.join(name(&files[2].0))));
+    for (p, bytes) in &files[1..] {
+        assert_eq!(s.files.read(&aside.join(name(p))).ok().as_ref(), Some(bytes), "{}: written over", p.display());
+    }
+    assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&ops[0]));
+}
+
+/// The queue from before the journal (`ops.json`) is its head: damaged, nothing after it can be
+/// sent, and it goes aside whole with every change of the journal.
+#[test]
+fn a_damaged_queue_from_before_the_journal_is_kept_apart_whole() {
+    let s = Store::memory();
+    let old = s.account_dir("a1").join("ops.json");
+    let damaged = b"[{\"op\":\"setFlag\",\"keys\":[".to_vec();
+    s.files.write(&old, &damaged).unwrap();
+    s.add_op("a1", burst_op(4, 50)).unwrap();
+    s.add_op("a1", burst_op(5, 50)).unwrap();
+    let journal: Vec<(PathBuf, Vec<u8>)> =
+        s.files.list(&s.account_dir("a1").join("ops")).into_iter().map(|(_, p)| (p.clone(), s.files.read(&p).unwrap())).collect();
+    assert_eq!(journal.len(), 2);
+    let read = s.load_ops("a1");
+    assert!(damaged_at(&read, &old), "{read:?}");
+    let first = s.first_op("a1");
+    assert!(damaged_at(&first, &old), "{first:?}");
+    assert_eq!(s.files.read(&old).ok(), Some(damaged.clone()), "left as it is");
+    assert_eq!(s.set_ops_aside_from("a1", &old).unwrap(), 3);
+    assert!(s.load_ops("a1").unwrap().is_empty() && s.first_op("a1").unwrap().is_none());
+    let aside = s.account_dir("a1").join("ops-aside");
+    assert_eq!(s.files.read(&aside.join("ops.json")).ok(), Some(damaged));
+    for (p, bytes) in &journal {
+        assert_eq!(s.files.read(&aside.join(p.file_name().unwrap())).ok().as_ref(), Some(bytes), "{}", p.display());
+    }
 }

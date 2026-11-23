@@ -2424,3 +2424,5 @@ presence	Offline	לא מחובר
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	לא ניתן היה לקרוא את מספור ההודעות של החשבון הזה, ולכן הדואר שלו אינו מסונכרן בינתיים: {error}
 	a file Quatrelle keeps is damaged: {error}	קובץ ש-Quatrelle שומר פגום: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	לא ניתן היה לקרוא את רשימת החשבונות, ולכן היא לא נשמרת: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	לא ניתן היה לקרוא {count} שינויים שבוצעו במחשב הזה, והם לא נשלחו; הם נשמרים בנפרד, ומוצג המצב שבשרת

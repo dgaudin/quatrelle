@@ -9,12 +9,12 @@ use quatrelle_store::FolderState;
 
 use super::*;
 
-fn folder(path: &str) -> Folder {
+pub(super) fn folder(path: &str) -> Folder {
     Folder { account: "a1".into(), path: path.into(), delimiter: Some('/'), selectable: true, ..Default::default() }
 }
 
 /// A folder `path` cached with `n` messages.
-fn cache(store: &Store, path: &str, n: u32) {
+pub(super) fn cache(store: &Store, path: &str, n: u32) {
     let messages = (1..=n)
         .map(|uid| Summary {
             key: MessageKey { account: "a1".into(), folder: path.into(), validity: 7, uid },
@@ -26,12 +26,12 @@ fn cache(store: &Store, path: &str, n: u32) {
 }
 
 /// The messages kept of `path`.
-fn cached(store: &Store, path: &str) -> usize {
+pub(super) fn cached(store: &Store, path: &str) -> usize {
     store.load_folder("a1", path).map(|f| f.messages.len()).unwrap_or(0)
 }
 
 /// An IMAP account on the fake server at `port`.
-fn imap_account(port: u16) -> AccountConfig {
+pub(super) fn imap_account(port: u16) -> AccountConfig {
     AccountConfig {
         id: "a1".into(),
         email: "me@studio.example".into(),
@@ -42,7 +42,7 @@ fn imap_account(port: u16) -> AccountConfig {
 }
 
 /// A worker for `acc`, its events in `pool`.
-fn worker(acc: AccountConfig, secret: &str, store: &Store, pool: &Pool) -> Worker {
+pub(super) fn worker(acc: AccountConfig, secret: &str, store: &Store, pool: &Pool) -> Worker {
     Worker::new(acc, Auth::shared(secret), store.clone(), pool.sink.clone(), SyncOptions::default())
 }
 

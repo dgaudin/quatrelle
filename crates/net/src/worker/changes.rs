@@ -498,6 +498,23 @@ impl Worker {
         (Err(NetError::Later(said)), false)
     }
 
+    /// The change waiting at `path`, that can't be read, and every change made after it, kept
+    /// aside (never sent, nor passed over), and said; `false` when they couldn't be: none is sent.
+    fn set_aside_from(&mut self, path: &str) -> bool {
+        match self.store.set_ops_aside_from(&self.acc.id, std::path::Path::new(path)) {
+            Ok(0) => false,
+            Ok(count) => {
+                self.waiting = None;
+                self.sink.emit(Event::OpsSetAside { account: self.id(), count });
+                true
+            }
+            Err(e) => {
+                log::warn!("{}: changes waiting that can't be read weren't kept aside: {e}", self.acc.id);
+                false
+            }
+        }
+    }
+
     /// Replay offline changes on the server, oldest first.
     pub(super) fn replay(&mut self) {
         let mut destinations: Vec<String> = Vec::new();
@@ -509,9 +526,18 @@ impl Worker {
         let mut retried = false;
         // The queue is the journal's: bounded, in case taking an entry out keeps failing.
         for _ in 0..100_000 {
-            let Some(op) = self.store.first_op(&self.acc.id).unwrap_or_default() else {
-                self.waiting = None;
-                break;
+            let op = match self.store.first_op(&self.acc.id) {
+                Ok(Some(op)) => op,
+                // A change that can't be read is never passed over: it and every change made
+                // after it are kept aside and said (those before it went already).
+                Err(quatrelle_store::StoreError::Damaged { path }) if self.set_aside_from(&path) => continue,
+                other => {
+                    if let Err(e) = other {
+                        log::warn!("{}: the changes waiting can't be read, none is sent for now: {e}", self.acc.id);
+                    }
+                    self.waiting = None;
+                    break;
+                }
             };
             // The change refused for now waits for its time; the ones after it wait with it.
             match &self.waiting {

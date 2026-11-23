@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod damaged;
 mod drafts;
 mod importing;
 mod read_errors;

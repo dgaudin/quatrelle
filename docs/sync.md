@@ -170,8 +170,12 @@ The pool writes them on a thread of its own (`edit_writer` in `worker.rs`), in o
 removed meanwhile (its files go at once, on the UI's thread) has its queued changes dropped, not
 written back (`Store::while_kept`).
 When connected, the worker replays them oldest first, deleting each entry once the server accepts
-or rejects it, also between folders of a full sync. After a folder is re-read from the server,
-queued ops that touch it are applied to the new cache again:
+or rejects it, also between folders of a full sync. An entry that can't be read (damaged) is never
+passed over: it and every change made after it are moved as they are into `<account>/ops-aside/`
+(a folder of its own each further time, nothing there removed), never read as changes again, and
+the user is told how many (`Event::OpsSetAside`); the changes before it go as ever, and until the
+worker reaches it the other readers of the queue take it as one that can't be read. After a
+folder is re-read from the server, queued ops that touch it are applied to the new cache again:
 
 - flags: `UID STORE <set> +FLAGS.SILENT (…)` / `-FLAGS.SILENT`;
 - move: `UID MOVE` (RFC 6851), else `UID COPY` + `\Deleted` + `UID EXPUNGE` (RFC 4315; plain

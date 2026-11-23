@@ -2429,3 +2429,5 @@ presence	Offline	Не в сети
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	не удалось прочитать нумерацию сообщений этой учётной записи, поэтому её почта пока не синхронизируется: {error}
 	a file Quatrelle keeps is damaged: {error}	файл, который хранит Quatrelle, повреждён: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	не удалось прочитать список учётных записей, поэтому он не сохраняется: {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	Изменения, сделанные на этом компьютере, не удалось прочитать, и они не отправлены (их: {count}); они хранятся отдельно, а показывается состояние сервера

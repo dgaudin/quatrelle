@@ -688,6 +688,7 @@ fn log_event(e: &Event) {
         Event::SendFailed { account, id, error } => log::warn!("{account}: message {id} not sent: {error}"),
         Event::Queued { account, id, error } => log::warn!("{account}: message {id} waits in the Outbox: {error}"),
         Event::OpFailed { account, op, error } => log::warn!("{account}: a change failed ({}): {error}", op.summary()),
+        Event::OpsSetAside { account, count } => log::warn!("{account}: {count} changes waiting kept aside, never sent"),
         // Logged where it's asked for, with the time it took: one line per message.
         Event::TextFirst { .. } => {}
         Event::BodyFailed { key, error } => log::warn!("{}: a message didn't download: {error}", key.account),

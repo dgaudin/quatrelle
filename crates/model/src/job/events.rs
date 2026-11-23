@@ -108,6 +108,13 @@ pub enum Event {
         op: Op,
         error: String,
     },
+    /// Changes waiting that couldn't be read were never sent: the first that couldn't, and every
+    /// one made after it (`count` files), are kept aside, as they are, in the account's
+    /// `ops-aside/`, never read as changes again. What they made here isn't the server's.
+    OpsSetAside {
+        account: String,
+        count: usize,
+    },
     /// The archive and retention policy tags the account's server offers (Exchange), read once a session; none
     /// when it has none or refuses.
     ArchiveTags {

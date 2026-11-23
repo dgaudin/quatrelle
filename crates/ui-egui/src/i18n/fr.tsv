@@ -2429,3 +2429,5 @@ presence	Offline	Hors ligne
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	la numérotation des messages de ce compte n’a pas pu être lue, son courrier n’est donc pas synchronisé pour l’instant : {error}
 	a file Quatrelle keeps is damaged: {error}	un fichier que Quatrelle conserve est abîmé : {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	la liste des comptes n’a pas pu être lue, elle n’est donc pas enregistrée : {error}
+# Changes waiting that couldn't be read are kept aside, never sent nor passed over.
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	{count} changements faits sur cet ordinateur n’ont pas pu être lus et n’ont pas été envoyés ; ils sont gardés à part, et c’est l’état du serveur qui s’affiche
