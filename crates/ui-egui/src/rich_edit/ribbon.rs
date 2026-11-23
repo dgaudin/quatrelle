@@ -401,8 +401,9 @@ fn rewrite_button(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &Compose, input: 
     let r = widgets::big_button(ui, Icon::Drafts, "Rewrite", t, rewrite_on(c, input.written))
         .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
     let r = if input.written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
+    let selection = rewrite_selection(ed);
     let mut asked = false;
-    egui::Popup::menu(&r).show(|ui| asked = rewrite_choices(ui, acts, &ed.sel));
+    egui::Popup::menu(&r).show(|ui| asked = rewrite_choices(ui, acts, selection.as_ref()));
     if asked {
         // The menu had the keyboard: the text gets it back, so Ctrl+Z, typing and the
         // right-click menu still work while the answer comes.
@@ -416,8 +417,14 @@ pub(crate) fn rewrite_on(c: &Compose, written: bool) -> bool {
     written && !c.sending && c.rewrite.as_ref().is_none_or(|r| r.answer.is_some())
 }
 
+/// The part a ribbon Rewrite works on: the editor's selection, unless its text is a block of the
+/// original quoted, whose positions are not the written text's (then the whole written text).
+pub(crate) fn rewrite_selection(ed: &Editor) -> Option<std::ops::Range<usize>> {
+    if ed.in_quote { None } else { Some(ed.sel.clone()) }
+}
+
 /// Rewrite's ways, each asking the language model.
-pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>, sel: &std::ops::Range<usize>) -> bool {
+pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>, sel: Option<&std::ops::Range<usize>>) -> bool {
     let mut asked = false;
     for (how, label) in [
         ("fix", "Correct spelling and grammar"),
@@ -427,7 +434,12 @@ pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>, sel: &std::op
         ("english", "In English"),
     ] {
         if ui.button(tl!(label)).clicked() {
-            acts.push(Action::Run("assistant.rewrite", json!({"how": how, "from": sel.start, "to": sel.end})));
+            let mut params = json!({ "how": how });
+            if let Some(sel) = sel {
+                params["from"] = json!(sel.start);
+                params["to"] = json!(sel.end);
+            }
+            acts.push(Action::Run("assistant.rewrite", params));
             asked = true;
             ui.close();
         }

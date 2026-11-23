@@ -448,7 +448,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                             .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
                         let r = if written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
                         let mut asked = false;
-                        egui::Popup::menu(&r).show(|ui| asked = rich_edit::rewrite_choices(ui, acts, &ed.sel));
+                        egui::Popup::menu(&r).show(|ui| asked = rich_edit::rewrite_choices(ui, acts, Some(&ed.sel)));
                         if asked {
                             ed.refocus = Some(ed.sel.clone());
                         }

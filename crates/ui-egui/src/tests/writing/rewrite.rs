@@ -5,6 +5,39 @@
 
 use super::*;
 
+type Handed = std::rc::Rc<std::cell::RefCell<Vec<quatrelle_engine::model::Job>>>;
+
+struct Recorder(Handed);
+
+impl crate::Backend for Recorder {
+    fn submit(&mut self, job: quatrelle_engine::model::Job) {
+        self.0.borrow_mut().push(job);
+    }
+
+    fn poll(&mut self) -> Vec<MailEvent> {
+        Vec::new()
+    }
+}
+
+/// The ribbon's Rewrite, below the reading pane's bar when both are drawn.
+fn ribbon_rewrite(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> egui::Pos2 {
+    for _ in 0..20 {
+        let shapes = frame_shapes(ctx, a, vec![], size);
+        let mut at: Vec<egui::Pos2> = shapes
+            .iter()
+            .filter_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text() == "Rewrite" => Some(t.pos + t.galley.rect.center().to_vec2()),
+                _ => None,
+            })
+            .collect();
+        at.sort_by(|a, b| b.y.partial_cmp(&a.y).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some(p) = at.first() {
+            return *p;
+        }
+    }
+    panic!("no Rewrite button");
+}
+
 /// Rewrite was under the Review tab only, and on before anything was typed.
 #[test]
 fn rewrite_is_beside_discard_and_grey_until_something_is_typed() {
@@ -123,4 +156,75 @@ fn using_a_rewrite_is_one_undo_step() {
     let again = a.session.compose.as_ref().unwrap();
     assert_eq!((again.body.clone(), again.styles.clone()), (after.body.clone(), after.styles.clone()), "one step forward");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The ribbon's Rewrite while the cursor is in a block of the original shown as it came asks
+/// about the whole written text, not about the block's selection applied to it.
+#[test]
+fn rewrite_in_a_quoted_block_uses_the_whole_written_text() {
+    let (mut a, dir) = app("rewrite-quote-selection");
+    let handed = Handed::default();
+    a.backend = Box::new(Recorder(handed.clone()));
+    a.session.prefs.reply_window = false;
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3"}));
+    frame(&ctx, &mut a, vec![]);
+    let open = a.session.list.iter().find(|m| m.subject == "Open call: winter group show").map(|m| m.key.to_id()).expect("the sample newsletter");
+    a.run("list.open", json!({"key": open}));
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.reply", json!({}));
+    for _ in 0..2 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    a.run("compose.popOut", json!({}));
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let (compose, n) = {
+        let c = a.session.compose.as_ref().expect("a reply");
+        let q = c.quote.clone().expect("the original as it came");
+        let n = (0..q.cells()).find(|n| q.cell(*n).is_some_and(|(t, _)| t.contains("Dear artists"))).expect("the greeting block");
+        (c.id, n)
+    };
+    if let Some(c) = a.session.compose.as_mut() {
+        c.body = format!("WHOLE BODY\n\n{}", c.body);
+        c.styles = quatrelle_engine::mime::rich::Styles::plain(&c.body);
+    }
+    frame(&ctx, &mut a, vec![]);
+    let body = a.session.compose.as_ref().map(crate::rich_edit::body_id).expect("a reply");
+    ctx.memory_mut(|m| m.surrender_focus(body));
+    a.ui.quote_focus = Some((compose, n));
+    frame(&ctx, &mut a, vec![]);
+    if let Some(ed) = a.ui.quote_editors.get_mut(&(compose, n)) {
+        ed.in_quote = true;
+        ed.sel = 3..8;
+    }
+    assert_eq!(a.ui.quote_focus, Some((compose, n)), "the block has the cursor");
+    let rewrite = ribbon_rewrite(&ctx, &mut a, size);
+    click_at(&ctx, &mut a, rewrite, 1, size);
+    let shorter = settled_text_at(&ctx, &mut a, "Shorter", size).expect("Shorter");
+    click_at(&ctx, &mut a, shorter, 1, size);
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let sent = handed.borrow().iter().find_map(|j| match j {
+        quatrelle_engine::model::Job::AskLlm { messages, .. } => messages.get(1).map(|m| m.1.clone()),
+        _ => None,
+    });
+    let sent = sent.unwrap_or_else(|| panic!("the rewrite was asked: {:?}", a.session.compose.as_ref().map(|c| (&c.rewrite, &c.error))));
+    assert!(sent.contains("WHOLE BODY"), "the written text, not the quote's selection: {sent:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A selection in a quoted block is not a selection in the written text: the ribbon asks about
+/// the whole text sent, never about positions from the quote.
+#[test]
+fn a_quoted_blocks_selection_is_not_the_written_texts_selection() {
+    let mut ed = crate::rich_edit::Editor::new(7);
+    ed.sel = 3..8;
+    ed.in_quote = true;
+    assert_eq!(crate::rich_edit::rewrite_selection(&ed), None);
+    ed.in_quote = false;
+    assert_eq!(crate::rich_edit::rewrite_selection(&ed), Some(3..8));
 }

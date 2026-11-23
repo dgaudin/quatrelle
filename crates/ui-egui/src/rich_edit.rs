@@ -46,6 +46,7 @@ pub(crate) use paste::{clipboard_html_once, forget_clipboard_html};
 #[cfg(test)]
 pub(crate) use pictures::FIT_WIDTH;
 pub(crate) use pictures::{own_size, own_size_of, placement};
+pub(crate) use ribbon::rewrite_selection;
 use ribbon::*;
 pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon, rewrite_choices, rewrite_on, scheme_name};
 pub(crate) use signature::draw as draw_signature;
