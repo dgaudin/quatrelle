@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope><soap:Header><t:ServerVersionInfo MajorVersion="15" MinorVersion="1"/></soap:Header><soap:Body><m:Responses><m:ResponseMessages>
+<m:FindFolderResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode>
+<m:RootFolder IncludesLastItemInRange="true"><t:Folders>
+<t:Folder><t:FolderId Id="AAMkFolder1"/><t:ParentFolderId Id="root"/><t:DisplayName>Inbox</t:DisplayName><t:TotalCount>2</t:TotalCount><t:UnreadCount>1</t:UnreadCount><t:FolderClass>IPF.Note</t:FolderClass></t:Folder>
+<t:Folder><t:FolderId Id="AAMkHidden"/><t:DisplayName>Working Set</t:DisplayName><t:ExtendedProperty><t:ExtendedFieldURI PropertyTag="0x10f4" PropertyType="Boolean"/><t:Value>true</t:Value></t:ExtendedProperty></t:Folder>
+</t:Folders></m:RootFolder></m:FindFolderResponseMessage>
+<m:SyncFolderItemsResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode>
+<m:SyncState>state-1</m:SyncState><m:IncludesLastItemInRange>true</m:IncludesLastItemInRange><m:Changes>
+<t:Create><t:Message><t:ItemId Id="AAMkMsg1"/><t:Subject>Mix review</t:Subject><t:From><t:Mailbox><t:Name>Ana</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress></t:Mailbox></t:From><t:DateTimeReceived>2026-11-02T09:00:00Z</t:DateTimeReceived><t:IsRead>false</t:IsRead></t:Message></t:Create>
+<t:ReadFlagChange><t:ItemId Id="AAMkMsg1"/><t:IsRead>true</t:IsRead></t:ReadFlagChange>
+</m:Changes></m:SyncFolderItemsResponseMessage>
+<m:FindItemResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RootFolder IncludesLastItemInRange="true"><m:Items>
+<t:Message><t:ItemId Id="AAMkMsg1"/><t:Subject>Mix review</t:Subject><t:IsRead>true</t:IsRead><t:Size>2048</t:Size></t:Message>
+</m:Items></m:RootFolder></m:FindItemResponseMessage>
+<m:ResolveNamesResponseMessage ResponseClass="Warning"><m:ResponseCode>ErrorNameResolutionMultipleResults</m:ResponseCode>
+<m:ResolutionSet IncludesLastItemInRange="true"><t:Resolution><t:Mailbox><t:Name>Ana Lima</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox></t:Resolution></m:ResolutionSet></m:ResolveNamesResponseMessage>
+<m:ExpandDLResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:DLExpansion TotalItemsInView="1" IncludesLastItemInRange="true"><t:Mailbox><t:Name>Ana</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox></m:DLExpansion></m:ExpandDLResponseMessage>
+<m:GetInboxRulesResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:InboxRules>
+<t:Rule><t:RuleId Id="r1"/><t:DisplayName>From Ana</t:DisplayName><t:IsEnabled>true</t:IsEnabled><t:Conditions><t:ContainsSenderStrings><t:String>ana@studio.example</t:String></t:ContainsSenderStrings></t:Conditions><t:Actions><t:MarkAsRead>true</t:MarkAsRead></t:Actions></t:Rule></m:InboxRules></m:GetInboxRulesResponseMessage>
+<m:GetRemindersResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:Reminders>
+<t:Reminder><t:ItemId Id="AAMkMsg1" ChangeKey="ck1"/><t:StartDate>2026-11-02T08:00:00Z</t:StartDate><t:Subject>Mix review</t:Subject></t:Reminder></m:Reminders></m:GetRemindersResponseMessage>
+<m:GetUserRetentionPolicyTagsResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:RetentionPolicyTags>
+<t:RetentionPolicyTag><t:RetentionId>11111111-2222-3333-4444-555555555555</t:RetentionId><t:DisplayName>Archive after one year</t:DisplayName><t:Type>Personal</t:Type><t:RetentionAction>MoveToArchive</t:RetentionAction><t:RetentionPeriod>365</t:RetentionPeriod><t:IsArchive>true</t:IsArchive><t:IsVisible>true</t:IsVisible></t:RetentionPolicyTag>
+</m:RetentionPolicyTags></m:GetUserRetentionPolicyTagsResponseMessage>
+<m:GetMailTipsResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:ResponseMessages>
+<m:MailTipsResponseMessageType ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:MailTips><t:RecipientAddress><t:Name>Ana</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress></t:RecipientAddress><t:AutomaticReplies><t:Message>Away</t:Message></t:AutomaticReplies></m:MailTips></m:MailTipsResponseMessageType></m:ResponseMessages></m:GetMailTipsResponseMessage>
+</m:ResponseMessages></m:Responses></soap:Body></soap:Envelope>

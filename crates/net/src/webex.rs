@@ -250,6 +250,20 @@ fn usable_link(link: &str) -> bool {
     link.starts_with("https://") && link.chars().count() <= MAX_LINK && !link.chars().any(char::is_control)
 }
 
+/// The meeting an answer carries, read as hostile JSON: a usable id and link, texts cleaned and
+/// bounded. For the fuzz target.
+#[doc(hidden)]
+pub fn meeting_of(body: &[u8]) -> Result<WebexMeeting, WebexError> {
+    meeting(body)
+}
+
+/// Why Webex refused a request, read from its status and answer, as hostile JSON. For the fuzz
+/// target.
+#[doc(hidden)]
+pub fn refusal_of(status: u16, body: &[u8]) -> WebexError {
+    refusal(&Response { status, headers: Vec::new(), body: body.to_vec(), head_at: None, url: None })
+}
+
 /// A text from an answer, with no control character, trimmed and at most [`MAX_TEXT`] long.
 fn clean(text: &str) -> String {
     let text: String = text.chars().filter(|c| !c.is_control()).collect();

@@ -188,6 +188,27 @@ pub(super) fn certificates_of(m: &El, email: &str) -> Vec<Vec<u8>> {
     out
 }
 
+/// The people in a `ResolveNames` answer (at most a hundred, each once) and whether there are
+/// more. For the fuzz target.
+#[doc(hidden)]
+pub fn people_listed(doc: &El) -> (Vec<Addressee>, bool) {
+    people_of(doc)
+}
+
+/// The members in an `ExpandDL` answer (five hundred at most, each once), whether there are more
+/// and how many the list says it has. For the fuzz target.
+#[doc(hidden)]
+pub fn members_listed(doc: &El) -> (Vec<Addressee>, bool, usize) {
+    members_of(doc)
+}
+
+/// The certificates in a `ResolveNames` answer for an address, each at most 64 KB. For the fuzz
+/// target.
+#[doc(hidden)]
+pub fn certificates_listed(doc: &El, email: &str) -> Vec<Vec<u8>> {
+    certificates_of(doc, email)
+}
+
 #[cfg(test)]
 mod tests {
     use quatrelle_model::EmailAddress;

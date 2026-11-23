@@ -631,3 +631,25 @@ fn a_change_to_someone_elses_meeting_leaves_its_zone_and_pattern() {
         }
     }
 }
+
+/// A shortcut's shown name and group are cut to a length the Calendar pane can show, however
+/// long the server makes them.
+#[test]
+fn a_shortcuts_name_and_group_are_bounded() {
+    let entry = "AAAAANynQMjAQhAatLkIACsv4YIAAAAAAAAAAC9vPVN0dWRpby9jbj1BbmEA";
+    let long = "n".repeat(5000);
+    let xml = format!(
+        "<m:FindItemResponseMessage><m:Items><t:Message>\
+         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x001A\" PropertyType=\"String\"/><t:Value>IPM.Microsoft.WunderBar.Link</t:Value></t:ExtendedProperty>\
+         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6852\" PropertyType=\"Integer\"/><t:Value>3</t:Value></t:ExtendedProperty>\
+         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6849\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>\
+         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6851\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
+         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E1D\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
+         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6854\" PropertyType=\"Binary\"/><t:Value>{entry}</t:Value></t:ExtendedProperty>\
+         </t:Message></m:Items></m:FindItemResponseMessage>"
+    );
+    let shortcuts = shortcuts_listed(&parse(&xml));
+    assert_eq!(shortcuts.len(), 1);
+    assert!(shortcuts[0].1.chars().count() <= 255, "{} characters in a name", shortcuts[0].1.chars().count());
+    assert!(shortcuts[0].2.chars().count() <= 255, "{} characters in a group", shortcuts[0].2.chars().count());
+}

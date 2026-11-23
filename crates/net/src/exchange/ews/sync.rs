@@ -464,7 +464,7 @@ fn changes(
 }
 
 /// An item's list entry from its details.
-fn item_summary(it: &El, key: MessageKey) -> Summary {
+pub(super) fn item_summary(it: &El, key: MessageKey) -> Summary {
     let received = it.text_of("DateTimeReceived").and_then(jmap::utc_date).unwrap_or(0);
     let size = it.text_of("Size").and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(0);
     let mut s = mime::summary_from_header(&header_block(it), key, flags(it), size, received);

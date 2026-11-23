@@ -267,21 +267,29 @@ pub(crate) fn token_request_within(p: &Provider, mut fields: Vec<(&str, String)>
         &Request::post(&p.token_url, "application/x-www-form-urlencoded", form(&pairs), 1 << 20).header("Accept", "application/json"),
         within,
     )?;
+    tokens_of_answer(r.status, &r.body, &p.name)
+}
+
+/// The tokens a sign-in service's answer carries, read as hostile JSON, or why it refused. A
+/// service busy or failing (429, 5xx, said in its JSON or not) is the connection's failure, tried
+/// again; never taken for a refusal that asks to sign in again. For the fuzz target.
+#[doc(hidden)]
+pub fn tokens_of_answer(status: u16, body: &[u8], name: &str) -> Result<Tokens> {
     // The service busy or failing (429, 5xx, said in its JSON or not): the connection's failure,
     // tried again; never taken for a refusal that asks to sign in again.
     let busy = |status: u16| NetError::Closed(format!("HTTP {status}"));
-    if r.status == 429 || (500..600).contains(&r.status) {
-        return Err(busy(r.status));
+    if status == 429 || (500..600).contains(&status) {
+        return Err(busy(status));
     }
     let v: Value =
-        serde_json::from_slice(&r.body).map_err(|_| NetError::Protocol(format!("the sign-in service answered HTTP {} without JSON", r.status)))?;
+        serde_json::from_slice(body).map_err(|_| NetError::Protocol(format!("the sign-in service answered HTTP {status} without JSON")))?;
     if matches!(v.get("error").and_then(Value::as_str), Some("temporarily_unavailable" | "server_error")) {
-        return Err(busy(r.status));
+        return Err(busy(status));
     }
-    if !r.ok() || v.get("error").is_some() {
+    if !(200..300).contains(&status) || v.get("error").is_some() {
         let what = v.get("error_description").or_else(|| v.get("error")).and_then(Value::as_str).unwrap_or("refused");
         // A revoked or expired grant means signing in again.
-        return Err(NetError::Auth(format!("{}: {what}", p.name)));
+        return Err(NetError::Auth(format!("{name}: {what}")));
     }
     let access = v
         .get("access_token")
@@ -321,6 +329,17 @@ pub fn refresh(p: &Provider, refresh_token: &str) -> Result<Tokens> {
 fn query_params(target: &str) -> Vec<(String, String)> {
     let q = target.split_once('?').map_or("", |(_, q)| q);
     q.split('&').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (unpct(k), unpct(&v.replace('+', " ")))).collect()
+}
+
+/// The parameters of the browser's request line to the loopback redirect (`GET /?code=…&state=…
+/// HTTP/1.1`), as the sign-in's listener reads them, and the `AADSTS` code in a refusal's words.
+/// For the fuzz target.
+#[doc(hidden)]
+pub fn redirect_read(line: &str) -> (Vec<(String, String)>, Option<String>) {
+    let target = line.split_whitespace().nth(1).unwrap_or("");
+    let params = query_params(target);
+    let code = params.iter().find(|(k, _)| k == "error_description").and_then(|(_, d)| aadsts_code(d));
+    (params, code)
 }
 
 pub(crate) fn unpct(s: &str) -> String {

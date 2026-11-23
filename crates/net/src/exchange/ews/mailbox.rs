@@ -18,6 +18,137 @@ enum Only {
 /// them hidden.
 pub(super) const SYSTEM_FOLDERS: [&str; 5] = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
 
+/// A folder's own archive and retention policy tags (each the server's id).
+type OwnTags = (Option<String>, Option<String>);
+
+/// A folder of a `FindFolder` page, with its archive and retention tags of its own; `None` for
+/// one Exchange hides, one that isn't the user's mail, or one with no id (`root`: the id of the
+/// mailbox's own top folder, whose system folders by name are left out; `skip`: folders not to
+/// list). The role is added by the caller, which knows the distinguished folders. For the fuzz
+/// target too.
+pub(super) fn folder_of(f: &El, root: Option<&str>, skip: &[String]) -> Option<(Mailbox, OwnTags)> {
+    let id = f.child("FolderId").and_then(|i| i.attr("Id")).filter(|id| !id.trim().is_empty()).map(str::to_string)?;
+    let class = f.text_of("FolderClass").unwrap_or("");
+    // Exchange's own hidden folders aren't the user's mail: Outlook doesn't show them, and some
+    // take long to read.
+    let hidden = is_hidden(f);
+    let top = f.child("ParentFolderId").and_then(|p| p.attr("Id")).is_some_and(|p| Some(p) == root);
+    if hidden || (top && f.text_of("DisplayName").is_some_and(|n| SYSTEM_FOLDERS.contains(&n.trim()))) {
+        return None;
+    }
+    if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note.")) || skip.contains(&id) {
+        return None;
+    }
+    let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).filter(|p| Some(p.as_str()) != root);
+    let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
+    let own = (shared::own_tag(f, quatrelle_model::PolicyKind::Archive), shared::own_tag(f, quatrelle_model::PolicyKind::Retention));
+    Some((
+        Mailbox {
+            name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
+            parent,
+            role: FolderRole::Other,
+            total: count("TotalCount"),
+            unread: count("UnreadCount"),
+            id,
+        },
+        own,
+    ))
+}
+
+/// What a `FindFolder` answer's first page says: its folders, and whether it was the last page
+/// (`root`: the id of the mailbox's own top folder, as the session reads it). For the fuzz target.
+#[doc(hidden)]
+pub fn mailboxes_listed(doc: &El, root: Option<&str>) -> (Vec<Mailbox>, bool) {
+    let mut out = Vec::new();
+    let found = messages(doc);
+    let Some(m) = found.iter().find(|m| m.find("Folders").is_some()).copied() else { return (out, true) };
+    let Some(rf) = m.child("RootFolder") else { return (out, true) };
+    for f in rf.folders() {
+        if out.len() >= MAX_FOLDERS {
+            break;
+        }
+        if let Some((mailbox, _)) = folder_of(f, root, &[]) {
+            out.push(mailbox);
+        }
+    }
+    let last = rf.attr("IncludesLastItemInRange").is_none_or(|v| v == "true");
+    (out, last)
+}
+
+/// The changes a `SyncFolderItems` answer lists, the state to ask from next and whether that was
+/// all of them, read as hostile XML. For the fuzz target.
+#[doc(hidden)]
+pub fn changes_listed(doc: &El) -> Result<(Vec<Change>, String, bool)> {
+    let found = messages(doc);
+    let m = found.iter().find(|m| m.text_of("SyncState").is_some()).copied().ok_or_else(|| NetError::Protocol("no SyncFolderItems answer".into()))?;
+    changes_of(m)
+}
+
+/// The ids and marks of the items a `FindItem` answer lists, and whether the last page was in.
+/// For the fuzz target.
+#[doc(hidden)]
+pub fn items_listed(doc: &El) -> (Vec<(String, Flags)>, bool) {
+    let mut out = Vec::new();
+    let mut last = true;
+    for m in messages(doc) {
+        last &= m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")) != Some("false");
+        if let Some(items) = m.find("Items") {
+            out.extend(items_of(items));
+        }
+    }
+    (out, last)
+}
+
+/// What a `SyncFolderItems` response message lists: its changes, the state to ask from next and
+/// whether that was all of them. Read as hostile XML; no sync state is an error, not a half read.
+pub(super) fn changes_of(m: &El) -> Result<(Vec<Change>, String, bool)> {
+    let next = m
+        .text_of("SyncState")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| NetError::No("no sync state in the answer".into()))?;
+    let last = m.text_of("IncludesLastItemInRange").is_none_or(|v| v.trim() == "true");
+    let id_of = |el: &El| el.find("ItemId").and_then(|i| i.attr("Id")).map(str::to_string);
+    let mut out = Vec::new();
+    for ch in m.child("Changes").map(|c| c.kids.as_slice()).unwrap_or_default() {
+        // A creation or an update carries the item (a message, a meeting request…).
+        let item = || ch.kids.iter().find(|k| k.child("ItemId").is_some());
+        match ch.name.as_str() {
+            "Create" => {
+                if let Some(it) = item()
+                    && let Some(id) = id_of(it)
+                {
+                    out.push(Change::Created(id, flags(it)));
+                }
+            }
+            "Update" => {
+                if let Some(it) = item()
+                    && let Some(id) = id_of(it)
+                {
+                    out.push(Change::Updated(id, flags(it)));
+                }
+            }
+            "Delete" => {
+                if let Some(id) = id_of(ch) {
+                    out.push(Change::Deleted(id));
+                }
+            }
+            "ReadFlagChange" => {
+                if let Some(id) = id_of(ch) {
+                    out.push(Change::Read(id, ch.text_of("IsRead").is_some_and(|v| v.trim() == "true")));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok((out, next, last))
+}
+
+/// The items a `FindItem` answer lists: each one's id and marks, those without an id left out.
+pub(super) fn items_of(items: &El) -> Vec<(String, Flags)> {
+    items.kids.iter().filter_map(|it| Some((it.child("ItemId")?.attr("Id")?.to_string(), flags(it)))).collect()
+}
+
 impl Client {
     /// The account's mail folders, with their roles and counts, and what of them couldn't be
     /// listed this time (a shared mailbox, the public folders, the online archive): the account's
@@ -65,32 +196,15 @@ impl Client {
             let folders = rf.folders();
             let n = folders.len();
             for f in folders {
-                let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
-                let class = f.text_of("FolderClass").unwrap_or("");
-                // Exchange's own hidden folders aren't the user's mail: Outlook doesn't show
-                // them, and some take long to read.
-                let hidden = is_hidden(f);
-                let top = f.child("ParentFolderId").and_then(|p| p.attr("Id")).is_some_and(|p| Some(p) == root.as_deref());
-                if hidden || (top && f.text_of("DisplayName").is_some_and(|n| SYSTEM_FOLDERS.contains(&n.trim()))) {
-                    continue;
+                if out.len() >= MAX_FOLDERS {
+                    break;
                 }
-                if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note.")) || skip.contains(&id) || out.len() >= MAX_FOLDERS {
-                    continue;
-                }
-                let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).filter(|p| Some(p) != root.as_ref());
-                let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
-                let own = (shared::own_tag(f, quatrelle_model::PolicyKind::Archive), shared::own_tag(f, quatrelle_model::PolicyKind::Retention));
+                let Some((mut mailbox, own)) = folder_of(f, root.as_deref(), &skip) else { continue };
+                mailbox.role = role_of.get(&mailbox.id).copied().unwrap_or(FolderRole::Other);
                 if own.0.is_some() || own.1.is_some() {
-                    self.folder_tags.borrow_mut().insert(id.clone(), own);
+                    self.folder_tags.borrow_mut().insert(mailbox.id.clone(), own);
                 }
-                out.push(Mailbox {
-                    name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
-                    parent,
-                    role: role_of.get(&id).copied().unwrap_or(FolderRole::Other),
-                    total: count("TotalCount"),
-                    unread: count("UnreadCount"),
-                    id,
-                });
+                out.push(mailbox);
             }
             let last = rf.attr("IncludesLastItemInRange").is_none_or(|v| v == "true");
             offset += n;
@@ -257,8 +371,7 @@ impl Client {
             ))?;
             let last = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")) != Some("false");
             let Some(items) = m.find("Items") else { break };
-            let got: Vec<(String, Flags)> =
-                items.kids.iter().filter_map(|it| Some((it.child("ItemId")?.attr("Id")?.to_string(), flags(it)))).collect();
+            let got = items_of(items);
             let n = got.len();
             out.extend(got);
             if last || n == 0 || n < page {
@@ -327,46 +440,7 @@ impl Client {
              <m:SyncScope>NormalItems</m:SyncScope></m:SyncFolderItems>",
             esc(folder)
         ))?;
-        let next = m
-            .text_of("SyncState")
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| NetError::No("no sync state in the answer".into()))?;
-        let last = m.text_of("IncludesLastItemInRange").is_none_or(|v| v.trim() == "true");
-        let id_of = |el: &El| el.find("ItemId").and_then(|i| i.attr("Id")).map(str::to_string);
-        let mut out = Vec::new();
-        for ch in m.child("Changes").map(|c| c.kids.as_slice()).unwrap_or_default() {
-            // A creation or an update carries the item (a message, a meeting request…).
-            let item = || ch.kids.iter().find(|k| k.child("ItemId").is_some());
-            match ch.name.as_str() {
-                "Create" => {
-                    if let Some(it) = item()
-                        && let Some(id) = id_of(it)
-                    {
-                        out.push(Change::Created(id, flags(it)));
-                    }
-                }
-                "Update" => {
-                    if let Some(it) = item()
-                        && let Some(id) = id_of(it)
-                    {
-                        out.push(Change::Updated(id, flags(it)));
-                    }
-                }
-                "Delete" => {
-                    if let Some(id) = id_of(ch) {
-                        out.push(Change::Deleted(id));
-                    }
-                }
-                "ReadFlagChange" => {
-                    if let Some(id) = id_of(ch) {
-                        out.push(Change::Read(id, ch.text_of("IsRead").is_some_and(|v| v.trim() == "true")));
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok((out, next, last))
+        changes_of(&m)
     }
 
     /// Messages' details, for the list.
@@ -663,4 +737,10 @@ impl Client {
         }
         Ok((crate::picture_media(&bytes).to_string(), bytes))
     }
+}
+/// An item's list entry from its details (its marks, its header block, its received time), read
+/// as hostile XML. For the fuzz target.
+#[doc(hidden)]
+pub fn summary_listed(it: &El) -> Summary {
+    super::sync::item_summary(it, MessageKey::default())
 }

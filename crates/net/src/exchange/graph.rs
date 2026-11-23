@@ -65,6 +65,71 @@ const LIST_FIELDS: &str = "id,subject,from,sender,toRecipients,ccRecipients,repl
 /// Sent on every call, including inside each `$batch` entry, where the outer header is ignored.
 const PREFER: &str = "IdType=\"ImmutableId\", outlook.timezone=\"UTC\"";
 
+/// A folder as Graph lists it (`id`, `displayName`, `parentFolderId`, counts). `None` without an
+/// id. For the fuzz target.
+#[doc(hidden)]
+pub fn mailbox_of(f: &Value) -> Option<Mailbox> {
+    let id = f.get("id").and_then(Value::as_str).filter(|id| !id.trim().is_empty()).map(str::to_string)?;
+    let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
+    Some(Mailbox {
+        name: f.get("displayName").and_then(Value::as_str).unwrap_or_default().chars().take(255).collect(),
+        parent: f.get("parentFolderId").and_then(Value::as_str).map(str::to_string),
+        role: FolderRole::Other,
+        total: count("totalItemCount"),
+        unread: count("unreadItemCount"),
+        id,
+    })
+}
+
+/// The folders a listing page carries (`value`), at most `limit` and never more than the folder
+/// cap, each once. For the fuzz target.
+#[doc(hidden)]
+pub fn mailboxes_listed(v: &Value, limit: usize) -> Vec<Mailbox> {
+    let mut out: Vec<Mailbox> = Vec::new();
+    for f in v.get("value").and_then(Value::as_array).into_iter().flatten() {
+        if out.len() >= limit.min(MAX_FOLDERS) {
+            break;
+        }
+        let Some(m) = mailbox_of(f) else { continue };
+        if out.iter().any(|o| o.id == m.id) {
+            continue;
+        }
+        out.push(m);
+    }
+    out
+}
+
+/// The next page's address in a listing, only when it is the same server as `base` (never a
+/// token sent to another site). For the fuzz target.
+#[doc(hidden)]
+pub fn next_link(base: &str, v: &Value) -> Option<String> {
+    let origin = http::Url::parse(base).ok()?.origin();
+    match v.get("@odata.nextLink").and_then(Value::as_str) {
+        Some(next) if http::Url::parse(next).is_ok_and(|u| u.origin() == origin) => Some(next.to_string()),
+        _ => None,
+    }
+}
+
+/// A message's marks as Graph's JSON gives them (read, draft, flagged or complete, replied to or
+/// forwarded). For the fuzz target.
+#[doc(hidden)]
+pub fn flags_of(m: &Value) -> Flags {
+    flags(m)
+}
+
+/// A message's header block from its details, and its list entry (its marks, preview, files and
+/// voting buttons), read as hostile JSON. For the fuzz target.
+#[doc(hidden)]
+pub fn summary_of(m: &Value, key: MessageKey) -> Summary {
+    sync::message_summary(m, key)
+}
+
+/// A message's header block alone, as it goes to the MIME reader. For the fuzz target.
+#[doc(hidden)]
+pub fn header_block_of(m: &Value) -> Vec<u8> {
+    header_block(m)
+}
+
 /// A signed-in Graph session.
 pub struct Client {
     base: String,
@@ -210,22 +275,15 @@ impl Client {
         let mut out: Vec<Mailbox> = Vec::new();
         let mut pending: Vec<Value> = self.all(&format!("{me}/mailFolders?$top=100&$select={FOLDER_FIELDS}"), MAX_FOLDERS)?;
         while let Some(f) = pending.pop() {
-            let Some(id) = f.get("id").and_then(Value::as_str).map(str::to_string) else { continue };
-            if skip.contains(&id) || out.iter().any(|m| m.id == id) || out.len() >= MAX_FOLDERS {
+            let Some(mut m) = mailbox_of(&f) else { continue };
+            if skip.contains(&m.id) || out.iter().any(|o| o.id == m.id) || out.len() >= MAX_FOLDERS {
                 continue;
             }
             if f.get("childFolderCount").and_then(Value::as_u64).unwrap_or(0) > 0 {
-                pending.extend(self.all(&format!("{me}/mailFolders/{}/childFolders?$top=100&$select={FOLDER_FIELDS}", seg(&id)), MAX_FOLDERS)?);
+                pending.extend(self.all(&format!("{me}/mailFolders/{}/childFolders?$top=100&$select={FOLDER_FIELDS}", seg(&m.id)), MAX_FOLDERS)?);
             }
-            let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
-            out.push(Mailbox {
-                name: f.get("displayName").and_then(Value::as_str).unwrap_or_default().chars().take(255).collect(),
-                parent: f.get("parentFolderId").and_then(Value::as_str).map(str::to_string),
-                role: role_of.get(&id).copied().unwrap_or(FolderRole::Other),
-                total: count("totalItemCount"),
-                unread: count("unreadItemCount"),
-                id,
-            });
+            m.role = role_of.get(&m.id).copied().unwrap_or(FolderRole::Other);
+            out.push(m);
         }
         Ok(out)
     }
@@ -606,6 +664,14 @@ mod tests {
         assert_eq!(utc(t), "2026-10-23T09:05:07Z");
         assert_eq!(received(&json!({"receivedDateTime": "2026-10-23T09:05:07Z"})), Some(t));
         assert_eq!(received(&json!({"receivedDateTime": "soon"})), None);
+    }
+
+    /// A folder whose id is empty can't be opened and would be the same as another empty one.
+    #[test]
+    fn a_folder_without_an_id_is_left_out() {
+        assert!(mailbox_of(&json!({"id": "", "displayName": "Ghost"})).is_none());
+        assert!(mailbox_of(&json!({"id": "  ", "displayName": "Ghost"})).is_none());
+        assert!(mailbox_of(&json!({"displayName": "Ghost"})).is_none());
     }
 
     #[test]

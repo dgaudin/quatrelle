@@ -46,10 +46,18 @@ fn u16_at(m: &[u8], i: usize) -> Option<u16> {
     Some(u16::from_be_bytes([*m.get(i)?, *m.get(i + 1)?]))
 }
 
+/// Whether an answer's target reads as a host name: labels of letters, digits and hyphens, at
+/// most 253 octets (RFC 1035 §2.3.4, RFC 2181 §11: an answer's target isn't arbitrary bytes).
+fn host_name(host: &str) -> bool {
+    !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+}
+
 /// A (possibly compressed) name at `pos`; returns it and the position after it.
 fn name_at(m: &[u8], mut pos: usize) -> Option<(String, usize)> {
     let mut labels: Vec<String> = Vec::new();
     let mut end = None;
+    // The name's length on the wire, root octet included (RFC 1035 §2.3.4).
+    let mut wire = 1usize;
     for _ in 0..64 {
         let len = *m.get(pos)?;
         if len == 0 {
@@ -65,6 +73,10 @@ fn name_at(m: &[u8], mut pos: usize) -> Option<(String, usize)> {
             continue;
         }
         let l = usize::from(len & 0x3F);
+        wire = wire.checked_add(1 + l)?;
+        if wire > 255 {
+            return None;
+        }
         let label = m.get(pos + 1..pos + 1 + l)?;
         labels.push(String::from_utf8_lossy(label).to_ascii_lowercase());
         pos += 1 + l;
@@ -110,13 +122,18 @@ pub fn parse(m: &[u8], id: u16, name: &str, qtype: u16) -> Option<Vec<Record>> {
         }
         match rtype {
             CNAME => owner = name_at(m, rdata)?.0,
-            MX if qtype == MX => out.push(Record::Mx { preference: u16_at(m, rdata)?, host: name_at(m, rdata + 2)?.0 }),
-            SRV if qtype == SRV => out.push(Record::Srv {
-                priority: u16_at(m, rdata)?,
-                weight: u16_at(m, rdata + 2)?,
-                port: u16_at(m, rdata + 4)?,
-                target: name_at(m, rdata + 6)?.0,
-            }),
+            MX if qtype == MX => {
+                let host = name_at(m, rdata + 2)?.0;
+                if host_name(&host) {
+                    out.push(Record::Mx { preference: u16_at(m, rdata)?, host });
+                }
+            }
+            SRV if qtype == SRV => {
+                let target = name_at(m, rdata + 6)?.0;
+                if host_name(&target) {
+                    out.push(Record::Srv { priority: u16_at(m, rdata)?, weight: u16_at(m, rdata + 2)?, port: u16_at(m, rdata + 4)?, target });
+                }
+            }
             _ => {}
         }
     }
@@ -188,6 +205,7 @@ pub fn mx(domain: &str) -> Vec<String> {
             Record::Mx { preference, host } => Some((preference, host)),
             Record::Srv { .. } => None,
         })
+        .filter(|(_, h)| host_name(h))
         .collect();
     r.sort();
     r.into_iter().map(|(_, h)| h).collect()
@@ -204,7 +222,7 @@ pub fn srv(name: &str) -> Option<(String, u16)> {
         })
         .collect();
     r.sort();
-    r.into_iter().find(|(_, _, port, t)| !t.is_empty() && *port != 0).map(|(_, _, port, t)| (t, port))
+    r.into_iter().find(|(_, _, port, t)| host_name(t) && *port != 0).map(|(_, _, port, t)| (t, port))
 }
 
 #[cfg(test)]
@@ -305,6 +323,42 @@ mod tests {
     fn query_ids_are_drawn_at_random() {
         let ids: std::collections::BTreeSet<u16> = (0..64).filter_map(|_| fresh_id()).collect();
         assert!(ids.len() > 32, "{} different ids in 64", ids.len());
+    }
+
+    /// An answer's records name hosts only: a target with `/`, a space or a NUL is dropped, for
+    /// MX and SRV alike.
+    #[test]
+    fn a_record_names_a_host_only() {
+        let answer = |qtype: u16, rdata: &[u8]| {
+            let mut m = vec![0xAB, 0xCD, 0x81, 0x80, 0, 1, 0, 1, 0, 0, 0, 0];
+            m.extend_from_slice(b"\x07example\x03org\x00");
+            m.extend_from_slice(&qtype.to_be_bytes());
+            m.extend_from_slice(&[0, 1]);
+            m.extend_from_slice(&[0xC0, 12]);
+            m.extend_from_slice(&qtype.to_be_bytes());
+            m.extend_from_slice(&[0, 1, 0, 0, 1, 0]);
+            m.extend_from_slice(&u16::try_from(rdata.len()).unwrap().to_be_bytes());
+            m.extend_from_slice(rdata);
+            m
+        };
+        for host in [b"\x03a/b\x00".as_slice(), b"\x03a\0b\x00".as_slice(), b"\x03a b\x00".as_slice()] {
+            let mx = [&[0, 10][..], host].concat();
+            assert_eq!(parse(&answer(MX, &mx), 0xABCD, "example.org", MX).unwrap(), Vec::new(), "{host:?}");
+            let srv = [&[0, 0, 0, 5, 3, 225][..], host].concat();
+            assert_eq!(parse(&answer(SRV, &srv), 0xABCD, "example.org", SRV).unwrap(), Vec::new(), "{host:?}");
+        }
+    }
+
+    /// RFC 1035 limits a name to 255 octets on the wire.
+    #[test]
+    fn a_name_is_at_most_255_octets() {
+        let mut m = Vec::new();
+        for _ in 0..5 {
+            m.push(63);
+            m.extend(std::iter::repeat_n(b'a', 63));
+        }
+        m.push(0);
+        assert!(name_at(&m, 0).is_none());
     }
 
     proptest::proptest! {

@@ -433,6 +433,39 @@ pub(crate) struct CalendarLink {
 /// Navigation shortcuts read at most.
 const MAX_LINKS: usize = 300;
 
+/// A navigation shortcut that names a calendar in a group: its X.500 directory name, the name
+/// Outlook shows, and the group. `None` for another shortcut, or one that isn't a calendar
+/// another user owns. Read as hostile XML. For the fuzz target too.
+fn shortcut_of(it: &El) -> Option<(String, String, String)> {
+    let text = |tag: &str| ext_text(it, tag);
+    let int = |tag: &str| text(tag).and_then(|v| v.trim().parse::<i64>().ok());
+    // A calendar (section 3) another user owns (kind 2), in a group.
+    if text("0x001A") != Some("IPM.Microsoft.WunderBar.Link") || int("0x6852") != Some(3) || int("0x6849") != Some(2) {
+        return None;
+    }
+    let dn = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b))?;
+    // As a folder's name: a length the Calendar pane can show.
+    let name = text("0x0E1D").map(str::trim).filter(|n| !n.is_empty()).unwrap_or_default().chars().take(255).collect::<String>();
+    let group = text("0x6851").unwrap_or_default().trim().chars().take(255).collect::<String>();
+    Some((dn, name, group))
+}
+
+/// The calendars named by navigation shortcuts in a `FindItem` answer's items, each address book
+/// entry once, at most [`MAX_LINKS`], before the directory resolves them. For the fuzz target.
+#[doc(hidden)]
+pub fn shortcuts_listed(doc: &El) -> Vec<(String, String, String)> {
+    let items: Vec<El> = doc.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
+    let mut out: Vec<(String, String, String)> = Vec::new();
+    for it in items.iter().take(MAX_LINKS) {
+        let Some((dn, name, group)) = shortcut_of(it) else { continue };
+        if out.iter().any(|(d, _, _)| *d == dn) {
+            continue;
+        }
+        out.push((dn, name, group));
+    }
+    out
+}
+
 /// The calendars Outlook keeps in groups of its Calendar pane. Outlook stores its groups as
 /// navigation shortcuts ([MS-OXOCFG] 2.2.9): hidden items of the mailbox's Common Views folder,
 /// each naming its group (`PidTagWlinkGroupName`), its section (3: Calendar), its kind (2: a
@@ -469,13 +502,7 @@ pub(crate) fn calendar_links(c: &Client) -> Result<Vec<CalendarLink>> {
     let mut resolved: HashMap<String, Option<String>> = HashMap::new();
     let mut out: Vec<CalendarLink> = Vec::new();
     for it in items.iter().take(MAX_LINKS) {
-        let text = |tag: &str| ext_text(it, tag);
-        let int = |tag: &str| text(tag).and_then(|v| v.trim().parse::<i64>().ok());
-        // A calendar (section 3) another user owns (kind 2), in a group.
-        if text("0x001A") != Some("IPM.Microsoft.WunderBar.Link") || int("0x6852") != Some(3) || int("0x6849") != Some(2) {
-            continue;
-        }
-        let Some(dn) = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b)) else { continue };
+        let Some((dn, name, group)) = shortcut_of(it) else { continue };
         let email = match resolved.get(&dn) {
             Some(e) => e.clone(),
             None => {
@@ -488,8 +515,8 @@ pub(crate) fn calendar_links(c: &Client) -> Result<Vec<CalendarLink>> {
         if out.iter().any(|l| l.email == email) {
             continue;
         }
-        let name = text("0x0E1D").map(str::trim).filter(|n| !n.is_empty()).unwrap_or(&email).to_string();
-        out.push(CalendarLink { email, name, group: text("0x6851").unwrap_or_default().trim().to_string() });
+        let name = if name.is_empty() { email.clone() } else { name };
+        out.push(CalendarLink { email, name, group });
     }
     Ok(out)
 }
@@ -614,6 +641,7 @@ use push::{answer_pending, push_events};
 use sync::read_calendar;
 pub use sync::{sync, sync_calendars, sync_changes, sync_tasks};
 use tasks::read_tasks;
+pub use tasks::task_of;
 
 #[cfg(test)]
 mod tests;

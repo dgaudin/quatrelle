@@ -527,8 +527,9 @@ fn is_hidden(f: &El) -> bool {
 
 /// The read, flag and draft state, asked for with every item.
 /// A change in a folder, as `SyncFolderItems` tells it.
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Change {
+pub enum Change {
     Created(String, Flags),
     Updated(String, Flags),
     Deleted(String),
@@ -779,6 +780,11 @@ mod sync;
 mod text_first;
 mod xml;
 
+#[doc(hidden)]
+pub use directory::{certificates_listed, members_listed, people_listed};
+#[doc(hidden)]
+pub use mailbox::{changes_listed, items_listed, mailboxes_listed, summary_listed};
+
 pub use super::ews_pim::mailtips::mail_tips_read;
 #[cfg(test)]
 pub(crate) use autodiscover::TEST_BASES;
@@ -787,6 +793,7 @@ pub use autodiscover::{archive_named, autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};
+pub use rules::{rule_written, rules_listed};
 #[cfg(test)]
 pub(crate) use shared::tags_read;
 pub use shared::{ItemPolicy, tags_listed};
