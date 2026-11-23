@@ -2458,3 +2458,5 @@ presence	Offline	离线
 	It may have been sent: {error}	它可能已经发出: {error}
 	May have been sent: {error}	可能已发出: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	再次发送之前，请询问收件人；如果你的服务器在已发送邮件中保留副本，也可以在那里查找
+	[picture]	[图片]
+	The rewritten text couldn't be read	无法读取改写后的文本

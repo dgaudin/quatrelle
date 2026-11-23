@@ -2459,3 +2459,5 @@ presence	Offline	Hors ligne
 	It may have been sent: {error}	Il est peut-être parti : {error}
 	May have been sent: {error}	Peut-être parti : {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Avant de le renvoyer, demandez à son destinataire, ou cherchez-le dans Éléments envoyés si votre serveur y range une copie
+	[picture]	[image]
+	The rewritten text couldn't be read	Le texte reformulé n'a pas pu être lu

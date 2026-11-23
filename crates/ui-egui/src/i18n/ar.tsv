@@ -2454,3 +2454,5 @@ presence	Offline	غير متصل
 	It may have been sent: {error}	ربما تكون قد أُرسلت: {error}
 	May have been sent: {error}	ربما أُرسلت: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	قبل إرسالها مرة أخرى، اسأل من كانت موجهة إليه، أو ابحث عنها في العناصر المرسلة إن كان خادمك يحفظ نسخة فيها
+	[picture]	[صورة]
+	The rewritten text couldn't be read	تعذّرت قراءة النص المعاد صياغته

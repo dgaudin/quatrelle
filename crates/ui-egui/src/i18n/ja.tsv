@@ -2455,3 +2455,5 @@ presence	Offline	オフライン
 	It may have been sent: {error}	送信された可能性があります: {error}
 	May have been sent: {error}	送信済みの可能性: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	もう一度送信する前に、宛先の相手に確認するか、サーバーがコピーを保存している場合は送信済みアイテムを探してください
+	[picture]	[画像]
+	The rewritten text couldn't be read	書き換えた文章を読み取れませんでした

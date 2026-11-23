@@ -2459,3 +2459,5 @@ presence	Offline	Offline
 	It may have been sent: {error}	Sie wurde vielleicht schon gesendet: {error}
 	May have been sent: {error}	Vielleicht gesendet: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Bevor Sie sie noch einmal senden, fragen Sie den Empfänger, oder suchen Sie sie unter Gesendete Elemente, falls Ihr Server dort eine Kopie ablegt
+	[picture]	[Bild]
+	The rewritten text couldn't be read	Der umgeschriebene Text konnte nicht gelesen werden

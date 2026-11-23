@@ -2457,3 +2457,5 @@ presence	Offline	Offline
 	It may have been sent: {error}	Forse è già partito: {error}
 	May have been sent: {error}	Forse partito: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Prima di inviarlo di nuovo, chiedi al destinatario, oppure cercalo in Posta inviata se il tuo server ne conserva una copia
+	[picture]	[immagine]
+	The rewritten text couldn't be read	Non è stato possibile leggere il testo riscritto

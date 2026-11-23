@@ -118,9 +118,16 @@ pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compo
                     ui.label(RichText::new(tl!("Asking the language model…")).color(t.dim));
                 });
             }
-            Some(Ok(text)) => {
-                egui::ScrollArea::vertical().id_salt(("rewrite", c.id)).max_height(220.0).show(ui, |ui| {
-                    ui.add(egui::Label::new(RichText::new(text).color(t.text)).selectable(true));
+            Some(Ok(_)) => {
+                egui::ScrollArea::vertical().id_salt(("rewrite", c.id)).max_height(220.0).show(ui, |ui| match c.rewrite_preview() {
+                    Some((text, _)) => {
+                        let picture = tl!("[picture]").to_string();
+                        let shown = text.replace(quatrelle_engine::mime::rich::PICTURE, &picture);
+                        ui.add(egui::Label::new(RichText::new(shown).color(t.text)).selectable(true));
+                    }
+                    None => {
+                        ui.label(RichText::new(tl!("The rewritten text couldn't be read")).color(t.warn));
+                    }
                 });
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {

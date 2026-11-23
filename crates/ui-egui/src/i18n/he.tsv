@@ -2454,3 +2454,5 @@ presence	Offline	לא מחובר
 	It may have been sent: {error}	ייתכן שההודעה כבר נשלחה: {error}
 	May have been sent: {error}	ייתכן שנשלחה: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	לפני ששולחים אותה שוב, שאלו את הנמען, או חפשו אותה בפריטים שנשלחו אם השרת שלכם שומר שם עותק
+	[picture]	[תמונה]
+	The rewritten text couldn't be read	לא ניתן היה לקרוא את הטקסט שנכתב מחדש

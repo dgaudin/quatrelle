@@ -112,7 +112,7 @@ fn asking_a_rewrite_leaves_the_editor_alive() {
 fn using_a_rewrite_is_one_undo_step() {
     let (mut a, dir) = app("rewrite-undo");
     let ctx = egui::Context::default();
-    let size = egui::vec2(1280.0, 800.0);
+    let size = egui::vec2(1280.0, 1200.0);
     a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3"}));
     a.run("mail.new", json!({}));
     let (text, styles) = quatrelle_engine::mime::rich::from_markup("**Bonjour**\n\n![logo](cid:logo@studio.example)");
@@ -227,4 +227,56 @@ fn a_quoted_blocks_selection_is_not_the_written_texts_selection() {
     assert_eq!(crate::rich_edit::rewrite_selection(&ed), None);
     ed.in_quote = false;
     assert_eq!(crate::rich_edit::rewrite_selection(&ed), Some(3..8));
+}
+
+/// What Use will put is shown as it will read: no Markdown marks, no marker, each picture a
+/// word.
+#[test]
+fn a_rewrite_preview_shows_no_marks_or_tokens() {
+    let (mut a, dir) = app("rewrite-preview");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 1200.0);
+    a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3"}));
+    a.run("mail.new", json!({}));
+    let (text, styles) = quatrelle_engine::mime::rich::from_markup("**Bonjour**\n\n![logo](cid:logo@studio.example)");
+    if let Some(c) = a.session.compose.as_mut() {
+        c.signature.clear();
+        c.body = text;
+        c.styles = styles;
+        c.inline = vec![quatrelle_engine::mime::InlinePicture {
+            cid: "logo@studio.example".into(),
+            name: "logo.png".into(),
+            mime: "image/png".into(),
+            data: Vec::new(),
+        }];
+    }
+    frame(&ctx, &mut a, vec![]);
+    a.run("assistant.rewrite", json!({"how": "shorter"}));
+    let (id, sent) = a
+        .session
+        .take_jobs()
+        .into_iter()
+        .find_map(|j| match j {
+            quatrelle_engine::model::Job::AskLlm { id, messages, .. } => messages.get(1).map(|m| (id, m.1.clone())),
+            _ => None,
+        })
+        .expect("the rewrite was asked");
+    let marker = sent.split_whitespace().find(|w| w.starts_with("QUATRELLE-IMAGE-") && w.ends_with("-END")).expect("a picture marker");
+    a.session.apply(quatrelle_engine::model::Event::LlmAnswered { id, text: format!("**Salut** Zoé,\n\n{marker}"), error: None });
+    for _ in 0..2 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let drawn: String = frame_shapes(&ctx, &mut a, vec![], size)
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!drawn.contains("QUATRELLE-IMAGE"), "{drawn}");
+    assert!(!drawn.contains("**"), "{drawn}");
+    assert!(drawn.contains("Salut Zoé"), "{drawn}");
+    assert!(drawn.contains("[picture]") || drawn.contains("[image]"), "the picture as a word: {drawn}");
+    let _ = std::fs::remove_dir_all(dir);
 }

@@ -79,6 +79,31 @@ pub struct Rewrite {
     answer_max: usize,
     /// The pictures in the part sent, each with the marker the model saw.
     images: Vec<quatrelle_mime::rich::RewritePicture>,
+    /// What Use would put in, read once when the answer came; an error says why there's none.
+    preview: Option<Result<(String, quatrelle_mime::rich::Styles), String>>,
+}
+
+impl Compose {
+    /// What Use would put in, as the editor will hold it (pictures as [`mime::rich::PICTURE`]),
+    /// once the answer was read; `None` while it works or when it can't be read.
+    pub fn rewrite_preview(&self) -> Option<&(String, quatrelle_mime::rich::Styles)> {
+        self.rewrite.as_ref()?.preview.as_ref()?.as_ref().ok()
+    }
+}
+
+impl Rewrite {
+    /// The answer as the editor will hold it, or why it can't be used.
+    fn preview_now(&self) -> Result<(String, quatrelle_mime::rich::Styles), String> {
+        let Some(Ok(text)) = &self.answer else { return Err("the rewritten text hasn't come yet".into()) };
+        if text.chars().count() > self.answer_max {
+            return Err("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into());
+        }
+        let (text, styles) = quatrelle_mime::rich::inbound(text, self.base.clone(), &self.images, &self.before, &self.before_styles);
+        if text.trim().is_empty() {
+            return Err("the rewritten text is empty; ask again or keep yours".into());
+        }
+        Ok((text, styles))
+    }
 }
 
 /// Where the text the user wrote ends in a message being written: before its signature, or for
@@ -341,6 +366,8 @@ impl Session {
             }
         } else if let Some(r) = self.compose.iter_mut().chain(self.composes.iter_mut()).filter_map(|c| c.rewrite.as_mut()).find(|r| r.id == id) {
             r.answer = Some(answer);
+            let preview = r.preview_now();
+            r.preview = Some(preview);
         }
     }
 
@@ -386,7 +413,8 @@ impl Session {
         );
         let range = start..start + text.chars().count();
         if let Some(c) = self.compose.as_mut() {
-            c.rewrite = Some(Rewrite { id, answer: None, range, before: text.clone(), before_styles: styles, base, answer_max, images });
+            c.rewrite =
+                Some(Rewrite { id, answer: None, range, before: text.clone(), before_styles: styles, base, answer_max, images, preview: None });
         }
         self.jobs.push(Job::AskLlm {
             id,

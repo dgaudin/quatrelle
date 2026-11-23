@@ -2457,3 +2457,5 @@ presence	Offline	오프라인
 	It may have been sent: {error}	이미 보내졌을 수 있습니다: {error}
 	May have been sent: {error}	보내졌을 수 있음: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	다시 보내기 전에 받는 사람에게 확인하거나, 서버가 보낸 편지함에 사본을 보관한다면 그곳에서 찾아보세요
+	[picture]	[그림]
+	The rewritten text couldn't be read	다시 쓴 내용을 읽을 수 없습니다

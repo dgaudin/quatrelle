@@ -2455,3 +2455,5 @@ presence	Offline	Offline
 	It may have been sent: {error}	Het is misschien al verzonden: {error}
 	May have been sent: {error}	Misschien verzonden: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Vraag het de ontvanger voordat u het opnieuw verzendt, of zoek het in Verzonden items als uw server daar een kopie bewaart
+	[picture]	[afbeelding]
+	The rewritten text couldn't be read	De herschreven tekst kon niet worden gelezen

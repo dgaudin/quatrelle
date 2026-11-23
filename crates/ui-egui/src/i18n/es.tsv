@@ -2459,3 +2459,5 @@ presence	Offline	Desconectado
 	It may have been sent: {error}	Quizá ya se envió: {error}
 	May have been sent: {error}	Quizá enviado: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Antes de volver a enviarlo, pregunte a su destinatario o búsquelo en Elementos enviados si su servidor guarda allí una copia
+	[picture]	[imagen]
+	The rewritten text couldn't be read	No se pudo leer el texto reescrito

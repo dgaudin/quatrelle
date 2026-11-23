@@ -2459,3 +2459,5 @@ presence	Offline	Не в сети
 	It may have been sent: {error}	Возможно, оно уже отправлено: {error}
 	May have been sent: {error}	Возможно, отправлено: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	Прежде чем отправить его снова, спросите получателя или поищите его в «Отправленных», если ваш сервер хранит там копию
+	[picture]	[изображение]
+	The rewritten text couldn't be read	Не удалось прочитать переписанный текст

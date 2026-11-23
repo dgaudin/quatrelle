@@ -2461,3 +2461,5 @@ presence	Offline	離線
 	It may have been sent: {error}	它可能已經寄出: {error}
 	May have been sent: {error}	可能已寄出: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	再次寄出之前，請詢問收件者；如果你的伺服器在寄件備份中保留副本，也可以在那裡尋找
+	[picture]	[圖片]
+	The rewritten text couldn't be read	無法讀取改寫後的文字
