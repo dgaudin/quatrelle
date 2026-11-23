@@ -9,7 +9,7 @@ use quatrelle_model::addr::trust::{site, url_host};
 use quatrelle_model::dates::Clock;
 use quatrelle_model::search::{Advanced, Doc, Index, MAX_TOKEN_CHARS, Query, fold_word, tokens};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
-use quatrelle_model::{EmailAddress, addr, ical, lookalike, utf7};
+use quatrelle_model::{EmailAddress, MessageKey, MessageKind, Smime, Summary, addr, ical, lookalike, utf7};
 
 /// Words the search box reads as plain words (no `field:`, no leading `-` or quote).
 fn words() -> impl Strategy<Value = String> {
@@ -322,6 +322,81 @@ proptest! {
         // What a draft keeps is read from the text too.
         for a in addr::parse_valid(&text) {
             prop_assert!(text.contains(a.email.as_str()));
+        }
+    }
+}
+
+/// Every kind of message.
+const KINDS: [MessageKind; 16] = [
+    MessageKind::Unknown,
+    MessageKind::Plain,
+    MessageKind::AutoReply,
+    MessageKind::NotDelivered,
+    MessageKind::Delayed,
+    MessageKind::Delivered,
+    MessageKind::ReadReceipt,
+    MessageKind::NotRead,
+    MessageKind::Recall,
+    MessageKind::RecallDone,
+    MessageKind::RecallFailed,
+    MessageKind::MeetingRequest,
+    MessageKind::MeetingCanceled,
+    MessageKind::MeetingAccepted,
+    MessageKind::MeetingTentative,
+    MessageKind::MeetingDeclined,
+];
+
+/// Any JSON value: what another version or a damaged disk may have written for a message's kind,
+/// the names of the kinds among the strings.
+fn any_json() -> impl Strategy<Value = serde_json::Value> {
+    use serde_json::Value;
+    let names = prop::sample::select(KINDS.to_vec()).prop_map(|k| serde_json::to_value(k).unwrap_or_default());
+    let leaf = prop_oneof![
+        Just(Value::Null),
+        any::<bool>().prop_map(Value::Bool),
+        any::<i64>().prop_map(Value::from),
+        any::<u64>().prop_map(Value::from),
+        (-1e300f64..1e300).prop_map(Value::from),
+        r"\PC{0,20}".prop_map(Value::String),
+        names,
+    ];
+    leaf.prop_recursive(3, 24, 4, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 0..4).prop_map(Value::Array),
+            prop::collection::vec(("[a-z]{0,6}", inner), 0..4).prop_map(|kv| Value::Object(kv.into_iter().collect())),
+        ]
+    })
+}
+
+proptest! {
+    /// A message keeps its kind through the cache, whichever it is, and one not said yet isn't
+    /// written (a cache from before, and 1.5.0's, stay as they were).
+    #[test]
+    fn summaries_round_trip_with_their_kind(kind in prop::sample::select(KINDS.to_vec()), subject in r"\PC{0,30}", uid in any::<u32>()) {
+        let m = Summary {
+            key: MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid },
+            subject,
+            kind,
+            smime: Smime::Signed,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&m).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        prop_assert_eq!(json.contains(r#""kind":"#), kind != MessageKind::Unknown, "{}", json);
+        let back: Summary = serde_json::from_str(&json).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        prop_assert_eq!(back, m);
+    }
+
+    /// Whatever stands for a message's kind in a page of the cache, the message reads, its kind
+    /// the one named or not said yet.
+    #[test]
+    fn any_json_kind_reads(kind in any_json()) {
+        let named = serde_json::from_value::<MessageKind>(kind.clone()).unwrap_or_default();
+        let page = serde_json::json!({"key": {"account": "a", "folder": "INBOX", "validity": 1, "uid": 7}, "subject": "s", "kind": kind});
+        let text = page.to_string();
+        let read = serde_json::from_str::<Summary>(&text);
+        prop_assert!(read.is_ok(), "{}", text);
+        if let Ok(m) = read {
+            prop_assert_eq!((m.kind, m.key.uid, m.subject.as_str()), (named, 7, "s"));
         }
     }
 }

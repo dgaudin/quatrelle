@@ -189,6 +189,7 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         voting: Vec::new(),
         voted: String::new(),
         forward_of: forward_of(m),
+        kind: quatrelle_model::MessageKind::Unknown,
     }
 }
 

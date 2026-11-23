@@ -28,7 +28,7 @@ pub mod zone;
 
 pub use addr::providers::*;
 pub use pim::scheduling;
-pub use thread::kind::Smime;
+pub use thread::kind::{ListIcon, MessageKind, REPLIED_ALL, Smime, list_icon, list_said};
 pub use thread::voting;
 
 use serde::{Deserialize, Serialize};
@@ -524,6 +524,11 @@ pub struct Summary {
     /// and checked; an encrypted one may be signed inside too).
     #[serde(default, skip_serializing_if = "Smime::is_none")]
     pub smime: Smime,
+    /// What it is beyond mail (a report, a meeting message, an automatic reply, a recall), as its
+    /// server or its source says; [`MessageKind::Unknown`] until one has, and then not written.
+    /// Read leniently: a value another version wrote reads as not said yet.
+    #[serde(default, skip_serializing_if = "MessageKind::is_unknown", deserialize_with = "thread::kind::lenient")]
+    pub kind: MessageKind,
     /// A draft of a forward: the message it forwards ([`MessageKey::to_id`]), as the draft's
     /// copy names it, for the list to mark that message `[Draft]` as it marks one a reply was
     /// begun to; empty for other mail.
