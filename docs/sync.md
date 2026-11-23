@@ -213,6 +213,13 @@ method calls, signed in with Basic authentication or an OAuth bearer token.
   them as it first sees them (`<account>/jmap.json`, numbers never reused) and uses the number as
   the UID, with a constant UIDVALIDITY of 1, so the cache, the engine and offline changes are the
   same as for IMAP. Numbers no cached message or pending change uses are pruned after a full sync.
+  A numbering that can't be read (the disk failing) or is damaged is never taken for an empty one,
+  which would number every message again and download the account again: the file stays where it
+  is, as it is, and the account is set aside for its mail (its cache shows, nothing is listed, read
+  or written, its changes waiting are kept, and the account says why) until it can be read at a
+  connection; a damaged one is cured by removing the account and adding it again. Sending by
+  the second connection (EWS, SMTP), which has no numbering, goes on; a JMAP message waits in the
+  Outbox. In the browser such an account isn't started.
 - **Folders** are named by their path of mailbox names joined by `/` (the Inbox is `INBOX`); the
   mailbox id behind each path is kept with the numbers. Roles come from the mailbox `role`.
 - **A folder sync** is two requests: `Email/query` (newest first, up to the window) with an

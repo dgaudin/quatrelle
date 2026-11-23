@@ -99,17 +99,25 @@ pub const FOUND_MAX: usize = 500;
 
 pub(super) const STATE_DOC: &str = "jmap.json";
 
+/// Said (before why) when an account's numbering couldn't be read: its mail isn't synchronized.
+/// Translated whole by `i18n::error`, which cuts at the first `: `: keep it free of one.
+pub const NUMBERING_UNREAD: &str = "this account's message numbering couldn't be read, so its mail isn't synchronized for now";
+
 impl State {
     /// Whose mailbox a folder is in, when it's another one opened in the account.
     pub fn owner(&self, path: &str) -> Option<&str> {
         self.owners.get(path).map(String::as_str)
     }
 
-    pub fn load(store: &Store, account: &str) -> State {
-        let mut s: State = store.load_account_doc(account, STATE_DOC).unwrap_or_default();
+    /// What the account kept (none yet: an empty numbering). One that can't be read, or is damaged,
+    /// is an error and stays where it is, as it is (never set aside, never written over): taken for
+    /// an empty one, every message would be numbered again and the whole account downloaded again,
+    /// an old number standing for another message besides.
+    pub fn load(store: &Store, account: &str) -> Result<State> {
+        let mut s: State = store.load_account_doc_strict(account, STATE_DOC)?;
         s.next = s.next.max(s.ids.numbers().max().unwrap_or(0));
         s.saved.set(s.fingerprint());
-        s
+        Ok(s)
     }
 
     /// A digest of what's kept: what was written is written again only once it has changed.

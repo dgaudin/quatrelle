@@ -585,4 +585,6 @@ pub(crate) mod pseudo {
 }
 
 #[cfg(test)]
+mod error_tests;
+#[cfg(test)]
 mod tests;

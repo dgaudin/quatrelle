@@ -170,7 +170,7 @@ fn follow_ups_completed_before_this_version_are_ticked_once() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages.into_iter().find(|m| m.subject == "done").unwrap();
     assert_eq!(m.flags.completed, jmap::utc_date("2026-10-30T09:12:00Z").unwrap(), "on the day Outlook noted");
     st.save(&store, "a1").unwrap();
-    let mut st = State::load(&store, "a1");
+    let mut st = State::load(&store, "a1").unwrap();
 
     // Started again: the Inbox isn't asked again, the other folder is (two pages).
     for f in folders {

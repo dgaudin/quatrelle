@@ -2427,3 +2427,6 @@ presence	Offline	離線
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 會保留已建立的線上會議
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 已匯入 {messages} 封郵件，但無法重新讀取其資料夾清單: Quatrelle 將在下次啟動時重新讀取
+# A numbering or another file Quatrelle keeps that can't be read is never started over.
+	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	無法讀取此帳戶的郵件編號，因此暫時不同步其郵件: {error}
+	a file Quatrelle keeps is damaged: {error}	Quatrelle 保存的檔案已損毀: {error}

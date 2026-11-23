@@ -17,6 +17,18 @@ use crate::fetch::Fetch;
 /// from the cache, then connected, polled and listened to.
 pub(super) fn start(sh: &Rcs, account: AccountConfig, password: Option<Secret>) {
     let id = account.id.clone();
+    // Its numbering first: one that can't be read is never started over (every message would be
+    // numbered again and downloaded again). The account isn't started, the one running (if one
+    // is) stays as it is, and the page says why; the cache shows as it is.
+    let state = match State::load(&store(sh), &id) {
+        Ok(state) => state,
+        Err(e) => {
+            log::warn!("{id}: the message numbering couldn't be read, the account isn't started: {e}");
+            let error = format!("{}: {e}", quatrelle_jmap::NUMBERING_UNREAD);
+            notice(sh, &id, error.clone());
+            return status(sh, &id, SyncStatus::Error { error });
+        }
+    };
     let generation = {
         let mut s = sh.borrow_mut();
         let store = s.store.clone();
@@ -26,7 +38,7 @@ pub(super) fn start(sh: &Rcs, account: AccountConfig, password: Option<Secret>) 
         s.accounts.insert(
             id.clone(),
             Account {
-                state: State::load(&store, &id),
+                state,
                 folders: store.load_folders(&id).unwrap_or_default(),
                 ops: old.map(|a| a.ops).unwrap_or_default(),
                 config: account,

@@ -2421,3 +2421,6 @@ presence	Offline	Offline
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 houdt een onlinevergadering zodra die is gemaakt
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} berichten geïmporteerd, maar de mappenlijst kon niet opnieuw worden gelezen: Quatrelle leest die opnieuw bij de volgende start
+# A numbering or another file Quatrelle keeps that can't be read is never started over.
+	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	de nummering van de berichten van dit account kon niet worden gelezen, dus de post wordt voorlopig niet gesynchroniseerd: {error}
+	a file Quatrelle keeps is damaged: {error}	een bestand dat Quatrelle bewaart is beschadigd: {error}

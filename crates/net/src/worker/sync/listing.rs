@@ -13,6 +13,10 @@ impl Worker {
     /// The folder list, then every folder (Inbox first), staying responsive to opened messages.
     /// Refresh the folder list from the server; `false` when that failed.
     pub(in crate::worker) fn relist(&mut self) -> bool {
+        // Nothing is listed while the numbering couldn't be read (the account is set aside).
+        if self.numbering_unread.is_some() {
+            return false;
+        }
         let _at_work = self.at_work();
         let id = self.id();
         // What the numbering knew before: the folders of a zone the listing misses keep their ids.
@@ -226,6 +230,9 @@ impl Worker {
     /// while the folder list before couldn't be read (`folders_unread`): a zone the listings miss
     /// may have folders here the worker doesn't know of.
     pub(in crate::worker) fn prune_jmap_numbers(&mut self) {
+        if self.numbering_unread.is_some() {
+            return;
+        }
         if !matches!(self.conn, Some(Conn::Jmap(_) | Conn::Graph(_) | Conn::Ews(_))) {
             return;
         }
@@ -351,6 +358,9 @@ impl Worker {
     /// while the list of those followed can't be read (`followed_unread`): it may be one. Nor a
     /// folder kept as it was while its zone doesn't list ([`Worker::kept_unlisted`]).
     pub(in crate::worker) fn let_go_of_online(&mut self) {
+        if self.numbering_unread.is_some() {
+            return;
+        }
         let unread = self.followed_unread;
         let paths: Vec<String> = self
             .folders

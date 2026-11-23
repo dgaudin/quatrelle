@@ -190,6 +190,10 @@ impl Worker {
     /// [`Self::sync_one`], and when the server received the newest message that came in, if one
     /// did (for the log).
     pub(super) fn sync_one_newest(&mut self, path: &str) -> Option<i64> {
+        // Nothing is read while the numbering couldn't be (the account is set aside).
+        if self.numbering_unread.is_some() {
+            return None;
+        }
         let _at_work = self.at_work();
         self.status(SyncStatus::Syncing { folder: path.to_string() });
         let (store, opts, id) = (self.store.clone(), self.options_for(path), self.id());

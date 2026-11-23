@@ -455,6 +455,8 @@ struct Worker {
     /// The folder list before couldn't be read: a zone a listing misses may have folders here the
     /// worker doesn't know of; no number is pruned, nor the list kept, till one misses none.
     folders_unread: bool,
+    /// Why the account's numbering couldn't be read, while it can't: its mail is set aside.
+    numbering_unread: Option<String>,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -495,7 +497,19 @@ impl Worker {
                 (Vec::new(), true)
             }
         };
-        let jstate = if acc.is_api() && numbering { jmap::State::load(&store, &acc.id) } else { jmap::State::default() };
+        // Not read: the account's mail is set aside (nothing numbered from nothing, nothing saved),
+        // and read again at each connection ([`Worker::reread_numbering`]).
+        let (jstate, numbering_unread) = if acc.is_api() && numbering {
+            match jmap::State::load(&store, &acc.id) {
+                Ok(state) => (state, None),
+                Err(e) => {
+                    log::warn!("{}: the message numbering couldn't be read, the account's mail is set aside: {e}", acc.id);
+                    (jmap::State::default(), Some(e.to_string()))
+                }
+            }
+        } else {
+            (jmap::State::default(), None)
+        };
         // Online only (issue #4): nothing downloaded in full ahead of reading; a message comes
         // when it's opened, and is held in memory only.
         let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, full: false, ..opts } } else { opts };
@@ -545,6 +559,7 @@ impl Worker {
             gone_meanwhile: Vec::new(),
             unlisted_kept: HashSet::new(),
             folders_unread,
+            numbering_unread,
         }
     }
 

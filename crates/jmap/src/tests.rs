@@ -14,7 +14,7 @@ fn an_empty_numbering_never_overwrites_the_one_on_disk() {
     // A state that numbered nothing (a connection refused halfway, a mistake) must not take
     // the numbering with it: the next sync would renumber every folder and delete the cache.
     State::default().save(&store, "a1").unwrap();
-    let mut back = State::load(&store, "a1");
+    let mut back = State::load(&store, "a1").unwrap();
     assert_eq!(back.id(1).as_deref(), Some("A"));
     assert_eq!(back.number("A"), 1, "and the same number");
     let _ = std::fs::remove_dir_all(&dir);
@@ -37,11 +37,11 @@ fn the_numbering_is_written_only_when_it_changed() {
     other.number("y");
     store.save_account_doc("a1", "jmap.json", &other).unwrap();
     st.save(&store, "a1").unwrap();
-    assert_eq!(State::load(&store, "a1").len(), 2, "unchanged: not written");
+    assert_eq!(State::load(&store, "a1").unwrap().len(), 2, "unchanged: not written");
     // ...a changed one does.
     st.number("m2");
     st.save(&store, "a1").unwrap();
-    assert!(State::load(&store, "a1").id(st.number("m2")).is_some());
+    assert!(State::load(&store, "a1").unwrap().id(st.number("m2")).is_some());
     // Marks: the newer of each.
     let mark = |at| FolderMark { stamp: "s".into(), at, ..Default::default() };
     st.marks.insert("INBOX".into(), mark(10));
@@ -301,4 +301,25 @@ fn the_completed_follow_ups_pass_is_kept_per_account() {
     assert_eq!(serde_json::to_value(&main).unwrap()["replies"]["done"], true);
     let damaged: State = serde_json::from_value(json!({ "ticks": { "done": true }, "replies": [1, 2] })).unwrap();
     assert!(!damaged.ticks_wanted("INBOX") && damaged.replies_wanted("INBOX"));
+}
+
+/// A numbering that can't be read, or is damaged, is an error that leaves the file where it is:
+/// taken for an empty one, every message of the account was numbered again and downloaded again.
+#[test]
+fn load_says_when_it_cant_read() {
+    let store = Store::failing();
+    assert!(State::load(&store, "a1").unwrap().is_empty(), "none there: nothing numbered yet");
+    let mut st = State::default();
+    st.number("m1");
+    st.save(&store, "a1").unwrap();
+    store.fail(Some("jmap.json"), None);
+    let read = State::load(&store, "a1");
+    store.fail(None, None);
+    assert!(matches!(&read, Err(Error::Store(StoreError::Io { .. }))), "{read:?}");
+    let damaged = b"{\"next\":3,\"ids\":[".to_vec();
+    store.write_account_files("a1", &[("jmap.json".to_string(), damaged.clone())]).unwrap();
+    let read = State::load(&store, "a1");
+    assert!(matches!(&read, Err(Error::Store(StoreError::Damaged { path })) if path.ends_with("jmap.json")), "{read:?}");
+    assert_eq!(store.account_file("a1", "jmap.json").unwrap(), Some(damaged), "left as it is");
+    assert_eq!(store.account_file("a1", "jmap.json.bad").unwrap(), None, "not set aside");
 }

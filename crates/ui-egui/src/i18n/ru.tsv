@@ -2425,3 +2425,6 @@ presence	Offline	Не в сети
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 сохраняет онлайн-собрание после его создания
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: импортировано писем: {messages}, но список папок не удалось прочитать снова: Quatrelle прочитает его снова при следующем запуске
+# A numbering or another file Quatrelle keeps that can't be read is never started over.
+	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	не удалось прочитать нумерацию сообщений этой учётной записи, поэтому её почта пока не синхронизируется: {error}
+	a file Quatrelle keeps is damaged: {error}	файл, который хранит Quatrelle, повреждён: {error}
