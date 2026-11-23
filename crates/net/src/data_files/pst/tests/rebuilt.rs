@@ -139,3 +139,16 @@ fn the_original_header_goes_back_without_doubling_the_source() {
     assert!(raw.starts_with(b"Received: "), "the original header is back");
     assert!(raw.capacity() - raw.len() <= raw.len() / 100, "{} held for {} bytes", raw.capacity(), raw.len());
 }
+
+/// What an item is reaches its summary: a delivery report is one, an ordinary message is not yet
+/// settled (its source decides when it is read), and a signed one says so before its source.
+#[test]
+fn a_summary_says_what_its_item_is() {
+    use quatrelle_model::{MessageKind, Smime};
+    let of = |class: &str| {
+        summary(Item { class: class.into(), kind: MessageKind::from_exchange(class, None), smime: Smime::from_class(class), ..Default::default() })
+    };
+    assert_eq!(of("REPORT.IPM.Note.NDR").kind, MessageKind::NotDelivered);
+    assert_eq!(of("IPM.Note").kind, MessageKind::Unknown);
+    assert_eq!(of("IPM.Note.SMIME.MultipartSigned").smime, Smime::Signed);
+}

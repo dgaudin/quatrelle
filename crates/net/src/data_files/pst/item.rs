@@ -32,6 +32,10 @@ pub(super) struct Item {
     pub(super) thread_topic: String,
     pub(super) sensitivity: u8,
     pub(super) flags: Flags,
+    /// What the item is (its class, its icon), as Exchange's is read.
+    pub(super) kind: quatrelle_model::MessageKind,
+    /// What protects it, from its class.
+    pub(super) smime: quatrelle_model::Smime,
     pub(super) files: Vec<File>,
     /// A contact's, contact group's, appointment's, meeting request's or journal entry's own
     /// properties.
@@ -239,6 +243,17 @@ pub(super) fn item_of<'a>(
         acted,
         ..Default::default()
     };
+    if verb == 0x0067 {
+        it.flags.set_keyword(quatrelle_model::REPLIED_ALL, true);
+    }
+    // What it is, as Exchange's is read: its class, then its icon (PidTagIconIndex), either of
+    // which may be missing or of another type, and then says nothing.
+    let icon = match p(0x1080) {
+        Some(Val::Int(n)) => Some(n),
+        _ => None,
+    };
+    it.kind = quatrelle_model::MessageKind::from_exchange(&it.class, icon);
+    it.smime = quatrelle_model::Smime::from_class(&it.class);
     // Its categories, as the keywords Quatrelle keeps them as, the way Exchange's come in (a
     // name like `$Junk` is `cat_$junk`, never the system's own keyword).
     if let Some(Val::Texts(names)) = named.keywords().and_then(p) {

@@ -10,6 +10,8 @@ use super::*;
 /// source (which takes the item apart).
 pub(super) struct Glance {
     flags: Flags,
+    kind: quatrelle_model::MessageKind,
+    smime: quatrelle_model::Smime,
     date: i64,
     received: i64,
     has_files: bool,
@@ -29,8 +31,15 @@ pub(super) fn to_raw(mut it: Item, fallback_id: &str) -> Result<Vec<u8>, String>
 /// its own can come well after the start, and it stops once it has its words.
 pub(super) fn message(mut it: Item, fallback_id: &str) -> Result<(Vec<u8>, Glance), String> {
     let text = take_text(&mut it);
-    let mut glance =
-        Glance { flags: std::mem::take(&mut it.flags), date: it.date, received: it.received, has_files: false, preview: mime::preview(&text) };
+    let mut glance = Glance {
+        flags: std::mem::take(&mut it.flags),
+        kind: it.kind,
+        smime: it.smime,
+        date: it.date,
+        received: it.received,
+        has_files: false,
+        preview: mime::preview(&text),
+    };
     let (raw, files) = build(it, text, fallback_id)?;
     glance.has_files = files;
     Ok((raw, glance))
@@ -268,6 +277,11 @@ fn bcc_line(bcc: &[EmailAddress]) -> String {
 pub(super) fn summary_of(raw: &[u8], glance: Glance, key: MessageKey, size: u32) -> quatrelle_model::Summary {
     let end = raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(raw.len(), |i| i + 4);
     let mut s = mime::summary_from_header(raw.get(..end).unwrap_or(raw), key, glance.flags, size, glance.date);
+    // What the item says it is stays unless the rebuilt header already said more.
+    s.kind = s.kind.told_by_server(glance.kind);
+    if s.smime.is_none() {
+        s.smime = glance.smime;
+    }
     s.has_attachments = glance.has_files;
     s.preview = glance.preview;
     s.received = if glance.received == s.date { 0 } else { glance.received };

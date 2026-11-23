@@ -260,6 +260,18 @@ fn a_headerless_item_keeps_forwarded_importance_and_references() {
     assert!(read(&[(0x1080, Val::Int(0x0106))]).flags.forwarded);
     let reply = read(&[(0x1081, Val::Int(0x0066)), (0x1080, Val::Int(0x0106))]);
     assert!(reply.flags.answered && !reply.flags.forwarded);
+    // Replied to all by its last verb (0x67); a reply (0x66) is not.
+    assert!(read(&[(0x1081, Val::Int(0x0067))]).flags.replied_all());
+    assert!(!read(&[(0x1081, Val::Int(0x0066))]).flags.replied_all());
+    // What it is, by its class, then its icon; an icon that is none, or the wrong type, is none.
+    let kind = |props: &[(u16, Val<'static>)]| read(props).kind;
+    let class = |c: &str| (0x001A, Val::Text(c.to_string().into()));
+    assert_eq!(kind(&[class("REPORT.IPM.Note.NDR")]), quatrelle_model::MessageKind::NotDelivered);
+    assert_eq!(kind(&[class("IPM.Schedule.Meeting.Resp.Tent")]), quatrelle_model::MessageKind::MeetingTentative);
+    assert_eq!(kind(&[class("IPM.Note"), (0x1080, Val::Int(0x011B))]), quatrelle_model::MessageKind::AutoReply);
+    assert_eq!(kind(&[(0x1080, Val::Int(-1))]), quatrelle_model::MessageKind::Plain);
+    assert_eq!(kind(&[class("IPM.Note"), (0x1080, Val::Text("x".into()))]), quatrelle_model::MessageKind::Plain);
+    assert_eq!(read(&[class("IPM.Note.SMIME.MultipartSigned")]).smime, quatrelle_model::Smime::Signed);
     // Importance: low, normal, high.
     for (n, want) in [(0, -1), (1, 0), (2, 1)] {
         assert_eq!(read(&[(0x0017, Val::Int(n))]).importance, want, "{n}");
