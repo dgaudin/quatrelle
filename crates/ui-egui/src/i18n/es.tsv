@@ -1287,6 +1287,7 @@ month	May	mayo
 	Check before sending	Comprobar antes de enviar
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} parece una dirección de {like}, pero no lo es. ¿Es la correcta?
 	{n} people who may not know each other will all see each other's addresses.	{n} personas que quizá no se conocen verán todas las direcciones de las demás.
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	Se encontró algo que revisar sobre los destinatarios, pero no se puede mostrar. Revíselos antes de enviar.
 	Put everyone in Bcc	Poner a todos en CCO
 	Each of them gets the message without seeing who else did; you're in To	Cada uno recibe el mensaje sin ver quién más lo recibió; tú quedas en Para
 	Open links without their tracking	Abrir vínculos sin su seguimiento
@@ -2426,6 +2427,14 @@ presence	Offline	Desconectado
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 conserva una reunión en línea una vez creada
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} mensajes importados, pero no se pudo volver a leer su lista de carpetas: Quatrelle la volverá a leer la próxima vez que se inicie
+	Send this message?	¿Enviar este mensaje?
+	Don't Send	No enviar
+	Don't ask again	No volver a preguntar
+	What Ctrl+Enter does in a message	Qué hace Ctrl+Intro en un mensaje
+	Ask first	Preguntar primero
+	Does nothing	No hace nada
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	Algo salió mal en la ventana y Quatrelle ha continuado. Es posible que tengas que repetir lo que estabas haciendo
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle tiene que cerrarse tras un error que no ha podido superar. Lo que estabas escribiendo se ha guardado en Borradores
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	no se pudo leer la numeración de los mensajes de esta cuenta, así que su correo no se sincroniza por ahora: {error}
 	a file Quatrelle keeps is damaged: {error}	un archivo que Quatrelle conserva está dañado: {error}

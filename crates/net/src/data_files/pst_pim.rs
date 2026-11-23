@@ -204,6 +204,11 @@ pub(crate) struct Extra {
     pub display: String,
     pub given: String,
     pub family: String,
+    /// A contact's other name parts (PidTagMiddleName, PidTagDisplayNamePrefix and
+    /// PidTagGeneration, its suffix).
+    pub middle: String,
+    pub prefix: String,
+    pub suffix: String,
     pub company: String,
     pub title: String,
     /// A contact's department, office, profession, manager, assistant, nickname and spouse
@@ -297,6 +302,9 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
         display: s(0x3001),
         given: s(0x3A06),
         family: s(0x3A11),
+        middle: s(0x3A44),
+        prefix: s(0x3A45),
+        suffix: s(0x3A05),
         company: s(0x3A16),
         title: s(0x3A17),
         department: s(0x3A18),
@@ -488,8 +496,9 @@ pub(crate) fn card_of(x: &Extra, body: &str, uid: String) -> Card {
         birthday: x.birthday.map(day_of).unwrap_or_default(),
         // Outlook keeps it as a hidden attachment (MS-OXOCNTC 2.2.2.1.1), read by the caller.
         photo: x.photo.as_ref().map(|(media, bytes)| Photo { media: media.clone(), base64: base64_encode(bytes) }),
-        extra: Vec::new(),
+        ..Default::default()
     };
+    card.set_name_extras(&x.middle, &x.prefix, &x.suffix);
     let more = if rest.is_empty() {
         None
     } else {

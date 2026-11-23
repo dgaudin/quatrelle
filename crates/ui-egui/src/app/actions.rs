@@ -185,6 +185,7 @@ impl MailApp {
                     self.act(*inner);
                 }
             }
+            Action::SendConfirmed => self.ui.send_confirmed = self.session.compose.as_ref().map(|c| c.id),
             Action::Quit => self.quit(),
             Action::CloseAnyway => {
                 // What becomes of an update is still said before Quatrelle goes; its answer closes
@@ -403,11 +404,7 @@ impl MailApp {
                     }
                     self.act(Action::Submit("account.update", settings));
                 }
-                Err(e) => {
-                    if let Some(d) = self.ui.dialog.as_mut() {
-                        d.set_error(e.to_string().trim_start_matches("bad parameters: ").to_string());
-                    }
-                }
+                Err(e) => self.refused(&e.to_string()),
             },
             Action::Submit(id, p) => match self.session.run(id, &p) {
                 Ok(v) => {
@@ -430,11 +427,7 @@ impl MailApp {
                         self.run("quickStep.run", json!({"name": name}));
                     }
                 }
-                Err(e) => {
-                    if let Some(d) = self.ui.dialog.as_mut() {
-                        d.set_error(e.to_string().trim_start_matches("bad parameters: ").to_string());
-                    }
-                }
+                Err(e) => self.refused(&e.to_string()),
             },
             Action::SetDark(d) => self.ui.dark = d,
             Action::ShowFormatted(key, on) => self.ui.shown_as.set(&key, on, self.session.prefs.show_html),
@@ -584,6 +577,16 @@ impl MailApp {
             format!("{} {}", calendar::long_date(day), calendar::hm(start, &self.session))
         };
         self.session.notice(tf!("Moved to {when}. Ctrl+Z puts it back.", when = when), false);
+    }
+
+    /// What a submit its command refused says: on the dialog's own error line, or as a notice when
+    /// it has none (Select Names, a question) or none is open. Never dropped.
+    fn refused(&mut self, error: &str) {
+        let said = error.trim_start_matches("bad parameters: ").to_string();
+        let shown = self.ui.dialog.as_mut().is_some_and(|d| d.set_error(said.clone()));
+        if !shown {
+            self.session.notice(said, true);
+        }
     }
 
     pub(crate) fn sign_in_again(&mut self, id: &str) {

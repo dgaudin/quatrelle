@@ -7,10 +7,19 @@ use super::*;
 
 /// A person, in the order EWS wants a contact's fields.
 pub(super) fn contact_xml(c: &Card) -> String {
+    let [middle, prefix, suffix] = c.name_extras();
     let mut x = format!("<t:Contact><t:Body BodyType=\"Text\">{}</t:Body>", esc(&c.note));
+    // The prefix has no field of its own to write (Exchange gives it back in `CompleteName`): it
+    // is its MAPI property, as Outlook keeps it.
+    if !prefix.is_empty() {
+        x.push_str(&format!("<t:ExtendedProperty>{NAME_PREFIX}<t:Value>{}</t:Value></t:ExtendedProperty>", esc(&prefix)));
+    }
     x.push_str(&format!("<t:DisplayName>{}</t:DisplayName>", esc(&c.display())));
     if !c.given.is_empty() {
         x.push_str(&format!("<t:GivenName>{}</t:GivenName>", esc(&c.given)));
+    }
+    if !middle.is_empty() {
+        x.push_str(&format!("<t:MiddleName>{}</t:MiddleName>", esc(&middle)));
     }
     if !c.org.is_empty() {
         x.push_str(&format!("<t:CompanyName>{}</t:CompanyName>", esc(&c.org)));
@@ -110,9 +119,15 @@ pub(super) fn contact_xml(c: &Card) -> String {
     if !c.family.is_empty() {
         x.push_str(&format!("<t:Surname>{}</t:Surname>", esc(&c.family)));
     }
+    if !suffix.is_empty() {
+        x.push_str(&format!("<t:Generation>{}</t:Generation>", esc(&suffix)));
+    }
     x.push_str("</t:Contact>");
     x
 }
+
+/// PidTagDisplayNamePrefix (a contact's `Dr.`), which EWS has no field to set.
+const NAME_PREFIX: &str = r#"<t:ExtendedFieldURI PropertyTag="0x3A45" PropertyType="String"/>"#;
 
 /// A contact as a card.
 pub fn card_of(it: &El) -> Option<Card> {
@@ -184,7 +199,7 @@ pub fn card_of(it: &El) -> Option<Card> {
             .unwrap_or_default()
     };
     let body = it.child("Body").map(|b| b.text.trim().to_string()).unwrap_or_default();
-    Some(Card {
+    let mut card = Card {
         uid: id,
         name: text(it, "DisplayName"),
         given: text(it, "GivenName"),
@@ -207,8 +222,12 @@ pub fn card_of(it: &El) -> Option<Card> {
         addresses,
         birthday: day_of("Birthday"),
         photo: None,
-        extra: Vec::new(),
-    })
+        ..Default::default()
+    };
+    // Its middle name and suffix have fields; its prefix is in the complete name Exchange makes.
+    let prefix = it.child("CompleteName").map(|n| text(n, "Title")).unwrap_or_default();
+    card.set_name_extras(&text(it, "MiddleName"), &prefix, &text(it, "Generation"));
+    Some(card)
 }
 
 /// Exchange's phone entries, by the kind each takes (two of business and home).

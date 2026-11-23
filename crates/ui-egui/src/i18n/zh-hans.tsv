@@ -1284,6 +1284,7 @@ month	May	5月
 	Check before sending	发送前检查
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} 看起来像 {like} 的地址，但其实不是。地址正确吗？
 	{n} people who may not know each other will all see each other's addresses.	{n} 个可能互不相识的人都会看到彼此的地址。
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	发现收件人有需要查看的内容，但无法显示。请在发送前检查收件人。
 	Put everyone in Bcc	把所有人放进密送
 	Each of them gets the message without seeing who else did; you're in To	每个人收到邮件时都看不到其他收件人；你在收件人栏
 	Open links without their tracking	打开链接时去掉跟踪
@@ -2425,6 +2426,14 @@ presence	Offline	离线
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 会保留已创建的联机会议
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 已导入 {messages} 封邮件，但无法重新读取其文件夹列表: Quatrelle 将在下次启动时重新读取
+	Send this message?	发送此邮件?
+	Don't Send	不发送
+	Don't ask again	不再询问
+	What Ctrl+Enter does in a message	邮件中 Ctrl+Enter 的作用
+	Ask first	先询问
+	Does nothing	不执行任何操作
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	窗口中出现问题，Quatrelle 已继续运行。您正在做的操作可能需要重做
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle 遇到无法越过的错误，必须关闭。您正在撰写的内容已保存在草稿中
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	无法读取此账户的邮件编号，因此暂时不同步其邮件: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle 保存的文件已损坏: {error}

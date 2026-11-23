@@ -181,6 +181,17 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         setting(ui, false, tl!("Write replies and forwards in a window of their own"), None, &mut |ui| {
             switch(ui, s.prefs.reply_window, tl!("Write replies and forwards in a window of their own"), "view.replyWindow", acts);
         });
+        // Ctrl+Enter sends at once only when that's chosen: it asks first, by default.
+        setting(ui, false, tl!("What Ctrl+Enter does in a message"), None, &mut |ui| {
+            use quatrelle_engine::CtrlEnter;
+            let ways = [(CtrlEnter::Ask, "ask"), (CtrlEnter::Send, "send"), (CtrlEnter::Nothing, "nothing")];
+            let now = ways.iter().position(|(w, _)| *w == s.prefs.ctrl_enter).unwrap_or(0);
+            if let Some(i) = widgets::segmented(ui, &t, "ctrl-enter", &[tl!("Ask first"), tl!("Send"), tl!("Does nothing")], now)
+                && let Some((_, code)) = ways.get(i)
+            {
+                acts.push(Action::Run("options.ctrlEnter", json!({"does": code})));
+            }
+        });
         setting(ui, false, tl!("Check the spelling as you type"), None, &mut |ui| {
             switch(ui, s.prefs.spell_check, tl!("Check the spelling as you type"), "view.spelling", acts);
         });

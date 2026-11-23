@@ -76,7 +76,8 @@ fn send_from_a_data_file_says_to_add_an_account() {
     assert_eq!(a.ui.compose_alert.as_deref(), Some(why.as_str()));
     assert_eq!(as_written(&a), Some(as_written_c(&written)));
     assert!(!a.session.notices.iter().any(|n| n.text.contains("sent")), "{:?}", a.session.notices);
-    // Ctrl+Enter and Alt+S, the same.
+    // Ctrl+Enter (set to send at once: its question is tested below) and Alt+S, the same.
+    a.session.prefs.ctrl_enter = quatrelle_engine::CtrlEnter::Send;
     for (k, m) in [(Key::Enter, Modifiers::COMMAND), (Key::S, Modifiers::ALT)] {
         a.ui.compose_alert = None;
         frame(&ctx, &mut a, vec![Event::ModifiersChanged(m), key(k, m)]);
@@ -237,5 +238,276 @@ fn the_window_and_the_outbox_say_may_have_gone_never_not_sent() {
     let pane = texts.iter().find(|t| t.starts_with("En attente dans la boîte d’envoi. Dernière tentative :")).cloned().unwrap_or_default();
     assert_eq!(pane, "En attente dans la boîte d’envoi. Dernière tentative : le serveur a refusé : 550 no such user", "{texts:?}");
     crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A backend that keeps the jobs handed to it, so that a test sees what went out.
+#[derive(Default)]
+struct Kept(std::rc::Rc<std::cell::RefCell<Vec<quatrelle_engine::model::Job>>>);
+
+impl crate::Backend for Kept {
+    fn submit(&mut self, job: quatrelle_engine::model::Job) {
+        self.0.borrow_mut().push(job);
+    }
+
+    fn poll(&mut self) -> Vec<MailEvent> {
+        Vec::new()
+    }
+}
+
+type Sent = std::rc::Rc<std::cell::RefCell<Vec<quatrelle_engine::model::Job>>>;
+
+/// How many messages went out so far.
+fn went(jobs: &Sent) -> usize {
+    jobs.borrow().iter().filter(|j| matches!(j, quatrelle_engine::model::Job::Send { .. })).count()
+}
+
+/// The app with a message being written beside the list, and what it hands its backend.
+fn writing(name: &str, subject: &str) -> (MailApp, std::path::PathBuf, egui::Context, Sent) {
+    let (mut a, dir) = app(name);
+    let kept = Kept::default();
+    let jobs = kept.0.clone();
+    a.backend = Box::new(kept);
+    a.session.prefs.new_mail_window = false;
+    // (Set to send at once; the tests of its question set it back.)
+    a.session.prefs.ctrl_enter = quatrelle_engine::CtrlEnter::Send;
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    // An account that sends through its server: the backend is handed a `Job::Send`.
+    let account = with_exchange(&mut a);
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"account": account, "to": "ann@studio.example", "subject": subject, "body": "See you"}));
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    (a, dir, ctx, jobs)
+}
+
+/// Ctrl+Enter pressed and let go.
+fn ctrl_enter(ctx: &egui::Context, a: &mut MailApp) {
+    let m = Modifiers::COMMAND;
+    frame(ctx, a, vec![Event::ModifiersChanged(m), key(Key::Enter, m)]);
+    frame(ctx, a, vec![Event::ModifiersChanged(Modifiers::NONE)]);
+    frame(ctx, a, vec![]);
+}
+
+/// Ctrl+Enter sent the message being written from wherever the keyboard was: with a search
+/// typed, in the Calendar or Contacts, with a dialog open, a message half written went. It goes
+/// only from the message (or with the keyboard nowhere), in Mail, with no dialog over it. (The
+/// To-Do bar has no box to type in: only the search box can hold the keyboard beside the message.)
+#[test]
+fn ctrl_enter_from_elsewhere_sends_nothing() {
+    // The search box has the keyboard.
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-search", "Plans");
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.search_focused, "the search box has the keyboard");
+    ctrl_enter(&ctx, &mut a);
+    assert_eq!(went(&jobs), 0, "not from the search box");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending), "the message is as it was");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn ctrl_enter_in_another_module_sends_nothing() {
+    use quatrelle_engine::Module;
+    for module in [Module::Calendar, Module::People, Module::Tasks, Module::Notes] {
+        let (mut a, dir, ctx, jobs) = writing("ctrl-enter-module", "Plans");
+        a.session.module = module;
+        for _ in 0..2 {
+            frame(&ctx, &mut a, vec![]);
+        }
+        ctrl_enter(&ctx, &mut a);
+        assert_eq!(went(&jobs), 0, "not from {module:?}");
+        assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending), "{module:?}: the message is as it was");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[test]
+fn ctrl_enter_with_a_dialog_open_sends_nothing() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-dialog", "Plans");
+    a.ui.dialog = Some(Dialog::Rules);
+    frame(&ctx, &mut a, vec![]);
+    ctrl_enter(&ctx, &mut a);
+    assert_eq!(went(&jobs), 0, "not with a dialog open");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Sent as the button sends it: a message with no subject asks first (the engine's own words,
+/// `allowEmptySubject` and all, came up as a notice).
+#[test]
+fn ctrl_enter_with_no_subject_asks_as_send_does() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-no-subject", "");
+    ctrl_enter(&ctx, &mut a);
+    assert!(matches!(a.ui.dialog, Some(Dialog::EmptySubject)), "asked about the subject");
+    assert_eq!(went(&jobs), 0, "not sent yet");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The keyboard in the message, a subject filled in: it goes, as ever.
+#[test]
+fn ctrl_enter_in_the_message_still_sends() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-sends", "Plans");
+    ctrl_enter(&ctx, &mut a);
+    assert_eq!(went(&jobs), 1, "sent once");
+    assert!(a.ui.dialog.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The dialog's own button `label` (the message's own Send is another, away from it).
+fn dialog_button(ctx: &egui::Context, a: &mut MailApp, label: &str) -> egui::Pos2 {
+    let nodes = shown(ctx, a);
+    let beside = nodes.iter().find(|n| n.0 == Role::Button && n.1 == "Don't Send").map(|n| n.2.center()).expect("the dialog's Don't Send");
+    // In the dialog's row of buttons (the message's own Send is above it, on another row).
+    let row = nodes.iter().filter(|n| n.0 == Role::Button && n.1 == label && !n.3 && (n.2.center().y - beside.y).abs() < 6.0);
+    row.map(|n| n.2.center()).next().unwrap_or_else(|| panic!("no {label} in the dialog"))
+}
+
+/// Ctrl+Enter asks first (the default): Don't Send leaves the message as it was and nothing
+/// goes; Send sends it.
+#[test]
+fn ctrl_enter_asks_before_sending() {
+    use quatrelle_engine::CtrlEnter;
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-asks", "Plans");
+    a.session.prefs.ctrl_enter = CtrlEnter::default();
+    assert_eq!(a.session.prefs.ctrl_enter, CtrlEnter::Ask, "it asks unless told otherwise");
+    let written = a.session.compose.clone();
+    ctrl_enter(&ctx, &mut a);
+    assert!(matches!(a.ui.dialog, Some(Dialog::CtrlEnter { remember: false })), "asked");
+    assert_eq!(went(&jobs), 0, "not sent yet");
+    assert_eq!(a.session.compose, written);
+    let at = dialog_button(&ctx, &mut a, "Don't Send");
+    click(&ctx, &mut a, at);
+    assert!(a.ui.dialog.is_none());
+    assert_eq!(went(&jobs), 0, "Don't Send: nothing goes");
+    assert_eq!(a.session.compose, written, "and the message stays as it was");
+    assert_eq!(a.session.prefs.ctrl_enter, CtrlEnter::Ask, "it asks again next time");
+    // Asked again, Send sends it.
+    ctrl_enter(&ctx, &mut a);
+    let at = dialog_button(&ctx, &mut a, "Send");
+    click(&ctx, &mut a, at);
+    assert!(a.ui.dialog.is_none());
+    assert_eq!(went(&jobs), 1, "Send: it goes");
+    assert_eq!(a.session.prefs.ctrl_enter, CtrlEnter::Ask, "without keeping the answer");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Don't ask again ticked, then Send: it goes, the answer is kept, and the next message's
+/// Ctrl+Enter sends at once. Ticked with Don't Send, it does nothing from then on.
+#[test]
+fn dont_ask_again_is_ticked_then_ctrl_enter_sends() {
+    use quatrelle_engine::CtrlEnter;
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-keeps", "Plans");
+    a.session.prefs.ctrl_enter = CtrlEnter::Ask;
+    ctrl_enter(&ctx, &mut a);
+    assert!(matches!(a.ui.dialog, Some(Dialog::CtrlEnter { remember: false })));
+    let nodes = shown(&ctx, &mut a);
+    let tick = nodes.iter().find(|n| n.1 == "Don't ask again").map(|n| n.2.center()).expect("the box to tick");
+    click(&ctx, &mut a, tick);
+    assert!(matches!(a.ui.dialog, Some(Dialog::CtrlEnter { remember: true })), "ticked");
+    let at = dialog_button(&ctx, &mut a, "Send");
+    click(&ctx, &mut a, at);
+    assert_eq!(went(&jobs), 1, "sent");
+    assert_eq!(a.session.prefs.ctrl_enter, CtrlEnter::Send, "the answer is kept");
+    // The next message: Ctrl+Enter sends without asking.
+    let account = a.session.accounts.iter().find(|x| x.config.email == "riley@contoso.example").map(|x| x.config.id.clone()).unwrap();
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"account": account, "to": "ann@studio.example", "subject": "Again", "body": "See you"}));
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    ctrl_enter(&ctx, &mut a);
+    assert!(a.ui.dialog.is_none(), "not asked");
+    assert_eq!(went(&jobs), 2, "sent at once");
+    // Kept as Don't Send, it does nothing.
+    a.session.prefs.ctrl_enter = CtrlEnter::Ask;
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"account": account, "to": "ann@studio.example", "subject": "Third", "body": "See you"}));
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    ctrl_enter(&ctx, &mut a);
+    let nodes = shown(&ctx, &mut a);
+    let tick = nodes.iter().find(|n| n.1 == "Don't ask again").map(|n| n.2.center()).expect("the box to tick");
+    click(&ctx, &mut a, tick);
+    let at = dialog_button(&ctx, &mut a, "Don't Send");
+    click(&ctx, &mut a, at);
+    assert_eq!(a.session.prefs.ctrl_enter, CtrlEnter::Nothing, "kept");
+    assert_eq!(went(&jobs), 2, "nothing went");
+    ctrl_enter(&ctx, &mut a);
+    assert!(a.ui.dialog.is_none(), "not asked");
+    assert_eq!(went(&jobs), 2, "and nothing goes from then on");
+    assert!(a.session.compose.as_ref().is_some_and(|c| !c.sending));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A message in a window of its own asks the same, and Send there sends it.
+#[test]
+fn ctrl_enter_in_a_message_window_asks_too() {
+    let (mut a, dir, ctx, jobs) = writing("ctrl-enter-window", "Plans");
+    a.session.prefs.ctrl_enter = quatrelle_engine::CtrlEnter::Ask;
+    a.session.prefs.new_mail_window = true;
+    ctx.set_embed_viewports(false);
+    let account = a.session.accounts.iter().find(|x| x.config.email == "riley@contoso.example").map(|x| x.config.id.clone()).unwrap();
+    a.run("compose.discard", json!({}));
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"account": account, "to": "ann@studio.example", "subject": "Plans", "body": "See you"}));
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let written = a.session.compose.clone();
+    assert!(written.as_ref().is_some_and(|c| c.window), "in a window of its own");
+    ctrl_enter(&ctx, &mut a);
+    assert!(matches!(a.ui.dialog, Some(Dialog::CtrlEnter { .. })), "asked in its window");
+    assert_eq!(went(&jobs), 0, "not sent");
+    assert_eq!(a.session.compose, written);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Alt+S and the Send button never ask, whatever Ctrl+Enter does.
+#[test]
+fn alt_s_and_send_never_ask() {
+    let (mut a, dir, ctx, jobs) = writing("alt-s-send", "Plans");
+    a.session.prefs.ctrl_enter = quatrelle_engine::CtrlEnter::Ask;
+    let m = Modifiers::ALT;
+    frame(&ctx, &mut a, vec![Event::ModifiersChanged(m), key(Key::S, m)]);
+    frame(&ctx, &mut a, vec![Event::ModifiersChanged(Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(!matches!(a.ui.dialog, Some(Dialog::CtrlEnter { .. })), "Alt+S asks nothing");
+    assert_eq!(went(&jobs), 1, "Alt+S sent it");
+    // The Send button, on the next message.
+    let account = a.session.accounts.iter().find(|x| x.config.email == "riley@contoso.example").map(|x| x.config.id.clone()).unwrap();
+    a.run("mail.new", json!({"account": account}));
+    a.run("compose.update", json!({"account": account, "to": "ann@studio.example", "subject": "Again", "body": "See you"}));
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let nodes = shown(&ctx, &mut a);
+    let send = nodes.iter().find(|n| n.0 == Role::Button && n.1 == "Send" && !n.3).map(|n| n.2.center()).expect("Send");
+    click(&ctx, &mut a, send);
+    assert!(!matches!(a.ui.dialog, Some(Dialog::CtrlEnter { .. })), "Send asks nothing");
+    assert_eq!(went(&jobs), 2, "Send sent it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A check before sending whose findings can't be read still says there is something, not only
+/// "Send anyway".
+#[test]
+fn a_check_before_sending_that_cant_be_shown_still_says_so() {
+    let (mut a, dir) = app("send-check-unshown");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    a.ui.dialog = Some(Dialog::SendCheck(Vec::new()));
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let nodes = shown(&ctx, &mut a);
+    let said = "Something about the recipients was found to look at, but it can't be shown. Look them over before sending.";
+    assert!(nodes.iter().any(|(_, name, ..)| name == said), "the dialog says there is something: {nodes:?}");
+    assert!(nodes.iter().any(|(role, name, ..)| *role == Role::Button && name == "Send anyway"));
     let _ = std::fs::remove_dir_all(dir);
 }

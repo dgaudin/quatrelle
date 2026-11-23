@@ -1286,6 +1286,7 @@ month	May	Май
 	Check before sending	Проверьте перед отправкой
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} похож на адрес в {like}, но им не является. Это правильный адрес?
 	{n} people who may not know each other will all see each other's addresses.	{n} человек, возможно незнакомых друг с другом, увидят адреса всех остальных.
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	Среди получателей найдено то, что стоит проверить, но показать это нельзя. Проверьте их перед отправкой.
 	Put everyone in Bcc	Поместить всех в скрытую копию
 	Each of them gets the message without seeing who else did; you're in To	Каждый получит письмо, не видя остальных получателей; вы будете в поле «Кому»
 	Open links without their tracking	Открывать ссылки без отслеживания
@@ -2426,6 +2427,14 @@ presence	Offline	Не в сети
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 сохраняет онлайн-собрание после его создания
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: импортировано писем: {messages}, но список папок не удалось прочитать снова: Quatrelle прочитает его снова при следующем запуске
+	Send this message?	Отправить это сообщение?
+	Don't Send	Не отправлять
+	Don't ask again	Больше не спрашивать
+	What Ctrl+Enter does in a message	Что делает Ctrl+Enter в сообщении
+	Ask first	Сначала спрашивать
+	Does nothing	Ничего не делает
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	В окне произошла ошибка, но Quatrelle продолжил работу. Возможно, то, что вы делали, придётся повторить
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle должен закрыться из-за ошибки, которую не удалось преодолеть. То, что вы писали, сохранено в черновиках
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	не удалось прочитать нумерацию сообщений этой учётной записи, поэтому её почта пока не синхронизируется: {error}
 	a file Quatrelle keeps is damaged: {error}	файл, который хранит Quatrelle, повреждён: {error}

@@ -35,7 +35,7 @@ fn item(c: &Client, a: &ReminderAnswer) -> Result<String> {
         query_time(a.occurrence.saturating_sub(AROUND)),
         query_time(a.occurrence.saturating_add(AROUND))
     );
-    let v = c.get(&path)?;
+    let v = c.get_item(&path)?;
     let list = v.get("value").and_then(Value::as_array).cloned().unwrap_or_default();
     list.iter()
         .take(MAX_INSTANCES)
@@ -43,15 +43,18 @@ fn item(c: &Client, a: &ReminderAnswer) -> Result<String> {
         .filter(|(start, id)| !id.is_empty() && start.abs_diff(a.occurrence) <= AROUND.unsigned_abs())
         .min_by_key(|(start, _)| start.abs_diff(a.occurrence))
         .map(|(_, id)| id)
-        .ok_or_else(|| NetError::No("that occurrence isn't in the calendar any more".into()))
+        .ok_or_else(|| NetError::Gone("that occurrence isn't in the calendar".into()))
 }
 
 /// Tell Graph one answer.
 fn answer(c: &Client, a: &ReminderAnswer) -> Result<()> {
     let id = item(c, a)?;
     match a.snooze_until {
-        None => c.post(&format!("/me/events/{}/dismissReminder", seg(&id)), &json!({})),
-        Some(until) => c.post(&format!("/me/events/{}/snoozeReminder", seg(&id)), &json!({ "newReminderTime": date_time(until) })),
+        None => c.post_item(&format!("/me/events/{}/dismissReminder", seg(&id)), b"{}".to_vec()),
+        Some(until) => {
+            let body = serde_json::to_vec(&json!({ "newReminderTime": date_time(until) })).map_err(|e| NetError::Protocol(e.to_string()))?;
+            c.post_item(&format!("/me/events/{}/snoozeReminder", seg(&id)), body)
+        }
     }
     .map(|_| ())
 }
@@ -62,8 +65,8 @@ pub(super) fn answer_all(c: &Client, pim: &Pim, out: &mut DavSync) {
     for a in pim.reminder_answers.iter().take(MAX_REMINDER_ANSWERS) {
         match answer(c, a) {
             Ok(()) => out.answered.push(a.clone()),
-            Err(NetError::No(why) | NetError::Gone(why)) => {
-                log::info!("a reminder answer can't be told to Exchange Online: {why}");
+            Err(e) if crate::gone(&e) => {
+                log::info!("a reminder answer can't be told to Exchange Online: {e}");
                 out.answered.push(a.clone());
             }
             // Out of reach: the others wait too, rather than each failing in turn.

@@ -76,6 +76,8 @@ pub struct Data {
     pub calls: Vec<String>,
     /// The signed-in Microsoft account has no mailbox.
     pub no_mailbox: bool,
+    /// Requests refused with a 403 (access denied): those whose `METHOD path` contains one of these.
+    pub forbid: Vec<String>,
     /// File a sent message's copy in Sent Items a moment after `sendMail`, as Graph does.
     pub file_late: bool,
     /// Other people whose calendars are shared with this account: (address, may edit). Their

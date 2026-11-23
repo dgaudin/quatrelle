@@ -342,7 +342,7 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a Tombstone>, out: &
         match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task) {
             // Deleted, or gone already (deleted in Outlook too).
             Ok(()) => out.deleted.push(t.href.clone()),
-            Err(NetError::No(why)) if why.starts_with("not on the server") => out.deleted.push(t.href.clone()),
+            Err(e) if crate::gone(&e) => out.deleted.push(t.href.clone()),
             // Refused: it stays on the server, so it comes back here, and why is said.
             Err(NetError::No(why)) => {
                 out.deleted.push(t.href.clone());
@@ -362,7 +362,7 @@ fn push_cards(c: &Client, pim: &Pim, out: &mut DavSync) {
     for k in pim.cards.iter().filter(|k| k.dirty) {
         if let Some(old) = k.href.strip_prefix("contact:")
             && let Err(e) = delete(c, old, false)
-            && !matches!(e, NetError::No(_))
+            && !crate::gone(&e)
         {
             out.errors.push(format!("{}: {e}", k.card.display()));
             continue;
@@ -493,7 +493,7 @@ fn read_notes(c: &Client, pim: &Pim, again: &[String], out: &mut DavSync) {
     for n in pim.notes.iter().filter(|n| n.dirty) {
         if let Some(old) = n.href.strip_prefix("note:")
             && let Err(e) = delete(c, old, false)
-            && !matches!(e, NetError::No(_))
+            && !crate::gone(&e)
         {
             out.errors.push(format!("{}: {e}", n.note.title()));
             continue;

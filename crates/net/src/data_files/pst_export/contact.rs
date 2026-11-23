@@ -86,9 +86,13 @@ fn files(card: &Card, photo: bool) -> (Vec<File>, Vec<String>) {
 /// card's own text fields, each that it has.
 fn names(card: &Card, name: &str) -> Vec<(Key, Value)> {
     let mut props = vec![tag(0x3001, Value::Text(name.to_string()))];
+    let [middle, prefix, suffix] = card.name_extras();
     let fields = [
         (0x3A06, &card.given),
+        (0x3A44, &middle),
         (0x3A11, &card.family),
+        (0x3A05, &suffix),
+        (0x3A45, &prefix),
         (0x3A16, &card.org),
         (0x3A18, &card.department),
         (0x3A17, &card.title),

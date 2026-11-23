@@ -6,6 +6,7 @@
 use super::*;
 
 mod notes;
+mod server_cards;
 mod teams;
 
 #[test]

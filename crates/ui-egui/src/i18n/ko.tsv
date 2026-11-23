@@ -1286,6 +1286,7 @@ month	May	5월
 	Check before sending	보내기 전에 확인
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address}은(는) {like}의 주소처럼 보이지만 아닙니다. 맞는 주소인가요?
 	{n} people who may not know each other will all see each other's addresses.	서로 모를 수도 있는 {n}명이 모두 서로의 주소를 보게 됩니다.
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	받는 사람에 대해 확인할 내용이 발견되었지만 표시할 수 없습니다. 보내기 전에 받는 사람을 살펴보세요.
 	Put everyone in Bcc	모두 숨은 참조에 넣기
 	Each of them gets the message without seeing who else did; you're in To	각자 다른 받는 사람을 보지 못한 채 메시지를 받습니다. 받는 사람에는 내가 들어갑니다
 	Open links without their tracking	추적 없이 링크 열기
@@ -2424,6 +2425,14 @@ presence	Offline	오프라인
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365는 한 번 만든 온라인 모임을 유지합니다
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: 메시지 {messages}개를 가져왔지만 폴더 목록을 다시 읽을 수 없습니다: Quatrelle가 다음에 시작할 때 다시 읽습니다
+	Send this message?	이 메시지를 보낼까요?
+	Don't Send	보내지 않음
+	Don't ask again	다시 묻지 않음
+	What Ctrl+Enter does in a message	메시지에서 Ctrl+Enter의 동작
+	Ask first	먼저 묻기
+	Does nothing	아무것도 안 함
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	창에서 문제가 발생했지만 Quatrelle은 계속 실행되었습니다. 하던 작업을 다시 해야 할 수 있습니다
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle이 해결할 수 없는 오류가 발생하여 종료해야 합니다. 작성 중이던 내용은 임시 보관함에 저장되어 있습니다
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	이 계정의 메시지 번호를 읽을 수 없어 당분간 메일이 동기화되지 않습니다: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle이 보관하는 파일이 손상되었습니다: {error}

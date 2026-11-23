@@ -126,6 +126,8 @@ pub struct Data {
     pub refused: Vec<String>,
     /// Items `DeleteItem` refuses (`ErrorAccessDenied`), by id: they stay.
     pub undeletable: Vec<String>,
+    /// Items `DeleteItem` can't do now (`ErrorServerBusy`), by id, for as long as they are listed.
+    pub delete_busy: Vec<String>,
     /// Mail deleted with `SoftDelete` (`deleting.rs`): in Recoverable Items, where Recover Deleted
     /// Items finds it. `HardDelete` leaves nothing the user can reach.
     pub recoverable: Vec<It>,
@@ -374,6 +376,7 @@ impl Default for Data {
             unreadable: Vec::new(),
             refused: Vec::new(),
             undeletable: Vec::new(),
+            delete_busy: Vec::new(),
             recoverable: Vec::new(),
             purged: Vec::new(),
             refuse_recoverable: false,

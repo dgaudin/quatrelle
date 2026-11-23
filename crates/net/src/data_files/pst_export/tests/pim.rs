@@ -48,6 +48,7 @@ pub(super) fn account() -> Pim {
         name: "Ana Lima".into(),
         given: "Ana".into(),
         family: "Lima".into(),
+        name_rest: "Maria;Dr.;Jr.".into(),
         emails: vec![
             typed("ana@studio.example", "work"),
             typed("ana@home.example", ""),
@@ -88,6 +89,7 @@ pub(super) fn account() -> Pim {
         birthday: "1990-04-01".into(),
         photo: Some(Photo { media: "image/png".into(), base64: "iVBORw0KGgo=".into() }),
         extra: vec!["X-CUSTOM:kept".into(), crate::pst_pim::card_file("cv; 2026.pdf", "application/pdf", b"cv")],
+        ..Default::default()
     };
     let ben = Card {
         uid: "c2".into(),

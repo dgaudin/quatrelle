@@ -213,6 +213,18 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.reply_window}))
         })
         .params(r#"{"on"?: bool}"#),
+        CommandSpec::new("options.ctrlEnter", "What Ctrl+Enter does in a message", "File › Options › Mail", |s, v| {
+            if let Some(does) = p::str(v, "does") {
+                s.prefs.ctrl_enter = match does {
+                    "ask" => crate::CtrlEnter::Ask,
+                    "send" => crate::CtrlEnter::Send,
+                    "nothing" => crate::CtrlEnter::Nothing,
+                    other => return Err(CmdError::Params(format!("`{other}`: Ctrl+Enter asks, sends or does nothing"))),
+                };
+            }
+            Ok(json!({"does": s.prefs.ctrl_enter}))
+        })
+        .params(r#"{"does"?: "ask"|"send"|"nothing"}"#),
         CommandSpec::new("view.favorites", "Show Favorites", "View › Layout", |s, v| {
             s.prefs.show_favorites = p::bool(v, "on").unwrap_or(!s.prefs.show_favorites);
             Ok(json!({"on": s.prefs.show_favorites}))

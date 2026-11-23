@@ -1283,6 +1283,7 @@ month	May	mei
 	Check before sending	Controleren voor verzenden
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} lijkt een adres bij {like}, maar is het niet. Is het het juiste adres?
 	{n} people who may not know each other will all see each other's addresses.	{n} mensen die elkaar misschien niet kennen, zien allemaal elkaars adres.
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	Er is iets gevonden over de ontvangers dat je moet bekijken, maar het kan niet worden getoond. Controleer ze voordat je verzendt.
 	Put everyone in Bcc	Iedereen in Bcc zetten
 	Each of them gets the message without seeing who else did; you're in To	Ieder krijgt het bericht zonder te zien wie nog meer; u staat in Aan
 	Open links without their tracking	Koppelingen openen zonder tracking
@@ -2422,6 +2423,14 @@ presence	Offline	Offline
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 houdt een onlinevergadering zodra die is gemaakt
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} berichten geïmporteerd, maar de mappenlijst kon niet opnieuw worden gelezen: Quatrelle leest die opnieuw bij de volgende start
+	Send this message?	Dit bericht verzenden?
+	Don't Send	Niet verzenden
+	Don't ask again	Niet meer vragen
+	What Ctrl+Enter does in a message	Wat Ctrl+Enter doet in een bericht
+	Ask first	Eerst vragen
+	Does nothing	Doet niets
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	Er ging iets mis in het venster en Quatrelle is doorgegaan. Wat u aan het doen was, moet misschien opnieuw gedaan worden
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle moet sluiten na een fout die het niet kon oplossen. Wat u aan het schrijven was, is bewaard in Concepten
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	de nummering van de berichten van dit account kon niet worden gelezen, dus de post wordt voorlopig niet gesynchroniseerd: {error}
 	a file Quatrelle keeps is damaged: {error}	een bestand dat Quatrelle bewaart is beschadigd: {error}

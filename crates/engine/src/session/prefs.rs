@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod saved;
 mod webex_rooms;
 pub use webex_rooms::*;
 
@@ -24,6 +25,18 @@ pub const MEETINGS_PROFILE: &str = "Quatrelle";
 /// either end), never a way out of it.
 pub fn is_profile_dir(dir: &str) -> bool {
     (1..=255).contains(&dir.len()) && dir != "." && dir != ".." && dir.trim() == dir && !dir.chars().any(|c| c == '/' || c == '\\' || c.is_control())
+}
+
+/// What Ctrl+Enter does in a message being written: it sent at once, and a slip of the keys
+/// sent a message unfinished. It asks first, as Outlook does the first time, until the answer is
+/// kept ("Don't ask again", or File › Options › Mail); Alt+S and Send are as ever.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CtrlEnter {
+    #[default]
+    Ask,
+    Send,
+    Nothing,
 }
 
 /// Settings the user changes from the View tab (saved by the app).
@@ -124,6 +137,8 @@ pub struct Prefs {
     /// Replies and forwards open in a window of their own too, not in the reading pane (issue
     /// #11: Pop out each time).
     pub reply_window: bool,
+    /// What Ctrl+Enter does in a message being written.
+    pub ctrl_enter: CtrlEnter,
     /// The folder pane shows Favorites at its top (issue #11: it could only be collapsed).
     pub show_favorites: bool,
     /// How the message list is arranged (View › Arrange by), and turned the other way round.
@@ -271,6 +286,11 @@ pub struct Prefs {
     /// File › Options › Teams. Read from the settings as saved; at first (none saved), off with
     /// the ids of a local build. Always saved: ids the user erased stay erased.
     pub teams: quatrelle_model::pim::teams::TeamsSettings,
+    /// The items of saved lists that this version couldn't read (written by a newer one), as
+    /// they were, by list name and place: put back where they were when the settings are saved
+    /// again ([`Prefs::to_saved`]), so what a newer version saved isn't lost. Never saved itself.
+    #[serde(skip)]
+    pub(crate) unread_items: BTreeMap<String, Vec<(usize, Value)>>,
 }
 
 impl Default for Prefs {
@@ -312,6 +332,7 @@ impl Default for Prefs {
             safe_senders: BTreeSet::new(),
             new_mail_window: true,
             reply_window: false,
+            ctrl_enter: CtrlEnter::Ask,
             show_favorites: true,
             arrange: Arrange::Date,
             reverse_sort: false,
@@ -347,6 +368,7 @@ impl Default for Prefs {
             scam_accounts: BTreeSet::new(),
             scam_daily_cap: crate::session::DEFAULT_CAP,
             teams: super::pim::default_teams_settings(),
+            unread_items: BTreeMap::new(),
             quick_steps: Vec::new(),
             quick_steps_seeded: false,
             folder_pane_minimized: false,

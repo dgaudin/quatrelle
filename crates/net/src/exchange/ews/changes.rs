@@ -315,7 +315,7 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                 esc(id)
             ));
             match asked {
-                Err(NetError::No(why)) if why.starts_with("not on the server") => Ok(()),
+                Err(e) if crate::gone(&e) => Ok(()),
                 r => r.map(drop),
             }
         }

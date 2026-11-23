@@ -1287,6 +1287,7 @@ month	May	Mai
 	Check before sending	Vor dem Senden prüfen
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} sieht aus wie eine Adresse bei {like}, ist aber keine. Ist es die richtige?
 	{n} people who may not know each other will all see each other's addresses.	{n} Personen, die sich vielleicht nicht kennen, sehen alle gegenseitig ihre Adressen.
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	Bei den Empfängern wurde etwas gefunden, das man ansehen sollte, es kann aber nicht angezeigt werden. Prüfen Sie sie vor dem Senden.
 	Put everyone in Bcc	Alle in Bcc setzen
 	Each of them gets the message without seeing who else did; you're in To	Jeder erhält die Nachricht, ohne zu sehen, wer sonst; Sie stehen in An
 	Open links without their tracking	Links ohne Tracking öffnen
@@ -2426,6 +2427,14 @@ presence	Offline	Offline
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 behält eine Onlinebesprechung, sobald sie erstellt ist
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} Nachrichten importiert, aber die Ordnerliste konnte nicht erneut gelesen werden: Quatrelle liest sie beim nächsten Start erneut
+	Send this message?	Diese Nachricht senden?
+	Don't Send	Nicht senden
+	Don't ask again	Nicht mehr fragen
+	What Ctrl+Enter does in a message	Was Strg+Eingabe in einer Nachricht bewirkt
+	Ask first	Zuerst fragen
+	Does nothing	Tut nichts
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	Im Fenster ist ein Fehler aufgetreten, und Quatrelle hat weitergemacht. Was Sie gerade getan haben, muss möglicherweise wiederholt werden
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle muss sich nach einem Fehler schließen, den es nicht überwinden konnte. Was Sie geschrieben haben, ist in den Entwürfen gespeichert
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	die Nummerierung der Nachrichten dieses Kontos konnte nicht gelesen werden, daher wird seine Post vorerst nicht synchronisiert: {error}
 	a file Quatrelle keeps is damaged: {error}	eine von Quatrelle aufbewahrte Datei ist beschädigt: {error}

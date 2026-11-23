@@ -58,8 +58,8 @@ use quatrelle_engine::model::{MessageKey, SyncStatus};
 use quatrelle_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
 use serde_json::{Value, json};
 
+pub use app::{FramePart, WindowPlace, after_open, alt_code_pages, alt_codes};
 pub(crate) use app::{SearchDrop, cleaned_on_written_host, junk_menu, meeting_browser, meeting_profile, quick_steps_menu, scope_label};
-pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;
 pub use os_windows::APP_ID;
@@ -204,6 +204,9 @@ impl MailApp {
                 tokens: Tokens::light(),
                 closing_anyway: false,
                 graphics_lost: false,
+                caught: Default::default(),
+                #[cfg(test)]
+                test_panic: None,
                 close_now: false,
                 close_after_compact: false,
                 quitting: false,
@@ -233,6 +236,9 @@ impl MailApp {
                 search_due: None,
                 search_drop: SearchDrop::None,
                 compose_alert: None,
+                compose_area: None,
+                send_asked: None,
+                send_confirmed: None,
                 attachment_view: None,
                 shown_as: Default::default(),
                 attachment_click: None,
@@ -593,11 +599,21 @@ impl MailApp {
 
     /// Preferences and theme for the app to save.
     pub fn saved_state(&self) -> Value {
-        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns, "envelope": self.session.envelope_keys() })
+        json!({ "prefs": self.session.prefs.to_saved(), "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns, "envelope": self.session.envelope_keys() })
     }
 
     pub fn restore_state(&mut self, v: &Value) {
-        if let Some(p) = v.get("prefs").and_then(|p| serde_json::from_value::<quatrelle_engine::Prefs>(p.clone()).ok()) {
+        // Each setting read alone: one that another version typed otherwise starts over, the
+        // others are kept (and saved again as they are). Only names are logged: a value, or
+        // serde's words about it, could be an address.
+        if let Some((p, unread)) = v.get("prefs").and_then(quatrelle_engine::Prefs::from_saved) {
+            if !unread.is_empty() {
+                log::warn!(
+                    "{} saved settings or list items couldn't be read (a setting starts from its default, a list item is kept as it was and saved again): {}",
+                    unread.len(),
+                    unread.join(", ")
+                );
+            }
             let offline = p.work_offline;
             self.session.prefs = p;
             self.session.prefs.carry_over_webex_rooms();
@@ -615,26 +631,38 @@ impl MailApp {
             }
         }
         // New mail still unread as Quatrelle closed: the envelope shows again.
-        if let Some(keys) = v.get("envelope").and_then(|k| serde_json::from_value(k.clone()).ok()) {
+        if let Some(keys) = saved_key(v, "envelope") {
             self.session.restore_envelope(keys);
         }
         self.ui.dark = v.get("dark").and_then(Value::as_bool);
         self.ui.system_accent = v.get("systemAccent").and_then(Value::as_bool).unwrap_or(true);
         self.ui.ribbon_collapsed = v.get("ribbonCollapsed").and_then(Value::as_bool).unwrap_or(false);
-        if let Some(pv) = v.get("peopleView").and_then(|w| serde_json::from_value(w.clone()).ok()) {
+        if let Some(pv) = saved_key(v, "peopleView") {
             self.ui.people_view = pv;
         }
-        if let Some(c) = v.get("listColumns").and_then(|w| serde_json::from_value::<list::ColumnWidths>(w.clone()).ok()) {
+        if let Some(c) = saved_key::<list::ColumnWidths>(v, "listColumns") {
             self.ui.list_columns = c.clamped();
         }
-        if let Some(pl) = v.get("peopleList").and_then(|w| serde_json::from_value(w.clone()).ok()) {
+        if let Some(pl) = saved_key(v, "peopleList") {
             self.ui.people_list = pl;
         }
-        if let Some(w) = v.get("windows").and_then(|w| serde_json::from_value(w.clone()).ok()) {
+        if let Some(w) = saved_key(v, "windows") {
             self.ui.places = w;
         }
         if let Some(l) = v.get("language").and_then(Value::as_str).filter(|l| *l == i18n::AUTO || i18n::Lang::from_code(l).is_some()) {
             self.ui.language = l.to_string();
+        }
+    }
+}
+
+/// One of the app's saved settings, read alone: the key and the kind of error are logged when it
+/// can't be read (never `e`: serde's words quote the value).
+fn saved_key<T: serde::de::DeserializeOwned>(state: &Value, key: &str) -> Option<T> {
+    match serde_json::from_value(state.get(key)?.clone()) {
+        Ok(x) => Some(x),
+        Err(e) => {
+            log::warn!("a saved setting ({key}) couldn't be read ({:?}) and starts from its default", e.classify());
+            None
         }
     }
 }

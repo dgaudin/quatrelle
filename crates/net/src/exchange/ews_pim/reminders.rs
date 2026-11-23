@@ -46,12 +46,12 @@ fn listed_around(c: &Client, at: i64) -> Result<Vec<Listed>> {
     Ok(reminders_listed(&doc))
 }
 
-/// Tell Exchange one answer. `NetError::No`: it can't apply there (the server doesn't list that
-/// reminder any more, or refuses the operation).
+/// Tell Exchange one answer. `NetError::Gone`: it can't apply there (the server doesn't list that
+/// reminder any more); any other refusal is the server's, and the answer is asked again.
 fn answer(c: &Client, a: &ReminderAnswer) -> Result<()> {
     let listed = listed_around(c, a.occurrence)?;
     let Some(r) = pick(&listed, a) else {
-        return Err(NetError::No("that reminder isn't on the server any more".into()));
+        return Err(NetError::Gone("that reminder isn't listed".into()));
     };
     let (action, time) = match a.snooze_until {
         None => ("Dismiss", String::new()),
@@ -84,8 +84,8 @@ pub(super) fn answer_all(c: &Client, pim: &Pim, out: &mut DavSync) {
     for a in waiting {
         match answer(c, a) {
             Ok(()) => out.answered.push(a.clone()),
-            Err(NetError::No(why)) => {
-                log::info!("a reminder answer can't be told to Exchange: {why}");
+            Err(e) if crate::gone(&e) => {
+                log::info!("a reminder answer can't be told to Exchange: {e}");
                 out.answered.push(a.clone());
             }
             // Out of reach: the others wait too, rather than each failing in turn.

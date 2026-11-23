@@ -249,17 +249,32 @@ impl Accepts {
 pub const MAX_ENTRIES: usize = 500;
 
 /// Cut typed text into entries: on `,` and `;` outside quotes and `<…>`, trimmed, empties dropped.
-/// A comma-separated part that is no address and has no `<…>` is joined to the part after it when
+/// A `>` outside quotes ends its entry too (`Ann <a@x> Bob <b@x>`, two lines pasted, is two). A
+/// comma-separated part that is no address and has no `<…>` is joined to the part after it when
 /// that one has `<…>` (`Doe, John <j@x>`); a `;` never joins.
 pub fn split_entries(input: &str) -> Vec<&str> {
+    split(input, true)
+}
+
+/// [`split_entries`] with the quotes ignored: a quote left open in a draft's text hides the
+/// entries after it from the first, and this one finds them.
+pub(super) fn split_entries_blind(input: &str) -> Vec<&str> {
+    split(input, false)
+}
+
+fn split(input: &str, honor_quotes: bool) -> Vec<&str> {
     // (start, end, a comma follows)
     let mut raw: Vec<(usize, usize, bool)> = Vec::new();
     let (mut quoted, mut angle, mut start) = (false, false, 0);
     for (i, c) in input.char_indices() {
         match c {
-            '"' => quoted = !quoted,
+            '"' if honor_quotes => quoted = !quoted,
             '<' if !quoted => angle = true,
-            '>' if !quoted => angle = false,
+            '>' if !quoted && angle => {
+                angle = false;
+                raw.push((start, i + 1, false));
+                start = i + 1;
+            }
             ',' | ';' if !quoted && !angle => {
                 raw.push((start, i, c == ','));
                 start = i + c.len_utf8();

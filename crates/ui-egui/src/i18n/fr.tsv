@@ -1287,6 +1287,7 @@ month	May	mai
 	Check before sending	Vérifier avant l'envoi
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	L'adresse {address} ressemble à une adresse chez {like}, sans en être une. Est-ce la bonne ?
 	{n} people who may not know each other will all see each other's addresses.	{n} personnes qui ne se connaissent peut-être pas verront toutes les adresses des autres.
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	Quelque chose à vérifier a été trouvé parmi les destinataires, mais ne peut pas être affiché. Vérifiez-les avant d’envoyer.
 	Put everyone in Bcc	Mettre tout le monde en Cci
 	Each of them gets the message without seeing who else did; you're in To	Chacun reçoit le message sans voir qui d'autre l'a reçu ; vous êtes dans À
 	Open links without their tracking	Ouvrir les liens sans leur pistage
@@ -2426,6 +2427,14 @@ presence	Offline	Hors ligne
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 garde une réunion en ligne une fois créée
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name} : {messages} messages importés, mais la liste de ses dossiers n’a pas pu être relue : Quatrelle la relira à son prochain démarrage
+	Send this message?	Envoyer ce message ?
+	Don't Send	Ne pas envoyer
+	Don't ask again	Ne plus demander
+	What Ctrl+Enter does in a message	Ce que fait Ctrl+Entrée dans un message
+	Ask first	Demander d’abord
+	Does nothing	Ne fait rien
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	Une erreur s’est produite dans la fenêtre, et Quatrelle a continué. Ce que vous faisiez est peut-être à refaire
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle doit se fermer après une erreur qu’il n’a pas pu passer. Ce que vous écriviez est gardé dans les Brouillons
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	la numérotation des messages de ce compte n’a pas pu être lue, son courrier n’est donc pas synchronisé pour l’instant : {error}
 	a file Quatrelle keeps is damaged: {error}	un fichier que Quatrelle conserve est abîmé : {error}

@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod guard;
 mod message_ribbon;
 
 #[test]

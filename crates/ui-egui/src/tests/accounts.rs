@@ -9,6 +9,7 @@ mod archiving;
 mod importing;
 mod pgp;
 mod recovering;
+mod settings;
 mod trust;
 
 #[test]

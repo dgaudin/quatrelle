@@ -60,7 +60,7 @@ pub(crate) use opening::source_lines;
 pub use opening::{BodyWork, HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, PreparedBody, SOURCE_SHOWN, STILL_DOWNLOADING, SourceView, Toward};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
-    ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
+    CtrlEnter, ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
     WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
 use searching::SearchIndex;

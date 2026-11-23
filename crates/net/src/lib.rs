@@ -135,6 +135,17 @@ impl NetError {
 
 pub type Result<T> = std::result::Result<T, NetError>;
 
+/// Whether an error says the thing asked about isn't on the server (any more): `Gone`, or the
+/// refusal EWS gives for an item or a folder it doesn't have. Only that lets a delete or an answer
+/// count as done; any other (access denied, the server busy) didn't happen, and the change stays.
+pub(crate) fn gone(e: &NetError) -> bool {
+    match e {
+        NetError::Gone(_) => true,
+        NetError::No(why) => why.starts_with("not on the server"),
+        _ => false,
+    }
+}
+
 /// The smart cards' PKCS #11 modules installed here, the likeliest first (S/MIME with a card).
 pub fn card_modules() -> Vec<String> {
     quatrelle_keys::pkcs11::known_modules()

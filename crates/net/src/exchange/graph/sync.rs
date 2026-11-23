@@ -397,12 +397,10 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             c.send_raw("PATCH", &format!("/me/calendars/{}", seg(calendar)), "application/json", body).map(drop)
         }
         // Gone already (deleted in Outlook meanwhile): what was asked is done.
-        Op::DeleteCalendar { calendar } => {
-            match c.send_raw("DELETE", &format!("/me/calendars/{}", seg(graph_calendar(calendar)?)), "application/json", Vec::new()) {
-                Err(NetError::No(why)) if why.starts_with("HTTP 404") => Ok(()),
-                r => r.map(drop),
-            }
-        }
+        Op::DeleteCalendar { calendar } => match c.delete_item(&format!("/me/calendars/{}", seg(graph_calendar(calendar)?))) {
+            Err(e) if crate::gone(&e) => Ok(()),
+            r => r.map(drop),
+        },
     }
 }
 

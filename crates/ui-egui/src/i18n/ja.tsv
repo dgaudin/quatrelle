@@ -1284,6 +1284,7 @@ month	May	5月
 	Check before sending	送信前の確認
 	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} は {like} のアドレスに見えますが、そうではありません。正しいアドレスですか?
 	{n} people who may not know each other will all see each other's addresses.	互いに知らないかもしれない {n} 人全員に、ほかの人のアドレスが見えます。
+	Something about the recipients was found to look at, but it can't be shown. Look them over before sending.	宛先について確認すべき点が見つかりましたが、表示できません。送信する前に宛先を確認してください。
 	Put everyone in Bcc	全員を BCC に入れる
 	Each of them gets the message without seeing who else did; you're in To	各自がほかに誰が受け取ったかを見ずにメッセージを受け取ります。あなたは宛先に入ります
 	Open links without their tracking	追跡を外してリンクを開く
@@ -2422,6 +2423,14 @@ presence	Offline	オフライン
 	Microsoft 365 keeps an online meeting once it is made	Microsoft 365 では、一度作成したオンライン会議は保持されます
 # A data file copied in whole whose folder list couldn't be read back (the disk failing).
 	{name}: {messages} messages imported, but its folder list couldn't be read back: Quatrelle reads it again when it next starts	{name}: {messages} 件のメッセージをインポートしましたが、フォルダー一覧を読み直せませんでした: Quatrelle は次回の起動時に読み直します
+	Send this message?	このメッセージを送信しますか?
+	Don't Send	送信しない
+	Don't ask again	今後確認しない
+	What Ctrl+Enter does in a message	メッセージ内での Ctrl+Enter の動作
+	Ask first	最初に確認する
+	Does nothing	何もしない
+	Something went wrong in the window, and Quatrelle went on. What you were doing may need doing again	ウィンドウでエラーが発生しましたが、Quatrelle は動作を続けました。実行していた操作をやり直す必要があるかもしれません
+	Quatrelle has to close after an error it couldn't get past. What you were writing is kept in Drafts	Quatrelle は回避できないエラーのため終了する必要があります。作成中の内容は下書きに保存されています
 # A numbering or another file Quatrelle keeps that can't be read is never started over.
 	this account's message numbering couldn't be read, so its mail isn't synchronized for now: {error}	このアカウントのメッセージ番号を読み取れなかったため、メールは当面同期されません: {error}
 	a file Quatrelle keeps is damaged: {error}	Quatrelle が保管しているファイルが壊れています: {error}

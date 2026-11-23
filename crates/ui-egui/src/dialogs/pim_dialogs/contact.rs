@@ -24,8 +24,18 @@ pub struct ContactForm {
     pub phones: [String; 5],
     /// Numbers beyond one of each kind, kept as they were.
     pub more_phones: Vec<quatrelle_engine::model::vcard::Typed>,
+    /// The number in the Other place when the contact opened, and its kind when that is one the
+    /// form has no place for (`pager`): the kind stays with that number only, a number typed
+    /// there instead takes the place's own.
+    pub other_phone: Option<(String, String)>,
     /// Business, home and other (as [`ADDRESSES`]).
     pub addresses: [quatrelle_engine::model::vcard::PostalAddress; 3],
+    /// Addresses beyond one of each kind, kept as they were.
+    pub more_addresses: Vec<quatrelle_engine::model::vcard::PostalAddress>,
+    /// The address in the Other place when the contact opened, with its kind when that is one the
+    /// form has no place for (`postal`): the kind stays with that address, not with one put
+    /// there instead.
+    pub other_address: Option<quatrelle_engine::model::vcard::PostalAddress>,
     /// The address shown in the form.
     pub address_shown: usize,
     /// `YYYY-MM-DD`.
@@ -44,6 +54,14 @@ pub struct ContactForm {
     pub anniversary: String,
     pub note: String,
     pub error: Option<String>,
+}
+
+/// Whether an address is still the one it was: something of it, a street, a city, a postcode or
+/// a country, stays as it was.
+fn same_place(was: &quatrelle_engine::model::vcard::PostalAddress, now: &quatrelle_engine::model::vcard::PostalAddress) -> bool {
+    [(&was.street, &now.street), (&was.city, &now.city), (&was.postcode, &now.postcode), (&was.country, &now.country)]
+        .into_iter()
+        .any(|(a, b)| !a.trim().is_empty() && a.trim() == b.trim())
 }
 
 impl ContactForm {
@@ -88,14 +106,26 @@ impl ContactForm {
             };
             let slot = PHONES.iter().position(|(_, k)| *k == kind).and_then(|i| f.phones.get_mut(i)).filter(|s| s.is_empty());
             match slot {
-                Some(slot) => *slot = ph.value.clone(),
+                Some(slot) => {
+                    *slot = ph.value.clone();
+                    if kind.is_empty() {
+                        f.other_phone = Some((ph.value.clone(), ph.kind.clone()));
+                    }
+                }
                 None => f.more_phones.push(ph.clone()),
             }
         }
         for a in &c.addresses {
-            let i = ADDRESSES.iter().position(|(_, k)| *k == a.kind).unwrap_or(2);
-            if let Some(slot) = f.addresses.get_mut(i).filter(|s| s.is_empty()) {
-                *slot = a.clone();
+            let known = ADDRESSES.iter().position(|(_, k)| *k == a.kind);
+            let i = known.unwrap_or(2);
+            match f.addresses.get_mut(i).filter(|s| s.is_empty()) {
+                Some(slot) => {
+                    *slot = a.clone();
+                    if i == 2 {
+                        f.other_address = Some(a.clone());
+                    }
+                }
+                None => f.more_addresses.push(a.clone()),
             }
         }
         f.address_shown = f.addresses.iter().position(|a| !a.is_empty()).unwrap_or(0);
@@ -105,21 +135,32 @@ impl ContactForm {
     pub(crate) fn params(&self) -> Value {
         let emails: Vec<&str> =
             self.emails.iter().map(|e| e.trim()).chain(self.more_emails.iter().map(String::as_str)).filter(|e| !e.is_empty()).collect();
+        // The Other place's own kind is none: what it opened with keeps the kind it had.
+        let other_phone_kind = |v: &str| self.other_phone.as_ref().filter(|(was, _)| was.trim() == v.trim()).map_or("", |(_, kind)| kind.as_str());
         let mut phones: Vec<Value> = PHONES
             .iter()
             .zip(&self.phones)
             .filter(|(_, v)| !v.trim().is_empty())
-            .map(|((_, kind), v)| json!({"value": v.trim(), "kind": kind}))
+            .map(|((_, kind), v)| json!({"value": v.trim(), "kind": if kind.is_empty() { other_phone_kind(v) } else { *kind }}))
             .collect();
         phones.extend(self.more_phones.iter().map(|x| json!({"value": x.value, "kind": x.kind})));
-        let addresses: Vec<Value> = ADDRESSES
+        // An address still the one it opened with (a part of it corrected, not the whole one
+        // typed over) keeps its kind in the Other place.
+        let other_address_kind = |a: &quatrelle_engine::model::vcard::PostalAddress| match &self.other_address {
+            Some(was) if same_place(was, a) => was.kind.clone(),
+            _ => String::new(),
+        };
+        let address = |kind: &str, a: &quatrelle_engine::model::vcard::PostalAddress| json!({"kind": kind, "street": a.street, "city": a.city, "region": a.region, "postcode": a.postcode, "country": a.country});
+        let mut addresses: Vec<Value> = ADDRESSES
             .iter()
             .zip(&self.addresses)
             .filter(|(_, a)| !a.is_empty())
             .map(|((_, kind), a)| {
-                json!({"kind": kind, "street": a.street, "city": a.city, "region": a.region, "postcode": a.postcode, "country": a.country})
+                let kind = if kind.is_empty() { other_address_kind(a) } else { (*kind).to_string() };
+                address(&kind, a)
             })
             .collect();
+        addresses.extend(self.more_addresses.iter().map(|a| address(&a.kind, a)));
         let mut p = json!({
             "name": self.name.trim(),
             "emails": emails,
