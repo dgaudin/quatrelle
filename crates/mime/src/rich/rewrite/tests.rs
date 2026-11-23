@@ -86,7 +86,9 @@ fn text_that_looks_like_markdown_stays_text() {
 fn a_rule_stays_a_rule_and_box_lines_stay_text() {
     let text = "Texte\n\nSuite";
     let mut styles = Styles::plain(text);
-    styles.paras.get_mut(1).map(|p| p.rule = true);
+    if let Some(p) = styles.paras.get_mut(1) {
+        p.rule = true;
+    }
     let (back, back_styles) = there_and_back(text, &styles);
     assert_eq!(back, text, "sent {:?}, paras {:?}", outbound(text, &styles, 7).0, back_styles.paras);
     assert!(back_styles.para(1).rule, "the line across is still one: {:?}", back_styles.paras);
@@ -222,4 +224,16 @@ fn a_whole_answer_in_one_fence_loses_the_fence() {
     let (back, styles) = inbound("```markdown\n**Salut** Zoé\n```", Style::default(), &[], "Salut Zoé", &Styles::plain("Salut Zoé"));
     assert_eq!(back, "Salut Zoé");
     assert!(styles.style(0).bold, "the text inside keeps its marks");
+}
+
+/// A bare web address in ordinary text comes back as a link, as pasted text would.
+#[test]
+fn a_bare_web_address_comes_back_as_a_link() {
+    let text = "Voir https://studio.example/plan pour le détail";
+    let styles = Styles::plain(text);
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text);
+    let at = back.find("https://studio.example/plan").unwrap_or(0);
+    let at = back.get(..at).map_or(0, |t| t.chars().count());
+    assert_eq!(back_styles.style(at).link.as_deref(), Some("https://studio.example/plan"));
 }

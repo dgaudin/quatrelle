@@ -428,7 +428,7 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &st
     // A picture whose marker was lost goes at the end of the paragraph it was in (never away).
     let mut missing: Vec<(usize, usize, Style)> = Vec::new();
     for (k, image) in images.iter().enumerate() {
-        if !seen[k] {
+        if !seen.get(k).copied().unwrap_or(false) {
             let line = image.para.min(out_styles.paras.len().saturating_sub(1));
             missing.push((line_end(&out, line), k, image.style.clone()));
         }
@@ -436,10 +436,11 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &st
     // From the end: inserting at an index moves the characters after it.
     missing.sort_by_key(|(at, k, _)| (std::cmp::Reverse(*at), std::cmp::Reverse(*k)));
     for (at, _, style) in missing {
+        let at = at.min(out.chars().count());
         let byte = out.char_indices().nth(at).map_or(out.len(), |(b, _)| b);
         out.insert(byte, PICTURE);
         let id = out_styles.intern(style);
-        out_styles.chars.insert(at, id);
+        out_styles.chars.insert(at.min(out_styles.chars.len()), id);
     }
     out_styles.fit(&out);
     let (out, mut out_styles) = restore_breaks(&out, &out_styles, before, before_styles);

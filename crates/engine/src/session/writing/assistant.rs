@@ -104,9 +104,7 @@ impl Compose {
     /// answer is too long, empty or unreadable. `None` while the model works, or when Use can.
     pub fn rewrite_problem(&self) -> Option<RewriteProblem> {
         let r = self.rewrite.as_ref()?;
-        if r.answer.is_none() {
-            return None;
-        }
+        r.answer.as_ref()?;
         match &r.preview {
             Some(Ok(_)) => r.locate(self).err(),
             Some(Err(p)) => Some(*p),
@@ -432,9 +430,11 @@ impl Session {
         }
     }
 
-    /// Ask the language model to rewrite the text written in the message being written (up to
-    /// its signature or the message quoted): `how` is `fix`, `shorter`, `formal`, `friendly` or
-    /// `english`. The new text is offered beside it, to put in place or not.
+    /// Ask the language model to rewrite part of the message being written: the selection
+    /// (`from`..`to` in characters, exclusive) or, without one, the text written up to its
+    /// signature or the message quoted. `how` is `fix`, `shorter`, `formal`, `friendly` or
+    /// `english`. A part too long for one rewrite is refused, never cut; the new text is offered
+    /// beside it, to put in place or not.
     pub fn rewrite(&mut self, how: &str, selection: Option<(usize, usize)>) -> CmdResult {
         let url = self.prefs.llm_url.trim().to_string();
         if url.is_empty() {
@@ -492,7 +492,10 @@ impl Session {
         self.compose.as_ref().is_some_and(|c| c.body.chars().take(own_text_end(c, &self.quote_words.from)).any(|ch| !ch.is_whitespace()))
     }
 
-    /// Put the rewritten text in place of the text written (`use`), or let it go.
+    /// Put the rewritten text in place of the part it was asked about (`use`), or let it go. It
+    /// refuses (and keeps the offer) when the part changed under it, or the answer is empty, too
+    /// long or unreadable; when it goes in, it returns the range it took (`replaced`, `end`, in
+    /// characters).
     pub fn end_rewrite(&mut self, use_it: bool) -> CmdResult {
         let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
         let Some(r) = c.rewrite.as_ref() else { return Ok(serde_json::json!({ "dropped": true })) };

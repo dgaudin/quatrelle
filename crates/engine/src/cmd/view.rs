@@ -177,10 +177,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.rewrite(p::str(v, "how").unwrap_or("fix"), from.zip(to))
         })
         .params(
-            r#"{"how": "fix"|"shorter"|"formal"|"friendly"|"english", "from"?: number, "to"?: number} (a selection to rewrite; without one, the text written up to the signature or the message quoted)"#,
+            r#"{"how": "fix"|"shorter"|"formal"|"friendly"|"english", "from"?: number (characters, from 0), "to"?: number (characters, exclusive; from >= to: the whole written text)} (a selection to rewrite; without one, the text written up to the signature or the message quoted; a part too long for one rewrite is refused)"#,
         ),
         CommandSpec::new("assistant.endRewrite", "Use the rewritten text", "Message › Review", |s, v| s.end_rewrite(p::bool(v, "use").unwrap_or(false)))
-            .params(r#"{"use": bool} (true: in place of the text written; false: let it go)"#),
+            .params(r#"{"use": bool} (true: in place of the part it was asked about, returning its new range as "replaced" and "end"; false: let it go)"#),
         CommandSpec::new("assistant.scamCheck", "Spot scams in external mail", "File › Options › Assistant", |s, v| {
             let accounts = match v.get("accounts") {
                 None | Some(Value::Null) => None,
