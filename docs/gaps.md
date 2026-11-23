@@ -797,8 +797,11 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   Summarize (the whole conversation for a message in one), Suggest a reply (then Reply with this
   text), File it (one of the account's folders and categories, as buttons); the answer closes
   with the cross at its top right, unused. In the message
-  window's Review tab: Rewrite the text written (correct, shorter, more formal, friendlier, in
-  English), to use in its place or not. Azure OpenAI's own addresses and key header aren't.
+  window's Review tab and the reading pane's bar: Rewrite the text written (correct, shorter, more
+  formal, friendlier, in English), the selection alone when there is one. What Markdown and the
+  editor can carry comes back — emphasis, code, lists, headings, links, colours, sizes, pictures —
+  the rest takes the part's common look; Use is one undo step and refuses if the part changed.
+  Azure OpenAI's own addresses and key header aren't.
 - **A reply in the reading pane, as Outlook's:** reading another message (or opening another
   folder) sets it aside in Drafts and shows that message; read again, its message brings the
   reply back as it was left (one left as it came, nothing typed, goes). Pop out and Discard are

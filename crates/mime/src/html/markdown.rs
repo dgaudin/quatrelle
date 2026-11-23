@@ -160,13 +160,75 @@ pub fn markdown_html(md: &str) -> String {
 /// editor writes them; its code is in the monospace font on [`rich::CODE_SHADE`], its tables in
 /// columns in that font.
 pub fn pasted_markdown(text: &str) -> Option<(String, rich::Styles)> {
-    if text.len() > MARKDOWN_MAX || !looks_like_markdown(text) {
+    if !looks_like_markdown(text) {
         return None;
     }
-    let html = written(text, true)?;
-    let (text, styles) = pasted_html(&html);
+    read_markdown_with(text, false, 2000)
+}
+
+/// Markdown known to be Markdown (a language model's answer, asked to keep the marks), as text
+/// and styles: the same reader as [`pasted_markdown`], without the signs it looks for in a
+/// clipboard, with soft line breaks as lines (the editor's text is made of them) and no width
+/// cutting a paragraph. `None` past [`MARKDOWN_MAX`] bytes, when the reader failed, or when it
+/// holds no text.
+pub fn read_markdown(text: &str) -> Option<(String, rich::Styles)> {
+    read_markdown_with(text, true, MARKDOWN_HTML_MAX.saturating_add(1))
+}
+
+fn read_markdown_with(text: &str, soft_lines: bool, width: usize) -> Option<(String, rich::Styles)> {
+    if text.len() > MARKDOWN_MAX {
+        return None;
+    }
+    let html = written_with(text, true, soft_lines)?;
+    let (text, styles) = pasted_html_at(&html, width, soft_lines);
     let (text, styles) = lay_out(&text, &styles);
-    (!text.trim().is_empty()).then_some((text, styles))
+    let (text, styles) = if soft_lines { tight_rules(&text, &styles) } else { (text, styles) };
+    (!text.trim().is_empty() || styles.paras.iter().any(|p| p.rule)).then_some((text, styles))
+}
+
+/// A rule's own line, with the empty lines html2text puts around every paragraph taken off
+/// either side: the editor's rule is that line, and reading the answer must not add lines.
+fn tight_rules(text: &str, styles: &rich::Styles) -> (String, rich::Styles) {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut drop = vec![false; lines.len()];
+    for (n, _) in lines.iter().enumerate().filter(|(n, _)| styles.para(*n).rule) {
+        if n > 0 && lines.get(n - 1).is_some_and(|l| l.trim().is_empty()) {
+            drop[n - 1] = true;
+        }
+        if lines.get(n + 1).is_some_and(|l| l.trim().is_empty()) {
+            drop[n + 1] = true;
+        }
+    }
+    if !drop.iter().any(|d| *d) {
+        return (text.to_string(), styles.clone());
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut kept = rich::Styles {
+        chars: Vec::with_capacity(styles.chars.len()),
+        palette: styles.palette.clone(),
+        paras: Vec::with_capacity(styles.paras.len()),
+    };
+    if kept.palette.is_empty() {
+        kept.palette.push(rich::Style::default());
+    }
+    let mut at = 0usize;
+    for (n, line) in lines.iter().enumerate() {
+        let len = line.chars().count();
+        if !drop[n] {
+            if !kept.paras.is_empty() {
+                out.push('\n');
+                kept.chars.push(styles.chars.get(at.saturating_sub(1)).copied().unwrap_or(0));
+            }
+            for k in 0..len {
+                out.push(line.chars().nth(k).unwrap_or(' '));
+                kept.chars.push(styles.chars.get(at + k).copied().unwrap_or(0));
+            }
+            kept.paras.push(styles.para(n));
+        }
+        at = at.saturating_add(len).saturating_add(1);
+    }
+    kept.fit(&out);
+    (out, kept)
 }
 
 /// How many table cells pulldown-cmark could make of `md`, counted generously (past
@@ -255,6 +317,8 @@ struct Writer {
     out: String,
     /// Line marks for pasting ([`MARK_FIRST`]), and quotes without `> ` before each line.
     marks: bool,
+    /// A soft line break is a line of the editor's text, not a space.
+    soft_lines: bool,
     open: Vec<Open>,
     /// The lists open (numbered or not), and for each item open how many paragraphs it has had.
     lists: Vec<bool>,
@@ -497,6 +561,12 @@ fn safe_link(url: &str) -> bool {
 /// [`markdown_html`], with line marks for pasting (`marks`). `None` when the reader failed, or
 /// what it wrote went past [`MARKDOWN_HTML_MAX`].
 fn written(md: &str, marks: bool) -> Option<String> {
+    written_with(md, marks, false)
+}
+
+/// [`written`], with soft line breaks kept as lines (`soft_lines`): the editor's text is made of
+/// lines, and a model needn't write the two spaces Markdown wants behind each.
+fn written_with(md: &str, marks: bool, soft_lines: bool) -> Option<String> {
     let md = cut(md, MARKDOWN_MAX);
     // Tables only while the cells they would make are within the budget.
     let mut options = Options::ENABLE_STRIKETHROUGH;
@@ -507,6 +577,7 @@ fn written(md: &str, marks: bool) -> Option<String> {
         let mut w = Writer {
             out: String::with_capacity(md.len() + md.len() / 2),
             marks,
+            soft_lines,
             open: Vec::new(),
             lists: Vec::new(),
             items: Vec::new(),
@@ -529,6 +600,10 @@ fn written(md: &str, marks: bool) -> Option<String> {
                     w.out.push_str("<code>");
                     w.text(&t);
                     w.out.push_str("</code>");
+                }
+                Event::SoftBreak if w.soft_lines => {
+                    w.out.push_str("<br>");
+                    w.line_mark();
                 }
                 Event::SoftBreak => w.out.push('\n'),
                 Event::HardBreak => {

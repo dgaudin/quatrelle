@@ -8,6 +8,9 @@ use super::*;
 /// The most of a message's text sent to the model: its start, where mail says what it wants.
 const MAX_TEXT: usize = 24_000;
 
+/// The most a rewrite sends in one go: a longer part is asked to be selected shorter, never cut.
+const REWRITE_MAX: usize = 24_000;
+
 /// How the model is asked for a summary.
 const SUMMARY_PROMPT: &str = "You summarize an email for the person who received it. Write in {lang}, whatever language the email is written in. \
 Give the gist in at most five short bullet points starting with \"- \": who wants what, by when, and what is expected of the reader. \
@@ -59,12 +62,107 @@ fn rewrite_prompt(how: &str) -> Option<&'static str> {
     })
 }
 
+/// Why Use can't put the rewritten text in: the text under it changed, the answer is too long,
+/// empty, or can't be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RewriteProblem {
+    Changed,
+    TooLong,
+    Empty,
+    Unreadable,
+}
+
 /// The language model's rewrite of the text written in a message, once it came.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rewrite {
     pub id: u64,
     /// `None` while it's working; the new text, or why there's none.
     pub answer: Option<Result<String, String>>,
+    /// The characters sent (and to replace), and the text and look they held when they were sent.
+    range: std::ops::Range<usize>,
+    before: String,
+    before_styles: quatrelle_mime::rich::Styles,
+    /// The look at the start of the part rewritten: what Markdown doesn't carry keeps it.
+    base: quatrelle_mime::rich::Style,
+    /// The most characters an answer may hold, from the size sent (and no more than Markdown's
+    /// own bound).
+    answer_max: usize,
+    /// The pictures in the part sent, each with the marker the model saw.
+    images: Vec<quatrelle_mime::rich::RewritePicture>,
+    /// What Use would put in, read once when the answer came; an error says why there's none.
+    preview: Option<Result<(String, quatrelle_mime::rich::Styles), RewriteProblem>>,
+}
+
+impl Compose {
+    /// What Use would put in, as the editor will hold it (pictures as [`mime::rich::PICTURE`]),
+    /// once the answer was read; `None` while it works or when it can't be read.
+    pub fn rewrite_preview(&self) -> Option<&(String, quatrelle_mime::rich::Styles)> {
+        self.rewrite.as_ref()?.preview.as_ref()?.as_ref().ok()
+    }
+
+    /// Why Use can't put the text in, once the answer came: the part changed under it, or the
+    /// answer is too long, empty or unreadable. `None` while the model works, or when Use can.
+    pub fn rewrite_problem(&self) -> Option<RewriteProblem> {
+        let r = self.rewrite.as_ref()?;
+        r.answer.as_ref()?;
+        match &r.preview {
+            Some(Ok(_)) => r.locate(self).err(),
+            Some(Err(p)) => Some(*p),
+            None => Some(RewriteProblem::Unreadable),
+        }
+    }
+}
+
+impl Rewrite {
+    /// The answer as the editor will hold it, or why it can't be used.
+    fn preview_now(&self) -> Result<(String, quatrelle_mime::rich::Styles), RewriteProblem> {
+        let Some(Ok(text)) = &self.answer else { return Err(RewriteProblem::Unreadable) };
+        if text.chars().count() > self.answer_max {
+            return Err(RewriteProblem::TooLong);
+        }
+        let (text, styles) = quatrelle_mime::rich::inbound(text, self.base.clone(), &self.images, &self.before, &self.before_styles);
+        if text.trim().is_empty() {
+            return Err(RewriteProblem::Empty);
+        }
+        Ok((text, styles))
+    }
+
+    /// Where the part is now: its old place if it still holds what was sent, or the one place it
+    /// moved to (a letter typed before it); otherwise it changed and can't be used.
+    fn locate(&self, c: &Compose) -> Result<std::ops::Range<usize>, RewriteProblem> {
+        if same_part(c, self.range.start, &self.before, &self.before_styles) {
+            return Ok(self.range.start..self.range.start + self.before.chars().count());
+        }
+        let mut found: Option<usize> = None;
+        let mut matches = 0usize;
+        for (byte, _) in c.body.match_indices(&self.before) {
+            let at = c.body.get(..byte).map_or(0, |t| t.chars().count());
+            if same_part(c, at, &self.before, &self.before_styles) {
+                matches += 1;
+                if matches > 1 {
+                    return Err(RewriteProblem::Changed);
+                }
+                found = Some(at);
+            }
+        }
+        found.map(|at| at..at + self.before.chars().count()).ok_or(RewriteProblem::Changed)
+    }
+}
+
+/// Whether the characters at `at` in `c` are `text` with exactly `styles` (a style for each
+/// character, a paragraph for each line).
+fn same_part(c: &Compose, at: usize, text: &str, styles: &quatrelle_mime::rich::Styles) -> bool {
+    let len = text.chars().count();
+    let (now, now_styles) = quatrelle_mime::rich::slice(&c.body, &c.styles, at..at + len);
+    if now != text {
+        return false;
+    }
+    let chars = len.max(now_styles.chars.len());
+    if (0..chars).any(|i| now_styles.style(i) != styles.style(i)) {
+        return false;
+    }
+    let lines = text.split('\n').count().max(now_styles.paras.len());
+    (0..lines).all(|n| now_styles.para(n) == styles.para(n))
 }
 
 /// Where the text the user wrote ends in a message being written: before its signature, or for
@@ -327,34 +425,63 @@ impl Session {
             }
         } else if let Some(r) = self.compose.iter_mut().chain(self.composes.iter_mut()).filter_map(|c| c.rewrite.as_mut()).find(|r| r.id == id) {
             r.answer = Some(answer);
+            let preview = r.preview_now();
+            r.preview = Some(preview);
         }
     }
 
-    /// Ask the language model to rewrite the text written in the message being written (up to
-    /// its signature or the message quoted): `how` is `fix`, `shorter`, `formal`, `friendly` or
-    /// `english`. The new text is offered beside it, to put in place or not.
-    pub fn rewrite(&mut self, how: &str) -> CmdResult {
+    /// Ask the language model to rewrite part of the message being written: the selection
+    /// (`from`..`to` in characters, exclusive) or, without one, the text written up to its
+    /// signature or the message quoted. `how` is `fix`, `shorter`, `formal`, `friendly` or
+    /// `english`. A part too long for one rewrite is refused, never cut; the new text is offered
+    /// beside it, to put in place or not.
+    pub fn rewrite(&mut self, how: &str, selection: Option<(usize, usize)>) -> CmdResult {
         let url = self.prefs.llm_url.trim().to_string();
         if url.is_empty() {
             return Err(CmdError::Disabled("set a language model in File › Options › Assistant first".into()));
         }
         let prompt = rewrite_prompt(how).ok_or_else(|| CmdError::Params(format!("no rewrite `{how}`")))?;
         let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
-        let text: String = c.body.chars().take(own_text_end(c, &self.quote_words.from)).collect();
+        let end = own_text_end(c, &self.quote_words.from);
+        let (start, stop) = match selection {
+            Some((a, b)) if b > a => {
+                let (start, stop) = (a.min(end), b.min(end));
+                if start >= stop {
+                    return Err(CmdError::Params("select the text you wrote, above the signature and the message quoted".into()));
+                }
+                (start, stop)
+            }
+            _ => (0, end),
+        };
+        let (text, styles) = quatrelle_mime::rich::slice(&c.body, &c.styles, start..stop);
         if text.trim().is_empty() {
             return Err(CmdError::Params("write something first".into()));
         }
-        let prompt =
-            format!("{prompt} It is part of an email: keep its greeting and closing if it has them. Write only the new text, with no comment.");
         let id = self.fresh_id();
+        let mut nonce = id;
+        while text.contains(&format!("{}-{nonce}-", quatrelle_mime::rich::MARKER)) {
+            nonce = nonce.wrapping_add(1);
+        }
+        let (marked, images) = quatrelle_mime::rich::outbound(&text, &styles, nonce);
+        if marked.chars().count() > REWRITE_MAX {
+            return Err(CmdError::Params("the text to rewrite is too long; select a shorter part".into()));
+        }
+        let answer_max = marked.chars().count().saturating_mul(3).saturating_add(1000).min(quatrelle_mime::MARKDOWN_MAX);
+        let base = quatrelle_mime::rich::base_style(&text, &styles);
+        let prompt = format!(
+            "{prompt} It is part of an email: keep its greeting and closing if it has them. Write the new text as Markdown, keeping its formatting: **bold**, *italic*, lists with - or 1., headings with #, and links as [text](url). Tokens of the form {marker}-…-END stand for pictures: keep each one exactly once, unchanged, in its place, and write no other token of that form. Write only the new text, with no comment.",
+            marker = quatrelle_mime::rich::MARKER
+        );
+        let range = start..start + text.chars().count();
         if let Some(c) = self.compose.as_mut() {
-            c.rewrite = Some(Rewrite { id, answer: None });
+            c.rewrite =
+                Some(Rewrite { id, answer: None, range, before: text.clone(), before_styles: styles, base, answer_max, images, preview: None });
         }
         self.jobs.push(Job::AskLlm {
             id,
             url,
             model: self.prefs.llm_model.trim().to_string(),
-            messages: vec![("system".into(), prompt), ("user".into(), text)],
+            messages: vec![("system".into(), prompt), ("user".into(), marked)],
         });
         Ok(serde_json::json!({ "asked": id }))
     }
@@ -365,22 +492,46 @@ impl Session {
         self.compose.as_ref().is_some_and(|c| c.body.chars().take(own_text_end(c, &self.quote_words.from)).any(|ch| !ch.is_whitespace()))
     }
 
-    /// Put the rewritten text in place of the text written (`use`), or let it go.
+    /// Put the rewritten text in place of the part it was asked about (`use`), or let it go. It
+    /// refuses (and keeps the offer) when the part changed under it, or the answer is empty, too
+    /// long or unreadable; when it goes in, it returns the range it took (`replaced`, `end`, in
+    /// characters).
     pub fn end_rewrite(&mut self, use_it: bool) -> CmdResult {
         let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
-        let text = match c.rewrite.take() {
-            Some(Rewrite { answer: Some(Ok(text)), .. }) => text,
-            _ if !use_it => return Ok(serde_json::json!({ "dropped": true })),
-            _ => return Err(CmdError::Disabled("the rewritten text hasn't come yet".into())),
-        };
+        let Some(r) = c.rewrite.as_ref() else { return Ok(serde_json::json!({ "dropped": true })) };
         if !use_it {
+            c.rewrite = None;
             return Ok(serde_json::json!({ "dropped": true }));
         }
-        let end = own_text_end(c, &self.quote_words.from);
-        let add = text.trim().to_string();
-        let add_styles = quatrelle_mime::rich::Styles::plain(&add);
-        quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, 0..end, &add, &add_styles);
-        Ok(serde_json::json!({ "replaced": end }))
+        let Some(Ok(_)) = &r.answer else {
+            return Err(CmdError::Disabled("the rewritten text hasn't come yet".into()));
+        };
+        let (add, add_styles) = match &r.preview {
+            Some(Ok((text, styles))) => (text.clone(), styles.clone()),
+            Some(Err(RewriteProblem::TooLong)) => {
+                return Err(CmdError::Failed("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into()));
+            }
+            Some(Err(RewriteProblem::Empty)) => return Err(CmdError::Failed("the rewritten text is empty; ask again or keep yours".into())),
+            Some(Err(RewriteProblem::Unreadable)) | None => {
+                return Err(CmdError::Failed("the rewritten text couldn't be read; ask again or keep yours".into()));
+            }
+            Some(Err(RewriteProblem::Changed)) => {
+                return Err(CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()));
+            }
+        };
+        let range = r.locate(c).map_err(|p| match p {
+            RewriteProblem::Changed => CmdError::Failed("the text changed while it was being rewritten; ask again or keep yours".into()),
+            RewriteProblem::TooLong => {
+                CmdError::Failed("the rewritten text is much longer than the part sent; select a shorter part or keep yours".into())
+            }
+            RewriteProblem::Empty => CmdError::Failed("the rewritten text is empty; ask again or keep yours".into()),
+            RewriteProblem::Unreadable => CmdError::Failed("the rewritten text couldn't be read; ask again or keep yours".into()),
+        })?;
+        let start = range.start;
+        let end = range.end;
+        c.rewrite = None;
+        quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, start..end, &add, &add_styles);
+        Ok(serde_json::json!({ "replaced": start, "end": start + add.chars().count() }))
     }
 
     /// Set the language model: an OpenAI-compatible server's address (`…/v1`; empty: none) and

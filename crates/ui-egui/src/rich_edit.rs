@@ -46,6 +46,8 @@ pub(crate) use paste::{clipboard_html_once, forget_clipboard_html};
 #[cfg(test)]
 pub(crate) use pictures::FIT_WIDTH;
 pub(crate) use pictures::{own_size, own_size_of, placement};
+#[cfg(test)]
+pub(crate) use ribbon::rewrite_selection;
 use ribbon::*;
 pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon, rewrite_choices, rewrite_on, scheme_name};
 pub(crate) use signature::draw as draw_signature;
@@ -207,7 +209,9 @@ impl Editor {
         self.paste_plain = true;
     }
 
-    fn remember(&mut self, c: &Compose, cursor: usize) {
+    /// Keep the message as it is now as one undo step (the assistant's rewritten text is put in
+    /// from outside the text box, where its own change detection can't see it).
+    pub(crate) fn remember(&mut self, c: &Compose, cursor: usize) {
         self.undo.push(Snap { text: c.body.clone(), styles: c.styles.clone(), cursor });
         if self.undo.len() > UNDO_MAX {
             self.undo.remove(0);

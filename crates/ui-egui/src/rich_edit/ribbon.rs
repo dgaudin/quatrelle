@@ -90,7 +90,7 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
                     // the bar above, beside Discard).
                     if input.assistant && input.in_window {
                         groups.end(ui, &t, "Tags");
-                        rewrite_button(ui, &t, c, input, acts);
+                        rewrite_button(ui, &t, ed, c, input, acts);
                         groups.last(ui, &t, "Assistant");
                     } else {
                         groups.last(ui, &t, "Tags");
@@ -153,7 +153,7 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
                     }
                     if input.assistant {
                         groups.end(ui, &t, "Proofing");
-                        rewrite_button(ui, &t, c, input, acts);
+                        rewrite_button(ui, &t, ed, c, input, acts);
                         groups.last(ui, &t, "Assistant");
                     } else {
                         groups.last(ui, &t, "Proofing");
@@ -397,11 +397,18 @@ fn include(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &mut Compose, sel: &Range
 
 /// Tags: high and low importance.
 /// Rewrite and its ways: the text written, rewritten by the language model set in Options.
-fn rewrite_button(ui: &mut Ui, t: &Tokens, c: &Compose, input: &RibbonInput<'_>, acts: &mut Vec<Action>) {
+fn rewrite_button(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &Compose, input: &RibbonInput<'_>, acts: &mut Vec<Action>) {
     let r = widgets::big_button(ui, Icon::Drafts, "Rewrite", t, rewrite_on(c, input.written))
         .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
     let r = if input.written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
-    egui::Popup::menu(&r).show(|ui| rewrite_choices(ui, acts));
+    let selection = rewrite_selection(ed);
+    let mut asked = false;
+    egui::Popup::menu(&r).show(|ui| asked = rewrite_choices(ui, acts, selection.as_ref()));
+    if asked {
+        // The menu had the keyboard: the text gets it back, so Ctrl+Z, typing and the
+        // right-click menu still work while the answer comes.
+        ed.refocus = Some(ed.sel.clone());
+    }
 }
 
 /// Whether Rewrite can be asked: something `written`, the message not being sent, and no rewrite
@@ -410,8 +417,15 @@ pub(crate) fn rewrite_on(c: &Compose, written: bool) -> bool {
     written && !c.sending && c.rewrite.as_ref().is_none_or(|r| r.answer.is_some())
 }
 
+/// The part a ribbon Rewrite works on: the editor's selection, unless its text is a block of the
+/// original quoted, whose positions are not the written text's (then the whole written text).
+pub(crate) fn rewrite_selection(ed: &Editor) -> Option<std::ops::Range<usize>> {
+    if ed.in_quote { None } else { Some(ed.sel.clone()) }
+}
+
 /// Rewrite's ways, each asking the language model.
-pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>) {
+pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>, sel: Option<&std::ops::Range<usize>>) -> bool {
+    let mut asked = false;
     for (how, label) in [
         ("fix", "Correct spelling and grammar"),
         ("shorter", "Shorter"),
@@ -420,10 +434,17 @@ pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>) {
         ("english", "In English"),
     ] {
         if ui.button(tl!(label)).clicked() {
-            acts.push(Action::Run("assistant.rewrite", json!({"how": how})));
+            let mut params = json!({ "how": how });
+            if let Some(sel) = sel {
+                params["from"] = json!(sel.start);
+                params["to"] = json!(sel.end);
+            }
+            acts.push(Action::Run("assistant.rewrite", params));
+            asked = true;
             ui.close();
         }
     }
+    asked
 }
 
 fn tags(ui: &mut Ui, t: Tokens, c: &mut Compose) {

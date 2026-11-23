@@ -1648,7 +1648,7 @@ month	May	5月
 	In English	譯成英文
 	Rewritten text	改寫後的文字
 	Use this text	使用此文字
-	In place of what you wrote (its formatting goes)	取代您寫的內容（格式會遺失）
+	In place of what you wrote, with its formatting and pictures	取代您寫的內容（格式與圖片保留）
 	Keep mine	保留我的
 	File it	歸檔
 	Ask the language model set in Options which of your folders and categories this message belongs in	詢問選項中設定的語言模型此郵件應放入哪個資料夾和類別
@@ -2462,3 +2462,9 @@ presence	Offline	離線
 	It may have been sent: {error}	它可能已經寄出: {error}
 	May have been sent: {error}	可能已寄出: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	再次寄出之前，請詢問收件者；如果你的伺服器在寄件備份中保留副本，也可以在那裡尋找
+	[picture]	[圖片]
+	The rewritten text couldn't be read	無法讀取改寫後的文字
+	The text changed while it was being rewritten; ask again or keep yours.	改寫期間文字發生了變化；請重新請求，或保留您的內容。
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	改寫後的文字比傳送的部分長得多；請選擇更短的部分，或保留您的內容。
+	The rewritten text is empty; ask again or keep yours.	改寫後的文字為空；請重新請求，或保留您的內容。
+	The rewritten text couldn't be read; ask again or keep yours.	無法讀取改寫後的文字；請重新請求，或保留您的內容。

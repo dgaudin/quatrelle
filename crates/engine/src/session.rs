@@ -72,7 +72,7 @@ pub use security::{
 use writing::NameCheck;
 pub use writing::{
     AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, MailTipsState, NAMES_NOT_FOUND, NameChoice, Outcome, Quote, QuotePoint,
-    Resolved, Rewrite, SendBlock, SendCheck, Sender, Written, add_pictures, group_entry, mail_tips_recipients, style_signature,
+    Resolved, Rewrite, RewriteProblem, SendBlock, SendCheck, Sender, Written, add_pictures, group_entry, mail_tips_recipients, style_signature,
 };
 
 /// A mailbox in the folder pane: an account, or a shared mailbox one opens ([`Session::pane_sections`]).

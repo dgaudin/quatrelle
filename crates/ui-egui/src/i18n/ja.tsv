@@ -1646,7 +1646,7 @@ month	May	5月
 	In English	英語で
 	Rewritten text	書き直した文章
 	Use this text	この文章を使う
-	In place of what you wrote (its formatting goes)	書いた文章の代わりに使います (書式は失われます)
+	In place of what you wrote, with its formatting and pictures	書いた文章の代わりに使います (書式と画像もそのまま)
 	Keep mine	自分の文章を残す
 	File it	整理
 	Ask the language model set in Options which of your folders and categories this message belongs in	オプションで設定した言語モデルに、このメッセージを入れるフォルダーと分類を尋ねます
@@ -2456,3 +2456,9 @@ presence	Offline	オフライン
 	It may have been sent: {error}	送信された可能性があります: {error}
 	May have been sent: {error}	送信済みの可能性: {error}
 	Before sending it again, ask who it was for, or look for it in Sent Items if your server keeps a copy there	もう一度送信する前に、宛先の相手に確認するか、サーバーがコピーを保存している場合は送信済みアイテムを探してください
+	[picture]	[画像]
+	The rewritten text couldn't be read	書き換えた文章を読み取れませんでした
+	The text changed while it was being rewritten; ask again or keep yours.	書き換え中に文章が変わりました。もう一度頼むか、元の文章を残してください。
+	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	書き換えた文章は送った部分よりずっと長いです。短い部分を選ぶか、元の文章を残してください。
+	The rewritten text is empty; ask again or keep yours.	書き換えた文章は空です。もう一度頼むか、元の文章を残してください。
+	The rewritten text couldn't be read; ask again or keep yours.	書き換えた文章を読み取れませんでした。もう一度頼むか、元の文章を残してください。
