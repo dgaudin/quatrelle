@@ -11,6 +11,7 @@ use quatrelle_engine::model::dates;
 use quatrelle_engine::{DueReminder, Session};
 use serde_json::json;
 
+use crate::app::{Caught, guarded_window};
 use crate::theme::Tokens;
 use crate::{Action, Dialog, widgets};
 
@@ -40,6 +41,9 @@ pub struct State {
     /// What the list was worked out from ([`signature`]): when it changes (a reminder answered,
     /// an event changed), it's worked out again at once.
     pub signature: u64,
+    /// In tests, the window's drawing panics.
+    #[cfg(test)]
+    pub(crate) test_panic: bool,
 }
 
 /// A digest of what decides the due list: the answers given and the events, by the calendar's
@@ -121,7 +125,7 @@ fn snooze_label(m: i64) -> String {
 }
 
 /// The window, when something is due.
-pub fn show(ctx: &egui::Context, st: &mut State, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
+pub(crate) fn show(ctx: &egui::Context, st: &mut State, s: &Session, t: &Tokens, caught: &mut Option<Caught>, acts: &mut Vec<Action>) {
     if !showing(st) {
         return;
     }
@@ -140,12 +144,20 @@ pub fn show(ctx: &egui::Context, st: &mut State, s: &Session, t: &Tokens, acts: 
             .with_always_on_top()
             .with_minimize_button(false)
             .with_maximize_button(false);
-        ctx.show_viewport_immediate(id, builder, |ui, _| {
-            open = !ui.input(|i| i.viewport().close_requested());
-            egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(12))).show(ui, |ui| {
-                body(ui, st, s, t, acts);
-            });
-        });
+        // Panicked: it stays open (closing it would count every reminder in it as answered).
+        open = ctx
+            .show_viewport_immediate(id, builder, |ui, _| {
+                guarded_window(caught, || {
+                    #[cfg(test)]
+                    assert!(!st.test_panic, "a panic the guard's tests asked for");
+                    let open = !ui.input(|i| i.viewport().close_requested());
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(12))).show(ui, |ui| {
+                        body(ui, st, s, t, acts);
+                    });
+                    open
+                })
+            })
+            .unwrap_or(true);
     } else {
         egui::Window::new(title)
             .id(egui::Id::unique("reminders-window"))

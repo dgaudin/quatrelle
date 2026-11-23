@@ -37,6 +37,20 @@ pub(crate) enum PanicAt {
     Dialog,
     /// The start of `logic`.
     Logic,
+    /// The form of the message being written, while it is out of the session.
+    Form,
+    /// The dialog a message's window of its own draws.
+    ComposeDialog,
+    /// The appointment window's form.
+    Meeting,
+    /// What an appointment window is made ready with, before it is drawn.
+    Prepare,
+    /// A message opened in a window of its own, read.
+    ReadMessage,
+    /// A message's source window.
+    Source,
+    /// A note's window.
+    Note,
 }
 
 /// How the frames under the guard have gone.
@@ -50,14 +64,31 @@ pub(crate) struct FrameGuard {
     logic_alone: bool,
     /// What's being written was kept and the app is to end: set after the keeping, never before.
     letting_go: bool,
+    /// A panic caught where the drawing goes on (the form of a message), told to the guard at the
+    /// frame's end ([`MailApp::frame_part_ended`]); the first stays.
+    pending: Option<Caught>,
+}
+
+impl FrameGuard {
+    /// Keep a panic caught in a drawing that goes on after it, for the frame's end.
+    pub(crate) fn keep(&mut self, payload: Caught) {
+        if self.pending.is_some() {
+            drop_quietly(payload);
+        } else {
+            self.pending = Some(payload);
+        }
+    }
+}
+
+/// Drop what a panic carried, off the guard's own stack: dropping it can panic.
+fn drop_quietly(payload: Caught) {
+    let _ = catch_unwind(AssertUnwindSafe(|| drop(payload)));
 }
 
 /// Run `draw`, a window of its own's drawing (`show_viewport_immediate` draws it in a pass of its
 /// own inside the main window's): a panic in it is kept in `caught` (the first one stays) and
 /// `None` stands for what it would have given, for [`MailApp::window_drawn`] once that pass is
 /// over. Let out of the window's pass, the panic would leave egui unable to draw it again.
-// Used by the windows of their own (a dialog's, a message's…) as they're put under the guard.
-#[allow(dead_code)]
 pub(crate) fn guarded_window<T>(caught: &mut Option<Caught>, draw: impl FnOnce() -> T) -> Option<T> {
     match catch_unwind(AssertUnwindSafe(draw)) {
         Ok(v) => Some(v),
@@ -92,6 +123,15 @@ impl MailApp {
     /// says so, and only then lets go. A window of its own that panicked counts as the frame's
     /// ([`MailApp::window_drawn`]), so this tells it at the end of the frame's `ui`.
     pub fn frame_part_ended(&mut self, ctx: &egui::Context, part: FramePart, ran: std::thread::Result<()>) -> bool {
+        // A panic caught where the drawing went on (a message's form) counts as the frame's.
+        let ran = match (ran, self.ui.caught.pending.take()) {
+            (Ok(()), Some(payload)) => Err(payload),
+            (Err(payload), Some(kept)) => {
+                drop_quietly(kept);
+                Err(payload)
+            }
+            (ran, None) => ran,
+        };
         match ran {
             Ok(()) => {
                 if part == FramePart::Ui && !self.ui.caught.panicked {
@@ -109,7 +149,6 @@ impl MailApp {
     /// After a window of its own was drawn under [`guarded_window`]: what it caught, if anything,
     /// as a panic of the frame's drawing. That Quatrelle must end is told by the frame's own
     /// [`MailApp::frame_part_ended`] after.
-    #[allow(dead_code)]
     pub(crate) fn window_drawn(&mut self, ctx: &egui::Context, caught: Option<Caught>) {
         if let Some(payload) = caught {
             self.frame_part_ended(ctx, FramePart::Ui, Err(payload));
@@ -120,7 +159,7 @@ impl MailApp {
     fn frame_panicked(&mut self, part: FramePart, payload: Caught) {
         // What the panic carried is in the log already (the app's hook); dropped here, off the
         // guard's own stack, as dropping it can panic.
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(payload)));
+        drop_quietly(payload);
         let g = &mut self.ui.caught;
         if g.letting_go {
             return;
@@ -155,6 +194,21 @@ impl MailApp {
     /// In tests, a panic where `at` says the drawing is to make one.
     #[cfg(test)]
     pub(crate) fn panic_at(&self, at: PanicAt) {
-        assert!(self.ui.test_panic != Some(at), "a panic the guard's tests asked for");
+        self.ui.panic_at(at);
     }
+}
+
+impl UiState {
+    /// In tests, a panic where `at` says the drawing is to make one.
+    #[cfg(test)]
+    pub(crate) fn panic_at(&self, at: PanicAt) {
+        panic_if(self.test_panic, at);
+    }
+}
+
+/// In tests, a panic when the hook (`UiState::test_panic`, copied where the state is borrowed) says
+/// `at`.
+#[cfg(test)]
+pub(crate) fn panic_if(hook: Option<PanicAt>, at: PanicAt) {
+    assert!(hook != Some(at), "a panic the guard's tests asked for");
 }

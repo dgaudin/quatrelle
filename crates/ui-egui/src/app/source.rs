@@ -8,11 +8,18 @@
 
 use crate::*;
 
+#[cfg(test)]
+use super::PanicAt;
+use super::guarded_window;
+
 impl MailApp {
     /// Each message source asked for, in a native window (in the browser, a window in the page).
     pub(crate) fn source_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
         let t = self.ui.tokens;
         let (sources, st) = (&self.session.sources, &mut self.ui);
+        // A panic in a window's drawing is kept for the whole pass (the first stays), and said
+        // once it's over: never taken in the loop, or the next window's clean drawing would hide it.
+        let mut caught = None;
         for v in sources {
             let key = v.key.clone();
             let subject = if v.subject.trim().is_empty() { tl!("(no subject)").to_string() } else { v.subject.trim().to_string() };
@@ -26,74 +33,84 @@ impl MailApp {
                 };
             }
             let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
-                let mut place = st.places.get("source").copied();
-                super::windows::after_open(ui, place);
-                trace_window(ui, "source");
-                super::windows::WindowPlace::note(&mut place, ui);
-                if let Some(p) = place {
-                    st.places.insert("source".into(), p);
-                }
-                if st.raise_source.as_ref() == Some(&key) {
-                    st.raise_source = None;
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
-                }
-                let mut closing = ui.input(|i| i.viewport().close_requested() || i.key_pressed(Key::Escape));
-                let header_only = st.source_headers.contains(&key);
-                egui::Panel::top(egui::Id::unique(("source-window-bar", key.to_id())))
-                    .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.border)))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 2.0;
-                            let parts = [tl!("Whole message"), tl!("Header only")];
-                            if let Some(i) = widgets::segmented(ui, &t, "source-part", &parts, usize::from(header_only)) {
-                                if i == 1 {
-                                    st.source_headers.insert(key.clone());
-                                } else {
-                                    st.source_headers.remove(&key);
-                                }
-                            }
-                            widgets::group_sep(ui, &t);
-                            let ready = !v.pending && v.error.is_none();
-                            if widgets::tool_button(ui, Icon::Copy, "Copy all", &t, ready).clicked() && ready {
-                                ui.ctx().copy_text(v.text(header_only));
-                            }
-                            if ready {
-                                ui.add_space(6.0);
-                                ui.label(RichText::new(widgets::human_size(v.size)).color(t.dim).small());
-                            }
-                            // Drawn inside the page (the browser), the window has no title bar.
-                            if ui.ctx().embed_viewports() {
-                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    if widgets::tool_button(ui, Icon::Close, "Close", &t, true).clicked() {
-                                        closing = true;
+                guarded_window(&mut caught, || {
+                    // In tests, the first of the windows is the one made to panic.
+                    #[cfg(test)]
+                    if sources.first().is_some_and(|first| first.key == key) {
+                        st.panic_at(PanicAt::Source);
+                    }
+                    let mut place = st.places.get("source").copied();
+                    super::windows::after_open(ui, place);
+                    trace_window(ui, "source");
+                    super::windows::WindowPlace::note(&mut place, ui);
+                    if let Some(p) = place {
+                        st.places.insert("source".into(), p);
+                    }
+                    if st.raise_source.as_ref() == Some(&key) {
+                        st.raise_source = None;
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
+                    }
+                    let mut closing = ui.input(|i| i.viewport().close_requested() || i.key_pressed(Key::Escape));
+                    let header_only = st.source_headers.contains(&key);
+                    egui::Panel::top(egui::Id::unique(("source-window-bar", key.to_id())))
+                        .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.border)))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                let parts = [tl!("Whole message"), tl!("Header only")];
+                                if let Some(i) = widgets::segmented(ui, &t, "source-part", &parts, usize::from(header_only)) {
+                                    if i == 1 {
+                                        st.source_headers.insert(key.clone());
+                                    } else {
+                                        st.source_headers.remove(&key);
                                     }
-                                });
+                                }
+                                widgets::group_sep(ui, &t);
+                                let ready = !v.pending && v.error.is_none();
+                                if widgets::tool_button(ui, Icon::Copy, "Copy all", &t, ready).clicked() && ready {
+                                    ui.ctx().copy_text(v.text(header_only));
+                                }
+                                if ready {
+                                    ui.add_space(6.0);
+                                    ui.label(RichText::new(widgets::human_size(v.size)).color(t.dim).small());
+                                }
+                                // Drawn inside the page (the browser), the window has no title bar.
+                                if ui.ctx().embed_viewports() {
+                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                        if widgets::tool_button(ui, Icon::Close, "Close", &t, true).clicked() {
+                                            closing = true;
+                                        }
+                                    });
+                                }
+                            });
+                            if v.truncated && !header_only {
+                                ui.add_space(2.0);
+                                ui.label(
+                                    RichText::new(tf!(
+                                        "Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.",
+                                        shown = widgets::human_size(quatrelle_engine::SOURCE_SHOWN.min(v.size)),
+                                        size = widgets::human_size(v.size)
+                                    ))
+                                    .color(t.dim)
+                                    .small(),
+                                );
                             }
                         });
-                        if v.truncated && !header_only {
-                            ui.add_space(2.0);
-                            ui.label(
-                                RichText::new(tf!(
-                                    "Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.",
-                                    shown = widgets::human_size(quatrelle_engine::SOURCE_SHOWN.min(v.size)),
-                                    size = widgets::human_size(v.size)
-                                ))
-                                .color(t.dim)
-                                .small(),
-                            );
-                        }
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(8))).show(ui, |ui| {
+                        source_text(ui, &t, v, header_only);
                     });
-                egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(8))).show(ui, |ui| {
-                    source_text(ui, &t, v, header_only);
-                });
-                closing
+                    closing
+                })
             });
+            // Panicked: the window is closed (it holds nothing of its own to keep).
+            let close = close.unwrap_or(true);
             if close {
                 super::windows::forget_open(ctx, id);
                 st.source_headers.remove(&key);
                 acts.push(Action::Run("message.closeSource", json!({"key": key.to_id()})));
             }
         }
+        self.window_drawn(ctx, caught);
     }
 }
 

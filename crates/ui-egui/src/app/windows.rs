@@ -3,6 +3,9 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The windows of their own: messages being written, and messages popped out.
 
+#[cfg(test)]
+use super::PanicAt;
+use super::{Caught, guarded_window};
 use crate::dialogs::people_field::{MEETING_WINDOWS, places};
 use crate::*;
 
@@ -56,21 +59,24 @@ impl MailApp {
         let ids: Vec<u64> = self.session.all_composes().filter(|c| !compose_inline(c, ctx)).map(|c| c.id).collect();
         // A window opening goes a step down and right of those already open.
         let open = ids.len().saturating_sub(1);
+        let mut caught = None;
         for id in ids {
             if self.use_compose(id) {
                 let mut mine = Vec::new();
-                self.compose_window(ctx, open, &mut mine);
+                self.compose_window(ctx, open, &mut caught, &mut mine);
                 acts.extend(mine.into_iter().map(|a| Action::ForCompose(id, Box::new(a))));
             }
         }
         if let Some(id) = before {
             self.use_compose(id);
         }
+        self.window_drawn(ctx, caught);
     }
 
     /// The window of the message acted on now, opening `n` steps down and right of the last
-    /// place (as many as are open already).
-    pub(crate) fn compose_window(&mut self, ctx: &egui::Context, n: usize, acts: &mut Vec<Action>) {
+    /// place (as many as are open already). A panic in its drawing is kept in `caught`: the
+    /// window stays open, with what was written in it.
+    pub(crate) fn compose_window(&mut self, ctx: &egui::Context, n: usize, caught: &mut Option<Caught>, acts: &mut Vec<Action>) {
         let Some(c) = self.session.compose.as_ref() else { return };
         let mine = c.id;
         let t = self.ui.tokens;
@@ -88,40 +94,46 @@ impl MailApp {
         }
         let (session, st) = (&mut self.session, &mut self.ui);
         let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
-            let mut place = st.places.get("compose").copied();
-            after_open(ui, place);
-            trace_window(ui, "compose");
-            WindowPlace::note(&mut place, ui);
-            if let Some(p) = place {
-                st.places.insert("compose".into(), p);
-            }
-            let mut mine_acts: Vec<Action> = Vec::new();
-            let mut closing = ui.input(|i| i.viewport().close_requested());
-            // Something written: ask first, as Outlook does.
-            if closing && session.compose_written() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                st.dialog = Some(Dialog::SaveChanges);
-                st.dialog_for = Some(mine);
-                closing = false;
-            }
-            egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-                reading::compose_window(session, st, ui, &mut mine_acts);
-            });
-            // A dialog for a message shows in that message's window only.
-            let here = st.dialog_for.is_none_or(|f| f == mine);
-            if let Some(mut d) = st.dialog.take() {
-                if d.for_compose() && here {
-                    let keep = dialogs::show(ui.ctx(), &mut d, session, &mut st.people, &mut st.pictures, &t, &mut mine_acts);
-                    if keep && st.dialog.is_none() {
+            guarded_window(caught, || {
+                let mut place = st.places.get("compose").copied();
+                after_open(ui, place);
+                trace_window(ui, "compose");
+                WindowPlace::note(&mut place, ui);
+                if let Some(p) = place {
+                    st.places.insert("compose".into(), p);
+                }
+                let mut mine_acts: Vec<Action> = Vec::new();
+                let mut closing = ui.input(|i| i.viewport().close_requested());
+                // Something written: ask first, as Outlook does.
+                if closing && session.compose_written() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    st.dialog = Some(Dialog::SaveChanges);
+                    st.dialog_for = Some(mine);
+                    closing = false;
+                }
+                egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
+                    reading::compose_window(session, st, ui, &mut mine_acts);
+                });
+                // A dialog for a message shows in that message's window only.
+                let here = st.dialog_for.is_none_or(|f| f == mine);
+                if let Some(mut d) = st.dialog.take() {
+                    if d.for_compose() && here {
+                        #[cfg(test)]
+                        st.panic_at(PanicAt::ComposeDialog);
+                        let keep = dialogs::show(ui.ctx(), &mut d, session, &mut st.people, &mut st.pictures, &t, &mut mine_acts);
+                        if keep && st.dialog.is_none() {
+                            st.dialog = Some(d);
+                        }
+                    } else {
                         st.dialog = Some(d);
                     }
-                } else {
-                    st.dialog = Some(d);
                 }
-            }
-            acts.extend(mine_acts);
-            closing
+                acts.extend(mine_acts);
+                closing
+            })
         });
+        // Panicked: the window stays open (closing it would drop the message).
+        let close = close.unwrap_or(false);
         if close {
             forget_open(ctx, id);
             acts.push(Action::Run("compose.close", json!({"save": false})));
@@ -180,13 +192,25 @@ impl MailApp {
         let mut windows = std::mem::take(&mut self.ui.event_windows);
         let open = windows.len().saturating_sub(1);
         let mut closed: Vec<u64> = Vec::new();
+        // A panic in what a window is made ready with or drawn with is kept here, and said at the
+        // end; the windows are put back whatever happens (they hold what is being written).
+        let mut caught = None;
         for (n, (wid, f)) in windows.iter_mut().enumerate() {
             // Its address book, listed from the session's (which the window only reads), and its
             // contacts fields made ready: its lines, and the address book's rows while it's open.
-            if let Some(book) = f.attendees_book.as_mut() {
-                book.search.refresh(&mut self.session);
+            let (session, ui) = (&mut self.session, &mut self.ui);
+            let prepared = guarded_window(&mut caught, || {
+                #[cfg(test)]
+                ui.panic_at(PanicAt::Prepare);
+                if let Some(book) = f.attendees_book.as_mut() {
+                    book.search.refresh(session);
+                }
+                pim_dialogs::prepare(f, session, &mut ui.people);
+            });
+            // Not made ready: left as it is this frame, and open.
+            if prepared.is_none() {
+                continue;
             }
-            pim_dialogs::prepare(f, &mut self.session, &mut self.ui.people);
             let title = if f.summary.trim().is_empty() { tl!("Untitled").to_string() } else { f.summary.trim().to_string() };
             let title = if f.inviting { tf!("{subject} – Meeting", subject = title) } else { tf!("{subject} – Appointment", subject = title) };
             let id = egui::ViewportId::from_hash_of(("event-window", *wid));
@@ -199,25 +223,34 @@ impl MailApp {
                 };
             }
             let (session, places, people) = (&self.session, &mut self.ui.places, &mut self.ui.people);
+            #[cfg(test)]
+            let hook = self.ui.test_panic;
             let wid = *wid;
             let mut mine: Vec<Action> = Vec::new();
-            let (keep, close) = ctx.show_viewport_immediate(id, builder, |ui, _| {
-                let mut place = places.get("event").copied();
-                after_open(ui, place);
-                trace_window(ui, "event");
-                WindowPlace::note(&mut place, ui);
-                if let Some(p) = place {
-                    places.insert("event".into(), p);
-                }
-                let mut keep = true;
-                egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(egui::Margin::symmetric(14, 10))).show(
-                    ui,
-                    |ui| {
-                        keep = pim_dialogs::meeting(ui, f, session, people, &t, &mut mine);
-                    },
-                );
-                (keep, ui.input(|i| i.viewport().close_requested()))
-            });
+            let (keep, close) = ctx
+                .show_viewport_immediate(id, builder, |ui, _| {
+                    guarded_window(&mut caught, || {
+                        #[cfg(test)]
+                        super::frame::panic_if(hook, PanicAt::Meeting);
+                        let mut place = places.get("event").copied();
+                        after_open(ui, place);
+                        trace_window(ui, "event");
+                        WindowPlace::note(&mut place, ui);
+                        if let Some(p) = place {
+                            places.insert("event".into(), p);
+                        }
+                        let mut keep = true;
+                        egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(egui::Margin::symmetric(14, 10))).show(
+                            ui,
+                            |ui| {
+                                keep = pim_dialogs::meeting(ui, f, session, people, &t, &mut mine);
+                            },
+                        );
+                        (keep, ui.input(|i| i.viewport().close_requested()))
+                    })
+                })
+                // Panicked: the window stays open, its meeting kept.
+                .unwrap_or((true, false));
             // Its commands go to the engine as its own: done, the window closes.
             for a in mine {
                 acts.push(match a {
@@ -240,6 +273,7 @@ impl MailApp {
         // A window opened meanwhile (from an action of this frame) is kept too.
         windows.append(&mut self.ui.event_windows);
         self.ui.event_windows = windows;
+        self.window_drawn(ctx, caught);
     }
 
     /// Show only one message, as its own window does (`key` from [`MessageKey::to_id`]).
@@ -290,6 +324,7 @@ impl MailApp {
                 }
             }
         }
+        let mut caught = None;
         for w in self.session.windows.clone() {
             let key = w.key.clone();
             let subject =
@@ -305,68 +340,75 @@ impl MailApp {
             }
             let (session, st) = (&mut self.session, &mut self.ui);
             let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
-                let mut place = st.places.get("message").copied();
-                after_open(ui, place);
-                trace_window(ui, "message");
-                WindowPlace::note(&mut place, ui);
-                if let Some(p) = place {
-                    st.places.insert("message".into(), p);
-                }
-                let mut mine: Vec<Action> = Vec::new();
-                // Escape closes the find bar first, while it's shown, and the window's dialog; on
-                // the File page, it goes back to the message, as Outlook's.
-                let filing = file_page::shown(ui.ctx(), &key);
-                let bar = st.find.shown_in_window(ui.ctx(), &key) || st.window_dialog.as_ref().is_some_and(|(k, _)| *k == key) || filing;
-                let closing = ui.input(|i| i.viewport().close_requested() || (i.key_pressed(Key::Escape) && !bar));
-                if filing && st.window_dialog.is_none() && ui.input(|i| i.key_pressed(Key::Escape)) {
-                    file_page::show(ui.ctx(), &key, false);
-                }
-                // Ctrl+P prints this window's message.
-                if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P)) {
-                    mine.push(Action::Print);
-                }
-                // Delete, and Shift+Delete for good, delete this window's message. Only in a
-                // window of its own: drawn inside the main one, its keys are the main window's.
-                if ui.ctx().viewport_id() != egui::ViewportId::ROOT && !ui.ctx().text_edit_focused() {
-                    let (delete, for_good) = ui.input_mut(|i| {
-                        let cut = super::keys::cut_is_shift_delete(i.modifiers) && i.events.iter().any(|e| matches!(e, egui::Event::Cut));
-                        (i.consume_key(egui::Modifiers::NONE, Key::Delete), i.consume_key(egui::Modifiers::SHIFT, Key::Delete) || cut)
-                    });
-                    if delete || for_good {
-                        mine.extend(super::keys::delete_from_window(&key, for_good));
+                guarded_window(&mut caught, || {
+                    #[cfg(test)]
+                    st.panic_at(PanicAt::ReadMessage);
+                    let mut place = st.places.get("message").copied();
+                    after_open(ui, place);
+                    trace_window(ui, "message");
+                    WindowPlace::note(&mut place, ui);
+                    if let Some(p) = place {
+                        st.places.insert("message".into(), p);
                     }
-                    // Reply, Reply all and Forward by their keys, as in the main window.
-                    let answer = ui.input_mut(|i| {
-                        let shift = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
-                        if i.consume_key(shift, Key::R) {
-                            Some("mail.replyAll")
-                        } else if i.consume_key(egui::Modifiers::COMMAND, Key::R) {
-                            Some("mail.reply")
-                        } else if i.consume_key(egui::Modifiers::COMMAND, Key::F) {
-                            Some("mail.forward")
-                        } else {
-                            None
+                    let mut mine: Vec<Action> = Vec::new();
+                    // Escape closes the find bar first, while it's shown, and the window's dialog; on
+                    // the File page, it goes back to the message, as Outlook's.
+                    let filing = file_page::shown(ui.ctx(), &key);
+                    let bar = st.find.shown_in_window(ui.ctx(), &key) || st.window_dialog.as_ref().is_some_and(|(k, _)| *k == key) || filing;
+                    let closing = ui.input(|i| i.viewport().close_requested() || (i.key_pressed(Key::Escape) && !bar));
+                    if filing && st.window_dialog.is_none() && ui.input(|i| i.key_pressed(Key::Escape)) {
+                        file_page::show(ui.ctx(), &key, false);
+                    }
+                    // Ctrl+P prints this window's message.
+                    if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::P)) {
+                        mine.push(Action::Print);
+                    }
+                    // Delete, and Shift+Delete for good, delete this window's message. Only in a
+                    // window of its own: drawn inside the main one, its keys are the main window's.
+                    if ui.ctx().viewport_id() != egui::ViewportId::ROOT && !ui.ctx().text_edit_focused() {
+                        let (delete, for_good) = ui.input_mut(|i| {
+                            let cut = super::keys::cut_is_shift_delete(i.modifiers) && i.events.iter().any(|e| matches!(e, egui::Event::Cut));
+                            (i.consume_key(egui::Modifiers::NONE, Key::Delete), i.consume_key(egui::Modifiers::SHIFT, Key::Delete) || cut)
+                        });
+                        if delete || for_good {
+                            mine.extend(super::keys::delete_from_window(&key, for_good));
                         }
-                    });
-                    if let Some(id) = answer {
-                        mine.push(Action::Run(id, json!({})));
+                        // Reply, Reply all and Forward by their keys, as in the main window.
+                        let answer = ui.input_mut(|i| {
+                            let shift = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+                            if i.consume_key(shift, Key::R) {
+                                Some("mail.replyAll")
+                            } else if i.consume_key(egui::Modifiers::COMMAND, Key::R) {
+                                Some("mail.reply")
+                            } else if i.consume_key(egui::Modifiers::COMMAND, Key::F) {
+                                Some("mail.forward")
+                            } else {
+                                None
+                            }
+                        });
+                        if let Some(id) = answer {
+                            mine.push(Action::Run(id, json!({})));
+                        }
                     }
-                }
-                message_content(ui, session, st, &w, &mut mine);
-                let leave = mine.iter().any(|a| matches!(a, Action::Run("message.closeWindow", _)));
-                // The File page (Junk Email options…) is the main window's: brought forward.
-                if mine.iter().any(|a| matches!(a, Action::Backstage(_))) {
-                    mine.push(Action::FocusMain);
-                }
-                // What it asks for is done to its message, whatever the main window has selected.
-                acts.extend(mine.into_iter().map(|a| for_window(&key, a)));
-                closing && !leave
+                    message_content(ui, session, st, &w, &mut mine);
+                    let leave = mine.iter().any(|a| matches!(a, Action::Run("message.closeWindow", _)));
+                    // The File page (Junk Email options…) is the main window's: brought forward.
+                    if mine.iter().any(|a| matches!(a, Action::Backstage(_))) {
+                        mine.push(Action::FocusMain);
+                    }
+                    // What it asks for is done to its message, whatever the main window has selected.
+                    acts.extend(mine.into_iter().map(|a| for_window(&key, a)));
+                    closing && !leave
+                })
             });
+            // Panicked: the window stays open.
+            let close = close.unwrap_or(false);
             if close {
                 forget_open(ctx, id);
                 acts.push(Action::Run("message.closeWindow", json!({"key": key.to_id()})));
             }
         }
+        self.window_drawn(ctx, caught);
         // A window gone takes its dialog and its ribbon's fit with it.
         if self.ui.window_dialog.as_ref().is_some_and(|(k, _)| !self.session.windows.iter().any(|w| w.key == *k)) {
             self.ui.window_dialog = None;

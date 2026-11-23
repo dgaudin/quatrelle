@@ -14,6 +14,7 @@ use serde_json::{Map, Value, json};
 
 use super::editor::{self, Editor, Face};
 use super::{colors_menu, paper};
+use crate::app::{Caught, guarded_window};
 use crate::icons::Icon;
 use crate::theme::Tokens;
 use crate::{Action, UiState, WindowPlace, widgets};
@@ -154,7 +155,7 @@ pub(crate) fn in_page_id(uid: &str) -> egui::Id {
 
 /// Every note's window, once a frame. One whose note went (deleted here, elsewhere or on the
 /// server) closes with nothing to save.
-pub(crate) fn windows(ctx: &egui::Context, s: &Session, st: &mut UiState, acts: &mut Vec<Action>) {
+pub(crate) fn windows(ctx: &egui::Context, s: &Session, st: &mut UiState, caught: &mut Option<Caught>, acts: &mut Vec<Action>) {
     let open = std::mem::take(&mut st.note_windows);
     let embedded = ctx.embed_viewports();
     let mut keep = Vec::with_capacity(open.len());
@@ -170,7 +171,13 @@ pub(crate) fn windows(ctx: &egui::Context, s: &Session, st: &mut UiState, acts: 
             w.editor.text = note.text.clone();
             w.saved = note.text.clone();
         }
-        let closed = if embedded { in_page(ctx, note, &mut w, st, acts) } else { of_its_own(ctx, note, &mut w, n, st, acts) };
+        // A panic in a window's drawing is kept for the frame's guard; the window stays open, and
+        // so does what's typed in it (it goes on, in `keep`, whatever happens).
+        let closed = if embedded {
+            guarded_window(caught, || in_page(ctx, note, &mut w, st, acts)).unwrap_or(false)
+        } else {
+            of_its_own(ctx, note, &mut w, n, st, caught, acts)
+        };
         if closed {
             acts.extend(save(&mut w, true));
             if !embedded {
@@ -269,7 +276,15 @@ fn spot(p: WindowPlace) -> Option<WindowPlace> {
 }
 
 /// A window of its own on the system, opening `n` steps down and right of the last place.
-fn of_its_own(ctx: &egui::Context, note: &Note, w: &mut NoteWindow, n: usize, st: &mut UiState, acts: &mut Vec<Action>) -> bool {
+fn of_its_own(
+    ctx: &egui::Context,
+    note: &Note,
+    w: &mut NoteWindow,
+    n: usize,
+    st: &mut UiState,
+    caught: &mut Option<Caught>,
+    acts: &mut Vec<Action>,
+) -> bool {
     let id = viewport(&w.uid);
     let min = [f32::from(MIN.0), f32::from(MIN.1)];
     let mut builder = crate::os_window().with_title(window_title(&w.editor.text)).with_min_inner_size(min);
@@ -283,34 +298,42 @@ fn of_its_own(ctx: &egui::Context, note: &Note, w: &mut NoteWindow, n: usize, st
     }
     let t = st.tokens;
     let fill = paper(note.color, t.dark);
+    #[cfg(test)]
+    let hook = st.test_panic;
     let places = &mut st.places;
     ctx.show_viewport_immediate(id, builder, |ui, _| {
-        let mut place = places.get("note").copied();
-        if let Some(p) = place.and_then(spot) {
-            crate::after_open(ui, Some(p));
-        }
-        crate::trace_window(ui, "note");
-        WindowPlace::note(&mut place, ui);
-        if let Some(p) = place {
-            places.insert("note".into(), p);
-        }
-        let closing = ui.input(|i| i.viewport().close_requested());
-        let raising = w.raise == RAISE;
-        let mut close = false;
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(fill).inner_margin(Margin::same(MARGIN))).show(ui, |ui| {
-            close = body(ui, note, w, false, &t, acts);
-        });
-        if raising {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
-        }
-        // Its size, but not while it's maximized, full screen or minimized: the note keeps its own.
-        let v = ui.input(|i| i.viewport().clone());
-        let own = v.maximized != Some(true) && v.fullscreen != Some(true) && v.minimized != Some(true);
-        if own && let Some(r) = v.inner_rect {
-            follow(ui.ctx(), w, r.size(), acts);
-        }
-        closing || close
+        guarded_window(caught, || {
+            #[cfg(test)]
+            crate::app::panic_if(hook, crate::app::PanicAt::Note);
+            let mut place = places.get("note").copied();
+            if let Some(p) = place.and_then(spot) {
+                crate::after_open(ui, Some(p));
+            }
+            crate::trace_window(ui, "note");
+            WindowPlace::note(&mut place, ui);
+            if let Some(p) = place {
+                places.insert("note".into(), p);
+            }
+            let closing = ui.input(|i| i.viewport().close_requested());
+            let raising = w.raise == RAISE;
+            let mut close = false;
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(fill).inner_margin(Margin::same(MARGIN))).show(ui, |ui| {
+                close = body(ui, note, w, false, &t, acts);
+            });
+            if raising {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
+            // Its size, but not while it's maximized, full screen or minimized: the note keeps its own.
+            let v = ui.input(|i| i.viewport().clone());
+            let own = v.maximized != Some(true) && v.fullscreen != Some(true) && v.minimized != Some(true);
+            if own && let Some(r) = v.inner_rect {
+                follow(ui.ctx(), w, r.size(), acts);
+            }
+            closing || close
+        })
     })
+    // Panicked: the window stays open.
+    .unwrap_or(false)
 }
 
 /// A window inside the page (the browser), of the same size.

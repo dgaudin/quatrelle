@@ -3,6 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The message being written: its form (from, to, cc, bcc, subject), its ribbon and its body.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
 use quatrelle_engine::{FieldId, SendBlock};
 
 use super::*;
@@ -289,362 +291,371 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     // drawn from the session as the reading pane draws a message; put back after, on every way
     // out of this.
     let Some(mut taken) = s.compose.take() else { return };
-    let c = &mut taken;
     // The editor's state belongs to one message.
     let mut ed = match st.editor.take() {
-        Some(e) if e.id == c.id => e,
-        _ => rich_edit::Editor::new(c.id),
+        Some(e) if e.id == taken.id => e,
+        _ => rich_edit::Editor::new(taken.id),
     };
     let mut quote_eds = std::mem::take(&mut st.quote_editors);
-    // The block of the original with the cursor, while there is one: the ribbon works on it.
-    let quote_cell = st.quote_focus.filter(|(id, _)| *id == c.id && c.quote.is_some()).map(|(_, n)| n);
-    // Why it couldn't go: over the message, in its own window when it has one.
-    if let Some(msg) = st.compose_alert.clone() {
-        let modal = egui::Modal::new(egui::Id::unique(("compose-alert", c.id))).frame(crate::dialogs::dialog_frame(&t)).show(ui.ctx(), |ui| {
-            ui.set_width(380.0);
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
-                icons::paint(ui.painter(), r, Icon::Warning, t.warn);
-                ui.add_space(6.0);
-                ui.vertical(|ui| {
-                    ui.label(RichText::new(tl!("Quatrelle")).font(theme::bold(16.0)).color(t.text));
-                    let mut text = if msg == "add at least one recipient" {
-                        tl!("Add at least one name in To, Cc or Bcc before sending.").to_string()
-                    } else if msg == "Looking for these recipients' certificates in the Exchange address book: send it again in a moment." {
-                        tl!("Looking for these recipients' certificates in the Exchange address book: send it again in a moment.").to_string()
-                    } else {
-                        msg.clone()
-                    };
-                    if let Some(first) = text.get(..1) {
-                        text = first.to_uppercase() + text.get(1..).unwrap_or_default();
-                    }
-                    if !text.ends_with('.') {
-                        text.push('.');
-                    }
-                    ui.add(egui::Label::new(RichText::new(text).color(t.text)).wrap());
-                });
-            });
-            ui.add_space(10.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Enter is OK; not the Ctrl+Enter that tried to send and brought it up.
-                let ok = ui.button(tl!("OK")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.command);
-                // Not sent for want of an account: one can be added from here.
-                let add = blocked.is_some_and(|b| b != SendBlock::NoOutgoingServer && blocked_text.as_deref() == Some(msg.as_str()))
-                    && ui.button(tl!("Add an account")).clicked();
-                if add {
-                    acts.push(Action::Dialog(crate::Dialog::add_account()));
-                }
-                ok || add
-            })
-            .inner
-        });
-        if modal.inner || modal.should_close() {
-            st.compose_alert = None;
-        }
-    }
-    // A newly opened message: start in To (new mail) or the body (replies).
-    let fresh = st.compose_shown.insert(c.id);
-    let focus_to = fresh && c.to.trim().is_empty();
-    let focus_body = fresh && !focus_to;
-    let send = |c: &quatrelle_engine::Compose, alert: &mut Option<String>, acts: &mut Vec<Action>| {
-        if let Some(names) = no_key_for.as_ref().filter(|_| c.encrypt && blocked.is_none()) {
-            *alert = Some(tf!(
-                "It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.",
-                names = names
-            ));
-            return;
-        }
-        // From an account that can't send: Send says why (not first ask about the subject).
-        if c.subject.trim().is_empty() && blocked.is_none() {
-            acts.push(Action::Dialog(crate::Dialog::EmptySubject));
-        } else {
-            acts.push(Action::Run("compose.send", json!({})));
-        }
-    };
-    // A key the main window took for this message (Ctrl+Enter or Alt+S, the keyboard in it).
-    let pass = ui.ctx().cumulative_pass_nr();
-    let confirmed = st.send_confirmed.take_if(|id| *id == c.id).is_some();
-    let keyed = match st.send_asked {
-        Some((id, at)) if id == c.id => {
-            st.send_asked = None;
-            at.saturating_add(3) > pass
-        }
-        _ => false,
-    };
-    // Alt+S sends, as in Outlook; in a window of its own the main window's shortcuts don't reach
-    // it, so Ctrl+Enter and Ctrl+S are the message's own there.
-    if !c.sending {
-        let (alt_s, send_key, save_key, spelling) = ui.input_mut(|i| {
-            (
-                i.consume_key(egui::Modifiers::ALT, egui::Key::S),
-                in_window && i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter),
-                in_window && i.consume_key(egui::Modifiers::COMMAND, egui::Key::S),
-                i.consume_key(egui::Modifiers::NONE, egui::Key::F7),
-            )
-        });
-        // Ctrl+Enter in a window of its own asks first, or does nothing, as set (the main window
-        // does the same for a message beside the list); Alt+S sends as ever.
-        let ctrl_enter = s.prefs.ctrl_enter;
-        if alt_s || keyed || confirmed || (send_key && ctrl_enter == quatrelle_engine::CtrlEnter::Send) {
-            send(c, &mut st.compose_alert, acts);
-        } else if send_key && ctrl_enter == quatrelle_engine::CtrlEnter::Ask {
-            acts.push(Action::Dialog(crate::Dialog::CtrlEnter { remember: false }));
-        }
-        if save_key {
-            acts.push(Action::Run("compose.saveDraft", json!({})));
-        }
-        if spelling {
-            acts.push(Action::Dialog(crate::Dialog::spelling()));
-        }
-    }
-    // The typefaces the text is set in (Arial, Calibri…), from the system when it has them, so
-    // the text shows as it will be read.
-    let typefaces = c.styles.palette.iter().filter_map(|s| s.font.clone());
-    for name in crate::look::typefaces::wanted(ui.ctx(), typefaces) {
-        acts.push(Action::LoadTypeface(name));
-    }
-    // The subject's spelling is checked as the message's is (its language, the words let be).
-    let subject_check = crate::spellcheck::Check { skip: Vec::new(), ..rich_edit::check_for(c) };
-    egui::Frame::new().inner_margin(Margin { left: 16, right: 16, top: 8, bottom: 12 }).show(ui, |ui| {
-        // The ribbon, as Outlook's message window has it: its tabs, with Save (and in a window
-        // Pop in and Discard) small at their right; where windows can't open (the browser),
-        // messages stay in the reading pane.
-        let input = rich_edit::RibbonInput {
-            signature: &signature,
-            clock: &clock,
-            can_delay,
-            can_vote,
-            has_cert,
-            has_pgp,
-            scheme_now: reach.as_ref().map(|r| r.scheme),
-            in_window,
-            can_pop: !ui.ctx().embed_viewports(),
-            assistant,
-            written,
-            recent_emoji: &recent_emoji,
-        };
-        // In the reading pane, Pop out and Discard where they're seen, as Outlook's reply there
-        // has them (a window has them small beside its tabs); Rewrite beside them, with a
-        // language model set (in a window, it's on the Message tab).
-        if !in_window {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                if input.can_pop
-                    && widgets::pill_button(ui, Icon::PopOut, "Pop out", &t).on_hover_text(tl!("Write it in a window of its own")).clicked()
-                {
-                    acts.push(Action::Run("compose.popOut", json!({})));
-                }
-                if widgets::pill_button(ui, Icon::Delete, "Discard", &t).clicked() {
-                    acts.push(Action::Run("compose.discard", json!({})));
-                }
-                if input.assistant {
-                    let r = widgets::menu_pill(ui, Icon::Drafts, "Rewrite", &t, rich_edit::rewrite_on(c, written), false)
-                        .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
-                    let r = if written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
-                    egui::Popup::menu(&r).show(|ui| rich_edit::rewrite_choices(ui, acts));
-                }
-            });
-            ui.add_space(6.0);
-        }
-        egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            let on_quote =
-                quote_cell.and_then(|n| quote::with_cell(c, &mut quote_eds, n, |c, ed| rich_edit::compose_ribbon(ui, &t, ed, c, &input, acts)));
-            if on_quote.is_none() {
-                rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
-            }
-        });
-        super::assistant::rewrite_panel(&t, ui, c, acts);
-        if let Some(b) = blocked {
-            ui.add_space(4.0);
-            send_block_bar(ui, &t, b, acts);
-        }
-        if let Some(e) = &c.error {
-            ui.add_space(4.0);
-            egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
-                ui.label(RichText::new(tf!("Not sent: {error}", error = e)).color(t.danger));
-            });
-        }
-        // Ctrl+K: Outlook's Check Names on every field, anywhere but in the text (where it makes
-        // a link) and a contacts field, From's other address among them (which checks itself).
-        if !c.sending
-            && st.people.open_field().is_none()
-            && !ui.memory(|m| m.has_focus(rich_edit::body_id(c)))
-            && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
-        {
-            acts.push(Action::Run("compose.checkNames", json!({})));
-        }
-        ui.add_space(6.0);
-        ui.add_enabled_ui(!c.sending, |ui| {
-            ui.spacing_mut().item_spacing.y = 6.0;
-            // Send beside the address rows (From, To, Cc and Bcc when shown).
-            let rows = if c.show_cc { 4.0 } else { 3.0 };
-            let height = rows * ROW_H + (rows - 1.0) * 6.0;
-            ui.horizontal_top(|ui| {
-                if send_button(ui, &t, height, c.sending, blocked_text.as_deref()).clicked() {
-                    send(c, &mut st.compose_alert, acts);
-                }
-                ui.add_space(10.0);
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| from_row(ui, &t, c, &senders, &mut st.people, choosing, acts));
-                    // To, Cc and Bcc are the contacts field; their buttons open the address book,
-                    // as in Outlook.
-                    let mut book = None;
-                    if people_row(ui, st, c, "to", "To", "Names <addresses>, separated by ; or ,", focus_to, can_expand, acts) {
-                        book = Some("to");
-                    }
-                    if people_row(ui, st, c, "cc", "Cc", "", false, can_expand, acts) {
-                        book = Some("cc");
-                    }
-                    if c.show_cc && people_row(ui, st, c, "bcc", "Bcc", "Hidden from the other recipients", false, can_expand, acts) {
-                        book = Some("bcc");
-                    }
-                    if let Some(name) = book {
-                        acts.push(Action::Dialog(crate::Dialog::select_names(c, name)));
-                    }
-                });
-            });
-            if c.show_reply_to || !c.reply_to.is_empty() {
+    // Drawn under `catch_unwind`: a panic in it must not leave the message out of the session.
+    let ran = catch_unwind(AssertUnwindSafe(|| {
+        #[cfg(test)]
+        st.panic_at(crate::app::PanicAt::Form);
+        let c = &mut taken;
+        // The block of the original with the cursor, while there is one: the ribbon works on it.
+        let quote_cell = st.quote_focus.filter(|(id, _)| *id == c.id && c.quote.is_some()).map(|(_, n)| n);
+        // Why it couldn't go: over the message, in its own window when it has one.
+        if let Some(msg) = st.compose_alert.clone() {
+            let modal = egui::Modal::new(egui::Id::unique(("compose-alert", c.id))).frame(crate::dialogs::dialog_frame(&t)).show(ui.ctx(), |ui| {
+                ui.set_width(380.0);
                 ui.horizontal(|ui| {
-                    ui.add_space(76.0);
+                    let (r, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
+                    icons::paint(ui.painter(), r, Icon::Warning, t.warn);
+                    ui.add_space(6.0);
                     ui.vertical(|ui| {
-                        people_row(ui, st, c, "replyTo", "Replies to", "Where replies go instead of to you", false, can_expand, acts);
+                        ui.label(RichText::new(tl!("Quatrelle")).font(theme::bold(16.0)).color(t.text));
+                        let mut text = if msg == "add at least one recipient" {
+                            tl!("Add at least one name in To, Cc or Bcc before sending.").to_string()
+                        } else if msg == "Looking for these recipients' certificates in the Exchange address book: send it again in a moment." {
+                            tl!("Looking for these recipients' certificates in the Exchange address book: send it again in a moment.").to_string()
+                        } else {
+                            msg.clone()
+                        };
+                        if let Some(first) = text.get(..1) {
+                            text = first.to_uppercase() + text.get(1..).unwrap_or_default();
+                        }
+                        if !text.ends_with('.') {
+                            text.push('.');
+                        }
+                        ui.add(egui::Label::new(RichText::new(text).color(t.text)).wrap());
                     });
                 });
-            }
-            ui.horizontal(|ui| {
-                ui.add_space(76.0);
-                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, Some(&subject_check)));
+                ui.add_space(10.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Enter is OK; not the Ctrl+Enter that tried to send and brought it up.
+                    let ok = ui.button(tl!("OK")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.command);
+                    // Not sent for want of an account: one can be added from here.
+                    let add = blocked.is_some_and(|b| b != SendBlock::NoOutgoingServer && blocked_text.as_deref() == Some(msg.as_str()))
+                        && ui.button(tl!("Add an account")).clicked();
+                    if add {
+                        acts.push(Action::Dialog(crate::Dialog::add_account()));
+                    }
+                    ok || add
+                })
+                .inner
             });
-            // With an OpenPGP key: whether everyone in it can receive it encrypted, and who can't.
-            if let Some(r) = reach.as_ref().filter(|r| has_pgp && r.recipients > 0) {
+            if modal.inner || modal.should_close() {
+                st.compose_alert = None;
+            }
+        }
+        // A newly opened message: start in To (new mail) or the body (replies).
+        let fresh = st.compose_shown.insert(c.id);
+        let focus_to = fresh && c.to.trim().is_empty();
+        let focus_body = fresh && !focus_to;
+        let send = |c: &quatrelle_engine::Compose, alert: &mut Option<String>, acts: &mut Vec<Action>| {
+            if let Some(names) = no_key_for.as_ref().filter(|_| c.encrypt && blocked.is_none()) {
+                *alert = Some(tf!(
+                    "It can't be sent encrypted: there's no usable OpenPGP key for {names}. Their key comes with their mail, or can be imported in File › Info › Security; or turn Encrypt off to send it unencrypted.",
+                    names = names
+                ));
+                return;
+            }
+            // From an account that can't send: Send says why (not first ask about the subject).
+            if c.subject.trim().is_empty() && blocked.is_none() {
+                acts.push(Action::Dialog(crate::Dialog::EmptySubject));
+            } else {
+                acts.push(Action::Run("compose.send", json!({})));
+            }
+        };
+        // A key the main window took for this message (Ctrl+Enter or Alt+S, the keyboard in it).
+        let pass = ui.ctx().cumulative_pass_nr();
+        let confirmed = st.send_confirmed.take_if(|id| *id == c.id).is_some();
+        let keyed = match st.send_asked {
+            Some((id, at)) if id == c.id => {
+                st.send_asked = None;
+                at.saturating_add(3) > pass
+            }
+            _ => false,
+        };
+        // Alt+S sends, as in Outlook; in a window of its own the main window's shortcuts don't reach
+        // it, so Ctrl+Enter and Ctrl+S are the message's own there.
+        if !c.sending {
+            let (alt_s, send_key, save_key, spelling) = ui.input_mut(|i| {
+                (
+                    i.consume_key(egui::Modifiers::ALT, egui::Key::S),
+                    in_window && i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter),
+                    in_window && i.consume_key(egui::Modifiers::COMMAND, egui::Key::S),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::F7),
+                )
+            });
+            // Ctrl+Enter in a window of its own asks first, or does nothing, as set (the main window
+            // does the same for a message beside the list); Alt+S sends as ever.
+            let ctrl_enter = s.prefs.ctrl_enter;
+            if alt_s || keyed || confirmed || (send_key && ctrl_enter == quatrelle_engine::CtrlEnter::Send) {
+                send(c, &mut st.compose_alert, acts);
+            } else if send_key && ctrl_enter == quatrelle_engine::CtrlEnter::Ask {
+                acts.push(Action::Dialog(crate::Dialog::CtrlEnter { remember: false }));
+            }
+            if save_key {
+                acts.push(Action::Run("compose.saveDraft", json!({})));
+            }
+            if spelling {
+                acts.push(Action::Dialog(crate::Dialog::spelling()));
+            }
+        }
+        // The typefaces the text is set in (Arial, Calibri…), from the system when it has them, so
+        // the text shows as it will be read.
+        let typefaces = c.styles.palette.iter().filter_map(|s| s.font.clone());
+        for name in crate::look::typefaces::wanted(ui.ctx(), typefaces) {
+            acts.push(Action::LoadTypeface(name));
+        }
+        // The subject's spelling is checked as the message's is (its language, the words let be).
+        let subject_check = crate::spellcheck::Check { skip: Vec::new(), ..rich_edit::check_for(c) };
+        egui::Frame::new().inner_margin(Margin { left: 16, right: 16, top: 8, bottom: 12 }).show(ui, |ui| {
+            // The ribbon, as Outlook's message window has it: its tabs, with Save (and in a window
+            // Pop in and Discard) small at their right; where windows can't open (the browser),
+            // messages stay in the reading pane.
+            let input = rich_edit::RibbonInput {
+                signature: &signature,
+                clock: &clock,
+                can_delay,
+                can_vote,
+                has_cert,
+                has_pgp,
+                scheme_now: reach.as_ref().map(|r| r.scheme),
+                in_window,
+                can_pop: !ui.ctx().embed_viewports(),
+                assistant,
+                written,
+                recent_emoji: &recent_emoji,
+            };
+            // In the reading pane, Pop out and Discard where they're seen, as Outlook's reply there
+            // has them (a window has them small beside its tabs); Rewrite beside them, with a
+            // language model set (in a window, it's on the Message tab).
+            if !in_window {
                 ui.horizontal(|ui| {
-                    ui.add_space(76.0 + LABEL_W);
-                    encryption_line(ui, &t, r, c.encrypt);
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    if input.can_pop
+                        && widgets::pill_button(ui, Icon::PopOut, "Pop out", &t).on_hover_text(tl!("Write it in a window of its own")).clicked()
+                    {
+                        acts.push(Action::Run("compose.popOut", json!({})));
+                    }
+                    if widgets::pill_button(ui, Icon::Delete, "Discard", &t).clicked() {
+                        acts.push(Action::Run("compose.discard", json!({})));
+                    }
+                    if input.assistant {
+                        let r = widgets::menu_pill(ui, Icon::Drafts, "Rewrite", &t, rich_edit::rewrite_on(c, written), false)
+                            .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
+                        let r = if written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
+                        egui::Popup::menu(&r).show(|ui| rich_edit::rewrite_choices(ui, acts));
+                    }
+                });
+                ui.add_space(6.0);
+            }
+            egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let on_quote =
+                    quote_cell.and_then(|n| quote::with_cell(c, &mut quote_eds, n, |c, ed| rich_edit::compose_ribbon(ui, &t, ed, c, &input, acts)));
+                if on_quote.is_none() {
+                    rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
+                }
+            });
+            super::assistant::rewrite_panel(&t, ui, c, acts);
+            if let Some(b) = blocked {
+                ui.add_space(4.0);
+                send_block_bar(ui, &t, b, acts);
+            }
+            if let Some(e) = &c.error {
+                ui.add_space(4.0);
+                egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
+                    ui.label(RichText::new(tf!("Not sent: {error}", error = e)).color(t.danger));
                 });
             }
-            if !c.attachments.is_empty() {
-                ui.horizontal(|ui| {
-                    ui.add_space(76.0 + LABEL_W);
-                    let mut remove = None;
+            // Ctrl+K: Outlook's Check Names on every field, anywhere but in the text (where it makes
+            // a link) and a contacts field, From's other address among them (which checks itself).
+            if !c.sending
+                && st.people.open_field().is_none()
+                && !ui.memory(|m| m.has_focus(rich_edit::body_id(c)))
+                && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
+            {
+                acts.push(Action::Run("compose.checkNames", json!({})));
+            }
+            ui.add_space(6.0);
+            ui.add_enabled_ui(!c.sending, |ui| {
+                ui.spacing_mut().item_spacing.y = 6.0;
+                // Send beside the address rows (From, To, Cc and Bcc when shown).
+                let rows = if c.show_cc { 4.0 } else { 3.0 };
+                let height = rows * ROW_H + (rows - 1.0) * 6.0;
+                ui.horizontal_top(|ui| {
+                    if send_button(ui, &t, height, c.sending, blocked_text.as_deref()).clicked() {
+                        send(c, &mut st.compose_alert, acts);
+                    }
+                    ui.add_space(10.0);
                     ui.vertical(|ui| {
-                        // Wrapped into rows, scrolling past two, as Outlook's are.
-                        let n = c.attachments.len();
-                        widgets::chip_grid(ui, egui::Id::unique(("compose-attachments", c.id)), n, 220.0, 320.0, 28.0, 2, |ui, i, w| {
-                            let Some(a) = c.attachments.get(i) else { return };
-                            let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
-                            let x_rect = Rect::from_center_size(egui::pos2(rect.right() - 15.0, rect.center().y), vec2(22.0, 22.0));
-                            let x = ui.interact(x_rect, resp.id.with("remove"), Sense::click()).on_hover_text(tl!("Remove"));
-                            widgets::named(ui, &x, &format!("{}: {}", tl!("Remove"), a.name), true, None);
-                            let p = ui.painter();
-                            p.rect(
-                                rect,
-                                4.0,
-                                if resp.hovered() { t.hover_row } else { t.surface },
-                                egui::Stroke::new(1.0, t.faint.gamma_multiply(0.55)),
-                                egui::StrokeKind::Inside,
-                            );
-                            if x.hovered() {
-                                p.rect_filled(x_rect, 3.0, t.hover);
-                            }
-                            icons::paint(p, icons::centered(x_rect, 11.0), Icon::Close, if x.hovered() { t.text } else { t.dim });
-                            let ir = Rect::from_center_size(egui::pos2(rect.left() + 15.0, rect.center().y), vec2(14.0, 14.0));
-                            icons::paint(p, ir, Icon::Attach, t.dim);
-                            let text = format!("{} ({})", a.name, widgets::human_size(a.data.len()));
-                            let g = widgets::one_line(ui, &text, theme::regular(12.0), t.text, x_rect.left() - 4.0 - (ir.right() + 6.0));
-                            p.galley(egui::pos2(ir.right() + 6.0, rect.center().y - g.size().y / 2.0), g, t.text);
-                            resp.on_hover_text(a.name.clone());
-                            if x.clicked() {
-                                remove = Some(i);
-                            }
-                        });
-                        // A photo that says where it was taken (looked at once per set of files).
-                        let size: usize = c.attachments.iter().map(|a| a.data.len()).sum();
-                        let id = egui::Id::unique(("photo-place", c.id, n, size));
-                        let placed = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or_else(|| {
-                            let v = c.attachments.iter().any(|a| mime::without_location(&a.data).is_some());
-                            ui.data_mut(|d| d.insert_temp(id, v));
-                            v
-                        });
-                        if placed {
-                            let note = if s.prefs.keep_photo_location {
-                                tl!("These photos say where they were taken, and go that way (File › Options › Safety)")
-                            } else {
-                                tl!("Where these photos were taken is left out as they're sent")
-                            };
-                            ui.label(RichText::new(note).color(t.faint).small());
+                        ui.horizontal(|ui| from_row(ui, &t, c, &senders, &mut st.people, choosing, acts));
+                        // To, Cc and Bcc are the contacts field; their buttons open the address book,
+                        // as in Outlook.
+                        let mut book = None;
+                        if people_row(ui, st, c, "to", "To", "Names <addresses>, separated by ; or ,", focus_to, can_expand, acts) {
+                            book = Some("to");
+                        }
+                        if people_row(ui, st, c, "cc", "Cc", "", false, can_expand, acts) {
+                            book = Some("cc");
+                        }
+                        if c.show_cc && people_row(ui, st, c, "bcc", "Bcc", "Hidden from the other recipients", false, can_expand, acts) {
+                            book = Some("bcc");
+                        }
+                        if let Some(name) = book {
+                            acts.push(Action::Dialog(crate::Dialog::select_names(c, name)));
                         }
                     });
-                    if let Some(i) = remove {
-                        acts.push(Action::Run("compose.removeAttachment", json!({"index": i})));
-                    }
                 });
-            }
-            ui.add_space(4.0);
-            let sep = ui.available_rect_before_wrap();
-            ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
-            ui.add_space(8.0);
-            // MailTips bar above the body, when the server has something to say about the current
-            // recipients.
-            tips::draw_tips(s, st, ui, c);
-            let body_id = rich_edit::body_id(c);
-            // The keys of a selection across the text and the original's blocks, before any of
-            // their text boxes sees them.
-            across::before(st, ui, c, &mut ed, &mut quote_eds);
-            let quote_cell = st.quote_focus.filter(|(id, _)| *id == c.id && c.quote.is_some()).map(|(_, n)| n);
-            // A picture pasted goes in as a picture: a screenshot (the window reads it off the
-            // clipboard when there's no text there, and Ctrl+V comes as the picture), or one
-            // copied from a web page, which comes with its HTML alone (a picture, no text). Into
-            // the block of the original with the cursor, when one has it.
-            let in_quote = quote_cell.is_some_and(|n| ui.memory(|m| m.has_focus(quote::cell_box(c.id, n))));
-            let paste = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
-            if ui.memory(|m| m.has_focus(body_id)) || in_quote {
-                // A paste taken for a picture that couldn't be read: its text, pasted as text.
-                let unpasted = ed.pastes.unpasted.take();
-                let again = unpasted.is_some();
-                if let Some(text) = unpasted {
-                    ui.input_mut(|i| i.events.push(egui::Event::Paste(text)));
-                }
-                let shots: Vec<Vec<u8>> = ui.input(|i| {
-                    i.events
-                        .iter()
-                        .filter_map(|e| match e {
-                            egui::Event::PasteImage(img) => crate::reading::png_of(img),
-                            _ => None,
-                        })
-                        .collect()
-                });
-                acts.extend(shots.into_iter().map(Action::PasteImage));
-                if paste && !again && rich_edit::clipboard_html_once().0.is_some_and(|h| picture_alone(&h)) {
-                    // Kept until the picture is read off the clipboard: put in if none is.
-                    ed.pastes.unpasted = ui.input(|i| {
-                        i.events.iter().find_map(|e| match e {
-                            egui::Event::Paste(s) => Some(s.replace("\r\n", "\n")),
-                            _ => None,
-                        })
+                if c.show_reply_to || !c.reply_to.is_empty() {
+                    ui.horizontal(|ui| {
+                        ui.add_space(76.0);
+                        ui.vertical(|ui| {
+                            people_row(ui, st, c, "replyTo", "Replies to", "Where replies go instead of to you", false, can_expand, acts);
+                        });
                     });
-                    log::info!("paste into the message: the clipboard's HTML is a picture alone: the picture is read off the clipboard");
-                    ui.ctx().request_repaint();
-                    ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
-                    acts.push(Action::PastePicture);
                 }
-            } else if paste {
-                log::info!("paste while a message is written, its text without the keyboard: left to what has it");
-            }
-            egui::ScrollArea::vertical().auto_shrink(false).id_salt("compose-body").show(ui, |ui| {
-                // Replies start above the quoted text.
-                rich_edit::body(ui, &t, &mut ed, c, focus_body.then_some(0), acts);
-                if ui.memory(|m| m.has_focus(body_id)) {
-                    st.quote_focus = None;
+                ui.horizontal(|ui| {
+                    ui.add_space(76.0);
+                    ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, Some(&subject_check)));
+                });
+                // With an OpenPGP key: whether everyone in it can receive it encrypted, and who can't.
+                if let Some(r) = reach.as_ref().filter(|r| has_pgp && r.recipients > 0) {
+                    ui.horizontal(|ui| {
+                        ui.add_space(76.0 + LABEL_W);
+                        encryption_line(ui, &t, r, c.encrypt);
+                    });
                 }
-                let mut drawn: Vec<(usize, rich_edit::Drawn)> = ed.drawn.clone().map(|d| (0, d)).into_iter().collect();
-                // The original, as it came, under the text: changed where it stands.
-                drawn.extend(quote::show(s, st, ui, c, &mut quote_eds, acts));
-                // A selection that goes on from one of these texts into others.
-                across::after(st, ui, c, &mut ed, &mut quote_eds, drawn);
+                if !c.attachments.is_empty() {
+                    ui.horizontal(|ui| {
+                        ui.add_space(76.0 + LABEL_W);
+                        let mut remove = None;
+                        ui.vertical(|ui| {
+                            // Wrapped into rows, scrolling past two, as Outlook's are.
+                            let n = c.attachments.len();
+                            widgets::chip_grid(ui, egui::Id::unique(("compose-attachments", c.id)), n, 220.0, 320.0, 28.0, 2, |ui, i, w| {
+                                let Some(a) = c.attachments.get(i) else { return };
+                                let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
+                                let x_rect = Rect::from_center_size(egui::pos2(rect.right() - 15.0, rect.center().y), vec2(22.0, 22.0));
+                                let x = ui.interact(x_rect, resp.id.with("remove"), Sense::click()).on_hover_text(tl!("Remove"));
+                                widgets::named(ui, &x, &format!("{}: {}", tl!("Remove"), a.name), true, None);
+                                let p = ui.painter();
+                                p.rect(
+                                    rect,
+                                    4.0,
+                                    if resp.hovered() { t.hover_row } else { t.surface },
+                                    egui::Stroke::new(1.0, t.faint.gamma_multiply(0.55)),
+                                    egui::StrokeKind::Inside,
+                                );
+                                if x.hovered() {
+                                    p.rect_filled(x_rect, 3.0, t.hover);
+                                }
+                                icons::paint(p, icons::centered(x_rect, 11.0), Icon::Close, if x.hovered() { t.text } else { t.dim });
+                                let ir = Rect::from_center_size(egui::pos2(rect.left() + 15.0, rect.center().y), vec2(14.0, 14.0));
+                                icons::paint(p, ir, Icon::Attach, t.dim);
+                                let text = format!("{} ({})", a.name, widgets::human_size(a.data.len()));
+                                let g = widgets::one_line(ui, &text, theme::regular(12.0), t.text, x_rect.left() - 4.0 - (ir.right() + 6.0));
+                                p.galley(egui::pos2(ir.right() + 6.0, rect.center().y - g.size().y / 2.0), g, t.text);
+                                resp.on_hover_text(a.name.clone());
+                                if x.clicked() {
+                                    remove = Some(i);
+                                }
+                            });
+                            // A photo that says where it was taken (looked at once per set of files).
+                            let size: usize = c.attachments.iter().map(|a| a.data.len()).sum();
+                            let id = egui::Id::unique(("photo-place", c.id, n, size));
+                            let placed = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or_else(|| {
+                                let v = c.attachments.iter().any(|a| mime::without_location(&a.data).is_some());
+                                ui.data_mut(|d| d.insert_temp(id, v));
+                                v
+                            });
+                            if placed {
+                                let note = if s.prefs.keep_photo_location {
+                                    tl!("These photos say where they were taken, and go that way (File › Options › Safety)")
+                                } else {
+                                    tl!("Where these photos were taken is left out as they're sent")
+                                };
+                                ui.label(RichText::new(note).color(t.faint).small());
+                            }
+                        });
+                        if let Some(i) = remove {
+                            acts.push(Action::Run("compose.removeAttachment", json!({"index": i})));
+                        }
+                    });
+                }
+                ui.add_space(4.0);
+                let sep = ui.available_rect_before_wrap();
+                ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
+                ui.add_space(8.0);
+                // MailTips bar above the body, when the server has something to say about the current
+                // recipients.
+                tips::draw_tips(s, st, ui, c);
+                let body_id = rich_edit::body_id(c);
+                // The keys of a selection across the text and the original's blocks, before any of
+                // their text boxes sees them.
+                across::before(st, ui, c, &mut ed, &mut quote_eds);
+                let quote_cell = st.quote_focus.filter(|(id, _)| *id == c.id && c.quote.is_some()).map(|(_, n)| n);
+                // A picture pasted goes in as a picture: a screenshot (the window reads it off the
+                // clipboard when there's no text there, and Ctrl+V comes as the picture), or one
+                // copied from a web page, which comes with its HTML alone (a picture, no text). Into
+                // the block of the original with the cursor, when one has it.
+                let in_quote = quote_cell.is_some_and(|n| ui.memory(|m| m.has_focus(quote::cell_box(c.id, n))));
+                let paste = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
+                if ui.memory(|m| m.has_focus(body_id)) || in_quote {
+                    // A paste taken for a picture that couldn't be read: its text, pasted as text.
+                    let unpasted = ed.pastes.unpasted.take();
+                    let again = unpasted.is_some();
+                    if let Some(text) = unpasted {
+                        ui.input_mut(|i| i.events.push(egui::Event::Paste(text)));
+                    }
+                    let shots: Vec<Vec<u8>> = ui.input(|i| {
+                        i.events
+                            .iter()
+                            .filter_map(|e| match e {
+                                egui::Event::PasteImage(img) => crate::reading::png_of(img),
+                                _ => None,
+                            })
+                            .collect()
+                    });
+                    acts.extend(shots.into_iter().map(Action::PasteImage));
+                    if paste && !again && rich_edit::clipboard_html_once().0.is_some_and(|h| picture_alone(&h)) {
+                        // Kept until the picture is read off the clipboard: put in if none is.
+                        ed.pastes.unpasted = ui.input(|i| {
+                            i.events.iter().find_map(|e| match e {
+                                egui::Event::Paste(s) => Some(s.replace("\r\n", "\n")),
+                                _ => None,
+                            })
+                        });
+                        log::info!("paste into the message: the clipboard's HTML is a picture alone: the picture is read off the clipboard");
+                        ui.ctx().request_repaint();
+                        ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
+                        acts.push(Action::PastePicture);
+                    }
+                } else if paste {
+                    log::info!("paste while a message is written, its text without the keyboard: left to what has it");
+                }
+                egui::ScrollArea::vertical().auto_shrink(false).id_salt("compose-body").show(ui, |ui| {
+                    // Replies start above the quoted text.
+                    rich_edit::body(ui, &t, &mut ed, c, focus_body.then_some(0), acts);
+                    if ui.memory(|m| m.has_focus(body_id)) {
+                        st.quote_focus = None;
+                    }
+                    let mut drawn: Vec<(usize, rich_edit::Drawn)> = ed.drawn.clone().map(|d| (0, d)).into_iter().collect();
+                    // The original, as it came, under the text: changed where it stands.
+                    drawn.extend(quote::show(s, st, ui, c, &mut quote_eds, acts));
+                    // A selection that goes on from one of these texts into others.
+                    across::after(st, ui, c, &mut ed, &mut quote_eds, drawn);
+                });
             });
         });
-    });
+    }));
+    // Put back on every way out, a panic included; the panic is for the frame's guard.
+    if let Err(payload) = ran {
+        st.caught.keep(payload);
+    }
     // Those of messages no longer being written go.
     quote_eds.retain(|(id, _), _| *id == taken.id || s.composes.iter().any(|c| c.id == *id));
     st.quote_editors = quote_eds;
@@ -661,8 +672,10 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     }
     // A signature written in HTML, drawn where it stands in the text (with the whole session at
     // hand again).
-    if let Some(c) = s.compose.as_ref() {
-        rich_edit::draw_signature(s, st, ui, &mut ed, c);
+    if let Some(c) = s.compose.as_ref()
+        && let Err(payload) = catch_unwind(AssertUnwindSafe(|| rich_edit::draw_signature(s, st, ui, &mut ed, c)))
+    {
+        st.caught.keep(payload);
     }
     st.editor = Some(ed);
 }

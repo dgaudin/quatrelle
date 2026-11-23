@@ -10,10 +10,9 @@ use super::ribbon::RIBBON_H;
 mod guard;
 pub(crate) use guard::FrameGuard;
 pub use guard::FramePart;
+pub(crate) use guard::{Caught, guarded_window};
 #[cfg(test)]
-pub(crate) use guard::PanicAt;
-#[cfg(test)]
-pub(crate) use guard::guarded_window;
+pub(crate) use guard::{PanicAt, panic_if};
 
 impl MailApp {
     /// Every wake, the window shown or not. eframe runs no `ui` while the window is minimized,
@@ -593,7 +592,9 @@ impl MailApp {
         self.source_windows(&ctx, &mut acts);
         self.compose_windows(&ctx, &mut acts);
         self.event_windows(&ctx, &mut acts);
-        notes::windows(&ctx, &self.session, &mut self.ui, &mut acts);
+        let mut caught = None;
+        notes::windows(&ctx, &self.session, &mut self.ui, &mut caught, &mut acts);
+        self.window_drawn(&ctx, caught);
         self.compacting_window(&ctx);
 
         // The address book reads the session's people: what is known now, listed again as the
@@ -663,7 +664,9 @@ impl MailApp {
         }
         self.toasts(&ctx);
         // Calendar reminders' window (the desktop is told in `logic`).
-        reminders::show(&ctx, &mut self.ui.reminders, &self.session, &t, &mut acts);
+        let mut caught = None;
+        reminders::show(&ctx, &mut self.ui.reminders, &self.session, &t, &mut caught, &mut acts);
+        self.window_drawn(&ctx, caught);
         if reminders::showing(&self.ui.reminders) {
             ctx.request_repaint_after(std::time::Duration::from_secs(15));
         }

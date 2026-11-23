@@ -26,10 +26,9 @@ pub(crate) use costs::Merging;
 pub(crate) use file_dialogs::FileDialogs;
 pub(crate) use frame::FrameGuard;
 pub use frame::FramePart;
+pub(crate) use frame::{Caught, guarded_window};
 #[cfg(test)]
-pub(crate) use frame::PanicAt;
-#[cfg(test)]
-pub(crate) use frame::guarded_window;
+pub(crate) use frame::{PanicAt, panic_if};
 pub(crate) use keys::delete_from_window;
 #[cfg(test)]
 pub(crate) use meetings::{PageOutcome, ProfileKind, page_line};
