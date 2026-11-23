@@ -139,7 +139,79 @@ fn a_marker_that_was_not_sent_is_no_picture() {
     s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
     let c = s.compose.as_ref().unwrap();
     assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 0, "{:?}", c.body);
-    assert!(c.body.contains("QUATRELLE-IMAGE-7-1-END") && c.body.contains("QUATRELLE-IMAGE-999-1-END"));
+    assert!(c.body.contains("QUATRELLE-IMAGE-7-1-END"), "the user's words stay: {:?}", c.body);
+    assert!(!c.body.contains("QUATRELLE-IMAGE-999-1-END"), "the model's marker goes: {:?}", c.body);
+}
+
+/// A marker written twice puts one picture back, and the second copy is no text; a marker
+/// broken before its end still brings its picture, with no token left over.
+#[test]
+fn a_duplicate_or_broken_marker_leaves_no_token() {
+    let mut s = sample_session("rewrite-marker-leftovers");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    written(
+        &mut s,
+        "Before
+
+![logo](cid:logo@studio.example)
+
+After",
+        "logo@studio.example",
+    );
+    let (id, sent) = ask(&mut s, "shorter", None);
+    let m = marker(&sent);
+    assert!(!m.is_empty(), "{sent}");
+    s.apply(Event::LlmAnswered { id, text: format!("One {m} two {m}"), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1, "{:?}", c.body);
+    assert!(!c.body.contains("QUATRELLE-IMAGE"), "{:?}", c.body);
+
+    // The same marker, stopped before its end: the picture goes at the paragraph's end.
+    let mut s = sample_session("rewrite-marker-broken");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    written(
+        &mut s,
+        "First
+
+![logo](cid:logo@studio.example)
+
+Last",
+        "logo@studio.example",
+    );
+    let (id, sent) = ask(&mut s, "shorter", None);
+    let m = marker(&sent);
+    let broken = m.strip_suffix("-END").unwrap_or(&m).to_string();
+    s.apply(Event::LlmAnswered {
+        id,
+        text: format!(
+            "First
+
+{broken}"
+        ),
+        error: None,
+    });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1, "{:?}", c.body);
+    assert!(!c.body.contains("QUATRELLE-IMAGE"), "{:?}", c.body);
+}
+
+/// A marker the model invents with the right nonce, and one with another, are no text and no
+/// picture.
+#[test]
+fn an_invented_marker_is_no_picture_and_no_text() {
+    let mut s = sample_session("rewrite-marker-invented");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    written(&mut s, "![logo](cid:logo@studio.example)", "logo@studio.example");
+    let (id, sent) = ask(&mut s, "shorter", None);
+    let m = marker(&sent);
+    let nonce = m.split('-').nth(2).unwrap_or("0");
+    s.apply(Event::LlmAnswered { id, text: format!("Salut {m} et QUATRELLE-IMAGE-{nonce}-99-END et QUATRELLE-IMAGE-4-2-END"), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1, "the real one stays, the invented ones are no pictures: {:?}", c.body);
+    assert!(!c.body.contains("QUATRELLE-IMAGE"), "{:?}", c.body);
 }
 
 /// Text changed where the rewrite would go is not overwritten: Use refuses, and the rewrite

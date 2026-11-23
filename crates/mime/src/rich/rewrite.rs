@@ -14,12 +14,11 @@ use std::collections::HashMap;
 /// The form of a picture's marker: no Markdown character, and a nonce no text holds.
 pub const MARKER: &str = "QUATRELLE-IMAGE";
 
-/// A picture in a rewrite: the marker sent in its place, the `cid:` it stands for, its own look
-/// and the paragraph it was in.
+/// A picture in a rewrite: the marker sent in its place, its own look and the paragraph it was
+/// in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RewritePicture {
     pub(crate) marker: String,
-    pub(crate) cid: String,
     pub(crate) style: Style,
     pub(crate) para: usize,
 }
@@ -35,16 +34,14 @@ fn mark_pictures(text: &str, styles: &Styles, nonce: u64) -> (String, Styles, Ve
     for (i, ch) in text.chars().enumerate() {
         if ch == PICTURE {
             let style = styles.style(i);
-            if let Some(cid) = style.picture.clone().filter(|c| !c.is_empty()) {
-                let marker = format!("{MARKER}-{nonce}-{}-END", images.len() + 1);
-                let look = style.for_typing();
-                let id = marked.intern(look.clone());
-                for c in marker.chars() {
-                    out.push(c);
-                    marked.chars.push(id);
-                }
-                images.push(RewritePicture { marker, cid, style, para });
+            let marker = format!("{MARKER}-{nonce}-{}-END", images.len() + 1);
+            let look = style.for_typing();
+            let id = marked.intern(look.clone());
+            for c in marker.chars() {
+                out.push(c);
+                marked.chars.push(id);
             }
+            images.push(RewritePicture { marker, style, para });
             continue;
         }
         if ch == '\n' {
@@ -375,31 +372,54 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], max_chars: 
     let mut out_styles = Styles::default();
     out_styles.palette.push(Style::default());
     let mut seen = vec![false; images.len()];
+    let markers: HashMap<&str, usize> = images.iter().enumerate().map(|(k, im)| (im.marker.as_str(), k)).collect();
+    let nonce = images.first().and_then(|im| marker_shape(&im.marker.chars().collect::<Vec<_>>(), 0).map(|(_, n, _)| n));
     let mut i = 0usize;
     while i < chars.len() {
-        let found = images
-            .iter()
-            .enumerate()
-            .position(|(k, im)| !seen[k] && chars.get(i..i + im.marker.chars().count()).is_some_and(|s| s.iter().copied().eq(im.marker.chars())));
-        if let Some(k) = found {
-            let image = &images[k];
-            seen[k] = true;
-            out.push(PICTURE);
-            let id = out_styles.intern(image.style.clone());
-            out_styles.chars.push(id);
-            i += image.marker.chars().count();
-            continue;
+        if let Some((len, token_nonce, has_end)) = marker_shape(&chars, i) {
+            let token: String = chars.get(i..i + len).map(|c| c.iter().collect()).unwrap_or_default();
+            let exact = markers.get(token.as_str()).copied().filter(|k| !seen.get(*k).copied().unwrap_or(true));
+            if let Some(k) = exact
+                && let Some(image) = images.get(k)
+            {
+                if let Some(s) = seen.get_mut(k) {
+                    *s = true;
+                }
+                out.push(PICTURE);
+                let id = out_styles.intern(image.style.clone());
+                out_styles.chars.push(id);
+                i += len;
+                continue;
+            }
+            // The user's own words that happen to look like a marker stay; anything else of the
+            // marker's shape came from the model and goes.
+            if before.contains(&token) {
+                for k in i..i + len {
+                    copy_char(&chars, &styles, &mut out, &mut out_styles, k);
+                }
+                i += len;
+                continue;
+            }
+            if has_end && len > 0 {
+                i += len;
+                continue;
+            }
+            if nonce == Some(token_nonce) {
+                let mut end = i + len;
+                let limit = i.saturating_add(MARKER_MAX);
+                while end < chars.len() && end < limit && !chars.get(end).is_some_and(|c| c.is_whitespace()) {
+                    if chars.get(end..).is_some_and(|c| c.starts_with(&['-', 'E', 'N', 'D'])) {
+                        end += 4;
+                        break;
+                    }
+                    end += 1;
+                }
+                i = end.max(i + 1);
+                continue;
+            }
         }
-        let ch = chars[i];
+        copy_char(&chars, &styles, &mut out, &mut out_styles, i);
         i += 1;
-        // A picture the model made up is no picture: only our markers carry one back.
-        if ch == PICTURE {
-            continue;
-        }
-        out.push(ch);
-        // A line's break has no look of its own (the reader marks it with the line before it).
-        let id = if ch == '\n' { out_styles.intern(Style::default()) } else { out_styles.intern(styles.style(i - 1)) };
-        out_styles.chars.push(id);
     }
     out_styles.paras = styles.paras.clone();
     // A picture whose marker was lost goes at the end of the paragraph it was in (never away).
@@ -498,6 +518,48 @@ fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Sty
 
 #[cfg(test)]
 mod tests;
+
+/// The most characters of a marker read, so a stranger's answer can't make a long walk.
+const MARKER_MAX: usize = 160;
+
+/// A marker's shape at `i`: its length when it ends (`…-<n>-END`), the nonce read, and whether
+/// it ended; a marker stopped before `-END` has the length read so far.
+fn marker_shape(chars: &[char], i: usize) -> Option<(usize, u64, bool)> {
+    let prefix: Vec<char> = MARKER.chars().chain(['-']).collect();
+    if !chars.get(i..).is_some_and(|c| c.starts_with(&prefix)) {
+        return None;
+    }
+    let mut at = i + prefix.len();
+    let start = at;
+    let mut nonce = 0u64;
+    while let Some(d) = chars.get(at).and_then(|c| c.to_digit(10)) {
+        nonce = nonce.saturating_mul(10).saturating_add(u64::from(d));
+        at += 1;
+        if at - start > 20 {
+            return None;
+        }
+    }
+    if at == start || chars.get(at) != Some(&'-') {
+        return None;
+    }
+    at += 1;
+    let number = at;
+    while chars.get(at).is_some_and(char::is_ascii_digit) {
+        at += 1;
+    }
+    if at == number {
+        return Some((at - i, nonce, false));
+    }
+    if chars.get(at..).is_some_and(|c| c.starts_with(&['-', 'E', 'N', 'D'])) { Some((at + 4 - i, nonce, true)) } else { Some((at - i, nonce, false)) }
+}
+
+/// One character with its look, a line break with none.
+fn copy_char(chars: &[char], styles: &Styles, out: &mut String, out_styles: &mut Styles, i: usize) {
+    let Some(ch) = chars.get(i).copied() else { return };
+    out.push(ch);
+    let id = if ch == '\n' { out_styles.intern(Style::default()) } else { out_styles.intern(styles.style(i)) };
+    out_styles.chars.push(id);
+}
 
 /// Where a paragraph ends in `text` (the character before its newline, or the text's end).
 fn line_end(text: &str, line: usize) -> usize {
