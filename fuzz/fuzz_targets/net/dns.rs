@@ -10,20 +10,22 @@
 use libfuzzer_sys::fuzz_target;
 use quatrelle_net::dns::{parse, query, MX, SRV};
 
-/// The longest name a read can make: 64 labels of 63 bytes at most, each byte becoming a
-/// three-byte replacement character, joined by dots.
-const MAX_NAME: usize = 64 * 63 * 3 + 63;
+/// The longest host name an answer may carry (RFC 1035 §2.3.4).
+const MAX_HOST: usize = 253;
+
+/// A host name: letters, digits and hyphens, in labels joined by dots.
+fn host_ok(host: &str) -> bool {
+    !host.is_empty() && host.len() <= MAX_HOST && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+}
 
 fn check(records: &[quatrelle_net::dns::Record]) {
     assert!(records.len() <= 64, "{} records", records.len());
     for r in records {
-        let (host, port) = match r {
-            quatrelle_net::dns::Record::Mx { host, .. } => (host, None),
-            quatrelle_net::dns::Record::Srv { port, target, .. } => (target, Some(*port)),
+        let host = match r {
+            quatrelle_net::dns::Record::Mx { host, .. } => host,
+            quatrelle_net::dns::Record::Srv { target, .. } => target,
         };
-        assert!(host.len() <= MAX_NAME, "{} bytes of name", host.len());
-        // A name read here is labels joined by dots, each from lossy UTF-8.
-        assert!(port.is_none_or(|_| host.len() <= MAX_NAME));
+        assert!(host_ok(host), "{host:?}");
     }
 }
 
