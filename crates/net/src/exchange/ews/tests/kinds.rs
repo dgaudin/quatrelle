@@ -143,6 +143,26 @@ fn a_server_that_refuses_the_kinds_search_is_asked_once() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// The pass comes after the folder's own read: its new mail is in first, not kept waiting while
+/// the folder is searched for what its mail kept before is.
+#[test]
+fn a_folder_is_read_before_it_is_asked_what_its_mail_is() {
+    let (server, store, c, mut st) = synced("ews-kinds-after", |_| {});
+    as_before(&store, &mut st);
+    {
+        let mut d = server.data.lock().unwrap();
+        let inbox = d.by_name("Inbox").map(|f| f.id.clone()).unwrap();
+        d.deliver(&inbox, b"From: b@y.example\r\nSubject: new\r\n\r\nx\r\n", false, "2024-06-01T09:00:00Z");
+        d.calls.clear();
+    }
+    let r = sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts());
+    assert!(r.as_ref().is_ok_and(|r| r.new == 1), "{r:?}");
+    let calls = server.data.lock().unwrap().calls.clone();
+    let at = |name: &str| calls.iter().position(|c| c == name);
+    assert!(matches!((at("SyncFolderItems"), at("FindItem kinds")), (Some(read), Some(pass)) if read < pass), "its changes read first: {calls:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// A big mailbox's folder whose pass is cut short (a timeout, a connection closed) is read all
 /// the same, its new mail in; the pass, still to do, isn't asked again before Quatrelle next
 /// starts, whether the server is well again or not, and is made then.

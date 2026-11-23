@@ -333,10 +333,11 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   `REPORT.`, `IPM.Note.SMIME`, `IPM.Note.Rules.OofTemplate`, `IPM.Outlook.Recall` or
   `IPM.Recall.Report`, or replied to all (`PidTagLastVerbExecuted` 103): an `IdOnly` `FindItem`
   of their ids, marks, class and icon, a thousand a page within the window and time kept,
-  nothing downloaded; ordinary mail is left to its source. A kind the server calls ordinary
-  never replaces one kept. A server that refuses that search has the pass noted done; one that
-  fails it (a timeout, a connection cut) has the folder read all the same and is asked again
-  only when Quatrelle next starts, once a folder a run.
+  nothing downloaded; ordinary mail is left to its source. The first two come before the
+  folder's read, the third after it, so its new mail never waits on that search. A kind the
+  server calls ordinary never replaces one kept. A server that refuses that search has the pass
+  noted done; one that fails it (a timeout, a connection cut) has the folder read all the same
+  and is asked again only when Quatrelle next starts, once a folder a run.
 - **Mail kept, as Outlook's Cached Exchange Mode** (the owner's rule): what came in the time
   chosen in Options (`Prefs::keep_days`, two years unless chosen; `SyncOptions::since_days`).
   The listing asks only for mail received since then (`FindItem` restricted on

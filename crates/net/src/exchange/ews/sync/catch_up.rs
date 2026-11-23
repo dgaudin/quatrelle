@@ -12,10 +12,9 @@ const TICKS_PAGE: usize = 1000;
 #[cfg(test)]
 const TICKS_PAGE: usize = 2;
 
-/// Each pass a folder is still to have, once (a folder with nothing kept yet has nothing to
-/// read: it's listed in full): how many messages changed. A pass done is noted at once, so one
-/// cut short after it (offline) isn't made again. The pass for kinds never stops the folder being
-/// read: failed, it waits for Quatrelle's next start.
+/// Each pass for marks a folder is still to have, once, before the folder is read (a folder with
+/// nothing kept yet has nothing to read: it's listed in full): how many messages changed. A pass
+/// done is noted at once, so one cut short after it (offline) isn't made again.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn catch_up_once(
     c: &Client,
@@ -41,25 +40,47 @@ pub(super) fn catch_up_once(
         }
         st.replies_read(folder);
     }
-    if st.kinds_due(folder) {
-        if !kept {
+    Ok(changed)
+}
+
+/// The pass for what a folder's mail kept before is ([`catch_up_kinds`]), still to be had, made
+/// once the folder is read (`report`): its new mail is in first, not kept waiting on a search
+/// of the whole folder. `kept`: whether it kept anything before that read (if not, all of it came
+/// with its kind). The pass never stops the folder's sync: failed, it waits for Quatrelle's next
+/// start. The report, with what the pass changed.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn kinds_after_read(
+    c: &Client,
+    store: &Store,
+    st: &mut State,
+    account: &str,
+    folder: &str,
+    id: &str,
+    kept: bool,
+    opts: &SyncOptions,
+    now: i64,
+    mut report: SyncReport,
+) -> SyncReport {
+    if opts.list_only || !st.kinds_due(folder) {
+        return report;
+    }
+    if !kept {
+        st.kinds_read(folder);
+        return report;
+    }
+    match catch_up_kinds(c, store, st, account, folder, id, opts.window, opts.since(now)) {
+        Ok(n) => {
+            report.changed += n;
             st.kinds_read(folder);
-        } else {
-            match catch_up_kinds(c, store, st, account, folder, id, window, since) {
-                Ok(n) => {
-                    changed += n;
-                    st.kinds_read(folder);
-                }
-                // A big folder timing out, a connection cut: read all the same (its new mail
-                // matters more), asked again when Quatrelle next starts, not at every sync.
-                Err(e) => {
-                    log::warn!("{account}: what messages kept are couldn't be asked of a folder ({}); asked again at the next start", failure(&e));
-                    st.kinds_failed(folder);
-                }
-            }
+        }
+        // A big folder timing out, a connection cut: asked again when Quatrelle next starts, not
+        // at every sync.
+        Err(e) => {
+            log::warn!("{account}: what messages kept are couldn't be asked of a folder ({}); asked again at the next start", failure(&e));
+            st.kinds_failed(folder);
         }
     }
-    Ok(changed)
+    report
 }
 
 /// What mail of a folder kept before this version read it is (a meeting message, a report, an

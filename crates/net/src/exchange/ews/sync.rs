@@ -8,7 +8,7 @@ use super::*;
 mod catch_up;
 mod listing;
 pub use crate::exchange::missed::{Missed, PublicMissed};
-use catch_up::{catch_up_once, take_found};
+use catch_up::{catch_up_once, kinds_after_read, take_found};
 pub use listing::list_folders;
 
 /// The query in Exchange's own syntax (`QueryString`, its Advanced Query Syntax): the words, and
@@ -204,11 +204,11 @@ pub fn sync_folder_then(
             && now - m.at < MARK_TRUSTED
     };
     let kept = store.folder_kept(account, folder, VALIDITY);
-    // Follow-ups marked complete, messages replied to or forwarded in Outlook before they were
-    // read here: asked for once per folder.
+    // Marks Outlook set before they were read here, asked once per folder; what its mail is, after.
     let ticked = if opts.list_only { 0 } else { catch_up_once(c, store, st, account, folder, &id, kept, opts.window, opts.since(now))? };
+    let kinds = |st: &mut State, report| kinds_after_read(c, store, st, account, folder, &id, kept, opts, now, report);
     if kept && st.marks.get(folder).is_some_and(same) {
-        return Ok(SyncReport { total, unread, changed: ticked, ..Default::default() });
+        return Ok(kinds(st, SyncReport { total, unread, changed: ticked, ..Default::default() }));
     }
     let before = st.marks.remove(folder);
     // Its state as last read known: only what changed since is asked (new mail, read marks,
@@ -234,7 +234,7 @@ pub fn sync_folder_then(
                 st.marks.insert(folder.to_string(), mark);
                 report.total = total;
                 report.unread = unread;
-                return Ok(report);
+                return Ok(kinds(st, report));
             }
             // A state the server no longer takes (too old, the folder rebuilt): listed in full.
             Err(NetError::No(e)) => log::info!("{account}: {}: changes since the last read refused ({e}); listed in full", utf7::decode(folder)),
@@ -306,7 +306,7 @@ pub fn sync_folder_then(
     st.marks.insert(folder.to_string(), mark);
     report.total = total;
     report.unread = unread;
-    Ok(report)
+    Ok(kinds(st, report))
 }
 
 /// How long a folder's mark is trusted (seconds): past this, it's read again anyway (a change
