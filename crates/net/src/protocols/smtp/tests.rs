@@ -82,7 +82,7 @@ fn ehlo_names_this_computers_address_on_the_way() {
         s.local_addr()
     });
     let Some(own) = own.ok().map(|a| a.ip()).filter(|ip| !ip.is_loopback() && !ip.is_unspecified()) else {
-        eprintln!("no network address: the rest skipped");
+        // No address but the loopback one: the rest can't be tried here.
         return;
     };
     let (port, h) = serve_once_on(TcpListener::bind((own, 0)).unwrap());
@@ -203,7 +203,7 @@ fn scripted(script: fn(&str) -> &'static str) -> u16 {
 /// One connection of [`scripted_heard`].
 fn play(sock: TcpStream, script: fn(&str) -> &'static str, heard: &Heard) {
     let mut out = sock.try_clone().unwrap();
-    let _ = out.write_all(b"220 scripted.test ready\r\n");
+    let _ = out.write_all(b"220 scripted.example ready\r\n");
     for command in BufReader::new(sock).lines().map_while(std::result::Result::ok) {
         let command = command.to_ascii_uppercase();
         heard.push(&command);
@@ -225,7 +225,7 @@ fn play(sock: TcpStream, script: fn(&str) -> &'static str, heard: &Heard) {
 /// A server that takes the message whole, then drops the connection without a word.
 pub(crate) fn cut_after_the_message(command: &str) -> &'static str {
     match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "MAIL" | "RCPT" => "250 2.0.0 fine\r\n",
         "DATA" => "354 go on\r\n",
@@ -241,7 +241,7 @@ pub(crate) fn cut_after_the_message(command: &str) -> &'static str {
 #[test]
 fn a_refused_sender_is_not_a_sign_in_failure() {
     let port = scripted(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "MAIL" => "553 5.7.1 <z@x.example>: the authenticated account may not send as this address\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
@@ -267,10 +267,10 @@ fn an_unreadable_root_in_the_store_does_not_stop_sending() {
     use crate::stream::trust::test_certs::{internal_ca, unreadable};
     use crate::stream::trust::{Distrusted, usable_roots};
     let store = vec![unreadable(), internal_ca()];
-    assert!(tls_parameters("mail.corp.test", &usable_roots(store.clone(), &Distrusted::new())).is_ok());
-    assert!(tls_parameters("mail.corp.test", &[]).is_ok());
+    assert!(tls_parameters("mail.studio.example", &usable_roots(store.clone(), &Distrusted::new())).is_ok());
+    assert!(tls_parameters("mail.studio.example", &[]).is_ok());
     // Why the store is sorted first: lettre refuses the lot.
-    assert!(tls_parameters("mail.corp.test", &store).is_err());
+    assert!(tls_parameters("mail.studio.example", &store).is_err());
 }
 
 /// The server takes the whole message and the connection drops before it answers: the
@@ -287,7 +287,7 @@ fn no_answer_after_the_message_is_not_tried_again_unasked() {
     assert!(!e.is_retryable(), "{e}");
     assert_eq!(heard.messages(), 1);
     let port = scripted(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "DATA" => "CLOSE",
         _ => "250 2.0.0 fine\r\n",
@@ -304,7 +304,7 @@ fn no_answer_after_the_message_is_not_tried_again_unasked() {
 fn the_answer_to_a_message_may_take_ten_minutes_not_one() {
     assert!(TIMEOUT < SLOW && SLOW < SENT_TIMEOUT);
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "MAIL" | "RCPT" => "250 2.0.0 fine\r\n",
         "DATA" => "354 go on\r\n",
@@ -329,7 +329,7 @@ fn an_answer_out_of_turn_never_passes_for_sent() {
     let message = b"Subject: in step\r\n\r\nRCPT TO:<eve@studio.example>\r\n";
     let to = ["ana@studio.example".to_string()];
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
         _ => "250 2.0.0 fine\r\n",
@@ -342,7 +342,7 @@ fn an_answer_out_of_turn_never_passes_for_sent() {
     assert!(said.get(data + 1..).is_some_and(<[String]>::is_empty), "after DATA: {said:?}");
     // 354 to the message's end.
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "MAIL" | "RCPT" => "250 2.0.0 fine\r\n",
         "DATA" | "." => "354 go on\r\n",
@@ -368,27 +368,27 @@ fn a_refused_sign_in_stays_a_sign_in_refusal() {
         send(&server, "zoe@studio.example", "pw", "zoe@studio.example", &["ana@studio.example".into()], b"Subject: hi\r\n\r\nhi\r\n").unwrap_err()
     };
     let e = attempt(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "535 5.7.8 credentials not accepted\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
         _ => "250 2.0.0 fine\r\n",
     });
     assert!(matches!(e, NetError::Auth(_)), "{e:?}");
     let e = attempt(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "454 4.7.0 try again in a moment\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
         _ => "250 2.0.0 fine\r\n",
     });
     assert!(matches!(e, NetError::Later(_)), "{e:?}");
     let e = attempt(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "CLOSE",
         _ => "250 2.0.0 fine\r\n",
     });
     assert!(matches!(e, NetError::Io(_)), "{e:?}");
     let e = attempt(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH CRAM-MD5\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH CRAM-MD5\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
         _ => "250 2.0.0 fine\r\n",
     });
@@ -403,7 +403,7 @@ fn addresses_outside_ascii_are_sent_where_the_server_takes_them() {
     let message = b"Subject: hi\r\n\r\nhi\r\n";
     let to = ["ana@studio.example".to_string()];
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 SMTPUTF8\r\n",
+        "EHLO" => "250-scripted.example\r\n250 SMTPUTF8\r\n",
         "DATA" => "354 go on\r\n",
         "." => "250 2.0.0 queued\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
@@ -416,7 +416,7 @@ fn addresses_outside_ascii_are_sent_where_the_server_takes_them() {
     let said = heard.said();
     assert!(said.iter().any(|l| l.starts_with("MAIL FROM:<ZOé@STUDIO.EXAMPLE>") && l.contains("SMTPUTF8")), "{said:?}");
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 8BITMIME\r\n",
+        "EHLO" => "250-scripted.example\r\n250 8BITMIME\r\n",
         "QUIT" => "221 2.0.0 closing\r\n",
         _ => "250 2.0.0 fine\r\n",
     });
@@ -433,7 +433,7 @@ fn addresses_outside_ascii_are_sent_where_the_server_takes_them() {
 #[test]
 fn after_no_answer_the_goodbye_waits_a_minute_at_most() {
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "MAIL" | "RCPT" => "250 2.0.0 fine\r\n",
         "DATA" => "354 go on\r\n",
@@ -455,7 +455,7 @@ fn after_no_answer_the_goodbye_waits_a_minute_at_most() {
 #[test]
 fn a_message_cut_before_its_end_can_go_again() {
     let (port, heard) = scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-        "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+        "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
         "AUTH" => "235 2.7.0 welcome\r\n",
         "MAIL" | "RCPT" => "250 2.0.0 fine\r\n",
         "DATA" => "354 go on\r\n",

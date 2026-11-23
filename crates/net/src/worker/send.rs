@@ -661,7 +661,7 @@ mod tests {
         assert!(!seen.iter().any(|e| matches!(e, Event::Queued { id: 7, .. })), "{seen:?}");
         // Asked to wait: kept for the next round, as ever.
         let (port, heard) = crate::smtp::tests::scripted_heard(|command| match command.split(' ').next().unwrap_or_default() {
-            "EHLO" => "250-scripted.test\r\n250 AUTH PLAIN\r\n",
+            "EHLO" => "250-scripted.example\r\n250 AUTH PLAIN\r\n",
             "AUTH" => "235 2.7.0 welcome\r\n",
             "MAIL" => "451 4.3.0 try again in a moment\r\n",
             "QUIT" => "221 2.0.0 closing\r\n",
