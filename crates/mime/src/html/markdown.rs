@@ -163,19 +163,24 @@ pub fn pasted_markdown(text: &str) -> Option<(String, rich::Styles)> {
     if !looks_like_markdown(text) {
         return None;
     }
-    read_markdown(text)
+    read_markdown_with(text, false, 2000)
 }
 
 /// Markdown known to be Markdown (a language model's answer, asked to keep the marks), as text
 /// and styles: the same reader as [`pasted_markdown`], without the signs it looks for in a
-/// clipboard. `None` past [`MARKDOWN_MAX`] bytes, when the reader failed, or when it holds no
-/// text.
+/// clipboard, with soft line breaks as lines (the editor's text is made of them) and no width
+/// cutting a paragraph. `None` past [`MARKDOWN_MAX`] bytes, when the reader failed, or when it
+/// holds no text.
 pub fn read_markdown(text: &str) -> Option<(String, rich::Styles)> {
+    read_markdown_with(text, true, MARKDOWN_HTML_MAX.saturating_add(1))
+}
+
+fn read_markdown_with(text: &str, soft_lines: bool, width: usize) -> Option<(String, rich::Styles)> {
     if text.len() > MARKDOWN_MAX {
         return None;
     }
-    let html = written(text, true)?;
-    let (text, styles) = pasted_html(&html);
+    let html = written_with(text, true, soft_lines)?;
+    let (text, styles) = pasted_html_at(&html, width);
     let (text, styles) = lay_out(&text, &styles);
     (!text.trim().is_empty()).then_some((text, styles))
 }
@@ -266,6 +271,8 @@ struct Writer {
     out: String,
     /// Line marks for pasting ([`MARK_FIRST`]), and quotes without `> ` before each line.
     marks: bool,
+    /// A soft line break is a line of the editor's text, not a space.
+    soft_lines: bool,
     open: Vec<Open>,
     /// The lists open (numbered or not), and for each item open how many paragraphs it has had.
     lists: Vec<bool>,
@@ -508,6 +515,12 @@ fn safe_link(url: &str) -> bool {
 /// [`markdown_html`], with line marks for pasting (`marks`). `None` when the reader failed, or
 /// what it wrote went past [`MARKDOWN_HTML_MAX`].
 fn written(md: &str, marks: bool) -> Option<String> {
+    written_with(md, marks, false)
+}
+
+/// [`written`], with soft line breaks kept as lines (`soft_lines`): the editor's text is made of
+/// lines, and a model needn't write the two spaces Markdown wants behind each.
+fn written_with(md: &str, marks: bool, soft_lines: bool) -> Option<String> {
     let md = cut(md, MARKDOWN_MAX);
     // Tables only while the cells they would make are within the budget.
     let mut options = Options::ENABLE_STRIKETHROUGH;
@@ -518,6 +531,7 @@ fn written(md: &str, marks: bool) -> Option<String> {
         let mut w = Writer {
             out: String::with_capacity(md.len() + md.len() / 2),
             marks,
+            soft_lines,
             open: Vec::new(),
             lists: Vec::new(),
             items: Vec::new(),
@@ -540,6 +554,10 @@ fn written(md: &str, marks: bool) -> Option<String> {
                     w.out.push_str("<code>");
                     w.text(&t);
                     w.out.push_str("</code>");
+                }
+                Event::SoftBreak if w.soft_lines => {
+                    w.out.push_str("<br>");
+                    w.line_mark();
                 }
                 Event::SoftBreak => w.out.push('\n'),
                 Event::HardBreak => {

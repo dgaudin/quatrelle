@@ -40,3 +40,26 @@ fn a_monospace_line_keeps_its_font() {
     assert_eq!(back, text);
     assert!(back_styles.style(0).mono, "sent {:?}", outbound(text, &styles, 7).0);
 }
+
+/// A line break the model writes as a plain newline, without the two spaces the writer put
+/// behind it, stays a line break.
+#[test]
+fn a_line_break_the_model_normalises_stays_a_line() {
+    let text = "Cordialement,\nZoé Martin";
+    let styles = Styles::plain(text);
+    let (sent, images) = outbound(text, &styles, 7);
+    assert!(sent.contains("  \n"), "the writer says where the line ends: {sent:?}");
+    let (back, _) = inbound(&sent.replace("  \n", "\n"), Style::default(), &images, 24_000);
+    assert_eq!(back, text);
+}
+
+/// A paragraph wider than the renderer's old 2000 columns is not cut in two.
+#[test]
+fn a_long_paragraph_comes_back_on_one_line() {
+    let text = vec!["mot"; 750].join(" ");
+    let styles = Styles::plain(&text);
+    let (sent, images) = outbound(&text, &styles, 7);
+    let (back, _) = inbound(&sent, Style::default(), &images, 24_000);
+    assert!(!back.contains('\n'), "one line: {:?}", back.chars().take(80).collect::<String>());
+    assert_eq!(back, text);
+}

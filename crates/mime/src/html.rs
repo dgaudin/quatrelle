@@ -142,8 +142,14 @@ pub(super) fn word_paragraphs(html: &str) -> String {
 /// page) as text and styles to put into a message: its formatting and links, without pictures
 /// (they'd point at the other program's files or the web) or the empty lines around it.
 pub fn pasted_html(html: &str) -> (String, rich::Styles) {
+    pasted_html_at(html, 2000)
+}
+
+/// [`pasted_html`] at a given render width: 2000 columns keeps its paragraphs on one line, and a
+/// rewrite's reader passes more so that no paragraph is ever cut in two.
+pub(crate) fn pasted_html_at(html: &str, width: usize) -> (String, rich::Styles) {
     // Sizes and typefaces come with the spans (`html_to_rich` reads them).
-    let mut lines = html_to_rich(&word_paragraphs(html));
+    let mut lines = html_to_rich_at(&word_paragraphs(html), width);
     for line in &mut lines {
         line.retain(|sp| sp.image.is_none());
     }
@@ -282,6 +288,11 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
 /// laid out as text, and pictures by reference. No scripts, styles or remote loads: what comes
 /// out is plain data. Never panics; empty when conversion fails.
 pub fn html_to_rich(html: &str) -> RichText {
+    html_to_rich_at(html, 2000)
+}
+
+/// [`html_to_rich`] rendered at `width` columns.
+fn html_to_rich_at(html: &str, width: usize) -> RichText {
     let html = match html.char_indices().nth(HTML_MAX) {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
@@ -297,7 +308,7 @@ pub fn html_to_rich(html: &str) -> RichText {
     let (fonts_marked, fonts) = crate::fonts::mark(&ruled);
     let marked = close_css_rules(&mark_pictures(&mark_headings(&fonts_marked)));
     // The message's own CSS is read for colours and hidden parts (`display: none`), nothing else.
-    let result = std::panic::catch_unwind(|| html2text::config::rich().use_doc_css().lines_from_read(marked.as_bytes(), 2000));
+    let result = std::panic::catch_unwind(|| html2text::config::rich().use_doc_css().lines_from_read(marked.as_bytes(), width));
     let Ok(Ok(lines)) = result else { return Vec::new() };
     let mut out: RichText = Vec::new();
     let mut blank = 0;
