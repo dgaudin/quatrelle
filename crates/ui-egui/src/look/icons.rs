@@ -159,6 +159,24 @@ pub enum Icon {
     LinkDismiss,
     /// An open book with a plus (Add to dictionary).
     BookAdd,
+    /// A person with a clock (an automatic reply).
+    AutoReply,
+    /// An envelope with an alert sign (not delivered).
+    NotDelivered,
+    /// An envelope with a clock (delivery delayed).
+    Delayed,
+    /// An envelope with a check mark (delivered).
+    Delivered,
+    /// An envelope with a rewind arrow (recalled).
+    Recall,
+    /// A calendar with a check mark (meeting accepted).
+    MeetingAccepted,
+    /// A calendar with a question mark (meeting tentatively accepted).
+    MeetingTentative,
+    /// A calendar with a cross (meeting declined).
+    MeetingDeclined,
+    /// A calendar with an alert sign (meeting canceled).
+    MeetingCanceled,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -282,6 +300,15 @@ fn svg(icon: Icon) -> &'static str {
         Icon::LinkEdit => f!("link_edit"),
         Icon::LinkDismiss => f!("link_dismiss"),
         Icon::BookAdd => f!("book_add"),
+        Icon::AutoReply => f!("person_clock"),
+        Icon::NotDelivered => f!("mail_error"),
+        Icon::Delayed => f!("mail_clock"),
+        Icon::Delivered => f!("mail_checkmark"),
+        Icon::Recall => f!("mail_rewind"),
+        Icon::MeetingAccepted => f!("calendar_checkmark"),
+        Icon::MeetingTentative => f!("calendar_question_mark"),
+        Icon::MeetingDeclined => f!("calendar_cancel"),
+        Icon::MeetingCanceled => f!("calendar_error"),
     }
 }
 
@@ -450,6 +477,15 @@ mod tests {
             LinkEdit,
             LinkDismiss,
             BookAdd,
+            AutoReply,
+            NotDelivered,
+            Delayed,
+            Delivered,
+            Recall,
+            MeetingAccepted,
+            MeetingTentative,
+            MeetingDeclined,
+            MeetingCanceled,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

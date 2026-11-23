@@ -347,7 +347,7 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(8.0, 7.0), (8.0, 11.5)]);
             pen.line(&[(8.0, 4.4), (8.0, 4.9)]);
         }
-        Icon::Away => {
+        Icon::Away | Icon::AutoReply => {
             // A door, and an arrow leaving through it.
             pen.line(&[(8.5, 5.0), (8.5, 1.5), (1.5, 1.5), (1.5, 14.5), (8.5, 14.5), (8.5, 11.0)]);
             pen.line(&[(5.0, 8.0), (14.5, 8.0)]);
@@ -661,6 +661,67 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(8.0, 2.5), (8.0, 11.5)]);
             pen.line(&[(13.5, 1.5), (13.5, 5.5)]);
             pen.line(&[(11.5, 3.5), (15.5, 3.5)]);
+        }
+        Icon::NotDelivered => {
+            // An envelope, and an alert sign at its top right.
+            pen.line(&[(9.0, 4.0), (1.5, 4.0), (1.5, 13.5), (14.5, 13.5), (14.5, 10.0)]);
+            pen.line(&[(1.5, 4.5), (8.0, 9.0), (10.0, 7.8)]);
+            pen.circle(12.5, 4.0, 3.2);
+            pen.line(&[(12.5, 2.6), (12.5, 4.4)]);
+            pen.dot(12.5, 5.6, 0.5);
+        }
+        Icon::Delayed => {
+            // An envelope, and a clock at its top right.
+            pen.line(&[(9.0, 4.0), (1.5, 4.0), (1.5, 13.5), (14.5, 13.5), (14.5, 10.0)]);
+            pen.line(&[(1.5, 4.5), (8.0, 9.0), (10.0, 7.8)]);
+            pen.circle(12.5, 4.0, 3.2);
+            pen.line(&[(12.5, 2.4), (12.5, 4.0), (13.8, 4.0)]);
+        }
+        Icon::Delivered => {
+            // An envelope, and a check mark at its top right.
+            pen.line(&[(9.0, 4.0), (1.5, 4.0), (1.5, 13.5), (14.5, 13.5), (14.5, 10.0)]);
+            pen.line(&[(1.5, 4.5), (8.0, 9.0), (10.0, 7.8)]);
+            pen.circle(12.5, 4.0, 3.2);
+            pen.line(&[(11.0, 4.2), (12.1, 5.2), (14.0, 3.0)]);
+        }
+        Icon::Recall => {
+            // An envelope, and a rewind arrow at its top right.
+            pen.line(&[(9.0, 4.0), (1.5, 4.0), (1.5, 13.5), (14.5, 13.5), (14.5, 10.0)]);
+            pen.line(&[(1.5, 4.5), (8.0, 9.0), (10.0, 7.8)]);
+            pen.line(&[(15.0, 2.0), (11.5, 4.0), (15.0, 6.0), (15.0, 2.0)]);
+            pen.line(&[(11.5, 2.0), (8.5, 4.0), (11.5, 6.0), (11.5, 2.0)]);
+        }
+        Icon::MeetingAccepted => {
+            // A calendar, and a check mark at its bottom right.
+            pen.line(&[(8.0, 14.5), (2.0, 14.5), (2.0, 3.0), (14.0, 3.0), (14.0, 8.0)]);
+            pen.line(&[(2.0, 6.5), (14.0, 6.5)]);
+            pen.circle(11.5, 11.5, 3.5);
+            pen.line(&[(9.8, 11.6), (11.1, 12.9), (13.3, 10.3)]);
+        }
+        Icon::MeetingTentative => {
+            // A calendar, and a question mark at its bottom right.
+            pen.line(&[(8.0, 14.5), (2.0, 14.5), (2.0, 3.0), (14.0, 3.0), (14.0, 8.0)]);
+            pen.line(&[(2.0, 6.5), (14.0, 6.5)]);
+            pen.circle(11.5, 11.5, 3.5);
+            pen.arc(11.5, 10.6, 1.0, -PI, 0.5 * PI);
+            pen.line(&[(11.5, 11.6), (11.5, 12.2)]);
+            pen.dot(11.5, 13.2, 0.4);
+        }
+        Icon::MeetingDeclined => {
+            // A calendar, and a cross at its bottom right.
+            pen.line(&[(8.0, 14.5), (2.0, 14.5), (2.0, 3.0), (14.0, 3.0), (14.0, 8.0)]);
+            pen.line(&[(2.0, 6.5), (14.0, 6.5)]);
+            pen.circle(11.5, 11.5, 3.5);
+            pen.line(&[(10.2, 10.2), (12.8, 12.8)]);
+            pen.line(&[(12.8, 10.2), (10.2, 12.8)]);
+        }
+        Icon::MeetingCanceled => {
+            // A calendar, and an alert sign at its bottom right.
+            pen.line(&[(8.0, 14.5), (2.0, 14.5), (2.0, 3.0), (14.0, 3.0), (14.0, 8.0)]);
+            pen.line(&[(2.0, 6.5), (14.0, 6.5)]);
+            pen.circle(11.5, 11.5, 3.5);
+            pen.line(&[(11.5, 9.8), (11.5, 11.8)]);
+            pen.dot(11.5, 13.0, 0.5);
         }
     }
 }
