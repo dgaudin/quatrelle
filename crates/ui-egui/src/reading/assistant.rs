@@ -153,8 +153,11 @@ pub(crate) fn rewrite_panel(t: &Tokens, ui: &mut Ui, c: &quatrelle_engine::Compo
                         use_it.clone().on_disabled_hover_text(why.clone());
                     }
                     if can && use_it.clicked() {
-                        // One step to undo, and the text keeps the keyboard to undo it with.
-                        ed.remember(c, ed.sel.end);
+                        // One step to undo, and the text keeps the keyboard to undo it with,
+                        // with a cursor (not the old selection over other words).
+                        let at = ed.sel.start;
+                        ed.remember(c, at);
+                        ed.settle(at);
                         ed.refocus = Some(ed.sel.clone());
                         acts.push(Action::Run("assistant.endRewrite", json!({"use": true})));
                     }

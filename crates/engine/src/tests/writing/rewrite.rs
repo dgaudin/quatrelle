@@ -425,3 +425,41 @@ fn a_letter_typed_before_the_part_is_kept() {
     s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
     assert_eq!(s.compose.as_ref().unwrap().body, "XSalut");
 }
+
+/// An empty answer (or only blank spaces) is refused rather than wiping the part.
+#[test]
+fn an_empty_answer_is_refused() {
+    let mut s = sample_session("rewrite-empty-answer");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Bonjour".into();
+        c.styles = Styles::plain("Bonjour");
+    }
+    let (id, _) = ask(&mut s, "fix", None);
+    s.apply(Event::LlmAnswered { id, text: "   \n".into(), error: None });
+    assert!(s.run("assistant.endRewrite", &json!({"use": true})).is_err(), "nothing to put in");
+    assert_eq!(s.compose.as_ref().unwrap().body, "Bonjour");
+}
+
+/// A picture without a cid still goes to the model as a marker and comes back at its place.
+#[test]
+fn a_picture_without_a_cid_is_kept() {
+    let mut s = sample_session("rewrite-no-cid");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    if let Some(c) = s.compose.as_mut() {
+        c.signature.clear();
+        c.body = format!("Before {} After", PICTURE);
+        c.styles = Styles::plain(&c.body);
+    }
+    let (id, sent) = ask(&mut s, "formal", None);
+    let m = marker(&sent);
+    assert!(!m.is_empty(), "the picture went as a marker: {sent}");
+    s.apply(Event::LlmAnswered { id, text: format!("One {m} two"), error: None });
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body.chars().filter(|ch| *ch == PICTURE).count(), 1, "{:?}", c.body);
+    assert!(!c.body.contains("QUATRELLE-IMAGE"), "{:?}", c.body);
+}

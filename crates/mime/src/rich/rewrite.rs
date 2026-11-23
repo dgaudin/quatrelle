@@ -363,6 +363,7 @@ pub fn base_style(text: &str, styles: &Styles) -> Style {
 pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &str, before_styles: &Styles) -> (String, Styles) {
     // The model's answer is hostile: its own copy of Quatrelle's internal marks (a signature
     // standing, a rule) and of a picture would be read as ours. None may pass.
+    let answer = without_outer_fence(answer);
     let answer: String = answer.trim().chars().filter(|c| *c != PICTURE && !('\u{E000}'..='\u{E06F}').contains(c)).collect();
     // One reader, the Markdown one: its backslash escapes are what the outbound writer wrote.
     let Some((mut text, mut styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
@@ -520,6 +521,18 @@ fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Sty
 
 #[cfg(test)]
 mod tests;
+
+/// An answer written whole inside one fenced code block (a model asked for Markdown often does
+/// it): the fence goes, the text stays.
+fn without_outer_fence(answer: &str) -> String {
+    let text = answer.trim();
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.len() >= 2 && lines.first().is_some_and(|l| l.trim_start().starts_with("```")) && lines.last().is_some_and(|l| l.trim() == "```") {
+        lines.get(1..lines.len() - 1).map(|l| l.join("\n")).unwrap_or_else(|| text.to_string())
+    } else {
+        text.to_string()
+    }
+}
 
 /// The most characters of a marker read, so a stranger's answer can't make a long walk.
 const MARKER_MAX: usize = 160;

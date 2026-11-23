@@ -336,3 +336,46 @@ fn a_refused_use_says_why_and_leaves_the_undo_history_alone() {
     assert_eq!(a.session.compose.as_ref().unwrap().body, before_edit, "one step back is the typing");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// After Use, the cursor is empty where the rewrite went: a key typed next does not replace the
+/// old selection over the new text.
+#[test]
+fn using_a_rewrite_leaves_an_empty_cursor() {
+    let (mut a, dir) = app("rewrite-cursor");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3"}));
+    a.session.prefs.new_mail_window = false;
+    a.run("mail.new", json!({}));
+    if let Some(c) = a.session.compose.as_mut() {
+        c.signature.clear();
+        c.body = "Bonjour tout le monde".into();
+        c.styles = quatrelle_engine::mime::rich::Styles::plain(&c.body);
+    }
+    frame(&ctx, &mut a, vec![]);
+    let id = crate::rich_edit::body_id(a.session.compose.as_ref().unwrap());
+    ctx.memory_mut(|m| m.request_focus(id));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![key(Key::ArrowUp, Modifiers::COMMAND)]);
+    for _ in 0..7 {
+        frame(&ctx, &mut a, vec![key(Key::ArrowRight, Modifiers::SHIFT)]);
+    }
+    a.run("assistant.rewrite", json!({"how": "fix", "from": 0, "to": 7}));
+    let ask = a.session.take_jobs().into_iter().find_map(|j| match j {
+        quatrelle_engine::model::Job::AskLlm { id, .. } => Some(id),
+        _ => None,
+    });
+    let ask = ask.expect("the rewrite was asked");
+    a.session.apply(quatrelle_engine::model::Event::LlmAnswered { id: ask, text: "Salut".into(), error: None });
+    frame(&ctx, &mut a, vec![]);
+    let use_it = settled_text_at(&ctx, &mut a, "Use this text", size).expect("Use this text");
+    click_at(&ctx, &mut a, use_it, 1, size);
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert!(a.session.compose.as_ref().unwrap().body.contains("Salut tout le monde"), "{:?}", a.session.compose.as_ref().unwrap().body);
+    frame(&ctx, &mut a, vec![Event::Text("!".into())]);
+    let body = &a.session.compose.as_ref().unwrap().body;
+    assert!(body.starts_with("!Salut tout le monde"), "the rewrite is not replaced: {body:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

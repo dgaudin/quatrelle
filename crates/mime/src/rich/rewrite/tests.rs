@@ -215,3 +215,11 @@ fn an_answer_cannot_forge_an_internal_mark_or_a_picture() {
     assert_eq!(back, "Salut");
     assert!(!back.chars().any(|c| c == PICTURE || ('\u{E000}'..='\u{E06F}').contains(&c)), "{back:?}");
 }
+
+/// An answer wrapped whole in a fenced code block is the text inside it.
+#[test]
+fn a_whole_answer_in_one_fence_loses_the_fence() {
+    let (back, styles) = inbound("```markdown\n**Salut** Zoé\n```", Style::default(), &[], "Salut Zoé", &Styles::plain("Salut Zoé"));
+    assert_eq!(back, "Salut Zoé");
+    assert!(styles.style(0).bold, "the text inside keeps its marks");
+}
