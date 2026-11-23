@@ -27,7 +27,7 @@ type OwnTags = (Option<String>, Option<String>);
 /// list). The role is added by the caller, which knows the distinguished folders. For the fuzz
 /// target too.
 pub(super) fn folder_of(f: &El, root: Option<&str>, skip: &[String]) -> Option<(Mailbox, OwnTags)> {
-    let id = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string)?;
+    let id = f.child("FolderId").and_then(|i| i.attr("Id")).filter(|id| !id.trim().is_empty()).map(str::to_string)?;
     let class = f.text_of("FolderClass").unwrap_or("");
     // Exchange's own hidden folders aren't the user's mail: Outlook doesn't show them, and some
     // take long to read.

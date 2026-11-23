@@ -30,6 +30,7 @@ fuzz_target!(|data: &[u8]| {
         let (folders, _last) = ews::mailboxes_listed(&root, top);
         assert!(folders.len() <= 5000, "{} folders", folders.len());
         for f in &folders {
+            assert!(!f.id.is_empty());
             assert!(f.name.chars().count() <= 255, "{:?}", f.name);
         }
     }

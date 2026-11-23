@@ -793,3 +793,16 @@ fn outlooks_copy_of_the_rules_is_replaced_only_when_asked() {
     // Once: the next change goes as usual (and the copy is gone, so it passes).
     assert!(!c.update_request("").contains("RemoveOutlookRuleBlob"));
 }
+
+/// A folder whose id is empty can't be synced: `<t:FolderId Id=""/>` is refused at every pass,
+/// and two such folders would be the same one. It is left out.
+#[test]
+fn a_folder_without_an_id_is_left_out() {
+    let doc = parse(
+        "<RootFolder><t:Folder><t:FolderId Id=\"\"/><t:DisplayName>Ghost</t:DisplayName>\
+         <t:FolderClass>IPF.Note</t:FolderClass></t:Folder></RootFolder>",
+    );
+    let rf = doc.find("RootFolder").unwrap_or(&doc);
+    let f = rf.folders().into_iter().next().unwrap_or(&doc);
+    assert!(super::mailbox::folder_of(f, None, &[]).is_none());
+}
