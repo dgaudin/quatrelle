@@ -8,6 +8,7 @@ use super::*;
 mod senders;
 pub use senders::SenderMarks;
 pub(crate) use senders::Senders;
+mod docs;
 mod held;
 mod prepare;
 mod selecting;
