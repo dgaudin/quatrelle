@@ -39,6 +39,7 @@ pub(super) fn own_calendar(id: &str) -> bool {
 }
 pub use calendars::{CalendarRefusal, PALETTE_COLOR, PALETTE_COLORS, RemovalRefusal};
 pub use conflicts::{CONFLICTS, ConflictWords, SYNC_ISSUES};
+pub(crate) use deleting::hold_unsent;
 pub use files::FilesComing;
 pub use find::{EVENT_HITS_MAX, EventHit, EventWhen};
 pub use notes::NoteRef;

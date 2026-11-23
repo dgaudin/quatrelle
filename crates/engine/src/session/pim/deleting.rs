@@ -49,11 +49,11 @@ impl Session {
                     if !g.href.is_empty() {
                         remote = true;
                         p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
-                    } else if synced && g.calendar != LOCAL && !quatrelle_model::pim::is_web_calendar(&g.calendar) {
+                    } else if synced {
                         // Not on the server as far as this computer knows, but a sync may be
                         // making it there now (made, then deleted at once), and its result would
                         // bring it back: held until a result says where it was made.
-                        hold(p, g);
+                        hold_unsent(p, g);
                     }
                 }
                 p.events.retain(|e| !here(e));
@@ -107,6 +107,14 @@ impl Session {
 
 /// An appointment deleted here with no item on the server, held ([`Pim::held`]): once, at most
 /// [`MAX_HELD`] of them (the oldest go first).
+/// A copy with no item on the server, in a calendar of the server's, held; one on this computer
+/// or in a calendar subscribed to by its link is never sent, and goes without a trace.
+pub(crate) fn hold_unsent(p: &mut Pim, e: &StoredEvent) {
+    if e.calendar != LOCAL && !quatrelle_model::pim::is_web_calendar(&e.calendar) {
+        hold(p, e);
+    }
+}
+
 fn hold(p: &mut Pim, e: &StoredEvent) {
     let (uid, recurrence_id) = (&e.event.uid, e.event.recurrence_id);
     hold_item(&mut p.held, HeldDeletion { uid: uid.clone(), recurrence_id, kind: HeldKind::Event });

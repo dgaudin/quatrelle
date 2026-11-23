@@ -12,6 +12,7 @@ use crate::InviteProblem;
 
 mod answered;
 mod charset;
+mod in_flight;
 mod sequence;
 mod showing;
 

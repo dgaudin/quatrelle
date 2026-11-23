@@ -665,7 +665,13 @@ pub(super) fn set_answer(e: &mut CalEvent, mine: &[String], me: &str, stat: &str
 /// something to learn.
 fn delete_items(p: &mut Pim, gone: &[StoredEvent]) -> bool {
     let mut remote = false;
-    for g in gone.iter().filter(|g| !g.href.is_empty()) {
+    for g in gone {
+        if g.href.is_empty() {
+            // Not on the server as far as this computer knows, but a sync may be making it
+            // there now: held until a result says where (see `Pim::held`).
+            pim::hold_unsent(p, g);
+            continue;
+        }
         if !p.deleted.iter().any(|t| t.href == g.href) {
             p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
         }
@@ -682,7 +688,11 @@ fn drop_occurrence(p: &mut Pim, uid: &str, at: i64) -> bool {
     let gone: Vec<StoredEvent> = p.events.iter().filter(|e| e.event.uid == uid && e.event.recurrence_id == Some(at)).cloned().collect();
     p.events.retain(|e| !(e.event.uid == uid && e.event.recurrence_id == Some(at)));
     let mut remote = false;
-    for g in gone.iter().filter(|g| !g.href.is_empty()) {
+    for g in &gone {
+        if g.href.is_empty() {
+            pim::hold_unsent(p, g);
+            continue;
+        }
         match p.events.iter_mut().find(|e| e.event.uid == uid && e.href == g.href) {
             Some(rest) => rest.dirty = true,
             None => {
