@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use crate::Summary;
 
+pub mod kind;
 pub mod voting;
 
 /// Strip `Re:`, `Fwd:`, `AW:`, `[list]` tags and the like from a subject.
