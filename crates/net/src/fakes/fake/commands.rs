@@ -54,6 +54,13 @@ impl Fake {
             self.say(&format!("{tag} NO {answer}"));
             return;
         }
+        if let Keywords::Refused(status) = st.keywords
+            && upper.starts_with("UID STORE ")
+            && paren_arg(rest).iter().any(|f| !f.starts_with('\\'))
+        {
+            self.say(&format!("{tag} {status} keywords aren't kept in this mailbox"));
+            return;
+        }
         if upper == "IDLE" {
             // RFC 2177, without pushing anything: what came before IDLE isn't said again.
             self.idling = Some(tag.to_string());
@@ -207,6 +214,7 @@ impl Fake {
             // Gmail mode: an EXPUNGE in a label folder (anything but Trash/Spam) drops the label
             // and archives the message into "[Gmail]/All Mail".
             let labels = st.caps.contains("X-GM-EXT-1");
+            let keywords = st.keywords;
             let mut copied_from = 0;
             let mut everywhere: Vec<Vec<u8>> = Vec::new();
             let mut copyuid = String::new();
@@ -281,7 +289,10 @@ impl Fake {
                 } else if verb == "STORE" {
                     let set = words.get(2).copied().unwrap_or("");
                     let add = words.get(3).is_some_and(|w| w.starts_with('+'));
-                    let flags = paren_arg(rest);
+                    let mut flags = paren_arg(rest);
+                    if keywords == Keywords::Dropped {
+                        flags.retain(|f| f.starts_with('\\'));
+                    }
                     for m in b.msgs.iter_mut().filter(|m| in_set(m.uid, set, max)) {
                         for f in &flags {
                             m.flags.retain(|x| !x.eq_ignore_ascii_case(f));

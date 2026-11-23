@@ -2,7 +2,7 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Syncing with the fake IMAP server: sign-in, folders, flags, QRESYNC, the window and the age
-//! kept, downloading ahead, moves and keywords.
+//! kept, downloading ahead, moves and keywords (a reply to all's among them).
 
 use super::*;
 
@@ -566,6 +566,82 @@ fn keywords_round_trip_with_the_server() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert!(m.flags.flagged && !m.flags.has(quatrelle_model::FOLLOW_UP_COMPLETE), "{:?}", m.flags);
     let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// The `UID STORE` commands the fake was sent, in order.
+fn stores_sent(st: &Arc<Mutex<State>>) -> Vec<String> {
+    st.lock().unwrap().log.iter().filter(|l| l.starts_with("UID STORE")).cloned().collect()
+}
+
+/// A message's marks in the cache, by its UID.
+fn cached_flags(store: &Store, uid: u32) -> quatrelle_model::Flags {
+    store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.key.uid == uid).map(|m| m.flags.clone()).unwrap()
+}
+
+/// Replied to all on a server that does `keywords` with keywords: the commands sent, what the
+/// change came to, and the marks read back from the server.
+fn reply_to_all_with(name: &str, keywords: Keywords) -> (Vec<String>, crate::Result<()>, quatrelle_model::Flags) {
+    let st = State::new();
+    st.lock().unwrap().add("INBOX", "to all", &[]);
+    st.lock().unwrap().keywords = keywords;
+    let store = store(name);
+    let mut c = login(&st);
+    sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 100, uid: 1 };
+    let r = apply_remote(&mut c, &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true, all: true });
+    sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    let f = cached_flags(&store, 1);
+    let _ = std::fs::remove_dir_all(store.root());
+    (stores_sent(&st), r, f)
+}
+
+/// A reply to all is kept on the server as `\Answered` with the keyword `$RepliedAll`, in one
+/// command, and read back so; a reply to the sender and a forward send what they always sent.
+#[test]
+fn a_reply_to_all_is_stored_with_its_keyword() {
+    let st = State::new();
+    for s in ["to all", "to one", "on"] {
+        st.lock().unwrap().add("INBOX", s, &[]);
+    }
+    let store = store("replied-all");
+    let mut c = login(&st);
+    sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 100, uid };
+    let mark = |uid, flag, all| Op::SetFlag { keys: vec![key(uid)], flag, on: true, all };
+    for op in [mark(1, Flag::Answered, true), mark(2, Flag::Answered, false), mark(3, Flag::Forwarded, false)] {
+        apply_remote(&mut c, &op).unwrap();
+    }
+    assert_eq!(
+        stores_sent(&st),
+        ["UID STORE 1 +FLAGS.SILENT (\\Answered $RepliedAll)", "UID STORE 2 +FLAGS.SILENT (\\Answered)", "UID STORE 3 +FLAGS.SILENT ($Forwarded)"]
+    );
+    sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    assert!(cached_flags(&store, 1).replied_all(), "{:?}", cached_flags(&store, 1));
+    let (one, on) = (cached_flags(&store, 2), cached_flags(&store, 3));
+    assert!(one.answered && !one.replied_all() && on.forwarded && !on.answered, "{one:?} {on:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A server that won't take keywords and refuses the whole command for it (`NO`, or `BAD` as
+/// some say) still has the reply marked: the same command again with `\Answered` alone, and no
+/// error.
+#[test]
+fn a_server_that_refuses_the_keyword_still_marks_the_reply() {
+    for status in ["NO", "BAD"] {
+        let (sent, r, f) = reply_to_all_with(&format!("keyword-refused-{status}"), Keywords::Refused(status));
+        assert!(r.is_ok(), "{status}: {r:?}");
+        assert_eq!(sent, ["UID STORE 1 +FLAGS.SILENT (\\Answered $RepliedAll)", "UID STORE 1 +FLAGS.SILENT (\\Answered)"], "{status}");
+        assert!(f.answered && !f.replied_all(), "{status}: {f:?}");
+    }
+}
+
+/// A server that takes the keyword without keeping it leaves a reply: one command, no error.
+#[test]
+fn a_server_that_drops_the_keyword_leaves_a_reply() {
+    let (sent, r, f) = reply_to_all_with("keyword-dropped", Keywords::Dropped);
+    assert!(r.is_ok(), "{r:?}");
+    assert_eq!(sent, ["UID STORE 1 +FLAGS.SILENT (\\Answered $RepliedAll)"]);
+    assert!(f.answered && !f.replied_all(), "{f:?}");
 }
 
 #[test]

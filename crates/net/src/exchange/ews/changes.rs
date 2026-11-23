@@ -83,13 +83,13 @@ fn set(field: &str, value: &str) -> String {
     )
 }
 
-/// Replied to or forwarded, as Outlook marks the original when it sends its reply or forward
-/// ([MS-OXOMSG]: `PidTagLastVerbExecuted` the verb, `PidTagLastVerbExecutionTime` now,
+/// Replied to (to all, or not) or forwarded, as Outlook marks the original when it sends its reply
+/// or forward ([MS-OXOMSG]: `PidTagLastVerbExecuted` the verb, `PidTagLastVerbExecutionTime` now,
 /// `PidTagIconIndex` the icon, [`super::replied_verb`]): Quatrelle sends its own message
 /// (`CreateItem` with its source), so Exchange marks nothing by itself.
-fn replied(forward: bool) -> String {
+fn replied(forward: bool, all: bool) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
-    let (verb, icon) = super::replied_verb(forward);
+    let (verb, icon) = super::replied_verb(forward, all);
     format!(
         "{}{}{}",
         set(LAST_VERB, &verb.to_string()),
@@ -166,7 +166,9 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         }
         Op::SetKeyword { keys, on, name: Some(name), .. } => set_category(c, &ids(keys), name, *on),
         // Replied to or forwarded here: the original marked as Outlook marks it.
-        Op::SetFlag { keys, flag: flag @ (Flag::Answered | Flag::Forwarded), on: true, .. } => update(keys, &replied(*flag == Flag::Forwarded)),
+        Op::SetFlag { keys, flag: flag @ (Flag::Answered | Flag::Forwarded), on: true, all } => {
+            update(keys, &replied(*flag == Flag::Forwarded, *all))
+        }
         // Exchange keeps the last thing done, which the next one replaces (the engine takes one
         // arrow off before it puts the other on); other keywords (`$Pinned`) are this computer's.
         Op::SetFlag { .. } | Op::SetKeyword { .. } => Ok(()),

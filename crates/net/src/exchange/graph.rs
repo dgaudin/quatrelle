@@ -479,8 +479,8 @@ fn flags(m: &Value) -> Flags {
     {
         f.completed = done.get("dateTime").and_then(Value::as_str).and_then(jmap::utc_date).filter(|t| *t > 0).unwrap_or(0);
     }
-    // Replied to (102, 103 to all) or forwarded (104), the last of them, and when, read as EWS
-    // reads them.
+    // Replied to (102, 103 to all, with the keyword that says so) or forwarded (104), the last of
+    // them, and when, read as EWS reads them.
     let prop = |tag: &str| {
         m.get("singleValueExtendedProperties")
             .and_then(Value::as_array)?
@@ -492,6 +492,9 @@ fn flags(m: &Value) -> Flags {
     let verb = prop("0x1081").and_then(|v| v.trim().parse::<i64>().ok());
     f.answered = matches!(verb, Some(crate::ews::VERB_REPLY | crate::ews::VERB_REPLY_ALL));
     f.forwarded = verb == Some(crate::ews::VERB_FORWARD);
+    if verb == Some(crate::ews::VERB_REPLY_ALL) {
+        f.set_keyword(quatrelle_model::REPLIED_ALL, true);
+    }
     if f.answered || f.forwarded {
         f.acted = prop("0x1082").map_or(0, crate::ews::verb_time);
     }
@@ -512,8 +515,8 @@ fn flag_patch(op: &Op) -> Option<Value> {
         // Replied to or forwarded here: the original marked as Outlook marks it (as over EWS:
         // `crate::ews` says where the values come from). Taken off, nothing: the next one
         // replaces the last.
-        Op::SetFlag { flag: flag @ (Flag::Answered | Flag::Forwarded), on: true, .. } => {
-            let (verb, icon) = crate::ews::replied_verb(*flag == Flag::Forwarded);
+        Op::SetFlag { flag: flag @ (Flag::Answered | Flag::Forwarded), on: true, all, .. } => {
+            let (verb, icon) = crate::ews::replied_verb(*flag == Flag::Forwarded, *all);
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
             Some(json!({"singleValueExtendedProperties": [
                 {"id": "Integer 0x1081", "value": verb.to_string()},
@@ -654,6 +657,16 @@ mod tests {
         assert_eq!((props[0]["id"].as_str(), props[0]["value"].as_str()), (Some("Integer 0x1081"), Some("102")));
         assert!(props[1]["value"].as_str().and_then(jmap::utc_date).is_some_and(|t| t > 1_790_000_000), "{p}");
         assert_eq!((props[2]["id"].as_str(), props[2]["value"].as_str()), (Some("Integer 0x1080"), Some("261")));
+        // Replied to all: its own verb, the reply's icon; a forward is one whatever it says.
+        let marked = |flag, all| {
+            let p = flag_patch(&Op::SetFlag { keys: keys.clone(), flag, on: true, all }).unwrap();
+            let props = p["singleValueExtendedProperties"].as_array().unwrap().clone();
+            let value = |id: &str| props.iter().find(|q| q["id"] == id).and_then(|q| q["value"].as_str().map(str::to_string));
+            (value("Integer 0x1081"), value("Integer 0x1080"))
+        };
+        assert_eq!(marked(Flag::Answered, true), (Some("103".into()), Some("261".into())));
+        assert_eq!(marked(Flag::Answered, false), (Some("102".into()), Some("261".into())));
+        assert_eq!(marked(Flag::Forwarded, true), (Some("104".into()), Some("262".into())));
         assert_eq!(flag_patch(&Op::SetFlag { keys, flag: Flag::Forwarded, on: false, all: false }), None);
     }
 

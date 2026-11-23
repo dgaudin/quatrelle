@@ -487,6 +487,13 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
         ids(keys).into_iter().map(|(id, _)| (id, json!({ field: value.clone() }))).collect()
     };
     match op {
+        // A reply to all: `$answered` with the keyword that says so, in one change.
+        Op::SetFlag { keys, flag: Flag::Answered, on: true, all: true } => {
+            let mut both = Map::new();
+            both.insert("keywords/$answered".into(), Value::Bool(true));
+            both.insert(format!("keywords/{}", quatrelle_model::REPLIED_ALL.to_ascii_lowercase()), Value::Bool(true));
+            c.set_emails(ids(keys).into_iter().map(|(id, _)| (id, Value::Object(both.clone()))).collect(), Vec::new()).await
+        }
         Op::SetFlag { keys, flag, on, .. } => match flag_keyword(*flag) {
             Some(k) => c.set_emails(patch_all(keys, &format!("keywords/{k}"), *on), Vec::new()).await,
             None => Ok(()),

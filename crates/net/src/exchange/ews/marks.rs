@@ -27,6 +27,11 @@ pub(super) fn flags(it: &El) -> Flags {
     let answered = matches!(verb, Some(VERB_REPLY | VERB_REPLY_ALL));
     let forwarded = verb == Some(VERB_FORWARD);
     let acted = extended_text(it, "0x1082").filter(|_| answered || forwarded).map_or(0, verb_time);
+    // To all: the keyword that says so, with the reply.
+    if verb == Some(VERB_REPLY_ALL) {
+        keywords.push(quatrelle_model::REPLIED_ALL.to_string());
+        keywords.sort_by_key(|k| k.to_ascii_lowercase());
+    }
     Flags {
         seen: it.text_of("IsRead").is_some_and(|v| v == "true"),
         flagged: status == Some(2),
@@ -47,12 +52,16 @@ pub(crate) fn verb_time(text: &str) -> i64 {
     jmap::utc_date(text).filter(|t| *t > 0 && *t < none).unwrap_or(0)
 }
 
-/// The verb and the icon Outlook writes on the original of a reply (`forward`: a forward):
-/// `PidTagLastVerbExecuted` 102 or 104 and `PidTagIconIndex` 0x105 or 0x106 ([MS-OXOMSG]). The
-/// engine doesn't say a reply was to all (103): it's written as a reply to the sender, which
-/// Outlook shows alike.
-pub(crate) fn replied_verb(forward: bool) -> (i64, i64) {
-    if forward { (VERB_FORWARD, 0x106) } else { (VERB_REPLY, 0x105) }
+/// The verb and the icon Outlook writes on the original of a reply (`forward`: a forward; `all`:
+/// a reply to all): `PidTagLastVerbExecuted` 102, 103 or 104 ([MS-OXOMSG] 2.2.1.14) and
+/// `PidTagIconIndex` 0x105 or 0x106 ([MS-OXOMSG] 2.2.1.10, which has no icon of its own for a
+/// reply to all: it's the reply's). A forward is one whatever `all` says.
+pub(crate) fn replied_verb(forward: bool, all: bool) -> (i64, i64) {
+    match (forward, all) {
+        (true, _) => (VERB_FORWARD, 0x106),
+        (false, true) => (VERB_REPLY_ALL, 0x105),
+        (false, false) => (VERB_REPLY, 0x105),
+    }
 }
 
 /// `PidTagLastVerbExecuted` for a reply to the sender ([MS-OXOMSG]; `NOTEIVERB_REPLYTOSENDER`).
@@ -74,7 +83,9 @@ pub fn marks_listed(doc: &El) -> Vec<Flags> {
 /// and its categories (Exchange keeps them by name, as [`flags`] reads them); the keywords that
 /// are Quatrelle's own (`$Pinned`, `$Junk`…) stay. Replied to or forwarded, the last of them and
 /// when, once the server says one; until then (a reply made here by a version that didn't tell
-/// Exchange, or not told yet) the arrow kept here stays. Whether anything changed.
+/// Exchange, or not told yet) the arrow kept here stays; told, the reply to all's keyword follows
+/// the server's verb (a reply to the sender or a forward made in Outlook takes it off). Whether
+/// anything changed.
 pub(super) fn take_marks(m: &mut Flags, server: &Flags) -> bool {
     use quatrelle_model::FOLLOW_UP_COMPLETE;
     let mut next = m.clone();
@@ -90,6 +101,7 @@ pub(super) fn take_marks(m: &mut Flags, server: &Flags) -> bool {
         next.answered = server.answered;
         next.forwarded = server.forwarded;
         next.acted = server.acted;
+        next.set_keyword(quatrelle_model::REPLIED_ALL, server.replied_all());
     }
     let changed = next != *m;
     *m = next;

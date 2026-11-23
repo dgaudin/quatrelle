@@ -66,6 +66,41 @@ fn a_jmap_folder_keeps_more_than_one_get() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A reply to all sets `$answered` and `$repliedall` on the server in one `Email/set`, and reads
+/// back as one; a reply to the sender and a forward set what they always set.
+#[test]
+fn a_reply_to_all_sets_both_keywords() {
+    let mut d = Data::default();
+    let inbox = d.mailbox("Inbox", None, Some("inbox"));
+    let ids: Vec<String> = ["to all", "to one", "on"]
+        .iter()
+        .enumerate()
+        .map(|(n, s)| d.deliver(&inbox, &mail(s, &format!("r{n}")), &["$seen"], &format!("2024-05-0{}T09:00:00Z", n + 1)))
+        .collect();
+    let server = serve(d);
+    let store = crate::fake::tests_store("jmap-replied-all");
+    let c = crate::jmap::Client::connect(&server.base, USER, PASSWORD, false, &[]).unwrap();
+    let mut st = crate::jmap::State::default();
+    crate::jmap::list_folders(&c, &mut st, "a1").unwrap();
+    let opts = crate::sync::SyncOptions { prefetch: 0, ..Default::default() };
+    crate::jmap::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let cached = |subject: &str| store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == subject).cloned().unwrap();
+    let sets = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "Email/set").count();
+    let before = sets();
+    for (subject, flag, all) in [("to all", Flag::Answered, true), ("to one", Flag::Answered, false), ("on", Flag::Forwarded, false)] {
+        crate::jmap::apply_remote(&c, &st, &Op::SetFlag { keys: vec![cached(subject).key], flag, on: true, all }).unwrap();
+    }
+    assert_eq!(sets() - before, 3, "one change each");
+    let keywords = |n: usize| server.data.lock().unwrap().email(&ids[n]).map(|e| e.keywords.iter().cloned().collect::<Vec<_>>()).unwrap();
+    assert_eq!(keywords(0), ["$answered", "$repliedall", "$seen"]);
+    assert_eq!((keywords(1), keywords(2)), (vec!["$answered".to_string(), "$seen".into()], vec!["$forwarded".to_string(), "$seen".into()]));
+    crate::jmap::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    assert!(cached("to all").flags.replied_all(), "{:?}", cached("to all").flags);
+    let (one, on) = (cached("to one").flags, cached("on").flags);
+    assert!(one.answered && !one.replied_all() && on.forwarded && !on.answered, "{one:?} {on:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// Gap #7: searching a JMAP server (`Email/query` with a filter) for mail past the window.
 #[test]
 fn a_jmap_server_is_searched_past_the_window() {

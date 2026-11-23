@@ -57,6 +57,7 @@ fn a_reply_or_a_forward_goes_both_ways_with_its_time() {
     assert_eq!(marks("replied to all"), (true, false, at("2026-10-30T09:13:00Z")));
     assert_eq!(marks("forwarded"), (false, true, at("2026-10-31T16:30:00Z")));
     assert_eq!(marks("plain"), (false, false, 0));
+    assert!(msg("replied to all").flags.replied_all() && !msg("replied").flags.replied_all());
 
     // Replied to here: the verb, the time and the icon, as Outlook writes them.
     let keys = vec![msg("plain").key];
@@ -92,9 +93,61 @@ fn a_reply_or_a_forward_goes_both_ways_with_its_time() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Replied to here before Exchange was told (or by a version that never told it): the arrow kept
-/// here isn't taken off by a sync that says nothing of it, a change made in Outlook or a folder
-/// read again in full.
+/// Replied to all here: Exchange gets Outlook's own mark for it (verb 103, the reply's icon) in
+/// one change, and the next sync reads it as one; what Outlook does next replaces it, a forward
+/// as a reply to the sender alone.
+#[test]
+fn a_reply_to_all_is_written_as_one_and_what_outlook_does_next_replaces_it() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: to all\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    let server = fake_ews::serve(d);
+    let store = crate::fake::tests_store("ews-replied-all");
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let flags = || store.load_folder("a1", "INBOX").unwrap().messages[0].flags.clone();
+    let on_server = || server.data.lock().unwrap().items.iter().find(|i| i.id == id).map(|i| i.verb.clone()).unwrap();
+    let updates = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "UpdateItem").count();
+    let in_outlook = |last: &str, time: &str| {
+        if let Some(i) = server.data.lock().unwrap().items.iter_mut().find(|i| i.id == id) {
+            i.verb = verb(last, time);
+        }
+    };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let keys = vec![store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone()];
+
+    // Replied to all here: one change, the verb for it and the reply's icon.
+    let before = updates();
+    apply_remote(&c, &st, &Op::SetFlag { keys, flag: Flag::Answered, on: true, all: true }).unwrap();
+    let v = on_server();
+    assert_eq!((v.last.as_deref(), v.icon.as_deref()), (Some("103"), Some("261")), "{v:?}");
+    assert!(v.time.as_deref().and_then(jmap::utc_date).is_some_and(|t| t > jmap::utc_date("2026-01-01T00:00:00Z").unwrap()), "{v:?}");
+    assert_eq!(updates() - before, 1, "one request");
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    assert!(flags().replied_all(), "{:?}", flags());
+
+    // Forwarded in Outlook afterwards: the forward is the last thing done.
+    in_outlook("104", "2026-11-02T08:00:00Z");
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let f = flags();
+    assert!(f.forwarded && !f.answered && !f.has(quatrelle_model::REPLIED_ALL), "{f:?}");
+    // Replied to all in Outlook, then to the sender alone: a reply, no longer to all.
+    in_outlook("103", "2026-11-03T08:00:00Z");
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    assert!(flags().replied_all(), "{:?}", flags());
+    in_outlook("102", "2026-11-04T08:00:00Z");
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let f = flags();
+    assert!(f.answered && !f.replied_all(), "{f:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// Replied to (here to all) before Exchange was told (or by a version that never told it): the
+/// arrow kept here isn't taken off by a sync that says nothing of it, a change made in Outlook or
+/// a folder read again in full.
 #[test]
 fn an_arrow_kept_here_survives_the_syncs_that_say_nothing_of_it() {
     let mut d = Data::default();
@@ -109,8 +162,8 @@ fn an_arrow_kept_here_survives_the_syncs_that_say_nothing_of_it() {
     let opts = SyncOptions { prefetch: 0, ..Default::default() };
     sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let key = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
-    store.apply_op("a1", &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true, all: false }).unwrap();
-    let answered = || store.load_folder("a1", "INBOX").unwrap().messages[0].flags.answered;
+    store.apply_op("a1", &Op::SetFlag { keys: vec![key], flag: Flag::Answered, on: true, all: true }).unwrap();
+    let answered = || store.load_folder("a1", "INBOX").unwrap().messages[0].flags.replied_all();
     // Read in Outlook: the change comes in, the arrow stays.
     if let Some(i) = server.data.lock().unwrap().items.iter_mut().find(|i| i.id == id) {
         i.read = true;

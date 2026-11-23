@@ -8,7 +8,7 @@ use super::*;
 
 /// Replied to or forwarded in Outlook, a message comes in with its arrow and time, at its first
 /// sync and at the next one of a cache from before this version; replied to or forwarded here,
-/// Graph gets the verb, the time and the icon; the last thing done shows.
+/// Graph gets the verb, the time and the icon; the last thing done shows, a reply to all as one.
 #[test]
 fn a_reply_or_a_forward_goes_both_ways_over_graph() {
     let mut d = Data::default();
@@ -52,11 +52,20 @@ fn a_reply_or_a_forward_goes_both_ways_over_graph() {
     assert!(time.as_deref().and_then(crate::jmap::utc_date).is_some_and(|t| t > at("2026-01-01T00:00:00Z")), "{time:?}");
     sync(&mut st);
     assert!(matches!(marks("plain"), (false, true, t) if t > 0), "{:?}", msg("plain").flags);
-    // Replied to in Outlook afterwards: the reply shows.
-    if let Some(m) = server.data.lock().unwrap().messages.iter_mut().find(|m| m.id == plain) {
-        (m.verb, m.verb_time) = (Some("103".into()), Some("2026-11-02T08:00:00Z".into()));
-    }
+    // Replied to all in Outlook afterwards: the reply to all shows; forwarded after that, the
+    // forward does, at the next sync.
+    let in_outlook = |verb: &str, time: &str| {
+        if let Some(m) = server.data.lock().unwrap().messages.iter_mut().find(|m| m.id == plain) {
+            (m.verb, m.verb_time) = (Some(verb.into()), Some(time.into()));
+        }
+    };
+    in_outlook("103", "2026-11-02T08:00:00Z");
     sync(&mut st);
     assert_eq!(marks("plain"), (true, false, at("2026-11-02T08:00:00Z")));
+    assert!(msg("plain").flags.replied_all(), "{:?}", msg("plain").flags);
+    in_outlook("104", "2026-11-03T08:00:00Z");
+    sync(&mut st);
+    let f = msg("plain").flags;
+    assert!(f.forwarded && !f.answered && !f.has(quatrelle_model::REPLIED_ALL), "{f:?}");
     let _ = std::fs::remove_dir_all(store.root());
 }

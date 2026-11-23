@@ -30,6 +30,19 @@ pub fn internal_date(t: i64) -> String {
     crate::sync::imap_datetime(t)
 }
 
+/// What the server does with a `STORE` naming a keyword (anything but a system flag `\…`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Keywords {
+    /// Kept, as most servers keep them.
+    #[default]
+    Kept,
+    /// The whole command refused with this answer (`NO` or `BAD`): a server whose permanent
+    /// flags have no `\*` (RFC 3501 §6.4.6, §7.1).
+    Refused(&'static str),
+    /// Taken without being kept: the system flags are stored, the keywords dropped.
+    Dropped,
+}
+
 pub struct Mailbox {
     pub name: String,
     pub attr: &'static str,
@@ -84,6 +97,8 @@ pub struct State {
     /// Commands starting with this text (case ignored) are answered `NO` with this text, this many
     /// times each (a server's passing failure, or a refusal with a code).
     pub refuse_on: Vec<(String, String, usize)>,
+    /// What a `STORE` naming a keyword does.
+    pub keywords: Keywords,
 }
 
 impl State {
@@ -113,6 +128,7 @@ impl State {
             refuse_expunge: 0,
             refuse_append: 0,
             refuse_on: Vec::new(),
+            keywords: Keywords::Kept,
         }))
     }
 

@@ -60,6 +60,21 @@ pub(super) fn expunge_keys<S: std::io::Read + std::io::Write>(c: &mut Client<S>,
     Ok(())
 }
 
+/// A reply to all: `\Answered` with the keyword `$RepliedAll`, in one command. A server that
+/// won't take keywords may refuse the whole command (RFC 3501 §6.4.6: `NO`; some answer `BAD`):
+/// the same command again with `\Answered` alone, without an error, so the reply isn't lost with
+/// the keyword. A refusal that is passing (`NetError::Later`) is the change's, tried again later.
+fn store_reply_to_all<S: std::io::Read + std::io::Write>(c: &mut Client<S>, set: &str) -> Result<()> {
+    let both = format!("{} {}", Flag::Answered.imap(), quatrelle_model::REPLIED_ALL);
+    match c.uid_store(set, true, &both) {
+        Err(NetError::No(_) | NetError::Bad(_)) => {
+            log::info!("the server refused the keyword {}: the reply is marked without it", quatrelle_model::REPLIED_ALL);
+            c.uid_store(set, true, Flag::Answered.imap())
+        }
+        r => r,
+    }
+}
+
 /// Apply one change on the server.
 pub fn apply_remote<S: std::io::Read + std::io::Write>(c: &mut Client<S>, op: &Op) -> Result<()> {
     apply_remote_with(c, op, None)
@@ -68,6 +83,7 @@ pub fn apply_remote<S: std::io::Read + std::io::Write>(c: &mut Client<S>, op: &O
 /// [`apply_remote`] with the account's Trash path, which permanent deletes on Gmail need.
 pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, op: &Op, trash: Option<&str>) -> Result<()> {
     match op {
+        Op::SetFlag { keys, flag: Flag::Answered, on: true, all: true } => by_folder(c, keys, |c, _, set| store_reply_to_all(c, set)),
         Op::SetFlag { keys, flag, on, .. } => by_folder(c, keys, |c, _, set| c.uid_store(set, *on, flag.imap())),
         // A keyword that isn't an atom would make the command malformed: the engine never sends one.
         Op::SetKeyword { keys, keyword, on, .. } if quatrelle_model::is_keyword(keyword) => {

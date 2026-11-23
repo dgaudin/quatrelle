@@ -177,7 +177,9 @@ the user is told how many (`Event::OpsSetAside`); the changes before it go as ev
 worker reaches it the other readers of the queue take it as one that can't be read. After a
 folder is re-read from the server, queued ops that touch it are applied to the new cache again:
 
-- flags: `UID STORE <set> +FLAGS.SILENT (…)` / `-FLAGS.SILENT`;
+- flags: `UID STORE <set> +FLAGS.SILENT (…)` / `-FLAGS.SILENT`; a reply to all is `\Answered`
+  with the keyword `$RepliedAll` in one command, sent again with `\Answered` alone, without an
+  error, when the server refuses it (`NO` or `BAD`: a server that takes no new keywords);
 - move: `UID MOVE` (RFC 6851), else `UID COPY` + `\Deleted` + `UID EXPUNGE` (RFC 4315; plain
   `EXPUNGE` only as a last resort);
 - delete permanently: `\Deleted` + `UID EXPUNGE`.
@@ -230,8 +232,9 @@ method calls, signed in with Basic authentication or an OAuth bearer token.
   `Email/get` of the keywords by back-reference and the mailbox's counts, then the `headers` of
   the messages not cached yet. Mail that leaves the window leaves the cache. The newest sources
   are downloaded as blobs.
-- **Changes** are `Email/set` patches (`keywords/$seen`, `mailboxIds/<id>`), destroys for
-  permanent deletion, and `Mailbox/set` for folders.
+- **Changes** are `Email/set` patches (`keywords/$seen`, `mailboxIds/<id>`; a reply to all sets
+  `keywords/$answered` and `keywords/$repliedall` in the one patch), destroys for permanent
+  deletion, and `Mailbox/set` for folders.
 - **Sending** uploads the message, imports it into Sent (`$seen`) and submits it with
   `EmailSubmission/set` from the identity for the sender; a refused submission removes the copy.
   Offline sends use the same Outbox. Drafts are imported with `$draft`.
@@ -430,6 +433,10 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   minute as before; a stream that fails (dropped, a subscription forgotten, ended at once) is
   tried again after 5 s, doubling up to 15 minutes, polled meanwhile.
 - **Changes** are `UpdateItem`, `MoveItem`, `DeleteItem` and the folder calls, fifty items a call.
+  The original of a reply or forward made here is marked as Outlook marks it, over Graph too
+  (`PidTagLastVerbExecuted` 102 to the sender, 103 to all, 104 forwarded, its time, and
+  `PidTagIconIndex`); read back, 103 is a reply to all (`\Answered` with `$RepliedAll`), which a
+  reply to the sender or a forward made in Outlook afterwards replaces.
 - **Categories** are kept by name, as Outlook keeps them: every answer that carries an item's marks
   asks for `item:Categories` too, read as the name's keyword (`keyword_for`; a category of this
   computer, `Work` as `$label2`, is matched by its name as well). The server's list replaces the
