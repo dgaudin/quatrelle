@@ -59,7 +59,7 @@ if (-not $haveCert -and -not $haveAzure) {
 $script:SignTool = Find-SignTool
 $common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'Quatrelle', '/du', 'https://github.com/dgaudin/quatrelle')
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "quatrelle-sign-$([IO.Path]::GetRandomFileName())"
-New-Item -ItemType Directory -LiteralPath $tmp | Out-Null
+New-Item -ItemType Directory -Path $tmp | Out-Null
 
 try {
   if ($haveCert) {
