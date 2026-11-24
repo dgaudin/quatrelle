@@ -304,9 +304,62 @@ fn is_our_mark(c: char) -> bool {
     ('\u{E000}'..='\u{E02F}').contains(&c) || ('\u{E100}'..='\u{EFFF}').contains(&c)
 }
 
-/// `s` without the marks this pipeline writes ([`is_our_mark`]): `s` itself when it has none.
+/// `s` without the marks this pipeline writes ([`is_our_mark`]), written as a character or as a
+/// numeric reference (`&#xE002;`, `&#57346;`, with or without `;`): `s` itself when it has none.
+/// One pass over it.
 pub(crate) fn without_marks(s: &str) -> std::borrow::Cow<'_, str> {
-    if s.chars().any(is_our_mark) { std::borrow::Cow::Owned(s.chars().filter(|c| !is_our_mark(*c)).collect()) } else { std::borrow::Cow::Borrowed(s) }
+    if !s.contains('&') && !s.chars().any(is_our_mark) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i] == b'&'
+            && let Some((value, took)) = numeric_ref(b, i + 1)
+            && char::from_u32(value).is_some_and(is_our_mark)
+        {
+            i += 1 + took;
+            continue;
+        }
+        let c = s.get(i..).and_then(|r| r.chars().next()).unwrap_or('\u{fffd}');
+        if !is_our_mark(c) {
+            out.push(c);
+        }
+        i += c.len_utf8();
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// The numeric reference at `at` in `b` (just past its `&`): `#`, decimal digits or `x` and hex
+/// digits of any length, its `;` or not — its value and how many bytes it takes after the `&`.
+fn numeric_ref(b: &[u8], at: usize) -> Option<(u32, usize)> {
+    if b.get(at) != Some(&b'#') {
+        return None;
+    }
+    let mut i = at + 1;
+    let hex = matches!(b.get(i), Some(b'x' | b'X'));
+    if hex {
+        i += 1;
+    }
+    let digits = i;
+    let mut n: u64 = 0;
+    while let Some(&d) = b.get(i) {
+        match (d as char).to_digit(if hex { 16 } else { 10 }) {
+            Some(d) => {
+                n = n.saturating_mul(u64::from(if hex { 16u32 } else { 10u32 })).saturating_add(u64::from(d));
+                i += 1;
+            }
+            None => break,
+        }
+    }
+    if i == digits || n > u64::from(u32::MAX) {
+        return None;
+    }
+    if b.get(i) == Some(&b';') {
+        i += 1;
+    }
+    Some((n as u32, i - at))
 }
 
 /// [`html_to_rich`] rendered at `width` columns, keeping a line made only of box-drawing

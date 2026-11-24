@@ -57,6 +57,40 @@ fn marks_a_message_writes_are_taken_out() {
     assert_ne!(crate::rich::SIGNATURE, '\u{E002}', "the rule line's mark");
 }
 
+/// The marks written as numeric references (decimal, hex, leading zeros, `;` or not) are taken
+/// out too: `&#xE002;` gives no rule line, `&#xE000;` no heading, font marks around text don't
+/// size it as the first font's, and a signature's mark in pasted text isn't Quatrelle's.
+#[test]
+fn marks_written_as_numeric_references_are_taken_out() {
+    assert_eq!(without_marks("a&#xE002;b"), "ab");
+    assert_eq!(without_marks("a&#57346;b"), "ab", "57346 = 0xE002");
+    assert_eq!(without_marks("a&#x0000E002;b"), "ab", "leading zeros");
+    assert_eq!(without_marks("a&#57346b"), "ab", "no semicolon");
+    assert_eq!(without_marks("a&#xE002b"), "a&#xE002b", "0xE002B is another character");
+    assert_eq!(without_marks("a&#x41;b"), "a&#x41;b", "not a mark: as written");
+    assert_eq!(without_marks("a&xE002;b"), "a&xE002;b", "not a reference");
+    // No rule line.
+    let r = html_to_rich("<p>&#xE002;</p>");
+    let text: String = r.iter().flat_map(|l| l.iter().map(|sp| sp.text.as_str())).collect();
+    assert!(text.trim().is_empty(), "{text:?}");
+    // No heading.
+    let r = html_to_rich("<p>&#xE000;Pay now</p>");
+    let text: String = r.iter().flat_map(|l| l.iter().map(|sp| sp.text.as_str())).collect();
+    assert_eq!(text.trim(), "Pay now", "{text:?}");
+    // Font marks around text don't draw it as the first font's: same as without them.
+    let words = "word ".repeat(200);
+    let drawn =
+        |html: String| -> String { html_to_rich(&html).iter().flat_map(|l| l.iter().map(|sp| format!("{:?}{:?}", sp.text, sp.size))).collect() };
+    assert_eq!(
+        drawn(format!("<p style=\"font-size:2px\">&#xE020;&#xE100;{words}&#xE021;</p>")),
+        drawn(format!("<p style=\"font-size:2px\">{words}</p>"))
+    );
+    // Pasted: no signature mark.
+    let (text, _) = pasted_html("<p>a&#xE005;b</p>");
+    assert!(!text.contains(crate::rich::SIGNATURE), "{text:?}");
+    assert_eq!(text, "ab");
+}
+
 /// A picture's size is the one CSS picks: the last declaration marked `!important` over a
 /// later plain one (`width:600px !important; width:1px` is 600 wide, not 1).
 #[test]
