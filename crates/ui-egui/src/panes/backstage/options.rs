@@ -47,6 +47,12 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         if ui.checkbox(&mut accent, tl!("Use the system's accent colour")).changed() {
             acts.push(Action::SetSystemAccent(accent));
         }
+        // Windows, Linux and the BSDs: the top bar is the window's title bar, or the system's is kept.
+        if cfg!(any(windows, all(unix, not(target_os = "macos")))) {
+            setting(ui, false, tl!("Use the system title bar"), Some(tl!("Applies when Quatrelle starts again")), &mut |ui| {
+                switch(ui, s.prefs.system_title_bar, tl!("Use the system title bar"), "view.systemTitleBar", acts);
+            });
+        }
         setting(ui, false, tl!("Language"), None, &mut |ui| {
             let language = st.language.as_str();
             let current = crate::i18n::Lang::from_code(language).map_or_else(|| tl!("Same as the system").to_string(), |l| l.name().to_string());

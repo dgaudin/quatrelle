@@ -162,6 +162,15 @@ pub struct Work {
 pub trait Services {
     /// Unix seconds and the local UTC offset in seconds.
     fn clock(&self) -> (i64, i32);
+    /// Whether the window has no title bar of the system's and Quatrelle's top bar is its title
+    /// bar, with the window's buttons, its drag and its resize edges. The default: no.
+    fn own_title_bar(&self) -> bool {
+        false
+    }
+    /// Once a frame while [`Services::own_title_bar`]: keep the window borderless.
+    fn keep_frame(&mut self) {}
+    /// Quatrelle's own title bar is about to maximize or restore the window, in this frame.
+    fn before_zoom(&mut self) {}
     /// The local time zone's IANA name (`Europe/Berlin`), when the system says.
     fn zone(&self) -> Option<String> {
         None

@@ -136,6 +136,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.reminders_on_top}))
         })
         .params(r#"{"on"?: bool} (the Reminders window in a window of its own, over every other)"#),
+        CommandSpec::new("view.systemTitleBar", "Use the system title bar", "File › Options › General", |s, v| {
+            s.prefs.system_title_bar = p::bool(v, "on").unwrap_or(!s.prefs.system_title_bar);
+            Ok(json!({"on": s.prefs.system_title_bar, "atNextStart": true}))
+        })
+        .params(r#"{"on"?: bool} (Windows, Linux and the BSDs; when Quatrelle starts again)"#),
         CommandSpec::new("calendar.webexRoom", "Webex rooms", "File › Options › Calendar", |s, v| {
             let url = p::req_str(v, "url")?;
             let text = |k: &str| match v.get(k) {

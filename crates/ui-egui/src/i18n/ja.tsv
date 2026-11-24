@@ -2479,3 +2479,7 @@ presence	Offline	オフライン
 	Answer: declined	回答: 辞退
 	Encrypted	暗号化済み
 	Signed	署名済み
+	Minimize	最小化
+	Maximize	最大化
+	Use the system title bar	システムのタイトルバーを使う
+	Applies when Quatrelle starts again	次回 Quatrelle を起動したときに反映されます

@@ -2483,3 +2483,7 @@ presence	Offline	Desconectado
 	Answer: declined	Respuesta: rechazada
 	Encrypted	Cifrado
 	Signed	Firmado
+	Minimize	Minimizar
+	Maximize	Maximizar
+	Use the system title bar	Usar la barra de título del sistema
+	Applies when Quatrelle starts again	Se aplica la próxima vez que se inicie Quatrelle

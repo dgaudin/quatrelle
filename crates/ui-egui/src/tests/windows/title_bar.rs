@@ -55,3 +55,40 @@ fn the_rows_at_the_top_of_the_window_have_their_measured_heights() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The labels of every node the Options page offers, after a few frames.
+fn options_labels(a: &mut MailApp) -> Vec<String> {
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    a.act(crate::Action::Backstage(crate::backstage::Page::Options));
+    let mut labels = Vec::new();
+    for _ in 0..4 {
+        let input =
+            egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 2400.0))), ..Default::default() };
+        let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+        out.textures_delta.clear();
+        let nodes = out.platform_output.accesskit_update.map(|u| u.nodes).unwrap_or_default();
+        labels = nodes.iter().filter_map(|(_, n)| n.label().or_else(|| n.value()).map(str::to_string)).collect();
+    }
+    labels
+}
+
+#[test]
+fn the_options_offer_the_system_title_bar_where_the_window_has_its_own() {
+    let (mut a, dir) = app("title-bar-option");
+    let labels = options_labels(&mut a);
+    let offered = cfg!(any(windows, all(unix, not(target_os = "macos"))));
+    assert_eq!(labels.iter().any(|l| l == "Use the system title bar"), offered, "the switch: {labels:?}");
+    assert_eq!(labels.iter().any(|l| l == "Applies when Quatrelle starts again"), offered, "its note");
+    a.run("view.systemTitleBar", json!({"on": true}));
+    assert!(a.session.prefs.system_title_bar);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_window_has_no_own_title_bar_by_default() {
+    let mut s = crate::NullServices(0);
+    assert!(!crate::Services::own_title_bar(&s));
+    crate::Services::keep_frame(&mut s);
+    crate::Services::before_zoom(&mut s);
+}

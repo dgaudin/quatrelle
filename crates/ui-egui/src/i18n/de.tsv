@@ -2483,3 +2483,7 @@ presence	Offline	Offline
 	Answer: declined	Antwort: abgelehnt
 	Encrypted	Verschlüsselt
 	Signed	Signiert
+	Minimize	Minimieren
+	Maximize	Maximieren
+	Use the system title bar	Die Titelleiste des Systems verwenden
+	Applies when Quatrelle starts again	Gilt beim nächsten Start von Quatrelle
