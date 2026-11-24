@@ -280,6 +280,9 @@ fn the_install_kind_follows_where_quatrelle_is() {
         // Where the image is mounted, as the AppImage runtime says (`APPDIR`).
         let mount = dir.join("mount");
         std::fs::create_dir_all(mount.join("usr/bin")).unwrap();
+        // As the AppImage runtime's APPDIR is canonicalized before it's compared: a TMPDIR
+        // reached through a link must not make this test fail for the code's sake.
+        let mount = mount.canonicalize().unwrap();
         let exe = mount.join("usr/bin/quatrelle");
         let (image_at, mount_at) = (image.clone(), mount.clone());
         let own = move |k: &str| match k {
