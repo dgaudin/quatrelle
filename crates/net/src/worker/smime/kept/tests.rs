@@ -170,3 +170,66 @@ fn imports_at_once_lose_nothing() {
         assert_ne!(kept(creds.as_ref(), &a).unwrap().certificate(), p12("riley-2025.p12").certificate());
     }
 }
+
+/// A key on the tests' stand-in card, which refuses every PIN, with `me`'s certificate.
+fn on_refusing_card(me: &Me, pin: Option<&str>) -> Me {
+    let at = KeyRef::Card { module: REFUSES_PIN.into(), token: "1".into(), id: "01".into() };
+    Me { chain: me.chain.clone(), key: MyKey::Held { at, pin: pin.map(Into::into) } }
+}
+
+fn pin_of(me: std::result::Result<Me, String>) -> Option<String> {
+    match me.unwrap().key {
+        MyKey::Held { pin, .. } => pin,
+        MyKey::Software(_) => None,
+    }
+}
+
+/// A kept PIN the card refuses is forgotten, through the MIME layer and every wrapper on the
+/// way: signing and decrypting forget it from the entry it came from (the one in use, or one
+/// kept beside it), the key's reference kept. A PIN just typed, or none at all, isn't a kept one
+/// refused, and the PIN itself is never in what the user is told.
+#[test]
+fn a_kept_pin_the_card_refuses_is_forgotten_wherever_it_was_used() {
+    const RAW: &[u8] = b"From: Riley <riley@studio.example>\r\nTo: riley@studio.example\r\nSubject: Plan\r\n\
+MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nThe plan.\r\n";
+    let creds = MemoryCredentials::default();
+    let account = account();
+    let (riley, zoe) = (p12("riley-aes.p12"), p12("zoe-aes.p12"));
+    let card = on_refusing_card(&riley, Some("4711"));
+    keep(&creds, &account, &card).unwrap();
+    assert!(creds.get_secret(&account, SECRET).unwrap().contains(r#""pin":"4711""#), "kept as it always was");
+    assert!(!format!("{:?}", kept(&creds, &account).unwrap()).contains("4711"), "never in a log");
+
+    // Signed, and signed and encrypted, with the one in use.
+    for encrypt_to in [Vec::new(), vec![riley.certificate().to_vec()]] {
+        keep(&creds, &account, &card).unwrap();
+        let done = kept(&creds, &account).and_then(|me| protect(RAW, &me, true, &encrypt_to, true, true));
+        let told = done.as_ref().map(|_| ()).unwrap_err().clone();
+        assert!(told == PIN_WRONG && !told.contains("4711"), "{told}");
+        forget_wrong_pin(&creds, &account, None, &done);
+        assert_eq!(pin_of(kept(&creds, &account)), None);
+        assert!(kept(&creds, &account).unwrap().chain == card.chain, "the key's reference stays");
+    }
+    // With its PIN forgotten the card asks for one: not a kept PIN refused.
+    let done = protect(RAW, &kept(&creds, &account).unwrap(), true, &[], false, false);
+    assert!(matches!(&done, Err(e) if e.contains("needs its PIN") && *e != PIN_WRONG), "{done:?}");
+
+    // Decrypting: mail to an older one forgets its PIN, mail to the one in use that one's.
+    keep(&creds, &account, &on_refusing_card(&zoe, Some("1111"))).unwrap();
+    keep_older(&creds, &account, &card, None).unwrap();
+    let riley_fp = fingerprint(riley.certificate());
+    let mut rng = rand_core::OsRng;
+    let body = b"Content-Type: text/plain\r\n\r\nFor the card.\r\n";
+    let to_riley = smime::encrypt(body, std::slice::from_ref(&riley.chain[0]), smime::Cipher::Aes256Gcm, &mut rng).unwrap();
+    assert_eq!(decrypt(&creds, &account, &to_riley).map(|_| ()), Err(PIN_WRONG.to_string()));
+    assert_eq!(pin_of(kept_older(&creds, &account, &riley_fp)), None);
+    assert_eq!(pin_of(kept(&creds, &account)).as_deref(), Some("1111"));
+    let to_zoe = smime::encrypt(body, std::slice::from_ref(&zoe.chain[0]), smime::Cipher::Aes256Cbc, &mut rng).unwrap();
+    assert_eq!(decrypt(&creds, &account, &to_zoe).map(|_| ()), Err(PIN_WRONG.to_string()));
+    assert_eq!(pin_of(kept(&creds, &account)), None);
+
+    // A PIN just typed that the card refuses is the user's to try again: not a kept one.
+    let MyKey::Held { at, .. } = &card.key else { panic!() };
+    let typed = with_held(at, Some("4711"), quatrelle_keys::pkcs11::PinFrom::Typed, |_| Ok::<(), smime::Error>(()));
+    assert_eq!(typed, Err(quatrelle_keys::Error::Pin.to_string()));
+}

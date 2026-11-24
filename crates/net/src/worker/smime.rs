@@ -68,7 +68,7 @@ fn with_held<T>(
 ) -> std::result::Result<T, String> {
     match at {
         KeyRef::Card { .. } => {
-            let mut k = quatrelle_keys::pkcs11::open(at, pin, from).map_err(|e| match e {
+            let mut k = open_card(at, pin, from).map_err(|e| match e {
                 // The kept PIN is wrong: said so, and the pool forgets it (`forget_wrong_pin`).
                 quatrelle_keys::Error::Pin if pin.is_some() && from == quatrelle_keys::pkcs11::PinFrom::Kept => PIN_WRONG.to_string(),
                 e => e.to_string(),
@@ -83,6 +83,24 @@ fn with_held<T>(
         #[cfg(not(target_os = "macos"))]
         KeyRef::Keychain { .. } => Err("the certificate is in another computer's keychain".into()),
     }
+}
+
+/// The module of the tests' stand-in card, which refuses every PIN as a real card does a wrong
+/// one (no real card is ever tried in a test).
+#[cfg(test)]
+const REFUSES_PIN: &str = "test: a card that refuses every PIN";
+
+/// A card's key, logged in to with `pin`.
+fn open_card(
+    at: &KeyRef,
+    pin: Option<&str>,
+    from: quatrelle_keys::pkcs11::PinFrom,
+) -> std::result::Result<quatrelle_keys::pkcs11::CardKey, quatrelle_keys::Error> {
+    #[cfg(test)]
+    if matches!(at, KeyRef::Card { module, .. } if module == REFUSES_PIN) {
+        return Err(if pin.is_some() { quatrelle_keys::Error::Pin } else { quatrelle_keys::Error::NeedPin });
+    }
+    quatrelle_keys::pkcs11::open(at, pin, from)
 }
 
 /// What a kept card PIN that the card refused says. It's forgotten at once, so it's never tried
