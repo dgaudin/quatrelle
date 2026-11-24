@@ -8,6 +8,36 @@ use super::*;
 use quatrelle_model::EWS_FOUND_DOC;
 use quatrelle_model::addr::trust::withdrawn;
 
+/// The connections made again at once with a renewed OAuth token, lately. A refusal after the
+/// server took a token gets a fresh one each time; a server that takes every token for its
+/// folder list and refuses it for what comes next would ask without pause and without end. So
+/// only so many go at once.
+#[derive(Default)]
+pub(super) struct Renewals(std::collections::VecDeque<Instant>);
+
+/// How many connections a renewed token makes again at once within [`RENEWALS_WITHIN`]; each
+/// one past that waits until the oldest of them is that long ago.
+const RENEWALS_AT_ONCE: usize = 3;
+const RENEWALS_WITHIN: Duration = Duration::from_secs(10 * 60);
+
+impl Renewals {
+    fn connect_at(&mut self, now: Instant) -> Instant {
+        while self.0.front().is_some_and(|t| now.saturating_duration_since(*t) >= RENEWALS_WITHIN) {
+            self.0.pop_front();
+        }
+        let at = match self.0.front() {
+            Some(oldest) if self.0.len() >= RENEWALS_AT_ONCE => {
+                let at = oldest.checked_add(RENEWALS_WITHIN).unwrap_or(now).max(now);
+                self.0.pop_front();
+                at
+            }
+            _ => now,
+        };
+        self.0.push_back(at);
+        at
+    }
+}
+
 // Run once, on this thread, once autodiscovery has found the server and before it is kept: a
 // test's way to come between the two.
 #[cfg(test)]
@@ -301,8 +331,15 @@ impl Worker {
                 match self.renew_token() {
                     Ok(_) => {
                         self.conn = None;
-                        self.next_attempt = Instant::now();
-                        self.status(SyncStatus::Connecting);
+                        // At once, unless tokens are being refused one after another.
+                        let now = Instant::now();
+                        self.next_attempt = self.renewals.connect_at(now);
+                        if self.next_attempt > now {
+                            let said = format!("the server keeps refusing the sign-in it is given ({m}); trying again in a while");
+                            self.status(SyncStatus::Error { error: said });
+                        } else {
+                            self.status(SyncStatus::Connecting);
+                        }
                     }
                     Err(e) => self.failed(e),
                 }
@@ -613,4 +650,23 @@ pub(super) fn sync_folders(
 /// connection is gone or its sign-in refused.
 pub(super) fn reader_stops(e: &NetError) -> bool {
     e.is_fatal() || matches!(e, NetError::Auth(_))
+}
+
+/// Renewals go at once a few times, then no faster than three in ten minutes, however long the
+/// server goes on refusing; and at once again after a quiet while.
+#[test]
+fn renewed_tokens_connect_at_once_only_so_often() {
+    let start = Instant::now();
+    let mut r = Renewals::default();
+    let mut now = start;
+    let mut made = Vec::new();
+    while now.saturating_duration_since(start) < Duration::from_secs(60 * 60) {
+        let at = r.connect_at(now);
+        made.push(at.saturating_duration_since(start).as_secs());
+        now = at + Duration::from_secs(1);
+    }
+    assert_eq!(made.get(..4), Some(&[0, 1, 2, 600][..]), "{made:?}");
+    assert!(made.len() <= 19, "{} connections in an hour: {made:?}", made.len());
+    let later = now + Duration::from_secs(20 * 60);
+    assert_eq!(r.connect_at(later), later);
 }

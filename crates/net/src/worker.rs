@@ -400,6 +400,8 @@ struct Worker {
     auth_failed: bool,
     /// An OAuth refusal was answered with a fresh token once; another means signing in again.
     token_retried: bool,
+    /// The connections made again at once with a renewed token, lately: only so many are.
+    renewals: connect::Renewals,
     /// The calendars' and contacts' sync led to a site the account doesn't trust (an item's
     /// address, a collection's): it waits for the account's next start (allowing the site
     /// starts it again). A look for a missing home that stops at one doesn't stop the rest.
@@ -565,6 +567,7 @@ impl Worker {
             last_full: None,
             auth_failed: false,
             token_retried: false,
+            renewals: connect::Renewals::default(),
             dav_waits: false,
             dav_asked: BTreeSet::new(),
             closed: false,

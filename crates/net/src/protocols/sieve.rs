@@ -82,10 +82,37 @@ pub struct Client<S: Read + Write> {
     caps: Vec<(String, String)>,
 }
 
-/// A token of a response line: an atom, or a string (quoted or literal).
-fn tokens<S: Read + Write>(io: &mut BufReader<S>, first: &str, budget: &mut Budget) -> Result<Vec<String>> {
+/// A token of a response line: an atom, a string (quoted or literal), or either inside the
+/// parentheses of a response code.
+#[derive(Debug, PartialEq, Eq)]
+enum Tok {
+    Atom(String),
+    Str(String),
+    Code(String),
+}
+
+impl Tok {
+    fn text(self) -> String {
+        match self {
+            Tok::Atom(s) | Tok::Str(s) | Tok::Code(s) => s,
+        }
+    }
+}
+
+/// A response line's tokens, the literals it announces read too.
+fn tokens<S: Read + Write>(io: &mut BufReader<S>, first: &str, budget: &mut Budget) -> Result<Vec<Tok>> {
     let mut out = Vec::new();
     let mut line = first.to_string();
+    let mut depth = 0usize;
+    let tok = |depth: usize, s: String, quoted: bool| {
+        if depth > 0 {
+            Tok::Code(s)
+        } else if quoted {
+            Tok::Str(s)
+        } else {
+            Tok::Atom(s)
+        }
+    };
     loop {
         let before = out.len();
         let mut chars = line.char_indices().peekable();
@@ -106,7 +133,7 @@ fn tokens<S: Read + Write>(io: &mut BufReader<S>, first: &str, budget: &mut Budg
                             Some((_, c)) => s.push(c),
                         }
                     }
-                    out.push(s);
+                    out.push(tok(depth, s, true));
                 }
                 '{' => {
                     let rest = line.get(i + 1..).unwrap_or("");
@@ -114,7 +141,8 @@ fn tokens<S: Read + Write>(io: &mut BufReader<S>, first: &str, budget: &mut Budg
                     literal = Some(n.parse().map_err(|_| NetError::Protocol("ManageSieve: bad literal".into()))?);
                     break;
                 }
-                '(' | ')' => {}
+                '(' => depth = depth.saturating_add(1),
+                ')' => depth = depth.saturating_sub(1),
                 _ => {
                     let mut atom = String::from(c);
                     while let Some(&(_, c)) = chars.peek() {
@@ -124,7 +152,7 @@ fn tokens<S: Read + Write>(io: &mut BufReader<S>, first: &str, budget: &mut Budg
                         atom.push(c);
                         chars.next();
                     }
-                    out.push(atom);
+                    out.push(tok(depth, atom, false));
                 }
             }
         }
@@ -138,7 +166,7 @@ fn tokens<S: Read + Write>(io: &mut BufReader<S>, first: &str, budget: &mut Budg
         budget.tokens(1)?;
         let mut buf = vec![0u8; n];
         io.read_exact(&mut buf)?;
-        out.push(String::from_utf8_lossy(&buf).into_owned());
+        out.push(tok(depth, String::from_utf8_lossy(&buf).into_owned(), true));
         line = read_line(io, budget)?;
     }
 }
@@ -163,16 +191,14 @@ fn reply<S: Read + Write>(io: &mut BufReader<S>) -> Result<Reply> {
     loop {
         let line = read_line(io, &mut budget)?;
         let t = tokens(io, &line, &mut budget)?;
-        let head = t.first().map(|s| s.to_ascii_uppercase()).unwrap_or_default();
+        // Only an atom ends the reply: a string is data (a script named "ok").
+        let head = match t.first() {
+            Some(Tok::Atom(a)) => a.to_ascii_uppercase(),
+            _ => String::new(),
+        };
         match head.as_str() {
             "OK" | "NO" | "BYE" => {
-                let text = t
-                    .iter()
-                    .skip(1)
-                    .filter(|x| !x.chars().all(|c| c.is_ascii_uppercase() || c == '-' || c == '/'))
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let text = t.into_iter().skip(1).filter(|x| !matches!(x, Tok::Code(_))).map(Tok::text).collect::<Vec<_>>().join(" ");
                 if head == "BYE" {
                     return Err(NetError::Closed(text));
                 }
@@ -182,7 +208,7 @@ fn reply<S: Read + Write>(io: &mut BufReader<S>) -> Result<Reply> {
                 if data.len() > 10_000 {
                     return Err(NetError::Protocol("ManageSieve: too many lines".into()));
                 }
-                data.push(t);
+                data.push(t.into_iter().map(Tok::text).collect());
             }
         }
     }
@@ -238,8 +264,10 @@ impl<S: Read + Write> Client<S> {
         if r.ok { Ok(()) } else { Err(NetError::Auth(if r.text.is_empty() { "the Sieve server refused the password".into() } else { r.text })) }
     }
 
+    /// Sign in with an OAuth token: `xoauth2` is the initial response in base64 already, sent as
+    /// IMAP sends it.
     pub fn login_xoauth2(&mut self, user: &str, token: &str) -> Result<()> {
-        let r = self.run(&format!("AUTHENTICATE \"XOAUTH2\" {}", q(&crate::imap::base64(crate::oauth::xoauth2(user, token).as_bytes()))))?;
+        let r = self.run(&format!("AUTHENTICATE \"XOAUTH2\" {}", q(&crate::oauth::xoauth2(user, token))))?;
         if r.ok { Ok(()) } else { Err(NetError::Auth(r.text)) }
     }
 

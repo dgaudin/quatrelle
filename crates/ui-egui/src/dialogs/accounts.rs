@@ -577,6 +577,13 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
     }
 }
 
+/// A server setting that leaves the password in the clear is said where it's chosen.
+fn clear_text_warning(ui: &mut Ui, t: &Tokens, on: bool) {
+    if on {
+        ui.label(RichText::new(tl!("Without encryption your password travels in the clear. Use only for local test servers.")).color(t.warn).small());
+    }
+}
+
 pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     ui.set_width(480.0);
     title(ui, t, "Server settings");
@@ -613,6 +620,7 @@ pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Token
             security_combo(ui, "edit-smtpsec", &mut f.smtp_security);
         });
         f.smtp_sign_in.ui(ui, w);
+        clear_text_warning(ui, t, *security == Security::None || f.smtp_security == Security::None);
     } else {
         ui.horizontal(|ui| {
             label(ui, "Mail server");
@@ -639,11 +647,7 @@ pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Token
             security_combo(ui, "edit-smtpsec", &mut f.smtp_security);
         });
         f.smtp_sign_in.ui(ui, w);
-        if f.imap_security == Security::None || f.smtp_security == Security::None {
-            ui.label(
-                RichText::new(tl!("Without encryption your password travels in the clear. Use only for local test servers.")).color(t.warn).small(),
-            );
-        }
+        clear_text_warning(ui, t, f.imap_security == Security::None || f.smtp_security == Security::None);
     }
     // Signed in with Microsoft: the organisation's own registration, or the built-in one.
     if f.oauth.as_deref() == Some("microsoft") {

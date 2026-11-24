@@ -59,6 +59,8 @@ pub struct State {
     pub caps: &'static str,
     /// Every command received (tags stripped).
     pub log: Vec<String>,
+    /// The token this server accepts (tests change it to refuse a renewed token).
+    pub token: String,
     /// Addresses whose good token is taken but whose mailbox then won't open, as Microsoft
     /// answers when IMAP is off or the token is another account's.
     pub not_connected: Vec<String>,
@@ -113,6 +115,7 @@ impl State {
             modseq: 10,
             caps: "IMAP4rev1 UIDPLUS MOVE CONDSTORE ENABLE QUOTA",
             log: Vec::new(),
+            token: GOOD_TOKEN.to_string(),
             not_connected: Vec::new(),
             refuse_passwords: None,
             search_delay: std::time::Duration::ZERO,
@@ -310,7 +313,7 @@ impl Fake {
     /// XOAUTH2: accept the good token; anything else gets an error challenge, then NO.
     fn sasl_step(&mut self, tag: &str, token: Option<&str>) {
         match token {
-            Some(t) if t.trim() == crate::oauth::xoauth2("me@studio.example", GOOD_TOKEN) => {
+            Some(t) if t.trim() == crate::oauth::xoauth2("me@studio.example", &self.st.lock().map(|s| s.token.clone()).unwrap_or_default()) => {
                 let caps = self.st.lock().map(|s| s.caps).unwrap_or("");
                 self.say(&format!("{tag} OK [CAPABILITY {caps}] signed in"));
             }

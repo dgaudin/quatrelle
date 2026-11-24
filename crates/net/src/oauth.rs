@@ -18,8 +18,8 @@
 //! (an organisation's single-tenant one: `AccountConfig::oauth_client_id` and `oauth_tenant`),
 //! which then stands in for the built-in one, and for `common`, for that account.
 
-use std::io::{BufRead, BufReader, ErrorKind, Write};
-use std::net::TcpListener;
+use std::io::{ErrorKind, Write};
+use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ring::rand::SecureRandom;
@@ -27,6 +27,12 @@ use serde_json::Value;
 
 use crate::http::{Request, form, pct};
 use crate::{NetError, Result};
+
+/// The longest request line read from the redirect listener.
+const REQUEST_LINE_MAX: usize = 8192;
+
+/// The most read of one request to the redirect listener: its line and its headers.
+const REQUEST_MAX: usize = 64 * 1024;
 
 /// An OAuth provider's endpoints and the app's registration with it.
 #[derive(Clone, PartialEq, Eq)]
@@ -368,6 +374,45 @@ pub fn authorize(p: &Provider, login_hint: &str, open: &mut dyn FnMut(&str) -> s
     authorize_on(p, 0, login_hint, open, timeout)
 }
 
+/// The first line of a request on `sock`, or `None` when the connection doesn't send a whole one
+/// (at most [`REQUEST_LINE_MAX`] bytes) within `wait`, or fails.
+///
+/// The request's headers are read to their end too (within `wait`, at most [`REQUEST_MAX`]
+/// bytes in all): a connection closed with part of the request unread can be reset, and the
+/// browser then shows an error instead of the page written to it.
+fn request_line(sock: &TcpStream, wait: Duration) -> Option<String> {
+    sock.set_nonblocking(false).ok()?;
+    let until = Instant::now().checked_add(wait)?;
+    let mut got: Vec<u8> = Vec::new();
+    let mut line_end: Option<usize> = None;
+    let mut buf = [0u8; 1024];
+    loop {
+        let chunk = until
+            .checked_duration_since(Instant::now())
+            .filter(|d| !d.is_zero())
+            .and_then(|left| sock.set_read_timeout(Some(left)).ok())
+            .and_then(|()| (&*sock).read(&mut buf).ok())
+            .and_then(|n| buf.get(..n))
+            .filter(|c| !c.is_empty());
+        let Some(chunk) = chunk else { break };
+        let from = got.len().saturating_sub(2);
+        got.extend_from_slice(chunk);
+        if line_end.is_none() {
+            line_end = got.iter().position(|&b| b == b'\n');
+            if line_end.unwrap_or(got.len()) > REQUEST_LINE_MAX {
+                return None;
+            }
+        }
+        let tail = got.get(from..).unwrap_or_default();
+        let ended = tail.windows(2).any(|w| w == b"\n\n") || tail.windows(3).any(|w| w == b"\n\r\n");
+        if line_end.is_some() && (ended || got.len() >= REQUEST_MAX) {
+            break;
+        }
+    }
+    let line = got.get(..line_end?)?;
+    Some(String::from_utf8_lossy(line).into_owned())
+}
+
 /// [`authorize`] with the listener on `port` (0: any free one), for a provider that takes only
 /// the redirect address registered with it, to the letter.
 pub fn authorize_on(
@@ -413,16 +458,11 @@ pub fn authorize_on(
             }
             Err(e) => return Err(e.into()),
         };
-        sock.set_nonblocking(false)?;
         // Never past the sign-in's own timeout, whatever is connected.
         let left = deadline.saturating_duration_since(Instant::now()).max(Duration::from_millis(1));
-        sock.set_read_timeout(Some(left.min(Duration::from_secs(10))))?;
-        let mut line = String::new();
         // A connection that says nothing readable (a browser's early one) is skipped: the real
         // redirect may be waiting behind it.
-        if BufReader::new(sock.try_clone()?).take(8192).read_line(&mut line).is_err() {
-            continue;
-        }
+        let Some(line) = request_line(&sock, left.min(Duration::from_secs(10))) else { continue };
         let target = line.split_whitespace().nth(1).unwrap_or("");
         let params = query_params(target);
         let get = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());

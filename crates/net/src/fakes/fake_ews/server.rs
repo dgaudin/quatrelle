@@ -13,14 +13,24 @@ pub struct Server {
     pub data: Arc<Mutex<Data>>,
 }
 
-pub(super) fn respond(s: &mut impl Write, status: u16, headers: &[(&str, String)], body: &[u8]) {
-    let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: text/xml; charset=utf-8\r\nContent-Length: {}\r\n", body.len());
+pub(super) fn respond(s: &mut impl Write, chunked: bool, status: u16, headers: &[(&str, String)], body: &[u8]) {
+    let framing = if chunked { "Transfer-Encoding: chunked".to_string() } else { format!("Content-Length: {}", body.len()) };
+    let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: text/xml; charset=utf-8\r\n{framing}\r\n");
     for (k, v) in headers {
         head.push_str(&format!("{k}: {v}\r\n"));
     }
     head.push_str("\r\n");
     let _ = s.write_all(head.as_bytes());
-    let _ = s.write_all(body);
+    if chunked {
+        for piece in body.chunks(7) {
+            let _ = write!(s, "{:x}\r\n", piece.len());
+            let _ = s.write_all(piece);
+            let _ = s.write_all(b"\r\n");
+        }
+        let _ = s.write_all(b"0\r\n\r\n");
+    } else {
+        let _ = s.write_all(body);
+    }
 }
 
 /// Count one down; whether there was one.
@@ -57,6 +67,7 @@ pub(super) fn serve_at(data: Data, at: &str) -> Server {
 
 /// Requests on one kept-open connection: NTLM signs it in once.
 fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
+    shared.lock().unwrap().connections += 1;
     let mut reader = BufReader::new(s.try_clone().unwrap());
     let mut signed_in = false;
     let mut challenge: Option<crate::ntlm::Challenge> = None;
@@ -71,6 +82,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             return;
         }
         answered += 1;
+        let chunked = shared.lock().unwrap().chunked;
         let (mut len, mut auth, mut routed, mut anchor, mut cookie) = (0usize, String::new(), String::new(), String::new(), String::new());
         let mut agent = String::new();
         loop {
@@ -113,14 +125,14 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             d.only_agent.clone()
         };
         if only.is_some_and(|o| o != agent) {
-            respond(&mut s, 403, &[], b"Forbidden");
+            respond(&mut s, chunked, 403, &[], b"Forbidden");
             continue;
         }
         let basic = shared.lock().unwrap().basic;
         if basic {
             let expected = format!("Basic {}", crate::imap::base64(format!("{DOMAIN}\\{USER}:{PASSWORD}").as_bytes()));
             if auth != expected {
-                respond(&mut s, 401, &[("WWW-Authenticate", "Basic realm=\"x\"".into())], b"");
+                respond(&mut s, chunked, 401, &[("WWW-Authenticate", "Basic realm=\"x\"".into())], b"");
                 continue;
             }
         } else {
@@ -134,7 +146,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                     Some(m) if m.get(8) == Some(&1) => {
                         let c = crate::ntlm::make_challenge([9; 8], &[]);
                         challenge = crate::ntlm::challenge(&c).ok();
-                        respond(&mut s, 401, &[("WWW-Authenticate", format!("NTLM {}", crate::imap::base64(&c)))], b"");
+                        respond(&mut s, chunked, 401, &[("WWW-Authenticate", format!("NTLM {}", crate::imap::base64(&c)))], b"Sign in with NTLM");
                         continue;
                     }
                     Some(m) if m.get(8) == Some(&3) => {
@@ -146,14 +158,20 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                                 .split_once("<soap:Body><m:")
                                 .map(|(_, o)| o.chars().take_while(|c| c.is_ascii_alphanumeric()).collect::<String>());
                             shared.lock().unwrap().refused_sign_ins.push(op.unwrap_or_default());
-                            respond(&mut s, 401, &[("WWW-Authenticate", "NTLM".into()), ("WWW-Authenticate", "Negotiate".into())], b"");
+                            respond(
+                                &mut s,
+                                chunked,
+                                401,
+                                &[("WWW-Authenticate", "NTLM".into()), ("WWW-Authenticate", "Negotiate".into())],
+                                b"Sign in",
+                            );
                             continue;
                         }
                         signed_in = true;
                         shared.lock().unwrap().handshakes += 1;
                     }
                     _ => {
-                        respond(&mut s, 401, &[("WWW-Authenticate", "Negotiate".into()), ("WWW-Authenticate", "NTLM".into())], b"");
+                        respond(&mut s, chunked, 401, &[("WWW-Authenticate", "Negotiate".into()), ("WWW-Authenticate", "NTLM".into())], b"Sign in");
                         continue;
                     }
                 }
@@ -166,7 +184,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 <e:Message xmlns:e=\"http://schemas.microsoft.com/exchange/services/2006/errors\">The server cannot service this request right now. Try again later.</e:Message>\
                 <t:MessageXml xmlns:t=\"http://schemas.microsoft.com/exchange/services/2006/types\"><t:Value Name=\"BackOffMilliseconds\">10</t:Value></t:MessageXml>\
                 </detail></s:Fault></s:Body></s:Envelope>";
-            respond(&mut s, 500, &[], fault.as_bytes());
+            respond(&mut s, chunked, 500, &[], fault.as_bytes());
             continue;
         }
         let doc = parse(&String::from_utf8_lossy(&body));
@@ -186,7 +204,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                      <RedirectAddr>{}</RedirectAddr></Account></Response></Autodiscover>",
                     esc(&to)
                 );
-                respond(&mut s, 200, &[], answer.as_bytes());
+                respond(&mut s, chunked, 200, &[], answer.as_bytes());
                 continue;
             }
             if let Some(pf) = pf.filter(|_| asked.starts_with(PF_GUID)) {
@@ -195,13 +213,13 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                      <AutoDiscoverSMTPAddress>{pf}</AutoDiscoverSMTPAddress></User><Account><AccountType>email</AccountType><Action>settings</Action>\
                      <Protocol><Type>EXCH</Type><EwsUrl>{url}</EwsUrl></Protocol></Account></Response></Autodiscover>"
                 );
-                respond(&mut s, 200, &[], answer.as_bytes());
+                respond(&mut s, chunked, 200, &[], answer.as_bytes());
                 continue;
             }
             // The account's (unless scripted to fail): its server, and its public folder hierarchy
             // mailbox.
             if shared.lock().unwrap().zones.discovery_fails() {
-                respond(&mut s, 500, &[], b"");
+                respond(&mut s, chunked, 500, &[], b"");
                 continue;
             }
             let public =
@@ -241,12 +259,13 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 "<?xml version=\"1.0\"?><Autodiscover><Response><User><DisplayName>Riley</DisplayName></User><Account><AccountType>email</AccountType><Action>settings</Action>\
                  <Protocol><Type>EXCH</Type><EwsUrl>{url}</EwsUrl></Protocol>{public}</Account></Response></Autodiscover>"
             );
-            respond(&mut s, 200, &[], answer.as_bytes());
+            respond(&mut s, chunked, 200, &[], answer.as_bytes());
             continue;
         }
         let Some(op) = doc.find("Body").and_then(|b| b.kids.first()).cloned() else {
             respond(
                 &mut s,
+                chunked,
                 500,
                 &[],
                 b"<soap:Envelope><soap:Body><soap:Fault><faultstring>no operation</faultstring></soap:Fault></soap:Body></soap:Envelope>",
@@ -266,7 +285,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                  <m:ResponseMessages>{}</m:ResponseMessages></m:SubscribeResponse></s:Body></s:Envelope>",
                 message.replace("<m:R ", "<m:SubscribeResponseMessage ").replace("</m:R>", "</m:SubscribeResponseMessage>")
             );
-            respond(&mut s, 200, &[("Set-Cookie", format!("{}; path=/", super::streaming::BACKEND))], xml.as_bytes());
+            respond(&mut s, chunked, 200, &[("Set-Cookie", format!("{}; path=/", super::streaming::BACKEND))], xml.as_bytes());
             continue;
         }
         if op.name == "GetStreamingEvents" {
@@ -340,7 +359,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         }
         // A mailbox without a picture, as Exchange 2016 tells of it: HTTP 404, nothing else.
         if op.name == "GetUserPhoto" && op.text_of("Email").is_some_and(|e| e.ends_with("@http404.example")) {
-            respond(&mut s, 404, &[], b"");
+            respond(&mut s, chunked, 404, &[], b"");
             continue;
         }
         let mut d = shared.lock().unwrap();
@@ -365,7 +384,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         // The directory scripted not to answer.
         if op.name == "ResolveNames" && d.zones.directory_silent {
             drop(d);
-            respond(&mut s, 500, &[], b"");
+            respond(&mut s, chunked, 500, &[], b"");
             continue;
         }
         // Reminders (Exchange 2013 and later), under the version the request asked for.
@@ -377,7 +396,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 let _ = s.shutdown(std::net::Shutdown::Both);
                 return;
             };
-            respond(&mut s, status, &[], body.as_bytes());
+            respond(&mut s, chunked, status, &[], body.as_bytes());
             continue;
         }
         // How the items were asked for; a field the schema doesn't know refuses the whole request.
@@ -403,7 +422,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                     <faultcode>a:ErrorSchemaValidation</faultcode><faultstring>The request failed schema validation.</faultstring>\
                     <detail><e:ResponseCode xmlns:e=\"http://schemas.microsoft.com/exchange/services/2006/errors\">ErrorSchemaValidation</e:ResponseCode>\
                     </detail></s:Fault></s:Body></s:Envelope>";
-                respond(&mut s, 500, &[], fault.as_bytes());
+                respond(&mut s, chunked, 500, &[], fault.as_bytes());
                 continue;
             }
         }
@@ -439,6 +458,6 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         let xml = format!(
             "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\">{header}<s:Body><m:{name} xmlns:m=\"m\" xmlns:t=\"t\">{inner}</m:{name}></s:Body></s:Envelope>"
         );
-        respond(&mut s, 200, &[], xml.as_bytes());
+        respond(&mut s, chunked, 200, &[], xml.as_bytes());
     }
 }
