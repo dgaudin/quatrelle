@@ -88,6 +88,7 @@ pub(super) fn attached<'a>(m: &'a Message<'_>) -> (Vec<Attached<'a>>, TnefBody) 
     }
     // A picture the body shows is in it, whether or not Outlook marked it hidden.
     let shown = shown_cids(&body, parts.iter().flat_map(|(_, _, _, files, _)| files.iter().flatten().filter_map(|f| f.content_id.as_deref())));
+    let refs = HtmlRefs::new(|| message_html(m));
     let mut out = Vec::new();
     for (p, mime, data, files, listed) in parts {
         for f in files.into_iter().flatten() {
@@ -105,7 +106,9 @@ pub(super) fn attached<'a>(m: &'a Message<'_>) -> (Vec<Attached<'a>>, TnefBody) 
         // A picture the text may show. A file that merely has a Content-ID and says nothing of
         // how it's to be shown (a PDF from some invoicing programs) is a file: taken for
         // inline, it was counted (the paperclip) and then listed nowhere, nor saved with the rest.
-        let inline = p.is_inline_part() && mime.starts_with("image/");
+        // An image of another type (some programs send `application/octet-stream`) the HTML shows
+        // by its `cid:` is a picture of the text all the same.
+        let inline = p.is_inline_part() && (mime.starts_with("image/") || p.content_id().is_some_and(|c| refs.shows(Some(c), None)));
         let info = AttachmentInfo {
             index,
             name,
