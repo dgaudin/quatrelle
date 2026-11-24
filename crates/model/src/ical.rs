@@ -47,7 +47,7 @@ pub use text::*;
 pub use todo::write_task;
 use whole::*;
 use write::{day, fold, stamp, trigger};
-pub use write::{write, write_event};
+pub use write::{write, write_event, write_for_server};
 use zones::*;
 pub use zones::{ZoneChange, ZoneRule, wall_clock, zone_rule};
 

@@ -158,7 +158,7 @@ pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &P
             master.href.clone()
         };
         let events: Vec<CalEvent> = parts.iter().map(|e| e.event.clone()).collect();
-        let data = ical::write(&events, None, now);
+        let data = ical::write_for_server(&events, now);
         let etag = (!master.href.is_empty()).then_some(master.etag.as_str());
         match dav.put(&url, "text/calendar; charset=utf-8", &data, etag) {
             Ok(new) => {

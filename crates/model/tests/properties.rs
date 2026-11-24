@@ -31,9 +31,10 @@ fn advanced() -> impl Strategy<Value = Advanced> {
     })
 }
 
-/// Text a person types into a card's field: any characters, lines included.
+/// Text a person types into a card's field: any characters, lines and tabs included, but the
+/// control characters a vCard can't hold (RFC 6350 §3.3: they're left out when it's written).
 fn field() -> impl Strategy<Value = String> {
-    "[^\r\u{0}]{0,40}".prop_map(|s| s.trim().to_string())
+    "[^\u{0}-\u{8}\u{b}-\u{1f}\u{7f}]{0,40}".prop_map(|s| s.trim().to_string())
 }
 
 fn typed(value: &'static str) -> impl Strategy<Value = Typed> {
@@ -43,7 +44,7 @@ fn typed(value: &'static str) -> impl Strategy<Value = Typed> {
 fn card() -> impl Strategy<Value = Card> {
     (
         "[a-z0-9-]{1,20}",
-        "[^\r\n\u{0}]{0,30}".prop_filter("a name", |s| !s.trim().is_empty()).prop_map(|s| s.trim().to_string()),
+        "[^\u{0}-\u{8}\u{a}-\u{1f}\u{7f}]{0,30}".prop_filter("a name", |s| !s.trim().is_empty()).prop_map(|s| s.trim().to_string()),
         (field(), field(), field(), field(), field()),
         prop::collection::vec(typed(r"[a-z0-9.+-]{1,10}@[a-z]{1,8}\.[a-z]{2,3}"), 0..3),
         prop::collection::vec(typed(r"\+?[0-9 ]{3,15}"), 0..3),
@@ -188,6 +189,20 @@ proptest! {
     #[test]
     fn ical_text_round_trips(text in "[^\r]{0,60}") {
         prop_assert_eq!(ical::unescape(&ical::escape(&text)), text);
+    }
+
+    /// Whatever an event's uid and texts hold, what's written for a server holds no control
+    /// character but HTAB and its line ends, and its uid read back is the one a uid read is kept
+    /// as: what a server stores is what's kept here and looked for.
+    #[test]
+    fn a_written_event_holds_only_what_a_line_may(uid in r"[\u{0}-\u{7f}]{1,30}", text in r"[\u{0}-\u{7f}]{0,60}") {
+        prop_assume!(!ical::stored_uid(&uid).is_empty());
+        let e = ical::CalEvent { uid: uid.clone(), summary: text.clone(), location: text.clone(), start: 1_800_000_000, end: 1_800_003_600, ..Default::default() };
+        let written = ical::write_for_server(std::slice::from_ref(&e), 1_800_000_000);
+        prop_assert!(!written.split("\r\n").any(|l| l.contains(|c: char| !ical::allowed(c))), "{:?}", written);
+        let back = ical::parse(&written, 0).events;
+        prop_assert_eq!(back.len(), 1);
+        prop_assert_eq!(&back[0].uid, &ical::stored_uid(&uid));
     }
 
     /// What the fuzz target `trust` holds as well: a host read from a URL is clean, its site is

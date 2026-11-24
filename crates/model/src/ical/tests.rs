@@ -189,6 +189,7 @@ use super::*;
 
 mod calls;
 mod conference;
+mod control;
 mod find;
 mod kept;
 mod meetings;
@@ -762,7 +763,7 @@ fn every_kind_of_private_comes_back_as_it_went() {
         let e = parse(&ics, 0).events.first().cloned().expect("one event");
         assert_eq!((e.private, e.private_kind), (private, kind), "{class}");
         let mut out = String::new();
-        write_event(&e, 0, &mut out);
+        write_event(&e, 0, false, &mut out);
         assert_eq!(out.lines().find(|l| l.starts_with("CLASS")), written, "{class}");
     }
 }

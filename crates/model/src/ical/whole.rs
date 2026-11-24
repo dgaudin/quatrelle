@@ -16,7 +16,9 @@ pub(super) fn whole<'a>(raw: impl IntoIterator<Item = &'a String>, left_out: &[&
     // The components open around the line: each one's name, and whether it's written.
     let mut open: Vec<(String, bool)> = Vec::new();
     for r in raw {
-        let s = r.replace(['\r', '\n'], "");
+        // Line breaks, and the other characters a line can't hold ([`allowed`]), taken out
+        // before it's read: what it begins and ends is what it will when written and read back.
+        let s: String = r.chars().filter(|c| allowed(*c)).collect();
         // Not a folded line's next part, nor nothing.
         let s = s.trim_start_matches([' ', '\t']);
         let Some(l) = parse_line(s) else { continue };
