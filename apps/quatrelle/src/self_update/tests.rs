@@ -69,14 +69,22 @@ fn failed_checks_back_off_up_to_the_hour() {
 #[test]
 fn the_version_just_installed_isnt_offered_again_for_a_day() {
     let dir = scratch("marker");
-    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000));
+    let (old, new) = ("0.21.0 1111111", "0.21.0 2222222");
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000, new));
+    // Written by the build that installed it; read by the new one.
+    std::fs::write(dir.join(MARKER), format!("v0.21.0-test.19\n1000000\n{old}\n")).unwrap();
+    assert!(just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600, new));
+    assert!(!just_installed(&dir, "v0.21.0-test.20", 1_000_000 + 3600, new), "another version is offered");
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000 + JUST_INSTALLED_FOR, new), "a day later it may be again");
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 999_000, new), "a clock gone back proves nothing");
+    // Read by the build that wrote it, still running: the install didn't take (refused, failed,
+    // or put off while Quatrelle still ran), and the version is offered again.
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600, old));
+    // A marker from before it named its build holds as it did.
     std::fs::write(dir.join(MARKER), "v0.21.0-test.19\n1000000\n").unwrap();
-    assert!(just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600));
-    assert!(!just_installed(&dir, "v0.21.0-test.20", 1_000_000 + 3600), "another version is offered");
-    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000 + JUST_INSTALLED_FOR), "a day later it may be again");
-    assert!(!just_installed(&dir, "v0.21.0-test.19", 999_000), "a clock gone back proves nothing");
+    assert!(just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600, old));
     std::fs::write(dir.join(MARKER), "junk").unwrap();
-    assert!(!just_installed(&dir, "junk", 1_000_000));
+    assert!(!just_installed(&dir, "junk", 1_000_000, new));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -251,7 +259,13 @@ fn the_install_kind_follows_where_quatrelle_is() {
 #[test]
 fn the_window_sees_where_the_update_is() {
     let dir = scratch("state");
-    let u = Updater { kind: Kind::Msi(PathBuf::from(r"C:\Program Files\Quatrelle\quatrelle.exe")), data: dir.clone(), shared: Arc::default() };
+    let u = Updater {
+        kind: Kind::Msi(PathBuf::from(r"C:\Program Files\Quatrelle\quatrelle.exe")),
+        data: dir.clone(),
+        version: "0.21.0".into(),
+        build_sha: Some("aaaa".into()),
+        shared: Arc::default(),
+    };
     assert_eq!(u.state(), UpdateState::None);
     assert!(!u.restart_after_close(), "nothing to restart into");
     // Each change wakes the window, which an idle or minimized one needs to see it.
@@ -267,7 +281,13 @@ fn the_window_sees_where_the_update_is() {
     assert_eq!(u.state(), UpdateState::Downloading { version: "0.25.0-test.22".into(), done: 10, total: 40 });
     u.set_status(Status::Ready { tag: "v0.25.0-test.22".into(), file: dir.join("x.msi") });
     assert_eq!(u.state(), UpdateState::Ready { version: "0.25.0-test.22".into(), admin: true }, "the MSI asks for an administrator");
-    let portable = Updater { kind: Kind::Portable(PathBuf::from("m.exe")), data: dir.clone(), shared: Arc::default() };
+    let portable = Updater {
+        kind: Kind::Portable(PathBuf::from("m.exe")),
+        data: dir.clone(),
+        version: "0.21.0".into(),
+        build_sha: Some("bbbb".into()),
+        shared: Arc::default(),
+    };
     portable.set_status(Status::Ready { tag: "v0.25.0-test.22".into(), file: dir.join("x.zip") });
     assert_eq!(portable.state(), UpdateState::Ready { version: "0.25.0-test.22".into(), admin: false });
     // Closing without updating: nothing is started.
