@@ -722,9 +722,13 @@ impl Pool {
 
     fn stop(&mut self, account: &str) {
         for t in self.stopping(account) {
-            std::thread::spawn(move || {
+            // Without a thread to wait on it (the system short of resources), it's left to end
+            // on its own: `std::thread::spawn` panicked here.
+            if let Err(e) = std::thread::Builder::new().name("worker-end".into()).spawn(move || {
                 let _ = t.join();
-            });
+            }) {
+                log::warn!("{account}: {e}");
+            }
         }
     }
 
