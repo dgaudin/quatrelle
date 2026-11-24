@@ -30,6 +30,7 @@ mod shares;
 pub(crate) mod start;
 pub(crate) mod state_writer;
 pub(crate) mod tray;
+pub(crate) mod window_frame;
 
 #[derive(Default)]
 pub(crate) struct Desktop {
@@ -71,6 +72,9 @@ pub(crate) struct Desktop {
     pub(crate) lanes: lanes::Lanes,
     /// The system's print window, while it's open (`desktop/printing.rs`).
     pub(crate) printing: printing::Printing,
+    /// The window opened without the system's title bar, Quatrelle's top bar being it
+    /// (`desktop/window_frame.rs`).
+    pub(crate) own_title_bar: bool,
 }
 
 impl Desktop {
@@ -157,6 +161,9 @@ impl Services for Desktop {
     }
     fn clock(&self) -> (i64, i32) {
         now_and_offset()
+    }
+    fn own_title_bar(&self) -> bool {
+        self.own_title_bar
     }
     fn zone(&self) -> Option<String> {
         iana_time_zone::get_timezone().ok()

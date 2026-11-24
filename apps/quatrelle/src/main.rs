@@ -413,20 +413,17 @@ fn main() -> eframe::Result {
     let updater =
         root.clone().filter(|_| !sample || self_update::trying_out()).and_then(|r| self_update::Updater::start(r, session.build_sha.clone()));
 
+    let saved_ui = saved_ui(state_path.as_deref());
     // The main window opens where it was, at the size it was, maximized if it was.
-    let main_place: Option<quatrelle_ui_egui::WindowPlace> = state_path
-        .as_ref()
-        .and_then(|p| std::fs::read(p).ok())
-        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-        .and_then(|v| v.get("windows")?.get("main").cloned())
-        .and_then(|m| serde_json::from_value(m).ok());
+    let main_place: Option<quatrelle_ui_egui::WindowPlace> =
+        saved_ui.as_ref().and_then(|v| v.get("windows")?.get("main").cloned()).and_then(|m| serde_json::from_value(m).ok());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(if sample { "Quatrelle – Sample mailbox" } else { "Quatrelle" })
             // Matches the desktop entry (StartupWMClass) and icon name in packaging/linux.
             .with_app_id(quatrelle_ui_egui::APP_ID)
             .with_inner_size([1320.0, 820.0])
-            .with_min_inner_size([760.0, 480.0])
+            .with_min_inner_size(quatrelle_ui_egui::MIN_WINDOW_SIZE)
             .with_icon(Arc::new(app_icon())),
         ..Default::default()
     };
@@ -434,6 +431,9 @@ fn main() -> eframe::Result {
         Some(p) => eframe::NativeOptions { viewport: p.apply(options.viewport), ..options },
         None => options,
     };
+    // Quatrelle's top bar is the window's title bar, unless File › Options asked for the system's
+    // (`desktop/window_frame.rs`): the window opens without the system's then.
+    options.viewport = options.viewport.with_decorations(!desktop::window_frame::own_title_bar(saved_ui.as_ref()));
     graphics::configure(&mut options);
     // Windows: Alt+numpad codes type their characters in every window (Alt+0201 is É; issue #23
     // upstream). Elsewhere the window's input is egui's, unchanged.
@@ -452,7 +452,7 @@ fn main() -> eframe::Result {
     // A window that can't open says why, rather than the app leaving without a word (or
     // staying in the background); a panic on the way is caught for that too.
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run(options, sample, store, session, desktop_data, base, moved, state_path, (cmd_args, handed), instance, updater)
+        run(options, sample, store, session, desktop_data, base, moved, (state_path, saved_ui), (cmd_args, handed), instance, updater)
     }));
     let failed = match ran {
         Ok(Ok(())) => {
@@ -477,6 +477,13 @@ fn main() -> eframe::Result {
         .set_buttons(rfd::MessageButtons::Ok)
         .show();
     std::process::exit(1)
+}
+
+/// The settings saved last time (`ui.json`), read once as Quatrelle starts: where the window was,
+/// its frame, then everything else. A file missing, damaged or unreadable is no settings, never a
+/// start that fails.
+fn saved_ui(path: Option<&std::path::Path>) -> Option<serde_json::Value> {
+    path.and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok())
 }
 
 /// Tell standard error (and the log). `eprintln!` panics when standard error is a broken pipe,
@@ -515,7 +522,7 @@ fn run(
     desktop_data: Option<PathBuf>,
     base: Option<PathBuf>,
     moved: Option<Result<PathBuf, String>>,
-    state_path: Option<PathBuf>,
+    (state_path, saved_ui): (Option<PathBuf>, Option<serde_json::Value>),
     (cmd_args, handed): (Vec<String>, Vec<String>),
     instance: Option<single_instance::Server>,
     updater: Option<self_update::Updater>,
@@ -527,6 +534,8 @@ fn run(
     // This thread is the window's: Compact Now never keeps it waiting to read the data file it
     // has to itself (the read fails at once, "being compacted"); writes still wait.
     quatrelle_engine::store::no_waiting();
+    // The window draws its own title bar: the system's was left off it (`main`).
+    let own_title_bar = options.viewport.decorations == Some(false);
     eframe::run_native(
         "Quatrelle",
         options,
@@ -587,6 +596,7 @@ fn run(
                         }),
                         !native_wayland,
                     ),
+                    own_title_bar,
                     ..Default::default()
                 }),
             );
@@ -599,8 +609,8 @@ fn run(
                 app.session.print_fonts = Some((r.clone(), bold.clone()));
             }
             app.install_fonts(&cc.egui_ctx, regular, bold);
-            if let Some(v) = state_path.as_ref().and_then(|p| std::fs::read(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()) {
-                app.restore_state(&v);
+            if let Some(v) = &saved_ui {
+                app.restore_state(v);
             }
             if args.iter().any(|a| a == "--light") {
                 app.ui.dark = Some(false);

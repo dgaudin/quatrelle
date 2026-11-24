@@ -50,6 +50,12 @@ only), its source then given to the pictures so they don't read it again. Work
 for a message no longer shown is cancelled, and what is kept is bounded (textures, decoded
 pictures waiting, files taken out).
 
+The main window's title bar is Quatrelle's top bar when `Services::own_title_bar` says so
+(`ui-egui/src/app/chrome/caption.rs`: the window's buttons, its drag and its resize edges): the
+desktop app opens the window without the system's on Windows, Linux and the BSDs unless
+`prefs.systemTitleBar` in `ui.json` asks for it (`apps/quatrelle/src/desktop/window_frame.rs`);
+a Mac and the browser keep the default, no.
+
 ## Source layout
 
 Modules use the 2018+ layout (`foo.rs` beside `foo/`, no `mod.rs`), split by topic, with every
