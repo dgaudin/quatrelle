@@ -246,11 +246,42 @@ fn the_install_kind_follows_where_quatrelle_is() {
         let dir = scratch("appimage");
         let image = dir.join("Quatrelle-x86_64.AppImage");
         std::fs::write(&image, b"").unwrap();
-        let found = image.clone();
-        let env = move |k: &str| (k == "APPIMAGE").then(|| found.clone());
-        assert_eq!(detect_at(Path::new("/tmp/.mount_x/usr/bin/quatrelle"), &env), Some(Kind::AppImage(image)));
-        let env = |k: &str| (k == "APPIMAGE").then(|| PathBuf::from("/proc/version"));
-        assert_eq!(detect_at(Path::new("/tmp/.mount_x/usr/bin/quatrelle"), &env), None, "a folder it can't write");
+        // Where the image is mounted, as the AppImage runtime says (`APPDIR`).
+        let mount = dir.join("mount");
+        std::fs::create_dir_all(mount.join("usr/bin")).unwrap();
+        let exe = mount.join("usr/bin/quatrelle");
+        let (image_at, mount_at) = (image.clone(), mount.clone());
+        let own = move |k: &str| match k {
+            "APPIMAGE" => Some(image_at.clone()),
+            "APPDIR" => Some(mount_at.clone()),
+            _ => None,
+        };
+        assert_eq!(detect_at(&exe, &own), Some(Kind::AppImage(image.clone())));
+        // Another program's AppImage, passed on to the Quatrelle it started (a browser's
+        // mailto: link): never taken for Quatrelle's, this copy isn't updated over it.
+        let browser = dir.join("Browser.AppImage");
+        std::fs::write(&browser, b"").unwrap();
+        for (exe_at, appdir) in [
+            (Path::new("/usr/bin/quatrelle"), Some(mount.clone())),
+            (exe.as_path(), None),
+            (exe.as_path(), Some(PathBuf::from("/"))),
+            (exe.as_path(), Some(PathBuf::from("tmp/x"))),
+        ] {
+            let (browser_at, appdir_at) = (browser.clone(), appdir.clone());
+            let env = move |k: &str| match k {
+                "APPIMAGE" => Some(browser_at.clone()),
+                "APPDIR" => appdir_at.clone(),
+                _ => None,
+            };
+            assert_eq!(detect_at(exe_at, &env), None, "{appdir:?}");
+        }
+        let mount_at = mount.clone();
+        let env = move |k: &str| match k {
+            "APPIMAGE" => Some(PathBuf::from("/proc/version")),
+            "APPDIR" => Some(mount_at.clone()),
+            _ => None,
+        };
+        assert_eq!(detect_at(&exe, &env), None, "a folder it can't write");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

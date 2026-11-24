@@ -167,8 +167,15 @@ fn detect_at(exe: &Path, env: &dyn Fn(&str) -> Option<PathBuf>) -> Option<Kind> 
     }
     if cfg!(target_os = "linux") {
         // Replaced by a rename beside it: its folder must be ours to write (an AppImage kept in
-        // /opt by root keeps File › About's Download link).
+        // /opt by root keeps File › About's Download link). Only Quatrelle's own: an AppImage that
+        // opens a link or a file passes its `APPIMAGE` on to the program it starts, so a Quatrelle
+        // started by another AppImage (a browser's `mailto:` link) would put its update over that
+        // one's file. Quatrelle's own runs from inside its image (`APPDIR`).
         let image = env("APPIMAGE").filter(|p| p.is_file())?;
+        if !runs_from_image(exe, env("APPDIR").as_deref()) {
+            log::info!("updates: {} belongs to another program, so it isn't taken for Quatrelle's", image.display());
+            return None;
+        }
         if !image.parent().is_some_and(writable) {
             log::info!("updates: {} is in a folder this user can't write, so it isn't replaced", image.display());
             return None;
@@ -176,6 +183,15 @@ fn detect_at(exe: &Path, env: &dyn Fn(&str) -> Option<PathBuf>) -> Option<Kind> 
         return Some(Kind::AppImage(image));
     }
     None
+}
+
+/// Whether `exe` runs from the AppImage mounted at `appdir`; anything unclear counts as not. One
+/// inherited from another program then isn't taken for Quatrelle's: this copy is updated as what
+/// it is, or not at all, never over that program's file.
+fn runs_from_image(exe: &Path, appdir: Option<&Path>) -> bool {
+    let Some(appdir) = appdir.filter(|d| d.has_root()).and_then(|d| d.canonicalize().ok()) else { return false };
+    // No image is mounted at the root, where every program would count as inside it.
+    appdir.parent().is_some() && exe.starts_with(&appdir)
 }
 
 /// Whether a file can be made in `dir` (made new and removed again to find out, never through
