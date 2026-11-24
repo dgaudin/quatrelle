@@ -144,7 +144,15 @@ pub fn parse(xml: &str) -> El {
                 count += 1;
                 let el = El {
                     name: local(e.name().as_ref()),
-                    attrs: e.attributes().flatten().map(|a| (local(a.key.as_ref()), unescape(&a.value))).collect(),
+                    attrs: e
+                        .attributes()
+                        .flatten()
+                        .map(|a| {
+                            let mut value = String::new();
+                            push_in_xml(&mut value, &unescape(&a.value));
+                            (local(a.key.as_ref()), value)
+                        })
+                        .collect(),
                     ..Default::default()
                 };
                 stack.push(el);
@@ -154,12 +162,12 @@ pub fn parse(xml: &str) -> El {
             }
             X::Text(t) => {
                 if let Some(top) = stack.last_mut() {
-                    top.text.push_str(&t);
+                    push_in_xml(&mut top.text, &t);
                 }
             }
             X::CData(t) => {
                 if let Some(top) = stack.last_mut() {
-                    top.text.push_str(&t);
+                    push_in_xml(&mut top.text, &t);
                 }
             }
             X::GeneralRef(g) => {
@@ -178,7 +186,7 @@ pub fn parse(xml: &str) -> El {
                         .and_then(char::from_u32),
                 };
                 if let (Some(c), Some(top)) = (c, stack.last_mut()) {
-                    top.text.push(c);
+                    push_in_xml(&mut top.text, c.encode_utf8(&mut [0; 4]));
                 }
             }
             X::End(_) => close(&mut stack),
@@ -192,6 +200,16 @@ pub fn parse(xml: &str) -> El {
     stack.pop().unwrap_or_default()
 }
 
+/// Whether XML 1.0 allows `c` (the controls but tab and line ends it doesn't).
+fn in_xml(c: char) -> bool {
+    (c as u32) >= 0x20 || matches!(c, '\t' | '\n' | '\r')
+}
+
+/// `s` onto `out`, without what XML doesn't allow.
+fn push_in_xml(out: &mut String, s: &str) {
+    out.extend(s.chars().filter(|&c| in_xml(c)));
+}
+
 /// Text for XML.
 pub fn esc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -201,8 +219,7 @@ pub fn esc(s: &str) -> String {
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
-            // Not allowed in XML 1.0.
-            c if (c as u32) < 0x20 && !matches!(c, '\t' | '\n' | '\r') => {}
+            c if !in_xml(c) => {}
             c => out.push(c),
         }
     }
@@ -291,5 +308,16 @@ mod tests {
         assert_eq!(r.kids.len(), MAX_ELEMENTS - 1);
         assert!(r.kids.iter().all(|k| k.name == "i"), "what's past the cap is left out");
         assert_eq!(r.text, "tail", "r is still open after the element left out ends");
+    }
+
+    /// What XML doesn't allow is neither read nor written: a rule's folder id holding NULs was
+    /// read with them and written back without.
+    #[test]
+    fn what_xml_does_not_allow_is_not_read() {
+        let doc = parse("<r a=\"x\0y\">a&#1;b</r>");
+        let r = doc.child("r").unwrap();
+        assert_eq!(r.attr("a"), Some("xy"), "{:?}", r.attrs);
+        assert_eq!(r.text, "ab", "{r:?}");
+        assert_eq!(esc("a\0b\u{1}"), "ab");
     }
 }
