@@ -109,6 +109,12 @@ pub struct UiState {
     /// Where the ribbon was last drawn (a click on the Search tab's buttons takes the focus
     /// from the box, and mustn't close the tab).
     pub(super) ribbon_rect: Option<egui::Rect>,
+    /// Where the top bar, the ribbon's panel and its row of tabs were drawn in the last frame
+    /// (`None` for the ones not drawn then, as the ribbon on the File page): the rows of the
+    /// window, kept for the tests that measure them.
+    pub(super) top_bar_rect: Option<egui::Rect>,
+    pub(super) ribbon_panel_rect: Option<egui::Rect>,
+    pub(super) ribbon_tabs_rect: Option<egui::Rect>,
     /// The ribbon's buttons from this one on go without their labels: it didn't fit the window
     /// ([`widgets::RibbonFit`]).
     pub(super) ribbon_icons_from: usize,

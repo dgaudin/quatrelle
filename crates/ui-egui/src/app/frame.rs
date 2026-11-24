@@ -372,9 +372,15 @@ impl MailApp {
             self.flush_jobs();
             return;
         }
-        egui::Panel::top("topbar").exact_size(40.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 5))).show(ui, |ui| {
-            self.top_bar(ui, &mut acts);
-        });
+        let top_bar = egui::Panel::top("topbar")
+            .exact_size(40.0)
+            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 5)))
+            .show(ui, |ui| {
+                self.top_bar(ui, &mut acts);
+            });
+        self.ui.top_bar_rect = Some(top_bar.response.rect);
+        self.ui.ribbon_panel_rect = None;
+        self.ui.ribbon_tabs_rect = None;
         egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 3))).show(
             ui,
             |ui| {
@@ -393,7 +399,7 @@ impl MailApp {
                 });
         }
         if self.ui.backstage.is_none() {
-            egui::Panel::top("ribbon")
+            let ribbon = egui::Panel::top("ribbon")
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
                     // Too wide for the window: its last buttons lose their labels, as few as it
@@ -433,6 +439,7 @@ impl MailApp {
                     }
                     self.ui.ribbon_groups.insert(key, next);
                 });
+            self.ui.ribbon_panel_rect = Some(ribbon.response.rect);
             // A newer Quatrelle ready to install (or a copy left from before): a bar of its own.
             if self.update_bar_wanted() {
                 egui::Panel::top("update-bar")
