@@ -76,7 +76,8 @@ fn old_links(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// The editor's for a picture's file in a saved page, its bytes.
+/// The upstream decoder for a picture's file in a saved page (the editor's), as it was, kept to
+/// check the one decoder gives what it gave: its bytes.
 fn old_inserting(s: &str) -> Vec<u8> {
     let raw = s.as_bytes();
     let mut out = Vec::with_capacity(raw.len());

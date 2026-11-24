@@ -31,7 +31,7 @@ fn thousands_of_pictures_pasted_with_much_text_cost_a_few_passes() {
 
 /// The marks the passes write are private-use characters mail doesn't carry: one a message
 /// writes itself is taken out, not read as ours (a typeface mark in pasted text was taken for
-/// MailCraft's own). And the signature's mark is its own character, not the rule line's.
+/// Quatrelle's own). And the signature's mark is its own character, not the rule line's.
 #[test]
 fn marks_a_message_writes_are_taken_out() {
     let r = html_to_rich("<p>a\u{E000}b\u{E001}c\u{E020}\u{E100}d\u{E002}e</p>");

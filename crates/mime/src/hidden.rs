@@ -335,7 +335,7 @@ mod tests {
         assert!(hidden_text(&deep).is_some());
     }
 
-    /// Found on the same notice: it said it hid 491 words. A preview line's padding of invisible
+    /// A shipping notice said it hid 491 words. A preview line's padding of invisible
     /// characters isn't words, and `font-size: 0` on a column, with a size set on the text inside
     /// (as MJML writes every column), hides nothing.
     #[test]
