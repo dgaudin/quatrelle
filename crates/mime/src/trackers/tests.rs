@@ -424,6 +424,20 @@ fn ordinary_mail_keeps_its_pictures_and_titles() {
     }
 }
 
+/// A link's host is after the last `@` of what's before its path, as a browser reads it: a
+/// name and password before it (`counter:x@`) aren't its host, nor is what's after a `\`.
+/// Cut at the first `:`, `https://sendgrid.net:x@shop.example/` was counted as SendGrid's,
+/// and `https://shop.example:x@sendgrid.net/` wasn't. The authority stays as written.
+#[test]
+fn a_host_after_a_name_and_password() {
+    assert!(!tracks_click("https://sendgrid.net:x@shop.example/sale"));
+    assert!(tracks_click("https://shop.example:x@sendgrid.net/sale"));
+    assert!(tracks_click("https://ana@sendgrid.net:8080/sale"));
+    assert!(!tracks_click("https://shop.example\\@sendgrid.net/sale"));
+    assert_eq!(clean_link("https://Ana:Pw@Shop.Example:8443/a?utm_source=x&id=7#top"), "https://Ana:Pw@Shop.Example:8443/a?id=7#top");
+    assert_eq!(clean_link("https://ana:pw@[::1]:80/?b=2&fbclid=1"), "https://ana:pw@[::1]:80/?b=2");
+}
+
 #[test]
 fn odd_links_never_panic() {
     for link in [
