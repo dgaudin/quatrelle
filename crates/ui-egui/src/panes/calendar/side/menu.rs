@@ -100,7 +100,11 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
     // Into one of the server's calendar groups (Outlook's Move to group).
     let groups: Vec<String> = s.pim.get(account).map(|p| p.calendar_groups.clone()).unwrap_or_default();
     if !groups.is_empty() {
-        let why = s.calendar_group_move(account).err().map(group_refusal_text);
+        let why = if extra.opened.is_some() {
+            Some(tl!("This calendar isn't in Outlook's calendar groups yet"))
+        } else {
+            s.calendar_group_move(account).err().map(group_refusal_text)
+        };
         let resp = ui
             .add_enabled_ui(why.is_none(), |ui| {
                 ui.menu_button((widgets::menu_icon(Some(Icon::Move)), tl!("Move to group")), |ui| {

@@ -243,3 +243,25 @@ fn escape_cancels_a_calendar_drag() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A calendar opened by its owner's address has no shortcut in Outlook's groups: Move to group
+/// is greyed with why, instead of offering a move that would fail.
+#[test]
+fn move_to_group_is_greyed_for_a_calendar_opened_by_address() {
+    let (mut a, dir, ctx) = with_groups("calendar-groups-opened");
+    let account = a.session.accounts[0].config.id.clone();
+    {
+        let pim = a.session.pim_mut(&account);
+        pim.shared.push("ana@contoso.example".into());
+        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Lima").expect("Ana Lima");
+        ana.id = "shared:ana@contoso.example".into();
+    }
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    right_click(&ctx, &mut a, "Ana Lima");
+    point_at(&ctx, &mut a, "Move to group");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "This calendar isn't in Outlook's calendar groups yet"), "{shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
