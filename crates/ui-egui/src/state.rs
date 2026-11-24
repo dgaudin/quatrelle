@@ -65,8 +65,6 @@ pub struct UiState {
     pub system_accent: bool,
     /// The ribbon folded away to its tabs (Ctrl+F1, or its ⌃), as Outlook's.
     pub ribbon_collapsed: bool,
-    /// The light or dark style last asked of the window's title bar (`None` inside: the system's).
-    pub(super) window_theme: Option<Option<bool>>,
     pub tab: RibbonTab,
     pub search_text: String,
     pub(super) focus_search: bool,

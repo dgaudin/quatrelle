@@ -34,5 +34,5 @@ pub(crate) use keys::delete_from_window;
 #[cfg(test)]
 pub(crate) use meetings::{PageOutcome, ProfileKind, page_line};
 pub(crate) use meetings::{meeting_browser, meeting_profile};
-pub(crate) use windows::forget_open;
 pub use windows::{WindowPlace, after_open};
+pub(crate) use windows::{forget_open, title_bars_in};

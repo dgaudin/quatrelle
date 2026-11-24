@@ -339,17 +339,11 @@ impl MailApp {
             self.ui.tokens = tokens;
             theme::apply(&ctx, &self.ui.tokens);
         }
-        // The title bar the system draws goes light or dark with the window: the system's
-        // when following it, else the one chosen.
-        if self.ui.window_theme != Some(self.ui.dark) {
-            self.ui.window_theme = Some(self.ui.dark);
-            let theme = match self.ui.dark {
-                Some(true) => egui::SystemTheme::Dark,
-                Some(false) => egui::SystemTheme::Light,
-                None => egui::SystemTheme::SystemDefault,
-            };
-            ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(theme));
-        }
+        // The title bars the system draws follow (the other windows', the main one's when it's
+        // chosen). As the system is, the system knows best; except on Linux, where winit knows
+        // no system theme and would say dark: the resolved one is said.
+        let said = if cfg!(all(unix, not(target_os = "macos"))) { Some(dark) } else { self.ui.dark };
+        super::title_bars_in(&ctx, said);
         self.shortcuts(&ctx);
 
         let mut acts: Vec<Action> = Vec::new();

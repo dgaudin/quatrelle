@@ -7,6 +7,7 @@ use super::*;
 
 mod guard;
 mod message_ribbon;
+mod theme;
 mod title_bar;
 
 #[test]

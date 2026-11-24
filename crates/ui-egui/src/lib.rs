@@ -227,7 +227,6 @@ impl MailApp {
                 dark: None,
                 system_accent: true,
                 ribbon_collapsed: false,
-                window_theme: None,
                 tab: RibbonTab::Home,
                 search_text: String::new(),
                 focus_search: false,
