@@ -95,11 +95,10 @@ const COUNTERS: &[&str] = &[
 ];
 
 /// Wrappers that carry the real address in a query parameter: (host or host suffix, path
-/// prefix, parameter).
+/// prefix, parameter). Every row for a host and path is tried, in order.
 const WRAPPERS: &[(&str, &str, &str)] = &[
-    ("www.google.com", "/url", "q"),
-    ("www.google.com", "/url", "url"),
     ("google.com", "/url", "q"),
+    ("google.com", "/url", "url"),
     ("l.facebook.com", "/l.php", "u"),
     ("lm.facebook.com", "/l.php", "u"),
     ("l.instagram.com", "/", "u"),
@@ -179,11 +178,15 @@ fn unwrapped(url: &str, gates: bool) -> Option<String> {
         // Amazon SES: `/L0/<the address, percent-encoded>/1/…`.
         u.path.strip_prefix("/L0/").and_then(|p| p.split('/').next()).and_then(|p| percent_decode(p, false))
     } else {
+        // Each row for its host and path in turn (the first was the only one tried, and
+        // Google's `?url=` after `?q=` never was).
+        let query = u.query?;
         let known = WRAPPERS.iter().chain(GATES.iter().filter(|_| gates));
-        let (_, _, param) = known.into_iter().find(|(host, path, _)| host_is(&u.host, host) && u.path.starts_with(path))?;
-        u.query?.split('&').find_map(|pair| {
-            let (k, v) = pair.split_once('=')?;
-            k.eq_ignore_ascii_case(param).then(|| percent_decode(v, true)).flatten()
+        known.filter(|(host, path, _)| host_is(&u.host, host) && u.path.starts_with(path)).find_map(|(_, _, param)| {
+            query.split('&').find_map(|pair| {
+                let (k, v) = pair.split_once('=')?;
+                k.eq_ignore_ascii_case(param).then(|| percent_decode(v, true)).flatten()
+            })
         })
     }?;
     let inner = inner.trim().to_string();
