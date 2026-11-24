@@ -435,3 +435,20 @@ fn the_password_only_answers_a_site_that_may_have_it() {
     let (got, seen) = go(&own, vec![other, multi()]);
     assert!(matches!(got, Err(NetError::Auth(_))) && seen.len() == 1 && !password_seen(&seen[0]), "{seen:?}");
 }
+
+/// A response past the depth cap is left out with all it holds: its end doesn't end the response
+/// it's in, whose properties after it are still read.
+#[test]
+fn past_the_depth_cap_a_response_keeps_its_properties() {
+    let (opens, closes) = ("<x>".repeat(62), "</x>".repeat(62));
+    let xml = format!(
+        "<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/a/</d:href>{opens}<d:response><d:href>/evil/</d:href></d:response>{closes}\
+         <d:propstat><d:prop><d:displayname>Kept</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>\
+         <d:response><d:href>/b/</d:href></d:response></d:multistatus>"
+    );
+    let items = multistatus(&xml);
+    let hrefs: Vec<&str> = items.iter().map(|i| i.href.as_str()).collect();
+    assert_eq!(hrefs, ["/a/", "/b/"]);
+    assert_eq!(items[0].props.get("displayname").map(String::as_str), Some("Kept"));
+    assert!(items[0].hrefs.is_empty(), "nothing past the cap is read: {:?}", items[0].hrefs);
+}
