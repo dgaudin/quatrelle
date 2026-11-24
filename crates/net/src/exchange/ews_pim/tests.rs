@@ -697,3 +697,13 @@ fn a_shortcuts_name_and_group_are_bounded() {
     assert!(shortcuts[0].1.chars().count() <= 255, "{} characters in a name", shortcuts[0].1.chars().count());
     assert!(shortcuts[0].2.chars().count() <= 255, "{} characters in a group", shortcuts[0].2.chars().count());
 }
+
+/// A weekly pattern's `FirstDayOfWeek` is read: every other Saturday and Sunday, weeks counted
+/// from Sunday, goes as `WKST=SU`.
+#[test]
+fn a_weekly_patterns_first_day_of_week_is_read() {
+    let xml = "<t:Recurrence><t:WeeklyRecurrence><t:Interval>2</t:Interval><t:DaysOfWeek>Saturday Sunday</t:DaysOfWeek><t:FirstDayOfWeek>Sunday</t:FirstDayOfWeek></t:WeeklyRecurrence><t:NoEndRecurrence><t:StartDate>2026-10-03</t:StartDate></t:NoEndRecurrence></t:Recurrence>";
+    let el = parse(xml);
+    let back = el.find("Recurrence").and_then(recurrence_json).as_ref().and_then(rrule_of).unwrap();
+    assert_eq!(back, "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU;INTERVAL=2", "{back}");
+}

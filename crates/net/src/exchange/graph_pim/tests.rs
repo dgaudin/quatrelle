@@ -36,6 +36,12 @@ fn recurrences_both_ways() {
     let r = recurrence_of("FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1", start).unwrap();
     assert_eq!((r["pattern"]["type"].as_str(), r["pattern"]["dayOfMonth"].as_u64()), (Some("absoluteMonthly"), Some(31)));
     assert_eq!(rrule_of(&r).unwrap(), "FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1");
+    // A list of several days other than that form keeps the start's day, as before; one day
+    // alone is taken.
+    let r = recurrence_of("FREQ=MONTHLY;BYMONTHDAY=1,15", start).unwrap();
+    assert_eq!((r["pattern"]["type"].as_str(), r["pattern"]["dayOfMonth"].as_u64()), (Some("absoluteMonthly"), Some(5)));
+    let r = recurrence_of("FREQ=MONTHLY;BYMONTHDAY=15", start).unwrap();
+    assert_eq!(r["pattern"]["dayOfMonth"].as_u64(), Some(15));
     // The day weeks start on goes both ways; Monday needn't be said.
     let r = recurrence_of("FREQ=WEEKLY;INTERVAL=2;BYDAY=SA,SU;WKST=SU", start).unwrap();
     assert_eq!(r["pattern"]["firstDayOfWeek"], "sunday");

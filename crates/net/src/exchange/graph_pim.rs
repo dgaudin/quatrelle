@@ -155,7 +155,20 @@ pub fn recurrence_of(rule: &str, start: i64) -> Option<Value> {
         Some(nth) if byday.iter().all(|(n, _)| *n == 0) => byday.into_iter().map(|(_, d)| (nth, d)).collect(),
         _ => byday,
     };
-    let month_day = get("BYMONTHDAY").and_then(|v| v.split(',').filter_map(|d| d.trim().parse::<u32>().ok()).max());
+    let month_days: Vec<u32> = get("BYMONTHDAY").map(|v| v.split(',').filter_map(|d| d.trim().parse::<u32>().ok()).collect()).unwrap_or_default();
+    // The 29th to 31st, or the month's last, said as `BYMONTHDAY=28,…,N` with `BYSETPOS=-1`: its
+    // largest day. Any other list keeps the start's day, as before (one day alone is taken).
+    let month_day = match (set_pos, month_days.as_slice()) {
+        (Some(-1), [28, rest @ ..])
+            if !rest.is_empty()
+                && rest.iter().copied().eq(29..=28 + u32::try_from(rest.len()).unwrap_or(0))
+                && rest.last().is_some_and(|n| *n <= 31) =>
+        {
+            month_days.last().copied()
+        }
+        (_, [day]) => Some(*day),
+        _ => None,
+    };
     let index = |n: i32| INDEX.iter().find(|(_, i)| *i == n).map_or("first", |(name, _)| *name);
     let days: Vec<&str> = byday.iter().map(|(_, d)| *d).collect();
     let pattern = match get("FREQ")? {

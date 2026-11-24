@@ -78,7 +78,7 @@ pub fn recurrence_json(r: &El) -> Option<Value> {
         })
         .collect();
     let month = p.text_of("Month").and_then(|m| MONTHS.iter().position(|x| x.eq_ignore_ascii_case(m.trim()))).map(|i| i + 1);
-    let pattern = json!({
+    let mut pattern = json!({
         "type": kind,
         "interval": num("Interval").unwrap_or(1),
         "daysOfWeek": days,
@@ -86,6 +86,12 @@ pub fn recurrence_json(r: &El) -> Option<Value> {
         "month": month.unwrap_or(0),
         "dayOfMonth": num("DayOfMonth").unwrap_or(0),
     });
+    // The day weeks start on, when the server says (`FirstDayOfWeek` in a `WeeklyRecurrence`).
+    if kind == "weekly"
+        && let Some(d) = p.text_of("FirstDayOfWeek")
+    {
+        pattern["firstDayOfWeek"] = json!(d.trim().to_ascii_lowercase());
+    }
     let date = |e: &El, n: &str| e.text_of(n).map(|d| d.trim().get(..10).unwrap_or("").to_string());
     let range = if let Some(e) = r.child("EndDateRecurrence") {
         json!({"type": "endDate", "startDate": date(e, "StartDate"), "endDate": date(e, "EndDate")})
