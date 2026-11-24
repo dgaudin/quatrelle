@@ -8,6 +8,8 @@ AddType font/otf .otf
 </IfModule>
 
 <IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Cross-Origin-Opener-Policy "same-origin"
   <FilesMatch "\.(wasm|js|otf)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
