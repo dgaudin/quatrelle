@@ -29,6 +29,11 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         if let Some((_, list)) = groups.first_mut() {
                             list.push((a, c));
                         }
+                    } else if !c.group.is_empty() {
+                        match groups.iter_mut().find(|(g, _)| g.eq_ignore_ascii_case(&c.group)) {
+                            Some((_, list)) => list.push((a, c)),
+                            None => groups.push((c.group.clone(), vec![(a, c)])),
+                        }
                     } else {
                         shared.push((a, c));
                     }

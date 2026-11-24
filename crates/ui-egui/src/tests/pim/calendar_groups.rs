@@ -177,3 +177,24 @@ fn dragging_a_calendar_onto_a_groups_header_moves_it() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A colleague's calendar that Exchange gives the id `shared:<address>` is under the server
+/// group it belongs to, not under Shared calendars.
+#[test]
+fn a_colleagues_calendar_stays_under_its_server_group() {
+    let (mut a, dir, ctx) = with_groups("calendar-groups-shared");
+    let account = a.session.accounts[0].config.id.clone();
+    {
+        let pim = a.session.pim_mut(&account);
+        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Lima").expect("Ana Lima");
+        ana.id = "shared:ana@contoso.example".into();
+    }
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    assert!(text_at(&shapes, "Shared calendars").is_none(), "the empty Shared calendars heading is gone");
+    let y = |t: &str| text_at(&shapes, t).unwrap_or_else(|| panic!("{t} in the pane")).y;
+    assert!(y("Équipe") < y("Ana Lima"), "Ana's calendar is under Équipe");
+    let _ = std::fs::remove_dir_all(dir);
+}
