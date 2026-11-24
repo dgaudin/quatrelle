@@ -151,7 +151,7 @@ pub(crate) fn serve(fake: Fake) -> (u16, Arc<Mutex<Fake>>) {
             let caps = |s: &mut std::net::TcpStream, sieve: &str| {
                 let _ = write!(
                     s,
-                    "\"IMPLEMENTATION\" \"Fake\"\r\n\"SASL\" \"PLAIN\"\r\n\"SIEVE\" \"{sieve}\"\r\n\"VERSION\" \"1.0\"\r\nOK \"ready\"\r\n"
+                    "\"IMPLEMENTATION\" \"Fake\"\r\n\"SASL\" \"PLAIN XOAUTH2\"\r\n\"SIEVE\" \"{sieve}\"\r\n\"VERSION\" \"1.0\"\r\nOK \"ready\"\r\n"
                 );
             };
             caps(&mut s, shared.lock().unwrap().sieve);
@@ -165,7 +165,11 @@ pub(crate) fn serve(fake: Fake) -> (u16, Arc<Mutex<Fake>>) {
                 let arg = |n: usize| line.split('"').nth(n).unwrap_or("").to_string();
                 let up = line.to_ascii_uppercase();
                 if up.starts_with("AUTHENTICATE") {
-                    let good = crate::imap::base64(b"\0me@studio.example\0pw");
+                    let good = if up.contains("\"XOAUTH2\"") {
+                        format!("\"{}\"", crate::imap::base64(b"user=me@studio.example\x01auth=Bearer token\x01\x01"))
+                    } else {
+                        crate::imap::base64(b"\0me@studio.example\0pw")
+                    };
                     let _ = s.write_all(if line.contains(&good) { b"OK\r\n" as &[u8] } else { b"NO \"wrong password\"\r\n" });
                 } else if up.starts_with("LISTSCRIPTS") {
                     for (n, _) in &f.scripts {
@@ -314,4 +318,53 @@ fn an_answer_without_an_end_is_refused_after_a_few_megabytes() {
         assert!(matches!(&got, Err(NetError::Protocol(m)) if m.contains("ManageSieve")), "{:?}", got.err());
         assert!(*served.lock().unwrap() <= 8 << 20, "{} bytes read", *served.lock().unwrap());
     }
+}
+
+/// An account signed in with OAuth reaches ManageSieve with XOAUTH2, its initial response
+/// encoded once, as IMAP sends it: it went encoded twice, which no server can read, so its
+/// automatic replies could never be read or set.
+#[test]
+fn oauth_accounts_sign_in_with_xoauth2() {
+    let (port, _) = serve(Fake { scripts: Vec::new(), active: None, sieve: "vacation", log: Vec::new() });
+    let mut c = Client::from_stream(std::net::TcpStream::connect(("127.0.0.1", port)).unwrap()).unwrap();
+    c.login_xoauth2("me@studio.example", "token").unwrap();
+    assert_eq!(c.vacation().unwrap(), Vacation::default());
+    c.logout();
+    let mut stale = Client::from_stream(std::net::TcpStream::connect(("127.0.0.1", port)).unwrap()).unwrap();
+    assert!(matches!(stale.login_xoauth2("me@studio.example", "expired"), Err(NetError::Auth(_))));
+    stale.logout();
+}
+
+/// A server's answers, canned; what's sent to it is dropped.
+struct Canned(std::io::Cursor<Vec<u8>>);
+
+impl Read for Canned {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl Write for Canned {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Found in review: a reply ended at any line whose first token read `OK`, `NO` or `BYE`,
+/// quoted or not, so scripts named "ok", "no" or "bye" ended LISTSCRIPTS early and the lines
+/// after were taken for the next command's answer; and every upper-case word was dropped from
+/// a reply's text as if it were a response code.
+#[test]
+fn only_an_atom_ends_a_reply_and_only_a_code_is_left_out_of_its_text() {
+    let s = b"\"SIEVE\" \"vacation\"\r\nOK\r\n\
+\"ok\"\r\n\"no\" ACTIVE\r\n\"bye\"\r\nOK\r\n\
+NO (QUOTA/MAXSIZE \"x\") \"LOCKED\"\r\n\
+NO {6}\r\nFAILED\r\n";
+    let mut c = Client::from_stream(Canned(std::io::Cursor::new(s.to_vec()))).unwrap();
+    assert_eq!(c.list().unwrap(), (vec!["ok".to_string(), "no".into(), "bye".into()], Some("no".to_string())));
+    assert!(matches!(c.activate("x"), Err(NetError::No(m)) if m == "LOCKED"));
+    assert!(matches!(c.activate("x"), Err(NetError::No(m)) if m == "FAILED"));
 }
