@@ -59,10 +59,6 @@ pub(super) fn portable_step(zip: &Path, dir: &Path) -> String {
 /// takes its place (a failed or partial one, or one left by an earlier try, never does), and if
 /// the new one can't be moved in, the old one goes back. A disk image the system is still busy
 /// with (checking it, indexing it) is attached again for about a minute before the update gives
-/// The shell step copying `Quatrelle.app` out of the DMG in place of `bundle`. Only a whole copy
-/// takes its place (a failed or partial one, or one left by an earlier try, never does), and if
-/// the new one can't be moved in, the old one goes back. A disk image the system is still busy
-/// with (checking it, indexing it) is attached again for about a minute before the update gives
 /// up (craft-libs' updater found that one refusal threw the download away). The disk image goes
 /// only once the new app is in place: one that never attached stays, to be tried again.
 pub(super) fn mac_step(dmg: &Path, bundle: &Path) -> String {

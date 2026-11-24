@@ -490,7 +490,6 @@ fn link<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>) -> bool {
     matches!(p(0x3705), Some(Val::Int(2 | 4 | 7)))
 }
 
-/// A file's name: its long name, its short one, then its display name.
 /// A file's name as its attachment's properties (`s`, text) give it: its long name, its short
 /// one, then its display name, the first that isn't blank. A data file's, and a `.msg` file's.
 pub(crate) fn given_name(s: &dyn Fn(u16) -> String) -> Option<String> {
