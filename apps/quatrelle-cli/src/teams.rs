@@ -289,12 +289,12 @@ fn launch(url: &str) -> Result<(), String> {
 
 fn outln(line: &str) {
     use std::io::Write;
-    let _ = writeln!(std::io::stdout(), "{line}");
+    let _ = writeln!(std::io::stdout(), "{}", crate::printable(line));
 }
 
 fn errln(line: &str) {
     use std::io::Write;
-    let _ = writeln!(std::io::stderr(), "{line}");
+    let _ = writeln!(std::io::stderr(), "{}", crate::printable(line));
 }
 
 #[cfg(test)]

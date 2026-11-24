@@ -86,3 +86,21 @@ fn windows_programs_are_never_started_by_their_bare_name() {
         }
     }
 }
+
+/// Everything the CLI writes to the terminal goes through `printable`: read back as text, no
+/// `write!`/`writeln!` on stdout or stderr prints without it (a message's source comes from
+/// whoever sent it, and the `source` command prints it).
+#[test]
+fn everything_printed_goes_through_printable() {
+    for src in [include_str!("../src/main.rs"), include_str!("../src/teams.rs")] {
+        for line in src.lines() {
+            let direct = line.contains("write!(std::io::stdout()")
+                || line.contains("writeln!(std::io::stdout()")
+                || line.contains("write!(std::io::stderr()")
+                || line.contains("writeln!(std::io::stderr()");
+            if direct {
+                assert!(line.contains("printable("), "printed without printable: {line}");
+            }
+        }
+    }
+}

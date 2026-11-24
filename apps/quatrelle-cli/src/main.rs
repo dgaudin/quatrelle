@@ -128,7 +128,7 @@ fn password(prompt_for: &str) -> Result<String, String> {
     {
         return Ok(p);
     }
-    let _ = write!(std::io::stderr(), "Password for {prompt_for}: ");
+    let _ = write!(std::io::stderr(), "{}", printable(&format!("Password for {prompt_for}: ")));
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     std::io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
@@ -441,7 +441,7 @@ fn run() -> Result<(), String> {
             if let Some(e) = r["error"].as_str() {
                 return Err(e.to_string());
             }
-            let _ = write!(std::io::stdout(), "{}", r["text"].as_str().unwrap_or(""));
+            let _ = write!(std::io::stdout(), "{}", printable(r["text"].as_str().unwrap_or("")));
             if r["truncated"].as_bool() == Some(true) {
                 errln!("(only the start of {} bytes is shown)", r["size"]);
             }
