@@ -353,7 +353,7 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
 /// Mail, Calendar, People, Tasks and Notes down the window's edge, as Outlook's: the module shown
 /// lit, with a bar at its edge. Conversations too with Teams on, its unread messages in a badge
 /// over its icon.
-pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<Action>) {
+pub(crate) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<Action>) {
     ui.spacing_mut().item_spacing.y = 4.0;
     let module = s.module;
     // The web app doesn't offer Teams (signing in needs a browser on this computer).
