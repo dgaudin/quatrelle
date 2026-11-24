@@ -5,6 +5,20 @@
 
 use super::*;
 
+/// Most web pictures kept loaded before those no longer shown are let go.
+const PICTURES_KEPT: usize = 400;
+
+/// Whether a picture's address is one on the web (the only ones ever fetched).
+fn on_web(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
+/// The web pictures of a message that may load: tracking pictures stay unloaded even when the
+/// others are shown.
+fn web_pictures_of(p: &Parsed) -> impl Iterator<Item = &String> {
+    p.images.iter().filter(|u| on_web(u) && !p.trackers.pictures.contains(u)).take(MAX_PICTURES)
+}
+
 impl Session {
     /// Web pictures of the open message (none for plain-text mail).
     pub fn remote_pictures(&self) -> Vec<String> {
@@ -13,19 +27,7 @@ impl Session {
         if self.reading_encrypted() {
             return Vec::new();
         }
-        self.reading
-            .as_ref()
-            .and_then(|r| r.parsed.as_ref())
-            .map(|p| {
-                // Tracking pictures stay unloaded even when the others are shown.
-                p.images
-                    .iter()
-                    .filter(|u| (u.starts_with("https://") || u.starts_with("http://")) && !p.trackers.pictures.contains(u))
-                    .take(MAX_PICTURES)
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| web_pictures_of(p).cloned().collect()).unwrap_or_default()
     }
 
     /// Whether the open message's web pictures may load: asked for this message; else, but for
@@ -62,13 +64,29 @@ impl Session {
         if !self.pictures_allowed() {
             return;
         }
-        if self.pictures.len() > 400 {
-            self.pictures.retain(|_, p| matches!(p, Picture::Loading));
+        let urls = self.remote_pictures();
+        self.request_urls(&urls);
+    }
+
+    /// Ask the network layer for the pictures at `urls` not loaded or loading yet. Past
+    /// [`PICTURES_KEPT`], those loaded are let go first, except the ones on screen: of the open
+    /// message, a message's own window and the signatures written in HTML, and those just asked
+    /// for. Nothing but `urls` is fetched.
+    pub(crate) fn request_urls(&mut self, urls: &[String]) {
+        if self.pictures.len() > PICTURES_KEPT {
+            let mut shown: HashSet<String> = urls.iter().cloned().collect();
+            for r in self.reading.iter().chain(&self.windows) {
+                if let Some(p) = &r.parsed {
+                    shown.extend(web_pictures_of(p).cloned());
+                }
+            }
+            shown.extend(self.signature_web_pictures());
+            self.pictures.retain(|url, p| matches!(p, Picture::Loading) || shown.contains(url));
         }
-        for url in self.remote_pictures() {
-            if !self.pictures.contains_key(&url) {
+        for url in urls {
+            if !self.pictures.contains_key(url) {
                 self.pictures.insert(url.clone(), Picture::Loading);
-                self.jobs.push(Job::FetchUrl { url });
+                self.jobs.push(Job::FetchUrl { url: url.clone() });
             }
         }
     }

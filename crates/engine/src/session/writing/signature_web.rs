@@ -81,14 +81,15 @@ fn picture_type(data: &[u8]) -> Option<&'static str> {
 impl Session {
     /// Ask for the web pictures of every account's HTML signature not fetched yet.
     pub(crate) fn fetch_signature_pictures(&mut self) {
-        let urls: Vec<String> = self.accounts.iter().flat_map(|a| web_pictures(&a.config.signature_raw_html)).map(|(_, url)| url).collect();
-        for url in urls {
-            if !matches!(self.pictures.get(&url), Some(Picture::Loading | Picture::Ready(_))) {
-                self.pictures.insert(url.clone(), Picture::Loading);
-                self.jobs.push(Job::FetchUrl { url });
-            }
-        }
+        let urls = self.signature_web_pictures();
+        self.request_urls(&urls);
         self.keep_signature_pictures();
+    }
+
+    /// The web pictures the HTML code of every account's signature names: the ones on screen
+    /// while a message is written, never let go to make room.
+    pub(crate) fn signature_web_pictures(&self) -> Vec<String> {
+        self.accounts.iter().flat_map(|a| web_pictures(&a.config.signature_raw_html)).map(|(_, url)| url).collect()
     }
 
     /// The web pictures fetched go into their signature: each kept as one of its pictures, its
