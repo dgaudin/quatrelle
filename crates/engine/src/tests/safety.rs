@@ -557,3 +557,24 @@ fn pictures_let_go_are_never_the_ones_on_screen() {
     assert!(s.pictures.len() < 10, "{}", s.pictures.len());
     done(s);
 }
+
+/// A signature's web picture that couldn't be fetched is asked for again at the next start
+/// (`Failed` doesn't keep its place); one that came is not.
+#[test]
+fn a_signatures_picture_that_failed_is_asked_for_again() {
+    let mut s = sample_session("signature-failed");
+    let sig = "https://cdn.example/sig.png".to_string();
+    let code = format!("<b>Riley</b><img src=\"{sig}\" width=\"40\">");
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "", "rawHtml": code})).unwrap();
+    let _ = s.take_jobs();
+    s.pictures.insert(sig.clone(), crate::Picture::Failed("no route".into()));
+    s.fetch_signature_pictures();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::FetchUrl { url }] if *url == sig), "asked for again");
+    assert!(matches!(s.pictures.get(&sig), Some(crate::Picture::Loading)));
+    let ready = crate::Picture::Ready(std::sync::Arc::new(vec![1, 2, 3]));
+    s.pictures.insert(sig.clone(), ready.clone());
+    s.fetch_signature_pictures();
+    assert!(s.take_jobs().is_empty(), "one that came isn't asked for again");
+    assert_eq!(s.pictures.get(&sig), Some(&ready));
+    done(s);
+}

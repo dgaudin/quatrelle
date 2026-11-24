@@ -79,9 +79,11 @@ fn picture_type(data: &[u8]) -> Option<&'static str> {
 }
 
 impl Session {
-    /// Ask for the web pictures of every account's HTML signature not fetched yet.
+    /// Ask for the web pictures of every account's HTML signature not fetched yet: one that
+    /// couldn't be had (`Failed`) is asked for again, the others keep their place.
     pub(crate) fn fetch_signature_pictures(&mut self) {
         let urls = self.signature_web_pictures();
+        self.pictures.retain(|url, p| !(urls.contains(url) && matches!(p, Picture::Failed(_))));
         self.request_urls(&urls);
         self.keep_signature_pictures();
     }
