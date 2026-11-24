@@ -198,3 +198,48 @@ fn a_colleagues_calendar_stays_under_its_server_group() {
     assert!(y("Équipe") < y("Ana Lima"), "Ana's calendar is under Équipe");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A calendar dragged onto a row of another group moves to that row's group.
+#[test]
+fn dragging_a_calendar_onto_a_groups_row_moves_it() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag-row");
+    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let to = settled_text_at(&ctx, &mut a, "Salle Lyon", SIZE).expect("Salle Lyon in the pane");
+    let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(from, true)], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(12.0, 0.0))], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(to)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(to, false)], SIZE);
+    for _ in 0..6 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    assert!(
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Salles")),
+        "Ana's calendar moved onto Salle Lyon's group"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Escape cancels the drag: the calendar stays where it was.
+#[test]
+fn escape_cancels_a_calendar_drag() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag-escape");
+    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let to = settled_text_at(&ctx, &mut a, "Salles", SIZE).expect("Salles in the pane");
+    let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(from, true)], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(12.0, 0.0))], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(to)], SIZE);
+    frame_sized(&ctx, &mut a, vec![key(egui::Key::Escape, Modifiers::NONE)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(to, false)], SIZE);
+    for _ in 0..6 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    assert!(
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Équipe")),
+        "Escape left Ana's calendar in Équipe"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -157,7 +157,14 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                                 last = Some(key);
                             }
                         }
-                        calendar_row(s, &t, ui, a, c, acts);
+                        let to = if from_server {
+                            Some(title.as_str())
+                        } else if n == 0 {
+                            Some("")
+                        } else {
+                            None
+                        };
+                        calendar_row(s, &t, ui, a, c, to, acts);
                     }
                     if n == 0 {
                         for a in &bare {
@@ -284,6 +291,7 @@ pub(super) fn calendar_row(
     ui: &mut Ui,
     a: &quatrelle_engine::AccountState,
     c: &quatrelle_engine::model::pim::CalendarInfo,
+    to: Option<&str>,
     acts: &mut Vec<Action>,
 ) {
     let shared = c.id.strip_prefix("shared:").map(str::to_string);
@@ -359,6 +367,19 @@ pub(super) fn calendar_row(
     let resp = row.response.interact(Sense::click_and_drag());
     if resp.drag_started() {
         resp.dnd_set_drag_payload(DragCalendar { account: a.config.id.clone(), calendar: c.id.clone(), group: c.group.clone() });
+    }
+    // A calendar dragged onto a row moves to that row's group (an empty title: My Calendars);
+    // Shared calendars aren't a group to move to.
+    if let Some(to) = to {
+        if resp.dnd_hover_payload::<DragCalendar>().is_some() {
+            ui.painter().rect_stroke(resp.rect, 3.0, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+        }
+        if let Some(d) = dropped::<DragCalendar>(&resp) {
+            let same = if to.is_empty() { d.group.is_empty() } else { d.group.eq_ignore_ascii_case(to) };
+            if !same {
+                acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": to})));
+            }
+        }
     }
     resp.context_menu(|ui| menu::calendar_menu(ui, s, a, c, &extra, acts));
 }
