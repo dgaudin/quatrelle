@@ -344,3 +344,51 @@ fn a_port_in_use_says_so() {
         other => panic!("{:?}", other.map(|t| t.access)),
     }
 }
+
+/// A browser's request is read to the end of its headers before it is answered (they come in
+/// more than one read): answered and closed with part of it unread, the connection can be reset
+/// and the page lost. Headers that never end don't hold the answer back for good.
+#[test]
+fn a_request_is_read_to_the_end_of_its_headers() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let serve = |wait: Duration| {
+        let listener = listener.try_clone().unwrap();
+        std::thread::spawn(move || {
+            let (sock, _) = listener.accept().unwrap();
+            let line = request_line(&sock, wait);
+            (&sock).write_all(b"answered").unwrap();
+            line
+        })
+    };
+    let server = serve(Duration::from_secs(30));
+    let mut browser = TcpStream::connect(addr).unwrap();
+    browser.write_all(b"GET /?code=c&state=s HTTP/1.1\r\nHost: 127.0.0.1\r\n").unwrap();
+    // Nothing is answered while headers are still to come.
+    browser.set_read_timeout(Some(Duration::from_millis(300))).unwrap();
+    let mut early = [0u8; 8];
+    let e = browser.read(&mut early).unwrap_err();
+    assert!(matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut), "{e}");
+    // The rest, several reads long, its empty line split in two.
+    browser.write_all(format!("Cookie: {}\r\n\r", "c".repeat(5000)).as_bytes()).unwrap();
+    browser.write_all(b"\n").unwrap();
+    browser.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
+    let mut answer = String::new();
+    browser.read_to_string(&mut answer).unwrap();
+    assert_eq!(answer, "answered");
+    assert_eq!(server.join().unwrap().as_deref(), Some("GET /?code=c&state=s HTTP/1.1\r"));
+    // Headers with no end: the line still counts, at the cap or when the time is up.
+    for (wait, headers) in [(Duration::from_secs(30), "h".repeat(REQUEST_MAX)), (Duration::from_millis(200), "Host: x\r\n".to_string())] {
+        let server = serve(wait);
+        let mut browser = TcpStream::connect(addr).unwrap();
+        browser.write_all(format!("GET / HTTP/1.1\n{headers}").as_bytes()).unwrap();
+        assert_eq!(server.join().unwrap().as_deref(), Some("GET / HTTP/1.1"));
+    }
+    // And a line that is too long, or never whole, is still no request.
+    for sent in ["G".repeat(REQUEST_LINE_MAX + 2) + "\n\n", "GET /?code=c".to_string()] {
+        let server = serve(Duration::from_millis(200));
+        let mut browser = TcpStream::connect(addr).unwrap();
+        let _ = browser.write_all(sent.as_bytes());
+        assert_eq!(server.join().unwrap(), None);
+    }
+}
