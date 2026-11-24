@@ -431,29 +431,39 @@ impl Shortcut {
     }
 }
 
-/// The shortcut of the calendar `calendar` (its id), by the name the account gives it.
+/// The shortcut of the calendar `calendar` (its id), by the name the account gives it. Someone
+/// else's is found by their address (the entry id's X.500 name, resolved once each, at most
+/// [`MAX_LOOKUPS`]), a shared name only when it is the only one; an own calendar's EWS folder id
+/// is not the shortcut's MAPI entry id, so it is found by its name, and only when only one
+/// shortcut has it.
 fn find_member<'a>(c: &Client, all: &'a [Shortcut], calendar: &str, name: &str) -> Option<&'a Shortcut> {
     if let Some(owner) = calendar.strip_prefix("shared:") {
+        let mut resolved: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
+        let mut named: Vec<&Shortcut> = Vec::new();
         for s in all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_SHARED)) {
-            if s.name.eq_ignore_ascii_case(name) {
-                return Some(s);
+            if let Some(dn) = address_book_dn(&s.address_book) {
+                let email = match resolved.get(&dn) {
+                    Some(e) => e.clone(),
+                    None => {
+                        let e = if resolved.len() < MAX_LOOKUPS { resolve(c, &dn) } else { None };
+                        resolved.insert(dn.clone(), e.clone());
+                        e
+                    }
+                };
+                if email.is_some_and(|e| e.eq_ignore_ascii_case(owner)) {
+                    return Some(s);
+                }
             }
-            if let Some(dn) = address_book_dn(&s.address_book)
-                && resolve(c, &dn).is_some_and(|e| e.eq_ignore_ascii_case(owner))
-            {
-                return Some(s);
+            if s.name.eq_ignore_ascii_case(name) {
+                named.push(s);
             }
         }
-        return None;
+        return if named.len() == 1 { named.first().copied() } else { None };
     }
-    let own = all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_OWN));
-    if let Some(id) = calendar.strip_prefix(crate::ews_pim::FOLDER)
-        && let Some(bytes) = crate::ews::unb64(id)
-        && let Some(s) = own.clone().find(|s| s.entry_id == bytes)
-    {
-        return Some(s);
-    }
-    own.into_iter().find(|s| s.name.eq_ignore_ascii_case(name))
+    let mut named =
+        all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_OWN)).filter(|s| s.name.eq_ignore_ascii_case(name));
+    let first = named.next()?;
+    if named.next().is_some() { None } else { Some(first) }
 }
 
 /// Put the calendar `calendar` in the group `group` (empty: My Calendars): its shortcut's group

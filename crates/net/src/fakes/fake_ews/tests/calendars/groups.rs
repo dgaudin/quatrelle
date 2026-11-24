@@ -409,3 +409,39 @@ fn a_group_make_that_doesnt_read_back_is_taken_out_again() {
     assert_eq!(kept.wlinks.len(), 1, "only the group that was there before is left: {:?}", kept.wlinks);
     assert!(kept.hidden_wlinks.is_empty(), "the made shortcut was deleted");
 }
+
+/// Two colleagues' shortcuts can show the same name; the one moved is the one the calendar's
+/// address names, not the first with that name in the list.
+#[test]
+fn a_shared_calendar_is_moved_by_its_address_not_by_a_homonyms_name() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("ana"), "ana@contoso.example".into()), (dn("tom"), "tom@contoso.example".into())];
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let ana = wlink_of(
+        link,
+        3,
+        2,
+        "Ana Lima",
+        &[("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))), ("0x684B", "Binary", crate::imap::base64(&[0x11]))],
+    )
+    .replace("Id=\"WAna Lima\"", "Id=\"W1\"");
+    let tom = wlink_of(
+        link,
+        3,
+        2,
+        "Ana Lima",
+        &[("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("tom")))), ("0x684B", "Binary", crate::imap::base64(&[0x12]))],
+    )
+    .replace("Id=\"WAna Lima\"", "Id=\"W2\"");
+    d.wlinks =
+        vec![wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", guid(0x20)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]), ana, tom];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    crate::ews_pim::move_calendar_to_group(&c, "shared:tom@contoso.example", "Ana Lima", "Salles").unwrap();
+    let kept = server.data.lock().unwrap();
+    let item = |id: &str| kept.wlinks.iter().find(|w| w.contains(&format!("Id=\"{id}\""))).cloned().unwrap_or_default();
+    assert!(item("W2").contains(">Salles<"), "Tom's shortcut moved: {}", item("W2"));
+    assert!(!item("W1").contains(">Salles<"), "Ana's shortcut with the same name stayed: {}", item("W1"));
+}
