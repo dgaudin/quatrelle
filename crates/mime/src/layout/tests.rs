@@ -712,6 +712,22 @@ fn flattened_as_appended_piece_by_piece() {
 /// A newsletter of 1,500 cells of about 130 characters laid out, then made the text to edit under
 /// a reply ([`flat::flatten`]), timed. Run under the heavy lock:
 /// `cargo test --release -p quatrelle-mime --lib flattened -- --ignored --nocapture`.
+/// The same 1,500 cells as the measure below, flattened within a bound of walked characters:
+/// a few times the text's length, not its square (before, each piece refit all gathered before
+/// it, and the walk past the bound fails the test at once).
+#[test]
+fn flatten_walks_its_text_a_bounded_number_of_times() {
+    let cell = "<td><b>A heading</b> and some words of a long newsletter, kept to see what quoting it under a reply costs.</td>";
+    let rows: String = (0..750).map(|_| format!("<tr>{cell}{cell}</tr>")).collect();
+    let html = format!("<table width=\"600\">{rows}</table>");
+    let b = html_layout(&html);
+    let bound = 4 * html.len();
+    let ((text, styles), walked) = crate::rich::work::at_most(bound, || flat::flatten(&b));
+    assert!(!text.is_empty());
+    assert_eq!(styles.chars.len(), text.chars().count());
+    assert!(walked <= bound, "walked {walked} of {bound} allowed");
+}
+
 #[test]
 #[ignore]
 fn measure_flatten() {
