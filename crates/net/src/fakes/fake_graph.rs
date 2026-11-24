@@ -517,7 +517,9 @@ pub fn serve(data: Data) -> Server {
 mod route;
 mod teams;
 
-pub(crate) use teams::{FakeChat, FakeMessage, FakeTeams, FakeUser, rfc3339};
+#[cfg(test)]
+pub(crate) use teams::ChannelRules;
+pub(crate) use teams::{FakeChannel, FakeChat, FakeMember, FakeMessage, FakeTeam, FakeTeams, FakeThread, FakeUser, rfc3339};
 
 #[cfg(test)]
 mod tests;

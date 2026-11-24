@@ -3,13 +3,17 @@
 //! `quatrelle-cli teams check`: the owner's step 0. It signs in to Microsoft in the browser
 //! with the organisation's own app registration (`docs/teams.md`), runs the check of
 //! [`quatrelle_net::teams::run_check`] on the account, and prints what it finds: counts, yes or
-//! no, HTTP status numbers and durations only, to be pasted back.
+//! no, HTTP status numbers and durations only, to be pasted back. With `--channels`, alone, it
+//! checks Teams' teams and channels instead ([`quatrelle_net::teams::run_channel_check`]), reading
+//! only: the sign-in asks for the channels' permissions too, to learn which are granted.
 //!
 //! ```text
 //! quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--files CHAT] [--hour] [--call CHAT]
+//! quatrelle-cli teams check --channels [--client ID] [--tenant ID-OR-DOMAIN]
 //! ```
 //!
-//! The tokens live only in this process: nothing is written to disk or to the keychain.
+//! The tokens live only in this process: nothing is written to disk or to the keychain, and no
+//! settings are read.
 
 use std::cell::Cell;
 use std::time::Duration;
@@ -18,7 +22,7 @@ use quatrelle_engine::model::ical::teams_call_link;
 use quatrelle_engine::model::mailto::percent_decode;
 use quatrelle_net::NetError;
 use quatrelle_net::oauth;
-use quatrelle_net::teams::{CheckOptions, TeamsClient, run_check};
+use quatrelle_net::teams::{ChannelCheck, CheckOptions, TeamsClient, run_channel_check, run_check};
 use serde_json::Value;
 
 /// Graph's address.
@@ -39,7 +43,8 @@ const CHAT_LINKS: [&str; 4] = [
 ];
 const CLIENT_VAR: &str = "QUATRELLE_TEAMS_CLIENT_ID";
 const TENANT_VAR: &str = "QUATRELLE_TEAMS_TENANT";
-const USAGE: &str = "usage: quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--files CHAT] [--hour] [--call CHAT]";
+const USAGE: &str = "usage: quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--files CHAT] [--hour] [--call CHAT], \
+                     or quatrelle-cli teams check --channels [--client ID] [--tenant ID-OR-DOMAIN]";
 const CONSENT: &str = "Microsoft asks for consent to these permissions: see docs/teams.md, step 4";
 /// What means consent is needed: OAuth's codes, and Microsoft's (AADSTS65001 not consented,
 /// 65004 consent declined, 70011 a scope refused, 90094 admin consent required).
@@ -70,6 +75,8 @@ struct Asked {
     files: Option<String>,
     hour: bool,
     call: Option<String>,
+    /// Teams' teams and channels, read only, instead of the chats.
+    channels: bool,
 }
 
 /// `teams …`: `args` are what follows `teams`.
@@ -98,9 +105,21 @@ fn run_with(args: &[String], env: &dyn Fn(&str) -> Option<String>) -> Result<(),
              or domain>, or set {CLIENT_VAR} and {TENANT_VAR} (see docs/teams.md)"
         ));
     };
-    let provider = oauth::teams_provider(&client, &tenant, false)
+    let mut provider = oauth::teams_provider(&client, &tenant, false)
         .ok_or("--client or --tenant isn't one: the client id is a GUID, the tenant a GUID or a domain (see docs/teams.md)")?;
+    if asked.channels {
+        provider.scope = channels_scope(&provider.scope);
+    }
     let tokens = oauth::authorize(&provider, "", &mut sign_in_page, SIGN_IN).map_err(|e| sign_in_error(&e))?;
+    if asked.channels {
+        errln("signed in; the channel check starts: a few minutes, reading only (Ctrl+C stops it, nothing is left behind)");
+        let check = ChannelCheck {
+            tenant: tokens.tenant.clone().filter(|t| quatrelle_engine::model::valid_oauth_tenant(t)),
+            granted: tokens.granted.clone(),
+            sleep: std::thread::sleep,
+        };
+        return check_channels_with(GRAPH, &tokens.access, &check, &mut |line| outln(line));
+    }
     errln("signed in; the check starts");
     // The refresh token, kept here only, and replaced when Microsoft rotates it.
     let refresh = Cell::new(tokens.refresh.clone());
@@ -145,10 +164,26 @@ fn parse(args: &[String]) -> Result<Asked, String> {
             "--files" => asked.files = Some(chat_id(&value()?).ok_or("--files: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
             "--call" => asked.call = Some(chat_id(&value()?).ok_or("--call: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
             "--hour" => asked.hour = true,
+            "--channels" => asked.channels = true,
             _ => return Err(USAGE.into()),
         }
     }
+    if asked.channels && (asked.write.is_some() || asked.files.is_some() || asked.hour || asked.call.is_some()) {
+        return Err(format!("--channels goes without --write, --files, --hour and --call; {USAGE}"));
+    }
     Ok(asked)
+}
+
+/// The sign-in's permissions for the channel check: the chats' own, and the channels' to read
+/// and to write (those are asked for only to learn whether they are granted: nothing is written).
+fn channels_scope(scope: &str) -> String {
+    format!("{scope} {} {}", oauth::TEAMS_CHANNELS_SCOPE, oauth::TEAMS_CHANNELS_WRITE_SCOPE)
+}
+
+/// The channel check against Graph at `base` with `token`: every line said through `say`.
+fn check_channels_with(base: &str, token: &str, check: &ChannelCheck, say: &mut dyn FnMut(&str)) -> Result<(), String> {
+    let (client, me) = TeamsClient::connect(base, token).map_err(|e| format!("Graph refused the check: {e}"))?;
+    run_channel_check(&client, &me, check, say).map_err(|e| format!("Graph refused the check: {e}"))
 }
 
 /// A chat's id, from the id itself (`19:…`), a link to the chat
@@ -461,6 +496,70 @@ mod tests {
         }
         // The call is with the two others, not with me.
         assert_eq!(opened, ["https://teams.microsoft.com/l/call/0/0?users=banana%40contoso.example,pudding%40contoso.example"]);
+    }
+
+    #[test]
+    fn channels_goes_alone_and_asks_for_the_channels_permissions() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let id = "19:abc_def@unq.gbl.spaces";
+        assert!(parse(&args(&["check", "--channels"])).unwrap().channels);
+        assert!(
+            parse(&args(&["check", "--client", "11111111-2222-3333-4444-555555555555", "--channels", "--tenant", "contoso.example"]))
+                .unwrap()
+                .channels
+        );
+        assert!(!parse(&args(&["check"])).unwrap().channels);
+        // With anything that writes, sends a file, runs an hour or calls: refused before anything
+        // is asked of anyone.
+        for other in [&["--write", id][..], &["--files", id], &["--hour"], &["--call", id]] {
+            let mut given = args(&["check", "--channels"]);
+            given.extend(args(other));
+            let e = run_with(&given, &|_| None).unwrap_err();
+            assert!(e.starts_with("--channels goes without --write, --files, --hour and --call") && e.contains("teams check --channels"), "{e}");
+            let mut given = args(&["check"]);
+            given.extend(args(other));
+            given.push("--channels".into());
+            assert!(parse(&given).is_err(), "{given:?}");
+        }
+        assert!(USAGE.contains("[--files CHAT]") && USAGE.contains("teams check --channels [--client ID]"));
+        // The chats' permissions, then the channels' six.
+        let scope = channels_scope(oauth::TEAMS_SCOPE);
+        assert!(scope.starts_with(oauth::TEAMS_SCOPE));
+        for p in [
+            "Team.ReadBasic.All",
+            "Channel.ReadBasic.All",
+            "ChannelMessage.Read.All",
+            "ChannelMember.Read.All",
+            "ChannelMessage.Send",
+            "ChannelMessage.ReadWrite",
+        ] {
+            assert!(scope.split(' ').any(|s| s == format!("https://graph.microsoft.com/{p}")), "{p}: {scope}");
+        }
+        assert!(!scope.contains("OnlineMeetings"), "{scope}");
+    }
+
+    #[test]
+    fn check_channels_against_the_fake_says_numbers_only() {
+        let fake = quatrelle_net::teams_sample();
+        let granted = format!("{} {} {}", oauth::TEAMS_SCOPE, oauth::TEAMS_CHANNELS_SCOPE, oauth::TEAMS_CHANNELS_WRITE_SCOPE);
+        let check = ChannelCheck { tenant: Some("tenant-quixote".into()), granted, sleep: |_| {} };
+        let mut lines = Vec::new();
+        check_channels_with(&fake.base, fake.token, &check, &mut |l| lines.push(l.to_string())).unwrap();
+        let has = |l: &str| lines.iter().any(|x| x == l);
+        assert!(has("teams: 1 (archived 0)"), "{lines:#?}");
+        assert!(has("channel messages read: 2 of 2 channels (refused 0; why: -)"), "{lines:#?}");
+        assert!(has("hosted images: channel form 1, channel reply form 0, reply as a message 0, chat form 0, other 0"), "{lines:#?}");
+        assert!(has("mentions: person 1 (the user 1), channel 1, team 0, tag 0, other 0"), "{lines:#?}");
+        assert!(lines.iter().any(|l| l.starts_with("channel members: read 2 of 2 (refused 0; why: -); organisation 4, guests 2,")), "{lines:#?}");
+        assert!(lines.last().is_some_and(|l| l.starts_with("in all: requests ")), "{lines:#?}");
+        for l in &lines {
+            for p in &fake.private {
+                assert!(!l.contains(p), "{p:?} in {l:?}");
+            }
+            assert!(l.is_ascii() && !l.contains('@') && !l.contains("//"), "{l:?}");
+        }
+        // It read, and only read.
+        assert_eq!(fake.writes_asked(), 0);
     }
 
     #[test]

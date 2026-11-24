@@ -8,6 +8,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use super::*;
 use crate::teams::check;
 
+/// The channel check: `--channels`.
+mod channels;
 /// The files check: `--files <chat>`.
 mod files;
 

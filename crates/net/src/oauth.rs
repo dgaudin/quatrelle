@@ -152,6 +152,15 @@ pub const TEAMS_SCOPE: &str = "https://graph.microsoft.com/User.Read https://gra
 /// without it would otherwise fail every request of the chats until a new sign-in.
 pub const TEAMS_MEETINGS_SCOPE: &str = "https://graph.microsoft.com/OnlineMeetings.ReadWrite";
 
+/// The permissions to read Teams' teams and channels: the teams joined, their channels, the
+/// channels' messages and their members (the last two the administrator's to grant). Never part
+/// of [`TEAMS_SCOPE`], for the reason [`TEAMS_MEETINGS_SCOPE`] isn't.
+pub const TEAMS_CHANNELS_SCOPE: &str = "https://graph.microsoft.com/Team.ReadBasic.All https://graph.microsoft.com/Channel.ReadBasic.All https://graph.microsoft.com/ChannelMessage.Read.All https://graph.microsoft.com/ChannelMember.Read.All";
+
+/// The permissions to write in Teams' channels: post, reply and react; edit and delete one's own
+/// messages (the administrator's to grant). Asked for apart from [`TEAMS_CHANNELS_SCOPE`].
+pub const TEAMS_CHANNELS_WRITE_SCOPE: &str = "https://graph.microsoft.com/ChannelMessage.Send https://graph.microsoft.com/ChannelMessage.ReadWrite";
+
 /// Teams' sign-in with the organisation's own registration, at its tenant; `meetings`: the
 /// permission to make Teams meetings asked for too. `None` when the client id or the tenant
 /// couldn't be one (they are typed or pasted by a person): nothing is sent anywhere for them.

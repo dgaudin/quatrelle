@@ -134,7 +134,7 @@ impl FakeTeams {
         Ok((files, pictures))
     }
 
-    fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
+    pub(super) fn message_json(&self, chat: &FakeChat, m: &FakeMessage) -> Value {
         json!({
             "id": m.id, "replyToId": null, "etag": ms_of(&m.modified).unwrap_or_default().to_string(),
             "messageType": if m.system { "systemEventMessage" } else { "message" },
@@ -374,7 +374,7 @@ impl FakeTeams {
 }
 
 /// `$top`: `None` when absent, `Err` when it isn't a number from 1 to 50.
-fn top(q: &HashMap<String, String>, default: usize) -> Result<usize, Reply> {
+pub(super) fn top(q: &HashMap<String, String>, default: usize) -> Result<usize, Reply> {
     match q.get("$top") {
         None => Ok(default),
         Some(t) => {
@@ -385,7 +385,7 @@ fn top(q: &HashMap<String, String>, default: usize) -> Result<usize, Reply> {
 
 /// How a listing's pages follow one another.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Paging {
+pub(super) enum Paging {
     /// As Graph's do.
     Plain,
     /// Every page's link points at the second page.
@@ -395,7 +395,7 @@ enum Paging {
 }
 
 /// One page of a listing at `$skiptoken`, with `@odata.nextLink` for the rest.
-fn page(list: Vec<Value>, top: usize, q: &HashMap<String, String>, path: &str, query: &str, base: &str, paging: Paging) -> Reply {
+pub(super) fn page(list: Vec<Value>, top: usize, q: &HashMap<String, String>, path: &str, query: &str, base: &str, paging: Paging) -> Reply {
     let skip: usize = if matches!(paging, Paging::Same(_)) { 0 } else { q.get("$skiptoken").and_then(|s| s.parse().ok()).unwrap_or(0) };
     let mut v = json!({ "value": list.iter().skip(skip).take(top).cloned().collect::<Vec<_>>() });
     let token = match paging {

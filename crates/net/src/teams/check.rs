@@ -31,6 +31,8 @@ use super::{Me, Range, TeamsClient};
 use crate::graph::utc;
 use crate::{NetError, Result};
 
+/// Teams' teams and channels (`--channels`), apart from the rest.
+mod channels;
 /// 7. A file sent, shared and opened.
 mod files;
 /// 6. The approved cadences, for an hour.
@@ -38,6 +40,7 @@ mod hour;
 /// How the check names what it counts.
 mod names;
 
+pub use channels::{ChannelCheck, run_channel_check};
 pub(super) use names::{ByName, author, id_shape, kind_name};
 
 /// Pages followed at most per listing.

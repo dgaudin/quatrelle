@@ -12,13 +12,18 @@
 //! `post`, `edit`, `setReaction`, `unsetReaction`, `softDelete`, `markChatReadForUser`,
 //! `shares`, `download`, `hosted`, `photo`, `presence`, `drive`, `uploadSession`, `upload`,
 //! `item`, `deleteItem`, `invite`, `users`, `createChat`, `createMeeting`, `updateMeeting`,
-//! `deleteMeeting`, and `unknown` for a Teams path no
-//! route answers (404).
+//! `deleteMeeting`, the teams and channels read (`channels.rs`): `joinedTeams`, `channels`,
+//! `channelMessages`, `channelReplies`, `channelMembers`, `channelDelta`; and `unknown` for a
+//! Teams path no route answers (404). Each is counted by its method too, in
+//! [`FakeTeams::methods`].
 
 use std::collections::HashMap;
 
 use super::*;
 
+pub(crate) use channels::{ChannelRules, FakeChannel, FakeMember, FakeTeam, FakeThread};
+
+mod channels;
 mod chats;
 mod drive;
 mod meetings;
@@ -274,6 +279,18 @@ pub(crate) struct FakeTeams {
     pub(crate) meeting_refusal: Option<(u16, &'static str)>,
     /// A `PATCH` answers another `joinWebUrl` than the creation's.
     pub(crate) meeting_moves: bool,
+    /// The teams the signed-in user joined, their channels and the channels' threads.
+    pub(crate) teams: Vec<FakeTeam>,
+    /// How the channels' routes behave.
+    pub(crate) channel_rules: ChannelRules,
+    /// Teams requests received, per method (`GET`, `POST`…), whatever their answer.
+    pub(crate) methods: HashMap<String, u32>,
+    /// Every request about one channel, whatever its answer: (route name, the channel's id).
+    pub(crate) channel_asks: Vec<(String, String)>,
+    /// Set per request: it prefers unknown enum members (`Prefer: include-unknown-enum-members`).
+    pub(crate) asked_enums: bool,
+    /// The `Retry-After` (seconds) of the 429s of `throttle_once` and `throttle_every`; `None`: 1.
+    pub(crate) throttle_retry_after: Option<u64>,
 }
 
 impl FakeTeams {
@@ -354,6 +371,12 @@ impl Reply {
 fn route_name(method: &str, p: &[&str]) -> Option<&'static str> {
     Some(match (method, p) {
         ("GET", ["me"]) => "me",
+        ("GET", ["me", "joinedTeams"]) => "joinedTeams",
+        ("GET", ["teams", _, "channels"]) => "channels",
+        ("GET", ["teams", _, "channels", _, "messages"]) => "channelMessages",
+        ("GET", ["teams", _, "channels", _, "messages", "delta"]) => "channelDelta",
+        ("GET", ["teams", _, "channels", _, "messages", _, "replies"]) => "channelReplies",
+        ("GET", ["teams", _, "channels", _, "members"]) => "channelMembers",
         ("GET", ["me", "chats"]) => "chats",
         ("GET", ["chats", _, "members"]) => "members",
         ("GET", ["chats", _, "messages"]) => "messages",
@@ -388,7 +411,9 @@ fn route_name(method: &str, p: &[&str]) -> Option<&'static str> {
             | ["me", "drive", ..]
             | ["me", "onlineMeetings", ..]
             | ["communications", ..]
-            | ["users", _, "photos", ..],
+            | ["users", _, "photos", ..]
+            | ["me", "joinedTeams", ..]
+            | ["teams", ..],
         ) => "unknown",
         _ => return None,
     })
@@ -450,9 +475,10 @@ impl FakeTeams {
         self.drive_files.files.iter().find(|f| self.web_dav_url(f) == url).map(|f| f.bytes.clone())
     }
 
-    /// A user by id: a chat member or the signed-in user.
+    /// A user by id: a chat's or a channel's member, or the signed-in user.
     fn user(&self, id: &str) -> Option<&FakeUser> {
-        std::iter::once(&self.me).chain(self.chats.iter().flat_map(|c| &c.members)).find(|u| u.id == id)
+        let channels = self.teams.iter().flat_map(|t| &t.channels).flat_map(|c| c.members.iter().map(|m| &m.user));
+        std::iter::once(&self.me).chain(self.chats.iter().flat_map(|c| &c.members)).chain(channels).find(|u| u.id == id)
     }
 
     /// A message's `from`: the one it was given, else its sender's identity (none: a system
@@ -529,6 +555,9 @@ impl FakeTeams {
         if let Some(r) = self.share_route(name, p, base) {
             return r;
         }
+        if let Some(r) = self.channel_route(name, p, &q, raw_path, query, base) {
+            return r;
+        }
         self.chat_route(name, p, query, raw_path, input, base)
     }
 }
@@ -597,6 +626,8 @@ impl Data {
         let hit = t.hits.entry(name.to_string()).or_default();
         *hit += 1;
         let hit = *hit;
+        *t.methods.entry(method.to_string()).or_default() += 1;
+        t.asked_enums = headers.iter().any(|(k, v)| k == "prefer" && v.contains("include-unknown-enum-members"));
         t.last_headers.insert(name.to_string(), headers.to_vec());
         if matches!(p.as_slice(), ["me", "onlineMeetings", ..]) {
             t.meeting_paths.push(raw_path.to_string());
@@ -630,6 +661,9 @@ impl Data {
         }
         if name == "createChat" {
             t.creations.push(input.clone());
+        }
+        if matches!(name, "channelMessages" | "channelReplies" | "channelMembers" | "channelDelta") {
+            t.channel_asks.push((name.to_string(), p.get(3).copied().unwrap_or_default().to_string()));
         }
         if matches!(name, "createMeeting" | "updateMeeting" | "deleteMeeting") {
             t.meeting_writes.push((name.to_string(), p.get(2).copied().unwrap_or_default().to_string(), input.clone()));
@@ -672,16 +706,17 @@ impl FakeTeams {
             return None;
         }
         let graph = name != "upload";
+        let throttled = || Reply { retry_after: self.throttle_retry_after, ..Reply::error(429, "TooManyRequests", "Too many requests.") };
         if graph && self.throttle_once == Some(name) {
             self.throttle_once = None;
-            return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
+            return Some(throttled());
         }
         if self.forbid_list && name == "chats" && authorized {
             return Some(Reply::error(403, "Forbidden", "This account has no Teams chats."));
         }
         let counted: u32 = self.hits.iter().filter(|(k, _)| !matches!(k.as_str(), "download" | "upload")).map(|(_, n)| *n).sum();
         if graph && counted > self.throttle_from && self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
-            return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
+            return Some(throttled());
         }
         if !authorized {
             return Some(Reply::error(401, "InvalidAuthenticationToken", "Access token is empty."));

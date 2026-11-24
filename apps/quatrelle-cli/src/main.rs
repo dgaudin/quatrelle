@@ -24,6 +24,7 @@
 //!   teams check [--client ID] [--tenant ID] [--write CHAT] [--files CHAT] [--hour] [--call CHAT]
 //!                                  sign in to Microsoft 365 and check what Graph gives of
 //!                                  Teams chats: numbers only (docs/teams.md)
+//!   teams check --channels         the same for Teams' teams and channels, reading only
 //!   --version                      print the version
 //! ```
 //!

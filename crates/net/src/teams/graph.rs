@@ -8,7 +8,8 @@
 //! file's item and share, a post with pictures and files, and a file shared in a chat (its
 //! address, its bytes counted) are in `files`; the directory and a chat's creation in `people`;
 //! Teams meetings (`/me/onlineMeetings`: made, changed, deleted, their answer checked) in
-//! `meetings`.
+//! `meetings`; the teams the user joined, their channels, a channel's messages, a thread's
+//! replies and a channel's members, read only, in `channels`.
 //!
 //! Every request carries the bearer token and goes on a connection of its own, made and answered
 //! within [`DEADLINE`] (its connection, its TLS handshake and every byte of its answer: a server
@@ -36,6 +37,7 @@ use crate::http::{self, Request, Response, Url};
 use crate::stream::{self, Stream};
 use crate::{NetError, Result};
 
+mod channels;
 mod files;
 mod meetings;
 mod people;
@@ -127,6 +129,8 @@ pub struct TeamsClient {
     retry: Cell<Option<u64>>,
     /// How long a request may take in all ([`DEADLINE`]; a test's shorter one).
     deadline: Cell<Duration>,
+    /// The bytes of the last answer's body, as it came (a download's: none kept, 0).
+    last_bytes: Cell<usize>,
 }
 
 impl TeamsClient {
@@ -151,6 +155,7 @@ impl TeamsClient {
             waiting: Cell::new(waiting),
             retry: Cell::new(None),
             deadline: Cell::new(DEADLINE),
+            last_bytes: Cell::new(0),
         };
         let v = c.json("GET", &c.at("/me?$select=id,displayName,mail,userPrincipalName"), None, false)?;
         let text = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().chars().take(320).collect::<String>();
@@ -195,6 +200,11 @@ impl TeamsClient {
     /// none, or not in seconds.
     pub fn retry_after(&self) -> Option<u64> {
         self.retry.get()
+    }
+
+    /// How many bytes the last answer's body had (a download's, whose body isn't kept: 0).
+    pub fn last_answer_bytes(&self) -> usize {
+        self.last_bytes.get()
     }
 
     /// A test's deadline for each request, in place of [`DEADLINE`].
@@ -559,8 +569,10 @@ impl TeamsClient {
         self.stats.set(s);
     }
 
-    /// An answer in: a 429 counted, a 429's or 503's `Retry-After` kept, and Graph's clock noted.
+    /// An answer in: a 429 counted, a 429's or 503's `Retry-After` kept, its body's size noted,
+    /// and Graph's clock noted.
     fn heard(&self, resp: &Response, graph: bool) {
+        self.last_bytes.set(resp.body.len());
         if resp.status == 429 {
             let mut s = self.stats.get();
             s.throttled = s.throttled.saturating_add(1);

@@ -8,7 +8,8 @@
 //!   images, photos, presence — and its answers read into the model (`chat_of`, `message_of`…),
 //!   each message behind a guard of its own.
 //! * [`check`]: the step 0 check a user runs on their own account (`quatrelle-cli teams
-//!   check`): counts and yes/no answers only, its test messages deleted on the way out.
+//!   check`): counts and yes/no answers only, its test messages deleted on the way out; and,
+//!   apart, the teams and channels (`--channels`), read only.
 //! * `store`: the local copy of the chats (`Teams.quatrelle`), bound to the identity it was made
 //!   for, its messages in pages.
 //! * `limits`: the limiter (Microsoft's per-second limits), the approved cadences and the
@@ -45,7 +46,7 @@ pub(crate) mod store;
 pub(crate) mod sync;
 pub(crate) mod worker;
 
-pub use check::{CheckOptions, run_check};
+pub use check::{ChannelCheck, CheckOptions, run_channel_check, run_check};
 pub use graph::{Me, Page, Range, Stats, TeamsClient, chat_of, member_of, message_of, presence_of};
 #[doc(hidden)]
 pub use search::fuzz_teams_index;

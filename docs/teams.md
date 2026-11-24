@@ -68,6 +68,22 @@ Done by an administrator of the Microsoft 365 tenant, in the
    admin consent for it (step 4) when the organisation requires it. Quatrelle never asks for it
    with the rest: it is asked for only when someone clicks **Authorize Teams meetings**, never
    when signing in for the conversations. Without it everything above works as before.
+
+   **Teams channels (optional).** For Teams' teams and channels, also add these delegated
+   permissions:
+
+   | Permission | Why | Admin consent |
+   |---|---|---|
+   | `Team.ReadBasic.All` | the teams you are a member of | no |
+   | `Channel.ReadBasic.All` | their channels | no |
+   | `ChannelMessage.Read.All` | the channels' messages and their replies | yes |
+   | `ChannelMember.Read.All` | the channels' members | yes |
+   | `ChannelMessage.Send` | posting, replying and reacting in a channel | no |
+   | `ChannelMessage.ReadWrite` | editing and deleting one's own messages in a channel | yes |
+
+   Then give admin consent (step 4) to all six: three need it, and the other three do too when
+   the tenant doesn't let users consent. Today only the channel check (section 10) asks for them:
+   all six, to see which are granted.
 4. Optional: **Grant admin consent for \<your organisation\>** on the same page, then **Yes**.
    Microsoft documents `Chat.ReadWrite` as not needing admin consent; the others normally don't
    either, so without this step each person approves them once on Microsoft's consent page. If
@@ -107,6 +123,8 @@ The whole check, with everything below:
 ```sh
 quatrelle-cli teams check --client … --tenant … --write "<chat link>" --files "<chat link>" --hour --call "<chat link>"
 ```
+
+Teams' teams and channels have a check of their own, `--channels`: section 10.
 
 ## 3. What each line means
 
@@ -794,3 +812,69 @@ the message, not in its text) are not there yet. For those, use Open in Teams.
 Everything printed on the standard output is numbers, kinds of chat, yes or no, HTTP statuses with
 Graph's error codes, and durations: copy it as it is and paste it back. The sign-in address printed on the error output (`Open this address
 to sign in: …`) carries the app's client id and no secret, and needn't be sent.
+
+## 10. `--channels`: teams and channels
+
+```sh
+quatrelle-cli teams check --client … --tenant … --channels
+```
+
+It says what Graph answers about your teams and channels, before Quatrelle reads them. It goes
+alone: `--write`, `--files`, `--hour` and `--call` are refused with it, and the chats aren't
+checked. Besides the chats' permissions, the sign-in asks for the six channel permissions of
+section 1, step 3; Microsoft's page lists them. The two that write are asked for only to learn
+whether they are granted: the check writes nothing, here or in Teams. If one of the six is missing
+from the registration or waits for the administrator's consent, the sign-in stops with
+`Microsoft asks for consent to these permissions: see docs/teams.md, step 4`.
+
+It reads, and at most: your teams (10 pages), the channels of 200 of them; for 20 channels taken
+in turn from your teams, a page of 50 threads with their replies and the channel's members (25
+pages); the same page without the replies for the channel whose page was the largest; the replies
+of 3 threads; and the status of one old route. About a hundred requests, a second apart within a
+channel: a few minutes. When Graph asks to wait (429), the check waits as long as Graph says, and
+stops asking if Graph goes on. Ctrl+C stops it at any moment: nothing was written, and the lines
+already printed stand. Like the rest of the check, it prints counts, Graph's names for kinds, yes
+or no and HTTP statuses with Graph's codes: never a team's, a channel's or a person's name, an id,
+a message's text or an address.
+
+A typical run:
+
+```text
+channels, permissions granted: Team.ReadBasic.All yes, Channel.ReadBasic.All yes, ChannelMessage.Read.All yes, ChannelMember.Read.All yes, ChannelMessage.Send yes, ChannelMessage.ReadWrite yes
+teams: 1 (archived 0)
+channels: 2 (standard 1, private 1, shared 0, other 0; of another organisation 0; layout post 2, chat 0, other 0, none 0; webUrl l/channel 2)
+channel messages read: 2 of 2 channels (refused 0; why: -)
+messages: roots 2, replies expanded 2, system 0, from apps 0; subject 1, importance high 0, urgent 0; webUrl l/message 4
+from.user: tenantId present 4, absent 0; the user's organisation 4, another 0; userIdentityType aadUser 4, other 0
+roots with replies: 1; whose lastModifiedDateTime is at or after their newest reply: 1
+the listing is in lastModifiedDateTime order: yes (out of order 0)
+a page with $expand=replies: largest 5 KiB, median 1 KiB; without: 3 KiB; replies expanded per root at most 2; roots whose replies were cut 0
+the replies route: newest first 1, oldest first 0, mixed 0 (threads read 1, refused 0)
+hosted images: channel form 1, channel reply form 0, reply as a message 0, chat form 0, other 0
+mentions: person 1 (the user 1), channel 1, team 0, tag 0, other 0
+channel members: read 2 of 2 (refused 0; why: -); organisation 4, guests 2, another organisation 0, other kinds 0; largest channel 3
+the old delta: 400 BadRequest
+in all: requests 10, throttled 0
+```
+
+| Line | Meaning |
+|---|---|
+| `channels, permissions granted: …` | Each of the six permissions, `yes` or `no`, as the sign-in says it granted them; `not said by the sign-in` when Microsoft listed none. |
+| `teams: N (archived A)` | The teams you are a member of. `at least`: more than 10 pages. `teams: no (403 …)`: Graph refused them (`Team.ReadBasic.All`); nothing more is asked. |
+| `channels: N (standard …, private …, shared …, other …; of another organisation …; layout post …, chat …, other …, none …; webUrl l/channel …)` | The channels of your teams by kind (private and shared ones only where you are a member), made in another organisation, by layout (`post`: threads; `chat`: one running conversation; `none`: not said), and with Teams' own link to them. |
+| `channel lists: asked of N teams…, refused R (why: …)` | Only when some teams' channels weren't listed: refused (`unusable id`: an id Graph gave that can't be sent back), or past 200 teams. |
+| `channel messages read: R of N channels (refused F; why: …)` | A page of messages asked of each of 20 channels (fewer if you have fewer), taken in turn from your teams. `403 Forbidden` for all: `ChannelMessage.Read.All` isn't granted. |
+| `messages: roots …, replies expanded …, …` | What those pages hold, counted over roots (the first message of a thread) and replies alike: system messages, messages from apps; with a subject, of high or urgent importance; with Teams' own link to the message. |
+| `from.user: …` | Of the messages people wrote: whether Graph says their organisation and whether it is yours, and their kind of identity. |
+| `roots with replies: N; whose lastModifiedDateTime is at or after their newest reply: M` | Whether a reply changes its thread's first message: `M` equals `N` if it does. |
+| `the listing is in lastModifiedDateTime order: yes (out of order 0)` | Whether Graph lists the threads by that time, the newest first. |
+| `a page with $expand=replies: largest … KiB, median … KiB; without: … KiB; replies expanded per root at most …; roots whose replies were cut …` | How large a page of threads with their replies is, the largest page again without them, and how many replies come with a thread before Graph cuts them. |
+| `the replies route: newest first …, oldest first …, mixed … (threads read …, refused …)` | The order in which Graph lists the replies of 3 threads of 2 replies or more. `not tried`: there was no such thread. |
+| `hosted images: channel form …, channel reply form …, reply as a message …, chat form …, other …` | Pictures kept with the messages, by the form of their address. |
+| `mentions: person … (the user …), channel …, team …, tag …, other …` | Mentions by what they name: a person (you among them), the channel, the team, a tag. |
+| `channel members: read R of N (refused F; why: …); organisation …, guests …, another organisation …, other kinds …; largest channel …` | The members of the same channels, counted per channel: of your organisation, guests, of another organisation, of other kinds; and the largest channel (`at least`: more than 25 pages). |
+| `the old delta: …` | Whether a route Graph no longer documents still answers, on the first channel read: its status only. Nothing is followed. |
+| `stopped early: …` | Only when Graph went on asking to wait: the lines above count what was read until then. |
+| `in all: requests R, throttled T` | Every request of the run, and the 429 answers among them. |
+
+Send the output back as section 9 says.
