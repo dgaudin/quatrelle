@@ -57,3 +57,49 @@ fn eventually(what: &str, mut f: impl FnMut() -> bool) {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+/// An IMAP account signed in with OAuth: the token endpoint gives t1, the server refuses it,
+/// the worker renews once to t2 and syncs, without asking to sign in again or saying the server
+/// keeps refusing. The token endpoint is asked exactly twice.
+#[test]
+fn a_refused_token_is_renewed_once_before_asking_to_sign_in() {
+    let answers = [("200 OK", r#"{"access_token":"t1","expires_in":3600}"#), ("200 OK", r#"{"access_token":"t2","expires_in":3600}"#)]
+        .iter()
+        .map(|(status, json)| {
+            let mut reply = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: application/json\r\n\r\n", json.len()).into_bytes();
+            reply.extend_from_slice(json.as_bytes());
+            reply
+        })
+        .collect();
+    let (oauth_base, token_requests) = crate::http::tests::serve(answers);
+    let mut p = crate::oauth::tests::local(&format!("{oauth_base}/token"));
+    p.id = "test-imap-renew".into();
+    crate::oauth::TEST_PROVIDERS.lock().unwrap().push(p);
+
+    let st = State::new();
+    st.lock().unwrap().token = "t2".into();
+    let port = serve_tcp(&st);
+    let store = tests_store("imap-renew");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { host: "127.0.0.1".into(), port, security: Security::None },
+        oauth: Some("test-imap-renew".into()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("r1".into())) });
+    let seen =
+        until(&pool, "online or asking", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. } | SyncStatus::NeedsPassword { .. }, .. }));
+    assert!(seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. })), "{seen:?}");
+    assert!(!seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. })), "{seen:?}");
+    assert!(
+        !seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::Error { error }, .. } if error.contains("keeps refusing"))),
+        "{seen:?}"
+    );
+    let asked = token_requests.join().unwrap();
+    assert_eq!(asked.len(), 2, "the first sign-in and one renewal: {asked:?}");
+    pool.submit(Job::Remove { account: "a1".into() });
+    let _ = std::fs::remove_dir_all(store.root());
+}
