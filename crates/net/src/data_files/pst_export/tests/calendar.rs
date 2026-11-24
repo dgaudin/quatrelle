@@ -357,3 +357,35 @@ fn meeting_mail_carries_its_meeting() {
 }
 
 mod items;
+
+/// A CalDAV series on the 31st (`FREQ=MONTHLY;BYMONTHDAY=31`) goes occurrence by occurrence, each
+/// with its exact date: a data file's pattern can't say "the 31st" alone, only "the last day",
+/// and the two aren't the same months.
+#[test]
+fn a_monthly_series_on_the_31st_goes_occurrence_by_occurrence_with_its_dates() {
+    let dir = scratch("monthly-31");
+    let store = Store::open(dir.join("cache")).unwrap();
+    let at31 = |y: i64, m: u32, d: u32| days_from_civil(y, m, d) * 86_400 + 9 * 3600;
+    let e = CalEvent {
+        uid: "last@dav.example".into(),
+        summary: "Invoice".into(),
+        start: at31(2026, 10, 31),
+        end: at31(2026, 10, 31) + 3600,
+        rrule: Some("FREQ=MONTHLY;BYMONTHDAY=31;UNTIL=20270430T235959Z".into()),
+        ..Default::default()
+    };
+    let pim = Pim { events: vec![StoredEvent { event: e, ..Default::default() }], ..Default::default() };
+    store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
+    let file = dir.join("Calendar.pst");
+    let done = export(&store, "a1", "Calendar", &file, NONE, &mut |_| {}).unwrap();
+    // One event, its four occurrences (Oct 31, Dec 31, Jan 31, Mar 31 — no Nov, Feb or Apr has
+    // a 31st), each an appointment of its own.
+    assert_eq!((done.events, done.occurrences), (4, 4), "{done:?}");
+    let back = Store::open(dir.join("back")).unwrap();
+    let imported = crate::pst::import(&file, &back, "b1", &mut |_| {}).unwrap();
+    assert_eq!(imported.skipped, 0, "{imported:?}");
+    let got: Pim = back.load_account_doc("b1", quatrelle_model::pim::PIM_DOC).unwrap();
+    let mut starts: Vec<i64> = got.events.iter().filter(|x| x.event.uid.starts_with("last@dav.example/")).map(|x| x.event.start).collect();
+    starts.sort_unstable();
+    assert_eq!(starts, [at31(2026, 10, 31), at31(2026, 12, 31), at31(2027, 1, 31), at31(2027, 3, 31)], "{starts:?}");
+}

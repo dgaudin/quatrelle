@@ -141,7 +141,7 @@ pub fn write_event(e: &CalEvent, now: i64, server: bool, out: &mut String) {
     } else {
         fold_chars(format!("UID:{uid}").chars(), out)
     }
-    for l in &lines[2..] {
+    for l in lines.iter().skip(2) {
         fold(l, out);
     }
 }
