@@ -182,7 +182,7 @@ fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8]) -> Strin
          <t:IsAssociated>true</t:IsAssociated></t:Message></m:Items></m:CreateItem>",
         esc(views),
         esc(name),
-        ext("0x6842", "CLSID", &guid),
+        ext("0x6842", "Binary", &guid),
         ext("0x6849", "Integer", "4"),
         ext("0x684B", "Binary", &ordinal),
         ext("0x684F", "Binary", &folder_type),
@@ -429,7 +429,7 @@ pub(crate) fn move_calendar_to_group(c: &Client, calendar: &str, name: &str, gro
         c,
         &member,
         &[
-            set_ext("0x6850", "CLSID", &crate::imap::base64(&target.header_id)),
+            set_ext("0x6850", "Binary", &crate::imap::base64(&target.header_id)),
             set_ext("0x6851", "String", &esc(&target.name)),
             set_ext("0x684B", "Binary", &crate::imap::base64(&ordinal)),
         ],

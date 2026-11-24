@@ -67,7 +67,8 @@ impl Data {
                 let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
                 let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
                 let total = items.len();
-                let page: String = items.iter().skip(offset).take(max).map(|w| w.as_str()).collect();
+                let wanted = wanted_props(op);
+                let page: String = items.iter().skip(offset).take(max).map(|w| props_only(w, &wanted)).collect();
                 let last = offset.saturating_add(max) >= total;
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"{last}\"><t:Items>{page}</t:Items></m:RootFolder>")));
             }
@@ -485,7 +486,7 @@ impl Data {
                                     item.kids.retain(|k| k.name != field);
                                     if let Some(v) = value {
                                         if field == "Subject" {
-                                            set_ext(&mut item, "0xE1D", &v.text);
+                                            set_ext(&mut item, "0xE1D", "String", &v.text);
                                         }
                                         item.kids.push(v);
                                     }
@@ -494,7 +495,8 @@ impl Data {
                             if let Some(tag) = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyTag"))
                                 && let Some(value) = u.find("ExtendedProperty").and_then(|p| p.text_of("Value"))
                             {
-                                set_ext(&mut item, tag, value);
+                                let kind = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyType")).unwrap_or("String");
+                                set_ext(&mut item, tag, kind, value);
                             }
                         }
                         self.wlinks[pos] = xml(&item);
@@ -765,12 +767,12 @@ fn wlink_id(w: &str) -> Option<String> {
 }
 
 /// Set an extended property of a shortcut kept as an element, replacing its namesake.
-fn set_ext(item: &mut El, tag: &str, value: &str) {
+fn set_ext(item: &mut El, tag: &str, kind: &str, value: &str) {
     item.kids.retain(|k| {
         !(k.name == "ExtendedProperty" && k.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, tag)))
     });
     if let Some(e) = parse(&format!(
-        "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"String\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+        "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
         esc(value)
     ))
     .kids
@@ -788,6 +790,43 @@ fn class_wanted(op: &El) -> Option<String> {
         return None;
     }
     Some(eq.find("Constant")?.attr("Value")?.to_string())
+}
+
+/// The extended properties a `FindItem` asks for, by tag and type: a stored property is only
+/// given back under the type it was stored with, as Exchange does.
+fn wanted_props(op: &El) -> Vec<(String, String)> {
+    op.find("AdditionalProperties")
+        .map(|a| {
+            a.children("ExtendedFieldURI")
+                .filter_map(|u| Some((norm_tag(u.attr("PropertyTag")?), u.attr("PropertyType")?.to_ascii_lowercase())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A property tag as `0x` and four hex digits, whichever way it was written.
+fn norm_tag(t: &str) -> String {
+    let hex = t.trim().strip_prefix("0x").or_else(|| t.trim().strip_prefix("0X"));
+    hex.and_then(|h| u32::from_str_radix(h, 16).ok()).map(|n| format!("0x{n:04X}")).unwrap_or_else(|| t.trim().to_ascii_lowercase())
+}
+
+/// A stored shortcut with only the extended properties asked for under their own type.
+fn props_only(w: &str, wanted: &[(String, String)]) -> String {
+    if wanted.is_empty() {
+        return w.to_string();
+    }
+    let e = parse(w);
+    let Some(mut m) = e.kids.first().cloned() else { return w.to_string() };
+    m.kids.retain(|k| {
+        if k.name != "ExtendedProperty" {
+            return true;
+        }
+        let Some(u) = k.child("ExtendedFieldURI") else { return false };
+        let tag = u.attr("PropertyTag").map(norm_tag);
+        let ty = u.attr("PropertyType").map(str::to_ascii_lowercase);
+        wanted.iter().any(|(wt, wy)| tag.as_deref() == Some(wt.as_str()) && ty.as_deref() == Some(wy.as_str()))
+    });
+    xml(&m)
 }
 
 /// A navigation shortcut's message class (`0x001A`), as it was kept.

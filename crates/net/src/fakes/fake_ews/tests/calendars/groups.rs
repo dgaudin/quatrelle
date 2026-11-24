@@ -195,9 +195,9 @@ fn groups_come_in_the_order_their_headers_give() {
     let season = guid(0x20);
     let rooms = guid(0x10);
     d.wlinks = vec![
-        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "CLSID", season.clone()), ("0x684B", "Binary", ordinal(0x20))]),
-        wlink_of(link, 3, 4, "Salles", &[("0x6842", "CLSID", rooms.clone()), ("0x684B", "Binary", ordinal(0x10))]),
-        wlink_of(link, 3, 2, "Ana Lima", &[("0x6850", "CLSID", season), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana"))))]),
+        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", season.clone()), ("0x684B", "Binary", ordinal(0x20))]),
+        wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", rooms.clone()), ("0x684B", "Binary", ordinal(0x10))]),
+        wlink_of(link, 3, 2, "Ana Lima", &[("0x6850", "Binary", season), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana"))))]),
     ];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
@@ -219,14 +219,14 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     let team = guid(0x10);
     d.wlinks = vec![
         wlink(link, 1, 2, "Favorites", "Ana's Inbox", &dn("ana")),
-        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "CLSID", team.clone()), ("0x684B", "Binary", ordinal(0x10))]),
+        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", team.clone()), ("0x684B", "Binary", ordinal(0x10))]),
         wlink_of(
             link,
             3,
             2,
             "Ana Lima",
             &[
-                ("0x6850", "CLSID", team),
+                ("0x6850", "Binary", team),
                 ("0x6851", "String", "Équipe".into()),
                 ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
                 ("0x684B", "Binary", ordinal(0x11)),
@@ -276,17 +276,17 @@ fn the_accounts_own_calendars_are_filed_under_their_group() {
     let ordinal = |b: u8| crate::imap::base64(&[b]);
     d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
     d.wlinks = vec![
-        wlink_of(link, 3, 4, "My Calendars", &[("0x6842", "CLSID", mine.clone()), ("0x684B", "Binary", ordinal(0x10))]),
-        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "CLSID", team.clone()), ("0x684B", "Binary", ordinal(0x20))]),
-        wlink_of(link, 3, 0, "Calendar", &[("0x6850", "CLSID", mine), ("0x684B", "Binary", ordinal(0x11))]),
-        wlink_of(link, 3, 0, "Meetings", &[("0x6850", "CLSID", team), ("0x684B", "Binary", ordinal(0x21))]),
+        wlink_of(link, 3, 4, "My Calendars", &[("0x6842", "Binary", mine.clone()), ("0x684B", "Binary", ordinal(0x10))]),
+        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", team.clone()), ("0x684B", "Binary", ordinal(0x20))]),
+        wlink_of(link, 3, 0, "Calendar", &[("0x6850", "Binary", mine), ("0x684B", "Binary", ordinal(0x11))]),
+        wlink_of(link, 3, 0, "Meetings", &[("0x6850", "Binary", team), ("0x684B", "Binary", ordinal(0x21))]),
         wlink_of(
             link,
             3,
             2,
             "Ana Lima",
             &[
-                ("0x6850", "CLSID", guid(0x20)),
+                ("0x6850", "Binary", guid(0x20)),
                 ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
                 ("0x684B", "Binary", ordinal(0x22)),
             ],

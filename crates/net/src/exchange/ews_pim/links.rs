@@ -98,13 +98,13 @@ const MAX_NAME: usize = 255;
 const PROPS: [(&str, &str); 12] = [
     ("0x001A", "String"),
     ("0x0E1D", "String"),
-    ("0x6842", "CLSID"),
+    ("0x6842", "Binary"),
     ("0x6849", "Integer"),
     ("0x684B", "Binary"),
     ("0x684C", "Binary"),
     ("0x684E", "Binary"),
     ("0x684F", "Binary"),
-    ("0x6850", "CLSID"),
+    ("0x6850", "Binary"),
     ("0x6851", "String"),
     ("0x6852", "Integer"),
     ("0x6854", "Binary"),
@@ -394,8 +394,8 @@ fn bin_prop(it: &El, tag: &str) -> Option<Vec<u8>> {
     crate::ews::unb64(v)
 }
 
-/// A GUID extended property's key: its 16 bytes in hex (EWS gives a `CLSID` as base64), or its
-/// text lowercased when it isn't one.
+/// A binary id's key: its 16 bytes in hex (EWS gives a `Binary` property as base64), or its text
+/// lowercased when it isn't one.
 fn guid_prop(it: &El, tag: &str) -> Option<String> {
     let v = ext_text(it, tag)?.trim();
     if v.is_empty() || v.len() > MAX_BINARY {
