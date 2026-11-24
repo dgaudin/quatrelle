@@ -462,12 +462,13 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                                 }
                             }
                             None => {
-                                if let Some((e, _)) = ev.as_mut() {
-                                    for line in lines {
-                                        if e.extra.len() < EXTRA_ALARMS_MAX {
-                                            e.extra.push(line);
-                                        }
-                                    }
+                                // An alarm Quatrelle can't read is kept whole or left whole out:
+                                // into `extra` only if every one of its lines fits there.
+                                if let Some((e, _)) = ev.as_mut()
+                                    && was_dropped.is_none()
+                                    && e.extra.len() + lines.len() <= EXTRA_ALARMS_MAX
+                                {
+                                    e.extra.extend(lines);
                                 }
                             }
                         }
@@ -523,6 +524,9 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                 Some(lines) if dropped_from.is_none() => {
                     if lines.len() < component_max {
                         lines.push(l.raw.clone());
+                    } else {
+                        // Its cap reached: the component is left out whole.
+                        dropped_from = Some(depth_in_event);
                     }
                 }
                 Some(_) => {}
