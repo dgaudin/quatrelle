@@ -484,7 +484,8 @@ fn fold(line: &str, out: &mut String) {
 
 /// Whether a line is read as a card's `BEGIN` or `END`.
 fn begins_or_ends_a_card(line: &str) -> bool {
-    let Some((head, value)) = line.split_once(':') else { return false };
+    // Cut where the reader cuts (the first colon outside quotes), not at the first colon.
+    let Some((head, value)) = written::split_line(line) else { return false };
     let name = head.split(';').next().unwrap_or("").rsplit('.').next().unwrap_or("").trim();
     (name.eq_ignore_ascii_case("BEGIN") || name.eq_ignore_ascii_case("END")) && value.trim().eq_ignore_ascii_case("VCARD")
 }
@@ -672,6 +673,13 @@ BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:ann\r\nEMAIL:ann@x.example\r\nEND:VCA
         // A line kept as written that would end the card once its control is left out.
         let odd = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:z\r\nFN:Zoe\r\nEND:VCARD\u{1}\r\nX-AFTER:kept\r\nEND:VCARD\r\n";
         let z = parse(odd).remove(0);
+        let back = parse(&write(&z));
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].extra, ["X-AFTER:kept"]);
+        // The same with a colon inside quotes in the head: read as a line whose value is
+        // `VCARD\u{1}`, so kept; written, it must not become an end.
+        let quoted = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:z\r\nFN:Zoe\r\nEND;X=\"a:b\":VCARD\u{1}\r\nX-AFTER:kept\r\nEND:VCARD\r\n";
+        let z = parse(quoted).remove(0);
         let back = parse(&write(&z));
         assert_eq!(back.len(), 1);
         assert_eq!(back[0].extra, ["X-AFTER:kept"]);
