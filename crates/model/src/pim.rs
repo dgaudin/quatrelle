@@ -375,6 +375,10 @@ pub struct Pim {
     /// them): the pane lists them between My Calendars and Shared Calendars.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calendar_groups: Vec<String>,
+    /// The server's own name for My Calendars, the group the account's main calendar is in
+    /// (empty: the server doesn't say); moving a calendar back there names it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub my_calendar_group: String,
     #[serde(default)]
     pub events: Vec<StoredEvent>,
     #[serde(default)]
@@ -495,6 +499,9 @@ pub struct DavSync {
     /// stay. Empty: the server has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub calendar_groups: Option<Vec<String>>,
+    /// The server's own name for My Calendars, read with the shortcuts; `None`: not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub my_calendar_group: Option<String>,
     /// The events of the calendars read in full (`synced_calendars`), except those unchanged
     /// (`kept`, by href).
     pub events: Vec<StoredEvent>,

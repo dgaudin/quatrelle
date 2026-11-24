@@ -173,6 +173,9 @@ impl Session {
             merge_events(p, sync);
             p.calendars = list;
         }
+        if let Some(my) = &sync.my_calendar_group {
+            p.my_calendar_group = my.clone();
+        }
         if let Some(groups) = &sync.calendar_groups {
             p.calendar_groups = groups.clone();
         }

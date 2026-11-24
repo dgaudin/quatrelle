@@ -449,18 +449,7 @@ fn find_member<'a>(c: &Client, all: &'a [Shortcut], calendar: &str, name: &str) 
 /// id, name and ordinal ([MS-OXOCFG] 2.2.9.7, 2.2.9.12, 2.2.9.13) change; its folder is untouched.
 pub(crate) fn move_calendar_to_group(c: &Client, calendar: &str, name: &str, group: &str) -> Result<()> {
     let before = read_raw(c)?;
-    let target = if group.is_empty() {
-        before
-            .iter()
-            .find(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_OWN) && s.name.eq_ignore_ascii_case(name))
-            .map(|s| group_of(s, &before))
-            .filter(|g| !g.is_empty())
-            .and_then(|g| group_named(&before, &g).cloned())
-            .or_else(|| group_named(&before, "My Calendars").cloned())
-            .ok_or_else(|| NetError::No("the account's My Calendars group isn't in its shortcuts".into()))?
-    } else {
-        group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?
-    };
+    let target = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
     let member = find_member(c, &before, calendar, name)
         .cloned()
         .ok_or_else(|| NetError::No("this calendar isn't in Outlook's calendar groups yet".into()))?;

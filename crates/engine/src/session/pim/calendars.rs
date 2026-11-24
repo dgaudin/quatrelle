@@ -472,24 +472,30 @@ impl Session {
     pub fn move_calendar_to_group(&mut self, account: &str, calendar: &str, group: &str) -> CmdResult {
         let c = self.calendar_named(account, calendar)?.clone();
         self.calendar_group_move(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
-        if group.is_empty() {
+        let to = if group.is_empty() {
             if c.main {
                 return Ok(json!({"account": account, "calendar": calendar, "group": ""}));
             }
+            let my = self.pim.get(account).map(|p| p.my_calendar_group.clone()).unwrap_or_default();
+            if my.is_empty() {
+                return Err(CmdError::Disabled("the server doesn't name the group My Calendars is in".into()));
+            }
+            my
         } else {
             self.calendar_group_named(account, group)?;
-        }
+            group.to_string()
+        };
         if c.main {
             return Err(CmdError::Disabled("the account's main calendar stays in My Calendars".into()));
         }
         if let Some(c) = self.pim_mut(account).calendars.iter_mut().find(|x| x.id == calendar) {
-            c.group = group.to_string();
+            c.group = if group.is_empty() { String::new() } else { group.to_string() };
         }
         self.pim_revision = self.pim_revision.wrapping_add(1);
         self.write_pim(account);
         self.jobs.push(Job::Apply {
             account: account.to_string(),
-            op: Op::MoveCalendarToGroup { calendar: calendar.to_string(), name: c.name, group: group.to_string() },
+            op: Op::MoveCalendarToGroup { calendar: calendar.to_string(), name: c.name, group: to },
         });
         Ok(json!({"account": account, "calendar": calendar, "group": group}))
     }
