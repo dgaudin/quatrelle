@@ -8,6 +8,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 mod deep;
 pub(crate) use deep::{tag_end, void};
+mod entities;
+pub(crate) use entities::{Refs, decode_refs};
 mod footers;
 pub(crate) use footers::footers_last;
 pub(crate) mod links;
@@ -740,7 +742,9 @@ pub fn html_links(html: &str) -> Vec<String> {
         if raw.len() > 8192 {
             continue;
         }
-        let url = raw.replace("&amp;", "&").replace("&#38;", "&").replace("&quot;", "\"").replace("&#39;", "'");
+        // Read once, as every other pass reads an address ([`decode_refs`]): the chain of
+        // replacements read `&amp;#38;` twice, as `&`.
+        let url = decode_refs(raw, Refs::Value).into_owned();
         let lower_url = url.to_ascii_lowercase();
         if (lower_url.starts_with("https://") || lower_url.starts_with("http://")) && !url.contains(char::is_whitespace) && !out.contains(&url) {
             out.push(url);

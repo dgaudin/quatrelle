@@ -31,3 +31,13 @@ fn an_attribute_inside_another_quoted_value_isnt_one() {
     let html = "<a title=\"see href=https://evil.example/\" href=\"https://x.example/\">t</a><a\thref\t=\t\"https://y.example/\">u</a>";
     assert_eq!(html_link_pairs(html), vec![("t".to_string(), "https://x.example/".to_string()), ("u".to_string(), "https://y.example/".to_string())]);
 }
+
+/// A link's target reads its character references once, as the other passes read them:
+/// `&#x3D;` is `=`, and `&amp;#38;` is `&#38;`.
+#[test]
+fn a_links_target_reads_its_references_once() {
+    assert_eq!(
+        html_link_pairs(r#"<a href="https://x.example/?a&#x3D;1&amp;#38;b">t</a>"#),
+        vec![("t".to_string(), "https://x.example/?a=1&#38;b".to_string())]
+    );
+}

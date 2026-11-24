@@ -4,7 +4,7 @@
 //! address and goes to another is how a phishing page is hidden. Bounded in what it reads and
 //! returns.
 
-use super::HTML_MAX;
+use super::{HTML_MAX, Refs, decode_refs};
 
 /// The most pairs returned.
 const MAX_PAIRS: usize = 200;
@@ -41,7 +41,7 @@ pub fn html_link_pairs(html: &str) -> Vec<(String, String)> {
             continue;
         }
         let shown = shown_text(html.get(inner_start..inner_end).unwrap_or(""));
-        out.push((shown, decode(target)));
+        out.push((shown, decode_refs(target, Refs::Value).into_owned()));
     }
     out
 }
@@ -71,11 +71,6 @@ fn shown_text(inner: &str) -> String {
             break;
         }
     }
-    let words = decode(&text).split_whitespace().collect::<Vec<_>>().join(" ");
+    let words = decode_refs(&text, Refs::Words).split_whitespace().collect::<Vec<_>>().join(" ");
     words.chars().take(MAX_SHOWN).collect()
-}
-
-/// The few entities that matter in a link or its text.
-fn decode(s: &str) -> String {
-    s.replace("&nbsp;", " ").replace("&quot;", "\"").replace("&#39;", "'").replace("&#38;", "&").replace("&amp;", "&")
 }

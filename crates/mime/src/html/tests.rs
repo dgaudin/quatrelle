@@ -32,3 +32,16 @@ fn thousands_of_pictures_pasted_with_much_text_cost_a_few_passes() {
 fn a_gt_inside_a_quoted_attribute_doesnt_end_a_rule_tag() {
     assert_eq!(mark_rules("<p>a</p><hr title=\"x>y\"><p>b</p>"), format!("<p>a</p><p>{RULE_MARK}</p><p>b</p>"));
 }
+
+/// A link's address reads its character references once, as every other pass reads them:
+/// `&amp;#38;` is `&#38;`, not `&` (the chain of replacements read it twice), and `&#x3D;` is
+/// `=`. A picture's address and a tracker's are read the same way.
+#[test]
+fn every_pass_reads_an_address_alike() {
+    let src = "https://pictures.example/p.png?a=1&b=2";
+    let html = r#"<p>Hi</p><img alt="Logo" src="https://pictures.example/p.png?a=1&#38;b=2"><a href="https://links.example/?q=x&amp;#38;y">go</a><img src="https://t.example/o.gif?a=1&#x26;b=2" width="1" height="1">"#;
+    assert_eq!(html_images(html), [src, "https://t.example/o.gif?a=1&b=2"]);
+    assert_eq!(html_links(html), ["https://links.example/?q=x&#38;y"]);
+    assert_eq!(crate::trackers::trackers(html).pictures, ["https://t.example/o.gif?a=1&b=2"]);
+    assert_eq!(html_links(r#"<a href="https://links.example/?a&#x3D;1">go</a>"#), ["https://links.example/?a=1"]);
+}
