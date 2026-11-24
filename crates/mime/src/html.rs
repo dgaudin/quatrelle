@@ -72,7 +72,8 @@ pub(super) fn picture_sizes(html: &str) -> Vec<(String, ImageSize)> {
     pictures::img_tags(html, |tag, _| {
         let Some(src) = tag_attr(tag, "src").map(str::trim).filter(|s| !s.is_empty()) else { return true };
         let style = tag_attr(tag, "style").map(css::declarations).unwrap_or_default();
-        let css = |prop: &str| style.iter().rev().find(|d| d.prop == prop).map(|d| d.value.as_str());
+        // The one that counts, as in CSS ([`css::pick`]): the last marked `!important`, else the last.
+        let css = |prop: &str| css::pick(&style, prop);
         // The style's size wins over the attributes', as in a browser: `auto` too, which leaves
         // the side to the picture's shape. A length not read here (Word's inches) leaves the tag's.
         let auto = |prop: &str| css(prop).is_some_and(|v| v.trim().eq_ignore_ascii_case("auto"));

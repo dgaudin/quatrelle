@@ -121,25 +121,10 @@ fn hides(tag: &str) -> bool {
         return true;
     }
     let Some(style) = crate::html::tag_attr(tag, "style") else { return false };
-    let style: String = style.to_ascii_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
-    // As in CSS: the last declaration of a property is the one that counts, unless an earlier
-    // one was marked `!important`, which beats a later plain one.
-    let value = |prop: &str| {
-        let mut last: Option<String> = None;
-        let mut marked: Option<String> = None;
-        for d in style.split(';') {
-            let Some((p, v)) = d.split_once(':') else { continue };
-            if p != prop {
-                continue;
-            }
-            if let Some(v) = v.strip_suffix("!important") {
-                marked = Some(v.to_string());
-            } else {
-                last = Some(v.to_string());
-            }
-        }
-        marked.or(last)
-    };
+    let decls = crate::css::declarations(&style.to_ascii_lowercase());
+    // The one that counts, as in CSS ([`crate::css::pick`]): the last marked `!important`, else
+    // the last (`display:none;display:block` isn't hidden; `display:none!important;display:block` is).
+    let value = |prop: &str| crate::css::pick(&decls, prop).map(|v| v.to_ascii_lowercase().split_whitespace().collect::<String>());
     let number = |v: &str| v.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '%').parse::<f32>().ok();
     let overflow_hidden = value("overflow").is_some_and(|v| v == "hidden");
     value("display").is_some_and(|v| v == "none")
@@ -152,9 +137,7 @@ fn hides(tag: &str) -> bool {
 /// Whether an opening tag's own `font-size` makes its text too small to see; `None` when it sets
 /// none it can be told from.
 fn tiny_text(tag: &str) -> Option<bool> {
-    let style = crate::html::tag_attr(tag, "style")?.to_ascii_lowercase();
-    let v =
-        style.split(';').rev().find_map(|d| d.split_once(':').filter(|(p, _)| p.trim() == "font-size").map(|(_, v)| v.replace("!important", "")))?;
+    let v = crate::css::style_value(crate::html::tag_attr(tag, "style")?, "font-size")?.to_ascii_lowercase();
     let v = v.trim();
     if v.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '%').parse::<f32>().is_ok_and(|n| n <= 0.0) {
         return Some(true);
@@ -215,6 +198,12 @@ mod tests {
         // at its `>`, and the hidden text after it is found.
         let html = format!("<div style=\"display:none\"><p title=it's>{LONG}</p></div>");
         assert!(hidden_text(&html).is_some());
+        // The size that counts, as in CSS: one marked `!important` over a later one (the last
+        // was taken, whatever came before it).
+        let html = format!(r#"<div style="font-size:0 !important; font-size:14px">{LONG}</div>"#);
+        assert!(hidden_text(&html).is_some());
+        let html = format!(r#"<div style="font-size:0; font-size:14px">{LONG}</div>"#);
+        assert_eq!(hidden_text(&html), None);
 
         // The hidden part ends where its element does, even with unclosed elements inside.
         let html = format!("<div style=\"display:none\"><p>short<b>bold</div><p>{LONG}</p>");

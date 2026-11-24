@@ -56,3 +56,13 @@ fn marks_a_message_writes_are_taken_out() {
     assert_eq!(text, "abcde", "{text:?}");
     assert_ne!(crate::rich::SIGNATURE, '\u{E002}', "the rule line's mark");
 }
+
+/// A picture's size is the one CSS picks: the last declaration marked `!important` over a
+/// later plain one (`width:600px !important; width:1px` is 600 wide, not 1).
+#[test]
+fn a_pictures_size_is_the_one_css_picks() {
+    let html = r#"<img src="https://x.example/a.png" style="width:600px !important; width:1px"><img src="https://x.example/b.png" style="width:1px; width:600px">"#;
+    let sizes = picture_sizes(html);
+    assert_eq!(sizes[0].1.width, Some(layout::Width::Px(600)), "{sizes:?}");
+    assert_eq!(sizes[1].1.width, Some(layout::Width::Px(600)), "{sizes:?}");
+}

@@ -134,6 +134,18 @@ pub(crate) fn declarations(block: &str) -> Vec<Decl> {
         })
         .collect()
 }
+/// The value `decls` (a style's, [`declarations`]) give `prop` (lower case), as CSS picks it: the
+/// last declaration of it marked `!important`, else the last. The one rule for every pass that
+/// looks a property up (some took the first, some the last).
+pub(crate) fn pick<'d>(decls: &'d [Decl], prop: &str) -> Option<&'d str> {
+    let of = || decls.iter().rev().filter(|d| d.prop == prop);
+    of().find(|d| d.important).or_else(|| of().next()).map(|d| d.value.as_str())
+}
+
+/// The value a style (an element's `style`) gives `prop` (lower case), as CSS picks it ([`pick`]).
+pub(crate) fn style_value(style: &str, prop: &str) -> Option<String> {
+    pick(&declarations(style), prop).map(str::to_string)
+}
 
 /// One selector (`table.report td`), or `None` when it uses what isn't supported.
 fn selector(text: &str) -> Option<Vec<Compound>> {
@@ -377,6 +389,12 @@ mod tests {
         assert_eq!(Sheet::parse(&many).rules.len(), MAX_RULES);
         assert!(selector(&"a ".repeat(20)).is_none(), "too long a selector");
         assert_eq!(declarations("color: red !important; x"), vec![Decl { prop: "color".into(), value: "red".into(), important: true }]);
+        // `pick`: the last `!important`, else the last (`! important`, spaced, is one too).
+        assert_eq!(pick(&declarations("width:1px;width:600px"), "width"), Some("600px"));
+        assert_eq!(pick(&declarations("width:600px !important;width:1px"), "width"), Some("600px"));
+        assert_eq!(pick(&declarations("width:600px ! important ;width:1px"), "width"), Some("600px"));
+        assert_eq!(style_value("width:1px; height:2px !important; height:3px", "height").as_deref(), Some("2px"));
+        assert_eq!(pick(&declarations("color:red"), "width"), None);
     }
 
     /// A `/*` in an address (`url(…)`, quoted or not) or in a quoted string is part of it, not a
