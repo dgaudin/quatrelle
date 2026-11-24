@@ -194,7 +194,9 @@ mod find;
 mod kept;
 mod meetings;
 mod notes;
+mod recurrence;
 mod showing;
+mod writing;
 mod zones;
 
 fn at(y: i64, m: u32, d: u32, h: i64, mi: i64) -> i64 {
@@ -318,37 +320,6 @@ fn reminders_from_and_to_alarms() {
     assert_eq!(back.first().and_then(reminder_minutes), Some(45));
 }
 
-/// An event from a damaged cache, starting at the end of time, is written without overflowing.
-#[test]
-fn an_event_at_the_end_of_time_is_written() {
-    for (all_day, tzid) in [(true, ""), (false, ""), (false, "Europe/Berlin"), (false, "Nowhere/Made-up")] {
-        for start in [i64::MAX - 10, i64::MIN + 10] {
-            let e = CalEvent { uid: "far".into(), start, end: 0, all_day, tzid: tzid.into(), ..Default::default() };
-            let text = write(std::slice::from_ref(&e), None, 0);
-            assert!(text.contains("UID:far") && text.contains("DTEND"), "{text}");
-        }
-    }
-}
-
-/// A component begun with spaces round its name (`BEGIN: valarm`, which reading takes) is written
-/// back as servers take it.
-#[test]
-fn a_component_s_beginning_is_written_plainly() {
-    let cal = parse(
-        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:sp\r\nDTSTART:20261103T090000Z\r\nBEGIN: x-big \r\nX-LINE:junk\r\nEND:x-big\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
-        0,
-    );
-    let text = write(&cal.events, None, 0);
-    assert!(text.contains("\r\nBEGIN:x-big\r\nX-LINE:junk\r\nEND:x-big\r\n"), "{text}");
-    // An alarm Quatrelle can't read is kept whole, its beginning written plainly too.
-    let cal = parse(
-        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:sp2\r\nDTSTART:20261103T090000Z\r\nBEGIN: valarm \r\nX-WEIRD:1\r\nEND:valarm\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
-        0,
-    );
-    let text = write(&cal.events, None, 0);
-    assert!(text.contains("\r\nBEGIN:valarm\r\nX-WEIRD:1\r\nEND:valarm\r\n"), "{text}");
-}
-
 #[test]
 fn writes_what_it_reads() {
     let cal = parse(INVITE, 0);
@@ -462,36 +433,6 @@ fn recurrences() {
     assert_eq!(starts_seen, vec![mon, mon + 15 * 86_400, mon + 21 * 86_400]);
     assert_eq!(occ[1].event, 1, "the moved instance");
 }
-
-/// A rule nothing ever matches ends too, window or none (it went on for ever before: the
-/// calendar froze on an invitation that had one).
-#[test]
-fn a_rule_nothing_matches_ends() {
-    let mk = |rrule: &str, start: i64| CalEvent { uid: "r".into(), start, end: start + 3600, rrule: Some(rrule.into()), ..Default::default() };
-    let mon = at(2026, 10, 5, 9, 0); // a Monday
-    for never in
-        ["FREQ=DAILY;BYSETPOS=2", "FREQ=WEEKLY;BYDAY=MO;BYSETPOS=2", "FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30", "FREQ=DAILY;INTERVAL=1000000;BYSETPOS=5"]
-    {
-        assert_eq!(starts(&mk(never, mon), i64::MAX), Vec::<i64>::new(), "{never}");
-        assert_eq!(starts(&mk(never, mon), mon + 400 * 86_400), Vec::<i64>::new(), "{never}");
-    }
-}
-
-/// A rule with a frequency RFC 5545 doesn't have (`FREQ=FORTNIGHTLY`, typed as a rule of its own)
-/// is no rule: the event still occurs at its start, as one with no `FREQ` at all does, rather
-/// than not at all.
-#[test]
-fn an_unknown_frequency_is_no_rule() {
-    let start = at(2026, 10, 5, 9, 0);
-    for rule in ["FREQ=FORTNIGHTLY", "FREQ=;COUNT=3", "COUNT=3", "FREQ=DAILYX;INTERVAL=2"] {
-        let e = CalEvent { uid: "u".into(), start, end: start + 1800, rrule: Some(rule.into()), ..Default::default() };
-        assert_eq!(starts(&e, i64::MAX), vec![start], "{rule}");
-        assert_eq!(occurrences(std::slice::from_ref(&e), start - 86_400, start + 86_400).len(), 1, "{rule}");
-    }
-    let daily = CalEvent { uid: "d".into(), start, end: start + 1800, rrule: Some("freq=daily;count=3".into()), ..Default::default() };
-    assert_eq!(starts(&daily, i64::MAX).len(), 3, "a known one in any case");
-}
-
 #[test]
 fn nth_weekdays() {
     assert_eq!(nth_weekday(2026, 3, -1, 6), Some(days_from_civil(2026, 3, 29)), "last Sunday of March 2026");
