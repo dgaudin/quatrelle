@@ -2463,3 +2463,18 @@ presence	Offline	غير متصل
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	النص المعاد صياغته أطول بكثير من الجزء المرسل؛ اختر جزءًا أقصر أو احتفظ بنصك.
 	The rewritten text is empty; ask again or keep yours.	النص المعاد صياغته فارغ؛ اطلب مرة أخرى أو احتفظ بنصك.
 	The rewritten text couldn't be read; ask again or keep yours.	تعذّرت قراءة النص المعاد صياغته؛ اطلب مرة أخرى أو احتفظ بنصك.
+	Automatic reply	رد تلقائي
+	Not delivered	لم يُسلَّم
+	Delivery delayed	تأخر التسليم
+	Delivered	تم التسليم
+	Deleted without being read	حُذفت دون قراءة
+	Recall request	طلب استرجاع
+	Recall succeeded	نجح الاسترجاع
+	Recall failed	فشل الاسترجاع
+	Meeting request	طلب اجتماع
+	Meeting canceled	أُلغي الاجتماع
+	Answer: accepted	الرد: مقبول
+	Answer: tentative	الرد: مبدئي
+	Answer: declined	الرد: مرفوض
+	Encrypted	مشفّرة
+	Signed	موقّعة

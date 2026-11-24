@@ -2464,3 +2464,18 @@ presence	Offline	オフライン
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	書き換えた文章は送った部分よりずっと長いです。短い部分を選ぶか、元の文章を残してください。
 	The rewritten text is empty; ask again or keep yours.	書き換えた文章は空です。もう一度頼むか、元の文章を残してください。
 	The rewritten text couldn't be read; ask again or keep yours.	書き換えた文章を読み取れませんでした。もう一度頼むか、元の文章を残してください。
+	Automatic reply	自動応答
+	Not delivered	配信されませんでした
+	Delivery delayed	配信が遅延しています
+	Delivered	配信済み
+	Deleted without being read	未読のまま削除
+	Recall request	取り消しの要求
+	Recall succeeded	取り消しに成功
+	Recall failed	取り消しに失敗
+	Meeting request	会議の招待
+	Meeting canceled	会議は中止されました
+	Answer: accepted	回答: 承諾
+	Answer: tentative	回答: 仮承諾
+	Answer: declined	回答: 辞退
+	Encrypted	暗号化済み
+	Signed	署名済み

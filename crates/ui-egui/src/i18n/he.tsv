@@ -2463,3 +2463,18 @@ presence	Offline	לא מחובר
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	הטקסט שנכתב מחדש ארוך בהרבה מהחלק שנשלח; בחר חלק קצר יותר או שמור על שלך.
 	The rewritten text is empty; ask again or keep yours.	הטקסט שנכתב מחדש ריק; בקש שוב או שמור על שלך.
 	The rewritten text couldn't be read; ask again or keep yours.	לא ניתן היה לקרוא את הטקסט שנכתב מחדש; בקש שוב או שמור על שלך.
+	Automatic reply	תשובה אוטומטית
+	Not delivered	לא נמסרה
+	Delivery delayed	המסירה מתעכבת
+	Delivered	נמסרה
+	Deleted without being read	נמחקה בלי שנקראה
+	Recall request	בקשת החזרה
+	Recall succeeded	ההחזרה הצליחה
+	Recall failed	ההחזרה נכשלה
+	Meeting request	בקשה לפגישה
+	Meeting canceled	הפגישה בוטלה
+	Answer: accepted	תשובה: התקבלה
+	Answer: tentative	תשובה: אולי
+	Answer: declined	תשובה: נדחתה
+	Encrypted	מוצפנת
+	Signed	חתומה

@@ -2468,3 +2468,18 @@ presence	Offline	Не в сети
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	Переписанный текст намного длиннее отправленной части; выберите часть покороче или оставьте свой.
 	The rewritten text is empty; ask again or keep yours.	Переписанный текст пуст; спросите ещё раз или оставьте свой.
 	The rewritten text couldn't be read; ask again or keep yours.	Не удалось прочитать переписанный текст; спросите ещё раз или оставьте свой.
+	Automatic reply	Автоответ
+	Not delivered	Не доставлено
+	Delivery delayed	Доставка задержана
+	Delivered	Доставлено
+	Deleted without being read	Удалено непрочитанным
+	Recall request	Запрос на отзыв
+	Recall succeeded	Отзыв выполнен
+	Recall failed	Отзыв не удался
+	Meeting request	Приглашение на встречу
+	Meeting canceled	Встреча отменена
+	Answer: accepted	Ответ: принято
+	Answer: tentative	Ответ: под вопросом
+	Answer: declined	Ответ: отклонено
+	Encrypted	Зашифровано
+	Signed	Подписано

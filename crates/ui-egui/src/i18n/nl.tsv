@@ -2464,3 +2464,18 @@ presence	Offline	Offline
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	De herschreven tekst is veel langer dan het verzonden deel; kies een korter deel of houd de uwe.
 	The rewritten text is empty; ask again or keep yours.	De herschreven tekst is leeg; vraag opnieuw of houd de uwe.
 	The rewritten text couldn't be read; ask again or keep yours.	De herschreven tekst kon niet worden gelezen; vraag opnieuw of houd de uwe.
+	Automatic reply	Automatisch antwoord
+	Not delivered	Niet bezorgd
+	Delivery delayed	Bezorging vertraagd
+	Delivered	Bezorgd
+	Deleted without being read	Verwijderd zonder gelezen te zijn
+	Recall request	Verzoek tot terughalen
+	Recall succeeded	Terughalen geslaagd
+	Recall failed	Terughalen mislukt
+	Meeting request	Vergaderverzoek
+	Meeting canceled	Vergadering geannuleerd
+	Answer: accepted	Antwoord: geaccepteerd
+	Answer: tentative	Antwoord: voorlopig
+	Answer: declined	Antwoord: afgewezen
+	Encrypted	Versleuteld
+	Signed	Ondertekend

@@ -2467,3 +2467,18 @@ presence	Offline	离线
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	改写后的文字比发送的部分长得多；请选择更短的部分，或保留您的内容。
 	The rewritten text is empty; ask again or keep yours.	改写后的文字为空；请重新请求，或保留您的内容。
 	The rewritten text couldn't be read; ask again or keep yours.	无法读取改写后的文字；请重新请求，或保留您的内容。
+	Automatic reply	自动答复
+	Not delivered	未送达
+	Delivery delayed	送达延迟
+	Delivered	已送达
+	Deleted without being read	未读即删除
+	Recall request	撤回请求
+	Recall succeeded	撤回成功
+	Recall failed	撤回失败
+	Meeting request	会议邀请
+	Meeting canceled	会议已取消
+	Answer: accepted	答复:已接受
+	Answer: tentative	答复:暂定
+	Answer: declined	答复:已拒绝
+	Encrypted	已加密
+	Signed	已签名

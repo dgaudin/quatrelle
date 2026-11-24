@@ -7,6 +7,7 @@ use super::*;
 
 mod deleting;
 pub(in crate::tests) mod follow_up;
+mod kinds;
 mod replied;
 mod search_big;
 mod searching;

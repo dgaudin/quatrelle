@@ -2467,3 +2467,18 @@ presence	Offline	Offline
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	O texto reescrito é muito mais longo que a parte enviada; escolha uma parte mais curta ou mantenha o seu.
 	The rewritten text is empty; ask again or keep yours.	O texto reescrito está vazio; peça de novo ou mantenha o seu.
 	The rewritten text couldn't be read; ask again or keep yours.	Não foi possível ler o texto reescrito; peça de novo ou mantenha o seu.
+	Automatic reply	Resposta automática
+	Not delivered	Não entregue
+	Delivery delayed	Entrega atrasada
+	Delivered	Entregue
+	Deleted without being read	Excluída sem ser lida
+	Recall request	Pedido de recolhimento
+	Recall succeeded	Recolhimento concluído
+	Recall failed	Recolhimento falhou
+	Meeting request	Solicitação de reunião
+	Meeting canceled	Reunião cancelada
+	Answer: accepted	Resposta: aceita
+	Answer: tentative	Resposta: provisória
+	Answer: declined	Resposta: recusada
+	Encrypted	Criptografada
+	Signed	Assinada

@@ -6,8 +6,8 @@
 use super::*;
 
 /// To a screen reader a row is one item of the list: who, the subject, when, and what its
-/// markers show (a sender to check, external, unread, flagged or completed, replied to or
-/// forwarded, attachments).
+/// markers show (a sender to check, external, unread, flagged or completed, what the message is
+/// or was done with, attachments).
 pub(super) fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, unread: bool, sent_view: bool) -> String {
     let mut who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
     if marks.address {
@@ -24,13 +24,15 @@ pub(super) fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::Sen
         (unread, "Unread"),
         (m.flags.flagged, "Flagged"),
         (m.flags.follow_up_complete(), "Completed"),
-        (m.flags.answered, "Replied"),
-        (!m.flags.answered && m.flags.forwarded, "Forwarded"),
-        (m.has_attachments, "Has attachments"),
     ] {
         if on {
             spoken.push(tl!(word).to_string());
         }
+    }
+    // What it is and what was done with it, everything true of it, not only its one icon.
+    spoken.extend(s.list_said(m).into_iter().map(icon_column::label).filter(|w| !w.is_empty()).map(str::to_string));
+    if m.has_attachments {
+        spoken.push(tl!("Has attachments").to_string());
     }
     spoken.join(", ")
 }

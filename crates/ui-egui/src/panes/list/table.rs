@@ -20,6 +20,7 @@ pub(super) fn table_row_height(s: &Session) -> f32 {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Col {
     Importance,
+    Icon,
     Attach,
     Who,
     Subject,
@@ -82,13 +83,18 @@ pub(super) fn columns(width: f32, w: &ColumnWidths) -> Vec<(Col, f32, f32)> {
         fixed_right.push((Col::Categories, w.categories.unwrap_or(110.0)));
     }
     fixed_right.push((Col::Flag, 26.0));
-    let left = 8.0 + 18.0 + 20.0;
+    let left = 8.0 + 18.0 + 20.0 + 20.0;
     let right: f32 = fixed_right.iter().map(|(_, w)| w).sum();
     let rest = (width - left - right - 6.0).max(120.0);
     // The subject keeps 80 points whatever the sender's width.
     let who = w.who.unwrap_or((rest * 0.34).clamp(90.0, 260.0)).min((rest - 80.0).max(60.0));
-    let mut out =
-        vec![(Col::Importance, 8.0, 26.0), (Col::Attach, 26.0, 46.0), (Col::Who, left, left + who), (Col::Subject, left + who, left + rest)];
+    let mut out = vec![
+        (Col::Importance, 8.0, 26.0),
+        (Col::Icon, 26.0, 46.0),
+        (Col::Attach, 46.0, 66.0),
+        (Col::Who, left, left + who),
+        (Col::Subject, left + who, left + rest),
+    ];
     let mut x = left + rest;
     for (c, w) in fixed_right {
         out.push((c, x, x + w));
@@ -107,7 +113,7 @@ pub(super) fn column_arrange(c: Col, sent_view: bool) -> Option<quatrelle_engine
         Col::Received => Some(A::Date),
         Col::Size => Some(A::Size),
         Col::Flag => Some(A::Flag),
-        Col::Importance | Col::Categories => None,
+        Col::Importance | Col::Icon | Col::Categories => None,
     }
 }
 
@@ -132,13 +138,13 @@ pub(super) fn table_header(
         if arrange.is_some() && resp.hovered() {
             p.rect_filled(cell, 0.0, t.hover);
         }
-        if x0 > 30.0 {
+        if x0 > 50.0 {
             p.line_segment([cell.left_top() + vec2(0.0, 5.0), cell.left_bottom() - vec2(0.0, 5.0)], egui::Stroke::new(1.0, t.border));
         }
         let active = arrange.is_some_and(|a| a == s.prefs.arrange);
         let label = match c {
             Col::Importance => "!".to_string(),
-            Col::Attach | Col::Flag => String::new(),
+            Col::Icon | Col::Attach | Col::Flag => String::new(),
             Col::Who => tl!(if sent_view { "To" } else { "From" }).to_string(),
             Col::Subject => tl!("Subject").to_string(),
             Col::Received => tl!("Received").to_string(),
@@ -253,6 +259,17 @@ pub(super) fn table_row(
             Col::Importance if m.importance != 0 => {
                 let (mark, color) = if m.importance > 0 { ("!", t.danger) } else { ("↓", t.accent) };
                 p.text(egui::pos2(cell.center().x, line1), egui::Align2::CENTER_CENTER, mark, theme::bold(13.0), color);
+            }
+            Col::Icon => {
+                // What the message is or what was done with it, dim; red where it asks for
+                // attention. The tip says everything true of it (no clickable area: the row's).
+                if let Some(i) = s.list_icon(m, true) {
+                    let at = Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(13.0, 13.0));
+                    icons::paint(&p, at, icon_column::icon_of(i), icon_column::color_of(i, t));
+                    if ui.rect_contains_pointer(cell) {
+                        resp.clone().on_hover_text(icon_column::said(s, m));
+                    }
+                }
             }
             Col::Attach if m.has_attachments => {
                 icons::paint(&p, Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(13.0, 13.0)), Icon::Attach, t.dim);
@@ -393,5 +410,17 @@ mod column_tests {
         assert!(width(&cols, Col::Subject) >= 80.0);
         let bad = ColumnWidths { who: Some(-5.0), received: Some(f32::NAN), size: Some(1e9), categories: None }.clamped();
         assert_eq!((bad.who, bad.received, bad.size), (Some(60.0), None, Some(160.0)));
+    }
+
+    /// The icon column sits between the importance mark and the paperclip, and isn't a heading
+    /// that arranges the list.
+    #[test]
+    fn the_icon_column_sits_between_importance_and_the_paperclip() {
+        let cols = columns(900.0, &ColumnWidths::default());
+        assert_eq!(cols[..4].iter().map(|c| c.0).collect::<Vec<_>>(), [Col::Importance, Col::Icon, Col::Attach, Col::Who]);
+        assert_eq!((cols[1].1, cols[1].2, cols[2].1, cols[2].2, cols[3].1), (26.0, 46.0, 46.0, 66.0, 66.0));
+        assert_eq!(column_arrange(Col::Icon, false), None);
+        let narrow = columns(500.0, &ColumnWidths { who: Some(600.0), ..Default::default() });
+        assert!(narrow.iter().find(|c| c.0 == Col::Subject).is_some_and(|c| c.2 - c.1 >= 80.0));
     }
 }

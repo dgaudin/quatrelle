@@ -2466,3 +2466,18 @@ presence	Offline	오프라인
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	다시 쓴 글이 보낸 부분보다 훨씬 깁니다. 더 짧은 부분을 고르거나 원래 글을 유지하세요.
 	The rewritten text is empty; ask again or keep yours.	다시 쓴 글이 비어 있습니다. 다시 요청하거나 원래 글을 유지하세요.
 	The rewritten text couldn't be read; ask again or keep yours.	다시 쓴 글을 읽을 수 없습니다. 다시 요청하거나 원래 글을 유지하세요.
+	Automatic reply	자동 응답
+	Not delivered	전달되지 않음
+	Delivery delayed	전달 지연됨
+	Delivered	전달됨
+	Deleted without being read	읽지 않고 삭제됨
+	Recall request	회수 요청
+	Recall succeeded	회수 성공
+	Recall failed	회수 실패
+	Meeting request	회의 요청
+	Meeting canceled	회의 취소됨
+	Answer: accepted	응답: 수락
+	Answer: tentative	응답: 미정
+	Answer: declined	응답: 거절
+	Encrypted	암호화됨
+	Signed	서명됨

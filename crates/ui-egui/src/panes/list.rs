@@ -29,6 +29,7 @@ pub(crate) struct ListRows {
 pub struct DragKeys(pub Vec<MessageKey>);
 
 mod age_bar;
+pub(crate) mod icon_column;
 mod spoken;
 mod table;
 use spoken::row_spoken;
@@ -233,7 +234,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 }
                 Row::Message { index, count, unread } => {
                     let Some(m) = s.list.get(*index) else { continue };
-                    if previews && s.source_wanted(m) {
+                    if s.source_wanted(m) && (previews || m.kind.is_unknown()) {
                         st.want_previews.push(m.key.clone());
                     }
                     let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, mh));
@@ -566,12 +567,9 @@ fn message_row(
             let (mark, color) = if m.importance > 0 { ("!", t.danger) } else { ("↓", t.accent) };
             p.text(egui::pos2(right - icons_w + 6.0, line2 + 8.0), egui::Align2::CENTER_CENTER, mark, theme::bold(13.0), color);
         }
-        // Replied to or forwarded (the reply when both are kept), as dim as the paperclip: in
-        // the faint colour it all but went on a selected row in the dark theme.
-        if m.flags.answered {
-            marker(Icon::Reply, t.dim, &mut icons_w);
-        } else if m.flags.forwarded {
-            marker(Icon::Forward, t.dim, &mut icons_w);
+        // What the message is or what was done with it, one icon (S/MIME has its own marks above).
+        if let Some(i) = s.list_icon(m, false) {
+            marker(icon_column::icon_of(i), icon_column::color_of(i, t), &mut icons_w);
         }
     }
     // Categories: a coloured dot each, before the markers.

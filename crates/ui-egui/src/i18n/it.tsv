@@ -2466,3 +2466,18 @@ presence	Offline	Offline
 	The rewritten text is much longer than the part sent; select a shorter part or keep yours.	Il testo riscritto è molto più lungo della parte inviata; scegli una parte più breve o tieni il tuo.
 	The rewritten text is empty; ask again or keep yours.	Il testo riscritto è vuoto; chiedi di nuovo o tieni il tuo.
 	The rewritten text couldn't be read; ask again or keep yours.	Non è stato possibile leggere il testo riscritto; chiedi di nuovo o tieni il tuo.
+	Automatic reply	Risposta automatica
+	Not delivered	Non recapitato
+	Delivery delayed	Recapito ritardato
+	Delivered	Recapitato
+	Deleted without being read	Eliminato senza essere letto
+	Recall request	Richiesta di richiamo
+	Recall succeeded	Richiamo riuscito
+	Recall failed	Richiamo non riuscito
+	Meeting request	Richiesta di riunione
+	Meeting canceled	Riunione annullata
+	Answer: accepted	Risposta: accettata
+	Answer: tentative	Risposta: provvisoria
+	Answer: declined	Risposta: rifiutata
+	Encrypted	Cifrato
+	Signed	Firmato
