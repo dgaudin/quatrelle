@@ -86,6 +86,7 @@ pub(crate) fn fewer_malloc_arenas() {}
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     use super::*;
 
     /// The allocator gives freed memory back by itself (Linux on x86-64).
