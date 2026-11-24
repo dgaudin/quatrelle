@@ -367,7 +367,9 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &st
     let answer = without_outer_fence(answer);
     let answer: String = answer.trim().chars().filter(|c| *c != PICTURE && !('\u{E000}'..='\u{E06F}').contains(c)).collect();
     // One reader, the Markdown one: its backslash escapes are what the outbound writer wrote.
-    let Some((mut text, mut styles)) = crate::read_markdown(&answer) else { return (String::new(), Styles::plain("")) };
+    // An answer it keeps no text of still gives the pictures back below (never lost); the caller
+    // finds it empty.
+    let (mut text, mut styles) = crate::read_markdown(&answer).unwrap_or_else(|| (String::new(), Styles::plain("")));
     // The HTML reader draws a strikethrough with a combining mark over each character; the
     // editor keeps the style instead.
     crate::rich::retain(&mut text, &mut styles, |c, _| c != '\u{336}');

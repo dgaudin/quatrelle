@@ -322,3 +322,18 @@ fn a_paragraph_beginning_like_a_bullet_stays_text() {
     assert_eq!(back, text, "sent {:?}", outbound(text, &styles, 7).0);
     assert_eq!(back_styles.para(1).list, List::None);
 }
+
+/// An answer with no text the reader keeps (only blanks, or only an HTML comment) still gives
+/// every picture back: the caller decides it is empty, a picture is never lost on the way.
+#[test]
+fn an_answer_without_readable_text_keeps_its_picture() {
+    let text = "Bonjour \u{FFFC} Zoé";
+    let mut styles = Styles::plain(text);
+    styles.restyle(text, 8..9, |s| Style { picture: Some("logo@studio.example".into()), ..s.clone() });
+    let (_, images) = outbound(text, &styles, 7);
+    assert_eq!(images.len(), 1);
+    for answer in ["<!-- -->tps://studio.example/AgE-7-1-END\n", "   \n", ""] {
+        let (back, _) = inbound(answer, Style::default(), &images, text, &styles);
+        assert_eq!(back.chars().filter(|c| *c == PICTURE).count(), 1, "answer {answer:?} gave {back:?}");
+    }
+}

@@ -444,6 +444,19 @@ fn an_empty_answer_is_refused() {
     assert_eq!(s.compose.as_ref().unwrap().body, "Bonjour");
 }
 
+/// An answer with no text but the pictures given back is as empty: it never replaces the words.
+#[test]
+fn an_answer_of_only_pictures_is_refused() {
+    let mut s = sample_session("rewrite-only-pictures");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    written(&mut s, "First\n\n![logo](cid:logo@studio.example)\n\nLast", "logo@studio.example");
+    let before = s.compose.as_ref().unwrap().body.clone();
+    let (id, _) = ask(&mut s, "fix", None);
+    s.apply(Event::LlmAnswered { id, text: "<!-- -->".into(), error: None });
+    assert!(s.run("assistant.endRewrite", &json!({"use": true})).is_err(), "nothing to put in");
+    assert_eq!(s.compose.as_ref().unwrap().body, before);
+}
+
 /// A picture without a cid still goes to the model as a marker and comes back at its place.
 #[test]
 fn a_picture_without_a_cid_is_kept() {

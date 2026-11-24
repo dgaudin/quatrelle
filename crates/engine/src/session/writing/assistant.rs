@@ -121,7 +121,8 @@ impl Rewrite {
             return Err(RewriteProblem::TooLong);
         }
         let (text, styles) = quatrelle_mime::rich::inbound(text, self.base.clone(), &self.images, &self.before, &self.before_styles);
-        if text.trim().is_empty() {
+        // The pictures always come back; an answer of them alone kept no words.
+        if text.chars().all(|c| c.is_whitespace() || c == quatrelle_mime::rich::PICTURE) {
             return Err(RewriteProblem::Empty);
         }
         Ok((text, styles))
