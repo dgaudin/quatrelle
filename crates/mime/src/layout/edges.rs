@@ -105,7 +105,7 @@ pub(super) fn named_color(name: &str) -> Option<[u8; 3]> {
 }
 
 /// A value's words, a function's arguments kept together (`1px solid rgb(1, 2, 3)`).
-fn words(v: &str) -> Vec<String> {
+pub(super) fn words(v: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut word = String::new();
     let mut depth = 0usize;

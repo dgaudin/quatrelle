@@ -74,7 +74,11 @@ pub(super) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'
                     while bytes.get(i).is_some_and(|&c| !is_space(c) && c != b'>') {
                         i += 1;
                     }
-                    html.get(at..i).unwrap_or_default()
+                    let bare = html.get(at..i).unwrap_or_default();
+                    // Unquoted, as programs write it (`src=https://…/c.png/>`): a slash before
+                    // the `>` is the tag's, not the address's (a `//` stays: a protocol-relative
+                    // address starts with it).
+                    bare.strip_suffix('/').filter(|b| !b.ends_with('/')).unwrap_or(bare)
                 }
             }
         } else {
@@ -542,6 +546,27 @@ mod tests {
             assert!(started.elapsed() < std::time::Duration::from_secs(5), "{before}: {:?}", started.elapsed());
             assert!(p.is_some_and(|p| p.text.contains("Hello")), "{before}");
         }
+    }
+
+    /// `<` with no name after it, and `<a` inside a `style` left open, were each read to the
+    /// end of the message, a megabyte of them for minutes.
+    #[test]
+    fn a_megabyte_of_stray_angle_brackets_is_read_once() {
+        let tables = "<table></table>".repeat(MAX_TABLES + 1);
+        let started = std::time::Instant::now();
+        for junk in ["<".repeat(1 << 20), "< ".repeat(1 << 19), format!("<style>{}", "<a ".repeat(1 << 18)), "<\"".repeat(1 << 19)] {
+            let html = format!("{tables}{junk}");
+            assert!(!too_deep(&html));
+            let _ = flattened(&html);
+        }
+        assert!(started.elapsed() < std::time::Duration::from_secs(20), "{:?}", started.elapsed());
+        // What the tags are is as before.
+        let mut seen = Vec::new();
+        tags("<p>a < b <i>c</i><style>x<y</style><script>if (a</b>) {}</script><b>", |name, end, _| {
+            seen.push(format!("{}{name}", if end { "/" } else { "" }));
+            true
+        });
+        assert_eq!(seen, ["p", "i", "/i", "style", "/style", "script", "/script", "b"]);
     }
 
     #[test]

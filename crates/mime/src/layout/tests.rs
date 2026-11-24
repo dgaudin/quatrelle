@@ -10,6 +10,45 @@ fn text(b: &Block) -> String {
     }
 }
 
+/// Styles as programs write them out: a colour with spaces in it (`rgb(34, 34, 34)`) is read,
+/// and the last declaration of a property is the one that counts, as in CSS (a cell that says a
+/// colour twice has the second); the one marked `!important` counts over a later one, and a value
+/// that can't be read gives way to the one before it, as in a browser.
+#[test]
+fn styles_as_programs_write_them_are_read() {
+    fn all_tables<'a>(b: &'a [Block], out: &mut Vec<&'a Table>) {
+        for blk in b {
+            if let Block::Table(t) = blk {
+                out.push(t);
+                for row in &t.rows {
+                    for c in row {
+                        all_tables(&c.blocks, out);
+                    }
+                }
+            }
+        }
+    }
+    let row_of = |html: &str, n: usize| {
+        let b = html_layout(html);
+        let mut all = Vec::new();
+        all_tables(&b, &mut all);
+        all.iter().find_map(|t| t.rows.iter().find(|r| r.len() == n)).unwrap_or_else(|| panic!("{b:?}")).clone()
+    };
+    let row = row_of(
+        r#"<html><body><table width="100%"><tr><td style="background-color: rgb(34, 34, 34); color: #fff; border: 2px solid rgb(204, 204, 204)">Dark</td><td style="background: rgba(0, 130, 150, 1) none">Teal</td><td style="background-color:#ffffff;background-color:#c00000">Total</td></tr></table></body></html>"#,
+        3,
+    );
+    assert_eq!(row[0].background, Some([34, 34, 34]));
+    assert_eq!(row[0].borders.top, Some(Border { width: 2, color: [204, 204, 204] }));
+    assert_eq!(row[1].background, Some([0, 130, 150]));
+    assert_eq!(row[2].background, Some([0xc0, 0, 0]), "the last one said");
+    let row = row_of(
+        r#"<html><body><table width="100%"><tr><td style="background-color:#00aa00;background-color:var(--brand)">A</td><td style="background-color:#c00000 !important;background-color:#ffffff">B</td></tr></table></body></html>"#,
+        2,
+    );
+    assert_eq!((row[0].background, row[1].background), (Some([0, 0xaa, 0]), Some([0xc0, 0, 0])));
+}
+
 #[test]
 fn a_newsletter_keeps_its_columns() {
     let html = r##"<html><head><style>.hide{display:none}</style></head><body>
