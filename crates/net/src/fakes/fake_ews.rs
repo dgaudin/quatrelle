@@ -109,6 +109,11 @@ pub struct Data {
     /// A `FindItem` page never says it holds the last item (a server whose paging is cut short
     /// or inconsistent).
     pub wlinks_more: bool,
+    /// A group made with `CreateItem` is stored but not given back by `FindItem` (a reread that
+    /// diverges).
+    pub hide_created_group: bool,
+    /// The shortcuts hidden from `FindItem` by [`Data::hide_created_group`].
+    pub hidden_wlinks: Vec<String>,
     /// The next requests are answered "busy" (`ErrorServerBusy`, back off 10 ms), this many times.
     pub busy: usize,
     /// The search for what messages are (`FindItem` on `item:ItemClass`): refused
@@ -378,6 +383,8 @@ impl Default for Data {
             refused_sign_ins: Vec::new(),
             drop_kept: 0,
             wlinks_more: false,
+            hide_created_group: false,
+            hidden_wlinks: Vec::new(),
             no_commit_time: false,
             limits: None,
             outlook_rules: false,

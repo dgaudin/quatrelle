@@ -56,7 +56,12 @@ impl Data {
             }
             "FindItem" if op.attr("Traversal") == Some("Associated") => {
                 let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
-                let mut items: Vec<&String> = if folder == "COMMON-VIEWS" { self.wlinks.iter().collect() } else { Vec::new() };
+                let mut items: Vec<&String> = if folder == "COMMON-VIEWS" {
+                    let hidden = &self.hidden_wlinks;
+                    self.wlinks.iter().filter(|w| !wlink_id(w).is_some_and(|id| hidden.contains(&id))).collect()
+                } else {
+                    Vec::new()
+                };
                 // A restriction on the message class is honored, as a client looking for the
                 // navigation shortcuts asks ([MS-OXOCFG] 2.2.9).
                 if let Some(class) = class_wanted(op) {
@@ -342,6 +347,9 @@ impl Data {
                             esc(&subject)
                         );
                         stored = stored.replacen("</t:Message>", &format!("{extra}</t:Message>"), 1);
+                        if self.hide_created_group {
+                            self.hidden_wlinks.push(id.clone());
+                        }
                         self.wlinks.push(stored);
                         out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:Message></m:Items>")));
                         continue;
@@ -641,6 +649,7 @@ impl Data {
                     // A navigation shortcut ([MS-OXOCFG] 2.2.9) goes.
                     if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
                         self.wlinks.remove(pos);
+                        self.hidden_wlinks.retain(|h| h != &id);
                         out.push(ok(String::new()));
                         continue;
                     }

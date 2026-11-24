@@ -387,3 +387,25 @@ fn a_group_header_has_a_save_stamp_and_flags() {
     let header = kept.wlinks.iter().find(|w| w.contains(">Rooms<")).expect("the renamed group header");
     assert!(header.contains(">8192<"), "renaming sets sipOneOffName (0x2000): {header}");
 }
+
+/// A make whose read-back doesn't show the group takes the made shortcut out again: a failed
+/// make leaves nothing on the server.
+#[test]
+fn a_group_make_that_doesnt_read_back_is_taken_out_again() {
+    let mut d = Data { hide_created_group: true, ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.wlinks = vec![wlink_of(
+        "IPM.Microsoft.WunderBar.Link",
+        3,
+        4,
+        "Salles",
+        &[("0x6842", "Binary", guid(0x10)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))],
+    )];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    assert!(crate::ews_pim::create_calendar_group(&c, "Équipe").is_err(), "the read-back doesn't show it");
+    let kept = server.data.lock().unwrap();
+    assert_eq!(kept.wlinks.len(), 1, "only the group that was there before is left: {:?}", kept.wlinks);
+    assert!(kept.hidden_wlinks.is_empty(), "the made shortcut was deleted");
+}

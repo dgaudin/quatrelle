@@ -254,7 +254,8 @@ fn update(c: &Client, s: &Shortcut, updates: &[String]) -> Result<()> {
     .map(drop)
 }
 
-/// A shortcut deleted with `SoftDelete` (into Deleted Items), as Outlook deletes one.
+/// A shortcut deleted with `SoftDelete` (into Recoverable Items, where Exchange keeps a deleted
+/// associated item), as Outlook deletes one.
 fn delete(c: &Client, s: &Shortcut) -> Result<()> {
     c.call_one(&format!(
         "<m:DeleteItem DeleteType=\"SoftDelete\"><m:ItemIds><t:ItemId Id=\"{}\" ChangeKey=\"{}\"/></m:ItemIds></m:DeleteItem>",
@@ -292,10 +293,20 @@ pub(crate) fn create_calendar_group(c: &Client, name: &str) -> Result<()> {
     };
     let id = new_guid();
     let ordinal = after_last_ordinal(&before);
-    c.call_one(&create_group_xml(&views, &name, &id, &ordinal))?;
+    let made = c.call_one(&create_group_xml(&views, &name, &id, &ordinal))?;
+    let created = made.find("ItemId").and_then(|i| i.attr("Id")).filter(|i| !i.is_empty()).map(str::to_string);
     let mut expected: Vec<String> = headers(&before).into_iter().map(|h| h.name.clone()).collect();
     expected.push(name);
-    groups_are(c, &expected)
+    if let Err(e) = groups_are(c, &expected) {
+        // The server made the header but its read-back doesn't show it: take it out again, so a
+        // failed make leaves nothing behind.
+        if let Some(id) = created {
+            let _ =
+                c.call_one(&format!("<m:DeleteItem DeleteType=\"HardDelete\"><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:DeleteItem>", esc(&id)));
+        }
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Rename the group `group` to `name`, its entries with it.
