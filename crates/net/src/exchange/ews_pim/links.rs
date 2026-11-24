@@ -116,7 +116,10 @@ const PROPS: [(&str, &str); 12] = [
 /// with the group's name. The account's own calendars kept in a group come too, with no address
 /// (`own`).
 pub(crate) fn calendar_links(c: &Client) -> Result<Shortcuts> {
-    let Some(views) = common_views(c)? else { return Ok(Shortcuts::default()) };
+    let Some(views) = common_views(c)? else {
+        log::info!("no calendar groups: the Common Views folder wasn't found");
+        return Ok(Shortcuts::default());
+    };
     read_shortcuts(c, &views)
 }
 
@@ -129,7 +132,16 @@ pub(super) fn common_views(c: &Client) -> Result<Option<String>> {
     if let Some(found) = c.common_views() {
         return Ok(found);
     }
-    let found = find_common_views(c)?;
+    let found = match find_common_views(c) {
+        Ok(found) => found,
+        Err(e) => {
+            // A probe that failed isn't made again this session: the folder isn't found by it,
+            // and twenty-four probes at each sync would only say so again.
+            log::info!("navigation shortcuts: the Common Views folder couldn't be read ({e})");
+            c.keep_common_views(&None);
+            return Err(e);
+        }
+    };
     c.keep_common_views(&found);
     Ok(found)
 }
@@ -148,6 +160,7 @@ fn find_common_views(c: &Client) -> Result<Option<String>> {
         rf.all("Folder", &mut folders);
     }
     if let Some(id) = folders.iter().find(|f| f.text_of("DisplayName") == Some("Common Views")).and_then(|f| folder_id(f)) {
+        log::info!("navigation shortcuts: the Common Views folder was found by its English name");
         return Ok(Some(id.to_string()));
     }
     // A mailbox in another language: the folder that holds the shortcuts says so itself. A
@@ -157,7 +170,10 @@ fn find_common_views(c: &Client) -> Result<Option<String>> {
     for f in folders.iter().take(MAX_PROBED) {
         let Some(id) = folder_id(f) else { continue };
         match holds_shortcuts(c, id) {
-            Ok(true) => return Ok(Some(id.to_string())),
+            Ok(true) => {
+                log::info!("navigation shortcuts: the Common Views folder was found by the shortcut it holds");
+                return Ok(Some(id.to_string()));
+            }
             Ok(false) => {}
             Err(e) => {
                 refused.get_or_insert(e);
@@ -166,7 +182,10 @@ fn find_common_views(c: &Client) -> Result<Option<String>> {
     }
     match refused {
         Some(e) => Err(e),
-        None => Ok(None),
+        None => {
+            log::info!("navigation shortcuts: no folder of the mailbox holds one");
+            Ok(None)
+        }
     }
 }
 
