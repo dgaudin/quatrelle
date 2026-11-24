@@ -723,5 +723,12 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(11.5, 9.8), (11.5, 11.8)]);
             pen.dot(11.5, 13.0, 0.5);
         }
+        Icon::Minimize => pen.line(&[(3.0, 8.0), (13.0, 8.0)]),
+        Icon::Maximize => pen.rect(3.0, 3.0, 13.0, 13.0),
+        Icon::Restore => {
+            // A square in front, and the corner of the one behind it.
+            pen.rect(3.0, 5.0, 11.0, 13.0);
+            pen.line(&[(5.0, 5.0), (5.0, 3.0), (13.0, 3.0), (13.0, 11.0), (11.0, 11.0)]);
+        }
     }
 }
