@@ -25,3 +25,10 @@ fn thousands_of_pictures_pasted_with_much_text_cost_a_few_passes() {
     assert_eq!(kept.len(), 1, "the picture the message has stays");
     assert_eq!(kept.first().and_then(|&i| styles.style(i).picture), Some("n0".to_string()));
 }
+
+/// A `>` inside a quoted attribute doesn't end the tag: the rest of an `<hr title="x>y">` isn't
+/// left in the text after its rule line.
+#[test]
+fn a_gt_inside_a_quoted_attribute_doesnt_end_a_rule_tag() {
+    assert_eq!(mark_rules("<p>a</p><hr title=\"x>y\"><p>b</p>"), format!("<p>a</p><p>{RULE_MARK}</p><p>b</p>"));
+}

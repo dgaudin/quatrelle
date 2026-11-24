@@ -175,7 +175,7 @@ fn tokens(xml: &str) -> Vec<Tok<'_>> {
     while !rest.is_empty() && out.len() < 2_000_000 {
         match rest.find('<') {
             Some(0) => {
-                let Some(close) = rest.find('>') else { break };
+                let Some(close) = crate::html::tag_end(rest.as_bytes(), 1) else { break };
                 let tag = rest.get(1..close).unwrap_or_default();
                 rest = rest.get(close + 1..).unwrap_or_default();
                 if tag.starts_with('?') || tag.starts_with('!') {
@@ -702,6 +702,16 @@ mod tests {
         let Block::Paragraph { runs, .. } = &b[1] else { panic!() };
         assert_eq!((runs[0].bold, runs[1].bold, runs[1].italic, runs[0].text.as_str()), (true, false, true, "Bold "));
         assert_eq!(b[2], Block::Table(vec![vec!["A1".into(), "B1\nmore".into()]]));
+    }
+    /// A `>` inside a quoted attribute doesn't end the XML tag: the rest of it isn't read as
+    /// text.
+    #[test]
+    fn a_gt_inside_a_quoted_attribute_stays_in_it() {
+        let doc = r#"<?xml version="1.0"?><w:document xmlns:w="x"><w:body><w:p><w:r><w:t xml:space="a>b">Hi</w:t></w:r></w:p></w:body></w:document>"#;
+        let p = preview("plan.docx", "", &zip(&[("word/document.xml", doc)])).unwrap();
+        let Preview::Document(b) = p else { panic!("not a document") };
+        let Block::Paragraph { runs, .. } = &b[0] else { panic!("{b:?}") };
+        assert_eq!(runs[0].text, "Hi", "{b:?}");
     }
 
     #[test]

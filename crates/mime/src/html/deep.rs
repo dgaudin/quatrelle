@@ -27,6 +27,42 @@ fn is_space(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0C)
 }
 
+/// Where the tag whose attributes start at `from` in `b` ends (the index of its `>`), as a
+/// browser reads it: past values quoted after their `=` (a `>` in one doesn't end the tag), a
+/// quote anywhere else being part of a name or value (`<p title=it's>`). `None` when it doesn't
+/// end. Every pass over a message's HTML ends a tag here, not at its first `>`: a picture whose
+/// `alt` held a `>` was cut there, and its address never seen.
+pub(crate) fn tag_end(b: &[u8], from: usize) -> Option<usize> {
+    let mut j = from;
+    // Just past an attribute's `=`, its value still to come.
+    let mut value = false;
+    while let Some(&c) = b.get(j) {
+        match c {
+            b'>' => return Some(j),
+            b'=' if !value => value = true,
+            b'"' | b'\'' if value => {
+                j = j + 1 + b.get(j + 1..)?.iter().position(|x| *x == c)?;
+                value = false;
+            }
+            c if c.is_ascii_whitespace() => {}
+            _ if value => {
+                while b.get(j + 1).is_some_and(|d| !d.is_ascii_whitespace() && *d != b'>') {
+                    j += 1;
+                }
+                value = false;
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
+/// Elements that never have content (no end tag), by their lower-cased name.
+pub(crate) fn void(name: &str) -> bool {
+    matches!(name, "area" | "base" | "br" | "col" | "embed" | "hr" | "img" | "input" | "link" | "meta" | "param" | "source" | "track" | "wbr")
+}
+
 /// The attributes of a tag, from `from` (after its name) in `html`, as a browser's tokenizer reads
 /// them, each given to `each` as (its name, as written; its value, as written: in its quotes,
 /// `""` for a name alone) until `each` says no more. A value in quotes runs to its closing quote,
@@ -403,6 +439,25 @@ pub(crate) fn flattened(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tag ends where a browser ends it: past values quoted after their `=`; a quote anywhere
+    /// else is part of a name or value.
+    #[test]
+    fn a_tag_ends_where_a_browser_ends_it() {
+        for (tag, end) in [
+            ("<p>", Some(2)),
+            ("<img alt=\"a>b\" src=x>", Some(20)),
+            ("<img alt='a>b'>", Some(14)),
+            ("<p title=it's>x", Some(13)),
+            ("<p a=b\"c>", Some(8)),
+            ("<p \"x>", Some(5)),
+            ("<img alt=\"never closed>", None),
+            ("<p", None),
+        ] {
+            assert_eq!(tag_end(tag.as_bytes(), 1), end, "{tag}");
+        }
+        assert!(void("img") && void("br") && !void("p") && !void("BR"), "by its lower-cased name");
+    }
 
     /// Found in review: tables left open one in another (a cell, a box, a link, again and
     /// again) took seconds to read at 64 KB, and over ten minutes at a megabyte, in the text

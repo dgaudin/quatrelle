@@ -31,7 +31,7 @@ pub(super) fn mark_rules(html: &str) -> String {
             at = rest.find("-->").map_or(lower.len(), |e| i + 1 + e + 3);
             continue;
         }
-        let Some(end) = rest.find('>').map(|e| i + 1 + e) else { break };
+        let Some(end) = crate::html::tag_end(lower.as_bytes(), i + 1) else { break };
         at = end + 1;
         let name = rest.split(|c: char| !c.is_ascii_alphanumeric()).next().unwrap_or("");
         let tag = html.get(i..end).unwrap_or("");

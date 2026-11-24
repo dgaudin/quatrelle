@@ -7,6 +7,7 @@ use super::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 mod deep;
+pub(crate) use deep::{tag_end, void};
 mod footers;
 pub(crate) use footers::footers_last;
 pub(crate) mod links;

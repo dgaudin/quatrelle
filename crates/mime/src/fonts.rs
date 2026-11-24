@@ -7,6 +7,7 @@
 //! italic or underline set with CSS, or `<u>`) starts and ends is marked in its text first,
 //! and the marks become the spans' sizes, fonts and underlines afterwards ([`runs`]).
 
+use crate::html::void;
 use crate::rich::DEFAULT_SIZE;
 
 /// Starts a marked element; the next character (from [`INDEX_BASE`]) says which.
@@ -27,11 +28,6 @@ pub(crate) struct Font {
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
-}
-
-/// Elements that never hold anything (no end tag).
-fn void(tag: &str) -> bool {
-    matches!(tag, "br" | "img" | "hr" | "meta" | "link" | "input" | "col" | "area" | "base" | "wbr" | "source" | "track" | "embed" | "param")
 }
 
 /// An attribute of a start tag (`name="v"`, `name='v'`, `name=v`), case-insensitive.
@@ -153,7 +149,7 @@ pub(crate) fn mark(html: &str) -> (String, Vec<Font>) {
     while let Some(off) = lower.get(i..).and_then(|r| r.find('<')) {
         let at = i + off;
         out.push_str(html.get(i..at).unwrap_or(""));
-        let Some(close) = lower.get(at..).and_then(|r| r.find('>')).map(|c| at + c) else {
+        let Some(close) = crate::html::tag_end(lower.as_bytes(), at + 1) else {
             out.push_str(html.get(at..).unwrap_or(""));
             return (out, fonts);
         };
@@ -315,6 +311,14 @@ pub(crate) fn runs(text: &str, open: &mut Vec<usize>, fonts: &[Font]) -> Vec<(St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `>` inside a quoted attribute doesn't end the tag: the `style` after it is read, and
+    /// its font with it.
+    #[test]
+    fn a_gt_inside_a_quoted_attribute_doesnt_end_the_tag() {
+        let (out, fonts) = mark("<span title=\"a>b\" style=\"font-family:Quicksand\">hi</span>");
+        assert_eq!(fonts, vec![Font { family: Some("Quicksand".into()), ..Default::default() }], "{out}");
+    }
 
     #[test]
     fn marks_follow_the_elements() {

@@ -30,10 +30,10 @@ pub fn html_link_pairs(html: &str) -> Vec<(String, String)> {
         if !lower.get(at..).is_some_and(|r| r.starts_with(|c: char| c.is_ascii_whitespace())) {
             continue;
         }
-        let Some(tag_end) = html.get(at..).and_then(|r| r.find('>')).map(|i| at + i) else { break };
-        let tag = html.get(at..tag_end).unwrap_or("");
+        let Some(end) = crate::html::tag_end(html.as_bytes(), at) else { break };
+        let tag = html.get(at..end).unwrap_or("");
         let Some(target) = attribute(tag, "href") else { continue };
-        let inner_start = tag_end + 1;
+        let inner_start = end + 1;
         let inner_end = lower.get(inner_start..).and_then(|r| r.find("</a")).map_or(html.len(), |i| inner_start + i);
         at = inner_end.max(inner_start);
         let target = target.trim();

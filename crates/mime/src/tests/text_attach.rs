@@ -67,6 +67,15 @@ fn a_file_with_a_content_id_is_still_a_file() {
         ["https://x.example/a/b.png", "cid:logo@x", "https://x.example/c.png"]
     );
 }
+/// A `>` inside a quoted attribute doesn't end the tag: the picture whose `alt` holds one is
+/// found, and counted as a tracking picture where it is one.
+#[test]
+fn a_picture_with_a_quoted_gt_in_its_alt_is_found() {
+    let html = "<p>Hi</p><img alt=\"5 > 4\" src=\"https://pictures.example/a.png\"><img src=\"https://pictures.example/b.png\">";
+    assert_eq!(crate::html_images(html), ["https://pictures.example/a.png", "https://pictures.example/b.png"]);
+    let tracker = "<img alt=\"a>b\" src=\"https://t.mailtrack.example/open?id=1\" width=\"1\" height=\"1\">";
+    assert_eq!(crate::trackers::trackers(tracker).pictures.len(), 1);
+}
 
 fn message(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
     let mut raw = b"From: Sam <sam@studio.example>\r\nTo: Lee <lee@studio.example>\r\nSubject: Files\r\nMIME-Version: 1.0\r\n\

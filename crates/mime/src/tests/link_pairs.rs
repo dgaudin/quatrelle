@@ -16,3 +16,10 @@ fn html_link_pairs_give_the_shown_text_and_the_target() {
     let long = format!("<a href=\"https://x.example\">{}</a>", "é".repeat(1000));
     assert_eq!(html_link_pairs(&long).first().map(|p| p.0.chars().count()), Some(200));
 }
+/// A `>` inside a quoted attribute doesn't end the tag, as a browser reads it: the anchor's
+/// `href` after it is still read.
+#[test]
+fn a_gt_inside_a_quoted_attribute_doesnt_end_the_anchor() {
+    let html = r#"<p>Hi</p><a title="5 > 4" href="https://x.example/page">Read it</a>"#;
+    assert_eq!(html_link_pairs(html), vec![("Read it".to_string(), "https://x.example/page".to_string())]);
+}

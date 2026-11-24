@@ -21,8 +21,8 @@ const KEPT_MAX: usize = 20_000;
 /// Elements nested deeper than this are counted as the deepest.
 const DEPTH_MAX: usize = 512;
 
-/// Elements with no closing tag.
-const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
+/// Elements with no closing tag: [`crate::html::void`].
+use crate::html::void;
 /// Elements whose content is never text to read.
 const NOT_TEXT: &[&str] = &["head", "script", "style", "title", "template"];
 
@@ -78,7 +78,7 @@ pub fn hidden_text(html: &str) -> Option<(String, usize)> {
             continue;
         }
         let name = tag_name(tag);
-        if name.is_empty() || name.starts_with('!') || name.starts_with('?') || VOID.contains(&name.as_str()) || tag.trim_end().ends_with('/') {
+        if name.is_empty() || name.starts_with('!') || name.starts_with('?') || void(&name) || tag.trim_end().ends_with('/') {
             continue;
         }
         let not_text = NOT_TEXT.contains(&name.as_str());
@@ -93,18 +93,10 @@ pub fn hidden_text(html: &str) -> Option<(String, usize)> {
     (words >= HIDDEN_WORDS_MIN).then_some((kept, words))
 }
 
-/// Where a tag that starts `s` (at its `<`) ends: its `>`, outside quoted values.
+/// Where a tag that starts `s` (at its `<`) ends: its `>`, as a browser finds it
+/// ([`crate::html::tag_end`]).
 fn tag_end(s: &str) -> Option<usize> {
-    let mut quote = None;
-    for (i, c) in s.char_indices().skip(1) {
-        match (quote, c) {
-            (Some(q), c) if c == q => quote = None,
-            (None, '"' | '\'') => quote = Some(c),
-            (None, '>') => return Some(i),
-            _ => {}
-        }
-    }
-    None
+    crate::html::tag_end(s.as_bytes(), 1)
 }
 
 fn tag_name(tag: &str) -> String {
@@ -266,6 +258,11 @@ mod tests {
         assert!(hidden_text(&html).is_some());
         let html = format!("<div style=\"display:block;display:none\">{LONG}</div>");
         assert!(hidden_text(&html).is_some());
+        // A quote in an unquoted value (`title=it's`) isn't a quoted value: the tag still ends
+        // at its `>`, and the hidden text after it is found.
+        let html = format!("<div style=\"display:none\"><p title=it's>{LONG}</p></div>");
+        assert!(hidden_text(&html).is_some());
+
         // The hidden part ends where its element does, even with unclosed elements inside.
         let html = format!("<div style=\"display:none\"><p>short<b>bold</div><p>{LONG}</p>");
         assert_eq!(hidden_text(&html), None);
