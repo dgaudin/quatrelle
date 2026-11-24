@@ -14,13 +14,10 @@ mod find;
 mod gone;
 mod guests;
 mod kept_files;
+mod online;
 mod reminders;
 mod removing;
 mod showing;
-mod teams_meetings;
-mod web;
-mod webex;
-mod webex_rooms;
 
 /// An appointment read from Exchange carries its start in its name (`…#<start>`), and a dialog
 /// opened before it moved still holds the old one: it finds the appointment all the same, when
