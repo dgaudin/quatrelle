@@ -468,8 +468,17 @@ impl Session {
         }
     }
 
+    /// The certificate `signed` came with is the one to encrypt to `from` with, unless the one
+    /// kept for them is newer and still good to encrypt to: an old message read again (signed
+    /// with the certificate they had before) put that one back, and the next message to them
+    /// was encrypted to it.
     fn remember_cert(&mut self, account: &str, from: &str, signed: &smime::Signed, issuers: &[Vec<u8>]) {
         let now = self.clock.now;
+        let since = |cert: &[u8]| smime::cert::info(cert).map_or(i64::MIN, |i| i.not_before);
+        let kept = self.smime.get(account).and_then(|s| s.known.get(from)).filter(|k| k.cert != signed.signer);
+        if kept.is_some_and(|k| since(&signed.signer) < since(&k.cert) && self.still_good(k, from)) {
+            return;
+        }
         let s = self.smime.entry(account.to_string()).or_default();
         let known = KnownCert { cert: signed.signer.clone(), chain: issuers.to_vec(), directory: false, gcm: signed.reads_gcm(), seen: now };
         let changed = s.known.get(from).is_none_or(|k| k.cert != known.cert || k.gcm != known.gcm || k.chain != known.chain || k.directory);
@@ -495,18 +504,22 @@ impl Session {
             return s.chain.first().map(|c| (c.clone(), true));
         }
         let k = s.known.get(&email)?;
+        self.still_good(k, &email).then(|| (k.cert.clone(), k.gcm))
+    }
+
+    /// Whether `k`, kept for `email`, can still be encrypted to: not withdrawn, and the address
+    /// book's in date; one a message brought is checked again, as it was when it came: still
+    /// trusted for that address today (a file written before only trusted ones were kept may
+    /// hold others).
+    fn still_good(&self, k: &KnownCert, email: &str) -> bool {
         if self.revocation.withdrawn(&k.cert) {
-            return None;
+            return false;
         }
-        // The address book's is taken at its word, while it's in date. One a message brought
-        // is checked again, as it was when it came: still trusted for that address today (a
-        // file written before only trusted ones were kept may hold others).
-        let usable = if k.directory {
+        if k.directory {
             smime::cert::info(&k.cert).is_ok_and(|i| i.not_before <= self.clock.now && self.clock.now <= i.not_after)
         } else {
-            smime::cert::check(&k.cert, &k.chain, &self.anchors(), self.clock.now, &email).is_ok_and(|problems| problems.is_empty())
-        };
-        usable.then(|| (k.cert.clone(), k.gcm))
+            smime::cert::check(&k.cert, &k.chain, &self.anchors(), self.clock.now, email).is_ok_and(|problems| problems.is_empty())
+        }
     }
 
     /// Before `c` goes: what signing and encrypting it takes. `None` when it's neither; else the

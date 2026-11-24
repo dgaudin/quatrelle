@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Engine tests: mail made to pass for someone else's. A signature vouches for the sender shown,
 //! never for one named inside by whoever signed; a key or certificate that came with the mail
@@ -207,6 +208,50 @@ fn an_untrusted_certificate_isnt_kept_to_encrypt_to() {
     open_raw(&mut s, 9709, &testdata("signed-clear.eml"));
     assert_eq!(seal(&s), Seal::Untrusted(vec![smime::Problem::UnknownIssuer]));
     assert!(s.smime_settings("sample").known.is_empty(), "kept: {:?}", s.smime_settings("sample").known.keys());
+    done(s);
+}
+
+/// A certificate kept to encrypt to someone gave way to whichever one their mail came signed
+/// with last: an old message read again, signed with the certificate they had before (still in
+/// date), put that one back, and the next message to them was encrypted to it. An older one
+/// doesn't take the place of a newer one that still holds; a newer one does.
+#[test]
+fn an_older_certificate_read_again_doesnt_replace_the_newer_one() {
+    let old = smime::read_p12(&testdata("riley-2025.p12"), "secret").unwrap();
+    let signed_by = |who: &smime::Identity, n: u32| {
+        let raw = format!(
+            "From: Riley <riley@studio.example>\r\nTo: riley@studio.example\r\nSubject: Note {n}\r\nDate: Sat, 24 Oct 2026 09:00:00 +0000\r\n\
+Message-ID: <k{n}@studio.example>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nNote.\r\n"
+        );
+        let (outer, entity) = quatrelle_mime::smime::entity_of(raw.as_bytes());
+        let signature = smime::sign(&entity, who, LATER, &mut rand_core::OsRng).unwrap();
+        quatrelle_mime::smime::signed_message(&outer, &entity, &signature, "=_k")
+    };
+    let kept = |s: &Session| s.smime_settings("sample").known.get("riley@studio.example").map(|k| k.cert.clone());
+    let (new_cert, old_cert) = (riley().chain[0].clone(), old.chain[0].clone());
+    // The authorities of both, trusted here (last year's came from another one, valid from the
+    // day after the test certificates were made), a day later, when both are in date.
+    let roots = vec![ca(), old.chain[1].clone()];
+    let now = LATER + 86_400;
+    let mut s = sample_session("smime-kept-newer");
+    s.clock.now = now;
+    s.set_trust_roots(roots.clone());
+    // Both trusted and in date: the newer kept, the older read again after it isn't.
+    open_raw(&mut s, 9401, &signed_by(&riley(), 1));
+    assert_eq!(seal(&s), Seal::Trusted);
+    assert_eq!(kept(&s), Some(new_cert.clone()));
+    open_raw(&mut s, 9402, &signed_by(&old, 2));
+    assert_eq!(seal(&s), Seal::Trusted, "still a good signature");
+    assert_eq!(kept(&s), Some(new_cert.clone()), "the older one doesn't take its place");
+    done(s);
+    // The other way round, the newer takes the older's place.
+    let mut s = sample_session("smime-kept-older-first");
+    s.clock.now = now;
+    s.set_trust_roots(roots);
+    open_raw(&mut s, 9411, &signed_by(&old, 1));
+    assert_eq!(kept(&s), Some(old_cert));
+    open_raw(&mut s, 9412, &signed_by(&riley(), 2));
+    assert_eq!(kept(&s), Some(new_cert));
     done(s);
 }
 
