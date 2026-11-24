@@ -7,7 +7,7 @@ use super::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 mod deep;
-pub(crate) use deep::{tag_end, tags, void};
+pub(crate) use deep::{attributes, tag_end, tags, void};
 mod entities;
 pub(crate) use entities::{Refs, decode_refs};
 mod footers;

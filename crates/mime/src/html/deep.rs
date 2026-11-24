@@ -68,7 +68,7 @@ pub(crate) fn void(name: &str) -> bool {
 /// `""` for a name alone) until `each` says no more. A value in quotes runs to its closing quote,
 /// `>` and all; a quote elsewhere (`a"b`) is a character like any. Where the tag ends (its `>`);
 /// `None` when it doesn't (a browser drops a tag left open at the end).
-pub(super) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'a str, &'a str) -> bool) -> Option<usize> {
+pub(crate) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'a str, &'a str) -> bool) -> Option<usize> {
     let bytes = html.as_bytes();
     let spaces = |mut i: usize, slash: bool| {
         while bytes.get(i).is_some_and(|&c| is_space(c) || (slash && c == b'/')) {
