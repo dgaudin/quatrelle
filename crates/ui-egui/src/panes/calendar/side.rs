@@ -4,6 +4,8 @@
 //! The calendar's side pane: a month (or several) to jump around in, then the calendars in their
 //! groups; and beside the mail, Outlook's To-Do bar.
 
+use std::collections::HashMap;
+
 use super::*;
 
 mod menu;
@@ -20,6 +22,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         // calendar sits under its name, in the folder pane's order (issue #1).
         let sections = s.pane_sections();
         let mut groups: Vec<(String, Vec<_>)> = vec![(tl!("My calendars").to_string(), Vec::new())];
+        let mut at: HashMap<String, usize> = HashMap::from([(tl!("My calendars").to_lowercase(), 0)]);
         let mut shared = Vec::new();
         // Each account's in the order the user gave them (the server's for the others).
         for a in &s.accounts {
@@ -30,9 +33,13 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                             list.push((a, c));
                         }
                     } else if !c.group.is_empty() {
-                        match groups.iter_mut().find(|(g, _)| g.eq_ignore_ascii_case(&c.group)) {
-                            Some((_, list)) => list.push((a, c)),
-                            None => groups.push((c.group.clone(), vec![(a, c)])),
+                        let key = c.group.to_lowercase();
+                        match at.get(&key) {
+                            Some(&i) => groups[i].1.push((a, c)),
+                            None => {
+                                groups.push((c.group.clone(), vec![(a, c)]));
+                                at.insert(key, groups.len() - 1);
+                            }
                         }
                     } else {
                         shared.push((a, c));
@@ -42,9 +49,13 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         list.push((a, c));
                     }
                 } else {
-                    match groups.iter_mut().find(|(g, _)| g.eq_ignore_ascii_case(&c.group)) {
-                        Some((_, list)) => list.push((a, c)),
-                        None => groups.push((c.group.clone(), vec![(a, c)])),
+                    let key = c.group.to_lowercase();
+                    match at.get(&key) {
+                        Some(&i) => groups[i].1.push((a, c)),
+                        None => {
+                            groups.push((c.group.clone(), vec![(a, c)]));
+                            at.insert(key, groups.len() - 1);
+                        }
                     }
                 }
             }
@@ -62,12 +73,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
         }
         for g in &order {
-            if !groups.iter().any(|(name, _)| name.eq_ignore_ascii_case(g)) {
+            let key = g.to_lowercase();
+            at.entry(key).or_insert_with(|| {
                 groups.push((g.clone(), Vec::new()));
-            }
+                groups.len() - 1
+            });
         }
+        let order_at: HashMap<String, usize> = order.iter().enumerate().map(|(i, g)| (g.to_lowercase(), i)).collect();
         let mut middle = groups.split_off(1);
-        middle.sort_by_key(|(name, _)| order.iter().position(|g| g.eq_ignore_ascii_case(name)).unwrap_or(usize::MAX));
+        middle.sort_by_key(|(name, _)| order_at.get(&name.to_lowercase()).copied().unwrap_or(usize::MAX));
         groups.extend(middle);
         groups.push((tl!("Shared calendars").to_string(), shared));
         // An account with calendars removed from the list and none of its own left in My

@@ -445,3 +445,30 @@ fn a_shared_calendar_is_moved_by_its_address_not_by_a_homonyms_name() {
     assert!(item("W2").contains(">Salles<"), "Tom's shortcut moved: {}", item("W2"));
     assert!(!item("W1").contains(">Salles<"), "Ana's shortcut with the same name stayed: {}", item("W1"));
 }
+
+/// A mailbox with more headers than the pane keeps is bounded.
+#[test]
+fn the_groups_are_capped() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let link = "IPM.Microsoft.WunderBar.Link";
+    d.wlinks = (0..301)
+        .map(|n| {
+            let name = format!("G{n}");
+            wlink_of(
+                link,
+                3,
+                4,
+                &name,
+                &[
+                    ("0x6842", "Binary", guid(u8::try_from(n % 255).unwrap_or(0))),
+                    ("0x684B", "Binary", crate::imap::base64(&[u8::try_from(n % 255).unwrap_or(0)])),
+                ],
+            )
+        })
+        .collect();
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    assert_eq!(crate::ews_pim::calendar_links(&c).unwrap().groups.len(), 300);
+}

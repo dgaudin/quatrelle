@@ -50,6 +50,8 @@ const PAGE: usize = 300;
 const MAX_PAGES: usize = 10;
 /// Most calendars kept from them.
 const MAX_LINKS: usize = 300;
+/// Most groups kept (a hostile or huge mailbox can't fill the pane).
+const MAX_GROUPS: usize = 300;
 
 /// A navigation shortcut that names a calendar in a group: its X.500 directory name, the name
 /// Outlook shows, and the group. `None` for another shortcut, or one that isn't a calendar
@@ -292,6 +294,9 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
         if !group.is_empty() && !groups.iter().any(|g| g.eq_ignore_ascii_case(&group)) {
             groups.push(group);
         }
+    }
+    if groups.len() > MAX_GROUPS {
+        groups.truncate(MAX_GROUPS);
     }
     let mut out: Vec<CalendarLink> = Vec::new();
     let mut resolved: HashMap<String, Option<String>> = HashMap::new();
