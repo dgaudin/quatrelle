@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-// Copyright (c) 2026 Didier Gaudin
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The previews and kinds of list rows that came without them, read from their sources: a stranger's
 //! message parsed in full, so off the window's thread. [`Session::take_preview_work`] hands the
 //! work out, [`PreviewWork::run`] does it on any thread, [`Session::finish_previews`] takes its
