@@ -199,3 +199,20 @@ fn a_chunked_answer_is_read_to_its_last_line() {
     assert_eq!(read_response(&mut s, 100, false).unwrap().body, b"hi");
     assert_eq!(read_response(&mut s, 100, false).unwrap().status, 204);
 }
+
+/// The path encoder before it wrote each character's UTF-8 bytes, as it was.
+fn old_spaces_escaped(path: &str) -> String {
+    path.chars()
+        .flat_map(|c| if c == ' ' || c.is_control() { format!("%{:02X}", u32::from(c) & 0xff).chars().collect::<Vec<_>>() } else { vec![c] })
+        .collect()
+}
+
+/// A control past ASCII is written as its UTF-8 bytes, not one byte of its number.
+#[test]
+fn a_paths_controls_are_written_as_their_utf8_bytes() {
+    assert_eq!(Url::parse("http://h/a\u{85}b\u{9f}").unwrap().path, "/a%C2%85b%C2%9F");
+    assert_eq!(old_spaces_escaped("/a\u{85}b"), "/a%85b", "one byte of the number, no character");
+    for path in ["/", "/dav/cal/1.ics", "/a b/c\td", "/é €/x\r\ny", "/?q=a b&r=\u{7f}", "/\u{0}\u{1f}", "/日本 語"] {
+        assert_eq!(Url::parse(&format!("https://h{path}")).unwrap().path, old_spaces_escaped(path), "{path:?}");
+    }
+}

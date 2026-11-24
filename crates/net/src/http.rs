@@ -79,12 +79,7 @@ impl Url {
         } else {
             tail.to_string()
         };
-        // Spaces and controls are percent-encoded rather than sent raw.
-        let path: String = path
-            .chars()
-            .flat_map(|c| if c == ' ' || c.is_control() { format!("%{:02X}", u32::from(c) & 0xff).chars().collect::<Vec<_>>() } else { vec![c] })
-            .collect();
-        Ok(Url { https, host: host.to_ascii_lowercase(), port, path })
+        Ok(Url { https, host: host.to_ascii_lowercase(), port, path: spaces_escaped(path) })
     }
 
     /// `Location` resolved against this URL.
@@ -113,6 +108,25 @@ impl Url {
 
 fn default_port(https: bool) -> u16 {
     if https { 443 } else { 80 }
+}
+
+/// A path with its spaces and controls percent-encoded rather than sent raw (each of their UTF-8
+/// bytes: `U+0085` is `%C2%85`); the path itself, untouched, when it has none.
+fn spaces_escaped(path: String) -> String {
+    let raw = |c: char| c == ' ' || c.is_control();
+    if !path.contains(raw) {
+        return path;
+    }
+    let mut out = String::with_capacity(path.len() + 16);
+    let mut utf8 = [0u8; 4];
+    for c in path.chars() {
+        if raw(c) {
+            out.push_str(&pct(c.encode_utf8(&mut utf8)));
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, p: &str) -> Option<&'a str> {
