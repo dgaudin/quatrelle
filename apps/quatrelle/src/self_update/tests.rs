@@ -214,9 +214,40 @@ fn a_busy_disk_image_is_attached_again() {
         let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
         std::process::Command::new("sh").arg("-c").arg(mac_step(&dmg, &app)).env("PATH", path).env("REFUSE", refuse).status().unwrap();
         assert_eq!(std::fs::read_to_string(app.join("v")).unwrap().trim(), want, "refused {refuse} times");
+        assert_eq!(dmg.exists(), want == "old", "refused {refuse} times: the download is kept only when it wasn't used");
         let attempts = std::fs::read_to_string(&tries).unwrap().lines().count();
         assert_eq!(attempts, if refuse == "2" { 3 } else { 7 }, "refused {refuse} times");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A portable zip that can't be unpacked changes nothing and stays, to be tried again from (the
+/// check takes a file already there and right as it is, rather than downloading it again); one
+/// that unpacks is put in place and goes.
+#[cfg(windows)]
+#[test]
+fn a_damaged_portable_zip_is_kept() {
+    let dir = scratch("zip-damaged");
+    let app = dir.join("Quatrelle");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("quatrelle.exe"), b"old").unwrap();
+    let ps =
+        |script: &str| std::process::Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", script]).status().unwrap();
+    let bad = dir.join("bad.zip");
+    std::fs::write(&bad, b"not a zip").unwrap();
+    ps(&portable_step(&bad, &app));
+    assert_eq!(std::fs::read(app.join("quatrelle.exe")).unwrap(), b"old");
+    assert!(bad.is_file(), "kept, to be tried again");
+    assert!(!app.join(".quatrelle-update").exists());
+    let top = dir.join("pack").join("quatrelle-0.40.0-windows-x64");
+    std::fs::create_dir_all(&top).unwrap();
+    std::fs::write(top.join("quatrelle.exe"), b"new").unwrap();
+    let good = dir.join("good.zip");
+    let q = |p: &std::path::Path| ps_quote(&p.display().to_string());
+    assert!(ps(&format!("Compress-Archive -Path {} -DestinationPath {}", q(&top), q(&good))).success());
+    ps(&portable_step(&good, &app));
+    assert_eq!(std::fs::read(app.join("quatrelle.exe")).unwrap(), b"new");
+    assert!(!good.exists(), "installed: the download goes");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
