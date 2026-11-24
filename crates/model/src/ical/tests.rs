@@ -191,6 +191,7 @@ mod calls;
 mod conference;
 mod find;
 mod meetings;
+mod notes;
 mod showing;
 mod zones;
 
