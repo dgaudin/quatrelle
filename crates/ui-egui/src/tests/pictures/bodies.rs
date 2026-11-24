@@ -321,10 +321,9 @@ fn rows_without_a_kind_are_read_on_a_lane_not_in_the_frame() {
             let key = MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9800 + i };
             let raw = format!("From: a@x.example\r\nSubject: Strange {i}\r\n\r\nWords of message {i}.\r\n");
             store.write_body(&key, raw.as_bytes()).unwrap();
-            inbox.messages.insert(
-                0,
-                Summary { key: key.clone(), subject: format!("Strange {i}"), date: NOW + 100 + i64::from(i), ..Default::default() }.into(),
-            );
+            inbox
+                .messages
+                .insert(0, Summary { key: key.clone(), subject: format!("Strange {i}"), date: NOW + 100 + i64::from(i), ..Default::default() });
             key
         })
         .collect();
