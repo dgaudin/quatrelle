@@ -496,7 +496,7 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                 if e.end <= e.start {
                     e.end = match dur {
                         Some(d) => e.start.saturating_add(d.max(0)),
-                        None if e.all_day => e.start + 86_400,
+                        None if e.all_day => e.start.saturating_add(86_400),
                         None => e.start,
                     };
                 }
