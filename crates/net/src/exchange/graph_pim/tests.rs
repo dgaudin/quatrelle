@@ -26,6 +26,23 @@ fn recurrences_both_ways() {
     let r = recurrence_of("FREQ=WEEKLY", start).unwrap();
     assert_eq!(r["pattern"]["daysOfWeek"], json!(["monday"]), "the start's own day");
     assert!(recurrence_of("FREQ=SECONDLY", start).is_none() && recurrence_of("junk", start).is_none());
+    // The nth of several weekdays, and the 31st or the month's last, as a data file's reader
+    // writes them, are said to Exchange as they are (the last weekday went as the first, the
+    // 31st as the day the series began), and read from it the same way.
+    let r = recurrence_of("FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1", start).unwrap();
+    assert_eq!((r["pattern"]["type"].as_str(), r["pattern"]["index"].as_str()), (Some("relativeMonthly"), Some("last")));
+    assert_eq!(r["pattern"]["daysOfWeek"].as_array().map(Vec::len), Some(5));
+    assert_eq!(rrule_of(&r).unwrap(), "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1");
+    let r = recurrence_of("FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1", start).unwrap();
+    assert_eq!((r["pattern"]["type"].as_str(), r["pattern"]["dayOfMonth"].as_u64()), (Some("absoluteMonthly"), Some(31)));
+    assert_eq!(rrule_of(&r).unwrap(), "FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1");
+    // The day weeks start on goes both ways; Monday needn't be said.
+    let r = recurrence_of("FREQ=WEEKLY;INTERVAL=2;BYDAY=SA,SU;WKST=SU", start).unwrap();
+    assert_eq!(r["pattern"]["firstDayOfWeek"], "sunday");
+    assert_eq!(rrule_of(&r).unwrap(), "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU;INTERVAL=2");
+    let r = recurrence_of("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO", start).unwrap();
+    assert_eq!(r["pattern"]["firstDayOfWeek"], "monday");
+    assert_eq!(rrule_of(&r).unwrap(), "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2");
 }
 
 /// An `UNTIL` that isn't a date (a calendar file's own text) ends nothing, and stops nothing.

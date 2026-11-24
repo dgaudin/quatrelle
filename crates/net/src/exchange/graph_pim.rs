@@ -81,12 +81,25 @@ pub fn rrule_of(r: &Value) -> Option<String> {
     let index = INDEX.iter().find(|(n, _)| *n == s(p, "index")).map_or(1, |(_, i)| *i);
     let month = p.get("month").and_then(Value::as_u64).unwrap_or(0);
     let mday = p.get("dayOfMonth").and_then(Value::as_u64).unwrap_or(0);
-    let by_index = days.iter().map(|d| format!("{index}{d}")).collect::<Vec<_>>().join(",");
+    // The nth of one weekday is that weekday's nth; of several ("weekday", "weekend day",
+    // "day"), the nth day that is one of them, not the nth of each (five days a month).
+    let by_index = match days.as_slice() {
+        [_] => format!("{index}{}", days.join(",")),
+        _ => format!("{};BYSETPOS={index}", days.join(",")),
+    };
+    // A day past the 28th is the month's last where it has no such day, as Exchange has it.
+    let by_mday = if (29..=31).contains(&mday) {
+        format!("{};BYSETPOS=-1", (28..=mday).map(|d| d.to_string()).collect::<Vec<_>>().join(","))
+    } else {
+        mday.to_string()
+    };
+    // The day weeks start on, for a rule every so many weeks (Monday needn't be said).
+    let week_start = day_code(&s(p, "firstDayOfWeek")).filter(|d| *d != "MO" && interval > 1).map(|d| format!(";WKST={d}")).unwrap_or_default();
     let mut rule = match s(p, "type").as_str() {
         "daily" => "FREQ=DAILY".to_string(),
-        "weekly" if !days.is_empty() => format!("FREQ=WEEKLY;BYDAY={}", days.join(",")),
+        "weekly" if !days.is_empty() => format!("FREQ=WEEKLY;BYDAY={}{week_start}", days.join(",")),
         "weekly" => "FREQ=WEEKLY".to_string(),
-        "absoluteMonthly" => format!("FREQ=MONTHLY;BYMONTHDAY={mday}"),
+        "absoluteMonthly" => format!("FREQ=MONTHLY;BYMONTHDAY={by_mday}"),
         "relativeMonthly" => format!("FREQ=MONTHLY;BYDAY={by_index}"),
         "absoluteYearly" => format!("FREQ=YEARLY;BYMONTH={month};BYMONTHDAY={mday}"),
         "relativeYearly" => format!("FREQ=YEARLY;BYMONTH={month};BYDAY={by_index}"),
@@ -131,18 +144,28 @@ pub fn recurrence_of(rule: &str, start: i64) -> Option<Value> {
         })
         .unwrap_or_default();
     let (y, m, d) = quatrelle_model::dates::civil_from_days(start.div_euclid(86_400));
+    // The nth of several weekdays is said with `BYSETPOS` (its days without a number); the
+    // 29th to 31st, or the month's last, as those days and `BYSETPOS=-1`: its largest.
+    let set_pos = get("BYSETPOS").and_then(|v| v.parse::<i32>().ok());
+    let byday: Vec<(i32, &str)> = match set_pos {
+        Some(nth) if byday.iter().all(|(n, _)| *n == 0) => byday.into_iter().map(|(_, d)| (nth, d)).collect(),
+        _ => byday,
+    };
+    let month_day = get("BYMONTHDAY").and_then(|v| v.split(',').filter_map(|d| d.trim().parse::<u32>().ok()).max());
     let index = |n: i32| INDEX.iter().find(|(_, i)| *i == n).map_or("first", |(name, _)| *name);
     let days: Vec<&str> = byday.iter().map(|(_, d)| *d).collect();
     let pattern = match get("FREQ")? {
         "DAILY" => json!({"type": "daily", "interval": interval}),
         "WEEKLY" => {
             let start_day = DAYS.get(usize::try_from((start.div_euclid(86_400) + 4).rem_euclid(7)).unwrap_or(0)).map_or("monday", |(n, _)| *n);
-            json!({"type": "weekly", "interval": interval, "daysOfWeek": if days.is_empty() { vec![start_day] } else { days }})
+            // Weeks start on the rule's day (Monday when it doesn't say: RFC 5545's).
+            let first = get("WKST").and_then(day_name).unwrap_or("monday");
+            json!({"type": "weekly", "interval": interval, "daysOfWeek": if days.is_empty() { vec![start_day] } else { days }, "firstDayOfWeek": first})
         }
         "MONTHLY" => match byday.first() {
             Some((n, _)) => json!({"type": "relativeMonthly", "interval": interval, "daysOfWeek": days, "index": index(*n)}),
             None => {
-                json!({"type": "absoluteMonthly", "interval": interval, "dayOfMonth": get("BYMONTHDAY").and_then(|v| v.parse::<u32>().ok()).unwrap_or(d)})
+                json!({"type": "absoluteMonthly", "interval": interval, "dayOfMonth": month_day.unwrap_or(d)})
             }
         },
         "YEARLY" => {
@@ -150,7 +173,7 @@ pub fn recurrence_of(rule: &str, start: i64) -> Option<Value> {
             match byday.first() {
                 Some((n, _)) => json!({"type": "relativeYearly", "interval": interval, "month": month, "daysOfWeek": days, "index": index(*n)}),
                 None => {
-                    json!({"type": "absoluteYearly", "interval": interval, "month": month, "dayOfMonth": get("BYMONTHDAY").and_then(|v| v.parse::<u32>().ok()).unwrap_or(d)})
+                    json!({"type": "absoluteYearly", "interval": interval, "month": month, "dayOfMonth": month_day.unwrap_or(d)})
                 }
             }
         }
