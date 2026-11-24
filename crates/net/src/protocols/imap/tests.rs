@@ -44,6 +44,8 @@ fn sets_and_dates() {
     assert_eq!(parse_internal_date(" 4-Jan-1970 00:00:00 -0100"), Some(3 * 86_400 + 3600));
     assert_eq!(parse_internal_date("junk"), None);
     assert_eq!(parse_internal_date("99-Oct-2026 09:30:00 +0200"), None);
+    assert_eq!(parse_internal_date("31-Dec-9999 23:59:59 +0000"), Some(253_402_300_799));
+    assert_eq!(parse_internal_date("01-Jan-0001 00:00:00 +0000"), Some(-62_135_596_800));
     assert_eq!(base64(b"\0user\0pass"), "AHVzZXIAcGFzcw==");
     assert_eq!(base64(b"ab"), "YWI=");
     assert_eq!(quoted("a\"b\\c").as_deref(), Some("\"a\\\"b\\\\c\""));
@@ -317,4 +319,28 @@ fn the_fuzz_seeds_are_parsed_without_a_panic() {
         seeds += 1;
     }
     assert!(seeds >= 5, "the session and the four answers the library panicked on");
+}
+
+/// An INTERNALDATE with a year far out of range (the day count overflowed, a panic in debug
+/// builds and a garbage date in release) or a negative time is refused.
+#[test]
+fn a_hostile_internal_date_is_refused() {
+    for bad in [
+        "01-Jan-9000000000000000000 00:00:00 +0000",
+        "01-Jan--9000000000000000000 00:00:00 +0000",
+        "01-Jan-10000 00:00:00 +0000",
+        "01-Jan-0 00:00:00 +0000",
+        "01-Mar-9223372036854775807 00:00:00 +0000",
+        "01-Jan-2026 -1:00:00 +0000",
+        "01-Jan-2026 10:-5:00 +0000",
+        "01-Jan-2026 10:00:-1 +0000",
+        "01-Jan-2026 +1:00:00 +0000",
+        "01-Jan-2026 10:00:00 +00-5",
+    ] {
+        assert_eq!(parse_internal_date(bad), None, "{bad}");
+    }
+    let s = b"* OK hi\r\n* 1 FETCH (UID 5 INTERNALDATE \"01-Jan-9000000000000000000 00:00:00 +0000\")\r\nM1 OK done\r\n";
+    let mut c = Client::from_stream(Script::new(s)).unwrap();
+    let got = c.uid_fetch("5", "UID INTERNALDATE", "").unwrap();
+    assert!(got.iter().all(|f| f.internal_date.is_none()));
 }
