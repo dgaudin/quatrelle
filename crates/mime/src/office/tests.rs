@@ -174,3 +174,15 @@ fn junk_is_no_preview() {
     let wb = r#"<workbook><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>"#;
     let _ = preview("x.xlsx", "", &zip(&[("xl/workbook.xml", wb), ("xl/worksheets/sheet1.xml", &s1)]));
 }
+
+/// A hostile workbook with a hundred thousand sheets and as many relationships, none matching:
+/// the lookup was a scan per sheet, ten billion comparisons on the window's thread.
+#[test]
+fn a_workbook_with_endless_unmatched_sheets_previews_quickly() {
+    let wb = format!("<workbook><sheets>{}</sheets></workbook>", r#"<sheet name="s" r:id="b"/>"#.repeat(100_000));
+    let rels = format!("<Relationships>{}</Relationships>", r#"<Relationship Id="a" Target="t"/>"#.repeat(100_000));
+    let file = zip(&[("xl/workbook.xml", &wb), ("xl/_rels/workbook.xml.rels", &rels)]);
+    let start = std::time::Instant::now();
+    let _ = preview("x.xlsx", "", &file);
+    assert!(start.elapsed() < std::time::Duration::from_secs(2), "took {:?}", start.elapsed());
+}

@@ -19,6 +19,8 @@ const MAX_ROWS: usize = 500;
 const MAX_COLS: usize = 40;
 const MAX_SHEETS: usize = 20;
 const MAX_SLIDES: usize = 200;
+/// Most relationships followed in a package: a real file has a handful per sheet or slide.
+const MAX_RELATIONSHIPS: usize = 5_000;
 
 /// A preview of an Office file.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -270,9 +272,9 @@ fn attr<'a>(attrs: &'a str, name: &str) -> Option<&'a str> {
 /// followed through `rels` (a target under `dir`, or from the package's root with a `/`), with
 /// the element's `name` when it has one. Empty when there are no relationships to follow: the
 /// format ties a sheet or a slide to its part so, not by the part's number.
-fn in_order(zip: &Zip<'_>, main: &str, rels: &str, element: &str, dir: &str) -> Vec<(Option<String>, String)> {
+fn in_order(zip: &Zip<'_>, main: &str, rels: &str, element: &str, dir: &str, limit: usize) -> Vec<(Option<String>, String)> {
     let Some(rels) = zip.read(rels) else { return Vec::new() };
-    let mut targets: Vec<(String, String)> = Vec::new();
+    let mut targets: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for t in tokens(&String::from_utf8_lossy(&rels)) {
         if let Tok::Start { name, attrs, .. } = t
             && local(name) == "Relationship"
@@ -283,7 +285,11 @@ fn in_order(zip: &Zip<'_>, main: &str, rels: &str, element: &str, dir: &str) -> 
                 Some(from_root) => from_root.to_string(),
                 None => format!("{dir}{target}"),
             };
-            targets.push((id.to_string(), part));
+            // The first relationship with an id wins, as a front-to-back search found it.
+            targets.entry(id.to_string()).or_insert(part);
+            if targets.len() >= MAX_RELATIONSHIPS {
+                break;
+            }
         }
     }
     let Some(x) = zip.read(main) else { return Vec::new() };
@@ -292,9 +298,12 @@ fn in_order(zip: &Zip<'_>, main: &str, rels: &str, element: &str, dir: &str) -> 
         if let Tok::Start { name, attrs, .. } = t
             && local(name) == element
             && let Some(id) = prefixed_attr(attrs, "id")
-            && let Some((_, part)) = targets.iter().find(|(i, _)| i == id)
+            && let Some(part) = targets.get(id)
         {
             out.push((attr(attrs, "name").map(unescape), part.clone()));
+            if out.len() >= limit {
+                break;
+            }
         }
     }
     out
@@ -482,7 +491,7 @@ fn workbook(zip: &Zip<'_>) -> Option<Preview> {
         }
     }
     // The sheets as the workbook lists them, each followed to its part.
-    let listed = in_order(zip, "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "sheet", "xl/");
+    let listed = in_order(zip, "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "sheet", "xl/", MAX_SHEETS);
     if !listed.is_empty() {
         let mut sheets = Vec::new();
         for (n, (name, part)) in listed.into_iter().take(MAX_SHEETS).enumerate() {
@@ -601,7 +610,7 @@ fn slides(zip: &Zip<'_>) -> Option<Preview> {
     // As the presentation lists them, each followed to its part; without its relationships, by
     // number.
     let mut parts: Vec<String> =
-        in_order(zip, "ppt/presentation.xml", "ppt/_rels/presentation.xml.rels", "sldId", "ppt/").into_iter().map(|(_, p)| p).collect();
+        in_order(zip, "ppt/presentation.xml", "ppt/_rels/presentation.xml.rels", "sldId", "ppt/", MAX_SLIDES).into_iter().map(|(_, p)| p).collect();
     if parts.is_empty() {
         parts = (1..=MAX_SLIDES).map(|n| format!("ppt/slides/slide{n}.xml")).take_while(|p| zip.has(p)).collect();
     }
