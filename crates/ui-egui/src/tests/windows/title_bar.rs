@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: the rows at the top of the window, measured: the top bar at the very top, the ribbon
 //! just under it (its tabs, then its buttons), in each module and on the File page, at the
-//! smallest, a usual and a very wide window. The heights are those of the window as it is: what
-//! changes them has to change them here too.
+//! smallest, a usual and a very wide window. The heights are those of the window as it is, within
+//! two points (the fonts differ a little between systems): what changes them has to change them
+//! here too.
 
 use super::*;
 
@@ -26,6 +27,14 @@ const BAR_H: f32 = 40.0;
 const RIBBON_PANEL_H: f32 = 129.0;
 const TABS_H: f32 = 26.0;
 const TABS_TOP_IN_PANEL: f32 = 5.0;
+/// How far a measure may be from the one written here: the fonts, and so the rows' text, can
+/// differ a little from one system to another (the CI's Windows and macOS).
+const SLACK: f32 = 2.0;
+
+/// Whether each measure is within [`SLACK`] of the one wanted.
+fn near<const N: usize>(got: [f32; N], want: [f32; N]) -> bool {
+    got.iter().zip(want).all(|(g, w)| (g - w).abs() <= SLACK)
+}
 
 #[test]
 fn the_rows_at_the_top_of_the_window_have_their_measured_heights() {
@@ -37,12 +46,12 @@ fn the_rows_at_the_top_of_the_window_have_their_measured_heights() {
             let at = format!("{module} at {width} pt");
             let (bar, panel, tabs) = rows(&mut a, &ctx, width);
             // The bar is the top row: from the top edge, across the window.
-            assert_eq!((bar.min.x, bar.min.y, bar.max.x, bar.height()), (0.0, 0.0, width, BAR_H), "the top bar, {at}");
+            assert!(near([bar.min.x, bar.min.y, bar.max.x, bar.height()], [0.0, 0.0, width, BAR_H]), "the top bar, {at}: {bar:?}");
             // The ribbon just under it, to the window's right edge.
             let panel = panel.unwrap_or_else(|| panic!("the ribbon, {at}"));
-            assert_eq!((panel.min.y, panel.max.x, panel.height()), (BAR_H, width, RIBBON_PANEL_H), "the ribbon panel, {at}");
+            assert!(near([panel.min.y, panel.max.x, panel.height()], [BAR_H, width, RIBBON_PANEL_H]), "the ribbon panel, {at}: {panel:?}");
             let tabs = tabs.unwrap_or_else(|| panic!("the tabs, {at}"));
-            assert_eq!((tabs.min.y, tabs.height()), (BAR_H + TABS_TOP_IN_PANEL, TABS_H), "the tabs, {at}");
+            assert!(near([tabs.min.y, tabs.height()], [BAR_H + TABS_TOP_IN_PANEL, TABS_H]), "the tabs, {at}: {tabs:?}");
         }
     }
     // The File page keeps the bar, and has no ribbon under it.
@@ -50,7 +59,7 @@ fn the_rows_at_the_top_of_the_window_have_their_measured_heights() {
     a.act(crate::Action::Backstage(crate::backstage::Page::Info));
     for width in SIZES {
         let (bar, panel, tabs) = rows(&mut a, &ctx, width);
-        assert_eq!((bar.min.x, bar.min.y, bar.max.x, bar.height()), (0.0, 0.0, width, BAR_H), "the top bar on the File page, {width} pt");
+        assert!(near([bar.min.x, bar.min.y, bar.max.x, bar.height()], [0.0, 0.0, width, BAR_H]), "the top bar on the File page, {width} pt: {bar:?}");
         assert!(panel.is_none() && tabs.is_none(), "no ribbon on the File page, {width} pt");
     }
     let _ = std::fs::remove_dir_all(dir);
