@@ -17,10 +17,12 @@ use quatrelle_smime as smime;
 use super::*;
 
 mod cards;
+mod opened;
 mod pgp;
 mod revocation;
 mod scam;
 pub use cards::CardSearch;
+pub(crate) use opened::Opened;
 pub(crate) use pgp::PgpState;
 pub use pgp::{AccountPgp, Learn, Learnt, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey, PgpCard, Reach, Scheme};
 pub(crate) use pgp::{OfferedKey, offered};
@@ -31,9 +33,6 @@ pub use scam::{DEFAULT_CAP, ScamMiss, ScamTest, ScamToday};
 
 /// An account's S/MIME settings (the account document `smime.json`).
 pub const SMIME_DOC: &str = "smime.json";
-
-/// The most decrypted messages held in memory at once.
-const OPENED_MAX: usize = 64;
 
 /// An account's S/MIME: its certificate, what new messages do, whom it can encrypt to.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -709,14 +708,7 @@ impl Session {
             Event::Decrypted { key, content, authenticated, error } => {
                 self.opening.remove(&key);
                 match (content, error) {
-                    (Some(Private(entity)), None) => {
-                        if self.opened.len() >= OPENED_MAX
-                            && let Some(k) = self.opened.keys().next().cloned()
-                        {
-                            self.opened.remove(&k);
-                        }
-                        self.opened.insert(key.clone(), (entity, authenticated));
-                    }
+                    (Some(Private(entity)), None) => self.keep_opened(&key, entity, authenticated),
                     (_, e) => {
                         self.decrypt_errors.insert(key.clone(), e.unwrap_or_else(|| "it can't be decrypted".into()));
                     }

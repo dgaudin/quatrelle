@@ -86,6 +86,13 @@ pub(crate) struct PgpState {
     reach: Option<(u64, Reach)>,
 }
 
+impl PgpState {
+    /// What a decrypted message's signature said goes with what was decrypted of it.
+    pub(super) fn forget_message(&mut self, key: &MessageKey) {
+        self.signed.remove(key);
+    }
+}
+
 /// `p` as it's kept, its keys read again from their public parts (one that can't be read is let
 /// go: the file is Quatrelle's, but it's read as any file is), the first in use.
 fn read_keys(mut p: AccountPgp) -> AccountPgp {

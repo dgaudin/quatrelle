@@ -272,13 +272,7 @@ impl Session {
         let (verify_with, from) = self.pgp.asked.remove(&key).unwrap_or_default();
         match (content, error) {
             (Some(Private(entity)), None) => {
-                if self.opened.len() >= OPENED_MAX
-                    && let Some(k) = self.opened.keys().next().cloned()
-                {
-                    self.opened.remove(&k);
-                    self.pgp.signed.remove(&k);
-                }
-                self.opened.insert(key.clone(), (entity, true));
+                self.keep_opened(&key, entity, true);
                 match signature {
                     Some(sig) => {
                         let by = self.pgp_signed_by(&key.account, &sig, &verify_with, &from, &from);
