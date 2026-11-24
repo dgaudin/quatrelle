@@ -58,7 +58,7 @@ use quatrelle_engine::model::{MessageKey, SyncStatus};
 use quatrelle_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
 use serde_json::{Value, json};
 
-pub use app::{FramePart, WindowPlace, after_open, alt_code_pages, alt_codes};
+pub use app::{FramePart, MIN_WINDOW_SIZE, WindowPlace, after_open, alt_code_pages, alt_codes};
 pub(crate) use app::{SearchDrop, cleaned_on_written_host, junk_menu, meeting_browser, meeting_profile, quick_steps_menu, scope_label};
 pub use dialogs::Dialog;
 use icons::Icon;
@@ -227,7 +227,6 @@ impl MailApp {
                 dark: None,
                 system_accent: true,
                 ribbon_collapsed: false,
-                window_theme: None,
                 tab: RibbonTab::Home,
                 search_text: String::new(),
                 focus_search: false,
@@ -246,6 +245,9 @@ impl MailApp {
                 attachments_active: false,
                 attachment_hovered: false,
                 ribbon_rect: None,
+                top_bar_rect: None,
+                ribbon_panel_rect: None,
+                ribbon_tabs_rect: None,
                 ribbon_icons_from: usize::MAX,
                 ribbon_groups: HashMap::new(),
                 dialog: None,

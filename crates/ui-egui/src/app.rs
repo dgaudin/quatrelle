@@ -5,15 +5,13 @@
 
 mod actions;
 mod alt_code;
-mod bars;
+mod chrome;
 mod costs;
 mod dropped;
 mod file_dialogs;
 mod frame;
 mod keys;
 mod meetings;
-mod ribbon;
-mod search_box;
 mod sending;
 pub(crate) mod source;
 mod updates;
@@ -22,6 +20,9 @@ mod windows;
 
 pub(crate) use actions::cleaned_on_written_host;
 pub use alt_code::{alt_code_pages, alt_codes};
+pub use chrome::MIN_WINDOW_SIZE;
+pub(crate) use chrome::{SearchDrop, scope_label};
+pub(crate) use chrome::{junk_menu, quick_steps_menu, run_quick_step};
 pub(crate) use costs::Merging;
 pub(crate) use file_dialogs::FileDialogs;
 pub(crate) use frame::FrameGuard;
@@ -33,7 +34,5 @@ pub(crate) use keys::delete_from_window;
 #[cfg(test)]
 pub(crate) use meetings::{PageOutcome, ProfileKind, page_line};
 pub(crate) use meetings::{meeting_browser, meeting_profile};
-pub(crate) use ribbon::{junk_menu, quick_steps_menu, run_quick_step};
-pub(crate) use search_box::{SearchDrop, scope_label};
-pub(crate) use windows::forget_open;
 pub use windows::{WindowPlace, after_open};
+pub(crate) use windows::{forget_open, title_bars_in};

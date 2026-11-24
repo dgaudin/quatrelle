@@ -2482,3 +2482,7 @@ presence	Offline	离线
 	Answer: declined	答复:已拒绝
 	Encrypted	已加密
 	Signed	已签名
+	Minimize	最小化
+	Maximize	最大化
+	Use the system title bar	使用系统标题栏
+	Applies when Quatrelle starts again	在 Quatrelle 下次启动时生效

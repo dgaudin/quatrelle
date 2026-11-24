@@ -15,7 +15,7 @@ impl MailApp {
             self.ui.tab = RibbonTab::Home;
         }
         let searching = self.ui.tab == RibbonTab::Search || s.search.is_some();
-        ui.horizontal(|ui| {
+        let tabs_row = ui.horizontal(|ui| {
             if ui.add(egui::Button::new(RichText::new(tl!("File")).color(t.dim).font(theme::regular(13.5))).frame_when_inactive(false)).clicked() {
                 acts.push(Action::Backstage(backstage::Page::Info));
             }
@@ -59,6 +59,7 @@ impl MailApp {
                 }
             });
         });
+        self.ui.ribbon_tabs_rect = Some(tabs_row.response.rect);
         if self.ui.ribbon_collapsed {
             return;
         }

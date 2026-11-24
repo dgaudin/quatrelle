@@ -5,10 +5,33 @@
 
 use crate::*;
 
+use super::caption;
+
 pub(crate) mod importing;
 
 impl MailApp {
+    /// The bar at the top of the window: Quatrelle's mark, quick access, the search box, dark mode
+    /// and settings. When the window has no title bar of the system's
+    /// ([`crate::Services::own_title_bar`]) it is the window's title bar: its free space drags the
+    /// window and the window's buttons are at its end, the rest kept clear of them.
     pub(crate) fn top_bar(&mut self, ui: &mut Ui, acts: &mut Vec<Action>) {
+        let t = self.ui.tokens;
+        let own = self.services.own_title_bar();
+        let inner = ui.max_rect();
+        // The panel's whole rect, its margins too: the window's buttons sit flush with its corner.
+        let bar = inner.expand2(vec2(f32::from(caption::TOP_BAR_MARGIN.0), f32::from(caption::TOP_BAR_MARGIN.1)));
+        let room = if own { caption::title_bar(ui, &t, bar) } else { inner };
+        // What isn't the bar's free space: the next frame's drag keeps off it.
+        let mut controls = Vec::new();
+        ui.scope_builder(egui::UiBuilder::new().max_rect(room), |ui| self.top_bar_row(ui, bar, own, &mut controls, acts));
+        if own {
+            caption::note_bar(ui.ctx(), bar, caption::top_row(bar), controls);
+        }
+    }
+
+    /// The top bar's row of controls, in `ui`'s room (`bar` the whole bar): where each is, in
+    /// `controls`.
+    fn top_bar_row(&mut self, ui: &mut Ui, bar: egui::Rect, own: bool, controls: &mut Vec<egui::Rect>, acts: &mut Vec<Action>) {
         let t = self.ui.tokens;
         ui.horizontal_centered(|ui| {
             // The app's own mark, the only colour up here: the bar itself is plain, as the title
@@ -16,23 +39,38 @@ impl MailApp {
             let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
             ui.painter().rect_filled(r, 4.0, t.accent);
             icons::paint(ui.painter(), icons::centered(r, 14.0), Icon::Unread, t.on_accent);
+            controls.push(r);
             ui.add_space(4.0);
             // Quick access, as Outlook's title bar: Send / Receive all folders, and Undo the last
             // move, delete, flag or category (Ctrl+Z).
             let can_sync = self.session.registry().get("mail.sync").is_some_and(|c| (c.enabled)(&self.session).is_none());
-            if can_sync && widgets::bar_icon_button(ui, Icon::Sync, tl!("Send / Receive all folders (F9)"), &t).clicked() {
-                acts.push(Action::Run("mail.sync", json!({})));
+            if can_sync {
+                let b = widgets::bar_icon_button(ui, Icon::Sync, tl!("Send / Receive all folders (F9)"), &t);
+                controls.push(b.rect);
+                if b.clicked() {
+                    acts.push(Action::Run("mail.sync", json!({})));
+                }
             }
-            if !self.session.undo.is_empty() && widgets::bar_icon_button(ui, Icon::Undo, tl!("Undo (Ctrl+Z)"), &t).clicked() {
-                acts.push(Action::Run("edit.undo", json!({})));
+            if !self.session.undo.is_empty() {
+                let b = widgets::bar_icon_button(ui, Icon::Undo, tl!("Undo (Ctrl+Z)"), &t);
+                controls.push(b.rect);
+                if b.clicked() {
+                    acts.push(Action::Run("edit.undo", json!({})));
+                }
             }
             ui.add_space(10.0);
-            // Centred in the window, whatever is left of it.
+            // Centred in the window, whatever is left of it (the window's own buttons' room
+            // included, when it has them: the box stays in the middle of the window).
             let avail = ui.available_width();
             let search_w = (avail * 0.45).clamp(220.0, 620.0);
-            let left = ui.min_rect().width();
-            let full = left + avail;
-            ui.add_space(((full - search_w) / 2.0 - left).clamp(0.0, (avail - search_w - 80.0).max(0.0)));
+            let (start, left) = (ui.min_rect().left(), ui.min_rect().width());
+            let mid = if own { bar.center().x } else { start + (left + avail) / 2.0 };
+            // Short of the buttons at the end, by the box's width as drawn (its menu and its
+            // buttons can make it wider than asked in a narrow window): in the room the window's
+            // own buttons leave, the bar's would have run into them.
+            let width_id = egui::Id::unique("top-bar-search-width");
+            let drawn = ui.ctx().data(|d| d.get_temp::<f32>(width_id)).unwrap_or(search_w);
+            ui.add_space((mid - search_w / 2.0 - start - left).clamp(0.0, (avail - search_w.max(drawn) - 80.0).max(0.0)));
             let frame = egui::Frame::new()
                 .fill(if t.dark { t.surface } else { Color32::WHITE })
                 .stroke(egui::Stroke::new(1.0, t.border))
@@ -40,7 +78,7 @@ impl MailApp {
                 .inner_margin(Margin::symmetric(8, 3));
             // Conversations has its own box, over its list.
             if self.session.module != Module::Conversations {
-                frame.show(ui, |ui| {
+                let boxed = frame.show(ui, |ui| {
                     ui.horizontal(|ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                         icons::paint(ui.painter(), r, Icon::Search, t.dim);
@@ -75,14 +113,24 @@ impl MailApp {
                         self.search_box(ui, search_w, acts);
                     });
                 });
+                controls.push(boxed.response.rect);
+                let width = boxed.response.rect.width();
+                if (width - drawn).abs() > 0.5 {
+                    ui.ctx().data_mut(|d| d.insert_temp(width_id, width));
+                    ui.ctx().request_repaint();
+                }
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let dark = t.dark;
                 let (icon, tip) = if dark { (Icon::Sun, tl!("Switch to light mode")) } else { (Icon::Moon, tl!("Switch to dark mode")) };
-                if widgets::bar_icon_button(ui, icon, tip, &t).clicked() {
+                let b = widgets::bar_icon_button(ui, icon, tip, &t);
+                controls.push(b.rect);
+                if b.clicked() {
                     acts.push(Action::SetDark(Some(!dark)));
                 }
-                if widgets::bar_icon_button(ui, Icon::Gear, "Accounts and settings", &t).clicked() {
+                let b = widgets::bar_icon_button(ui, Icon::Gear, "Accounts and settings", &t);
+                controls.push(b.rect);
+                if b.clicked() {
                     acts.push(Action::Backstage(backstage::Page::Info));
                 }
             });
@@ -353,7 +401,7 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
 /// Mail, Calendar, People, Tasks and Notes down the window's edge, as Outlook's: the module shown
 /// lit, with a bar at its edge. Conversations too with Teams on, its unread messages in a badge
 /// over its icon.
-pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<Action>) {
+pub(crate) fn module_rail(ui: &mut Ui, t: &Tokens, s: &Session, acts: &mut Vec<Action>) {
     ui.spacing_mut().item_spacing.y = 4.0;
     let module = s.module;
     // The web app doesn't offer Teams (signing in needs a browser on this computer).

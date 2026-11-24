@@ -11,8 +11,10 @@ way in a few places.
 - **It looks like Outlook and fits the desktop.** The interface icons are Microsoft's
   [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons), published under the
   MIT licence: the one exception to the rule of no Microsoft artwork (`CLAUDE.md`, "Assets"; each
-  file has its row in `ATTRIBUTION.md`). The window follows the desktop: its title bar, light or
-  dark, the accent colour and the system's fonts. The app icon and colour stay Quatrelle's own.
+  file has its row in `ATTRIBUTION.md`). On Windows, Linux and the BSDs the main window draws its
+  own title bar, Quatrelle's top bar; File › Options › General gives it the desktop's back. The
+  window follows the desktop: the system's title bars, light or dark, the accent colour and the
+  system's fonts. The app icon and colour stay Quatrelle's own.
 - **Exchange as Outlook uses it.** An on-premises Exchange (EWS) is kept on this computer the way
   Outlook's Cached Exchange Mode keeps it; shared mailboxes and calendars, public folders, the
   server's rules, the online archive. Exchange Online goes through Microsoft Graph.

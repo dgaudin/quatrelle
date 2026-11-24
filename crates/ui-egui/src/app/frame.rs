@@ -5,7 +5,8 @@
 
 use crate::*;
 
-use super::ribbon::RIBBON_H;
+use super::chrome::RIBBON_H;
+use super::chrome::caption::{self, TOP_BAR_H, TOP_BAR_MARGIN};
 
 mod guard;
 pub(crate) use guard::FrameGuard;
@@ -294,6 +295,8 @@ impl MailApp {
         for name in std::mem::take(&mut self.ui.load_typefaces) {
             crate::look::typefaces::load(&ctx, &mut *self.services, &name);
         }
+        // The window draws its own title bar: kept borderless, its scroll bars off its edges.
+        caption::begin_frame(&ctx, &mut *self.services);
         let mut main = self.ui.places.get("main").copied();
         after_open(ui, main);
         WindowPlace::note(&mut main, ui);
@@ -336,17 +339,11 @@ impl MailApp {
             self.ui.tokens = tokens;
             theme::apply(&ctx, &self.ui.tokens);
         }
-        // The title bar the system draws goes light or dark with the window: the system's
-        // when following it, else the one chosen.
-        if self.ui.window_theme != Some(self.ui.dark) {
-            self.ui.window_theme = Some(self.ui.dark);
-            let theme = match self.ui.dark {
-                Some(true) => egui::SystemTheme::Dark,
-                Some(false) => egui::SystemTheme::Light,
-                None => egui::SystemTheme::SystemDefault,
-            };
-            ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(theme));
-        }
+        // The title bars the system draws follow (the other windows', the main one's when it's
+        // chosen). As the system is, the system knows best; except on Linux, where winit knows
+        // no system theme and would say dark: the resolved one is said.
+        let said = if cfg!(all(unix, not(target_os = "macos"))) { Some(dark) } else { self.ui.dark };
+        super::title_bars_in(&ctx, said);
         self.shortcuts(&ctx);
 
         let mut acts: Vec<Action> = Vec::new();
@@ -372,9 +369,15 @@ impl MailApp {
             self.flush_jobs();
             return;
         }
-        egui::Panel::top("topbar").exact_size(40.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 5))).show(ui, |ui| {
-            self.top_bar(ui, &mut acts);
-        });
+        let top_bar = egui::Panel::top("topbar")
+            .exact_size(TOP_BAR_H)
+            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(TOP_BAR_MARGIN.0, TOP_BAR_MARGIN.1)))
+            .show(ui, |ui| {
+                self.top_bar(ui, &mut acts);
+            });
+        self.ui.top_bar_rect = Some(top_bar.response.rect);
+        self.ui.ribbon_panel_rect = None;
+        self.ui.ribbon_tabs_rect = None;
         egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 3))).show(
             ui,
             |ui| {
@@ -389,11 +392,11 @@ impl MailApp {
                 .exact_size(48.0)
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
-                    ui.vertical_centered(|ui| super::bars::module_rail(ui, &t, &self.session, &mut acts));
+                    ui.vertical_centered(|ui| super::chrome::module_rail(ui, &t, &self.session, &mut acts));
                 });
         }
         if self.ui.backstage.is_none() {
-            egui::Panel::top("ribbon")
+            let ribbon = egui::Panel::top("ribbon")
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
                     // Too wide for the window: its last buttons lose their labels, as few as it
@@ -433,6 +436,7 @@ impl MailApp {
                     }
                     self.ui.ribbon_groups.insert(key, next);
                 });
+            self.ui.ribbon_panel_rect = Some(ribbon.response.rect);
             // A newer Quatrelle ready to install (or a copy left from before): a bar of its own.
             if self.update_bar_wanted() {
                 egui::Panel::top("update-bar")
@@ -662,6 +666,9 @@ impl MailApp {
                 }
             }
         }
+        // The window's resize edges, over everything, when it has no system frame to resize by;
+        // its title bar over a dialog holding the window.
+        caption::end_frame(ui, &t, &*self.services);
         self.toasts(&ctx);
         // Calendar reminders' window (the desktop is told in `logic`).
         let mut caught = None;
@@ -707,6 +714,7 @@ impl MailApp {
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);
         }
+        caption::tell_before_zooming(&ctx, &mut *self.services);
         let busy = self.session.accounts.iter().any(|a| matches!(a.status, SyncStatus::Connecting | SyncStatus::Syncing { .. }));
         ctx.request_repaint_after(std::time::Duration::from_secs(if busy || self.ui.toast.is_some() { 1 } else { 20 }));
     }

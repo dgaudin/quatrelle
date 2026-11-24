@@ -2483,3 +2483,7 @@ presence	Offline	Не в сети
 	Answer: declined	Ответ: отклонено
 	Encrypted	Зашифровано
 	Signed	Подписано
+	Minimize	Свернуть
+	Maximize	Развернуть
+	Use the system title bar	Использовать системную строку заголовка
+	Applies when Quatrelle starts again	Применится при следующем запуске Quatrelle

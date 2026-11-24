@@ -63,6 +63,11 @@ windows-registry = "0.6"
 uds_windows = "1.2"
 # The envelope in the notification area while new mail is unread (`desktop/tray.rs`).
 tray-icon = { version = "0.26.1", default-features = false }
+# The main window kept without the system's frame while Quatrelle's top bar is its title bar
+# (`desktop/window_frame.rs`): winit's own shadow off as the window is made (`main.rs`), and
+# winsafe's safe wrappers over Win32, only the parts it calls.
+winit = { version = "0.30", default-features = false }
+winsafe = { version = "0.0.29", default-features = false, features = ["dwm", "user"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
@@ -89,7 +94,8 @@ x11rb = "0.13"
 raw-window-handle = "0.6"
 # GNOME's compositor leaves the title bar to the app: without this, winit draws a bare grey
 # frame; with it, a title bar like the desktop's own (title, buttons, light and dark). Where
-# the window manager draws title bars (KDE, X11), it still does.
+# the window manager draws title bars (KDE, X11), it still does. The main window has one only
+# when File › Options asks for the system's title bar (`desktop/window_frame.rs`).
 winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita", "x11"] }
 # The desktop's light or dark style and accent colour (the XDG settings portal).
 zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }

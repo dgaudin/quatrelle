@@ -295,3 +295,23 @@ fn message_files_go_into_the_folder_open_and_a_msg_is_shown_when_read() {
 fn is_message_file(path: &str) -> bool {
     crate::cmd::is_message_file(path)
 }
+
+/// The desktop's title bar or Quatrelle's own, `view.systemTitleBar`: off at the start (Quatrelle's
+/// own bar), toggled or set by `on`, saved under `prefs.systemTitleBar`, and an older `ui.json`
+/// without it reads as the own bar.
+#[test]
+fn the_system_title_bar_option_toggles_and_is_saved() {
+    let mut s = sample_session("system-title-bar");
+    assert!(!s.prefs.system_title_bar, "Quatrelle's own bar by default");
+    assert_eq!(s.run("view.systemTitleBar", &json!({})).unwrap()["on"], json!(true), "no `on`: it toggles");
+    assert!(s.prefs.system_title_bar);
+    let set = s.run("view.systemTitleBar", &json!({"on": false})).unwrap();
+    assert_eq!((set["on"].clone(), set["atNextStart"].clone()), (json!(false), json!(true)));
+    s.run("view.systemTitleBar", &json!({"on": true})).unwrap();
+    assert_eq!(s.prefs.to_saved()["systemTitleBar"], json!(true), "saved in ui.json as systemTitleBar");
+    let (back, unread) = crate::Prefs::from_saved(&s.prefs.to_saved()).expect("reads back");
+    assert!(back.system_title_bar && unread.is_empty());
+    // A ui.json from before the setting, and from the 1.5.0 version, has none: the own bar.
+    let (old, unread) = crate::Prefs::from_saved(&json!({"conversations": true})).expect("an older file reads");
+    assert!(!old.system_title_bar && old.conversations && unread.is_empty());
+}

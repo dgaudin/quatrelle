@@ -177,6 +177,11 @@ pub enum Icon {
     MeetingDeclined,
     /// A calendar with an alert sign (meeting canceled).
     MeetingCanceled,
+    /// The window's own buttons on Quatrelle's title bar: a line (Minimize), a square (Maximize)
+    /// and two squares, one behind the other (Restore). Close is [`Icon::Close`].
+    Minimize,
+    Maximize,
+    Restore,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -309,6 +314,9 @@ fn svg(icon: Icon) -> &'static str {
         Icon::MeetingTentative => f!("calendar_question_mark"),
         Icon::MeetingDeclined => f!("calendar_cancel"),
         Icon::MeetingCanceled => f!("calendar_error"),
+        Icon::Minimize => f!("subtract"),
+        Icon::Maximize => f!("maximize"),
+        Icon::Restore => f!("square_multiple"),
     }
 }
 
@@ -486,6 +494,9 @@ mod tests {
             MeetingTentative,
             MeetingDeclined,
             MeetingCanceled,
+            Minimize,
+            Maximize,
+            Restore,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

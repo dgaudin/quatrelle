@@ -104,6 +104,9 @@ pub struct Prefs {
     /// The Reminders window opens in a window of its own, over every other, when a reminder
     /// comes (the main window minimized or behind others too), as Outlook's does.
     pub reminders_on_top: bool,
+    /// Windows, Linux and the BSDs: the desktop's title bar above Quatrelle's top bar, instead of
+    /// the top bar being the window's title bar. Read as Quatrelle starts.
+    pub system_title_bar: bool,
     /// The categories offered, in order.
     pub categories: Vec<quatrelle_model::organize::Category>,
     /// Split the Inbox into Focused and Other.
@@ -321,6 +324,7 @@ impl Default for Prefs {
             envelope: true,
             keep_running: true,
             reminders_on_top: true,
+            system_title_bar: false,
             categories: quatrelle_model::organize::default_categories(),
             focused_inbox: false,
             focus_overrides: std::collections::BTreeMap::new(),
