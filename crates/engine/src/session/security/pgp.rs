@@ -91,6 +91,12 @@ impl PgpState {
     pub(super) fn forget_message(&mut self, key: &MessageKey) {
         self.signed.remove(key);
     }
+
+    /// What's known of the messages in `folder` goes: its keys name other messages now.
+    pub(super) fn forget_folder(&mut self, folder: &str) {
+        self.asked.retain(|k, _| k.folder != folder);
+        self.signed.retain(|k, _| k.folder != folder);
+    }
 }
 
 /// `p` as it's kept, its keys read again from their public parts (one that can't be read is let

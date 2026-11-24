@@ -268,7 +268,11 @@ impl Session {
         keys: Vec<Vec<u8>>,
         error: Option<String>,
     ) {
-        self.opening.remove(&key);
+        // One no longer asked for (the Outbox's rows moved meanwhile) is another's now.
+        if !self.decrypt_awaited(&key) {
+            self.pgp.asked.remove(&key);
+            return;
+        }
         let (verify_with, from) = self.pgp.asked.remove(&key).unwrap_or_default();
         match (content, error) {
             (Some(Private(entity)), None) => {

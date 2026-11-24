@@ -419,30 +419,6 @@ impl Session {
         self.reading.iter().chain(&self.windows).filter(|r| r.key == *key).any(|r| r.security.as_ref().is_some_and(|s| s.sender_inside))
     }
 
-    /// A message as it reads: what [`Session::unwrap`] shows, without checking anything again.
-    pub fn readable_raw(&self, key: &MessageKey) -> Option<Vec<u8>> {
-        let mut cur = self.kept_or_held(key)?;
-        let theirs = self.shows_sender_inside(key);
-        for _ in 0..4 {
-            cur = match mime::smime::protection(&cur) {
-                mime::smime::Protection::None => match self.readable_pgp(key, &cur, theirs) {
-                    Some(next) => next,
-                    None => break,
-                },
-                mime::smime::Protection::Signed { content, .. } => put_back(&cur, &content, theirs).0,
-                mime::smime::Protection::Opaque(cms) => match smime::carried(&cms) {
-                    Ok(c) => put_back(&cur, &c, theirs).0,
-                    Err(_) => break,
-                },
-                mime::smime::Protection::Encrypted(_) => match self.opened.get(key) {
-                    Some((entity, _)) => mime::smime::with_entity(&cur, entity),
-                    None => break,
-                },
-            };
-        }
-        Some(cur)
-    }
-
     fn ask_decrypt(&mut self, key: &MessageKey, cms: Vec<u8>) -> Lock {
         let Some(config) = self.account(&key.account).map(|a| a.config.clone()) else { return Lock::Failed("its account is gone".into()) };
         if self.identity(&key.account).is_none() && self.smime.get(&key.account).is_none_or(|s| s.older.is_empty()) {
@@ -706,7 +682,10 @@ impl Session {
                 }
             }
             Event::Decrypted { key, content, authenticated, error } => {
-                self.opening.remove(&key);
+                // One no longer asked for (the Outbox's rows moved meanwhile) is another's now.
+                if !self.decrypt_awaited(&key) {
+                    return;
+                }
                 match (content, error) {
                     (Some(Private(entity)), None) => self.keep_opened(&key, entity, authenticated),
                     (_, e) => {
@@ -725,9 +704,9 @@ impl Session {
 
     /// A message shown (in the reading pane or a window of its own) shown again, its protection
     /// taken off and checked anew.
-    fn show_again(&mut self, key: &MessageKey) {
+    pub(crate) fn show_again(&mut self, key: &MessageKey) {
         let shown = self.reading.as_ref().is_some_and(|r| r.key == *key) || self.windows.iter().any(|w| w.key == *key);
-        if shown && let Some(raw) = self.kept_or_held(key) {
+        if shown && let Some(raw) = self.cached_source(key) {
             for w in self.windows.iter_mut().filter(|w| w.key == *key) {
                 w.parsed = None;
             }
