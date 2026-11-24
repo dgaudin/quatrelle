@@ -580,9 +580,13 @@ fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Resp
             if body.len().saturating_add(size) > max {
                 return Err(too_big());
             }
-            rest.drain(..pos.min(rest.len()));
-            pos = 0;
-            let want = size.saturating_add(2);
+            // The buffer is moved only when a read follows: what was used is cut off then, not
+            // for each chunk (a server's one-byte chunks moved all the rest each time).
+            if rest.len() < pos.saturating_add(size).saturating_add(2) {
+                rest.drain(..pos.min(rest.len()));
+                pos = 0;
+            }
+            let want = pos.saturating_add(size).saturating_add(2);
             if !fill(&mut rest, want)? {
                 return Err(NetError::Closed("the response ended early".into()));
             }

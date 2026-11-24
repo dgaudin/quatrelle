@@ -260,3 +260,17 @@ fn measure_chunked_one_byte_chunks() {
     assert_eq!(r.body.len(), n);
     println!("MEASURE chunked {n} bytes in 1-byte chunks: {took:?}");
 }
+
+/// Four megabytes in one-byte chunks is read in a moment: the buffer is moved only before a read,
+/// not for each chunk (that was about 8 KiB copied per byte of body).
+#[test]
+fn one_byte_chunks_are_read_without_moving_the_buffer_each_time() {
+    let n = 4 << 20;
+    let mut v = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+    v.extend(std::iter::repeat_n(b"1\r\nx\r\n", n).flatten());
+    v.extend(b"0\r\n\r\n");
+    let began = Instant::now();
+    let r = read_response(&mut std::io::Cursor::new(v), 8 << 20, false).unwrap();
+    assert_eq!(r.body.len(), n);
+    assert!(began.elapsed() < Duration::from_secs(10), "took {:?}", began.elapsed());
+}
