@@ -250,39 +250,19 @@ impl Refs {
             }
             at = start + end;
         }
-        let space = |from: usize| from + lower.get(from..).unwrap_or_default().iter().take_while(|b| b.is_ascii_whitespace()).count();
-        for attr in [&b"src"[..], b"href", b"background"] {
-            let mut from = 0;
-            while let Some(i) = memchr::memmem::find(lower.get(from..).unwrap_or_default(), attr) {
-                let at = from + i;
-                from = at + attr.len();
-                if at == 0 || !lower.get(at - 1).is_some_and(|b| b.is_ascii_whitespace()) {
-                    continue;
-                }
-                let eq = space(from);
-                if lower.get(eq) != Some(&b'=') {
-                    from = eq;
-                    continue;
-                }
-                let start = space(eq + 1);
-                let (value, next) = match lower.get(start) {
-                    Some(&q @ (b'"' | b'\'')) => {
-                        let w = window(start + 1);
-                        let end = w.iter().position(|b| *b == q).unwrap_or(w.len());
-                        (w.get(..end).unwrap_or_default(), start + 1 + end)
-                    }
-                    _ => {
-                        let w = window(start);
-                        let end = w.iter().position(|b| b.is_ascii_whitespace() || *b == b'>').unwrap_or(w.len());
-                        (w.get(..end).unwrap_or_default(), start + end)
-                    }
-                };
-                from = next.max(from);
+        // Every `src`, `href` and `background` of a tag, read as every other pass reads a tag's
+        // attributes ([`crate::html::tag_attr`], over the tags [`crate::html::tags`] finds): not
+        // a name in another's quoted value (`alt="… src=plan.pdf"` took a file of that name for
+        // shown), nor one in the text or a comment. The lower-cased bytes sit at the same
+        // places as the text's, so the tags are read there and stay lower case.
+        crate::html::tags(html, |_, _, range| {
+            let tag = std::str::from_utf8(lower.get(range.clone()).unwrap_or_default()).unwrap_or_default();
+            for attr in ["src", "href", "background"] {
+                let Some(value) = crate::html::tag_attr(tag, attr) else { continue };
                 if value.len() > REF_MAX || r.paths.len() >= MAX_REFS {
                     continue;
                 }
-                let value = String::from_utf8_lossy(value);
-                let path = percent_decoded(value.split(['?', '#']).next().unwrap_or(&value).trim());
+                let path = percent_decoded(value.split(['?', '#']).next().unwrap_or(value).trim());
                 if !path.is_empty() {
                     if !last_segment(&path).is_empty() {
                         r.files.insert(last_segment(&path).to_string());
@@ -290,7 +270,8 @@ impl Refs {
                     r.paths.insert(path);
                 }
             }
-        }
+            r.paths.len() < MAX_REFS
+        });
         r
     }
 }

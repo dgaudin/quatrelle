@@ -8,6 +8,22 @@ use super::*;
 
 const PNG: &str = "iVBORw0KGgo=";
 
+/// What the HTML shows is read from its tags' attributes as every other pass reads them: a
+/// `src=` in another attribute's quoted value, or in the text, shows nothing (a file whose
+/// address was written in a picture's description was taken for shown, and lost its paperclip).
+#[test]
+fn an_address_in_a_quoted_value_shows_nothing() {
+    let make = || {
+        r#"<p>Use src=notes.txt now</p><img alt="see src=plan.pdf here" src="cid:logo@x"><a title='x' href = 'files/Chart%20one.png?v=2'>c</a><td background=bg.gif>"#.to_string()
+    };
+    let refs = HtmlRefs::new(&make);
+    assert!(!refs.shows(None, Some("plan.pdf")));
+    assert!(!refs.shows(None, Some("notes.txt")));
+    assert!(refs.shows(Some("<logo@x>"), None));
+    assert!(refs.shows(None, Some("chart one.png")) && refs.shows(None, Some("files/chart one.png")));
+    assert!(refs.shows(None, Some("BG.gif")));
+}
+
 fn related(picture_headers: &str) -> Vec<u8> {
     format!(
         "From: a@studio.example\r\nSubject: Logo\r\nContent-Type: multipart/related; boundary=\"r\"\r\n\r\n--r\r\nContent-Type: text/html\r\n\r\n<p>Hi</p><img src=\"cid:logo@x\">\r\n--r\r\nContent-Type: image/png; name=\"logo.png\"\r\nContent-ID: <logo@x>\r\n{picture_headers}Content-Transfer-Encoding: base64\r\n\r\n{PNG}\r\n--r--\r\n"
