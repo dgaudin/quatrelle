@@ -20,6 +20,7 @@ mod windows;
 
 pub(crate) use actions::cleaned_on_written_host;
 pub use alt_code::{alt_code_pages, alt_codes};
+pub use chrome::MIN_WINDOW_SIZE;
 pub(crate) use chrome::{SearchDrop, scope_label};
 pub(crate) use chrome::{junk_menu, quick_steps_menu, run_quick_step};
 pub(crate) use costs::Merging;

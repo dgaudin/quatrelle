@@ -6,6 +6,7 @@
 use crate::*;
 
 use super::chrome::RIBBON_H;
+use super::chrome::caption::{self, TOP_BAR_H, TOP_BAR_MARGIN};
 
 mod guard;
 pub(crate) use guard::FrameGuard;
@@ -294,6 +295,8 @@ impl MailApp {
         for name in std::mem::take(&mut self.ui.load_typefaces) {
             crate::look::typefaces::load(&ctx, &mut *self.services, &name);
         }
+        // The window draws its own title bar: kept borderless, its scroll bars off its edges.
+        caption::begin_frame(&ctx, &mut *self.services);
         let mut main = self.ui.places.get("main").copied();
         after_open(ui, main);
         WindowPlace::note(&mut main, ui);
@@ -373,8 +376,8 @@ impl MailApp {
             return;
         }
         let top_bar = egui::Panel::top("topbar")
-            .exact_size(40.0)
-            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 5)))
+            .exact_size(TOP_BAR_H)
+            .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(TOP_BAR_MARGIN.0, TOP_BAR_MARGIN.1)))
             .show(ui, |ui| {
                 self.top_bar(ui, &mut acts);
             });
@@ -669,6 +672,9 @@ impl MailApp {
                 }
             }
         }
+        // The window's resize edges, over everything, when it has no system frame to resize by;
+        // its title bar over a dialog holding the window.
+        caption::end_frame(ui, &t, &*self.services);
         self.toasts(&ctx);
         // Calendar reminders' window (the desktop is told in `logic`).
         let mut caught = None;
@@ -714,6 +720,7 @@ impl MailApp {
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);
         }
+        caption::tell_before_zooming(&ctx, &mut *self.services);
         let busy = self.session.accounts.iter().any(|a| matches!(a.status, SyncStatus::Connecting | SyncStatus::Syncing { .. }));
         ctx.request_repaint_after(std::time::Duration::from_secs(if busy || self.ui.toast.is_some() { 1 } else { 20 }));
     }
