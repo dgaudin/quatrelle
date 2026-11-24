@@ -41,3 +41,11 @@ fn a_links_target_reads_its_references_once() {
         vec![("t".to_string(), "https://x.example/?a=1&#38;b".to_string())]
     );
 }
+
+/// A character reference in an `href` is read as the browser reads it: `&commat;` is `@`, so
+/// the target's host is the one after it.
+#[test]
+fn a_reference_in_an_href_is_read() {
+    let pairs = html_link_pairs("<a href=\"https://bank.example&commat;evil.example/\">https://bank.example</a>");
+    assert_eq!(pairs, [("https://bank.example".to_string(), "https://bank.example@evil.example/".to_string())], "{pairs:?}");
+}

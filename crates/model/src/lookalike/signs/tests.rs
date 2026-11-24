@@ -19,6 +19,24 @@ fn a_shown_domain_that_isnt_the_targets_is_misleading() {
     assert_eq!(misleading_links(&many).len(), 5);
 }
 
+/// A `\` in a web address is a `/` to a browser, so the authority ends at it: a link shown as
+/// one bank going to `…\@bank.example` really goes to the host before the `@`, and is a
+/// misleading link. And a `&commat;` in the `href` reads as `@` (the pairs come decoded), so
+/// `bank.example&commat;evil.example` goes to `evil.example`.
+#[test]
+fn a_backslash_or_a_commat_in_the_target_s_host_is_read_as_a_browser_reads_it() {
+    let found = misleading_links(&pair("https://bank.example/", "https://evil.example\\@bank.example/"));
+    assert_eq!(
+        found,
+        vec![Sign::MisleadingLink { shown: "https://bank.example/".into(), target: "https://evil.example\\@bank.example/".into() }],
+        "{found:?}"
+    );
+    let found = misleading_links(&pair("https://bank.example/", "https://bank.example@evil.example/"));
+    assert_eq!(found.len(), 1, "the decoded &commat;: {found:?}");
+    // Without the `\` read as `/`, the first one's host would be the bank's, and no sign.
+    assert_eq!(target_host("https://evil.example\\@bank.example/").as_deref(), Some("evil.example"));
+}
+
 #[test]
 fn risky_attachments_are_named() {
     let names: Vec<String> = ["facture.pdf.exe", "photo.JPG", "a.docm", "page.htm", "notes.txt"].map(String::from).to_vec();

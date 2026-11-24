@@ -28,7 +28,9 @@ const MAX_HEADERS: usize = 64 * 1024;
 fn target_host(target: &str) -> Option<String> {
     let lower = target.trim().to_ascii_lowercase();
     let rest = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://"))?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    // The authority also ends at a `\`: for a web address it is a `/` (so `…\@host/` goes to
+    // the host before the `@`, not after it).
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
     let host = authority.rsplit('@').next().unwrap_or("");
     let host = host.split(':').next().unwrap_or("");
     host_shape(host).then(|| host.to_string())
@@ -51,7 +53,7 @@ fn shown_host(shown: &str) -> Option<String> {
     }
     let rest = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://")).unwrap_or(&lower);
     let rest = rest.rsplit('@').next().unwrap_or(rest);
-    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
     let host = host.split(':').next().unwrap_or("");
     host_shape(host).then(|| host.to_string())
 }
