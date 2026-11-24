@@ -344,3 +344,18 @@ fn a_hostile_internal_date_is_refused() {
     let got = c.uid_fetch("5", "UID INTERNALDATE", "").unwrap();
     assert!(got.iter().all(|f| f.internal_date.is_none()));
 }
+
+/// Found in review: bare LF line ends were mended across the whole response, literals too, so a
+/// literal holding bare LFs outgrew its `{n}` and the response was dropped; and a response ending
+/// in CRLF was never mended, so a bare LF before its literal stayed.
+#[test]
+fn bare_lf_line_ends_are_mended_outside_literals_only() {
+    let s = b"* OK hi\r\n\
+* 1 FETCH (UID 7 BODY[] {6}\r\na\nb\nc\n)\n\
+* 2 FETCH (UID 8 BODY[] {3}\nx\r\n)\r\n\
+M1 OK done\r\n";
+    let mut c = Client::from_stream(Script::new(s)).unwrap();
+    let got = c.uid_fetch("7:8", "UID BODY.PEEK[]", "").unwrap();
+    let bodies: Vec<(u32, Option<&[u8]>)> = got.iter().map(|f| (f.uid, f.body.as_deref())).collect();
+    assert_eq!(bodies, [(7, Some(&b"a\nb\nc\n"[..])), (8, Some(&b"x\r\n"[..]))]);
+}
