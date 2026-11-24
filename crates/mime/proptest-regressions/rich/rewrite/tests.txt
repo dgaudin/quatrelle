@@ -9,3 +9,10 @@ cc 430ec9235e01f3030e79b8fd7ac344a789c1186eb0c2f59b8490f8be462d7391 # shrinks to
 cc 194938d9b9dd301ffe39fcecb03dcb989c6292bea63e710f15703d8b0e488671 # shrinks to lines = [(0, ['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', ' ', 'a'])]
 cc 72c8d79fabc5bc687b66c8cdae390016add5a3db7319711f77906b3aeb8974c2 # shrinks to lines = [(0, ['a', ' ', ' ', 'a'])]
 cc cfac2162674998b26689be474fc688024a13460105b7cc41bed486d9d1676f72 # shrinks to lines = [(1, []), (0, ['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a', ' ', 'a'])]
+cc f0f41504e75fb86f8c88dab769e26d519f698b4df2370ecfde1c3cbb793a1554 # shrinks to lines = [(4, ['*', ' ', 'a'])]
+cc b58c1e4b761861bee123f997822692dcc949fbc0245cf613f09336d7ba5227f9 # shrinks to lines = [(4, ['a', ' ', '#'])]
+cc 17a902725d23875dc393aadb3782454794f7d7aee38a0c07172882eff41bed7f # shrinks to lines = [(1, [' '])]
+cc a317000000000000000000000000000000000000000000000000000000000000 # shrinks to lines = [(4, ['#'])]
+# The exact case from the report, kept as a_title_whose_text_is_a_hash_comes_back:
+# lines = [(4, ['#'])]
+cc 0d6240058cf5186adf5f125fc97ac10e31f4b5d184d32b7f8b0a5f780dd0d84e # shrinks to lines = [(0, []), (0, ['*', ' ', 'a'])]
