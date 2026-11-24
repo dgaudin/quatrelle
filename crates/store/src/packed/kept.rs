@@ -12,7 +12,7 @@ pub(super) const FILES: TableDefinition<&str, &[u8]> = TableDefinition::new("fil
 /// big file goes in pieces that each fill their pages, and `FILES` keeps a note of it.
 pub(super) const PIECES: TableDefinition<(&str, u32), &[u8]> = TableDefinition::new("pieces");
 /// The note in `FILES` for a file kept in pieces: this, then its length (8 bytes, little-endian).
-/// Nothing Quatrelle keeps starts with a NUL.
+/// A file that itself starts with this or [`DEFLATED`] is never kept raw ([`pack`]).
 pub(super) const PIECED: &[u8] = b"\0Quatrelle:pieces\0";
 
 /// The note as the fork wrote it before it took its name (see `legacy`): a data file keeps it in
@@ -40,14 +40,26 @@ thread_local! {
     pub(super) static MOST_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// A file as kept: compressed (fast deflate) when that saves a tenth or more.
+/// A file as kept: compressed (fast deflate) when that saves a tenth or more — always, for one
+/// that starts as a compressed file or a note does.
 ///
 /// miniz_oxide is called directly rather than through flate2: in the app, another crate turns
 /// flate2's zlib-rs backend on for everyone, and its fastest level (static Huffman tables) kept
 /// base64 attachments at 0.995 of their size, so they were stored raw; miniz's level 1 keeps
 /// them at about 0.76, and is faster. The stream is the same raw deflate either way.
 pub(super) fn pack(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
-    if bytes.len() < DEFLATE_MIN || bytes.starts_with(DEFLATED) || bytes.starts_with(DEFLATED_OLD) {
+    // A file that starts with one of the data file's own markers (a message can: its bytes are
+    // the server's) is kept compressed however little that saves: kept raw, it would be read
+    // back as a compressed one, or as the note of one in pieces. Compressed, it reads back as
+    // it came, in every build.
+    if bytes.starts_with(DEFLATED) || bytes.starts_with(DEFLATED_OLD) || bytes.starts_with(PIECED) || bytes.starts_with(PIECED_OLD) {
+        let stream = miniz_oxide::deflate::compress_to_vec(bytes, 1);
+        let mut out = Vec::with_capacity(DEFLATED.len() + stream.len());
+        out.extend_from_slice(DEFLATED);
+        out.extend_from_slice(&stream);
+        return out.into();
+    }
+    if bytes.len() < DEFLATE_MIN {
         return bytes.into();
     }
     let stream = miniz_oxide::deflate::compress_to_vec(bytes, 1);

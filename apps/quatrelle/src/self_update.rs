@@ -167,8 +167,15 @@ fn detect_at(exe: &Path, env: &dyn Fn(&str) -> Option<PathBuf>) -> Option<Kind> 
     }
     if cfg!(target_os = "linux") {
         // Replaced by a rename beside it: its folder must be ours to write (an AppImage kept in
-        // /opt by root keeps File › About's Download link).
+        // /opt by root keeps File › About's Download link). Only Quatrelle's own: an AppImage that
+        // opens a link or a file passes its `APPIMAGE` on to the program it starts, so a Quatrelle
+        // started by another AppImage (a browser's `mailto:` link) would put its update over that
+        // one's file. Quatrelle's own runs from inside its image (`APPDIR`).
         let image = env("APPIMAGE").filter(|p| p.is_file())?;
+        if !runs_from_image(exe, env("APPDIR").as_deref()) {
+            log::info!("updates: {} belongs to another program, so it isn't taken for Quatrelle's", image.display());
+            return None;
+        }
         if !image.parent().is_some_and(writable) {
             log::info!("updates: {} is in a folder this user can't write, so it isn't replaced", image.display());
             return None;
@@ -176,6 +183,15 @@ fn detect_at(exe: &Path, env: &dyn Fn(&str) -> Option<PathBuf>) -> Option<Kind> 
         return Some(Kind::AppImage(image));
     }
     None
+}
+
+/// Whether `exe` runs from the AppImage mounted at `appdir`; anything unclear counts as not. One
+/// inherited from another program then isn't taken for Quatrelle's: this copy is updated as what
+/// it is, or not at all, never over that program's file.
+fn runs_from_image(exe: &Path, appdir: Option<&Path>) -> bool {
+    let Some(appdir) = appdir.filter(|d| d.has_root()).and_then(|d| d.canonicalize().ok()) else { return false };
+    // No image is mounted at the root, where every program would count as inside it.
+    appdir.parent().is_some() && exe.starts_with(&appdir)
 }
 
 /// Whether a file can be made in `dir` (made new and removed again to find out, never through
@@ -224,6 +240,10 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 pub struct Updater {
     kind: Kind,
     data: PathBuf,
+    /// The version this build counts as.
+    version: String,
+    /// The commit this build was made from, when known.
+    build_sha: Option<String>,
     shared: Arc<Shared>,
 }
 
@@ -238,7 +258,7 @@ impl Updater {
             log::info!("updates: this copy wasn't installed in a way Quatrelle can update by itself");
             return None;
         };
-        let u = Updater { kind, data, shared: Arc::default() };
+        let u = Updater { kind, data, version: current_version(), build_sha: build_sha.clone(), shared: Arc::default() };
         let worker = u.clone();
         let spawned = std::thread::Builder::new().name("updates".into()).spawn(move || worker.run(build_sha.as_deref()));
         if let Err(e) = spawned {
@@ -370,7 +390,7 @@ impl Updater {
             }
         };
         let Some(release) = pick(&current_version(), build_sha, &releases) else { return Ok(()) };
-        if just_installed(&self.data, &release.tag, now()) {
+        if just_installed(&self.data, &release.tag, now(), &self.build()) {
             return Ok(());
         }
         if let Status::Ready { tag, .. } = self.status()
@@ -423,6 +443,11 @@ impl Updater {
         }
     }
 
+    /// This build, as the marker names it: its version and commit.
+    fn build(&self) -> String {
+        format!("{} {}", self.version, self.build_sha.as_deref().unwrap_or("-"))
+    }
+
     /// Install what's waiting once this process has ended; `restart` opens the new version then.
     /// Nothing waiting, or started already: nothing to do.
     pub fn install(&self, restart: bool) -> Result<bool, String> {
@@ -430,7 +455,10 @@ impl Updater {
         if self.shared.started.swap(true, Ordering::SeqCst) {
             return Ok(false);
         }
-        if let Err(e) = quatrelle_engine::store::write_atomic(&self.data.join(MARKER), format!("{tag}\n{}\n", now()).as_bytes()) {
+        // With the build that wrote it: that build, still running later (the install refused,
+        // failed, or put off while Quatrelle still ran), isn't held back by it.
+        let marker = format!("{tag}\n{}\n{}\n", now(), self.build());
+        if let Err(e) = quatrelle_engine::store::write_atomic(&self.data.join(MARKER), marker.as_bytes()) {
             log::warn!("updates: couldn't note the update: {e}");
         }
         let log = self.data.join(DOWNLOADS).join("install.log");
@@ -468,12 +496,16 @@ fn has_part(dir: &Path) -> bool {
     std::fs::read_dir(dir).is_ok_and(|l| l.flatten().any(|e| e.file_name().to_string_lossy().ends_with(".part")))
 }
 
-/// Whether `tag` was installed by the updater within [`JUST_INSTALLED_FOR`] of `now`.
-fn just_installed(data: &Path, tag: &str, now: u64) -> bool {
+/// Whether `tag` was installed by the updater within [`JUST_INSTALLED_FOR`] of `now`, as build
+/// `me` ([`Updater::build`]) sees it. The marker is written as the install starts: when the
+/// build that wrote it is the one running, the install didn't take, and `tag` is offered again
+/// (its download, kept, is taken as it is) rather than a day later.
+fn just_installed(data: &Path, tag: &str, now: u64, me: &str) -> bool {
     let Ok(text) = std::fs::read_to_string(data.join(MARKER)) else { return false };
     let mut lines = text.lines();
     let (Some(done), Some(at)) = (lines.next(), lines.next().and_then(|a| a.trim().parse::<u64>().ok())) else { return false };
-    done.trim() == tag && now.checked_sub(at).is_some_and(|age| age < JUST_INSTALLED_FOR)
+    let by = lines.next().map(str::trim).filter(|b| !b.is_empty());
+    done.trim() == tag && by != Some(me) && now.checked_sub(at).is_some_and(|age| age < JUST_INSTALLED_FOR)
 }
 
 fn now() -> u64 {

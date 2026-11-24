@@ -31,6 +31,7 @@ pub(crate) mod start;
 pub(crate) mod state_writer;
 pub(crate) mod tray;
 pub(crate) mod window_frame;
+pub(crate) mod windows_programs;
 
 #[derive(Default)]
 pub(crate) struct Desktop {
@@ -369,7 +370,7 @@ impl Services for Desktop {
             }
             candidates.push(("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf".into(), 0));
         }
-        candidates.iter().find_map(|(p, i)| std::fs::read(p).ok().map(|b| (b, *i)))
+        quatrelle_ui_egui::first_readable(candidates.into_iter().map(|(p, i)| (PathBuf::from(p), i)))
     }
     fn typeface(&mut self, family: &str) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
         let (regular, bold) = appearance::typeface_files(family)?;
@@ -391,7 +392,7 @@ impl Services for Desktop {
                 "/usr/share/fonts/noto/NotoSansArabic-Regular.ttf",
             ]
         };
-        candidates.iter().find_map(|p| std::fs::read(p).ok())
+        quatrelle_ui_egui::first_readable(candidates.iter().map(|p| (PathBuf::from(*p), 0))).map(|(bytes, _)| bytes)
     }
     fn emoji_font(&mut self) -> Option<(Vec<u8>, u32)> {
         let (path, index) = appearance::emoji_font_file()?;
@@ -471,7 +472,7 @@ impl Services for Desktop {
         // and quietly showed nothing, so sign-in pages never reached the browser.
         #[cfg(windows)]
         if url.starts_with("https://") || url.starts_with("http://") || url.starts_with("mailto:") {
-            return std::process::Command::new("rundll32.exe")
+            return std::process::Command::new(crate::desktop::windows_programs::path("rundll32.exe"))
                 .arg("url.dll,FileProtocolHandler")
                 .arg(url)
                 .spawn()
@@ -500,7 +501,7 @@ impl Services for Desktop {
         #[cfg(windows)]
         let portable = self.portable;
         // Off the UI thread: the notification service can be slow, or missing.
-        std::thread::spawn(move || {
+        off_thread(std::thread::Builder::new().name("notify".into()), "notification", move || {
             let mut n = notify_rust::Notification::new();
             n.summary(&title).body(&body).appname("Quatrelle");
             // Windows names a toast after its app id (PowerShell's when none is given). A
@@ -604,6 +605,19 @@ impl Services for Desktop {
     }
 }
 
+/// Run `f` on a thread of its own made by `builder`: false, and `what` logged, when the system
+/// won't start one (short of resources), where `std::thread::spawn` panicked on the window's
+/// thread.
+fn off_thread(builder: std::thread::Builder, what: &str, f: impl FnOnce() + Send + 'static) -> bool {
+    match builder.spawn(f) {
+        Ok(_) => true,
+        Err(e) => {
+            log::warn!("{what}: no thread to run it on ({e})");
+            false
+        }
+    }
+}
+
 /// A notification's text as the desktop is to show it: as it was written. On Linux and the BSDs
 /// the desktop may read the body as markup (the summary never), so a stranger's `<b>` or `<img>`
 /// in a message, a subject or a place is escaped there (mail, reminders and Teams alike), an
@@ -625,9 +639,18 @@ fn shell_open(target: &std::ffi::OsStr) -> Result<(), String> {
         // A folder opens in Explorer: ShellExec_RunDLL quietly does nothing with one (Options ›
         // Data files › Open folder never opened).
         if std::path::Path::new(target).is_dir() {
-            return std::process::Command::new("explorer.exe").arg(target).spawn().map(drop).map_err(|e| e.to_string());
+            return std::process::Command::new(crate::desktop::windows_programs::path("explorer.exe"))
+                .arg(target)
+                .spawn()
+                .map(drop)
+                .map_err(|e| e.to_string());
         }
-        std::process::Command::new("rundll32.exe").arg("shell32.dll,ShellExec_RunDLL").arg(target).spawn().map(drop).map_err(|e| e.to_string())
+        std::process::Command::new(crate::desktop::windows_programs::path("rundll32.exe"))
+            .arg("shell32.dll,ShellExec_RunDLL")
+            .arg(target)
+            .spawn()
+            .map(drop)
+            .map_err(|e| e.to_string())
     }
     #[cfg(not(windows))]
     {
@@ -644,10 +667,13 @@ pub(crate) fn system_fonts() -> (Option<Vec<u8>>, Option<Vec<u8>>) {
     } else {
         // The desktop's own interface font, when it has a bold of its own.
         #[cfg(all(unix, not(target_os = "macos")))]
-        if let Some((r, b)) = appearance::desktop_font_files()
-            && let (Ok(reg), Ok(bold)) = (std::fs::read(r), std::fs::read(b))
-        {
-            return (Some(reg), Some(bold));
+        if let Some((r, b)) = appearance::desktop_font_files() {
+            // A damaged file is passed over (egui stopped Quatrelle on it, at every start).
+            let reg = quatrelle_ui_egui::first_readable([(r, 0)]);
+            let bold = quatrelle_ui_egui::first_readable([(b, 0)]);
+            if let (Some((reg, _)), Some((bold, _))) = (reg, bold) {
+                return (Some(reg), Some(bold));
+            }
         }
         &[
             ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
@@ -656,8 +682,10 @@ pub(crate) fn system_fonts() -> (Option<Vec<u8>>, Option<Vec<u8>>) {
         ]
     };
     for (r, b) in candidates {
-        if let Ok(reg) = std::fs::read(r) {
-            return (Some(reg), std::fs::read(b).ok());
+        // A damaged file is passed over for the next (egui stopped Quatrelle on it, at every start).
+        if let Some((reg, _)) = quatrelle_ui_egui::first_readable([(PathBuf::from(r), 0)]) {
+            let bold = quatrelle_ui_egui::first_readable([(PathBuf::from(b), 0)]).map(|(b, _)| b);
+            return (Some(reg), bold);
         }
     }
     (None, None)
@@ -733,6 +761,17 @@ pub(crate) fn read_clipboard<T>(read: fn(&mut arboard::Clipboard) -> Option<T>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A thread the system won't start (here a stack no system gives) is said, not a panic on
+    /// the window's thread, as `std::thread::spawn` made it for each new-mail notification.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn a_thread_that_cant_start_isnt_a_panic() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        assert!(off_thread(std::thread::Builder::new(), "test", move || tx.send(()).unwrap_or_default()));
+        assert!(rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(), "ran");
+        assert!(!off_thread(std::thread::Builder::new().stack_size(1 << 50), "test", || {}));
+    }
 
     /// The next dialog opens where the last answer was: a file's folder, or the folder picked;
     /// a cancelled dialog leaves it, and a folder that's gone isn't offered.

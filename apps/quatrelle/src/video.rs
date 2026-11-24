@@ -45,10 +45,11 @@ pub(crate) fn source() -> Option<Source> {
 
 /// The system's own thumbnailer.
 pub(crate) fn system() -> Option<Source> {
+    // Windows' own PowerShell, by its full path (`windows_programs::path`): from `%SystemRoot%`,
+    // or the PATH, it could be anyone's.
     if cfg!(windows) {
-        let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
-        let dir = format!("{root}\\System32\\WindowsPowerShell\\v1.0");
-        find_tool("powershell", &[dir.as_str()]).map(Source::Shell)
+        let powershell = crate::desktop::windows_programs::path(r"WindowsPowerShell\v1.0\powershell.exe");
+        powershell.is_file().then_some(Source::Shell(powershell))
     } else if cfg!(target_os = "macos") {
         find_tool("qlmanage", &["/usr/bin"]).map(Source::QuickLook)
     } else {
@@ -167,11 +168,17 @@ fn run(mut cmd: Command) -> Option<Vec<u8>> {
     }
     let mut child = cmd.spawn().ok()?;
     let mut out = child.stdout.take()?;
-    let reader = std::thread::spawn(move || {
+    // A thread the system won't start is no picture (`std::thread::spawn` panicked).
+    let reader = std::thread::Builder::new().name("video-tool-output".into()).spawn(move || {
         let mut buf = Vec::new();
         let _ = out.by_ref().take(20 << 20).read_to_end(&mut buf);
         buf
     });
+    let Ok(reader) = reader else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return None;
+    };
     let end = Instant::now() + TIMEOUT;
     let status = loop {
         match child.try_wait() {

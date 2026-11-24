@@ -64,6 +64,10 @@ needs revalidation.
   travel over HTTPS anyway.
 - **Content Security Policy:** if you send one, `connect-src` must include your JMAP server's
   origin, and `script-src` needs `'wasm-unsafe-eval'`.
+- **Opener isolation:** `Cross-Origin-Opener-Policy: same-origin`, so a page opened from Quatrelle
+  can't reach or navigate its tab. It opens links with `noopener` already; this covers any other
+  way.
+- **Sniffing:** `X-Content-Type-Options: nosniff`.
 
 Local test: `python3 -m http.server 8774` inside the folder, then open http://localhost:8774/
 (or http://localhost:8774/?sample).

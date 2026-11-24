@@ -517,3 +517,64 @@ fn a_profile_folder_is_one_name() {
         assert!(!crate::is_profile_dir(bad), "{bad:?}");
     }
 }
+
+/// With many web pictures loaded, those let go to make room are never the ones on screen:
+/// showing a signature's pictures keeps the open message's, and showing the open message's
+/// keeps the signature's. Only what was asked for is fetched.
+#[test]
+fn pictures_let_go_are_never_the_ones_on_screen() {
+    let mut s = sample_session("pictures-kept");
+    let open = "https://cdn.example/open.png".to_string();
+    let sig = "https://cdn.example/sig.png".to_string();
+    let k = key_of(&s, "Your proof for the festival poster is ready");
+    s.run("list.open", &k).unwrap();
+    let r = s.reading.as_mut().unwrap();
+    let mut p = (**r.parsed.as_ref().unwrap()).clone();
+    p.images = vec![open.clone()];
+    r.parsed = Some(std::sync::Arc::new(p));
+    s.run("message.showPictures", &json!({})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::FetchUrl { url }] if *url == open));
+    let ready = || crate::Picture::Ready(std::sync::Arc::new(vec![1, 2, 3]));
+    let fill = |s: &mut Session| {
+        for n in 0..450 {
+            s.pictures.insert(format!("https://old.example/{n}.png"), ready());
+        }
+    };
+    s.pictures.insert(open.clone(), ready());
+    fill(&mut s);
+    let code = format!("<b>Riley</b><img src=\"{sig}\" width=\"40\">");
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "", "rawHtml": code})).unwrap();
+    s.fetch_signature_pictures();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::FetchUrl { url }] if *url == sig), "the signature's only");
+    assert_eq!(s.pictures.get(&open), Some(&ready()), "the open message's still shown");
+    assert!(s.pictures.len() < 10, "the others let go: {}", s.pictures.len());
+
+    s.pictures.insert(sig.clone(), ready());
+    fill(&mut s);
+    s.run("message.showPictures", &json!({})).unwrap();
+    assert!(s.take_jobs().is_empty(), "nothing fetched again");
+    assert_eq!((s.pictures.get(&open), s.pictures.get(&sig)), (Some(&ready()), Some(&ready())));
+    assert!(s.pictures.len() < 10, "{}", s.pictures.len());
+    done(s);
+}
+
+/// A signature's web picture that couldn't be fetched is asked for again at the next start
+/// (`Failed` doesn't keep its place); one that came is not.
+#[test]
+fn a_signatures_picture_that_failed_is_asked_for_again() {
+    let mut s = sample_session("signature-failed");
+    let sig = "https://cdn.example/sig.png".to_string();
+    let code = format!("<b>Riley</b><img src=\"{sig}\" width=\"40\">");
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "", "rawHtml": code})).unwrap();
+    let _ = s.take_jobs();
+    s.pictures.insert(sig.clone(), crate::Picture::Failed("no route".into()));
+    s.fetch_signature_pictures();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::FetchUrl { url }] if *url == sig), "asked for again");
+    assert!(matches!(s.pictures.get(&sig), Some(crate::Picture::Loading)));
+    let ready = crate::Picture::Ready(std::sync::Arc::new(vec![1, 2, 3]));
+    s.pictures.insert(sig.clone(), ready.clone());
+    s.fetch_signature_pictures();
+    assert!(s.take_jobs().is_empty(), "one that came isn't asked for again");
+    assert_eq!(s.pictures.get(&sig), Some(&ready));
+    done(s);
+}

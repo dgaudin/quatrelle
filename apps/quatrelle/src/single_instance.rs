@@ -49,6 +49,10 @@ const MAX_WAITING: usize = 256;
 const MAX_KEY: u64 = 256;
 /// How long either side waits for the other.
 const TIMEOUT: Duration = Duration::from_secs(5);
+/// How often a launch asks again when the running Quatrelle's key isn't in place, and how long
+/// it waits before each.
+const KEY_TRIES: usize = 5;
+const KEY_WAIT: Duration = Duration::from_millis(40);
 
 /// What this launch does.
 pub enum Claim {
@@ -141,6 +145,8 @@ fn request(key: &str, open: &[String]) -> String {
 
 /// What a request hands over, or `None` when it isn't one with `key`: anything but one JSON
 /// object with that key and a list of strings (empty ones and those past [`MAX_OPEN`] left out).
+/// A launch hands on links as they are and paths made absolute (`args::handed`): a path that
+/// isn't one would be opened from this Quatrelle's own folder instead, so it's left out too.
 fn parse_request(line: &str, key: &str) -> Option<Vec<String>> {
     let value: serde_json::Value = serde_json::from_str(line.trim_end()).ok()?;
     let sent = value.get("key")?.as_str()?;
@@ -149,7 +155,8 @@ fn parse_request(line: &str, key: &str) -> Option<Vec<String>> {
     }
     let open = value.get("open")?.as_array()?;
     let open = open.iter().map(|v| v.as_str().map(str::to_string)).collect::<Option<Vec<String>>>()?;
-    Some(open.into_iter().filter(|s| !s.trim().is_empty()).take(MAX_OPEN).collect())
+    let absolute = |s: &String| quatrelle_engine::model::mailto::is_mailto(s) || Path::new(s).is_absolute();
+    Some(open.into_iter().filter(|s| !s.trim().is_empty()).filter(absolute).take(MAX_OPEN).collect())
 }
 
 /// Compares a sent key with ours without stopping at the first wrong byte, so a caller timing
@@ -165,14 +172,54 @@ fn keys_match(sent: &[u8], ours: &[u8]) -> bool {
     differing == 0
 }
 
-/// Stores `key` in the `.key` file next to the socket. Runs before the socket is bound, so by
-/// the time a launch can connect, the key is there for it to read.
-fn write_key(socket: &Path, key: &str) -> std::io::Result<()> {
-    let key_file = socket.with_extension("key");
+/// Stores `key` in the file `key_file`, made afresh.
+fn write_key(key_file: &Path, key: &str) -> std::io::Result<()> {
     // A key from a run that crashed would make the exclusive create below fail.
-    let _ = std::fs::remove_file(&key_file);
-    let mut file = owner_only_file(&key_file)?;
+    let _ = std::fs::remove_file(key_file);
+    let mut file = owner_only_file(key_file)?;
     std::io::Write::write_all(&mut file, key.as_bytes())
+}
+
+/// Where a launch keeps its key until it listens: a name of its own beside the socket (each
+/// launch, threads in tests too, has its own).
+fn pending_key(socket: &Path) -> PathBuf {
+    static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    socket.with_extension(format!("key-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)))
+}
+
+/// Listen at `socket` with a new key: `Ok(None)` when another launch listens there first. The
+/// key is written under a name of this launch's own, and takes the `.key` name only once this
+/// launch listens: written there first, a launch that lost the socket to another replaced the
+/// key that one's later launches are checked against, and each of them opened a window of its
+/// own. (A launch that connects between the bind and the rename, which the election lock keeps
+/// out when it's had, finds no key or the one of before: it asks again, [`hand_over`].)
+fn listen(socket: &Path) -> Result<Option<(UnixListener, String)>, String> {
+    let pending = pending_key(socket);
+    let key = new_key(&pending).map_err(|e| format!("no key ({e})"))?;
+    let listener = match UnixListener::bind(socket) {
+        Ok(listener) => listener,
+        Err(e) => {
+            let _ = std::fs::remove_file(&pending);
+            return match e.kind() {
+                std::io::ErrorKind::AddrInUse => Ok(None),
+                // Older Windows, a path too long for a socket, a file system without sockets.
+                _ => Err(format!("can't listen at {} ({e})", socket.display())),
+            };
+        }
+    };
+    let key_file = socket.with_extension("key");
+    // Windows replaces a file by renaming only when nothing has it open (a launch reading it).
+    let placed = std::fs::rename(&pending, &key_file).or_else(|_| {
+        let _ = std::fs::remove_file(&key_file);
+        std::fs::rename(&pending, &key_file)
+    });
+    if let Err(e) = placed {
+        drop(listener);
+        let _ = std::fs::remove_file(socket);
+        let _ = std::fs::remove_file(&pending);
+        return Err(format!("the key wasn't put in place ({e})"));
+    }
+    Ok(Some((listener, key)))
 }
 
 /// Creates `path`, failing if something is already there; on Unix with mode 0600, so other
@@ -258,13 +305,20 @@ fn claim_at(path: &Path, open: &[String]) -> Claim {
     for _ in 0..3 {
         match UnixStream::connect(path) {
             Ok(stream) => {
-                return match hand_over(&stream, path, open) {
+                return match hand_over(stream, path, open, || std::thread::sleep(KEY_WAIT)) {
                     Ok(()) => Claim::Shown,
                     Err(e) => {
                         log::warn!("the running Quatrelle didn't answer ({e}); opening a window");
                         Claim::Alone
                     }
                 };
+            }
+            // Only a refused or missing socket is one nobody listens on: another failure (no
+            // right to it, too many waiting) may come from a Quatrelle that's running, whose
+            // socket isn't taken from it.
+            Err(e) if !matches!(e.kind(), std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::NotFound) => {
+                log::info!("single instance off: can't reach {} ({e})", path.display());
+                return Claim::Alone;
             }
             // Nobody listens: no socket yet, or one left by a Quatrelle that didn't exit cleanly.
             // Removed without asking `exists()` first: on Windows that follows the socket's
@@ -283,20 +337,12 @@ fn claim_at(path: &Path, open: &[String]) -> Claim {
                 }
             },
         }
-        // The key first: a launch that finds the socket finds its key too.
-        let key = match new_key(path) {
-            Ok(key) => key,
+        match listen(path) {
+            Ok(Some((listener, key))) => return serve(listener, path, key),
+            // Another launch listens there now: asked in the next round.
+            Ok(None) => continue,
             Err(e) => {
-                log::info!("single instance off: no key ({e})");
-                return Claim::Alone;
-            }
-        };
-        match UnixListener::bind(path) {
-            Ok(listener) => return serve(listener, path, key),
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
-            // Older Windows, a path too long for a socket, a file system without sockets.
-            Err(e) => {
-                log::info!("single instance off: can't listen at {} ({e})", path.display());
+                log::info!("single instance off: {e}");
                 return Claim::Alone;
             }
         }
@@ -304,15 +350,36 @@ fn claim_at(path: &Path, open: &[String]) -> Claim {
     Claim::Alone
 }
 
-/// A new key for this run, kept beside the socket.
-fn new_key(socket: &Path) -> std::io::Result<String> {
+/// A new key for this run, written to `key_file`.
+fn new_key(key_file: &Path) -> std::io::Result<String> {
     let key = quatrelle_net::oauth::secret_token().map_err(|e| std::io::Error::other(e.to_string()))?;
-    write_key(socket, &key)?;
+    write_key(key_file, &key)?;
     Ok(key)
 }
 
-/// Ask the Quatrelle at the other end to show its window and open `open`, and wait for its `ok`.
-fn hand_over(stream: &UnixStream, socket: &Path, open: &[String]) -> std::io::Result<()> {
+/// Ask the Quatrelle at the other end of `stream` to show its window and open `open`, again
+/// (after `wait`, a few times) while its key isn't in place: it listens before its key has its
+/// name ([`listen`]), so a launch that reaches it in between, without the election lock, finds
+/// no key or the one of the run before, was refused and opened a second window. One that doesn't
+/// answer in time isn't asked again.
+fn hand_over(stream: UnixStream, socket: &Path, open: &[String], mut wait: impl FnMut()) -> std::io::Result<()> {
+    let mut stream = stream;
+    for _ in 1..KEY_TRIES {
+        match hand_over_once(&stream, socket, open) {
+            Err(e) if !matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => {
+                log::info!("single instance: not answered ({e}); asking again");
+                drop(stream);
+                wait();
+                stream = UnixStream::connect(socket)?;
+            }
+            done => return done,
+        }
+    }
+    hand_over_once(&stream, socket, open)
+}
+
+/// Ask once, with the key beside the socket, and wait for the `ok`.
+fn hand_over_once(stream: &UnixStream, socket: &Path, open: &[String]) -> std::io::Result<()> {
     use std::io::{BufRead, Read, Write};
     stream.set_read_timeout(Some(TIMEOUT))?;
     stream.set_write_timeout(Some(TIMEOUT))?;
@@ -383,7 +450,17 @@ mod tests {
     #[test]
     fn socket_paths_fit_a_socket_address() {
         let app = socket_path(Path::new("/home/zoe/.local/share/quatrelle")).unwrap_or_default();
-        for p in [app, socket_at("together"), socket_at("stale"), socket_at("silent"), socket_at("show"), socket_at("keyed"), socket_at("handed")] {
+        for p in [
+            app,
+            socket_at("together"),
+            socket_at("stale"),
+            socket_at("silent"),
+            socket_at("show"),
+            socket_at("keyed"),
+            socket_at("handed"),
+            socket_at("lost"),
+            socket_at("early"),
+        ] {
             let len = p.as_os_str().len();
             assert!(len < 104, "{len} bytes: {}", p.display());
         }
@@ -430,6 +507,70 @@ mod tests {
         first.close();
         assert!(std::fs::symlink_metadata(&path).is_err(), "the socket goes");
         assert!(matches!(claim_at(&path, &[]), Claim::Primary(_)), "no one listens: this one is first");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// Found in audit (#242): a launch whose connect failed just before another bound the
+    /// socket (without the election lock, which is best effort) wrote its key over the other's,
+    /// then found the socket taken. The running Quatrelle's later launches sent that key and
+    /// were refused, each opening a window of its own. A key takes its name only once its
+    /// launch listens.
+    #[test]
+    fn a_launch_that_loses_the_socket_leaves_the_key() {
+        let path = socket("lost");
+        let Claim::Primary(first) = claim_at(&path, &[]) else { panic!("the first launch listens") };
+        let key = read_key(&path).unwrap();
+        // The other launch's step after its connect failed, while the first listens.
+        assert!(matches!(listen(&path), Ok(None)), "the socket is the first's");
+        assert_eq!(read_key(&path).unwrap(), key, "the first's key stays");
+        assert!(matches!(claim_at(&path, &[]), Claim::Shown), "later launches still reach it");
+        assert_eq!(first.take(), Some(Vec::new()));
+        // Nothing of the other launch's is left beside the socket: the socket, its lock, its key.
+        let dir = path.parent().unwrap();
+        let mut left: Vec<String> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        left.sort();
+        let name = |ext: &str| path.with_extension(ext).file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(left, [name("key"), name("lock"), name("sock")]);
+        first.close();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A launch that reaches the running Quatrelle before its key is in place (it listens first;
+    /// the election lock, when it can't be had, doesn't keep the launch out) asks again once it
+    /// is: with no key beside the socket, or the key of the run before, it was refused and opened
+    /// a window of its own.
+    #[test]
+    fn a_launch_before_the_key_is_in_place_asks_again() {
+        let path = socket("early");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let open = vec!["mailto:ana@x.example".to_string()];
+        for before in [None, Some("the-key-of-the-run-before")] {
+            // Listening, its key not yet under its name.
+            let listener = UnixListener::bind(&path).unwrap();
+            let Claim::Primary(first) = serve(listener, &path, "this-runs-key".into()) else { panic!("it answers") };
+            let _ = std::fs::remove_file(path.with_extension("key"));
+            if let Some(old) = before {
+                write_key(&path.with_extension("key"), old).unwrap();
+            }
+            let mut asked = 0;
+            let stream = UnixStream::connect(&path).unwrap();
+            let handed = hand_over(stream, &path, &open, || {
+                asked += 1;
+                // The key takes its name after the launch's second ask.
+                if asked == 2 {
+                    write_key(&path.with_extension("key"), "this-runs-key").unwrap();
+                }
+            });
+            assert!(handed.is_ok(), "{before:?}: {handed:?}");
+            assert_eq!((asked, first.take()), (2, Some(open.clone())), "{before:?}");
+            // A key that never comes: given up on after a few asks, for a window of its own.
+            let _ = std::fs::remove_file(path.with_extension("key"));
+            let mut asked = 0;
+            let stream = UnixStream::connect(&path).unwrap();
+            assert!(hand_over(stream, &path, &open, || asked += 1).is_err());
+            assert_eq!((asked, first.take()), (KEY_TRIES - 1, None));
+            first.close();
+        }
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -484,6 +625,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(silent.parent().unwrap());
     }
 
+    /// `p` (`/u/a.pdf`) as an absolute path on this system: on Windows, on drive C.
+    fn abs(p: &str) -> String {
+        if cfg!(windows) { format!("C:{p}") } else { p.to_string() }
+    }
+
     /// What a launch hands over reaches the running window, in order, once; the request carries
     /// the run's key, which is in a file beside the socket and new each run.
     #[test]
@@ -493,11 +639,11 @@ mod tests {
         let key = read_key(&path).unwrap();
         assert_eq!(key, first.key);
         assert!(key.len() >= 40, "{key}");
-        let open = vec!["mailto:ana@x.example?subject=Hi".to_string(), "C:/Users/zoe/Downloads/Invite.ics".to_string()];
+        let open = vec!["mailto:ana@x.example?subject=Hi".to_string(), abs("/Users/zoe/Downloads/Invite.ics")];
         assert!(matches!(claim_at(&path, &open), Claim::Shown));
-        assert!(matches!(claim_at(&path, &["/home/zoe/x.eml".to_string()]), Claim::Shown));
+        assert!(matches!(claim_at(&path, &[abs("/home/zoe/x.eml")]), Claim::Shown));
         let mut all = open.clone();
-        all.push("/home/zoe/x.eml".into());
+        all.push(abs("/home/zoe/x.eml"));
         assert_eq!(first.take(), Some(all));
         assert!(first.take().is_none());
         first.close();
@@ -549,14 +695,18 @@ mod tests {
     /// The request's parser: the key exactly, a list of strings, empties and extras left out.
     #[test]
     fn requests_are_read_strictly() {
-        let open: Vec<String> = (0..100).map(|i| format!("/m/{i}.eml")).collect();
+        let open: Vec<String> = (0..100).map(|i| abs(&format!("/m/{i}.eml"))).collect();
         let line = request("k3y", &open);
         assert!(line.ends_with('\n') && !line.trim_end().contains('\n'), "one line");
         assert_eq!(parse_request(&line, "k3y").map(|v| v.len()), Some(MAX_OPEN));
         assert_eq!(parse_request(&line, "k3Y"), None);
         assert_eq!(parse_request(&line, ""), None, "no key, no requests");
         assert_eq!(parse_request(&request("", &[]), ""), None);
-        assert_eq!(parse_request("{\"key\":\"k\",\"open\":[\"\",\" \",\"a\"]}", "k"), Some(vec!["a".to_string()]));
+        assert_eq!(parse_request("{\"key\":\"k\",\"open\":[\"\",\" \",\"mailto:a@x.example\"]}", "k"), Some(vec!["mailto:a@x.example".to_string()]));
+        // A path that isn't absolute (a launch makes them so) would be opened from this
+        // Quatrelle's folder: left out.
+        let relative = request("k", &["x.eml".to_string(), abs("/m/y.eml")]);
+        assert_eq!(parse_request(&relative, "k"), Some(vec![abs("/m/y.eml")]));
         for junk in ["", "{}", "[]", "null", "{\"key\":\"k\"}", "{\"key\":5,\"open\":[]}", "\u{0}\u{ff}"] {
             assert_eq!(parse_request(junk, "k"), None, "{junk:?}");
         }

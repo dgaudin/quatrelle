@@ -23,6 +23,10 @@ serde_json = { workspace = true }
 jiff = { workspace = true, features = ["tz-system", "tzdb-zoneinfo", "tzdb-bundle-platform"] }
 iana-time-zone = "0.1"
 
+[target.'cfg(windows)'.dependencies]
+# Windows' own programs started by their full path (a copy of apps/quatrelle's windows_programs.rs).
+winsafe = { version = "0.0.29", default-features = false, features = ["kernel"] }
+
 [dev-dependencies]
 # The fake Graph server, for `teams check`'s test.
 quatrelle-net = { workspace = true, features = ["fakes"] }

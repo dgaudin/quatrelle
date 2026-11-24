@@ -69,14 +69,22 @@ fn failed_checks_back_off_up_to_the_hour() {
 #[test]
 fn the_version_just_installed_isnt_offered_again_for_a_day() {
     let dir = scratch("marker");
-    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000));
+    let (old, new) = ("0.21.0 1111111", "0.21.0 2222222");
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000, new));
+    // Written by the build that installed it; read by the new one.
+    std::fs::write(dir.join(MARKER), format!("v0.21.0-test.19\n1000000\n{old}\n")).unwrap();
+    assert!(just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600, new));
+    assert!(!just_installed(&dir, "v0.21.0-test.20", 1_000_000 + 3600, new), "another version is offered");
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000 + JUST_INSTALLED_FOR, new), "a day later it may be again");
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 999_000, new), "a clock gone back proves nothing");
+    // Read by the build that wrote it, still running: the install didn't take (refused, failed,
+    // or put off while Quatrelle still ran), and the version is offered again.
+    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600, old));
+    // A marker from before it named its build holds as it did.
     std::fs::write(dir.join(MARKER), "v0.21.0-test.19\n1000000\n").unwrap();
-    assert!(just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600));
-    assert!(!just_installed(&dir, "v0.21.0-test.20", 1_000_000 + 3600), "another version is offered");
-    assert!(!just_installed(&dir, "v0.21.0-test.19", 1_000_000 + JUST_INSTALLED_FOR), "a day later it may be again");
-    assert!(!just_installed(&dir, "v0.21.0-test.19", 999_000), "a clock gone back proves nothing");
+    assert!(just_installed(&dir, "v0.21.0-test.19", 1_000_000 + 3600, old));
     std::fs::write(dir.join(MARKER), "junk").unwrap();
-    assert!(!just_installed(&dir, "junk", 1_000_000));
+    assert!(!just_installed(&dir, "junk", 1_000_000, new));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -206,9 +214,40 @@ fn a_busy_disk_image_is_attached_again() {
         let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default());
         std::process::Command::new("sh").arg("-c").arg(mac_step(&dmg, &app)).env("PATH", path).env("REFUSE", refuse).status().unwrap();
         assert_eq!(std::fs::read_to_string(app.join("v")).unwrap().trim(), want, "refused {refuse} times");
+        assert_eq!(dmg.exists(), want == "old", "refused {refuse} times: the download is kept only when it wasn't used");
         let attempts = std::fs::read_to_string(&tries).unwrap().lines().count();
         assert_eq!(attempts, if refuse == "2" { 3 } else { 7 }, "refused {refuse} times");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A portable zip that can't be unpacked changes nothing and stays, to be tried again from (the
+/// check takes a file already there and right as it is, rather than downloading it again); one
+/// that unpacks is put in place and goes.
+#[cfg(windows)]
+#[test]
+fn a_damaged_portable_zip_is_kept() {
+    let dir = scratch("zip-damaged");
+    let app = dir.join("Quatrelle");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("quatrelle.exe"), b"old").unwrap();
+    let ps =
+        |script: &str| std::process::Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", script]).status().unwrap();
+    let bad = dir.join("bad.zip");
+    std::fs::write(&bad, b"not a zip").unwrap();
+    ps(&portable_step(&bad, &app));
+    assert_eq!(std::fs::read(app.join("quatrelle.exe")).unwrap(), b"old");
+    assert!(bad.is_file(), "kept, to be tried again");
+    assert!(!app.join(".quatrelle-update").exists());
+    let top = dir.join("pack").join("quatrelle-0.40.0-windows-x64");
+    std::fs::create_dir_all(&top).unwrap();
+    std::fs::write(top.join("quatrelle.exe"), b"new").unwrap();
+    let good = dir.join("good.zip");
+    let q = |p: &std::path::Path| ps_quote(&p.display().to_string());
+    assert!(ps(&format!("Compress-Archive -Path {} -DestinationPath {}", q(&top), q(&good))).success());
+    ps(&portable_step(&good, &app));
+    assert_eq!(std::fs::read(app.join("quatrelle.exe")).unwrap(), b"new");
+    assert!(!good.exists(), "installed: the download goes");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -238,11 +277,45 @@ fn the_install_kind_follows_where_quatrelle_is() {
         let dir = scratch("appimage");
         let image = dir.join("Quatrelle-x86_64.AppImage");
         std::fs::write(&image, b"").unwrap();
-        let found = image.clone();
-        let env = move |k: &str| (k == "APPIMAGE").then(|| found.clone());
-        assert_eq!(detect_at(Path::new("/tmp/.mount_x/usr/bin/quatrelle"), &env), Some(Kind::AppImage(image)));
-        let env = |k: &str| (k == "APPIMAGE").then(|| PathBuf::from("/proc/version"));
-        assert_eq!(detect_at(Path::new("/tmp/.mount_x/usr/bin/quatrelle"), &env), None, "a folder it can't write");
+        // Where the image is mounted, as the AppImage runtime says (`APPDIR`).
+        let mount = dir.join("mount");
+        std::fs::create_dir_all(mount.join("usr/bin")).unwrap();
+        // As the AppImage runtime's APPDIR is canonicalized before it's compared: a TMPDIR
+        // reached through a link must not make this test fail for the code's sake.
+        let mount = mount.canonicalize().unwrap();
+        let exe = mount.join("usr/bin/quatrelle");
+        let (image_at, mount_at) = (image.clone(), mount.clone());
+        let own = move |k: &str| match k {
+            "APPIMAGE" => Some(image_at.clone()),
+            "APPDIR" => Some(mount_at.clone()),
+            _ => None,
+        };
+        assert_eq!(detect_at(&exe, &own), Some(Kind::AppImage(image.clone())));
+        // Another program's AppImage, passed on to the Quatrelle it started (a browser's
+        // mailto: link): never taken for Quatrelle's, this copy isn't updated over it.
+        let browser = dir.join("Browser.AppImage");
+        std::fs::write(&browser, b"").unwrap();
+        for (exe_at, appdir) in [
+            (Path::new("/usr/bin/quatrelle"), Some(mount.clone())),
+            (exe.as_path(), None),
+            (exe.as_path(), Some(PathBuf::from("/"))),
+            (exe.as_path(), Some(PathBuf::from("tmp/x"))),
+        ] {
+            let (browser_at, appdir_at) = (browser.clone(), appdir.clone());
+            let env = move |k: &str| match k {
+                "APPIMAGE" => Some(browser_at.clone()),
+                "APPDIR" => appdir_at.clone(),
+                _ => None,
+            };
+            assert_eq!(detect_at(exe_at, &env), None, "{appdir:?}");
+        }
+        let mount_at = mount.clone();
+        let env = move |k: &str| match k {
+            "APPIMAGE" => Some(PathBuf::from("/proc/version")),
+            "APPDIR" => Some(mount_at.clone()),
+            _ => None,
+        };
+        assert_eq!(detect_at(&exe, &env), None, "a folder it can't write");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
@@ -251,7 +324,13 @@ fn the_install_kind_follows_where_quatrelle_is() {
 #[test]
 fn the_window_sees_where_the_update_is() {
     let dir = scratch("state");
-    let u = Updater { kind: Kind::Msi(PathBuf::from(r"C:\Program Files\Quatrelle\quatrelle.exe")), data: dir.clone(), shared: Arc::default() };
+    let u = Updater {
+        kind: Kind::Msi(PathBuf::from(r"C:\Program Files\Quatrelle\quatrelle.exe")),
+        data: dir.clone(),
+        version: "0.21.0".into(),
+        build_sha: Some("aaaa".into()),
+        shared: Arc::default(),
+    };
     assert_eq!(u.state(), UpdateState::None);
     assert!(!u.restart_after_close(), "nothing to restart into");
     // Each change wakes the window, which an idle or minimized one needs to see it.
@@ -267,7 +346,13 @@ fn the_window_sees_where_the_update_is() {
     assert_eq!(u.state(), UpdateState::Downloading { version: "0.25.0-test.22".into(), done: 10, total: 40 });
     u.set_status(Status::Ready { tag: "v0.25.0-test.22".into(), file: dir.join("x.msi") });
     assert_eq!(u.state(), UpdateState::Ready { version: "0.25.0-test.22".into(), admin: true }, "the MSI asks for an administrator");
-    let portable = Updater { kind: Kind::Portable(PathBuf::from("m.exe")), data: dir.clone(), shared: Arc::default() };
+    let portable = Updater {
+        kind: Kind::Portable(PathBuf::from("m.exe")),
+        data: dir.clone(),
+        version: "0.21.0".into(),
+        build_sha: Some("bbbb".into()),
+        shared: Arc::default(),
+    };
     portable.set_status(Status::Ready { tag: "v0.25.0-test.22".into(), file: dir.join("x.zip") });
     assert_eq!(portable.state(), UpdateState::Ready { version: "0.25.0-test.22".into(), admin: false });
     // Closing without updating: nothing is started.

@@ -46,18 +46,41 @@ use quatrelle_net::worker::{MemoryCredentials, Pool};
 use serde_json::{Value, json};
 
 mod teams;
+#[cfg(windows)]
+mod windows_program;
 
 // Output that a closed pipe can't turn into a panic (`quatrelle-cli list | head` closes it
 // early; `println!` panicked there).
+// What's printed is made printable first (`printable`): a subject, a sender, a folder's name or
+// a server's error can't drive the terminal.
 macro_rules! outln {
     ($($t:tt)*) => {{
-        let _ = writeln!(std::io::stdout(), $($t)*);
+        let _ = writeln!(std::io::stdout(), "{}", crate::printable(&format!($($t)*)));
     }};
 }
 macro_rules! errln {
     ($($t:tt)*) => {{
-        let _ = writeln!(std::io::stderr(), $($t)*);
+        let _ = writeln!(std::io::stderr(), "{}", crate::printable(&format!($($t)*)));
     }};
+}
+
+/// `text` as it's shown in a terminal: a control character in it (an escape, a lone carriage
+/// return, one of C1's) written as its escape (`\\u{1b}`), so mail and what a server says can't
+/// move the cursor, change the colours, retitle the window or rewrite a line that was printed
+/// (a subject is a header anyone sends, and its encoded words decode to any character). Line
+/// ends and tabs stay. The log does it too.
+pub(crate) fn printable(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let kept = !c.is_control() || matches!(c, '\n' | '\t') || (c == '\r' && chars.peek() == Some(&'\n'));
+        if kept {
+            out.push(c);
+        } else {
+            out.extend(c.escape_default());
+        }
+    }
+    out
 }
 
 struct Args {
@@ -106,7 +129,7 @@ fn password(prompt_for: &str) -> Result<String, String> {
     {
         return Ok(p);
     }
-    let _ = write!(std::io::stderr(), "Password for {prompt_for}: ");
+    let _ = write!(std::io::stderr(), "{}", printable(&format!("Password for {prompt_for}: ")));
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     std::io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
@@ -419,7 +442,7 @@ fn run() -> Result<(), String> {
             if let Some(e) = r["error"].as_str() {
                 return Err(e.to_string());
             }
-            let _ = write!(std::io::stdout(), "{}", r["text"].as_str().unwrap_or(""));
+            let _ = write!(std::io::stdout(), "{}", printable(r["text"].as_str().unwrap_or("")));
             if r["truncated"].as_bool() == Some(true) {
                 errln!("(only the start of {} bytes is shown)", r["size"]);
             }
@@ -617,6 +640,19 @@ mod tests {
     use super::*;
     use quatrelle_engine::model::job::Op;
     use quatrelle_engine::model::{Flag, MessageKey};
+
+    /// What's printed can't drive the terminal: an escape (colours, the window's title, clearing
+    /// the screen), a bell, a lone carriage return (which rewrote the start of a From line) and
+    /// C1's one-byte escape are shown as escapes; text, line ends (CRLF too) and tabs as they are.
+    #[test]
+    fn printed_text_cant_drive_the_terminal() {
+        assert_eq!(printable("Re: Quarterly figures, 2026 \u{2014} Zoë"), "Re: Quarterly figures, 2026 \u{2014} Zoë");
+        assert_eq!(printable("one\ntwo\r\nthree\tfour"), "one\ntwo\r\nthree\tfour");
+        assert_eq!(printable("\u{1b}]0;pwned\u{7}\u{1b}[31mred"), "\\u{1b}]0;pwned\\u{7}\\u{1b}[31mred");
+        assert_eq!(printable("Riley\rSpoofed"), "Riley\\rSpoofed");
+        assert_eq!(printable("a\u{9b}2Jb\u{7f}c\0d"), "a\\u{9b}2Jb\\u{7f}c\\u{0}d");
+        assert_eq!(printable("ends with\r"), "ends with\\r");
+    }
 
     /// A calendar's discovery stopped at another site says so, as a connection stopped there does.
     #[test]

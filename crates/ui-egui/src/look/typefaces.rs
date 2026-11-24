@@ -98,12 +98,46 @@ pub(crate) fn load(ctx: &egui::Context, services: &mut dyn crate::Services, name
 /// does here, and stops at the next frame on anything else.
 pub(crate) fn readable(what: &str, bytes: &[u8], index: u32) -> bool {
     match skrifa::FontRef::from_index(bytes, index) {
-        Ok(_) => true,
+        Ok(_) if face_readable(bytes, index) => true,
+        Ok(_) => {
+            log::warn!("{what}: a table is missing from the file, left out");
+            false
+        }
         Err(e) => {
             log::warn!("{what}: not a font Quatrelle can draw with ({e}), left out");
             false
         }
     }
+}
+
+/// Whether face `index` of `bytes` is whole: every table its directory lists is in the file
+/// (skrifa reads them only as they're used, so a file cut short parsed, and its letters drew as
+/// nothing).
+fn face_readable(bytes: &[u8], index: u32) -> bool {
+    let Ok(font) = skrifa::FontRef::from_index(bytes, index) else { return false };
+    font.table_directory.table_records().iter().all(|r| font.table_data(r.tag()).is_some())
+}
+
+/// The largest system font file read: a CJK collection is about 20 MB, Windows' largest about 40.
+const SYSTEM_FONT_MAX: u64 = 96 << 20;
+
+/// The first of `candidates` (a file, and the face in it) that can be read whole and has that
+/// face as egui reads it. A file that's empty, cut short, too large or not a font, or a collection
+/// without the face, is passed over for the next one: taken as it was, egui stopped Quatrelle as
+/// it started, every time.
+pub fn first_readable(candidates: impl IntoIterator<Item = (std::path::PathBuf, u32)>) -> Option<(Vec<u8>, u32)> {
+    candidates.into_iter().find_map(|(path, index)| {
+        if std::fs::metadata(&path).ok()?.len() > SYSTEM_FONT_MAX {
+            log::warn!("fonts: {} is too large to be a font", path.display());
+            return None;
+        }
+        let bytes = std::fs::read(&path).ok()?;
+        if !face_readable(&bytes, index) {
+            log::warn!("fonts: {} isn't a font Quatrelle can read whole (face {index}); another is used", path.display());
+            return None;
+        }
+        Some((bytes, index))
+    })
 }
 
 /// The usual fonts were installed anew (the desktop's font changed): what was loaded went with
@@ -183,5 +217,72 @@ mod tests {
             }
         });
         out.textures_delta.clear();
+    }
+
+    /// A system font file that's empty, cut short, too large or not a font is passed over for the
+    /// next candidate: taken as it was, egui stopped Quatrelle as it started, every time.
+    #[test]
+    fn a_damaged_system_font_is_passed_over() {
+        let dir = std::env::temp_dir().join(format!("quatrelle-fonts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = sfnt(&[(b"head", &[0u8; 54])]);
+        let file = |name: &str, bytes: &[u8]| {
+            let p = dir.join(name);
+            std::fs::write(&p, bytes).unwrap();
+            p
+        };
+        let empty = file("empty.ttf", b"");
+        let junk = file("junk.ttf", b"<html>not found</html>");
+        // Past the directory (28 bytes) but before the table's end: it parses, its table doesn't.
+        let cut = file("cut.ttf", &good[..40]);
+        let font = file("good.ttf", &good);
+        let missing = dir.join("missing.ttf");
+        let big = file("big.ttf", b"");
+        std::fs::File::options().write(true).open(&big).unwrap().set_len(SYSTEM_FONT_MAX + 1).unwrap();
+        let candidates = [(missing, 0), (empty, 0), (junk, 0), (cut, 0), (big, 0), (font.clone(), 1), (font, 0)];
+        let (bytes, index) = first_readable(candidates).expect("the good one");
+        assert_eq!((bytes.as_slice(), index), (good.as_slice(), 0), "face 1 isn't in it either");
+        assert!(first_readable([(dir.join("empty.ttf"), 0)]).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A font file cut short parses (its directory is whole) but isn't readable: its tables are
+    /// past the end. Taken before, its letters drew as nothing.
+    #[test]
+    fn a_cut_short_font_is_not_readable() {
+        let good = sfnt(&[(b"head", &[0u8; 54])]);
+        assert!(readable("test", &good, 0));
+        assert!(!readable("test", &good[..40], 0), "cut short");
+        assert!(!readable("test", b"", 0));
+        assert!(!readable("test", b"not a font at all", 0));
+    }
+
+    /// A font file of `tables` (tag, data), sorted by tag as the format asks, each on a four-byte
+    /// boundary.
+    fn sfnt(tables: &[(&[u8; 4], &[u8])]) -> Vec<u8> {
+        let mut tables: Vec<(&[u8; 4], &[u8])> = tables.to_vec();
+        tables.sort_by_key(|t| t.0);
+        let count = u16::try_from(tables.len()).unwrap_or(0);
+        let power = if count == 0 { 0 } else { 1u16 << (15 - count.leading_zeros()) };
+        let search = power * 16;
+        let mut out = Vec::new();
+        out.extend_from_slice(&0x0001_0000u32.to_be_bytes());
+        out.extend_from_slice(&count.to_be_bytes());
+        out.extend_from_slice(&search.to_be_bytes());
+        out.extend_from_slice(&u16::try_from(power.max(1).trailing_zeros()).unwrap_or(0).to_be_bytes());
+        out.extend_from_slice(&(count * 16).wrapping_sub(search).to_be_bytes());
+        let mut offset = 12 + 16 * usize::from(count);
+        for (tag, data) in &tables {
+            out.extend_from_slice(tag.as_slice());
+            out.extend_from_slice(&0u32.to_be_bytes());
+            out.extend_from_slice(&u32::try_from(offset).unwrap_or(0).to_be_bytes());
+            out.extend_from_slice(&u32::try_from(data.len()).unwrap_or(0).to_be_bytes());
+            offset += data.len().next_multiple_of(4);
+        }
+        for (_, data) in &tables {
+            out.extend_from_slice(data);
+            out.resize(out.len().next_multiple_of(4), 0);
+        }
+        out
     }
 }

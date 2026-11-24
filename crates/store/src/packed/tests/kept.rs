@@ -305,3 +305,54 @@ fn a_read_without_a_cap_reads_past_any_cap() {
     drop(s);
     let _ = std::fs::remove_dir_all(t);
 }
+
+/// Messages (hostile: a server sends what it likes) that start with the data file's own markers,
+/// short and long, compressible or not, whole and big enough for pieces.
+fn marked() -> Vec<Vec<u8>> {
+    use super::super::{DEFLATED, PIECED};
+    let big = super::super::WHOLE_MAX * 3;
+    let note = |len: u64, rest: &[u8]| [PIECED, &len.to_le_bytes(), rest].concat();
+    vec![
+        DEFLATED.to_vec(),
+        PIECED.to_vec(),
+        [DEFLATED, b"hello"].concat(),
+        [DEFLATED, &noise(5_000, 1)].concat(),
+        [DEFLATED, "Subject: a\r\n\r\nwords words words ".repeat(200).as_bytes()].concat(),
+        [DEFLATED, &noise(big, 2)].concat(),
+        note(0, b"read as nothing at all"),
+        note(5_000, b"read as a file whose pieces are gone"),
+        note(7, &noise(5_000, 3)),
+        [PIECED, &noise(big, 4)].concat(),
+        [PIECED, "Subject: b\r\n\r\nwords words words ".repeat(20_000).as_bytes()].concat(),
+        b"\0".to_vec(),
+        b"\0Quatrelle:pie".to_vec(),
+    ]
+}
+
+/// Every such message reads back as it came, written one at a time or in a batch; and the data
+/// file still compacts, and they still read back.
+#[test]
+fn a_message_starting_with_the_data_files_markers_reads_back_as_it_came() {
+    use std::sync::atomic::AtomicBool;
+    let t = temp("kept-marked");
+    let s = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+    let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let sources = marked();
+    for (i, src) in sources.iter().enumerate() {
+        s.write_body(&key(i as u32 + 1), src).unwrap();
+    }
+    s.write_bodies(&sources.iter().enumerate().map(|(i, src)| (key(i as u32 + 101), src.clone())).collect::<Vec<_>>()).unwrap();
+    let check = |s: &Store, when: &str| {
+        for (i, src) in sources.iter().enumerate() {
+            for uid in [i as u32 + 1, i as u32 + 101] {
+                assert_eq!(s.load_body(&key(uid)).unwrap().as_ref(), Some(src), "{when}: source {i}, uid {uid}");
+            }
+        }
+    };
+    check(&s, "written");
+    s.recompress_data_file("a1", &AtomicBool::new(false), &mut |_| {}).unwrap().unwrap();
+    check(&s, "compressed again");
+    drop(s);
+    let _ = std::fs::remove_dir_all(t);
+}

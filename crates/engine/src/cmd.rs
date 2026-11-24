@@ -198,6 +198,38 @@ pub(crate) fn read_capped(path: &str, max: u64) -> Result<Vec<u8>, CmdError> {
     Ok(bytes)
 }
 
+/// The size of the file at `path`, refused when it isn't a plain file: a device (`/dev/zero`)
+/// reads forever and a pipe blocks on opening, whatever size they report.
+pub(crate) fn plain_file_size(path: &str) -> Result<u64, CmdError> {
+    match std::fs::metadata(path) {
+        Err(e) => Err(CmdError::Failed(format!("{path}: {e}"))),
+        Ok(m) if !m.is_file() => Err(CmdError::Params(format!("{path} isn't a file"))),
+        Ok(m) => Ok(m.len()),
+    }
+}
+
+/// The file at `path` opened to read (after [`plain_file_size`]).
+pub(crate) fn open_file(path: &str) -> Result<std::fs::File, CmdError> {
+    std::fs::File::open(path).map_err(|e| CmdError::Failed(format!("{path}: {e}")))
+}
+
+/// The rest of `f` after `bytes`, refused with `too_big` once there's more than `max` in all.
+pub(crate) fn read_more(
+    path: &str,
+    f: impl std::io::Read,
+    mut bytes: Vec<u8>,
+    max: u64,
+    too_big: impl Fn() -> CmdError,
+) -> Result<Vec<u8>, CmdError> {
+    use std::io::Read;
+    let room = max.saturating_add(1).saturating_sub(bytes.len() as u64);
+    f.take(room).read_to_end(&mut bytes).map_err(|e| CmdError::Failed(format!("{path}: {e}")))?;
+    if bytes.len() as u64 > max {
+        return Err(too_big());
+    }
+    Ok(bytes)
+}
+
 fn compose_replace_text(s: &mut Session, v: &Value) -> CmdResult {
     let from = p::i64(v, "from").ok_or_else(|| CmdError::Params("`from` is required".into()))?;
     let to = p::i64(v, "to").ok_or_else(|| CmdError::Params("`to` is required".into()))?;

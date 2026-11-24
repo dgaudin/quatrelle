@@ -13,4 +13,5 @@ pub(crate) mod people_field;
 pub mod theme;
 pub(crate) mod thumbs;
 pub(crate) mod typefaces;
+pub use typefaces::first_readable;
 pub(crate) mod widgets;

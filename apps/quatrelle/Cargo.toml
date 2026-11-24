@@ -67,7 +67,7 @@ tray-icon = { version = "0.26.1", default-features = false }
 # (`desktop/window_frame.rs`): winit's own shadow off as the window is made (`main.rs`), and
 # winsafe's safe wrappers over Win32, only the parts it calls.
 winit = { version = "0.30", default-features = false }
-winsafe = { version = "0.0.29", default-features = false, features = ["dwm", "user"] }
+winsafe = { version = "0.0.29", default-features = false, features = ["dwm", "kernel", "user"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
