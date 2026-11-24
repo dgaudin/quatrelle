@@ -101,7 +101,7 @@ pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &P
     // Where the collections live (looked up once; again a day after finding none, or at once
     // when the site the last look stopped at has been allowed since).
     let allowed = pim.dav_untrusted.as_deref().is_some_and(|s| dav.trust.allows(s));
-    let retry = allowed || pim.dav_checked.is_none_or(|t| now - t > 86_400);
+    let retry = allowed || pim.dav_checked.is_none_or(|t| now.saturating_sub(t) > 86_400);
     // A look that stops at a site the account doesn't trust finds nothing, as one that finds no
     // server does, and is noted (to ask about); the other kind, and what has a home, sync all the
     // same.
@@ -158,7 +158,7 @@ pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &P
             master.href.clone()
         };
         let events: Vec<CalEvent> = parts.iter().map(|e| e.event.clone()).collect();
-        let data = ical::write(&events, None, now);
+        let data = ical::write_for_server(&events, now);
         let etag = (!master.href.is_empty()).then_some(master.etag.as_str());
         match dav.put(&url, "text/calendar; charset=utf-8", &data, etag) {
             Ok(new) => {

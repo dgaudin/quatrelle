@@ -19,7 +19,7 @@ pub fn reminder_minutes(e: &CalEvent) -> Option<i64> {
         return Some(m.clamp(0, REMINDER_MAX_MINUTES));
     }
     let mut in_alarm = false;
-    for raw in e.extra.iter().take(400) {
+    for raw in &e.extra {
         let line = raw.trim();
         let upper = line.to_ascii_uppercase();
         if upper == "BEGIN:VALARM" {
@@ -99,7 +99,6 @@ pub(super) fn alarm_lines(e: &CalEvent) -> Vec<String> {
 pub(super) fn acknowledged_in(lines: &[String]) -> Option<i64> {
     lines
         .iter()
-        .take(400)
         .filter_map(|raw| {
             let line = raw.trim();
             let named = line.get(..13).is_some_and(|n| n.eq_ignore_ascii_case("ACKNOWLEDGED:") || n.eq_ignore_ascii_case("ACKNOWLEDGED;"));
@@ -117,7 +116,7 @@ pub(super) fn acknowledged_in(lines: &[String]) -> Option<i64> {
 pub fn acknowledged(e: &CalEvent) -> Option<i64> {
     let mut in_alarm: Option<Vec<String>> = None;
     let mut latest = e.acknowledged;
-    for raw in e.extra.iter().take(400) {
+    for raw in &e.extra {
         let upper = raw.trim().to_ascii_uppercase();
         if upper == "BEGIN:VALARM" {
             in_alarm = Some(Vec::new());

@@ -286,13 +286,15 @@ fn events_digest(events: &[StoredEvent]) -> u64 {
 /// not by a pass through them all.
 fn merge_events(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
     type Key<'a> = (&'a str, Option<i64>);
+    // The events the server sent, each under the uid kept here for it (see `as_kept`).
+    let events = as_kept(&p.events, &sync.events);
     let synced: HashSet<&str> = sync.synced_calendars.iter().map(String::as_str).collect();
     let kept: HashSet<&str> = sync.kept.iter().map(String::as_str).collect();
     // Deleted here, the server not told yet (a sync read it before it went): it stays deleted.
     let deleting: HashSet<&str> = p.deleted.iter().map(|t| t.href.as_str()).filter(|h| !h.is_empty()).collect();
     // Read again (a whole calendar read): weighed against what came below, rather than taken out
     // and put back.
-    let read: HashSet<Key<'_>> = sync.events.iter().filter(|x| !x.href.is_empty()).map(|x| (x.href.as_str(), x.event.recurrence_id)).collect();
+    let read: HashSet<Key<'_>> = events.iter().filter(|x| !x.href.is_empty()).map(|x| (x.href.as_str(), x.event.recurrence_id)).collect();
     p.events.retain(|e| {
         !synced.contains(e.calendar.as_str())
             || e.dirty
@@ -324,7 +326,7 @@ fn merge_events(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
         let mut add: Vec<Option<&StoredEvent>> = Vec::new();
         let mut added_href: HashMap<Key<'_>, usize> = HashMap::new();
         let mut added_unsent: HashMap<Key<'_>, usize> = HashMap::new();
-        for x in sync.events.iter().filter(|x| synced.contains(x.calendar.as_str()) && !deleting.contains(x.href.as_str())) {
+        for x in events.iter().filter(|x| synced.contains(x.calendar.as_str()) && !deleting.contains(x.href.as_str())) {
             if edited_href.contains(x.href.as_str()) || edited_uid.contains(x.event.uid.as_str()) {
                 continue;
             }
@@ -418,4 +420,32 @@ fn merge_cards(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
         !gone.contains(&(i - 1))
     });
     p.cards.extend(add);
+}
+
+/// The events a server sent, each under the uid kept here for it. A meeting's uid is kept as
+/// its organizer wrote it, and a server stores it without the characters a line can't hold
+/// (`ical::stored_uid`): its copy is that meeting's, not another one beside it, and an answer
+/// still names the uid the organizer looks for. The local events are keyed by where they live
+/// on the server (calendar and href), so only that resource's copy is renamed — another
+/// resource holding the same stored uid, a real meeting beside an invitation to it, keeps
+/// its own. Nearly always the server's, as they are.
+fn as_kept<'a>(here: &[StoredEvent], server: &'a [StoredEvent]) -> std::borrow::Cow<'a, [StoredEvent]> {
+    let odd = |uid: &str| uid.contains(|c| !quatrelle_model::ical::allowed(c));
+    let kept: HashMap<(&str, &str), &str> = here
+        .iter()
+        .filter(|e| !e.href.is_empty() && odd(&e.event.uid))
+        .map(|e| ((e.calendar.as_str(), e.href.as_str()), e.event.uid.as_str()))
+        .collect();
+    if kept.is_empty() {
+        return std::borrow::Cow::Borrowed(server);
+    }
+    let mut server = server.to_vec();
+    for e in &mut server {
+        if let Some(uid) = kept.get(&(e.calendar.as_str(), e.href.as_str()))
+            && e.event.uid == quatrelle_model::ical::stored_uid(uid)
+        {
+            e.event.uid = (*uid).to_string();
+        }
+    }
+    std::borrow::Cow::Owned(server)
 }

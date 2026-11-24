@@ -76,7 +76,7 @@ impl ShowAs {
 /// What the organizer meant the time to show as for a guest who accepts
 /// (`X-MICROSOFT-CDO-INTENDEDSTATUS`): the first such line among the extra lines that reads.
 pub fn intended_show_as(e: &CalEvent) -> Option<ShowAs> {
-    e.extra.iter().take(400).find_map(|l| {
+    e.extra.iter().find_map(|l| {
         let (head, value) = l.split_once(':')?;
         let name = head.split(';').next().unwrap_or("").trim();
         if !name.eq_ignore_ascii_case("X-MICROSOFT-CDO-INTENDEDSTATUS") {

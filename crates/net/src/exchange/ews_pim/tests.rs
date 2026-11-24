@@ -26,6 +26,50 @@ fn recurrences_both_ways() {
     assert!(junk.find("Recurrence").and_then(recurrence_json).is_some(), "a bad number falls back");
 }
 
+/// A relative pattern whose `DaysOfWeek` EWS names by one word (`Day`, `Weekday`, `WeekendDay` —
+/// there it is a single value, not a list) is read as the set of days it stands for, and written
+/// back as that word; and a relative pattern with no day at all keeps at least its first
+/// occurrence (it was read as `BYDAY=;BYSETPOS=2`, which matches nothing, and the series
+/// disappeared).
+#[test]
+fn a_relative_pattern_ews_names_as_one_word_is_a_set_of_days() {
+    let at = |s: &str| quatrelle_jmap::utc_date(s).unwrap();
+    let item = |days: &str, index: &str| {
+        format!(
+            "<t:CalendarItem><t:ItemId Id=\"S1\"/><t:Subject>Pay</t:Subject>\
+             <t:Start>2026-11-03T09:00:00Z</t:Start><t:End>2026-11-03T10:00:00Z</t:End><t:IsAllDayEvent>false</t:IsAllDayEvent>\
+             <t:CalendarItemType>RecurringMaster</t:CalendarItemType><t:UID>pay</t:UID>\
+             <t:Recurrence><t:RelativeMonthlyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>{days}</t:DaysOfWeek><t:DayOfWeekIndex>{index}</t:DayOfWeekIndex></t:RelativeMonthlyRecurrence>\
+             <t:NoEndRecurrence><t:StartDate>2026-11-03</t:StartDate></t:NoEndRecurrence></t:Recurrence></t:CalendarItem>"
+        )
+    };
+    let read = |days: &str, index: &str| event_of(parse(&item(days, index)).find("CalendarItem").unwrap()).unwrap();
+    // "Weekday", the second: BYDAY=MO,TU,WE,TH,FR;BYSETPOS=2, and from Tuesday 3/11/2026 9 h the
+    // 3/11, the 2/12 and the 4/1/2027.
+    let e = read("Weekday", "Second");
+    assert_eq!(e.rrule.as_deref(), Some("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=2"), "{:?}", e.rrule);
+    assert_eq!(
+        quatrelle_model::ical::starts(&e, at("2027-02-01T00:00:00Z")).into_iter().take(3).collect::<Vec<_>>(),
+        [at("2026-11-03T09:00:00Z"), at("2026-12-02T09:00:00Z"), at("2027-01-04T09:00:00Z")]
+    );
+    // No day at all: the series keeps at least its first occurrence.
+    let e = read("", "Second");
+    assert!(!quatrelle_model::ical::starts(&e, at("2027-02-01T00:00:00Z")).is_empty(), "{:?}", e.rrule);
+    // Each set is written back as EWS's one word, and reads back as the same rule.
+    for (word, rule) in [
+        ("Day", "FREQ=MONTHLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYSETPOS=2"),
+        ("Weekday", "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=2"),
+        ("WeekendDay", "FREQ=MONTHLY;BYDAY=SA,SU;BYSETPOS=2"),
+    ] {
+        let e = read(word, "Second");
+        assert_eq!(e.rrule.as_deref(), Some(rule), "{word}");
+        let xml = recurrence_xml(e.rrule.as_deref().unwrap(), at("2026-11-03T09:00:00Z")).unwrap();
+        assert!(xml.contains(&format!("<t:DaysOfWeek>{word}</t:DaysOfWeek>")), "{word}: {xml}");
+        let back = parse(&xml).find("Recurrence").and_then(recurrence_json).as_ref().and_then(rrule_of).unwrap();
+        assert_eq!(back, rule, "{word}: {xml}");
+    }
+}
+
 /// A rule from a calendar file, with an end that is no date: no end is sent, and nothing of the
 /// rule's own text reaches the request.
 #[test]
@@ -652,4 +696,14 @@ fn a_shortcuts_name_and_group_are_bounded() {
     assert_eq!(shortcuts.len(), 1);
     assert!(shortcuts[0].1.chars().count() <= 255, "{} characters in a name", shortcuts[0].1.chars().count());
     assert!(shortcuts[0].2.chars().count() <= 255, "{} characters in a group", shortcuts[0].2.chars().count());
+}
+
+/// A weekly pattern's `FirstDayOfWeek` is read: every other Saturday and Sunday, weeks counted
+/// from Sunday, goes as `WKST=SU`.
+#[test]
+fn a_weekly_patterns_first_day_of_week_is_read() {
+    let xml = "<t:Recurrence><t:WeeklyRecurrence><t:Interval>2</t:Interval><t:DaysOfWeek>Saturday Sunday</t:DaysOfWeek><t:FirstDayOfWeek>Sunday</t:FirstDayOfWeek></t:WeeklyRecurrence><t:NoEndRecurrence><t:StartDate>2026-10-03</t:StartDate></t:NoEndRecurrence></t:Recurrence>";
+    let el = parse(xml);
+    let back = el.find("Recurrence").and_then(recurrence_json).as_ref().and_then(rrule_of).unwrap();
+    assert_eq!(back, "FREQ=WEEKLY;BYDAY=SA,SU;WKST=SU;INTERVAL=2", "{back}");
 }

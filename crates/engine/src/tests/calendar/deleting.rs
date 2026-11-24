@@ -14,13 +14,13 @@ use super::*;
 
 /// The kind of server the account's calendar is on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Server {
+pub(super) enum Server {
     Ews,
     Graph,
     CalDav,
 }
 
-const DAV_CALENDAR: &str = "https://dav.example.org/cal/work/";
+pub(super) const DAV_CALENDAR: &str = "https://dav.example.org/cal/work/";
 
 impl Server {
     /// The account's main calendar, as its sync names it.
@@ -55,7 +55,7 @@ impl Server {
 }
 
 /// An account on `server`, its calendar read once (empty): where new appointments go.
-fn session(name: &str, server: Server) -> (Session, String) {
+pub(super) fn session(name: &str, server: Server) -> (Session, String) {
     let mut s = Session::open(Some(temp(name)), Clock::new(NOW, 0));
     let add = match server {
         Server::CalDav => json!({"email": "zoe@contoso.example", "password": "pw"}),
@@ -77,7 +77,7 @@ fn session(name: &str, server: Server) -> (Session, String) {
 
 /// A sync's result: the calendar read (up to `state`) with `read` in it, what the sync made on
 /// the server (`made`), and what it deleted there.
-fn result(server: Server, state: &str, read: Vec<StoredEvent>, made: Vec<StoredEvent>, deleted: Vec<String>) -> DavSync {
+pub(super) fn result(server: Server, state: &str, read: Vec<StoredEvent>, made: Vec<StoredEvent>, deleted: Vec<String>) -> DavSync {
     let calendar = server.calendar();
     DavSync {
         caldav_home: Some(server.home().into()),
@@ -98,13 +98,13 @@ fn result(server: Server, state: &str, read: Vec<StoredEvent>, made: Vec<StoredE
 }
 
 /// The account's calendars as saved: what a sync that starts now reads.
-fn as_saved(s: &Session, id: &str) -> Pim {
+pub(super) fn as_saved(s: &Session, id: &str) -> Pim {
     s.store.as_ref().unwrap().load_account_doc(id, PIM_DOC).unwrap()
 }
 
 /// What a sync that read `saved` does: each appointment never sent made on the server, and read
 /// back from the calendar as the server keeps it. (What it made, what it read.)
-fn made(server: Server, saved: &Pim) -> (Vec<StoredEvent>, Vec<StoredEvent>) {
+pub(super) fn made(server: Server, saved: &Pim) -> (Vec<StoredEvent>, Vec<StoredEvent>) {
     let mut made = Vec::new();
     let mut read = Vec::new();
     for e in saved.events.iter().filter(|e| e.dirty && e.href.is_empty() && e.event.recurrence_id.is_none()) {
@@ -118,7 +118,7 @@ fn made(server: Server, saved: &Pim) -> (Vec<StoredEvent>, Vec<StoredEvent>) {
 
 /// What the session asked of the network since it was last looked at: how many syncs of the
 /// account, and the calendars mailed (each one's method).
-fn asked(s: &mut Session, id: &str) -> (usize, Vec<String>) {
+pub(super) fn asked(s: &mut Session, id: &str) -> (usize, Vec<String>) {
     let jobs = s.take_jobs();
     let syncs = jobs.iter().filter(|j| matches!(j, Job::SyncDav { account } if account == id)).count();
     let mailed = jobs

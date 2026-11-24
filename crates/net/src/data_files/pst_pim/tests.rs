@@ -82,6 +82,22 @@ fn recurrence_patterns_become_rules() {
         "FREQ=MONTHLY;INTERVAL=1;BYDAY=-1FR"
     );
     assert_eq!(recurrence(&blob(0x200D, 0x0002, 12, &[5], (0x2023, 0), &[], &[], first), start).unwrap().0, "FREQ=YEARLY;INTERVAL=1");
+    // The last weekday of each month (Outlook's "weekday": Monday to Friday) is one day a month,
+    // not the last of each of the five; the second weekend day likewise.
+    assert_eq!(
+        recurrence(&blob(0x200C, 0x0003, 1, &[0x3E, 5], (0x2023, 0), &[], &[], first), start).unwrap().0,
+        "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"
+    );
+    assert_eq!(
+        recurrence(&blob(0x200C, 0x0003, 1, &[0x41, 2], (0x2023, 0), &[], &[], first), start).unwrap().0,
+        "FREQ=MONTHLY;INTERVAL=1;BYDAY=SU,SA;BYSETPOS=2"
+    );
+    // The 31st of each month is the last day of a month that has none; the 15th is the 15th.
+    assert_eq!(
+        recurrence(&blob(0x200C, 0x0002, 1, &[31], (0x2023, 0), &[], &[], first), start).unwrap().0,
+        "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=28,29,30,31;BYSETPOS=-1"
+    );
+    assert_eq!(recurrence(&blob(0x200C, 0x0002, 1, &[15], (0x2023, 0), &[], &[], first), start).unwrap().0, "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=15");
     // Junk is no rule, and never a crash.
     assert!(recurrence(&[], start).is_none());
     assert!(recurrence(&b[..20], start).is_none());
@@ -89,6 +105,37 @@ fn recurrence_patterns_become_rules() {
     let mut huge = blob(0x200B, 0x0001, 1, &[1], (0x2023, 0), &[], &[], first);
     huge.splice(38..42, u32::MAX.to_le_bytes());
     assert!(recurrence(&huge, start).is_none());
+}
+
+/// A damaged pattern's day of the month, days of the week or which of them is no rule: RFC 5545
+/// has no day 0, no `BYDAY` without a day and no 0th, and Outlook writes a day 1 to 31, days as
+/// the bits 0 to 6 and which of them 1 to 5.
+#[test]
+fn a_damaged_pattern_s_days_are_no_rule() {
+    let first = minutes(2026, 10, 5);
+    let start = days_from_civil(2026, 10, 5) * 86_400 + 7 * 3600;
+    let rule =
+        |frequency, pattern, period, specific: &[u32]| recurrence(&blob(frequency, pattern, period, specific, (0x2023, 0), &[], &[], first), start);
+    for (frequency, pattern, period, specific) in [
+        (0x200B, 0x0001, 1, &[0][..]),
+        (0x200B, 0x0001, 1, &[0x80]),
+        (0x200C, 0x0002, 1, &[0]),
+        (0x200C, 0x0002, 1, &[32]),
+        (0x200C, 0x0002, 1, &[u32::MAX]),
+        (0x200C, 0x0003, 1, &[0b010_0000, 0]),
+        (0x200C, 0x0003, 1, &[0b010_0000, 6]),
+        (0x200C, 0x0003, 1, &[0x3E, 0]),
+        (0x200C, 0x0003, 1, &[0, 2]),
+        (0x200C, 0x0003, 1, &[0x100, 2]),
+        (0x200D, 0x0003, 12, &[0, 2]),
+        (0x200D, 0x0003, 12, &[0b010_0000, 0]),
+    ] {
+        assert_eq!(rule(frequency, pattern, period, specific), None, "{frequency:x} {pattern:x} {specific:?}");
+    }
+    // Each edge that is a day still is one.
+    assert_eq!(rule(0x200C, 0x0002, 1, &[1]).unwrap().0, "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=1");
+    assert_eq!(rule(0x200C, 0x0003, 1, &[0x7F, 1]).unwrap().0, "FREQ=MONTHLY;INTERVAL=1;BYDAY=SU,MO,TU,WE,TH,FR,SA;BYSETPOS=1");
+    assert_eq!(rule(0x200B, 0x0001, 1, &[0b100_0000]).unwrap().0, "FREQ=WEEKLY;INTERVAL=1;BYDAY=SA");
 }
 
 /// A named start or end of a type that is not a time leaves the event without one: it does not

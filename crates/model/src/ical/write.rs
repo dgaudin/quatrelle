@@ -5,10 +5,16 @@
 
 use super::*;
 
-/// Fold a content line at 75 octets (RFC 5545 §3.1), on character boundaries.
+/// Fold a content line at 75 octets (RFC 5545 §3.1), on character boundaries; a character it
+/// may not hold ([`allowed`]) is left out.
 pub(super) fn fold(line: &str, out: &mut String) {
+    fold_chars(line.chars().filter(|c| allowed(*c)), out);
+}
+
+/// Fold a content line of these characters at 75 octets.
+pub(super) fn fold_chars(line: impl Iterator<Item = char>, out: &mut String) {
     let mut width = 0;
-    for c in line.chars() {
+    for c in line {
         let n = c.len_utf8();
         if width + n > 75 {
             out.push_str("\r\n ");
@@ -61,9 +67,14 @@ pub(super) fn trigger(minutes: i64) -> String {
     }
 }
 
-/// One `VEVENT`, folded; `now` is its `DTSTAMP`.
-pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
-    let mut lines: Vec<String> = vec!["BEGIN:VEVENT".into(), format!("UID:{}", e.uid.replace(['\r', '\n'], "")), format!("DTSTAMP:{}", stamp(now))];
+/// One `VEVENT`, folded; `now` is its `DTSTAMP`. `server`: the copy a calendar server keeps,
+/// whose uid is the one a line may hold ([`stored_uid`]).
+pub fn write_event(e: &CalEvent, now: i64, server: bool, out: &mut String) {
+    // The uid of a file's or a message's event is the one it came with, whatever it holds but
+    // line breaks: an organizer finds their meeting by it in an answer. A server's copy has it
+    // as a line may hold it ([`stored_uid`]: servers store it so, or refuse it).
+    let uid = if server { stored_uid(&e.uid) } else { e.uid.replace(['\r', '\n'], "") };
+    let mut lines: Vec<String> = vec!["BEGIN:VEVENT".into(), format!("UID:{uid}"), format!("DTSTAMP:{}", stamp(now))];
     // Timed events in a zone are written in it (repeating at its wall-clock time); others in UTC.
     let zone = zone_of(e);
     let when = |prop: &str, t: i64| match &zone {
@@ -72,7 +83,7 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
     };
     if e.all_day {
         lines.push(format!("DTSTART;VALUE=DATE:{}", day(e.start)));
-        lines.push(format!("DTEND;VALUE=DATE:{}", day(e.end.max(e.start + 86_400))));
+        lines.push(format!("DTEND;VALUE=DATE:{}", day(e.end.max(e.start.saturating_add(86_400)))));
     } else {
         lines.push(when("DTSTART", e.start));
         lines.push(when("DTEND", e.end.max(e.start)));
@@ -123,8 +134,15 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
     let repeated = conference::repeats(e);
     lines.extend(whole(e.extra.iter().enumerate().filter(|(i, _)| !repeated.contains(i)).map(|(_, x)| x), &[]));
     lines.push("END:VEVENT".into());
-    for l in lines {
-        fold(&l, out);
+    fold("BEGIN:VEVENT", out);
+    // A message's uid line is folded without the filter: it echoes what came, as it came.
+    if server {
+        fold(&format!("UID:{uid}"), out)
+    } else {
+        fold_chars(format!("UID:{uid}").chars(), out)
+    }
+    for l in lines.iter().skip(2) {
+        fold(l, out);
     }
 }
 
@@ -132,6 +150,16 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
 /// An invitation is stamped `now`; a stored event keeps the stamp it came with, so the copy on a
 /// server still tells which invitation it was.
 pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
+    write_inner(events, method, now, false)
+}
+
+/// A calendar file with these events as a calendar server takes them: each uid as the server
+/// stores it ([`stored_uid`]), no character a line may not hold.
+pub fn write_for_server(events: &[CalEvent], now: i64) -> String {
+    write_inner(events, None, now, true)
+}
+
+fn write_inner(events: &[CalEvent], method: Option<&str>, now: i64, server: bool) -> String {
     let mut out = String::new();
     for l in ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Quatrelle//Quatrelle//EN", "CALSCALE:GREGORIAN"] {
         fold(l, &mut out);
@@ -172,7 +200,7 @@ pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
             e
         };
         let stamp = if method.is_none() && e.dtstamp > 0 { e.dtstamp } else { now };
-        write_event(e, stamp, &mut out);
+        write_event(e, stamp, server, &mut out);
     }
     fold("END:VCALENDAR", &mut out);
     out

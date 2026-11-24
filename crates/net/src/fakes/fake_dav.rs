@@ -330,6 +330,22 @@ mod tests {
         assert!(back.iter().any(|e| e.event.recurrence_id.is_none() && e.event.rrule.is_some()));
     }
 
+    /// When the servers were last looked for, read from a damaged cache (far off either way), is a
+    /// time like any other: the sync goes ahead, nothing overflows.
+    #[test]
+    fn a_damaged_last_look_is_no_overflow() {
+        let server = serve();
+        let dav = session(&server, PASSWORD);
+        let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)).unwrap().unwrap();
+        let book_home = dav.home_from(Kind::Contacts, &format!("{}/.well-known/carddav", server.base)).unwrap().unwrap();
+        for checked in [i64::MIN, i64::MAX, -1] {
+            let pim =
+                Pim { caldav_home: Some(home.clone()), carddav_home: Some(book_home.clone()), dav_checked: Some(checked), ..Default::default() };
+            let out = sync(&dav, USER, "imap.example", &pim, 100, Zone::UTC).unwrap();
+            assert!(out.errors.is_empty(), "{:?}", out.errors);
+        }
+    }
+
     /// A CONFERENCE the server holds is read; one changed here goes back with each of its two
     /// lines once, the telephone one as it came.
     #[test]
@@ -409,5 +425,34 @@ mod tests {
             let on_server = d.items.values().any(|(_, v)| ical::parse(v, 0).events.iter().any(|e| e.uid == format!("{long}-{uid}")));
             assert!(on_server, "{uid} is on the server");
         }
+    }
+
+    /// An event whose uid holds characters a content line can't: the server's file has the uid a
+    /// line may hold (`ical::stored_uid`), with no control character in it, and the sync's result
+    /// names the uid kept here.
+    #[test]
+    fn an_odd_uid_is_stored_as_a_line_may_hold_it_but_pushed_under_its_own() {
+        let server = serve();
+        let data = server.data.clone();
+        let dav = session(&server, PASSWORD);
+        let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)).unwrap().unwrap();
+        let mut pim = Pim { caldav_home: Some(home), ..Default::default() };
+        pim.ensure_defaults();
+        let first = sync(&dav, USER, "imap.example", &pim, 100, Zone::UTC).unwrap();
+        let cal_id = format!("{}{CAL}", server.base);
+        pim.calendars = first.calendars.clone().unwrap();
+        let odd = "odd\u{1}uid\u{1b}-7@studio.example";
+        pim.events.push(StoredEvent { calendar: cal_id, event: event(odd, "Odd", 1_800_000_000), dirty: true, ..Default::default() });
+        let out = sync(&dav, USER, "imap.example", &pim, 200, Zone::UTC).unwrap();
+        assert!(out.errors.is_empty(), "{:?}", out.errors);
+        assert_eq!(out.pushed_events.len(), 1);
+        assert_eq!(out.pushed_events[0].event.uid, odd, "the result names the uid kept here");
+        let name = out.pushed_events[0].href.rsplit('/').next().unwrap_or_default().to_string();
+        let d = data.lock().unwrap();
+        let (_, file) =
+            d.items.get(&format!("{CAL}{name}")).unwrap_or_else(|| panic!("{name} is on the server: {:?}", d.items.keys().collect::<Vec<_>>()));
+        assert!(file.contains(&format!("UID:{}", ical::stored_uid(odd))), "{file}");
+        assert!(!file.contains(odd), "no character a line can't hold is written: {file:?}");
+        assert!(!file.chars().any(|c| c.is_ascii_control() && !matches!(c, '\t' | '\r' | '\n')), "{file:?}");
     }
 }

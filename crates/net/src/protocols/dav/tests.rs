@@ -435,3 +435,24 @@ fn the_password_only_answers_a_site_that_may_have_it() {
     let (got, seen) = go(&own, vec![other, multi()]);
     assert!(matches!(got, Err(NetError::Auth(_))) && seen.len() == 1 && !password_seen(&seen[0]), "{seen:?}");
 }
+
+/// An invitation whose uid holds control characters is stored as a server takes it (without
+/// them), and read back under that uid: the copy on the server is the meeting's, and is found
+/// by the uid a server stores.
+#[test]
+fn an_invitations_odd_uid_is_stored_as_a_server_takes_it() {
+    let s = fake_dav::serve();
+    let dav = Dav::new(USER, PASSWORD, trusting(&[&s.base]));
+    let calendar = format!("{}{CAL}", s.base);
+    let invitation = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:odd\u{1}uid\u{1b}-x\r\nDTSTAMP:20261101T090000Z\r\n\
+                      DTSTART:20261102T090000Z\r\nDTEND:20261102T100000Z\r\nSUMMARY:Odd\u{1} one\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let kept = quatrelle_model::ical::parse(invitation, 0).events.remove(0);
+    assert_eq!(kept.uid, "odd\u{1}uid\u{1b}-x", "kept as the organizer wrote it");
+    let href = format!("{}/odd-x.ics", calendar.trim_end_matches('/'));
+    let data = quatrelle_model::ical::write_for_server(std::slice::from_ref(&kept), 0);
+    assert!(!data.contains(|c: char| c.is_ascii_control() && !matches!(c, '\t' | '\r' | '\n')), "{data:?}");
+    dav.put(&href, "text/calendar; charset=utf-8", &data, None).unwrap();
+    let read = dav.multiget(Kind::Calendars, &calendar, std::slice::from_ref(&href)).unwrap();
+    let back: Vec<CalEvent> = read.iter().flat_map(|(_, _, d)| quatrelle_model::ical::parse(d, 0).events).collect();
+    assert!(back.iter().any(|e| e.uid == quatrelle_model::ical::stored_uid(&kept.uid) && e.summary == "Odd one"), "{read:?}");
+}

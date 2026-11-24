@@ -4,6 +4,7 @@
 //! Commands: calendar, people and notes.
 
 use super::*;
+use crate::session::pim::MAX_SECONDS;
 use quatrelle_model::addr::Accepts;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
@@ -69,7 +70,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("calendar.events", "Events", "Calendar", |s, v| {
             let (d0, d1) = s.cal_days();
             let from = p::str(v, "from").and_then(|x| parse_local(x, &s.clock)).map_or(s.local_midnight(d0), |(t, all_day)| if all_day { s.clock.utc(t) } else { t });
-            let to = p::str(v, "to").and_then(|x| parse_local(x, &s.clock)).map_or(s.local_midnight(d1), |(t, all_day)| if all_day { s.clock.utc(t + 86_400) } else { t });
+            let to = p::str(v, "to").and_then(|x| parse_local(x, &s.clock)).map_or(s.local_midnight(d1), |(t, all_day)| if all_day { s.clock.utc(t.saturating_add(86_400)) } else { t });
             Ok(json!(s.agenda(from, to).iter().map(|i| json!({
                 "uid": i.uid, "summary": i.summary, "location": i.location, "start": i.start, "end": i.end, "allDay": i.all_day,
                 "occurrence": i.occurrence, "recurring": i.recurring, "account": i.account, "calendar": i.calendar,
@@ -195,17 +196,23 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
                 match p::str(v, k) {
                     Some(x) => parse_local(x, &s.clock).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)"))),
-                    None => Ok(v.get(k).and_then(Value::as_i64).map(|n| (n, false))),
+                    // Unix seconds, within the years a date written out can name (sums with one past
+                    // them overflowed: a panic in a debug build, a time long past in a release one).
+                    None => match v.get(k).and_then(Value::as_i64) {
+                        Some(n) if !(-MAX_SECONDS..MAX_SECONDS).contains(&n) => Err(CmdError::Params(format!("`{k}`: {n} is no time a calendar has"))),
+                        n => Ok(n.map(|n| (n, false))),
+                    },
                 }
             };
             let (mut start, _) = when("start")?.ok_or_else(|| CmdError::Params("`start` is needed".into()))?;
             let mut end = match when("end")? {
-                Some((t, all_day)) => if all_day && current.all_day { t + 86_400 } else { t },
-                None => start.saturating_add(current.end - current.start),
+                Some((t, all_day)) => if all_day && current.all_day { t.saturating_add(86_400) } else { t },
+                None => start.saturating_add(current.end.saturating_sub(current.start)),
             };
             if current.all_day {
-                start -= start.rem_euclid(86_400);
-                end = (end - end.rem_euclid(86_400)).max(start + 86_400);
+                // Times kept in the calendar's file are whatever it holds: none overflows here.
+                start = start.saturating_sub(start.rem_euclid(86_400));
+                end = end.saturating_sub(end.rem_euclid(86_400)).max(start.saturating_add(86_400));
             }
             s.move_event(&uid, occurrence, start, end, p::bool(v, "send").unwrap_or(true))
         })
@@ -224,11 +231,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             {
                 // One occurrence off: the guests are told of that one.
                 if let Some(at) = occurrence.filter(|_| e.rrule.is_some()) {
-                    let len = e.end - e.start;
+                    let len = e.end.saturating_sub(e.start);
                     e.recurrence_id = Some(at);
                     e.rrule = None;
                     e.start = at;
-                    e.end = at + len;
+                    e.end = at.saturating_add(len);
                 }
                 e.sequence = e.sequence.saturating_add(1);
                 s.send_invitations(&e, &account, "CANCEL")?;
@@ -407,25 +414,31 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             Some(x) => {
                 parse_local(x, &s.clock).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)")))
             }
-            None => Ok(v.get(k).and_then(Value::as_i64).map(|n| (n, false))),
+            // Unix seconds, within the years a date written out can name (sums with one past
+            // them overflowed: a panic in a debug build, a time long past in a release one).
+            None => match v.get(k).and_then(Value::as_i64) {
+                Some(n) if !(-MAX_SECONDS..MAX_SECONDS).contains(&n) => Err(CmdError::Params(format!("`{k}`: {n} is no time a calendar has"))),
+                n => Ok(n.map(|n| (n, false))),
+            },
         }
     };
-    let length = e.end - e.start;
+    let length = e.end.saturating_sub(e.start);
     let was_all_day = e.all_day;
     if let Some((t, all_day)) = when("start")? {
         e.start = t;
         e.all_day = p::bool(v, "allDay").unwrap_or(all_day);
-        e.end = t + length.max(if e.all_day { 86_400 } else { 3600 });
+        e.end = t.saturating_add(length.max(if e.all_day { 86_400 } else { 3600 }));
     } else if let Some(a) = p::bool(v, "allDay") {
         e.all_day = a;
     }
     if let Some((t, all_day)) = when("end")? {
         // An all-day end date is the last day shown: the event ends the day after.
-        e.end = if all_day && e.all_day { t + 86_400 } else { t };
+        e.end = if all_day && e.all_day { t.saturating_add(86_400) } else { t };
     }
     if e.all_day {
-        e.start -= e.start.rem_euclid(86_400);
-        e.end = (e.end - e.end.rem_euclid(86_400)).max(e.start + 86_400);
+        // Times kept in the calendar's file are whatever it holds: none overflows here.
+        e.start = e.start.saturating_sub(e.start.rem_euclid(86_400));
+        e.end = e.end.saturating_sub(e.end.rem_euclid(86_400)).max(e.start.saturating_add(86_400));
     } else if e.tzid.is_empty()
         && (e.uid.is_empty() || v.get("start").is_some() || v.get("end").is_some() || e.all_day != was_all_day)
         && let Some(zone) = s.clock.zone.and_then(|z| z.name())

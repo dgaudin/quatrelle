@@ -189,9 +189,14 @@ use super::*;
 
 mod calls;
 mod conference;
+mod control;
 mod find;
+mod kept;
 mod meetings;
+mod notes;
+mod recurrence;
 mod showing;
+mod writing;
 mod zones;
 
 fn at(y: i64, m: u32, d: u32, h: i64, mi: i64) -> i64 {
@@ -386,6 +391,31 @@ fn recurrences() {
     // An endless secondly rule stops at the cap of occurrences.
     assert_eq!(starts(&mk("FREQ=SECONDLY", mon), i64::MAX).len(), MAX_OCCURRENCES * 10);
     assert!(starts(&mk("FREQ=DAILY;BYMONTH=13", mon), mon + 400 * 86_400).len() <= 400);
+    // RFC 5545's own: every other week on Tuesday and Sunday from Tuesday 5 August 1997, weeks
+    // starting on Sunday, then on Monday (the day when none is said).
+    let tue = at(1997, 8, 5, 9, 0);
+    let days = |rule: &str| starts(&mk(rule, tue), i64::MAX).into_iter().map(|t| civil_from_days(t.div_euclid(86_400)).2).collect::<Vec<_>>();
+    assert_eq!(days("FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=SU"), [5, 17, 19, 31]);
+    assert_eq!(days("FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU;WKST=MO"), [5, 10, 19, 24]);
+    assert_eq!(days("FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=TU,SU"), [5, 10, 19, 24]);
+    // As Outlook's patterns are read: the last weekday of each month, one day a month; the
+    // 31st, the last day of a month that has none.
+    let jan = at(2026, 1, 30, 9, 0);
+    let dates = |rule: &str, from: i64| {
+        starts(&mk(rule, from), i64::MAX).into_iter().map(|t| civil_from_days(t.div_euclid(86_400))).map(|(_, m, d)| (m, d)).collect::<Vec<_>>()
+    };
+    assert_eq!(dates("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=4", jan), [(1, 30), (2, 27), (3, 31), (4, 30)]);
+    assert_eq!(dates("FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1;COUNT=4", at(2026, 1, 31, 9, 0)), [(1, 31), (2, 28), (3, 31), (4, 30)]);
+    // A week's days before the start's own weekday are in a window that ends before that weekday
+    // (a day's view of the Monday, the rule begun on a Friday).
+    let fri = at(2026, 1, 2, 9, 0);
+    let mon_after = at(2026, 1, 5, 9, 0);
+    for rule in ["FREQ=WEEKLY;BYDAY=MO,FR", "FREQ=WEEKLY;BYDAY=FR,MO;WKST=SU", "FREQ=WEEKLY;INTERVAL=1;BYDAY=SA,SU,MO,TU,WE,TH,FR"] {
+        assert!(starts(&mk(rule, fri), mon_after + 86_400).contains(&mon_after), "{rule}");
+    }
+    assert_eq!(starts(&mk("FREQ=WEEKLY;BYDAY=MO,FR", fri), mon_after + 1), [fri, mon_after]);
+    // One that matches rarely is still found past its empty periods.
+    assert_eq!(starts(&mk("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29;COUNT=2", mon), i64::MAX).len(), 2);
 
     // Occurrences in a window, with an exception and a moved instance.
     let mut weekly = mk("FREQ=WEEKLY", mon);
@@ -403,7 +433,6 @@ fn recurrences() {
     assert_eq!(starts_seen, vec![mon, mon + 15 * 86_400, mon + 21 * 86_400]);
     assert_eq!(occ[1].event, 1, "the moved instance");
 }
-
 #[test]
 fn nth_weekdays() {
     assert_eq!(nth_weekday(2026, 3, -1, 6), Some(days_from_civil(2026, 3, 29)), "last Sunday of March 2026");
@@ -675,7 +704,7 @@ fn every_kind_of_private_comes_back_as_it_went() {
         let e = parse(&ics, 0).events.first().cloned().expect("one event");
         assert_eq!((e.private, e.private_kind), (private, kind), "{class}");
         let mut out = String::new();
-        write_event(&e, 0, &mut out);
+        write_event(&e, 0, false, &mut out);
         assert_eq!(out.lines().find(|l| l.starts_with("CLASS")), written, "{class}");
     }
 }
