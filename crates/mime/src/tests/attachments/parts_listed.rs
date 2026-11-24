@@ -8,6 +8,22 @@ use super::*;
 
 const PNG: &str = "iVBORw0KGgo=";
 
+/// What the HTML shows is read from its tags' attributes as every other pass reads them: a
+/// `src=` in another attribute's quoted value, or in the text, shows nothing (a file whose
+/// address was written in a picture's description was taken for shown, and lost its paperclip).
+#[test]
+fn an_address_in_a_quoted_value_shows_nothing() {
+    let make = || {
+        r#"<p>Use src=notes.txt now</p><img alt="see src=plan.pdf here" src="cid:logo@x"><a title='x' href = 'files/Chart%20one.png?v=2'>c</a><td background=bg.gif>"#.to_string()
+    };
+    let refs = HtmlRefs::new(&make);
+    assert!(!refs.shows(None, Some("plan.pdf")));
+    assert!(!refs.shows(None, Some("notes.txt")));
+    assert!(refs.shows(Some("<logo@x>"), None));
+    assert!(refs.shows(None, Some("chart one.png")) && refs.shows(None, Some("files/chart one.png")));
+    assert!(refs.shows(None, Some("BG.gif")));
+}
+
 fn related(picture_headers: &str) -> Vec<u8> {
     format!(
         "From: a@studio.example\r\nSubject: Logo\r\nContent-Type: multipart/related; boundary=\"r\"\r\n\r\n--r\r\nContent-Type: text/html\r\n\r\n<p>Hi</p><img src=\"cid:logo@x\">\r\n--r\r\nContent-Type: image/png; name=\"logo.png\"\r\nContent-ID: <logo@x>\r\n{picture_headers}Content-Transfer-Encoding: base64\r\n\r\n{PNG}\r\n--r--\r\n"
@@ -31,6 +47,23 @@ fn a_picture_the_html_shows_stays_listed_and_inline() {
         assert!(!summary_from_full(&raw, key(), Flags::default(), 0, 0).has_attachments);
         assert_eq!(index_doc(&raw).files, 0);
     }
+}
+
+/// An image of another type (`application/octet-stream`, as some programs send pictures) with a
+/// Content-ID the HTML shows by `cid:` is in the text and in the list: it goes inline, like a
+/// picture. One whose Content-ID the HTML shows nowhere stays a file, whatever its disposition.
+#[test]
+fn an_octet_stream_picture_the_html_shows_by_its_cid_is_inline() {
+    let raw = format!(
+        "From: a@studio.example\r\nSubject: Pic\r\nContent-Type: multipart/related; boundary=\"r\"\r\n\r\n--r\r\nContent-Type: text/html\r\n\r\n<p>Hi</p><img src=\"cid:pic@x\">\r\n--r\r\nContent-Type: application/octet-stream; name=\"pic.png\"\r\nContent-ID: <pic@x>\r\nContent-Disposition: inline\r\nContent-Transfer-Encoding: base64\r\n\r\n{PNG}\r\n--r\r\nContent-Type: application/octet-stream; name=\"data.bin\"\r\nContent-ID: <data@x>\r\nContent-Disposition: inline\r\nContent-Transfer-Encoding: base64\r\n\r\n{PNG}\r\n--r--\r\n"
+    )
+    .into_bytes();
+    let p = parse(&raw).unwrap();
+    let got: Vec<_> = p.attachments.iter().map(|a| (a.name.as_str(), a.inline)).collect();
+    assert_eq!(got, [("pic.png", true), ("data.bin", false)]);
+    // The one the HTML shows gives no paperclip; the other does.
+    assert!(summary_from_full(&raw, key(), Flags::default(), 0, 0).has_attachments);
+    assert_eq!(index_doc(&raw).files, 1);
 }
 
 fn mixed(file: &str) -> Vec<u8> {

@@ -479,22 +479,11 @@ fn hosted_id(src: &str, chat: &str, message: &str) -> Option<String> {
     (!id.is_empty() && !only_dots && id.len() <= MAX_ID && id.chars().all(safe)).then_some(id)
 }
 
-/// `s` with its %-escapes read; `None` when one is broken or the bytes aren't UTF-8.
+/// `s` with its %-escapes read by the one decoder ([`quatrelle_model::mailto::percent_decode_bytes`]:
+/// a `%` that isn't followed by two hex digits stays as written, it doesn't make the whole
+/// address unreadable); `None` when the bytes aren't UTF-8.
 fn percent_decoded(s: &str) -> Option<String> {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while let Some(&b) = bytes.get(i) {
-        if b == b'%' {
-            let hex = std::str::from_utf8(bytes.get(i + 1..i + 3)?).ok()?;
-            out.push(u8::from_str_radix(hex, 16).ok()?);
-            i += 3;
-        } else {
-            out.push(b);
-            i += 1;
-        }
-    }
-    String::from_utf8(out).ok()
+    String::from_utf8(quatrelle_model::mailto::percent_decode_bytes(s)).ok()
 }
 
 /// A link or picture address on the web: `http` or `https` (the scheme written in lower case),

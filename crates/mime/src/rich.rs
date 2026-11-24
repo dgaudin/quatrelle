@@ -18,7 +18,10 @@ pub const PICTURE: char = '\u{FFFC}';
 
 /// Where a signature written in HTML stands in a message being written: drawn, and sent, as it
 /// was written (its layout: a logo beside the name), which the text and its styles can't hold.
-pub const SIGNATURE: char = '\u{E002}';
+/// The mark that stands for the account's signature in a draft's body while it is written. Its
+/// own private-use character: U+E002 is the rule line's mark (`html::rules::RULE_MARK`), and the
+/// two were one, so a quoted `<hr>` in a draft read as the signature's.
+pub const SIGNATURE: char = '\u{E005}';
 
 /// Font sizes offered, in points.
 pub const SIZES: [u8; 12] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36];
@@ -734,6 +737,16 @@ pub fn retain(text: &mut String, styles: &mut Styles, mut keep: impl FnMut(char,
 /// Append `add` (text and styles) to `text` and `styles`.
 pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &Styles) {
     styles.fit(text);
+    append_to_fitted(text, styles, add, add_styles);
+}
+
+/// [`append`] to `styles` that fit `text` already (as [`append`] leaves them): only what's added
+/// is fitted, and they fit what they make. Many pieces appended one after another (a quoted
+/// newsletter's cells) fitted all of what was gathered twice for each: 0.2 s for 1,500 cells.
+pub fn append_to_fitted(text: &mut String, styles: &mut Styles, add: &str, add_styles: &Styles) {
+    if styles.palette.is_empty() {
+        styles.palette.push(Style::default());
+    }
     let mut other = add_styles.clone();
     other.fit(add);
     let map: Vec<u16> = other.palette.iter().map(|s| styles.intern(s.clone())).collect();
@@ -749,7 +762,6 @@ pub fn append(text: &mut String, styles: &mut Styles, add: &str, add_styles: &St
     styles.paras.extend(paras);
     styles.chars.extend(other.chars.iter().map(|c| map.get(usize::from(*c)).copied().unwrap_or(0)));
     text.push_str(add);
-    styles.fit(text);
 }
 
 mod rewrite;

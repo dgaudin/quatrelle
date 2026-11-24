@@ -7,6 +7,7 @@
 //! italic or underline set with CSS, or `<u>`) starts and ends is marked in its text first,
 //! and the marks become the spans' sizes, fonts and underlines afterwards ([`runs`]).
 
+use crate::html::void;
 use crate::rich::DEFAULT_SIZE;
 
 /// Starts a marked element; the next character (from [`INDEX_BASE`]) says which.
@@ -29,31 +30,11 @@ pub(crate) struct Font {
     pub underline: bool,
 }
 
-/// Elements that never hold anything (no end tag).
-fn void(tag: &str) -> bool {
-    matches!(tag, "br" | "img" | "hr" | "meta" | "link" | "input" | "col" | "area" | "base" | "wbr" | "source" | "track" | "embed" | "param")
-}
-
-/// An attribute of a start tag (`name="v"`, `name='v'`, `name=v`), case-insensitive.
+/// An attribute of a start tag (`name="v"`, `name='v'`, `name=v`), case-insensitive, read as a
+/// browser reads the tag ([`crate::html::tag_attr`]: one inside another attribute's quoted
+/// value, `title="a style=…"`, isn't one).
 fn attr(tag: &str, name: &str) -> Option<String> {
-    let lower = tag.to_ascii_lowercase();
-    let mut from = 0;
-    while let Some(i) = lower.get(from..).and_then(|r| r.find(name)) {
-        let at = from + i;
-        from = at + name.len();
-        let before_ok = lower.get(..at).and_then(|b| b.chars().last()).is_some_and(|c| c.is_whitespace());
-        let rest = lower.get(at + name.len()..).unwrap_or("").trim_start();
-        if !before_ok || !rest.starts_with('=') {
-            continue;
-        }
-        let off = tag.len() - rest.len() + 1;
-        let v = tag.get(off..).unwrap_or("").trim_start();
-        return Some(match v.chars().next() {
-            Some(q @ ('"' | '\'')) => v.get(1..).and_then(|x| x.split(q).next()).unwrap_or("").to_string(),
-            _ => v.split(|c: char| c.is_whitespace() || c == '>').next().unwrap_or("").to_string(),
-        });
-    }
-    None
+    crate::html::tag_attr(tag, name).map(str::to_string)
 }
 
 /// A typeface's name from a CSS `font-family` list: the first, unquoted, or `None` for a
@@ -153,7 +134,7 @@ pub(crate) fn mark(html: &str) -> (String, Vec<Font>) {
     while let Some(off) = lower.get(i..).and_then(|r| r.find('<')) {
         let at = i + off;
         out.push_str(html.get(i..at).unwrap_or(""));
-        let Some(close) = lower.get(at..).and_then(|r| r.find('>')).map(|c| at + c) else {
+        let Some(close) = crate::html::tag_end(lower.as_bytes(), at + 1) else {
             out.push_str(html.get(at..).unwrap_or(""));
             return (out, fonts);
         };
@@ -315,6 +296,22 @@ pub(crate) fn runs(text: &str, open: &mut Vec<usize>, fonts: &[Font]) -> Vec<(St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `>` inside a quoted attribute doesn't end the tag: the `style` after it is read, and
+    /// its font with it.
+    #[test]
+    fn a_gt_inside_a_quoted_attribute_doesnt_end_the_tag() {
+        let (out, fonts) = mark("<span title=\"a>b\" style=\"font-family:Quicksand\">hi</span>");
+        assert_eq!(fonts, vec![Font { family: Some("Quicksand".into()), ..Default::default() }], "{out}");
+    }
+
+    /// An attribute is read as a browser reads the tag: `style=` inside another attribute's
+    /// quoted value isn't the element's.
+    #[test]
+    fn an_attribute_inside_another_quoted_value_isnt_one() {
+        let (out, fonts) = mark("<span title=\"a style=font-family:Evil\" style=\"font-family:Quicksand\">x</span>");
+        assert_eq!(fonts, vec![Font { family: Some("Quicksand".into()), ..Default::default() }], "{out}");
+    }
 
     #[test]
     fn marks_follow_the_elements() {

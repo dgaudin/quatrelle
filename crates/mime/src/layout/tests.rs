@@ -10,6 +10,45 @@ fn text(b: &Block) -> String {
     }
 }
 
+/// Styles as programs write them out: a colour with spaces in it (`rgb(34, 34, 34)`) is read,
+/// and the last declaration of a property is the one that counts, as in CSS (a cell that says a
+/// colour twice has the second); the one marked `!important` counts over a later one, and a value
+/// that can't be read gives way to the one before it, as in a browser.
+#[test]
+fn styles_as_programs_write_them_are_read() {
+    fn all_tables<'a>(b: &'a [Block], out: &mut Vec<&'a Table>) {
+        for blk in b {
+            if let Block::Table(t) = blk {
+                out.push(t);
+                for row in &t.rows {
+                    for c in row {
+                        all_tables(&c.blocks, out);
+                    }
+                }
+            }
+        }
+    }
+    let row_of = |html: &str, n: usize| {
+        let b = html_layout(html);
+        let mut all = Vec::new();
+        all_tables(&b, &mut all);
+        all.iter().find_map(|t| t.rows.iter().find(|r| r.len() == n)).unwrap_or_else(|| panic!("{b:?}")).clone()
+    };
+    let row = row_of(
+        r#"<html><body><table width="100%"><tr><td style="background-color: rgb(34, 34, 34); color: #fff; border: 2px solid rgb(204, 204, 204)">Dark</td><td style="background: rgba(0, 130, 150, 1) none">Teal</td><td style="background-color:#ffffff;background-color:#c00000">Total</td></tr></table></body></html>"#,
+        3,
+    );
+    assert_eq!(row[0].background, Some([34, 34, 34]));
+    assert_eq!(row[0].borders.top, Some(Border { width: 2, color: [204, 204, 204] }));
+    assert_eq!(row[1].background, Some([0, 130, 150]));
+    assert_eq!(row[2].background, Some([0xc0, 0, 0]), "the last one said");
+    let row = row_of(
+        r#"<html><body><table width="100%"><tr><td style="background-color:#00aa00;background-color:var(--brand)">A</td><td style="background-color:#c00000 !important;background-color:#ffffff">B</td></tr></table></body></html>"#,
+        2,
+    );
+    assert_eq!((row[0].background, row[1].background), (Some([0, 0xaa, 0]), Some([0xc0, 0, 0])));
+}
+
 #[test]
 fn a_newsletter_keeps_its_columns() {
     let html = r##"<html><head><style>.hide{display:none}</style></head><body>
@@ -645,4 +684,58 @@ fn a_button_in_a_box_of_its_own_is_a_box_as_wide_as_its_words() {
     let [Block::Text(lines)] = t.rows[0][0].blocks.as_slice() else { panic!("one line: {:?}", t.rows[0][0].blocks) };
     let line: String = lines.iter().flatten().map(|s| s.text.as_str()).collect();
     assert_eq!(line.split_whitespace().collect::<Vec<_>>().join(" "), "Then go there today.");
+}
+
+/// A laid-out message made the text to edit under a reply reads as appending each of its pieces
+/// with [`crate::rich::append`] does (it's built without fitting all of it for each piece).
+#[test]
+fn flattened_as_appended_piece_by_piece() {
+    let html = r##"<table width="600"><tr><td style="color:#c00"><b>Sale</b> on <i>everything</i></td><td align="right"><a href="https://shop.example/">Shop</a></td></tr>
+        <tr><td colspan="2"><p>Two lines</p><p style="text-align:center">centred</p></td></tr></table><p>After the table <u>under</u> it.</p>"##;
+    let b = html_layout(html);
+    let (text, styles) = flat::flatten(&b);
+    let (mut want, mut want_styles) = (String::new(), crate::rich::Styles::plain(""));
+    for (lines, align) in flat::text_blocks(&b) {
+        let (t, st) = flat::cell_text(lines, align);
+        if t.trim().is_empty() && !t.contains(crate::rich::PICTURE) {
+            continue;
+        }
+        if !want.is_empty() {
+            crate::rich::append(&mut want, &mut want_styles, "\n", &crate::rich::Styles::plain("\n"));
+        }
+        crate::rich::append(&mut want, &mut want_styles, &t, &st);
+    }
+    assert!(!text.is_empty());
+    assert_eq!((text, styles), (want, want_styles));
+}
+
+/// A newsletter of 1,500 cells of about 130 characters laid out, then made the text to edit under
+/// a reply ([`flat::flatten`]), timed. Run under the heavy lock:
+/// `cargo test --release -p quatrelle-mime --lib flattened -- --ignored --nocapture`.
+/// The same 1,500 cells as the measure below, flattened within a bound of walked characters:
+/// a few times the text's length, not its square (before, each piece refit all gathered before
+/// it, and the walk past the bound fails the test at once).
+#[test]
+fn flatten_walks_its_text_a_bounded_number_of_times() {
+    let cell = "<td><b>A heading</b> and some words of a long newsletter, kept to see what quoting it under a reply costs.</td>";
+    let rows: String = (0..750).map(|_| format!("<tr>{cell}{cell}</tr>")).collect();
+    let html = format!("<table width=\"600\">{rows}</table>");
+    let b = html_layout(&html);
+    let bound = 4 * html.len();
+    let ((text, styles), walked) = crate::rich::work::at_most(bound, || flat::flatten(&b));
+    assert!(!text.is_empty());
+    assert_eq!(styles.chars.len(), text.chars().count());
+    assert!(walked <= bound, "walked {walked} of {bound} allowed");
+}
+
+#[test]
+#[ignore]
+fn measure_flatten() {
+    let cell = "<td><b>A heading</b> and some words of a long newsletter, kept to see what quoting it under a reply costs.</td>";
+    let rows: String = (0..750).map(|_| format!("<tr>{cell}{cell}</tr>")).collect();
+    let b = html_layout(&format!("<table width=\"600\">{rows}</table>"));
+    let t = std::time::Instant::now();
+    let (text, styles) = flat::flatten(&b);
+    println!("MEASURE flatten 1500 cells ({} KB): {} ms", text.len() / 1024, t.elapsed().as_millis());
+    assert_eq!(styles.chars.len(), text.chars().count());
 }

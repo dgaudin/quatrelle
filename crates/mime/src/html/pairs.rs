@@ -4,7 +4,7 @@
 //! address and goes to another is how a phishing page is hidden. Bounded in what it reads and
 //! returns.
 
-use super::HTML_MAX;
+use super::{HTML_MAX, Refs, decode_refs};
 
 /// The most pairs returned.
 const MAX_PAIRS: usize = 200;
@@ -30,10 +30,14 @@ pub fn html_link_pairs(html: &str) -> Vec<(String, String)> {
         if !lower.get(at..).is_some_and(|r| r.starts_with(|c: char| c.is_ascii_whitespace())) {
             continue;
         }
-        let Some(tag_end) = html.get(at..).and_then(|r| r.find('>')).map(|i| at + i) else { break };
-        let tag = html.get(at..tag_end).unwrap_or("");
-        let Some(target) = attribute(tag, "href") else { continue };
-        let inner_start = tag_end + 1;
+        let Some(end) = crate::html::tag_end(html.as_bytes(), at) else { break };
+        let tag = html.get(at..end).unwrap_or("");
+        let Some(target) = attribute(tag, "href") else {
+            // No `href`: the tag was read to its `>` — go on past it, not back into it.
+            at = end + 1;
+            continue;
+        };
+        let inner_start = end + 1;
         let inner_end = lower.get(inner_start..).and_then(|r| r.find("</a")).map_or(html.len(), |i| inner_start + i);
         at = inner_end.max(inner_start);
         let target = target.trim();
@@ -41,31 +45,15 @@ pub fn html_link_pairs(html: &str) -> Vec<(String, String)> {
             continue;
         }
         let shown = shown_text(html.get(inner_start..inner_end).unwrap_or(""));
-        out.push((shown, decode(target)));
+        out.push((shown, decode_refs(target, Refs::Value).into_owned()));
     }
     out
 }
 
-/// The value of attribute `name` in a tag's text (quoted either way, or not).
+/// The value of attribute `name` in a tag's text, read as a browser reads the tag
+/// ([`super::tag_attr`]: one inside another attribute's quoted value isn't one).
 fn attribute(tag: &str, name: &str) -> Option<String> {
-    let lower = tag.to_ascii_lowercase();
-    let mut from = 0;
-    while let Some(rel) = lower.get(from..).and_then(|r| r.find(name)) {
-        let i = from + rel;
-        from = i + name.len();
-        let before_ok = i == 0 || lower.get(..i).is_some_and(|b| b.ends_with(|c: char| c.is_ascii_whitespace() || c == '"' || c == '\''));
-        let rest = tag.get(from..).unwrap_or("").trim_start();
-        let Some(value) = rest.strip_prefix('=').filter(|_| before_ok) else { continue };
-        let value = value.trim_start();
-        return Some(match value.chars().next() {
-            Some(q @ ('"' | '\'')) => {
-                let body = value.get(1..).unwrap_or("");
-                body.get(..body.find(q).unwrap_or(body.len())).unwrap_or("").to_string()
-            }
-            _ => value.get(..value.find(char::is_whitespace).unwrap_or(value.len())).unwrap_or("").to_string(),
-        });
-    }
-    None
+    super::tag_attr(tag, name).map(str::to_string)
 }
 
 /// An anchor's inner HTML as the text a reader sees: tags out, entities read, spaces collapsed,
@@ -87,11 +75,6 @@ fn shown_text(inner: &str) -> String {
             break;
         }
     }
-    let words = decode(&text).split_whitespace().collect::<Vec<_>>().join(" ");
+    let words = decode_refs(&text, Refs::Words).split_whitespace().collect::<Vec<_>>().join(" ");
     words.chars().take(MAX_SHOWN).collect()
-}
-
-/// The few entities that matter in a link or its text.
-fn decode(s: &str) -> String {
-    s.replace("&nbsp;", " ").replace("&quot;", "\"").replace("&#39;", "'").replace("&#38;", "&").replace("&amp;", "&")
 }

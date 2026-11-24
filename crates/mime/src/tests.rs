@@ -36,22 +36,20 @@ fn a_teams_invitations_join_link_survives_as_text() {
 
 use super::*;
 
+mod attachments;
 mod build_bytes;
 mod draft_source;
 mod heading_lines;
 mod importance;
 pub(crate) mod index_text;
 mod inline_names;
-mod kept_cid;
 mod link_pairs;
 mod one_parse;
-mod parts_listed;
 mod reply_layout;
 mod report;
 mod report_status;
 mod table_footer;
 mod tables_left_open;
-mod text_attach;
 
 /// Issue #1: a signature copied from Outlook (Word's HTML on the clipboard, only the copied
 /// fragment) keeps its look when pasted.

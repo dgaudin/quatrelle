@@ -175,7 +175,7 @@ impl Pictures {
             let Some(raw) = tag_attr(tag, "src") else { return true };
             let Some(src) = self.addresses.value(raw) else {
                 unread = true;
-                let folded = raw.trim().replace("&amp;", "&");
+                let folded = decode_refs(raw.trim(), Refs::Value).into_owned();
                 if list && !folded.is_empty() && folded.len() < SRC_MAX && (self.images.contains(&folded) || self.images.len() < MAX_PICTURES) {
                     if !self.images.contains(&folded) {
                         self.images.push(folded.clone());

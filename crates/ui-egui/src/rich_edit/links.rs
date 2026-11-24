@@ -70,25 +70,10 @@ impl LinkForm {
     }
 }
 
-/// `%XX` escapes in a mailto address or subject, as text.
+/// `%XX` escapes in a mailto address or subject, as text: the one decoder
+/// ([`quatrelle_engine::model::mailto::percent_decode`]).
 pub(super) fn percent_decode(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while let Some(&c) = b.get(i) {
-        let hex = |k: usize| b.get(k).and_then(|h| (*h as char).to_digit(16));
-        match (c, hex(i + 1), hex(i + 2)) {
-            (b'%', Some(h), Some(l)) => {
-                out.push(u8::try_from(h * 16 + l).unwrap_or(b'?'));
-                i += 3;
-            }
-            _ => {
-                out.push(c);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
+    quatrelle_engine::model::mailto::percent_decode(s)
 }
 
 /// A subject as a mailto may carry it (RFC 6068): everything but letters, digits and `-._~`

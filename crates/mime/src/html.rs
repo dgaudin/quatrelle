@@ -7,6 +7,9 @@ use super::*;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 mod deep;
+pub(crate) use deep::{attributes, tag_end, tags, void};
+mod entities;
+pub(crate) use entities::{Refs, decode_refs};
 mod footers;
 pub(crate) use footers::footers_last;
 pub(crate) mod links;
@@ -69,7 +72,8 @@ pub(super) fn picture_sizes(html: &str) -> Vec<(String, ImageSize)> {
     pictures::img_tags(html, |tag, _| {
         let Some(src) = tag_attr(tag, "src").map(str::trim).filter(|s| !s.is_empty()) else { return true };
         let style = tag_attr(tag, "style").map(css::declarations).unwrap_or_default();
-        let css = |prop: &str| style.iter().rev().find(|d| d.prop == prop).map(|d| d.value.as_str());
+        // The one that counts, as in CSS ([`css::pick`]): the last marked `!important`, else the last.
+        let css = |prop: &str| css::pick(&style, prop);
         // The style's size wins over the attributes', as in a browser: `auto` too, which leaves
         // the side to the picture's shape. A length not read here (Word's inches) leaves the tag's.
         let auto = |prop: &str| css(prop).is_some_and(|v| v.trim().eq_ignore_ascii_case("auto"));
@@ -291,6 +295,73 @@ pub fn html_to_rich(html: &str) -> RichText {
     html_to_rich_at(html, 2000, false)
 }
 
+/// Whether `c` is one of the marks this pipeline writes into HTML while it becomes text: the
+/// heading's, picture's, rule line's and signature's (U+E000–U+E005), a typeface's start or end
+/// and its index (U+E020, U+E021, U+E100 and up). The block is one mail doesn't use. Not the
+/// code block's marks (U+E038, U+E039): the markdown pass writes those itself, and its output
+/// comes through here.
+fn is_our_mark(c: char) -> bool {
+    ('\u{E000}'..='\u{E02F}').contains(&c) || ('\u{E100}'..='\u{EFFF}').contains(&c)
+}
+
+/// `s` without the marks this pipeline writes ([`is_our_mark`]), written as a character or as a
+/// numeric reference (`&#xE002;`, `&#57346;`, with or without `;`): `s` itself when it has none.
+/// One pass over it.
+pub(crate) fn without_marks(s: &str) -> std::borrow::Cow<'_, str> {
+    if !s.contains('&') && !s.chars().any(is_our_mark) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i] == b'&'
+            && let Some((value, took)) = numeric_ref(b, i + 1)
+            && char::from_u32(value).is_some_and(is_our_mark)
+        {
+            i += 1 + took;
+            continue;
+        }
+        let c = s.get(i..).and_then(|r| r.chars().next()).unwrap_or('\u{fffd}');
+        if !is_our_mark(c) {
+            out.push(c);
+        }
+        i += c.len_utf8();
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// The numeric reference at `at` in `b` (just past its `&`): `#`, decimal digits or `x` and hex
+/// digits of any length, its `;` or not — its value and how many bytes it takes after the `&`.
+fn numeric_ref(b: &[u8], at: usize) -> Option<(u32, usize)> {
+    if b.get(at) != Some(&b'#') {
+        return None;
+    }
+    let mut i = at + 1;
+    let hex = matches!(b.get(i), Some(b'x' | b'X'));
+    if hex {
+        i += 1;
+    }
+    let digits = i;
+    let mut n: u64 = 0;
+    while let Some(&d) = b.get(i) {
+        match (d as char).to_digit(if hex { 16 } else { 10 }) {
+            Some(d) => {
+                n = n.saturating_mul(u64::from(if hex { 16u32 } else { 10u32 })).saturating_add(u64::from(d));
+                i += 1;
+            }
+            None => break,
+        }
+    }
+    if i == digits || n > u64::from(u32::MAX) {
+        return None;
+    }
+    if b.get(i) == Some(&b';') {
+        i += 1;
+    }
+    Some((n as u32, i - at))
+}
+
 /// [`html_to_rich`] rendered at `width` columns, keeping a line made only of box-drawing
 /// characters as text (`keep_box_lines`) rather than taking it for a table's border.
 fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
@@ -298,6 +369,11 @@ fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
+    // The marks the passes write are private-use characters mail doesn't carry: one the HTML
+    // has itself is taken out here, before any pass marks, so it isn't read as ours (a typeface
+    // or rule mark in a message or pasted text was).
+    let html = without_marks(html);
+    let html = html.as_ref();
     let html = flat_if_too_deep(html);
     let html = html.as_ref();
     let html = footers_last(html);
@@ -518,25 +594,9 @@ pub fn picture_attachment(p: &Parsed, src: &str) -> Option<usize> {
     if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("data:") || src.is_empty() || src.len() > 4096 {
         return None;
     }
-    let decoded = |s: &str| {
-        let b = s.as_bytes();
-        let mut out = Vec::with_capacity(b.len());
-        let mut i = 0;
-        while let Some(&c) = b.get(i) {
-            let hex = b.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok());
-            match (c, hex) {
-                (b'%', Some(v)) => {
-                    out.push(v);
-                    i += 3;
-                }
-                _ => {
-                    out.push(c);
-                    i += 1;
-                }
-            }
-        }
-        String::from_utf8_lossy(&out).into_owned()
-    };
+    // The one decoder ([`quatrelle_model::mailto::percent_decode`]), as the paperclip's: `%+X`
+    // stays as written (it was read as byte 15 before).
+    let decoded = |s: &str| quatrelle_model::mailto::percent_decode(s);
     let last_part = |s: &str| s.rsplit(['/', '\\']).next().unwrap_or(s).to_string();
     let name_is = |a: &AttachmentInfo, n: &str| !n.is_empty() && a.name.eq_ignore_ascii_case(n);
     if let Some(cid) = src.get(..4).filter(|s| s.eq_ignore_ascii_case("cid:")).and_then(|_| src.get(4..)) {
@@ -737,7 +797,9 @@ pub fn html_links(html: &str) -> Vec<String> {
         if raw.len() > 8192 {
             continue;
         }
-        let url = raw.replace("&amp;", "&").replace("&#38;", "&").replace("&quot;", "\"").replace("&#39;", "'");
+        // Read once, as every other pass reads an address ([`decode_refs`]): the chain of
+        // replacements read `&amp;#38;` twice, as `&`.
+        let url = decode_refs(raw, Refs::Value).into_owned();
         let lower_url = url.to_ascii_lowercase();
         if (lower_url.starts_with("https://") || lower_url.starts_with("http://")) && !url.contains(char::is_whitespace) && !out.contains(&url) {
             out.push(url);

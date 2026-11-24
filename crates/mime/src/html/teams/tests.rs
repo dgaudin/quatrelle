@@ -501,3 +501,15 @@ proptest::proptest! {
         }
     }
 }
+
+/// `%+f` isn't an escape (RFC 3986's are `%` and two hex digits): it stays as written and
+/// doesn't make the whole address unreadable — it was `None` before, and this message's
+/// hosted image wasn't found.
+#[test]
+fn a_sign_is_no_hex_digit_for_the_hosted_addresses() {
+    assert_eq!(percent_decoded("a%+fb").as_deref(), Some("a%+fb"));
+    assert_eq!(percent_decoded("a%3Db").as_deref(), Some("a=b"));
+    assert_eq!(percent_decoded("a%2").as_deref(), Some("a%2"));
+    let src = "https://graph.microsoft.com/v1.0/chats/19%3aa%40thread.v2/messages/1/hostedContents/aGk%3D/$value";
+    assert_eq!(hosted_id(src, C, "1").as_deref(), Some("aGk="));
+}

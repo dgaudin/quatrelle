@@ -20,6 +20,10 @@ pub(crate) fn font_px(v: &str) -> Option<f32> {
         num(n)? * 0.16
     } else {
         match v.as_str() {
+            "xx-small" => 9.0,
+            "x-small" => 10.0,
+            "small" => 13.0,
+            "medium" => 16.0,
             "large" => 18.0,
             "x-large" => 24.0,
             "xx-large" => 32.0,

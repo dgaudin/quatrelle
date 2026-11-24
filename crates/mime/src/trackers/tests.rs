@@ -10,6 +10,10 @@ fn links_lose_their_tags_and_wrappers() {
         ("https://shop.example/?fbclid=abc", "https://shop.example/"),
         ("https://Shop.Example:8443/a?MC_EID=1&q=x+y", "https://Shop.Example:8443/a?q=x+y"),
         ("https://www.google.com/url?q=https://site.example/page&sa=D&ust=1", "https://site.example/page"),
+        // Google's other parameter: every row for the host and path is tried, not the first
+        // (the first was, and `?url=` after `?q=` stayed wrapped); a bare google.com row is one.
+        ("https://www.google.com/url?sa=t&url=https://site.example/other&ved=1", "https://site.example/other"),
+        ("https://google.com/url?q=https://site.example/bare", "https://site.example/bare"),
         ("https://abcd.r.us-east-1.awstrack.me/L0/https:%2F%2Fapp.example%2Fwelcome/1/0100-x/abc=", "https://app.example/welcome"),
         ("https://l.facebook.com/l.php?u=https%3A%2F%2Fevent.example%2F&h=AT0", "https://event.example/"),
         // Nothing to take out, or not a web address: as it was.
@@ -418,6 +422,20 @@ fn ordinary_mail_keeps_its_pictures_and_titles() {
         assert!(spans.iter().any(|s| s.bold && s.size == Some(20) && s.text.contains("Big title")), "under {sheet:?}: {spans:?}");
         assert!(!crate::html::too_deep(body));
     }
+}
+
+/// A link's host is after the last `@` of what's before its path, as a browser reads it: a
+/// name and password before it (`counter:x@`) aren't its host, nor is what's after a `\`.
+/// Cut at the first `:`, `https://sendgrid.net:x@shop.example/` was counted as SendGrid's,
+/// and `https://shop.example:x@sendgrid.net/` wasn't. The authority stays as written.
+#[test]
+fn a_host_after_a_name_and_password() {
+    assert!(!tracks_click("https://sendgrid.net:x@shop.example/sale"));
+    assert!(tracks_click("https://shop.example:x@sendgrid.net/sale"));
+    assert!(tracks_click("https://ana@sendgrid.net:8080/sale"));
+    assert!(!tracks_click("https://shop.example\\@sendgrid.net/sale"));
+    assert_eq!(clean_link("https://Ana:Pw@Shop.Example:8443/a?utm_source=x&id=7#top"), "https://Ana:Pw@Shop.Example:8443/a?id=7#top");
+    assert_eq!(clean_link("https://ana:pw@[::1]:80/?b=2&fbclid=1"), "https://ana:pw@[::1]:80/?b=2");
 }
 
 #[test]

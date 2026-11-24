@@ -13,6 +13,27 @@ fn status_encoding(raw: &[u8]) -> String {
     part[start..].split("\r\n").next().unwrap().to_string()
 }
 
+/// An attached message saved with bare line feeds goes with whole line ends (CR LF), which
+/// mail servers refuse outright; one that has them already goes untouched.
+#[test]
+fn an_attached_message_goes_with_whole_line_ends() {
+    let from = EmailAddress::new("Riley", "riley@studio.example");
+    let eml = |data: &[u8]| OutAttachment { name: "note.eml".into(), mime: "message/rfc822".into(), data: data.to_vec(), ..Default::default() };
+    let bare = b"Subject: Lunch\n\nNoon.\n.\nAfter the dot.\rAnd a bare return.\r\nDone.\n";
+    let whole = b"Subject: Lunch\r\n\r\nNoon.\r\n.\r\nAfter the dot.\r\nAnd a bare return.\r\nDone.\r\n";
+    for data in [&bare[..], &whole[..]] {
+        let d = Draft { subject: "Fwd".into(), body: "See attached.".into(), attachments: vec![eml(data)], ..Default::default() };
+        let raw = build(&d, &from, 1_700_000_000, "m@x").unwrap();
+        let bare_end = |raw: &[u8]| {
+            raw.iter()
+                .enumerate()
+                .any(|(i, &b)| (b == b'\n' && raw.get(i.wrapping_sub(1)) != Some(&b'\r')) || (b == b'\r' && raw.get(i + 1) != Some(&b'\n')))
+        };
+        assert!(!bare_end(&raw), "{}", String::from_utf8_lossy(&raw));
+        assert_eq!(attachment_data(&raw, 0).unwrap(), whole);
+    }
+}
+
 fn built(data: &[u8]) -> Vec<u8> {
     let from = EmailAddress::new("Mail Delivery", "postmaster@studio.example");
     let file = OutAttachment { name: "details.txt".into(), mime: "message/delivery-status".into(), data: data.to_vec(), ..Default::default() };

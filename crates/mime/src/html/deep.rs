@@ -27,12 +27,48 @@ fn is_space(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\n' | b'\r' | 0x0C)
 }
 
+/// Where the tag whose attributes start at `from` in `b` ends (the index of its `>`), as a
+/// browser reads it: past values quoted after their `=` (a `>` in one doesn't end the tag), a
+/// quote anywhere else being part of a name or value (`<p title=it's>`). `None` when it doesn't
+/// end. Every pass over a message's HTML ends a tag here, not at its first `>`: a picture whose
+/// `alt` held a `>` was cut there, and its address never seen.
+pub(crate) fn tag_end(b: &[u8], from: usize) -> Option<usize> {
+    let mut j = from;
+    // Just past an attribute's `=`, its value still to come.
+    let mut value = false;
+    while let Some(&c) = b.get(j) {
+        match c {
+            b'>' => return Some(j),
+            b'=' if !value => value = true,
+            b'"' | b'\'' if value => {
+                j = j + 1 + b.get(j + 1..)?.iter().position(|x| *x == c)?;
+                value = false;
+            }
+            c if c.is_ascii_whitespace() => {}
+            _ if value => {
+                while b.get(j + 1).is_some_and(|d| !d.is_ascii_whitespace() && *d != b'>') {
+                    j += 1;
+                }
+                value = false;
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
+/// Elements that never have content (no end tag), by their lower-cased name.
+pub(crate) fn void(name: &str) -> bool {
+    matches!(name, "area" | "base" | "br" | "col" | "embed" | "hr" | "img" | "input" | "link" | "meta" | "param" | "source" | "track" | "wbr")
+}
+
 /// The attributes of a tag, from `from` (after its name) in `html`, as a browser's tokenizer reads
 /// them, each given to `each` as (its name, as written; its value, as written: in its quotes,
 /// `""` for a name alone) until `each` says no more. A value in quotes runs to its closing quote,
 /// `>` and all; a quote elsewhere (`a"b`) is a character like any. Where the tag ends (its `>`);
 /// `None` when it doesn't (a browser drops a tag left open at the end).
-pub(super) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'a str, &'a str) -> bool) -> Option<usize> {
+pub(crate) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'a str, &'a str) -> bool) -> Option<usize> {
     let bytes = html.as_bytes();
     let spaces = |mut i: usize, slash: bool| {
         while bytes.get(i).is_some_and(|&c| is_space(c) || (slash && c == b'/')) {
@@ -74,6 +110,8 @@ pub(super) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'
                     while bytes.get(i).is_some_and(|&c| !is_space(c) && c != b'>') {
                         i += 1;
                     }
+                    // Unquoted, as programs write it (`src=https://…/c.png/>`): the `/` before the
+                    // `>` is the address's, not the tag's — a browser reads the value to the `>`.
                     html.get(at..i).unwrap_or_default()
                 }
             }
@@ -400,6 +438,25 @@ pub(crate) fn flattened(html: &str) -> String {
 mod tests {
     use super::*;
 
+    /// A tag ends where a browser ends it: past values quoted after their `=`; a quote anywhere
+    /// else is part of a name or value.
+    #[test]
+    fn a_tag_ends_where_a_browser_ends_it() {
+        for (tag, end) in [
+            ("<p>", Some(2)),
+            ("<img alt=\"a>b\" src=x>", Some(20)),
+            ("<img alt='a>b'>", Some(14)),
+            ("<p title=it's>x", Some(13)),
+            ("<p a=b\"c>", Some(8)),
+            ("<p \"x>", Some(5)),
+            ("<img alt=\"never closed>", None),
+            ("<p", None),
+        ] {
+            assert_eq!(tag_end(tag.as_bytes(), 1), end, "{tag}");
+        }
+        assert!(void("img") && void("br") && !void("p") && !void("BR"), "by its lower-cased name");
+    }
+
     /// Found in review: tables left open one in another (a cell, a box, a link, again and
     /// again) took seconds to read at 64 KB, and over ten minutes at a megabyte, in the text
     /// converter and the layout. Read flat, they take no time, their words and links kept; mail
@@ -542,6 +599,27 @@ mod tests {
             assert!(started.elapsed() < std::time::Duration::from_secs(5), "{before}: {:?}", started.elapsed());
             assert!(p.is_some_and(|p| p.text.contains("Hello")), "{before}");
         }
+    }
+
+    /// `<` with no name after it, and `<a` inside a `style` left open, were each read to the
+    /// end of the message, a megabyte of them for minutes.
+    #[test]
+    fn a_megabyte_of_stray_angle_brackets_is_read_once() {
+        let tables = "<table></table>".repeat(MAX_TABLES + 1);
+        let started = std::time::Instant::now();
+        for junk in ["<".repeat(1 << 20), "< ".repeat(1 << 19), format!("<style>{}", "<a ".repeat(1 << 18)), "<\"".repeat(1 << 19)] {
+            let html = format!("{tables}{junk}");
+            assert!(!too_deep(&html));
+            let _ = flattened(&html);
+        }
+        assert!(started.elapsed() < std::time::Duration::from_secs(20), "{:?}", started.elapsed());
+        // What the tags are is as before.
+        let mut seen = Vec::new();
+        tags("<p>a < b <i>c</i><style>x<y</style><script>if (a</b>) {}</script><b>", |name, end, _| {
+            seen.push(format!("{}{name}", if end { "/" } else { "" }));
+            true
+        });
+        assert_eq!(seen, ["p", "i", "/i", "style", "/style", "script", "/script", "b"]);
     }
 
     #[test]
