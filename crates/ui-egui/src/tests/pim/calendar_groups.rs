@@ -65,11 +65,11 @@ fn the_pane_lists_the_servers_groups_in_its_order() {
 fn a_group_header_folds_and_unfolds() {
     let (mut a, dir, ctx) = with_groups("calendar-groups-fold");
     click_text(&ctx, &mut a, "Équipe");
-    assert!(a.session.prefs.folded_calendar_groups.contains("Équipe"), "remembered folded");
+    assert!(!a.session.prefs.folded_calendar_groups.is_empty(), "remembered folded");
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
     assert!(text_at(&shapes, "Ana Lima").is_none(), "folded: its calendar isn't drawn");
     click_text(&ctx, &mut a, "Équipe");
-    assert!(!a.session.prefs.folded_calendar_groups.contains("Équipe"), "unfolded");
+    assert!(a.session.prefs.folded_calendar_groups.is_empty(), "unfolded");
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
     assert!(text_at(&shapes, "Ana Lima").is_some(), "unfolded: its calendar is drawn");
     let _ = std::fs::remove_dir_all(dir);
@@ -277,5 +277,25 @@ fn deleting_a_group_puts_its_own_calendars_back_under_my_calendars() {
         a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Salle Lyon" && c.group.is_empty())),
         "Salle Lyon is back under My Calendars"
     );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// An account whose server keeps no groups says so where a group would be made.
+#[test]
+fn a_server_without_calendar_groups_says_so() {
+    let (mut a, dir, ctx) = calendars("calendar-groups-imap", false, false);
+    let account = a.session.accounts[0].config.id.clone();
+    {
+        let pim = a.session.pim_mut(&account);
+        pim.calendar_groups = vec!["Équipe".into()];
+        pim.calendars.push(CalendarInfo { id: "AAMkAna=".into(), name: "Ana Lima".into(), group: "Équipe".into(), ..Default::default() });
+    }
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    right_click(&ctx, &mut a, "Équipe");
+    point_at(&ctx, &mut a, "New calendar group…");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "This account's server doesn't keep calendar groups"), "{shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }

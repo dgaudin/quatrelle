@@ -2487,7 +2487,7 @@ presence	Offline	オフライン
 	Rename group…	グループの名前を変更…
 	Delete group…	グループを削除…
 	Move to group	グループへ移動
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	予定表グループ {name} を削除しますか? その中の予定表は自分の予定表に戻ります。
+	Delete the calendar group {name}?	予定表グループ {name} を削除しますか?
 	New calendar group	新しい予定表グループ
 	Rename calendar group	予定表グループの名前を変更
 	Delete calendar group	予定表グループを削除

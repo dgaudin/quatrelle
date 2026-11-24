@@ -2491,7 +2491,7 @@ presence	Offline	Не в сети
 	Rename group…	Переименовать группу…
 	Delete group…	Удалить группу…
 	Move to group	Переместить в группу
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	Удалить группу календарей {name}? Её календари вернутся в Мои календари.
+	Delete the calendar group {name}?	Удалить группу календарей {name}?
 	New calendar group	Новая группа календарей
 	Rename calendar group	Переименовать группу календарей
 	Delete calendar group	Удалить группу календарей

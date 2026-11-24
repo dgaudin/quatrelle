@@ -2490,7 +2490,7 @@ presence	Offline	Offline
 	Rename group…	Renomear grupo…
 	Delete group…	Excluir grupo…
 	Move to group	Mover para o grupo
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	Excluir o grupo de agendas {name}? As agendas nele voltam para Minhas agendas.
+	Delete the calendar group {name}?	Excluir o grupo de agendas {name}?
 	New calendar group	Novo grupo de agendas
 	Rename calendar group	Renomear grupo de agendas
 	Delete calendar group	Excluir grupo de agendas

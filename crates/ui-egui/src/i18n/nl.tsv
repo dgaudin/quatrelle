@@ -2487,7 +2487,7 @@ presence	Offline	Offline
 	Rename group…	Groep een andere naam geven…
 	Delete group…	Groep verwijderen…
 	Move to group	Naar groep verplaatsen
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	De agendagroep {name} verwijderen? De agenda's erin gaan terug naar Mijn agenda's.
+	Delete the calendar group {name}?	De agendagroep {name} verwijderen?
 	New calendar group	Nieuwe agendagroep
 	Rename calendar group	Agendagroep een andere naam geven
 	Delete calendar group	Agendagroep verwijderen

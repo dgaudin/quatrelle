@@ -2491,7 +2491,7 @@ presence	Offline	Desconectado
 	Rename group…	Cambiar nombre del grupo…
 	Delete group…	Eliminar grupo…
 	Move to group	Mover al grupo
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	¿Eliminar el grupo de calendarios {name}? Sus calendarios vuelven a Mis calendarios.
+	Delete the calendar group {name}?	¿Eliminar el grupo de calendarios {name}?
 	New calendar group	Nuevo grupo de calendarios
 	Rename calendar group	Cambiar nombre del grupo de calendarios
 	Delete calendar group	Eliminar grupo de calendarios

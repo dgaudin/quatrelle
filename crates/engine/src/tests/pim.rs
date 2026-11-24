@@ -244,7 +244,7 @@ fn dav_results_merge_without_losing_local_changes() {
     use quatrelle_model::ical::CalEvent;
     use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
     let mut s = Session::open(Some(temp("dav-merge")), quatrelle_model::dates::Clock::new(NOW, 0));
-    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let id = s.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let cal = "https://dav.example.org/cal/work/".to_string();
     let ev = |uid: &str, summary: &str, href: &str| StoredEvent {
         calendar: cal.clone(),
@@ -387,7 +387,7 @@ fn dav_results_merge_without_losing_local_changes() {
 fn calendar_groups_follow_the_server_and_stay_when_not_read() {
     use quatrelle_model::pim::DavSync;
     let mut s = Session::open(Some(temp("dav-groups")), quatrelle_model::dates::Clock::new(NOW, 0));
-    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let id = s.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let read = DavSync {
         calendar_groups: Some(vec!["Équipe".into(), "Salles".into()]),
         my_calendar_group: Some("Mes calendriers".into()),

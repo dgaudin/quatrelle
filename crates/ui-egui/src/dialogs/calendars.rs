@@ -240,7 +240,7 @@ pub(super) fn draw_group_change(ui: &mut Ui, f: &mut CalendarGroupForm, s: &Sess
     if let GroupAsk::Delete { group } = &f.ask {
         ui.set_width(400.0);
         title(ui, t, "Delete calendar group");
-        let text = tf!("Delete the calendar group {name}? Its calendars go back to My Calendars.", name = f.name);
+        let text = tf!("Delete the calendar group {name}?", name = f.name);
         ui.add(egui::Label::new(RichText::new(text).color(t.dim)).wrap());
         if let Some(e) = &f.error {
             ui.label(RichText::new(e.as_str()).color(t.danger).small());

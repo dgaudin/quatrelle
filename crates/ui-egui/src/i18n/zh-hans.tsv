@@ -2490,7 +2490,7 @@ presence	Offline	离线
 	Rename group…	重命名组…
 	Delete group…	删除组…
 	Move to group	移到组
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	删除日历组 {name}? 其中的日历将回到“我的日历”。
+	Delete the calendar group {name}?	删除日历组 {name}?
 	New calendar group	新建日历组
 	Rename calendar group	重命名日历组
 	Delete calendar group	删除日历组

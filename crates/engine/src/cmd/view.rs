@@ -264,7 +264,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"account": string, "calendar": string, "shown"?: bool (default: the other way)}"#),
         CommandSpec::new("calendar.groupFold", "Fold or unfold a calendar group", "Calendar › Calendars", |s, v| {
-            let group = p::req_str(v, "group")?.to_string();
+            let group: String = p::req_str(v, "group")?.chars().take(quatrelle_model::pim::MAX_CALENDAR_NAME + 64).collect();
             let folded = p::bool(v, "folded").unwrap_or(!s.prefs.folded_calendar_groups.contains(&group));
             if folded {
                 s.prefs.folded_calendar_groups.insert(group.clone());

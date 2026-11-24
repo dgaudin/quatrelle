@@ -80,7 +80,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             });
         }
         let order_at: HashMap<String, usize> = order.iter().enumerate().map(|(i, g)| (g.to_lowercase(), i)).collect();
-        let mut middle = groups.split_off(1);
+        let mut middle = groups.split_off(1.min(groups.len()));
         middle.sort_by_key(|(name, _)| order_at.get(&name.to_lowercase()).copied().unwrap_or(usize::MAX));
         groups.extend(middle);
         groups.push((tl!("Shared calendars").to_string(), shared));
@@ -101,7 +101,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             if list.is_empty() && !from_server && (n > 0 || bare.is_empty()) {
                 continue;
             }
-            let open = !s.prefs.folded_calendar_groups.contains(title);
+            let account_key = list.first().map(|(a, _)| a.config.id.as_str()).unwrap_or("");
+            let fold_key = if n == 0 {
+                "calendar:my".to_string()
+            } else if from_server {
+                format!("{account_key}/{title}")
+            } else {
+                "calendar:shared".to_string()
+            };
+            let open = !s.prefs.folded_calendar_groups.contains(&fold_key);
             let shown: Vec<bool> = list.iter().map(|(a, c)| s.calendar_shown(&a.config.id, &c.id)).collect();
             let all = !shown.is_empty() && shown.iter().all(|x| *x);
             let some = shown.iter().any(|x| *x);
@@ -132,7 +140,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 }
             }
             if header.inner.0.clicked() || header.inner.1.clicked() {
-                acts.push(Action::Run("calendar.groupFold", json!({"group": title, "folded": open})));
+                acts.push(Action::Run("calendar.groupFold", json!({"group": fold_key, "folded": open})));
             }
             // A calendar dragged onto a group's header moves there; the header says it will take
             // it. Only the server's groups take a calendar: My and Shared calendars are theirs.
@@ -182,9 +190,10 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 header.inner.1.context_menu(|ui| menu::account_menu(ui, s, a, acts));
             }
             // A group the server keeps has its own menu.
-            if let Some(a) =
+            let group_account = list.first().map(|(a, _)| *a).or_else(|| {
                 s.accounts.iter().find(|a| s.pim.get(&a.config.id).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(title))))
-            {
+            });
+            if let Some(a) = group_account {
                 header.response.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
                 header.inner.1.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
             }

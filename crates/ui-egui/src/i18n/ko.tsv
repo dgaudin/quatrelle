@@ -2489,7 +2489,7 @@ presence	Offline	오프라인
 	Rename group…	그룹 이름 바꾸기…
 	Delete group…	그룹 삭제…
 	Move to group	그룹으로 이동
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	일정 그룹 {name}을(를) 삭제하시겠습니까? 그 안의 일정은 내 일정으로 돌아갑니다.
+	Delete the calendar group {name}?	일정 그룹 {name}을(를) 삭제하시겠습니까?
 	New calendar group	새 일정 그룹
 	Rename calendar group	일정 그룹 이름 바꾸기
 	Delete calendar group	일정 그룹 삭제

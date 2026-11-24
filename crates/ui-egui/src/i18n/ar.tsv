@@ -2486,7 +2486,7 @@ presence	Offline	غير متصل
 	Rename group…	إعادة تسمية المجموعة…
 	Delete group…	حذف المجموعة…
 	Move to group	نقل إلى المجموعة
-	Delete the calendar group {name}? Its calendars go back to My Calendars.	هل تريد حذف مجموعة التقويمات {name}؟ ستعود التقويمات التي فيها إلى تقويماتي.
+	Delete the calendar group {name}?	هل تريد حذف مجموعة التقويمات {name}؟
 	New calendar group	مجموعة تقويمات جديدة
 	Rename calendar group	إعادة تسمية مجموعة التقويمات
 	Delete calendar group	حذف مجموعة التقويمات
