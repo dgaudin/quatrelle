@@ -210,8 +210,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 None => start.saturating_add(current.end.saturating_sub(current.start)),
             };
             if current.all_day {
-                start -= start.rem_euclid(86_400);
-                end = (end - end.rem_euclid(86_400)).max(start.saturating_add(86_400));
+                // Times kept in the calendar's file are whatever it holds: none overflows here.
+                start = start.saturating_sub(start.rem_euclid(86_400));
+                end = end.saturating_sub(end.rem_euclid(86_400)).max(start.saturating_add(86_400));
             }
             s.move_event(&uid, occurrence, start, end, p::bool(v, "send").unwrap_or(true))
         })
@@ -435,8 +436,9 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         e.end = if all_day && e.all_day { t.saturating_add(86_400) } else { t };
     }
     if e.all_day {
-        e.start -= e.start.rem_euclid(86_400);
-        e.end = (e.end - e.end.rem_euclid(86_400)).max(e.start.saturating_add(86_400));
+        // Times kept in the calendar's file are whatever it holds: none overflows here.
+        e.start = e.start.saturating_sub(e.start.rem_euclid(86_400));
+        e.end = e.end.saturating_sub(e.end.rem_euclid(86_400)).max(e.start.saturating_add(86_400));
     } else if e.tzid.is_empty()
         && (e.uid.is_empty() || v.get("start").is_some() || v.get("end").is_some() || e.all_day != was_all_day)
         && let Some(zone) = s.clock.zone.and_then(|z| z.name())
