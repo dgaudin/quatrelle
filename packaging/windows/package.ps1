@@ -48,7 +48,7 @@ $MsiVersion = ($Version -split '-')[0]
 $Target = switch ($Arch) { 'x64' { 'x86_64-pc-windows-msvc' } 'x86' { 'i686-pc-windows-msvc' } 'arm64' { 'aarch64-pc-windows-msvc' } }
 $Dist = if ($env:DIST) { $env:DIST } else { Join-Path $Root 'dist\release' }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Root 'target' }
-New-Item -ItemType Directory -Force -Path $Dist | Out-Null
+New-Item -ItemType Directory -Force -LiteralPath $Dist | Out-Null
 
 # Shown by `quatrelle --version`. The shared release workflow sets BUILD_SHA and BUILD_DATE.
 if (-not $env:QUATRELLE_BUILD_SHA) { $env:QUATRELLE_BUILD_SHA = if ($env:BUILD_SHA) { $env:BUILD_SHA } else { (git -C $Root rev-parse HEAD 2>$null) } }
@@ -95,8 +95,8 @@ if ($Icons -eq 0) { throw 'quatrelle.exe has no embedded icon: rebuild it with Q
 Write-Output "ok quatrelle.exe: $Icons embedded icon group(s)"
 $Stage = Join-Path $TargetDir "windows-package\$Arch"
 Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-Copy-Item (Join-Path $Bin 'quatrelle.exe'), (Join-Path $Bin 'quatrelle-cli.exe') $Stage
+New-Item -ItemType Directory -Force -LiteralPath $Stage | Out-Null
+Copy-Item -LiteralPath (Join-Path $Bin 'quatrelle.exe'), (Join-Path $Bin 'quatrelle-cli.exe') -Destination $Stage
 
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'quatrelle.exe') (Join-Path $Stage 'quatrelle-cli.exe')
 
@@ -114,18 +114,18 @@ Remove-Item -LiteralPath ([IO.Path]::ChangeExtension($Msi, '.wixpdb')) -Force -E
 # ---- portable zip ------------------------------------------------------------------------------
 $Portable = Join-Path $TargetDir "windows-package\quatrelle-$Version-windows-$Arch-portable"
 Remove-Item -LiteralPath $Portable -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $Portable | Out-Null
-Copy-Item (Join-Path $Stage '*.exe') $Portable
+New-Item -ItemType Directory -Force -LiteralPath $Portable | Out-Null
+Get-ChildItem -LiteralPath $Stage -Filter '*.exe' | Copy-Item -Destination $Portable
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE', 'ATTRIBUTION.md') {
   $p = Join-Path $Root $f
-  if (Test-Path $p) { Copy-Item $p $Portable }
+  if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination $Portable }
 }
 # portable.txt beside quatrelle.exe switches on portable mode: everything goes to QuatrelleData\ next
 # to the exe, passwords stay in memory (issue #4; see apps/quatrelle/src/portable.rs).
-Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'portable.txt') -Destination $Portable
 $Zip = Join-Path $Dist "quatrelle-$Version-windows-$Arch-portable.zip"
 Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
-Compress-Archive -Path $Portable -DestinationPath $Zip
+Compress-Archive -LiteralPath $Portable -DestinationPath $Zip
 
 # Smoke-test the CLI when this machine can run it. An ARM64 build made on an x64 runner can't run
 # here.
@@ -135,4 +135,4 @@ if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
 } else {
   Write-Output "skipping quatrelle-cli --version: an $Arch build doesn't run on this $HostArch machine"
 }
-Get-Item $Msi, $Zip | Format-Table Name, Length
+Get-Item -LiteralPath $Msi, $Zip | Format-Table Name, Length
