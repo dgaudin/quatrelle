@@ -63,6 +63,9 @@ windows-registry = "0.6"
 uds_windows = "1.2"
 # The envelope in the notification area while new mail is unread (`desktop/tray.rs`).
 tray-icon = { version = "0.26.1", default-features = false }
+# The main window kept without the system's frame while Quatrelle's top bar is its title bar
+# (`desktop/window_frame.rs`): safe wrappers over Win32, only the parts it calls.
+winsafe = { version = "0.0.29", default-features = false, features = ["user"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3.6", default-features = false, features = ["apple-native"] }

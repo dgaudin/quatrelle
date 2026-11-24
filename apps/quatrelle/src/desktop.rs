@@ -75,6 +75,8 @@ pub(crate) struct Desktop {
     /// The window opened without the system's title bar, Quatrelle's top bar being it
     /// (`desktop/window_frame.rs`).
     pub(crate) own_title_bar: bool,
+    /// What keeps it borderless, on Windows (`window_frame::service`).
+    pub(crate) frame_guard: Option<window_frame::FrameGuard>,
 }
 
 impl Desktop {
@@ -164,6 +166,9 @@ impl Services for Desktop {
     }
     fn own_title_bar(&self) -> bool {
         self.own_title_bar
+    }
+    fn keep_frame(&mut self) {
+        window_frame::keep(self.frame_guard.as_ref());
     }
     fn zone(&self) -> Option<String> {
         iana_time_zone::get_timezone().ok()

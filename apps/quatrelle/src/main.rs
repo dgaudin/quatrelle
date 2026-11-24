@@ -597,6 +597,9 @@ fn run(
                         !native_wayland,
                     ),
                     own_title_bar,
+                    // Borderless, its title bar Quatrelle's own: kept so from the first frame
+                    // (Windows; upstream issue #22).
+                    frame_guard: desktop::window_frame::service(cc, own_title_bar),
                     ..Default::default()
                 }),
             );
