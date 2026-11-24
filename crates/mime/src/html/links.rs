@@ -50,25 +50,10 @@ fn host_ok(host: &str) -> bool {
         && labels.last().is_some_and(|tld| tld.chars().count() >= 2 && tld.chars().all(char::is_alphabetic))
 }
 
-/// `%xx` escapes undone (an address's path as its characters).
+/// `%xx` escapes undone (an address's path as its characters), by the one decoder
+/// ([`quatrelle_model::mailto::percent_decode`]).
 fn unescape(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while let Some(&c) = b.get(i) {
-        let hex = |k: usize| b.get(k).and_then(|h| (*h as char).to_digit(16));
-        match (c, hex(i + 1), hex(i + 2)) {
-            (b'%', Some(h), Some(l)) => {
-                out.push(u8::try_from(h * 16 + l).unwrap_or(b'?'));
-                i += 3;
-            }
-            _ => {
-                out.push(c);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+    quatrelle_model::mailto::percent_decode(s)
 }
 
 /// A path part as it goes in an address: what would end or change one escaped.
