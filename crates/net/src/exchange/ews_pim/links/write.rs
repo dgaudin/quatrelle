@@ -23,6 +23,7 @@ struct Shortcut {
     group_id: Vec<u8>,
     header_id: Vec<u8>,
     ordinal: Vec<u8>,
+    flags: i64,
     entry_id: Vec<u8>,
     store_id: Vec<u8>,
     folder_type: Vec<u8>,
@@ -109,6 +110,7 @@ fn shortcut_of(it: &El) -> Option<Shortcut> {
         group_id,
         header_id,
         ordinal,
+        flags: int_prop(it, "0x684A").unwrap_or(0),
         entry_id: bin_prop(it, "0x684C").unwrap_or_default(),
         store_id: bin_prop(it, "0x684E").unwrap_or_default(),
         folder_type: bin_prop(it, "0x684F").unwrap_or_default(),
@@ -183,10 +185,19 @@ fn after_group(all: &[Shortcut], group: &Shortcut, except: Option<&str>) -> Vec<
     last
 }
 
-/// CLSID_CalendarFolder ([MS-OXOCFG] 2.2.9.11): the folder class a calendar shortcut points at.
+/// CLSID_CalendarFolder ([MS-OXOCFG] 2.2.9.11, the value [MS-OXCDATA] 2.2.5.2 gives): the
+/// folder class a calendar shortcut points at.
 const CALENDAR_FOLDER: [u8; 16] = [0x02, 0x78, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46];
 
-/// A new GUID for a group header ([MS-OXOCFG] 2.2.9.3, PtypGuid).
+/// A save stamp for a shortcut this session writes ([MS-OXOCFG] 2.2.9.4): an integer that says
+/// the writing client's session.
+fn save_stamp() -> u32 {
+    let mut out = [0u8; 4];
+    rand_core::OsRng.fill_bytes(&mut out);
+    u32::from_le_bytes(out)
+}
+
+/// A new GUID for a group header ([MS-OXOCFG] 2.2.9.3).
 fn new_guid() -> [u8; 16] {
     let mut out = [0u8; 16];
     rand_core::OsRng.fill_bytes(&mut out);
@@ -206,14 +217,16 @@ fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8]) -> Strin
     let ordinal = crate::imap::base64(ordinal);
     format!(
         "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:FolderId Id=\"{}\"/></m:SavedItemFolderId>\
-         <m:Items><t:Message><t:ItemClass>{WLINK_CLASS}</t:ItemClass><t:Subject>{}</t:Subject>{}{}{}{}{}\
+         <m:Items><t:Message><t:ItemClass>{WLINK_CLASS}</t:ItemClass><t:Subject>{}</t:Subject>{}{}{}{}{}{}{}\
          <t:IsAssociated>true</t:IsAssociated></t:Message></m:Items></m:CreateItem>",
         esc(views),
         esc(name),
         ext("0x6842", "Binary", &guid),
+        ext("0x6847", "Integer", &save_stamp().to_string()),
         ext("0x6849", "Integer", "4"),
+        ext("0x684A", "Integer", "0"),
         ext("0x684B", "Binary", &ordinal),
-        ext("0x684F", "Binary", &folder_type),
+        ext("0x684F", "CLSID", &folder_type),
         ext("0x6852", "Integer", "3"),
     )
 }
@@ -300,7 +313,12 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
         return Err(NetError::No("a calendar group with that name is there already".into()));
     }
     let members: Vec<Shortcut> = members_of(&before, &header).into_iter().cloned().collect();
-    update(c, &header, &[set_subject(&name)])?;
+    let flags = header.flags | 0x2000;
+    update(
+        c,
+        &header,
+        &[set_subject(&name), set_ext("0x6847", "Integer", &save_stamp().to_string()), set_ext("0x684A", "Integer", &flags.to_string())],
+    )?;
     let mut done: Vec<Shortcut> = Vec::new();
     for m in &members {
         if let Err(e) = update(c, m, &[set_ext("0x6851", "String", &esc(&name))]) {

@@ -364,3 +364,26 @@ fn a_page_that_never_says_it_is_the_last_one_is_not_written_on() {
     let e = crate::ews_pim::create_calendar_group(&c, "Salles").unwrap_err();
     assert!(e.to_string().contains("read whole"), "{e}");
 }
+
+/// A group header carries the save stamp and the flags Outlook keeps ([MS-OXOCFG] 2.2.9.4,
+/// 2.2.9.6); renaming it sets the one-off name flag.
+#[test]
+fn a_group_header_has_a_save_stamp_and_flags() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    crate::ews_pim::create_calendar_group(&c, "Salles").unwrap();
+    {
+        let kept = server.data.lock().unwrap();
+        let header = kept.wlinks.iter().find(|w| w.contains(">Salles<")).expect("the new group header");
+        assert!(header.contains("PropertyTag=\"0x6847\""), "the save stamp is written: {header}");
+        assert!(header.contains("PropertyTag=\"0x684A\""), "the flags are written: {header}");
+        assert!(header.contains("PropertyTag=\"0x684F\" PropertyType=\"CLSID\""), "the folder type is a CLSID: {header}");
+    }
+    crate::ews_pim::rename_calendar_group(&c, "Salles", "Rooms").unwrap();
+    let kept = server.data.lock().unwrap();
+    let header = kept.wlinks.iter().find(|w| w.contains(">Rooms<")).expect("the renamed group header");
+    assert!(header.contains(">8192<"), "renaming sets sipOneOffName (0x2000): {header}");
+}
