@@ -268,14 +268,12 @@ fn sign_in_page(url: &str) -> Result<(), String> {
 /// Open an address in the system's browser, without a shell.
 fn launch(url: &str) -> Result<(), String> {
     // Windows: the URL handler itself (`explorer` can split an address at its commas, and a
-    // call link has them); the address goes as one argument, with no shell between.
-    let (opener, first): (&str, &[&str]) = if cfg!(windows) {
-        ("rundll32.exe", &["url.dll,FileProtocolHandler"])
-    } else if cfg!(target_os = "macos") {
-        ("open", &[])
-    } else {
-        ("xdg-open", &[])
-    };
+    // call link has them); the address goes as one argument, with no shell between. rundll32 is
+    // Windows' own, by its full path: a `rundll32.exe` beside a portable copy would run.
+    #[cfg(windows)]
+    let (opener, first): (std::path::PathBuf, &[&str]) = (crate::windows_program::path("rundll32.exe"), &["url.dll,FileProtocolHandler"]);
+    #[cfg(not(windows))]
+    let (opener, first): (&str, &[&str]) = if cfg!(target_os = "macos") { ("open", &[]) } else { ("xdg-open", &[]) };
     let mut child = std::process::Command::new(opener)
         .args(first)
         .arg(url)
@@ -283,7 +281,7 @@ fn launch(url: &str) -> Result<(), String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|_| format!("{opener} couldn't be started"))?;
+        .map_err(|_| "the browser couldn't be started".to_string())?;
     // Reaped in the background: the hour may run long after.
     std::thread::spawn(move || child.wait());
     Ok(())

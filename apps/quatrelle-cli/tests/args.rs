@@ -54,3 +54,35 @@ fn what_is_printed_cant_drive_the_terminal() {
     assert!(!err.contains('\u{1b}') && !err.contains('\u{7}'), "{err:?}");
     assert!(err.contains("\\u{1b}]0;pwned\\u{7}\\u{1b}[31mred"), "{err:?}");
 }
+
+/// Read as text, no source of the CLI starts a Windows program by its bare name: the current
+/// folder is searched first, where a portable copy's `rundll32.exe` would run. A
+/// `Command::new("…exe")` or a `("…exe", …)` tuple is refused (the app's `windows_programs.rs`
+/// is the model; the CLI keeps a copy of it).
+#[test]
+fn windows_programs_are_never_started_by_their_bare_name() {
+    let sources = [include_str!("../src/main.rs"), include_str!("../src/teams.rs")];
+    for src in sources {
+        for line in src.lines() {
+            if line.contains(r#"::path(""#) {
+                continue;
+            }
+            if let Some(at) = line.find(r#"Command::new(""#) {
+                let lit = line[at + r#"Command::new(""#.len()..].split('"').next().unwrap_or("").to_ascii_lowercase();
+                assert!(!(lit.ends_with(".exe") || lit.contains("powershell")), "a program by its bare name: {line}");
+            }
+            let mut at = 0;
+            while let Some(rel) = line[at..].find(r#"(""#) {
+                let open = at + rel;
+                let before = line[..open].chars().next_back();
+                let tuple_start = before.is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '.' || c == '!' || c == '>'));
+                if tuple_start {
+                    let lit = line[open + 2..].split('"').next().unwrap_or("");
+                    let bare = !lit.contains('{') && lit.to_ascii_lowercase().ends_with(".exe");
+                    assert!(!bare, "a program by its bare name: {line}");
+                }
+                at = open + 2;
+            }
+        }
+    }
+}

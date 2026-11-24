@@ -57,7 +57,7 @@ fn explorer_select(path: &str) -> Option<String> {
 pub(super) fn show_in_explorer(path: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let select = explorer_select(path).ok_or_else(|| "not a path Explorer can be given".to_string())?;
-    std::process::Command::new("explorer.exe").raw_arg(select).spawn().map(drop).map_err(|e| e.to_string())
+    std::process::Command::new(crate::desktop::windows_programs::path("explorer.exe")).raw_arg(select).spawn().map(drop).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

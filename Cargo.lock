@@ -5415,6 +5415,7 @@ dependencies = [
  "quatrelle-engine",
  "quatrelle-net",
  "serde_json",
+ "winsafe",
 ]
 
 [[package]]

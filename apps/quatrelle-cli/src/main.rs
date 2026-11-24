@@ -45,6 +45,8 @@ use quatrelle_net::worker::{MemoryCredentials, Pool};
 use serde_json::{Value, json};
 
 mod teams;
+#[cfg(windows)]
+mod windows_program;
 
 // Output that a closed pipe can't turn into a panic (`quatrelle-cli list | head` closes it
 // early; `println!` panicked there).

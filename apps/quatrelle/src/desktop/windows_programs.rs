@@ -27,6 +27,57 @@ pub(crate) fn path(name: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    /// Read as text, no source of the app starts a Windows program by its bare name outside this
+    /// module: the current folder is searched first, where a portable copy's `explorer.exe` would
+    /// run. A `Command::new("…exe")` or a `("…exe", …)` tuple is refused; test-only code names no
+    /// `.exe` (the keychain test's `cmdkey` runs only in tests).
+    #[test]
+    fn windows_programs_are_never_started_by_their_bare_name() {
+        let sources = [
+            include_str!("../desktop.rs"),
+            include_str!("appearance.rs"),
+            include_str!("browsers.rs"),
+            include_str!("file_dialogs.rs"),
+            include_str!("keychain.rs"),
+            include_str!("lanes.rs"),
+            include_str!("memory.rs"),
+            include_str!("opening.rs"),
+            include_str!("printing.rs"),
+            include_str!("profiles.rs"),
+            include_str!("shares.rs"),
+            include_str!("start.rs"),
+            include_str!("state_writer.rs"),
+            include_str!("tray.rs"),
+            include_str!("window_frame.rs"),
+            include_str!("../self_update/install.rs"),
+            include_str!("../video.rs"),
+        ];
+        for src in sources {
+            for line in src.lines() {
+                if line.contains(r#"::path(""#) {
+                    continue;
+                }
+                if let Some(at) = line.find(r#"Command::new(""#) {
+                    let lit = line[at + r#"Command::new(""#.len()..].split('"').next().unwrap_or("");
+                    let low = lit.to_ascii_lowercase();
+                    assert!(!(!lit.contains('{') && (low.ends_with(".exe") || low.contains("powershell"))), "a program by its bare name: {line}");
+                }
+                let mut at = 0;
+                while let Some(rel) = line[at..].find(r#"(""#) {
+                    let open = at + rel;
+                    let before = line[..open].chars().next_back();
+                    let tuple_start = before.is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '.' || c == '!' || c == '>'));
+                    if tuple_start {
+                        let lit = line[open + 2..].split('"').next().unwrap_or("");
+                        let bare = !lit.contains('{') && lit.to_ascii_lowercase().ends_with(".exe");
+                        assert!(!bare, "a program by its bare name: {line}");
+                    }
+                    at = open + 2;
+                }
+            }
+        }
+    }
+
     /// Windows' programs Quatrelle starts (to open a folder, a file or a link, and to install an
     /// update) are Windows' own, by their full path where Windows says its folders are. Started by
     /// name, an `explorer.exe` beside a portable Quatrelle ran in its place.
