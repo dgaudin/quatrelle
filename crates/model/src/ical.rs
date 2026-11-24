@@ -374,6 +374,14 @@ fn person(l: &Line) -> Attendee {
     }
 }
 
+/// The most lines an event keeps as written (`extra`): its properties Quatrelle doesn't read,
+/// and the components it holds. One that begins past it is left out whole.
+const EXTRA_MAX: usize = 200;
+
+/// An event's alarms may go on to this many: its reminder is kept past a calendar's own
+/// properties, where every reader of its alarms finds it.
+const EXTRA_ALARMS_MAX: usize = 400;
+
 /// Read a calendar file. `local_offset` (seconds east of UTC) places floating times; better,
 /// [`parse_in`] the viewer's zone.
 pub fn parse(text: &str, local_offset: i64) -> ICalendar {
@@ -395,6 +403,10 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
     let mut busy_said = false;
     let mut ev: Option<(CalEvent, Option<i64>)> = None;
     let mut depth_in_event = 0usize;
+    // The depth of the nested component being left out, with all it holds; the cap of the one
+    // being kept.
+    let mut dropped_from: Option<usize> = None;
+    let mut component_max = EXTRA_MAX;
     // The `VALARM` being read, as written: its trigger becomes the reminder, and an alarm
     // Quatrelle can't read is kept whole.
     let mut alarm: Option<Vec<String>> = None;
@@ -405,27 +417,41 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
             if what == "VEVENT" && ev.is_none() {
                 ev = Some((CalEvent::default(), None));
                 depth_in_event = 0;
+                dropped_from = None;
+                component_max = EXTRA_MAX;
                 pending.clear();
                 busy_said = false;
                 continue;
             }
             if ev.is_some() {
-                depth_in_event += 1;
-                if what == "VALARM" && depth_in_event == 1 && alarm.is_none() {
-                    alarm = Some(vec![l.raw.clone()]);
-                } else if let Some(a) = alarm.as_mut() {
-                    a.push(l.raw.clone());
-                } else if let Some((e, _)) = ev.as_mut() {
-                    e.extra.push(l.raw.clone());
+                depth_in_event = depth_in_event.saturating_add(1);
+                if dropped_from.is_none() {
+                    if depth_in_event == 1 {
+                        component_max = if what == "VALARM" { EXTRA_ALARMS_MAX } else { EXTRA_MAX };
+                    }
+                    if what == "VALARM" && depth_in_event == 1 && alarm.is_none() {
+                        alarm = Some(vec![l.raw.clone()]);
+                    } else if let Some(a) = alarm.as_mut() {
+                        if a.len() < component_max { a.push(l.raw.clone()) } else { dropped_from = Some(depth_in_event) }
+                    } else if let Some((e, _)) = ev.as_mut() {
+                        if e.extra.len() < component_max { e.extra.push(l.raw.clone()) } else { dropped_from = Some(depth_in_event) }
+                    }
                 }
             }
             continue;
         }
         if n == "END" {
             if ev.is_some() && depth_in_event > 0 {
+                // A component left out whole: its end is left out too, and what it held.
+                let was_dropped = dropped_from;
+                if matches!(dropped_from, Some(d) if d == depth_in_event) {
+                    dropped_from = None;
+                }
                 depth_in_event -= 1;
                 if let Some(lines) = alarm.as_mut() {
-                    lines.push(l.raw.clone());
+                    if was_dropped.is_none() && lines.len() < component_max {
+                        lines.push(l.raw.clone());
+                    }
                     if depth_in_event == 0 {
                         let lines = alarm.take().unwrap_or_default();
                         match alarm_minutes(&lines) {
@@ -437,12 +463,18 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                             }
                             None => {
                                 if let Some((e, _)) = ev.as_mut() {
-                                    e.extra.extend(lines);
+                                    for line in lines {
+                                        if e.extra.len() < EXTRA_ALARMS_MAX {
+                                            e.extra.push(line);
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                } else if let Some((e, _)) = ev.as_mut() {
+                } else if let Some((e, _)) = ev.as_mut()
+                    && was_dropped.is_none()
+                {
                     e.extra.push(l.raw.clone());
                 }
                 continue;
@@ -488,8 +520,14 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
         };
         if depth_in_event > 0 {
             match alarm.as_mut() {
-                Some(lines) => lines.push(l.raw.clone()),
-                None => e.extra.push(l.raw.clone()),
+                Some(lines) if dropped_from.is_none() => {
+                    if lines.len() < component_max {
+                        lines.push(l.raw.clone());
+                    }
+                }
+                Some(_) => {}
+                None if dropped_from.is_none() && e.extra.len() < component_max => e.extra.push(l.raw.clone()),
+                None => {}
             }
             continue;
         }
@@ -539,7 +577,7 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
             "CONFERENCE" if conference::take(e, l) => {}
             _ if meeting::read(e, n, &l.value, &mut busy_said) => {}
             _ => {
-                if e.extra.len() < 200 {
+                if e.extra.len() < EXTRA_MAX {
                     e.extra.push(l.raw.clone());
                 }
             }
