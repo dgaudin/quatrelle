@@ -302,3 +302,67 @@ fn hold_down(server: bool, packed: bool) -> std::time::Duration {
     let _ = std::fs::remove_dir_all(dir);
     worst
 }
+
+/// Rows listed with no kind and no preview have their sources read and parsed on a lane of
+/// their own (a stranger's message parsed in full is heavy work), not in the frame that draws
+/// them; what the lane read shows once it is back, and nothing is asked for twice.
+#[test]
+fn rows_without_a_kind_are_read_on_a_lane_not_in_the_frame() {
+    use quatrelle_engine::model::Summary;
+    let (mut a, dir) = app("preview-lane");
+    let ctx = egui::Context::default();
+    let held = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(HeldAll(held.clone()));
+    a.defer_bodies();
+    let store = a.session.store.clone().unwrap();
+    let mut inbox = store.load_folder("sample", "INBOX").unwrap();
+    let keys: Vec<MessageKey> = (0..4u32)
+        .map(|i| {
+            let key = MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9800 + i };
+            let raw = format!("From: a@x.example\r\nSubject: Strange {i}\r\n\r\nWords of message {i}.\r\n");
+            store.write_body(&key, raw.as_bytes()).unwrap();
+            inbox.messages.insert(
+                0,
+                Summary { key: key.clone(), subject: format!("Strange {i}"), date: NOW + 100 + i64::from(i), ..Default::default() }.into(),
+            );
+            key
+        })
+        .collect();
+    store.save_folder("sample", "INBOX", &inbox).unwrap();
+    a.session.apply(MailEvent::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    a.run("folder.open", json!({"account": "sample", "folder": "INBOX"}));
+    for _ in 0..3 {
+        a.logic(&ctx);
+        frame(&ctx, &mut a, vec![]);
+    }
+    let shown = |a: &MailApp| -> Vec<String> {
+        keys.iter().map(|k| a.session.list.iter().find(|m| m.key == *k).map(|m| a.session.preview_of(m).to_string()).unwrap_or_default()).collect()
+    };
+    assert!(shown(&a).iter().all(String::is_empty), "no source is read on the window's thread: {:?}", shown(&a));
+    assert!(run_held(&held) > 0, "the work went to a lane");
+    a.logic(&ctx);
+    assert!(shown(&a).iter().all(|p| !p.is_empty()), "what the lane read is kept: {:?}", shown(&a));
+    let row = a.session.list.iter().find(|m| m.key == keys[0]).cloned().unwrap();
+    assert_eq!(a.session.preview_of(&row), "Words of message 0.");
+    assert!(!a.session.source_wanted(&row), "a row read isn't asked for again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Services that keep every piece of work handed to them, the previews' too.
+struct HeldAll(std::sync::Arc<std::sync::Mutex<Vec<crate::Work>>>);
+
+impl crate::Services for HeldAll {
+    fn clock(&self) -> (i64, i32) {
+        (NOW, 0)
+    }
+    fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
+        Ok(())
+    }
+    fn background(&mut self, _: crate::Lane, work: crate::Work) -> Result<(), crate::Work> {
+        self.0.lock().unwrap().push(work);
+        Ok(())
+    }
+    fn has_background(&self) -> bool {
+        true
+    }
+}

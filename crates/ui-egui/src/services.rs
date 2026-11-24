@@ -141,6 +141,8 @@ pub enum Lane {
     Pictures,
     /// Getting a message ready to read.
     Reading,
+    /// Reading the sources of list rows that came without a preview or a kind.
+    Previews,
     /// Writing a local account's marks to its cache, in order.
     Writing,
     /// Taking the folders' kept search indexes back, ahead of the search that joins them.

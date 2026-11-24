@@ -35,7 +35,12 @@ impl crate::Services for Held {
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         Ok(())
     }
-    fn background(&mut self, _: crate::Lane, work: crate::Work) -> Result<(), crate::Work> {
+    fn background(&mut self, lane: crate::Lane, work: crate::Work) -> Result<(), crate::Work> {
+        // The previews of list rows aren't what these tests count: read at once.
+        if lane == crate::Lane::Previews {
+            (work.run)();
+            return Ok(());
+        }
         self.0.lock().unwrap().push(work);
         Ok(())
     }

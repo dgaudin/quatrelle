@@ -141,6 +141,7 @@ fn spawn(lane: Lane, shared: &Arc<Shared>, id: u64) -> std::io::Result<()> {
     let name = match lane {
         Lane::Pictures => "mail-pictures",
         Lane::Reading => "mail-reading",
+        Lane::Previews => "mail-previews",
         Lane::Writing => "mail-writing",
         Lane::Searching => "mail-searching",
     };

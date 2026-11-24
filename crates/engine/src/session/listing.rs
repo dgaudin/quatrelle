@@ -6,6 +6,9 @@
 use super::*;
 use quatrelle_model::{ListIcon, MessageKind};
 
+mod previews;
+pub use previews::{PreviewWork, PreviewsRead};
+
 /// What the message list shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -309,6 +312,7 @@ impl Session {
     pub fn source_wanted(&self, m: &Summary) -> bool {
         (m.preview.is_empty() || m.kind.is_unknown())
             && m.key.folder != OUTBOX
+            && !self.previews_pending.contains(&m.key)
             && match self.previews.get(&m.key) {
                 None => true,
                 Some(Preview::Read { .. }) => false,
@@ -344,49 +348,13 @@ impl Session {
         self.previews.len()
     }
 
-    /// Work out the previews and kinds of rows shown from their sources here, as Outlook
-    /// writes a message's preview from its offline copy for the rows it draws: mail downloaded
-    /// ahead comes without one (a big folder's list isn't written again for it), and mail kept
-    /// as it came says nothing of what it is. In memory only, a few at a time; whether some of
-    /// `keys` are left.
+    /// [`Session::take_preview_work`], done here and now, for what can't wait (a command, the
+    /// tests): whether some of `keys` are left.
     pub fn fill_previews(&mut self, keys: &[MessageKey]) -> bool {
-        let Some(store) = self.store.clone() else { return false };
-        if self.previews.len() >= PREVIEWS_KEPT {
-            self.previews.clear();
-        }
-        let (mut done, mut bytes) = (0usize, 0usize);
-        let compacting = self.compacting_in_place().map(str::to_string);
-        for key in keys {
-            if done >= PREVIEW_STEP || bytes >= PREVIEW_STEP_BYTES {
-                return true;
-            }
-            // Its data file had to itself by Compact Now: worked out once it's done.
-            if compacting.as_deref() == Some(key.account.as_str()) {
-                continue;
-            }
-            let Some(raw) = store.read_body(key) else {
-                self.previews.insert(key.clone(), Preview::Missing(self.clock.now));
-                continue;
-            };
-            done += 1;
-            bytes = bytes.saturating_add(raw.len());
-            // The row as listed: with a preview it keeps it, with a kind it keeps it.
-            let (has_preview, said) = match self.list.iter().find(|m| m.key.uid == key.uid && m.key == *key) {
-                Some(m) => (!m.preview.is_empty(), m.kind),
-                None => (false, MessageKind::Unknown),
-            };
-            // As its summary would have it, had it come whole: not a full parse (laid out).
-            let text = if has_preview { String::new() } else { mime::preview_from_source(&raw) };
-            let kind = if !said.is_unknown() {
-                said
-            } else if raw.len() > KIND_SOURCE_MAX {
-                MessageKind::Plain
-            } else {
-                // A parser of strangers' bytes, kept from taking the window down.
-                std::panic::catch_unwind(|| mime::message_kind(&raw)).unwrap_or(MessageKind::Plain)
-            };
-            self.previews.insert(key.clone(), Preview::Read { text, kind });
-        }
-        false
+        let Some(work) = self.take_preview_work(keys) else { return false };
+        let read = work.run();
+        let left = read.left;
+        self.finish_previews(read);
+        left
     }
 }

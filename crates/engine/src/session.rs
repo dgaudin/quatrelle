@@ -45,7 +45,7 @@ mod writing;
 pub use accounts::{ACCOUNTS_UNREAD, AccountState, ImportState, UnfinishedImport, UpdateCheck, VacationState, newer_release};
 use changing::UNDO_DEPTH;
 pub use changing::{MarkWork, Undo};
-pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
+pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, PreviewWork, PreviewsRead, Row, View, arrange_list};
 use listing::{Preview, arranged, flag_rank, person, size_group};
 pub(crate) use mailboxes::none_offered;
 pub use mailboxes::{
@@ -338,6 +338,8 @@ pub struct Session {
     /// Previews worked out from sources for list rows that came without one
     /// ([`Session::fill_previews`]).
     previews: HashMap<MessageKey, Preview>,
+    /// The rows whose sources are being read for their previews (on a lane of their own).
+    previews_pending: HashSet<MessageKey>,
     /// Flags owed to originals, keyed by the Outbox id of the reply or forward that earns them:
     /// set when the server accepts that message. Saved to disk so a restart keeps them.
     pending_marks: BTreeMap<u64, (MessageKey, Flag, bool)>,
@@ -561,6 +563,7 @@ impl Session {
             reported_counts: HashMap::new(),
             counts_stale: HashSet::new(),
             previews: HashMap::new(),
+            previews_pending: HashSet::new(),
             parked: HashSet::new(),
             away_from_calendar: None,
             read_aside: HashMap::new(),

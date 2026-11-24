@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use quatrelle_engine::model::Summary;
-use quatrelle_engine::{BodyWork, PreparedBody};
+use quatrelle_engine::{BodyWork, PreparedBody, PreviewsRead};
 
 use super::*;
 use crate::{Lane, MailApp, Work};
@@ -31,6 +31,8 @@ pub(crate) struct Bodies {
     done: Arc<Mutex<Option<(u64, PreparedBody)>>>,
     /// The number of the last work handed over.
     handed: AtomicU64,
+    /// What the previews lane read, for the window to take in.
+    previews: Arc<Mutex<Option<PreviewsRead>>>,
 }
 
 #[cfg(test)]
@@ -59,6 +61,32 @@ impl MailApp {
                 self.ui.pictures.give_source(p.key(), raw.clone());
             }
             self.session.finish_body(p);
+        }
+    }
+
+    /// The sources of rows shown without a preview or a kind go to their lane (a few at a time,
+    /// the window drawn between): parsing a stranger's message isn't done on the window's thread.
+    /// Done here when no lane takes it.
+    pub(crate) fn send_preview_work(&mut self, ctx: &egui::Context, keys: &[quatrelle_engine::model::MessageKey]) {
+        let Some(work) = self.session.take_preview_work(keys) else { return };
+        let (done, ctx2) = (self.ui.bodies.previews.clone(), ctx.clone());
+        let run = Box::new(move || {
+            let read = work.run();
+            *lock(&done) = Some(read);
+            ctx2.request_repaint();
+        });
+        if let Err(work) = self.services.background(Lane::Previews, Work { run, cancelled: Arc::new(AtomicBool::new(false)), first: false }) {
+            (work.run)();
+            self.take_previews();
+            ctx.request_repaint();
+        }
+    }
+
+    /// What the previews lane read is kept.
+    pub(crate) fn take_previews(&mut self) {
+        let read = lock(&self.ui.bodies.previews).take();
+        if let Some(read) = read {
+            self.session.finish_previews(read);
         }
     }
 

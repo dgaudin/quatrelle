@@ -39,6 +39,7 @@ impl MailApp {
         self.ui.teams_queue.pictures.made(ctx);
         // The open message's body, back from the reading lane.
         self.take_body();
+        self.take_previews();
         // A send held for names being resolved goes once they are, or says why it can't.
         self.send_when_resolved(ctx);
         // A file dialog answered: what asked (Attach, Save As…) completes.
@@ -702,8 +703,7 @@ impl MailApp {
         // asks for the rest).
         let previews = std::mem::take(&mut self.ui.want_previews);
         if !previews.is_empty() && self.session.compacting_in_place().is_none() {
-            self.session.fill_previews(&previews);
-            ctx.request_repaint();
+            self.send_preview_work(&ctx, &previews);
         }
         self.send_body_work(&ctx);
         self.flush_jobs();
