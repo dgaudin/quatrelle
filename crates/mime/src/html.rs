@@ -399,12 +399,6 @@ fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
             continue;
         }
         if level > 0 {
-            if let Some(first) = spans.first_mut()
-                && first.text.trim_start_matches('#').trim().is_empty()
-                && first.image.is_none()
-            {
-                first.text.clear();
-            }
             for sp in &mut spans {
                 sp.heading = level;
             }
@@ -418,8 +412,12 @@ fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
         for sp in &mut spans {
             sp.text = sp.text.replace([HEADING_MARK, PICTURE_MARK, RULE_MARK], "");
         }
-        // List bullets (`* item`, indented when nested) as real bullets.
-        if let Some(first) = spans.first_mut() {
+        // List bullets (`* item`, indented when nested) as real bullets; a title's text is
+        // text, even when it begins like one.
+        if level == 0
+            && !keep_box_lines
+            && let Some(first) = spans.first_mut()
+        {
             let indent = first.text.len() - first.text.trim_start_matches(' ').len();
             if first.text.get(indent..).is_some_and(|r| r.starts_with("* ")) {
                 first.text = format!("{}• {}", " ".repeat(indent), first.text.get(indent + 2..).unwrap_or(""));

@@ -85,26 +85,24 @@ fn markdown_of(text: &str, styles: &Styles) -> String {
             continue;
         }
         let indent = "    ".repeat(usize::from(para.indent));
-        let mut content_started = false;
         match para.list {
             List::Bullet if heading == 0 => {
                 out.push_str(&indent);
                 out.push_str("- ");
-                content_started = true;
             }
             List::Number if heading == 0 => {
                 out.push_str(&indent);
                 out.push_str("1. ");
-                content_started = true;
             }
             _ => {}
         }
         if heading > 0 {
             out.push_str(&"#".repeat(usize::from(heading)));
             out.push(' ');
-            content_started = true;
         }
-        let mut esc = Escaping { at_line_start: !content_started, digits: 0 };
+        // The first character of the content is still a line's beginning to Markdown, even
+        // behind a title's `# ` or a list's bullet: a hash there would close the title.
+        let mut esc = Escaping { at_line_start: true, digits: 0, heading: heading > 0 };
         let runs = runs_of(&chars, start, heading > 0, styles);
         write_runs(&runs, &mut out, &mut esc);
         start += chars.len() + 1;
@@ -161,6 +159,8 @@ fn runs_of(chars: &[char], start: usize, heading: bool, styles: &Styles) -> Vec<
 struct Escaping {
     at_line_start: bool,
     digits: usize,
+    /// A title's own marks: a `#` anywhere in it would close the title or become one.
+    heading: bool,
 }
 
 /// A run's text escaped, keeping only the white space at its ends outside any emphasis.
@@ -294,7 +294,8 @@ fn escape_into(c: char, out: &mut String, esc: &mut Escaping) {
     let start = esc.at_line_start;
     let mark = match c {
         '\\' | '`' | '*' | '_' | '[' | ']' | '~' | '<' | '>' | '&' | '|' | '=' => true,
-        '#' | '-' | '+' if start => true,
+        '#' if start || esc.heading => true,
+        '-' | '+' if start => true,
         '.' | ')' if esc.digits > 0 => true,
         _ => false,
     };
@@ -474,7 +475,7 @@ fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Sty
     let mut answer_paras = Vec::new();
     for (n, line) in text.split('\n').enumerate() {
         let para = styles.para(n);
-        if !line.trim().is_empty() || para.rule {
+        if !line.trim().is_empty() || para.rule || para.list != List::None {
             answer_paras.push(para);
         }
     }
@@ -492,7 +493,7 @@ fn restore_breaks(text: &str, styles: &Styles, before: &str, before_styles: &Sty
     let mut next = 0usize;
     let mut next_para = 0usize;
     for (n, line) in before.split('\n').enumerate() {
-        let ours = !line.trim().is_empty() || before_styles.para(n).rule;
+        let ours = !line.trim().is_empty() || before_styles.para(n).rule || before_styles.para(n).list != List::None;
         let para = if ours {
             let p = answer_paras.get(next_para).copied().unwrap_or_default();
             next_para += 1;

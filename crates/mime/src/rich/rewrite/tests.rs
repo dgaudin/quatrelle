@@ -143,13 +143,15 @@ proptest! {
                 styles.chars.push(0);
             }
             let mut chars = chars.clone();
-            if !matches!(kind, 3 | 5) && chars.is_empty() {
-                chars.push('a');
-            }
             while chars.first() == Some(&' ') { chars.remove(0); }
             while chars.last() == Some(&' ') { chars.pop(); }
             // A run of spaces collapses where HTML is read; one space is exact.
             chars.dedup_by(|a, b| *a == ' ' && *b == ' ');
+            // A block line that is empty would be a case of its own; the exact test above
+            // covers an empty bullet, and the round trip here keeps to text.
+            if !matches!(kind, 3 | 5) && chars.is_empty() {
+                chars.push('a');
+            }
             let heading = match kind {
                 4 => match n % 3 { 0 => Some(20), 1 => Some(16), _ => Some(14) },
                 _ => None,
@@ -236,4 +238,87 @@ fn a_bare_web_address_comes_back_as_a_link() {
     let at = back.find("https://studio.example/plan").unwrap_or(0);
     let at = back.get(..at).map_or(0, |t| t.chars().count());
     assert_eq!(back_styles.style(at).link.as_deref(), Some("https://studio.example/plan"));
+}
+
+/// A title whose text is a single hash comes back as that hash, still a title.
+#[test]
+fn a_title_whose_text_is_a_hash_comes_back() {
+    let text = "#";
+    let mut styles = Styles::plain(text);
+    styles.restyle(text, 0..1, |s| Style { bold: true, size: Some(20), ..s.clone() });
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text, "sent {:?}", outbound(text, &styles, 7).0);
+    assert!(back_styles.style(0).bold && back_styles.style(0).size == Some(20), "still a title");
+}
+
+/// A line made of one Markdown sign, as a paragraph, a list item or a title, comes back as that
+/// sign with its layout.
+#[test]
+fn a_line_that_is_one_markdown_sign_comes_back() {
+    fn line(text: &str, heading: bool, list: List) -> (Styles, Para) {
+        let mut styles = Styles::plain(text);
+        let para = Para { list, ..Para::default() };
+        styles.paras[0] = para;
+        if heading {
+            styles.restyle(text, 0..text.chars().count(), |s| Style { bold: true, size: Some(20), ..s.clone() });
+        }
+        (styles, para)
+    }
+    for sign in ["#", "-", "+", ">", "1.", "*", "_"] {
+        for (heading, list) in [(false, List::None), (false, List::Bullet), (false, List::Number), (true, List::None)] {
+            let (styles, para) = line(sign, heading, list);
+            let (back, back_styles) = there_and_back(sign, &styles);
+            assert_eq!(back, sign, "sign {sign:?}, heading {heading}, list {list:?}: sent {:?}", outbound(sign, &styles, 7).0);
+            let now = back_styles.para(0);
+            assert_eq!((now.list, now.rule), (para.list, para.rule), "layout of {sign:?}");
+            if heading {
+                assert!(back_styles.style(0).bold && back_styles.style(0).size == Some(20), "title {sign:?}");
+            }
+        }
+    }
+}
+
+/// A title whose text begins like a bullet stays its text, not a bullet.
+#[test]
+fn a_title_that_begins_like_a_bullet_stays_text() {
+    let text = "* a";
+    let mut styles = Styles::plain(text);
+    styles.restyle(text, 0..text.chars().count(), |s| Style { bold: true, size: Some(20), ..s.clone() });
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text, "sent {:?}", outbound(text, &styles, 7).0);
+    assert!(back_styles.style(0).bold && back_styles.style(0).size == Some(20), "still a title");
+}
+
+/// A title with a hash at its end keeps it: the hash would close the title otherwise.
+#[test]
+fn a_title_ending_with_a_hash_keeps_it() {
+    let text = "a #";
+    let mut styles = Styles::plain(text);
+    styles.restyle(text, 0..text.chars().count(), |s| Style { bold: true, size: Some(20), ..s.clone() });
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text, "sent {:?}", outbound(text, &styles, 7).0);
+    assert!(back_styles.style(0).bold && back_styles.style(0).size == Some(20), "still a title");
+}
+
+/// An empty list item is a list item, not a lost paragraph.
+#[test]
+fn an_empty_bullet_line_stays_a_bullet() {
+    let text = "";
+    let mut styles = Styles::plain(text);
+    styles.paras[0].list = List::Bullet;
+    let sent = outbound(text, &styles, 7).0;
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text, "sent {sent:?} read {:?}", crate::read_markdown(&sent));
+    assert_eq!(back_styles.para(0).list, List::Bullet, "paras {:?} read {:?}", back_styles.paras, crate::read_markdown(&sent));
+}
+
+/// An ordinary paragraph whose text begins like a bullet (`* a`) stays its text; the reader
+/// trusts the line's own mark, not the characters.
+#[test]
+fn a_paragraph_beginning_like_a_bullet_stays_text() {
+    let text = "a\n* a";
+    let styles = Styles::plain(text);
+    let (back, back_styles) = there_and_back(text, &styles);
+    assert_eq!(back, text, "sent {:?}", outbound(text, &styles, 7).0);
+    assert_eq!(back_styles.para(1).list, List::None);
 }
