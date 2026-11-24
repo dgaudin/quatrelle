@@ -145,6 +145,8 @@ fn request(key: &str, open: &[String]) -> String {
 
 /// What a request hands over, or `None` when it isn't one with `key`: anything but one JSON
 /// object with that key and a list of strings (empty ones and those past [`MAX_OPEN`] left out).
+/// A launch hands on links as they are and paths made absolute (`args::handed`): a path that
+/// isn't one would be opened from this Quatrelle's own folder instead, so it's left out too.
 fn parse_request(line: &str, key: &str) -> Option<Vec<String>> {
     let value: serde_json::Value = serde_json::from_str(line.trim_end()).ok()?;
     let sent = value.get("key")?.as_str()?;
@@ -153,7 +155,8 @@ fn parse_request(line: &str, key: &str) -> Option<Vec<String>> {
     }
     let open = value.get("open")?.as_array()?;
     let open = open.iter().map(|v| v.as_str().map(str::to_string)).collect::<Option<Vec<String>>>()?;
-    Some(open.into_iter().filter(|s| !s.trim().is_empty()).take(MAX_OPEN).collect())
+    let absolute = |s: &String| quatrelle_engine::model::mailto::is_mailto(s) || Path::new(s).is_absolute();
+    Some(open.into_iter().filter(|s| !s.trim().is_empty()).filter(absolute).take(MAX_OPEN).collect())
 }
 
 /// Compares a sent key with ours without stopping at the first wrong byte, so a caller timing
@@ -309,6 +312,13 @@ fn claim_at(path: &Path, open: &[String]) -> Claim {
                         Claim::Alone
                     }
                 };
+            }
+            // Only a refused or missing socket is one nobody listens on: another failure (no
+            // right to it, too many waiting) may come from a Quatrelle that's running, whose
+            // socket isn't taken from it.
+            Err(e) if !matches!(e.kind(), std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::NotFound) => {
+                log::info!("single instance off: can't reach {} ({e})", path.display());
+                return Claim::Alone;
             }
             // Nobody listens: no socket yet, or one left by a Quatrelle that didn't exit cleanly.
             // Removed without asking `exists()` first: on Windows that follows the socket's
@@ -605,6 +615,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(silent.parent().unwrap());
     }
 
+    /// `p` (`/u/a.pdf`) as an absolute path on this system: on Windows, on drive C.
+    fn abs(p: &str) -> String {
+        if cfg!(windows) { format!("C:{p}") } else { p.to_string() }
+    }
+
     /// What a launch hands over reaches the running window, in order, once; the request carries
     /// the run's key, which is in a file beside the socket and new each run.
     #[test]
@@ -614,11 +629,11 @@ mod tests {
         let key = read_key(&path).unwrap();
         assert_eq!(key, first.key);
         assert!(key.len() >= 40, "{key}");
-        let open = vec!["mailto:ana@x.example?subject=Hi".to_string(), "C:/Users/zoe/Downloads/Invite.ics".to_string()];
+        let open = vec!["mailto:ana@x.example?subject=Hi".to_string(), abs("/Users/zoe/Downloads/Invite.ics")];
         assert!(matches!(claim_at(&path, &open), Claim::Shown));
-        assert!(matches!(claim_at(&path, &["/home/zoe/x.eml".to_string()]), Claim::Shown));
+        assert!(matches!(claim_at(&path, &[abs("/home/zoe/x.eml")]), Claim::Shown));
         let mut all = open.clone();
-        all.push("/home/zoe/x.eml".into());
+        all.push(abs("/home/zoe/x.eml"));
         assert_eq!(first.take(), Some(all));
         assert!(first.take().is_none());
         first.close();
@@ -670,14 +685,18 @@ mod tests {
     /// The request's parser: the key exactly, a list of strings, empties and extras left out.
     #[test]
     fn requests_are_read_strictly() {
-        let open: Vec<String> = (0..100).map(|i| format!("/m/{i}.eml")).collect();
+        let open: Vec<String> = (0..100).map(|i| abs(&format!("/m/{i}.eml"))).collect();
         let line = request("k3y", &open);
         assert!(line.ends_with('\n') && !line.trim_end().contains('\n'), "one line");
         assert_eq!(parse_request(&line, "k3y").map(|v| v.len()), Some(MAX_OPEN));
         assert_eq!(parse_request(&line, "k3Y"), None);
         assert_eq!(parse_request(&line, ""), None, "no key, no requests");
         assert_eq!(parse_request(&request("", &[]), ""), None);
-        assert_eq!(parse_request("{\"key\":\"k\",\"open\":[\"\",\" \",\"a\"]}", "k"), Some(vec!["a".to_string()]));
+        assert_eq!(parse_request("{\"key\":\"k\",\"open\":[\"\",\" \",\"mailto:a@x.example\"]}", "k"), Some(vec!["mailto:a@x.example".to_string()]));
+        // A path that isn't absolute (a launch makes them so) would be opened from this
+        // Quatrelle's folder: left out.
+        let relative = request("k", &["x.eml".to_string(), abs("/m/y.eml")]);
+        assert_eq!(parse_request(&relative, "k"), Some(vec![abs("/m/y.eml")]));
         for junk in ["", "{}", "[]", "null", "{\"key\":\"k\"}", "{\"key\":5,\"open\":[]}", "\u{0}\u{ff}"] {
             assert_eq!(parse_request(junk, "k"), None, "{junk:?}");
         }
