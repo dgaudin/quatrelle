@@ -39,11 +39,13 @@ pub(super) fn msi_step(file: &Path) -> String {
 /// The PowerShell step unzipping the portable zip over `dir` (its one top folder's contents).
 /// The zip goes only once it's copied in, as the MSI goes only once installed: one that can't
 /// be unpacked or copied stays, to be tried again rather than downloaded again.
+/// It is unpacked by .NET's own `ZipFile`: `Expand-Archive -Force` fails in Windows PowerShell 5.1
+/// with the newer Archive module (it asks .NET for an overload only .NET Core has).
 pub(super) fn portable_step(zip: &Path, dir: &Path) -> String {
     let tmp = dir.join(".quatrelle-update");
     format!(
         "$t = {t}; $ok = $false; Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue; \
-         try {{ Expand-Archive -LiteralPath {z} -DestinationPath $t -Force -ErrorAction Stop; \
+         try {{ Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory({z}, $t); \
          $top = Get-ChildItem -LiteralPath $t -Directory | Select-Object -First 1; \
          if ($top) {{ Copy-Item -Path (Join-Path $top.FullName '*') -Destination {d} -Recurse -Force -ErrorAction Stop; $ok = $true }} }} \
          catch {{ Write-Output $_ }}; \
