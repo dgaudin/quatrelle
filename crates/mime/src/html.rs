@@ -294,6 +294,20 @@ pub fn html_to_rich(html: &str) -> RichText {
     html_to_rich_at(html, 2000, false)
 }
 
+/// Whether `c` is one of the marks this pipeline writes into HTML while it becomes text: the
+/// heading's, picture's, rule line's and signature's (U+E000–U+E005), a typeface's start or end
+/// and its index (U+E020, U+E021, U+E100 and up). The block is one mail doesn't use. Not the
+/// code block's marks (U+E038, U+E039): the markdown pass writes those itself, and its output
+/// comes through here.
+fn is_our_mark(c: char) -> bool {
+    ('\u{E000}'..='\u{E02F}').contains(&c) || ('\u{E100}'..='\u{EFFF}').contains(&c)
+}
+
+/// `s` without the marks this pipeline writes ([`is_our_mark`]): `s` itself when it has none.
+pub(crate) fn without_marks(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.chars().any(is_our_mark) { std::borrow::Cow::Owned(s.chars().filter(|c| !is_our_mark(*c)).collect()) } else { std::borrow::Cow::Borrowed(s) }
+}
+
 /// [`html_to_rich`] rendered at `width` columns, keeping a line made only of box-drawing
 /// characters as text (`keep_box_lines`) rather than taking it for a table's border.
 fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
@@ -301,6 +315,11 @@ fn html_to_rich_at(html: &str, width: usize, keep_box_lines: bool) -> RichText {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
+    // The marks the passes write are private-use characters mail doesn't carry: one the HTML
+    // has itself is taken out here, before any pass marks, so it isn't read as ours (a typeface
+    // or rule mark in a message or pasted text was).
+    let html = without_marks(html);
+    let html = html.as_ref();
     let html = flat_if_too_deep(html);
     let html = html.as_ref();
     let html = footers_last(html);

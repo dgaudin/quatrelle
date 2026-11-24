@@ -18,7 +18,10 @@ pub const PICTURE: char = '\u{FFFC}';
 
 /// Where a signature written in HTML stands in a message being written: drawn, and sent, as it
 /// was written (its layout: a logo beside the name), which the text and its styles can't hold.
-pub const SIGNATURE: char = '\u{E002}';
+/// The mark that stands for the account's signature in a draft's body while it is written. Its
+/// own private-use character: U+E002 is the rule line's mark (`html::rules::RULE_MARK`), and the
+/// two were one, so a quoted `<hr>` in a draft read as the signature's.
+pub const SIGNATURE: char = '\u{E005}';
 
 /// Font sizes offered, in points.
 pub const SIZES: [u8; 12] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36];

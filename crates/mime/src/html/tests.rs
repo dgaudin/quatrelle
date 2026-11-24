@@ -45,3 +45,14 @@ fn every_pass_reads_an_address_alike() {
     assert_eq!(crate::trackers::trackers(html).pictures, ["https://t.example/o.gif?a=1&b=2"]);
     assert_eq!(html_links(r#"<a href="https://links.example/?a&#x3D;1">go</a>"#), ["https://links.example/?a=1"]);
 }
+
+/// The marks the passes write are private-use characters mail doesn't carry: one a message
+/// writes itself is taken out, not read as ours (a typeface mark in pasted text was taken for
+/// MailCraft's own). And the signature's mark is its own character, not the rule line's.
+#[test]
+fn marks_a_message_writes_are_taken_out() {
+    let r = html_to_rich("<p>a\u{E000}b\u{E001}c\u{E020}\u{E100}d\u{E002}e</p>");
+    let text: String = r.iter().flat_map(|l| l.iter().map(|sp| sp.text.as_str())).collect();
+    assert_eq!(text, "abcde", "{text:?}");
+    assert_ne!(crate::rich::SIGNATURE, '\u{E002}', "the rule line's mark");
+}
