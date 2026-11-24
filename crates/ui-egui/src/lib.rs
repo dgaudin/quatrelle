@@ -45,7 +45,7 @@ pub use action::Action;
 // Each part by its own name, wherever its file sits (`crate::list`, `quatrelle_ui_egui::theme`).
 use dialogs::pim_dialogs;
 pub use look::thumbs::VideoFrame;
-pub use look::{bidi, craft_fonts, icons, motion, theme};
+pub use look::{bidi, craft_fonts, first_readable, icons, motion, theme};
 use look::{thumbs, widgets};
 pub use panes::backstage;
 use panes::{calendar, conversations, list, nav, notes, organize, people, reminders, tasks};

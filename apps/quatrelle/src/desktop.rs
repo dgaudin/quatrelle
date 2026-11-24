@@ -369,7 +369,7 @@ impl Services for Desktop {
             }
             candidates.push(("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf".into(), 0));
         }
-        candidates.iter().find_map(|(p, i)| std::fs::read(p).ok().map(|b| (b, *i)))
+        quatrelle_ui_egui::first_readable(candidates.into_iter().map(|(p, i)| (PathBuf::from(p), i)))
     }
     fn typeface(&mut self, family: &str) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
         let (regular, bold) = appearance::typeface_files(family)?;
@@ -391,7 +391,7 @@ impl Services for Desktop {
                 "/usr/share/fonts/noto/NotoSansArabic-Regular.ttf",
             ]
         };
-        candidates.iter().find_map(|p| std::fs::read(p).ok())
+        quatrelle_ui_egui::first_readable(candidates.iter().map(|p| (PathBuf::from(*p), 0))).map(|(bytes, _)| bytes)
     }
     fn emoji_font(&mut self) -> Option<(Vec<u8>, u32)> {
         let (path, index) = appearance::emoji_font_file()?;
@@ -657,10 +657,13 @@ pub(crate) fn system_fonts() -> (Option<Vec<u8>>, Option<Vec<u8>>) {
     } else {
         // The desktop's own interface font, when it has a bold of its own.
         #[cfg(all(unix, not(target_os = "macos")))]
-        if let Some((r, b)) = appearance::desktop_font_files()
-            && let (Ok(reg), Ok(bold)) = (std::fs::read(r), std::fs::read(b))
-        {
-            return (Some(reg), Some(bold));
+        if let Some((r, b)) = appearance::desktop_font_files() {
+            // A damaged file is passed over (egui stopped Quatrelle on it, at every start).
+            let reg = quatrelle_ui_egui::first_readable([(r, 0)]);
+            let bold = quatrelle_ui_egui::first_readable([(b, 0)]);
+            if let (Some((reg, _)), Some((bold, _))) = (reg, bold) {
+                return (Some(reg), Some(bold));
+            }
         }
         &[
             ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
@@ -669,8 +672,10 @@ pub(crate) fn system_fonts() -> (Option<Vec<u8>>, Option<Vec<u8>>) {
         ]
     };
     for (r, b) in candidates {
-        if let Ok(reg) = std::fs::read(r) {
-            return (Some(reg), std::fs::read(b).ok());
+        // A damaged file is passed over for the next (egui stopped Quatrelle on it, at every start).
+        if let Some((reg, _)) = quatrelle_ui_egui::first_readable([(PathBuf::from(r), 0)]) {
+            let bold = quatrelle_ui_egui::first_readable([(PathBuf::from(b), 0)]).map(|(b, _)| b);
+            return (Some(reg), bold);
         }
     }
     (None, None)
