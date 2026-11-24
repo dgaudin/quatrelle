@@ -425,17 +425,25 @@ fn merge_cards(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
 /// The events a server sent, each under the uid kept here for it. A meeting's uid is kept as
 /// its organizer wrote it, and a server stores it without the characters a line can't hold
 /// (`ical::stored_uid`): its copy is that meeting's, not another one beside it, and an answer
-/// still names the uid the organizer looks for. Nearly always the server's, as they are.
+/// still names the uid the organizer looks for. The local events are keyed by where they live
+/// on the server (calendar and href), so only that resource's copy is renamed — another
+/// resource holding the same stored uid, a real meeting beside an invitation to it, keeps
+/// its own. Nearly always the server's, as they are.
 fn as_kept<'a>(here: &[StoredEvent], server: &'a [StoredEvent]) -> std::borrow::Cow<'a, [StoredEvent]> {
     let odd = |uid: &str| uid.contains(|c| !quatrelle_model::ical::allowed(c));
-    let kept: HashMap<String, &str> =
-        here.iter().filter(|e| odd(&e.event.uid)).map(|e| (quatrelle_model::ical::stored_uid(&e.event.uid), e.event.uid.as_str())).collect();
+    let kept: HashMap<(&str, &str), &str> = here
+        .iter()
+        .filter(|e| !e.href.is_empty() && odd(&e.event.uid))
+        .map(|e| ((e.calendar.as_str(), e.href.as_str()), e.event.uid.as_str()))
+        .collect();
     if kept.is_empty() {
         return std::borrow::Cow::Borrowed(server);
     }
     let mut server = server.to_vec();
     for e in &mut server {
-        if let Some(uid) = kept.get(&e.event.uid) {
+        if let Some(uid) = kept.get(&(e.calendar.as_str(), e.href.as_str()))
+            && e.event.uid == quatrelle_model::ical::stored_uid(uid)
+        {
             e.event.uid = (*uid).to_string();
         }
     }
