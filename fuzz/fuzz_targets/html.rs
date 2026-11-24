@@ -19,6 +19,12 @@ fuzz_target!(|input: &[u8]| {
     // A short piece shown as it is: a MailTip's automatic reply.
     let _ = mime::html_to_plain(&page);
     let _ = mime::html_links(&page);
+    let _ = mime::html_link_pairs(&page);
+    for link in std::iter::once(page.as_ref()).chain(mime::html_links(&page).iter().map(String::as_str)) {
+        let _ = mime::clean_link(link);
+        let _ = mime::link_destination(link);
+        let _ = mime::tracks_click(link);
+    }
     let _ = mime::html_images(&page);
     let _ = mime::trackers(&page);
     let _ = mime::layout::inline_css(&page);

@@ -64,9 +64,21 @@ fn a_file_with_a_content_id_is_still_a_file() {
     // An address written without quotes is whole.
     assert_eq!(
         crate::html_images("<img src=https://x.example/a/b.png width=1><img src=cid:logo@x /><img src=https://x.example/c.png/>"),
-        ["https://x.example/a/b.png", "cid:logo@x", "https://x.example/c.png"]
+        ["https://x.example/a/b.png", "cid:logo@x", "https://x.example/c.png/"]
     );
 }
+/// An unquoted address keeps its trailing `/` in every pass that reads it: the list of pictures
+/// and the picture span in the text are the same address.
+#[test]
+fn an_unquoted_addresses_trailing_slash_is_kept_in_every_pass() {
+    let html = "<p>Hi</p><img src=https://x.example/c.png/>";
+    let images = crate::html_images(html);
+    let r = html_to_rich(html);
+    let span_images: Vec<&str> = r.iter().flatten().filter_map(|sp| sp.image.as_deref()).collect();
+    assert_eq!(images, ["https://x.example/c.png/"]);
+    assert_eq!(span_images, images, "{span_images:?}");
+}
+
 /// A `>` inside a quoted attribute doesn't end the tag: the picture whose `alt` holds one is
 /// found, and counted as a tracking picture where it is one.
 #[test]

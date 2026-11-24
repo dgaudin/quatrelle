@@ -49,3 +49,13 @@ fn a_reference_in_an_href_is_read() {
     let pairs = html_link_pairs("<a href=\"https://bank.example&commat;evil.example/\">https://bank.example</a>");
     assert_eq!(pairs, [("https://bank.example".to_string(), "https://bank.example@evil.example/".to_string())], "{pairs:?}");
 }
+
+/// A run of `<a ` with no `href` is read through once, bounded in time (it was read again from
+/// each one, past every following one).
+#[test]
+fn anchors_without_href_are_gone_through_once() {
+    let page = "<a ".repeat(1 << 20) + ">";
+    let t = std::time::Instant::now();
+    assert!(html_link_pairs(&page).is_empty());
+    assert!(t.elapsed() < std::time::Duration::from_secs(5), "{:?}", t.elapsed());
+}

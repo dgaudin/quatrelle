@@ -32,7 +32,11 @@ pub fn html_link_pairs(html: &str) -> Vec<(String, String)> {
         }
         let Some(end) = crate::html::tag_end(html.as_bytes(), at) else { break };
         let tag = html.get(at..end).unwrap_or("");
-        let Some(target) = attribute(tag, "href") else { continue };
+        let Some(target) = attribute(tag, "href") else {
+            // No `href`: the tag was read to its `>` — go on past it, not back into it.
+            at = end + 1;
+            continue;
+        };
         let inner_start = end + 1;
         let inner_end = lower.get(inner_start..).and_then(|r| r.find("</a")).map_or(html.len(), |i| inner_start + i);
         at = inner_end.max(inner_start);

@@ -110,11 +110,9 @@ pub(crate) fn attributes<'a>(html: &'a str, from: usize, mut each: impl FnMut(&'
                     while bytes.get(i).is_some_and(|&c| !is_space(c) && c != b'>') {
                         i += 1;
                     }
-                    let bare = html.get(at..i).unwrap_or_default();
-                    // Unquoted, as programs write it (`src=https://…/c.png/>`): a slash before
-                    // the `>` is the tag's, not the address's (a `//` stays: a protocol-relative
-                    // address starts with it).
-                    bare.strip_suffix('/').filter(|b| !b.ends_with('/')).unwrap_or(bare)
+                    // Unquoted, as programs write it (`src=https://…/c.png/>`): the `/` before the
+                    // `>` is the address's, not the tag's — a browser reads the value to the `>`.
+                    html.get(at..i).unwrap_or_default()
                 }
             }
         } else {
