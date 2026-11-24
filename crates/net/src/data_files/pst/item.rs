@@ -430,7 +430,7 @@ pub(super) fn from_row<'a>(e: &io::Error, p: &dyn Fn(u16) -> Option<Val<'a>>, cl
         Got::Left(FileLeftOut::Link)
     } else if kept_empty(e, method) {
         let name = name_of(&s);
-        let mime = Some(s(0x370E)).filter(|m| !m.is_empty()).unwrap_or_else(|| mime::mime_from_name(&name).to_string());
+        let mime = mime_or_from_name(s(0x370E), &name);
         Got::File(File::Data { name, mime, cid: s(0x3712), data: Vec::new() })
     } else if method == Some(5) {
         log::info!("an attached message could not be read: {e}");
@@ -491,8 +491,20 @@ fn link<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>) -> bool {
 }
 
 /// A file's name: its long name, its short one, then its display name.
+/// A file's name as its attachment's properties (`s`, text) give it: its long name, its short
+/// one, then its display name, the first that isn't blank. A data file's, and a `.msg` file's.
+pub(crate) fn given_name(s: &dyn Fn(u16) -> String) -> Option<String> {
+    [0x3707, 0x3704, 0x3001].into_iter().map(s).find(|n| !n.trim().is_empty())
+}
+
+/// A file's name ([`given_name`]), or "attachment" when it gives none.
 fn name_of(s: &dyn Fn(u16) -> String) -> String {
-    [s(0x3707), s(0x3704), s(0x3001)].into_iter().find(|n| !n.is_empty()).unwrap_or_else(|| "attachment".into())
+    given_name(s).unwrap_or_else(|| "attachment".into())
+}
+
+/// A file's type: the one its attachment states, else the one its name says.
+fn mime_or_from_name(stated: String, name: &str) -> String {
+    if stated.is_empty() { mime::mime_from_name(name).to_string() } else { stated }
 }
 
 /// A table's rows as property maps.

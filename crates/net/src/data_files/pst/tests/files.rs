@@ -22,6 +22,28 @@ fn no_file_value() -> io::Error {
     io::Error::from(outlook_pst::messaging::MessagingError::InvalidAttachmentFileBinaryData(PropertyType::Null))
 }
 
+/// A file's name is its long name, its short one, then its display name, the first that isn't
+/// blank: a long name of spaces made a blank file name of one and fell through for the other.
+#[test]
+fn a_blank_long_name_gives_way_to_the_short_one() {
+    let get = |row: &HashMap<u16, Val<'static>>| from_row(&no_file_value(), &|id| row.get(&id).cloned(), "IPM.Note", true);
+    let names = |long: &'static str| {
+        HashMap::from([
+            (0x0E20, Val::Int(165)),
+            (0x3707, Val::Text(long.into())),
+            (0x3704, Val::Text("PLAN~1.PDF".into())),
+            (0x3001, Val::Text("Plan".into())),
+            (0x3705, Val::Int(1)),
+            (0x370B, Val::Int(-1)),
+        ])
+    };
+    assert!(matches!(get(&names("plan.pdf")), Got::File(File::Data { ref name, .. }) if name == "plan.pdf"));
+    assert!(matches!(get(&names(" \t ")), Got::File(File::Data { ref name, .. }) if name == "PLAN~1.PDF"));
+    let blank =
+        HashMap::from([(0x0E20, Val::Int(165)), (0x3707, Val::Text(" ".into())), (0x3704, Val::Text(" ".into())), (0x3001, Val::Text(" ".into()))]);
+    assert!(matches!(get(&blank), Got::File(File::Data { ref name, .. }) if name == "attachment"));
+}
+
 /// An attachment the reader couldn't read comes from its row: a zero-byte file comes in empty,
 /// named from its short name with its type from the name when the row has only that (the row's
 /// size counts its properties, so it isn't 0); a link is counted; an attached message is counted

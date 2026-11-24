@@ -50,6 +50,7 @@ pub(crate) use tests::data_file as test_file;
 
 use chunked::Shared;
 use embedded::{Holder, Part, item_with_files};
+pub(crate) use item::given_name;
 use item::{File, Item, attachment, item, message_class, message_code_page, picture_of, unread_attachment};
 use journal::Tell;
 pub use journal::{Progress, Run};
