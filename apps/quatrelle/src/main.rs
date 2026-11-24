@@ -468,11 +468,7 @@ fn main() -> eframe::Result {
             return Ok(());
         }
         Ok(Err(e)) => e.to_string(),
-        Err(p) => p
-            .downcast_ref::<&str>()
-            .map(|s| (*s).to_string())
-            .or_else(|| p.downcast_ref::<String>().cloned())
-            .unwrap_or_else(|| "it stopped unexpectedly".into()),
+        Err(p) => logfile::panic_said(p.as_ref()),
     };
     log::error!("the window couldn't open: {failed}");
     log::logger().flush();

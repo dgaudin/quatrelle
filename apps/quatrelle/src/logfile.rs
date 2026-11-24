@@ -253,6 +253,13 @@ pub fn log_panics() {
     }));
 }
 
+/// What's said of a panic that stopped the window from opening, in the log and on the screen:
+/// that it happened. Where is in the log already ([`log_panics`]); what it said is written
+/// nowhere, as it can quote what was being read (a subject, a line of a message).
+pub fn panic_said(_: &(dyn std::any::Any + Send)) -> String {
+    "it stopped unexpectedly (the log says where)".into()
+}
+
 /// The log's line for a panic on thread `thread` at `at` (file and line).
 fn panic_line(thread: Option<&str>, at: Option<(&str, u32)>) -> String {
     let at = at.map_or_else(|| "an unknown place".to_string(), |(file, line)| format!("{file}:{line}"));
@@ -271,6 +278,18 @@ mod tests {
             "internal error: a panic on thread sync a1 at crates/net/src/sync.rs:42"
         );
         assert_eq!(panic_line(None, None), "internal error: a panic on thread (unnamed) at an unknown place");
+    }
+
+    /// A panic that stops the window from opening is said to have happened, never in its words
+    /// (they can quote what it was working on: a subject, a line of a message), whatever they are.
+    #[test]
+    fn a_panics_words_are_never_said() {
+        let said: [Box<dyn std::any::Any + Send>; 3] =
+            [Box::new("Subject: the payroll for October"), Box::new(String::from("Subject: the payroll for October")), Box::new(42_u8)];
+        for p in said {
+            let text = panic_said(p.as_ref());
+            assert!(!text.contains("payroll") && text.contains("stopped unexpectedly"), "{text}");
+        }
     }
 
     /// A terminal that's gone doesn't end Quatrelle (found when its starter exited).
