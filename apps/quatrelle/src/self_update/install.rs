@@ -29,8 +29,10 @@ pub(super) fn helper(kind: &Kind, file: &Path, pid: u32, restart: bool, log: &Pa
 /// The PowerShell step installing an MSI (Windows asks for an administrator: it's per machine).
 pub(super) fn msi_step(file: &Path) -> String {
     format!(
-        "$p = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\msiexec.exe') -ArgumentList '/i',{},'/passive','/norestart' -Wait -PassThru; \
+        "$p = Start-Process -FilePath {} -ArgumentList '/i',{},'/passive','/norestart' -Wait -PassThru; \
          if ($p.ExitCode -eq 0) {{ Remove-Item -LiteralPath {} -ErrorAction SilentlyContinue }}",
+        // By its full path where Windows says its folders are, as the other programs are.
+        ps_quote(&crate::desktop::windows_programs::path("msiexec.exe").display().to_string()),
         ps_quote(&format!("\"{}\"", file.display())),
         ps_quote(&file.display().to_string()),
     )

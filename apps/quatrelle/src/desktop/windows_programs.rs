@@ -27,31 +27,35 @@ pub(crate) fn path(name: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    /// Every source file of the app (`src/`, folders too) but this module and the tests' own
+    /// files, each up to its test module.
+    fn sources_of_the_app() -> Vec<String> {
+        fn walk(dir: &std::path::Path, out: &mut Vec<String>) {
+            let Ok(entries) = std::fs::read_dir(dir) else { return };
+            for e in entries.flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else if path.extension().is_some_and(|x| x == "rs") && !path.ends_with("windows_programs.rs") && !path.ends_with("tests.rs") {
+                    let text = std::fs::read_to_string(&path).unwrap_or_default();
+                    let live = text.split("#[cfg(test)]").next().unwrap_or_default();
+                    out.push(live.to_string());
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut out);
+        out
+    }
+
     /// Read as text, no source of the app starts a Windows program by its bare name outside this
     /// module: the current folder is searched first, where a portable copy's `explorer.exe` would
     /// run. A `Command::new("…exe")` or a `("…exe", …)` tuple is refused; test-only code names no
     /// `.exe` (the keychain test's `cmdkey` runs only in tests).
     #[test]
     fn windows_programs_are_never_started_by_their_bare_name() {
-        let sources = [
-            include_str!("../desktop.rs"),
-            include_str!("appearance.rs"),
-            include_str!("browsers.rs"),
-            include_str!("file_dialogs.rs"),
-            include_str!("keychain.rs"),
-            include_str!("lanes.rs"),
-            include_str!("memory.rs"),
-            include_str!("opening.rs"),
-            include_str!("printing.rs"),
-            include_str!("profiles.rs"),
-            include_str!("shares.rs"),
-            include_str!("start.rs"),
-            include_str!("state_writer.rs"),
-            include_str!("tray.rs"),
-            include_str!("window_frame.rs"),
-            include_str!("../self_update/install.rs"),
-            include_str!("../video.rs"),
-        ];
+        let sources = sources_of_the_app();
+        assert!(sources.len() > 20, "the sources of the app were found: {}", sources.len());
         for src in sources {
             for line in src.lines() {
                 if line.contains(r#"::path(""#) {

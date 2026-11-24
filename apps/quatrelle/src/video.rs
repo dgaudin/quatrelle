@@ -31,8 +31,14 @@ pub(crate) enum Source {
 /// An executable on the PATH, or in a usual place for it.
 pub(crate) fn find_tool(name: &str, usual: &[&str]) -> Option<PathBuf> {
     let exe = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
-    let on_path = std::env::var_os("PATH").into_iter().flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>());
+    let on_path = std::env::var_os("PATH").into_iter().flat_map(|p| absolute_dirs(&p));
     on_path.chain(usual.iter().map(PathBuf::from)).map(|d| d.join(&exe)).find(|p| p.is_file())
+}
+
+/// The folders of a `PATH` that are absolute: an empty or relative entry means the current folder,
+/// where a tool put by whoever sent the file would be found first.
+fn absolute_dirs(path: &std::ffi::OsStr) -> Vec<PathBuf> {
+    std::env::split_paths(path).filter(|d| d.is_absolute()).collect()
 }
 
 /// The best way to get frames here, if any.
@@ -198,6 +204,15 @@ fn run(mut cmd: Command) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `PATH` entry that is empty or relative isn't searched (it is the current folder).
+    #[test]
+    fn only_absolute_folders_of_the_path_are_searched() {
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let abs = if cfg!(windows) { r"C:\tools" } else { "/usr/bin" };
+        let path = std::ffi::OsString::from(format!("{sep}bin{sep}.{sep}{abs}"));
+        assert_eq!(absolute_dirs(&path), [PathBuf::from(abs)]);
+    }
 
     /// A short test clip, made with ffmpeg (when it's installed).
     fn clip(dir: &Path) -> Option<PathBuf> {
