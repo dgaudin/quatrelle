@@ -330,6 +330,22 @@ mod tests {
         assert!(back.iter().any(|e| e.event.recurrence_id.is_none() && e.event.rrule.is_some()));
     }
 
+    /// When the servers were last looked for, read from a damaged cache (far off either way), is a
+    /// time like any other: the sync goes ahead, nothing overflows.
+    #[test]
+    fn a_damaged_last_look_is_no_overflow() {
+        let server = serve();
+        let dav = session(&server, PASSWORD);
+        let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)).unwrap().unwrap();
+        let book_home = dav.home_from(Kind::Contacts, &format!("{}/.well-known/carddav", server.base)).unwrap().unwrap();
+        for checked in [i64::MIN, i64::MAX, -1] {
+            let pim =
+                Pim { caldav_home: Some(home.clone()), carddav_home: Some(book_home.clone()), dav_checked: Some(checked), ..Default::default() };
+            let out = sync(&dav, USER, "imap.example", &pim, 100, Zone::UTC).unwrap();
+            assert!(out.errors.is_empty(), "{:?}", out.errors);
+        }
+    }
+
     /// A CONFERENCE the server holds is read; one changed here goes back with each of its two
     /// lines once, the telephone one as it came.
     #[test]
