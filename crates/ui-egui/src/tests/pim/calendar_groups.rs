@@ -265,3 +265,17 @@ fn move_to_group_is_greyed_for_a_calendar_opened_by_address() {
     assert!(shown.iter().any(|t| t == "This calendar isn't in Outlook's calendar groups yet"), "{shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Deleting a group puts its own calendars back under My Calendars, not out of the list.
+#[test]
+fn deleting_a_group_puts_its_own_calendars_back_under_my_calendars() {
+    let (mut a, dir, ctx) = with_groups("calendar-groups-delete-own");
+    right_click(&ctx, &mut a, "Salles");
+    click_text(&ctx, &mut a, "Delete group…");
+    click_text(&ctx, &mut a, "Delete");
+    assert!(
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Salle Lyon" && c.group.is_empty())),
+        "Salle Lyon is back under My Calendars"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -217,8 +217,9 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     let link = "IPM.Microsoft.WunderBar.Link";
     let ordinal = |b: u8| crate::imap::base64(&[b]);
     let team = guid(0x10);
+    let favorites = wlink(link, 1, 2, "Favorites", "Ana's Inbox", &dn("ana"));
     d.wlinks = vec![
-        wlink(link, 1, 2, "Favorites", "Ana's Inbox", &dn("ana")),
+        favorites.clone(),
         wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", team.clone()), ("0x684B", "Binary", ordinal(0x10))]),
         wlink_of(
             link,
@@ -257,7 +258,7 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     assert_eq!(names(&c), ["Équipe Studio"]);
     assert_eq!(ana(&c), None, "the group's shared calendar left the list");
     let kept = server.data.lock().unwrap();
-    assert!(kept.wlinks.iter().any(|w| w.contains("Ana's Inbox")), "another section's shortcut is untouched");
+    assert!(kept.wlinks.contains(&favorites), "another section's shortcut is untouched, byte for byte");
 }
 
 /// A group of the account's own calendars: the main one stays in My Calendars, the others are
@@ -471,4 +472,34 @@ fn the_groups_are_capped() {
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
     assert_eq!(crate::ews_pim::calendar_links(&c).unwrap().groups.len(), 300);
+}
+
+/// A group whose calendars all fail to resolve keeps its header: the group is the server's, even
+/// when none of its calendars can be listed.
+#[test]
+fn a_group_whose_calendars_all_fail_to_resolve_is_kept() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.wlinks = vec![
+        wlink_of(
+            "IPM.Microsoft.WunderBar.Link",
+            3,
+            4,
+            "Équipe",
+            &[("0x6842", "Binary", guid(0x10)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))],
+        ),
+        wlink_of(
+            "IPM.Microsoft.WunderBar.Link",
+            3,
+            2,
+            "Nobody",
+            &[("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("nobody")))), ("0x684B", "Binary", crate::imap::base64(&[0x11]))],
+        ),
+    ];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
+    assert_eq!(shortcuts.groups, ["Équipe"], "the header stays");
+    assert!(shortcuts.links.is_empty(), "no address resolved");
 }
