@@ -543,25 +543,9 @@ pub fn picture_attachment(p: &Parsed, src: &str) -> Option<usize> {
     if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("data:") || src.is_empty() || src.len() > 4096 {
         return None;
     }
-    let decoded = |s: &str| {
-        let b = s.as_bytes();
-        let mut out = Vec::with_capacity(b.len());
-        let mut i = 0;
-        while let Some(&c) = b.get(i) {
-            let hex = b.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok());
-            match (c, hex) {
-                (b'%', Some(v)) => {
-                    out.push(v);
-                    i += 3;
-                }
-                _ => {
-                    out.push(c);
-                    i += 1;
-                }
-            }
-        }
-        String::from_utf8_lossy(&out).into_owned()
-    };
+    // The one decoder ([`quatrelle_model::mailto::percent_decode`]), as the paperclip's: `%+X`
+    // stays as written (it was read as byte 15 before).
+    let decoded = |s: &str| quatrelle_model::mailto::percent_decode(s);
     let last_part = |s: &str| s.rsplit(['/', '\\']).next().unwrap_or(s).to_string();
     let name_is = |a: &AttachmentInfo, n: &str| !n.is_empty() && a.name.eq_ignore_ascii_case(n);
     if let Some(cid) = src.get(..4).filter(|s| s.eq_ignore_ascii_case("cid:")).and_then(|_| src.get(4..)) {

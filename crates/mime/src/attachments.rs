@@ -281,24 +281,12 @@ fn last_segment(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
-/// `%xx` escapes decoded.
-fn percent_decoded(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while let Some(&c) = b.get(i) {
-        match (c, b.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok())) {
-            (b'%', Some(v)) => {
-                out.push(v);
-                i += 3;
-            }
-            _ => {
-                out.push(c);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
+/// `%xx` escapes decoded (RFC 3986), as the reading pane decodes a picture's address
+/// ([`crate::html::picture_attachment`]): the one decoder
+/// ([`quatrelle_model::mailto::percent_decode`]), so the paperclip and the reading pane find the
+/// same picture. `%+X` stays as written.
+pub(crate) fn percent_decoded(s: &str) -> String {
+    quatrelle_model::mailto::percent_decode(s)
 }
 
 impl<F: Fn() -> String> HtmlRefs<F> {
