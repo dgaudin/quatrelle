@@ -414,3 +414,38 @@ fn the_options_choose_when_pictures_load() {
     assert_eq!(a.session.prefs.pictures, quatrelle_engine::PictureLoading::Always);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A POP account's Server settings warn when its POP or SMTP server has no encryption, as
+/// adding the account does, and stay quiet when both are encrypted.
+#[test]
+fn a_pop_accounts_server_settings_warn_without_encryption() {
+    use quatrelle_engine::model::{AccountConfig, Security, ServerConfig};
+    let (mut a, dir) = app("pop-settings-clear");
+    let ctx = egui::Context::default();
+    let draw = |a: &mut MailApp, pop: Security, smtp: Security| {
+        let mut config = AccountConfig::guess("ana@example.org");
+        config.pop = Some(ServerConfig { host: "pop.example.org".into(), port: 995, security: pop });
+        config.smtp = ServerConfig { host: "smtp.example.org".into(), port: 25, security: smtp };
+        a.ui.dialog = Some(Dialog::edit_account(&config));
+        let mut drawn = String::new();
+        for _ in 0..20 {
+            drawn = frame_shapes(&ctx, a, vec![], egui::vec2(1280.0, 1400.0))
+                .iter()
+                .filter_map(|s| match s {
+                    egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            if drawn.contains("Without encryption your password travels in the clear") {
+                break;
+            }
+        }
+        drawn
+    };
+    let warning = "Without encryption your password travels in the clear";
+    assert!(draw(&mut a, Security::Tls, Security::None).contains(warning), "SMTP in the clear");
+    assert!(draw(&mut a, Security::None, Security::Tls).contains(warning), "POP in the clear");
+    assert!(!draw(&mut a, Security::Tls, Security::Tls).contains(warning), "both encrypted");
+    let _ = std::fs::remove_dir_all(dir);
+}
