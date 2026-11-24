@@ -41,6 +41,17 @@
 //! is made (`window_created` in `main.rs`) and the desktop compositor is asked for one instead, by
 //! extending the frame a pixel into the client area, where Quatrelle's own pixels cover it.
 //!
+//! Windows plays its zoom animation (maximize, restore) only for a window with a caption. On
+//! Windows 11 the caption is left alone (the systems reported above are Windows 10): Windows
+//! animates every way of maximizing and restoring and sizes a maximize clear of the taskbar
+//! itself, leaving only the auto-hide trim to do. On Windows 10 the caption still comes off, and
+//! [`FrameGuard::before_zoom`] hands it back for Quatrelle's own Maximize, Restore and double-click:
+//! those animate, and a maximize isn't sized over the taskbar, which the shell took for a full-screen
+//! app and dropped the taskbar for a frame, what was behind it showing through. The caption comes
+//! off again once the animation is over, without a frame change on a maximized window (one there
+//! sizes it over the taskbar again). Win+Up and dragging don't pass through Quatrelle first, so on
+//! Windows 10 they stay as they were: not animated, and trimmed after the fact.
+//!
 //! The Windows calls go through safe `winsafe` wrappers; the workspace forbids `unsafe`, and
 //! winsafe can't wrap a raw handle without it, so the window is found by its handle instead.
 
@@ -48,8 +59,25 @@ use serde_json::Value;
 
 pub use platform::service;
 
-/// Run once a frame while the window draws its own title bar ([`keep`]).
-pub(crate) type FrameGuard = std::rc::Rc<dyn Fn()>;
+/// What keeps the window borderless while it draws its own title bar ([`keep`], [`before_zoom`]).
+#[derive(Clone)]
+pub(crate) struct FrameGuard {
+    keep: std::rc::Rc<dyn Fn()>,
+    before_zoom: std::rc::Rc<dyn Fn()>,
+}
+
+impl FrameGuard {
+    /// Run once a frame.
+    pub(crate) fn keep(&self) {
+        (self.keep)();
+    }
+
+    /// Run in the frame that asks to maximize or restore the window, before winit does it (see
+    /// above).
+    pub(crate) fn before_zoom(&self) {
+        (self.before_zoom)();
+    }
+}
 
 /// Whether Quatrelle's top bar is the window's title bar, as Outlook's is: on Windows, Linux and
 /// the BSDs, where the desktop's title bar sat above it, unless File › Options asked for the
@@ -63,8 +91,16 @@ pub(crate) fn own_title_bar(saved_ui: Option<&Value>) -> bool {
 /// Once a frame ([`quatrelle_ui_egui::Services::keep_frame`]): the window's guard, if it has one
 /// (Windows, without the system's title bar).
 pub(crate) fn keep(guard: Option<&FrameGuard>) {
-    if let Some(keep) = guard {
-        keep();
+    if let Some(guard) = guard {
+        guard.keep();
+    }
+}
+
+/// In the frame Quatrelle's own title bar maximizes or restores the window
+/// ([`quatrelle_ui_egui::Services::before_zoom`]): the window's guard, if it has one.
+pub(crate) fn before_zoom(guard: Option<&FrameGuard>) {
+    if let Some(guard) = guard {
+        guard.before_zoom();
     }
 }
 
@@ -72,11 +108,45 @@ pub(crate) fn keep(guard: Option<&FrameGuard>) {
 mod platform {
     use super::FrameGuard;
     use eframe::wgpu::rwh::{HasWindowHandle, RawWindowHandle};
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use std::time::{Duration, Instant};
     use winsafe::prelude::Handle;
     use winsafe::{AtomStr, HWND, HwndPlace, POINT, SIZE, co};
 
     /// A rect in desktop coordinates: `(left, top, right, bottom)`, right and bottom exclusive.
     type Rect = (i32, i32, i32, i32);
+
+    /// How long Windows' zoom animation runs: the caption it needs stays on for this long.
+    const ZOOM: Duration = Duration::from_millis(400);
+
+    /// The window the guard looks after.
+    struct Frame {
+        hwnd: HWND,
+        /// Windows 11: the caption stays on, and only the auto-hide trim is left to do.
+        keeps_caption: bool,
+        /// Until when the caption is left on, for Windows' zoom animation.
+        zooming_until: Cell<Option<Instant>>,
+    }
+
+    impl Frame {
+        /// One pass of the per-frame guard.
+        fn keep(&self) {
+            if strip_due(self.keeps_caption, self.zooming_until.get(), Instant::now()) {
+                strip(&self.hwnd);
+            }
+            keep_clear_of_the_taskbar(&self.hwnd);
+        }
+
+        /// The window is about to be maximized or restored by Quatrelle: the caption goes back
+        /// on, not as a frame change (nothing moves until the zoom does), for the animation.
+        fn before_zoom(&self) {
+            if !self.keeps_caption {
+                self.hwnd.set_style(captioned(self.hwnd.style()));
+                self.zooming_until.set(Some(Instant::now() + ZOOM));
+            }
+        }
+    }
 
     /// A monitor edge.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,13 +171,15 @@ mod platform {
             log::warn!("window frame: Quatrelle's window wasn't found among the desktop's, so the system's frame may come back");
             return None;
         };
-        reapply(&hwnd);
         // The window's shadow, which winit's own is turned off for (see above).
         let shadow = winsafe::MARGINS { cyTopHeight: 1, ..Default::default() };
         if let Err(e) = hwnd.DwmExtendFrameIntoClientArea(&shadow) {
             log::warn!("window frame: the window has no shadow: {e}");
         }
-        Some(std::rc::Rc::new(move || reapply(&hwnd)))
+        let frame = Rc::new(Frame { hwnd, keeps_caption: windows_11(), zooming_until: Cell::new(None) });
+        frame.keep();
+        let keeps = Rc::clone(&frame);
+        Some(FrameGuard { keep: Rc::new(move || keeps.keep()), before_zoom: Rc::new(move || frame.before_zoom()) })
     }
 
     /// The top-level window with the given raw handle. `EnumWindows` hands out real `HWND`s, so
@@ -125,15 +197,27 @@ mod platform {
         found
     }
 
-    /// One pass of the per-frame guard: the styles winit put back come off again, and a parked
-    /// maximize stays clear of the taskbar.
-    fn reapply(hwnd: &HWND) {
-        strip(hwnd);
-        keep_clear_of_the_taskbar(hwnd);
+    /// Whether this is Windows 11 or later. From the registry: Windows tells a program with no
+    /// version manifest that it runs on Windows 8.
+    fn windows_11() -> bool {
+        let build = windows_registry::LOCAL_MACHINE.open(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion").and_then(|k| k.get_string("CurrentBuild"));
+        build.is_ok_and(|text| build_is_windows_11(&text))
+    }
+
+    /// Whether a Windows build number is Windows 11's (22000) or later.
+    fn build_is_windows_11(build: &str) -> bool {
+        build.trim().parse::<u32>().is_ok_and(|b| b >= 22000)
+    }
+
+    /// Whether the guard takes the caption off this frame: not on Windows 11, and not while
+    /// Windows' zoom animation needs it (`zooming_until`).
+    fn strip_due(keeps_caption: bool, zooming_until: Option<Instant>, now: Instant) -> bool {
+        !keeps_caption && zooming_until.is_none_or(|until| now >= until)
     }
 
     /// Removes `WS_CAPTION`/`WS_BORDER` and has Windows recalculate the frame. A no-op once they
-    /// are gone, so it is cheap to call every frame.
+    /// are gone, so it is cheap to call every frame. A maximized window keeps its rect: a frame
+    /// change there would make Windows size it over the taskbar again (see above).
     fn strip(hwnd: &HWND) {
         let style = hwnd.style();
         let without = borderless(style);
@@ -141,6 +225,9 @@ mod platform {
             return;
         }
         hwnd.set_style(without);
+        if !needs_a_frame_change(hwnd.IsZoomed()) {
+            return;
+        }
         let _ = hwnd.SetWindowPos(
             HwndPlace::None,
             POINT::new(),
@@ -292,9 +379,24 @@ mod platform {
         style & !(co::WS::CAPTION | co::WS::BORDER)
     }
 
+    /// `style` with the caption Windows sizes a maximize's frame by.
+    fn captioned(style: co::WS) -> co::WS {
+        style | co::WS::CAPTION
+    }
+
+    /// Whether taking the styles off has to recalculate the frame: not on a maximized window,
+    /// where that would move it (see above).
+    fn needs_a_frame_change(zoomed: bool) -> bool {
+        !zoomed
+    }
+
     #[cfg(test)]
     mod tests {
-        use super::{Edge, borderless, clamped_rect, short_of_autohide_taskbars, taskbar_edge};
+        use super::{
+            Edge, ZOOM, borderless, build_is_windows_11, captioned, clamped_rect, needs_a_frame_change, short_of_autohide_taskbars, strip_due,
+            taskbar_edge,
+        };
+        use std::time::Instant;
         use winsafe::co;
 
         #[test]
@@ -308,6 +410,34 @@ mod platform {
             assert!(bare.has(co::WS::MAXIMIZEBOX) && bare.has(co::WS::SYSMENU), "window buttons kept");
             // Already borderless: unchanged, so the per-frame call does nothing.
             assert_eq!(bare.raw(), borderless(bare).raw());
+        }
+
+        #[test]
+        fn the_window_keeps_its_caption_from_windows_11_on() {
+            assert!(build_is_windows_11("22000") && build_is_windows_11("26300"));
+            assert!(!build_is_windows_11("19045"), "Windows 10");
+            assert!(!build_is_windows_11("junk") && !build_is_windows_11(""), "not known: as Windows 10");
+        }
+
+        #[test]
+        fn the_caption_waits_for_the_zoom_animation() {
+            let now = Instant::now();
+            assert!(strip_due(false, None, now), "Windows 10 with no zoom going on: off it comes");
+            assert!(!strip_due(false, Some(now + ZOOM), now), "not during the animation");
+            assert!(strip_due(false, Some(now), now + ZOOM), "and off it comes when that's over");
+            assert!(!strip_due(true, None, now), "Windows 11 keeps its caption");
+        }
+
+        #[test]
+        fn a_maximize_gets_its_caption_back_first_and_keeps_its_rect() {
+            let bare = borderless(co::WS::CAPTION | co::WS::BORDER | co::WS::SYSMENU | co::WS::THICKFRAME);
+            let with = captioned(bare);
+            assert!(with.has(co::WS::CAPTION), "Windows sizes the maximize with a frame, clear of the taskbar");
+            assert!(with.has(co::WS::THICKFRAME) && with.has(co::WS::SYSMENU), "the rest of the style is kept");
+            assert_eq!(with.raw(), captioned(with).raw(), "already has it: unchanged");
+            assert_eq!(borderless(with).raw(), bare.raw(), "and the guard takes it off again");
+            assert!(needs_a_frame_change(false), "a restored window's frame is recalculated");
+            assert!(!needs_a_frame_change(true), "a maximized window's would move it over the taskbar again");
         }
 
         #[test]
@@ -449,20 +579,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Each frame the top bar has the desktop keep the window's frame: the guard the window was
-    /// given runs then, every frame; a window with none (the system's title bar, or not Windows)
-    /// has nothing to run.
+    /// Each frame the top bar has the desktop keep the window's frame, and in the frame its own
+    /// Maximize, Restore or double-click asks for a zoom it tells the window first: each reaches
+    /// the window's guard, the one and not the other; a window with none (the system's title bar,
+    /// or not Windows) has nothing to run.
     #[test]
-    fn each_frame_runs_the_windows_frame_guard() {
+    fn the_top_bar_reaches_the_windows_frame_guard() {
         use quatrelle_ui_egui::Services;
-        let runs = std::rc::Rc::new(std::cell::Cell::new(0));
-        let counted = std::rc::Rc::clone(&runs);
-        let guard: FrameGuard = std::rc::Rc::new(move || counted.set(counted.get() + 1));
+        use std::{cell::Cell, rc::Rc};
+        let (kept, zoomed) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+        let guard = FrameGuard {
+            keep: Rc::new({
+                let kept = Rc::clone(&kept);
+                move || kept.set(kept.get() + 1)
+            }),
+            before_zoom: Rc::new({
+                let zoomed = Rc::clone(&zoomed);
+                move || zoomed.set(zoomed.get() + 1)
+            }),
+        };
         let mut desktop = crate::Desktop { own_title_bar: true, frame_guard: Some(guard), ..Default::default() };
         desktop.keep_frame();
         desktop.keep_frame();
-        assert_eq!(runs.get(), 2, "once a frame");
-        crate::Desktop::default().keep_frame();
+        assert_eq!((kept.get(), zoomed.get()), (2, 0), "once a frame");
+        desktop.before_zoom();
+        assert_eq!((kept.get(), zoomed.get()), (2, 1), "before the zoom, and only then");
+        let mut plain = crate::Desktop::default();
+        plain.keep_frame();
+        plain.before_zoom();
         keep(None);
+        before_zoom(None);
     }
 }

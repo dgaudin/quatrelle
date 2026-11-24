@@ -170,6 +170,9 @@ impl Services for Desktop {
     fn keep_frame(&mut self) {
         window_frame::keep(self.frame_guard.as_ref());
     }
+    fn before_zoom(&mut self) {
+        window_frame::before_zoom(self.frame_guard.as_ref());
+    }
     fn zone(&self) -> Option<String> {
         iana_time_zone::get_timezone().ok()
     }
