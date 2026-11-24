@@ -112,10 +112,9 @@ struct Ahead<'a, S> {
 impl<S: Read> Ahead<'_, S> {
     /// More bytes from the connection; false at its end.
     fn more(&mut self) -> Result<bool> {
-        if self.pos >= self.buf.len() {
-            self.buf.clear();
-            self.pos = 0;
-        }
+        // What has been read goes first: at most the start of a line is left to keep.
+        self.buf.drain(..self.pos.min(self.buf.len()));
+        self.pos = 0;
         let mut tmp = [0u8; 16 << 10];
         let n = self.s.read(&mut tmp)?;
         self.buf.extend_from_slice(tmp.get(..n).unwrap_or_default());
@@ -251,5 +250,36 @@ mod tests {
         assert!(r.is_ok(), "{r:?}");
         assert_eq!(got, b"012345678");
         h.join().unwrap();
+    }
+
+    /// The connection's bytes, one piece per read.
+    struct Pieces(std::collections::VecDeque<Vec<u8>>);
+
+    impl Read for Pieces {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let Some(mut piece) = self.0.pop_front() else { return Ok(0) };
+            let n = piece.len().min(buf.len());
+            buf[..n].copy_from_slice(&piece[..n]);
+            if n < piece.len() {
+                piece.drain(..n);
+                self.0.push_front(piece);
+            }
+            Ok(n)
+        }
+    }
+
+    /// What has been read is dropped as it goes: every read ends inside a size line, so only
+    /// the line's start is kept, not the whole answer's framing.
+    #[test]
+    fn what_was_read_is_dropped_as_it_goes() {
+        let mut pieces = std::collections::VecDeque::from([b"1".to_vec()]);
+        pieces.extend(std::iter::repeat_n(b"\r\nx\r\n1".to_vec(), 10_000));
+        pieces.push_back(b"\r\nx\r\n0\r\n\r\n".to_vec());
+        let mut s = Pieces(pieces);
+        let mut body = Ahead { s: &mut s, buf: Vec::new(), pos: 0 };
+        let head = Response { status: 200, headers: vec![("Transfer-Encoding".into(), "chunked".into())], ..Default::default() };
+        let mut out = Vec::new();
+        assert_eq!(copy_body(&mut body, &head, 1 << 20, &mut out).unwrap(), 10_001);
+        assert!(body.buf.capacity() < 1024, "{} bytes held", body.buf.capacity());
     }
 }

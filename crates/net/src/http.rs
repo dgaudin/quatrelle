@@ -539,6 +539,8 @@ fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Resp
                 if rest.len() - pos > 1024 {
                     return Err(NetError::Protocol("bad chunk size line".into()));
                 }
+                rest.drain(..pos.min(rest.len()));
+                pos = 0;
                 let want = rest.len() + 1;
                 if !fill(&mut rest, want)? {
                     return Err(NetError::Closed("the response ended early".into()));
@@ -559,6 +561,8 @@ fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Resp
                         if rest.len() - pos > MAX_HEAD {
                             return Err(NetError::Protocol("bad chunked trailer".into()));
                         }
+                        rest.drain(..pos.min(rest.len()));
+                        pos = 0;
                         let want = rest.len() + 1;
                         if !fill(&mut rest, want)? {
                             break None;
@@ -576,7 +580,9 @@ fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Resp
             if body.len().saturating_add(size) > max {
                 return Err(too_big());
             }
-            let want = pos.saturating_add(size).saturating_add(2);
+            rest.drain(..pos.min(rest.len()));
+            pos = 0;
+            let want = size.saturating_add(2);
             if !fill(&mut rest, want)? {
                 return Err(NetError::Closed("the response ended early".into()));
             }

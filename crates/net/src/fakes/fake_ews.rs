@@ -78,8 +78,12 @@ pub struct Data {
     pub oof: (String, String, String, String, String, String),
     /// Sign in with Basic instead of NTLM.
     pub basic: bool,
+    /// Answer every request with a chunked body, in pieces of seven bytes.
+    pub chunked: bool,
     /// Operations asked for, in order.
     pub calls: Vec<String>,
+    /// Connections opened.
+    pub connections: usize,
     /// NTLM handshakes done (one per connection).
     pub handshakes: usize,
     /// The next request on a signed-in connection is told to sign in again (a recycled
@@ -359,7 +363,9 @@ impl Default for Data {
             votes: Vec::new(),
             oof: ("Disabled".into(), String::new(), String::new(), String::new(), String::new(), "All".into()),
             basic: false,
+            chunked: false,
             calls: Vec::new(),
+            connections: 0,
             handshakes: 0,
             forget_sign_in: false,
             password_changed: false,

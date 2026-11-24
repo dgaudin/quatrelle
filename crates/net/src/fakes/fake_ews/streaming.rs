@@ -116,7 +116,7 @@ pub(super) fn stream_events(s: &mut TcpStream, shared: &Arc<Mutex<Data>>, op: &E
         scope.map(|scope| (d.told.get(&sub).cloned().unwrap_or_else(|| d.seen(&scope)), scope, d.stream_for))
     };
     let Some((mut before, scope, stream_for)) = found else {
-        respond(s, 200, &[], gone().as_bytes());
+        respond(s, false, 200, &[], gone().as_bytes());
         return;
     };
     let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/xml; charset=utf-8\r\nTransfer-Encoding: chunked\r\n\r\n");

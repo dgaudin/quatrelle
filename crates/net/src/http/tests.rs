@@ -216,3 +216,47 @@ fn a_paths_controls_are_written_as_their_utf8_bytes() {
         assert_eq!(Url::parse(&format!("https://h{path}")).unwrap().path, old_spaces_escaped(path), "{path:?}");
     }
 }
+
+/// A chunked answer carrying `n` bytes of `x`, in chunks of `size`.
+fn chunked(n: usize, size: usize) -> Vec<u8> {
+    let mut v = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+    let mut left = n;
+    while left > 0 {
+        let c = left.min(size);
+        v.extend(format!("{c:x}\r\n").as_bytes());
+        v.extend(std::iter::repeat_n(b'x', c));
+        v.extend(b"\r\n");
+        left -= c;
+    }
+    v.extend(b"0\r\n\r\n");
+    v
+}
+
+/// Found in the code audit: a chunked body was capped on the bytes as they came, framing
+/// included, so a body under the cap sent in small chunks was refused as larger than it.
+#[test]
+fn a_chunked_body_is_capped_by_its_size_not_its_framing() {
+    let max = 100_000;
+    let (base, h) = serve(vec![chunked(max, 1), chunked(max + 1, 1)]);
+    let r = get(&base, max).unwrap();
+    assert!(r.body.len() == max && r.body.iter().all(|b| *b == b'x'), "{} bytes", r.body.len());
+    assert!(matches!(get(&base, max), Err(NetError::Protocol(m)) if m.contains("larger")), "one byte past the cap");
+    let _ = h.join();
+}
+
+/// Run alone (`--exact`): time to read 8 MiB in one-byte chunks, against the per-chunk drain
+/// that made the work grow faster than the body (the fix copies only before a read).
+#[test]
+#[ignore = "a measurement: run alone"]
+fn measure_chunked_one_byte_chunks() {
+    let n = 8 << 20;
+    let head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
+    let mut v = head.to_vec();
+    v.extend(std::iter::repeat_n(b"1\r\nx\r\n", n).flatten());
+    v.extend(b"0\r\n\r\n");
+    let began = Instant::now();
+    let r = read_response(&mut std::io::Cursor::new(v), 16 << 20, false).unwrap();
+    let took = began.elapsed();
+    assert_eq!(r.body.len(), n);
+    println!("MEASURE chunked {n} bytes in 1-byte chunks: {took:?}");
+}

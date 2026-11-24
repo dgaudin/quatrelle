@@ -800,3 +800,33 @@ fn the_exchange_inbox_count_reported_after_a_read_mark_and_a_draft_never_goes_ba
     assert!(counts.windows(2).all(|w| w[1] <= w[0]), "the count went back up: {counts:?}");
     drop(pool);
 }
+
+/// An Exchange account behind NTLM whose answers, including the 401 challenge, come in
+/// seven-byte chunks: FindFolder and the folder sync still arrive on the one signed-in
+/// connection, with no error.
+#[test]
+fn ntlm_answers_in_small_chunks_still_sync() {
+    let mut d = Data { chunked: true, ..Default::default() };
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, &mail("Chunked", "m1"), false, "2024-05-06T09:00:00Z");
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-chunked");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    let seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    assert!(!seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::Error { .. } | SyncStatus::NeedsPassword { .. }, .. })), "{seen:?}");
+    eventually("the chunked Inbox", || store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == "Chunked")));
+    let (connections, handshakes) = {
+        let d = server.data.lock().unwrap();
+        (d.connections, d.handshakes)
+    };
+    assert_eq!(connections, handshakes, "each connection signed in once, not once per request");
+    assert!(connections <= 2, "the account's two connections at most: {connections}");
+}
