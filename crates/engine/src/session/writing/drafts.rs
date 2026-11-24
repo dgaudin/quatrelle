@@ -169,9 +169,19 @@ impl Session {
             return Ok(serde_json::json!({ "compose": id }));
         }
         let raw = self.readable_raw(key).ok_or_else(|| CmdError::Disabled("the draft is still downloading".into()))?;
+        // One kept encrypted (a message to be sent encrypted is, on the server) opens once it's
+        // been decrypted, never as what encrypts it.
+        if crate::session::security::is_sealed(&raw) {
+            return Err(CmdError::Disabled("the draft is encrypted: it opens once it has been decrypted".into()));
+        }
         // As it was saved ([`Session::compose_from_saved`]).
         let mut c = self.compose_from_saved(&key.account.clone(), key, &raw)?;
         c.draft = Some(key.clone());
+        // Kept encrypted, it was to be sent encrypted: it still is, whatever the account does by
+        // itself (opened again and sent, it went in the clear, with the text it quoted).
+        if self.kept_or_held(key).is_some_and(|stored| crate::session::security::is_sealed(&stored)) {
+            c.encrypt = true;
+        }
         c.window = self.prefs.new_mail_window;
         let id = c.id;
         self.bring_back(c);

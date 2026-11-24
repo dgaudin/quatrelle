@@ -9,6 +9,7 @@ use super::*;
 use crate::session::{Lock, Seal};
 use quatrelle_smime as smime;
 
+mod drafts;
 mod forged;
 mod pgp;
 

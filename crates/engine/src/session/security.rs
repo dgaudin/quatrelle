@@ -22,7 +22,7 @@ mod pgp;
 mod revocation;
 mod scam;
 pub use cards::CardSearch;
-pub(crate) use opened::Opened;
+pub(crate) use opened::{Opened, is_sealed};
 pub(crate) use pgp::PgpState;
 pub use pgp::{AccountPgp, Learn, Learnt, NO_KEY_TO_ENCRYPT, OwnKey, PEOPLE_DOC, PEOPLE_MAX, PGP_DOC, PeopleKeys, PersonKey, PgpCard, Reach, Scheme};
 pub(crate) use pgp::{OfferedKey, offered};

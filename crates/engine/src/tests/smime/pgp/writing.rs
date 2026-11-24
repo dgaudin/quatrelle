@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Engine tests: sending with OpenPGP on the sample mailbox (Riley's account). Signed, then
 //! encrypted to every recipient and to the sender; a recipient without a key that can be
@@ -360,5 +361,39 @@ fn encryption_turns_itself_on_only_when_chosen() {
     s.run("compose.send", &json!({})).unwrap();
     let (to, _) = answer_protect(&mut s, &riley.secret);
     assert_eq!(to.len(), 2, "Bo, and Riley for the Sent copy");
+    done(s);
+}
+
+/// A draft kept encrypted with the account's OpenPGP key opened again forgot that, and went in
+/// the clear: it's still to be sent encrypted, and opens only once it's been decrypted.
+#[test]
+fn a_draft_kept_encrypted_with_openpgp_is_still_sent_encrypted() {
+    let (mut s, riley) = with_key("pgp-draft-sealed");
+    let draft = encrypted_mail("Riley Moreno <riley@studio.example>", "", &riley.public, "The figures, as agreed.", NOW);
+    let key = open_raw(&mut s, 9721, &draft);
+    let err = s.run("draft.edit", &json!({"key": key.to_id()})).unwrap_err().to_string();
+    assert!(err.contains("encrypted") && s.compose.is_none(), "{err}");
+    answer_decrypt_with(&mut s, &riley.secret);
+    s.run("draft.edit", &json!({"key": key.to_id()})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert!(c.body.contains("The figures, as agreed.") && c.encrypt, "{}", c.body);
+    done(s);
+}
+
+/// A draft in plain text with an encrypted block pasted into it (one made elsewhere, for someone
+/// else) isn't a draft kept encrypted: it's text, and opens as that.
+#[test]
+fn a_draft_with_an_encrypted_block_in_its_text_opens() {
+    let (mut s, _) = with_key("pgp-pasted");
+    let block = pgp::encrypt(b"For Bo only.", &[bo_key().public.as_slice()], None, NOW, &mut rand_core::OsRng).unwrap();
+    let raw = format!(
+        "From: Riley <riley@studio.example>\r\nTo: bo@studio.example\r\nSubject: For you\r\nMessage-ID: <pasted@studio.example>\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\r\n{}\r\n",
+        block.trim().replace("\r\n", "\n").replace('\n', "\r\n")
+    );
+    let key = open_raw(&mut s, 9722, raw.as_bytes());
+    s.run("draft.edit", &json!({"key": key.to_id()})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert!(c.body.contains("BEGIN PGP MESSAGE") && !c.encrypt, "{}", c.body);
     done(s);
 }

@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! What was decrypted of messages, held in memory only, in the order it came.
+//! What was decrypted of messages, held in memory only, in the order it came; and whether a
+//! message is kept encrypted.
 
 use std::collections::VecDeque;
 
 use super::*;
+
+/// Whether `raw` is encrypted whole (S/MIME, or OpenPGP in a part of its own), as Quatrelle
+/// keeps a draft and sends a message: not text that has an encrypted block in it, which is what
+/// its writer put there (a draft with one pasted in never opened again otherwise).
+pub(crate) fn is_sealed(raw: &[u8]) -> bool {
+    matches!(mime::smime::protection(raw), mime::smime::Protection::Encrypted(_))
+        || matches!(mime::pgp::protection(raw), mime::pgp::Protection::Encrypted(_))
+}
 
 /// The most decrypted messages held in memory at once.
 pub(super) const OPENED_MAX: usize = 64;
