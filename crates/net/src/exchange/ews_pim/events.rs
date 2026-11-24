@@ -63,7 +63,20 @@ pub fn recurrence_json(r: &El) -> Option<Value> {
         _ => return None,
     };
     let num = |n: &str| p.text_of(n).and_then(|v| v.trim().parse::<u64>().ok());
-    let days: Vec<String> = p.text_of("DaysOfWeek").unwrap_or("").split_whitespace().map(str::to_ascii_lowercase).collect();
+    let days: Vec<String> = p
+        .text_of("DaysOfWeek")
+        .unwrap_or("")
+        .split_whitespace()
+        .flat_map(|t| match t.to_ascii_lowercase().as_str() {
+            // EWS names a set of days by one word (a relative pattern's `DaysOfWeek` is a single
+            // value there, not a list): read it as the days it stands for, so `rrule_of` writes
+            // the `BYDAY` of them.
+            "day" => DAYS.iter().map(|d| d.to_ascii_lowercase()).collect::<Vec<_>>(),
+            "weekday" => DAYS[1..6].iter().map(|d| d.to_ascii_lowercase()).collect(),
+            "weekendday" => vec![DAYS[6].to_ascii_lowercase(), DAYS[0].to_ascii_lowercase()], // Saturday, Sunday
+            other => vec![other.to_string()],
+        })
+        .collect();
     let month = p.text_of("Month").and_then(|m| MONTHS.iter().position(|x| x.eq_ignore_ascii_case(m.trim()))).map(|i| i + 1);
     let pattern = json!({
         "type": kind,
@@ -90,7 +103,21 @@ pub fn recurrence_xml(rule: &str, start: i64) -> Option<String> {
     let p = &r["pattern"];
     let interval = p["interval"].as_u64().unwrap_or(1).max(1);
     let day = |d: &Value| d.as_str().and_then(|n| DAYS.iter().find(|x| x.eq_ignore_ascii_case(n))).copied();
-    let days = p["daysOfWeek"].as_array().map(|a| a.iter().filter_map(day).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+    let days = p["daysOfWeek"].as_array().map(|a| a.iter().filter_map(day).collect::<Vec<_>>()).unwrap_or_default();
+    // A relative pattern's `DaysOfWeek` is a single value, not a list: a set of days is written
+    // as the one word EWS has for it.
+    let days_text = |days: &[&str]| {
+        if days.len() == DAYS.len() {
+            "Day".to_string()
+        } else if days == ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] {
+            "Weekday".to_string()
+        } else if days.len() == 2 && days.contains(&"Saturday") && days.contains(&"Sunday") {
+            "WeekendDay".to_string()
+        } else {
+            days.join(" ")
+        }
+    };
+    let days_list = days.join(" ");
     let index = p["index"].as_str().map(|i| {
         let mut c = i.chars();
         c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
@@ -99,19 +126,21 @@ pub fn recurrence_xml(rule: &str, start: i64) -> Option<String> {
     let mday = p["dayOfMonth"].as_u64().unwrap_or(1);
     let pattern = match p["type"].as_str()? {
         "daily" => format!("<t:DailyRecurrence><t:Interval>{interval}</t:Interval></t:DailyRecurrence>"),
-        "weekly" => format!("<t:WeeklyRecurrence><t:Interval>{interval}</t:Interval><t:DaysOfWeek>{days}</t:DaysOfWeek></t:WeeklyRecurrence>"),
+        "weekly" => format!("<t:WeeklyRecurrence><t:Interval>{interval}</t:Interval><t:DaysOfWeek>{days_list}</t:DaysOfWeek></t:WeeklyRecurrence>"),
         "absoluteMonthly" => format!(
             "<t:AbsoluteMonthlyRecurrence><t:Interval>{interval}</t:Interval><t:DayOfMonth>{mday}</t:DayOfMonth></t:AbsoluteMonthlyRecurrence>"
         ),
         "relativeMonthly" => format!(
-            "<t:RelativeMonthlyRecurrence><t:Interval>{interval}</t:Interval><t:DaysOfWeek>{days}</t:DaysOfWeek><t:DayOfWeekIndex>{}</t:DayOfWeekIndex></t:RelativeMonthlyRecurrence>",
+            "<t:RelativeMonthlyRecurrence><t:Interval>{interval}</t:Interval><t:DaysOfWeek>{}</t:DaysOfWeek><t:DayOfWeekIndex>{}</t:DayOfWeekIndex></t:RelativeMonthlyRecurrence>",
+            days_text(&days),
             index.unwrap_or_else(|| "First".into())
         ),
         "absoluteYearly" => {
             format!("<t:AbsoluteYearlyRecurrence><t:DayOfMonth>{mday}</t:DayOfMonth><t:Month>{month}</t:Month></t:AbsoluteYearlyRecurrence>")
         }
         "relativeYearly" => format!(
-            "<t:RelativeYearlyRecurrence><t:DaysOfWeek>{days}</t:DaysOfWeek><t:DayOfWeekIndex>{}</t:DayOfWeekIndex><t:Month>{month}</t:Month></t:RelativeYearlyRecurrence>",
+            "<t:RelativeYearlyRecurrence><t:DaysOfWeek>{}</t:DaysOfWeek><t:DayOfWeekIndex>{}</t:DayOfWeekIndex><t:Month>{month}</t:Month></t:RelativeYearlyRecurrence>",
+            days_text(&days),
             index.unwrap_or_else(|| "First".into())
         ),
         _ => return None,

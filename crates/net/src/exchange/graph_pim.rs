@@ -84,6 +84,10 @@ pub fn rrule_of(r: &Value) -> Option<String> {
     // The nth of one weekday is that weekday's nth; of several ("weekday", "weekend day",
     // "day"), the nth day that is one of them, not the nth of each (five days a month).
     let by_index = match days.as_slice() {
+        // No day named (EWS sends `Day`/`Weekday`/`WeekendDay` for that, read as the set below):
+        // no BYSETPOS, the series keeps its start's day as before — `BYDAY=;BYSETPOS=n` would
+        // match nothing and the series would disappear.
+        [] => String::new(),
         [_] => format!("{index}{}", days.join(",")),
         _ => format!("{};BYSETPOS={index}", days.join(",")),
     };
