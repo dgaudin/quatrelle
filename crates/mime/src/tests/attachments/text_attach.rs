@@ -48,7 +48,6 @@ fn quoted_printable(data: &[u8]) -> String {
     out
 }
 
-/// A message with a short text body and these parts after it, each `(headers, body)`.
 /// A file with a Content-ID and nothing on how it's shown (as some invoicing programs attach
 /// a PDF) is a file: taken for a picture in the text, it was counted (the paperclip) and then
 /// listed nowhere. A picture like that is still the text's.
@@ -67,33 +66,8 @@ fn a_file_with_a_content_id_is_still_a_file() {
         ["https://x.example/a/b.png", "cid:logo@x", "https://x.example/c.png/"]
     );
 }
-/// An unquoted address keeps its trailing `/` in every pass that reads it: the list of pictures
-/// and the picture span in the text are the same address.
-#[test]
-fn an_unquoted_addresses_trailing_slash_is_kept_in_every_pass() {
-    let html = "<p>Hi</p><img src=https://x.example/c.png/>";
-    let images = crate::html_images(html);
-    let r = html_to_rich(html);
-    let span_images: Vec<&str> = r.iter().flatten().filter_map(|sp| sp.image.as_deref()).collect();
-    assert_eq!(images, ["https://x.example/c.png/"]);
-    assert_eq!(span_images, images, "{span_images:?}");
-}
 
-/// A `>` inside a quoted attribute doesn't end the tag: the picture whose `alt` holds one is
-/// found, and counted as a tracking picture where it is one.
-#[test]
-fn a_picture_with_a_quoted_gt_in_its_alt_is_found() {
-    let html = "<p>Hi</p><img alt=\"5 > 4\" src=\"https://pictures.example/a.png\"><img src=\"https://pictures.example/b.png\">";
-    assert_eq!(crate::html_images(html), ["https://pictures.example/a.png", "https://pictures.example/b.png"]);
-    let tracker = "<img alt=\"a>b\" src=\"https://t.mailtrack.example/open?id=1\" width=\"1\" height=\"1\">";
-    assert_eq!(crate::trackers::trackers(tracker).pictures.len(), 1);
-
-    // An attribute inside another's quoted value isn't one, and a tab around the `=` doesn't
-    // hide the real `src`.
-    let html = "<img alt=\"x src=https://evil.example/\" src=\"https://x.example/a.png\"><img\tsrc\t=\t\"https://x.example/b.png\">";
-    assert_eq!(crate::html_images(html), ["https://x.example/a.png", "https://x.example/b.png"]);
-}
-
+/// A message with a short text body and these parts after it, each `(headers, body)`.
 fn message(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
     let mut raw = b"From: Sam <sam@studio.example>\r\nTo: Lee <lee@studio.example>\r\nSubject: Files\r\nMIME-Version: 1.0\r\n\
         Content-Type: multipart/mixed; boundary=\"b1\"\r\n\r\n--b1\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHere.\r\n"

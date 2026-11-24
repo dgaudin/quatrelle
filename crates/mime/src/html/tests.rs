@@ -4,6 +4,9 @@
 
 use super::*;
 
+mod pictures;
+mod rules;
+
 /// Found in review: HTML pasted with thousands of pictures named by `cid:` had each given its
 /// style in a pass over the whole text (its palette compacted each time): 10,000 pictures before
 /// 2 MB of text froze the window, before those the message hasn't were taken out (in one pass,
@@ -24,26 +27,6 @@ fn thousands_of_pictures_pasted_with_much_text_cost_a_few_passes() {
     let kept: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == rich::PICTURE).map(|(i, _)| i).collect();
     assert_eq!(kept.len(), 1, "the picture the message has stays");
     assert_eq!(kept.first().and_then(|&i| styles.style(i).picture), Some("n0".to_string()));
-}
-
-/// A `>` inside a quoted attribute doesn't end the tag: the rest of an `<hr title="x>y">` isn't
-/// left in the text after its rule line.
-#[test]
-fn a_gt_inside_a_quoted_attribute_doesnt_end_a_rule_tag() {
-    assert_eq!(mark_rules("<p>a</p><hr title=\"x>y\"><p>b</p>"), format!("<p>a</p><p>{RULE_MARK}</p><p>b</p>"));
-}
-
-/// A link's address reads its character references once, as every other pass reads them:
-/// `&amp;#38;` is `&#38;`, not `&` (the chain of replacements read it twice), and `&#x3D;` is
-/// `=`. A picture's address and a tracker's are read the same way.
-#[test]
-fn every_pass_reads_an_address_alike() {
-    let src = "https://pictures.example/p.png?a=1&b=2";
-    let html = r#"<p>Hi</p><img alt="Logo" src="https://pictures.example/p.png?a=1&#38;b=2"><a href="https://links.example/?q=x&amp;#38;y">go</a><img src="https://t.example/o.gif?a=1&#x26;b=2" width="1" height="1">"#;
-    assert_eq!(html_images(html), [src, "https://t.example/o.gif?a=1&b=2"]);
-    assert_eq!(html_links(html), ["https://links.example/?q=x&#38;y"]);
-    assert_eq!(crate::trackers::trackers(html).pictures, ["https://t.example/o.gif?a=1&b=2"]);
-    assert_eq!(html_links(r#"<a href="https://links.example/?a&#x3D;1">go</a>"#), ["https://links.example/?a=1"]);
 }
 
 /// The marks the passes write are private-use characters mail doesn't carry: one a message
@@ -89,14 +72,4 @@ fn marks_written_as_numeric_references_are_taken_out() {
     let (text, _) = pasted_html("<p>a&#xE005;b</p>");
     assert!(!text.contains(crate::rich::SIGNATURE), "{text:?}");
     assert_eq!(text, "ab");
-}
-
-/// A picture's size is the one CSS picks: the last declaration marked `!important` over a
-/// later plain one (`width:600px !important; width:1px` is 600 wide, not 1).
-#[test]
-fn a_pictures_size_is_the_one_css_picks() {
-    let html = r#"<img src="https://x.example/a.png" style="width:600px !important; width:1px"><img src="https://x.example/b.png" style="width:1px; width:600px">"#;
-    let sizes = picture_sizes(html);
-    assert_eq!(sizes[0].1.width, Some(layout::Width::Px(600)), "{sizes:?}");
-    assert_eq!(sizes[1].1.width, Some(layout::Width::Px(600)), "{sizes:?}");
 }
