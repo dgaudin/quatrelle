@@ -450,7 +450,17 @@ mod tests {
     #[test]
     fn socket_paths_fit_a_socket_address() {
         let app = socket_path(Path::new("/home/zoe/.local/share/quatrelle")).unwrap_or_default();
-        for p in [app, socket_at("together"), socket_at("stale"), socket_at("silent"), socket_at("show"), socket_at("keyed"), socket_at("handed")] {
+        for p in [
+            app,
+            socket_at("together"),
+            socket_at("stale"),
+            socket_at("silent"),
+            socket_at("show"),
+            socket_at("keyed"),
+            socket_at("handed"),
+            socket_at("lost"),
+            socket_at("early"),
+        ] {
             let len = p.as_os_str().len();
             assert!(len < 104, "{len} bytes: {}", p.display());
         }
