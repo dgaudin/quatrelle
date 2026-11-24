@@ -106,6 +106,9 @@ pub struct Data {
     /// The next request on a connection already used is met with the connection closed, unread
     /// (a connection the server closed for being idle), this many times.
     pub drop_kept: usize,
+    /// A `FindItem` page never says it holds the last item (a server whose paging is cut short
+    /// or inconsistent).
+    pub wlinks_more: bool,
     /// The next requests are answered "busy" (`ErrorServerBusy`, back off 10 ms), this many times.
     pub busy: usize,
     /// The search for what messages are (`FindItem` on `item:ItemClass`): refused
@@ -374,6 +377,7 @@ impl Default for Data {
             password_changed: false,
             refused_sign_ins: Vec::new(),
             drop_kept: 0,
+            wlinks_more: false,
             no_commit_time: false,
             limits: None,
             outlook_rules: false,

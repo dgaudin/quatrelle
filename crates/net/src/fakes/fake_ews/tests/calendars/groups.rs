@@ -302,3 +302,65 @@ fn the_accounts_own_calendars_are_filed_under_their_group() {
     assert_eq!(cals.iter().find(|c| c.name == "Meetings").map(|c| c.group.as_str()), Some("Équipe"));
     assert_eq!(cals.iter().find(|c| c.name == "Ana Lima").map(|c| c.group.as_str()), Some("Équipe"));
 }
+
+/// A shortcut of the Calendar section that doesn't read whole — no address book entry to say
+/// whose calendar it is — is left alone: renaming the group it names must not rewrite it, and
+/// deleting the group must not delete it.
+#[test]
+fn a_malformed_shortcut_is_never_renamed_or_deleted() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let team = guid(0x10);
+    d.wlinks = vec![
+        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", team.clone()), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]),
+        wlink_of(
+            link,
+            3,
+            2,
+            "Ana Lima",
+            &[
+                ("0x6850", "Binary", team.clone()),
+                ("0x6851", "String", "Équipe".into()),
+                ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
+                ("0x684B", "Binary", crate::imap::base64(&[0x11])),
+            ],
+        ),
+        // The same group's name, but no address book entry and no id: not a shortcut this reads.
+        wlink_of(link, 3, 2, "Half a shortcut", &[("0x6851", "String", "Équipe".into())]),
+    ];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe Studio").unwrap();
+    let kept = server.data.lock().unwrap();
+    let item = |id: &str| kept.wlinks.iter().find(|w| w.contains(&format!("Id=\"{id}\""))).cloned().unwrap_or_default();
+    assert!(item("WAna Lima").contains(">Équipe Studio<"), "the shortcut that reads whole is renamed: {}", item("WAna Lima"));
+    assert!(item("WHalf a shortcut").contains(">Équipe<"), "the malformed shortcut keeps its group name: {}", item("WHalf a shortcut"));
+    assert!(!item("WHalf a shortcut").contains("Équipe Studio"), "the malformed shortcut isn't renamed");
+    drop(kept);
+    crate::ews_pim::delete_calendar_group(&c, "Équipe Studio").unwrap();
+    let kept = server.data.lock().unwrap();
+    assert!(kept.wlinks.iter().any(|w| w.contains("Half a shortcut")), "the malformed shortcut isn't deleted with the group");
+}
+
+/// A server that never says its page is the last one is not written on: the shortcuts weren't
+/// read whole.
+#[test]
+fn a_page_that_never_says_it_is_the_last_one_is_not_written_on() {
+    let mut d = Data { wlinks_more: true, ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.wlinks = vec![wlink_of(
+        "IPM.Microsoft.WunderBar.Link",
+        3,
+        4,
+        "Équipe",
+        &[("0x6842", "Binary", guid(0x10)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))],
+    )];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let e = crate::ews_pim::create_calendar_group(&c, "Salles").unwrap_err();
+    assert!(e.to_string().contains("read whole"), "{e}");
+}

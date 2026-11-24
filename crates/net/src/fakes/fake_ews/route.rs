@@ -69,7 +69,7 @@ impl Data {
                 let total = items.len();
                 let wanted = wanted_props(op);
                 let page: String = items.iter().skip(offset).take(max).map(|w| props_only(w, &wanted)).collect();
-                let last = offset.saturating_add(max) >= total;
+                let last = !self.wlinks_more && offset.saturating_add(max) >= total;
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"{last}\"><t:Items>{page}</t:Items></m:RootFolder>")));
             }
             "ResolveNames" => return self.resolve_names(op),

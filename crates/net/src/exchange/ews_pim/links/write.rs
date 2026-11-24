@@ -37,6 +37,7 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
     };
     let props: String = PROPS.iter().map(|(tag, kind)| format!("<t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/>")).collect();
     let mut out = Vec::new();
+    let mut complete = false;
     for page in 0..MAX_PAGES {
         let offset = page * PAGE;
         let m = c.call_one(&format!(
@@ -50,15 +51,18 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
         ))?;
         let batch: Vec<El> = m.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
         let last = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")).is_some_and(|v| v.eq_ignore_ascii_case("true"));
-        let n = batch.len();
         for it in &batch {
             if let Some(s) = shortcut_of(it) {
                 out.push(s);
             }
         }
-        if last || n < PAGE || out.len() >= MAX_PAGES * PAGE {
+        if last {
+            complete = true;
             break;
         }
+    }
+    if !complete {
+        return Err(NetError::No("the server's navigation shortcuts weren't read whole".into()));
     }
     Ok(out)
 }
@@ -74,20 +78,41 @@ fn shortcut_of(it: &El) -> Option<Shortcut> {
         return None;
     }
     let change_key = it.find("ItemId").and_then(|i| i.attr("ChangeKey")).unwrap_or_default().to_string();
+    let section = int_prop(it, "0x6852");
+    let kind = int_prop(it, "0x6849");
+    let name = clean(ext_text(it, "0x0E1D").unwrap_or_default());
+    let group_name = clean(ext_text(it, "0x6851").unwrap_or_default());
+    let group_id = bin_prop(it, "0x6850").unwrap_or_default();
+    let header_id = bin_prop(it, "0x6842").unwrap_or_default();
+    let ordinal = bin_prop(it, "0x684B").unwrap_or_default();
+    let address_book = bin_prop(it, "0x6854").unwrap_or_default();
+    if ordinal.len() > 16 || (!group_id.is_empty() && group_id.len() != 16) {
+        return None;
+    }
+    let calendar = section == Some(CALENDAR_SECTION);
+    let usable = match kind {
+        Some(WLINK_HEADER) => calendar && !name.is_empty() && header_id.len() == 16,
+        Some(WLINK_OWN) => calendar && !name.is_empty(),
+        Some(WLINK_SHARED) => calendar && address_book_dn(&address_book).is_some(),
+        _ => false,
+    };
+    if !usable {
+        return None;
+    }
     Some(Shortcut {
         id,
         change_key,
-        section: int_prop(it, "0x6852"),
-        kind: int_prop(it, "0x6849"),
-        name: clean(ext_text(it, "0x0E1D").unwrap_or_default()),
-        group_name: clean(ext_text(it, "0x6851").unwrap_or_default()),
-        group_id: bin_prop(it, "0x6850").unwrap_or_default(),
-        header_id: bin_prop(it, "0x6842").unwrap_or_default(),
-        ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
+        section,
+        kind,
+        name,
+        group_name,
+        group_id,
+        header_id,
+        ordinal,
         entry_id: bin_prop(it, "0x684C").unwrap_or_default(),
         store_id: bin_prop(it, "0x684E").unwrap_or_default(),
         folder_type: bin_prop(it, "0x684F").unwrap_or_default(),
-        address_book: bin_prop(it, "0x6854").unwrap_or_default(),
+        address_book,
     })
 }
 
@@ -118,7 +143,10 @@ fn group_named<'a>(all: &'a [Shortcut], name: &str) -> Option<&'a Shortcut> {
 fn members_of<'a>(all: &'a [Shortcut], group: &Shortcut) -> Vec<&'a Shortcut> {
     all.iter()
         .filter(|s| s.section == Some(CALENDAR_SECTION) && matches!(s.kind, Some(WLINK_OWN | WLINK_SHARED)))
-        .filter(|s| group_of(s, all).eq_ignore_ascii_case(&group.name))
+        // The header's id is what Outlook points at; a member that carries no id falls back to
+        // the header's exact name, never to a case-insensitive one that another group could
+        // share.
+        .filter(|s| if s.group_id.is_empty() { !s.group_name.is_empty() && s.group_name == group.name } else { s.group_id == group.header_id })
         .collect()
 }
 
