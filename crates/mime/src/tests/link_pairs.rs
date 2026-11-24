@@ -23,3 +23,11 @@ fn a_gt_inside_a_quoted_attribute_doesnt_end_the_anchor() {
     let html = r#"<p>Hi</p><a title="5 > 4" href="https://x.example/page">Read it</a>"#;
     assert_eq!(html_link_pairs(html), vec![("Read it".to_string(), "https://x.example/page".to_string())]);
 }
+
+/// An attribute is read as a browser reads the tag: `href=` inside another attribute's quoted
+/// value isn't the anchor's, and a tab around the `=` doesn't hide the real one.
+#[test]
+fn an_attribute_inside_another_quoted_value_isnt_one() {
+    let html = "<a title=\"see href=https://evil.example/\" href=\"https://x.example/\">t</a><a\thref\t=\t\"https://y.example/\">u</a>";
+    assert_eq!(html_link_pairs(html), vec![("t".to_string(), "https://x.example/".to_string()), ("u".to_string(), "https://y.example/".to_string())]);
+}

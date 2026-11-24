@@ -75,6 +75,11 @@ fn a_picture_with_a_quoted_gt_in_its_alt_is_found() {
     assert_eq!(crate::html_images(html), ["https://pictures.example/a.png", "https://pictures.example/b.png"]);
     let tracker = "<img alt=\"a>b\" src=\"https://t.mailtrack.example/open?id=1\" width=\"1\" height=\"1\">";
     assert_eq!(crate::trackers::trackers(tracker).pictures.len(), 1);
+
+    // An attribute inside another's quoted value isn't one, and a tab around the `=` doesn't
+    // hide the real `src`.
+    let html = "<img alt=\"x src=https://evil.example/\" src=\"https://x.example/a.png\"><img\tsrc\t=\t\"https://x.example/b.png\">";
+    assert_eq!(crate::html_images(html), ["https://x.example/a.png", "https://x.example/b.png"]);
 }
 
 fn message(parts: &[(String, Vec<u8>)]) -> Vec<u8> {

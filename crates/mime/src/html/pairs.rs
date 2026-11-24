@@ -46,26 +46,10 @@ pub fn html_link_pairs(html: &str) -> Vec<(String, String)> {
     out
 }
 
-/// The value of attribute `name` in a tag's text (quoted either way, or not).
+/// The value of attribute `name` in a tag's text, read as a browser reads the tag
+/// ([`super::tag_attr`]: one inside another attribute's quoted value isn't one).
 fn attribute(tag: &str, name: &str) -> Option<String> {
-    let lower = tag.to_ascii_lowercase();
-    let mut from = 0;
-    while let Some(rel) = lower.get(from..).and_then(|r| r.find(name)) {
-        let i = from + rel;
-        from = i + name.len();
-        let before_ok = i == 0 || lower.get(..i).is_some_and(|b| b.ends_with(|c: char| c.is_ascii_whitespace() || c == '"' || c == '\''));
-        let rest = tag.get(from..).unwrap_or("").trim_start();
-        let Some(value) = rest.strip_prefix('=').filter(|_| before_ok) else { continue };
-        let value = value.trim_start();
-        return Some(match value.chars().next() {
-            Some(q @ ('"' | '\'')) => {
-                let body = value.get(1..).unwrap_or("");
-                body.get(..body.find(q).unwrap_or(body.len())).unwrap_or("").to_string()
-            }
-            _ => value.get(..value.find(char::is_whitespace).unwrap_or(value.len())).unwrap_or("").to_string(),
-        });
-    }
-    None
+    super::tag_attr(tag, name).map(str::to_string)
 }
 
 /// An anchor's inner HTML as the text a reader sees: tags out, entities read, spaces collapsed,
