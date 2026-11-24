@@ -25,8 +25,10 @@ pub(super) fn whole<'a>(raw: impl IntoIterator<Item = &'a String>, left_out: &[&
             "BEGIN" => {
                 let name = l.value.trim().to_string();
                 let w = writing && !left_out.iter().any(|x| name.eq_ignore_ascii_case(x));
+                // Written as its end is, with nothing around its name (servers refuse a
+                // `BEGIN: valarm`, which reading takes).
                 if w {
-                    out.push(s.to_string());
+                    out.push(format!("BEGIN:{name}"));
                 }
                 // Bounded by the lines kept (200 an event, a zone's own cap).
                 open.push((name, w));

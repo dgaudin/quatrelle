@@ -329,6 +329,25 @@ fn an_event_at_the_end_of_time_is_written() {
     }
 }
 
+/// A component begun with spaces round its name (`BEGIN: valarm`, which reading takes) is written
+/// back as servers take it.
+#[test]
+fn a_component_s_beginning_is_written_plainly() {
+    let cal = parse(
+        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:sp\r\nDTSTART:20261103T090000Z\r\nBEGIN: x-big \r\nX-LINE:junk\r\nEND:x-big\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+        0,
+    );
+    let text = write(&cal.events, None, 0);
+    assert!(text.contains("\r\nBEGIN:x-big\r\nX-LINE:junk\r\nEND:x-big\r\n"), "{text}");
+    // An alarm Quatrelle can't read is kept whole, its beginning written plainly too.
+    let cal = parse(
+        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:sp2\r\nDTSTART:20261103T090000Z\r\nBEGIN: valarm \r\nX-WEIRD:1\r\nEND:valarm\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+        0,
+    );
+    let text = write(&cal.events, None, 0);
+    assert!(text.contains("\r\nBEGIN:valarm\r\nX-WEIRD:1\r\nEND:valarm\r\n"), "{text}");
+}
+
 #[test]
 fn writes_what_it_reads() {
     let cal = parse(INVITE, 0);
