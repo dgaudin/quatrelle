@@ -381,3 +381,35 @@ fn a_panic_in_a_read_message_window_leaves_it_open() {
     assert_eq!(a.session.windows.len(), 1, "and stays open");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A backend that hands over one batch of events, once.
+struct Batch(Vec<quatrelle_engine::model::Event>);
+
+impl crate::Backend for Batch {
+    fn submit(&mut self, _: quatrelle_engine::model::Job) {}
+    fn poll(&mut self) -> Vec<quatrelle_engine::model::Event> {
+        std::mem::take(&mut self.0)
+    }
+}
+
+/// A panic in applying one event of a batch loses only that event: the ones after it in the
+/// batch (a `Sent`, a reply a window waits for) are applied, and the panic is said once.
+#[test]
+fn a_panic_applying_an_event_keeps_the_events_after_it() {
+    use quatrelle_engine::model::{Event, SyncStatus};
+    let (mut a, dir, ctx) = writing("frame-guard-event");
+    let id =
+        a.session.run("account.add", &json!({"email": "zoe@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    a.session.apply(Event::Status { account: id.clone(), status: SyncStatus::Online { at: NOW } });
+    a.session.take_jobs();
+    a.backend = Box::new(Batch(vec![
+        Event::Status { account: id.clone(), status: SyncStatus::Offline },
+        Event::Status { account: id.clone(), status: SyncStatus::Connecting },
+    ]));
+    a.ui.test_panic = Some(PanicAt::Event);
+    assert!(!guarded_frame(&ctx, &mut a, true), "one panic doesn't end Quatrelle");
+    assert!(matches!(a.session.account(&id).unwrap().status, SyncStatus::Connecting), "{:?}", a.session.account(&id).unwrap().status);
+    let said = a.session.notices.iter().filter(|n| n.error && n.text.starts_with("Something went wrong in the window")).count();
+    assert_eq!(said, 1, "the panic is said, once");
+    let _ = std::fs::remove_dir_all(dir);
+}

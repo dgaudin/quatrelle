@@ -51,6 +51,8 @@ pub(crate) enum PanicAt {
     Source,
     /// A note's window.
     Note,
+    /// The first event of the batch the workers sent, as it is applied.
+    Event,
 }
 
 /// How the frames under the guard have gone.

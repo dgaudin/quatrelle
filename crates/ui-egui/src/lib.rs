@@ -562,7 +562,19 @@ impl MailApp {
             }
             answered |= matches!(e, quatrelle_engine::model::Event::Found { .. });
             let merging = app::Merging::of(&e);
-            self.session.apply(e);
+            // Each under its own guard: one that panics loses itself, not the events after it in
+            // the batch (a `Sent`, an answer a window waits for). The panic is the frame's, told
+            // to the guard at its end.
+            let applied = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                #[cfg(test)]
+                if i == 0 {
+                    self.panic_at(app::PanicAt::Event);
+                }
+                self.session.apply(e);
+            }));
+            if let Err(payload) = applied {
+                self.ui.caught.keep(payload);
+            }
             if let Some(m) = merging {
                 m.done();
             }
