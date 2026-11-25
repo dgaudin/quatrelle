@@ -562,3 +562,24 @@ fn a_shared_calendar_whose_only_name_match_is_someone_else_is_left_alone() {
     let kept = server.data.lock().unwrap();
     assert!(kept.wlinks.contains(&before), "Tom's shortcut is untouched: {:?}", kept.wlinks);
 }
+
+/// A transient failure of the Common Views probe isn't remembered as "there is none": the next
+/// sync asks again and finds the groups.
+#[test]
+fn a_failed_common_views_probe_is_not_remembered_as_none() {
+    let mut d = Data { find_folder_fails: 1, ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.wlinks = vec![wlink_of(
+        "IPM.Microsoft.WunderBar.Link",
+        3,
+        4,
+        "Équipe",
+        &[("0x6842", "Binary", guid(0x10)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))],
+    )];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    assert!(crate::ews_pim::calendar_links(&c).is_err(), "the first probe is refused");
+    let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
+    assert_eq!(shortcuts.groups.len(), 1, "the next probe found the group: {:?}", shortcuts.groups);
+}

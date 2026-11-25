@@ -40,6 +40,9 @@ impl Data {
         if let Some(done) = self.calendar_folders(op) {
             return (format!("{}Response", op.name), done);
         }
+        if op.name == "FindFolder" && super::server::take_one(&mut self.find_folder_fails) {
+            return ("FindFolderResponse".into(), vec![err("ErrorAccessDenied")]);
+        }
         if let Some(done) = self.folder_route(op).or_else(|| self.rules_route(op)) {
             return (format!("{}Response", op.name), done);
         }

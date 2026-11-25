@@ -144,10 +144,9 @@ pub(super) fn common_views(c: &Client) -> Result<Option<String>> {
     let found = match find_common_views(c) {
         Ok(found) => found,
         Err(e) => {
-            // A probe that failed isn't made again this session: the folder isn't found by it,
-            // and twenty-four probes at each sync would only say so again.
+            // A probe that failed isn't remembered as "there is none": a transient refusal
+            // would erase the groups for the rest of the session. The next sync asks again.
             log::info!("navigation shortcuts: the Common Views folder couldn't be read ({e})");
-            c.keep_common_views(&None);
             return Err(e);
         }
     };

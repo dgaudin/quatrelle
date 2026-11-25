@@ -34,7 +34,7 @@ pub(super) fn respond(s: &mut impl Write, chunked: bool, status: u16, headers: &
 }
 
 /// Count one down; whether there was one.
-fn take_one(n: &mut usize) -> bool {
+pub(super) fn take_one(n: &mut usize) -> bool {
     if *n == 0 {
         return false;
     }
