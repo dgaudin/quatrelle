@@ -110,6 +110,7 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
             reminder_time: Some("2026-11-06T09:00:00Z".into()),
             reminder_signal: Some("2026-11-06T09:00:00Z".into()),
             request: Some("Follow up".into()),
+            title: None,
         };
     }
     let server = fake_ews::serve(d);
@@ -402,6 +403,7 @@ fn marking_complete_keeps_the_follow_up_dates_on_exchange() {
             reminder_time: Some("2026-11-06T09:00:00Z".into()),
             reminder_signal: Some("2026-11-06T09:00:00Z".into()),
             request: Some("Follow up".into()),
+            title: None,
         };
     }
     let server = fake_ews::serve(d);
@@ -476,6 +478,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
                 reminder_time: Some("2026-11-06T09:00:00Z".into()),
                 reminder_signal: Some("2026-11-06T09:00:00Z".into()),
                 request: Some("Review".into()),
+                title: None,
             };
         }
     }
@@ -540,5 +543,52 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
         assert_eq!(f.common_start.as_deref().and_then(jmap::utc_date), Some(at("2026-11-02T00:00:00Z")), "{f:?}");
         assert_eq!(f.reminder_signal.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The To-Do List's title is the task's (`PidLidToDoTitle`, 0x85A4), read with the flag's
+/// fields everywhere; what the flag asks for (`PidLidFlagRequest`) is the fallback.
+#[test]
+fn the_follow_up_s_title_is_the_task_s_todo_title() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let _id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp {
+            due: Some("2026-11-06T00:00:00Z".into()),
+            request: Some("Follow up".into()),
+            title: Some("Review the proofs".into()),
+            ..Default::default()
+        };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-title-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert_eq!(m.flags.follow_up.title, "Review the proofs", "the task's title, not the flag's request: {:?}", m.flags.follow_up);
+
+    // One with no task title: the flag's request.
+    {
+        let d = server.data.lock().unwrap();
+        let inbox = d.folders.iter().find(|f| f.name == "Inbox").map(|f| f.id.clone()).unwrap_or_default();
+        drop(d);
+        let _id2 = server.data.lock().unwrap().deliver(&inbox, b"From: a@x.example\r\nSubject: plain\r\n\r\nx\r\n", true, "2024-05-02T09:00:00Z");
+        server.data.lock().unwrap().items.iter_mut().filter(|i| i.id == _id2).for_each(|i| {
+            i.flagged = true;
+            i.follow_up.request = Some("Review".into());
+        });
+    }
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "plain").cloned().unwrap();
+    assert_eq!(m.flags.follow_up.title, "Review", "the flag's request when the task has no title: {:?}", m.flags.follow_up);
     let _ = std::fs::remove_dir_all(&dir);
 }

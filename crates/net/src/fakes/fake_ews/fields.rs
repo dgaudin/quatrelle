@@ -137,6 +137,9 @@ pub struct FollowUp {
     pub reminder_time: Option<String>,
     pub reminder_signal: Option<String>,
     pub request: Option<String>,
+    /// The task's title (`PidLidToDoTitle`, 0x85A4), what the To-Do List shows as the row's
+    /// subject when Outlook set one.
+    pub title: Option<String>,
 }
 
 /// A message's follow-up as Exchange gives it, with the last thing done with it ([`Verb`]).
@@ -171,6 +174,9 @@ pub(super) fn follow_up_xml(f: &FollowUp) -> String {
     }
     if let Some(v) = &f.request {
         x.push_str(&lid("Common", 34096, "String", v));
+    }
+    if let Some(v) = &f.title {
+        x.push_str(&lid("Common", 34212, "String", v));
     }
     x
 }
@@ -225,6 +231,7 @@ pub(super) fn take_flag_update(it: &mut It, u: &El) {
             ("Common", "34050") => it.follow_up.reminder_time = v,
             ("Common", "34144") => it.follow_up.reminder_signal = v,
             ("Common", "34096") => it.follow_up.request = v,
+            ("Common", "34212") => it.follow_up.title = v,
             _ => {}
         }
         return;

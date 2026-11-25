@@ -556,6 +556,7 @@ const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34050\" PropertyType=\"SystemTime\"/>\
 <t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34144\" PropertyType=\"SystemTime\"/>\
 <t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34096\" PropertyType=\"String\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34212\" PropertyType=\"String\"/>\
 <t:FieldURI FieldURI=\"item:Categories\"/>";
 /// Most categories taken from one item.
 const ITEM_CATEGORIES: usize = 50;
