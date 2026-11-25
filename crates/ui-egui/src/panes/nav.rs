@@ -171,6 +171,10 @@ fn row(
 }
 
 pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+    // The scroll bar takes its own strip on the right of the pane instead of floating over the
+    // rows (egui's default): a folder's unread count, drawn at the right of its line, stays whole
+    // under it.
+    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
     egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 1.0;
         // Hidden altogether (View › Favorites), or collapsed to its heading.

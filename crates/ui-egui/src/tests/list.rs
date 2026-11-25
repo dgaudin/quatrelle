@@ -120,3 +120,41 @@ fn the_reading_panes_buttons_stay_whole_at_the_bottom() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The folder pane's scroll bar takes its own strip on the right of the pane instead of floating
+/// over the rows (egui's default): with enough folders to scroll, the selected row — and the
+/// unread count drawn at its right — ends before the pane's edge, leaving the bar room and the
+/// count whole.
+#[test]
+fn the_folder_panes_scroll_bar_stays_off_the_rows() {
+    let (mut a, dir) = app_big("nav-scrollbar", 60, 3);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    let mut shapes = Vec::new();
+    // Frames until the bar's strip is in (it appears when the pane starts scrolling).
+    for _ in 0..30 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    // The pane's background: the tall filled rect on the left, before the message list.
+    let pane = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Rect(r) if r.rect.min.x < 50.0 && r.rect.height() > 600.0 && r.rect.max.x < 500.0 => Some(r.rect),
+            _ => None,
+        })
+        .max_by(|a, b| a.max.x.partial_cmp(&b.max.x).unwrap_or(std::cmp::Ordering::Equal))
+        .expect("the pane's background");
+    // The selected folder row's fill, spanning the content's width (inside the pane).
+    let row_right = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Rect(r) if r.rect.min.x < pane.max.x && r.rect.max.x <= pane.max.x + 1.0 && (20.0..=40.0).contains(&r.rect.height()) => {
+                Some(r.rect.max.x)
+            }
+            _ => None,
+        })
+        .fold(0.0_f32, f32::max);
+    assert!(row_right > 0.0, "a folder row is drawn");
+    assert!(pane.max.x - row_right >= 9.0, "the bar's strip is left of the rows: pane right {:.0}, row right {:.0}", pane.max.x, row_right);
+    let _ = std::fs::remove_dir_all(dir);
+}
