@@ -339,7 +339,7 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a Tombstone>, out: &
     let mut refused = Vec::new();
     for t in gone {
         let task = t.href.starts_with("task:");
-        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task) {
+        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task, t.notify && !task) {
             // Deleted, or gone already (deleted in Outlook too).
             Ok(()) => out.deleted.push(t.href.clone()),
             Err(e) if crate::gone(&e) => out.deleted.push(t.href.clone()),
@@ -361,7 +361,7 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a Tombstone>, out: &
 fn push_cards(c: &Client, pim: &Pim, out: &mut DavSync) {
     for k in pim.cards.iter().filter(|k| k.dirty) {
         if let Some(old) = k.href.strip_prefix("contact:")
-            && let Err(e) = delete(c, old, false)
+            && let Err(e) = delete(c, old, false, false)
             && !crate::gone(&e)
         {
             out.errors.push(format!("{}: {e}", k.card.display()));
@@ -492,7 +492,7 @@ fn read_notes(c: &Client, pim: &Pim, again: &[String], out: &mut DavSync) {
     // then the folder is read again. A mailbox without one keeps notes on this computer.
     for n in pim.notes.iter().filter(|n| n.dirty) {
         if let Some(old) = n.href.strip_prefix("note:")
-            && let Err(e) = delete(c, old, false)
+            && let Err(e) = delete(c, old, false, false)
             && !crate::gone(&e)
         {
             out.errors.push(format!("{}: {e}", n.note.title()));

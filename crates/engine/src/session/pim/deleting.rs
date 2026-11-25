@@ -24,6 +24,9 @@ impl Session {
             return Err(CmdError::Params("this calendar can't be changed".into()));
         }
         let others = self.find_event(&real).is_some_and(|(_, e)| self.organized_by_other(&e.event));
+        // A meeting the user organizes, on Exchange: the server tells its guests it's off as it
+        // deletes it, under the meeting's own UID (`event.delete` mails nothing then).
+        let tell = self.server_tells_guests(&account) && self.find_event(&real).is_some_and(|(_, e)| self.organizes(&e.event));
         let synced = self.account(&account).is_some_and(|a| !a.is_local());
         let p = self.pim_mut(&account);
         let here = |e: &StoredEvent| e.calendar == calendar && e.event.uid == real;
@@ -48,12 +51,12 @@ impl Session {
                 for g in &gone {
                     if !g.href.is_empty() {
                         remote = true;
-                        p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
+                        p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone(), notify: tell });
                     } else if synced {
                         // Not on the server as far as this computer knows, but a sync may be
                         // making it there now (made, then deleted at once), and its result would
                         // bring it back: held until a result says where it was made.
-                        hold_unsent(p, g);
+                        hold_unsent(p, g, tell);
                     }
                 }
                 p.events.retain(|e| !here(e));
@@ -108,21 +111,22 @@ impl Session {
 /// An appointment deleted here with no item on the server, held ([`Pim::held`]): once, at most
 /// [`MAX_HELD`] of them (the oldest go first).
 /// A copy with no item on the server, in a calendar of the server's, held; one on this computer
-/// or in a calendar subscribed to by its link is never sent, and goes without a trace.
-pub(crate) fn hold_unsent(p: &mut Pim, e: &StoredEvent) {
+/// or in a calendar subscribed to by its link is never sent, and goes without a trace. `notify`:
+/// the server is to tell its guests it's off ([`Tombstone::notify`]).
+pub(crate) fn hold_unsent(p: &mut Pim, e: &StoredEvent, notify: bool) {
     if e.calendar != LOCAL && !quatrelle_model::pim::is_web_calendar(&e.calendar) {
-        hold(p, e);
+        hold(p, e, notify);
     }
 }
 
-fn hold(p: &mut Pim, e: &StoredEvent) {
+fn hold(p: &mut Pim, e: &StoredEvent, notify: bool) {
     let (uid, recurrence_id) = (&e.event.uid, e.event.recurrence_id);
-    hold_item(&mut p.held, HeldDeletion { uid: uid.clone(), recurrence_id, kind: HeldKind::Event });
+    hold_item(&mut p.held, HeldDeletion { uid: uid.clone(), recurrence_id, kind: HeldKind::Event, notify });
 }
 
 /// A task, note or contact deleted here with no item on the server ([`Pim::held`]).
 pub(super) fn hold_other(held: &mut Vec<HeldDeletion>, kind: HeldKind, uid: &str) {
-    hold_item(held, HeldDeletion { uid: uid.to_string(), recurrence_id: None, kind });
+    hold_item(held, HeldDeletion { uid: uid.to_string(), recurrence_id: None, kind, notify: false });
 }
 
 fn hold_item(held: &mut Vec<HeldDeletion>, h: HeldDeletion) {
@@ -144,12 +148,12 @@ pub(super) fn settle_held(p: &mut Pim, made: &[StoredEvent]) -> Vec<usize> {
         let same = |uid: &str, rid: Option<i64>| uid == x.event.uid && rid == x.event.recurrence_id;
         // (Made where the server didn't say: still held.)
         let Some(h) = p.held.iter().position(|h| h.kind.is_event() && same(&h.uid, h.recurrence_id)).filter(|_| !x.href.is_empty()) else { continue };
-        p.held.remove(h);
+        let notify = p.held.remove(h).notify;
         if p.events.iter().any(|e| same(&e.event.uid, e.event.recurrence_id) && (e.href.is_empty() || e.href == x.href)) {
             continue;
         }
         if !p.deleted.iter().any(|t| t.href == x.href) {
-            p.deleted.push(Tombstone { href: x.href.clone(), etag: x.etag.clone(), calendar: x.calendar.clone() });
+            p.deleted.push(Tombstone { href: x.href.clone(), etag: x.etag.clone(), calendar: x.calendar.clone(), notify });
         }
         deleted.push(at);
     }

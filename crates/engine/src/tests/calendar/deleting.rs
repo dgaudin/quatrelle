@@ -182,6 +182,7 @@ fn deleted_while_it_went_up(server: Server, name: &str) {
     assert_eq!(syncs, 1, "{server:?}: a sync deletes it on the server");
     let saved = as_saved(&s, &id);
     assert_eq!(saved.deleted.iter().map(|t| t.href.as_str()).collect::<Vec<_>>(), [href.as_str()], "{server:?}: its deletion goes");
+    assert_eq!(saved.deleted.iter().map(|t| t.notify).collect::<Vec<_>>(), [server != Server::CalDav], "{server:?}: the server tells the guests");
     assert!(saved.events.iter().all(|e| !e.dirty && e.href != href), "{server:?}: nothing made again");
     // That sync's result: deleted there, the calendar read without it.
     s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(result(server, "state-3", Vec::new(), Vec::new(), vec![href.clone()])) });
@@ -190,9 +191,9 @@ fn deleted_while_it_went_up(server: Server, name: &str) {
     let (syncs, m) = asked(&mut s, &id);
     mailed.extend(m);
     assert_eq!(syncs, 0, "{server:?}: nothing more to send");
-    // The guests: invited once (by the server where it does that, else by mail), and told once
-    // that it's off.
-    let expected: &[&str] = if server == Server::CalDav { &["REQUEST", "CANCEL"] } else { &["CANCEL"] };
+    // The guests: invited once and told once that it's off, by the server where it does that
+    // (Exchange, as it deletes it), else by mail.
+    let expected: &[&str] = if server == Server::CalDav { &["REQUEST", "CANCEL"] } else { &[] };
     assert_eq!(mailed, expected, "{server:?}");
     done(s);
 }
@@ -330,4 +331,44 @@ fn an_occurrence_deleted_while_microsoft_365_made_its_series_stays_out() {
 #[test]
 fn an_occurrence_deleted_while_caldav_made_its_series_stays_out() {
     occurrence_deleted_while_it_went_up(Server::CalDav, "deleting-occurrence-caldav");
+}
+
+/// A meeting the user organizes, on Exchange (on premises or Microsoft 365), deleted once on the
+/// server: the server tells its guests as it deletes it, under the meeting's own UID; nothing is
+/// mailed from here. Mailed from here, the cancellation carried this computer's UID, or
+/// Exchange's with the meeting's start after it, which the guests' calendars don't know: the
+/// meeting stayed with them. CalDAV has no server to do it: mailed, as before.
+fn deleted_on_the_server_its_guests_are_told_by_it(server: Server, name: &str) {
+    let (mut s, id) = session(name, server);
+    meeting(&mut s, &id, None);
+    asked(&mut s, &id);
+    let (made, read) = made(server, &as_saved(&s, &id));
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(result(server, "state-2", read, made.clone(), Vec::new())) });
+    asked(&mut s, &id);
+    let href = made.first().map(|e| e.href.clone()).unwrap();
+    let uid = s.pim[&id].events.iter().find(|e| e.href == href).map(|e| e.event.uid.clone()).unwrap();
+    s.run("event.delete", &json!({"uid": uid})).unwrap();
+    let (syncs, mailed) = asked(&mut s, &id);
+    assert_eq!(syncs, 1, "{server:?}: a sync deletes it on the server");
+    let by_server = server != Server::CalDav;
+    let expected: &[&str] = if by_server { &[] } else { &["CANCEL"] };
+    assert_eq!(mailed, expected, "{server:?}");
+    let deleted: Vec<(String, bool)> = as_saved(&s, &id).deleted.iter().map(|t| (t.href.clone(), t.notify)).collect();
+    assert_eq!(deleted, [(href, by_server)], "{server:?}: the server to tell the guests");
+    done(s);
+}
+
+#[test]
+fn a_meeting_deleted_on_exchange_is_cancelled_by_the_server() {
+    deleted_on_the_server_its_guests_are_told_by_it(Server::Ews, "cancel-ews");
+}
+
+#[test]
+fn a_meeting_deleted_on_microsoft_365_is_cancelled_by_the_server() {
+    deleted_on_the_server_its_guests_are_told_by_it(Server::Graph, "cancel-graph");
+}
+
+#[test]
+fn a_meeting_deleted_on_caldav_is_cancelled_by_mail() {
+    deleted_on_the_server_its_guests_are_told_by_it(Server::CalDav, "cancel-caldav");
 }

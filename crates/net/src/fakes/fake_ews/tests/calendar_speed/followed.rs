@@ -301,7 +301,7 @@ fn a_deletion_the_server_refused_comes_back_where_it_was() {
     pim.tasks.retain(|t| t.href != "task:XT9");
     pim.notes.retain(|n| n.href != "note:XN9");
     pim.deleted = vec![
-        Tombstone { href: "XA9".into(), etag: String::new(), calendar: ana.clone() },
+        Tombstone { href: "XA9".into(), etag: String::new(), calendar: ana.clone(), notify: false },
         Tombstone { href: "task:XT9".into(), ..Default::default() },
         Tombstone { href: "note:XN9".into(), ..Default::default() },
     ];

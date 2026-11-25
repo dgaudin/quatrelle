@@ -332,6 +332,10 @@ pub struct Tombstone {
     /// The calendar it was in, when that decides where it's deleted (someone else's calendar).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub calendar: String,
+    /// A meeting the user organizes, on a server that tells its guests it's off as it deletes it
+    /// (Exchange's cancellation, under the meeting's own UID): nothing is mailed from here.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub notify: bool,
 }
 
 /// What a deletion held ([`Pim::held`]) was: an appointment (the one the field's name says), a
@@ -361,6 +365,9 @@ pub struct HeldDeletion {
     pub recurrence_id: Option<i64>,
     #[serde(default, skip_serializing_if = "HeldKind::is_event")]
     pub kind: HeldKind,
+    /// Its server is to tell the guests it's off once it deletes it ([`Tombstone::notify`]).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub notify: bool,
 }
 
 /// The most deletions [`Pim::held`] keeps (the oldest go first).

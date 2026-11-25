@@ -334,7 +334,7 @@ fn a_deletion_the_server_refused_comes_back() {
     use quatrelle_model::pim::Tombstone;
     let (server, c, mut pim) = read_once();
     pim.events.retain(|e| e.href != "E30");
-    pim.deleted.push(Tombstone { href: "E30".into(), etag: String::new(), calendar: crate::ews_pim::CALENDAR.into() });
+    pim.deleted.push(Tombstone { href: "E30".into(), etag: String::new(), calendar: crate::ews_pim::CALENDAR.into(), notify: false });
     server.data.lock().unwrap().undeletable.push("E30".into());
     let next = told(&c, &pim, NOW + 60);
     assert!(next.deleted.iter().any(|h| h == "E30"), "no longer waiting to be deleted");

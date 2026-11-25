@@ -411,11 +411,14 @@ fn new_id(m: &El) -> (String, String) {
 }
 
 /// An item deleted (to Deleted Items, as Outlook deletes). Exchange won't delete a task without
-/// being told which of its occurrences go: all of them, as Outlook deletes a task.
-fn delete(c: &Client, id: &str, task: bool) -> Result<()> {
+/// being told which of its occurrences go: all of them, as Outlook deletes a task. `cancel`: a
+/// meeting the user organizes, its guests told it's off by the server (with a copy kept in Sent
+/// Items), as Outlook's "Send cancellation" does.
+fn delete(c: &Client, id: &str, task: bool, cancel: bool) -> Result<()> {
     let occurrences = if task { " AffectedTaskOccurrences=\"AllOccurrences\"" } else { "" };
+    let cancellations = if cancel { "SendToAllAndSaveCopy" } else { "SendToNone" };
     c.call_one(&format!(
-        "<m:DeleteItem DeleteType=\"MoveToDeletedItems\" SendMeetingCancellations=\"SendToNone\"{occurrences}><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:DeleteItem>",
+        "<m:DeleteItem DeleteType=\"MoveToDeletedItems\" SendMeetingCancellations=\"{cancellations}\"{occurrences}><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:DeleteItem>",
         esc(id)
     ))
     .map(drop)

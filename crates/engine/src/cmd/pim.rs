@@ -229,8 +229,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             if let Some((account, mut e)) = before
                 && organized_by_me(s, &e)
             {
+                let one = occurrence.filter(|_| e.rrule.is_some());
+                // The whole meeting, on Exchange: the server tells the guests it's off as it deletes
+                // it, under the meeting's own UID. Mailed from here, the cancellation carried a UID
+                // their calendars don't know (and Microsoft 365 sent its own as well).
+                if one.is_none() && s.server_tells_guests(&account) {
+                    return Ok(r);
+                }
                 // One occurrence off: the guests are told of that one.
-                if let Some(at) = occurrence.filter(|_| e.rrule.is_some()) {
+                if let Some(at) = one {
                     let len = e.end.saturating_sub(e.start);
                     e.recurrence_id = Some(at);
                     e.rrule = None;

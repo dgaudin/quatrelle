@@ -146,7 +146,7 @@ fn other_peoples_calendars_are_written_where_allowed() {
             ..Default::default()
         },
     ];
-    pim.deleted = vec![Tombstone { href: lunch.href.clone(), etag: String::new(), calendar: ana.clone() }];
+    pim.deleted = vec![Tombstone { href: lunch.href.clone(), etag: String::new(), calendar: ana.clone(), notify: false }];
     let second = crate::graph_pim::sync(&c, &pim, 1_792_000_100).unwrap();
     assert!(second.errors.is_empty(), "{:?}", second.errors);
     let d = server.data.lock().unwrap();

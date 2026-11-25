@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod cancelled;
 mod contacts;
 mod files;
 mod notes;
@@ -480,7 +481,7 @@ fn someone_elses_calendar_can_be_changed_by_an_editor() {
             ..Default::default()
         },
     ];
-    pim.deleted = vec![Tombstone { href: lunch.href.clone(), etag: String::new(), calendar: ana.clone() }];
+    pim.deleted = vec![Tombstone { href: lunch.href.clone(), etag: String::new(), calendar: ana.clone(), notify: false }];
     let second = crate::ews_pim::sync(&c, &pim, 1_792_000_100).unwrap();
     assert!(second.errors.is_empty(), "{:?}", second.errors);
     assert!(second.pushed_events.iter().all(|e| e.calendar == ana), "they stay in Ana's calendar");

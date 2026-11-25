@@ -669,11 +669,11 @@ fn delete_items(p: &mut Pim, gone: &[StoredEvent]) -> bool {
         if g.href.is_empty() {
             // Not on the server as far as this computer knows, but a sync may be making it
             // there now: held until a result says where (see `Pim::held`).
-            pim::hold_unsent(p, g);
+            pim::hold_unsent(p, g, false);
             continue;
         }
         if !p.deleted.iter().any(|t| t.href == g.href) {
-            p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
+            p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone(), notify: false });
         }
         remote = true;
     }
@@ -690,7 +690,7 @@ fn drop_occurrence(p: &mut Pim, uid: &str, at: i64) -> bool {
     let mut remote = false;
     for g in &gone {
         if g.href.is_empty() {
-            pim::hold_unsent(p, g);
+            pim::hold_unsent(p, g, false);
             continue;
         }
         match p.events.iter_mut().find(|e| e.event.uid == uid && e.href == g.href) {
