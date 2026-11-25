@@ -389,3 +389,32 @@ fn a_folder_synced_makes_the_next_count_reported_news() {
     s.apply(Event::Folders { account: id.clone(), folders: vec![inbox(3)] });
     assert_eq!(count(&s), Some(3), "as the server has it");
 }
+
+/// Two follow-up changes on the same message that name different fields are not the same
+/// change: read from disk before the second arrives, the first's field is still applied — the
+/// second doesn't stand in for it.
+#[test]
+fn a_follow_up_field_is_not_superseded_by_a_change_naming_another() {
+    let (mut s, id) = server_inbox(5);
+    let key = s.row_keys()[0].clone();
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    // Two follow-up changes sent: one naming the start, one naming the due.
+    let at = day.saturating_mul(86_400);
+    s.apply_op(
+        &id,
+        Op::SetFollowUp { keys: vec![key.clone()], start: Some(quatrelle_model::FieldChange::Set(at)), due: None, reminder: None, title: None },
+    );
+    s.apply_op(
+        &id,
+        Op::SetFollowUp { keys: vec![key.clone()], start: None, due: Some(quatrelle_model::FieldChange::Set(at)), reminder: None, title: None },
+    );
+    s.take_jobs(); // sent; the echoes are waited for, the disk not written yet
+    // The folder read from disk before the first echo arrives: memory rebuilt without the changes.
+    s.cache.remove(&(id.clone(), "INBOX".into()));
+    s.refresh_list();
+    assert_eq!(s.summary(&key).unwrap().flags.follow_up.start, 0, "the disk doesn't have the change yet");
+    inbox_changed(&mut s, &id);
+    let m = s.summary(&key).unwrap();
+    assert_eq!(m.flags.follow_up.start, at, "the start-naming change was applied, not superseded by the due one: {m:?}");
+    done(s);
+}

@@ -84,6 +84,8 @@ pub struct Data {
     pub chunked: bool,
     /// Operations asked for, in order.
     pub calls: Vec<String>,
+    /// The `UpdateItem` bodies asked for, as XML, in order.
+    pub updates: Vec<String>,
     /// Connections opened.
     pub connections: usize,
     /// NTLM handshakes done (one per connection).
@@ -384,6 +386,7 @@ impl Default for Data {
             basic: false,
             chunked: false,
             calls: Vec::new(),
+            updates: Vec::new(),
             connections: 0,
             handshakes: 0,
             forget_sign_in: false,

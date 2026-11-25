@@ -131,7 +131,9 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     assert_eq!(m.flags.follow_up.start, at("2026-11-02T00:00:00Z"), "{:?}", m.flags.follow_up);
     assert_eq!(m.flags.follow_up.due, at("2026-11-06T00:00:00Z"), "{:?}", m.flags.follow_up);
     assert_eq!(m.flags.follow_up.reminder, at("2026-11-06T09:00:00Z"), "{:?}", m.flags.follow_up);
-    assert_eq!(m.flags.follow_up.title, "Follow up");
+    // The flag's request is not the title: with no PidLidToDoTitle the title is empty and the
+    // list shows the message's subject.
+    assert_eq!(m.flags.follow_up.title, "");
 
     // Set here: Exchange gets the dates and the reminder (both its times).
     let keys = vec![m.key];
@@ -146,6 +148,7 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
             start: Some(FieldChange::Set(start)),
             due: Some(FieldChange::Set(due)),
             reminder: Some(FieldChange::Set(reminder)),
+            title: None,
         },
     )
     .unwrap();
@@ -164,7 +167,10 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
         assert_eq!(f.reminder_signal.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
     }
     // The next sync reads them back.
-    server.data.lock().unwrap().items.iter_mut().for_each(|i| i.follow_up.request = Some("Send the report".into()));
+    server.data.lock().unwrap().items.iter_mut().for_each(|i| {
+        i.follow_up.request = Some("Review".into());
+        i.follow_up.title = Some("Send the report".into());
+    });
     sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder), (start, due, reminder), "{:?}", m.flags.follow_up);
@@ -174,7 +180,13 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     apply_remote(
         &c,
         &st,
-        &Op::SetFollowUp { keys: keys.clone(), start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+        &Op::SetFollowUp {
+            keys: keys.clone(),
+            start: Some(FieldChange::Clear),
+            due: Some(FieldChange::Clear),
+            reminder: Some(FieldChange::Clear),
+            title: None,
+        },
     )
     .unwrap();
     {
@@ -196,7 +208,9 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     apply_remote(&c, &st, &Op::SetFlag { keys, flag: Flag::Flagged, on: true, all: false }).unwrap();
     let d = server.data.lock().unwrap();
     let i = d.items.iter().find(|i| i.id == id).unwrap();
-    assert!(i.flagged && i.follow_up.request.as_deref() == Some("Follow up"), "{i:?}");
+    // Flagging writes no PidLidFlagRequest ([MS-OXOFLAG] 3.1.4.1.3: only when absent — the
+    // server's default "Follow up" applies); the task's title goes with SetFollowUp.
+    assert!(i.flagged && i.follow_up.request.is_none(), "{i:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -446,7 +460,7 @@ fn marking_complete_keeps_the_follow_up_dates_on_exchange() {
     apply_remote(
         &c,
         &st,
-        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), title: None },
     )
     .unwrap();
     let d = server.data.lock().unwrap();
@@ -478,7 +492,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
                 reminder_time: Some("2026-11-06T09:00:00Z".into()),
                 reminder_signal: Some("2026-11-06T09:00:00Z".into()),
                 request: Some("Review".into()),
-                title: None,
+                title: Some("Review the proofs".into()),
             };
         }
     }
@@ -524,7 +538,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
         "the pass read them: {:?}",
         m.flags.follow_up
     );
-    assert_eq!(m.flags.follow_up.title, "Review");
+    assert_eq!(m.flags.follow_up.title, "Review the proofs");
     // Never asked again.
     st.save(&store, "a1").unwrap();
     let mut st = State::load(&store, "a1").unwrap();
@@ -534,7 +548,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
     // A change naming one field alone (Add Reminder…): the server's dates stay.
     let keys = vec![m.key];
     let reminder = at("2026-11-07T08:00:00Z");
-    apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: Some(FieldChange::Set(reminder)) }).unwrap();
+    apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: Some(FieldChange::Set(reminder)), title: None }).unwrap();
     {
         let d = server.data.lock().unwrap();
         let f = &d.items.iter().find(|i| i.id == flagged).unwrap().follow_up;
@@ -576,7 +590,7 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert_eq!(m.flags.follow_up.title, "Review the proofs", "the task's title, not the flag's request: {:?}", m.flags.follow_up);
 
-    // One with no task title: the flag's request.
+    // One with no task title: the flag's request is not a title.
     {
         let d = server.data.lock().unwrap();
         let inbox = d.folders.iter().find(|f| f.name == "Inbox").map(|f| f.id.clone()).unwrap_or_default();
@@ -589,7 +603,7 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
     }
     sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "plain").cloned().unwrap();
-    assert_eq!(m.flags.follow_up.title, "Review", "the flag's request when the task has no title: {:?}", m.flags.follow_up);
+    assert_eq!(m.flags.follow_up.title, "", "no task title: the flag's request is not used, the subject is shown: {:?}", m.flags.follow_up);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -597,7 +611,7 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
 /// the same day for both (the due is required with the start), and Clear Flag takes the task's
 /// title (`PidLidToDoTitle`) off with the rest of the flag's properties.
 #[test]
-fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
+fn a_start_date_alone_is_written_alone_and_clear_flag_takes_the_title_off() {
     let mut d = Data::default();
     let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: ews writes\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
@@ -619,9 +633,12 @@ fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     let keys = vec![m.key.clone()];
 
-    // A start without a due: both land on the server, the same day.
+    // A start named alone is written alone: the pairing rule ([MS-OXOTASK] requires the due
+    // with the start) is the engine's, applied only when the server has no due yet — a named
+    // start never rewrites a due the server already has.
     let start = at("2026-12-01T00:00:00Z");
-    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: Some(FieldChange::Set(start)), due: None, reminder: None }).unwrap();
+    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: Some(FieldChange::Set(start)), due: None, reminder: None, title: None })
+        .unwrap();
     {
         let d = server.data.lock().unwrap();
         let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
@@ -632,8 +649,8 @@ fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
                 f.common_start.is_some(),
                 f.common_end.is_some()
             ),
-            (Some(start), Some(start), true, true),
-            "a start set without a due takes the same day for both: {f:?}"
+            (Some(start), None, true, false),
+            "only the fields named are written: {f:?}"
         );
     }
 
@@ -643,6 +660,131 @@ fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
         let d = server.data.lock().unwrap();
         let i = d.items.iter().find(|i| i.id == id).unwrap();
         assert!(!i.flagged && i.follow_up.request.is_none() && i.follow_up.title.is_none(), "the flag's properties all gone: {i:?}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The Common dates a follow-up change writes go under their own property ids ([MS-OXPROPS]
+/// PSETID_Common: `PidLidCommonStart` 0x8516 = 34070, `PidLidCommonEnd` 0x8517 = 34071). The
+/// numbers are written in clear here, so a wrong id in the code fails this test.
+#[test]
+fn common_dates_are_written_under_their_own_property_ids() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-common-ids-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+
+    let at = |text: &str| jmap::utc_date(text).unwrap();
+    apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp {
+            keys: vec![m.key],
+            start: Some(FieldChange::Set(at("2026-12-01T00:00:00Z"))),
+            due: Some(FieldChange::Set(at("2026-12-04T00:00:00Z"))),
+            reminder: None,
+            title: None,
+        },
+    )
+    .unwrap();
+    let d = server.data.lock().unwrap();
+    let upd = d.updates.last().expect("an UpdateItem was sent");
+    assert!(upd.contains("PropertyId=\"34070\""), "PidLidCommonStart written as 34070 (0x8516): {upd}");
+    assert!(upd.contains("PropertyId=\"34071\""), "PidLidCommonEnd written as 34071 (0x8517): {upd}");
+    assert!(!upd.contains("PropertyId=\"34052\"") && !upd.contains("PropertyId=\"34053\""), "not 0x8504/0x8505: {upd}");
+    let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+    assert!(f.common_start.is_some() && f.common_end.is_some(), "the server read them under the same ids: {f:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The flag's request text (`PidLidFlagRequest`, "Follow up" by default) is never the task's
+/// title: only `PidLidToDoTitle` is, and the list falls back to the message's subject.
+#[test]
+fn a_flag_request_alone_is_not_the_task_s_title() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, b"From: a@x.example\r\nSubject: Proofs of the film\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp { request: Some("Follow up".into()), title: None, ..Default::default() };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-title-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    assert_eq!(m.flags.follow_up.title, "", "the flag's request is not the title: {:?}", m.flags.follow_up);
+    assert_eq!(m.subject, "Proofs of the film");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Mark Complete on Exchange keeps the flag's own text and title (only the status, the time
+/// done, the icon and the reminder change), and the task's title goes with `SetFollowUp`
+/// (`PidLidToDoTitle`, 0x85A4 = 34212).
+#[test]
+fn mark_complete_keeps_the_flags_text_and_the_title_goes_with_set_follow_up() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: Proofs of the film\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp {
+            reminder_set: true,
+            reminder_time: Some("2026-11-06T09:00:00Z".into()),
+            reminder_signal: Some("2026-11-06T09:00:00Z".into()),
+            request: Some("Review".into()),
+            title: Some("Review the proofs".into()),
+            ..Default::default()
+        };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-complete-keeps-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    let keys = vec![m.key];
+
+    // Mark Complete: status 1, the time, the icon and the reminder go — the flag's request
+    // (34096) and the task's title (34212) are not deleted.
+    apply_remote(&c, &st, &Op::SetKeyword { keys: keys.clone(), keyword: quatrelle_model::FOLLOW_UP_COMPLETE.into(), on: true, name: None }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let upd = d.updates.last().unwrap();
+        assert!(upd.contains("PropertyTag=\"0x1090\""), "status set: {upd}");
+        assert!(!upd.contains("34096") && !upd.contains("34212"), "the flag's text and the title stay: {upd}");
+        assert!(d.items.iter().find(|i| i.id == id).unwrap().follow_up.request.as_deref() == Some("Review"), "request kept");
+        assert_eq!(d.items.iter().find(|i| i.id == id).unwrap().follow_up.title.as_deref(), Some("Review the proofs"), "title kept");
+    }
+    // The task's title goes with SetFollowUp: PidLidToDoTitle = 34212 with the subject.
+    apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: None, title: Some(Some("Proofs of the film".into())) }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let upd = d.updates.last().unwrap();
+        assert!(upd.contains("PropertyId=\"34212\"") && upd.contains("Proofs of the film"), "the title written under 34212: {upd}");
+        assert_eq!(d.items.iter().find(|i| i.id == id).unwrap().follow_up.title.as_deref(), Some("Proofs of the film"));
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -154,7 +154,7 @@ impl Session {
                 return;
             }
             let Some(at) = self.follow_up_reminder(m).filter(|t| *t > 0) else { return };
-            let key = crate::session::mail_reminder_key(account, m);
+            let key = crate::session::mail_reminder_key(account, m, at);
             let due = match self.prefs.reminders.get(&key) {
                 Some(0) => return,
                 Some(until) => *until,

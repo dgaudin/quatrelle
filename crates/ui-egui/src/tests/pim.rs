@@ -985,6 +985,9 @@ fn the_task_lists_fixed_names_go_through_the_catalogs() {
         selectable: true,
         ..Default::default()
     });
+    // The folder arrived as an event would bring it: the mail stamp moved, so the My Tasks
+    // lists are computed again.
+    a.run("account.list", json!({}));
     a.run("view.module", json!({"name": "tasks"}));
     crate::i18n::pseudo::set(true);
     frame(&ctx, &mut a, vec![]);

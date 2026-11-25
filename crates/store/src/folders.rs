@@ -385,7 +385,7 @@ impl Store {
                     }
                     marked = Some(uids);
                 }
-                Op::SetFollowUp { keys, start, due, reminder } => {
+                Op::SetFollowUp { keys, start, due, reminder, .. } => {
                     let uids: HashSet<u32> = keys.iter().filter(|k| in_folder(k)).map(|k| k.uid).collect();
                     for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
                         // Only the fields the change names: an unnamed one keeps what it had.

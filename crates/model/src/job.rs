@@ -99,6 +99,10 @@ pub enum Op {
         due: Option<FieldChange>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reminder: Option<FieldChange>,
+        /// The task's title (`PidLidToDoTitle` on Exchange), set with the flag as Outlook does
+        /// (`Some(Some(…))` set, `Some(None)` taken off, `None` untouched).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<Option<String>>,
     },
     /// Move to another folder of the same account.
     Move { keys: Vec<MessageKey>, to: String },

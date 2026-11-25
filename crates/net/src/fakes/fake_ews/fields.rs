@@ -4,6 +4,10 @@
 //! The fake EWS server: which fields Exchange knows, and what the fields of a message's text give.
 
 use super::*;
+use crate::exchange::ews::{
+    PID_LID_COMMON_END, PID_LID_COMMON_START, PID_LID_FLAG_REQUEST, PID_LID_REMINDER_SET, PID_LID_REMINDER_SIGNAL_TIME, PID_LID_REMINDER_TIME,
+    PID_LID_TASK_DUE_DATE, PID_LID_TASK_START_DATE, PID_LID_TO_DO_TITLE,
+};
 
 /// The `item:` and `message:` names Exchange knows, from Microsoft's FieldURI page. A `GetItem`
 /// naming any other is refused whole, whatever the other fields are.
@@ -152,31 +156,31 @@ pub(super) fn follow_up_xml(f: &FollowUp) -> String {
         )
     };
     if let Some(v) = &f.start {
-        x.push_str(&lid("Task", 33028, "SystemTime", v));
+        x.push_str(&lid("Task", PID_LID_TASK_START_DATE, "SystemTime", v));
     }
     if let Some(v) = &f.due {
-        x.push_str(&lid("Task", 33029, "SystemTime", v));
+        x.push_str(&lid("Task", PID_LID_TASK_DUE_DATE, "SystemTime", v));
     }
     if let Some(v) = &f.common_start {
-        x.push_str(&lid("Common", 34052, "SystemTime", v));
+        x.push_str(&lid("Common", PID_LID_COMMON_START, "SystemTime", v));
     }
     if let Some(v) = &f.common_end {
-        x.push_str(&lid("Common", 34053, "SystemTime", v));
+        x.push_str(&lid("Common", PID_LID_COMMON_END, "SystemTime", v));
     }
     if f.reminder_set {
-        x.push_str(&lid("Common", 34051, "Boolean", "true"));
+        x.push_str(&lid("Common", PID_LID_REMINDER_SET, "Boolean", "true"));
     }
     if let Some(v) = &f.reminder_time {
-        x.push_str(&lid("Common", 34050, "SystemTime", v));
+        x.push_str(&lid("Common", PID_LID_REMINDER_TIME, "SystemTime", v));
     }
     if let Some(v) = &f.reminder_signal {
-        x.push_str(&lid("Common", 34144, "SystemTime", v));
+        x.push_str(&lid("Common", PID_LID_REMINDER_SIGNAL_TIME, "SystemTime", v));
     }
     if let Some(v) = &f.request {
-        x.push_str(&lid("Common", 34096, "String", v));
+        x.push_str(&lid("Common", PID_LID_FLAG_REQUEST, "String", v));
     }
     if let Some(v) = &f.title {
-        x.push_str(&lid("Common", 34212, "String", v));
+        x.push_str(&lid("Common", PID_LID_TO_DO_TITLE, "String", v));
     }
     x
 }
@@ -222,16 +226,17 @@ pub(super) fn take_flag_update(it: &mut It, u: &El) {
         && let (Some(id), Some(set_name)) = (uri.attr("PropertyId"), uri.attr("DistinguishedPropertySetId"))
     {
         let v = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set);
+        let Ok(id) = id.parse::<u32>() else { return };
         match (set_name, id) {
-            ("Task", "33028") => it.follow_up.start = v,
-            ("Task", "33029") => it.follow_up.due = v,
-            ("Common", "34052") => it.follow_up.common_start = v,
-            ("Common", "34053") => it.follow_up.common_end = v,
-            ("Common", "34051") => it.follow_up.reminder_set = set && v.as_deref() == Some("true"),
-            ("Common", "34050") => it.follow_up.reminder_time = v,
-            ("Common", "34144") => it.follow_up.reminder_signal = v,
-            ("Common", "34096") => it.follow_up.request = v,
-            ("Common", "34212") => it.follow_up.title = v,
+            ("Task", PID_LID_TASK_START_DATE) => it.follow_up.start = v,
+            ("Task", PID_LID_TASK_DUE_DATE) => it.follow_up.due = v,
+            ("Common", PID_LID_COMMON_START) => it.follow_up.common_start = v,
+            ("Common", PID_LID_COMMON_END) => it.follow_up.common_end = v,
+            ("Common", PID_LID_REMINDER_SET) => it.follow_up.reminder_set = set && v.as_deref() == Some("true"),
+            ("Common", PID_LID_REMINDER_TIME) => it.follow_up.reminder_time = v,
+            ("Common", PID_LID_REMINDER_SIGNAL_TIME) => it.follow_up.reminder_signal = v,
+            ("Common", PID_LID_FLAG_REQUEST) => it.follow_up.request = v,
+            ("Common", PID_LID_TO_DO_TITLE) => it.follow_up.title = v,
             _ => {}
         }
         return;

@@ -80,6 +80,30 @@ pub(crate) fn leaves_marks_waiting(id: &str) -> bool {
     leaves_body_waiting(id) || matches!(id, "mail.markRead" | "mail.markUnread" | "mail.toggleRead" | "mail.flag")
 }
 
+/// Whether a command can change what the To-Do List and the reminders read (the mail, the
+/// tasks, the folders, the accounts): the view-only ones — moving about, looking, searching,
+/// opening a message to read it — don't, so the mail stamp, and with it the memoized lists,
+/// stays put across them and the frames after them rebuild nothing. Anything doubtful counts:
+/// a stamp that moves too often only costs a rebuild, one that doesn't move shows stale lists.
+pub(crate) fn changes_mail(id: &str) -> bool {
+    const CONTENT: &[&str] = &[
+        "mail.",
+        "task.",
+        "folder.",
+        "archive.",
+        "junk.",
+        "category.",
+        "outbox.",
+        "account.",
+        "invite.",
+        "edit.undo",
+        "reminders.dismiss",
+        "reminders.snooze",
+        "list.open",
+    ];
+    CONTENT.iter().any(|p| id.starts_with(p))
+}
+
 /// The message being read has voting buttons.
 fn has_voting(s: &Session) -> Option<&'static str> {
     match &s.reading {

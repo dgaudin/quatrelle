@@ -27,14 +27,15 @@ pub struct TodoMemo {
     pub bar: Option<(u64, i64, Vec<TodoRef>)>,
     /// A list's rows: `todo_for(list, query, completed)`.
     pub for_list: Option<(u64, i64, String, String, bool, Vec<TodoRef>)>,
-    /// A list as its view shows it: `todo_view(list, query, completed, view, arrange)`.
-    pub view: Option<(u64, i64, String, String, bool, TaskView, TaskArrange, Vec<TodoRef>)>,
+    /// A list as its view shows it: `todo_view(list, query, completed, view, arrange)`, with
+    /// each row's heading (computed with it, not again at every image).
+    pub view: Option<(u64, i64, String, String, bool, TaskView, TaskArrange, Vec<TodoRef>, Vec<Option<(String, bool)>>)>,
 }
 
 impl TodoMemo {
     /// The bar's list, computed again only when the mail stamp or the day changed.
     pub(crate) fn bar_list(&mut self, s: &Session, today: i64) -> &[TodoRef] {
-        let stamp = s.mail_stamp();
+        let stamp = s.todo_stamp();
         if self.bar.as_ref().is_none_or(|(st, d, _)| *st != stamp || *d != today) {
             self.bar = Some((stamp, today, s.todo("", false)));
         }
@@ -46,7 +47,7 @@ impl TodoMemo {
 
     /// A list's rows (`todo_for`), same memoizing.
     fn for_list(&mut self, s: &Session, today: i64, list: &str, query: &str, completed: bool) -> &[TodoRef] {
-        let stamp = s.mail_stamp();
+        let stamp = s.todo_stamp();
         if self.for_list.as_ref().is_none_or(|(st, d, l, q, c, _)| *st != stamp || *d != today || l != list || q != query || *c != completed) {
             self.for_list = Some((stamp, today, list.to_string(), query.to_string(), completed, s.todo_for(list, query, completed)));
         }
@@ -56,26 +57,30 @@ impl TodoMemo {
         }
     }
 
-    /// A list as its view shows it (`todo_view`), same memoizing.
-    fn view_list(&mut self, s: &Session, today: i64, list: &str, query: &str, completed: bool, view: TaskView, arrange: TaskArrange) -> &[TodoRef] {
-        let stamp = s.mail_stamp();
-        if self.view.as_ref().is_none_or(|(st, d, l, q, c, v, a, _)| {
+    /// A list as its view shows it (`todo_view`) with each row's heading, same memoizing: the
+    /// rows and their headings are computed together, once per change, not walked again at every
+    /// image.
+    fn view_rows(
+        &mut self,
+        s: &Session,
+        today: i64,
+        list: &str,
+        query: &str,
+        completed: bool,
+        view: TaskView,
+        arrange: TaskArrange,
+    ) -> (&[TodoRef], &[Option<(String, bool)>]) {
+        let stamp = s.todo_stamp();
+        if self.view.as_ref().is_none_or(|(st, d, l, q, c, v, a, _, _)| {
             *st != stamp || *d != today || l != list || q != query || *c != completed || *v != view || *a != arrange
         }) {
-            self.view = Some((
-                stamp,
-                today,
-                list.to_string(),
-                query.to_string(),
-                completed,
-                view,
-                arrange,
-                s.todo_view(list, query, completed, view, arrange),
-            ));
+            let rows = s.todo_view(list, query, completed, view, arrange);
+            let headings = rows.iter().map(|r| heading_of(s, r, arrange, today)).collect();
+            self.view = Some((stamp, today, list.to_string(), query.to_string(), completed, view, arrange, rows, headings));
         }
         match &self.view {
-            Some((_, _, _, _, _, _, _, rows)) => rows,
-            None => &[],
+            Some((_, _, _, _, _, _, _, rows, headings)) => (rows, headings),
+            None => (&[], &[]),
         }
     }
 }
@@ -224,13 +229,17 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
 
 /// The main pane: the list, and the one picked beside it.
 pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
+    // Folders still being read from disk in the background: repaint as they come in.
+    if s.disk_scan_running() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+    }
     let t = st.tokens;
     let today = dates::today(&s.clock);
     let list_id = list_of(&st.tasks).to_string();
     let list_ref = s.task_list(&list_id);
     let (view, arrange) = s.task_view(&list_id);
     let query = st.tasks.query.clone();
-    let list = st.todo_memo.view_list(s, today, &list_id, &query, st.tasks.completed, view, arrange);
+    let (list, headings) = st.todo_memo.view_rows(s, today, &list_id, &query, st.tasks.completed, view, arrange);
     // The one picked went (deleted, or done with the completed ones hidden): none is.
     let picked = st.tasks.selected.as_deref().and_then(|u| list.iter().find(|r| r.uid() == u)).cloned();
     if picked.is_none() {
@@ -247,7 +256,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             .show(ui, |ui| form::show(s, &mut st.tasks, &t, ui, p, today, acts));
     }
     egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-        list_pane(s, &mut st.tasks, &t, ui, list, list_ref.as_ref(), view, arrange, today, acts);
+        list_pane(s, &mut st.tasks, &t, ui, list, headings, list_ref.as_ref(), view, today, acts);
     });
 }
 
@@ -258,9 +267,9 @@ fn list_pane(
     t: &Tokens,
     ui: &mut Ui,
     list: &[TodoRef],
+    headings: &[Option<(String, bool)>],
     list_ref: Option<&quatrelle_engine::TaskList>,
     view: TaskView,
-    arrange: TaskArrange,
     today: i64,
     acts: &mut Vec<Action>,
 ) {
@@ -318,13 +327,12 @@ fn list_pane(
             detail_header(ui, t);
         }
         // Each heading's row count in one pass (not a scan of the whole list per group).
-        let headings: Vec<Option<(String, bool)>> = list.iter().map(|r| heading_of(s, r, arrange, today)).collect();
         let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
         for h in headings.iter().flatten() {
             *counts.entry(h.0.as_str()).or_default() += 1;
         }
         let mut group: Option<String> = None;
-        for (r, heading) in list.iter().zip(&headings) {
+        for (r, heading) in list.iter().zip(headings) {
             // Headings by what the list is arranged by (none by start date: the order says it).
             if let Some((label, danger)) = heading
                 && group.as_deref() != Some(label.as_str())

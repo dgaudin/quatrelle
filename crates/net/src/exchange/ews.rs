@@ -42,6 +42,27 @@ const PUBLIC_DEPTH: usize = 6;
 const MAX_PUBLIC: usize = 500;
 /// The folder Exchange's public folders are listed under.
 pub use quatrelle_model::PUBLIC_FOLDERS;
+
+/// The follow-up fields' property ids in their property sets ([MS-OXPROPS] 1.3.2), named once
+/// here and shared with the fake server, so an id written to the server can be checked against
+/// the number written in clear in a test: PSETID_Task `PidLidTaskStartDate` 0x8104,
+/// `PidLidTaskDueDate` 0x8105; PSETID_Common `PidLidReminderTime` 0x8502, `PidLidReminderSet`
+/// 0x8503, `PidLidCommonStart` 0x8516, `PidLidCommonEnd` 0x8517, `PidLidFlagRequest` 0x8530,
+/// `PidLidReminderSignalTime` 0x8560, `PidLidToDoTitle` 0x85A4.
+pub(crate) const PID_LID_TASK_START_DATE: u32 = 0x8104;
+pub(crate) const PID_LID_TASK_DUE_DATE: u32 = 0x8105;
+pub(crate) const PID_LID_REMINDER_TIME: u32 = 0x8502;
+pub(crate) const PID_LID_REMINDER_SET: u32 = 0x8503;
+pub(crate) const PID_LID_COMMON_START: u32 = 0x8516;
+pub(crate) const PID_LID_COMMON_END: u32 = 0x8517;
+pub(crate) const PID_LID_FLAG_REQUEST: u32 = 0x8530;
+pub(crate) const PID_LID_REMINDER_SIGNAL_TIME: u32 = 0x8560;
+pub(crate) const PID_LID_TO_DO_TITLE: u32 = 0x85A4;
+
+/// An `ExtendedFieldURI` for a property of a distinguished set, by its [MS-OXPROPS] id.
+pub(crate) fn lid_uri(set: &str, id: u32, kind: &str) -> String {
+    format!("<t:ExtendedFieldURI DistinguishedPropertySetId=\"{set}\" PropertyId=\"{id}\" PropertyType=\"{kind}\"/>")
+}
 /// Elements read from one answer at most, and how deep.
 const MAX_ELEMENTS: usize = 500_000;
 const MAX_DEPTH: usize = 64;

@@ -94,6 +94,7 @@ fn task_lists_are_per_account_with_the_archive_read_only() {
     // An Exchange account has its online archive's list only when it has an archive folder,
     // and a shared mailbox's list when one is opened.
     s.accounts[0].config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    s.mail_stamp = s.mail_stamp.wrapping_add(1); // as the account change that set it does
     assert!(!s.task_lists().iter().any(|l| l.archive), "no archive folder: no archive list, whatever the server");
     let shared = quatrelle_model::Folder {
         account: "sample".into(),
@@ -116,6 +117,7 @@ fn task_lists_are_per_account_with_the_archive_read_only() {
         ..Default::default()
     };
     s.accounts[0].folders.push(archive_folder);
+    s.mail_stamp = s.mail_stamp.wrapping_add(1); // as the Folders event that brought them does
     let lists = s.task_lists();
     let archive = lists.iter().find(|l| l.archive).expect("the online archive");
     assert!(archive.read_only && archive.id == "sample|archive" && archive.account.as_deref() == Some("sample"));
@@ -436,65 +438,14 @@ fn a_tasks_reminder_comes_and_goes() {
 /// A message flagged in a folder not opened this session — its list is only in the cache on
 /// disk — is in the To-Do List and its reminder rings: the list and the reminders read the
 /// cache on disk too, not just what is in memory.
+/// The look through the disk cache is bounded and comes to every folder in time: the folders
+/// are read off the interface thread (one `todo()` call does no disk read itself), only the
+/// flagged or reminded messages are kept, and every folder is come to.
 #[test]
-fn a_flagged_message_in_a_folder_never_opened_counts_too() {
-    let mut s = sample_session("todo-disk");
-    let today = quatrelle_model::dates::today(&s.clock);
-    // A folder kept on disk only, never read into the cache this session.
-    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
-    s.accounts[0].folders.push(folder);
-    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
-    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
-    st.messages.push(Summary {
-        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 },
-        message_id: "disk-only@x".into(),
-        subject: "On disk only".into(),
-        flags: quatrelle_model::Flags {
-            flagged: true,
-            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), reminder: s.clock.now - 60, ..Default::default() },
-            ..Default::default()
-        },
-        ..Default::default()
-    });
-    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
-    // Out of the memory cache, as the trim leaves it (only so many summaries are kept): the
-    // folder was not opened this session.
-    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
-    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
-    assert!(!s.cache.contains_key(&("sample".to_string(), "Projects".to_string())), "not in the cache this session");
-
-    // The To-Do List finds it (a call may read only part of the disk's folders; the next calls
-    // come to the rest).
-    let mut found = false;
-    for _ in 0..s.accounts[0].folders.len() {
-        if s.todo("", false).iter().any(|r| r.subject() == "On disk only") {
-            found = true;
-            break;
-        }
-    }
-    assert!(
-        found,
-        "the To-Do List reads the cache on disk, not just the memory: {:?}",
-        s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>()
-    );
-    // Its reminder rings too.
-    let mut rings = false;
-    for _ in 0..s.accounts[0].folders.len() {
-        if s.due_reminders(s.clock.now).iter().any(|r| r.message.as_ref().is_some_and(|k| k.uid == 77)) {
-            rings = true;
-            break;
-        }
-    }
-    assert!(rings, "the reminders read the cache on disk too: {:?}", s.due_reminders(s.clock.now).iter().map(|r| &r.summary).collect::<Vec<_>>());
-    done(s);
-}
-
-/// The look through the folders kept on disk is bounded per call: one call reads a few folders
-/// (round-robin), not them all, and the next calls come to the rest.
-#[test]
-fn the_look_through_the_disk_folders_is_bounded_per_call() {
+fn the_disk_look_is_bounded_and_comes_to_every_folder_in_time() {
     let mut s = sample_session("todo-scan");
-    // Six folders on disk only, each with one flagged message, none in the memory cache.
+    // Six folders on disk only, each with one flagged message and a hundred plain ones, none
+    // in the memory cache.
     for i in 0..6u32 {
         let path = format!("Disk-{i}");
         s.accounts[0].folders.push(quatrelle_model::Folder { account: "sample".into(), path: path.clone(), selectable: true, ..Default::default() });
@@ -505,6 +456,13 @@ fn the_look_through_the_disk_folders_is_bounded_per_call() {
             flags: quatrelle_model::Flags { flagged: true, ..Default::default() },
             ..Default::default()
         });
+        for u in 0..100u32 {
+            st.messages.push(Summary {
+                key: MessageKey { account: "sample".into(), folder: path.clone(), validity: 1, uid: 1_000 + u },
+                subject: format!("Plain {i}-{u}"),
+                ..Default::default()
+            });
+        }
         s.store.as_ref().unwrap().save_folder("sample", &path, &st).unwrap();
     }
     s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
@@ -515,37 +473,78 @@ fn the_look_through_the_disk_folders_is_bounded_per_call() {
         s.cache_order.retain(|o| *o != k);
     }
 
-    // One call reads at most a few of them.
-    let first = s.todo("", false);
-    let n_first = first.iter().filter(|r| r.subject().starts_with("Disk ")).count();
-    assert!(n_first <= 2, "one call read {n_first} disk folders, not a few: bounded per call");
-    // And the next calls come to the rest: everything is seen in time.
-    let mut all = first;
-    for _ in 0..8 {
-        all = s.todo("", false);
-        if all.iter().filter(|r| r.subject().starts_with("Disk ")).count() == 6 {
-            break;
-        }
-    }
+    // One call starts the background read but does no disk read itself.
+    s.todo("", false);
+    assert!(s.disk_scan_running(), "the background read is running");
+    s.wait_disk_scan();
+    // Everything is come to in time, and only the flagged messages are kept.
+    let all = s.todo("", false);
     assert_eq!(all.iter().filter(|r| r.subject().starts_with("Disk ")).count(), 6, "every disk folder is come to in time");
+    {
+        let g = s.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(g.done.len(), g.folders.len(), "every folder read once, then left alone");
+        let kept: usize = g.map.values().map(|v| v.len()).sum();
+        assert_eq!(kept, 6, "only the flagged messages are kept, not the 600 plain ones");
+    }
     done(s);
 }
 
-/// The mail stamp counts the changes commands, ops and events make to what the To-Do List and
-/// the reminders read: the interface rebuilds them only when it changed, not at every image.
+/// The mail stamp counts only the changes that can alter what the To-Do List and the reminders
+/// read — a content command, an op that touches messages or folders, an event that changes the
+/// mail — not selecting, not a status line: the interface rebuilds its memoized lists only when
+/// it moved, not at every image.
 #[test]
-fn the_mail_stamp_counts_every_change() {
+fn the_mail_stamp_counts_only_mail_changes() {
     let mut s = sample_session("mail-stamp");
     let a = s.mail_stamp();
     s.run("list.select", &key_of(&s, "Character turnarounds")).unwrap();
-    assert!(s.mail_stamp() > a, "a command counts");
+    assert_eq!(s.mail_stamp(), a, "selecting a message changes no mail");
+    s.run("search.run", &json!({"query": "film"})).unwrap();
+    assert_eq!(s.mail_stamp(), a, "a search changes no mail");
     let b = s.mail_stamp();
+    s.run("task.create", &json!({"subject": "Stamp probe"})).unwrap();
+    assert!(s.mail_stamp() > b, "a task written counts");
+    let c = s.mail_stamp();
     let key = s.list.iter().find(|m| m.subject == "Character turnarounds").map(|m| m.key.clone()).unwrap_or_default();
     s.apply_op("sample", Op::SetFlag { keys: vec![key], flag: Flag::Flagged, on: true, all: false });
-    assert!(s.mail_stamp() > b, "an op counts");
-    let c = s.mail_stamp();
+    assert!(s.mail_stamp() > c, "an op on messages counts");
+    let d = s.mail_stamp();
+    s.apply_op("sample", Op::SetFlag { keys: vec![], flag: Flag::Seen, on: true, all: false });
+    assert_eq!(s.mail_stamp(), d, "an op on no message changes nothing");
+    let e = s.mail_stamp();
     s.apply(Event::Status { account: "sample".into(), status: SyncStatus::Online { at: s.clock.now } });
-    assert!(s.mail_stamp() > c, "an event counts");
+    assert_eq!(s.mail_stamp(), e, "a status line changes no mail");
+    s.apply(Event::FolderSynced { account: "sample".into(), folder: "INBOX".into(), change: Box::new(quatrelle_model::ListChange::default()) });
+    assert!(s.mail_stamp() > e, "a folder synced counts");
+    done(s);
+}
+
+/// The address book is looked up by address through an index built once per PIM revision, not
+/// searched card by card at every call: the index is there after a lookup, and a contact added
+/// afterwards is found (the index is built again when the revision moves).
+#[test]
+fn person_by_email_uses_the_index_and_follows_the_revision() {
+    let mut s = sample_session("people-index");
+    let card = |uid: &str, name: &str, email: &str| quatrelle_model::vcard::Card {
+        uid: uid.into(),
+        name: name.into(),
+        emails: vec![quatrelle_model::vcard::Typed { value: email.into(), ..Default::default() }],
+        ..Default::default()
+    };
+    let r1 = s.create_card(None, card("c1", "Zed Probe", "zed@probe.example")).unwrap();
+    assert_eq!(r1["uid"], json!("c1"));
+    let p = s.person_by_email("ZED@probe.example").unwrap();
+    assert_eq!(p.card.display(), "Zed Probe", "any case of the address is found");
+    {
+        let g = s.people_index.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(g.is_some(), "the index is built by the lookup");
+    }
+    // A card added under the same address wins when its name comes first: the index is rebuilt
+    // at the new revision, not kept stale.
+    s.create_card(None, card("c2", "Amy Probe", "zed@probe.example")).unwrap();
+    let p = s.person_by_email("zed@probe.example").unwrap();
+    assert_eq!(p.card.display(), "Amy Probe", "the first by name, as before, after the revision moved: {:?}", p.card.display());
+    assert!(s.person_by_email("nobody@probe.example").is_none());
     done(s);
 }
 
@@ -625,4 +624,124 @@ fn favorite_people_read_from_disk_are_capped() {
     assert_eq!(p.favorite_people.len(), 200, "capped at 200");
     let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": ["", "ok@x.example", "x".repeat(300)]})).unwrap();
     assert_eq!(p.favorite_people, vec!["ok@x.example".to_string()], "empty and over-long addresses left out");
+}
+
+/// A folder a sync event touched is read again from the disk cache, off the interface thread:
+/// a flagged message that appears in it on disk shows in the To-Do List after the event. Before
+/// the invalidation, the list read once stayed until the restart.
+#[test]
+fn a_folder_a_sync_touched_is_read_again_from_disk() {
+    let mut s = sample_session("todo-disk-refresh");
+    s.cache_limit = 1_000_000; // keep the disk lists: only a re-read can bring the change in
+    let today = quatrelle_model::dates::today(&s.clock);
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let flagged = |uid: u32, subject: &str| Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid },
+        message_id: format!("{subject}@x"),
+        subject: subject.into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(flagged(1, "First"));
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+
+    // It shows, read from the disk cache in the background.
+    let mut found = false;
+    for _ in 0..100 {
+        if s.todo("", false).iter().any(|r| r.subject() == "First") {
+            found = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(found, "the flagged message on disk shows: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
+
+    // The sync changes the folder on disk (another flagged message there), then says so.
+    st.messages.push(flagged(2, "Second"));
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.apply(quatrelle_model::Event::FolderChanged { account: "sample".into(), folder: "Projects".into() });
+
+    // The list is refreshed from the disk: the new one shows too.
+    let mut found = false;
+    for _ in 0..100 {
+        s.wait_disk_scan();
+        if s.todo("", false).iter().any(|r| r.subject() == "Second") {
+            found = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(found, "the folder a sync touched is read again: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
+    done(s);
+}
+
+/// A row of the To-Do List whose message is only in the disk cache (a folder never opened this
+/// session) can be flagged and edited by its key: `message_by_id` reads the disk-read lists too.
+#[test]
+fn a_disk_only_row_is_edited_by_its_key() {
+    let mut s = sample_session("todo-key-disk");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 },
+        message_id: "disk-only@x".into(),
+        subject: "On disk only".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+    s.todo("", false);
+    s.wait_disk_scan();
+
+    let key = MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 };
+    let id = key.to_id();
+    assert!(s.message_by_id(&id).is_some(), "the disk-read lists are searched too");
+    let r = s.run("mail.flag", &serde_json::json!({ "key": id, "due": "none" }));
+    assert!(r.is_ok(), "mail.flag by the key of a disk-only row: {r:?}");
+    done(s);
+}
+
+/// The To-Do List leaves Junk and Trash out, as the reminders do: a flagged message there
+/// never rings, so it isn't listed either.
+#[test]
+fn junk_and_trash_are_not_in_the_todo_list() {
+    let mut s = sample_session("todo-junk");
+    for (path, role) in [("Junk Email", quatrelle_model::FolderRole::Junk), ("Trash", quatrelle_model::FolderRole::Trash)] {
+        s.accounts[0].folders.push(quatrelle_model::Folder {
+            account: "sample".into(),
+            path: path.into(),
+            role,
+            selectable: true,
+            ..Default::default()
+        });
+    }
+    s.mail_stamp = s.mail_stamp.wrapping_add(1); // as the Folders event that brought them does
+    for path in ["Junk Email", "Trash"] {
+        let mut m: Summary = (*s.list[0]).clone();
+        m.key.folder = path.into();
+        m.flags.flagged = true;
+        let st = quatrelle_store::FolderState { validity: 1, messages: vec![std::sync::Arc::new(m)], ..Default::default() };
+        s.cache.insert(("sample".into(), path.into()), st);
+    }
+    let list = s.todo("", false);
+    assert!(list.iter().all(|r| r.mail().is_none_or(|m| m.key.folder != "Junk Email" && m.key.folder != "Trash")), "no Junk or Trash row: {list:?}");
+    done(s);
 }

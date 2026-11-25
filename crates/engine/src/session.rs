@@ -141,6 +141,26 @@ const RECOUNT_MAX: u64 = 50_000;
 /// (300 MB) for the rest of the day. A folder read again comes from the cache file in milliseconds.
 pub(crate) const CACHE_MESSAGES: usize = 50_000;
 
+/// The folders' disk-read lists behind the To-Do List's and the reminders' look through mail
+/// ([`Session::disk_lists`]): only the flagged or reminded messages of a folder are kept, read
+/// off the interface thread, bounded, and re-read when a change touches the folder.
+pub(crate) struct DiskScan {
+    /// Folders read, least recently read first.
+    pub order: Vec<(String, String)>,
+    /// The flagged or reminded messages of each folder read.
+    pub map: HashMap<(String, String), Vec<Summary>>,
+    /// Folders known, refreshed by each look-through.
+    pub folders: Vec<(String, String)>,
+    /// Folders read (or in the memory cache): not read again until a change touches them.
+    pub done: HashSet<(String, String)>,
+    /// Counts every fill and invalidation, with the mail stamp into [`Session::todo_stamp`].
+    pub stamp: u64,
+    /// Whether the background reader was started (native only; the web reads per call, so on
+    /// wasm it is never read).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub started: bool,
+}
+
 /// Body words kept for search at most (bytes): enough for the messages a search looks at again.
 const BODY_WORDS_BYTES: usize = 48 << 20;
 
@@ -347,15 +367,25 @@ pub struct Session {
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
     /// Where the To-Do List's and the reminders' look through the folders kept on disk left
-    /// off: round-robin, a few folders a call ([`pim::tasks::todo::TODO_DISK_SCAN`]).
+    /// off, on the web (no threads): round-robin, a few folders a call
+    /// ([`pim::tasks::todo::TODO_DISK_SCAN`]).
+    #[cfg(target_arch = "wasm32")]
     pub(crate) todo_scan: std::sync::atomic::AtomicUsize,
-    /// The folders' lists read from the cache on disk for the To-Do List and the reminders
-    /// (least recently read first, then by folder), so a folder not opened this session is
-    /// seen too, in time: filled a few folders a call, bounded like the cache itself.
-    pub(crate) disk_lists: std::sync::Mutex<(Vec<(String, String)>, HashMap<(String, String), FolderState<Arc<Summary>>>)>,
-    /// Counts every change commands, ops and events make to what the To-Do List and the
-    /// reminders read: the interface rebuilds them only when it changed, not at every image.
+    /// The flagged or reminded messages of the folders read from the cache on disk for the
+    /// To-Do List and the reminders, so a folder not opened this session is seen too, in
+    /// time: filled off the interface thread, bounded, re-read when a change touches the
+    /// folder ([`Session::disk_folder_changed`]).
+    pub(crate) disk_lists: std::sync::Arc<std::sync::Mutex<DiskScan>>,
+    /// Counts the changes that can alter what the To-Do List and the reminders read (the
+    /// content commands, the ops and events that touch mail): the interface rebuilds them only
+    /// when it changed, not at every image or every status line.
     pub(crate) mail_stamp: u64,
+    /// The My Tasks pane's lists, computed for the mail stamp they were computed at: rebuilt
+    /// only when accounts or folders changed, not at every call.
+    pub(crate) task_lists_memo: std::sync::Mutex<Option<(u64, Vec<pim::TaskList>)>>,
+    /// The address book by address (lower case), for the PIM revision it was built at: looked up
+    /// in, not searched card by card at every image.
+    pub(crate) people_index: std::sync::Mutex<Option<(u64, HashMap<String, pim::Person>)>>,
     /// Folders' lists read from the cache on disk, the messages read, and the pages of lists read
     /// alone ([`Session::lists_read`], [`Session::pages_read`]).
     lists_read: (u64, u64, u64),
@@ -583,9 +613,19 @@ impl Session {
             aside_on_disk: HashSet::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
+            #[cfg(target_arch = "wasm32")]
             todo_scan: std::sync::atomic::AtomicUsize::new(0),
-            disk_lists: std::sync::Mutex::new((Vec::new(), HashMap::new())),
+            disk_lists: std::sync::Arc::new(std::sync::Mutex::new(DiskScan {
+                order: Vec::new(),
+                map: HashMap::new(),
+                folders: Vec::new(),
+                done: HashSet::new(),
+                stamp: 0,
+                started: false,
+            })),
             mail_stamp: 0,
+            task_lists_memo: std::sync::Mutex::new(None),
+            people_index: std::sync::Mutex::new(None),
             lists_read: (0, 0, 0),
             contacts: Contacts::default(),
             people: mailboxes::People::default(),
@@ -712,10 +752,52 @@ impl Session {
         self.mail_stamp
     }
 
+    /// The stamp of everything the To-Do List and the reminders read: the mail stamp, with the
+    /// disk scan's own (a folder read off the interface thread refreshes the lists too).
+    pub fn todo_stamp(&self) -> u64 {
+        let disk = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner()).stamp;
+        self.mail_stamp ^ disk
+    }
+
+    /// Wait until the background disk read has come to every folder (tests; the interface
+    /// just repaints as folders come in). The web reads per call instead, so nothing to wait.
+    pub fn wait_disk_scan(&self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut waited = 0;
+            while self.disk_scan_running() && waited < 1_000 {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                waited += 1;
+            }
+        }
+    }
+
+    /// Whether the background disk read has folders left to read.
+    pub fn disk_scan_running(&self) -> bool {
+        let g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        g.folders.iter().any(|k| !g.done.contains(k))
+    }
+
+    /// A sync event or a change touched this folder: its disk-read list is stale, read it
+    /// again off the interface thread.
+    pub(crate) fn disk_folder_changed(&self, account: &str, folder: &str) {
+        let mut g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        let k = (account.to_string(), folder.to_string());
+        g.done.remove(&k);
+        if g.map.remove(&k).is_some() {
+            g.order.retain(|o| *o != k);
+            g.stamp = g.stamp.wrapping_add(1);
+        }
+    }
+
     /// Run a command by id. Disabled commands fail with [`CmdError::Disabled`]. A panic inside a
     /// command is caught and reported as an error rather than taking the app down.
     pub fn run(&mut self, id: &str, params: &Value) -> CmdResult {
-        self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        // Only a command that can change the mail or the tasks moves the stamp the To-Do List
+        // and the reminders are memoized on: selecting, looking and searching leave it alone.
+        if crate::cmd::changes_mail(id) {
+            self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        }
         let reg = self.registry.clone();
         let spec = reg.get(id).ok_or_else(|| CmdError::Unknown(id.to_string()))?;
         // What the command acts on is the message as shown: its body, still being got ready on
@@ -850,7 +932,17 @@ fn follow_up_id(m: &Summary) -> String {
 }
 
 /// The key a flagged message's reminder is answered under: by its Message-ID, so moving the
-/// message to another folder doesn't make it ring again.
-pub(crate) fn mail_reminder_key(account: &str, m: &Summary) -> String {
-    format!("{account}|mail|{}", m.follow_up_id())
+/// message to another folder doesn't make it ring again, and with the reminder's time, so a
+/// reminder set anew — here or on the server, as Outlook does — rings again instead of finding
+/// the answer given to the old one (and the old answers go with the years, as the key ends in
+/// a time).
+pub(crate) fn mail_reminder_key(account: &str, m: &Summary, reminder: i64) -> String {
+    format!("{account}|mail|{}|{reminder}", m.follow_up_id())
+}
+
+/// Take off every answer given to a flagged message's reminders, whatever time they were for:
+/// the reminder changed or the flag went, and the next one is to ring.
+pub(crate) fn forget_mail_reminder_answers(prefs: &mut Prefs, account: &str, id: &str) {
+    let prefix = format!("{account}|mail|{id}|");
+    prefs.reminders.retain(|k, _| !k.starts_with(&prefix));
 }

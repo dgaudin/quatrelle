@@ -374,6 +374,9 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             d.synced.push(folder);
         }
         d.calls.push(if pim_changes { "SyncFolderItems pim".into() } else { op.name.clone() });
+        if op.name == "UpdateItem" {
+            d.updates.push(super::xml(&op));
+        }
         // The search for what messages are, cut short: the connection closed, unanswered.
         if d.kinds_cut && op.name == "FindItem" && op.find("Restriction").and_then(super::fields::kinds_search).is_some() {
             d.calls.push("FindItem kinds cut".into());

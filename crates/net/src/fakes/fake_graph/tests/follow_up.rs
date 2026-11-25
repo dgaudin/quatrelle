@@ -114,6 +114,7 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
             start: Some(FieldChange::Set(start)),
             due: Some(FieldChange::Set(due)),
             reminder: Some(FieldChange::Set(at("2026-12-04T08:30:00Z"))),
+            title: None,
         },
     )
     .unwrap();
@@ -134,7 +135,7 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
     crate::graph::apply_remote(
         &c,
         &st,
-        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), title: None },
     )
     .unwrap();
     let d = server.data.lock().unwrap();
@@ -174,10 +175,12 @@ fn a_follow_up_completed_before_this_version_is_ticked_at_the_next_sync() {
 }
 
 /// Graph refuses a due date without a start one ("To set the due date, you must also specify
-/// the startDateTime", a 400) — the fake refuses it too — and a due-only change from here goes
-/// with the same start, so it's accepted and both dates land on the server.
+/// the startDateTime", a 400) when the message has no start yet — the fake refuses it too. A
+/// due-only change is written as it is: the engine is what pairs it with the same start, and
+/// only when the server has no start; a message that already has one takes the due alone and
+/// keeps its start.
 #[test]
-fn a_due_date_without_a_start_one_is_refused_by_graph_and_sent_with_one() {
+fn a_due_date_alone_is_refused_without_a_start_and_kept_with_one() {
     let mut d = Data::default();
     let inbox = d.folder("Inbox", None, Some("inbox"));
     let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due only\r\n\r\nx\r\n", false, "2024-05-01T09:00:00Z");
@@ -194,29 +197,49 @@ fn a_due_date_without_a_start_one_is_refused_by_graph_and_sent_with_one() {
     let zone = crate::system_zone();
     let at = |text: &str| crate::jmap::utc_date(text).unwrap();
 
-    // The rule itself: a PATCH setting dueDateTime alone is a 400.
+    // The rule itself: a PATCH setting dueDateTime alone on a message with no start is a 400.
     {
         let body = serde_json::to_vec(&json!({"flag": {"dueDateTime": {"dateTime": "2026-12-04T00:00:00", "timeZone": "UTC"}}})).unwrap();
         let (status, _, _) = server.data.lock().unwrap().route("PATCH", &format!("/me/messages/{id}"), &body, &server.base);
         assert_eq!(status, 400, "Graph refuses a due date without a start one");
     }
 
-    // A due-only change from here: accepted, with the start set to the due.
+    // A due-only change from here on a message with no start: written as it is, so Graph
+    // refuses it — pairing it with the same start is the engine's rule, not the transport's.
     let due = at("2026-12-04T00:00:00Z");
-    crate::graph::apply_remote(&c, &st, &Op::SetFollowUp { keys: vec![m.key], start: None, due: Some(FieldChange::Set(due)), reminder: None })
-        .unwrap();
+    let r = crate::graph::apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys: vec![m.key.clone()], start: None, due: Some(FieldChange::Set(due)), reminder: None, title: None },
+    );
+    assert!(r.is_err(), "a due-only change on a startless message is refused: {r:?}");
+
+    // The message has a start now; a due-only change is accepted and the start stays as it is.
+    let start0 = at("2026-11-20T00:00:00Z");
+    crate::graph::apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys: vec![m.key.clone()], start: Some(FieldChange::Set(start0)), due: None, reminder: None, title: None },
+    )
+    .unwrap();
+    crate::graph::apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys: vec![m.key.clone()], start: None, due: Some(FieldChange::Set(due)), reminder: None, title: None },
+    )
+    .unwrap();
     {
         let d = server.data.lock().unwrap();
         let mm = d.message(&id).unwrap();
         assert_eq!(
             (mm.start.as_deref().and_then(crate::jmap::utc_date), mm.due.as_deref().and_then(crate::jmap::utc_date)),
-            (Some(zone.to_utc(due)), Some(zone.to_utc(due))),
-            "the due went with the same start: {mm:?}"
+            (Some(zone.to_utc(start0)), Some(zone.to_utc(due))),
+            "the due landed alone, the start stayed: {mm:?}"
         );
     }
-    // And it reads back as the same day for both.
+    // And it reads back as the days they are.
     crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages.into_iter().find(|m| m.subject == "due only").unwrap();
-    assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due), (due, due), "{:?}", m.flags.follow_up);
+    assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due), (start0, due), "{:?}", m.flags.follow_up);
     let _ = std::fs::remove_dir_all(&dir);
 }

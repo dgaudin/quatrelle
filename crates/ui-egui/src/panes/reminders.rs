@@ -62,7 +62,7 @@ fn signature(s: &Session) -> u64 {
         mix(p.events.len() as u64);
     }
     // A flagged message's reminder comes from the mail, not the calendar.
-    mix(s.mail_stamp());
+    mix(s.todo_stamp());
     h
 }
 

@@ -48,9 +48,11 @@ pub(super) fn flags(it: &El) -> Flags {
         start: lid_time(it, "Task", 33028),
         due: lid_time(it, "Task", 33029),
         reminder: reminder.unwrap_or(0),
-        // Its title is the task's (`PidLidToDoTitle`, 0x85A4), what the flag asks for
-        // (`PidLidFlagRequest`) when the task has none.
-        title: extended_lid(it, "Common", 34212).or_else(|| extended_lid(it, "Common", 34096)).unwrap_or_default().trim().chars().take(255).collect(),
+        // Its title is the task's (`PidLidToDoTitle`, 0x85A4) alone: the flag's request
+        // (`PidLidFlagRequest`) is not a title — "Follow up" is its default text, and a row
+        // named by it would show "Follow up" for every message followed here. The list falls
+        // back to the message's subject when the task has no title.
+        title: extended_lid(it, "Common", super::PID_LID_TO_DO_TITLE).unwrap_or_default().trim().chars().take(255).collect(),
     };
     Flags {
         seen: it.text_of("IsRead").is_some_and(|v| v == "true"),

@@ -237,7 +237,8 @@ fn a_follow_up_day_goes_to_exchange_as_its_floating_midnight() {
         .take_jobs()
         .iter()
         .find_map(|j| match j {
-            Job::Apply { op: Op::SetFollowUp { due, .. }, .. } => Some(*due),
+            // the title goes with its own SetFollowUp; take the one that names the due day
+            Job::Apply { op: Op::SetFollowUp { due, .. }, .. } if due.is_some() => Some(*due),
             _ => None,
         })
         .expect("the follow-up change went to the server");
@@ -478,5 +479,192 @@ fn mail_flag_needs_a_message() {
     let k = key_of(&s, "Character turnarounds");
     s.run("mail.flag", &json!({"key": k["key"], "due": "today"})).unwrap();
     assert!(turnaround(&s).flags.flagged, "by key, without a selection: works");
+    done(s);
+}
+
+/// Mark Complete on an Exchange account keeps the flag's own text (no SetFlag off — the
+/// keyword's status covers it), and Undo puts the task's title and the reminder back.
+#[test]
+fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_reminder() {
+    use quatrelle_model::AccountConfig;
+    let mut s = Session::open(Some(temp("ews-complete")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    s.take_jobs();
+    s.accounts.iter_mut().find(|a| a.config.id == id).unwrap().folders.push(quatrelle_model::Folder {
+        account: id.clone(),
+        path: "INBOX".into(),
+        selectable: true,
+        ..Default::default()
+    });
+    let key = MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid: 5 };
+    let mut st: quatrelle_store::FolderState<std::sync::Arc<Summary>> = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(std::sync::Arc::new(Summary {
+        key: key.clone(),
+        message_id: "p@x".into(),
+        subject: "Proofs of the film".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: NOW, reminder: NOW + 3600, ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    s.cache.insert((id.clone(), "INBOX".into()), st);
+
+    s.run("mail.flag", &serde_json::json!({ "key": key.to_id(), "complete": true })).unwrap();
+    let jobs = s.take_jobs();
+    let applies: Vec<&quatrelle_model::Op> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::Apply { op, .. } => Some(op),
+            _ => None,
+        })
+        .collect();
+    assert!(applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetKeyword { on: true, .. })), "{applies:?}");
+    assert!(
+        !applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFlag { flag: quatrelle_model::Flag::Flagged, on: false, .. })),
+        "Mark Complete on Exchange keeps the flag's text (no SetFlag off): {applies:?}"
+    );
+
+    s.run("edit.undo", &serde_json::json!({})).unwrap();
+    let jobs = s.take_jobs();
+    let applies: Vec<&quatrelle_model::Op> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::Apply { op, .. } => Some(op),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFollowUp { title: Some(Some(t)), .. } if t == "Proofs of the film")),
+        "undo restores the title: {applies:?}"
+    );
+    assert!(
+        applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFollowUp { reminder: Some(_), .. })),
+        "undo restores the reminder: {applies:?}"
+    );
+    done(s);
+}
+
+/// A start date named alone does not rewrite the due date the server already has: the pairing
+/// rule ([MS-OXOTASK]) applies only when the server has no due yet (the message's own due in
+/// the cache counts as the server's).
+#[test]
+fn a_named_start_does_not_rewrite_the_servers_due() {
+    use quatrelle_model::AccountConfig;
+    let mut s = Session::open(Some(temp("ews-start-due")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    s.take_jobs();
+    s.accounts.iter_mut().find(|a| a.config.id == id).unwrap().folders.push(quatrelle_model::Folder {
+        account: id.clone(),
+        path: "INBOX".into(),
+        selectable: true,
+        ..Default::default()
+    });
+    let mk = |uid: u32, subject: &str, due: i64| {
+        std::sync::Arc::new(Summary {
+            key: MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid },
+            message_id: format!("{uid}@x"),
+            subject: subject.into(),
+            flags: quatrelle_model::Flags { flagged: true, follow_up: quatrelle_model::FollowUp { due, ..Default::default() }, ..Default::default() },
+            ..Default::default()
+        })
+    };
+    let with_due = mk(1, "Has a due", NOW + 5 * 86_400);
+    let without_due = mk(2, "No due", 0);
+    let mut st: quatrelle_store::FolderState<std::sync::Arc<Summary>> = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(with_due.clone());
+    st.messages.push(without_due.clone());
+    s.cache.insert((id.clone(), "INBOX".into()), st);
+
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.follow_up_set_for(&[with_due, without_due], Some(Some(day)), None, None).unwrap();
+    let jobs = s.take_jobs();
+    let ops: Vec<&quatrelle_model::Op> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::Apply { op, .. } => Some(op),
+            _ => None,
+        })
+        .collect();
+    let fu: Vec<&quatrelle_model::Op> = ops.iter().copied().filter(|o| matches!(o, quatrelle_model::Op::SetFollowUp { .. })).collect();
+    // two ops (one per due state): the one for the message with a due names start alone; the
+    // one for the message without a due pairs them.
+    let start_only = fu.iter().find(|o| matches!(o, quatrelle_model::Op::SetFollowUp { start: Some(_), due: None, .. }));
+    let paired = fu.iter().find(|o| matches!(o, quatrelle_model::Op::SetFollowUp { start: Some(_), due: Some(_), .. }));
+    assert!(start_only.is_some(), "a start named alone when the server has a due: {fu:?}");
+    assert!(paired.is_some(), "paired only when the server has no due: {fu:?}");
+    assert!(
+        matches!(start_only.unwrap(), quatrelle_model::Op::SetFollowUp { keys, .. } if keys[0].uid == 1),
+        "the message with a due got start alone"
+    );
+    assert!(matches!(paired.unwrap(), quatrelle_model::Op::SetFollowUp { keys, .. } if keys[0].uid == 2), "the message without a due got both");
+    done(s);
+}
+
+/// Clear Flag on a message with neither a flag nor a date on the server writes nothing there:
+/// an UpdateItem deleting eight properties the message doesn't have is not sent.
+#[test]
+fn clear_flag_on_a_message_with_nothing_there_writes_nothing() {
+    let mut s = sample_session("clear-flag-nothing");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    let m = std::sync::Arc::new(m);
+    s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().all(|j| !matches!(j, Job::Apply { op: Op::SetFollowUp { .. }, .. })),
+        "no follow-up write for a message with nothing on the server: {jobs:?}"
+    );
+    done(s);
+}
+
+/// A reminder moved on the server (Outlook) rings again: the answer is kept under the
+/// reminder's own time, so the new time has no answer yet — a dismissal doesn't outlive the
+/// reminder it answered.
+#[test]
+fn a_reminder_moved_on_the_server_rings_again() {
+    let mut s = sample_session("reminder-moved-on-server");
+    let k = key_of(&s, "Character turnarounds");
+    let now = s.clock.now;
+    s.run("list.select", &k).unwrap();
+    s.run("mail.flag", &json!({"reminder": now - 60})).unwrap();
+    let m = turnaround(&s);
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("the flag's reminder is due");
+    s.run("reminders.dismiss", &json!({"key": due.key})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "dismissed");
+    // The server says the reminder moved (a sync reads it into the message's flags).
+    {
+        let ck = (m.key.account.clone(), m.key.folder.clone());
+        let st = s.cache.get_mut(&ck).unwrap();
+        let mm = st.messages.iter_mut().find(|x| x.key.uid == m.key.uid).unwrap();
+        std::sync::Arc::make_mut(mm).flags.follow_up.reminder = now - 30;
+    }
+    assert!(
+        s.due_reminders(now).iter().any(|r| r.message.as_ref() == Some(&m.key)),
+        "a reminder moved on the server rings again, not answered under the old time"
+    );
     done(s);
 }

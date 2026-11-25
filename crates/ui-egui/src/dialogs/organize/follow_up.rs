@@ -27,10 +27,15 @@ pub struct FollowUpForm {
 
 impl FollowUpForm {
     /// The form filled in from the message's follow-up, as the server or this computer has it:
-    /// the one `key` names (a To-Do List row), else the selected one.
+    /// the one `key` names (a To-Do List row), else the selected one. A `key` that doesn't
+    /// resolve gets an empty form, not the selection's: the change is for that row alone.
     pub fn of(s: &Session, dates: bool, key: Option<&str>) -> FollowUpForm {
         let keyed = key.and_then(|k| s.message_by_id(k));
-        let Some(m) = keyed.as_deref().or_else(|| s.first_selected()) else {
+        let m = match (&key, &keyed) {
+            (Some(_), _) => keyed.as_deref(),
+            (None, _) => keyed.as_deref().or_else(|| s.first_selected()),
+        };
+        let Some(m) = m else {
             return FollowUpForm { dates, key: key.map(str::to_string), ..Default::default() };
         };
         let day = |d: Option<i64>| d.map(pickers::text_of).unwrap_or_default();

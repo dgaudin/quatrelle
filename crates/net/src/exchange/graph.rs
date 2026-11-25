@@ -590,13 +590,10 @@ fn flag_patch(op: &Op) -> Option<Value> {
                 None => None,
             };
             let due_v = time(*due);
-            let mut start_v = time(*start);
-            // Graph refuses a due date without a start one ("To set the due date, you must
-            // also specify the startDateTime", a 400): a due set with the start unnamed or
-            // cleared goes with the same start.
-            if matches!(due, Some(FieldChange::Set(_))) && !matches!(start, Some(FieldChange::Set(_))) {
-                start_v = due_v.clone();
-            }
+            let start_v = time(*start);
+            // Graph refuses a due date without a start one (a 400): the engine sends the start
+            // along only when the server has none yet, so a named due never rewrites a start
+            // the server already has.
             let mut flag = serde_json::Map::new();
             if let Some(v) = start_v {
                 flag.insert("startDateTime".into(), v);
