@@ -114,7 +114,7 @@ const PROPS: [(&str, &str); 13] = [
     ("0x684B", "Binary"),
     ("0x684C", "Binary"),
     ("0x684E", "Binary"),
-    ("0x684F", "Binary"),
+    ("0x684F", "CLSID"),
     ("0x6850", "Binary"),
     ("0x6851", "String"),
     ("0x6852", "Integer"),

@@ -505,3 +505,18 @@ pub(crate) fn move_calendar_to_group(c: &Client, calendar: &str, name: &str, gro
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The folder type is read and written as the same CLSID: a header written with a type the
+    /// read doesn't ask for is a property Outlook may ignore or "repair".
+    #[test]
+    fn the_folder_type_is_read_and_written_as_the_same_clsid() {
+        let read = PROPS.iter().find(|(tag, _)| *tag == "0x684F").map(|(_, kind)| *kind);
+        let written = create_group_xml("F", "G", &[0u8; 16], &[0x80], 1);
+        assert_eq!(read, Some("CLSID"), "the read asks the type the write uses");
+        assert!(written.contains("PropertyTag=\"0x684F\" PropertyType=\"CLSID\""), "{written}");
+    }
+}
