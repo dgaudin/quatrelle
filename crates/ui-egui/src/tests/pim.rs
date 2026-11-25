@@ -968,3 +968,28 @@ fn a_calendar_file_opened_asks_before_it_adds() {
     assert!(added.attendees.is_empty(), "and nobody is invited");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The two fixed My Tasks list names (the To-Do List, the Online Archive) go through the
+/// catalogs at display; the engine keeps them plain. In pseudo mode every translated string is
+/// marked, so the marked forms are what the pane draws.
+#[test]
+fn the_task_lists_fixed_names_go_through_the_catalogs() {
+    let (mut a, dir) = app("task-list-i18n");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.session.accounts[0].folders.push(quatrelle_engine::model::Folder {
+        account: "sample".into(),
+        path: "Archiv".into(),
+        archive: true,
+        selectable: true,
+        ..Default::default()
+    });
+    a.run("view.module", json!({"name": "tasks"}));
+    crate::i18n::pseudo::set(true);
+    frame(&ctx, &mut a, vec![]);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    crate::i18n::pseudo::set(false);
+    assert!(text_at(&shapes, crate::i18n::pseudo::mark("To-Do List")).is_some(), "the To-Do List's name goes through the catalogs");
+    assert!(text_at(&shapes, crate::i18n::pseudo::mark("Online Archive")).is_some(), "the online archive's name too");
+    let _ = std::fs::remove_dir_all(dir);
+}

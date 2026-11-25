@@ -115,7 +115,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, _acts: &mut Vec<Action>) 
     let chosen = list_of(&st.tasks).to_string();
     for list in &lists {
         let picked = list.id == chosen;
-        let resp = ui.selectable_label(picked, RichText::new(&list.name).color(t.text));
+        // The two fixed names go through the catalogs; an account's or a mailbox's stays as is.
+        let name = if list.id == "todo" {
+            tl!("To-Do List").to_string()
+        } else if list.archive {
+            i18n::tc("folder", "Online Archive").to_string()
+        } else {
+            list.name.clone()
+        };
+        let resp = ui.selectable_label(picked, RichText::new(name).color(t.text));
         if resp.clicked() {
             st.tasks.list = list.id.clone();
             st.tasks.selected = None;
