@@ -472,11 +472,15 @@ pub(crate) fn finish(st: &mut UiState, ui: &mut Ui, whole: Option<&str>) {
     // is selected — and the whole message as it is written.
     let menu = ui.interact(rect.intersect(clip), id.with("text-menu"), Sense::hover());
     menu.container_context_menu(|ui| {
-        if ui.add_enabled(d.selection().is_some(), egui::Button::new(tl!("Copy"))).on_hover_text("Ctrl+C").clicked() {
+        if ui
+            .add_enabled(d.selection().is_some(), egui::Button::new((crate::widgets::menu_icon(Some(crate::icons::Icon::Copy)), tl!("Copy"))))
+            .on_hover_text("Ctrl+C")
+            .clicked()
+        {
             ui.ctx().copy_text(d.text(whole));
             ui.close();
         }
-        if ui.button(tl!("Copy the whole message")).clicked() {
+        if ui.button((crate::widgets::menu_icon(None), tl!("Copy the whole message"))).clicked() {
             let (a, h) = (d.anchor, d.head);
             d.anchor = Some(Mark::START);
             d.head = Some(Mark::END);

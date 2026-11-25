@@ -181,6 +181,19 @@ fn right_click_in_the_message_copies_only_with_a_selection() {
     // Nothing selected: the menu offers Copy, greyed out — clicking it copies nothing.
     right_click(&mut a, at);
     assert!(shows(&ctx, &mut a, "Copy"), "the menu opens with Copy");
+    // The Copy item has its icon: a small painted shape beside the label, as Outlook's menu.
+    let all = nodes(&ctx, &mut a);
+    let copy_at = all.iter().filter(|(n, _)| n == "Copy").filter_map(|(_, at)| *at).next_back().expect("Copy");
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SCREEN);
+    let icon = shapes.iter().any(|s| match s {
+        egui::Shape::Text(_) => false,
+        sh => {
+            let r = sh.visual_bounding_rect();
+            let c = r.center();
+            r.width() <= 24.0 && r.height() <= 24.0 && c.x < copy_at.x && c.x > copy_at.x - 110.0 && (c.y - copy_at.y).abs() < 12.0
+        }
+    });
+    assert!(icon, "the Copy item has its icon beside the label");
     assert!(click_menu(&mut a, "Copy").is_none(), "greyed out: nothing is copied");
     // Something selected (Ctrl+A here): Copy is offered and copies it.
     press(&ctx, &mut a, at);
