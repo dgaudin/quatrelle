@@ -78,7 +78,7 @@ fn at_offers_the_organisations_members_and_enter_picks() {
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
     assert!(!has_text(&texts, "Ana Exemple"), "the offer gone: {texts:?}");
     let acts = typed(&ctx, &mut a, vec![enter()]);
-    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "Ana Exemple ", "bold": [], "italic": [], "mentions": [[0, 8, "u-ana"]]})]);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "Ana Exemple ", "bold": [], "italic": [], "mentions": [[0, 11, "u-ana"]]})]);
     run_all(&mut a, acts);
     let sent = a.session.teams.outgoing.last().expect("taken by the engine, shown at once");
     assert_eq!(sent.mentions, vec![Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }]);
@@ -120,7 +120,7 @@ fn a_member_is_found_by_a_word_of_the_name_or_the_address() {
     a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: people, web_url: Some(TEAMS_LINK.into()), first: true });
     let ctx = egui::Context::default();
     focus_box(&ctx, &mut a);
-    for (query, offered) in [("@RO", vec!["Bruno Rossi"]), ("@b.r", vec!["Bruno Rossi"]), ("@lim", vec!["Ana Exemple"]), ("@zz", vec![])] {
+    for (query, offered) in [("@RO", vec!["Bruno Rossi"]), ("@b.r", vec!["Bruno Rossi"]), ("@ex", vec!["Ana Exemple"]), ("@zz", vec![])] {
         typed(&ctx, &mut a, vec![text(query)]);
         let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
         for name in ["Ana Exemple", "Bruno Rossi"] {
@@ -162,7 +162,7 @@ fn arrows_and_tab_choose_in_the_offer() {
     assert_eq!(in_box_mentions(&a), vec![(0..11, "u-bruno".to_string())]);
     typed(&ctx, &mut a, vec![text("and "), text("@"), down(), up(), tab(), text("x")]);
     assert_eq!(in_box(&a), "Bruno Rossi and Ana Exemple x", "Tab picked, the keyboard kept");
-    assert_eq!(in_box_mentions(&a), vec![(0..11, "u-bruno".to_string()), (16..24, "u-ana".to_string())]);
+    assert_eq!(in_box_mentions(&a), vec![(0..11, "u-bruno".to_string()), (16..27, "u-ana".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -195,11 +195,11 @@ fn typing_into_a_mention_makes_it_text() {
     typed(&ctx, &mut a, vec![backspace()]);
     assert_eq!((in_box(&a).as_str(), in_box_mentions(&a).len()), ("Ana Exemple", 1), "the space only: the mention kept");
     typed(&ctx, &mut a, vec![backspace()]);
-    assert_eq!(in_box(&a), "Ana Lim");
+    assert_eq!(in_box(&a), "Ana Exempl");
     assert!(in_box_mentions(&a).is_empty(), "the name changed: text");
     let acts = typed(&ctx, &mut a, vec![enter()]);
     let sent = sends(&acts);
-    assert_eq!(sent.iter().map(|p| p.get("text").cloned()).collect::<Vec<_>>(), vec![Some(json!("Ana Lim"))]);
+    assert_eq!(sent.iter().map(|p| p.get("text").cloned()).collect::<Vec<_>>(), vec![Some(json!("Ana Exempl"))]);
     assert_eq!(sent.iter().map(mentions_of).collect::<Vec<_>>(), vec![json!([])]);
     // A letter typed inside the name.
     typed(&ctx, &mut a, vec![text("@"), text("b"), enter()]);
@@ -222,9 +222,9 @@ fn a_refused_send_comes_back_with_its_mentions() {
     typed(&ctx, &mut a, vec![text("@"), text("b"), enter()]);
     assert_eq!(in_box(&a), "Bruno Rossi ");
     a.session.teams_apply(teams::Event::Unsent { count: quatrelle_engine::model::pim::teams::OUTBOX_MAX as u32 });
-    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "Ana Exemple hi", "bold": [], "italic": [], "mentions": [[0, 8, "u-ana"]]})));
+    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "Ana Exemple hi", "bold": [], "italic": [], "mentions": [[0, 11, "u-ana"]]})));
     assert_eq!(in_box(&a), "Ana Exemple hi\nBruno Rossi ");
-    assert_eq!(in_box_mentions(&a), vec![(0..8, "u-ana".to_string()), (12..23, "u-bruno".to_string())]);
+    assert_eq!(in_box_mentions(&a), vec![(0..11, "u-ana".to_string()), (15..26, "u-bruno".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -311,7 +311,7 @@ fn the_offer_in_light_and_dark() {
         let bruno = rect_of(&texts, |t| t == "Bruno Rossi").expect("Bruno");
         assert!(bubble.bottom() <= ana.top(), "{theme}: the offer under the messages: {bubble:?} {ana:?}");
         assert!(ana.bottom() <= bruno.top() && bruno.bottom() <= written.top(), "{theme}: {ana:?} {bruno:?} {written:?}");
-        let address = rect_of(&texts, |t| t == "ana.lima@contoso.example").expect("Ana's address");
+        let address = rect_of(&texts, |t| t == "ana.exemple@contoso.example").expect("Ana's address");
         assert!(address.left() > ana.right() && (address.center().y - ana.center().y).abs() < 4.0, "{theme}: after the name: {address:?}");
         let gale = rect_of(&texts, |t| t == "Gale Stone").expect("the guest offered");
         let tag = texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).find(|r| (r.center().y - gale.center().y).abs() < 6.0);
