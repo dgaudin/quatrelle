@@ -9,6 +9,10 @@ impl Session {
     /// Apply an event from the network layer.
     pub fn apply(&mut self, e: Event) {
         self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        // A folder's list changed on disk: its disk-read list for the To-Do List is stale.
+        if let Event::FolderChanged { account, folder } | Event::FolderSynced { account, folder, .. } = &e {
+            self.disk_folder_changed(account, folder);
+        }
         match e {
             e @ (Event::Identity { .. }
             | Event::Protected { .. }

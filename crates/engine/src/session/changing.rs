@@ -40,8 +40,13 @@ impl Session {
     /// job), or straight to the cache for local accounts.
     pub fn apply_op(&mut self, account: &str, op: Op) {
         self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        let folders: std::collections::HashSet<String> = op.keys().iter().map(|k| k.folder.clone()).collect();
         if let Err(e) = self.apply_op_checked(account, op) {
             self.notice_with("Your mail couldn't be moved, so it stays where it was: {error}", &[("error", &e.to_string())], true);
+        }
+        // The change touches these folders: their disk-read lists for the To-Do List are stale.
+        for f in folders {
+            self.disk_folder_changed(account, &f);
         }
     }
 

@@ -34,7 +34,7 @@ pub struct TodoMemo {
 impl TodoMemo {
     /// The bar's list, computed again only when the mail stamp or the day changed.
     pub(crate) fn bar_list(&mut self, s: &Session, today: i64) -> &[TodoRef] {
-        let stamp = s.mail_stamp();
+        let stamp = s.todo_stamp();
         if self.bar.as_ref().is_none_or(|(st, d, _)| *st != stamp || *d != today) {
             self.bar = Some((stamp, today, s.todo("", false)));
         }
@@ -46,7 +46,7 @@ impl TodoMemo {
 
     /// A list's rows (`todo_for`), same memoizing.
     fn for_list(&mut self, s: &Session, today: i64, list: &str, query: &str, completed: bool) -> &[TodoRef] {
-        let stamp = s.mail_stamp();
+        let stamp = s.todo_stamp();
         if self.for_list.as_ref().is_none_or(|(st, d, l, q, c, _)| *st != stamp || *d != today || l != list || q != query || *c != completed) {
             self.for_list = Some((stamp, today, list.to_string(), query.to_string(), completed, s.todo_for(list, query, completed)));
         }
@@ -58,7 +58,7 @@ impl TodoMemo {
 
     /// A list as its view shows it (`todo_view`), same memoizing.
     fn view_list(&mut self, s: &Session, today: i64, list: &str, query: &str, completed: bool, view: TaskView, arrange: TaskArrange) -> &[TodoRef] {
-        let stamp = s.mail_stamp();
+        let stamp = s.todo_stamp();
         if self.view.as_ref().is_none_or(|(st, d, l, q, c, v, a, _)| {
             *st != stamp || *d != today || l != list || q != query || *c != completed || *v != view || *a != arrange
         }) {
@@ -224,6 +224,10 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
 
 /// The main pane: the list, and the one picked beside it.
 pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
+    // Folders still being read from disk in the background: repaint as they come in.
+    if s.disk_scan_running() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+    }
     let t = st.tokens;
     let today = dates::today(&s.clock);
     let list_id = list_of(&st.tasks).to_string();

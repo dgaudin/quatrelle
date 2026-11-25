@@ -141,6 +141,24 @@ const RECOUNT_MAX: u64 = 50_000;
 /// (300 MB) for the rest of the day. A folder read again comes from the cache file in milliseconds.
 pub(crate) const CACHE_MESSAGES: usize = 50_000;
 
+/// The folders' disk-read lists behind the To-Do List's and the reminders' look through mail
+/// ([`Session::disk_lists`]): only the flagged or reminded messages of a folder are kept, read
+/// off the interface thread, bounded, and re-read when a change touches the folder.
+pub(crate) struct DiskScan {
+    /// Folders read, least recently read first.
+    pub order: Vec<(String, String)>,
+    /// The flagged or reminded messages of each folder read.
+    pub map: HashMap<(String, String), Vec<Summary>>,
+    /// Folders known, refreshed by each look-through.
+    pub folders: Vec<(String, String)>,
+    /// Folders read (or in the memory cache): not read again until a change touches them.
+    pub done: HashSet<(String, String)>,
+    /// Counts every fill and invalidation, with the mail stamp into [`Session::todo_stamp`].
+    pub stamp: u64,
+    /// Whether the background reader was started (native only).
+    pub started: bool,
+}
+
 /// Body words kept for search at most (bytes): enough for the messages a search looks at again.
 const BODY_WORDS_BYTES: usize = 48 << 20;
 
@@ -345,12 +363,15 @@ pub struct Session {
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
     /// Where the To-Do List's and the reminders' look through the folders kept on disk left
-    /// off: round-robin, a few folders a call ([`pim::tasks::todo::TODO_DISK_SCAN`]).
+    /// off, on the web (no threads): round-robin, a few folders a call
+    /// ([`pim::tasks::todo::TODO_DISK_SCAN`]).
+    #[cfg(target_arch = "wasm32")]
     pub(crate) todo_scan: std::sync::atomic::AtomicUsize,
-    /// The folders' lists read from the cache on disk for the To-Do List and the reminders
-    /// (least recently read first, then by folder), so a folder not opened this session is
-    /// seen too, in time: filled a few folders a call, bounded like the cache itself.
-    pub(crate) disk_lists: std::sync::Mutex<(Vec<(String, String)>, HashMap<(String, String), FolderState<Arc<Summary>>>)>,
+    /// The flagged or reminded messages of the folders read from the cache on disk for the
+    /// To-Do List and the reminders, so a folder not opened this session is seen too, in
+    /// time: filled off the interface thread, bounded, re-read when a change touches the
+    /// folder ([`Session::disk_folder_changed`]).
+    pub(crate) disk_lists: std::sync::Arc<std::sync::Mutex<DiskScan>>,
     /// Counts every change commands, ops and events make to what the To-Do List and the
     /// reminders read: the interface rebuilds them only when it changed, not at every image.
     pub(crate) mail_stamp: u64,
@@ -579,8 +600,16 @@ impl Session {
             aside_on_disk: HashSet::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
+            #[cfg(target_arch = "wasm32")]
             todo_scan: std::sync::atomic::AtomicUsize::new(0),
-            disk_lists: std::sync::Mutex::new((Vec::new(), HashMap::new())),
+            disk_lists: std::sync::Arc::new(std::sync::Mutex::new(DiskScan {
+                order: Vec::new(),
+                map: HashMap::new(),
+                folders: Vec::new(),
+                done: HashSet::new(),
+                stamp: 0,
+                started: false,
+            })),
             mail_stamp: 0,
             lists_read: (0, 0, 0),
             contacts: Contacts::default(),
@@ -706,6 +735,44 @@ impl Session {
     /// events): the interface rebuilds them only when this changed, not at every image.
     pub fn mail_stamp(&self) -> u64 {
         self.mail_stamp
+    }
+
+    /// The stamp of everything the To-Do List and the reminders read: the mail stamp, with the
+    /// disk scan's own (a folder read off the interface thread refreshes the lists too).
+    pub fn todo_stamp(&self) -> u64 {
+        let disk = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner()).stamp;
+        self.mail_stamp ^ disk
+    }
+
+    /// Wait until the background disk read has come to every folder (tests; the interface
+    /// just repaints as folders come in). The web reads per call instead, so nothing to wait.
+    pub fn wait_disk_scan(&self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut waited = 0;
+            while self.disk_scan_running() && waited < 1_000 {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                waited += 1;
+            }
+        }
+    }
+
+    /// Whether the background disk read has folders left to read.
+    pub fn disk_scan_running(&self) -> bool {
+        let g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        g.folders.iter().any(|k| !g.done.contains(k))
+    }
+
+    /// A sync event or a change touched this folder: its disk-read list is stale, read it
+    /// again off the interface thread.
+    pub(crate) fn disk_folder_changed(&self, account: &str, folder: &str) {
+        let mut g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        let k = (account.to_string(), folder.to_string());
+        g.done.remove(&k);
+        if g.map.remove(&k).is_some() {
+            g.order.retain(|o| *o != k);
+            g.stamp = g.stamp.wrapping_add(1);
+        }
     }
 
     /// Run a command by id. Disabled commands fail with [`CmdError::Disabled`]. A panic inside a

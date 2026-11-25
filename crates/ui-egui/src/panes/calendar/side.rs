@@ -545,6 +545,10 @@ fn tasks_part(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>
         }
     }
     let today = dates::today(&s.clock);
+    // Folders still being read from disk in the background: repaint as they come in.
+    if s.disk_scan_running() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+    }
     // Computed again only when mail or tasks changed, not at every image.
     let list = st.todo_memo.bar_list(s, today);
     let mut group = None;

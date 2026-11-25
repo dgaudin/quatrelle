@@ -218,7 +218,36 @@ impl TodoRef {
 
 /// Folders kept on disk read per call when the To-Do List or the reminders look through mail:
 /// round-robin, so every folder is come to in time and the work one call does stays bounded.
+#[cfg(target_arch = "wasm32")]
 pub(crate) const TODO_DISK_SCAN: usize = 2;
+
+/// The flagged or reminded messages kept of the folders read from disk, at most: a folder's
+/// whole list is read off the interface thread, but only what the To-Do List shows is kept.
+pub(crate) const MAX_DISK_FLAGGED: usize = 5_000;
+
+/// Whether a message read from the disk cache is one the To-Do List or the reminders show:
+/// flagged, completed, or with a reminder.
+fn flagged_or_reminded(m: &Summary) -> bool {
+    m.flags.flagged || m.flags.follow_up_complete() || m.flags.follow_up.reminder > 0
+}
+
+/// Keep `msgs` as the folder `k`'s disk-read list, least recently read first, bounded by
+/// [`MAX_DISK_FLAGGED`].
+fn insert_disk_read(g: &mut crate::session::DiskScan, k: (String, String), msgs: Vec<Summary>) {
+    let mut total: usize = g.map.values().map(|v| v.len()).sum();
+    total = total.saturating_add(msgs.len());
+    while total > MAX_DISK_FLAGGED
+        && let Some(old) = g.order.first().cloned()
+    {
+        if let Some(v) = g.map.remove(&old) {
+            total = total.saturating_sub(v.len());
+        }
+        g.order.remove(0);
+    }
+    g.map.insert(k.clone(), msgs);
+    g.order.push(k);
+    g.stamp = g.stamp.wrapping_add(1);
+}
 
 impl Session {
     /// Calls `keep(account, folder, message)` for each message of each folder of each known
@@ -239,55 +268,86 @@ impl Session {
             }
         }
         let Some(store) = &self.store else { return };
-        // Fill the disk lists a few folders a call, round-robin over the folders neither in
-        // the cache nor already read.
         {
             let mut g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
-            let (order, map) = &mut *g;
-            let mut candidates: Vec<(String, String)> = Vec::new();
-            for a in &self.accounts {
-                for f in &a.folders {
-                    let k = (a.config.id.clone(), f.path.clone());
-                    if !self.cache.contains_key(&k) && !map.contains_key(&k) {
-                        candidates.push(k);
+            g.folders = self.accounts.iter().flat_map(|a| a.folders.iter().map(|f| (a.config.id.clone(), f.path.clone()))).collect();
+            for k in self.cache.keys() {
+                g.done.insert(k.clone());
+            }
+            // The disk read itself runs off the interface thread (native); the web has no
+            // threads and reads a few folders per call below instead.
+            #[cfg(not(target_arch = "wasm32"))]
+            if !g.started {
+                g.started = true;
+                drop(g);
+                Self::spawn_disk_scan(store.clone(), std::sync::Arc::downgrade(&self.disk_lists));
+            }
+        }
+        // What is read already: the background reader fills this, bounded, off this thread.
+        {
+            let g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+            for ((account, folder), msgs) in &g.map {
+                if self.account(account).is_none() {
+                    continue;
+                }
+                for m in msgs {
+                    if seen.insert(m.key.clone()) {
+                        keep(account, folder, m);
                     }
                 }
             }
+        }
+        // The web (no threads): read a few folders per call here, round-robin, flagged only.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let mut g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+            let candidates: Vec<(String, String)> = g.folders.iter().filter(|k| !g.done.contains(*k)).cloned().collect();
             if !candidates.is_empty() {
                 let start = self.todo_scan.fetch_add(TODO_DISK_SCAN, std::sync::atomic::Ordering::Relaxed) % candidates.len();
                 for i in 0..TODO_DISK_SCAN.min(candidates.len()) {
                     let k = candidates[(start + i) % candidates.len()].clone();
-                    // A folder whose list can't be read is left out, not fatal.
-                    if let Ok(st) = store.load_folder(&k.0, &k.1) {
-                        let mut total: usize = map.values().map(|s| s.messages.len()).sum();
-                        let shared = st.shared();
-                        total = total.saturating_add(shared.messages.len());
-                        // The memory stays bounded: the least recently read folders go first.
-                        while total > crate::session::CACHE_MESSAGES
-                            && let Some(old) = order.first().cloned()
-                        {
-                            if let Some(st) = map.remove(&old) {
-                                total = total.saturating_sub(st.messages.len());
-                            }
-                            order.remove(0);
-                        }
-                        map.insert(k.clone(), shared);
-                        order.push(k);
+                    if let Ok(mut st) = store.load_folder(&k.0, &k.1) {
+                        st.messages.retain(flagged_or_reminded);
+                        insert_disk_read(&mut g, k.clone(), st.messages);
                     }
+                    g.done.insert(k);
+                    g.stamp = g.stamp.wrapping_add(1);
                 }
             }
         }
-        let g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
-        for ((account, folder), st) in g.1.iter() {
-            if self.account(account).is_none() {
-                continue;
-            }
-            for m in &st.messages {
-                if seen.insert(m.key.clone()) {
-                    keep(account, folder, m);
+    }
+
+    /// Read the folders of the cache on disk for the To-Do List and the reminders, off the
+    /// interface thread: one folder at a time, only its flagged or reminded messages kept,
+    /// bounded, until the session is gone (the weak reference fails then).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn spawn_disk_scan(store: quatrelle_store::Store, weak: std::sync::Weak<std::sync::Mutex<crate::session::DiskScan>>) {
+        let _ = std::thread::Builder::new().name("todo-disk-scan".into()).spawn(move || {
+            while let Some(g) = weak.upgrade() {
+                let next = {
+                    let g = g.lock().unwrap_or_else(|e| e.into_inner());
+                    g.folders.iter().find(|k| !g.done.contains(*k)).cloned()
+                };
+                let Some(k) = next else {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    continue;
+                };
+                // A folder whose list can't be read is left out, not fatal, and not retried
+                // until a change touches it again.
+                let loaded = store.load_folder(&k.0, &k.1).ok().map(|mut st| {
+                    st.messages.retain(flagged_or_reminded);
+                    st.messages
+                });
+                let mut g = g.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(msgs) = loaded {
+                    insert_disk_read(&mut g, k.clone(), msgs);
                 }
+                g.done.insert(k);
+                g.stamp = g.stamp.wrapping_add(1);
+                drop(g);
+                std::thread::sleep(std::time::Duration::from_millis(50));
             }
-        }
+        });
     }
 
     /// The To-Do List's row named by `uid` (a task's, or a message's key id).
