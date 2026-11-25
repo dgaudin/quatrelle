@@ -118,12 +118,23 @@ fn a_group_header_menu_renames_and_deletes_the_group() {
     click_text(&ctx, &mut a, "Rename");
     assert!(a.session.pim.values().any(|p| p.calendar_groups.iter().any(|g| g == "Team")));
     assert!(a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Team")));
-    // Delete asks first, then takes the group out of the pane.
+    // A group that still holds calendars can't be deleted (Microsoft 365's behaviour on a
+    // non-empty group isn't known): the entry is greyed with why.
     right_click(&ctx, &mut a, "Team");
+    point_at(&ctx, &mut a, "Delete group…");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "A calendar group that still holds calendars can't be deleted here"), "{shown:?}");
+    // An empty group may go.
+    let account = a.session.accounts[0].config.id.clone();
+    a.session.pim_mut(&account).calendar_groups.push("Vide".into());
+    for _ in 0..5 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    right_click(&ctx, &mut a, "Vide");
     click_text(&ctx, &mut a, "Delete group…");
     assert!(matches!(&a.ui.dialog, Some(Dialog::CalendarGroupChange(f)) if f.deleting()));
     click_text(&ctx, &mut a, "Delete");
-    assert!(!a.session.pim.values().any(|p| p.calendar_groups.iter().any(|g| g == "Team")));
+    assert!(!a.session.pim.values().any(|p| p.calendar_groups.iter().any(|g| g == "Vide")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -143,6 +154,8 @@ fn a_group_moves_its_calendar_to_another_group_on_exchange() {
 #[test]
 fn a_group_moves_up_and_down_on_exchange_but_not_on_microsoft_365() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-order-ews");
+    let account = a.session.accounts[0].config.id.clone();
+    a.session.pim_mut(&account).own_calendar_groups.push("Salles".into());
     right_click(&ctx, &mut a, "Salles");
     click_text(&ctx, &mut a, "Move down");
     let order = a.session.pim.values().next().map(|p| p.calendar_groups.clone()).unwrap_or_default();
@@ -269,7 +282,9 @@ fn move_to_group_is_greyed_for_a_calendar_opened_by_address() {
 /// Deleting a group puts its own calendars back under My Calendars, not out of the list.
 #[test]
 fn deleting_a_group_puts_its_own_calendars_back_under_my_calendars() {
-    let (mut a, dir, ctx) = with_groups("calendar-groups-delete-own");
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-delete-own");
+    let account = a.session.accounts[0].config.id.clone();
+    a.session.pim_mut(&account).own_calendar_groups.push("Salles".into());
     right_click(&ctx, &mut a, "Salles");
     click_text(&ctx, &mut a, "Delete group…");
     click_text(&ctx, &mut a, "Delete");
@@ -297,5 +312,23 @@ fn a_server_without_calendar_groups_says_so() {
     point_at(&ctx, &mut a, "New calendar group…");
     let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
     assert!(shown.iter().any(|t| t == "This account's server doesn't keep calendar groups"), "{shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// On Exchange, a group Outlook made cannot be renamed, moved, or deleted while it holds
+/// calendars: the menu says so.
+#[test]
+fn an_outlook_group_cannot_be_renamed_or_deleted_on_exchange() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-outlook-menu");
+    right_click(&ctx, &mut a, "Équipe");
+    point_at(&ctx, &mut a, "Rename group…");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "{shown:?}");
+    point_at(&ctx, &mut a, "Delete group…");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "A calendar group that still holds calendars can't be deleted here"), "{shown:?}");
+    point_at(&ctx, &mut a, "Move down");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "{shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }

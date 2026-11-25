@@ -2498,3 +2498,5 @@ presence	Offline	Offline
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 non può spostare un calendario tra gruppi
 	Group name	Nome del gruppo
 	This calendar isn't in Outlook's calendar groups yet	Questo calendario non è ancora in un gruppo di calendari di Outlook
+	Outlook's own calendar group can't be changed here	Un gruppo di calendari di Outlook non può essere modificato qui
+	A calendar group that still holds calendars can't be deleted here	Un gruppo di calendari che contiene ancora calendari non può essere eliminato qui

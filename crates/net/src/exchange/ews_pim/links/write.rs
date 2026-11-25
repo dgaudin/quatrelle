@@ -24,6 +24,7 @@ struct Shortcut {
     header_id: Vec<u8>,
     ordinal: Vec<u8>,
     flags: i64,
+    save_stamp: Option<i64>,
     entry_id: Vec<u8>,
     store_id: Vec<u8>,
     folder_type: Vec<u8>,
@@ -111,6 +112,7 @@ fn shortcut_of(it: &El) -> Option<Shortcut> {
         header_id,
         ordinal,
         flags: int_prop(it, "0x684A").unwrap_or(0),
+        save_stamp: int_prop(it, "0x6847"),
         entry_id: bin_prop(it, "0x684C").unwrap_or_default(),
         store_id: bin_prop(it, "0x684E").unwrap_or_default(),
         folder_type: bin_prop(it, "0x684F").unwrap_or_default(),
@@ -189,14 +191,6 @@ fn after_group(all: &[Shortcut], group: &Shortcut, except: Option<&str>) -> Vec<
 /// folder class a calendar shortcut points at.
 const CALENDAR_FOLDER: [u8; 16] = [0x02, 0x78, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46];
 
-/// A save stamp for a shortcut this session writes ([MS-OXOCFG] 2.2.9.4): an integer that says
-/// the writing client's session.
-fn save_stamp() -> u32 {
-    let mut out = [0u8; 4];
-    rand_core::OsRng.fill_bytes(&mut out);
-    u32::from_le_bytes(out)
-}
-
 /// A new GUID for a group header ([MS-OXOCFG] 2.2.9.3).
 fn new_guid() -> [u8; 16] {
     let mut out = [0u8; 16];
@@ -211,7 +205,7 @@ fn ext(tag: &str, kind: &str, value: &str) -> String {
 
 /// A shortcut created in the Common Views folder: an associated item ([MS-OXOCFG] 2.2.9: a
 /// group header, type 4, section 3).
-fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8]) -> String {
+fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8], stamp: u32) -> String {
     let guid = crate::imap::base64(id);
     let folder_type = crate::imap::base64(&CALENDAR_FOLDER);
     let ordinal = crate::imap::base64(ordinal);
@@ -222,7 +216,7 @@ fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8]) -> Strin
         esc(views),
         esc(name),
         ext("0x6842", "Binary", &guid),
-        ext("0x6847", "Integer", &save_stamp().to_string()),
+        ext("0x6847", "Integer", &stamp.to_string()),
         ext("0x6849", "Integer", "4"),
         ext("0x684A", "Integer", "0"),
         ext("0x684B", "Binary", &ordinal),
@@ -293,7 +287,7 @@ pub(crate) fn create_calendar_group(c: &Client, name: &str) -> Result<()> {
     };
     let id = new_guid();
     let ordinal = after_last_ordinal(&before);
-    let made = c.call_one(&create_group_xml(&views, &name, &id, &ordinal))?;
+    let made = c.call_one(&create_group_xml(&views, &name, &id, &ordinal, c.group_stamp()))?;
     let created = made.find("ItemId").and_then(|i| i.attr("Id")).filter(|i| !i.is_empty()).map(str::to_string);
     let mut expected: Vec<String> = headers(&before).into_iter().map(|h| h.name.clone()).collect();
     expected.push(name);
@@ -309,6 +303,11 @@ pub(crate) fn create_calendar_group(c: &Client, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether the header was written by this session (its save stamp is ours).
+fn ours(c: &Client, header: &Shortcut) -> bool {
+    header.save_stamp == Some(i64::from(c.group_stamp()))
+}
+
 /// Rename the group `group` to `name`, its entries with it.
 pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Result<()> {
     let name = clean(name);
@@ -317,6 +316,9 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
     }
     let before = read_raw(c)?;
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
+    if !ours(c, &header) {
+        return Err(NetError::No("Outlook's own calendar group can't be renamed here".into()));
+    }
     if header.name.eq_ignore_ascii_case(&name) {
         return Ok(());
     }
@@ -328,7 +330,7 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
     update(
         c,
         &header,
-        &[set_subject(&name), set_ext("0x6847", "Integer", &save_stamp().to_string()), set_ext("0x684A", "Integer", &flags.to_string())],
+        &[set_subject(&name), set_ext("0x6847", "Integer", &c.group_stamp().to_string()), set_ext("0x684A", "Integer", &flags.to_string())],
     )?;
     let mut done: Vec<Shortcut> = Vec::new();
     for m in &members {
@@ -372,6 +374,9 @@ pub(crate) fn delete_calendar_group(c: &Client, group: &str) -> Result<()> {
     let before = read_raw(c)?;
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
     let members: Vec<Shortcut> = members_of(&before, &header).into_iter().cloned().collect();
+    if !ours(c, &header) && !members.is_empty() {
+        return Err(NetError::No("a calendar group Outlook made can't be deleted while it holds calendars".into()));
+    }
     for m in &members {
         delete(c, m)?;
     }
@@ -387,6 +392,9 @@ pub(crate) fn move_calendar_group(c: &Client, group: &str, up: bool) -> Result<(
     let before = read_raw(c)?;
     let list = headers(&before);
     let at = list.iter().position(|h| h.name.eq_ignore_ascii_case(group)).ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
+    if !ours(c, list[at]) {
+        return Err(NetError::No("Outlook's own calendar group can't be moved here".into()));
+    }
     let there = if up {
         at.checked_sub(1).ok_or_else(|| NetError::No("it's the first calendar group already".into()))?
     } else {

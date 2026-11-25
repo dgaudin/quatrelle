@@ -107,7 +107,9 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                 .map(|l| l.group.clone())
                 .filter(|g| !g.is_empty());
             // The pane draws My Calendars itself: the server's name for it isn't a group.
-            out.calendar_groups = Some(shortcuts.groups.iter().filter(|g| my_calendars.as_deref() != Some(g.as_str())).cloned().collect());
+            out.calendar_groups =
+                Some(shortcuts.groups.iter().filter(|g| my_calendars.as_deref() != Some(g.name.as_str())).map(|g| g.name.clone()).collect());
+            out.own_calendar_groups = Some(shortcuts.groups.iter().filter(|g| g.ours).map(|g| g.name.clone()).collect());
             out.my_calendar_group = my_calendars.clone();
             for l in links.iter().filter(|l| l.email.is_empty()) {
                 let Some(k) = calendars.iter_mut().find(|k| plain_name(&k.name).eq_ignore_ascii_case(&l.name)) else { continue };

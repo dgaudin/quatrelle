@@ -19,6 +19,8 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
+use rand_core::RngCore as _;
+
 use quatrelle_mime as mime;
 use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
 use quatrelle_store::{FolderState, Store};
@@ -163,6 +165,9 @@ pub struct Client {
     /// The Common Views folder's id, once found by its name or the shortcuts it holds; `None`
     /// inside when this mailbox has none this session (see `ews_pim/links.rs`).
     common_views: RefCell<Option<Option<String>>>,
+    /// The save stamp this session writes on a calendar group header ([MS-OXOCFG] 2.2.9.4): what
+    /// makes a header one Quatrelle may change, the others being Outlook's or another client's.
+    group_stamp: RefCell<Option<u32>>,
     /// The folders whose changes the server won't give this session (`SyncFolderItems` refused
     /// from nothing: public folders, on some servers), by the element naming them: read whole, as
     /// before, without asking again.
@@ -415,6 +420,7 @@ impl Client {
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
             common_views: RefCell::new(None),
+            group_stamp: RefCell::new(None),
             changes_refused: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
             clock: Cell::new(None),
@@ -452,6 +458,7 @@ impl Client {
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
             common_views: self.common_views.clone(),
+            group_stamp: self.group_stamp.clone(),
             changes_refused: self.changes_refused.clone(),
             fields_refused: self.fields_refused.clone(),
             clock: self.clock.clone(),
@@ -468,6 +475,20 @@ impl Client {
     /// Keep the Common Views folder's id (or that there is none) for this session.
     pub(crate) fn keep_common_views(&self, id: &Option<String>) {
         *self.common_views.borrow_mut() = Some(id.clone());
+    }
+
+    /// The save stamp this session writes on a calendar group header, made once
+    /// ([MS-OXOCFG] 2.2.9.4: the writer's session).
+    pub(crate) fn group_stamp(&self) -> u32 {
+        let mut slot = self.group_stamp.borrow_mut();
+        if let Some(v) = *slot {
+            return v;
+        }
+        let mut bytes = [0u8; 4];
+        rand_core::OsRng.fill_bytes(&mut bytes);
+        let v = u32::from_le_bytes(bytes);
+        *slot = Some(v);
+        v
     }
 
     /// Whether the server refused an appointment's fields asked by name this session.

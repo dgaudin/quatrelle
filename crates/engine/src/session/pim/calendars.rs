@@ -73,6 +73,11 @@ pub enum GroupRefusal {
     Order,
     /// The server can't move an existing calendar from one group to another (Microsoft 365).
     Move,
+    /// The group was made by Outlook (or another client), not here: [MS-OXOCFG] gives no
+    /// well-known id to tell its own headers from ours, so only an empty one may go.
+    Outlook,
+    /// The group still holds calendars: deleting it would take them with it.
+    NotEmpty,
 }
 
 impl GroupRefusal {
@@ -82,6 +87,8 @@ impl GroupRefusal {
             GroupRefusal::Server => "this account's server doesn't keep calendar groups",
             GroupRefusal::Order => "Microsoft 365 keeps no order for calendar groups",
             GroupRefusal::Move => "Microsoft 365 can't move a calendar between groups",
+            GroupRefusal::Outlook => "Outlook's own calendar group can't be changed here",
+            GroupRefusal::NotEmpty => "a calendar group that still holds calendars can't be deleted here",
         }
     }
 }
@@ -359,16 +366,75 @@ impl Session {
         }
     }
 
-    /// Whether the server orders its groups (Microsoft 365 doesn't say one).
-    pub fn calendar_group_order(&self, account: &str) -> Result<(), GroupRefusal> {
-        self.calendar_groups_change(account)?;
-        if self.account(account).is_some_and(|a| a.config.ews.is_some()) { Ok(()) } else { Err(GroupRefusal::Order) }
+    /// Whether `group` may be renamed here: only a header this session wrote (or, on Microsoft
+    /// 365, a group the account keeps through Graph). Outlook's own headers have its save stamp,
+    /// not ours ([MS-OXOCFG] 2.2.9.4).
+    pub fn calendar_group_rename(&self, account: &str, group: &str) -> Result<(), GroupRefusal> {
+        match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
+            Some((ews, _)) if ews.is_some() => {
+                if self.own_group(account, group) {
+                    Ok(())
+                } else {
+                    Err(GroupRefusal::Outlook)
+                }
+            }
+            Some((_, graph)) if graph.is_some() => Ok(()),
+            _ => Err(GroupRefusal::Server),
+        }
+    }
+
+    /// Whether `group` may be deleted here: ours, or (the fallback when [MS-OXOCFG] can't tell
+    /// Outlook's headers from ours) a group that holds no calendar. Microsoft 365 refuses a
+    /// group that still holds calendars, as its own behaviour on a non-empty one isn't known.
+    pub fn calendar_group_delete(&self, account: &str, group: &str) -> Result<(), GroupRefusal> {
+        match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
+            Some((ews, _)) if ews.is_some() => {
+                if self.own_group(account, group) || !self.group_has_calendars(account, group) {
+                    Ok(())
+                } else {
+                    Err(GroupRefusal::NotEmpty)
+                }
+            }
+            Some((_, graph)) if graph.is_some() => {
+                if self.group_has_calendars(account, group) {
+                    Err(GroupRefusal::NotEmpty)
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Err(GroupRefusal::Server),
+        }
+    }
+
+    /// Whether the server orders the group (Microsoft 365 doesn't say one), and it is ours.
+    pub fn calendar_group_order(&self, account: &str, group: &str) -> Result<(), GroupRefusal> {
+        match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
+            Some((ews, _)) if ews.is_some() => {
+                if self.own_group(account, group) {
+                    Ok(())
+                } else {
+                    Err(GroupRefusal::Outlook)
+                }
+            }
+            Some((_, graph)) if graph.is_some() => Err(GroupRefusal::Order),
+            _ => Err(GroupRefusal::Server),
+        }
     }
 
     /// Whether the server can move an existing calendar between groups (Graph v1.0 can't).
     pub fn calendar_group_move(&self, account: &str) -> Result<(), GroupRefusal> {
         self.calendar_groups_change(account)?;
         if self.account(account).is_some_and(|a| a.config.ews.is_some()) { Ok(()) } else { Err(GroupRefusal::Move) }
+    }
+
+    /// Whether `group` is a header Quatrelle wrote.
+    fn own_group(&self, account: &str, group: &str) -> bool {
+        self.pim.get(account).is_some_and(|p| p.own_calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(group)))
+    }
+
+    /// Whether a calendar of the account is listed in `group`.
+    fn group_has_calendars(&self, account: &str, group: &str) -> bool {
+        self.pim.get(account).is_some_and(|p| p.calendars.iter().any(|c| c.group.eq_ignore_ascii_case(group)))
     }
 
     /// A group of `account` by its name, or why the params don't name one.
@@ -393,6 +459,7 @@ impl Session {
         }
         if let Some(p) = self.pim.get_mut(account) {
             p.calendar_groups.push(name.clone());
+            p.own_calendar_groups.push(name.clone());
         }
         self.pim_revision = self.pim_revision.wrapping_add(1);
         self.write_pim(account);
@@ -404,7 +471,7 @@ impl Session {
     /// says what the server kept).
     pub fn rename_calendar_group(&mut self, account: &str, group: &str, name: &str) -> CmdResult {
         self.calendar_group_named(account, group)?;
-        self.calendar_groups_change(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        self.calendar_group_rename(account, group).map_err(|r| CmdError::Disabled(r.reason().into()))?;
         let name = typed_name(name)?;
         if name.eq_ignore_ascii_case(group) {
             return Ok(json!({"account": account, "group": group, "name": name}));
@@ -414,6 +481,11 @@ impl Session {
         }
         let p = self.pim_mut(account);
         for g in &mut p.calendar_groups {
+            if g.eq_ignore_ascii_case(group) {
+                g.clone_from(&name);
+            }
+        }
+        for g in &mut p.own_calendar_groups {
             if g.eq_ignore_ascii_case(group) {
                 g.clone_from(&name);
             }
@@ -432,9 +504,10 @@ impl Session {
     /// list), on the server through the journal.
     pub fn delete_calendar_group(&mut self, account: &str, group: &str) -> CmdResult {
         self.calendar_group_named(account, group)?;
-        self.calendar_groups_change(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        self.calendar_group_delete(account, group).map_err(|r| CmdError::Disabled(r.reason().into()))?;
         let p = self.pim_mut(account);
         p.calendar_groups.retain(|g| !g.eq_ignore_ascii_case(group));
+        p.own_calendar_groups.retain(|g| !g.eq_ignore_ascii_case(group));
         for c in &mut p.calendars {
             if c.group.eq_ignore_ascii_case(group) {
                 c.group.clear();
@@ -449,7 +522,7 @@ impl Session {
     /// Move a calendar group up (or down) among the groups, on the server through the journal.
     pub fn move_calendar_group(&mut self, account: &str, group: &str, up: bool) -> CmdResult {
         self.calendar_group_named(account, group)?;
-        self.calendar_group_order(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        self.calendar_group_order(account, group).map_err(|r| CmdError::Disabled(r.reason().into()))?;
         let p = self.pim_mut(account);
         let Some(at) = p.calendar_groups.iter().position(|g| g.eq_ignore_ascii_case(group)) else {
             return Err(CmdError::Params(format!("no calendar group `{group}` in `{account}`")));

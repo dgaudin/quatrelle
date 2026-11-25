@@ -37,6 +37,8 @@ pub(crate) fn group_refusal_text(r: GroupRefusal) -> &'static str {
         GroupRefusal::Server => tl!("This account's server doesn't keep calendar groups"),
         GroupRefusal::Order => tl!("Microsoft 365 keeps no order for calendar groups"),
         GroupRefusal::Move => tl!("Microsoft 365 can't move a calendar between groups"),
+        GroupRefusal::Outlook => tl!("Outlook's own calendar group can't be changed here"),
+        GroupRefusal::NotEmpty => tl!("A calendar group that still holds calendars can't be deleted here"),
     }
 }
 
@@ -175,8 +177,8 @@ fn remove_entry(ui: &mut Ui, s: &Session, account: &str, id: &str, acts: &mut Ve
 /// doesn't).
 pub(super) fn group_menu(ui: &mut Ui, s: &Session, a: &AccountState, group: &str, acts: &mut Vec<Action>) {
     let account = a.config.id.as_str();
-    let change = s.calendar_groups_change(account).err().map(group_refusal_text);
-    if entry(ui, Icon::CalendarAdd, tl!("New calendar group…"), false, change.is_none(), change) {
+    let create = s.calendar_groups_change(account).err().map(group_refusal_text);
+    if entry(ui, Icon::CalendarAdd, tl!("New calendar group…"), false, create.is_none(), create) {
         acts.push(Action::Dialog(Dialog::new_calendar_group(account)));
     }
     let Some(at) = s.pim.get(account).and_then(|p| p.calendar_groups.iter().position(|g| g.eq_ignore_ascii_case(group))) else {
@@ -184,14 +186,16 @@ pub(super) fn group_menu(ui: &mut Ui, s: &Session, a: &AccountState, group: &str
     };
     let n = s.pim.get(account).map(|p| p.calendar_groups.len()).unwrap_or(0);
     ui.separator();
-    if entry(ui, Icon::Rename, tl!("Rename group…"), false, change.is_none(), change) {
+    let rename = s.calendar_group_rename(account, group).err().map(group_refusal_text);
+    if entry(ui, Icon::Rename, tl!("Rename group…"), false, rename.is_none(), rename) {
         acts.push(Action::Dialog(Dialog::rename_calendar_group(account, group)));
     }
-    if entry(ui, Icon::Delete, tl!("Delete group…"), false, change.is_none(), change) {
+    let delete = s.calendar_group_delete(account, group).err().map(group_refusal_text);
+    if entry(ui, Icon::Delete, tl!("Delete group…"), false, delete.is_none(), delete) {
         acts.push(Action::Dialog(Dialog::delete_calendar_group(account, group)));
     }
     ui.separator();
-    let order = s.calendar_group_order(account).err().map(group_refusal_text);
+    let order = s.calendar_group_order(account, group).err().map(group_refusal_text);
     if entry(ui, Icon::ChevronUp, tl!("Move up"), false, order.is_none() && at > 0, order) {
         acts.push(Action::Run("calendar.group.move", json!({"account": account, "group": group, "up": true})));
     }

@@ -2498,3 +2498,5 @@ presence	Offline	오프라인
 	Microsoft 365 can't move a calendar between groups	Microsoft 365는 일정을 그룹 간에 이동할 수 없습니다
 	Group name	그룹 이름
 	This calendar isn't in Outlook's calendar groups yet	이 일정은 아직 Outlook의 일정 그룹에 없습니다
+	Outlook's own calendar group can't be changed here	Outlook의 일정 그룹은 여기에서 변경할 수 없습니다
+	A calendar group that still holds calendars can't be deleted here	일정이 남아 있는 일정 그룹은 여기에서 삭제할 수 없습니다

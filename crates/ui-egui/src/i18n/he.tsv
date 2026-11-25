@@ -2495,3 +2495,5 @@ presence	Offline	לא מחובר
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 אינו יכול להעביר יומן בין קבוצות
 	Group name	שם הקבוצה
 	This calendar isn't in Outlook's calendar groups yet	היומן הזה עדיין לא נמצא בקבוצת יומנים של Outlook
+	Outlook's own calendar group can't be changed here	לא ניתן לשנות כאן קבוצת יומנים של Outlook
+	A calendar group that still holds calendars can't be deleted here	לא ניתן למחוק כאן קבוצת יומנים שעדיין מכילה יומנים

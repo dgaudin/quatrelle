@@ -202,7 +202,7 @@ fn groups_come_in_the_order_their_headers_give() {
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
     let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
-    assert_eq!(shortcuts.groups, ["Salles", "Équipe"], "the smaller ordinal comes first");
+    assert_eq!(shortcuts.groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["Salles", "Équipe"], "the smaller ordinal comes first");
     assert_eq!(shortcuts.links.len(), 1);
 }
 
@@ -236,7 +236,7 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     ];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let names = |c: &crate::ews::Client| crate::ews_pim::calendar_links(c).unwrap().groups;
+    let names = |c: &crate::ews::Client| crate::ews_pim::calendar_links(c).unwrap().groups.into_iter().map(|g| g.name).collect::<Vec<_>>();
     let ana = |c: &crate::ews::Client| {
         crate::ews_pim::calendar_links(c).unwrap().links.into_iter().find(|l| l.email == "ana@contoso.example").map(|l| l.group)
     };
@@ -244,18 +244,17 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     crate::ews_pim::create_calendar_group(&c, "Salles").unwrap();
     assert_eq!(names(&c), ["Équipe", "Salles"]);
 
-    crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe Studio").unwrap();
-    assert_eq!(names(&c), ["Équipe Studio", "Salles"]);
-    assert_eq!(ana(&c).as_deref(), Some("Équipe Studio"));
+    crate::ews_pim::rename_calendar_group(&c, "Salles", "Salles Studio").unwrap();
+    assert_eq!(names(&c), ["Équipe", "Salles Studio"]);
 
-    crate::ews_pim::move_calendar_group(&c, "Salles", true).unwrap();
-    assert_eq!(names(&c), ["Salles", "Équipe Studio"]);
+    crate::ews_pim::move_calendar_group(&c, "Salles Studio", true).unwrap();
+    assert_eq!(names(&c), ["Salles Studio", "Équipe"]);
 
-    crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Lima", "Salles").unwrap();
-    assert_eq!(ana(&c).as_deref(), Some("Salles"));
+    crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Lima", "Salles Studio").unwrap();
+    assert_eq!(ana(&c).as_deref(), Some("Salles Studio"));
 
-    crate::ews_pim::delete_calendar_group(&c, "Salles").unwrap();
-    assert_eq!(names(&c), ["Équipe Studio"]);
+    crate::ews_pim::delete_calendar_group(&c, "Salles Studio").unwrap();
+    assert_eq!(names(&c), ["Équipe"]);
     assert_eq!(ana(&c), None, "the group's shared calendar left the list");
     let kept = server.data.lock().unwrap();
     assert!(kept.wlinks.contains(&favorites), "another section's shortcut is untouched, byte for byte");
@@ -312,36 +311,20 @@ fn a_malformed_shortcut_is_never_renamed_or_deleted() {
     let mut d = Data::default();
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
-    d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
     let link = "IPM.Microsoft.WunderBar.Link";
-    let team = guid(0x10);
-    d.wlinks = vec![
-        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", team.clone()), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]),
-        wlink_of(
-            link,
-            3,
-            2,
-            "Ana Lima",
-            &[
-                ("0x6850", "Binary", team.clone()),
-                ("0x6851", "String", "Équipe".into()),
-                ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
-                ("0x684B", "Binary", crate::imap::base64(&[0x11])),
-            ],
-        ),
-        // The same group's name, but no address book entry and no id: not a shortcut this reads.
-        wlink_of(link, 3, 2, "Half a shortcut", &[("0x6851", "String", "Équipe".into())]),
-    ];
+    d.wlinks = Vec::new();
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe Studio").unwrap();
+    crate::ews_pim::create_calendar_group(&c, "Studio").unwrap();
+    let malformed = wlink_of(link, 3, 2, "Half a shortcut", &[("0x6851", "String", "Studio".into())]);
+    server.data.lock().unwrap().wlinks.push(malformed);
+    crate::ews_pim::rename_calendar_group(&c, "Studio", "Studio 2").unwrap();
     let kept = server.data.lock().unwrap();
     let item = |id: &str| kept.wlinks.iter().find(|w| w.contains(&format!("Id=\"{id}\""))).cloned().unwrap_or_default();
-    assert!(item("WAna Lima").contains(">Équipe Studio<"), "the shortcut that reads whole is renamed: {}", item("WAna Lima"));
-    assert!(item("WHalf a shortcut").contains(">Équipe<"), "the malformed shortcut keeps its group name: {}", item("WHalf a shortcut"));
-    assert!(!item("WHalf a shortcut").contains("Équipe Studio"), "the malformed shortcut isn't renamed");
+    assert!(item("WHalf a shortcut").contains(">Studio<"), "the malformed shortcut keeps its group name: {}", item("WHalf a shortcut"));
+    assert!(!item("WHalf a shortcut").contains("Studio 2"), "the malformed shortcut isn't renamed");
     drop(kept);
-    crate::ews_pim::delete_calendar_group(&c, "Équipe Studio").unwrap();
+    crate::ews_pim::delete_calendar_group(&c, "Studio 2").unwrap();
     let kept = server.data.lock().unwrap();
     assert!(kept.wlinks.iter().any(|w| w.contains("Half a shortcut")), "the malformed shortcut isn't deleted with the group");
 }
@@ -500,6 +483,53 @@ fn a_group_whose_calendars_all_fail_to_resolve_is_kept() {
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
     let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
-    assert_eq!(shortcuts.groups, ["Équipe"], "the header stays");
+    assert_eq!(shortcuts.groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["Équipe"], "the header stays");
     assert!(shortcuts.links.is_empty(), "no address resolved");
+}
+
+/// A group Outlook made (its header has Outlook's save stamp, not ours) is protected: its
+/// rename and move are refused, and it can only be deleted while it holds no calendar.
+#[test]
+fn an_outlook_group_is_protected() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let team = guid(0x10);
+    d.wlinks = vec![
+        wlink_of(
+            link,
+            3,
+            4,
+            "Équipe",
+            &[("0x6842", "Binary", team.clone()), ("0x6847", "Integer", "305419896".into()), ("0x684B", "Binary", crate::imap::base64(&[0x10]))],
+        ),
+        wlink_of(
+            link,
+            3,
+            4,
+            "Autres calendriers",
+            &[("0x6842", "Binary", guid(0x20)), ("0x6847", "Integer", "305419896".into()), ("0x684B", "Binary", crate::imap::base64(&[0x20]))],
+        ),
+        wlink_of(
+            link,
+            3,
+            2,
+            "Ana Lima",
+            &[
+                ("0x6850", "Binary", team),
+                ("0x6851", "String", "Équipe".into()),
+                ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
+                ("0x684B", "Binary", crate::imap::base64(&[0x11])),
+            ],
+        ),
+    ];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    assert!(crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe 2").is_err(), "Outlook's group isn't renamed");
+    assert!(crate::ews_pim::delete_calendar_group(&c, "Équipe").is_err(), "a group that holds calendars isn't deleted");
+    assert!(crate::ews_pim::move_calendar_group(&c, "Équipe", true).is_err(), "Outlook's group isn't moved");
+    crate::ews_pim::delete_calendar_group(&c, "Autres calendriers").unwrap();
+    assert!(!crate::ews_pim::calendar_links(&c).unwrap().groups.iter().any(|g| g.name == "Autres calendriers"), "an empty group may go");
 }

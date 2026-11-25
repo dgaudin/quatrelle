@@ -2499,3 +2499,5 @@ presence	Offline	离线
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 无法在组之间移动日历
 	Group name	组名
 	This calendar isn't in Outlook's calendar groups yet	此日历还不在 Outlook 的某个日历组中
+	Outlook's own calendar group can't be changed here	Outlook 的日历组无法在此更改
+	A calendar group that still holds calendars can't be deleted here	仍包含日历的日历组无法在此删除

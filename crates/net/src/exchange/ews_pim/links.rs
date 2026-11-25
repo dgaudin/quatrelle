@@ -26,11 +26,19 @@ pub(crate) struct CalendarLink {
     pub group: String,
 }
 
+/// A group of the Calendar pane: its name, and whether Quatrelle wrote its header (so it may be
+/// renamed, moved or deleted here; the save stamp is the writer's session, [MS-OXOCFG] 2.2.9.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CalendarGroup {
+    pub name: String,
+    pub ours: bool,
+}
+
 /// What the Common Views folder says of the Calendar pane: its groups in Outlook's order, and the
 /// calendars kept in them (the account's own ones have no address).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Shortcuts {
-    pub groups: Vec<String>,
+    pub groups: Vec<CalendarGroup>,
     pub links: Vec<CalendarLink>,
 }
 
@@ -97,10 +105,11 @@ const MAX_NAME: usize = 255;
 /// The properties a shortcut carries that this reads: class, name, header id, type, ordinal,
 /// entry and store ids, folder type, group id, group name, section and address book entry id
 /// ([MS-OXOCFG] 2.2.9.1–2.2.9.16).
-const PROPS: [(&str, &str); 12] = [
+const PROPS: [(&str, &str); 13] = [
     ("0x001A", "String"),
     ("0x0E1D", "String"),
     ("0x6842", "Binary"),
+    ("0x6847", "Integer"),
     ("0x6849", "Integer"),
     ("0x684B", "Binary"),
     ("0x684C", "Binary"),
@@ -217,6 +226,7 @@ struct Wlink {
     group_id: Option<String>,
     header_id: Option<String>,
     ordinal: Vec<u8>,
+    save_stamp: Option<i64>,
     address_book_eid: Option<Vec<u8>>,
 }
 
@@ -274,6 +284,7 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
             group_id: guid_prop(it, "0x6850"),
             header_id: guid_prop(it, "0x6842"),
             ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
+            save_stamp: int_prop(it, "0x6847"),
             address_book_eid: bin_prop(it, "0x6854"),
         });
     }
@@ -293,16 +304,17 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
     // The groups, in Outlook's order: the headers by their ordinals, then a group a member
     // names without a header (it may hold only an entry that doesn't resolve).
     let group_of = |w: &Wlink| w.group_id.as_ref().and_then(|id| headers.get(id)).cloned().unwrap_or_else(|| w.group_name.clone());
-    let mut group_headers: Vec<(String, Vec<u8>)> = wlinks
-        .iter()
-        .filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty())
-        .map(|w| (w.name.clone(), w.ordinal.clone()))
-        .collect();
-    group_headers.sort_by(|a, b| a.1.cmp(&b.1));
-    let mut groups: Vec<String> = Vec::new();
-    for (name, _) in group_headers {
-        if !groups.iter().any(|g| g.eq_ignore_ascii_case(&name)) {
-            groups.push(name);
+    let mut group_headers: Vec<&Wlink> =
+        wlinks.iter().filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty()).collect();
+    group_headers.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
+    let stamp = i64::from(c.group_stamp());
+    let mut groups: Vec<CalendarGroup> = Vec::new();
+    for w in group_headers {
+        let ours = w.save_stamp == Some(stamp);
+        if let Some(g) = groups.iter_mut().find(|g| g.name.eq_ignore_ascii_case(&w.name)) {
+            g.ours |= ours;
+        } else {
+            groups.push(CalendarGroup { name: w.name.clone(), ours });
         }
     }
     for w in &wlinks {
@@ -310,8 +322,8 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
             continue;
         }
         let group = group_of(w);
-        if !group.is_empty() && !groups.iter().any(|g| g.eq_ignore_ascii_case(&group)) {
-            groups.push(group);
+        if !group.is_empty() && !groups.iter().any(|g| g.name.eq_ignore_ascii_case(&group)) {
+            groups.push(CalendarGroup { name: group, ours: false });
         }
     }
     if groups.len() > MAX_GROUPS {
