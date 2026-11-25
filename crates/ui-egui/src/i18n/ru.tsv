@@ -2493,6 +2493,7 @@ presence	Offline	Не в сети
 	Add Reminder…	Добавить напоминание…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Напоминание — это день (YYYY-MM-DD) и время (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	«{name}» — это день, YYYY-MM-DD
+	The start date is after the due date	Дата начала позже даты окончания
 	Remove from List	Удалить из списка
 	Add to Favorites	Добавить в избранное
 	Open contact	Открыть контакт

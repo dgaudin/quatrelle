@@ -2493,6 +2493,7 @@ presence	Offline	Desconectado
 	Add Reminder…	Agregar recordatorio…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	El recordatorio es un día (YYYY-MM-DD) y una hora (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	«{name}» es un día, YYYY-MM-DD
+	The start date is after the due date	La fecha de inicio es posterior a la fecha de vencimiento
 	Remove from List	Quitar de la lista
 	Add to Favorites	Agregar a favoritos
 	Open contact	Abrir contacto

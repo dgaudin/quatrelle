@@ -375,9 +375,14 @@ fn heading_of(s: &Session, r: &TodoRef, arrange: TaskArrange, today: i64) -> Opt
             .to_string(),
             false,
         )),
-        TaskArrange::Categories => {
-            Some((r.task().and_then(|t| t.task.categories.first()).cloned().unwrap_or_else(|| tl!("No category").to_string()), false))
-        }
+        TaskArrange::Categories => Some((
+            match r {
+                TodoRef::Task(t) => t.task.categories.first().cloned(),
+                TodoRef::Mail(m) => m.categories.first().cloned(),
+            }
+            .unwrap_or_else(|| tl!("No category").to_string()),
+            false,
+        )),
         TaskArrange::Folder => Some((
             match r {
                 TodoRef::Task(t) => s
@@ -440,7 +445,10 @@ fn detail_row(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TodoRe
             ui.add_sized(vec2(90.0, 18.0), egui::Label::new(RichText::new(due).color(if late { t.danger } else { t.dim }).small()).truncate());
             let percent = r.task().map(|task| format!("{} %", task.task.percent)).unwrap_or_default();
             ui.add_sized(vec2(76.0, 18.0), egui::Label::new(RichText::new(percent).color(t.dim).small()).truncate());
-            let categories = r.task().map(|task| task.task.categories.join(", ")).unwrap_or_default();
+            let categories = match r {
+                TodoRef::Task(t) => t.task.categories.join(", "),
+                TodoRef::Mail(m) => m.categories.join(", "),
+            };
             ui.add_sized(vec2(120.0, 18.0), egui::Label::new(RichText::new(categories).color(t.dim).small()).truncate());
             let folder = match r {
                 TodoRef::Task(task) => s

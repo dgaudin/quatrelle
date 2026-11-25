@@ -2491,6 +2491,7 @@ presence	Offline	오프라인
 	Add Reminder…	미리 알림 추가…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	미리 알림은 날짜(YYYY-MM-DD)와 시간(HH:MM)입니다
 	`{name}` is a day, YYYY-MM-DD	'{name}'은(는) 날짜입니다(YYYY-MM-DD)
+	The start date is after the due date	시작일이 마감일보다 늦습니다
 	Remove from List	목록에서 제거
 	Add to Favorites	즐겨찾기에 추가
 	Open contact	연락처 열기

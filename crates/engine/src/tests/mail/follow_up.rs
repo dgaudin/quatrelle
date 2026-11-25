@@ -468,3 +468,15 @@ fn a_reminder_answer_stays_unless_the_reminder_changes() {
     assert!(s.due_reminders(now).iter().all(|r| r.uid != idd), "deleted: doesn't ring");
     done(s);
 }
+
+/// mail.flag needs a message: with neither a key nor a selection it's disabled, as its
+/// neighbours in Home › Tags; from the To-Do List, the key alone works.
+#[test]
+fn mail_flag_needs_a_message() {
+    let mut s = sample_session("flag-needs-a-message");
+    assert!(matches!(s.run("mail.flag", &json!({"due": "today"})), Err(CmdError::Disabled(_))), "no selection: disabled, whatever the params");
+    let k = key_of(&s, "Character turnarounds");
+    s.run("mail.flag", &json!({"key": k["key"], "due": "today"})).unwrap();
+    assert!(turnaround(&s).flags.flagged, "by key, without a selection: works");
+    done(s);
+}

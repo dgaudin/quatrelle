@@ -2492,6 +2492,7 @@ presence	Offline	Offline
 	Add Reminder…	Adicionar lembrete…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	O lembrete é um dia (YYYY-MM-DD) e um horário (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	"{name}" é um dia, YYYY-MM-DD
+	The start date is after the due date	A data de início é posterior à data de vencimento
 	Remove from List	Remover da lista
 	Add to Favorites	Adicionar aos favoritos
 	Open contact	Abrir contato

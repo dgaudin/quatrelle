@@ -2495,6 +2495,7 @@ presence	Offline	離線
 	Add Reminder…	新增提醒…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	提醒是一個日期 (YYYY-MM-DD) 和時間 (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	「{name}」是一個日期，YYYY-MM-DD
+	The start date is after the due date	開始日期晚於到期日期
 	Remove from List	從清單中移除
 	Add to Favorites	加到我的最愛
 	Open contact	開啟連絡人

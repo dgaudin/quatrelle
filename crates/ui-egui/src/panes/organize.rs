@@ -85,12 +85,13 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
             })
             .inner;
         if clicked {
-            acts.push(Action::Run("mail.flag", params(json!({"due": f.code()}))));
+            // As Outlook's presets set them: the start day is the due day.
+            acts.push(Action::Run("mail.flag", params(json!({"due": f.code(), "start": f.code()}))));
             ui.close();
         }
     }
     if ui.selectable_label(false, tl!("No date")).clicked() {
-        acts.push(Action::Run("mail.flag", params(json!({"due": "none"}))));
+        acts.push(Action::Run("mail.flag", params(json!({"due": "none", "start": "none"}))));
         ui.close();
     }
     if ui.button(tl!("Custom…")).clicked() {

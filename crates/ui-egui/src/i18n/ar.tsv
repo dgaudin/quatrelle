@@ -2488,6 +2488,7 @@ presence	Offline	غير متصل
 	Add Reminder…	إضافة تذكير…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	التذكير هو يوم (YYYY-MM-DD) ووقت (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	«{name}» هو يوم، YYYY-MM-DD
+	The start date is after the due date	تاريخ البدء بعد تاريخ الاستحقاق
 	Remove from List	إزالة من القائمة
 	Add to Favorites	إضافة إلى المفضلة
 	Open contact	فتح جهة الاتصال

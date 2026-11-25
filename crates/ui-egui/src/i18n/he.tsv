@@ -2488,6 +2488,7 @@ presence	Offline	לא מחובר
 	Add Reminder…	הוספת תזכורת…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	התזכורת היא יום (YYYY-MM-DD) ושעה (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	"{name}" הוא יום, YYYY-MM-DD
+	The start date is after the due date	תאריך ההתחלה הוא אחרי תאריך היעד
 	Remove from List	הסרה מהרשימה
 	Add to Favorites	הוספה למועדפים
 	Open contact	פתיחת איש קשר

@@ -575,3 +575,54 @@ fn the_todo_bar_setting_reads_and_writes_as_an_older_version_reads_it() {
     assert_eq!(on["tasks"], json!(true), "the ticked part is remembered, not the calendar alone: {on}");
     done(s);
 }
+
+/// Next 7 Days covers seven days, not eight: due in seven days is out of it, in six is in.
+#[test]
+fn next_seven_days_covers_seven_days() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("next-7");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let day = |n| quatrelle_model::dates::day_string(today + n);
+    s.run("task.create", &json!({"subject": "In six", "due": day(6)})).unwrap();
+    s.run("task.create", &json!({"subject": "In seven", "due": day(7)})).unwrap();
+    s.run("task.create", &json!({"subject": "In eight", "due": day(8)})).unwrap();
+    let v = s.todo_view("todo", "", true, TaskView::NextSevenDays, TaskArrange::DueDate);
+    let names: Vec<&str> = v.iter().map(|r| r.subject()).collect();
+    assert!(names.contains(&"In six"), "{names:?}");
+    assert!(!names.contains(&"In seven") && !names.contains(&"In eight"), "seven days, not eight: {names:?}");
+    done(s);
+}
+
+/// Arrange By › Categories puts a flagged message under its category, beside the tasks of it,
+/// not under "No category".
+#[test]
+fn flagged_mail_is_arranged_by_its_categories() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("todo-categories");
+    s.run("task.create", &json!({"subject": "Plain task"})).unwrap();
+    s.run("task.create", &json!({"subject": "Work task", "categories": "Work"})).unwrap();
+    let k = key_of(&s, "Character turnarounds");
+    s.run("list.select", &k).unwrap();
+    s.run("mail.categorize", &json!({"category": "Work"})).unwrap();
+    s.run("mail.flag", &json!({"due": "2026-12-01"})).unwrap();
+    let list = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::Categories);
+    let names: Vec<&str> = list.iter().map(|r| r.subject()).collect();
+    let at = |n: &str| names.iter().position(|x| *x == n);
+    let (plain, work, mail) = (at("Plain task"), at("Work task"), at("Character turnarounds"));
+    assert!(
+        matches!((plain, work, mail), (Some(p), Some(w), Some(m)) if m > p && (m as i64 - w as i64).abs() == 1),
+        "the flagged message sits with the Work task: {names:?}"
+    );
+    done(s);
+}
+
+/// Favorite people read back from disk are capped (200, plausible addresses), as a damaged or
+/// hostile file may have more.
+#[test]
+fn favorite_people_read_from_disk_are_capped() {
+    let many: Vec<String> = (0..300).map(|i| format!("p{i}@x.example")).collect();
+    let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": many})).unwrap();
+    assert_eq!(p.favorite_people.len(), 200, "capped at 200");
+    let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": ["", "ok@x.example", "x".repeat(300)]})).unwrap();
+    assert_eq!(p.favorite_people, vec!["ok@x.example".to_string()], "empty and over-long addresses left out");
+}

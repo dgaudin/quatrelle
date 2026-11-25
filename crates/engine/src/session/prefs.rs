@@ -131,7 +131,7 @@ pub struct Prefs {
     pub task_arranges: BTreeMap<String, quatrelle_model::pim::tasks::TaskArrange>,
     /// The people in the To-Do bar's People part (Outlook's favorite people): their addresses,
     /// in the order shown. Kept on this computer (the contacts themselves are in the books).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "checked_people")]
     pub favorite_people: Vec<String>,
     /// Mail received in the last this many days kept on this computer, whole (0: all of it), as
     /// Outlook's "Mail to keep offline" in Cached Exchange Mode; older mail is read on the server.
@@ -621,6 +621,13 @@ fn checked_days<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<Strin
 /// A setting that was on before it existed.
 fn yes() -> bool {
     true
+}
+
+/// Favorite people read from disk: at most 200 of them, each a plausible address (not empty, not
+/// over 254 bytes), as a damaged or hostile file may have more.
+fn checked_people<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let read = <Vec<String> as serde::Deserialize>::deserialize(d)?;
+    Ok(read.into_iter().filter(|a| !a.trim().is_empty() && a.len() <= 254).take(200).collect())
 }
 
 /// The To-Do bar's on/off as saved: a bool, or (as a version that gave it parts wrote it) the

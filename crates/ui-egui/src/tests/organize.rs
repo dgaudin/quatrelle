@@ -807,3 +807,18 @@ fn the_follow_up_dialog_opened_on_a_key_edits_that_message() {
     assert!(!sel_m.flags.flagged && a.session.follow_up_due(&sel_m).is_none(), "the selected one is untouched: {:?}", sel_m.flags);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Follow Up › Custom… refuses a start date after the due date.
+#[test]
+fn the_follow_up_dialog_refuses_a_start_after_the_due() {
+    let (a, dir) = app("follow-up-start-after-due");
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    f.start = "2026-12-05".into();
+    f.due = "2026-12-01".into();
+    assert!(f.check().is_some(), "a start after the due is refused: {:?}", f.check());
+    f.start = "2026-12-01".into();
+    assert_eq!(f.check(), None, "the same day is fine");
+    f.start = "2026-11-30".into();
+    assert_eq!(f.check(), None, "before is fine");
+    let _ = std::fs::remove_dir_all(dir);
+}

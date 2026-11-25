@@ -202,7 +202,7 @@
 	Remove	Retirer
 	Remove account?	Retirer le compte ?
 	Remove account…	Retirer le compte…
-	Remove from Favorites	Retirer des Favoris
+	Remove from Favorites	Retirer des favoris
 	Remove…	Retirer…
 	Rename	Renommer
 	Rename folder	Renommer le dossier
@@ -2493,6 +2493,7 @@ presence	Offline	Hors ligne
 	Add Reminder…	Ajouter un rappel…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Le rappel est un jour (YYYY-MM-DD) et une heure (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	« {name} » est un jour, YYYY-MM-DD
+	The start date is after the due date	La date de début est après l'échéance
 	Remove from List	Retirer de la liste
 	Add to Favorites	Ajouter aux favoris
 	Open contact	Ouvrir le contact
@@ -2510,5 +2511,5 @@ presence	Offline	Hors ligne
 	Importance	Importance
 	Type	Type
 	No category	Aucune catégorie
-	Flagged messages	Messages signalés
+	Flagged messages	Messages avec indicateur
 	In folder	Dans le dossier

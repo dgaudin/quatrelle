@@ -2489,6 +2489,7 @@ presence	Offline	Offline
 	Add Reminder…	Herinnering toevoegen…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	De herinnering is een dag (YYYY-MM-DD) en een tijd (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	'{name}' is een dag, YYYY-MM-DD
+	The start date is after the due date	De startdatum ligt na de vervaldatum
 	Remove from List	Uit de lijst verwijderen
 	Add to Favorites	Toevoegen aan favorieten
 	Open contact	Contact openen

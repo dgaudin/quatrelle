@@ -260,7 +260,13 @@ pub(super) fn flag(s: &mut Session, v: &Value) -> CmdResult {
     // The message named by `key` (a row of the To-Do List), or the list's selection.
     let sel: Vec<std::sync::Arc<quatrelle_model::Summary>> = match p::str(v, "key") {
         Some(id) => vec![s.message_by_id(id).ok_or_else(|| CmdError::Params(format!("no message kept as `{id}`")))?],
-        None => s.selected(),
+        None => {
+            let sel = s.selected();
+            if sel.is_empty() {
+                return Err(CmdError::Disabled("no message selected".into()));
+            }
+            sel
+        }
     };
     if p::bool(v, "complete") == Some(true) {
         return s.complete_for(&sel);

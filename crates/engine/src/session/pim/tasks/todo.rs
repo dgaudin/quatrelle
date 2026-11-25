@@ -81,7 +81,7 @@ impl Session {
         match view {
             TaskView::Active => items.retain(|r| !r.is_complete()),
             TaskView::Completed => items.retain(|r| r.is_complete()),
-            TaskView::NextSevenDays => items.retain(|r| r.due().is_some_and(|d| (today..=today.saturating_add(7)).contains(&d)) && !r.is_complete()),
+            TaskView::NextSevenDays => items.retain(|r| r.due().is_some_and(|d| (today..today.saturating_add(7)).contains(&d)) && !r.is_complete()),
             TaskView::Overdue => items.retain(|r| !r.is_complete() && r.due().is_some_and(|d| d < today)),
             TaskView::SimpleList | TaskView::Detailed | TaskView::Prioritized => {}
         }
@@ -101,7 +101,7 @@ impl Session {
             TaskArrange::Categories => items.sort_by_cached_key(|r| {
                 let category = match r {
                     TodoRef::Task(t) => t.task.categories.first().map(|c| c.to_lowercase()).unwrap_or_default(),
-                    TodoRef::Mail(_) => String::new(),
+                    TodoRef::Mail(m) => m.categories.first().map(|c| c.to_lowercase()).unwrap_or_default(),
                 };
                 (category, due(r), r.subject().to_lowercase(), r.uid())
             }),
@@ -143,6 +143,8 @@ pub struct FlaggedMail {
     pub due: Option<i64>,
     pub start: Option<i64>,
     pub reminder: Option<i64>,
+    /// Its categories, as a task's are (Arrange By › Categories and the Detailed view's column).
+    pub categories: Vec<String>,
     /// Its follow-up marked complete (then it shows only with the completed ones).
     pub complete: bool,
 }
@@ -319,6 +321,7 @@ impl Session {
                 due: self.follow_up_due_any(m),
                 start: self.follow_up_start(m),
                 reminder: self.follow_up_reminder(m),
+                categories: self.categories_of(m).into_iter().map(|c| c.name.clone()).collect(),
                 complete: done,
             }));
         });

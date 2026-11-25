@@ -77,10 +77,21 @@ impl FollowUpForm {
     /// `HH:MM`.
     pub(crate) fn check(&self) -> Option<String> {
         if self.dates {
-            for (name, text) in [("start", &self.start), ("due", &self.due)] {
-                if !text.trim().is_empty() && pickers::day_of(text).is_none() {
-                    return Some(tf!("`{name}` is a day, YYYY-MM-DD", name = name));
+            let mut days = Vec::new();
+            for (name, label, text) in [("start", tl!("Start date"), &self.start), ("due", tl!("Due date"), &self.due)] {
+                if !text.trim().is_empty() {
+                    match pickers::day_of(text) {
+                        Some(d) => days.push((name, d)),
+                        None => return Some(tf!("`{name}` is a day, YYYY-MM-DD", name = label)),
+                    }
                 }
+            }
+            // A start after the due makes no task.
+            if let [(s_name, s), (d_name, d)] = days.as_slice()
+                && s > d
+            {
+                let _ = (s_name, d_name);
+                return Some(tf!("The start date is after the due date"));
             }
         }
         if self.remind {

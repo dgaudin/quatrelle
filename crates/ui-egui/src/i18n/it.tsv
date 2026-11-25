@@ -2491,6 +2491,7 @@ presence	Offline	Offline
 	Add Reminder…	Aggiungi promemoria…
 	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Il promemoria è un giorno (YYYY-MM-DD) e un'ora (HH:MM)
 	`{name}` is a day, YYYY-MM-DD	"{name}" è un giorno, YYYY-MM-DD
+	The start date is after the due date	La data di inizio è successiva alla scadenza
 	Remove from List	Rimuovi dall'elenco
 	Add to Favorites	Aggiungi ai preferiti
 	Open contact	Apri contatto
