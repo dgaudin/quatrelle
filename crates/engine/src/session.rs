@@ -926,7 +926,17 @@ fn follow_up_id(m: &Summary) -> String {
 }
 
 /// The key a flagged message's reminder is answered under: by its Message-ID, so moving the
-/// message to another folder doesn't make it ring again.
-pub(crate) fn mail_reminder_key(account: &str, m: &Summary) -> String {
-    format!("{account}|mail|{}", m.follow_up_id())
+/// message to another folder doesn't make it ring again, and with the reminder's time, so a
+/// reminder set anew — here or on the server, as Outlook does — rings again instead of finding
+/// the answer given to the old one (and the old answers go with the years, as the key ends in
+/// a time).
+pub(crate) fn mail_reminder_key(account: &str, m: &Summary, reminder: i64) -> String {
+    format!("{account}|mail|{}|{reminder}", m.follow_up_id())
+}
+
+/// Take off every answer given to a flagged message's reminders, whatever time they were for:
+/// the reminder changed or the flag went, and the next one is to ring.
+pub(crate) fn forget_mail_reminder_answers(prefs: &mut Prefs, account: &str, id: &str) {
+    let prefix = format!("{account}|mail|{id}|");
+    prefs.reminders.retain(|k, _| !k.starts_with(&prefix));
 }

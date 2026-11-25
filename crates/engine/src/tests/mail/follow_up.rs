@@ -615,3 +615,56 @@ fn a_named_start_does_not_rewrite_the_servers_due() {
     assert!(matches!(paired.unwrap(), quatrelle_model::Op::SetFollowUp { keys, .. } if keys[0].uid == 2), "the message without a due got both");
     done(s);
 }
+
+/// Clear Flag on a message with neither a flag nor a date on the server writes nothing there:
+/// an UpdateItem deleting eight properties the message doesn't have is not sent.
+#[test]
+fn clear_flag_on_a_message_with_nothing_there_writes_nothing() {
+    let mut s = sample_session("clear-flag-nothing");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    let m = std::sync::Arc::new(m);
+    s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().all(|j| !matches!(j, Job::Apply { op: Op::SetFollowUp { .. }, .. })),
+        "no follow-up write for a message with nothing on the server: {jobs:?}"
+    );
+    done(s);
+}
+
+/// A reminder moved on the server (Outlook) rings again: the answer is kept under the
+/// reminder's own time, so the new time has no answer yet — a dismissal doesn't outlive the
+/// reminder it answered.
+#[test]
+fn a_reminder_moved_on_the_server_rings_again() {
+    let mut s = sample_session("reminder-moved-on-server");
+    let k = key_of(&s, "Character turnarounds");
+    let now = s.clock.now;
+    s.run("list.select", &k).unwrap();
+    s.run("mail.flag", &json!({"reminder": now - 60})).unwrap();
+    let m = turnaround(&s);
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("the flag's reminder is due");
+    s.run("reminders.dismiss", &json!({"key": due.key})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "dismissed");
+    // The server says the reminder moved (a sync reads it into the message's flags).
+    {
+        let ck = (m.key.account.clone(), m.key.folder.clone());
+        let st = s.cache.get_mut(&ck).unwrap();
+        let mm = st.messages.iter_mut().find(|x| x.key.uid == m.key.uid).unwrap();
+        std::sync::Arc::make_mut(mm).flags.follow_up.reminder = now - 30;
+    }
+    assert!(
+        s.due_reminders(now).iter().any(|r| r.message.as_ref() == Some(&m.key)),
+        "a reminder moved on the server rings again, not answered under the old time"
+    );
+    done(s);
+}

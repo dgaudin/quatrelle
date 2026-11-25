@@ -381,10 +381,17 @@ impl Session {
         let has = |text: &str| quatrelle_model::search::fold_word(text).contains(q.as_ref());
         let today = quatrelle_model::dates::today(&self.clock);
         let mut list: Vec<TodoRef> = self.tasks(query, completed).into_iter().map(TodoRef::Task).collect();
-        self.scan_mail(|account, _, m| {
+        // The folders' roles, to leave Junk and Trash out as the reminders do: a row that
+        // never rings isn't listed either.
+        let roles: std::collections::HashMap<(&str, &str), quatrelle_model::FolderRole> =
+            self.accounts.iter().flat_map(|a| a.folders.iter().map(move |f| ((a.config.id.as_str(), f.path.as_str()), f.role))).collect();
+        self.scan_mail(|account, folder, m| {
             // Flagged and not done, or (with the completed ones shown) a follow-up done.
             let done = m.flags.follow_up_complete();
             if m.flags.deleted || (!done && !m.flags.flagged) || (done && !completed) {
+                return;
+            }
+            if matches!(roles.get(&(account, folder)), Some(quatrelle_model::FolderRole::Junk | quatrelle_model::FolderRole::Trash)) {
                 return;
             }
             let subject = self.follow_up_title(m).unwrap_or(&m.subject).to_string();

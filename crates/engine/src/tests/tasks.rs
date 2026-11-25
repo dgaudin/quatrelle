@@ -718,3 +718,30 @@ fn a_disk_only_row_is_edited_by_its_key() {
     assert!(r.is_ok(), "mail.flag by the key of a disk-only row: {r:?}");
     done(s);
 }
+
+/// The To-Do List leaves Junk and Trash out, as the reminders do: a flagged message there
+/// never rings, so it isn't listed either.
+#[test]
+fn junk_and_trash_are_not_in_the_todo_list() {
+    let mut s = sample_session("todo-junk");
+    for (path, role) in [("Junk Email", quatrelle_model::FolderRole::Junk), ("Trash", quatrelle_model::FolderRole::Trash)] {
+        s.accounts[0].folders.push(quatrelle_model::Folder {
+            account: "sample".into(),
+            path: path.into(),
+            role,
+            selectable: true,
+            ..Default::default()
+        });
+    }
+    s.mail_stamp = s.mail_stamp.wrapping_add(1); // as the Folders event that brought them does
+    for path in ["Junk Email", "Trash"] {
+        let mut m: Summary = (*s.list[0]).clone();
+        m.key.folder = path.into();
+        m.flags.flagged = true;
+        let st = quatrelle_store::FolderState { validity: 1, messages: vec![std::sync::Arc::new(m)], ..Default::default() };
+        s.cache.insert(("sample".into(), path.into()), st);
+    }
+    let list = s.todo("", false);
+    assert!(list.iter().all(|r| r.mail().is_none_or(|m| m.key.folder != "Junk Email" && m.key.folder != "Trash")), "no Junk or Trash row: {list:?}");
+    done(s);
+}

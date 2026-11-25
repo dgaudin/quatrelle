@@ -185,7 +185,12 @@ fn same_change(a: &Op, b: &Op) -> bool {
     match (a, b) {
         (Op::SetFlag { flag: x, .. }, Op::SetFlag { flag: y, .. }) => x == y,
         (Op::SetKeyword { keyword: x, .. }, Op::SetKeyword { keyword: y, .. }) => x.eq_ignore_ascii_case(y),
-        (Op::SetFollowUp { .. }, Op::SetFollowUp { .. }) => true,
+        // Two follow-up changes are the same one only when they name the same fields: one that
+        // names the start doesn't stand in for one that names the due.
+        (
+            Op::SetFollowUp { start: s1, due: d1, reminder: r1, title: t1, .. },
+            Op::SetFollowUp { start: s2, due: d2, reminder: r2, title: t2, .. },
+        ) => s1 == s2 && d1 == d2 && r1 == r2 && t1 == t2,
         _ => false,
     }
 }

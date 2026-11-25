@@ -59,7 +59,11 @@ impl Session {
         let mut restore: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
         if !on {
             for m in sel {
-                if server_side(&m.key.account) {
+                // Only a message that has a flag or a date there is written to: Clear Flag on
+                // one with neither would send an UpdateItem deleting eight properties it
+                // doesn't have.
+                let has = m.flags.flagged || m.flags.follow_up.start > 0 || m.flags.follow_up.due > 0 || m.flags.follow_up.reminder > 0;
+                if server_side(&m.key.account) && has {
                     let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
                     clear.entry(m.key.account.clone()).or_default().push(m.key.clone());
                     restore.entry((m.key.account.clone(), old.0, old.1, old.2)).or_default().push(m.key.clone());
@@ -106,7 +110,7 @@ impl Session {
                 self.prefs.follow_up.remove(&id);
                 self.prefs.follow_up_start.remove(&id);
                 self.prefs.follow_up_reminder.remove(&id);
-                self.prefs.reminders.remove(&mail_reminder_key(&m.key.account, m));
+                forget_mail_reminder_answers(&mut self.prefs, &m.key.account, &id);
             }
             self.prefs.follow_up_done.remove(&id);
         }
@@ -268,7 +272,7 @@ impl Session {
                 let new = c.value();
                 let old = self.follow_up_reminder(m).filter(|t| *t > 0);
                 if new != old {
-                    self.prefs.reminders.remove(&mail_reminder_key(&account, m));
+                    forget_mail_reminder_answers(&mut self.prefs, &account, &id);
                 }
             }
             let exchange = ews.contains(account.as_str());
