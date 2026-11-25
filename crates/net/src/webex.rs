@@ -267,7 +267,9 @@ pub fn refusal_of(status: u16, body: &[u8]) -> WebexError {
 /// A text from an answer, with no control character, trimmed and at most [`MAX_TEXT`] long.
 fn clean(text: &str) -> String {
     let text: String = text.chars().filter(|c| !c.is_control()).collect();
-    text.trim().chars().take(MAX_TEXT).collect()
+    // Trimmed again once cut: the cut can fall just after a space.
+    let cut: String = text.trim().chars().take(MAX_TEXT).collect();
+    cut.trim_end().to_string()
 }
 
 #[cfg(test)]

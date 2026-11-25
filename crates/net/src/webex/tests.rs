@@ -410,6 +410,12 @@ fn other_refusals_carry_the_status_and_webexs_words() {
         WebexError::Refused { message, .. } => assert_eq!(message.chars().count(), 300),
         other => panic!("{other:?}"),
     }
+    // Cut where a space was: the words end on a word, not on the space.
+    let cut = format!("{} {}", "a".repeat(299), "b".repeat(50));
+    match refused(400, json!({ "message": cut })) {
+        WebexError::Refused { message, .. } => assert_eq!(message, "a".repeat(299)),
+        other => panic!("{other:?}"),
+    }
 }
 
 #[test]
