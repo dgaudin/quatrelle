@@ -2441,7 +2441,7 @@ presence	Offline	오프라인
 	a file Quatrelle keeps is damaged: {error}	Quatrelle이 보관하는 파일이 손상되었습니다: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	계정 목록을 읽을 수 없어 저장되지 않습니다: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
-	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	이 컴퓨터에서 한 변경 {count}개를 읽을 수 없어 보내지 않았습니다. 따로 보관되며 서버의 상태가 표시됩니다
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and what they changed may still show here	이 컴퓨터에서 한 변경 {count}개를 읽을 수 없어 보내지 않았습니다. 따로 보관되며 이 변경으로 바뀐 내용이 여기에 계속 표시될 수 있습니다
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	이 계정의 폴더 목록이 손상되어 서버에서 다시 읽습니다
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	이 계정의 폴더 목록이 손상되어 당분간 아무것도 정리되지 않습니다: {error}

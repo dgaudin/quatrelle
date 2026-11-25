@@ -208,6 +208,22 @@ impl Op {
         }
     }
 
+    /// The folders whose mail this change moves or removes in the cache: those of its messages, where
+    /// a move goes, a folder emptied, and the one a policy tag is set on. Folder changes (made,
+    /// renamed, deleted) are the folder list's, read again after.
+    pub fn mail_folders(&self) -> Vec<String> {
+        let mut folders: Vec<String> = self.keys().iter().map(|k| k.folder.clone()).collect();
+        match self {
+            Op::Move { to, .. } => folders.push(to.clone()),
+            Op::EmptyFolder { path } => folders.push(path.clone()),
+            Op::SetArchiveTag { folder: Some(f), .. } => folders.push(f.clone()),
+            _ => {}
+        }
+        folders.sort();
+        folders.dedup();
+        folders
+    }
+
     /// What the change is, for the log: its kind, the folders and the number of messages, never a
     /// subject or an address (`Move of 2 messages in INBOX`).
     pub fn summary(&self) -> String {

@@ -2442,7 +2442,7 @@ presence	Offline	离线
 	a file Quatrelle keeps is damaged: {error}	Quatrelle 保存的文件已损坏: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	无法读取账户列表，因此不会保存它: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
-	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	无法读取在此电脑上所做的 {count} 项更改，因此未发送；这些更改已另行保存，显示的是服务器的状态
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and what they changed may still show here	无法读取在此电脑上所做的 {count} 项更改，因此未发送；这些更改已另行保存，这些更改所做的改动仍可能显示在这里
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	此账户的文件夹列表已损坏，将从服务器重新读取
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	此账户的文件夹列表已损坏，因此暂时不会向其中归档任何内容: {error}

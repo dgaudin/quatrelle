@@ -347,7 +347,7 @@ fn a_refused_change_to_the_accounts_changes_nothing_in_memory() {
 }
 
 /// Changes waiting that couldn't be read, kept aside by the worker, are said: how many, and that
-/// the server's state shows; the account's folders held in memory are read again (what the
+/// what they changed may still show here; the account's folders held in memory are read again (what the
 /// session made of them is the cache's, not the server's).
 #[test]
 fn changes_kept_aside_are_said_and_their_folders_read_again() {
@@ -365,7 +365,9 @@ fn changes_kept_aside_are_said_and_their_folders_read_again() {
     assert!(said.as_ref().is_some_and(|n| n.error), "not said: {said:?}");
     assert_eq!(
         said.as_ref().map(|n| n.template),
-        Some("{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows")
+        Some(
+            "{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and what they changed may still show here"
+        )
     );
     assert_eq!(said.map(|n| n.values), Some(vec![("count", "2".to_string())]));
     let now = s.folder_state(account, "INBOX").messages.iter().find(|m| m.key == held.0).map(|m| m.flags.flagged);

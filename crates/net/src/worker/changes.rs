@@ -514,17 +514,41 @@ impl Worker {
 
     /// The change waiting at `path`, that can't be read, and every change made after it, kept
     /// aside (never sent, nor passed over), and said; `false` when they couldn't be: none is sent.
-    fn set_aside_from(&mut self, path: &str) -> bool {
+    /// What the ones after it did in the cache (a message moved or deleted here) the server never
+    /// had: the folders they name are marked to be read in full, and returned to be read.
+    fn set_aside_from(&mut self, path: &str, to_read: &mut Vec<String>) -> bool {
         match self.store.set_ops_aside_from(&self.acc.id, std::path::Path::new(path)) {
-            Ok(0) => false,
-            Ok(count) => {
+            Ok((0, _)) => false,
+            Ok((count, folders)) => {
                 self.waiting = None;
+                self.mark_to_read_in_full(&folders);
+                to_read.extend(folders);
                 self.sink.emit(Event::OpsSetAside { account: self.id(), count });
                 true
             }
             Err(e) => {
                 log::warn!("{}: changes waiting that can't be read weren't kept aside: {e}", self.acc.id);
                 false
+            }
+        }
+    }
+
+    /// `folders` are read in full at the next sync, not only for what changed on the server since:
+    /// the cache holds what a change that isn't sent made. On IMAP no change count nor next UID is
+    /// kept (and so no "nothing changed" is taken), over Exchange the folder's last read and its
+    /// sync state are let go (Graph lists the newest each time).
+    fn mark_to_read_in_full(&mut self, folders: &[String]) {
+        for f in folders {
+            self.jstate.marks.remove(f);
+            // Not once the account was removed: its files would come back.
+            let marked = self.store.while_kept(&self.acc.id, self.removals, || {
+                let mut st = self.store.load_folder(&self.acc.id, f).ok()?;
+                st.highest_modseq = 0;
+                st.uid_next = 0;
+                Some(self.store.save_folder(&self.acc.id, f, &st))
+            });
+            if let Some(Some(Err(e))) = marked {
+                log::warn!("{}: a folder isn't marked to be read in full again: {e}", self.acc.id);
             }
         }
     }
@@ -544,7 +568,7 @@ impl Worker {
                 Ok(Some(op)) => op,
                 // A change that can't be read is never passed over: it and every change made
                 // after it are kept aside and said (those before it went already).
-                Err(quatrelle_store::StoreError::Damaged { path }) if self.set_aside_from(&path) => continue,
+                Err(quatrelle_store::StoreError::Damaged { path }) if self.set_aside_from(&path, &mut destinations) => continue,
                 other => {
                     if let Err(e) = other {
                         log::warn!("{}: the changes waiting can't be read, none is sent for now: {e}", self.acc.id);
@@ -631,18 +655,7 @@ impl Worker {
                     }
                     let mut folders: Vec<String> = op.keys().iter().map(|k| k.folder.clone()).collect();
                     folders.dedup();
-                    for f in &folders {
-                        // Not once the account was removed: its files would come back.
-                        let marked = self.store.while_kept(&self.acc.id, self.removals, || {
-                            let mut st = self.store.load_folder(&self.acc.id, f).ok()?;
-                            st.highest_modseq = 0;
-                            st.uid_next = 0;
-                            Some(self.store.save_folder(&self.acc.id, f, &st))
-                        });
-                        if let Some(Some(Err(e))) = marked {
-                            log::warn!("{}: a folder isn't marked to be read in full again: {e}", self.acc.id);
-                        }
-                    }
+                    self.mark_to_read_in_full(&folders);
                     relist |= op.is_folder_op();
                     calendars |= op.is_calendar_op();
                     self.sink.emit(Event::OpFailed { account: self.id(), op, error: e.to_string() });

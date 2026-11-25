@@ -413,7 +413,7 @@ impl Session {
                 self.forget_echoes(&account);
                 let count = count.to_string();
                 self.notice_with(
-                    "{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows",
+                    "{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and what they changed may still show here",
                     &[("count", &count)],
                     true,
                 );

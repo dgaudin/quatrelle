@@ -233,3 +233,42 @@ fn a_damaged_folder_list_is_replaced_by_a_server_without_public_folders() {
     assert_eq!(damaged_still(&store, "a1", "folders.json.bad"), Ok(()), "not set aside as it was");
     assert!(store.load_folders("a1").unwrap().iter().any(|f| f.path == "INBOX"));
 }
+
+/// Found in review (Z2-5): changes kept aside after a damaged one had made their effect in the
+/// cache (a message moved), and the server never had it: over Exchange only what changed on the
+/// server is asked for, so the message stayed out of its folder until a full read nothing
+/// asked for. The folders they name are read in full.
+#[test]
+fn what_changes_kept_aside_did_in_the_cache_is_read_again_from_the_server() {
+    let (mut d, _) = zones::zones();
+    d.folder("Archive", None, Some("archive"), "IPF.Note");
+    let server = fake_ews::serve(d);
+    let store = Store::failing();
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let mut w = zones::listed(&server, &store, &pool);
+    let archive = w.folders.iter().find(|f| f.role == FolderRole::Archive).map(|f| f.path.clone()).unwrap();
+    w.sync_one("INBOX");
+    w.sync_one(&archive);
+    let key = zones::cached(&store, "INBOX").first().map(|m| m.key.clone()).unwrap();
+    // The move the user made, offline: applied to the cache, waiting to be sent, and a change
+    // before it that can't be read.
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    st.messages.retain(|m| m.key != key);
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    store.add_op("a1", Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true, all: false }).unwrap();
+    store.add_op("a1", Op::Move { keys: vec![key.clone()], to: archive.clone() }).unwrap();
+    let mut names = store.account_files("a1", "ops").unwrap();
+    names.sort();
+    assert_eq!(names.len(), 2);
+    store.write_account_files("a1", &[(format!("ops/{}", names[0]), b"{\"op\":\"setFlag\",\"keys\":[{\"acc".to_vec())]).unwrap();
+    assert!(zones::cached(&store, "INBOX").iter().all(|m| m.key != key), "still cached");
+    w.replay();
+    w.sync_one("INBOX");
+    w.sync_one(&archive);
+    let told: Vec<usize> =
+        pool.poll().into_iter().filter_map(|e| if let Event::OpsSetAside { count, .. } = e { Some(count) } else { None }).collect();
+    assert_eq!(told, [2], "not kept aside");
+    // Nothing was moved on the server: the message is in its folder, and only there.
+    assert!(zones::cached(&store, "INBOX").iter().any(|m| m.key == key), "the message is still missing from its folder");
+    assert!(zones::cached(&store, &archive).iter().all(|m| m.key != key), "it is in the folder it was to be moved to");
+}

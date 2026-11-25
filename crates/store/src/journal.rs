@@ -128,8 +128,10 @@ impl Store {
     /// it, moved as they are into the account's `ops-aside/`: never read as changes again. How many.
     /// A later time goes in a folder of its own (`ops-aside/2`…): nothing kept aside before is
     /// written over, nor removed. None moves when `path` isn't one of the queue's, or reads (read
-    /// again here): a change that reads is never kept from the server.
-    pub fn set_ops_aside_from(&self, account: &str, path: &Path) -> Result<usize> {
+    /// again here): a change that reads is never kept from the server. With how many, the folders
+    /// the changes kept aside after the damaged one name (`Op::mail_folders`): what they changed
+    /// in the cache is no longer the server's, those folders are to be read in full.
+    pub fn set_ops_aside_from(&self, account: &str, path: &Path) -> Result<(usize, Vec<String>)> {
         let _held = self.changes.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let old = self.account_dir(account).join(OLD);
         let damaged = if path == old {
@@ -138,15 +140,24 @@ impl Store {
             matches!(self.read_op(path), Err(StoreError::Damaged { .. }))
         };
         if !damaged {
-            return Ok(0);
+            return Ok((0, Vec::new()));
         }
         let journal = self.op_files(account).into_iter().map(|(_, p)| p);
         // The queue from before is the head: everything is after it.
         let going: Vec<PathBuf> =
             if path == old { std::iter::once(old.clone()).chain(journal).collect() } else { journal.skip_while(|p| p != path).collect() };
         if going.is_empty() {
-            return Ok(0);
+            return Ok((0, Vec::new()));
         }
+        // What the ones after the damaged one name (one that can't be read says nothing).
+        let mut folders: Vec<String> = Vec::new();
+        for from in going.iter().skip(1) {
+            if let Ok(Some(op)) = self.read_op(from) {
+                folders.extend(op.mail_folders());
+            }
+        }
+        folders.sort();
+        folders.dedup();
         let dir = self.aside_dir(account)?;
         // Copied whole first, in one go: one that can't be leaves the queue as it was.
         let mut copies = Vec::with_capacity(going.len());
@@ -169,7 +180,7 @@ impl Store {
             going.len().saturating_sub(1),
             dir.display()
         );
-        Ok(going.len())
+        Ok((going.len(), folders))
     }
 
     /// Where the account's changes go aside this time: `ops-aside/` while it holds none, else the

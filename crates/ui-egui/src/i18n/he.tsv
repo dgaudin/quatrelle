@@ -2438,7 +2438,7 @@ presence	Offline	לא מחובר
 	a file Quatrelle keeps is damaged: {error}	קובץ ש-Quatrelle שומר פגום: {error}
 	the list of accounts couldn't be read, so it isn't saved: {error}	לא ניתן היה לקרוא את רשימת החשבונות, ולכן היא לא נשמרת: {error}
 # Changes waiting that couldn't be read are kept aside, never sent nor passed over.
-	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and the server's state shows	לא ניתן היה לקרוא {count} שינויים שבוצעו במחשב הזה, והם לא נשלחו; הם נשמרים בנפרד, ומוצג המצב שבשרת
+	{count} changes made on this computer couldn't be read and weren't sent; they are kept aside, and what they changed may still show here	לא ניתן היה לקרוא {count} שינויים שבוצעו במחשב הזה, והם לא נשלחו; הם נשמרים בנפרד, ומה ששינו עשוי עדיין להופיע כאן
 # An account's folder list that is damaged: its server lists it again; with none, nothing is filed in it.
 	this account's list of folders is damaged and is read again from the server	רשימת התיקיות של החשבון הזה פגומה, והיא נקראת מחדש מהשרת
 	this account's list of folders is damaged, so nothing is filed in it for now: {error}	רשימת התיקיות של החשבון הזה פגומה, ולכן בינתיים לא נשמר בה דבר: {error}

@@ -347,9 +347,9 @@ fn changes_from_a_damaged_one_on_are_kept_apart() {
     let s = Store::memory();
     let (ops, files) = three_the_second_damaged(&s);
     // A change that reads is never kept from the server.
-    assert_eq!(s.set_ops_aside_from("a1", &files[0].0).unwrap(), 0);
+    assert_eq!(s.set_ops_aside_from("a1", &files[0].0).unwrap().0, 0);
     assert!(files.iter().all(|(p, _)| s.files.is_file(p)));
-    assert_eq!(s.set_ops_aside_from("a1", &files[1].0).unwrap(), 2);
+    assert_eq!(s.set_ops_aside_from("a1", &files[1].0).unwrap().0, 2);
     assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&ops[0]));
     assert_eq!(s.files.read(&files[0].0).ok().as_ref(), Some(&files[0].1), "the one before stays");
     let aside = s.account_dir("a1").join("ops-aside");
@@ -359,13 +359,13 @@ fn changes_from_a_damaged_one_on_are_kept_apart() {
         assert!(!s.files.exists(p), "{}: still in the queue", p.display());
     }
     // What isn't a file of the queue moves nothing.
-    assert_eq!(s.set_ops_aside_from("a1", &s.account_dir("a1").join("folders.json")).unwrap(), 0);
+    assert_eq!(s.set_ops_aside_from("a1", &s.account_dir("a1").join("folders.json")).unwrap().0, 0);
     assert_eq!(s.load_ops("a1").unwrap(), std::slice::from_ref(&ops[0]));
     // A second time: the changes take the same numbers again, and go in a folder of their own.
     s.add_op("a1", ops[1].clone()).unwrap();
     s.files.write(&files[1].0, b"[1,").unwrap();
     s.add_op("a1", ops[2].clone()).unwrap();
-    assert_eq!(s.set_ops_aside_from("a1", &files[1].0).unwrap(), 2);
+    assert_eq!(s.set_ops_aside_from("a1", &files[1].0).unwrap().0, 2);
     let again = aside.join("2");
     assert_eq!(s.files.read(&again.join(name(&files[1].0))).ok(), Some(b"[1,".to_vec()));
     assert!(s.files.is_file(&again.join(name(&files[2].0))));
@@ -393,7 +393,7 @@ fn a_damaged_queue_from_before_the_journal_is_kept_apart_whole() {
     let first = s.first_op("a1");
     assert!(damaged_at(&first, &old), "{first:?}");
     assert_eq!(s.files.read(&old).ok(), Some(damaged.clone()), "left as it is");
-    assert_eq!(s.set_ops_aside_from("a1", &old).unwrap(), 3);
+    assert_eq!(s.set_ops_aside_from("a1", &old).unwrap().0, 3);
     assert!(s.load_ops("a1").unwrap().is_empty() && s.first_op("a1").unwrap().is_none());
     let aside = s.account_dir("a1").join("ops-aside");
     assert_eq!(s.files.read(&aside.join("ops.json")).ok(), Some(damaged));
