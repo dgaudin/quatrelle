@@ -414,3 +414,59 @@ fn a_tasks_reminder_comes_and_goes() {
     assert!(s.due_reminders(NOW).iter().all(|x| x.uid != other));
     done(s);
 }
+
+/// A message flagged in a folder not opened this session — its list is only in the cache on
+/// disk — is in the To-Do List and its reminder rings: the list and the reminders read the
+/// cache on disk too, not just what is in memory.
+#[test]
+fn a_flagged_message_in_a_folder_never_opened_counts_too() {
+    let mut s = sample_session("todo-disk");
+    let today = quatrelle_model::dates::today(&s.clock);
+    // A folder kept on disk only, never read into the cache this session.
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 },
+        message_id: "disk-only@x".into(),
+        subject: "On disk only".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), reminder: s.clock.now - 60, ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    // Out of the memory cache, as the trim leaves it (only so many summaries are kept): the
+    // folder was not opened this session.
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+    assert!(!s.cache.contains_key(&("sample".to_string(), "Projects".to_string())), "not in the cache this session");
+
+    // The To-Do List finds it (a call may read only part of the disk's folders; the next calls
+    // come to the rest).
+    let mut found = false;
+    for _ in 0..s.accounts[0].folders.len() {
+        if s.todo("", false).iter().any(|r| r.subject() == "On disk only") {
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "the To-Do List reads the cache on disk, not just the memory: {:?}",
+        s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>()
+    );
+    // Its reminder rings too.
+    let mut rings = false;
+    for _ in 0..s.accounts[0].folders.len() {
+        if s.due_reminders(s.clock.now).iter().any(|r| r.message.as_ref().is_some_and(|k| k.uid == 77)) {
+            rings = true;
+            break;
+        }
+    }
+    assert!(rings, "the reminders read the cache on disk too: {:?}", s.due_reminders(s.clock.now).iter().map(|r| &r.summary).collect::<Vec<_>>());
+    done(s);
+}

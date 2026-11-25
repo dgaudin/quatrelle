@@ -213,6 +213,41 @@ impl TodoRef {
 }
 
 impl Session {
+    /// Calls `keep(account, folder, message)` for each message of each folder of each known
+    /// account: those in the cache first, then those of the folders not in it, read from the
+    /// cache on disk — so a message followed in a folder not opened this session counts too.
+    /// Each message once (its key).
+    pub(crate) fn scan_mail(&self, mut keep: impl FnMut(&str, &str, &Summary)) {
+        let mut seen: std::collections::HashSet<MessageKey> = std::collections::HashSet::new();
+        for ((account, folder), st) in &self.cache {
+            if self.account(account).is_none() {
+                continue;
+            }
+            for m in &st.messages {
+                if seen.insert(m.key.clone()) {
+                    keep(account, folder, m);
+                }
+            }
+        }
+        let Some(store) = &self.store else { return };
+        for a in &self.accounts {
+            for f in &a.folders {
+                let k = (a.config.id.clone(), f.path.clone());
+                if self.cache.contains_key(&k) {
+                    continue;
+                }
+                // A folder whose list can't be read is left out, not fatal.
+                if let Ok(st) = store.load_folder(&k.0, &k.1) {
+                    for m in &st.messages {
+                        if seen.insert(m.key.clone()) {
+                            keep(&a.config.id, &f.path, m);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// The To-Do List's row named by `uid` (a task's, or a message's key id).
     pub fn find_todo(&self, uid: &str, completed: bool) -> Option<TodoRef> {
         self.todo("", completed).into_iter().find(|r| r.uid() == uid)
@@ -220,37 +255,33 @@ impl Session {
 
     /// The To-Do List: every task matching `query`, with every flagged message of the accounts
     /// kept on this computer that isn't done (and the done ones too when `completed`), grouped
-    /// by due day and in that order. A row flagged here appears at once: the cache has it.
+    /// by due day and in that order. A row flagged here appears at once: the cache has it; one
+    /// flagged in a folder not opened this session appears too, read from the cache on disk.
     pub fn todo(&self, query: &str, completed: bool) -> Vec<TodoRef> {
         let q = quatrelle_model::search::fold_word(query.trim());
         let has = |text: &str| quatrelle_model::search::fold_word(text).contains(q.as_ref());
         let today = quatrelle_model::dates::today(&self.clock);
         let mut list: Vec<TodoRef> = self.tasks(query, completed).into_iter().map(TodoRef::Task).collect();
-        for ((account, _), st) in &self.cache {
-            if self.account(account).is_none() {
-                continue;
+        self.scan_mail(|account, _, m| {
+            // Flagged and not done, or (with the completed ones shown) a follow-up done.
+            let done = m.flags.follow_up_complete();
+            if m.flags.deleted || (!done && !m.flags.flagged) || (done && !completed) {
+                return;
             }
-            for m in &st.messages {
-                // Flagged and not done, or (with the completed ones shown) a follow-up done.
-                let done = m.flags.follow_up_complete();
-                if m.flags.deleted || (!done && !m.flags.flagged) || (done && !completed) {
-                    continue;
-                }
-                let subject = self.follow_up_title(m).unwrap_or(&m.subject).to_string();
-                if !q.is_empty() && !has(&subject) && !has(&m.subject) {
-                    continue;
-                }
-                list.push(TodoRef::Mail(FlaggedMail {
-                    account: account.clone(),
-                    key: m.key.clone(),
-                    subject,
-                    due: self.follow_up_due_any(m),
-                    start: self.follow_up_start(m),
-                    reminder: self.follow_up_reminder(m),
-                    complete: done,
-                }));
+            let subject = self.follow_up_title(m).unwrap_or(&m.subject).to_string();
+            if !q.is_empty() && !has(&subject) && !has(&m.subject) {
+                return;
             }
-        }
+            list.push(TodoRef::Mail(FlaggedMail {
+                account: account.to_string(),
+                key: m.key.clone(),
+                subject,
+                due: self.follow_up_due_any(m),
+                start: self.follow_up_start(m),
+                reminder: self.follow_up_reminder(m),
+                complete: done,
+            }));
+        });
         list.sort_by_cached_key(|r| (r.group(today), r.due().unwrap_or(i64::MAX), -r.importance(), r.subject().to_lowercase(), r.uid()));
         list
     }
