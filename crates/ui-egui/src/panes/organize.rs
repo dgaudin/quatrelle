@@ -94,11 +94,11 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
         ui.close();
     }
     if ui.button(tl!("Custom…")).clicked() {
-        acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, true)))));
+        acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, true, key)))));
         ui.close();
     }
     if ui.button(tl!("Add Reminder…")).clicked() {
-        acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, false)))));
+        acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, false, key)))));
         ui.close();
     }
     ui.separator();

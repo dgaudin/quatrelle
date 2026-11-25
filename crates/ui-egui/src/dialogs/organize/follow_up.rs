@@ -20,13 +20,19 @@ pub struct FollowUpForm {
     /// Custom… (the dates and the reminder) or Add Reminder… (the reminder alone).
     pub dates: bool,
     pub error: Option<String>,
+    /// The message the change is for when it isn't the list's selection: the To-Do List's row or
+    /// the To-Do bar's entry the menu was opened on, by its key (`mail.flag`'s `key`).
+    pub key: Option<String>,
 }
 
 impl FollowUpForm {
-    /// The form filled in from the selected message's follow-up, as the server or this computer
-    /// has it.
-    pub fn of(s: &Session, dates: bool) -> FollowUpForm {
-        let Some(m) = s.first_selected() else { return FollowUpForm { dates, ..Default::default() } };
+    /// The form filled in from the message's follow-up, as the server or this computer has it:
+    /// the one `key` names (a To-Do List row), else the selected one.
+    pub fn of(s: &Session, dates: bool, key: Option<&str>) -> FollowUpForm {
+        let keyed = key.and_then(|k| s.message_by_id(k));
+        let Some(m) = keyed.as_deref().or_else(|| s.first_selected()) else {
+            return FollowUpForm { dates, key: key.map(str::to_string), ..Default::default() };
+        };
         let day = |d: Option<i64>| d.map(pickers::text_of).unwrap_or_default();
         let (remind_day, remind_time) = match s.follow_up_reminder(m) {
             Some(at) => {
@@ -43,18 +49,28 @@ impl FollowUpForm {
             remind_time,
             dates,
             error: None,
+            key: key.map(str::to_string),
         }
     }
 
-    /// What `mail.flag` is given: the days (`none` for an empty one) and the reminder's time,
-    /// or `false` for none.
+    /// What `mail.flag` is given: the message's `key` when the form was opened on a To-Do List
+    /// row or a To-Do bar entry, the days (`none` for an empty one) and the reminder's time, or
+    /// `false` for none.
     pub(crate) fn params(&self) -> Value {
         let day = |text: &str| {
             let text = text.trim();
             if text.is_empty() { json!("none") } else { json!(text) }
         };
         let reminder = if self.remind { json!(format!("{}T{}", self.remind_day.trim(), self.remind_time.trim())) } else { json!(false) };
-        if self.dates { json!({ "start": day(&self.start), "due": day(&self.due), "reminder": reminder }) } else { json!({ "reminder": reminder }) }
+        let mut p = if self.dates {
+            json!({ "start": day(&self.start), "due": day(&self.due), "reminder": reminder })
+        } else {
+            json!({ "reminder": reminder })
+        };
+        if let (Some(k), Some(o)) = (&self.key, p.as_object_mut()) {
+            o.insert("key".into(), json!(k));
+        }
+        p
     }
 
     /// Says what's wrong with the form, if anything: days as `YYYY-MM-DD`, a reminder's time as

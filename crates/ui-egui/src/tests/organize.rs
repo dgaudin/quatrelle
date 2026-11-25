@@ -19,7 +19,7 @@ fn the_follow_up_dialog_sets_start_due_and_reminder() {
     let k = a.session.list[1].key.clone();
     a.run("list.select", json!({"key": k.to_id()}));
     // Follow Up › Custom…: the form as the message's follow-up has it (none, here).
-    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true);
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
     assert!(f.start.is_empty() && f.due.is_empty() && !f.remind, "{f:?}");
     // Drawn, then filled in as typed.
     a.ui.dialog = Some(Dialog::FollowUp(Box::new(f.clone())));
@@ -39,7 +39,7 @@ fn the_follow_up_dialog_sets_start_due_and_reminder() {
     assert!(a.session.follow_up_reminder(&m).is_some());
 
     // What isn't a day or a time is said, and nothing is set.
-    let mut bad = crate::dialogs::FollowUpForm::of(&a.session, true);
+    let mut bad = crate::dialogs::FollowUpForm::of(&a.session, true, None);
     bad.start = "20/11/2026".into();
     assert!(bad.check().is_some(), "not a day");
     bad.start = "2026-11-20".into();
@@ -49,7 +49,7 @@ fn the_follow_up_dialog_sets_start_due_and_reminder() {
     assert!(bad.check().is_some(), "not a time");
 
     // Add Reminder… alone: the dates stay as they are.
-    let mut r = crate::dialogs::FollowUpForm::of(&a.session, false);
+    let mut r = crate::dialogs::FollowUpForm::of(&a.session, false, None);
     assert!(!r.dates && r.remind);
     r.remind_time = "10:15".into();
     a.act(crate::Action::Run("mail.flag", r.params()));
@@ -779,5 +779,31 @@ fn the_quick_step_form_marks_complete_and_writes() {
     assert!(a.ui.dialog.is_none() && a.session.prefs.quick_steps.len() == 1);
     let again = crate::dialogs::QuickStepForm::edit(&a.session, &a.session.prefs.quick_steps[0]);
     assert!(again.complete && again.write == crate::dialogs::StepWriting::Forward && again.to.starts_with("boss@studio.example"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Custom… opened from a To-Do List row or the To-Do bar (with the row's `key`) edits that
+/// message, not the one selected in the mail list: the form is filled from it and `mail.flag`
+/// is given its key.
+#[test]
+fn the_follow_up_dialog_opened_on_a_key_edits_that_message() {
+    let (mut a, dir) = app("follow-up-dialog-key");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let selected = a.session.list[0].key.clone();
+    let row = a.session.list[1].key.clone();
+    a.run("list.select", json!({"key": selected.to_id()}));
+    // The form as the row's menu opens it: filled from the row's message, carrying its key.
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, Some(&row.to_id()));
+    assert_eq!(f.key.as_deref(), Some(row.to_id().as_str()));
+    assert!(f.params().get("key").and_then(|k| k.as_str()) == Some(row.to_id().as_str()), "{}", f.params());
+    f.due = "2026-12-01".into();
+    assert_eq!(f.check(), None);
+    a.act(crate::Action::Run("mail.flag", f.params()));
+    let day = quatrelle_engine::model::dates::days_from_civil(2026, 12, 1);
+    let row_m = a.session.list.iter().find(|m| m.key == row).cloned().unwrap();
+    let sel_m = a.session.list.iter().find(|m| m.key == selected).cloned().unwrap();
+    assert!(row_m.flags.flagged && a.session.follow_up_due(&row_m) == Some(day), "the row's message got the due day: {:?}", row_m.flags);
+    assert!(!sel_m.flags.flagged && a.session.follow_up_due(&sel_m).is_none(), "the selected one is untouched: {:?}", sel_m.flags);
     let _ = std::fs::remove_dir_all(dir);
 }
