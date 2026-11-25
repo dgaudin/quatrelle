@@ -541,8 +541,15 @@ fn flags(m: &Value) -> Flags {
         f.completed = time("completedDateTime").unwrap_or(0);
     }
     // Its follow-up dates (Graph's `message.flag`): no reminder, which Graph has nowhere for.
-    f.follow_up =
-        quatrelle_model::FollowUp { start: time("startDateTime").unwrap_or(0), due: time("dueDateTime").unwrap_or(0), ..Default::default() };
+    // Graph keeps them as instants; the day is the local one, kept as the floating midnight
+    // (`day * 86_400`) Exchange's `PidLidTask*Date` uses, so one convention serves both.
+    let zone = crate::system_zone();
+    let as_floating = |t: i64| (t + zone.offset_at(t)).div_euclid(86_400).saturating_mul(86_400);
+    f.follow_up = quatrelle_model::FollowUp {
+        start: time("startDateTime").map(as_floating).unwrap_or(0),
+        due: time("dueDateTime").map(as_floating).unwrap_or(0),
+        ..Default::default()
+    };
     // Replied to (102, 103 to all, with the keyword that says so) or forwarded (104), the last of
     // them, and when, read as EWS reads them.
     let prop = |tag: &str| extended(m, tag);
@@ -570,10 +577,13 @@ fn flag_patch(op: &Op) -> Option<Value> {
             Some(json!({"flag": {"flagStatus": if *on { "complete" } else { "notFlagged" }}}))
         }
         // Its follow-up dates (Graph's `message.flag.startDateTime`/`dueDateTime`, in UTC): a
-        // date taken off is nulled. Graph has no reminder on a flag.
+        // date taken off is nulled. Graph has no reminder on a flag. A day comes as its floating
+        // midnight (`day * 86_400`) and goes as that midnight in the local zone, so Outlook
+        // shows the same day whatever the zone.
         Op::SetFollowUp { start, due, .. } => {
+            let zone = crate::system_zone();
             let time = |t: Option<i64>| match t {
-                Some(t) => json!({"dateTime": utc(t).trim_end_matches('Z'), "timeZone": "UTC"}),
+                Some(t) => json!({"dateTime": utc(zone.to_utc(t)).trim_end_matches('Z'), "timeZone": "UTC"}),
                 None => Value::Null,
             };
             let mut flag = json!({"startDateTime": time(*start), "dueDateTime": time(*due)});

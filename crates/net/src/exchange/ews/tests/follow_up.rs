@@ -104,6 +104,8 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
         i.follow_up = fake_ews::FollowUp {
             start: Some("2026-11-02T00:00:00Z".into()),
             due: Some("2026-11-06T00:00:00Z".into()),
+            common_start: Some("2026-11-02T00:00:00Z".into()),
+            common_end: Some("2026-11-06T00:00:00Z".into()),
             reminder_set: true,
             reminder_time: Some("2026-11-06T09:00:00Z".into()),
             reminder_signal: Some("2026-11-06T09:00:00Z".into()),
@@ -139,8 +141,13 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     {
         let d = server.data.lock().unwrap();
         let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+        // The Task date as it was given (the day's floating midnight, written as it is), and the
+        // Common one the same midnight in the local zone: both are set ([MS-OXOFLAG] 3.1.4.1.3).
+        let zone = crate::system_zone();
         assert_eq!(f.start.as_deref().and_then(jmap::utc_date), Some(start), "{f:?}");
         assert_eq!(f.due.as_deref().and_then(jmap::utc_date), Some(due), "{f:?}");
+        assert_eq!(f.common_start.as_deref().and_then(jmap::utc_date), Some(zone.to_utc(start)), "{f:?}");
+        assert_eq!(f.common_end.as_deref().and_then(jmap::utc_date), Some(zone.to_utc(due)), "{f:?}");
         assert!(f.reminder_set, "{f:?}");
         assert_eq!(f.reminder_time.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
         assert_eq!(f.reminder_signal.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
@@ -152,12 +159,20 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder), (start, due, reminder), "{:?}", m.flags.follow_up);
     assert_eq!(m.flags.follow_up.title, "Send the report");
 
-    // Taken off here: Exchange has no reminder and no dates.
+    // Taken off here: Exchange has no reminder and no dates, Task or Common.
     apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: None, due: None, reminder: None }).unwrap();
     {
         let d = server.data.lock().unwrap();
         let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
-        assert!(!f.reminder_set && f.start.is_none() && f.due.is_none() && f.reminder_time.is_none(), "{f:?}");
+        assert!(
+            !f.reminder_set
+                && f.start.is_none()
+                && f.due.is_none()
+                && f.common_start.is_none()
+                && f.common_end.is_none()
+                && f.reminder_time.is_none(),
+            "{f:?}"
+        );
     }
 
     // Flagged here: the plain red flag's icon and title ([MS-OXOFLAG] 3.1.4.1).

@@ -75,6 +75,10 @@ const FOLLOW_UP_ICON: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1095\" Propert
 /// `PidLidFlagRequest` in PSETID_Common.
 const TASK_START: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33028\" PropertyType=\"SystemTime\"/>";
 const TASK_DUE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33029\" PropertyType=\"SystemTime\"/>";
+/// `PidLidCommonStart`/`PidLidCommonEnd`: set with the Task dates ([MS-OXOFLAG] 3.1.4.1.3
+/// says they MUST be), the same midnight in the user's local time zone.
+const COMMON_START: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34052\" PropertyType=\"SystemTime\"/>";
+const COMMON_END: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34053\" PropertyType=\"SystemTime\"/>";
 const REMINDER_SET: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34051\" PropertyType=\"Boolean\"/>";
 const REMINDER_TIME: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34050\" PropertyType=\"SystemTime\"/>";
 const REMINDER_SIGNAL: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34144\" PropertyType=\"SystemTime\"/>";
@@ -138,18 +142,22 @@ fn delete(field: &str) -> String {
     format!("<t:DeleteItemField>{field}</t:DeleteItemField>")
 }
 
+/// The updates for one follow-up date (`at`: the day's floating midnight, `day * 86_400`, as
+/// `PidLidTask*Date` takes it, [MS-OXOTASK] 2.2.2.2.4): the Task property gets it as it is,
+/// the Common one the same midnight in the local zone, both always set or both deleted
+/// ([MS-OXOFLAG] 3.1.4.1.3).
+fn date_updates(task: &str, common: &str, at: Option<i64>) -> String {
+    match at {
+        Some(at) => format!("{}{}", set_time(task, at), set_time(common, crate::system_zone().to_utc(at))),
+        None => format!("{}{}", delete(task), delete(common)),
+    }
+}
+
 /// The updates that take a follow-up's dates and reminder off (Cleared, or done with): each
 /// property as `None` deletes it.
 fn follow_up_updates(start: Option<i64>, due: Option<i64>, reminder: Option<i64>) -> String {
-    let mut out = String::new();
-    match start {
-        Some(at) => out.push_str(&set_time(TASK_START, at)),
-        None => out.push_str(&delete(TASK_START)),
-    }
-    match due {
-        Some(at) => out.push_str(&set_time(TASK_DUE, at)),
-        None => out.push_str(&delete(TASK_DUE)),
-    }
+    let mut out = date_updates(TASK_START, COMMON_START, start);
+    out.push_str(&date_updates(TASK_DUE, COMMON_END, due));
     // A reminder's time of day and the moment it rings are the same moment here: Outlook keeps
     // the day it is due in `PidLidReminderTime` and the moment in `PidLidReminderSignalTime`
     // ([MS-OXOFLAG] 2.2.1), and Quatrelle has one time, which both take.

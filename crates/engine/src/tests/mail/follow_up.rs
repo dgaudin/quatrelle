@@ -189,17 +189,20 @@ fn a_flag_s_reminder_rings_and_is_dismissed_or_snoozed() {
 }
 
 /// What Exchange keeps wins over what's kept here: its start, due day and reminder are the
-/// follow-up's, the preferences only the fallback for what it doesn't have.
+/// follow-up's, the preferences only the fallback for what it doesn't have. The server's dates
+/// are the day's floating midnight (`day * 86_400`, as `PidLidTask*Date` holds it), read as a
+/// UTC day: west of UTC, reading one in the local zone would name the day before.
 #[test]
 fn the_server_s_follow_up_dates_win_over_the_preferences() {
     let mut s = sample_session("follow-up-server-wins");
+    // A clock west of UTC (New York), where the local-zone read of a floating midnight shifts.
+    s.clock = quatrelle_model::dates::Clock::new(NOW, -5 * 3600).in_zone(Some(quatrelle_model::zone::Zone::Fixed(-5 * 3600)));
     let mut m = turnaround(&s);
     let id = id(&m);
     let day = |y, mo, d| quatrelle_model::dates::days_from_civil(y, mo, d);
-    let server_due = s.clock.midnight(day(2026, 12, 3));
     m.flags.flagged = true;
-    m.flags.follow_up.start = s.clock.midnight(day(2026, 11, 30));
-    m.flags.follow_up.due = s.clock.midnight(day(2026, 12, 3));
+    m.flags.follow_up.start = day(2026, 11, 30).saturating_mul(86_400);
+    m.flags.follow_up.due = day(2026, 12, 3).saturating_mul(86_400);
     m.flags.follow_up.reminder = s.clock.now + 3600;
     s.prefs.follow_up_start.insert(id.clone(), day(2020, 1, 1));
     s.prefs.follow_up.insert(id.clone(), day(2020, 1, 2));
@@ -207,7 +210,38 @@ fn the_server_s_follow_up_dates_win_over_the_preferences() {
     assert_eq!(s.follow_up_start(&m), Some(day(2026, 11, 30)));
     assert_eq!(s.follow_up_due(&m), Some(day(2026, 12, 3)));
     assert_eq!(s.follow_up_reminder(&m), Some(s.clock.now + 3600));
-    assert_eq!(m.flags.follow_up.due, server_due, "a moment at that day's midnight");
+    assert_eq!(m.flags.follow_up.due, day(2026, 12, 3) * 86_400, "the day's floating midnight, not a local one");
+    done(s);
+}
+
+/// A day a follow-up is due goes to the server as the day's floating midnight (`day * 86_400`),
+/// the convention Exchange's `PidLidTask*Date` holds ([MS-OXOTASK] 2.2.2.2.4): a local midnight
+/// written there shows the day before in Outlook (in France, 22/11 leaves as the 21st).
+#[test]
+fn a_follow_up_day_goes_to_exchange_as_its_floating_midnight() {
+    let mut s = sample_session("follow-up-floating");
+    // A clock east of UTC (Paris), where a local midnight is not the floating one.
+    s.clock = quatrelle_model::dates::Clock::new(NOW, 3600).in_zone(Some(quatrelle_model::zone::Zone::Fixed(3600)));
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.follow_up_for(&[std::sync::Arc::new(m)], Some(day)).unwrap();
+    let due = s
+        .take_jobs()
+        .iter()
+        .find_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { due, .. }, .. } => Some(*due),
+            _ => None,
+        })
+        .expect("the follow-up change went to the server");
+    assert_eq!(due, Some(day.saturating_mul(86_400)), "the floating midnight, not the local one ({})", s.clock.midnight(day));
     done(s);
 }
 

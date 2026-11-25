@@ -123,13 +123,16 @@ pub struct Verb {
 }
 
 /// A message's follow-up as Exchange keeps it ([MS-OXOFLAG] 2.2.1): its start and due dates
-/// (`PidLidTaskStartDate`, `PidLidTaskDueDate`), its reminder (`PidLidReminderSet`,
-/// `PidLidReminderTime`, `PidLidReminderSignalTime`) and its title (`PidLidFlagRequest`), each
-/// as Exchange writes it (`2026-10-30T09:12:00Z`) when it has one.
+/// (`PidLidTaskStartDate`, `PidLidTaskDueDate`, with `PidLidCommonStart`/`PidLidCommonEnd` the
+/// same midnights in the local zone), its reminder (`PidLidReminderSet`, `PidLidReminderTime`,
+/// `PidLidReminderSignalTime`) and its title (`PidLidFlagRequest`), each as Exchange writes it
+/// (`2026-10-30T09:12:00Z`) when it has one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct FollowUp {
     pub start: Option<String>,
     pub due: Option<String>,
+    pub common_start: Option<String>,
+    pub common_end: Option<String>,
     pub reminder_set: bool,
     pub reminder_time: Option<String>,
     pub reminder_signal: Option<String>,
@@ -150,6 +153,12 @@ pub(super) fn follow_up_xml(f: &FollowUp) -> String {
     }
     if let Some(v) = &f.due {
         x.push_str(&lid("Task", 33029, "SystemTime", v));
+    }
+    if let Some(v) = &f.common_start {
+        x.push_str(&lid("Common", 34052, "SystemTime", v));
+    }
+    if let Some(v) = &f.common_end {
+        x.push_str(&lid("Common", 34053, "SystemTime", v));
     }
     if f.reminder_set {
         x.push_str(&lid("Common", 34051, "Boolean", "true"));
@@ -210,6 +219,8 @@ pub(super) fn take_flag_update(it: &mut It, u: &El) {
         match (set_name, id) {
             ("Task", "33028") => it.follow_up.start = v,
             ("Task", "33029") => it.follow_up.due = v,
+            ("Common", "34052") => it.follow_up.common_start = v,
+            ("Common", "34053") => it.follow_up.common_end = v,
             ("Common", "34051") => it.follow_up.reminder_set = set && v.as_deref() == Some("true"),
             ("Common", "34050") => it.follow_up.reminder_time = v,
             ("Common", "34144") => it.follow_up.reminder_signal = v,

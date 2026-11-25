@@ -248,6 +248,8 @@ fn sync_snapshot(state: &str) -> Option<Vec<Marks>> {
             let follow_up = FollowUp {
                 start: text(),
                 due: text(),
+                common_start: None,
+                common_end: None,
                 reminder_set: text().is_some_and(|r| r == "1"),
                 reminder_time: text(),
                 reminder_signal: text(),

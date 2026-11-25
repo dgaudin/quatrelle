@@ -200,15 +200,18 @@ impl Session {
         let mut undo: BTreeMap<String, Vec<Op>> = undo.into_iter().collect();
         // What each account keeps where: Exchange all three, Graph the dates, the others here.
         let (ews, graph) = self.mail_server_kind(sel);
-        // The change to make, by account and its three values (a day as local midnight).
+        // The change to make, by account and its three values. A day goes to the server as its
+        // floating midnight (`day * 86_400`), the convention Exchange's `PidLidTask*Date` holds
+        // ([MS-OXOTASK] 2.2.2.2.4): a local midnight written there shows the day before west of
+        // UTC, and in Outlook itself for a French date.
         let mut ops: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
         let mut before: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
         for m in sel {
             let id = follow_up_id(m);
             let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
             let now = (
-                start.unwrap_or_else(|| self.follow_up_start(m)).map(|d| self.clock.midnight(d)).unwrap_or(0),
-                due.unwrap_or_else(|| self.follow_up_due(m)).map(|d| self.clock.midnight(d)).unwrap_or(0),
+                start.unwrap_or_else(|| self.follow_up_start(m)).map(|d| d.saturating_mul(86_400)).unwrap_or(0),
+                due.unwrap_or_else(|| self.follow_up_due(m)).map(|d| d.saturating_mul(86_400)).unwrap_or(0),
                 reminder.unwrap_or_else(|| self.follow_up_reminder(m)).unwrap_or(0),
             );
             let account = m.key.account.clone();
@@ -225,8 +228,8 @@ impl Session {
             if !exchange {
                 let keep_dates = !graph;
                 if keep_dates {
-                    put_day(&mut self.prefs.follow_up_start, id.clone(), (now.0 > 0).then(|| self.clock.local_day(now.0)));
-                    put_day(&mut self.prefs.follow_up, id.clone(), (now.1 > 0).then(|| self.clock.local_day(now.1)));
+                    put_day(&mut self.prefs.follow_up_start, id.clone(), (now.0 > 0).then(|| quatrelle_model::dates::utc_day(now.0)));
+                    put_day(&mut self.prefs.follow_up, id.clone(), (now.1 > 0).then(|| quatrelle_model::dates::utc_day(now.1)));
                 }
                 put_day(&mut self.prefs.follow_up_reminder, id.clone(), (now.2 > 0).then_some(now.2));
             } else {
@@ -331,7 +334,8 @@ impl Session {
     /// due, as the To-Do List shows it.
     pub fn follow_up_due_any(&self, m: &Summary) -> Option<i64> {
         if m.flags.follow_up.due > 0 {
-            return Some(self.clock.local_day(m.flags.follow_up.due));
+            // A floating midnight, read as a UTC day, never in the local zone.
+            return Some(quatrelle_model::dates::utc_day(m.flags.follow_up.due));
         }
         self.prefs.follow_up.get(&follow_up_id(m)).copied()
     }
@@ -345,7 +349,8 @@ impl Session {
     /// When a flag's follow-up starts: the server's own, else the day kept here.
     pub fn follow_up_start(&self, m: &Summary) -> Option<i64> {
         if m.flags.follow_up.start > 0 {
-            return Some(self.clock.local_day(m.flags.follow_up.start));
+            // A floating midnight, read as a UTC day, never in the local zone.
+            return Some(quatrelle_model::dates::utc_day(m.flags.follow_up.start));
         }
         self.prefs.follow_up_start.get(&follow_up_id(m)).copied()
     }

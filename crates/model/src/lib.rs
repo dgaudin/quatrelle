@@ -275,8 +275,10 @@ impl MessageKey {
 /// A follow-up's start and due days, its reminder and its title, as Exchange and Graph keep
 /// them (MS-OXOFLAG 2.2.1: `PidLidTaskStartDate`, `PidLidTaskDueDate`, `PidLidReminderSet`,
 /// `PidLidReminderTime` and `PidLidReminderSignalTime`, and `PidLidFlagRequest` the title).
-/// Unix seconds; 0 when the server says none. A server that keeps no follow-up dates (IMAP,
-/// JMAP, POP) leaves all of it 0, and the preferences hold them instead.
+/// `start` and `due` are the day's floating midnight (`day * 86_400`, as `PidLidTask*Date` holds
+/// a date — read with [`crate::dates::utc_day`], never in the local zone); `reminder` is Unix
+/// seconds. 0 when the server says none. A server that keeps no follow-up dates (IMAP, JMAP,
+/// POP) leaves all of it 0, and the preferences hold them instead.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FollowUp {
     #[serde(default, skip_serializing_if = "is_zero_time")]

@@ -49,6 +49,12 @@ pub(crate) const MAX_PICTURE: usize = 512 * 1024;
 /// that server's calendars (the engine doesn't ask it to).
 pub(crate) const CALENDARS_NOT_HERE: &str = "this server's calendars aren't made or changed from here";
 
+/// The system's time zone, for times written without one (`UTC` when it can't say): a local
+/// midnight as Exchange's `PidLidCommon*` keeps a follow-up date ([MS-OXOFLAG] 3.1.4.1.3).
+pub(crate) fn system_zone() -> quatrelle_model::zone::Zone {
+    iana_time_zone::get_timezone().ok().and_then(|z| quatrelle_model::zone::Zone::named(&z)).unwrap_or_default()
+}
+
 /// A picture's media type, read from its first bytes: a directory photo arrives without a name.
 pub(crate) fn picture_media(data: &[u8]) -> &'static str {
     match data {

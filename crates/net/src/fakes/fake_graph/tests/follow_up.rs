@@ -89,17 +89,20 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
     let opts = crate::sync::SyncOptions { prefetch: 0, ..Default::default() };
     let at = |text: &str| crate::jmap::utc_date(text).unwrap();
 
-    // As Outlook set it.
+    // As Outlook set it: read as the local day's floating midnight, whatever the zone.
+    let zone = crate::system_zone();
+    let float = |t: i64| (t + zone.offset_at(t)).div_euclid(86_400).saturating_mul(86_400);
     crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert_eq!(
         (m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder),
-        (at("2026-11-02T00:00:00Z"), at("2026-11-06T00:00:00Z"), 0),
+        (float(at("2026-11-02T00:00:00Z")), float(at("2026-11-06T00:00:00Z")), 0),
         "{:?}",
         m.flags.follow_up
     );
 
-    // Set here: Graph gets both, and no reminder (it has nowhere for one).
+    // Set here: Graph gets both, and no reminder (it has nowhere for one). A day comes as its
+    // floating midnight and goes as that midnight in the local zone, so Outlook shows the day.
     let start = at("2026-12-01T00:00:00Z");
     let due = at("2026-12-04T00:00:00Z");
     let keys = vec![m.key];
@@ -114,7 +117,7 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
         let m = d.message(&id).unwrap();
         assert_eq!(
             (m.start.as_deref().and_then(crate::jmap::utc_date), m.due.as_deref().and_then(crate::jmap::utc_date)),
-            (Some(start), Some(due)),
+            (Some(zone.to_utc(start)), Some(zone.to_utc(due))),
             "{m:?}"
         );
     }

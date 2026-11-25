@@ -101,6 +101,13 @@ pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
     era.checked_mul(146_097).and_then(|e| e.checked_add(doe - 719_468)).unwrap_or(far)
 }
 
+/// The day (days since the epoch) a floating midnight names: `day * 86_400`, as Exchange's
+/// `PidLidTaskStartDate`/`PidLidTaskDueDate` hold a date ([MS-OXOTASK] 2.2.2.2.4), is read as
+/// UTC, whatever the local zone is — reading it in the local zone shifts the day west of UTC.
+pub fn utc_day(t: i64) -> i64 {
+    t.div_euclid(86_400)
+}
+
 /// Split a time into local calendar parts.
 pub fn civil(t: i64, clock: &Clock) -> Civil {
     let local = clock.local(t);
