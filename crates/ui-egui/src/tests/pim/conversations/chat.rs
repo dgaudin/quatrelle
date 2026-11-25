@@ -26,7 +26,7 @@ pub(super) fn member(id: &str, name: &str, tenant: &str) -> Member {
 pub(super) fn members() -> Vec<Member> {
     vec![
         member(ME, "Riley Moreno", TENANT_ID),
-        member("u-ana", "Ana Lima", TENANT_ID),
+        member("u-ana", "Ana Exemple", TENANT_ID),
         member("u-bruno", "Bruno Rossi", TENANT_ID),
         member("u-sam", "Sam Okafor", "99999999-0000-0000-0000-000000000009"),
     ]
@@ -132,7 +132,7 @@ pub(super) fn picture_jobs(jobs: &Shared<Job>, f: impl Fn(&Picture) -> bool) -> 
 /// from another site, a card, an application's and an outsider's messages.
 #[test]
 fn a_conversation_with_every_kind_of_content() {
-    let ana = || user("u-ana", "Ana Lima");
+    let ana = || user("u-ana", "Ana Exemple");
     let (today, yesterday, before) = (NOW, NOW - 86_400, NOW - 3 * 86_400);
     let mut edited = said("m2", ana(), yesterday, para(vec![words("We moved the review")]));
     edited.edited = Some(yesterday * 1000 + 5);
@@ -246,7 +246,7 @@ fn a_conversation_with_every_kind_of_content() {
         assert!(!texts_with(&texts, "files.evil.example").is_empty(), "{theme}: the file's host on its card");
         // Ana's messages in five rows (a day, the next, then around the user's own, the app's
         // and the outsider's): her name once for each, not for each of her 11 messages.
-        assert_eq!(texts.iter().filter(|(t, _)| t == "Ana Lima").count(), 5, "{theme}: one name per row of messages: {texts:?}");
+        assert_eq!(texts.iter().filter(|(t, _)| t == "Ana Exemple").count(), 5, "{theme}: one name per row of messages: {texts:?}");
         // The user's own on the right, others' on the left.
         let own = rect_of(&texts, |t| t == "I'll take it").expect("own message");
         let theirs = rect_of(&texts, |t| t == "Plans for the week").expect("Ana's message");
@@ -267,7 +267,7 @@ fn a_conversation_with_every_kind_of_content() {
 #[test]
 fn an_outside_image_is_asked_only_on_a_click() {
     let url = "https://images.example/cat.gif";
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
     let (mut a, dir, jobs) = chat_app("teams-chat-outside", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     let texts = settled_at(&ctx, &mut a, (1280, 800));
@@ -291,7 +291,7 @@ fn an_outside_image_is_asked_only_on_a_click() {
 /// `teams.openInTeams` (which opens it in the meetings browser's window), never as a link.
 #[test]
 fn open_in_teams_needs_a_teams_chat_link() {
-    let mut card = said("m1", user("u-ana", "Ana Lima"), NOW, ChatText::default());
+    let mut card = said("m1", user("u-ana", "Ana Exemple"), NOW, ChatText::default());
     card.attachments = vec![Attachment::Card];
     let ctx = egui::Context::default();
     let size = (1280, 800);
@@ -321,7 +321,7 @@ fn open_in_teams_needs_a_teams_chat_link() {
 fn every_header_has_open_in_teams_when_its_link_is_one() {
     let ctx = egui::Context::default();
     let size = (1280, 800);
-    let hello = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Hello")]));
+    let hello = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("Hello")]));
     let (mut a, dir, _) = chat_app("teams-header-link", group_row(), TEAMS_LINK, vec![hello.clone()]);
     settled_at(&ctx, &mut a, size);
     let (_, texts) = pane(&ctx, &mut a, vec![], size);
@@ -368,7 +368,7 @@ fn every_header_has_open_in_teams_when_its_link_is_one() {
 #[test]
 fn a_file_card_names_its_host_and_says_another_site() {
     let file = |id: &str, url: &str| {
-        let mut m = said(id, user("u-ana", "Ana Lima"), NOW, para(vec![words("A file")]));
+        let mut m = said(id, user("u-ana", "Ana Exemple"), NOW, para(vec![words("A file")]));
         m.attachments = vec![Attachment::File { id: format!("f-{id}"), name: "notes.docx".into(), url: url.into(), size: Some(12 * 1024) }];
         m
     };
@@ -431,7 +431,7 @@ fn scrolling_up_asks_for_the_older_page_once() {
             .map(|i| {
                 said(
                     &format!("m{i:03}"),
-                    user(if i % 2 == 0 { "u-ana" } else { ME }, "Ana Lima"),
+                    user(if i % 2 == 0 { "u-ana" } else { ME }, "Ana Exemple"),
                     NOW - 7200 + i * 30,
                     para(vec![words(&format!("Line {i}"))]),
                 )
@@ -585,7 +585,7 @@ fn a_presence_is_said_in_every_language() {
 /// A one-to-one chat's header says the other person's presence.
 #[test]
 fn the_header_says_the_other_persons_presence() {
-    let r = one_to_one(CHAT, "Ana Lima", "u-ana", NOW);
+    let r = one_to_one(CHAT, "Ana Exemple", "u-ana", NOW);
     let (mut a, dir, _) = chat_app("teams-chat-presence", r, TEAMS_LINK, vec![]);
     a.session.teams_apply(teams::Event::Presence { presences: vec![("u-ana".into(), teams::Presence::DoNotDisturb)] });
     let ctx = egui::Context::default();
@@ -663,7 +663,7 @@ fn a_sender_is_the_member_whatever_the_ids_capitals() {
     let (mut a, dir, _) = chat_app("teams-chat-capitals", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     let texts = settled_at(&ctx, &mut a, TALL);
-    assert!(has_text(&texts, "Ana Lima"), "{texts:?}");
+    assert!(has_text(&texts, "Ana Exemple"), "{texts:?}");
     assert!(!has_text(&texts, "Someone Else"), "{texts:?}");
     assert!(!has_text(&texts, "External"), "a member of the organisation: {texts:?}");
     let _ = std::fs::remove_dir_all(dir);
@@ -720,7 +720,8 @@ fn external_is_on_each_message_of_a_row() {
 #[test]
 fn a_left_chat_says_so_under_its_header() {
     let left = ChatRow { left: true, ..group_row() };
-    let (mut a, dir, _) = chat_app("teams-chat-left", left, TEAMS_LINK, vec![said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Bye")]))]);
+    let (mut a, dir, _) =
+        chat_app("teams-chat-left", left, TEAMS_LINK, vec![said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("Bye")]))]);
     let ctx = egui::Context::default();
     let (_, texts) = {
         settled_at(&ctx, &mut a, TALL);

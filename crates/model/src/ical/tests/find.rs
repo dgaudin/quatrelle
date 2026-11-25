@@ -12,7 +12,7 @@ fn board() -> CalEvent {
         summary: "Board meeting".into(),
         location: "Room 2.14, Main building".into(),
         description: "Budget for 2027 and the new studio".into(),
-        organizer: Some(Attendee { email: "ana@studio.example".into(), name: "Ana Lima".into(), ..Default::default() }),
+        organizer: Some(Attendee { email: "ana@studio.example".into(), name: "Ana Exemple".into(), ..Default::default() }),
         attendees: vec![Attendee { email: "jun.park@studio.example".into(), name: "Jun Park".into(), ..Default::default() }],
         categories: vec!["Red category".into(), "Clients".into()],
         ..Default::default()

@@ -50,7 +50,7 @@ fn msg(chat: &str, i: i64) -> ChatMessage {
     ChatMessage {
         id: at.to_string(),
         chat: chat.into(),
-        sender: Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
+        sender: Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
         created: at,
         modified: at,
         body: text(&format!("Message {i}")),
@@ -520,15 +520,15 @@ fn what_is_read_back_keeps_the_readers_rules() {
     .unwrap();
     for back in [c.chat(A).unwrap(), c.chats().remove(0)] {
         assert_eq!(back.chat.topic, Some(one_line(&topic)));
-        assert_eq!(back.chat.members, [member("u-ok", "Ana Lima")]);
+        assert_eq!(back.chat.members, [member("u-ok", "Ana Exemple")]);
         let p = back.chat.preview.unwrap();
         assert_eq!((p.sender, p.text), (user("u-ok", "Ana"), "hi there".to_string()));
     }
     let read = c.last_pages(A, 2);
     let [m, nobody, deleted_named, deleted_long] = read.as_slice() else { panic!("{read:?}") };
-    assert_eq!(deleted_named.sender, user("u-ok", "Ana Lima"));
+    assert_eq!(deleted_named.sender, user("u-ok", "Ana Exemple"));
     assert_eq!(deleted_long.sender, Sender::Nobody);
-    assert_eq!(m.sender, user("u-ok", "Ana Lima"));
+    assert_eq!(m.sender, user("u-ok", "Ana Exemple"));
     assert_eq!(m.mentions, [Mention { id: 0, text: "Paul x".into(), user_id: None }]);
     assert_eq!(m.reactions[0].users, ["u-ok"]);
     assert_eq!(m.attachments, [Attachment::Hosted { id: "h1".into() }, Attachment::Card]);

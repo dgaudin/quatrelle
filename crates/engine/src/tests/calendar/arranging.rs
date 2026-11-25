@@ -396,7 +396,7 @@ fn an_unsent_appointment_in_someone_elses_calendar_isnt_made_the_accounts() {
     let mut s = ews_session("arranging-orphans-theirs");
     let ana = "shared:ana@contoso.example";
     let team = CalendarInfo { group: "Team".into(), ..cal("shared:zoe@contoso.example", "Zoe Park", 3) };
-    ews_synced(&mut s, vec![ews_main(), cal(ana, "Ana Lima", 2), team], Vec::new(), false);
+    ews_synced(&mut s, vec![ews_main(), cal(ana, "Ana Exemple", 2), team], Vec::new(), false);
     for (uid, calendar) in [("lunch", ana), ("review", "shared:zoe@contoso.example")] {
         let event = CalEvent { uid: uid.into(), summary: uid.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
         s.pim_mut("sample").events.push(StoredEvent { calendar: calendar.into(), event, dirty: true, ..Default::default() });

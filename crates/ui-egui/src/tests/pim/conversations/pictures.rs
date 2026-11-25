@@ -61,7 +61,7 @@ fn a_picture_bigger_than_40_megapixels_is_a_placeholder() {
     assert!(u64::from(10_000u32 * 5_000) > MAX_PIXELS);
     let m = said(
         "m1",
-        user("u-ana", "Ana Lima"),
+        user("u-ana", "Ana Exemple"),
         NOW,
         para(vec![
             words("Two"),
@@ -150,7 +150,7 @@ fn a_photo_is_drawn_on_its_row() {
 /// puts it away.
 #[test]
 fn a_thumbnail_opens_the_picture_big() {
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
     let (mut a, dir, _) = chat_app("teams-chat-viewer", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     settled_at(&ctx, &mut a, (1280, 800));
@@ -184,7 +184,7 @@ fn pictures_are_asked_for_as_their_messages_come_on_screen() {
         .map(|i| {
             said(
                 &format!("m{i:02}"),
-                user("u-ana", "Ana Lima"),
+                user("u-ana", "Ana Exemple"),
                 NOW - 7200 + i * 30,
                 para(vec![words("A picture"), Run { hosted: Some(format!("h{i}")), ..Default::default() }]),
             )
@@ -208,7 +208,7 @@ fn pictures_are_asked_for_as_their_messages_come_on_screen() {
 fn a_message_of_20000_pictures_is_drawn_quickly() {
     let mut runs: Vec<Run> = (0..20_000).map(|i| Run { hosted: Some(format!("h{i}")), ..Default::default() }).collect();
     runs.extend((0..2_000).map(|i| Run { outside: Some(format!("https://images.example/{i}.gif")), ..Default::default() }));
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(runs));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(runs));
     let (mut a, dir, jobs) = chat_app("teams-pictures-many", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     settled_at(&ctx, &mut a, TALL);
@@ -235,7 +235,7 @@ fn next_frame_in(ctx: &egui::Context, a: &mut MailApp) -> std::time::Duration {
 /// drawing.
 #[test]
 fn a_placeholder_on_screen_asks_no_repaint() {
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
     let (mut a, dir, _) = chat_app("teams-pictures-still", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     let texts = settled_at(&ctx, &mut a, (1280, 800));
@@ -259,7 +259,7 @@ fn texture_bytes(ctx: &egui::Context) -> usize {
 /// screen is asked for again when it's back on screen.
 #[test]
 fn a_picture_let_go_is_asked_again_and_the_cache_stays_bounded() {
-    let m = said("m0", user("u-ana", "Ana Lima"), NOW, para(vec![words("The first"), Run { hosted: Some("h0".into()), ..Default::default() }]));
+    let m = said("m0", user("u-ana", "Ana Exemple"), NOW, para(vec![words("The first"), Run { hosted: Some("h0".into()), ..Default::default() }]));
     let (mut a, dir, jobs) = chat_app("teams-pictures-evicted", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     settled_at(&ctx, &mut a, (1280, 800));
@@ -294,7 +294,7 @@ fn a_picture_let_go_is_asked_again_and_the_cache_stays_bounded() {
 /// let go when the viewer closes.
 #[test]
 fn a_picture_is_decoded_whole_only_in_the_viewer() {
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
     let (mut a, dir, _) = chat_app("teams-pictures-whole", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     settled_at(&ctx, &mut a, (1280, 800));
@@ -323,7 +323,7 @@ fn a_picture_is_decoded_whole_only_in_the_viewer() {
 /// spinner, no repaint asked, and no new picture asked for however long it stays on screen.
 #[test]
 fn a_failed_picture_stays_still_and_isnt_asked_again() {
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("A picture"), Run { hosted: Some("h1".into()), ..Default::default() }]));
     let (mut a, dir, jobs) = chat_app("teams-pictures-failed", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     settled_at(&ctx, &mut a, (1280, 800));
@@ -351,7 +351,7 @@ fn a_failed_picture_stays_still_and_isnt_asked_again() {
 #[test]
 fn show_picture_twice_asks_once() {
     let url = "https://images.example/cat.gif";
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
     let (mut a, dir, jobs) = chat_app("teams-pictures-twice", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     let size = egui::vec2(1280.0, 800.0);
@@ -392,7 +392,7 @@ fn show_picture_twice_asks_once() {
 #[test]
 fn show_picture_is_greyed_while_it_waits() {
     let url = "https://images.example/cat.gif";
-    let m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
+    let m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("Look"), Run { outside: Some(url.into()), ..Default::default() }]));
     let (mut a, dir, _) = chat_app("teams-pictures-greyed", group_row(), TEAMS_LINK, vec![m]);
     let ctx = egui::Context::default();
     let size = (1280, 800);

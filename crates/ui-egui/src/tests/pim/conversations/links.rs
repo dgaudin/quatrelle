@@ -23,7 +23,7 @@ const WRAPPED_AT_BACKSLASH: &str = "https://www.google.com/url?q=https%3A%2F%2Fb
 fn linked(url: &str) -> ChatMessage {
     said(
         "m1",
-        user("u-ana", "Ana Lima"),
+        user("u-ana", "Ana Exemple"),
         NOW,
         para(vec![words("Read "), Run { text: "the plan".into(), link: Some(url.into()), ..Default::default() }]),
     )
@@ -101,7 +101,7 @@ fn a_wrapped_link_that_cant_be_opened_is_plain_text() {
 #[test]
 fn a_file_cards_wrapped_link_names_where_it_goes() {
     let file = |url: &str| {
-        let mut m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A file")]));
+        let mut m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("A file")]));
         m.attachments = vec![Attachment::File { id: "f-1".into(), name: "report.pdf".into(), url: url.into(), size: Some(2048) }];
         m
     };
@@ -127,7 +127,7 @@ fn a_file_cards_wrapped_link_names_where_it_goes() {
 #[test]
 fn a_file_card_is_the_users_own_only_by_what_its_click_opens() {
     let file = |url: &str| {
-        let mut m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("A file")]));
+        let mut m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("A file")]));
         m.attachments = vec![Attachment::File { id: "f-1".into(), name: "notes.docx".into(), url: url.into(), size: Some(2048) }];
         m
     };

@@ -18,7 +18,7 @@ const STEPS: [&str; 8] =
 
 /// A group chat of the user, Ana (who has an object id) and Bruno (who has none).
 fn files_server(change: impl FnOnce(&mut FakeTeams)) -> Server {
-    let members = vec![me(), FakeUser::new(ANA_ID, "Ana Lima"), FakeUser::new("u-bruno", "Bruno Reis")];
+    let members = vec![me(), FakeUser::new(ANA_ID, "Ana Exemple"), FakeUser::new("u-bruno", "Bruno Reis")];
     let mut chat = FakeChat::new(CHAT, "group", None, members);
     chat.messages.push(FakeMessage::new("1", Some("u-bruno"), &rfc3339(T0), "<p>Hello</p>"));
     let mut t = teams_with(vec![chat]);

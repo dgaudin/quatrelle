@@ -61,7 +61,7 @@ fn a_failed_last_save_is_kept_across_a_restart() {
     let mut pim = quatrelle_model::pim::Pim::default();
     pim.cards.push(quatrelle_model::pim::StoredCard {
         book: quatrelle_model::pim::LOCAL.into(),
-        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
+        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Exemple".into(), ..Default::default() },
         ..Default::default()
     });
     store.save_account_doc(&cards, quatrelle_model::pim::PIM_DOC, &pim).unwrap();
@@ -76,7 +76,7 @@ fn a_failed_last_save_is_kept_across_a_restart() {
         error: Some("disk full".into()),
     });
     assert!(s.account(&cards).is_some(), "contacts came in: the account stays");
-    assert!(s.pim[&cards].cards.iter().any(|c| c.card.name == "Ana Lima"), "and they show");
+    assert!(s.pim[&cards].cards.iter().any(|c| c.card.name == "Ana Exemple"), "and they show");
     // The folder list can't be saved again either: said, and the account has no folders after.
     store.fail(None, Some("folders.json"));
     let lost = s.run("account.importPst", &json!({"path": "C:/Mail/lost.pst"})).unwrap()["account"].as_str().unwrap().to_string();
@@ -159,7 +159,7 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     let mut pim = quatrelle_model::pim::Pim::default();
     pim.cards.push(quatrelle_model::pim::StoredCard {
         book: quatrelle_model::pim::LOCAL.into(),
-        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
+        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Exemple".into(), ..Default::default() },
         ..Default::default()
     });
     s.store.clone().unwrap().save_account_doc(&id, quatrelle_model::pim::PIM_DOC, &pim).unwrap();
@@ -173,7 +173,7 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
         done: true,
         error: None,
     });
-    assert!(s.pim[&id].cards.iter().any(|c| c.card.name == "Ana Lima"));
+    assert!(s.pim[&id].cards.iter().any(|c| c.card.name == "Ana Exemple"));
     assert!(!s.pim[&id].calendars.is_empty(), "with a calendar to add to");
     assert!(s.notices.last().is_some_and(|n| n.text.contains("250 messages imported (2 could not be read)")));
     assert_eq!(s.view, View::Folder { account: id.clone(), folder: "INBOX".into() });

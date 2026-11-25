@@ -32,7 +32,7 @@ fn file_lines(extra: &[String]) -> Vec<String> {
 fn pictures_and_files_come_in_on_cards_and_events() {
     let png = b"\x89PNG\r\n\x1a\npicture";
     let photo_flag = [UnicodePstProperty::tagged(0x7FFF, V::Boolean(true))];
-    let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Lima", "", &[]));
+    let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Exemple", "", &[]));
     contact.files = vec![file("ContactPicture.png", "image/png", png, &photo_flag), file("cv.pdf", "application/pdf", b"%PDF", &[])];
     let when = [named(APPOINTMENT, 0x820D, V::Time(filetime(1_700_070_400))), named(APPOINTMENT, 0x820E, V::Time(filetime(1_700_074_000)))];
     let mut event = Put::new(&["Calendar"], "IPF.Appointment", item("IPM.Appointment", "Review", "", &when));
@@ -157,7 +157,7 @@ fn a_picture_past_the_cap_is_counted() {
     let mut big = b"\x89PNG\r\n\x1a\n".to_vec();
     big.resize(quatrelle_model::vcard::MAX_PHOTO + 1, 0);
     let flags = [UnicodePstProperty::tagged(0x7FFF, V::Boolean(true)), UnicodePstProperty::tagged(0x7FFE, V::Boolean(true))];
-    let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Lima", "", &[]));
+    let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Exemple", "", &[]));
     contact.files = vec![file("ContactPicture.png", "image/png", &big, &flags)];
     let b = Brought::of("big-picture", &[contact]);
     assert_eq!(b.done.contacts, 1);

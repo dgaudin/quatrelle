@@ -608,7 +608,7 @@ fn the_search_is_sent_after_a_pause_and_its_hits_replace_the_rows() {
 /// each one's photo is asked once.
 #[test]
 fn the_people_shown_are_told_once_and_their_photos_asked_once() {
-    let rows = vec![one_to_one("19:p1@thread.v2", "Paul Durand", "u-paul", NOW), one_to_one("19:p2@thread.v2", "Ana Lima", "u-ana", NOW - 5)];
+    let rows = vec![one_to_one("19:p1@thread.v2", "Paul Durand", "u-paul", NOW), one_to_one("19:p2@thread.v2", "Ana Exemple", "u-ana", NOW - 5)];
     let (mut a, dir, jobs) = module_app("teams-list-people", rows);
     a.session.teams_apply(teams::Event::Presence { presences: vec![("u-paul".into(), teams::Presence::Busy)] });
     let ctx = egui::Context::default();

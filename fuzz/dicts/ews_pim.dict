@@ -29,7 +29,7 @@
 "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6852\" PropertyType=\"Integer\"/><t:Value>3</t:Value></t:ExtendedProperty>"
 "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6849\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>"
 "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6851\" PropertyType=\"String\"/><t:Value>Team</t:Value></t:ExtendedProperty>"
-"<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E1D\" PropertyType=\"String\"/><t:Value>Ana Lima</t:Value></t:ExtendedProperty>"
+"<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E1D\" PropertyType=\"String\"/><t:Value>Ana Exemple</t:Value></t:ExtendedProperty>"
 "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6854\" PropertyType=\"Binary\"/><t:Value>AAAAANynQMg</t:Value></t:ExtendedProperty>"
 "<t:Mailbox><t:EmailAddress>ana@studio.example</t:EmailAddress></t:Mailbox>"
 "ana@studio.example"

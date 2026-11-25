@@ -178,8 +178,8 @@ fn search_folders_are_made_from_the_dialog_and_open() {
     f.preset = 8;
     f.apply_preset(before);
     assert_eq!(f.name, "Mail from specific people", "the name follows the kind until one is typed");
-    f.people = "zoe@studio.example; Ana Lima, , \"x".into();
-    assert_eq!(f.final_query(), "from:zoe@studio.example,\"Ana Lima\",x");
+    f.people = "zoe@studio.example; Ana Exemple, , \"x".into();
+    assert_eq!(f.final_query(), "from:zoe@studio.example,\"Ana Exemple\",x");
     f.name = "Zoe and Ana".into();
     a.ui.dialog = Some(Dialog::SearchFolder(Box::new(f.clone())));
     frame(&ctx, &mut a, vec![]);
@@ -197,7 +197,7 @@ fn search_folders_are_made_from_the_dialog_and_open() {
     assert!(matches!(&a.ui.dialog, Some(Dialog::SearchFolder(f)) if f.error.is_some()));
     // Edited: a preset's search shows as that kind, anything else as Custom.
     let edit = crate::dialogs::SearchFolderForm::edit(&a.session.prefs.search_folders[0]);
-    assert_eq!((edit.preset, edit.final_query().as_str()), (8, "from:zoe@studio.example,\"Ana Lima\",x"));
+    assert_eq!((edit.preset, edit.final_query().as_str()), (8, "from:zoe@studio.example,\"Ana Exemple\",x"));
     a.ui.dialog = Some(Dialog::SearchFolder(Box::new(edit)));
     frame(&ctx, &mut a, vec![]);
     // Many, with long names, draw.
@@ -579,7 +579,7 @@ fn removing_a_rule_condition_keeps_each_field_its_own() {
 fn a_people_search_folder_reopens_as_people_and_saves_the_same() {
     let (mut a, dir) = app("search-people-reopen");
     let ctx = egui::Context::default();
-    let query = "from:zoe@studio.example,\"Ana Lima\",x";
+    let query = "from:zoe@studio.example,\"Ana Exemple\",x";
     a.run("searchFolder.create", json!({"name": "People", "query": query}));
     let edit = crate::dialogs::SearchFolderForm::edit(&a.session.prefs.search_folders[0]);
     assert_eq!(edit.preset, 8);

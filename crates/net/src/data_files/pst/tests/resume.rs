@@ -49,7 +49,7 @@ fn mailbox(name: &str) -> (PathBuf, PathBuf) {
     }
     store.save_folders("a1", &folders).unwrap();
     let mut pim = Pim::default();
-    for (k, name) in ["Ana Lima", "Ben Okoro", "Cy Tran"].iter().enumerate() {
+    for (k, name) in ["Ana Exemple", "Ben Okoro", "Cy Tran"].iter().enumerate() {
         let card = quatrelle_model::vcard::Card { uid: format!("c{k}"), name: (*name).into(), ..Default::default() };
         pim.cards.push(StoredCard { card, ..Default::default() });
     }

@@ -98,7 +98,7 @@ proptest! {
     ) {
         let (copy, store) = copy();
         copy.index.borrow_mut().tranche_cap = Some(8);
-        // Message k as it is now: `m{k:02}`, from Ana Lima.
+        // Message k as it is now: `m{k:02}`, from Ana Exemple.
         let mut now: Vec<ChatMessage> =
             pool.iter().enumerate().map(|(k, (ms, w))| msg_at(A, &format!("m{k:02}"), T0 + ms % spread, &says(w))).collect();
         // Each message as the copy last took it: what a write says changed.

@@ -343,7 +343,7 @@ fn mails() -> Vec<Mail> {
         },
         Mail {
             folder: "INBOX",
-            from: ("Ana Lima", "ana@soundlab.example"),
+            from: ("Ana Exemple", "ana@soundlab.example"),
             to: &[ME],
             cc: &[],
             subject: "Sound mix, version 3",

@@ -37,7 +37,7 @@ fn person(id: &str, name: &str, guest: bool) -> Person {
 }
 
 fn ana() -> Person {
-    person(ANA, "Ana Lima", false)
+    person(ANA, "Ana Exemple", false)
 }
 
 fn bruno() -> Person {
@@ -53,7 +53,7 @@ fn teams(chats: Vec<FakeChat>) -> FakeTeams {
     let mut t = FakeTeams::new(morgan(), TENANT);
     let mut carla = user(CARLA, "Carla Dias");
     carla.mail = "carla@fabrikam.example".into();
-    t.directory = vec![user(ANA, "Ana Lima"), user(BRUNO, "Bruno Reis"), carla, user(MORGAN, "Morgan Lee")];
+    t.directory = vec![user(ANA, "Ana Exemple"), user(BRUNO, "Bruno Reis"), carla, user(MORGAN, "Morgan Lee")];
     t.guests = vec![CARLA.into()];
     t.chats = chats;
     t
@@ -68,11 +68,11 @@ fn chat_of_kind(id: &str, kind: &'static str, topic: Option<&str>, members: Vec<
 }
 
 fn one_to_one(id: &str) -> FakeChat {
-    chat_of_kind(id, "oneOnOne", None, vec![morgan(), user(ANA, "Ana Lima")], T0)
+    chat_of_kind(id, "oneOnOne", None, vec![morgan(), user(ANA, "Ana Exemple")], T0)
 }
 
 fn group(id: &str, kind: &'static str, at: i64) -> FakeChat {
-    chat_of_kind(id, kind, Some("Plans"), vec![morgan(), user(ANA, "Ana Lima"), user(BRUNO, "Bruno Reis")], at)
+    chat_of_kind(id, kind, Some("Plans"), vec![morgan(), user(ANA, "Ana Exemple"), user(BRUNO, "Bruno Reis")], at)
 }
 
 impl Run {
@@ -230,7 +230,7 @@ fn a_new_chat_is_created_listed_and_said() {
     let created = events.iter().position(|e| matches!(e, model::Event::Created { .. })).unwrap();
     assert!(row < created, "the row, then Created: {events:?}");
     let row = r.row(&chat);
-    assert_eq!((row.name.as_str(), row.kind, row.person.as_deref()), ("Ana Lima", ChatKind::OneOnOne, Some(ANA)));
+    assert_eq!((row.name.as_str(), row.kind, row.person.as_deref()), ("Ana Exemple", ChatKind::OneOnOne, Some(ANA)));
     assert_eq!(r.record(&chat).chat.members.len(), 2);
 
     r.create("1-2", vec![ana(), bruno()], Some("Launch"));

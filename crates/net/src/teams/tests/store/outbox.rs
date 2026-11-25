@@ -170,8 +170,8 @@ fn records_of_delivery_two_read_back_as_sends() {
 #[test]
 fn change_records_are_kept_and_read_back() {
     let (c, _) = copy();
-    let ana = mention(0, Some("u-ana"), "Ana Lima");
-    let all = [edit(1, naming(0, "Ana Lima"), vec![ana.clone()]), delete(2), react(3, "\u{1F44D}")];
+    let ana = mention(0, Some("u-ana"), "Ana Exemple");
+    let all = [edit(1, naming(0, "Ana Exemple"), vec![ana.clone()]), delete(2), react(3, "\u{1F44D}")];
     for o in &all {
         c.put_op(o).unwrap();
     }
@@ -183,7 +183,7 @@ fn change_records_are_kept_and_read_back() {
 #[test]
 fn a_change_record_past_its_rules_is_passed_over() {
     let (c, s) = copy();
-    let ana = || mention(0, Some("u-ana"), "Ana Lima");
+    let ana = || mention(0, Some("u-ana"), "Ana Exemple");
     let kind = |what: OutKind| OpRecord { what, ..delete(1) };
     let at = |created: i64| (OutKind::Delete { message: "m-1".into(), created }, created);
     let many: Vec<Mention> = (0..=MAX_MENTIONS as u32).map(|i| mention(i, Some("u-ana"), "Ana")).collect();

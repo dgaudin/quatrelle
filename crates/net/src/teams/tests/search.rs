@@ -40,7 +40,7 @@ fn chat(id: &str, topic: Option<&str>) -> Chat {
         topic: topic.map(str::to_string),
         members: vec![
             Member { user_id: "u-me".into(), name: "Morgan Lee".into(), ..Member::default() },
-            Member { user_id: "u-ana".into(), name: "Ana Lima".into(), ..Member::default() },
+            Member { user_id: "u-ana".into(), name: "Ana Exemple".into(), ..Member::default() },
         ],
         last_read: None,
         hidden: false,
@@ -64,7 +64,7 @@ fn msg(chat: &str, i: i64, says: &str) -> ChatMessage {
     ChatMessage {
         id: at.to_string(),
         chat: chat.into(),
-        sender: Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
+        sender: Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
         created: at,
         modified: at,
         body: text(says),

@@ -111,7 +111,7 @@ fn calendar() -> Vec<CalEvent> {
         end: 1_793_003_600,
         organizer: Some(person("riley@studio.example", "Riley", "", false)),
         attendees: vec![
-            person("ana@studio.example", "Ana Lima", "ACCEPTED", false),
+            person("ana@studio.example", "Ana Exemple", "ACCEPTED", false),
             person("ben@studio.example", "Ben", "DECLINED", false),
             person("cleo@posteo.example", "", "NEEDS-ACTION", true),
         ],

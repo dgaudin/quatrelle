@@ -25,7 +25,7 @@ fn person(id: &str, name: &str) -> Person {
 }
 
 fn ana() -> Person {
-    person(ANA, "Ana Lima")
+    person(ANA, "Ana Exemple")
 }
 
 fn bruno() -> Person {

@@ -72,7 +72,7 @@ pub(crate) fn sample() -> Vec<u8> {
             (0x3FFD_0003, P::Int(65001)),
         ],
     );
-    for (i, (name, email, kind)) in [("Ana Lima", "ana@studio.test", 1), ("Ben Ode", "ben@studio.test", 2)].into_iter().enumerate() {
+    for (i, (name, email, kind)) in [("Ana Exemple", "ana@studio.test", 1), ("Ben Ode", "ben@studio.test", 2)].into_iter().enumerate() {
         let dir = format!("/__recip_version1.0_#{i:08X}");
         cf.create_storage(&dir).unwrap();
         write_props(&mut cf, &dir, PART_HEADER, &[(0x3001_001F, P::Text(name)), (0x39FE_001F, P::Text(email)), (0x0C15_0003, P::Int(kind))]);
@@ -103,7 +103,7 @@ pub(crate) fn sample() -> Vec<u8> {
             (0x001A_001F, P::Text("IPM.Note")),
             (0x0037_001F, P::Text("Earlier figures")),
             (0x1000_001F, P::Text("Last quarter's.")),
-            (0x0C1A_001F, P::Text("Ana Lima")),
+            (0x0C1A_001F, P::Text("Ana Exemple")),
             (0x5D01_001F, P::Text("ana@studio.test")),
         ],
     );

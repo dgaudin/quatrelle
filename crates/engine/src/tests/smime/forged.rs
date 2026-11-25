@@ -78,7 +78,7 @@ fn a_sender_named_inside_isnt_vouched_for_by_anothers_key() {
     let mut s = sample_session("forged-pgp-inside");
     s.clock.now = PGP_NOW;
     s.run("pgp.importPublic", &json!({"data": pgpdata("ana.asc")})).unwrap();
-    let sent = pgp_signed(&outer("f2", "Ana Lima <ana@posteo.example>", ""), AS_THE_DIRECTOR, &ana_key(), PGP_NOW);
+    let sent = pgp_signed(&outer("f2", "Ana Exemple <ana@posteo.example>", ""), AS_THE_DIRECTOR, &ana_key(), PGP_NOW);
     open_raw(&mut s, 9702, &sent);
     assert!(!(shown_from(&s) == "director@victim.example" && seal(&s) == Seal::Trusted), "a trusted seal over a sender the key isn't for");
     assert_eq!(shown_from(&s), "ana@posteo.example");

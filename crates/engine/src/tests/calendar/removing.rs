@@ -158,7 +158,7 @@ fn an_exchange_accounts_removed_calendars_go_to_its_sync() {
         ews_main(),
         cal(trips, "Trips", 2),
         CalendarInfo { read_only: true, ..cal(birthdays, "Birthdays", 3) },
-        CalendarInfo { group: "Team".into(), ..cal(ana, "Ana Lima", 4) },
+        CalendarInfo { group: "Team".into(), ..cal(ana, "Ana Exemple", 4) },
     ];
     ews_synced(&mut s, calendars, vec![sent("train", trips)], false);
     s.run("view.module", &json!({"name": "calendar"})).unwrap();
@@ -166,7 +166,7 @@ fn an_exchange_accounts_removed_calendars_go_to_its_sync() {
     for c in [trips, birthdays, ana] {
         s.run("calendar.remove", &json!({"account": "sample", "calendar": c})).unwrap();
     }
-    assert_eq!(removed_names(&s, "sample"), ["Trips", "Birthdays", "Ana Lima"]);
+    assert_eq!(removed_names(&s, "sample"), ["Trips", "Birthdays", "Ana Exemple"]);
     let shown = shown_ids(&s);
     assert!(shown.contains(&"ews:calendar".to_string()) && [trips, birthdays, ana].iter().all(|c| !shown.contains(&c.to_string())), "{shown:?}");
     s.take_jobs();

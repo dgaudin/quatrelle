@@ -163,10 +163,10 @@ fn sending_holds_when_something_is_said_to_be_attached_and_nothing_is() {
 #[test]
 fn a_reply_opened_again_from_drafts_still_leaves_out_its_original() {
     let mut s = sample_session("missing-attachment-draft");
-    let body = "Thanks, got it.\n\nFrom: Ana Lima <ana@soundlab.example>\nSent: Wednesday, 22 October 2026 10:00\n\
+    let body = "Thanks, got it.\n\nFrom: Ana Exemple <ana@soundlab.example>\nSent: Wednesday, 22 October 2026 10:00\n\
                 To: Riley <riley@studio.example>\nSubject: The attachment you asked for\n\nHere is the file, attached.\n";
     let d = quatrelle_mime::Draft {
-        to: vec![quatrelle_model::EmailAddress::new("Ana Lima", "ana@soundlab.example")],
+        to: vec![quatrelle_model::EmailAddress::new("Ana Exemple", "ana@soundlab.example")],
         subject: "RE: The attachment you asked for".into(),
         body: body.into(),
         in_reply_to: "<gone@soundlab.example>".into(),
@@ -215,7 +215,7 @@ fn the_attachment_reminder_reads_only_what_was_written() {
         s.run("compose.update", &json!({"body": format!("{words}{body}")})).unwrap();
     };
     let reply_to = |s: &mut Session, n: u32, subject: &str, body: &str, html: Option<&str>| {
-        deliver_with(s, n, ("Ana Lima", "ana@soundlab.example"), subject, body, html);
+        deliver_with(s, n, ("Ana Exemple", "ana@soundlab.example"), subject, body, html);
         s.run("mail.reply", &json!({})).unwrap();
     };
     // A signature whose notice speaks of attachments, in new messages and in replies.
@@ -328,7 +328,8 @@ fn sent_mail_without_an_answer_waits_for_a_reply() {
         references: vec![mine.message_id.clone()],
         ..Default::default()
     };
-    let raw = quatrelle_mime::build(&d, &quatrelle_model::EmailAddress::new("Ana Lima", "ana@soundlab.example"), s.clock.now, "<answer@x>").unwrap();
+    let raw =
+        quatrelle_mime::build(&d, &quatrelle_model::EmailAddress::new("Ana Exemple", "ana@soundlab.example"), s.clock.now, "<answer@x>").unwrap();
     let store = s.store.clone().unwrap();
     let mut inbox = store.load_folder("sample", "INBOX").unwrap();
     let key = quatrelle_model::MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9200 };

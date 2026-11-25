@@ -19,7 +19,7 @@ const OVER: egui::Pos2 = egui::pos2(900.0, 400.0);
 fn lines(range: std::ops::Range<i64>) -> Vec<ChatMessage> {
     range
         .map(|i| {
-            let who = if i % 2 == 0 { user("u-ana", "Ana Lima") } else { user(ME, "Riley Moreno") };
+            let who = if i % 2 == 0 { user("u-ana", "Ana Exemple") } else { user(ME, "Riley Moreno") };
             said(&format!("m{i:03}"), who, NOW - 7200 + i * 30, para(vec![words(&format!("Line {i}"))]))
         })
         .collect()

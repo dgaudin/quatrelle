@@ -629,8 +629,8 @@ mod tests {
     /// Each sender warning `message.read` gives is said in a line, one not known yet too.
     #[test]
     fn sender_warnings_are_said() {
-        let w = json!({"kind": "nameOfKnownPerson", "name": "Ana Lima", "known": "ana@corp.example", "real": "ana.lima.1984@gmail.com"});
-        assert_eq!(sender_warning_text(&w), "you know Ana Lima as ana@corp.example, but this comes from ana.lima.1984@gmail.com.");
+        let w = json!({"kind": "nameOfKnownPerson", "name": "Ana Exemple", "known": "ana@corp.example", "real": "ana.lima.1984@gmail.com"});
+        assert_eq!(sender_warning_text(&w), "you know Ana Exemple as ana@corp.example, but this comes from ana.lima.1984@gmail.com.");
         let w = json!({"kind": "signatureShowsOther", "shown": "corp.example", "real": "ana.lima.1984@gmail.com"});
         assert_eq!(sender_warning_text(&w), "the signature gives corp.example, but this comes from ana.lima.1984@gmail.com.");
         assert_eq!(sender_warning_text(&json!({"kind": 5})), "the sender doesn't add up ().");

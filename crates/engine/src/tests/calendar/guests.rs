@@ -58,7 +58,7 @@ fn an_appointment_with_only_the_user_has_no_guests_to_tell() {
     for (name, attendees) in [
         ("ews-only-me", vec![person(ME, "ACCEPTED")]),
         ("ews-only-me-caps", vec![person("Zoe@Contoso.example", "ACCEPTED")]),
-        ("ews-no-address", vec![person(ME, "ACCEPTED"), person("Ana Lima", "NEEDS-ACTION")]),
+        ("ews-no-address", vec![person(ME, "ACCEPTED"), person("Ana Exemple", "NEEDS-ACTION")]),
     ] {
         let (mut s, id) = exchange_with(name, attendees);
         s.run("event.update", &json!({"uid": "test-1", "summary": "x"})).unwrap();

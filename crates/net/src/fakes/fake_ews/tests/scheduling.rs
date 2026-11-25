@@ -178,7 +178,7 @@ fn a_meeting_made_with_a_room_books_it_as_a_resource() {
             start: 1_792_000_000,
             end: 1_792_003_600,
             organizer: Some(who("Riley", "riley@contoso.example", "")),
-            attendees: vec![who("Ana Lima", "ana@contoso.example", ""), who("Salle Rhône", "room.rhone@contoso.example", "ROOM")],
+            attendees: vec![who("Ana Exemple", "ana@contoso.example", ""), who("Salle Rhône", "room.rhone@contoso.example", "ROOM")],
             ..Default::default()
         },
         dirty: true,

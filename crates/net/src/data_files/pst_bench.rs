@@ -139,7 +139,7 @@ fn make() {
                 .map(|(o, f)| UnicodePstBatchMessage {
                     message: UnicodePstMessage {
                         subject: &o.0,
-                        sender_name: "Ana Lima",
+                        sender_name: "Ana Exemple",
                         sender_email: "ana@soundlab.example",
                         recipients: &recipients,
                         body: &o.1,

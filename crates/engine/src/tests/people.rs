@@ -14,7 +14,7 @@ fn a_contact_keeps_outlooks_fields() {
         .run(
             "contact.create",
             &json!({
-                "name": "Ana Lima",
+                "name": "Ana Exemple",
                 "emails": ["ana@contoso.example"],
                 "org": "Contoso",
                 "department": "Story",
@@ -62,7 +62,7 @@ fn a_contacts_own_picture_is_asked_for_by_its_id() {
         etag: String::new(),
         card: quatrelle_model::vcard::Card {
             uid: "C9".into(),
-            name: "Ana Lima".into(),
+            name: "Ana Exemple".into(),
             emails: vec![quatrelle_model::vcard::Typed { value: "ana@contoso.example".into(), kind: "work".into() }],
             ..Default::default()
         },
@@ -115,10 +115,10 @@ fn a_directory_picture_is_asked_for_once_and_kept() {
 #[test]
 fn a_contact_is_found_by_its_address() {
     let mut s = sample_session("person-by-email");
-    s.run("contact.create", &json!({"name": "Ana Lima", "emails": ["Ana.Lima@Contoso.example"]})).unwrap();
+    s.run("contact.create", &json!({"name": "Ana Exemple", "emails": ["Ana.Lima@Contoso.example"]})).unwrap();
     s.run("contact.create", &json!({"name": "Analyst Desk", "emails": ["desk@contoso.example"]})).unwrap();
     let found = s.person_by_email(" ana.lima@contoso.example ").map(|p| p.card.display());
-    assert_eq!(found.as_deref(), Some("Ana Lima"));
+    assert_eq!(found.as_deref(), Some("Ana Exemple"));
     assert!(s.person_by_email("ana").is_none(), "not by a name");
     assert!(s.person_by_email("contoso.example").is_none(), "nor by part of an address");
     assert!(s.person_by_email("").is_none());

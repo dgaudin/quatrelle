@@ -40,7 +40,7 @@ pub(super) const GROUP: &str = "19:g5h6@thread.v2";
 pub(super) const STEP: Duration = Duration::from_millis(100);
 
 pub(super) fn ana() -> FakeUser {
-    FakeUser::new("u-ana", "Ana Lima")
+    FakeUser::new("u-ana", "Ana Exemple")
 }
 
 /// A group chat of the user, Ana and Bruno, with one message of Ana's at `at`.

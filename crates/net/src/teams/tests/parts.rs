@@ -34,7 +34,7 @@ const DRIVE: &str = "https://contoso-my.sharepoint.com/personal/riley";
 const MIB: usize = 1 << 20;
 
 fn ana() -> FakeUser {
-    FakeUser::new(ANA, "Ana Lima")
+    FakeUser::new(ANA, "Ana Exemple")
 }
 
 /// `members`' chat, with `n` messages a minute apart from `start`, alternately Ana's and the

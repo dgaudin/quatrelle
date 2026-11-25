@@ -26,9 +26,9 @@ impl crate::Services for Opens {
     }
 }
 
-/// A message `m1` of Ana Lima with the file `name` on the user's own drive.
+/// A message `m1` of Ana Exemple with the file `name` on the user's own drive.
 fn with_file(name: &str) -> ChatMessage {
-    let mut m = said("m1", user("u-ana", "Ana Lima"), NOW, para(vec![words("The file")]));
+    let mut m = said("m1", user("u-ana", "Ana Exemple"), NOW, para(vec![words("The file")]));
     m.attachments = vec![Attachment::File {
         id: G.into(),
         name: name.into(),

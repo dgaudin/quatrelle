@@ -411,7 +411,7 @@ fn the_sign_out_question_counts_the_unsent() {
 #[test]
 fn the_box_and_what_goes_out_in_light_and_dark() {
     let messages = vec![
-        said("m1", user("u-ana", "Ana Lima"), NOW - 600, para(vec![words("Can you send the figures?")])),
+        said("m1", user("u-ana", "Ana Exemple"), NOW - 600, para(vec![words("Can you send the figures?")])),
         said("m2", user(ME, "Riley Moreno"), NOW - 300, para(vec![words("On it")])),
     ];
     let (mut a, dir) = writing_app("teams-box-frames", messages);
@@ -569,7 +569,7 @@ fn ctrl_enter_in_the_box_never_sends_the_mail_being_written() {
 /// conversations' search.
 #[test]
 fn in_conversations_no_key_sends_the_mail_being_written() {
-    let bubble = said("m1", user("u-ana", "Ana Lima"), NOW - 60, para(vec![words("Can you look at the agenda?")]));
+    let bubble = said("m1", user("u-ana", "Ana Exemple"), NOW - 60, para(vec![words("Can you look at the agenda?")]));
     let (mut a, dir) = writing_app("teams-no-mail-anywhere", vec![bubble]);
     let ctx = egui::Context::default();
     let size = egui::vec2(SIZE.0 as f32, SIZE.1 as f32);

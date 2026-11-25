@@ -62,11 +62,11 @@ fn at_offers_the_organisations_members_and_enter_picks() {
     focus_box(&ctx, &mut a);
     typed(&ctx, &mut a, vec![text("@")]);
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
-    assert!(has_text(&texts, "Ana Lima") && has_text(&texts, "Bruno Rossi"), "{texts:?}");
+    assert!(has_text(&texts, "Ana Exemple") && has_text(&texts, "Bruno Rossi"), "{texts:?}");
     assert!(!has_text(&texts, "Riley Moreno") && !has_text(&texts, "Sam Okafor"), "{texts:?}");
     typed(&ctx, &mut a, vec![text("a")]);
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
-    let ana = rect_of(&texts, |t| t == "Ana Lima").expect("Ana offered");
+    let ana = rect_of(&texts, |t| t == "Ana Exemple").expect("Ana offered");
     let written = rect_of(&texts, |t| t == "@a").expect("the box's text");
     assert!(ana.bottom() <= written.top(), "above the box: {ana:?} {written:?}");
     for not in ["Bruno Rossi", "Sam Okafor", "Riley Moreno"] {
@@ -74,14 +74,14 @@ fn at_offers_the_organisations_members_and_enter_picks() {
     }
     let acts = typed(&ctx, &mut a, vec![enter()]);
     assert!(sends(&acts).is_empty(), "Enter picked: nothing sent");
-    assert_eq!(in_box(&a), "Ana Lima ");
+    assert_eq!(in_box(&a), "Ana Exemple ");
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
-    assert!(!has_text(&texts, "Ana Lima"), "the offer gone: {texts:?}");
+    assert!(!has_text(&texts, "Ana Exemple"), "the offer gone: {texts:?}");
     let acts = typed(&ctx, &mut a, vec![enter()]);
-    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "Ana Lima ", "bold": [], "italic": [], "mentions": [[0, 8, "u-ana"]]})]);
+    assert_eq!(sends(&acts), vec![json!({"chat": CHAT, "text": "Ana Exemple ", "bold": [], "italic": [], "mentions": [[0, 8, "u-ana"]]})]);
     run_all(&mut a, acts);
     let sent = a.session.teams.outgoing.last().expect("taken by the engine, shown at once");
-    assert_eq!(sent.mentions, vec![Mention { id: 0, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }]);
+    assert_eq!(sent.mentions, vec![Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -98,14 +98,14 @@ fn a_name_with_a_bidi_mark_goes_in_as_one_line_and_stays_a_mention() {
     focus_box(&ctx, &mut a);
     typed(&ctx, &mut a, vec![text("@"), text("a")]);
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
-    assert!(has_text(&texts, "Ana Lima"), "offered on one line: {texts:?}");
+    assert!(has_text(&texts, "Ana Exemple"), "offered on one line: {texts:?}");
     typed(&ctx, &mut a, vec![enter()]);
-    assert_eq!(in_box(&a), "Ana Lima ");
+    assert_eq!(in_box(&a), "Ana Exemple ");
     let acts = typed(&ctx, &mut a, vec![enter()]);
     assert_eq!(sends(&acts).iter().map(mentions_of).collect::<Vec<_>>(), vec![json!([[0, 8, "u-ana"]])]);
     run_all(&mut a, acts);
     let sent = a.session.teams.outgoing.last().expect("taken by the engine");
-    assert_eq!(sent.mentions, vec![Mention { id: 0, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }]);
+    assert_eq!(sent.mentions, vec![Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -120,10 +120,10 @@ fn a_member_is_found_by_a_word_of_the_name_or_the_address() {
     a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: people, web_url: Some(TEAMS_LINK.into()), first: true });
     let ctx = egui::Context::default();
     focus_box(&ctx, &mut a);
-    for (query, offered) in [("@RO", vec!["Bruno Rossi"]), ("@b.r", vec!["Bruno Rossi"]), ("@lim", vec!["Ana Lima"]), ("@zz", vec![])] {
+    for (query, offered) in [("@RO", vec!["Bruno Rossi"]), ("@b.r", vec!["Bruno Rossi"]), ("@lim", vec!["Ana Exemple"]), ("@zz", vec![])] {
         typed(&ctx, &mut a, vec![text(query)]);
         let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
-        for name in ["Ana Lima", "Bruno Rossi"] {
+        for name in ["Ana Exemple", "Bruno Rossi"] {
             assert_eq!(has_text(&texts, name), offered.contains(&name), "{query}: {name}: {texts:?}");
         }
         typed(&ctx, &mut a, vec![key(Key::A, Modifiers::COMMAND), backspace()]);
@@ -161,7 +161,7 @@ fn arrows_and_tab_choose_in_the_offer() {
     assert_eq!(in_box(&a), "Bruno Rossi ");
     assert_eq!(in_box_mentions(&a), vec![(0..11, "u-bruno".to_string())]);
     typed(&ctx, &mut a, vec![text("and "), text("@"), down(), up(), tab(), text("x")]);
-    assert_eq!(in_box(&a), "Bruno Rossi and Ana Lima x", "Tab picked, the keyboard kept");
+    assert_eq!(in_box(&a), "Bruno Rossi and Ana Exemple x", "Tab picked, the keyboard kept");
     assert_eq!(in_box_mentions(&a), vec![(0..11, "u-bruno".to_string()), (16..24, "u-ana".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -193,7 +193,7 @@ fn typing_into_a_mention_makes_it_text() {
     typed(&ctx, &mut a, vec![text("@"), text("a"), enter()]);
     assert_eq!(in_box_mentions(&a).len(), 1);
     typed(&ctx, &mut a, vec![backspace()]);
-    assert_eq!((in_box(&a).as_str(), in_box_mentions(&a).len()), ("Ana Lima", 1), "the space only: the mention kept");
+    assert_eq!((in_box(&a).as_str(), in_box_mentions(&a).len()), ("Ana Exemple", 1), "the space only: the mention kept");
     typed(&ctx, &mut a, vec![backspace()]);
     assert_eq!(in_box(&a), "Ana Lim");
     assert!(in_box_mentions(&a).is_empty(), "the name changed: text");
@@ -222,8 +222,8 @@ fn a_refused_send_comes_back_with_its_mentions() {
     typed(&ctx, &mut a, vec![text("@"), text("b"), enter()]);
     assert_eq!(in_box(&a), "Bruno Rossi ");
     a.session.teams_apply(teams::Event::Unsent { count: quatrelle_engine::model::pim::teams::OUTBOX_MAX as u32 });
-    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "Ana Lima hi", "bold": [], "italic": [], "mentions": [[0, 8, "u-ana"]]})));
-    assert_eq!(in_box(&a), "Ana Lima hi\nBruno Rossi ");
+    a.act(Action::Run("teams.send", json!({"chat": CHAT, "text": "Ana Exemple hi", "bold": [], "italic": [], "mentions": [[0, 8, "u-ana"]]})));
+    assert_eq!(in_box(&a), "Ana Exemple hi\nBruno Rossi ");
     assert_eq!(in_box_mentions(&a), vec![(0..8, "u-ana".to_string()), (12..23, "u-bruno".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -241,7 +241,7 @@ fn enter_in_the_frame_acts_on_the_offer_shown() {
     typed(&ctx, &mut a, vec![text("@"), text("a")]);
     let acts = one_frame(&ctx, &mut a, vec![text("n"), enter()], 2);
     assert!(sends(&acts).is_empty(), "picked, not sent");
-    assert_eq!(in_box(&a), "Ana Lima ");
+    assert_eq!(in_box(&a), "Ana Exemple ");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -253,13 +253,13 @@ fn mentions_are_highlighted_in_the_box() {
     let ctx = egui::Context::default();
     focus_box(&ctx, &mut a);
     typed(&ctx, &mut a, vec![text("Hi "), text("@"), text("a"), enter()]);
-    assert_eq!(in_box(&a), "Hi Ana Lima ");
+    assert_eq!(in_box(&a), "Hi Ana Exemple ");
     let shapes = frame_shapes(&ctx, &mut a, vec![], egui::vec2(SIZE.0 as f32, SIZE.1 as f32));
     let t = a.ui.tokens;
     let galley = shapes
         .iter()
         .find_map(|s| match s {
-            egui::Shape::Text(x) if x.galley.text() == "Hi Ana Lima " => Some(x.galley.clone()),
+            egui::Shape::Text(x) if x.galley.text() == "Hi Ana Exemple " => Some(x.galley.clone()),
             _ => None,
         })
         .expect("the box's text");
@@ -270,14 +270,14 @@ fn mentions_are_highlighted_in_the_box() {
         .filter_map(|x| Some((galley.job.text.get(x.byte_range.start.0..x.byte_range.end.0)?, x.format.color, x.format.background)))
         .collect();
     let plain = egui::Color32::TRANSPARENT;
-    assert_eq!(looks, [("Hi ", t.text, plain), ("Ana Lima", t.accent, t.accent_soft), (" ", t.text, plain)]);
+    assert_eq!(looks, [("Hi ", t.text, plain), ("Ana Exemple", t.accent, t.accent_soft), (" ", t.text, plain)]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
 /// The box offering two members, light and dark: the offer above the box, inside its panel.
 #[test]
 fn the_offer_in_light_and_dark() {
-    let messages = vec![said("m1", user("u-ana", "Ana Lima"), NOW - 600, para(vec![words("Who has the figures?")]))];
+    let messages = vec![said("m1", user("u-ana", "Ana Exemple"), NOW - 600, para(vec![words("Who has the figures?")]))];
     let (mut a, dir) = writing_app("teams-at-frames", messages);
     let mut people = members();
     // A guest of the organisation: offered, tagged External.
@@ -307,7 +307,7 @@ fn the_offer_in_light_and_dark() {
         let texts = texts_of(&shapes);
         let written = rect_of(&texts, |t| t == "Thanks @").expect("the box's text");
         let bubble = rect_of(&texts, |t| t == "Who has the figures?").expect("the message");
-        let ana = texts.iter().filter(|(t, _)| t == "Ana Lima").map(|(_, r)| *r).max_by(|x, y| x.top().total_cmp(&y.top())).expect("Ana");
+        let ana = texts.iter().filter(|(t, _)| t == "Ana Exemple").map(|(_, r)| *r).max_by(|x, y| x.top().total_cmp(&y.top())).expect("Ana");
         let bruno = rect_of(&texts, |t| t == "Bruno Rossi").expect("Bruno");
         assert!(bubble.bottom() <= ana.top(), "{theme}: the offer under the messages: {bubble:?} {ana:?}");
         assert!(ana.bottom() <= bruno.top() && bruno.bottom() <= written.top(), "{theme}: {ana:?} {bruno:?} {written:?}");
@@ -328,7 +328,7 @@ fn the_offer_in_light_and_dark() {
         let png = pictures_dir.as_ref().map(|d| d.join(format!("teams-box-mention-{theme}.png")));
         let (_, shapes) = frame_with_size(&ctx, &mut a, &mut tex, vec![], png, SIZE);
         let texts = texts_of(&shapes);
-        assert!(has_text(&texts, "Thanks Ana Lima "), "{theme}: {texts:?}");
+        assert!(has_text(&texts, "Thanks Ana Exemple "), "{theme}: {texts:?}");
         assert!(!has_text(&texts, "Bruno Rossi"), "{theme}: the offer gone");
     }
     a.ui.dark = Some(false);
@@ -341,7 +341,7 @@ fn the_offer_in_light_and_dark() {
 #[test]
 fn a_guest_is_offered_with_external() {
     let (mut a, dir) = writing_app("teams-at-guest", vec![]);
-    let mut guest = member("u-gale", "Ana Lima Guest", TENANT_ID);
+    let mut guest = member("u-gale", "Ana Exemple Guest", TENANT_ID);
     guest.roles = vec!["guest".into()];
     let all = members().into_iter().chain([guest]).collect();
     a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: all, web_url: Some(TEAMS_LINK.into()), first: true });
@@ -350,7 +350,7 @@ fn a_guest_is_offered_with_external() {
     typed(&ctx, &mut a, vec![text("@ana")]);
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
     let (ana, gale) =
-        (rect_of(&texts, |t| t == "Ana Lima").expect("Ana offered"), rect_of(&texts, |t| t == "Ana Lima Guest").expect("the guest offered"));
+        (rect_of(&texts, |t| t == "Ana Exemple").expect("Ana offered"), rect_of(&texts, |t| t == "Ana Exemple Guest").expect("the guest offered"));
     let on = |row: egui::Rect| texts.iter().filter(|(t, _)| t == "External").map(|(_, r)| *r).find(|r| (r.center().y - row.center().y).abs() < 6.0);
     assert!(on(gale).is_some_and(|r| r.right() <= gale.left()), "External before the guest's name: {texts:?}");
     assert!(on(ana).is_none(), "not on a member of the organisation: {texts:?}");

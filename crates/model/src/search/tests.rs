@@ -290,7 +290,10 @@ fn a_folder_index_is_kept_and_read_back() {
 
 #[test]
 fn a_people_search_gives_its_people_back() {
-    assert_eq!(from_people("from:zoe@studio.example,\"Ana Lima\",x"), Some(vec!["zoe@studio.example".to_string(), "Ana Lima".into(), "x".into()]));
+    assert_eq!(
+        from_people("from:zoe@studio.example,\"Ana Exemple\",x"),
+        Some(vec!["zoe@studio.example".to_string(), "Ana Exemple".into(), "x".into()])
+    );
     assert_eq!(from_people("FROM:ana"), Some(vec!["ana".to_string()]));
     assert_eq!(from_people("from:ana subject:invoice"), None);
     assert_eq!(from_people("is:unread"), None);

@@ -159,7 +159,7 @@ fn invitations_are_answered_and_sent() {
     assert_eq!(method, "REPLY");
     assert!(raw.contains("PARTSTAT=ACCEPTED") && raw.contains("mailto:riley@studio.example"), "{raw}");
     assert!(raw.to_ascii_lowercase().contains("text/calendar"), "sent as a calendar part");
-    assert!(raw.contains("To: \"Ana Lima\" <ana@soundlab.example>") || raw.contains("ana@soundlab.example"));
+    assert!(raw.contains("To: \"Ana Exemple\" <ana@soundlab.example>") || raw.contains("ana@soundlab.example"));
 
     // Declining takes it out of the calendar.
     s.run("invite.respond", &json!({"answer": "declined"})).unwrap();
@@ -817,7 +817,7 @@ fn an_opened_calendar_cannot_be_moved_to_a_group() {
     let sync = DavSync {
         calendars: Some(vec![
             CalendarInfo { id: "FOLDER1".into(), name: "Calendar".into(), main: true, ..Default::default() },
-            CalendarInfo { id: "shared:ana@contoso.example".into(), name: "Ana Lima".into(), group: "Équipe".into(), ..Default::default() },
+            CalendarInfo { id: "shared:ana@contoso.example".into(), name: "Ana Exemple".into(), group: "Équipe".into(), ..Default::default() },
         ]),
         calendar_groups: Some(vec!["Équipe".into()]),
         checked: NOW,

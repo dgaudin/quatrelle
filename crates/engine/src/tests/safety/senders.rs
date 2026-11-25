@@ -92,29 +92,29 @@ fn row(s: &mut Session, subject: &str) -> Value {
     r["messages"].as_array().unwrap().iter().find(|m| m["subject"] == subject).cloned().unwrap_or_else(|| panic!("no {subject}"))
 }
 
-const ANA: (&str, &str) = ("Ana Lima", "ana.lima.1984@gmail.com");
+const ANA: (&str, &str) = ("Ana Exemple", "ana.lima.1984@gmail.com");
 
 fn ana_warned() -> Option<SenderWarning> {
-    Some(SenderWarning::NameOfKnownPerson { name: "Ana Lima".into(), known: "ana@corp.example".into(), real: "ana.lima.1984@gmail.com".into() })
+    Some(SenderWarning::NameOfKnownPerson { name: "Ana Exemple".into(), known: "ana@corp.example".into(), real: "ana.lima.1984@gmail.com".into() })
 }
 
 #[test]
 fn known_people_come_from_accounts_cards_written_and_directory() {
     // A card in Contacts.
     let mut s = zoe_session("senders-card");
-    card(&mut s, "Ana Lima", "ana@corp.example");
+    card(&mut s, "Ana Exemple", "ana@corp.example");
     deliver(&mut s, 1, ANA, "Invoice");
     assert_eq!(warning(&s), ana_warned(), "a card");
     done(s);
     // Someone written to.
     let mut s = zoe_session("senders-written");
-    s.contacts_sent(&[EmailAddress::new("Ana Lima", "ana@corp.example")]);
+    s.contacts_sent(&[EmailAddress::new("Ana Exemple", "ana@corp.example")]);
     deliver(&mut s, 1, ANA, "Invoice");
     assert_eq!(warning(&s), ana_warned(), "written to");
     done(s);
     // Someone the directory answered for.
     let mut s = zoe_session("senders-directory");
-    directory_answers(&mut s, "ana", &[("Ana Lima", "ana@corp.example")]);
+    directory_answers(&mut s, "ana", &[("Ana Exemple", "ana@corp.example")]);
     deliver(&mut s, 1, ANA, "Invoice");
     assert_eq!(warning(&s), ana_warned(), "the directory");
     done(s);
@@ -136,13 +136,13 @@ fn known_people_come_from_accounts_cards_written_and_directory() {
 #[test]
 fn saving_the_sender_as_a_contact_takes_the_warning_away() {
     let mut s = zoe_session("senders-saved");
-    card(&mut s, "Ana Lima", "ana@corp.example");
+    card(&mut s, "Ana Exemple", "ana@corp.example");
     let key = deliver(&mut s, 1, ANA, "Invoice");
     s.run("message.popOut", &json!({"key": key.to_id()})).unwrap();
     assert_eq!(warning(&s), ana_warned());
     assert!(s.windows.iter().any(|w| w.key == key && w.warning == ana_warned()));
     // Ana really writes from Gmail too: saved, the open message and its window say nothing.
-    card(&mut s, "Ana Lima", "ana.lima.1984@gmail.com");
+    card(&mut s, "Ana Exemple", "ana.lima.1984@gmail.com");
     s.keep_senders();
     assert_eq!(warning(&s), None);
     assert!(s.windows.iter().any(|w| w.key == key && w.warning.is_none()));
@@ -152,10 +152,10 @@ fn saving_the_sender_as_a_contact_takes_the_warning_away() {
 #[test]
 fn marks_follow_the_options() {
     let mut s = zoe_session("senders-marks");
-    card(&mut s, "Ana Lima", "ana@studio.example");
+    card(&mut s, "Ana Exemple", "ana@studio.example");
     // A colleague, known from the directory.
     directory_answers(&mut s, "sam", &[("Sam Okafor", "sam@studio.example")]);
-    deliver(&mut s, 1, ("Ana Lima", "ana@studio.example"), "From a contact");
+    deliver(&mut s, 1, ("Ana Exemple", "ana@studio.example"), "From a contact");
     deliver(&mut s, 2, ("Pat Doe", "pat.doe@gmail.com"), "From a stranger");
     deliver(&mut s, 3, ("Sam Okafor", "sam@studio.example"), "From a colleague");
     deliver(&mut s, 4, ("Zoe Park", "zoe@studio.example"), "From me");
@@ -197,14 +197,14 @@ fn marks_follow_the_options() {
 #[test]
 fn list_and_read_say_the_marks() {
     let mut s = zoe_session("senders-commands");
-    card(&mut s, "Ana Lima", "ana@corp.example");
+    card(&mut s, "Ana Exemple", "ana@corp.example");
     deliver(&mut s, 1, ANA, "Invoice");
     let r = row(&mut s, "Invoice");
     assert_eq!((&r["fromAddress"], &r["senderWarning"], &r["external"]), (&json!(false), &json!(true), &json!(false)));
     let read = s.run("message.read", &json!({})).unwrap();
     assert_eq!(
         read["warning"],
-        json!({"kind": "nameOfKnownPerson", "name": "Ana Lima", "known": "ana@corp.example", "real": "ana.lima.1984@gmail.com"})
+        json!({"kind": "nameOfKnownPerson", "name": "Ana Exemple", "known": "ana@corp.example", "real": "ana.lima.1984@gmail.com"})
     );
     assert_eq!(read["external"], json!(false));
     s.run("view.externalTag", &json!({"on": true})).unwrap();
@@ -229,7 +229,7 @@ fn the_quiet_gathering_waits_for_the_book() {
     s.keep_senders_quietly();
     assert!(s.senders.is_some(), "the book read: gathered");
     // The stamp changes (a card saved) while a folder waits to be read into the book.
-    card(&mut s, "Ana Lima", "ana@corp.example");
+    card(&mut s, "Ana Exemple", "ana@corp.example");
     s.contacts_folder_changed(ME, "INBOX");
     assert!(s.contacts_pending());
     s.keep_senders_quietly();
@@ -330,7 +330,7 @@ fn gathering_is_quick() {
 #[test]
 fn a_calendar_change_doesnt_gather_the_people_again() {
     let mut s = zoe_session("senders-calendar");
-    let uid = s.run("contact.create", &json!({"name": "Ana Lima", "emails": ["ana@corp.example"]})).unwrap()["uid"].as_str().unwrap().to_string();
+    let uid = s.run("contact.create", &json!({"name": "Ana Exemple", "emails": ["ana@corp.example"]})).unwrap()["uid"].as_str().unwrap().to_string();
     s.keep_senders();
     let gathered = |s: &Session| s.senders.as_ref().unwrap().gathered;
     let first = gathered(&s);

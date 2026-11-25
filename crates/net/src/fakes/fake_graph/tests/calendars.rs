@@ -133,7 +133,7 @@ fn a_calendar_someone_else_owns_is_never_the_accounts_own() {
     d.folder("Inbox", None, Some("inbox"));
     d.calendars.push(("CAL1".into(), "Calendar".into()));
     d.calendars.push(("CAL2".into(), "Trips".into()));
-    d.calendars.push(("CAL3".into(), "Ana Lima".into()));
+    d.calendars.push(("CAL3".into(), "Ana Exemple".into()));
     d.calendar_owners.push(("CAL3".into(), "ana@contoso.example".into()));
     let server = serve(d);
     let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();

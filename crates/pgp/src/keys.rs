@@ -465,11 +465,11 @@ mod tests {
 
     #[test]
     fn addresses_come_out_of_user_ids() {
-        assert_eq!(email_of("Ana Lima <Ana@Posteo.example>").as_deref(), Some("ana@posteo.example"));
+        assert_eq!(email_of("Ana Exemple <Ana@Posteo.example>").as_deref(), Some("ana@posteo.example"));
         assert_eq!(email_of("ana@posteo.example").as_deref(), Some("ana@posteo.example"));
-        assert_eq!(email_of("Ana Lima"), None);
+        assert_eq!(email_of("Ana Exemple"), None);
         assert_eq!(email_of("<>"), None);
-        assert_eq!(name_of("\"Ana Lima\" <ana@posteo.example>"), "Ana Lima");
+        assert_eq!(name_of("\"Ana Exemple\" <ana@posteo.example>"), "Ana Exemple");
     }
 
     #[test]

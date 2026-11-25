@@ -269,7 +269,7 @@ fn sign_in_needs_both_ids() {
         drive_host: Some("contoso-my.sharepoint.com".into()),
     }));
     assert!(s.prefs.teams.signed_in);
-    assert_eq!((s.prefs.teams.name.as_str(), s.prefs.teams.object_id.as_str()), ("Ana Lima", "u-1"));
+    assert_eq!((s.prefs.teams.name.as_str(), s.prefs.teams.object_id.as_str()), ("Ana Exemple", "u-1"));
     assert_eq!(s.teams.drive_host.as_deref(), Some("contoso-my.sharepoint.com"));
 }
 

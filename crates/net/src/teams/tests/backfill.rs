@@ -177,7 +177,7 @@ fn copying(statuses: &[Status]) -> Vec<(u32, u32)> {
 
 /// A meeting's chat with one message of Ana's at `at`.
 fn meeting(id: &str, at: i64) -> FakeChat {
-    let mut c = FakeChat::new(id, "meeting", Some("Weekly review"), vec![me(), FakeUser::new("u-ana", "Ana Lima")]);
+    let mut c = FakeChat::new(id, "meeting", Some("Weekly review"), vec![me(), FakeUser::new("u-ana", "Ana Exemple")]);
     c.messages.push(FakeMessage::new(&at.to_string(), Some("u-ana"), &rfc3339(at), "<p>Agenda</p>"));
     c
 }

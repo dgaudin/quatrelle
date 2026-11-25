@@ -57,7 +57,7 @@ fn me() -> FakeUser {
 
 /// A chat with `n` messages a minute apart from `start`, alternately from Ana and from me.
 fn chat(id: &str, start: i64, n: i64) -> FakeChat {
-    let mut c = FakeChat::new(id, "oneOnOne", None, vec![me(), FakeUser::new("u-ana", "Ana Lima")]);
+    let mut c = FakeChat::new(id, "oneOnOne", None, vec![me(), FakeUser::new("u-ana", "Ana Exemple")]);
     for i in 0..n {
         let at = start + i * MINUTE;
         let from = if i % 2 == 0 { "u-ana" } else { ME };
@@ -404,7 +404,7 @@ fn errors_carry_the_status_and_code_only() {
     assert!(matches!(graph::status_error(503, b""), Err(NetError::Closed(m)) if m == "HTTP 503"));
     assert!(graph::status_error(204, b"").is_ok());
     // A code that isn't a code (spaces, quotes, too long) isn't repeated.
-    let odd = br#"{"error": {"code": "Ana Lima said \"no\""}}"#;
+    let odd = br#"{"error": {"code": "Ana Exemple said \"no\""}}"#;
     assert!(matches!(graph::status_error(403, odd), Err(NetError::Protocol(m)) if m == "HTTP 403"));
     let long = format!(r#"{{"error": {{"code": "{}"}}}}"#, "A".repeat(200));
     assert!(matches!(graph::status_error(403, long.as_bytes()), Err(NetError::Protocol(m)) if m == "HTTP 403"));

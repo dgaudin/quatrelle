@@ -61,7 +61,7 @@ impl Made {
     fn message(&self, i: usize, k: usize) -> ChatMessage {
         let created = self.created(i, k);
         let sender = if k.is_multiple_of(2) {
-            Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT_ID.into()) }
+            Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT_ID.into()) }
         } else {
             Sender::User { id: ME.into(), name: "Riley Moreno".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT_ID.into()) }
         };
@@ -261,7 +261,7 @@ impl Scaled {
             let news = News {
                 chat: chat_id(1 + round),
                 message: format!("n{round}"),
-                sender: "Ana Lima".into(),
+                sender: "Ana Exemple".into(),
                 external: false,
                 app: false,
                 mentions_me: false,
@@ -279,7 +279,7 @@ impl Scaled {
             self.shown.lock().unwrap().clear();
             took.push(self.frame(vec![]));
             let shown = std::mem::take(&mut *self.shown.lock().unwrap());
-            assert_eq!(shown, [(format!("Ana Lima in Conversation {}", 1 + round), "Lunch at noon?".to_string())], "announced in the frame");
+            assert_eq!(shown, [(format!("Ana Exemple in Conversation {}", 1 + round), "Lunch at noon?".to_string())], "announced in the frame");
             let newest = self.a.session.teams.window.back().map(|m| m.id.clone());
             assert_eq!(newest, Some(format!("m{:06}", n + 50 * round + 49)), "the new messages taken in the frame");
             self.settle();
@@ -348,7 +348,7 @@ fn opening_scrolling_and_receiving_stay_flat_at_2000_chats_and_300000_messages()
 #[test]
 fn a_window_with_full_reactions_and_50_changes_going_out_draws_in_time() {
     let message = |i: usize| {
-        let from = if i.is_multiple_of(2) { user(ME, "Riley Moreno") } else { user("u-ana", "Ana Lima") };
+        let from = if i.is_multiple_of(2) { user(ME, "Riley Moreno") } else { user("u-ana", "Ana Exemple") };
         let mut m = said(&format!("m{i:03}"), from, NOW - 6000 + i as i64 * 10, para(vec![words(&format!("Line {i} of the plan"))]));
         m.reactions = (0..5)
             .map(|r| Reaction {
@@ -407,7 +407,7 @@ fn a_window_with_full_reactions_and_50_changes_going_out_draws_in_time() {
 /// "m{k} p{i}" each.
 fn heavy(k: usize, paragraphs: usize) -> ChatMessage {
     let blocks = (0..paragraphs).map(|i| Block { kind: BlockKind::Paragraph, runs: vec![words(&format!("m{k} p{i}"))] }).collect();
-    said(&format!("h{k:03}"), user("u-ana", "Ana Lima"), NOW - 86_000 + k as i64 * 60, teams::ChatText { blocks })
+    said(&format!("h{k:03}"), user("u-ana", "Ana Exemple"), NOW - 86_000 + k as i64 * 60, teams::ChatText { blocks })
 }
 
 /// The paragraphs of heavy messages a frame drew.
@@ -528,7 +528,7 @@ fn a_window_of_many_runs_is_measured_a_part_a_frame() {
             .collect();
         said(
             &format!("r{k:03}"),
-            user("u-ana", "Ana Lima"),
+            user("u-ana", "Ana Exemple"),
             NOW - 86_000 + k as i64 * 60,
             teams::ChatText { blocks: vec![Block { kind: BlockKind::Paragraph, runs }] },
         )

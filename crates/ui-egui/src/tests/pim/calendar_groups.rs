@@ -17,7 +17,7 @@ fn with_groups(name: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
     {
         let pim = a.session.pim_mut(&account);
         pim.calendar_groups = vec!["Salles".into(), "Équipe".into()];
-        pim.calendars.push(CalendarInfo { id: "AAMkAna=".into(), name: "Ana Lima".into(), group: "Équipe".into(), ..Default::default() });
+        pim.calendars.push(CalendarInfo { id: "AAMkAna=".into(), name: "Ana Exemple".into(), group: "Équipe".into(), ..Default::default() });
         pim.calendars.push(CalendarInfo { id: "AAMkRoom=".into(), name: "Salle Lyon".into(), group: "Salles".into(), ..Default::default() });
     }
     for _ in 0..10 {
@@ -57,7 +57,7 @@ fn the_pane_lists_the_servers_groups_in_its_order() {
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
     let y = |t: &str| text_at(&shapes, t).unwrap_or_else(|| panic!("{t} in the pane")).y;
     assert!(y("Salles") < y("Équipe"), "the server's order, not the order the calendars came in");
-    assert!(y("Salles") < y("Salle Lyon") && y("Salle Lyon") < y("Équipe") && y("Équipe") < y("Ana Lima"), "each group's calendars under it");
+    assert!(y("Salles") < y("Salle Lyon") && y("Salle Lyon") < y("Équipe") && y("Équipe") < y("Ana Exemple"), "each group's calendars under it");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -67,11 +67,11 @@ fn a_group_header_folds_and_unfolds() {
     click_text(&ctx, &mut a, "Équipe");
     assert!(!a.session.prefs.folded_calendar_groups.is_empty(), "remembered folded");
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
-    assert!(text_at(&shapes, "Ana Lima").is_none(), "folded: its calendar isn't drawn");
+    assert!(text_at(&shapes, "Ana Exemple").is_none(), "folded: its calendar isn't drawn");
     click_text(&ctx, &mut a, "Équipe");
     assert!(a.session.prefs.folded_calendar_groups.is_empty(), "unfolded");
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
-    assert!(text_at(&shapes, "Ana Lima").is_some(), "unfolded: its calendar is drawn");
+    assert!(text_at(&shapes, "Ana Exemple").is_some(), "unfolded: its calendar is drawn");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -117,7 +117,7 @@ fn a_group_header_menu_renames_and_deletes_the_group() {
     }
     click_text(&ctx, &mut a, "Rename");
     assert!(a.session.pim.values().any(|p| p.calendar_groups.iter().any(|g| g == "Team")));
-    assert!(a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Team")));
+    assert!(a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Exemple" && c.group == "Team")));
     // A group that still holds calendars can't be deleted (Microsoft 365's behaviour on a
     // non-empty group isn't known): the entry is greyed with why.
     right_click(&ctx, &mut a, "Team");
@@ -141,11 +141,11 @@ fn a_group_header_menu_renames_and_deletes_the_group() {
 #[test]
 fn a_group_moves_its_calendar_to_another_group_on_exchange() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-move-calendar");
-    right_click(&ctx, &mut a, "Ana Lima");
+    right_click(&ctx, &mut a, "Ana Exemple");
     point_at(&ctx, &mut a, "Move to group");
     click_text(&ctx, &mut a, "Salles");
     assert!(
-        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Salles")),
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Exemple" && c.group == "Salles")),
         "Ana's calendar moved to Salles"
     );
     let _ = std::fs::remove_dir_all(dir);
@@ -173,7 +173,7 @@ fn a_group_moves_up_and_down_on_exchange_but_not_on_microsoft_365() {
 #[test]
 fn dragging_a_calendar_onto_a_groups_header_moves_it() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag");
-    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let from = settled_text_at(&ctx, &mut a, "Ana Exemple", SIZE).expect("Ana Exemple in the pane");
     let to = settled_text_at(&ctx, &mut a, "Salles", SIZE).expect("Salles in the pane");
     let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
@@ -185,7 +185,7 @@ fn dragging_a_calendar_onto_a_groups_header_moves_it() {
         frame_sized(&ctx, &mut a, vec![], SIZE);
     }
     assert!(
-        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Salles")),
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Exemple" && c.group == "Salles")),
         "Ana's calendar moved onto Salles"
     );
     let _ = std::fs::remove_dir_all(dir);
@@ -199,7 +199,7 @@ fn a_colleagues_calendar_stays_under_its_server_group() {
     let account = a.session.accounts[0].config.id.clone();
     {
         let pim = a.session.pim_mut(&account);
-        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Lima").expect("Ana Lima");
+        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Exemple").expect("Ana Exemple");
         ana.id = "shared:ana@contoso.example".into();
     }
     for _ in 0..10 {
@@ -208,7 +208,7 @@ fn a_colleagues_calendar_stays_under_its_server_group() {
     let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
     assert!(text_at(&shapes, "Shared calendars").is_none(), "the empty Shared calendars heading is gone");
     let y = |t: &str| text_at(&shapes, t).unwrap_or_else(|| panic!("{t} in the pane")).y;
-    assert!(y("Équipe") < y("Ana Lima"), "Ana's calendar is under Équipe");
+    assert!(y("Équipe") < y("Ana Exemple"), "Ana's calendar is under Équipe");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -216,7 +216,7 @@ fn a_colleagues_calendar_stays_under_its_server_group() {
 #[test]
 fn dragging_a_calendar_onto_a_groups_row_moves_it() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag-row");
-    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let from = settled_text_at(&ctx, &mut a, "Ana Exemple", SIZE).expect("Ana Exemple in the pane");
     let to = settled_text_at(&ctx, &mut a, "Salle Lyon", SIZE).expect("Salle Lyon in the pane");
     let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
@@ -228,7 +228,7 @@ fn dragging_a_calendar_onto_a_groups_row_moves_it() {
         frame_sized(&ctx, &mut a, vec![], SIZE);
     }
     assert!(
-        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Salles")),
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Exemple" && c.group == "Salles")),
         "Ana's calendar moved onto Salle Lyon's group"
     );
     let _ = std::fs::remove_dir_all(dir);
@@ -238,7 +238,7 @@ fn dragging_a_calendar_onto_a_groups_row_moves_it() {
 #[test]
 fn escape_cancels_a_calendar_drag() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag-escape");
-    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let from = settled_text_at(&ctx, &mut a, "Ana Exemple", SIZE).expect("Ana Exemple in the pane");
     let to = settled_text_at(&ctx, &mut a, "Salles", SIZE).expect("Salles in the pane");
     let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
@@ -251,7 +251,7 @@ fn escape_cancels_a_calendar_drag() {
         frame_sized(&ctx, &mut a, vec![], SIZE);
     }
     assert!(
-        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Équipe")),
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Exemple" && c.group == "Équipe")),
         "Escape left Ana's calendar in Équipe"
     );
     let _ = std::fs::remove_dir_all(dir);
@@ -266,13 +266,13 @@ fn move_to_group_is_greyed_for_a_calendar_opened_by_address() {
     {
         let pim = a.session.pim_mut(&account);
         pim.shared.push("ana@contoso.example".into());
-        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Lima").expect("Ana Lima");
+        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Exemple").expect("Ana Exemple");
         ana.id = "shared:ana@contoso.example".into();
     }
     for _ in 0..10 {
         frame_sized(&ctx, &mut a, vec![], SIZE);
     }
-    right_click(&ctx, &mut a, "Ana Lima");
+    right_click(&ctx, &mut a, "Ana Exemple");
     point_at(&ctx, &mut a, "Move to group");
     let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
     assert!(shown.iter().any(|t| t == "This calendar isn't in Outlook's calendar groups yet"), "{shown:?}");
@@ -303,7 +303,7 @@ fn a_server_without_calendar_groups_says_so() {
     {
         let pim = a.session.pim_mut(&account);
         pim.calendar_groups = vec!["Équipe".into()];
-        pim.calendars.push(CalendarInfo { id: "AAMkAna=".into(), name: "Ana Lima".into(), group: "Équipe".into(), ..Default::default() });
+        pim.calendars.push(CalendarInfo { id: "AAMkAna=".into(), name: "Ana Exemple".into(), group: "Équipe".into(), ..Default::default() });
     }
     for _ in 0..10 {
         frame_sized(&ctx, &mut a, vec![], SIZE);
@@ -342,13 +342,13 @@ fn dragging_an_opened_calendar_does_not_move_it() {
     {
         let pim = a.session.pim_mut(&account);
         pim.shared.push("ana@contoso.example".into());
-        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Lima").expect("Ana Lima");
+        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Exemple").expect("Ana Exemple");
         ana.id = "shared:ana@contoso.example".into();
     }
     for _ in 0..10 {
         frame_sized(&ctx, &mut a, vec![], SIZE);
     }
-    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let from = settled_text_at(&ctx, &mut a, "Ana Exemple", SIZE).expect("Ana Exemple in the pane");
     let to = settled_text_at(&ctx, &mut a, "Salles", SIZE).expect("Salles in the pane");
     let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
@@ -360,7 +360,7 @@ fn dragging_an_opened_calendar_does_not_move_it() {
         frame_sized(&ctx, &mut a, vec![], SIZE);
     }
     assert!(
-        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Équipe")),
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Exemple" && c.group == "Équipe")),
         "the opened calendar stays in Équipe"
     );
     let _ = std::fs::remove_dir_all(dir);

@@ -52,7 +52,7 @@ fn eventually(what: &str, mut f: impl FnMut() -> bool) {
 fn a_contacts_picture_is_fetched() {
     let mut d = Data::default();
     d.folder("Inbox", None, Some("inbox"));
-    d.contacts.push(json!({"id": "C1", "displayName": "Ana Lima", "emailAddresses": [{"address": "ana@contoso.example"}]}));
+    d.contacts.push(json!({"id": "C1", "displayName": "Ana Exemple", "emailAddresses": [{"address": "ana@contoso.example"}]}));
     d.contacts.push(json!({"id": "C2", "displayName": "Ben Ito"}));
     d.contact_photos.push("C1".into());
     let server = serve(d);
@@ -170,7 +170,7 @@ fn exchange_calendars_and_contacts_sync_both_ways() {
     d.events.push(json!({"id": "E1", "calendar": "CAL1", "iCalUId": "standup", "subject": "Stand-up", "changeKey": "x",
         "start": {"dateTime": "2026-10-05T09:00:00.0000000"}, "end": {"dateTime": "2026-10-05T09:15:00.0000000"},
         "recurrence": {"pattern": {"type": "weekly", "interval": 1, "daysOfWeek": ["monday", "wednesday", "friday"]}, "range": {"type": "noEnd"}}}));
-    d.contacts.push(json!({"id": "C1", "displayName": "Ana Lima", "emailAddresses": [{"address": "ana@contoso.example"}]}));
+    d.contacts.push(json!({"id": "C1", "displayName": "Ana Exemple", "emailAddresses": [{"address": "ana@contoso.example"}]}));
     let server = serve(d);
     let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
     // Here: a new event and person, and a deleted event.

@@ -110,13 +110,13 @@ fn events_and_contacts_both_ways() {
     assert_eq!(event_json(&all_day)["end"]["dateTime"], "2026-10-17T00:00:00");
     assert!(event_of(&json!({"id": "x"})).is_none(), "no start, no event");
 
-    let c = json!({"id": "C1", "displayName": "Ana Lima", "givenName": "Ana", "surname": "Lima",
+    let c = json!({"id": "C1", "displayName": "Ana Exemple", "givenName": "Ana", "surname": "Lima",
         "emailAddresses": [{"name": "Ana", "address": "ana@contoso.example"}], "businessPhones": ["+1 555 0100"],
         "mobilePhone": "+1 555 0101", "companyName": "Sound Lab", "jobTitle": "Mixer"});
     let card = card_of(&c).unwrap();
     assert_eq!(
         (card.display(), card.emails[0].value.as_str(), card.phones.len(), card.org.as_str()),
-        ("Ana Lima".to_string(), "ana@contoso.example", 2, "Sound Lab")
+        ("Ana Exemple".to_string(), "ana@contoso.example", 2, "Sound Lab")
     );
     let back = card_json(&card);
     assert_eq!((back["mobilePhone"].as_str(), back["businessPhones"][0].as_str()), (Some("+1 555 0101"), Some("+1 555 0100")));

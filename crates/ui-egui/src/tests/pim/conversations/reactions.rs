@@ -152,7 +152,7 @@ pub(super) fn alpha_of(shapes: &[egui::Shape], text: &str) -> Option<u8> {
 }
 
 pub(super) fn ana(id: &str, secs: i64, text: &str) -> ChatMessage {
-    said(id, user("u-ana", "Ana Lima"), secs, para(vec![words(text)]))
+    said(id, user("u-ana", "Ana Exemple"), secs, para(vec![words(text)]))
 }
 
 pub(super) fn mine(id: &str, secs: i64, text: &str) -> ChatMessage {

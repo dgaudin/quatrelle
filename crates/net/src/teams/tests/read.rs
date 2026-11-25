@@ -31,14 +31,14 @@ fn message_json(id: &str) -> Value {
     json!({
         "id": id, "messageType": "message", "eventDetail": null,
         "createdDateTime": rfc3339(T0), "lastModifiedDateTime": rfc3339(T0 + MINUTE), "lastEditedDateTime": null, "deletedDateTime": null,
-        "from": {"application": null, "device": null, "user": {"id": "u-ana", "displayName": "Ana Lima", "userIdentityType": "aadUser", "tenantId": TENANT}},
+        "from": {"application": null, "device": null, "user": {"id": "u-ana", "displayName": "Ana Exemple", "userIdentityType": "aadUser", "tenantId": TENANT}},
         "body": {"contentType": "html", "content": "<p>Hello <b>there</b></p>"},
         "attachments": [], "mentions": [], "reactions": [],
     })
 }
 
 fn ana() -> Sender {
-    Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) }
+    Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) }
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn members_say_their_kind_tenant_and_roles() {
     .unwrap();
     assert_eq!(
         (m.kind.as_str(), m.name.as_str(), m.address.as_str(), m.tenant_id.as_deref()),
-        ("aadUserConversationMember", "Ana Lima", "ana@contoso.example", Some(TENANT))
+        ("aadUserConversationMember", "Ana Exemple", "ana@contoso.example", Some(TENANT))
     );
     // A guest past the cap on roles stays a guest; an anonymous guest has its own id; an odd type is none.
     let roles: Vec<String> = (0..20).map(|i| format!("r{i}")).chain(["guest".to_string()]).collect();

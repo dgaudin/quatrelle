@@ -25,7 +25,7 @@ fn the_common_views_folder_is_found_even_when_its_name_is_localized() {
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
     d.common_views_name = "Vues communes".into();
     d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
-    d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe", "Ana Lima", &dn("ana"))];
+    d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe", "Ana Exemple", &dn("ana"))];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
     let links = crate::ews_pim::calendar_links(&c).unwrap().links;
@@ -48,7 +48,7 @@ fn a_group_header_names_the_group_of_its_members() {
             "IPM.Microsoft.WunderBar.Link",
             3,
             2,
-            "Ana Lima",
+            "Ana Exemple",
             &[("0x6850", "Binary", gid), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana"))))],
         ),
     ];
@@ -109,7 +109,7 @@ fn shortcuts_are_sorted_by_their_ordinal() {
             link,
             3,
             2,
-            "Ana Lima",
+            "Ana Exemple",
             &[
                 ("0x6851", "String", "Équipe".into()),
                 ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
@@ -149,7 +149,7 @@ fn other_sections_and_malformed_shortcuts_are_left_alone() {
     let link = "IPM.Microsoft.WunderBar.Link";
     d.wlinks = vec![
         wlink(link, 1, 2, "Favorites", "Ana's Inbox", &dn("ana")),
-        wlink(link, 3, 2, "Équipe", "Ana Lima", &dn("ana")),
+        wlink(link, 3, 2, "Équipe", "Ana Exemple", &dn("ana")),
         wlink_of(link, 3, 2, "Broken", &[("0x6854", "Binary", "not base64!".into())]),
         wlink("IPM.Note", 3, 2, "Équipe", "Not a shortcut", &dn("ana")),
     ];
@@ -169,7 +169,7 @@ fn a_group_keeps_the_calendars_whose_addresses_resolve() {
     d.directory = vec![(dn("ana"), "ana@contoso.example".into()), (dn("tom"), "tom@contoso.example".into())];
     let link = "IPM.Microsoft.WunderBar.Link";
     d.wlinks = vec![
-        wlink(link, 3, 2, "Équipe", "Ana Lima", &dn("ana")),
+        wlink(link, 3, 2, "Équipe", "Ana Exemple", &dn("ana")),
         wlink(link, 3, 2, "Équipe", "Ghost", &dn("ghost")),
         wlink(link, 3, 2, "Équipe", "Tom Diaz", &dn("tom")),
     ];
@@ -197,7 +197,13 @@ fn groups_come_in_the_order_their_headers_give() {
     d.wlinks = vec![
         wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", season.clone()), ("0x684B", "Binary", ordinal(0x20))]),
         wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", rooms.clone()), ("0x684B", "Binary", ordinal(0x10))]),
-        wlink_of(link, 3, 2, "Ana Lima", &[("0x6850", "Binary", season), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana"))))]),
+        wlink_of(
+            link,
+            3,
+            2,
+            "Ana Exemple",
+            &[("0x6850", "Binary", season), ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana"))))],
+        ),
     ];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
@@ -225,7 +231,7 @@ fn a_group_is_made_renamed_moved_and_deleted() {
             link,
             3,
             2,
-            "Ana Lima",
+            "Ana Exemple",
             &[
                 ("0x6850", "Binary", team),
                 ("0x6851", "String", "Équipe".into()),
@@ -250,7 +256,7 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     crate::ews_pim::move_calendar_group(&c, "Salles Studio", true).unwrap();
     assert_eq!(names(&c), ["Salles Studio", "Équipe"]);
 
-    crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Lima", "Salles Studio").unwrap();
+    crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Exemple", "Salles Studio").unwrap();
     assert_eq!(ana(&c).as_deref(), Some("Salles Studio"));
 
     crate::ews_pim::delete_calendar_group(&c, "Salles Studio").unwrap();
@@ -284,7 +290,7 @@ fn the_accounts_own_calendars_are_filed_under_their_group() {
             link,
             3,
             2,
-            "Ana Lima",
+            "Ana Exemple",
             &[
                 ("0x6850", "Binary", guid(0x20)),
                 ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
@@ -300,7 +306,7 @@ fn the_accounts_own_calendars_are_filed_under_their_group() {
     let main = cals.iter().find(|c| c.main).unwrap_or_else(|| panic!("the main calendar is listed"));
     assert_eq!(main.group, "", "My Calendars is the account's own, not a group");
     assert_eq!(cals.iter().find(|c| c.name == "Meetings").map(|c| c.group.as_str()), Some("Équipe"));
-    assert_eq!(cals.iter().find(|c| c.name == "Ana Lima").map(|c| c.group.as_str()), Some("Équipe"));
+    assert_eq!(cals.iter().find(|c| c.name == "Ana Exemple").map(|c| c.group.as_str()), Some("Équipe"));
 }
 
 /// A shortcut of the Calendar section that doesn't read whole — no address book entry to say
@@ -407,23 +413,23 @@ fn a_shared_calendar_is_moved_by_its_address_not_by_a_homonyms_name() {
         link,
         3,
         2,
-        "Ana Lima",
+        "Ana Exemple",
         &[("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))), ("0x684B", "Binary", crate::imap::base64(&[0x11]))],
     )
-    .replace("Id=\"WAna Lima\"", "Id=\"W1\"");
+    .replace("Id=\"WAna Exemple\"", "Id=\"W1\"");
     let tom = wlink_of(
         link,
         3,
         2,
-        "Ana Lima",
+        "Ana Exemple",
         &[("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("tom")))), ("0x684B", "Binary", crate::imap::base64(&[0x12]))],
     )
-    .replace("Id=\"WAna Lima\"", "Id=\"W2\"");
+    .replace("Id=\"WAna Exemple\"", "Id=\"W2\"");
     d.wlinks =
         vec![wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", guid(0x20)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]), ana, tom];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    crate::ews_pim::move_calendar_to_group(&c, "shared:tom@contoso.example", "Ana Lima", "Salles").unwrap();
+    crate::ews_pim::move_calendar_to_group(&c, "shared:tom@contoso.example", "Ana Exemple", "Salles").unwrap();
     let kept = server.data.lock().unwrap();
     let item = |id: &str| kept.wlinks.iter().find(|w| w.contains(&format!("Id=\"{id}\""))).cloned().unwrap_or_default();
     assert!(item("W2").contains(">Salles<"), "Tom's shortcut moved: {}", item("W2"));
@@ -516,7 +522,7 @@ fn an_outlook_group_is_protected() {
             link,
             3,
             2,
-            "Ana Lima",
+            "Ana Exemple",
             &[
                 ("0x6850", "Binary", team),
                 ("0x6851", "String", "Équipe".into()),
@@ -547,7 +553,7 @@ fn a_shared_calendar_whose_only_name_match_is_someone_else_is_left_alone() {
         link,
         3,
         2,
-        "Ana Lima",
+        "Ana Exemple",
         &[
             ("0x6851", "String", "Équipe".into()),
             ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("tom")))),
@@ -558,7 +564,7 @@ fn a_shared_calendar_whose_only_name_match_is_someone_else_is_left_alone() {
     d.wlinks = vec![wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", guid(0x20)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]), tom];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    assert!(crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Lima", "Salles").is_err(), "no shortcut names Ana");
+    assert!(crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Exemple", "Salles").is_err(), "no shortcut names Ana");
     let kept = server.data.lock().unwrap();
     assert!(kept.wlinks.contains(&before), "Tom's shortcut is untouched: {:?}", kept.wlinks);
 }

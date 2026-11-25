@@ -73,7 +73,7 @@ fn the_tenant_is_never_a_chats_own() {
         c.messages.push(FakeMessage::new(&T0.to_string(), Some("u-ana"), &rfc3339(T0), "<p>Hello</p>"));
         teams_with(vec![c])
     };
-    let (ana, bruno) = (FakeUser::new("u-ana", "Ana Lima"), FakeUser::new("u-bruno", "Bruno Rossi"));
+    let (ana, bruno) = (FakeUser::new("u-ana", "Ana Exemple"), FakeUser::new("u-bruno", "Bruno Rossi"));
     // The sign-in names no organisation: the user's own entry among the members does.
     let r = rig(foreign(vec![ana.clone(), me()]), grant(None));
     r.sign_in("organizations");
