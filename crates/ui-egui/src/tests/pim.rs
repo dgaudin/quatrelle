@@ -307,9 +307,10 @@ fn flagged_mail_shows_in_the_todo_list_and_opens_there() {
         a.session.todo("", false).into_iter().find(|r| r.mail().is_some_and(|f| f.key == m.key)).expect("the flagged message is in the To-Do List");
     assert_eq!((row.subject(), row.due()), (m.subject.as_str(), Some(quatrelle_engine::model::dates::today(&a.session.clock))));
     let at = settled_text_at(&ctx, &mut a, &m.subject, size).expect("the flagged message's row is drawn");
-    // A double click opens it.
+    // A double click opens it, in the Mail module as the list opens one (not left in Tasks).
     click_at(&ctx, &mut a, at, 2, size);
     assert_eq!(a.session.reading.as_ref().map(|r| r.key.clone()), Some(m.key.clone()), "opened from the To-Do List");
+    assert_eq!(a.session.module, quatrelle_engine::Module::Mail, "the double click goes to the Mail module");
 
     // Its tick (the command the row's tick runs) marks its follow-up complete: out of the
     // list of what's to do, back with the completed ones.
