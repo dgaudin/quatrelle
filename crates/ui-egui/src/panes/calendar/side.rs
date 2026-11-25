@@ -149,6 +149,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                     ui.painter().rect_stroke(header.response.rect, 4.0, egui::Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
                 }
                 if let Some(d) = dropped::<DragCalendar>(&header.response)
+                    && !d.opened
                     && !d.group.eq_ignore_ascii_case(title)
                 {
                     acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": title})));
@@ -228,6 +229,7 @@ struct DragCalendar {
     account: String,
     calendar: String,
     group: String,
+    opened: bool,
 }
 
 /// What was dropped on `resp`, if it is a `T` (asking for the wrong type loses a drop for the
@@ -375,7 +377,12 @@ pub(super) fn calendar_row(
     let extra = menu::Extra { web: web.is_some(), opened };
     let resp = row.response.interact(Sense::click_and_drag());
     if resp.drag_started() {
-        resp.dnd_set_drag_payload(DragCalendar { account: a.config.id.clone(), calendar: c.id.clone(), group: c.group.clone() });
+        resp.dnd_set_drag_payload(DragCalendar {
+            account: a.config.id.clone(),
+            calendar: c.id.clone(),
+            group: c.group.clone(),
+            opened: extra.opened.is_some(),
+        });
     }
     // A calendar dragged onto a row moves to that row's group (an empty title: My Calendars);
     // Shared calendars aren't a group to move to.
@@ -385,7 +392,7 @@ pub(super) fn calendar_row(
         }
         if let Some(d) = dropped::<DragCalendar>(&resp) {
             let same = if to.is_empty() { d.group.is_empty() } else { d.group.eq_ignore_ascii_case(to) };
-            if !same {
+            if !same && !d.opened {
                 acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": to})));
             }
         }

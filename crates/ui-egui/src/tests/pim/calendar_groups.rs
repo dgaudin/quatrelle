@@ -332,3 +332,36 @@ fn an_outlook_group_cannot_be_renamed_or_deleted_on_exchange() {
     assert!(shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "{shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A calendar opened by its owner's address has no shortcut to move: a drag onto a group leaves
+/// it where it is, as the menu is greyed.
+#[test]
+fn dragging_an_opened_calendar_does_not_move_it() {
+    let (mut a, dir, ctx) = with_ews_groups("calendar-groups-drag-opened");
+    let account = a.session.accounts[0].config.id.clone();
+    {
+        let pim = a.session.pim_mut(&account);
+        pim.shared.push("ana@contoso.example".into());
+        let ana = pim.calendars.iter_mut().find(|c| c.name == "Ana Lima").expect("Ana Lima");
+        ana.id = "shared:ana@contoso.example".into();
+    }
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    let from = settled_text_at(&ctx, &mut a, "Ana Lima", SIZE).expect("Ana Lima in the pane");
+    let to = settled_text_at(&ctx, &mut a, "Salles", SIZE).expect("Salles in the pane");
+    let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(from, true)], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(12.0, 0.0))], SIZE);
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(to)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(to, false)], SIZE);
+    for _ in 0..6 {
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+    }
+    assert!(
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Ana Lima" && c.group == "Équipe")),
+        "the opened calendar stays in Équipe"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

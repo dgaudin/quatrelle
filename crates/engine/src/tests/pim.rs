@@ -801,3 +801,35 @@ fn an_event_at_the_end_of_time_is_drawn_without_overflow() {
     let _ = s.agenda(i64::MIN, i64::MIN + 100);
     done(s);
 }
+
+/// A calendar opened by its owner's address has no shortcut in Outlook's groups: the engine
+/// refuses the move, so a drag can't bypass the greyed menu.
+#[test]
+fn an_opened_calendar_cannot_be_moved_to_a_group() {
+    use quatrelle_model::pim::{CalendarInfo, DavSync};
+    let mut s = Session::open(Some(temp("ews-opened-move")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sync = DavSync {
+        calendars: Some(vec![
+            CalendarInfo { id: "FOLDER1".into(), name: "Calendar".into(), main: true, ..Default::default() },
+            CalendarInfo { id: "shared:ana@contoso.example".into(), name: "Ana Lima".into(), group: "Équipe".into(), ..Default::default() },
+        ]),
+        calendar_groups: Some(vec!["Équipe".into()]),
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
+    s.pim_mut(&id).shared.push("ana@contoso.example".into());
+    s.take_jobs();
+    assert!(
+        s.run("calendar.moveTo", &json!({"account": id, "calendar": "shared:ana@contoso.example", "group": "Équipe"})).is_err(),
+        "the opened calendar is refused"
+    );
+    assert!(s.take_jobs().is_empty(), "and no job is queued");
+    done(s);
+}

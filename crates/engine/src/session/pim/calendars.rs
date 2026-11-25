@@ -544,6 +544,11 @@ impl Session {
     /// through the journal.
     pub fn move_calendar_to_group(&mut self, account: &str, calendar: &str, group: &str) -> CmdResult {
         let c = self.calendar_named(account, calendar)?.clone();
+        if let Some(owner) = c.id.strip_prefix("shared:")
+            && self.pim.get(account).is_some_and(|p| p.shared.iter().any(|e| e.eq_ignore_ascii_case(owner)))
+        {
+            return Err(CmdError::Disabled("this calendar was opened by its owner's address; it has no shortcut in Outlook's groups".into()));
+        }
         self.calendar_group_move(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
         let to = if group.is_empty() {
             if c.main {
