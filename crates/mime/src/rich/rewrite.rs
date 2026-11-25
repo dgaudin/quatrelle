@@ -373,60 +373,25 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &st
     // The HTML reader draws a strikethrough with a combining mark over each character; the
     // editor keeps the style instead.
     crate::rich::retain(&mut text, &mut styles, |c, _| c != '\u{336}');
+    let mut markers = Markers {
+        images,
+        sent: images.iter().enumerate().map(|(k, im)| (im.marker.as_str(), k)).collect(),
+        nonce: images.first().and_then(|im| marker_shape(&im.marker.chars().collect::<Vec<_>>(), 0).map(|(_, n, _)| n)),
+        before,
+        seen: vec![false; images.len()],
+    };
     let chars: Vec<char> = text.chars().collect();
-    let mut out = String::with_capacity(text.len());
-    let mut out_styles = Styles::default();
-    out_styles.palette.push(Style::default());
-    let mut seen = vec![false; images.len()];
-    let markers: HashMap<&str, usize> = images.iter().enumerate().map(|(k, im)| (im.marker.as_str(), k)).collect();
-    let nonce = images.first().and_then(|im| marker_shape(&im.marker.chars().collect::<Vec<_>>(), 0).map(|(_, n, _)| n));
-    let mut i = 0usize;
-    while i < chars.len() {
-        if let Some((len, token_nonce, has_end)) = marker_shape(&chars, i) {
-            let token: String = chars.get(i..i + len).map(|c| c.iter().collect()).unwrap_or_default();
-            let exact = markers.get(token.as_str()).copied().filter(|k| !seen.get(*k).copied().unwrap_or(true));
-            if let Some(k) = exact
-                && let Some(image) = images.get(k)
-            {
-                if let Some(s) = seen.get_mut(k) {
-                    *s = true;
-                }
-                out.push(PICTURE);
-                let id = out_styles.intern(image.style.clone());
-                out_styles.chars.push(id);
-                i += len;
-                continue;
-            }
-            // The user's own words that happen to look like a marker stay; anything else of the
-            // marker's shape came from the model and goes.
-            if before.contains(&token) {
-                for k in i..i + len {
-                    copy_char(&chars, &styles, &mut out, &mut out_styles, k);
-                }
-                i += len;
-                continue;
-            }
-            if has_end && len > 0 {
-                i += len;
-                continue;
-            }
-            if nonce == Some(token_nonce) {
-                let mut end = i + len;
-                let limit = i.saturating_add(MARKER_MAX);
-                while end < chars.len() && end < limit && !chars.get(end).is_some_and(|c| c.is_whitespace()) {
-                    if chars.get(end..).is_some_and(|c| c.starts_with(&['-', 'E', 'N', 'D'])) {
-                        end += 4;
-                        break;
-                    }
-                    end += 1;
-                }
-                i = end.max(i + 1);
-                continue;
-            }
+    let (mut out, mut out_styles, mut took) = markers.take(&chars, &styles, false);
+    // Taking a marker out can join the pieces around it into another (`QUATRELLE-I`, a marker,
+    // `MAGE-7-…`): read again while one went; the last time, a space keeps the pieces apart.
+    for round in 1..MARKER_ROUNDS {
+        if !took {
+            break;
         }
-        copy_char(&chars, &styles, &mut out, &mut out_styles, i);
-        i += 1;
+        let chars: Vec<char> = out.chars().collect();
+        (out, out_styles, took) = markers.take(&chars, &out_styles, round + 1 == MARKER_ROUNDS);
     }
+    let seen = markers.seen;
     out_styles.paras = styles.paras.clone();
     // A picture whose marker was lost goes at the end of the paragraph it was in (never away).
     let mut missing: Vec<(usize, usize, Style)> = Vec::new();
@@ -462,6 +427,92 @@ pub fn inbound(answer: &str, base: Style, images: &[RewritePicture], before: &st
         }
     });
     (out, out_styles)
+}
+
+/// The markers an answer is read against, and the pictures found so far.
+struct Markers<'a> {
+    images: &'a [RewritePicture],
+    sent: HashMap<&'a str, usize>,
+    nonce: Option<u64>,
+    before: &'a str,
+    seen: Vec<bool>,
+}
+
+/// How many times the answer is read for markers at most (see [`inbound`]).
+const MARKER_ROUNDS: usize = 16;
+
+impl Markers<'_> {
+    /// One reading: each picture's marker, the first time, becomes the picture; the user's own
+    /// words of a marker's shape stay; any other marker goes. Whether one went.
+    fn take(&mut self, chars: &[char], styles: &Styles, last: bool) -> (String, Styles, bool) {
+        let mut out = String::with_capacity(chars.len());
+        let mut out_styles = Styles::default();
+        out_styles.palette.push(Style::default());
+        let mut took = false;
+        let mut i = 0usize;
+        while i < chars.len() {
+            if let Some((len, token_nonce, has_end)) = marker_shape(chars, i) {
+                let token: String = chars.get(i..i + len).map(|c| c.iter().collect()).unwrap_or_default();
+                let exact = self.sent.get(token.as_str()).copied().filter(|k| !self.seen.get(*k).copied().unwrap_or(true));
+                if let Some(k) = exact
+                    && let Some(image) = self.images.get(k)
+                {
+                    if let Some(s) = self.seen.get_mut(k) {
+                        *s = true;
+                    }
+                    out.push(PICTURE);
+                    let id = out_styles.intern(image.style.clone());
+                    out_styles.chars.push(id);
+                    i += len;
+                    continue;
+                }
+                // The user's own words that happen to look like a marker stay; anything else of the
+                // marker's shape came from the model and goes.
+                if self.before.contains(&token) {
+                    for k in i..i + len {
+                        copy_char(chars, styles, &mut out, &mut out_styles, k);
+                    }
+                    i += len;
+                    continue;
+                }
+                if has_end && len > 0 {
+                    took = true;
+                    apart(chars, i + len, last, &mut out, &mut out_styles);
+                    i += len;
+                    continue;
+                }
+                if self.nonce == Some(token_nonce) {
+                    let mut end = i + len;
+                    let limit = i.saturating_add(MARKER_MAX);
+                    while end < chars.len() && end < limit && !chars.get(end).is_some_and(|c| c.is_whitespace() || *c == PICTURE) {
+                        if chars.get(end..).is_some_and(|c| c.starts_with(&['-', 'E', 'N', 'D'])) {
+                            end += 4;
+                            break;
+                        }
+                        end += 1;
+                    }
+                    took = true;
+                    apart(chars, end, last, &mut out, &mut out_styles);
+                    i = end.max(i + 1);
+                    continue;
+                }
+            }
+            copy_char(chars, styles, &mut out, &mut out_styles, i);
+            i += 1;
+        }
+        (out, out_styles, took)
+    }
+}
+
+/// The last reading puts a space where a marker went between two words: they can't join into
+/// another marker.
+fn apart(chars: &[char], next: usize, last: bool, out: &mut String, out_styles: &mut Styles) {
+    let joins = out.chars().next_back().is_some_and(|c| !c.is_whitespace()) && chars.get(next).is_some_and(|c| !c.is_whitespace());
+    if last && joins {
+        out.push(' ');
+        let id = out_styles.chars.last().copied().unwrap_or(0);
+        out_styles.chars.push(id);
+    }
 }
 
 /// The answer with the line breaks of the text sent, when its characters (all but the breaks)

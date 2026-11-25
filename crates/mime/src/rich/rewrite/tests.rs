@@ -337,3 +337,24 @@ fn an_answer_without_readable_text_keeps_its_picture() {
         assert_eq!(back.chars().filter(|c| *c == PICTURE).count(), 1, "answer {answer:?} gave {back:?}");
     }
 }
+
+/// A marker taken out of the answer can leave the pieces around it joined into another
+/// (`QUATRELLE-I` + a marker + `MAGE-7-…`): that one goes as well, however deep they nest, and
+/// the picture still comes back once.
+#[test]
+fn a_marker_joined_by_taking_another_out_goes_too() {
+    let text = "Bonjour \u{FFFC} Zoé";
+    let mut styles = Styles::plain(text);
+    styles.restyle(text, 8..9, |s| Style { picture: Some("logo@studio.example".into()), ..s.clone() });
+    let (_, images) = outbound(text, &styles, 7);
+    let sent = images.first().map(|im| im.marker.clone()).unwrap_or_default();
+    let mut nested = String::from("QUATRELLE-IMAGE-7-4-END");
+    for _ in 0..40 {
+        nested = format!("QUATRELLE-I{nested}MAGE-7-");
+    }
+    for answer in [format!("Hello {sent} 4QUATRELLE-IQUATRELLE-IMAGE-7-4-ENDMAGE-7-\u{3a7}T"), format!("Hello {sent} x{nested}y")] {
+        let (back, _) = inbound(&answer, Style::default(), &images, text, &styles);
+        assert_eq!(back.chars().filter(|c| *c == PICTURE).count(), 1, "{back:?}");
+        assert!(!back.contains("QUATRELLE-IMAGE-7-"), "{back:?}");
+    }
+}
